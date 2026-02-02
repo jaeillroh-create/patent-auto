@@ -10,6 +10,7 @@ const SYSTEM_PROMPT = '너는 20년 경력의 한국 변리사이다. 원칙: 1.
 let API_KEY='',currentUser=null,currentProfile=null,currentProjectId=null;
 let outputs={},selectedTitle='',selectedTitleType='',includeMethodClaims=true;
 let usage={calls:0,inputTokens:0,outputTokens:0},loadingState={};
+let detailLevel='standard'; // compact | standard | detailed
 // 검토 반영 전 상태 저장용
 let beforeReviewText = '';
 
@@ -39,7 +40,7 @@ function showScreen(name){
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
   currentProjectId=null;outputs={};selectedTitle='';selectedTitleType='';includeMethodClaims=true;
-  usage={calls:0,inputTokens:0,outputTokens:0};loadingState={};beforeReviewText='';uploadedFiles=[];
+  usage={calls:0,inputTokens:0,outputTokens:0};loadingState={};beforeReviewText='';uploadedFiles=[];diagramData={};
   const ids=['projectInput','titleInput'];ids.forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   ['titleConfirmArea','titleConfirmMsg','batchArea'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   for(let i=1;i<=19;i++){const e=document.getElementById(`resultStep${String(i).padStart(2,'0')}`);if(e)e.innerHTML='';}
@@ -57,7 +58,7 @@ function clearAllState(){
 function switchAuthTab(tab){document.querySelectorAll('.auth-tab').forEach(t=>t.classList.remove('active'));if(tab==='login'){document.querySelector('.auth-tab:first-child').classList.add('active');document.getElementById('authLogin').style.display='block';document.getElementById('authSignup').style.display='none';}else{document.querySelector('.auth-tab:last-child').classList.add('active');document.getElementById('authLogin').style.display='none';document.getElementById('authSignup').style.display='block';}}
 async function handleLogin(){const e=document.getElementById('loginEmail').value.trim(),p=document.getElementById('loginPassword').value;if(!e||!p){showToast('이메일과 비밀번호를 입력해 주세요','error');return;}setButtonLoading('btnLogin',true);const{data,error}=await sb.auth.signInWithPassword({email:e,password:p});setButtonLoading('btnLogin',false);if(error){showToast(error.message,'error');return;}await onAuthSuccess(data.user);}
 async function handleSignup(){const e=document.getElementById('signupEmail').value.trim(),p=document.getElementById('signupPassword').value,n=document.getElementById('signupName').value.trim();if(!e||!p){showToast('이메일과 비밀번호를 입력해 주세요','error');return;}if(p.length<6){showToast('비밀번호는 6자 이상','error');return;}setButtonLoading('btnSignup',true);const{data,error}=await sb.auth.signUp({email:e,password:p,options:{data:{display_name:n||e}}});setButtonLoading('btnSignup',false);if(error){showToast(error.message,'error');return;}showToast('회원가입 완료!');if(data.user)await onAuthSuccess(data.user);}
-async function handleLogout(){clearAllState();sessionStorage.removeItem('pk');API_KEY='';await sb.auth.signOut();currentUser=null;currentProfile=null;showScreen('auth');}
+async function handleLogout(){clearAllState();API_KEY='';await sb.auth.signOut();currentUser=null;currentProfile=null;showScreen('auth');}
 async function onAuthSuccess(user){
   currentUser=user;let{data:profile}=await sb.from('profiles').select('*').eq('id',user.id).single();
   if(!profile){const{data:np,error}=await sb.from('profiles').insert({id:user.id,display_name:user.user_metadata?.display_name||user.email,role:'user',status:'pending',tos_accepted:false}).select('*').single();if(error){showToast('프로필 생성 실패','error');return;}profile=np;}
@@ -65,11 +66,12 @@ async function onAuthSuccess(user){
   if(!profile.tos_accepted){showScreen('tos');return;}if(profile.status==='pending'){showScreen('pending');return;}if(profile.status==='suspended'){showToast('계정 정지됨','error');return;}
   const dn=document.getElementById('dashUserName');if(dn)dn.textContent=profile.display_name||user.email;
   if(profile.role==='admin'){const ab=document.getElementById('btnDashAdmin');if(ab)ab.style.display='inline-flex';}
-  API_KEY=sessionStorage.getItem('pk')||'';clearAllState();showScreen('dashboard');
+  API_KEY=profile.api_key_encrypted||'';clearAllState();showScreen('dashboard');
 }
 async function handleTosAccept(){if(!document.getElementById('tosCheck1').checked||!document.getElementById('tosCheck2').checked){showToast('모든 항목에 동의해 주세요','error');return;}await sb.from('profiles').update({tos_accepted:true,tos_accepted_at:new Date().toISOString()}).eq('id',currentUser.id);currentProfile.tos_accepted=true;if(currentProfile.status==='pending')showScreen('pending');else await onAuthSuccess(currentUser);}
 async function checkApprovalStatus(){const{data}=await sb.from('profiles').select('status').eq('id',currentUser.id).single();if(data?.status==='approved')await onAuthSuccess(currentUser);else showToast('아직 승인 대기 중','info');}
-function saveApiKey(){const k=document.getElementById('apiKeyInput').value.trim();if(!k){showToast('API Key를 입력해 주세요','error');return;}API_KEY=k;sessionStorage.setItem('pk',k);document.getElementById('apiKeyModal').style.display='none';showToast('API Key 설정 완료');}
+async function saveApiKey(){const k=document.getElementById('apiKeyInput').value.trim();if(!k){showToast('API Key를 입력해 주세요','error');return;}API_KEY=k;if(currentUser){await sb.from('profiles').update({api_key_encrypted:k}).eq('id',currentUser.id);}document.getElementById('apiKeyModal').style.display='none';showToast('API Key 저장 완료 (계정에 저장됨)');}
+function showApiKeyModal(){const inp=document.getElementById('apiKeyInput');if(inp&&API_KEY)inp.value=API_KEY;document.getElementById('apiKeyModal').style.display='flex';}
 
 // ═══════════ ADMIN ═══════════
 async function loadAdminUsers(){const{data:u}=await sb.from('profiles').select('*').order('created_at',{ascending:false});const el=document.getElementById('adminUserList');if(!u?.length){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px">사용자 없음</p>';return;}el.innerHTML=u.map(x=>`<div class="admin-user-item"><div class="admin-user-info"><div class="admin-user-name">${escapeHtml(x.display_name||x.id)}</div><div class="admin-user-status"><span class="badge ${x.status==='approved'?'badge-success':x.status==='pending'?'badge-warning':'badge-error'}">${x.status}</span> <span class="badge badge-neutral">${x.role}</span></div></div><div style="display:flex;gap:4px">${x.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="adminApprove('${x.id}')">승인</button>`:''} ${x.status==='approved'?`<button class="btn btn-outline btn-sm" onclick="adminSuspend('${x.id}')">정지</button>`:''} ${x.status==='suspended'?`<button class="btn btn-outline btn-sm" onclick="adminApprove('${x.id}')">해제</button>`:''}</div></div>`).join('');}
@@ -108,6 +110,7 @@ async function saveProject(silent=false){if(!currentProjectId)return;const t=sel
 // ═══════════ TAB & TOGGLES ═══════════
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===4)renderPreview();}
 function toggleMethod(){includeMethodClaims=document.getElementById('methodToggle').checked;['methodClaimsCard','methodDiagramCard','methodDescCard'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.toggle('card-disabled',!includeMethodClaims);});}
+function selectDetailLevel(el,level){document.querySelectorAll('#detailLevelCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');detailLevel=level;}
 function selectTitleType(el,type){document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitleType=type;document.getElementById('btnStep01').disabled=false;}
 function selectTitle(el,kr,en){document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitle=kr;document.getElementById('titleInput').value=kr;document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';}
 function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';}
@@ -117,7 +120,7 @@ async function callClaude(prompt,maxTokens=8192){
   if(!API_KEY){document.getElementById('apiKeyModal').style.display='flex';throw new Error('API Key 필요');}
   const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),120000);
   try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:ctrl.signal,headers:{'Content-Type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:MODEL,max_tokens:maxTokens,system:SYSTEM_PROMPT,messages:[{role:'user',content:prompt}]})});clearTimeout(tout);
-    if(res.status===401){sessionStorage.removeItem('pk');API_KEY='';document.getElementById('apiKeyModal').style.display='flex';throw new Error('API Key 유효하지 않음');}
+    if(res.status===401){API_KEY='';if(currentUser)sb.from('profiles').update({api_key_encrypted:''}).eq('id',currentUser.id);document.getElementById('apiKeyModal').style.display='flex';throw new Error('API Key 유효하지 않음');}
     if(res.status===429)throw new Error('요청 과다. 30초 후 재시도');if(res.status>=500)throw new Error('서버 오류');
     const d=await res.json();if(d.error)throw new Error(d.error.message);usage.calls++;usage.inputTokens+=(d.usage?.input_tokens||0);usage.outputTokens+=(d.usage?.output_tokens||0);updateStats();
     return{text:d.content[0].text,stopReason:d.stop_reason};
@@ -299,7 +302,13 @@ function buildPrompt(stepId){
     case 'step_06':{const i=document.getElementById('optDeviceIndep').value,d=document.getElementById('optDeviceDep').value;return `장치 청구범위. 독립항 ${i}개+종속항 ${d}개. "청구항 N에 있어서," 시작. 【청구항 1】형식. SW명 금지. 제한성 표현 금지.\n${T}\n[프로젝트] ${inv}`;}
     case 'step_07':{const f=document.getElementById('optDeviceFigures').value;return `청구범위 도면 ${f}개 설계.\n\n[파트1: 도면 설계]\n각 도면: 제목/유형, 구성요소+참조번호, 연결관계. 참조번호: 서버100번대, 단말200번대, 외부300번대.\n\n[파트2: 도면의 간단한 설명]\n---BRIEF_DESCRIPTIONS---\n도 1은 (명칭)(참조번호)의 (내용)을 나타내는 (블록도/구성도)이다.\n도 2는 ...\n\n파트2는 마커 이후 위 형식으로만. 명령문 포함 금지.\n\n${T}\n[청구범위] ${outputs.step_06||''}`;}
     // FIX: step_08 — 발명을 실시하기 위한 구체적인 내용만
-    case 'step_08':return `아래 발명에 대한 【발명을 실시하기 위한 구체적인 내용】을 작성하라.
+    case 'step_08':{
+      const dlCfg={
+        compact:{charPerFig:'약 1,000자',total:'약 3,000~4,000자',extra:'핵심 구성요소 중심으로 간결하게 기술하라. 변형 실시예는 1개만.'},
+        standard:{charPerFig:'약 1,500자',total:'약 5,000~7,000자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 주요 구성요소에 변형 실시예 포함.'},
+        detailed:{charPerFig:'약 2,000자 이상',total:'8,000~10,000자',extra:'각 도면마다 구성요소의 기능, 동작 원리, 데이터 흐름, 상호 연동 관계를 상세히 설명하라. 구성요소 간 통신 프로토콜, 데이터 포맷, 처리 절차를 구체적으로 기술하라. 변형 실시예를 통해 다양한 구현 방식을 기술하라. 절대 축약하거나 요약하지 마라.'}
+      }[detailLevel];
+      return `아래 발명에 대한 【발명을 실시하기 위한 구체적인 내용】을 작성하라.
 
 규칙:
 - 이 항목만 작성. 기술분야, 배경기술, 과제, 효과 등 다른 항목 포함 금지.
@@ -307,18 +316,15 @@ function buildPrompt(stepId){
 - 도면별 "도 N을 참조하면," 형태로 시작.
 - 특허문체(~한다). 글머리 기호/마크다운 절대 금지.
 - 청구항의 모든 구성요소를 빠짐없이 포함하여 설명하라. 절대 생략 금지.
-- 각 핵심 구성요소에 대해 최소 1개의 변형 실시예를 포함하라.
+- 각 핵심 구성요소에 대해 변형 실시예를 포함하라.
 - 제한성 표현(만, 반드시, ~에 한하여 등) 사용 금지.
 
 ★ 분량 규칙 (매우 중요):
-- 도면 1개당 약 2,000자(공백 포함) 이상으로 설명하라.
-- 총 분량은 8,000~10,000자(공백 포함)가 되어야 한다.
-- 각 도면마다 구성요소의 기능, 동작 원리, 데이터 흐름, 상호 연동 관계를 상세히 설명하라.
-- 구성요소 간 통신 프로토콜, 데이터 포맷, 처리 절차를 구체적으로 기술하라.
-- 변형 실시예를 통해 다양한 구현 방식을 기술하라.
-- 절대 축약하거나 요약하지 마라. 각 구성요소에 대해 충분하고 상세한 설명을 작성하라.
+- 도면 1개당 ${dlCfg.charPerFig}(공백 포함)으로 설명하라.
+- 총 분량은 ${dlCfg.total}(공백 포함)가 되어야 한다.
+- ${dlCfg.extra}
 
-${T}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}\n[프로젝트] ${(inv||'').slice(0,3000)}`;
+${T}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}\n[프로젝트] ${(inv||'').slice(0,3000)}`;}
     case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예시 대입: (수치)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}`;
     case 'step_10':{const i=document.getElementById('optMethodIndep').value,d=document.getElementById('optMethodDep').value,s=getLastClaimNumber(outputs.step_06||'')+1;return `방법 청구항. 독립항 ${i}+종속항 ${d}. "~단계". 【청구항 ${s}】부터. 장치 1:1 대응. 제한성 표현 금지.\n${T}\n[장치 청구항] ${outputs.step_06||''}\n[상세설명] ${(outputs.step_08||'').slice(0,3000)}`;}
     case 'step_11':{const f=document.getElementById('optMethodFigures').value,lf=getLastFigureNumber(outputs.step_07||'');return `방법 흐름도 ${f}개. 도 ${lf+1}부터. S100,S200 단계번호.\n\n[파트1: 도면 설계]\n단계: 번호, 내용, 연결.\n\n[파트2: 도면의 간단한 설명]\n---BRIEF_DESCRIPTIONS---\n도 ${lf+1}은 (방법 이름)의 (설명)을 나타내는 순서도이다.\n\n${T}\n[방법 청구항] ${outputs.step_10||''}`;}
@@ -410,6 +416,7 @@ async function applyReview(){
     // Phase 1: 검토 내용 반영하여 Step 8 상세설명 보완
     showProgress('progressApplyReview','[1/3] 검토 반영 상세설명 보완 중...',1,3);
     const inv=document.getElementById('projectInput').value;
+    const dlCfg={compact:{c:'약 1,000자',t:'약 3,000~4,000자'},standard:{c:'약 1,500자',t:'약 5,000~7,000자'},detailed:{c:'약 2,000자 이상',t:'8,000~10,000자'}}[detailLevel];
     const improvedDesc=await callClaudeWithContinuation(`[검토 결과]를 반영하여 【발명을 실시하기 위한 구체적인 내용】을 완전히 새로 작성하라.
 
 규칙:
@@ -418,7 +425,7 @@ async function applyReview(){
 - 서버(100)를 주어. "구성요소(참조번호)" 형태.
 - 도면별 "도 N을 참조하면," 형태.
 - 특허문체(~한다). 글머리 금지. 생략 금지.
-- 도면 1개당 약 2,000자, 총 8,000~10,000자.
+- 도면 1개당 ${dlCfg.c}, 총 ${dlCfg.t}.
 - 청구항의 모든 구성요소를 빠짐없이 설명. 변형 실시예 포함.
 - 제한성 표현 금지.
 
@@ -476,13 +483,15 @@ function extractMermaidBlocks(t){return(t.match(/```mermaid\n([\s\S]*?)```/g)||[
 function parseMathBlocks(t){const b=[];let m;const re=/---MATH_BLOCK_\d+---\s*\nANCHOR:\s*(.+)\s*\nFORMULA:\s*\n([\s\S]*?)(?=---MATH_BLOCK_|\s*$)/g;while((m=re.exec(t))!==null)b.push({anchor:m[1].trim(),formula:m[2].trim()});return b;}
 function insertMathBlocks(s08,s09){let r=s08;const b=parseMathBlocks(s09);for(const x of b.reverse()){const i=r.indexOf(x.anchor);if(i>=0){const s=i+x.anchor.length,p=r.indexOf('.',s);const ip=(p>=0&&p-s<100)?p+1:s;r=r.slice(0,ip)+'\n\n'+x.formula+'\n\n'+r.slice(ip);}}return r;}
 
-// ═══════════ MERMAID → EDITABLE PPTX (v4.4) ═══════════
+// ═══════════ UNIFIED DIAGRAM ENGINE (v4.5) ═══════════
+// Single layout → used for BOTH web SVG and PPTX
+let diagramData = {}; // { step_07: [{nodes, edges, positions}], step_11: [...] }
+
 function parseMermaidGraph(code){
   const nodes={},edges=[];
   code.split('\n').forEach(line=>{
     const l=line.trim();
     if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef')||l.startsWith('subgraph'))return;
-    // edge patterns: A["lbl"] --> B["lbl"], A -->|"txt"| B, A --> B
     const em=l.match(/^(\w+)(?:\[["']?(.+?)["']?\])?\s*(-->|---)\s*(?:\|["']?(.+?)["']?\|\s*)?(\w+)(?:\[["']?(.+?)["']?\])?/);
     if(em){
       const[,fid,fl,,el,tid,tl]=em;
@@ -500,12 +509,10 @@ function parseMermaidGraph(code){
 }
 
 function layoutGraph(nodes,edges){
-  // BFS hierarchical layout with wide spacing
   const adj={};edges.forEach(e=>{if(!adj[e.from])adj[e.from]=[];adj[e.from].push(e.to);});
   const targets=new Set(edges.map(e=>e.to));
   const roots=nodes.filter(n=>!targets.has(n.id));
   if(!roots.length&&nodes.length)roots.push(nodes[0]);
-
   const levels={},visited=new Set();
   const queue=roots.map(r=>({id:r.id,level:0}));
   while(queue.length){
@@ -514,13 +521,11 @@ function layoutGraph(nodes,edges){
     (adj[id]||[]).forEach(tid=>{if(!visited.has(tid))queue.push({id:tid,level:level+1});});
   }
   nodes.forEach(n=>{if(!(n.id in levels))levels[n.id]=0;});
-
   const groups={};nodes.forEach(n=>{const lv=levels[n.id];if(!groups[lv])groups[lv]=[];groups[lv].push(n);});
-
+  // Layout constants (in inches, used by both SVG and PPTX)
   const NW=2.5,NH=0.65,HG=0.8,VG=1.2;
   const SW=13.33,startY=0.7;
   const positions={};
-
   Object.entries(groups).forEach(([lv,grp])=>{
     const totalW=grp.length*NW+(grp.length-1)*HG;
     const sx=(SW-totalW)/2;
@@ -532,76 +537,142 @@ function layoutGraph(nodes,edges){
   return positions;
 }
 
-function downloadPptx(sid){
-  const mt=outputs[sid+'_mermaid'];if(!mt){showToast('도면 없음','error');return;}
-  const pptx=new PptxGenJS();pptx.layout='LAYOUT_WIDE';
-  const blocks=extractMermaidBlocks(mt);if(!blocks.length){showToast('Mermaid 코드 없음','error');return;}
+// Compute edge route segments (shared by SVG and PPTX)
+function computeEdgeRoutes(edges,positions){
+  return edges.map((e,ei)=>{
+    const fp=positions[e.from],tp=positions[e.to];
+    if(!fp||!tp)return null;
+    const sx=fp.cx,sy=fp.y+fp.h;
+    const tx=tp.cx,ty=tp.y;
+    const segments=[];
+    let labelPos=null;
+    if(Math.abs(sx-tx)<0.05){
+      segments.push({type:'line',x1:sx,y1:sy,x2:tx,y2:ty,arrow:true});
+      if(e.label)labelPos={x:sx+0.15,y:(sy+ty)/2-0.12};
+    }else{
+      const baseM=(sy+ty)/2;
+      const offset=(ei%3-1)*0.12;
+      const midY=baseM+offset;
+      segments.push({type:'line',x1:sx,y1:sy,x2:sx,y2:midY,arrow:false});
+      segments.push({type:'line',x1:sx,y1:midY,x2:tx,y2:midY,arrow:false});
+      segments.push({type:'line',x1:tx,y1:midY,x2:tx,y2:ty,arrow:true});
+      if(e.label)labelPos={x:Math.max(sx,tx)+0.15,y:midY-0.12};
+    }
+    return{segments,label:e.label,labelPos};
+  }).filter(Boolean);
+}
 
-  // figure numbering offset
+// ── Web SVG Renderer ──
+function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
+  let maxX=0,maxY=0;
+  Object.values(positions).forEach(p=>{maxX=Math.max(maxX,p.x+p.w);maxY=Math.max(maxY,p.y+p.h);});
+  const PX=72; // pixels per inch
+  const PAD=0.3;
+  const svgW=(maxX+PAD*2)*PX,svgH=(maxY+PAD*2)*PX;
+  const ox=PAD*PX; // offset in pixels
+
+  const mkId=`ah_${containerId}`;
+  let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${Math.min(svgW,960)}px;background:white;border-radius:8px">`;
+  svg+=`<defs><marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#000"/></marker></defs>`;
+
+  // Edges
+  const routes=computeEdgeRoutes(edges,positions);
+  routes.forEach(route=>{
+    route.segments.forEach(seg=>{
+      const x1=seg.x1*PX+ox,y1=seg.y1*PX+ox,x2=seg.x2*PX+ox,y2=seg.y2*PX+ox;
+      const me=seg.arrow?` marker-end="url(#${mkId})"`:' ';
+      svg+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#000" stroke-width="1.5"${me}/>`;
+    });
+    if(route.label&&route.labelPos){
+      const lx=route.labelPos.x*PX+ox,ly=route.labelPos.y*PX+ox;
+      svg+=`<text x="${lx}" y="${ly+10}" font-size="10" font-family="맑은 고딕,sans-serif" fill="#333">${escapeHtml(route.label)}</text>`;
+    }
+  });
+
+  // Nodes (drawn AFTER edges so they cover edge lines at connection points)
+  nodes.forEach(n=>{
+    const p=positions[n.id];if(!p)return;
+    const xP=p.x*PX+ox,yP=p.y*PX+ox,wP=p.w*PX,hP=p.h*PX;
+    svg+=`<rect x="${xP}" y="${yP}" width="${wP}" height="${hP}" fill="#fff" stroke="#000" stroke-width="1.5" rx="3"/>`;
+    // Text — truncate if too long
+    const label=n.label.length>20?n.label.slice(0,18)+'…':n.label;
+    svg+=`<text x="${xP+wP/2}" y="${yP+hP/2+4}" text-anchor="middle" font-size="11" font-family="맑은 고딕,sans-serif" fill="#000">${escapeHtml(label)}</text>`;
+  });
+  svg+='</svg>';
+  const c=document.getElementById(containerId);if(c)c.innerHTML=svg;
+}
+
+// ── Unified Diagram Renderer (replaces Mermaid renderDiagrams) ──
+function renderDiagrams(sid,mt){
+  const cid=sid==='step_07'?'diagramsStep07':'diagramsStep11';
+  const el=document.getElementById(cid);
+  const blocks=extractMermaidBlocks(mt);
+  if(!blocks.length){el.innerHTML=`<div class="diagram-container"><pre style="font-size:12px;white-space:pre-wrap">${escapeHtml(mt)}</pre></div>`;return;}
+
+  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+  diagramData[sid]=[];
+
+  el.innerHTML=blocks.map((code,i)=>{
+    const figNum=figOffset+i+1;
+    return `<div class="diagram-container"><div class="diagram-label">도 ${figNum}</div><div id="diagram_${sid}_${i}" style="background:#fff;border:1px solid #eee;border-radius:8px;padding:12px;overflow-x:auto"></div><details style="margin-top:8px"><summary style="font-size:11px;color:var(--color-text-tertiary);cursor:pointer">Mermaid 코드 보기</summary><pre style="font-size:11px;margin-top:4px;padding:8px;background:var(--color-bg-tertiary);border-radius:8px;overflow-x:auto">${escapeHtml(code)}</pre></details></div>`;
+  }).join('');
+
+  blocks.forEach((code,i)=>{
+    const{nodes,edges}=parseMermaidGraph(code);
+    const positions=layoutGraph(nodes,edges);
+    diagramData[sid].push({nodes,edges,positions});
+    renderDiagramSvg(`diagram_${sid}_${i}`,nodes,edges,positions,figOffset+i+1);
+  });
+}
+
+// ── PPTX Generator (uses SAME diagramData as SVG) ──
+function downloadPptx(sid){
+  const data=diagramData[sid];
+  if(!data||!data.length){
+    // Fallback: re-parse from mermaid text
+    const mt=outputs[sid+'_mermaid'];
+    if(!mt){showToast('도면 없음','error');return;}
+    const blocks=extractMermaidBlocks(mt);
+    if(!blocks.length){showToast('Mermaid 코드 없음','error');return;}
+    diagramData[sid]=blocks.map(code=>{const{nodes,edges}=parseMermaidGraph(code);return{nodes,edges,positions:layoutGraph(nodes,edges)};});
+    return downloadPptx(sid);
+  }
+
+  const pptx=new PptxGenJS();pptx.layout='LAYOUT_WIDE';
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
 
-  blocks.forEach((code,idx)=>{
+  data.forEach(({nodes,edges,positions},idx)=>{
     const slide=pptx.addSlide({bkgd:'FFFFFF'});
     const figNum=figOffset+idx+1;
     slide.addText(`도 ${figNum}`,{x:0.3,y:0.05,w:3,h:0.4,fontSize:16,bold:true,fontFace:'맑은 고딕',color:'000000'});
 
-    const{nodes,edges}=parseMermaidGraph(code);
-    if(!nodes.length){slide.addText(code,{x:0.5,y:0.6,w:12,h:6.4,fontSize:9,fontFace:'Consolas',color:'000000'});return;}
-    const pos=layoutGraph(nodes,edges);
+    if(!nodes.length)return;
 
-    // Draw edges (orthogonal routing, continuous arrows)
-    edges.forEach((e,ei)=>{
-      const fp=pos[e.from],tp=pos[e.to];
-      if(!fp||!tp)return;
-
-      const sx=fp.cx,sy=fp.y+fp.h; // source: bottom center
-      const tx=tp.cx,ty=tp.y;       // target: top center
-
-      if(Math.abs(sx-tx)<0.05){
-        // Straight vertical line with arrow
-        const h=ty-sy;
-        if(h>0){
-          slide.addShape(pptx.shapes.LINE,{x:sx,y:sy,w:0,h:h,
-            line:{color:'000000',width:1.5,endArrowType:'triangle'}});
+    // Edges — SAME computeEdgeRoutes as SVG
+    const routes=computeEdgeRoutes(edges,positions);
+    routes.forEach(route=>{
+      route.segments.forEach(seg=>{
+        const x1=seg.x1,y1=seg.y1,x2=seg.x2,y2=seg.y2;
+        const dx=x2-x1,dy=y2-y1;
+        const lineOpts={color:'000000',width:1.5};
+        if(seg.arrow)lineOpts.endArrowType='triangle';
+        if(Math.abs(dx)<0.01){
+          // Vertical line
+          slide.addShape(pptx.shapes.LINE,{x:x1,y:Math.min(y1,y2),w:0,h:Math.abs(dy),line:lineOpts});
+        }else{
+          // Horizontal line
+          slide.addShape(pptx.shapes.LINE,{x:Math.min(x1,x2),y:y1,w:Math.abs(dx),h:0,line:lineOpts});
         }
-      }else{
-        // Orthogonal routing: down → horizontal → down
-        // Use offset midY per edge to avoid overlapping horizontal segments
-        const baseM=(sy+ty)/2;
-        const offset=(ei%3-1)*0.15; // slight offset to prevent overlap
-        const midY=baseM+offset;
-
-        const seg1H=midY-sy;
-        const seg3H=ty-midY;
-
-        // Segment 1: vertical down from source
-        if(seg1H>0){
-          slide.addShape(pptx.shapes.LINE,{x:sx,y:sy,w:0,h:seg1H,
-            line:{color:'000000',width:1.5}});
-        }
-        // Segment 2: horizontal
-        const lx=Math.min(sx,tx),rw=Math.abs(tx-sx);
-        slide.addShape(pptx.shapes.LINE,{x:lx,y:midY,w:rw,h:0,
-          line:{color:'000000',width:1.5}});
-        // Segment 3: vertical down to target with arrow
-        if(seg3H>0){
-          slide.addShape(pptx.shapes.LINE,{x:tx,y:midY,w:0,h:seg3H,
-            line:{color:'000000',width:1.5,endArrowType:'triangle'}});
-        }
-      }
-
-      // Edge label: place BESIDE the arrow (offset to right), not on the arrow
-      if(e.label){
-        const midX=Math.max(sx,tx)+0.15; // right side of rightmost node
-        const midY2=(sy+ty)/2-0.12;
-        slide.addText(e.label,{x:midX,y:midY2,w:1.2,h:0.24,
+      });
+      if(route.label&&route.labelPos){
+        slide.addText(route.label,{x:route.labelPos.x,y:route.labelPos.y,w:1.2,h:0.24,
           fontSize:7,fontFace:'맑은 고딕',color:'333333',align:'left',valign:'middle'});
       }
     });
 
-    // Draw nodes (rectangles) AFTER edges so they appear on top
+    // Nodes — SAME positions as SVG
     nodes.forEach(n=>{
-      const p=pos[n.id];if(!p)return;
+      const p=positions[n.id];if(!p)return;
       slide.addShape(pptx.shapes.RECTANGLE,{
         x:p.x,y:p.y,w:p.w,h:p.h,
         fill:{color:'FFFFFF'},line:{color:'000000',width:1.5},rectRadius:0.03
@@ -615,9 +686,9 @@ function downloadPptx(sid){
   });
 
   pptx.writeFile({fileName:`도면_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.pptx`});
-  showToast('편집 가능한 PPTX 다운로드 완료');
+  showToast('PPTX 다운로드 완료 (웹 표시와 동일)');
 }
-function downloadPptxAll(){if(outputs.step_07_mermaid)downloadPptx('step_07');else showToast('도면 없음','error');}
+function downloadPptxAll(){if(diagramData.step_07||outputs.step_07_mermaid)downloadPptx('step_07');else showToast('도면 없음','error');}
 
 // ═══════════ RENDERERS ═══════════
 function renderOutput(sid,text){const cid=`result${sid.charAt(0).toUpperCase()+sid.slice(1).replace('_','')}`;const el=document.getElementById(cid);if(!el)return;if(sid==='step_01')renderTitleCards(el,text);else if(sid==='step_06'||sid==='step_10')renderClaimResult(el,sid,text);else renderEditableResult(el,sid,text);}
@@ -626,12 +697,6 @@ function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=valida
 function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="outputs['${sid}']=this.value">${escapeHtml(text)}</textarea></div>`;}
 function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tossface">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="outputs['${sid}']=this.value">${escapeHtml(text)}</textarea></div>`;}
 function toggleAccordion(h){h.classList.toggle('open');const b=h.nextElementSibling;if(b)b.classList.toggle('open');}
-function renderDiagrams(sid,mt){
-  const cid=sid==='step_07'?'diagramsStep07':'diagramsStep11',el=document.getElementById(cid),blocks=extractMermaidBlocks(mt);
-  if(!blocks.length){el.innerHTML=`<div class="diagram-container"><pre style="font-size:12px;white-space:pre-wrap">${escapeHtml(mt)}</pre></div>`;return;}
-  el.innerHTML=blocks.map((code,i)=>`<div class="diagram-container"><div class="diagram-label">도 ${i+1}</div><div id="mermaid_${sid}_${i}"></div><details style="margin-top:8px"><summary style="font-size:11px;color:var(--color-text-tertiary);cursor:pointer">코드 보기</summary><pre style="font-size:11px;margin-top:4px;padding:8px;background:var(--color-bg-tertiary);border-radius:8px;overflow-x:auto">${escapeHtml(code)}</pre></details></div>`).join('');
-  blocks.forEach((code,i)=>{const eid=`mermaid_${sid}_${i}`,svid=`svg_${sid}_${i}_${Date.now()}`;try{mermaid.render(svid,code).then(r=>{const t=document.getElementById(eid);if(t)t.innerHTML=r.svg;}).catch(()=>{const t=document.getElementById(eid);if(t)t.innerHTML='<div class="issue-item issue-high">렌더링 실패</div>';});}catch(e){const t=document.getElementById(eid);if(t)t.innerHTML='<div class="issue-item issue-high">렌더링 오류</div>';}});
-}
 
 // ═══════════ VALIDATION ═══════════
 const KILLER_WORDS=[{pattern:/반드시/,msg:'"반드시" — 제한적 표현 (권리범위 축소 우려)'},{pattern:/에 한하여/,msg:'"~에 한하여" — 제한적 표현'},{pattern:/에 한정/,msg:'"~에 한정" — 제한적 표현'},{pattern:/에 제한/,msg:'"~에 제한" — 제한적 표현'},{pattern:/필수적으로/,msg:'"필수적으로" — 제한적 표현'}];
