@@ -140,7 +140,7 @@ function buildPrompt(stepId){
     case 'step_02':return `【기술분야】를 작성. "본 발명은 ~에 관한 것이다." 한 문장만. 20단어. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}`;
     case 'step_03':return `【발명의 배경이 되는 기술】을 작성. 3문단(기존문제/최근동향/필요성), 각 150단어. 번호 없이. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}`;
     // FIX: 선행기술문헌 딱 1건만
-    case 'step_04':return `【선행기술문헌】작성.\n규칙: 다른 항목 포함 금지. 헤더 금지. 관련 한국 특허 딱 1건만 기재.\n출력:\n【특허문헌】\n(특허문헌 1) 한국등록특허 제__________호 (추후 보완)\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}`;
+    case 'step_04':return `【선행기술문헌】작성.\n규칙: 다른 항목 포함 금지. 헤더 금지. 관련 한국 특허 딱 1건만 기재.\n출력:\n【특허문헌】\n(특허문헌 1) 한국등록특허 제__________호\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}`;
     case 'step_05':return `【해결하고자 하는 과제】작성. "본 발명은 ~을 제공하는 것을 목적으로 한다." 50단어 이하. 마지막: "본 발명의 기술적 과제는 이상에서 언급한 기술적 과제로 제한되지 않으며, 언급되지 않은 또 다른 기술적 과제들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다." 헤더 금지.\n\n발명의 명칭: ${T}\n[배경기술] ${outputs.step_03||''}`;
     case 'step_06':{const i=document.getElementById('optDeviceIndep').value,d=document.getElementById('optDeviceDep').value;return `장치 청구범위. 독립항 ${i}개+종속항 ${d}개. "청구항 N에 있어서," 시작. 【청구항 1】형식. SW명 금지. 제한성 표현 금지.\n${T}\n[프로젝트] ${inv}`;}
     case 'step_07':{const f=document.getElementById('optDeviceFigures').value;return `청구범위 도면 ${f}개 설계.\n\n[파트1: 도면 설계]\n각 도면: 제목/유형, 구성요소+참조번호, 연결관계. 참조번호: 서버100번대, 단말200번대, 외부300번대.\n\n[파트2: 도면의 간단한 설명]\n---BRIEF_DESCRIPTIONS---\n도 1은 (명칭)(참조번호)의 (내용)을 나타내는 (블록도/구성도)이다.\n도 2는 ...\n\n파트2는 마커 이후 위 형식으로만. 명령문 포함 금지.\n\n${T}\n[청구범위] ${outputs.step_06||''}`;}
@@ -155,6 +155,14 @@ function buildPrompt(stepId){
 - 청구항의 모든 구성요소를 빠짐없이 포함하여 설명하라. 절대 생략 금지.
 - 각 핵심 구성요소에 대해 최소 1개의 변형 실시예를 포함하라.
 - 제한성 표현(만, 반드시, ~에 한하여 등) 사용 금지.
+
+★ 분량 규칙 (매우 중요):
+- 도면 1개당 약 2,000자(공백 포함) 이상으로 설명하라.
+- 총 분량은 8,000~10,000자(공백 포함)가 되어야 한다.
+- 각 도면마다 구성요소의 기능, 동작 원리, 데이터 흐름, 상호 연동 관계를 상세히 설명하라.
+- 구성요소 간 통신 프로토콜, 데이터 포맷, 처리 절차를 구체적으로 기술하라.
+- 변형 실시예를 통해 다양한 구현 방식을 기술하라.
+- 절대 축약하거나 요약하지 마라. 각 구성요소에 대해 충분하고 상세한 설명을 작성하라.
 
 ${T}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}\n[프로젝트] ${(inv||'').slice(0,3000)}`;
     case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예시 대입: (수치)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}`;
@@ -195,26 +203,97 @@ ${src}`;
 
 // ═══════════ STEP EXECUTION ═══════════
 function checkDependency(s){const inv=document.getElementById('projectInput').value.trim();const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저'};return d[s]?d[s]():null;}
-async function runStep(sid){if(loadingState[sid])return;const dep=checkDependency(sid);if(dep){showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13'},bid=bm[sid];loadingState[sid]=true;if(bid)setButtonLoading(bid,true);try{const r=await callClaude(buildPrompt(sid));outputs[sid]=r.text;renderOutput(sid,r.text);if(sid==='step_13')document.getElementById('btnApplyReview').style.display='block';showToast(`${STEP_NAMES[sid]} 완료`);}catch(e){showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)setButtonLoading(bid,false);}}
+async function runStep(sid){if(loadingState[sid])return;const dep=checkDependency(sid);if(dep){showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13'},bid=bm[sid];loadingState[sid]=true;if(bid)setButtonLoading(bid,true);
+  try{
+    const r=await callClaude(buildPrompt(sid));outputs[sid]=r.text;renderOutput(sid,r.text);
+    // Step 6: 자동 기재불비 검토 후 수정본 출력
+    if(sid==='step_06'){
+      showProgress('progressStep06','기재불비 자동 검증 중...',1,3);
+      const issues=validateClaims(r.text);
+      if(issues.length>0){
+        showProgress('progressStep06','기재불비 수정 중...',2,3);
+        const issueText=issues.map(i=>i.message).join('\n');
+        const fixPrompt=`아래 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.
+
+수정 규칙:
+- 【청구항 N】형식 유지
+- "상기" 선행기재 누락: 참조하는 독립항에 해당 구성요소를 추가하거나, 종속항의 표현을 수정
+- 제한적 표현("반드시", "~에 한하여" 등): 삭제 또는 비제한적 표현으로 교체
+- 청구항 참조 오류: 올바른 청구항 번호로 수정
+- 수정한 부분만 바꾸고 나머지는 원문 그대로 유지
+
+[지적사항]
+${issueText}
+
+[원본 청구범위]
+${r.text}`;
+        const fixR=await callClaude(fixPrompt);
+        outputs[sid]=fixR.text;
+        renderOutput(sid,fixR.text);
+        showProgress('progressStep06','기재불비 수정 완료',3,3);
+        setTimeout(()=>clearProgress('progressStep06'),2000);
+        showToast('장치 청구항 생성 + 기재불비 자동 수정 완료');
+      }else{
+        clearProgress('progressStep06');
+        showToast('장치 청구항 완료 (기재불비 없음)');
+      }
+    }else{
+      if(sid==='step_13')document.getElementById('btnApplyReview').style.display='block';
+      showToast(`${STEP_NAMES[sid]} 완료`);
+    }
+  }catch(e){showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)setButtonLoading(bid,false);}}
 async function runLongStep(sid){if(loadingState[sid])return;const dep=checkDependency(sid);if(dep){showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';loadingState[sid]=true;setButtonLoading(bid,true);showProgress(pid,`${STEP_NAMES[sid]} 생성 중...`,0,1);try{const t=await callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;renderOutput(sid,t);showToast(`${STEP_NAMES[sid]} 완료`);}catch(e){showToast(e.message,'error');}finally{loadingState[sid]=false;setButtonLoading(bid,false);clearProgress(pid);}}
 async function runMathInsertion(){if(loadingState.step_09)return;const dep=checkDependency('step_09');if(dep){showToast(dep,'error');return;}loadingState.step_09=true;setButtonLoading('btnStep09',true);try{const r=await callClaude(buildPrompt('step_09'));outputs.step_09=insertMathBlocks(outputs.step_08,r.text);renderOutput('step_09',outputs.step_09);showToast('수학식 삽입 완료');}catch(e){showToast(e.message,'error');}finally{loadingState.step_09=false;setButtonLoading('btnStep09',false);}}
 
-// FIX: applyReview — 반영 전/후 비교 기능
+// FIX: applyReview — Step 8 보완 → Step 9 수학식 삽입 → 완전 수정본
 async function applyReview(){
   if(loadingState.applyReview)return;if(!outputs.step_13){showToast('검토 결과 없음','error');return;}
   const cur=getLatestDescription();if(!cur){showToast('상세설명 없음','error');return;}
-  // 반영 전 텍스트 저장
   beforeReviewText=cur;
-  loadingState.applyReview=true;setButtonLoading('btnApplyReview',true);showProgress('progressApplyReview','반영 중...',0,1);
+  loadingState.applyReview=true;setButtonLoading('btnApplyReview',true);
+
   try{
-    const t=await callClaudeWithContinuation(`[현재 상세설명]에 [검토 결과] 보완사항 반영하여 개선된 상세설명 전체 출력. 기존 유지+검토 지적사항 보완. 수학식 유지. 특허문체. 글머리 금지. 절대 생략 금지.\n\n[발명의 명칭] ${selectedTitle}\n[검토 결과] ${outputs.step_13}\n[현재 상세설명] ${cur}`,'progressApplyReview');
-    outputs.step_13_applied=t;
-    renderOutput('step_09',t);
-    // 반영 결과 비교 UI 표시
+    // Phase 1: 검토 내용 반영하여 Step 8 상세설명 보완
+    showProgress('progressApplyReview','[1/3] 검토 반영 상세설명 보완 중...',1,3);
+    const inv=document.getElementById('projectInput').value;
+    const improvedDesc=await callClaudeWithContinuation(`[검토 결과]를 반영하여 【발명을 실시하기 위한 구체적인 내용】을 완전히 새로 작성하라.
+
+규칙:
+- 기존 상세설명을 기반으로 검토 지적사항을 모두 보완하라.
+- 이 항목만 작성. 다른 항목(기술분야, 배경기술 등) 포함 금지.
+- 서버(100)를 주어. "구성요소(참조번호)" 형태.
+- 도면별 "도 N을 참조하면," 형태.
+- 특허문체(~한다). 글머리 금지. 생략 금지.
+- 도면 1개당 약 2,000자, 총 8,000~10,000자.
+- 청구항의 모든 구성요소를 빠짐없이 설명. 변형 실시예 포함.
+- 제한성 표현 금지.
+
+[발명의 명칭] ${selectedTitle}
+[검토 결과] ${outputs.step_13}
+[청구범위] ${outputs.step_06||''}
+[도면] ${outputs.step_07||''}
+[현재 상세설명] ${cur}
+[프로젝트] ${(inv||'').slice(0,2000)}`,'progressApplyReview');
+
+    outputs.step_08=improvedDesc; // Step 8 갱신
+
+    // Phase 2: 보완된 상세설명에 수학식 삽입 (Step 9)
+    showProgress('progressApplyReview','[2/3] 수학식 삽입 중...',2,3);
+    const mathR=await callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예시 대입: (수치)\n\n${selectedTitle}\n[현재 상세설명] ${improvedDesc}`);
+    const finalDesc=insertMathBlocks(improvedDesc,mathR.text);
+    outputs.step_09=finalDesc; // Step 9 갱신
+    outputs.step_13_applied=finalDesc;
+
+    // Phase 3: UI 업데이트
+    showProgress('progressApplyReview','[3/3] 완료',3,3);
+    renderOutput('step_08',improvedDesc);
+    renderOutput('step_09',finalDesc);
+
     const resultArea=document.getElementById('reviewApplyResult');
     if(resultArea){resultArea.style.display='block';showReviewDiff('after');}
-    showToast('검토 반영 완료 — "도면·설명 → Step 9" 결과에 반영됨');
-  }catch(e){showToast(e.message,'error');}finally{loadingState.applyReview=false;setButtonLoading('btnApplyReview',false);clearProgress('progressApplyReview');}
+    setTimeout(()=>clearProgress('progressApplyReview'),2000);
+    showToast('검토 반영 완료 — Step 8 보완 → Step 9 수학식 삽입 순차 적용');
+  }catch(e){showToast(e.message,'error');}finally{loadingState.applyReview=false;setButtonLoading('btnApplyReview',false);}
 }
 function showReviewDiff(mode){
   const area=document.getElementById('reviewDiffArea');
@@ -243,14 +322,13 @@ function extractMermaidBlocks(t){return(t.match(/```mermaid\n([\s\S]*?)```/g)||[
 function parseMathBlocks(t){const b=[];let m;const re=/---MATH_BLOCK_\d+---\s*\nANCHOR:\s*(.+)\s*\nFORMULA:\s*\n([\s\S]*?)(?=---MATH_BLOCK_|\s*$)/g;while((m=re.exec(t))!==null)b.push({anchor:m[1].trim(),formula:m[2].trim()});return b;}
 function insertMathBlocks(s08,s09){let r=s08;const b=parseMathBlocks(s09);for(const x of b.reverse()){const i=r.indexOf(x.anchor);if(i>=0){const s=i+x.anchor.length,p=r.indexOf('.',s);const ip=(p>=0&&p-s<100)?p+1:s;r=r.slice(0,ip)+'\n\n'+x.formula+'\n\n'+r.slice(ip);}}return r;}
 
-// ═══════════ MERMAID → EDITABLE PPTX ═══════════
+// ═══════════ MERMAID → EDITABLE PPTX (v4.4) ═══════════
 function parseMermaidGraph(code){
-  const nodes={},edges=[],subgraphs=[];
+  const nodes={},edges=[];
   code.split('\n').forEach(line=>{
     const l=line.trim();
-    if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef'))return;
-    if(l.startsWith('subgraph')){const nm=l.replace('subgraph','').replace(/["']/g,'').trim();subgraphs.push(nm);return;}
-    // edge: A["lbl"] --> B["lbl"] or A -->|"txt"| B
+    if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef')||l.startsWith('subgraph'))return;
+    // edge patterns: A["lbl"] --> B["lbl"], A -->|"txt"| B, A --> B
     const em=l.match(/^(\w+)(?:\[["']?(.+?)["']?\])?\s*(-->|---)\s*(?:\|["']?(.+?)["']?\|\s*)?(\w+)(?:\[["']?(.+?)["']?\])?/);
     if(em){
       const[,fid,fl,,el,tid,tl]=em;
@@ -261,29 +339,39 @@ function parseMermaidGraph(code){
       edges.push({from:fid,to:tid,label:el||''});
       return;
     }
-    // standalone node: A["label"]
     const nm=l.match(/^(\w+)\[["']?(.+?)["']?\]/);
-    if(nm)nodes[nm[1]]={id:nm[1],label:nm[2]};
+    if(nm&&!nodes[nm[1]])nodes[nm[1]]={id:nm[1],label:nm[2]};
   });
-  return{nodes:Object.values(nodes),edges,subgraphs};
+  return{nodes:Object.values(nodes),edges};
 }
+
 function layoutGraph(nodes,edges){
-  // BFS hierarchical layout
+  // BFS hierarchical layout with wide spacing
+  const adj={};edges.forEach(e=>{if(!adj[e.from])adj[e.from]=[];adj[e.from].push(e.to);});
   const targets=new Set(edges.map(e=>e.to));
   const roots=nodes.filter(n=>!targets.has(n.id));
   if(!roots.length&&nodes.length)roots.push(nodes[0]);
+
   const levels={},visited=new Set();
   const queue=roots.map(r=>({id:r.id,level:0}));
-  while(queue.length){const{id,level}=queue.shift();if(visited.has(id))continue;visited.add(id);levels[id]=level;edges.filter(e=>e.from===id).forEach(e=>{if(!visited.has(e.to))queue.push({id:e.to,level:level+1});});}
+  while(queue.length){
+    const{id,level}=queue.shift();
+    if(visited.has(id))continue;visited.add(id);levels[id]=level;
+    (adj[id]||[]).forEach(tid=>{if(!visited.has(tid))queue.push({id:tid,level:level+1});});
+  }
   nodes.forEach(n=>{if(!(n.id in levels))levels[n.id]=0;});
+
   const groups={};nodes.forEach(n=>{const lv=levels[n.id];if(!groups[lv])groups[lv]=[];groups[lv].push(n);});
+
+  const NW=2.5,NH=0.65,HG=0.8,VG=1.2;
+  const SW=13.33,startY=0.7;
   const positions={};
-  const NW=2.2,NH=0.7,HG=0.6,VG=0.9,SW=13.33,SY=0.6;
+
   Object.entries(groups).forEach(([lv,grp])=>{
     const totalW=grp.length*NW+(grp.length-1)*HG;
     const sx=(SW-totalW)/2;
     grp.forEach((node,i)=>{
-      const x=sx+i*(NW+HG), y=SY+parseInt(lv)*(NH+VG);
+      const x=sx+i*(NW+HG),y=startY+parseInt(lv)*(NH+VG);
       positions[node.id]={x,y,w:NW,h:NH,cx:x+NW/2,cy:y+NH/2};
     });
   });
@@ -295,43 +383,80 @@ function downloadPptx(sid){
   const pptx=new PptxGenJS();pptx.layout='LAYOUT_WIDE';
   const blocks=extractMermaidBlocks(mt);if(!blocks.length){showToast('Mermaid 코드 없음','error');return;}
 
+  // figure numbering offset
+  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+
   blocks.forEach((code,idx)=>{
     const slide=pptx.addSlide({bkgd:'FFFFFF'});
-    slide.addText(`도 ${idx+1}`,{x:0.3,y:0.1,w:3,h:0.4,fontSize:16,bold:true,fontFace:'맑은 고딕',color:'000000'});
+    const figNum=figOffset+idx+1;
+    slide.addText(`도 ${figNum}`,{x:0.3,y:0.05,w:3,h:0.4,fontSize:16,bold:true,fontFace:'맑은 고딕',color:'000000'});
 
     const{nodes,edges}=parseMermaidGraph(code);
-    if(!nodes.length){slide.addText(code,{x:0.5,y:0.8,w:12,h:6,fontSize:9,fontFace:'Consolas',color:'000000'});return;}
+    if(!nodes.length){slide.addText(code,{x:0.5,y:0.6,w:12,h:6.4,fontSize:9,fontFace:'Consolas',color:'000000'});return;}
     const pos=layoutGraph(nodes,edges);
 
-    // Draw edges first (angular/orthogonal arrows)
-    edges.forEach(e=>{
+    // Draw edges (orthogonal routing, continuous arrows)
+    edges.forEach((e,ei)=>{
       const fp=pos[e.from],tp=pos[e.to];
       if(!fp||!tp)return;
-      const sx=fp.cx,sy=fp.y+fp.h; // source bottom center
-      const tx=tp.cx,ty=tp.y; // target top center
-      const midY=(sy+ty)/2;
 
-      if(Math.abs(sx-tx)<0.1){
-        // Straight vertical
-        slide.addShape(pptx.shapes.LINE,{x:sx,y:sy,w:0.001,h:ty-sy,line:{color:'000000',width:1.5,endArrowType:'triangle'}});
+      const sx=fp.cx,sy=fp.y+fp.h; // source: bottom center
+      const tx=tp.cx,ty=tp.y;       // target: top center
+
+      if(Math.abs(sx-tx)<0.05){
+        // Straight vertical line with arrow
+        const h=ty-sy;
+        if(h>0){
+          slide.addShape(pptx.shapes.LINE,{x:sx,y:sy,w:0,h:h,
+            line:{color:'000000',width:1.5,endArrowType:'triangle'}});
+        }
       }else{
-        // Angular: down → horizontal → down
-        slide.addShape(pptx.shapes.LINE,{x:sx,y:sy,w:0.001,h:midY-sy,line:{color:'000000',width:1.5}});
+        // Orthogonal routing: down → horizontal → down
+        // Use offset midY per edge to avoid overlapping horizontal segments
+        const baseM=(sy+ty)/2;
+        const offset=(ei%3-1)*0.15; // slight offset to prevent overlap
+        const midY=baseM+offset;
+
+        const seg1H=midY-sy;
+        const seg3H=ty-midY;
+
+        // Segment 1: vertical down from source
+        if(seg1H>0){
+          slide.addShape(pptx.shapes.LINE,{x:sx,y:sy,w:0,h:seg1H,
+            line:{color:'000000',width:1.5}});
+        }
+        // Segment 2: horizontal
         const lx=Math.min(sx,tx),rw=Math.abs(tx-sx);
-        slide.addShape(pptx.shapes.LINE,{x:lx,y:midY,w:rw,h:0.001,line:{color:'000000',width:1.5}});
-        slide.addShape(pptx.shapes.LINE,{x:tx,y:midY,w:0.001,h:ty-midY,line:{color:'000000',width:1.5,endArrowType:'triangle'}});
+        slide.addShape(pptx.shapes.LINE,{x:lx,y:midY,w:rw,h:0,
+          line:{color:'000000',width:1.5}});
+        // Segment 3: vertical down to target with arrow
+        if(seg3H>0){
+          slide.addShape(pptx.shapes.LINE,{x:tx,y:midY,w:0,h:seg3H,
+            line:{color:'000000',width:1.5,endArrowType:'triangle'}});
+        }
       }
-      // Edge label
+
+      // Edge label: place BESIDE the arrow (offset to right), not on the arrow
       if(e.label){
-        slide.addText(e.label,{x:(sx+tx)/2-0.5,y:midY-0.15,w:1,h:0.3,fontSize:8,fontFace:'맑은 고딕',color:'000000',align:'center'});
+        const midX=Math.max(sx,tx)+0.15; // right side of rightmost node
+        const midY2=(sy+ty)/2-0.12;
+        slide.addText(e.label,{x:midX,y:midY2,w:1.2,h:0.24,
+          fontSize:7,fontFace:'맑은 고딕',color:'333333',align:'left',valign:'middle'});
       }
     });
 
-    // Draw nodes (rectangles with text)
+    // Draw nodes (rectangles) AFTER edges so they appear on top
     nodes.forEach(n=>{
       const p=pos[n.id];if(!p)return;
-      slide.addShape(pptx.shapes.RECTANGLE,{x:p.x,y:p.y,w:p.w,h:p.h,fill:{color:'FFFFFF'},line:{color:'000000',width:1.5},rectRadius:0.05});
-      slide.addText(n.label,{x:p.x,y:p.y,w:p.w,h:p.h,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle',bold:false});
+      slide.addShape(pptx.shapes.RECTANGLE,{
+        x:p.x,y:p.y,w:p.w,h:p.h,
+        fill:{color:'FFFFFF'},line:{color:'000000',width:1.5},rectRadius:0.03
+      });
+      slide.addText(n.label,{
+        x:p.x+0.05,y:p.y,w:p.w-0.1,h:p.h,
+        fontSize:9,fontFace:'맑은 고딕',color:'000000',
+        align:'center',valign:'middle',bold:false
+      });
     });
   });
 

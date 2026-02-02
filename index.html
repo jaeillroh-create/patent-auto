@@ -331,9 +331,13 @@
           <label>종속항</label>
           <input type="number" class="input-field input-sm" id="optDeviceDep" value="9" min="0" max="20" />
         </div>
-        <button class="btn btn-primary btn-full" id="btnStep06" onclick="runStep('step_06')" style="margin-top:12px">
+        <p class="card-description" style="margin-top:8px;font-size:12px;color:var(--color-text-tertiary)">
+          <span class="tossface">🛡️</span> 생성 후 기재불비(상기 선행기재, 제한적 표현, 참조 무결성)를 자동 검증하고 수정된 최종본을 출력합니다.
+        </p>
+        <button class="btn btn-primary btn-full" id="btnStep06" onclick="runStep('step_06')" style="margin-top:8px">
           <span class="tossface">🤖</span> 장치 청구항 생성
         </button>
+        <div id="progressStep06" style="margin-top:8px"></div>
         <div id="resultStep06"></div>
       </div>
 
@@ -461,13 +465,16 @@
         </button>
         <div id="resultStep13"></div>
         <button class="btn btn-primary btn-full" id="btnApplyReview" onclick="applyReview()" style="display:none;margin-top:8px">
-          <span class="tossface">🔄</span> 검토 내용을 상세설명에 반영
+          <span class="tossface">🔄</span> 검토 반영 → Step 8 보완 → Step 9 수학식 삽입 (순차 실행)
         </button>
         <div id="progressApplyReview" style="margin-top:8px"></div>
         <div id="reviewApplyResult" style="display:none;margin-top:12px">
           <div class="card" style="border:2px solid var(--color-primary);background:var(--color-bg-secondary)">
             <div class="card-header"><div class="card-title"><span class="tossface">✅</span> 반영 결과</div></div>
-            <p class="card-description" style="margin-bottom:8px">검토 내용이 <strong>"도면·설명 → Step 9: 수학식 삽입"</strong> 결과에 반영되었습니다.<br>아래에서 반영 전/후를 비교할 수 있습니다.</p>
+            <p class="card-description" style="margin-bottom:8px">검토 내용이 아래 순서로 반영되었습니다:<br>
+              ① <strong>Step 8 상세설명</strong> — 검토 지적사항 보완 (도면당 ~2,000자)<br>
+              ② <strong>Step 9 수학식</strong> — 보완된 상세설명에 수학식 재삽입<br>
+              아래에서 반영 전/후를 비교할 수 있습니다.</p>
             <div style="display:flex;gap:8px;margin-bottom:8px">
               <button class="btn btn-outline btn-sm" onclick="showReviewDiff('before')" id="btnDiffBefore">반영 전</button>
               <button class="btn btn-primary btn-sm" onclick="showReviewDiff('after')" id="btnDiffAfter">반영 후 (현재)</button>
