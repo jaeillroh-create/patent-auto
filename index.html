@@ -97,6 +97,54 @@
   </div>
 </div>
 
+<!-- ═══════════════ Project Dashboard ═══════════════ -->
+<div id="screenDashboard" class="screen">
+  <div class="app-container">
+    <header class="app-header">
+      <div class="header-left">
+        <img src="logo.png" alt="DIDIM IP" class="header-logo" />
+        <span class="header-title">사건 관리</span>
+      </div>
+      <div class="header-right">
+        <span id="dashUserName" class="header-user"></span>
+        <button id="btnDashAdmin" class="btn btn-ghost btn-sm" style="display:none" onclick="showScreen('admin')">
+          <span class="tossface">⚙️</span> 관리
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="handleLogout()">로그아웃</button>
+      </div>
+    </header>
+
+    <!-- 새 사건 만들기 -->
+    <div class="card" style="text-align:center;padding:32px;margin-bottom:16px;cursor:pointer;border:2px dashed var(--color-border)" onclick="openNewProjectModal()">
+      <div style="font-size:48px;margin-bottom:12px"><span class="tossface">➕</span></div>
+      <div style="font-size:18px;font-weight:600;color:var(--color-primary)">새 사건 만들기</div>
+      <div style="font-size:13px;color:var(--color-text-tertiary);margin-top:4px">새로운 특허명세서 작성을 시작합니다</div>
+    </div>
+
+    <!-- 기존 사건 목록 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span class="tossface">📂</span> 내 사건 목록</div>
+        <div class="card-description" id="dashProjectCount">0건</div>
+      </div>
+      <div id="dashProjectList" style="padding:0 16px 16px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- New Project Modal -->
+<div id="newProjectModal" class="modal-overlay" style="display:none">
+  <div class="modal-content">
+    <div class="modal-title"><span class="tossface">📝</span> 새 사건 만들기</div>
+    <div class="modal-body">사건명을 입력해 주세요.</div>
+    <input type="text" class="input-field" id="newProjectTitle" placeholder="예: 공기 청결도 기반 가습기 분무량 제어 서버" />
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-ghost" onclick="closeNewProjectModal()" style="flex:1">취소</button>
+      <button class="btn btn-primary" onclick="createAndOpenProject()" style="flex:1">만들기</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════ API Key Modal ═══════════════ -->
 <div id="apiKeyModal" class="modal-overlay" style="display:none">
   <div class="modal-content">
@@ -122,7 +170,7 @@
         <img src="logo.png" alt="DIDIM IP" class="header-logo" />
         <span class="badge badge-error">관리자</span>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="showScreen('main')">앱으로 돌아가기</button>
+      <button class="btn btn-ghost btn-sm" onclick="showScreen('dashboard')">사건 목록으로</button>
     </header>
     <div class="card">
       <div class="card-header">
@@ -140,10 +188,16 @@
     <!-- Header -->
     <header class="app-header">
       <div class="header-left">
+        <button class="btn btn-ghost btn-sm" onclick="backToDashboard()" title="사건 목록으로">
+          <span class="tossface">←</span>
+        </button>
         <img src="logo.png" alt="DIDIM IP" class="header-logo" />
-        <span class="header-title">특허명세서 자동 생성</span>
+        <span id="headerProjectName" class="header-title" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">특허명세서</span>
       </div>
       <div class="header-right">
+        <button class="btn btn-secondary btn-sm" onclick="saveProject()">
+          <span class="tossface">💾</span> 저장
+        </button>
         <span id="headerUserName" class="header-user"></span>
         <button id="btnAdmin" class="btn btn-ghost btn-sm" style="display:none" onclick="showScreen('admin')">
           <span class="tossface">⚙️</span> 관리
@@ -178,18 +232,6 @@
 
     <!-- ── TAB 0: 기본정보 ── -->
     <div id="page0" class="page active" role="tabpanel">
-
-      <!-- Project Management -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title"><span class="tossface">💼</span> 프로젝트</div>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-outline btn-sm" onclick="saveProject()"><span class="tossface">💾</span> 저장</button>
-            <button class="btn btn-primary btn-sm" onclick="createNewProject()">+ 새 프로젝트</button>
-          </div>
-        </div>
-        <div id="projectList" class="project-list"></div>
-      </div>
 
       <!-- Invention Content -->
       <div class="card">
@@ -418,6 +460,10 @@
           <span class="tossface">🔍</span> AI 검토 실행
         </button>
         <div id="resultStep13"></div>
+        <button class="btn btn-primary btn-full" id="btnApplyReview" onclick="applyReview()" style="display:none;margin-top:8px">
+          <span class="tossface">🔄</span> 검토 내용을 상세설명에 반영
+        </button>
+        <div id="progressApplyReview" style="margin-top:8px"></div>
       </div>
 
       <!-- Step 16~19: Batch Finish -->
@@ -459,8 +505,8 @@
           <div class="card-title"><span class="tossface">📥</span> 다운로드</div>
         </div>
         <div class="download-btns">
-          <button class="btn btn-primary btn-full" onclick="downloadAsDocx()">
-            <span class="tossface">📄</span> Word (.docx)
+          <button class="btn btn-primary btn-full" onclick="downloadAsWord()">
+            <span class="tossface">📄</span> Word (.doc)
           </button>
           <button class="btn btn-outline btn-full" onclick="downloadPptxAll()">
             <span class="tossface">📊</span> PPTX (도면)
