@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   특허명세서 자동 생성 v4.9 — Provisional History + English Title + Auto Category + Validation Fix
+   특허명세서 자동 생성 v5.0 — English Title Braces + Claim Validation Chain Fix
    ═══════════════════════════════════════════════════════════ */
 const SUPABASE_URL = 'https://uvrzwhfjtzqujawmscca.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cnp3aGZqdHpxdWphd21zY2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTEwNDgsImV4cCI6MjA4NTUyNzA0OH0.JSSPMPIHsXfbNm6pgRzCTGH7aNQATl-okIkcXHl7Mkk';
@@ -240,7 +240,7 @@ async function openProvisionalViewer(pid){
   currentProvisionalId=pid;
   const pd=data.current_state_json.provisionalData;
   document.getElementById('provisionalViewerTitle').textContent=pd.title||'가출원 명세서';
-  const titleLine=pd.titleEn?`${pd.title}\n(${pd.titleEn})`:(pd.title||'');
+  const titleLine=pd.titleEn?`${pd.title}\n{${pd.titleEn}}`:(pd.title||'');
   document.getElementById('provisionalViewerMeta').textContent=`생성: ${new Date(data.created_at).toLocaleDateString('ko-KR')} · 발명 내용: ${(data.invention_content||'').length.toLocaleString()}자`;
   const content=[
     `【발명의 명칭】\n${titleLine}`,
@@ -262,7 +262,7 @@ async function redownloadProvisionalWord(){
   const{data}=await sb.from('projects').select('current_state_json').eq('id',currentProvisionalId).single();
   if(!data?.current_state_json?.provisionalData){showToast('데이터 없음','error');return;}
   const pd=data.current_state_json.provisionalData;
-  const titleLine=pd.titleEn?`${pd.title}\n(${pd.titleEn})`:(pd.title||'');
+  const titleLine=pd.titleEn?`${pd.title}\n{${pd.titleEn}}`:(pd.title||'');
   const secs=[
     {h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:pd.techField},
     {h:'발명의 내용'},{h:'해결하고자 하는 과제',b:pd.problem},
@@ -500,7 +500,7 @@ function selectTitle(el,kr,en){document.querySelectorAll('#resultStep01 .selecti
 function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';if(v)autoSetDeviceCategoryFromTitle(v);}
 function onTitleEnInput(){selectedTitleEn=document.getElementById('titleInputEn')?.value?.trim()||'';}
 
-// ═══ Auto Device Category from Title/Type (v4.9) ═══
+// ═══ Auto Device Category from Title/Type (v5.0) ═══
 function autoSetDeviceCategoryFromType(type){
   if(!type)return;
   let devCat='server';
@@ -899,7 +899,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
       r=await callClaude(buildPrompt(sid));outputs[sid]=r.text;
     }
     renderOutput(sid,r.text||outputs[sid]);
-    // Step 6: auto-validation + multi-round correction (v4.9)
+    // Step 6: auto-validation + multi-round correction (v5.0)
     if(sid==='step_06'){
       let corrected=outputs[sid];
       let correctionRound=0;const maxRounds=3;
@@ -919,7 +919,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
       if(finalIssues.length===0)showToast(`장치 청구항 완료 (기재불비 없음, ${correctionRound}회 수정)`);
       else showToast(`장치 청구항 완료 (${correctionRound}회 수정, ${finalIssues.length}건 잔여 — 경미한 사항)`, 'info');
     }
-    // Step 10: auto-validation + multi-round correction (v4.9)
+    // Step 10: auto-validation + multi-round correction (v5.0)
     else if(sid==='step_10'){
       let corrected=outputs[sid];
       let correctionRound=0;const maxRounds=3;
@@ -1071,7 +1071,7 @@ ${diagram}`,4096);
     }catch(e){console.error('Provisional save error:',e);}
 
     // Generate Word with English title
-    const titleLine=titleEn?`${title}\n(${titleEn})`:(title||'');
+    const titleLine=titleEn?`${title}\n{${titleEn}}`:(title||'');
     const secs=[
       {h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:techField},
       {h:'발명의 내용'},{h:'해결하고자 하는 과제',b:problem},
@@ -1253,7 +1253,7 @@ function validateClaims(text){
     if(n>1){const rm=ct.match(/청구항\s*(\d+)에\s*있어서/),rn=rm?parseInt(rm[1]):1;
       if(rm){if(!claims[rn])iss.push({severity:'HIGH',message:`청구항 ${num}: 참조 청구항 ${rn} 없음`});if(rn>=n)iss.push({severity:'HIGH',message:`청구항 ${num}: 자기/후행 청구항 참조`});}
       // v4.9: Check "상기" references against FULL claim chain, not just direct parent
-      const chainText=getClaimChainText(rn||1, claims);
+      const chainText=getClaimChainText(n, claims);
       const refs=ct.match(/상기\s+([가-힣]+(?:\s[가-힣]+){0,3})/g)||[];
       refs.forEach(ref=>{const raw=ref.replace(/^상기\s+/,''),cw=raw.split(/\s+/).slice(0,2).map(stripKoreanParticles).filter(w=>w.length>=2);if(!cw.length)return;
         // v4.9: Relaxed — at least ONE keyword must match in chain (was: ALL must match)
@@ -1271,7 +1271,7 @@ function renderPreview(){const el=document.getElementById('previewArea'),spec=bu
 function buildSpecification(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
-  const titleLine=selectedTitleEn?`${selectedTitle}\n(${selectedTitleEn})`:selectedTitle;
+  const titleLine=selectedTitleEn?`${selectedTitle}\n{${selectedTitleEn}}`:selectedTitle;
   // Claims: use the latest version (after auto-correction from validation)
   const deviceClaims=outputs.step_06||'';
   const methodClaims=outputs.step_10||'';
@@ -1288,7 +1288,7 @@ function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){showToast('�
 function downloadAsWord(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
-  const titleLine=selectedTitleEn?`${selectedTitle}\n(${selectedTitleEn})`:selectedTitle;
+  const titleLine=selectedTitleEn?`${selectedTitle}\n{${selectedTitleEn}}`:selectedTitle;
   const allClaims=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n\n');
   const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,outputs.step_12].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${escapeHtml(l.trim())}</p>`;}).join('');}).join('');
