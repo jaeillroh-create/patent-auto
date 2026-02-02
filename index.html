@@ -1,151 +1,521 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>특허명세서 자동 생성 | 특허그룹 디딤</title>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:#f4f6f9;color:#1a1a1a}.app{max-width:1000px;margin:0 auto;padding:16px}.header{text-align:center;padding:20px 0 14px}.header h1{font-size:22px;color:#1B3A5C}.header p{color:#888;font-size:12px;margin-top:4px}.stats{display:flex;gap:8px;margin-bottom:14px}.stat-box{flex:1;text-align:center;padding:12px 6px;border-radius:10px;color:#fff}.stat-box .n{font-size:22px;font-weight:700}.stat-box .l{font-size:10px;opacity:.9}.bg1{background:linear-gradient(135deg,#1B3A5C,#2C5F8A)}.bg2{background:linear-gradient(135deg,#2C5F8A,#3A7CA5)}.bg3{background:linear-gradient(135deg,#3A7CA5,#4A9CC5)}.tabs{display:flex;gap:3px;margin-bottom:14px;overflow-x:auto}.tab{flex:1;min-width:80px;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;text-align:center}.tab:hover{border-color:#1B3A5C}.tab.on{border:2px solid #1B3A5C;background:#EBF0F7}.tab .i{font-size:16px}.tab .t{font-size:10px;font-weight:600;margin-top:1px}.card{background:#fff;border-radius:10px;padding:18px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}.card.cp{border:2px solid #1B3A5C}.card h3{color:#1B3A5C;font-size:14px;margin-bottom:10px}.btn{display:inline-flex;align-items:center;gap:5px;padding:8px 16px;border-radius:7px;border:1px solid #ccc;background:#fff;color:#333;font-weight:600;font-size:12px;cursor:pointer}.btn:hover{background:#f0f0f0}.btn.pr{background:#1B3A5C;color:#fff;border:none}.btn.pr:hover{background:#153050}.btn:disabled{background:#e0e0e0!important;color:#999!important;cursor:not-allowed}.br{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}textarea,input[type=text],input[type=password],select{width:100%;padding:9px 10px;border-radius:7px;border:1px solid #ddd;font-family:inherit;font-size:12px;line-height:1.6;resize:vertical}textarea:focus,input:focus{outline:none;border-color:#1B3A5C}.ti{border:2px solid #1B3A5C;font-size:13px;font-weight:600}.tcs{display:flex;flex-direction:column;gap:6px;margin:10px 0}.tc{padding:10px 14px;border:2px solid #e0e0e0;border-radius:8px;cursor:pointer;background:#fff}.tc:hover{border-color:#1B3A5C;background:#f8fafc}.tc.sel{border-color:#1B3A5C;background:#EBF0F7}.tc .c{font-weight:700;color:#1B3A5C;font-size:12px}.tc .k{font-size:13px;font-weight:600;margin:3px 0 1px}.tc .e{font-size:11px;color:#666}.or{display:flex;gap:10px;margin-bottom:10px;align-items:center;flex-wrap:wrap}.or label{font-size:12px;font-weight:600;color:#444;white-space:nowrap}.or select{width:auto;min-width:70px}.ch{padding:9px 12px;background:#f8f9fa;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:12px;border-radius:7px;border:1px solid #e8e8e8;margin-bottom:3px;user-select:none}.ch:hover{background:#f0f2f5}.cb{padding:10px;border:1px solid #e8e8e8;border-top:none;border-radius:0 0 7px 7px;margin-bottom:6px;margin-top:-4px}.bg{background:#4CAF50;color:#fff;padding:1px 7px;border-radius:8px;font-size:10px}.is{padding:7px 10px;border-radius:5px;margin-bottom:5px;font-size:12px}.is.cr{background:#FFEBEE;border-left:3px solid #ef5350}.is.hi{background:#FFF3E0;border-left:3px solid #FF9800}.is.pa{background:#E8F5E9;border-left:3px solid #4CAF50}.dc{margin:10px 0;padding:14px;background:#fff;border:1px solid #e0e0e0;border-radius:8px;overflow-x:auto}.ft{text-align:center;color:#bbb;font-size:10px;padding:16px 0}.mo{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000}.md{background:#fff;border-radius:14px;padding:28px;max-width:440px;width:90%}.md h2{color:#1B3A5C;margin-bottom:10px;font-size:18px}.md p{color:#666;font-size:12px;margin-bottom:14px;line-height:1.5}.pc{display:none}.pc.on{display:block}.si{display:flex;align-items:center;gap:7px;padding:7px 10px;background:#EBF0F7;border-radius:7px;margin:6px 0;font-size:12px;color:#1B3A5C;font-weight:500}.si .d{width:7px;height:7px;border-radius:50%;background:#1B3A5C;animation:pu 1s infinite}@keyframes pu{0%,100%{opacity:1}50%{opacity:.3}}.pb{background:#e0e0e0;border-radius:6px;height:6px;overflow:hidden;margin:6px 0}.pf{background:linear-gradient(90deg,#1B3A5C,#3A7CA5);height:100%;border-radius:6px;transition:width .4s}.ps{font-size:11px;color:#666;display:flex;justify-content:space-between;margin-top:4px}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>특허명세서 자동 생성 — DIDIM IP</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/gh/toss/tossface/dist/tossface.css" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<div class="app">
-<div class="mo" id="aM"><div class="md"><h2>🔑 API Key</h2><p>Anthropic API Key를 입력하세요.</p><input type="password" id="aI" placeholder="sk-ant-api03-..."><p style="font-size:11px;color:#999;margin-top:6px">발급: <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></p><button class="btn pr" onclick="sAK()" style="width:100%;justify-content:center;margin-top:8px">시작</button></div></div>
-<div class="header"><h1>📋 특허명세서 자동 생성</h1><p>특허그룹 디딤 | 19단계 AI · 자동검증 · Human-in-the-Loop</p></div>
-<div class="stats"><div class="stat-box bg1"><div class="n" id="xC">0/19</div><div class="l">완료</div></div><div class="stat-box bg2"><div class="n" id="xA">0</div><div class="l">API호출</div></div><div class="stat-box bg3"><div class="n" id="x$">$0.00</div><div class="l">비용</div></div></div>
-<div class="tabs"><div class="tab on" onclick="sw(0)"><div class="i">📋</div><div class="t">기본정보</div></div><div class="tab" onclick="sw(1)"><div class="i">⚖️</div><div class="t">청구범위</div></div><div class="tab" onclick="sw(2)"><div class="i">🖼️</div><div class="t">도면&설명</div></div><div class="tab" onclick="sw(3)"><div class="i">🔍</div><div class="t">검토</div></div><div class="tab" onclick="sw(4)"><div class="i">📥</div><div class="t">산출물</div></div></div>
 
-<div class="pc on" id="P0">
-<div class="card"><h3>📁 발명 내용</h3><textarea id="pj" rows="6" placeholder="발명의 핵심 기술, 구성요소, 차별점 등을 상세히 입력하세요..."></textarea></div>
-<div class="card cp"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>🏷️ Step 1: 발명의 명칭</h3><button class="btn pr" onclick="R('step_01')" id="B01">🤖 명칭 후보 생성</button></div><div id="tA"></div><input type="text" id="tI" class="ti" placeholder="위 후보 클릭 또는 직접 입력" oninput="oTI()"><div id="tOK" style="display:none;color:#4CAF50;font-weight:700;margin-top:5px;font-size:13px">✅ 명칭 확정</div></div>
-<div id="P0S" style="display:none"><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>📝 Step 2~5</h3><button class="btn pr" onclick="RB(['step_02','step_03','step_04','step_05'],'b25')" id="Bb25">🚀 일괄 생성</button></div><div id="G_b25"></div><div id="Z02"></div><div id="Z03"></div><div id="Z04"></div><div id="Z05"></div></div></div>
+<!-- ═══════════════ Toast Container ═══════════════ -->
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- ═══════════════ Auth Screen: Login / Signup ═══════════════ -->
+<div id="screenAuth" class="screen active">
+  <div class="auth-wrapper">
+    <div class="auth-logo">
+      <img src="logo.png" alt="DIDIM IP" class="logo-img" />
+    </div>
+    <div class="auth-card card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" onclick="switchAuthTab('login')">로그인</button>
+        <button class="auth-tab" onclick="switchAuthTab('signup')">회원가입</button>
+      </div>
+
+      <!-- Login Form -->
+      <div id="authLogin" class="auth-form">
+        <input type="email" class="input-field" id="loginEmail" placeholder="이메일" />
+        <input type="password" class="input-field" id="loginPassword" placeholder="비밀번호" style="margin-top:8px" />
+        <button class="btn btn-primary btn-full" id="btnLogin" onclick="handleLogin()" style="margin-top:16px">
+          로그인
+        </button>
+      </div>
+
+      <!-- Signup Form -->
+      <div id="authSignup" class="auth-form" style="display:none">
+        <input type="email" class="input-field" id="signupEmail" placeholder="이메일" />
+        <input type="password" class="input-field" id="signupPassword" placeholder="비밀번호 (6자 이상)" style="margin-top:8px" />
+        <input type="text" class="input-field" id="signupName" placeholder="이름 (선택)" style="margin-top:8px" />
+        <button class="btn btn-primary btn-full" id="btnSignup" onclick="handleSignup()" style="margin-top:16px">
+          회원가입
+        </button>
+      </div>
+    </div>
+    <p class="auth-footer">특허그룹 디딤 · 시너지앤(주)</p>
+  </div>
 </div>
 
-<div class="pc" id="P1">
-<div class="card cp"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>⚖️ Step 6: 장치 청구항</h3><button class="btn pr" onclick="R('step_06')" id="B06">🤖 생성</button></div>
-<div class="or"><label>독립항:</label><select id="oI"><option value="1" selected>1개</option><option value="2">2개</option><option value="3">3개</option></select><label>종속항:</label><select id="oD"><option value="3">3개</option><option value="5" selected>5개</option><option value="7">7개</option><option value="9">9개</option><option value="11">11개</option></select></div>
-<div id="cSt" style="display:none"></div><div id="cVl"></div><div id="E06"></div></div>
-<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>📋 Step 10: 방법 청구항</h3><button class="btn pr" onclick="R('step_10')" id="B10">🤖 생성</button></div><div id="E10"></div></div>
-<div class="card"><h3>추가</h3><div class="br"><button class="btn" onclick="R('step_14')" id="B14">대안 청구항</button><button class="btn" onclick="R('step_15')" id="B15">기재불비</button></div><div id="Z14"></div><div id="Z15"></div></div>
+<!-- ═══════════════ ToS Screen ═══════════════ -->
+<div id="screenTos" class="screen">
+  <div class="auth-wrapper">
+    <div class="auth-logo">
+      <img src="logo.png" alt="DIDIM IP" class="logo-img" />
+    </div>
+    <div class="card" style="max-width:480px;margin:0 auto">
+      <div class="card-header">
+        <div class="card-title"><span class="tossface">📜</span> 이용 동의</div>
+      </div>
+      <p class="card-description" style="margin-bottom:16px">
+        서비스 이용을 위해 아래 항목에 동의해 주세요.
+      </p>
+      <label class="checkbox-label">
+        <input type="checkbox" id="tosCheck1" />
+        <span>이용약관에 동의합니다 (필수)</span>
+      </label>
+      <label class="checkbox-label" style="margin-top:8px">
+        <input type="checkbox" id="tosCheck2" />
+        <span>발명 내용에 대한 기밀유지에 동의합니다 (필수)</span>
+      </label>
+      <button class="btn btn-primary btn-full" style="margin-top:20px" onclick="handleTosAccept()">
+        동의하고 계속하기
+      </button>
+    </div>
+  </div>
 </div>
 
-<div class="pc" id="P2">
-<div class="card cp"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>🖼️ Step 7: 장치 도면</h3><button class="btn pr" onclick="RD('step_07')" id="B07">🤖 생성</button></div>
-<div class="or"><label>도면 수:</label><select id="oDF"><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option></select></div>
-<div id="E07"></div><div id="D07"></div></div>
-<div class="card"><h3>📝 상세설명 & 수학식</h3><div class="br"><button class="btn pr" onclick="RL('step_08')" id="B08">상세설명 (Step 8)</button><button class="btn" onclick="RM()" id="B09">수학식 생성&삽입 (Step 9)</button></div><div id="G_s08"></div><div id="Z08"></div></div>
-<div class="card"><h3>📊 방법 (선택)</h3><div class="or"><label>방법도면 수:</label><select id="oMF"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></div>
-<div class="br"><button class="btn" onclick="RD('step_11')" id="B11">방법도면</button><button class="btn" onclick="RL('step_12')" id="B12">방법설명</button></div><div id="E11"></div><div id="D11"></div><div id="G_s12"></div><div id="Z12"></div></div>
+<!-- ═══════════════ Pending Screen ═══════════════ -->
+<div id="screenPending" class="screen">
+  <div class="auth-wrapper">
+    <div class="auth-logo">
+      <img src="logo.png" alt="DIDIM IP" class="logo-img" />
+    </div>
+    <div class="card" style="max-width:480px;margin:0 auto;text-align:center">
+      <div style="font-size:48px;margin-bottom:16px"><span class="tossface">⏳</span></div>
+      <h2 style="margin-bottom:8px">승인 대기 중이에요</h2>
+      <p class="card-description">관리자가 계정을 확인하고 있어요. 승인 후 이용 가능합니다.</p>
+      <button class="btn btn-secondary" style="margin-top:20px" onclick="checkApprovalStatus()">
+        상태 확인
+      </button>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="handleLogout()">
+        로그아웃
+      </button>
+    </div>
+  </div>
 </div>
 
-<div class="pc" id="P3">
-<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>🔍 Step 13: 검토</h3><button class="btn pr" onclick="R('step_13')" id="B13">🤖 검토</button></div><div id="Z13"></div></div>
-<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>📄 마무리</h3><button class="btn pr" onclick="RB(['step_16','step_17','step_18','step_19'],'bF')" id="BbF">🚀 일괄</button></div><div id="G_bF"></div><div id="Z16"></div><div id="Z17"></div><div id="Z18"></div><div id="Z19"></div></div>
-<div class="card"><h3>✅ 검증</h3><button class="btn" onclick="RV()">실행</button><div id="vR" style="margin-top:8px"></div></div>
+<!-- ═══════════════ API Key Modal ═══════════════ -->
+<div id="apiKeyModal" class="modal-overlay" style="display:none">
+  <div class="modal-content">
+    <div class="modal-title"><span class="tossface">🔑</span> API Key 입력</div>
+    <div class="modal-body">
+      특허명세서 생성에 사용할 Anthropic API Key를 입력해 주세요.
+    </div>
+    <input type="password" class="input-field" id="apiKeyInput" placeholder="sk-ant-api03-..." />
+    <p class="input-hint">
+      발급: <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a>
+    </p>
+    <button class="btn btn-primary btn-full" onclick="saveApiKey()" style="margin-top:16px">
+      시작하기
+    </button>
+  </div>
 </div>
 
-<div class="pc" id="P4">
-<div class="card"><h3>📥 최종 산출물</h3><div class="br"><button class="btn pr" onclick="DW()">📄 Word 다운로드</button><button class="btn" onclick="CA()">📋 복사</button><button class="btn" onclick="DT()">💾 TXT</button></div><p style="font-size:11px;color:#888;margin:6px 0 12px">Word(.doc)는 MS Word에서 바로 열 수 있습니다.</p><div id="pA"></div></div>
-<div class="card"><h3>💰 사용량</h3><div id="uS" style="font-size:12px;color:#555"></div></div>
+<!-- ═══════════════ Admin Panel (conditionally shown) ═══════════════ -->
+<div id="adminPanel" class="screen" style="display:none">
+  <div class="app-container">
+    <header class="app-header">
+      <div class="header-left">
+        <img src="logo.png" alt="DIDIM IP" class="header-logo" />
+        <span class="badge badge-error">관리자</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="showScreen('main')">앱으로 돌아가기</button>
+    </header>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span class="tossface">👥</span> 사용자 관리</div>
+      </div>
+      <div id="adminUserList"></div>
+    </div>
+  </div>
 </div>
 
-<div class="ft">특허명세서 자동 생성 v1.0 | 특허그룹 디딤 / 시너지앤 | 2026</div>
+<!-- ═══════════════ Main App ═══════════════ -->
+<div id="screenMain" class="screen" style="display:none">
+  <div class="app-container">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <img src="logo.png" alt="DIDIM IP" class="header-logo" />
+        <span class="header-title">특허명세서 자동 생성</span>
+      </div>
+      <div class="header-right">
+        <span id="headerUserName" class="header-user"></span>
+        <button id="btnAdmin" class="btn btn-ghost btn-sm" style="display:none" onclick="showScreen('admin')">
+          <span class="tossface">⚙️</span> 관리
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="handleLogout()">로그아웃</button>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <div class="tab-container" role="tablist">
+      <button class="tab-item active" role="tab" aria-selected="true" onclick="switchTab(0)">
+        <span class="tab-icon tossface">📋</span>
+        <span class="tab-label">기본정보</span>
+      </button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(1)">
+        <span class="tab-icon tossface">⚖️</span>
+        <span class="tab-label">청구범위</span>
+      </button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(2)">
+        <span class="tab-icon tossface">🖼️</span>
+        <span class="tab-label">도면·설명</span>
+      </button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(3)">
+        <span class="tab-icon tossface">🔍</span>
+        <span class="tab-label">검토</span>
+      </button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(4)">
+        <span class="tab-icon tossface">📥</span>
+        <span class="tab-label">산출물</span>
+      </button>
+    </div>
+
+    <!-- ── TAB 0: 기본정보 ── -->
+    <div id="page0" class="page active" role="tabpanel">
+
+      <!-- Project Management -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">💼</span> 프로젝트</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-outline btn-sm" onclick="saveProject()"><span class="tossface">💾</span> 저장</button>
+            <button class="btn btn-primary btn-sm" onclick="createNewProject()">+ 새 프로젝트</button>
+          </div>
+        </div>
+        <div id="projectList" class="project-list"></div>
+      </div>
+
+      <!-- Invention Content -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">📁</span> 발명 내용</div>
+        </div>
+        <textarea class="textarea-field" id="projectInput" rows="6"
+          placeholder="발명의 핵심 기술, 구성요소, 차별점 등을 상세히 입력해 주세요..."></textarea>
+        <div class="card-description">입력이 상세할수록 더 정확한 명세서가 생성돼요.</div>
+      </div>
+
+      <!-- Step 1: Title -->
+      <div class="card" id="cardStep01">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">🏷️</span> Step 1: 발명의 명칭</div>
+        </div>
+        <p class="card-description" style="margin-bottom:12px">발명의 유형을 선택하고, 명칭 후보를 생성하세요.</p>
+
+        <!-- Title Type Selection -->
+        <div class="selection-cards" id="titleTypeCards">
+          <div class="selection-card" onclick="selectTitleType(this,'서버')">
+            <div class="selection-card-category">A</div>
+            <div class="selection-card-title">~서버</div>
+          </div>
+          <div class="selection-card" onclick="selectTitleType(this,'방법')">
+            <div class="selection-card-category">B</div>
+            <div class="selection-card-title">~방법</div>
+          </div>
+          <div class="selection-card" onclick="selectTitleType(this,'시스템')">
+            <div class="selection-card-category">C</div>
+            <div class="selection-card-title">~시스템</div>
+          </div>
+          <div class="selection-card" onclick="selectTitleType(this,'서버 및 방법')">
+            <div class="selection-card-category">D</div>
+            <div class="selection-card-title">~서버 및 방법</div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-full" id="btnStep01" onclick="runStep('step_01')" disabled>
+          <span class="tossface">🤖</span> 명칭 후보 생성 (5개)
+        </button>
+        <div id="resultStep01"></div>
+
+        <!-- Confirmed title -->
+        <div id="titleConfirmArea" style="display:none;margin-top:12px">
+          <label style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">확정 명칭</label>
+          <input type="text" class="input-field input-highlight" id="titleInput" oninput="onTitleInput()" style="margin-top:4px" />
+          <div id="titleConfirmMsg" class="confirm-msg" style="display:none">
+            <span class="tossface">✅</span> 명칭이 확정되었어요
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2~5: Batch -->
+      <div id="batchArea" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span class="tossface">🚀</span> Step 2~5: 기본 항목 일괄 생성</div>
+          </div>
+          <div class="step-desc-list">
+            <div class="step-desc-item"><strong>Step 2 — 기술분야:</strong> 발명이 속하는 기술 분야를 한 문장으로 정의합니다.</div>
+            <div class="step-desc-item"><strong>Step 3 — 배경기술:</strong> 발명의 배경이 되는 기존 기술과 문제점을 서술합니다.</div>
+            <div class="step-desc-item"><strong>Step 4 — 선행기술문헌:</strong> 관련 선행기술문헌을 기재합니다.</div>
+            <div class="step-desc-item"><strong>Step 5 — 해결과제:</strong> 본 발명이 해결하고자 하는 기술적 과제를 명시합니다.</div>
+          </div>
+          <div id="progressBatch" style="margin:12px 0"></div>
+          <button class="btn btn-primary btn-full" id="btnBatch25" onclick="runBatch25()">
+            <span class="tossface">🚀</span> 일괄 생성
+          </button>
+          <div id="resultsBatch25"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB 1: 청구범위 ── -->
+    <div id="page1" class="page" role="tabpanel">
+
+      <!-- Method Toggle -->
+      <div class="card" style="padding:16px 20px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600;font-size:15px"><span class="tossface">⚡</span> 방법 청구항 포함</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="methodToggle" checked onchange="toggleMethod()" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Step 6: Device Claims -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">⚖️</span> Step 6: 장치 청구항</div>
+        </div>
+        <div class="option-row">
+          <label>독립항</label>
+          <input type="number" class="input-field input-sm" id="optDeviceIndep" value="1" min="0" max="10" />
+          <label>종속항</label>
+          <input type="number" class="input-field input-sm" id="optDeviceDep" value="9" min="0" max="20" />
+        </div>
+        <button class="btn btn-primary btn-full" id="btnStep06" onclick="runStep('step_06')" style="margin-top:12px">
+          <span class="tossface">🤖</span> 장치 청구항 생성
+        </button>
+        <div id="resultStep06"></div>
+      </div>
+
+      <!-- Step 10: Method Claims (conditional) -->
+      <div id="methodClaimsCard" class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">⚖️</span> Step 10: 방법 청구항</div>
+        </div>
+        <div class="option-row">
+          <label>독립항</label>
+          <input type="number" class="input-field input-sm" id="optMethodIndep" value="1" min="0" max="10" />
+          <label>종속항</label>
+          <input type="number" class="input-field input-sm" id="optMethodDep" value="9" min="0" max="20" />
+        </div>
+        <button class="btn btn-primary btn-full" id="btnStep10" onclick="runStep('step_10')" style="margin-top:12px">
+          <span class="tossface">🤖</span> 방법 청구항 생성
+        </button>
+        <div id="resultStep10"></div>
+      </div>
+
+      <!-- Step 14, 15 -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">🔧</span> 추가 검토</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" style="flex:1" onclick="runStep('step_14')">
+            대안 청구항
+          </button>
+          <button class="btn btn-outline" style="flex:1" onclick="runStep('step_15')">
+            기재불비 검토
+          </button>
+        </div>
+        <div id="resultStep14"></div>
+        <div id="resultStep15"></div>
+      </div>
+    </div>
+
+    <!-- ── TAB 2: 도면 & 설명 ── -->
+    <div id="page2" class="page" role="tabpanel">
+
+      <!-- Step 7: Diagrams -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">🖼️</span> Step 7: 장치 도면 설계</div>
+        </div>
+        <div class="option-row">
+          <label>도면 수</label>
+          <input type="number" class="input-field input-sm" id="optDeviceFigures" value="4" min="1" max="10" />
+        </div>
+        <button class="btn btn-primary btn-full" id="btnStep07" onclick="runDiagramStep('step_07')" style="margin-top:12px">
+          <span class="tossface">🤖</span> 도면 설계 생성
+        </button>
+        <div id="resultStep07"></div>
+        <div id="diagramsStep07" class="diagrams-area"></div>
+        <button class="btn btn-outline btn-full" id="btnPptx07" onclick="downloadPptx('step_07')" style="display:none;margin-top:8px">
+          <span class="tossface">📊</span> PPTX 다운로드
+        </button>
+      </div>
+
+      <!-- Step 8: Device Detailed Description -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">📝</span> Step 8: 장치 상세설명</div>
+        </div>
+        <div id="progressStep08" style="margin-bottom:8px"></div>
+        <button class="btn btn-primary btn-full" id="btnStep08" onclick="runLongStep('step_08')">
+          <span class="tossface">🤖</span> 상세설명 생성 (자동이어쓰기)
+        </button>
+        <div id="resultStep08"></div>
+      </div>
+
+      <!-- Step 9: Math Formulas -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">🔢</span> Step 9: 수학식 삽입</div>
+        </div>
+        <p class="card-description">상세설명에 핵심 알고리즘 수학식을 삽입해요. 기존 내용은 유지됩니다.</p>
+        <button class="btn btn-primary btn-full" id="btnStep09" onclick="runMathInsertion()" style="margin-top:12px">
+          <span class="tossface">🔢</span> 수학식 생성 및 삽입
+        </button>
+        <div id="resultStep09"></div>
+      </div>
+
+      <!-- Step 11: Method Diagrams (conditional) -->
+      <div id="methodDiagramCard" class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">📊</span> Step 11: 방법 도면</div>
+        </div>
+        <div class="option-row">
+          <label>흐름도 수</label>
+          <input type="number" class="input-field input-sm" id="optMethodFigures" value="2" min="1" max="5" />
+        </div>
+        <button class="btn btn-primary btn-full" id="btnStep11" onclick="runDiagramStep('step_11')" style="margin-top:12px">
+          <span class="tossface">🤖</span> 방법 도면 생성
+        </button>
+        <div id="resultStep11"></div>
+        <div id="diagramsStep11" class="diagrams-area"></div>
+      </div>
+
+      <!-- Step 12: Method Description (conditional) -->
+      <div id="methodDescCard" class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">📝</span> Step 12: 방법 상세설명</div>
+        </div>
+        <div id="progressStep12" style="margin-bottom:8px"></div>
+        <button class="btn btn-primary btn-full" id="btnStep12" onclick="runLongStep('step_12')">
+          <span class="tossface">🤖</span> 방법 상세설명 생성
+        </button>
+        <div id="resultStep12"></div>
+      </div>
+    </div>
+
+    <!-- ── TAB 3: 검토 ── -->
+    <div id="page3" class="page" role="tabpanel">
+
+      <!-- Step 13: Review -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">🔍</span> Step 13: AI 검토</div>
+        </div>
+        <p class="card-description" style="margin-bottom:12px">청구항 뒷받침, 기술적 비약, 수학식 정합성, 반복 실시 가능성을 검토합니다.</p>
+        <button class="btn btn-primary btn-full" id="btnStep13" onclick="runStep('step_13')">
+          <span class="tossface">🔍</span> AI 검토 실행
+        </button>
+        <div id="resultStep13"></div>
+      </div>
+
+      <!-- Step 16~19: Batch Finish -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">🚀</span> Step 16~19: 마무리 일괄 생성</div>
+        </div>
+        <div class="step-desc-list">
+          <div class="step-desc-item"><strong>Step 16 — 발명의 효과:</strong> 발명의 효과를 50단어 이내로 작성합니다.</div>
+          <div class="step-desc-item"><strong>Step 17 — 과제의 해결 수단:</strong> 과제를 해결하는 기술적 수단을 기술합니다.</div>
+          <div class="step-desc-item"><strong>Step 18 — 도면 부호:</strong> 도면의 주요 부분 부호를 정리합니다.</div>
+          <div class="step-desc-item"><strong>Step 19 — 요약서:</strong> 청구항 1 기반 150단어 요약서를 작성합니다.</div>
+        </div>
+        <div id="progressBatchFinish" style="margin:12px 0"></div>
+        <button class="btn btn-primary btn-full" id="btnBatchFinish" onclick="runBatchFinish()">
+          <span class="tossface">🚀</span> 마무리 일괄 생성
+        </button>
+        <div id="resultsBatchFinish"></div>
+      </div>
+
+      <!-- Auto Validation -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">🛡️</span> 자동 검증</div>
+        </div>
+        <button class="btn btn-outline btn-full" onclick="runValidation()">
+          검증 실행
+        </button>
+        <div id="validationResults" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- ── TAB 4: 산출물 ── -->
+    <div id="page4" class="page" role="tabpanel">
+
+      <!-- Download Buttons -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">📥</span> 다운로드</div>
+        </div>
+        <div class="download-btns">
+          <button class="btn btn-primary btn-full" onclick="downloadAsDocx()">
+            <span class="tossface">📄</span> Word (.docx)
+          </button>
+          <button class="btn btn-outline btn-full" onclick="downloadPptxAll()">
+            <span class="tossface">📊</span> PPTX (도면)
+          </button>
+          <button class="btn btn-outline btn-full" onclick="copyToClipboard()">
+            <span class="tossface">📋</span> 전체 복사
+          </button>
+          <button class="btn btn-outline btn-full" onclick="downloadAsTxt()">
+            <span class="tossface">💾</span> TXT
+          </button>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">👁️</span> 미리보기</div>
+        </div>
+        <div id="previewArea"></div>
+      </div>
+
+      <!-- Stats -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">💰</span> 사용량</div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-card stat-card-steps">
+            <div class="stat-card-value" id="statCompleted">0/19</div>
+            <div class="stat-card-label">완료 Step</div>
+          </div>
+          <div class="stat-card stat-card-api">
+            <div class="stat-card-value" id="statApiCalls">0</div>
+            <div class="stat-card-label">API 호출</div>
+          </div>
+          <div class="stat-card stat-card-cost">
+            <div class="stat-card-value" id="statCost">$0.00</div>
+            <div class="stat-card-label">예상 비용</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      특허그룹 디딤 · 시너지앤(주) | 2026
+    </footer>
+  </div>
 </div>
-<script>
-let AK='',O={},TT='',U={c:0,i:0,o:0},LL={};
-const SN={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술문헌',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'도면 설계',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'검토',step_14:'대안 청구항',step_15:'기재불비',step_16:'발명의 효과',step_17:'해결 수단',step_18:'도면 부호',step_19:'요약서'};
-const SYS='너는 20년 경력의 한국 변리사이다. 원칙: 1.표준문체(~한다) 2.글머리/마크다운 절대금지 3.SW명 대신 알고리즘 4.구성요소명(참조번호) 형태 5.명세서에 바로 붙여넣을 순수텍스트';
-mermaid.initialize({startOnLoad:false,theme:'neutral',securityLevel:'loose'});
-(function(){const s=sessionStorage.getItem('pk');if(s){AK=s;document.getElementById('aM').style.display='none'}})();
-function sAK(){const k=document.getElementById('aI').value.trim();if(!k)return alert('Key 입력');AK=k;sessionStorage.setItem('pk',k);document.getElementById('aM').style.display='none'}
-function sw(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===n));document.querySelectorAll('.pc').forEach((c,i)=>c.classList.toggle('on',i===n));if(n===4)rPv()}
-function oTI(){TT=document.getElementById('tI').value.trim();document.getElementById('tOK').style.display=TT?'block':'none';document.getElementById('P0S').style.display=TT?'block':'none';document.querySelectorAll('.tc').forEach(c=>c.classList.remove('sel'))}
-function uS(){const d=Object.keys(O).filter(k=>O[k]).length;document.getElementById('xC').textContent=d+'/19';document.getElementById('xA').textContent=U.c;document.getElementById('x$').textContent='$'+((U.i*15/1e6+U.o*75/1e6).toFixed(2))}
 
-async function api(p,mt=8192){const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-5-20251101',max_tokens:mt,system:SYS,messages:[{role:'user',content:p}]})});const d=await r.json();if(d.error)throw new Error(d.error.message);U.c++;U.i+=(d.usage?.input_tokens||0);U.o+=(d.usage?.output_tokens||0);uS();return{text:d.content[0].text,stop:d.stop_reason}}
-
-async function apiC(p,gid){let f='',a=0;const r=await api(p);f=r.text;while(a<4&&r.stop==='max_tokens'){a++;sP(gid,'이어서 작성 중 ('+a+'/4)',a,4);const c=await api('아래 특허명세서의 뒷부분을 이어서 작성하라. 앞부분 반복 금지. 마지막 문장 다음부터 이어서. 동일 문체 유지.\n\n[마지막부분]\n'+f.slice(-2000));f+='\n'+c.text;if(c.stop!=='max_tokens')break}cP(gid);return f}
-
-function sP(id,nm,c,t){const e=document.getElementById(id);if(!e)return;const p=Math.round(c/t*100);e.innerHTML='<div class="si"><div class="d"></div>'+nm+'</div><div class="pb"><div class="pf" style="width:'+p+'%"></div></div><div class="ps"><span>'+c+'/'+t+'</span><span>'+p+'%</span></div>'}
-function cP(id){const e=document.getElementById(id);if(e)e.innerHTML=''}
-function sB(id,l){const b=document.getElementById(id);if(!b)return;if(l){b.disabled=true;b._=b.textContent;b.textContent='⏳ 생성 중...'}else{b.disabled=false;b.textContent=b._||'생성'}}
-
-function bP(s){const pj=document.getElementById('pj').value,cx=TT?'[발명의 명칭] '+TT:'',o=O;
-const iN=document.getElementById('oI')?.value||'1',dN=document.getElementById('oD')?.value||'5';
-const dfN=document.getElementById('oDF')?.value||'4',mfN=document.getElementById('oMF')?.value||'2';
-const m={
-step_01:'프로젝트를 분석하여 특허 발명의 명칭 후보 4가지.\nA:"~서버" B:"~방법" C:"~시스템" D:"~서버 및 방법"\n각 후보에 국문+영문. 중요: D의 영문은 반드시 "Server and method for"로 시작.\n출력형식:\n[A] 국문: (명칭) / 영문: (명칭)\n[B] 국문: (명칭) / 영문: (명칭)\n[C] 국문: (명칭) / 영문: (명칭)\n[D] 국문: (명칭) / 영문: (명칭)\n[프로젝트]\n'+pj,
-step_02:'기술분야. 20단어내외 한문장. "본 발명은"~"~에 관한 것이다." 명칭포함.\n'+cx,
-step_03:'배경기술 3문단: (1)기존문제 (2)최근동향 (3)필요성. 각 150단어. 번호없이문단만.\n'+cx+'\n[프로젝트] '+pj,
-step_04:'선행기술문헌.\n【특허문헌】\n(특허문헌 1) 한국등록특허 제__________호 (추후 보완)\n'+cx,
-step_05:'해결과제. "본 발명은"~"~을 제공하는 것을 목적으로 한다." 마지막: "본 발명의 기술적 과제는 이상에서 언급한 기술적 과제로 제한되지 않으며, 언급되지 않은 또 다른 기술적 과제들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다."\n'+cx+'\n[배경기술] '+(o.step_03||''),
-step_06:'장치 청구범위. 독립항 '+iN+'개+종속항 '+dN+'개. "청구항 N에 있어서"로 시작. 【청구항 1】형식. SW명금지.\n'+cx+'\n[프로젝트] '+pj,
-step_07:'청구범위 도면 '+dfN+'개 설계. 각 도면: 제목/유형,구성요소+참조번호,연결관계,간단한설명. 서버100번대,단말200번대,외부300번대.\n'+cx+'\n[청구범위] '+(o.step_06||''),
-step_08:'상세설명을 빠짐없이 완전하게 작성. 서버(100)주어. "구성요소(참조번호)"형태. 도면별 "도 N을 참조하면,"형태. 특허문체. 글머리금지. 청구항 모든 구성요소 포함. 절대 생략금지.\n'+cx+'\n[청구범위] '+(o.step_06||'')+'\n[도면] '+(o.step_07||'')+'\n[프로젝트] '+(pj||'').substring(0,3000),
-step_09:'아래 상세설명 분석하여 핵심알고리즘 수학식 5개내외 생성하고, 수학식이 삽입된 최종 상세설명 전체를 출력하라. 【수학식 N】 수식(첨자금지)/파라미터정의/예시대입. 해당 구성요소 설명 직후에 삽입. 기존텍스트 절대 생략금지.\n'+cx+'\n[현재 상세설명]\n'+(o.step_08||''),
-step_10:'방법 청구항. 독립항1+종속항9개내외. "~단계". 장치번호 이어서. 【청구항 N】.\n'+cx+'\n[장치] '+(o.step_06||'')+'\n[상세설명] '+((o.step_08||'').substring(0,3000)),
-step_11:'방법 흐름도 '+mfN+'개. S100,S200... 단계:번호,내용,연결. 간단한설명.\n'+cx+'\n[방법 청구항] '+(o.step_10||''),
-step_12:'방법 상세설명 빠짐없이. 단계순서대로 장치동작 1:1대응. 특허문체. 글머리금지. 시작:"이하에서는 앞서 설명한 서버의 구성 및 동작을 참조하여 방법을 설명한다." 생략금지.\n'+cx+'\n[방법청구항] '+(o.step_10||'')+'\n[방법도면] '+(o.step_11||'')+'\n[장치상세설명] '+((o.step_08||'').substring(0,3000)),
-step_13:'검토. 1.청구항뒷받침 2.기술적비약. 보충/보완.\n'+cx+'\n[청구범위] '+(o.step_06||'')+'\n'+(o.step_10||'')+'\n[상세설명] '+((o.step_08||'').substring(0,6000)),
-step_14:'대안 청구항. 핵심유지 표현달리. 【청구항 N】.\n'+cx+'\n[장치] '+(o.step_06||'')+'\n[방법] '+(o.step_10||''),
-step_15:'기재불비. (a)상기선행기재 (b)용어 (c)대응 (d)누락. 수정안.\n'+cx+'\n[전체] '+(o.step_06||'')+'\n'+(o.step_10||'')+'\n'+(o.step_14||''),
-step_16:'효과. "본 발명에 따르면,"시작. 마지막:"본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며..."\n'+cx+'\n[과제] '+(o.step_05||'')+'\n[상세설명] '+((o.step_08||'').substring(0,2000)),
-step_17:'해결수단. "본 발명의 일 실시예에 따른"시작. 마지막:"본 발명의 기타 구체적인 사항들은 상세한 설명 및 도면들에 포함되어 있다."\n'+cx+'\n[장치] '+(o.step_06||'')+'\n[방법] '+(o.step_10||'(없음)'),
-step_18:'도면부호. "구성요소 : 참조번호" 형태. 참조번호순.\n'+cx+'\n[도면] '+(o.step_07||'')+'\n[방법도면] '+(o.step_11||''),
-step_19:'요약서. 청구항1기준 150단어. 목적/구성/효과. "본 발명은".\n'+cx+'\n[청구항1] '+((o.step_06||'').substring(0,1500))
-};return m[s]||''}
-
-async function R(s){if(LL[s])return;LL[s]=1;sB('B'+s.replace('step_',''),1);try{const r=await api(bP(s));O[s]=r.text;rO(s)}catch(e){alert('오류:'+e.message)}finally{LL[s]=0;sB('B'+s.replace('step_',''),0)}}
-async function RB(ss,bid){sB('B'+bid,1);for(let i=0;i<ss.length;i++){sP('G_'+bid,SN[ss[i]]+' 생성 중...',i+1,ss.length);try{const r=await api(bP(ss[i]));O[ss[i]]=r.text;rO(ss[i])}catch(e){alert(e.message);break}}cP('G_'+bid);sB('B'+bid,0)}
-async function RL(s){if(LL[s])return;LL[s]=1;sB('B'+s.replace('step_',''),1);try{sP('G_s'+s.replace('step_',''),SN[s]+' 생성 중...',1,1);O[s]=await apiC(bP(s),'G_s'+s.replace('step_',''));rO(s)}catch(e){alert(e.message)}finally{LL[s]=0;sB('B'+s.replace('step_',''),0);cP('G_s'+s.replace('step_',''))}}
-async function RM(){if(!O.step_08)return alert('상세설명(Step 8) 먼저 생성하세요.');sB('B09',1);try{sP('G_s08','수학식 생성&삽입 중...',1,1);O.step_08=await apiC(bP('step_09'),'G_s08');O.step_09='(통합됨)';rO('step_08');cP('G_s08');alert('✅ 수학식이 삽입되었습니다.')}catch(e){alert(e.message)}finally{sB('B09',0);cP('G_s08')}}
-async function RD(s){await R(s);if(O[s])await gD(s)}
-
-async function gD(s){const dc=document.getElementById('D'+s.replace('step_',''));if(!dc)return;dc.innerHTML='<div class="si"><div class="d"></div> 도면 이미지 생성 중...</div>';
-try{const r=await api('아래 도면 설계를 Mermaid.js로 변환. 각 도면별 ```mermaid 코드블록. 규칙: 블록도=graph TD/LR, 흐름도=flowchart TD, 한글노드 큰따옴표: A["서버(100)"], subgraph그룹.\n[도면]\n'+O[s],4096);
-const bs=r.text.match(/```mermaid\n([\s\S]*?)```/g)||[];if(!bs.length){dc.innerHTML='<p style="color:#999;font-size:12px">도면 이미지 생성 실패</p>';return}
-const cs=bs.map(b=>b.replace(/```mermaid\n/,'').replace(/```/,'').trim());dc.innerHTML='';
-for(let i=0;i<cs.length;i++){const w=document.createElement('div');w.className='dc';w.innerHTML='<div style="font-weight:600;font-size:12px;color:#1B3A5C;margin-bottom:6px">도 '+(i+1)+'</div>';const dd=document.createElement('div');dd.id='m'+Date.now()+'_'+i;w.appendChild(dd);dc.appendChild(w);
-try{const{svg}=await mermaid.render(dd.id+'s',cs[i]);dd.innerHTML=svg}catch(e){dd.innerHTML='<pre style="font-size:11px;color:#999;white-space:pre-wrap">'+eh(cs[i])+'\n(렌더링실패)</pre>'}}}
-catch(e){dc.innerHTML='<p style="color:#e53935;font-size:12px">오류:'+e.message+'</p>'}}
-
-function pT(t){const cs=[];[[/\[A\]\s*국문:\s*(.+?)\s*[/／]\s*영문:\s*(.+)/,'A','서버형'],[/\[B\]\s*국문:\s*(.+?)\s*[/／]\s*영문:\s*(.+)/,'B','방법형'],[/\[C\]\s*국문:\s*(.+?)\s*[/／]\s*영문:\s*(.+)/,'C','시스템형'],[/\[D\]\s*국문:\s*(.+?)\s*[/／]\s*영문:\s*(.+)/,'D','서버및방법형']].forEach(([p,c,d])=>{const m=t.match(p);if(m)cs.push({c,d,k:m[1].trim(),e:m[2].trim()})});return cs}
-
-function rT(t){const a=document.getElementById('tA'),cs=pT(t);if(!cs.length){a.innerHTML='<div style="background:#f0f4f8;padding:10px;border-radius:7px;font-size:12px;white-space:pre-wrap;line-height:1.7">'+eh(t)+'</div>';return}
-let h='<div class="tcs">';cs.forEach(c=>{h+='<div class="tc" onclick="sT(this,\''+c.k.replace(/'/g,"\\'")+'\')"><div class="c">['+c.c+'] '+c.d+'</div><div class="k">'+eh(c.k)+'</div><div class="e">'+eh(c.e)+'</div></div>'});a.innerHTML=h+'</div>'}
-function sT(el,k){document.querySelectorAll('.tc').forEach(c=>c.classList.remove('sel'));el.classList.add('sel');document.getElementById('tI').value=k;TT=k;document.getElementById('tOK').style.display='block';document.getElementById('P0S').style.display='block'}
-
-function rO(s){const c=O[s];if(!c)return;if(s==='step_01'){rT(c);return}
-if(s==='step_06'){rCS();rE('E06','step_06',c,14);return}
-const ea={step_07:'E07',step_10:'E10',step_11:'E11'};if(ea[s]){rE(ea[s],s,c,10);return}
-const sm={step_02:'Z02',step_03:'Z03',step_04:'Z04',step_05:'Z05',step_08:'Z08',step_09:'Z09',step_12:'Z12',step_13:'Z13',step_14:'Z14',step_15:'Z15',step_16:'Z16',step_17:'Z17',step_18:'Z18',step_19:'Z19'};
-if(sm[s]){const e=document.getElementById(sm[s]);if(e)e.innerHTML=mC(SN[s],c,s,c.length+'자')}uS()}
-
-function rE(id,s,c,r){const e=document.getElementById(id);if(e)e.innerHTML='<textarea rows="'+r+'" style="width:100%" onchange="O[\''+s+'\']=this.value">'+eh(c)+'</textarea>'}
-function rCS(){const t=O.step_06||'',ms=t.match(/【청구항\s*\d+】/g)||[];let dp=0;const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g;let m;while((m=cp.exec(t))!==null)if(/있어서|따른/.test(m[2]))dp++;const tt=ms.length;
-document.getElementById('cSt').style.display='block';document.getElementById('cSt').innerHTML='<div class="stats" style="margin:0;width:100%"><div class="stat-box bg1"><div class="n">'+tt+'</div><div class="l">총</div></div><div class="stat-box" style="background:#2E7D32"><div class="n">'+(tt-dp)+'</div><div class="l">독립</div></div><div class="stat-box" style="background:#1565C0"><div class="n">'+dp+'</div><div class="l">종속</div></div></div>';
-const is=vC(t);document.getElementById('cVl').innerHTML=is.length===0?'<div class="is pa">✅ 검증 통과</div>':is.map(i=>'<div class="is '+(i.s==='CRITICAL'?'cr':'hi')+'">'+(i.s==='CRITICAL'?'🔴':'🟠')+' '+i.m+'</div>').join('')}
-
-function vC(t){const is=[];if(!t)return is;const cl={};const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g;let m;while((m=cp.exec(t))!==null)cl[parseInt(m[1])]=m[2].trim();
-if(!Object.keys(cl).length){is.push({s:'HIGH',m:'파싱실패'});return is}if(!cl[1])is.push({s:'CRITICAL',m:'독립항 없음'});
-Object.entries(cl).forEach(([n,tx])=>{if(parseInt(n)===1)return;(tx.match(/상기\s+([가-힣a-zA-Z]+(?:\s[가-힣a-zA-Z]+)*)/g)||[]).forEach(r=>{const t2=r.replace(/^상기\s+/,'');if(cl[1]&&!cl[1].includes(t2)){const rc=tx.match(/청구항\s*(\d+)에\s*있어서/);const rn=rc?parseInt(rc[1]):1;if(!cl[rn]||!cl[rn].includes(t2))is.push({s:'CRITICAL',m:'청구항'+n+': "상기 '+t2+'" 선행기재없음'})}})});return is}
-function RV(){const a=[];if(O.step_06)a.push(...vC(O.step_06));if(O.step_10)a.push(...vC(O.step_10));document.getElementById('vR').innerHTML=a.length===0?'<div class="is pa">🎉 통과</div>':a.map(i=>'<div class="is '+(i.s==='CRITICAL'?'cr':'hi')+'">'+(i.s==='CRITICAL'?'🔴':'🟠')+' '+i.m+'</div>').join('')}
-
-function mC(t,c,s,b){const id='c'+Math.random().toString(36).substr(2,5);return '<div class="ch" onclick="document.getElementById(\''+id+'\').style.display=document.getElementById(\''+id+'\').style.display===\'none\'?\'block\':\'none\'"><span>▶ '+t+'</span>'+(b?'<span class="bg">'+b+'</span>':'')+'</div><div class="cb" id="'+id+'" style="display:none"><textarea rows="8" style="width:100%" onchange="O[\''+s+'\']=this.value">'+eh(c)+'</textarea></div>'}
-function eh(t){return(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-
-function bS(){return[['발명의 설명',''],['발명의 명칭',TT],['기술분야',O.step_02],['발명의 배경이 되는 기술',O.step_03],['선행기술문헌',O.step_04],['발명의 내용',''],['해결하고자 하는 과제',O.step_05],['과제의 해결 수단',O.step_17],['발명의 효과',O.step_16],['도면의 간단한 설명',O.step_07],['발명을 실시하기 위한 구체적인 내용',[O.step_08,O.step_12].filter(Boolean).join('\n\n')],['청구범위',[O.step_06,O.step_10].filter(Boolean).join('\n\n')],['요약서',O.step_19],['도면의 주요 부분에 대한 부호의 설명',O.step_18]].filter(([,v])=>v!==undefined).map(([n,c])=>'【'+n+'】\n'+(c||'')).join('\n\n')}
-function CA(){navigator.clipboard.writeText(bS()).then(()=>alert('✅ 복사됨'))}
-function DT(){const b=new Blob([bS()],{type:'text/plain;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='특허명세서_'+(TT||'초안')+'_'+new Date().toISOString().slice(0,10)+'.txt';a.click()}
-function DW(){const ss=[{h:'발명의 설명'},{h:'발명의 명칭',b:TT},{h:'기술분야',b:O.step_02},{h:'발명의 배경이 되는 기술',b:O.step_03},{h:'선행기술문헌',b:O.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:O.step_05},{h:'과제의 해결 수단',b:O.step_17},{h:'발명의 효과',b:O.step_16},{h:'도면의 간단한 설명',b:O.step_07},{h:'발명을 실시하기 위한 구체적인 내용',b:[O.step_08,O.step_12].filter(Boolean).join('\n\n')},{h:'청구범위',b:[O.step_06,O.step_10].filter(Boolean).join('\n\n')},{h:'요약서',b:O.step_19},{h:'도면의 주요 부분에 대한 부호의 설명',b:O.step_18}];
-let hb=ss.map(s=>{const hd='<h2 style="font-size:12pt;font-weight:bold;margin-top:18pt;margin-bottom:6pt">【'+s.h+'】</h2>';if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>'<p style="text-indent:1cm;margin:3pt 0;line-height:1.6;font-size:11pt">'+eh(l.trim())+'</p>').join('')}).join('');
-const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:"맑은 고딕",sans-serif;font-size:11pt;line-height:1.6}</style></head><body>'+hb+'</body></html>';
-const blob=new Blob(['\ufeff'+html],{type:'application/msword'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='특허명세서_'+(TT||'초안')+'_'+new Date().toISOString().slice(0,10)+'.doc';a.click()}
-
-function rPv(){const a=document.getElementById('pA');const ss=[['발명의 명칭',TT],['기술분야',O.step_02],['배경기술',O.step_03],['과제',O.step_05],['해결수단',O.step_17],['효과',O.step_16],['도면설계',O.step_07],['상세설명',O.step_08],['방법설명',O.step_12],['장치청구항',O.step_06],['방법청구항',O.step_10],['요약서',O.step_19],['도면부호',O.step_18]].filter(([,v])=>v);
-a.innerHTML=ss.map(([n,c])=>mC('【'+n+'】',c,'',c.length+'자')).join('');
-document.getElementById('uS').innerHTML='호출:'+U.c+'회 | 입력:'+U.i.toLocaleString()+'토큰 | 출력:'+U.o.toLocaleString()+'토큰 | 비용:$'+((U.i*15/1e6+U.o*75/1e6).toFixed(2))}
-</script>
+<!-- ═══════════════ Scripts ═══════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3/dist/pptxgen.bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.min.js"></script>
+<script src="script.js"></script>
 </body>
 </html>
