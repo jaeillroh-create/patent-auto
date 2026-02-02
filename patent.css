@@ -1,0 +1,53 @@
+/* ═══════════════════════════════════════════════════════
+   특허명세서 자동 생성 v5.2 — Patent-Specific Styles
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Input Highlight (확정 명칭 입력) ── */
+.input-highlight { border: 2px solid var(--color-primary); font-size: var(--font-size-title); font-weight: var(--font-weight-semibold); }
+
+/* ── Selection Card ── */
+.selection-cards { display: flex; flex-direction: column; gap: var(--spacing-8); margin: var(--spacing-12) 0; }
+.selection-card { padding: 14px 18px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; background: var(--color-bg-primary); transition: all var(--transition-fast); }
+.selection-card:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
+.selection-card.selected { border-color: var(--color-primary); background: var(--color-primary-light); box-shadow: 0 0 0 1px var(--color-primary); }
+.selection-card-category { font-size: var(--font-size-small); font-weight: var(--font-weight-bold); color: var(--color-primary); margin-bottom: var(--spacing-2); }
+.selection-card-title { font-size: var(--font-size-body); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); }
+.selection-card-subtitle { font-size: var(--font-size-caption); color: var(--color-text-secondary); margin-top: 2px; }
+
+/* ── Stat Card ── */
+.stat-row { display: flex; gap: var(--spacing-8); margin-bottom: var(--spacing-20); }
+.stat-card { flex: 1; text-align: center; padding: 16px 12px; border-radius: var(--radius-lg); color: var(--color-text-on-color); }
+.stat-card-value { font-size: var(--font-size-headline); font-weight: var(--font-weight-bold); line-height: 1.2; }
+.stat-card-label { font-size: var(--font-size-small); opacity: 0.85; margin-top: var(--spacing-4); }
+.stat-card-steps { background: linear-gradient(135deg, #3182F6, #64B5F6); }
+.stat-card-api { background: linear-gradient(135deg, #34C759, #7EE08B); }
+.stat-card-cost { background: linear-gradient(135deg, #FF9F0A, #FFCC70); }
+
+/* ── Validation Issues ── */
+.issue-item { padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: var(--spacing-6); font-size: var(--font-size-caption); display: flex; align-items: flex-start; gap: var(--spacing-8); line-height: var(--line-height-normal); }
+.issue-critical { background: var(--color-error-light); border-left: 3px solid var(--color-error); color: #8B1A10; }
+.issue-high { background: var(--color-warning-light); border-left: 3px solid var(--color-warning); color: #7A5200; }
+.issue-medium { background: var(--color-primary-light); border-left: 3px solid var(--color-primary); color: var(--color-primary); }
+.issue-pass { background: var(--color-success-light); border-left: 3px solid var(--color-success); color: #1B873B; }
+
+/* ── Diagram Container ── */
+.diagrams-area { margin-top: var(--spacing-12); }
+.diagram-container { margin: var(--spacing-12) 0; padding: var(--spacing-20); background: var(--color-bg-primary); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow-x: auto; }
+.diagram-label { font-size: var(--font-size-caption); font-weight: var(--font-weight-semibold); color: var(--color-primary); margin-bottom: var(--spacing-12); }
+
+/* ── Step Description List ── */
+.step-desc-list { margin-bottom: var(--spacing-12); }
+.step-desc-item { font-size: var(--font-size-caption); color: var(--color-text-secondary); line-height: var(--line-height-relaxed); padding: 4px 0; }
+
+/* ── Confirm Message ── */
+.confirm-msg { margin-top: var(--spacing-8); padding: 8px 12px; background: var(--color-success-light); border-radius: var(--radius-sm); font-size: var(--font-size-caption); font-weight: var(--font-weight-medium); color: #1B873B; }
+
+/* ── Download Buttons ── */
+.download-btns { display: flex; flex-direction: column; gap: var(--spacing-8); }
+
+/* ── Editable Result Textarea ── */
+.result-textarea { width: 100%; min-height: 200px; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-md); font-family: var(--font-family); font-size: var(--font-size-caption); color: var(--color-text-primary); background: var(--color-bg-tertiary); line-height: var(--line-height-relaxed); resize: vertical; outline: none; margin-top: var(--spacing-12); }
+.result-textarea:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(49,130,246,0.12); background: var(--color-bg-primary); }
+
+/* ── Method disabled state ── */
+.card-disabled { opacity: 0.4; pointer-events: none; }
