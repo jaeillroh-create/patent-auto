@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>특허명세서 자동 생성 v4.8 — DIDIM IP</title>
+  <title>특허명세서 자동 생성 v4.9 — DIDIM IP</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/gh/toss/tossface/dist/tossface.css" rel="stylesheet" />
@@ -97,9 +97,30 @@
         <span id="globalRefStatus" style="font-size:12px;color:var(--color-text-tertiary)">업로드된 문서 없음</span>
       </div>
     </div>
-    <div class="card">
+    <div class="card" style="margin-bottom:16px">
       <div class="card-header"><div class="card-title"><span class="tossface">📂</span> 내 사건 목록</div><div class="card-description" id="dashProjectCount">0건</div></div>
       <div id="dashProjectList" style="padding:0 16px 16px"></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title"><span class="tossface">⚡</span> 가출원 내역</div><div class="card-description" id="dashProvisionalCount">0건</div></div>
+      <div id="dashProvisionalList" style="padding:0 16px 16px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Provisional Viewer Modal -->
+<div id="provisionalViewerModal" class="modal-overlay" style="display:none">
+  <div class="modal-content" style="max-width:700px;max-height:85vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="modal-title" style="margin:0"><span class="tossface">⚡</span> <span id="provisionalViewerTitle">가출원 명세서</span></div>
+      <button class="btn btn-ghost btn-sm" onclick="closeProvisionalViewer()">✕</button>
+    </div>
+    <div id="provisionalViewerMeta" style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:12px"></div>
+    <div id="provisionalViewerContent" style="font-size:13px;white-space:pre-wrap;background:var(--color-bg-secondary);padding:16px;border-radius:8px;max-height:50vh;overflow-y:auto;margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="btnProvRedownloadWord" onclick="redownloadProvisionalWord()"><span class="tossface">📄</span> Word 재다운로드</button>
+      <button class="btn btn-outline" onclick="copyProvisionalToClipboard()"><span class="tossface">📋</span> 복사</button>
+      <button class="btn btn-ghost" onclick="confirmDeleteProvisional()" style="color:var(--color-error)"><span class="tossface">🗑️</span> 삭제</button>
     </div>
   </div>
 </div>
@@ -209,8 +230,10 @@
         <button class="btn btn-primary btn-full" id="btnStep01" onclick="runStep('step_01')" disabled><span class="tossface">🤖</span> 명칭 후보 생성 (5개)</button>
         <div id="resultStep01"></div>
         <div id="titleConfirmArea" style="display:none;margin-top:12px">
-          <label style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">확정 명칭</label>
+          <label style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">확정 명칭 (국문)</label>
           <input type="text" class="input-field input-highlight" id="titleInput" oninput="onTitleInput()" style="margin-top:4px" />
+          <label style="font-size:13px;font-weight:600;color:var(--color-text-secondary);margin-top:8px;display:block">확정 명칭 (영문)</label>
+          <input type="text" class="input-field" id="titleInputEn" oninput="onTitleEnInput()" placeholder="예: SERVER FOR MANAGING NUTRITIONAL INTAKE" style="margin-top:4px" />
           <div id="titleConfirmMsg" class="confirm-msg" style="display:none"><span class="tossface">✅</span> 명칭이 확정되었어요</div>
         </div>
       </div>
@@ -329,10 +352,10 @@
 
       <!-- Step 14/15 -->
       <div class="card">
-        <div class="card-header"><div class="card-title"><span class="tossface">🔄</span> 대안 / 기재불비</div></div>
+        <div class="card-header"><div class="card-title"><span class="tossface">🔄</span> 대안 / 특허성 검토</div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-outline" id="btnStep14" onclick="runStep('step_14')"><span class="tossface">🔄</span> Step 14: 대안 청구항</button>
-          <button class="btn btn-outline" id="btnStep15" onclick="runStep('step_15')"><span class="tossface">📝</span> Step 15: 기재불비</button>
+          <button class="btn btn-outline" id="btnStep15" onclick="runStep('step_15')"><span class="tossface">🔍</span> Step 15: 특허성 검토</button>
         </div>
         <div id="resultStep14" style="margin-top:8px"></div>
         <div id="resultStep15" style="margin-top:8px"></div>

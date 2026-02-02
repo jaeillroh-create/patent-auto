@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   특허명세서 자동 생성 v4.8 — Bug Fixes + UX Improvements
+   특허명세서 자동 생성 v4.9 — Provisional History + English Title + Auto Category + Validation Fix
    ═══════════════════════════════════════════════════════════ */
 const SUPABASE_URL = 'https://uvrzwhfjtzqujawmscca.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cnp3aGZqdHpxdWphd21zY2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTEwNDgsImV4cCI6MjA4NTUyNzA0OH0.JSSPMPIHsXfbNm6pgRzCTGH7aNQATl-okIkcXHl7Mkk';
@@ -46,10 +46,11 @@ const CATEGORY_ENDINGS = {
 };
 
 let API_KEY='',currentUser=null,currentProfile=null,currentProjectId=null;
-let outputs={},selectedTitle='',selectedTitleType='',includeMethodClaims=true;
+let outputs={},selectedTitle='',selectedTitleEn='',selectedTitleType='',includeMethodClaims=true;
 let usage={calls:0,inputTokens:0,outputTokens:0,cost:0},loadingState={};
 let detailLevel='standard';
 let customDetailChars=2000;
+let currentProvisionalId=null; // For provisional viewer
 
 // ═══ Claim System v4.7 ═══
 let deviceCategory='server', deviceGeneralDep=5, deviceAnchorDep=4, deviceAnchorStart=7;
@@ -83,7 +84,7 @@ const STEP8_SUFFIX = `본 발명에 따른 방법들은 다양한 컴퓨터 수�
 또한, 상술한 방법 또는 장치는 그 구성이나 기능의 전부 또는 일부가 결합되어 구현되거나, 분리되어 구현될 수 있다.
 상기에서는 본 발명의 바람직한 실시예를 참조하여 설명하였지만, 해당 기술 분야의 숙련된 당업자는 하기의 특허 청구의 범위에 기재된 본 발명의 사상 및 필드로부터 벗어나지 않는 범위 내에서 본 발명을 다양하게 수정 및 변경시킬 수 있음을 이해할 수 있을 것이다.`;
 
-const STEP_NAMES={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술문헌',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'도면 설계',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'검토',step_14:'대안 청구항',step_15:'기재불비',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서'};
+const STEP_NAMES={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술문헌',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'도면 설계',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서'};
 
 // ═══════════ UTILITIES ═══════════
 function escapeHtml(t){if(!t)return '';return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');}
@@ -108,7 +109,7 @@ function showScreen(name){
 
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
-  currentProjectId=null;outputs={};selectedTitle='';selectedTitleType='';includeMethodClaims=true;
+  currentProjectId=null;outputs={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
   usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};beforeReviewText='';uploadedFiles=[];diagramData={};
   projectRefStyleText='';requiredFigures=[];
   // Claim defaults
@@ -175,11 +176,34 @@ async function adminSuspend(id){await sb.from('profiles').update({status:'suspen
 async function loadDashboardProjects(){
   const{data}=await sb.from('projects').select('id,title,invention_content,current_state_json,created_at,updated_at').eq('owner_user_id',currentUser.id).order('updated_at',{ascending:false});
   const el=document.getElementById('dashProjectList'),cnt=document.getElementById('dashProjectCount');
-  if(!data?.length){el.innerHTML='<div style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:40px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></div>';cnt.textContent='0건';return;}
-  cnt.textContent=`${data.length}건`;
-  el.innerHTML=data.map(p=>{const s=p.current_state_json||{},o=s.outputs||{},c=Object.keys(o).filter(k=>o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length,pct=Math.round(c/19*100);
-    return `<div class="card" style="margin-bottom:12px;cursor:pointer;transition:box-shadow 0.15s" onmouseover="this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'" onclick="openProject('${p.id}')"><div style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.title)}</div><div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">생성 ${new Date(p.created_at).toLocaleDateString('ko-KR')} · 수정 ${new Date(p.updated_at).toLocaleDateString('ko-KR')}</div></div><div style="display:flex;gap:6px;margin-left:12px;flex-shrink:0"><span class="badge ${pct===100?'badge-success':pct>0?'badge-primary':'badge-neutral'}">${c}/19 (${pct}%)</span><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmDeleteProject('${p.id}','${escapeHtml(p.title).replace(/'/g,"\\\\'")}')">🗑️</button></div></div><div class="progress-bar-bg" style="margin-top:10px;height:4px"><div class="progress-bar-fill" style="width:${pct}%;height:4px"></div></div></div></div>`;
-  }).join('');
+  const provEl=document.getElementById('dashProvisionalList'),provCnt=document.getElementById('dashProvisionalCount');
+  if(!data?.length){
+    el.innerHTML='<div style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:40px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></div>';cnt.textContent='0건';
+    if(provEl)provEl.innerHTML='<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)"><p style="font-size:13px">가출원 내역 없음</p></div>';if(provCnt)provCnt.textContent='0건';
+    return;
+  }
+  // Separate regular and provisional
+  const regular=data.filter(p=>!p.current_state_json?.type||p.current_state_json.type!=='provisional');
+  const provisional=data.filter(p=>p.current_state_json?.type==='provisional');
+  cnt.textContent=`${regular.length}건`;
+  if(!regular.length){el.innerHTML='<div style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:40px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></div>';}
+  else{
+    el.innerHTML=regular.map(p=>{const s=p.current_state_json||{},o=s.outputs||{},c=Object.keys(o).filter(k=>o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length,pct=Math.round(c/19*100);
+      return `<div class="card" style="margin-bottom:12px;cursor:pointer;transition:box-shadow 0.15s" onmouseover="this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'" onclick="openProject('${p.id}')"><div style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.title)}</div><div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">생성 ${new Date(p.created_at).toLocaleDateString('ko-KR')} · 수정 ${new Date(p.updated_at).toLocaleDateString('ko-KR')}</div></div><div style="display:flex;gap:6px;margin-left:12px;flex-shrink:0"><span class="badge ${pct===100?'badge-success':pct>0?'badge-primary':'badge-neutral'}">${c}/19 (${pct}%)</span><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmDeleteProject('${p.id}','${escapeHtml(p.title).replace(/'/g,"\\\\'")}')">🗑️</button></div></div><div class="progress-bar-bg" style="margin-top:10px;height:4px"><div class="progress-bar-fill" style="width:${pct}%;height:4px"></div></div></div></div>`;
+    }).join('');
+  }
+  // Provisional list
+  if(provCnt)provCnt.textContent=`${provisional.length}건`;
+  if(provEl){
+    if(!provisional.length){provEl.innerHTML='<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)"><p style="font-size:13px">가출원 내역 없음</p></div>';}
+    else{
+      provEl.innerHTML=provisional.map(p=>{
+        const pd=p.current_state_json?.provisionalData||{};
+        const titleEn=pd.titleEn||'';
+        return `<div class="card" style="margin-bottom:8px;cursor:pointer;transition:box-shadow 0.15s;border-left:3px solid var(--color-warning)" onmouseover="this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'" onclick="openProvisionalViewer('${p.id}')"><div style="padding:12px 16px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px"><span class="badge badge-warning" style="font-size:10px">⚡ 가출원</span><span style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(pd.title||p.title)}</span></div>${titleEn?`<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">${escapeHtml(titleEn)}</div>`:''}<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">${new Date(p.created_at).toLocaleDateString('ko-KR')} 생성</div></div><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmDeleteProject('${p.id}','${escapeHtml(p.title).replace(/'/g,"\\\\'")}')">🗑️</button></div></div></div>`;
+      }).join('');
+    }
+  }
 }
 
 // ═══ Global Reference Document (Dashboard level) ═══
@@ -209,6 +233,67 @@ async function handleGlobalRefUpload(event){
 }
 function clearGlobalRef(){globalRefStyleText='';try{localStorage.removeItem('patent_global_ref');}catch(e){}const st=document.getElementById('globalRefStatus');if(st){st.textContent='업로드된 문서 없음';st.style.color='var(--color-text-tertiary)';}showToast('공통 참고 문서 제거됨');}
 
+// ═══ Provisional Viewer ═══
+async function openProvisionalViewer(pid){
+  const{data}=await sb.from('projects').select('*').eq('id',pid).single();
+  if(!data||!data.current_state_json?.provisionalData){showToast('데이터를 찾을 수 없어요','error');return;}
+  currentProvisionalId=pid;
+  const pd=data.current_state_json.provisionalData;
+  document.getElementById('provisionalViewerTitle').textContent=pd.title||'가출원 명세서';
+  const titleLine=pd.titleEn?`${pd.title}\n(${pd.titleEn})`:(pd.title||'');
+  document.getElementById('provisionalViewerMeta').textContent=`생성: ${new Date(data.created_at).toLocaleDateString('ko-KR')} · 발명 내용: ${(data.invention_content||'').length.toLocaleString()}자`;
+  const content=[
+    `【발명의 명칭】\n${titleLine}`,
+    `【기술분야】\n${pd.techField||''}`,
+    `【해결하고자 하는 과제】\n${pd.problem||''}`,
+    `【과제의 해결 수단】\n${pd.solution||''}`,
+    `【발명의 효과】\n${pd.effect||''}`,
+    `【도면의 간단한 설명】\n도 1은 ${pd.title||''}의 구성을 나타내는 블록도이다.`,
+    `【발명을 실시하기 위한 구체적인 내용】\n${pd.desc||''}`,
+    `【청구범위】\n${pd.claim||''}`,
+    `【요약서】\n${pd.abstract||''}`
+  ].join('\n\n');
+  document.getElementById('provisionalViewerContent').textContent=content;
+  document.getElementById('provisionalViewerModal').style.display='flex';
+}
+function closeProvisionalViewer(){document.getElementById('provisionalViewerModal').style.display='none';currentProvisionalId=null;}
+async function redownloadProvisionalWord(){
+  if(!currentProvisionalId)return;
+  const{data}=await sb.from('projects').select('current_state_json').eq('id',currentProvisionalId).single();
+  if(!data?.current_state_json?.provisionalData){showToast('데이터 없음','error');return;}
+  const pd=data.current_state_json.provisionalData;
+  const titleLine=pd.titleEn?`${pd.title}\n(${pd.titleEn})`:(pd.title||'');
+  const secs=[
+    {h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:pd.techField},
+    {h:'발명의 내용'},{h:'해결하고자 하는 과제',b:pd.problem},
+    {h:'과제의 해결 수단',b:pd.solution},{h:'발명의 효과',b:pd.effect},
+    {h:'도면의 간단한 설명',b:`도 1은 ${pd.title||''}의 구성을 나타내는 블록도이다.`},
+    {h:'발명을 실시하기 위한 구체적인 내용',b:pd.desc},
+    {h:'청구범위',b:pd.claim},
+    {h:'요약서',b:pd.abstract?`【요약】\n${pd.abstract}\n\n【대표도】\n도 1`:''},
+  ];
+  const html=secs.map(s=>{
+    const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${escapeHtml(s.h)}】</h2>`;
+    if(!s.b)return hd;
+    return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify">${escapeHtml(l.trim())}</p>`).join('');
+  }).join('');
+  const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));
+  a.download=`가출원_${pd.title||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();
+  showToast('Word 재다운로드 완료');
+}
+function copyProvisionalToClipboard(){
+  const t=document.getElementById('provisionalViewerContent')?.textContent;
+  if(!t){showToast('내용 없음','error');return;}
+  navigator.clipboard.writeText(t).then(()=>showToast('복사 완료')).catch(()=>showToast('클립보드 접근 불가','error'));
+}
+async function confirmDeleteProvisional(){
+  if(!currentProvisionalId)return;
+  if(!confirm('이 가출원 명세서를 삭제하시겠어요?'))return;
+  await sb.from('projects').delete().eq('id',currentProvisionalId);
+  closeProvisionalViewer();showToast('삭제됨');loadDashboardProjects();
+}
+
 function openNewProjectModal(){document.getElementById('newProjectTitle').value='';document.getElementById('newProjectModal').style.display='flex';document.getElementById('newProjectTitle').focus();}
 function closeNewProjectModal(){document.getElementById('newProjectModal').style.display='none';}
 async function createAndOpenProject(){const t=document.getElementById('newProjectTitle').value.trim();if(!t){showToast('사건명을 입력해 주세요','error');return;}const{data,error}=await sb.from('projects').insert({owner_user_id:currentUser.id,title:t,invention_content:'',current_state_json:{outputs:{},selectedTitle:'',selectedTitleType:'',includeMethodClaims:true,usage:{calls:0,inputTokens:0,outputTokens:0}}}).select('id').single();if(error){showToast('생성 실패','error');return;}closeNewProjectModal();await openProject(data.id);}
@@ -216,7 +301,7 @@ async function createAndOpenProject(){const t=document.getElementById('newProjec
 async function openProject(pid){
   clearAllState();const{data}=await sb.from('projects').select('*').eq('id',pid).single();if(!data){showToast('불러올 수 없어요','error');return;}
   currentProjectId=data.id;document.getElementById('projectInput').value=data.invention_content||'';
-  const s=data.current_state_json||{};outputs=s.outputs||{};selectedTitle=s.selectedTitle||'';selectedTitleType=s.selectedTitleType||'';includeMethodClaims=s.includeMethodClaims!==false;usage=s.usage||{calls:0,inputTokens:0,outputTokens:0};
+  const s=data.current_state_json||{};outputs=s.outputs||{};selectedTitle=s.selectedTitle||'';selectedTitleEn=s.selectedTitleEn||'';selectedTitleType=s.selectedTitleType||'';includeMethodClaims=s.includeMethodClaims!==false;usage=s.usage||{calls:0,inputTokens:0,outputTokens:0};
   // Restore v4.7 claim config
   deviceCategory=s.deviceCategory||'server';deviceGeneralDep=s.deviceGeneralDep||5;deviceAnchorDep=s.deviceAnchorDep||4;deviceAnchorStart=s.deviceAnchorStart||7;
   anchorThemeMode=s.anchorThemeMode||'auto';selectedAnchorThemes=s.selectedAnchorThemes||[];
@@ -233,7 +318,7 @@ async function openProject(pid){
   restoreClaimUI();
   // Restore custom title type
   if(selectedTitleType){const ci=document.getElementById('customTitleType');if(ci)ci.value=selectedTitleType;document.getElementById('btnStep01').disabled=false;}
-  if(selectedTitle){document.getElementById('titleInput').value=selectedTitle;document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';}
+  if(selectedTitle){document.getElementById('titleInput').value=selectedTitle;const enInp=document.getElementById('titleInputEn');if(enInp)enInp.value=selectedTitleEn||'';document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';}
   Object.keys(outputs).forEach(k=>{if(outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied'))renderOutput(k,outputs[k]);});
   document.getElementById('headerProjectName').textContent=data.title;document.getElementById('headerUserName').textContent=currentProfile?.display_name||currentUser?.email||'';
   if(currentProfile?.role==='admin')document.getElementById('btnAdmin').style.display='inline-flex';
@@ -258,7 +343,7 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await sb.from('projects').delete().eq('id',id);showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures}}).eq('id',currentProjectId);if(!silent)showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures}}).eq('id',currentProjectId);if(!silent)showToast('저장됨');}
 
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===4)renderPreview();}
@@ -409,10 +494,38 @@ async function handleProjectRefUpload(event){
 }
 function clearProjectRef(){projectRefStyleText='';const st=document.getElementById('projectRefStatus');if(st){st.textContent='없음 (공통 참고 문서 사용)';st.style.color='var(--color-text-tertiary)';}showToast('프로젝트 참고 문서 제거됨');}
 
-function selectTitleType(el,type){document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitleType=type;const ci=document.getElementById('customTitleType');if(ci)ci.value=type;document.getElementById('btnStep01').disabled=false;showToast(`발명 유형: ~${type}`);}
-function onCustomTitleType(val){const v=val.trim();if(v){selectedTitleType=v;document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));document.getElementById('btnStep01').disabled=false;}else{selectedTitleType='';document.getElementById('btnStep01').disabled=true;}}
-function selectTitle(el,kr,en){document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitle=kr;document.getElementById('titleInput').value=kr;document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';}
-function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';}
+function selectTitleType(el,type){document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitleType=type;const ci=document.getElementById('customTitleType');if(ci)ci.value=type;document.getElementById('btnStep01').disabled=false;autoSetDeviceCategoryFromType(type);showToast(`발명 유형: ~${type}`);}
+function onCustomTitleType(val){const v=val.trim();if(v){selectedTitleType=v;document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));document.getElementById('btnStep01').disabled=false;autoSetDeviceCategoryFromType(v);}else{selectedTitleType='';document.getElementById('btnStep01').disabled=true;}}
+function selectTitle(el,kr,en){document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitle=kr;selectedTitleEn=en||'';document.getElementById('titleInput').value=kr;const enInp=document.getElementById('titleInputEn');if(enInp)enInp.value=en||'';document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';autoSetDeviceCategoryFromTitle(kr);}
+function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';if(v)autoSetDeviceCategoryFromTitle(v);}
+function onTitleEnInput(){selectedTitleEn=document.getElementById('titleInputEn')?.value?.trim()||'';}
+
+// ═══ Auto Device Category from Title/Type (v4.9) ═══
+function autoSetDeviceCategoryFromType(type){
+  if(!type)return;
+  let devCat='server';
+  if(/서버/.test(type))devCat='server';
+  else if(/시스템/.test(type))devCat='system';
+  else if(/장치/.test(type))devCat='apparatus';
+  else if(/단말|전자/.test(type))devCat='electronic_device';
+  deviceCategory=devCat;
+  const sel=document.getElementById('selDeviceCategory');if(sel)sel.value=devCat;
+  // Also set method category
+  if(/방법/.test(type)){methodCategory='method';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='method';}
+  if(/기록매체/.test(type)){methodCategory='recording_medium';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='recording_medium';}
+  if(/컴퓨터\s*프로그램/.test(type)){methodCategory='computer_program_product';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='computer_program_product';}
+}
+function autoSetDeviceCategoryFromTitle(title){
+  if(!title)return;
+  // Extract category from title ending
+  if(/서버\s*$/.test(title))autoSetDeviceCategoryFromType('서버');
+  else if(/시스템\s*$/.test(title))autoSetDeviceCategoryFromType('시스템');
+  else if(/장치\s*$/.test(title))autoSetDeviceCategoryFromType('장치');
+  else if(/(단말|단말기)\s*$/.test(title))autoSetDeviceCategoryFromType('전자단말');
+  else if(/방법\s*$/.test(title))autoSetDeviceCategoryFromType('방법');
+  // Compound: "서버 및 방법"
+  if(/서버\s*(및|와|,)\s*방법/.test(title)){autoSetDeviceCategoryFromType('서버 및 방법');}
+}
 
 // ═══════════ API ═══════════
 function ensureApiKey(){
@@ -566,6 +679,14 @@ function buildAnchorThemeInstruction(mode,themes,count){
 - 권한/마스킹/암호화/감사 → privacy_audit`;
 }
 function getCategoryEnding(cat){return CATEGORY_ENDINGS[cat]||CATEGORY_ENDINGS.server;}
+function autoDetectCategoryFromTitle(){
+  const t=selectedTitle||'';const ty=selectedTitleType||'';
+  if(/서버/.test(ty)||/서버/.test(t))return 'server';
+  if(/시스템/.test(ty)||/시스템/.test(t))return 'system';
+  if(/장치/.test(ty)||/장치/.test(t))return 'apparatus';
+  if(/단말|전자/.test(ty)||/단말|전자/.test(t))return 'electronic_device';
+  return 'server';
+}
 
 function buildPrompt(stepId){
   const inv=document.getElementById('projectInput').value,T=selectedTitle;
@@ -579,7 +700,9 @@ function buildPrompt(stepId){
 
     // ═══ Step 6: 장치 청구항 (v4.7 완전 재작성) ═══
     case 'step_06':{
-      const catLabel=deviceCategory==='auto'?'발명에 가장 적합한 카테고리를 선택하라':deviceCategory;
+      // v4.9: Auto-select category from title type if set to 'auto'
+      const effectiveCat=(deviceCategory==='auto')?autoDetectCategoryFromTitle():deviceCategory;
+      const catLabel=effectiveCat;
       const totalDep=deviceGeneralDep+deviceAnchorDep;
       const anchorEnd=deviceAnchorStart+deviceAnchorDep-1;
       const themeInst=buildAnchorThemeInstruction(anchorThemeMode,selectedAnchorThemes,deviceAnchorDep);
@@ -734,7 +857,17 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}${getFullInvention()}`;}
     case 'step_12':return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: \"이하에서는 앞서 설명한 서버의 구성 및 동작을 참조하여 방법을 설명한다.\" 생략 금지. 제한성 표현 금지.\n\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${getFullInvention()}${styleRef}`;
     case 'step_13':return `청구범위와 상세설명 검토:\n1.청구항뒷받침 2.기술적비약 3.수학식정합성 4.반복실시가능성 5.보완/수정 구체적 문장\n${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}`;
     case 'step_14':return `대안 청구항. 핵심유지 표현달리. 【청구항 N】.\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}`;
-    case 'step_15':return `기재불비: (a)상기선행기재 (b)용어통일 (c)대응 (d)누락 (e)용어뒷받침. 수정안.\n${T}\n[전체] ${outputs.step_06||''}\n${outputs.step_10||''}\n${outputs.step_14||''}`;
+    case 'step_15':return `특허성 검토: 아래 청구범위와 상세설명에 대해 다음 항목을 검토하라.
+
+(1) 신규성: 청구항의 구성요소 조합이 선행기술과 구별되는지
+(2) 진보성: 기술적 특징이 당업자에게 자명하지 않은 수준인지, 특히 앵커 종속항의 창의성
+(3) 명확성: 청구항 표현이 명확하고 뒷받침되는지
+(4) 산업상 이용가능성: 실제 구현 가능한 기술인지
+(5) 보호범위 최적화: 독립항이 과도하게 좁거나 넓지 않은지, 개선 제안
+
+각 항목별로 평가 결과와 개선 제안을 작성하라.
+
+${T}\n[전체 청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명 요약] ${(getLatestDescription()||'').slice(0,3000)}\n[발명 내용] ${inv.slice(0,2000)}`;
     case 'step_16':return `발명의 효과. \"본 발명에 따르면,\"시작. 50단어 이내. 마지막: \"본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며, 언급되지 않은 또 다른 효과들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\"\n${T}\n[과제] ${outputs.step_05||''}\n[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
     case 'step_17':return `과제의 해결 수단. \"본 발명의 일 실시예에 따른\"시작. 마지막: \"본 발명의 기타 구체적인 사항들은 상세한 설명 및 도면들에 포함되어 있다.\"\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}${styleRef}`;
     case 'step_18':return `【부호의 설명】작성. \"구성요소 : 참조번호\". 참조번호 오름차순.\n${T}\n[도면] ${outputs.step_07||''}\n[방법도면] ${outputs.step_11||''}`;
@@ -766,31 +899,45 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
       r=await callClaude(buildPrompt(sid));outputs[sid]=r.text;
     }
     renderOutput(sid,r.text||outputs[sid]);
-    // Step 6: auto-validation + correction
+    // Step 6: auto-validation + multi-round correction (v4.9)
     if(sid==='step_06'){
-      showProgress('progressStep06','기재불비 자동 검증 중...',1,3);
-      const issues=validateClaims(outputs.step_06);
-      if(issues.length>0){
-        showProgress('progressStep06','기재불비 수정 중...',2,3);
+      let corrected=outputs[sid];
+      let correctionRound=0;const maxRounds=3;
+      for(correctionRound=0;correctionRound<maxRounds;correctionRound++){
+        showProgress('progressStep06',`기재불비 검증 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+1,maxRounds*2+1);
+        const issues=validateClaims(corrected);
+        if(issues.length===0)break;
+        showProgress('progressStep06',`기재불비 수정 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+2,maxRounds*2+1);
         const issueText=issues.map(i=>i.message).join('\n');
-        const fixPrompt=`아래 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 독립항에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${outputs.step_06}`;
-        const fixR=await callClaude(fixPrompt);outputs[sid]=fixR.text;renderOutput(sid,fixR.text);
-        showProgress('progressStep06','수정 완료',3,3);setTimeout(()=>clearProgress('progressStep06'),2000);
-        showToast('장치 청구항 생성 + 기재불비 자동 수정 완료');
-      }else{clearProgress('progressStep06');showToast('장치 청구항 완료 (기재불비 없음)');}
+        const fixPrompt=`아래 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 상위항(독립항 포함)에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 상위항에 추가할 때는 독립항의 범위가 과도하게 좁아지지 않도록 주의\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${corrected}`;
+        const fixR=await callClaude(fixPrompt);corrected=fixR.text;
+      }
+      outputs[sid]=corrected;renderOutput(sid,corrected);
+      const finalIssues=validateClaims(corrected);
+      showProgress('progressStep06',`완료 (수정 ${correctionRound}회)`,maxRounds*2+1,maxRounds*2+1);
+      setTimeout(()=>clearProgress('progressStep06'),2000);
+      if(finalIssues.length===0)showToast(`장치 청구항 완료 (기재불비 없음, ${correctionRound}회 수정)`);
+      else showToast(`장치 청구항 완료 (${correctionRound}회 수정, ${finalIssues.length}건 잔여 — 경미한 사항)`, 'info');
     }
-    // Step 10: auto-validation + correction (same as Step 6)
+    // Step 10: auto-validation + multi-round correction (v4.9)
     else if(sid==='step_10'){
-      showProgress('progressStep10'||'','기재불비 자동 검증 중...',1,3);
-      const issues=validateClaims(outputs.step_10);
-      if(issues.length>0){
-        showProgress('progressStep10'||'','기재불비 수정 중...',2,3);
+      let corrected=outputs[sid];
+      let correctionRound=0;const maxRounds=3;
+      for(correctionRound=0;correctionRound<maxRounds;correctionRound++){
+        showProgress('progressStep10',`기재불비 검증 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+1,maxRounds*2+1);
+        const issues=validateClaims(corrected);
+        if(issues.length===0)break;
+        showProgress('progressStep10',`기재불비 수정 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+2,maxRounds*2+1);
         const issueText=issues.map(i=>i.message).join('\n');
-        const fixPrompt=`아래 방법 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 독립항에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${outputs.step_10}`;
-        const fixR=await callClaude(fixPrompt);outputs[sid]=fixR.text;renderOutput(sid,fixR.text);
-        showProgress('progressStep10'||'','수정 완료',3,3);setTimeout(()=>clearProgress('progressStep10'||''),2000);
-        showToast('방법 청구항 생성 + 기재불비 자동 수정 완료');
-      }else{clearProgress('progressStep10'||'');showToast('방법 청구항 완료 (기재불비 없음)');}
+        const fixPrompt=`아래 방법 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 상위항(독립항 포함)에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${corrected}`;
+        const fixR=await callClaude(fixPrompt);corrected=fixR.text;
+      }
+      outputs[sid]=corrected;renderOutput(sid,corrected);
+      const finalIssues=validateClaims(corrected);
+      showProgress('progressStep10',`완료 (수정 ${correctionRound}회)`,maxRounds*2+1,maxRounds*2+1);
+      setTimeout(()=>clearProgress('progressStep10'),2000);
+      if(finalIssues.length===0)showToast(`방법 청구항 완료 (기재불비 없음, ${correctionRound}회 수정)`);
+      else showToast(`방법 청구항 완료 (${correctionRound}회 수정, ${finalIssues.length}건 잔여 — 경미한 사항)`, 'info');
     }
     else{
       if(sid==='step_13')document.getElementById('btnApplyReview').style.display='block';
@@ -844,7 +991,7 @@ async function runProvisionalApplication(){
     const r1=await callClaudeSonnet(`가출원 명세서를 작성하라. 전체 문서가 4000단어를 넘지 않도록 간결하게 작성하라.
 
 [구성]
-1. 발명의 명칭: 1개 ("~서버" 또는 "~방법" 또는 "~시스템" 형태)
+1. 발명의 명칭: 국문 1개 + 영문 1개 ("~서버" 또는 "~방법" 또는 "~시스템" 형태)
 2. 기술분야: 1문장
 3. 해결하고자 하는 과제: 2~3문장
 4. 과제의 해결 수단: 3~5문장
@@ -863,7 +1010,9 @@ async function runProvisionalApplication(){
 
 [출력 형식]
 ===명칭===
-(명칭)
+(국문 명칭)
+===영문명칭===
+(영문 명칭)
 ===기술분야===
 (내용)
 ===과제===
@@ -888,7 +1037,8 @@ ${inv}`,8192);
     showProgress('progressProvisional','도면 Mermaid 변환 중... (2/3)',2,3);
     const text=r1.text;
     const getSection=(key)=>{const re=new RegExp('==='+key+'===\\s*\\n([\\s\\S]*?)(?====|$)');const m=text.match(re);return m?m[1].trim():'';};
-    const title=getSection('명칭');const techField=getSection('기술분야');
+    const title=getSection('명칭');const titleEn=getSection('영문명칭');
+    const techField=getSection('기술분야');
     const problem=getSection('과제');const solution=getSection('해결수단');
     const claim=getSection('청구항');const diagram=getSection('도면설계');
     const desc=getSection('상세설명');const effect=getSection('효과');
@@ -907,11 +1057,23 @@ ${diagram}`,4096);
       }
     }catch(e){/* PPTX generation is optional */}
 
-    showProgress('progressProvisional','Word + PPTX 생성 중... (3/3)',3,3);
+    showProgress('progressProvisional','Word + PPTX 생성 및 저장 중... (3/3)',3,3);
 
-    // Generate Word
+    // v4.9: Save provisional to DB
+    const provisionalData={title,titleEn,techField,problem,solution,claim,diagram,desc,effect,abstract};
+    try{
+      await sb.from('projects').insert({
+        owner_user_id:currentUser.id,
+        title:`[가출원] ${title||'초안'}`,
+        invention_content:inv,
+        current_state_json:{type:'provisional',provisionalData,usage:{calls:usage.calls,inputTokens:usage.inputTokens,outputTokens:usage.outputTokens,cost:usage.cost}}
+      });
+    }catch(e){console.error('Provisional save error:',e);}
+
+    // Generate Word with English title
+    const titleLine=titleEn?`${title}\n(${titleEn})`:(title||'');
     const secs=[
-      {h:'발명의 설명'},{h:'발명의 명칭',b:title},{h:'기술분야',b:techField},
+      {h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:techField},
       {h:'발명의 내용'},{h:'해결하고자 하는 과제',b:problem},
       {h:'과제의 해결 수단',b:solution},{h:'발명의 효과',b:effect},
       {h:'도면의 간단한 설명',b:diagram?`도 1은 ${title}의 구성을 나타내는 블록도이다.`:''},
@@ -948,7 +1110,9 @@ ${diagram}`,4096);
 
     clearProgress('progressProvisional');
     closeProvisionalModal();
-    showToast(`가출원 명세서 Word 다운로드 완료${pptxGenerated?' + 도면 PPTX 다운로드':' (도면 PPTX 생성 실패 — Word에 도면 설명 포함)'}: ${title}`);  }catch(e){clearProgress('progressProvisional');showToast(e.message,'error');}
+    showToast(`가출원 명세서 저장 + Word 다운로드 완료${pptxGenerated?' + 도면 PPTX':''}: ${title}`);
+    loadDashboardProjects(); // Refresh list to show new provisional
+  }catch(e){clearProgress('progressProvisional');showToast(e.message,'error');}
   finally{setButtonLoading('btnProvisionalGen',false);setGlobalProcessing(false);}
 }
 
@@ -1067,8 +1231,19 @@ function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12
 function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tossface">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="outputs['${sid}']=this.value">${escapeHtml(text)}</textarea></div>`;}
 function toggleAccordion(h){h.classList.toggle('open');const b=h.nextElementSibling;if(b)b.classList.toggle('open');}
 
-// ═══════════ VALIDATION (v4.7 — expanded) ═══════════
+// ═══════════ VALIDATION (v4.9 — full claim chain + relaxed matching) ═══════════
 const KILLER_WORDS=[{pattern:/반드시/,msg:'"반드시" — 제한적 표현'},{pattern:/에 한하여/,msg:'"~에 한하여" — 제한적 표현'},{pattern:/에 한정/,msg:'"~에 한정" — 제한적 표현'},{pattern:/에 제한/,msg:'"~에 제한" — 제한적 표현'},{pattern:/필수적으로/,msg:'"필수적으로" — 제한적 표현'},{pattern:/무조건/,msg:'"무조건" — 제한적 표현'},{pattern:/오직/,msg:'"오직" — 제한적 표현'}];
+// v4.9: Get full text of claim chain (claim N → references → parent → ... → independent)
+function getClaimChainText(claimNum, claims){
+  let text='';let current=claimNum;const visited=new Set();
+  while(current&&!visited.has(current)){
+    visited.add(current);
+    if(claims[current])text+=' '+claims[current];
+    const rm=claims[current]?.match(/청구항\s*(\d+)에\s*있어서/);
+    current=rm?parseInt(rm[1]):null;
+  }
+  return text;
+}
 function validateClaims(text){
   const iss=[];if(!text)return iss;const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,claims={};let m;
   while((m=cp.exec(text))!==null)claims[parseInt(m[1])]=m[2].trim();
@@ -1077,8 +1252,14 @@ function validateClaims(text){
   Object.entries(claims).forEach(([num,ct])=>{const n=parseInt(num);
     if(n>1){const rm=ct.match(/청구항\s*(\d+)에\s*있어서/),rn=rm?parseInt(rm[1]):1;
       if(rm){if(!claims[rn])iss.push({severity:'HIGH',message:`청구항 ${num}: 참조 청구항 ${rn} 없음`});if(rn>=n)iss.push({severity:'HIGH',message:`청구항 ${num}: 자기/후행 청구항 참조`});}
-      const refs=ct.match(/상기\s+([가-힣]+(?:\s[가-힣]+){0,3})/g)||[],refText=claims[rn]||claims[1]||'';
-      refs.forEach(ref=>{const raw=ref.replace(/^상기\s+/,''),cw=raw.split(/\s+/).slice(0,2).map(stripKoreanParticles).filter(w=>w.length>=2);if(!cw.length)return;if(!cw.every(w=>refText.includes(w)))iss.push({severity:'CRITICAL',message:`청구항 ${num}: "상기 ${raw}" — 청구항 ${rn}에 "${cw.join(', ')}" 선행기재 없음`});});}
+      // v4.9: Check "상기" references against FULL claim chain, not just direct parent
+      const chainText=getClaimChainText(rn||1, claims);
+      const refs=ct.match(/상기\s+([가-힣]+(?:\s[가-힣]+){0,3})/g)||[];
+      refs.forEach(ref=>{const raw=ref.replace(/^상기\s+/,''),cw=raw.split(/\s+/).slice(0,2).map(stripKoreanParticles).filter(w=>w.length>=2);if(!cw.length)return;
+        // v4.9: Relaxed — at least ONE keyword must match in chain (was: ALL must match)
+        const matchCount=cw.filter(w=>chainText.includes(w)).length;
+        if(matchCount===0)iss.push({severity:'HIGH',message:`청구항 ${num}: "상기 ${raw}" — 상위 청구항 체인에 "${cw.join(', ')}" 선행기재 없음`});
+      });}
     KILLER_WORDS.forEach(kw=>{if(kw.pattern.test(ct))iss.push({severity:'HIGH',message:`청구항 ${num}: ${kw.msg}`});});
   });return iss;
 }
@@ -1089,23 +1270,27 @@ function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.star
 function renderPreview(){const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${escapeHtml(h[1])}】</span><span class="arrow">▶</span></div><div class="accordion-body">${escapeHtml(s)}</div>`;}).join('');}
 function buildSpecification(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
+  // v4.9: Include English title
+  const titleLine=selectedTitleEn?`${selectedTitle}\n(${selectedTitleEn})`:selectedTitle;
   // Claims: use the latest version (after auto-correction from validation)
   const deviceClaims=outputs.step_06||'';
   const methodClaims=outputs.step_10||'';
   const allClaims=[deviceClaims,methodClaims].filter(Boolean).join('\n\n');
-  // Include step_14 (alternative claims) and step_15 (deficiency review) if available
+  // Include step_14 (alternative claims) if available
   let extras='';
   if(outputs.step_14)extras+='\n\n[참고: 대안 청구항]\n'+outputs.step_14;
-  if(outputs.step_15)extras+='\n\n[참고: 기재불비 검토]\n'+outputs.step_15;
-  return['【발명의 설명】',`【발명의 명칭】\n${selectedTitle}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${outputs.step_12?'\n\n'+outputs.step_12:''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${allClaims}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n')+extras;
+  if(outputs.step_15)extras+='\n\n[참고: 특허성 검토]\n'+outputs.step_15;
+  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${outputs.step_12?'\n\n'+outputs.step_12:''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${allClaims}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n')+extras;
 }
 function copyToClipboard(){const t=buildSpecification();if(!t.trim()){showToast('내용 없음','error');return;}navigator.clipboard.writeText(t).then(()=>showToast('복사 완료')).catch(()=>showToast('클립보드 접근 불가','error'));}
 function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){showToast('내용 없음','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();}
 
 function downloadAsWord(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
+  // v4.9: Include English title
+  const titleLine=selectedTitleEn?`${selectedTitle}\n(${selectedTitleEn})`:selectedTitle;
   const allClaims=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n\n');
-  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:selectedTitle},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,outputs.step_12].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
+  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,outputs.step_12].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();showToast('Word 다운로드 완료');
