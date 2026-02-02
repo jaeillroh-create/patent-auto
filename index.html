@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>특허명세서 자동 생성 | 특허그룹 디딤</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/pretendard/1.3.9/static/pretendard.min.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Pretendard', -apple-system, sans-serif; background: #f4f6f9; color: #1a1a1a; }
+
+        /* Layout */
+        .app { max-width: 1000px; margin: 0 auto; padding: 16px; }
+        .header { text-align: center; padding: 24px 0 16px; }
+        .header h1 { font-size: 24px; color: #1B3A5C; margin-bottom: 4px; }
+        .header p { color: #888; font-size: 13px; }
+
+        /* Stats Bar */
+        .stats { display: flex; gap: 10px; margin-bottom: 16px; }
+        .stat-box { flex: 1; text-align: center; padding: 14px 8px; border-radius: 10px; color: white; }
+        .stat-box .num { font-size: 26px; font-weight: 700; }
+        .stat-box .lbl { font-size: 11px; opacity: 0.9; }
+        .bg1 { background: linear-gradient(135deg, #1B3A5C, #2C5F8A); }
+        .bg2 { background: linear-gradient(135deg, #2C5F8A, #3A7CA5); }
+        .bg3 { background: linear-gradient(135deg, #3A7CA5, #4A9CC5); }
+
+        /* Phase Tabs */
+        .phase-tabs { display: flex; gap: 4px; margin-bottom: 16px; overflow-x: auto; }
+        .phase-tab {
+            flex: 1; min-width: 90px; padding: 10px 6px; border-radius: 10px;
+            border: 1px solid #e0e0e0; background: white; cursor: pointer;
+            text-align: center; transition: all 0.2s;
+        }
+        .phase-tab:hover { border-color: #1B3A5C; }
+        .phase-tab.active { border: 2px solid #1B3A5C; background: #EBF0F7; }
+        .phase-tab .icon { font-size: 20px; }
+        .phase-tab .name { font-size: 11px; font-weight: 600; margin-top: 2px; }
+
+        /* Cards */
+        .card {
+            background: white; border-radius: 12px; padding: 20px;
+            margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .card.checkpoint { border: 2px solid #1B3A5C; }
+        .card h3 { color: #1B3A5C; font-size: 16px; margin-bottom: 12px; }
+        .card h4 { color: #333; font-size: 14px; margin: 16px 0 8px; }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 10px 20px; border-radius: 8px; border: 1px solid #ccc;
+            background: white; color: #333; font-weight: 600; font-size: 13px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn:hover { background: #f0f0f0; }
+        .btn.primary { background: #1B3A5C; color: white; border: none; }
+        .btn.primary:hover { background: #153050; }
+        .btn:disabled { background: #e0e0e0; color: #999; cursor: not-allowed; }
+        .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+
+        /* Inputs */
+        textarea, input[type="text"], input[type="password"] {
+            width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ddd;
+            font-family: inherit; font-size: 13px; line-height: 1.7; resize: vertical;
+        }
+        textarea:focus, input:focus { outline: none; border-color: #1B3A5C; }
+        .title-input { border: 2px solid #1B3A5C; font-size: 15px; font-weight: 600; }
+
+        /* Collapsible */
+        .collapse-header {
+            padding: 10px 14px; background: #f8f9fa; cursor: pointer;
+            display: flex; justify-content: space-between; align-items: center;
+            font-weight: 600; font-size: 13px; border-radius: 8px;
+            border: 1px solid #e8e8e8; margin-bottom: 4px;
+        }
+        .collapse-header:hover { background: #f0f2f5; }
+        .collapse-body { padding: 12px; border: 1px solid #e8e8e8; border-top: none; border-radius: 0 0 8px 8px; margin-bottom: 8px; margin-top: -5px; }
+        .badge { background: #4CAF50; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+
+        /* Issues */
+        .issue { padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
+        .issue.critical { background: #FFEBEE; border-left: 4px solid #ef5350; }
+        .issue.high { background: #FFF3E0; border-left: 4px solid #FF9800; }
+        .issue.pass { background: #E8F5E9; border-left: 4px solid #4CAF50; }
+
+        /* Loading */
+        .spinner { display: inline-block; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Preview */
+        .preview-block {
+            white-space: pre-wrap; font-size: 13px; line-height: 1.8;
+            padding: 12px; background: #f9f9f9; border-radius: 6px;
+            max-height: 300px; overflow: auto; border: 1px solid #eee;
+        }
+
+        /* Footer */
+        .footer { text-align: center; color: #bbb; font-size: 11px; padding: 20px 0; }
+
+        /* API Key Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center;
+            justify-content: center; z-index: 1000;
+        }
+        .modal {
+            background: white; border-radius: 16px; padding: 32px;
+            max-width: 480px; width: 90%;
+        }
+        .modal h2 { color: #1B3A5C; margin-bottom: 12px; }
+        .modal p { color: #666; font-size: 13px; margin-bottom: 16px; line-height: 1.6; }
+        .modal .hint { font-size: 12px; color: #999; margin-top: 8px; }
+
+        /* Hide phase content */
+        .phase-content { display: none; }
+        .phase-content.active { display: block; }
+    </style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+    <!-- API Key Modal -->
+    <div class="modal-overlay" id="apiModal">
+        <div class="modal">
+            <h2>🔑 API Key 설정</h2>
+            <p>Anthropic API Key를 입력하세요. 키는 브라우저에만 저장되며 외부로 전송되지 않습니다.</p>
+            <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." style="margin-bottom: 12px;">
+            <p class="hint">
+                발급: <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a> → API Keys → Create Key
+            </p>
+            <button class="btn primary" onclick="setApiKey()" style="width:100%; justify-content: center;">시작하기</button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <div class="header">
+        <h1>📋 특허명세서 자동 생성</h1>
+        <p>특허그룹 디딤 | 19단계 AI 파이프라인 · 자동 검증 · Human-in-the-Loop</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+        <div class="stat-box bg1"><div class="num" id="statComplete">0/19</div><div class="lbl">완료 단계</div></div>
+        <div class="stat-box bg2"><div class="num" id="statCalls">0</div><div class="lbl">API 호출</div></div>
+        <div class="stat-box bg3"><div class="num" id="statCost">$0.000</div><div class="lbl">예상 비용</div></div>
+    </div>
+
+    <!-- Phase Tabs -->
+    <div class="phase-tabs">
+        <div class="phase-tab active" onclick="switchPhase(0)"><div class="icon">📋</div><div class="name">기본 정보</div></div>
+        <div class="phase-tab" onclick="switchPhase(1)"><div class="icon">⚖️</div><div class="name">청구범위</div></div>
+        <div class="phase-tab" onclick="switchPhase(2)"><div class="icon">🖼️</div><div class="name">도면 & 설명</div></div>
+        <div class="phase-tab" onclick="switchPhase(3)"><div class="icon">🔍</div><div class="name">검토</div></div>
+        <div class="phase-tab" onclick="switchPhase(4)"><div class="icon">📥</div><div class="name">산출물</div></div>
+    </div>
+
+    <!-- ═══════════ Phase 0: 기본 정보 ═══════════ -->
+    <div class="phase-content active" id="phase0">
+        <div class="card">
+            <h3>📁 발명 내용 입력</h3>
+            <textarea id="projectText" rows="6" placeholder="발명의 핵심 기술, 구성요소, 차별점, 데이터 흐름 등을 상세히 입력하세요...&#10;&#10;예: AI 기반으로 기업과 정부 지원사업을 매칭하는 플랫폼. 기업 프로필(업종, 매출, 인력 등)을 분석하여 적합한 지원사업을 추천하고..."></textarea>
+        </div>
+
+        <div class="card checkpoint">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3>🏷️ Step 1: 발명의 명칭 (Checkpoint)</h3>
+                <button class="btn primary" onclick="runStep('step_01')" id="btn_step_01">🤖 명칭 후보 생성</button>
+            </div>
+            <div id="output_step_01_preview" style="display:none; background:#f0f4f8; padding:12px; border-radius:8px; margin-bottom:10px; font-size:13px; white-space:pre-wrap; line-height:1.8;"></div>
+            <input type="text" id="titleInput" class="title-input" placeholder="확정할 발명의 명칭 (위 후보에서 선택 또는 직접 입력)" oninput="onTitleChange()">
+            <div id="titleConfirm" style="display:none; color:#4CAF50; font-weight:700; margin-top:6px;">✅ 명칭 확정됨</div>
+        </div>
+
+        <div id="phase0Steps" style="display:none;">
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <h3>📝 Step 2~5: 기본 섹션</h3>
+                    <button class="btn primary" onclick="runBatch(['step_02','step_03','step_04','step_05'])">🚀 일괄 생성</button>
+                </div>
+                <div id="step02_section"></div>
+                <div id="step03_section"></div>
+                <div id="step04_section"></div>
+                <div id="step05_section"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════ Phase 1: 청구범위 ═══════════ -->
+    <div class="phase-content" id="phase1">
+        <div class="card checkpoint">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3>⚖️ Step 6: 장치 청구항 (Checkpoint)</h3>
+                <button class="btn primary" onclick="runStep('step_06')" id="btn_step_06">🤖 생성</button>
+            </div>
+            <div id="claimStats" style="display:none; margin-bottom:12px;"></div>
+            <div id="claimValidation"></div>
+            <div id="step06_edit"></div>
+        </div>
+
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3>📋 Step 10: 방법 청구항</h3>
+                <button class="btn primary" onclick="runStep('step_10')" id="btn_step_10">🤖 생성</button>
+            </div>
+            <div id="step10_edit"></div>
+        </div>
+
+        <div class="card">
+            <h3>추가 청구항</h3>
+            <div class="btn-row">
+                <button class="btn" onclick="runStep('step_14')">📋 대안 청구항 (Step 14)</button>
+                <button class="btn" onclick="runStep('step_15')">🔍 기재불비 체크 (Step 15)</button>
+            </div>
+            <div id="step14_section"></div>
+            <div id="step15_section"></div>
+        </div>
+    </div>
+
+    <!-- ═══════════ Phase 2: 도면 & 설명 ═══════════ -->
+    <div class="phase-content" id="phase2">
+        <div class="card checkpoint">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3>🖼️ Step 7: 도면 설계 (Checkpoint)</h3>
+                <button class="btn primary" onclick="runStep('step_07')" id="btn_step_07">🤖 생성</button>
+            </div>
+            <div id="step07_edit"></div>
+        </div>
+
+        <div class="card">
+            <h3>📝 상세설명 & 수학식</h3>
+            <div class="btn-row">
+                <button class="btn primary" onclick="runStep('step_08')" id="btn_step_08">장치 상세설명 (Step 8)</button>
+                <button class="btn" onclick="runStep('step_09')" id="btn_step_09">수학식 (Step 9)</button>
+            </div>
+            <div id="step08_section"></div>
+            <div id="step09_section"></div>
+        </div>
+
+        <div class="card">
+            <h3>📊 방법 도면 & 설명</h3>
+            <div class="btn-row">
+                <button class="btn" onclick="runStep('step_11')" id="btn_step_11">방법 도면 (Step 11)</button>
+                <button class="btn" onclick="runStep('step_12')" id="btn_step_12">방법 설명 (Step 12)</button>
+            </div>
+            <div id="step11_section"></div>
+            <div id="step12_section"></div>
+        </div>
+    </div>
+
+    <!-- ═══════════ Phase 3: 검토 ═══════════ -->
+    <div class="phase-content" id="phase3">
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3>🔍 Step 13: 명세서 검토</h3>
+                <button class="btn primary" onclick="runStep('step_13')">🤖 전체 검토</button>
+            </div>
+            <div id="step13_section"></div>
+        </div>
+
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3>📄 마무리 섹션</h3>
+                <button class="btn primary" onclick="runBatch(['step_16','step_17','step_18','step_19'])">🚀 일괄 생성</button>
+            </div>
+            <div id="step16_section"></div>
+            <div id="step17_section"></div>
+            <div id="step18_section"></div>
+            <div id="step19_section"></div>
+        </div>
+    </div>
+
+    <!-- ═══════════ Phase 4: 최종 산출물 ═══════════ -->
+    <div class="phase-content" id="phase4">
+        <div class="card">
+            <h3>📥 최종 산출물</h3>
+            <div class="btn-row">
+                <button class="btn primary" onclick="copyFullSpec()">📋 전체 명세서 클립보드 복사</button>
+                <button class="btn" onclick="downloadAsText()">💾 TXT 파일 다운로드</button>
+            </div>
+            <p style="font-size:12px; color:#888; margin-bottom:16px;">복사 후 Word에 붙여넣기하면 됩니다. 섹션 헤더(【...】)가 자동 포함됩니다.</p>
+            <div id="previewArea"></div>
+        </div>
+
+        <div class="card">
+            <h3>💰 API 사용량</h3>
+            <div id="usageSummary" style="font-size:13px; color:#555;"></div>
+        </div>
+    </div>
+
+    <div class="footer">특허명세서 자동 생성 시스템 v1.0 | 특허그룹 디딤 / 주식회사 시너지앤 | 2026</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════
+let API_KEY = '';
+let outputs = {};
+let title = '';
+let usage = { calls: 0, input: 0, output: 0 };
+let loadingSteps = {};
+
+const SYSTEM_PROMPT = `너는 20년 경력의 한국 변리사이다.
+특허 명세서를 작성할 때 다음 원칙을 항상 지켜라:
+1. 문체는 특허 명세서의 표준 문체(~한다, ~이다)를 사용한다.
+2. 불필요한 서수, 글머리 기호, 마크다운 서식을 절대 사용하지 마라.
+3. 구체적 소프트웨어명/라이브러리명 대신 기술적 알고리즘 형태로 기재한다.
+4. 모든 구성요소는 '구성요소명(참조번호)' 형태로 기재한다.
+5. 출력은 바로 명세서에 붙여넣을 수 있는 순수 텍스트 형태로 작성한다.
+6. 마크다운 헤더(#, ##), 볼드(**), 이탤릭(*) 등 어떤 마크다운 서식도 사용하지 마라.`;
+
+const STEP_NAMES = {
+    step_01: '발명의 명칭', step_02: '기술분야', step_03: '배경기술',
+    step_04: '선행기술문헌', step_05: '해결하고자 하는 과제', step_06: '장치 청구항',
+    step_07: '도면 설계', step_08: '장치 상세설명', step_09: '수학식',
+    step_10: '방법 청구항', step_11: '방법 도면', step_12: '방법 상세설명',
+    step_13: '명세서 검토', step_14: '대안 청구항', step_15: '기재불비 체크',
+    step_16: '발명의 효과', step_17: '과제의 해결 수단', step_18: '도면 부호',
+    step_19: '요약서'
+};
+
+// ═══════════════════════════════════════════════
+// API Key
+// ═══════════════════════════════════════════════
+function setApiKey() {
+    const key = document.getElementById('apiKeyInput').value.trim();
+    if (!key) { alert('API Key를 입력하세요.'); return; }
+    API_KEY = key;
+    sessionStorage.setItem('patent_api_key', key);
+    document.getElementById('apiModal').style.display = 'none';
+}
+
+// Check saved key
+(function() {
+    const saved = sessionStorage.getItem('patent_api_key');
+    if (saved) {
+        API_KEY = saved;
+        document.getElementById('apiModal').style.display = 'none';
+    }
+})();
+
+// ═══════════════════════════════════════════════
+// Phase Switching
+// ═══════════════════════════════════════════════
+function switchPhase(n) {
+    document.querySelectorAll('.phase-tab').forEach((t, i) => t.classList.toggle('active', i === n));
+    document.querySelectorAll('.phase-content').forEach((c, i) => c.classList.toggle('active', i === n));
+    if (n === 4) renderPreview();
+}
+
+// ═══════════════════════════════════════════════
+// Title
+// ═══════════════════════════════════════════════
+function onTitleChange() {
+    title = document.getElementById('titleInput').value.trim();
+    const confirmed = title.length > 0;
+    document.getElementById('titleConfirm').style.display = confirmed ? 'block' : 'none';
+    document.getElementById('phase0Steps').style.display = confirmed ? 'block' : 'none';
+}
+
+// ═══════════════════════════════════════════════
+// Claude API Call
+// ═══════════════════════════════════════════════
+async function callClaude(prompt) {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+            model: 'claude-sonnet-4-5-20250929',
+            max_tokens: 8192,
+            system: SYSTEM_PROMPT,
+            messages: [{ role: 'user', content: prompt }]
+        })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.message);
+    usage.calls++;
+    usage.input += (data.usage?.input_tokens || 0);
+    usage.output += (data.usage?.output_tokens || 0);
+    updateStats();
+    return data.content[0].text;
+}
+
+// ═══════════════════════════════════════════════
+// Prompt Builder
+// ═══════════════════════════════════════════════
+function buildPrompt(stepId) {
+    const proj = document.getElementById('projectText').value;
+    const ctx = title ? `[발명의 명칭] ${title}` : '';
+    const o = outputs;
+
+    const map = {
+step_01: `아래 프로젝트 내용을 분석하여 특허출원에 적합한 발명의 명칭 후보를 4가지 카테고리로 제안하라.
+카테고리 A: "~서버" 형태 / B: "~방법" 형태 / C: "~시스템" 형태 / D: "~서버 및 방법" 형태
+각 후보에 국문과 영문 포함.
+[프로젝트 내용]
+${proj}`,
+
+step_02: `기술분야를 서술하라. 20단어 내외 한 문장. "본 발명은"으로 시작, "~에 관한 것이다."로 끝내라. 발명의 명칭 포함.
+${ctx}`,
+
+step_03: `배경기술을 기재하라. 3개 문단: (1)기존 문제 (2)최근 동향 (3)필요성. 각 150단어. 번호/제목 없이 문단만. 제품명/회사명 금지.
+${ctx}
+[프로젝트] ${proj}`,
+
+step_04: `선행기술문헌을 작성하라.
+【특허문헌】
+(특허문헌 1) 한국등록특허 제__________호 (추후 보완 필요)
+${ctx}`,
+
+step_05: `해결과제를 서술하라. "본 발명은"으로 시작, "~을 제공하는 것을 목적으로 한다."로 끝.
+마지막 문단: "본 발명의 기술적 과제는 이상에서 언급한 기술적 과제로 제한되지 않으며, 언급되지 않은 또 다른 기술적 과제들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다."
+${ctx}
+[배경기술] ${o.step_03 || ''}`,
+
+step_06: `장치 청구범위를 작성하라. 독립항1 + 종속항5개내외. 종속항은 "청구항 1에 있어서"로 시작. 출력: 【청구항 1】... 【청구항 2】... 형식.
+${ctx}
+[프로젝트] ${proj}`,
+
+step_07: `청구범위 설명 도면을 설계하라. 각 도면: 제목/유형, 구성요소+참조번호, 연결관계, 간단한설명. 참조번호: 서버100번대, 단말200번대, 외부300번대.
+${ctx}
+[청구범위] ${o.step_06 || ''}`,
+
+step_08: `상세설명을 작성하라. 서버(100) 주어. "구성요소(참조번호)" 형태. 도면별 설명. 특허문체(~한다). 글머리금지. 청구항 모든 구성요소 포함.
+${ctx}
+[청구범위] ${o.step_06 || ''}
+[도면설계] ${o.step_07 || ''}
+[프로젝트] ${(proj || '').substring(0, 3000)}`,
+
+step_09: `수학식 5개 내외. 【수학식 N】, 수식본문, 파라미터정의, 예시대입. 삽입위치 지정. 실제 기술 정확히 표현.
+${ctx}
+[상세설명] ${(o.step_08 || '').substring(0, 5000)}`,
+
+step_10: `방법 청구항. 독립항1 + 종속항9개내외. "~단계"로 기술. 장치 청구항 번호에 이어서. 【청구항 N】 형태.
+${ctx}
+[장치 청구항] ${o.step_06 || ''}
+[상세설명] ${(o.step_08 || '').substring(0, 3000)}`,
+
+step_11: `방법 흐름도 설계. 도면부호 S100,S200... 각 단계: 번호,내용,연결. 간단한설명 포함.
+${ctx}
+[방법 청구항] ${o.step_10 || ''}`,
+
+step_12: `방법 상세설명. 단계순서대로 장치동작과 1:1 대응. 특허문체. 글머리금지.
+시작: "이하에서는 앞서 설명한 서버의 구성 및 동작을 참조하여 방법을 설명한다."
+${ctx}
+[방법 청구항] ${o.step_10 || ''}
+[방법 도면] ${o.step_11 || ''}
+[장치 상세설명] ${(o.step_08 || '').substring(0, 3000)}`,
+
+step_13: `명세서 검토. 1.청구항 뒷받침 검토 2.기술적비약 파악. 각 보충/보완내용 작성.
+${ctx}
+[청구범위] ${o.step_06 || ''}\n${o.step_10 || ''}
+[상세설명] ${(o.step_08 || '').substring(0, 6000)}`,
+
+step_14: `대안 청구항. 핵심 유지하되 표현 달리하라. 【청구항 N】 형태.
+${ctx}
+[장치 청구항] ${o.step_06 || ''}
+[방법 청구항] ${o.step_10 || ''}`,
+
+step_15: `기재불비 검사. (a)상기 선행기재 (b)용어일관성 (c)구성요소대응 (d)필수구성누락. 수정안 제시.
+${ctx}
+[전체 청구범위] ${o.step_06 || ''}\n${o.step_10 || ''}\n${o.step_14 || ''}`,
+
+step_16: `발명의 효과. "본 발명에 따르면,"으로 시작. 마지막: "본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며..."
+${ctx}
+[과제] ${o.step_05 || ''}
+[상세설명] ${(o.step_08 || '').substring(0, 2000)}`,
+
+step_17: `과제의 해결 수단. "본 발명의 일 실시예에 따른"으로 시작. 마지막: "본 발명의 기타 구체적인 사항들은 상세한 설명 및 도면들에 포함되어 있다."
+${ctx}
+[장치 청구항] ${o.step_06 || ''}
+[방법 청구항] ${o.step_10 || '(없음)'}`,
+
+step_18: `도면 부호 설명. "구성요소 : 참조번호" 형태. 참조번호순 정렬.
+${ctx}
+[도면설계] ${o.step_07 || ''}
+[방법도면] ${o.step_11 || ''}`,
+
+step_19: `요약서. 청구항1 기준 150단어 내외. 목적/구성/효과. "본 발명은"으로 시작.
+${ctx}
+[청구항 1] ${(o.step_06 || '').substring(0, 1500)}`
+    };
+    return map[stepId] || '';
+}
+
+// ═══════════════════════════════════════════════
+// Run Step
+// ═══════════════════════════════════════════════
+async function runStep(stepId) {
+    if (loadingSteps[stepId]) return;
+    loadingSteps[stepId] = true;
+    updateButtonState(stepId, true);
+
+    try {
+        const prompt = buildPrompt(stepId);
+        const result = await callClaude(prompt);
+        outputs[stepId] = result;
+        renderStepOutput(stepId);
+    } catch(e) {
+        alert(`오류: ${e.message}`);
+    } finally {
+        loadingSteps[stepId] = false;
+        updateButtonState(stepId, false);
+    }
+}
+
+async function runBatch(stepIds) {
+    for (const sid of stepIds) {
+        await runStep(sid);
+    }
+}
+
+// ═══════════════════════════════════════════════
+// UI Helpers
+// ═══════════════════════════════════════════════
+function updateButtonState(stepId, loading) {
+    const btn = document.getElementById(`btn_${stepId}`);
+    if (btn) {
+        if (loading) {
+            btn.disabled = true;
+            btn._origText = btn.textContent;
+            btn.textContent = '⏳ 생성 중...';
+        } else {
+            btn.disabled = false;
+            btn.textContent = btn._origText || '🤖 생성';
+        }
+    }
+}
+
+function updateStats() {
+    const completed = Object.keys(outputs).filter(k => outputs[k] && !outputs[k].startsWith('[오류]')).length;
+    document.getElementById('statComplete').textContent = `${completed}/19`;
+    document.getElementById('statCalls').textContent = usage.calls;
+    const cost = ((usage.input * 3) / 1e6 + (usage.output * 15) / 1e6).toFixed(3);
+    document.getElementById('statCost').textContent = `$${cost}`;
+}
+
+function createCollapsible(title, content, container, badge) {
+    const id = 'c_' + Math.random().toString(36).substr(2, 6);
+    const html = `
+        <div class="collapse-header" onclick="document.getElementById('${id}').style.display = document.getElementById('${id}').style.display === 'none' ? 'block' : 'none'">
+            <span>▶ ${title}</span>
+            ${badge ? `<span class="badge">${badge}</span>` : ''}
+        </div>
+        <div class="collapse-body" id="${id}" style="display:none;">
+            <textarea rows="8" style="width:100%;" onchange="outputs['${container}'] = this.value">${escapeHtml(content)}</textarea>
+        </div>`;
+    return html;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderStepOutput(stepId) {
+    const content = outputs[stepId];
+    if (!content) return;
+
+    // Step 1: title candidates
+    if (stepId === 'step_01') {
+        const el = document.getElementById('output_step_01_preview');
+        el.textContent = content;
+        el.style.display = 'block';
+        return;
+    }
+
+    // Step 6: claims with stats
+    if (stepId === 'step_06') {
+        renderClaimStats();
+        renderEditArea('step06_edit', 'step_06', content, 12);
+        return;
+    }
+
+    // Steps with dedicated edit areas
+    const editAreas = {
+        step_07: 'step07_edit', step_10: 'step10_edit'
+    };
+    if (editAreas[stepId]) {
+        renderEditArea(editAreas[stepId], stepId, content, 10);
+        return;
+    }
+
+    // Steps with collapsible sections
+    const sectionMap = {
+        step_02: 'step02_section', step_03: 'step03_section',
+        step_04: 'step04_section', step_05: 'step05_section',
+        step_08: 'step08_section', step_09: 'step09_section',
+        step_11: 'step11_section', step_12: 'step12_section',
+        step_13: 'step13_section', step_14: 'step14_section',
+        step_15: 'step15_section', step_16: 'step16_section',
+        step_17: 'step17_section', step_18: 'step18_section',
+        step_19: 'step19_section'
+    };
+
+    const targetId = sectionMap[stepId];
+    if (targetId) {
+        const el = document.getElementById(targetId);
+        if (el) {
+            el.innerHTML = createCollapsible(
+                STEP_NAMES[stepId],
+                content, stepId,
+                `${content.length}자`
+            );
+        }
+    }
+
+    updateStats();
+}
+
+function renderEditArea(containerId, stepId, content, rows) {
+    const el = document.getElementById(containerId);
+    if (el) {
+        el.innerHTML = `<textarea rows="${rows}" style="width:100%;" onchange="outputs['${stepId}'] = this.value">${escapeHtml(content)}</textarea>`;
+    }
+}
+
+function renderClaimStats() {
+    const text = outputs.step_06 || '';
+    const matches = text.match(/【청구항\s*\d+】/g) || [];
+    const total = matches.length;
+    let dep = 0;
+    const cp = /【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g;
+    let m;
+    while ((m = cp.exec(text)) !== null) {
+        if (/있어서|따른/.test(m[2])) dep++;
+    }
+
+    document.getElementById('claimStats').style.display = 'flex';
+    document.getElementById('claimStats').innerHTML = `
+        <div class="stats" style="margin:0; width:100%;">
+            <div class="stat-box bg1"><div class="num">${total}</div><div class="lbl">총 청구항</div></div>
+            <div class="stat-box" style="background:#2E7D32;"><div class="num">${total - dep}</div><div class="lbl">독립항</div></div>
+            <div class="stat-box" style="background:#1565C0;"><div class="num">${dep}</div><div class="lbl">종속항</div></div>
+        </div>`;
+
+    // Validation
+    const issues = validateClaims(text);
+    const valEl = document.getElementById('claimValidation');
+    if (issues.length === 0) {
+        valEl.innerHTML = '<div class="issue pass">✅ 기재불비 자동 검증 통과</div>';
+    } else {
+        valEl.innerHTML = issues.map(i =>
+            `<div class="issue ${i.severity.toLowerCase()}">${i.severity === 'CRITICAL' ? '🔴' : '🟠'} ${i.msg}</div>`
+        ).join('');
+    }
+}
+
+function validateClaims(text) {
+    const issues = [];
+    if (!text) return issues;
+    const claims = {};
+    const cp = /【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g;
+    let m;
+    while ((m = cp.exec(text)) !== null) claims[parseInt(m[1])] = m[2].trim();
+    if (Object.keys(claims).length === 0) {
+        issues.push({ severity: 'HIGH', msg: '청구항 파싱 실패' });
+        return issues;
+    }
+    if (!claims[1]) issues.push({ severity: 'CRITICAL', msg: '독립항(청구항 1) 없음' });
+
+    Object.entries(claims).forEach(([num, text]) => {
+        if (parseInt(num) === 1) return;
+        const refs = text.match(/상기\s+([가-힣a-zA-Z]+(?:\s[가-힣a-zA-Z]+)*)/g) || [];
+        refs.forEach(ref => {
+            const term = ref.replace(/^상기\s+/, '');
+            if (claims[1] && !claims[1].includes(term)) {
+                const rc = text.match(/청구항\s*(\d+)에\s*있어서/);
+                const rn = rc ? parseInt(rc[1]) : 1;
+                if (!claims[rn] || !claims[rn].includes(term)) {
+                    issues.push({ severity: 'CRITICAL', msg: `청구항 ${num}: '상기 ${term}' 선행기재 없음` });
+                }
+            }
+        });
+    });
+    return issues;
+}
+
+// ═══════════════════════════════════════════════
+// Preview & Export
+// ═══════════════════════════════════════════════
+function buildFullSpec() {
+    const sections = [
+        ['발명의 설명', ''],
+        ['발명의 명칭', title],
+        ['기술분야', outputs.step_02],
+        ['발명의 배경이 되는 기술', outputs.step_03],
+        ['선행기술문헌', outputs.step_04],
+        ['발명의 내용', ''],
+        ['해결하고자 하는 과제', outputs.step_05],
+        ['과제의 해결 수단', outputs.step_17],
+        ['발명의 효과', outputs.step_16],
+        ['도면의 간단한 설명', outputs.step_07],
+        ['발명을 실시하기 위한 구체적인 내용', [outputs.step_08, outputs.step_09, outputs.step_12].filter(Boolean).join('\n\n')],
+        ['청구범위', [outputs.step_06, outputs.step_10].filter(Boolean).join('\n\n')],
+        ['요약서', outputs.step_19],
+        ['도면의 주요 부분에 대한 부호의 설명', outputs.step_18],
+    ];
+    return sections
+        .filter(([, v]) => v !== undefined)
+        .map(([name, content]) => `【${name}】\n${content || ''}`)
+        .join('\n\n');
+}
+
+function copyFullSpec() {
+    navigator.clipboard.writeText(buildFullSpec()).then(() => alert('✅ 전체 명세서가 클립보드에 복사되었습니다.'));
+}
+
+function downloadAsText() {
+    const blob = new Blob([buildFullSpec()], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `특허명세서_${title || '초안'}_${new Date().toISOString().slice(0,10)}.txt`;
+    a.click();
+}
+
+function renderPreview() {
+    const area = document.getElementById('previewArea');
+    const sections = [
+        ['발명의 명칭', title], ['기술분야', outputs.step_02],
+        ['배경기술', outputs.step_03], ['선행기술문헌', outputs.step_04],
+        ['해결하고자 하는 과제', outputs.step_05], ['과제의 해결 수단', outputs.step_17],
+        ['발명의 효과', outputs.step_16], ['도면 설계', outputs.step_07],
+        ['장치 상세설명', outputs.step_08], ['수학식', outputs.step_09],
+        ['방법 상세설명', outputs.step_12], ['장치 청구항', outputs.step_06],
+        ['방법 청구항', outputs.step_10], ['대안 청구항', outputs.step_14],
+        ['요약서', outputs.step_19], ['도면 부호', outputs.step_18],
+    ].filter(([, v]) => v);
+
+    area.innerHTML = sections.map(([name, content]) =>
+        createCollapsible(`【${name}】`, content, '', `${content.length}자`)
+    ).join('');
+
+    // Usage summary
+    const cost = ((usage.input * 3) / 1e6 + (usage.output * 15) / 1e6).toFixed(3);
+    document.getElementById('usageSummary').innerHTML =
+        `호출: ${usage.calls}회 | 입력: ${usage.input.toLocaleString()} 토큰 | 출력: ${usage.output.toLocaleString()} 토큰 | 예상 비용: $${cost}`;
+}
+</script>
+
+</body>
+</html>
