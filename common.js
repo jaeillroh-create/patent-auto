@@ -102,7 +102,7 @@ function showScreen(name){
     case 'auth':document.getElementById('screenAuth').classList.add('active');break;
     case 'tos':document.getElementById('screenTos').classList.add('active');break;
     case 'pending':document.getElementById('screenPending').classList.add('active');break;
-    case 'dashboard':document.getElementById('screenDashboard').style.display='block';document.getElementById('screenDashboard').classList.add('active');if(App._onDashboard)App._onDashboard();break;
+    case 'dashboard':document.getElementById('screenDashboard').style.display='block';document.getElementById('screenDashboard').classList.add('active');App.initServiceTabs();if(App._onDashboard)App._onDashboard();break;
     case 'main':document.getElementById('screenMain').style.display='block';document.getElementById('screenMain').classList.add('active');break;
     case 'admin':document.getElementById('adminPanel').style.display='block';document.getElementById('adminPanel').classList.add('active');loadAdminUsers();break;
   }
@@ -272,5 +272,38 @@ Object.assign(App, {
   showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation,
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
   openProfileSettings, closeProfileSettings,
+  currentService: 'patent',
   _onDashboard: null  // Hook for patent.js to register dashboard load callback
 });
+
+// ═══ Service Tab Switching (특허 / 상표) ═══
+App.switchService = function(service) {
+  // 탭 버튼 활성화
+  document.querySelectorAll('.service-tab').forEach(function(tab) {
+    tab.classList.toggle('active', tab.dataset.service === service);
+  });
+
+  // 대시보드 패널 전환
+  document.querySelectorAll('.service-panel').forEach(function(panel) {
+    panel.classList.remove('active');
+  });
+  var targetPanel = document.getElementById(service + '-dashboard-panel');
+  if (targetPanel) {
+    targetPanel.classList.add('active');
+  }
+
+  // 현재 서비스 저장
+  App.currentService = service;
+
+  // URL 해시 업데이트
+  history.replaceState(null, '', '#' + service);
+};
+
+App.initServiceTabs = function() {
+  var hash = window.location.hash.replace('#', '');
+  if (hash === 'trademark') {
+    App.switchService('trademark');
+  } else {
+    App.switchService('patent');
+  }
+};

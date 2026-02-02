@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>특허명세서 자동 생성 v5.2 — DIDIM IP</title>
+  <title>IP 문서 자동 생성 v5.3 — DIDIM IP</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/gh/toss/tossface/dist/tossface.css" rel="stylesheet" />
@@ -70,7 +70,7 @@
 <div id="screenDashboard" class="screen">
   <div class="app-container">
     <header class="app-header">
-      <div class="header-left"><img src="logo.png" alt="DIDIM IP" class="header-logo" /><span class="header-title">사건 관리</span></div>
+      <div class="header-left"><img src="logo.png" alt="DIDIM IP" class="header-logo" /><span class="header-title">IP 문서 관리</span></div>
       <div class="header-right">
         <span id="dashUserName" class="header-user"></span>
         <button class="btn btn-outline btn-sm" onclick="openProfileSettings()"><span class="tossface">🛠️</span> 계정설정</button>
@@ -78,6 +78,19 @@
         <button class="btn btn-ghost btn-sm" onclick="handleLogout()">로그아웃</button>
       </div>
     </header>
+
+    <!-- ═══ 서비스 탭 (특허 / 상표) ═══ -->
+    <nav class="service-tab-nav">
+      <button class="service-tab active" data-service="patent" onclick="App.switchService('patent')">
+        <span class="tossface">📋</span> 특허 명세서
+      </button>
+      <button class="service-tab" data-service="trademark" onclick="App.switchService('trademark')">
+        <span class="tossface">™️</span> 상표 출원
+      </button>
+    </nav>
+
+    <!-- ═══ 특허 대시보드 패널 ═══ -->
+    <div id="patent-dashboard-panel" class="service-panel active">
     <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       <div class="card" style="flex:1;min-width:200px;text-align:center;padding:28px;cursor:pointer;border:2px dashed var(--color-border)" onclick="openNewProjectModal()">
         <div style="font-size:40px;margin-bottom:8px"><span class="tossface">➕</span></div>
@@ -107,6 +120,24 @@
       <div class="card-header"><div class="card-title"><span class="tossface">⚡</span> 가출원 내역</div><div class="card-description" id="dashProvisionalCount">0건</div></div>
       <div id="dashProvisionalList" style="padding:0 16px 16px"></div>
     </div>
+    </div><!-- /patent-dashboard-panel -->
+
+    <!-- ═══ 상표 대시보드 패널 ═══ -->
+    <div id="trademark-dashboard-panel" class="service-panel">
+      <div class="trademark-placeholder">
+        <div style="font-size:56px;margin-bottom:16px"><span class="tossface">🏷️</span></div>
+        <h2 style="font-size:22px;font-weight:700;color:var(--color-text-primary);margin-bottom:8px">상표 출원 기능 준비 중</h2>
+        <p style="font-size:14px;color:var(--color-text-secondary);line-height:1.6;max-width:400px;margin:0 auto">
+          상표 출원서 작성, 지정상품 분류 추천,<br>유사상표 검토 기능이 곧 추가됩니다.
+        </p>
+        <div style="margin-top:24px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+          <div class="trademark-feature-chip"><span class="tossface">📝</span> 출원서 자동 작성</div>
+          <div class="trademark-feature-chip"><span class="tossface">🔍</span> 유사상표 검토</div>
+          <div class="trademark-feature-chip"><span class="tossface">📑</span> 지정상품 분류</div>
+        </div>
+      </div>
+    </div><!-- /trademark-dashboard-panel -->
+
   </div>
 </div>
 
