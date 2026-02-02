@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>특허명세서 자동 생성 v5.0 — DIDIM IP</title>
+  <title>특허명세서 자동 생성 v5.2 — DIDIM IP</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/gh/toss/tossface/dist/tossface.css" rel="stylesheet" />
@@ -72,6 +72,7 @@
       <div class="header-left"><img src="logo.png" alt="DIDIM IP" class="header-logo" /><span class="header-title">사건 관리</span></div>
       <div class="header-right">
         <span id="dashUserName" class="header-user"></span>
+        <button class="btn btn-outline btn-sm" onclick="openProfileSettings()"><span class="tossface">🛠️</span> 계정설정</button>
         <button id="btnDashAdmin" class="btn btn-ghost btn-sm" style="display:none" onclick="showScreen('admin')"><span class="tossface">⚙️</span> 관리</button>
         <button class="btn btn-ghost btn-sm" onclick="handleLogout()">로그아웃</button>
       </div>
@@ -137,7 +138,7 @@
 <div id="provisionalModal" class="modal-overlay" style="display:none">
   <div class="modal-content" style="max-width:560px">
     <div class="modal-title"><span class="tossface">⚡</span> 가출원 명세서</div>
-    <div class="modal-body" style="margin-bottom:12px">발명 내용만 입력하면 <strong>독립항 1개 + 도면 1개</strong>의 가출원 명세서를 Word로 다운로드합니다.<br><span style="font-size:12px;color:var(--color-text-tertiary)">Sonnet 사용 · 4,000단어 이내</span></div>
+    <div class="modal-body" style="margin-bottom:12px">발명 내용만 입력하면 <strong>독립항 1개 + 도면 1개</strong>의 가출원 명세서를 Word로 다운로드합니다.<br><span style="font-size:12px;color:var(--color-text-tertiary)">경량 모델 사용 · 4,000단어 이내</span></div>
     <textarea class="textarea-field" id="provisionalInput" rows="8" placeholder="발명의 핵심 기술, 구성요소, 차별점 등을 입력해 주세요..."></textarea>
     <div id="progressProvisional" style="margin-top:8px"></div>
     <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="closeProvisionalModal()" style="flex:1">취소</button><button class="btn btn-primary" id="btnProvisionalGen" onclick="runProvisionalApplication()" style="flex:1"><span class="tossface">⚡</span> 생성 및 다운로드</button></div>
@@ -146,10 +147,36 @@
 <div id="apiKeyModal" class="modal-overlay" style="display:none">
   <div class="modal-content">
     <div class="modal-title"><span class="tossface">🔑</span> API Key 입력</div>
-    <div class="modal-body">Anthropic API Key를 입력해 주세요.<br><span style="font-size:12px;color:var(--color-text-tertiary)">계정에 저장됩니다.</span></div>
+    <div class="modal-body">API Key를 입력해 주세요.</div>
     <input type="password" class="input-field" id="apiKeyInput" placeholder="sk-ant-api03-..." />
-    <p class="input-hint">발급: <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></p>
-    <button class="btn btn-primary btn-full" onclick="saveApiKey()" style="margin-top:16px">저장 및 시작</button>
+    <p class="input-hint" id="apiKeyHintOld">발급: <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></p>
+    <button class="btn btn-primary btn-full" onclick="saveApiKey()" style="margin-top:16px">저장</button>
+  </div>
+</div>
+<!-- Profile Settings Modal (v5.2) -->
+<div id="profileSettingsModal" class="modal-overlay" style="display:none">
+  <div class="modal-content" style="max-width:480px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin:0"><span class="tossface">🛠️</span> 계정 설정</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeProfileSettings()">✕</button>
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="font-weight:600;font-size:14px;margin-bottom:10px">AI 서비스 선택</div>
+      <div id="providerCards" style="display:flex;gap:8px"></div>
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="font-weight:600;font-size:14px;margin-bottom:6px">API Key</div>
+      <input type="password" class="input-field" id="profileApiKeyInput" />
+      <p class="input-hint" id="profileApiKeyHint"></p>
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="font-weight:600;font-size:14px;margin-bottom:6px">현재 적용 상태</div>
+      <div id="profileCurrentStatus" style="font-size:13px;padding:12px;background:var(--color-bg-secondary);border-radius:8px"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="closeProfileSettings()" style="flex:1">닫기</button>
+      <button class="btn btn-primary" onclick="saveProfileSettings()" style="flex:1">저장 및 적용</button>
+    </div>
   </div>
 </div>
 
@@ -168,15 +195,13 @@
       <div class="header-left">
         <button class="btn btn-ghost btn-sm" onclick="backToDashboard()" title="사건 목록"><span class="tossface">←</span></button>
         <img src="logo.png" alt="DIDIM IP" class="header-logo" />
-        <span id="headerProjectName" class="header-title" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">특허명세서</span>
+        <span id="headerProjectName" class="header-title" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="renameCurrentProject()" title="클릭하여 사건명 변경">특허명세서</span>
       </div>
       <div class="header-right">
         <button class="btn btn-secondary btn-sm" onclick="saveProject()"><span class="tossface">💾</span> 저장</button>
-        <div style="display:inline-flex;border:1px solid var(--color-border);border-radius:8px;overflow:hidden">
-          <button id="btnModelSonnet" onclick="selectModel('sonnet')" style="border:none;font-size:11px;padding:4px 10px;cursor:pointer;background:var(--color-primary);color:#fff;font-family:inherit">✓ Sonnet 4.5</button>
-          <button id="btnModelOpus" onclick="selectModel('opus')" style="border:none;font-size:11px;padding:4px 10px;cursor:pointer;background:transparent;color:var(--color-text-secondary);font-family:inherit">Opus 4.5</button>
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="showApiKeyModal()" title="API Key"><span class="tossface">🔑</span></button>
+        <span id="providerLabel" class="badge badge-primary" style="font-size:10px">Claude</span>
+        <div id="modelToggleContainer" style="display:inline-flex;border:1px solid var(--color-border);border-radius:8px;overflow:hidden"></div>
+        <button class="btn btn-ghost btn-sm" onclick="openProfileSettings()" title="계정설정"><span class="tossface">🛠️</span></button>
         <span id="headerUserName" class="header-user"></span>
         <button id="btnAdmin" class="btn btn-ghost btn-sm" style="display:none" onclick="showScreen('admin')"><span class="tossface">⚙️</span></button>
         <button class="btn btn-ghost btn-sm" onclick="handleLogout()">로그아웃</button>
