@@ -199,6 +199,10 @@
         <button class="btn btn-secondary btn-sm" onclick="saveProject()">
           <span class="tossface">💾</span> 저장
         </button>
+        <div id="modelSelector" style="display:inline-flex;border:1px solid var(--color-border);border-radius:8px;overflow:hidden">
+          <button id="btnModelSonnet" onclick="selectModel('sonnet')" style="border:none;border-radius:0;font-size:11px;padding:4px 10px;cursor:pointer;background:var(--color-primary);color:#fff;font-family:inherit">Sonnet</button>
+          <button id="btnModelOpus" onclick="selectModel('opus')" style="border:none;border-radius:0;font-size:11px;padding:4px 10px;cursor:pointer;background:transparent;color:var(--color-text-secondary);font-family:inherit">Opus</button>
+        </div>
         <button class="btn btn-ghost btn-sm" onclick="showApiKeyModal()" title="API Key 변경">
           <span class="tossface">🔑</span>
         </button>
@@ -256,6 +260,24 @@
         <div id="fileList" style="margin-top:8px"></div>
 
         <div class="card-description" style="margin-top:8px">입력이 상세할수록 더 정확한 명세서가 생성돼요. 파일을 첨부하면 텍스트가 자동 추출되어 발명 내용에 추가됩니다.</div>
+      </div>
+
+      <!-- Reference Style Document -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="tossface">📎</span> 참고 문서 (문체 참고용)</div>
+        </div>
+        <p class="card-description" style="margin-bottom:8px">
+          기존 특허명세서를 업로드하면 문장 형태·단락 구조·작성 방식을 참고합니다.<br>
+          <strong style="color:var(--color-error)">※ 발명의 내용은 절대 참조하지 않습니다. 문체(형식)만 참고합니다.</strong>
+        </p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label for="refStyleUpload" class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+            <span class="tossface">📄</span> 참고 문서 업로드
+          </label>
+          <input type="file" id="refStyleUpload" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="handleRefStyleUpload(event)" />
+          <span id="refStyleStatus" style="font-size:12px;color:var(--color-text-tertiary)">업로드된 문서 없음</span>
+        </div>
       </div>
 
       <!-- Step 1: Title -->
@@ -419,7 +441,7 @@
           <div class="card-title"><span class="tossface">📝</span> Step 8: 장치 상세설명</div>
         </div>
         <p class="card-description" style="margin-bottom:10px">상세함 수준을 선택하세요. 상세할수록 토큰 사용량(비용)이 증가합니다.</p>
-        <div class="selection-cards" id="detailLevelCards" style="margin-bottom:12px">
+        <div class="selection-cards" id="detailLevelCards" style="margin-bottom:8px">
           <div class="selection-card" onclick="selectDetailLevel(this,'compact')">
             <div class="selection-card-category">💰</div>
             <div class="selection-card-title">간략</div>
@@ -433,7 +455,19 @@
           <div class="selection-card" onclick="selectDetailLevel(this,'detailed')">
             <div class="selection-card-category">📋</div>
             <div class="selection-card-title">상세</div>
-            <div class="selection-card-subtitle">8,000~10,000자 · 고비용</div>
+            <div class="selection-card-subtitle">8,000~10,000자</div>
+          </div>
+          <div class="selection-card" onclick="selectDetailLevel(this,'custom')">
+            <div class="selection-card-category">✏️</div>
+            <div class="selection-card-title">직접 입력</div>
+            <div class="selection-card-subtitle">글자수 지정</div>
+          </div>
+        </div>
+        <div id="customDetailInput" style="display:none;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label style="font-size:13px;white-space:nowrap">도면 1개당</label>
+            <input type="number" class="input-field input-sm" id="customCharPerFig" value="2000" min="500" max="5000" style="width:100px" onchange="customDetailChars=parseInt(this.value)||2000" />
+            <span style="font-size:13px;color:var(--color-text-tertiary)">자 (전후 정형문 제외)</span>
           </div>
         </div>
         <div id="progressStep08" style="margin-bottom:8px"></div>
@@ -505,7 +539,7 @@
           <div class="card" style="border:2px solid var(--color-primary);background:var(--color-bg-secondary)">
             <div class="card-header"><div class="card-title"><span class="tossface">✅</span> 반영 결과</div></div>
             <p class="card-description" style="margin-bottom:8px">검토 내용이 아래 순서로 반영되었습니다:<br>
-              ① <strong>Step 8 상세설명</strong> — 검토 지적사항 보완 (도면당 ~2,000자)<br>
+              ① <strong>Step 8 상세설명</strong> — 검토 지적사항 보완 (선택한 상세 수준 적용)<br>
               ② <strong>Step 9 수학식</strong> — 보완된 상세설명에 수학식 재삽입<br>
               아래에서 반영 전/후를 비교할 수 있습니다.</p>
             <div style="display:flex;gap:8px;margin-bottom:8px">

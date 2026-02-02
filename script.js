@@ -4,15 +4,48 @@
 const SUPABASE_URL = 'https://uvrzwhfjtzqujawmscca.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cnp3aGZqdHpxdWphd21zY2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTEwNDgsImV4cCI6MjA4NTUyNzA0OH0.JSSPMPIHsXfbNm6pgRzCTGH7aNQATl-okIkcXHl7Mkk';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const MODEL = 'claude-opus-4-5-20251101';
+
+// ═══ Model Selection ═══
+const MODELS = {
+  sonnet: { id: 'claude-sonnet-4-5-20250929', label: 'Sonnet', inputCost: 3, outputCost: 15 },
+  opus:   { id: 'claude-opus-4-5-20251101',   label: 'Opus',   inputCost: 15, outputCost: 75 }
+};
+let selectedModel = 'sonnet';
+function getModel() { return MODELS[selectedModel].id; }
+function selectModel(m) {
+  selectedModel = m;
+  document.getElementById('btnModelSonnet').style.background = m==='sonnet' ? 'var(--color-primary)' : 'transparent';
+  document.getElementById('btnModelSonnet').style.color = m==='sonnet' ? '#fff' : 'var(--color-text-secondary)';
+  document.getElementById('btnModelOpus').style.background = m==='opus' ? 'var(--color-primary)' : 'transparent';
+  document.getElementById('btnModelOpus').style.color = m==='opus' ? '#fff' : 'var(--color-text-secondary)';
+  showToast(`모델: ${MODELS[m].label} (${m==='opus'?'고품질·고비용':'표준·저비용'})`);
+}
+
 const SYSTEM_PROMPT = '너는 20년 경력의 한국 변리사이다. 원칙: 1.표준문체(~한다) 2.글머리/마크다운 절대금지 3.SW명 대신 알고리즘 4.구성요소명(참조번호) 형태 5.명세서에 바로 붙여넣을 순수텍스트 6.제한성 표현(만, 반드시, ~에 한하여 등) 사용 금지';
 
 let API_KEY='',currentUser=null,currentProfile=null,currentProjectId=null;
 let outputs={},selectedTitle='',selectedTitleType='',includeMethodClaims=true;
-let usage={calls:0,inputTokens:0,outputTokens:0},loadingState={};
-let detailLevel='standard'; // compact | standard | detailed
+let usage={calls:0,inputTokens:0,outputTokens:0,cost:0},loadingState={};
+let detailLevel='standard'; // compact | standard | detailed | custom
+let customDetailChars=2000;
+let refStyleText=''; // 참고 문서 텍스트 (문체만 참고, 내용 참조 금지)
 // 검토 반영 전 상태 저장용
 let beforeReviewText = '';
+
+// ═══ Step 8 정형문 (전후에 붙이는 고정 텍스트, AI 생성 분량에서 제외) ═══
+const STEP8_PREFIX = `이하, 본 발명의 실시예를 첨부된 도면을 참조하여 상세하게 설명한다.
+실시예를 설명함에 있어서 본 발명이 속하는 기술 분야에 익히 알려져 있고 본 발명과 직접적으로 관련이 없는 기술 내용에 대해서는 설명을 생략한다. 이는 불필요한 설명을 생략함으로써 본 발명의 요지를 흐리지 않고 더욱 명확히 전달하기 위함이다.
+마찬가지 이유로 첨부 도면에 있어서 일부 구성요소는 과장되거나 생략되거나 개략적으로 도시되었다. 또한, 각 구성요소의 크기는 실제 크기를 전적으로 반영하는 것이 아니다. 각 도면에서 동일한 또는 대응하는 구성요소에는 동일한 참조 번호를 부여하였다.
+본 발명의 이점 및 특징, 그리고 그것들을 달성하는 방법은 첨부되는 도면과 함께 상세하게 후술되어 있는 실시 예들을 참조하면 명확해질 것이다. 그러나 본 발명은 이하에서 개시되는 실시 예들에 한정되는 것이 아니라 서로 다른 다양한 형태로 구현될 수 있으며, 단지 본 실시 예들은 본 발명의 개시가 완전하도록 하고, 본 발명이 속하는 기술분야에서 통상의 지식을 가진 자에게 발명의 범주를 완전하게 알려주기 위해 제공되는 것이며, 본 발명은 청구항의 범주에 의해 정의될 뿐이다. 명세서 전체에 걸쳐 동일 참조 부호는 동일 구성 요소를 지칭한다.
+이때, 처리 흐름도 도면들의 각 블록과 흐름도 도면들의 조합들은 컴퓨터 프로그램 인스트럭션들에 의해 수행될 수 있음을 이해할 수 있을 것이다. 이들 컴퓨터 프로그램 인스트럭션들은 범용 컴퓨터, 특수용 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비의 프로세서에 탑재될 수 있으므로, 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비의 프로세서를 통해 수행되는 그 인스트럭션들이 흐름도 블록(들)에서 설명된 기능들을 수행하는 수단을 생성하게 된다. 이들 컴퓨터 프로그램 인스트럭션들은 특정 방식으로 기능을 구현하기 위해 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비를 지향할 수 있는 컴퓨터 이용 가능 또는 컴퓨터 판독 가능 메모리에 저장되는 것도 가능하므로, 그 컴퓨터 이용가능 또는 컴퓨터 판독 가능 메모리에 저장된 인스트럭션들은 흐름도 블록(들)에서 설명된 기능을 수행하는 인스트럭션 수단을 내포하는 제조 품목을 생산하는 것도 가능하다. 컴퓨터 프로그램 인스트럭션들은 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비 상에 탑재되는 것도 가능하므로, 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비 상에서 일련의 동작 단계들이 수행되어 컴퓨터로 실행되는 프로세스를 생성해서 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비를 수행하는 인스트럭션들은 흐름도 블록(들)에서 설명된 기능들을 실행하기 위한 단계들을 제공하는 것도 가능하다.
+또한, 각 블록은 특정된 논리적 기능(들)을 실행하기 위한 하나 이상의 실행 가능한 인스트럭션들을 포함하는 모듈, 세그먼트 또는 코드의 일부를 나타낼 수 있다. 또, 몇 가지 대체 실행 예들에서는 블록들에서 언급된 기능들이 순서를 벗어나서 발생하는 것도 가능함을 주목해야 한다. 예컨대, 잇달아 도시되어 있는 두 개의 블록들은 사실 실질적으로 동시에 수행되는 것도 가능하고 또는 그 블록들이 때때로 해당하는 기능에 따라 역순으로 수행되는 것도 가능하다.
+이 때, 본 실시 예에서 사용되는 '~부'라는 용어는 소프트웨어 또는 FPGA(field-Programmable Gate Array) 또는 ASIC(Application Specific Integrated Circuit)과 같은 하드웨어 구성요소를 의미하며, '~부'는 어떤 역할들을 수행한다. 그렇지만 '~부'는 소프트웨어 또는 하드웨어에 한정되는 의미는 아니다. '~부'는 어드레싱할 수 있는 저장 매체에 있도록 구성될 수도 있고 하나 또는 그 이상의 프로세서들을 재생시키도록 구성될 수도 있다. 따라서, 일 예로서 '~부'는 소프트웨어 구성요소들, 객체지향 소프트웨어 구성요소들, 클래스 구성요소들 및 태스크 구성요소들과 같은 구성요소들과, 프로세스들, 함수들, 속성들, 프로시저들, 서브루틴들, 프로그램 코드의 세그먼트들, 드라이버들, 펌웨어, 마이크로코드, 회로, 데이터, 데이터베이스, 데이터 구조들, 테이블들, 어레이들, 및 변수들을 포함한다. 구성요소들과 '~부'들 안에서 제공되는 기능은 더 작은 수의 구성요소들 및 '~부'들로 결합되거나 추가적인 구성요소들과 '~부'들로 더 분리될 수 있다. 뿐만 아니라, 구성요소들 및 '~부'들은 디바이스 또는 보안 멀티미디어카드 내의 하나 또는 그 이상의 CPU들을 재생시키도록 구현될 수도 있다.
+본 발명의 실시예들을 구체적으로 설명함에 있어서, 특정 시스템의 예를 주된 대상으로 할 것이지만, 본 명세서에서 청구하고자 하는 주요한 요지는 유사한 기술적 배경을 가지는 여타의 통신 시스템 및 서비스에도 본 명세서에 개시된 범위를 크게 벗어나지 아니하는 범위에서 적용 가능하며, 이는 당해 기술분야에서 숙련된 기술적 지식을 가진 자의 판단으로 가능할 것이다.`;
+
+const STEP8_SUFFIX = `본 발명에 따른 방법들은 다양한 컴퓨터 수단을 통해 수행될 수 있는 프로그램 명령 형태로 구현되어 컴퓨터 판독 가능 매체에 기록될 수 있다. 컴퓨터 판독 가능 매체는 프로그램 명령, 데이터 파일, 데이터 구조 등을 단독으로 또는 조합하여 포함할 수 있다. 컴퓨터 판독 가능 매체에 기록되는 프로그램 명령은 본 발명을 위해 특별히 설계되고 구성된 것들이거나 컴퓨터 소프트웨어 당업자에게 공지되어 사용 가능한 것일 수도 있다.
+컴퓨터 판독 가능 매체의 예에는 롬(ROM), 램(RAM), 플래시 메모리(flash memory) 등과 같이 프로그램 명령을 저장하고 수행하도록 특별히 구성된 하드웨어 장치가 포함될 수 있다. 프로그램 명령의 예에는 컴파일러(compiler)에 의해 만들어지는 것과 같은 기계어 코드뿐만 아니라 인터프리터(interpreter) 등을 사용해서 컴퓨터에 의해 실행될 수 있는 고급 언어 코드를 포함할 수 있다. 상술한 하드웨어 장치는 본 발명의 동작을 수행하기 위해 적어도 하나의 소프트웨어 모듈로 작동하도록 구성될 수 있으며, 그 역도 마찬가지이다.
+또한, 상술한 방법 또는 장치는 그 구성이나 기능의 전부 또는 일부가 결합되어 구현되거나, 분리되어 구현될 수 있다.
+상기에서는 본 발명의 바람직한 실시예를 참조하여 설명하였지만, 해당 기술 분야의 숙련된 당업자는 하기의 특허 청구의 범위에 기재된 본 발명의 사상 및 필드로부터 벗어나지 않는 범위 내에서 본 발명을 다양하게 수정 및 변경시킬 수 있음을 이해할 수 있을 것이다.`;
 
 const STEP_NAMES={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술문헌',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'도면 설계',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'검토',step_14:'대안 청구항',step_15:'기재불비',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서'};
 
@@ -40,7 +73,8 @@ function showScreen(name){
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
   currentProjectId=null;outputs={};selectedTitle='';selectedTitleType='';includeMethodClaims=true;
-  usage={calls:0,inputTokens:0,outputTokens:0};loadingState={};beforeReviewText='';uploadedFiles=[];diagramData={};
+  usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};beforeReviewText='';uploadedFiles=[];diagramData={};
+  // refStyleText는 세션간 유지 (프로젝트 독립적 참고문서이므로 리셋하지 않음)
   const ids=['projectInput','titleInput'];ids.forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   ['titleConfirmArea','titleConfirmMsg','batchArea'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   for(let i=1;i<=19;i++){const e=document.getElementById(`resultStep${String(i).padStart(2,'0')}`);if(e)e.innerHTML='';}
@@ -110,7 +144,35 @@ async function saveProject(silent=false){if(!currentProjectId)return;const t=sel
 // ═══════════ TAB & TOGGLES ═══════════
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===4)renderPreview();}
 function toggleMethod(){includeMethodClaims=document.getElementById('methodToggle').checked;['methodClaimsCard','methodDiagramCard','methodDescCard'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.toggle('card-disabled',!includeMethodClaims);});}
-function selectDetailLevel(el,level){document.querySelectorAll('#detailLevelCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');detailLevel=level;}
+function selectDetailLevel(el,level){
+  document.querySelectorAll('#detailLevelCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');detailLevel=level;
+  const ci=document.getElementById('customDetailInput');
+  if(ci) ci.style.display = level==='custom' ? 'block' : 'none';
+}
+// ═══ 참고 문서 업로드 (문체만 참고, 내용 참조 금지) ═══
+async function handleRefStyleUpload(event){
+  const file=event.target.files[0];if(!file)return;
+  const st=document.getElementById('refStyleStatus');
+  st.textContent='추출 중...';st.style.color='var(--color-primary)';
+  try{
+    const text=await extractTextFromFile(file);
+    if(text&&text.trim()&&!text.startsWith('[')){
+      // 최대 5000자까지만 사용 (문체 참고용이므로 전체 필요 없음)
+      refStyleText=text.trim().slice(0,5000);
+      st.innerHTML=`<span class="tossface">✅</span> ${escapeHtml(file.name)} (${refStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearRefStyle()" style="margin-left:4px">✕</button>`;
+      st.style.color='var(--color-success)';
+      showToast(`참고 문서 로드 완료 — 문체만 참고, 내용 참조 없음`);
+    }else{
+      st.textContent='텍스트 추출 불가';st.style.color='var(--color-error)';
+      showToast('참고 문서 텍스트를 추출할 수 없어요','error');
+    }
+  }catch(e){
+    st.textContent='오류 발생';st.style.color='var(--color-error)';
+    showToast(e.message,'error');
+  }
+  event.target.value='';
+}
+function clearRefStyle(){refStyleText='';const st=document.getElementById('refStyleStatus');if(st){st.textContent='업로드된 문서 없음';st.style.color='var(--color-text-tertiary)';}showToast('참고 문서 제거됨');}
 function selectTitleType(el,type){document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitleType=type;document.getElementById('btnStep01').disabled=false;}
 function selectTitle(el,kr,en){document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitle=kr;document.getElementById('titleInput').value=kr;document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';}
 function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';}
@@ -118,11 +180,16 @@ function onTitleInput(){const v=document.getElementById('titleInput').value.trim
 // ═══════════ API ═══════════
 async function callClaude(prompt,maxTokens=8192){
   if(!API_KEY){document.getElementById('apiKeyModal').style.display='flex';throw new Error('API Key 필요');}
+  const model=getModel(), mc=MODELS[selectedModel];
   const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),120000);
-  try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:ctrl.signal,headers:{'Content-Type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:MODEL,max_tokens:maxTokens,system:SYSTEM_PROMPT,messages:[{role:'user',content:prompt}]})});clearTimeout(tout);
+  try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:ctrl.signal,headers:{'Content-Type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,system:SYSTEM_PROMPT,messages:[{role:'user',content:prompt}]})});clearTimeout(tout);
     if(res.status===401){API_KEY='';if(currentUser)sb.from('profiles').update({api_key_encrypted:''}).eq('id',currentUser.id);document.getElementById('apiKeyModal').style.display='flex';throw new Error('API Key 유효하지 않음');}
     if(res.status===429)throw new Error('요청 과다. 30초 후 재시도');if(res.status>=500)throw new Error('서버 오류');
-    const d=await res.json();if(d.error)throw new Error(d.error.message);usage.calls++;usage.inputTokens+=(d.usage?.input_tokens||0);usage.outputTokens+=(d.usage?.output_tokens||0);updateStats();
+    const d=await res.json();if(d.error)throw new Error(d.error.message);
+    const it=d.usage?.input_tokens||0,ot=d.usage?.output_tokens||0;
+    usage.calls++;usage.inputTokens+=it;usage.outputTokens+=ot;
+    usage.cost+=(it*mc.inputCost/1e6)+(ot*mc.outputCost/1e6);
+    updateStats();
     return{text:d.content[0].text,stopReason:d.stop_reason};
   }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃');throw e;}
 }
@@ -130,6 +197,11 @@ async function callClaudeWithContinuation(prompt,pid){let full='',r=await callCl
 
 // ═══════════ HELPERS ═══════════
 function getLatestDescription(){return outputs.step_13_applied||outputs.step_09||outputs.step_08||'';}
+function getFullDescription(){
+  const body=getLatestDescription();
+  if(!body)return '';
+  return STEP8_PREFIX+'\n'+body+'\n'+STEP8_SUFFIX;
+}
 function getLastClaimNumber(t){const m=t.match(/【청구항\s*(\d+)】/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
 function getLastFigureNumber(t){const m=t.match(/도\s*(\d+)/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
 function extractBriefDescriptions(s07,s11){const d=[];[s07,s11].forEach(t=>{if(!t)return;const i=t.indexOf('---BRIEF_DESCRIPTIONS---');if(i>=0)t.slice(i+24).trim().split('\n').filter(l=>l.trim().startsWith('도 ')).forEach(l=>d.push(l.trim()));else t.split('\n').filter(l=>/^도\s*\d+은?\s/.test(l.trim())).forEach(l=>d.push(l.trim()));});return d.join('\n');}
@@ -289,26 +361,37 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
 }
 
-// ═══════════ PROMPTS (v4.4) ═══════════
+// ═══════════ PROMPTS (v4.6) ═══════════
+// 참고 문서 문체 지시문 (내용 참조 절대 금지)
+function getStyleRef(){
+  if(!refStyleText)return '';
+  return '\n\n[참고 문체 — 아래 문서의 문장 형태, 단락 구조, 작성 방식만 참고하라. 내용은 절대 참조하지 마라. 발명의 내용과 무관하다.]\n'+refStyleText.slice(0,3000);
+}
+// 발명 내용 전체 (누락 금지 강조)
+function getFullInvention(){
+  const inv=document.getElementById('projectInput').value;
+  return '\n\n★★★ [발명 내용 — 아래 내용을 단 하나도 누락 없이 모두 반영하라. 누락 시 특허 거절 사유가 된다.] ★★★\n'+inv;
+}
+
 function buildPrompt(stepId){
   const inv=document.getElementById('projectInput').value,T=selectedTitle;
+  const styleRef=getStyleRef();
   switch(stepId){
-    case 'step_01':return `프로젝트를 분석하여 특허 발명의 명칭 후보를 5가지 생성하라.\n형태: "~${selectedTitleType}"\n각 후보에 국문+영문.\n\n출력형식:\n[1] 국문: (명칭) / 영문: (명칭)\n[2] 국문: (명칭) / 영문: (명칭)\n[3] 국문: (명칭) / 영문: (명칭)\n[4] 국문: (명칭) / 영문: (명칭)\n[5] 국문: (명칭) / 영문: (명칭)\n\n[프로젝트]\n${inv}`;
-    case 'step_02':return `【기술분야】를 작성. "본 발명은 ~에 관한 것이다." 한 문장만. 20단어. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}`;
-    case 'step_03':return `【발명의 배경이 되는 기술】을 작성. 3문단(기존문제/최근동향/필요성), 각 150단어. 번호 없이. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}`;
-    // FIX: 선행기술문헌 딱 1건만
+    case 'step_01':return `프로젝트를 분석하여 특허 발명의 명칭 후보를 5가지 생성하라.\n형태: \"~${selectedTitleType}\"\n각 후보에 국문+영문.\n\n출력형식:\n[1] 국문: (명칭) / 영문: (명칭)\n[2] 국문: (명칭) / 영문: (명칭)\n[3] 국문: (명칭) / 영문: (명칭)\n[4] 국문: (명칭) / 영문: (명칭)\n[5] 국문: (명칭) / 영문: (명칭)\n\n[프로젝트]\n${inv}`;
+    case 'step_02':return `【기술분야】를 작성. \"본 발명은 ~에 관한 것이다.\" 한 문장만. 20단어. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}${styleRef}`;
+    case 'step_03':return `【발명의 배경이 되는 기술】을 작성. 3문단(기존문제/최근동향/필요성), 각 150단어. 번호 없이. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}${styleRef}`;
     case 'step_04':return `【선행기술문헌】작성.\n규칙: 다른 항목 포함 금지. 헤더 금지. 관련 한국 특허 딱 1건만 기재.\n출력:\n【특허문헌】\n(특허문헌 1) 한국등록특허 제__________호\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}`;
-    case 'step_05':return `【해결하고자 하는 과제】작성. "본 발명은 ~을 제공하는 것을 목적으로 한다." 50단어 이하. 마지막: "본 발명의 기술적 과제는 이상에서 언급한 기술적 과제로 제한되지 않으며, 언급되지 않은 또 다른 기술적 과제들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다." 헤더 금지.\n\n발명의 명칭: ${T}\n[배경기술] ${outputs.step_03||''}`;
-    case 'step_06':{const i=document.getElementById('optDeviceIndep').value,d=document.getElementById('optDeviceDep').value;return `장치 청구범위. 독립항 ${i}개+종속항 ${d}개. "청구항 N에 있어서," 시작. 【청구항 1】형식. SW명 금지. 제한성 표현 금지.\n${T}\n[프로젝트] ${inv}`;}
-    case 'step_07':{const f=document.getElementById('optDeviceFigures').value;return `청구범위 도면 ${f}개 설계.\n\n[파트1: 도면 설계]\n각 도면: 제목/유형, 구성요소+참조번호, 연결관계. 참조번호: 서버100번대, 단말200번대, 외부300번대.\n\n[파트2: 도면의 간단한 설명]\n---BRIEF_DESCRIPTIONS---\n도 1은 (명칭)(참조번호)의 (내용)을 나타내는 (블록도/구성도)이다.\n도 2는 ...\n\n파트2는 마커 이후 위 형식으로만. 명령문 포함 금지.\n\n${T}\n[청구범위] ${outputs.step_06||''}`;}
-    // FIX: step_08 — 발명을 실시하기 위한 구체적인 내용만
+    case 'step_05':return `【해결하고자 하는 과제】작성. \"본 발명은 ~을 제공하는 것을 목적으로 한다.\" 50단어 이하. 마지막: \"본 발명의 기술적 과제는 이상에서 언급한 기술적 과제로 제한되지 않으며, 언급되지 않은 또 다른 기술적 과제들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\" 헤더 금지.\n\n발명의 명칭: ${T}\n[배경기술] ${outputs.step_03||''}${styleRef}`;
+    case 'step_06':{const i=document.getElementById('optDeviceIndep').value,d=document.getElementById('optDeviceDep').value;return `장치 청구범위. 독립항 ${i}개+종속항 ${d}개. \"청구항 N에 있어서,\" 시작. 【청구항 1】형식. SW명 금지. 제한성 표현 금지.\n\n★★★ 중요: [프로젝트]에 기재된 발명 내용을 단 하나도 누락 없이 모두 포함하여 청구항을 작성하라. 모든 기술적 특징이 청구항에 반영되어야 한다. ★★★\n\n${T}${getFullInvention()}${styleRef}`;}
+    case 'step_07':{const f=document.getElementById('optDeviceFigures').value;return `청구범위 도면 ${f}개 설계.\n\n[파트1: 도면 설계]\n각 도면: 제목/유형, 구성요소+참조번호, 연결관계. 참조번호: 서버100번대, 단말200번대, 외부300번대.\n\n[파트2: 도면의 간단한 설명]\n---BRIEF_DESCRIPTIONS---\n도 1은 (명칭)(참조번호)의 (내용)을 나타내는 (블록도/구성도)이다.\n도 2는 ...\n\n파트2는 마커 이후 위 형식으로만. 명령문 포함 금지.\n\n★★★ 중요: [프로젝트]에 기재된 발명 내용을 단 하나도 누락 없이 모두 도면에 반영하라. 모든 구성요소와 기술적 특징이 도면에 포함되어야 한다. ★★★\n\n${T}\n[청구범위] ${outputs.step_06||''}${getFullInvention()}`;}
     case 'step_08':{
       const dlCfg={
         compact:{charPerFig:'약 1,000자',total:'약 3,000~4,000자',extra:'핵심 구성요소 중심으로 간결하게 기술하라. 변형 실시예는 1개만.'},
         standard:{charPerFig:'약 1,500자',total:'약 5,000~7,000자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 주요 구성요소에 변형 실시예 포함.'},
-        detailed:{charPerFig:'약 2,000자 이상',total:'8,000~10,000자',extra:'각 도면마다 구성요소의 기능, 동작 원리, 데이터 흐름, 상호 연동 관계를 상세히 설명하라. 구성요소 간 통신 프로토콜, 데이터 포맷, 처리 절차를 구체적으로 기술하라. 변형 실시예를 통해 다양한 구현 방식을 기술하라. 절대 축약하거나 요약하지 마라.'}
+        detailed:{charPerFig:'약 2,000자 이상',total:'8,000~10,000자',extra:'각 도면마다 구성요소의 기능, 동작 원리, 데이터 흐름, 상호 연동 관계를 상세히 설명하라. 구성요소 간 통신 프로토콜, 데이터 포맷, 처리 절차를 구체적으로 기술하라. 변형 실시예를 통해 다양한 구현 방식을 기술하라. 절대 축약하거나 요약하지 마라.'},
+        custom:{charPerFig:'약 '+customDetailChars+'자',total:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름, 상호 연동 관계를 설명하라. 변형 실시예를 포함하라.'}
       }[detailLevel];
-      return `아래 발명에 대한 【발명을 실시하기 위한 구체적인 내용】을 작성하라.
+      return `아래 발명에 대한 【발명을 실시하기 위한 구체적인 내용】의 본문만 작성하라.
 
 규칙:
 - 이 항목만 작성. 기술분야, 배경기술, 과제, 효과 등 다른 항목 포함 금지.
@@ -322,45 +405,26 @@ function buildPrompt(stepId){
 ★ 분량 규칙 (매우 중요):
 - 도면 1개당 ${dlCfg.charPerFig}(공백 포함)으로 설명하라.
 - 총 분량은 ${dlCfg.total}(공백 포함)가 되어야 한다.
+- 이 글자수는 순수 본문만 해당하며, 본문 전후에 붙는 정형문 글자수는 제외한다.
 - ${dlCfg.extra}
 
-${T}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}\n[프로젝트] ${(inv||'').slice(0,3000)}`;}
+★★★ 중요: [프로젝트]에 기재된 발명 내용을 단 하나도 누락 없이 모두 상세설명에 반영하라. 프로젝트의 모든 기술적 특징이 설명되어야 한다. ★★★
+
+${T}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}${getFullInvention()}${styleRef}`;}
     case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예시 대입: (수치)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}`;
-    case 'step_10':{const i=document.getElementById('optMethodIndep').value,d=document.getElementById('optMethodDep').value,s=getLastClaimNumber(outputs.step_06||'')+1;return `방법 청구항. 독립항 ${i}+종속항 ${d}. "~단계". 【청구항 ${s}】부터. 장치 1:1 대응. 제한성 표현 금지.\n${T}\n[장치 청구항] ${outputs.step_06||''}\n[상세설명] ${(outputs.step_08||'').slice(0,3000)}`;}
-    case 'step_11':{const f=document.getElementById('optMethodFigures').value,lf=getLastFigureNumber(outputs.step_07||'');return `방법 흐름도 ${f}개. 도 ${lf+1}부터. S100,S200 단계번호.\n\n[파트1: 도면 설계]\n단계: 번호, 내용, 연결.\n\n[파트2: 도면의 간단한 설명]\n---BRIEF_DESCRIPTIONS---\n도 ${lf+1}은 (방법 이름)의 (설명)을 나타내는 순서도이다.\n\n${T}\n[방법 청구항] ${outputs.step_10||''}`;}
-    case 'step_12':return `방법 상세설명. 단계순서 장치동작 1:1 대응. 특허문체. 글머리 금지. 시작: "이하에서는 앞서 설명한 서버의 구성 및 동작을 참조하여 방법을 설명한다." 생략 금지. 제한성 표현 금지.\n${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}`;
+    case 'step_10':{const i=document.getElementById('optMethodIndep').value,d=document.getElementById('optMethodDep').value,s=getLastClaimNumber(outputs.step_06||'')+1;return `방법 청구항. 독립항 ${i}+종속항 ${d}. \"~단계\". 【청구항 ${s}】부터. 장치 1:1 대응. 제한성 표현 금지.\n\n★★★ 중요: [프로젝트]에 기재된 발명 내용을 단 하나도 누락 없이 모두 방법 청구항에 반영하라. ★★★\n\n${T}\n[장치 청구항] ${outputs.step_06||''}\n[상세설명] ${(outputs.step_08||'').slice(0,3000)}${getFullInvention()}${styleRef}`;}
+    case 'step_11':{const f=document.getElementById('optMethodFigures').value,lf=getLastFigureNumber(outputs.step_07||'');return `방법 흐름도 ${f}개. 도 ${lf+1}부터. S100,S200 단계번호.\n\n[파트1: 도면 설계]\n단계: 번호, 내용, 연결.\n\n[파트2: 도면의 간단한 설명]\n---BRIEF_DESCRIPTIONS---\n도 ${lf+1}은 (방법 이름)의 (설명)을 나타내는 순서도이다.\n\n★★★ 중요: [프로젝트]에 기재된 발명 내용을 단 하나도 누락 없이 모두 흐름도에 반영하라. ★★★\n\n${T}\n[방법 청구항] ${outputs.step_10||''}${getFullInvention()}`;}
+    case 'step_12':return `방법 상세설명. 단계순서 장치동작 1:1 대응. 특허문체. 글머리 금지. 시작: \"이하에서는 앞서 설명한 서버의 구성 및 동작을 참조하여 방법을 설명한다.\" 생략 금지. 제한성 표현 금지.\n\n★★★ 중요: [프로젝트]에 기재된 발명 내용을 단 하나도 누락 없이 모두 방법 상세설명에 반영하라. ★★★\n\n${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${getFullInvention()}${styleRef}`;
     case 'step_13':return `청구범위와 상세설명 검토:\n1.청구항뒷받침 2.기술적비약 3.수학식정합성 4.반복실시가능성 5.보완/수정 구체적 문장\n${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}`;
     case 'step_14':return `대안 청구항. 핵심유지 표현달리. 【청구항 N】.\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}`;
     case 'step_15':return `기재불비: (a)상기선행기재 (b)용어통일 (c)대응 (d)누락 (e)용어뒷받침. 수정안.\n${T}\n[전체] ${outputs.step_06||''}\n${outputs.step_10||''}\n${outputs.step_14||''}`;
-    case 'step_16':return `발명의 효과. "본 발명에 따르면,"시작. 50단어 이내. 마지막: "본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며, 언급되지 않은 또 다른 효과들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다."\n${T}\n[과제] ${outputs.step_05||''}\n[상세설명] ${(outputs.step_08||'').slice(0,2000)}`;
-    case 'step_17':return `과제의 해결 수단. "본 발명의 일 실시예에 따른"시작. 마지막: "본 발명의 기타 구체적인 사항들은 상세한 설명 및 도면들에 포함되어 있다."\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}`;
-    case 'step_18':return `【부호의 설명】작성. "구성요소 : 참조번호". 참조번호 오름차순.\n${T}\n[도면] ${outputs.step_07||''}\n[방법도면] ${outputs.step_11||''}`;
-    case 'step_19':return `요약서. 청구항1 기준 150단어. "본 발명은"시작.\n출력:\n【요약】\n(본문)\n\n【대표도】\n도 1\n\n위 형식만.\n${T}\n[청구항1] ${(outputs.step_06||'').slice(0,1500)}`;
+    case 'step_16':return `발명의 효과. \"본 발명에 따르면,\"시작. 50단어 이내. 마지막: \"본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며, 언급되지 않은 또 다른 효과들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\"\n${T}\n[과제] ${outputs.step_05||''}\n[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
+    case 'step_17':return `과제의 해결 수단. \"본 발명의 일 실시예에 따른\"시작. 마지막: \"본 발명의 기타 구체적인 사항들은 상세한 설명 및 도면들에 포함되어 있다.\"\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}${styleRef}`;
+    case 'step_18':return `【부호의 설명】작성. \"구성요소 : 참조번호\". 참조번호 오름차순.\n${T}\n[도면] ${outputs.step_07||''}\n[방법도면] ${outputs.step_11||''}`;
+    case 'step_19':return `요약서. 청구항1 기준 150단어. \"본 발명은\"시작.\n출력:\n【요약】\n(본문)\n\n【대표도】\n도 1\n\n위 형식만.\n${T}\n[청구항1] ${(outputs.step_06||'').slice(0,1500)}${styleRef}`;
     default:return '';
   }
 }
-// FIX: Mermaid — 각진 화살표, 흑백, 겹침 방지
-function buildMermaidPrompt(sid){
-  const src=sid==='step_07'?outputs.step_07:outputs.step_11;
-  return `도면을 Mermaid.js로 변환하라.
-
-필수 규칙:
-1. 각 도면별 \`\`\`mermaid 코드블록으로 출력
-2. 블록도는 graph TD, 흐름도는 flowchart TD 사용
-3. 한글 노드는 반드시 큰따옴표: A["서버(100)"]
-4. 노드 ID는 영문/숫자만 사용 (한글 금지)
-5. subgraph으로 그룹핑
-6. 화살표: --> 사용 (직선/각진 형태)
-7. 화살표 텍스트: A -->|"텍스트"| B
-8. 스타일: 모든 노드에 흰색 배경 + 검은색 테두리 적용
-   style 노드ID fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000
-9. 노드 간 충분한 간격을 두어 텍스트가 겹치지 않도록 할 것
-10. linkStyle로 화살표도 검은색으로 지정
-
-[도면]
-${src}`;
-}
-
 // ═══════════ STEP EXECUTION ═══════════
 function checkDependency(s){const inv=document.getElementById('projectInput').value.trim();const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저'};return d[s]?d[s]():null;}
 async function runStep(sid){if(loadingState[sid])return;const dep=checkDependency(sid);if(dep){showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13'},bid=bm[sid];loadingState[sid]=true;if(bid)setButtonLoading(bid,true);
@@ -416,8 +480,8 @@ async function applyReview(){
     // Phase 1: 검토 내용 반영하여 Step 8 상세설명 보완
     showProgress('progressApplyReview','[1/3] 검토 반영 상세설명 보완 중...',1,3);
     const inv=document.getElementById('projectInput').value;
-    const dlCfg={compact:{c:'약 1,000자',t:'약 3,000~4,000자'},standard:{c:'약 1,500자',t:'약 5,000~7,000자'},detailed:{c:'약 2,000자 이상',t:'8,000~10,000자'}}[detailLevel];
-    const improvedDesc=await callClaudeWithContinuation(`[검토 결과]를 반영하여 【발명을 실시하기 위한 구체적인 내용】을 완전히 새로 작성하라.
+    const dlCfg={compact:{c:'약 1,000자',t:'약 3,000~4,000자'},standard:{c:'약 1,500자',t:'약 5,000~7,000자'},detailed:{c:'약 2,000자 이상',t:'8,000~10,000자'},custom:{c:'약 '+customDetailChars+'자',t:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자'}}[detailLevel];
+    const improvedDesc=await callClaudeWithContinuation(`[검토 결과]를 반영하여 【발명을 실시하기 위한 구체적인 내용】의 본문만 완전히 새로 작성하라.
 
 규칙:
 - 기존 상세설명을 기반으로 검토 지적사항을 모두 보완하라.
@@ -425,16 +489,17 @@ async function applyReview(){
 - 서버(100)를 주어. "구성요소(참조번호)" 형태.
 - 도면별 "도 N을 참조하면," 형태.
 - 특허문체(~한다). 글머리 금지. 생략 금지.
-- 도면 1개당 ${dlCfg.c}, 총 ${dlCfg.t}.
+- 도면 1개당 ${dlCfg.c}, 총 ${dlCfg.t}. (본문 전후 정형문 글자수 제외)
 - 청구항의 모든 구성요소를 빠짐없이 설명. 변형 실시예 포함.
 - 제한성 표현 금지.
+
+★★★ 중요: [프로젝트]에 기재된 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
 [발명의 명칭] ${selectedTitle}
 [검토 결과] ${outputs.step_13}
 [청구범위] ${outputs.step_06||''}
 [도면] ${outputs.step_07||''}
-[현재 상세설명] ${cur}
-[프로젝트] ${(inv||'').slice(0,2000)}`,'progressApplyReview');
+[현재 상세설명] ${cur}${getFullInvention()}${getStyleRef()}`,'progressApplyReview');
 
     outputs.step_08=improvedDesc; // Step 8 갱신
 
@@ -716,15 +781,15 @@ function validateClaims(text){
 function runValidation(){const all=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n');if(!all){showToast('검증할 청구항이 없어요','error');return;}const iss=validateClaims(all),el=document.getElementById('validationResults');if(!iss.length){el.innerHTML='<div class="issue-item issue-pass"><span class="tossface">🎉</span>모든 검증 통과</div>';return;}el.innerHTML=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tossface">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${escapeHtml(i.message)}</div>`).join('');}
 
 // ═══════════ OUTPUT ═══════════
-function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;document.getElementById('statCompleted').textContent=`${c}/19`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${((usage.inputTokens*15/1e6)+(usage.outputTokens*75/1e6)).toFixed(2)}`;}
+function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;document.getElementById('statCompleted').textContent=`${c}/19`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
 function renderPreview(){const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${escapeHtml(h[1])}】</span><span class="arrow">▶</span></div><div class="accordion-body">${escapeHtml(s)}</div>`;}).join('');}
-function buildSpecification(){const desc=getLatestDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');return['【발명의 설명】',`【발명의 명칭】\n${selectedTitle}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${outputs.step_12?'\n\n'+outputs.step_12:''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${outputs.step_06||''}${outputs.step_10?'\n\n'+outputs.step_10:''}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n');}
+function buildSpecification(){const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');return['【발명의 설명】',`【발명의 명칭】\n${selectedTitle}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${outputs.step_12?'\n\n'+outputs.step_12:''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${outputs.step_06||''}${outputs.step_10?'\n\n'+outputs.step_10:''}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n');}
 function copyToClipboard(){const t=buildSpecification();if(!t.trim()){showToast('내용 없음','error');return;}navigator.clipboard.writeText(t).then(()=>showToast('복사 완료')).catch(()=>showToast('클립보드 접근 불가','error'));}
 function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){showToast('내용 없음','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();}
 
 // FIX: Word — 바탕체(BatangChe), 12pt, 줄간격200%, 들여쓰기1.41cm(40pt), 양쪽맞춤
 function downloadAsWord(){
-  const desc=getLatestDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
+  const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   const secs=[
     {h:'발명의 설명'},{h:'발명의 명칭',b:selectedTitle},{h:'기술분야',b:outputs.step_02},
     {h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},
