@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>특허명세서 자동 생성 v4.7 — DIDIM IP</title>
+  <title>특허명세서 자동 생성 v4.8 — DIDIM IP</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/gh/toss/tossface/dist/tossface.css" rel="stylesheet" />
@@ -152,8 +152,8 @@
       <div class="header-right">
         <button class="btn btn-secondary btn-sm" onclick="saveProject()"><span class="tossface">💾</span> 저장</button>
         <div style="display:inline-flex;border:1px solid var(--color-border);border-radius:8px;overflow:hidden">
-          <button id="btnModelSonnet" onclick="selectModel('sonnet')" style="border:none;font-size:11px;padding:4px 10px;cursor:pointer;background:var(--color-primary);color:#fff;font-family:inherit">Sonnet</button>
-          <button id="btnModelOpus" onclick="selectModel('opus')" style="border:none;font-size:11px;padding:4px 10px;cursor:pointer;background:transparent;color:var(--color-text-secondary);font-family:inherit">Opus</button>
+          <button id="btnModelSonnet" onclick="selectModel('sonnet')" style="border:none;font-size:11px;padding:4px 10px;cursor:pointer;background:var(--color-primary);color:#fff;font-family:inherit">✓ Sonnet 4.5</button>
+          <button id="btnModelOpus" onclick="selectModel('opus')" style="border:none;font-size:11px;padding:4px 10px;cursor:pointer;background:transparent;color:var(--color-text-secondary);font-family:inherit">Opus 4.5</button>
         </div>
         <button class="btn btn-ghost btn-sm" onclick="showApiKeyModal()" title="API Key"><span class="tossface">🔑</span></button>
         <span id="headerUserName" class="header-user"></span>
@@ -192,12 +192,19 @@
       </div>
       <div class="card" id="cardStep01">
         <div class="card-header"><div class="card-title"><span class="tossface">🏷️</span> Step 1: 발명의 명칭</div></div>
-        <p class="card-description" style="margin-bottom:12px">발명의 유형을 선택하고, 명칭 후보를 생성하세요.</p>
-        <div class="selection-cards" id="titleTypeCards">
-          <div class="selection-card" onclick="selectTitleType(this,'서버')"><div class="selection-card-category">A</div><div class="selection-card-title">~서버</div></div>
-          <div class="selection-card" onclick="selectTitleType(this,'방법')"><div class="selection-card-category">B</div><div class="selection-card-title">~방법</div></div>
-          <div class="selection-card" onclick="selectTitleType(this,'시스템')"><div class="selection-card-category">C</div><div class="selection-card-title">~시스템</div></div>
-          <div class="selection-card" onclick="selectTitleType(this,'서버 및 방법')"><div class="selection-card-category">D</div><div class="selection-card-title">~서버 및 방법</div></div>
+        <p class="card-description" style="margin-bottom:8px">발명의 유형을 입력하세요. 아래 참고 유형을 클릭하거나 직접 입력할 수 있습니다.</p>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <label style="font-size:13px;font-weight:600;color:var(--color-text-secondary);white-space:nowrap">발명 유형:</label>
+          <input type="text" class="input-field" id="customTitleType" placeholder="예: 서버, 방법, 시스템, 장치, 단말기, 서버 및 방법 등" style="flex:1" oninput="onCustomTitleType(this.value)" />
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;display:block">참고 유형 (클릭하면 자동 입력)</label>
+          <div class="selection-cards" id="titleTypeCards" style="grid-template-columns:repeat(4,1fr)">
+            <div class="selection-card" onclick="selectTitleType(this,'서버')" style="padding:8px"><div class="selection-card-title" style="font-size:12px">~서버</div></div>
+            <div class="selection-card" onclick="selectTitleType(this,'방법')" style="padding:8px"><div class="selection-card-title" style="font-size:12px">~방법</div></div>
+            <div class="selection-card" onclick="selectTitleType(this,'시스템')" style="padding:8px"><div class="selection-card-title" style="font-size:12px">~시스템</div></div>
+            <div class="selection-card" onclick="selectTitleType(this,'서버 및 방법')" style="padding:8px"><div class="selection-card-title" style="font-size:12px">~서버 및 방법</div></div>
+          </div>
         </div>
         <button class="btn btn-primary btn-full" id="btnStep01" onclick="runStep('step_01')" disabled><span class="tossface">🤖</span> 명칭 후보 생성 (5개)</button>
         <div id="resultStep01"></div>
@@ -266,11 +273,20 @@
         <div id="resultStep06"></div>
       </div>
 
+      <!-- Method Toggle (outside card-disabled zone) -->
+      <div class="card" style="padding:12px 24px;display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="tossface">⚖️</span>
+          <span style="font-weight:600;font-size:14px">방법 청구항 포함</span>
+          <span style="font-size:12px;color:var(--color-text-tertiary)">(OFF 시 장치 청구항만 생성)</span>
+        </div>
+        <label class="toggle-switch"><input type="checkbox" id="methodToggle" checked onchange="toggleMethod()" /><span class="toggle-slider"></span></label>
+      </div>
+
       <!-- Step 10 방법 청구항 -->
       <div class="card" id="methodClaimsCard">
         <div class="card-header">
           <div class="card-title"><span class="tossface">⚖️</span> Step 10: 방법 청구항</div>
-          <label class="toggle"><input type="checkbox" id="methodToggle" checked onchange="toggleMethod()" /><span class="toggle-slider"></span></label>
         </div>
         <p class="card-description" style="margin-bottom:12px">장치 청구항의 핵심만 선별·병합. 개수가 다를 수 있습니다.</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
@@ -306,6 +322,7 @@
             </div>
           </div>
         </div>
+        <div id="progressStep10" style="margin:8px 0"></div>
         <button class="btn btn-primary btn-full" id="btnStep10" onclick="runStep('step_10')"><span class="tossface">🤖</span> 방법 청구항 생성</button>
         <div id="resultStep10"></div>
       </div>
@@ -338,6 +355,8 @@
             <input type="number" class="input-field" id="inpRequiredFigNum" min="1" max="30" placeholder="1" style="width:80px;margin-top:2px" /></div>
           <div style="flex:1"><label style="font-size:11px;color:var(--color-text-tertiary)">도면 설명</label>
             <input type="text" class="input-field" id="inpRequiredFigDesc" placeholder="예: 시스템의 전체 구성을 나타내는 블록도" style="margin-top:2px" /></div>
+          <div><label style="font-size:11px;color:var(--color-text-tertiary)">도면 파일 (선택)</label>
+            <input type="file" class="input-field" id="inpRequiredFigFile" accept=".png,.jpg,.jpeg,.gif,.bmp,.svg,.pdf" style="font-size:11px;margin-top:2px;padding:4px" /></div>
           <button class="btn btn-outline btn-sm" onclick="addRequiredFigure()">추가</button>
         </div>
         <div id="requiredFiguresList"></div>
@@ -360,19 +379,22 @@
       <!-- Step 8 -->
       <div class="card">
         <div class="card-header"><div class="card-title"><span class="tossface">📝</span> Step 8: 장치 상세설명</div></div>
-        <p class="card-description" style="margin-bottom:12px">정형문은 본문 전후에 자동 삽입됩니다.</p>
+        <p class="card-description" style="margin-bottom:12px">상세설명 생성 후, 정형문 삽입 버튼으로 본문 전후에 정형문을 추가할 수 있습니다.</p>
         <div class="selection-cards" id="detailLevelCards">
           <div class="selection-card" onclick="selectDetailLevel(this,'compact')"><div class="selection-card-category">💨</div><div class="selection-card-title">간략</div><div class="selection-card-subtitle">~1,000자/도면</div></div>
           <div class="selection-card selected" onclick="selectDetailLevel(this,'standard')"><div class="selection-card-category">📝</div><div class="selection-card-title">표준</div><div class="selection-card-subtitle">~1,500자/도면</div></div>
-          <div class="selection-card" onclick="selectDetailLevel(this,'detailed')"><div class="selection-card-category">📖</div><div class="selection-card-title">상세</div><div class="selection-card-subtitle">~2,000자+</div></div>
-          <div class="selection-card" onclick="selectDetailLevel(this,'custom')"><div class="selection-card-category">✏️</div><div class="selection-card-title">직접 입력</div><div class="selection-card-subtitle">글자수 지정</div></div>
+          <div class="selection-card" onclick="selectDetailLevel(this,'detailed')"><div class="selection-card-category">📖</div><div class="selection-card-title">상세</div><div class="selection-card-subtitle">~2,000자+/도면</div></div>
+          <div class="selection-card" onclick="selectDetailLevel(this,'custom')"><div class="selection-card-category">✏️</div><div class="selection-card-title">직접 입력</div><div class="selection-card-subtitle">글자수/도면 지정</div></div>
         </div>
         <div id="customDetailInput" style="display:none;margin-top:8px">
           <label style="font-size:12px;color:var(--color-text-secondary)">도면 1개당 글자수</label>
           <input type="number" class="input-field" min="500" max="5000" value="2000" onchange="customDetailChars=parseInt(this.value)||2000" style="width:120px;margin-top:4px" />
         </div>
         <div id="progressStep08" style="margin:8px 0"></div>
-        <button class="btn btn-primary btn-full" id="btnStep08" onclick="runLongStep('step_08')"><span class="tossface">🤖</span> 상세설명 생성</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" id="btnStep08" onclick="runLongStep('step_08')" style="flex:1"><span class="tossface">🤖</span> 상세설명 생성</button>
+          <button class="btn btn-outline" id="btnInsertBoilerplate" onclick="insertBoilerplate()"><span class="tossface">📎</span> 정형문 삽입</button>
+        </div>
         <div id="resultStep08" style="margin-top:8px"></div>
       </div>
 
@@ -410,6 +432,7 @@
       <div class="card">
         <div class="card-header"><div class="card-title"><span class="tossface">🔍</span> Step 13: AI 검토</div></div>
         <p class="card-description" style="margin-bottom:12px">청구범위 뒷받침, 기술적 비약, 수학식 정합성, 반복실시 가능성을 검토합니다.</p>
+        <div id="progressStep13" style="margin:8px 0"></div>
         <button class="btn btn-primary btn-full" id="btnStep13" onclick="runStep('step_13')"><span class="tossface">🤖</span> AI 검토 실행</button>
         <div id="resultStep13" style="margin-top:8px"></div>
       </div>

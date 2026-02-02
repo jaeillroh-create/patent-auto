@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   특허명세서 자동 생성 v4.7 — Claim System Redesign + Provisional
+   특허명세서 자동 생성 v4.8 — Bug Fixes + UX Improvements
    ═══════════════════════════════════════════════════════════ */
 const SUPABASE_URL = 'https://uvrzwhfjtzqujawmscca.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cnp3aGZqdHpxdWphd21zY2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTEwNDgsImV4cCI6MjA4NTUyNzA0OH0.JSSPMPIHsXfbNm6pgRzCTGH7aNQATl-okIkcXHl7Mkk';
@@ -18,7 +18,9 @@ function selectModel(m) {
   document.getElementById('btnModelSonnet').style.color = m==='sonnet' ? '#fff' : 'var(--color-text-secondary)';
   document.getElementById('btnModelOpus').style.background = m==='opus' ? 'var(--color-primary)' : 'transparent';
   document.getElementById('btnModelOpus').style.color = m==='opus' ? '#fff' : 'var(--color-text-secondary)';
-  showToast(`모델: ${MODELS[m].label} (${m==='opus'?'고품질·고비용':'표준·저비용'})`);
+  document.getElementById('btnModelSonnet').textContent = m==='sonnet' ? '✓ Sonnet 4.5' : 'Sonnet 4.5';
+  document.getElementById('btnModelOpus').textContent = m==='opus' ? '✓ Opus 4.5' : 'Opus 4.5';
+  showToast(`모델: ${MODELS[m].label} (${MODELS[m].id}) — ${m==='opus'?'고품질·고비용':'표준·저비용'}`);
 }
 
 const SYSTEM_PROMPT = '너는 대한민국 특허청(KIPO) 심사 실무와 등록 가능성(신규성/진보성/명확성/지원요건)을 완벽히 이해한 15년 차 수석 변리사이다. 원칙: 1.표준문체(~한다) 2.글머리/마크다운 절대금지 3.SW명 대신 알고리즘 4.구성요소명(참조번호) 형태 5.명세서에 바로 붙여넣을 순수텍스트 6.제한성 표현(만, 반드시, ~에 한하여 등) 사용 금지';
@@ -39,7 +41,8 @@ const CATEGORY_ENDINGS = {
   apparatus:'~을 포함하는 장치.', electronic_device:'~을 포함하는 전자단말.',
   method:'~하는 방법.',
   recording_medium:'컴퓨터가 …을 수행하도록 하는 프로그램을 기록한 컴퓨터 판독가능 기록매체.',
-  computer_program:'컴퓨터가 …을 수행하도록 하는 프로그램.'
+  computer_program:'컴퓨터가 …을 수행하도록 하는 프로그램.',
+  computer_program_product:'컴퓨터가 …을 수행하도록 하는 프로그램.'
 };
 
 let API_KEY='',currentUser=null,currentProfile=null,currentProjectId=null;
@@ -140,9 +143,11 @@ async function onAuthSuccess(user){
   if(!profile.tos_accepted){showScreen('tos');return;}if(profile.status==='pending'){showScreen('pending');return;}if(profile.status==='suspended'){showToast('계정 정지됨','error');return;}
   const dn=document.getElementById('dashUserName');if(dn)dn.textContent=profile.display_name||user.email;
   if(profile.role==='admin'){const ab=document.getElementById('btnDashAdmin');if(ab)ab.style.display='inline-flex';}
-  // FIX: API Key — profile DB → localStorage fallback
-  API_KEY=profile.api_key_encrypted||'';
-  if(!API_KEY){try{API_KEY=localStorage.getItem('patent_api_key')||'';}catch(e){}}
+  // FIX: API Key — DB → localStorage → memory (triple fallback, never clear on login)
+  if(!API_KEY){
+    API_KEY=profile.api_key_encrypted||'';
+    if(!API_KEY){try{API_KEY=localStorage.getItem('patent_api_key')||'';}catch(e){}}
+  }
   clearAllState();showScreen('dashboard');
 }
 async function handleTosAccept(){if(!document.getElementById('tosCheck1').checked||!document.getElementById('tosCheck2').checked){showToast('모든 항목에 동의해 주세요','error');return;}await sb.from('profiles').update({tos_accepted:true,tos_accepted_at:new Date().toISOString()}).eq('id',currentUser.id);currentProfile.tos_accepted=true;if(currentProfile.status==='pending')showScreen('pending');else await onAuthSuccess(currentUser);}
@@ -218,9 +223,16 @@ async function openProject(pid){
   methodCategory=s.methodCategory||'method';methodGeneralDep=s.methodGeneralDep||3;methodAnchorDep=s.methodAnchorDep||2;methodAnchorStart=s.methodAnchorStart||0;
   methodAnchorThemeMode=s.methodAnchorThemeMode||'auto';selectedMethodAnchorThemes=s.selectedMethodAnchorThemes||[];
   projectRefStyleText=s.projectRefStyleText||'';requiredFigures=s.requiredFigures||[];
+  // FIX: Ensure API_KEY is loaded (triple fallback)
+  if(!API_KEY){
+    if(currentProfile?.api_key_encrypted)API_KEY=currentProfile.api_key_encrypted;
+    if(!API_KEY){try{API_KEY=localStorage.getItem('patent_api_key')||'';}catch(e){}}
+  }
   // Restore UI
   document.getElementById('methodToggle').checked=includeMethodClaims;toggleMethod();
   restoreClaimUI();
+  // Restore custom title type
+  if(selectedTitleType){const ci=document.getElementById('customTitleType');if(ci)ci.value=selectedTitleType;document.getElementById('btnStep01').disabled=false;}
   if(selectedTitle){document.getElementById('titleInput').value=selectedTitle;document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';}
   Object.keys(outputs).forEach(k=>{if(outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied'))renderOutput(k,outputs[k]);});
   document.getElementById('headerProjectName').textContent=data.title;document.getElementById('headerUserName').textContent=currentProfile?.display_name||currentUser?.email||'';
@@ -250,7 +262,17 @@ async function saveProject(silent=false){if(!currentProjectId)return;const t=sel
 
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===4)renderPreview();}
-function toggleMethod(){includeMethodClaims=document.getElementById('methodToggle').checked;['methodClaimsCard','methodDiagramCard','methodDescCard'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.toggle('card-disabled',!includeMethodClaims);});}
+function toggleMethod(){
+  includeMethodClaims=document.getElementById('methodToggle').checked;
+  ['methodClaimsCard','methodDiagramCard','methodDescCard'].forEach(id=>{
+    const e=document.getElementById(id);
+    if(e){
+      e.classList.toggle('card-disabled',!includeMethodClaims);
+      e.style.opacity=includeMethodClaims?'1':'0.4';
+      e.style.pointerEvents=includeMethodClaims?'':'none';
+    }
+  });
+}
 function selectDetailLevel(el,level){
   document.querySelectorAll('#detailLevelCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');detailLevel=level;
   const ci=document.getElementById('customDetailInput');
@@ -259,18 +281,38 @@ function selectDetailLevel(el,level){
 
 // Claim config update handlers
 function updateDeviceCategory(v){deviceCategory=v;}
-function updateDeviceGeneralDep(v){deviceGeneralDep=parseInt(v)||5;autoCalcDeviceAnchorStart();updateDeviceClaimTotal();}
-function updateDeviceAnchorDep(v){deviceAnchorDep=parseInt(v)||4;updateDeviceClaimTotal();}
-function updateDeviceAnchorStart(v){deviceAnchorStart=parseInt(v)||7;updateDeviceClaimTotal();}
-function autoCalcDeviceAnchorStart(){deviceAnchorStart=deviceGeneralDep+2;const el=document.getElementById('inpDeviceAnchorStart');if(el)el.value=deviceAnchorStart;}
+function updateDeviceGeneralDep(v){deviceGeneralDep=parseInt(v)||0;autoCalcDeviceAnchorStart();updateDeviceClaimTotal();updateMethodClaimTotal();}
+function updateDeviceAnchorDep(v){deviceAnchorDep=parseInt(v)||0;autoCalcDeviceAnchorStart();updateDeviceClaimTotal();updateMethodClaimTotal();}
+function updateDeviceAnchorStart(v){deviceAnchorStart=parseInt(v)||2;updateDeviceClaimTotal();}
+function autoCalcDeviceAnchorStart(){
+  // Anchor claims start right after general claims
+  deviceAnchorStart=1+deviceGeneralDep+1; // independent(1) + general deps + 1
+  const el=document.getElementById('inpDeviceAnchorStart');if(el)el.value=deviceAnchorStart;
+}
 function updateDeviceClaimTotal(){
   const total=1+deviceGeneralDep+deviceAnchorDep;
+  const genStart=2, genEnd=1+deviceGeneralDep;
+  const anchorEnd=deviceAnchorStart+deviceAnchorDep-1;
   const el=document.getElementById('deviceClaimTotal');
-  if(el)el.textContent=`독립항 1 + 일반 ${deviceGeneralDep} + 앵커 ${deviceAnchorDep} = ${total}개`;
+  // Validate: anchor start should be genEnd+1
+  const expectedAnchorStart=genEnd+1;
+  let warn='';
+  if(deviceAnchorDep>0 && deviceAnchorStart!==expectedAnchorStart){
+    warn=` ⚠️ 앵커 시작번호 보정: ${deviceAnchorStart}→${expectedAnchorStart}`;
+    deviceAnchorStart=expectedAnchorStart;
+    const das=document.getElementById('inpDeviceAnchorStart');if(das)das.value=deviceAnchorStart;
+  }
+  if(el){
+    let txt=`독립항 1 (청구항 1)`;
+    if(deviceGeneralDep>0) txt+=` + 일반 ${deviceGeneralDep} (청구항 ${genStart}~${genEnd})`;
+    if(deviceAnchorDep>0) txt+=` + 앵커 ${deviceAnchorDep} (청구항 ${deviceAnchorStart}~${deviceAnchorStart+deviceAnchorDep-1})`;
+    txt+=` = 총 ${total}개${warn}`;
+    el.textContent=txt;
+  }
 }
 function toggleDeviceAnchorThemes(mode){
   anchorThemeMode=mode;
-  const el=document.getElementById('deviceThemeCheckboxes');
+  const el=document.getElementById('deviceThemeList');
   if(el)el.style.display=mode==='fixed'?'flex':'none';
 }
 function toggleDeviceTheme(key,checked){
@@ -279,20 +321,34 @@ function toggleDeviceTheme(key,checked){
 }
 
 function updateMethodCategory(v){methodCategory=v;}
-function updateMethodGeneralDep(v){methodGeneralDep=parseInt(v)||3;autoCalcMethodAnchorStart();updateMethodClaimTotal();}
-function updateMethodAnchorDep(v){methodAnchorDep=parseInt(v)||2;updateMethodClaimTotal();}
+function updateMethodGeneralDep(v){methodGeneralDep=parseInt(v)||0;updateMethodClaimTotal();}
+function updateMethodAnchorDep(v){methodAnchorDep=parseInt(v)||0;updateMethodClaimTotal();}
 function autoCalcMethodAnchorStart(){
   const devTotal=1+deviceGeneralDep+deviceAnchorDep;
-  methodAnchorStart=devTotal+1+methodGeneralDep;
+  const methodIndep=devTotal+1;
+  // Anchor starts right after method general deps
+  methodAnchorStart=methodIndep+methodGeneralDep+1;
 }
 function updateMethodClaimTotal(){
+  const devTotal=1+deviceGeneralDep+deviceAnchorDep;
+  const methodIndep=devTotal+1;
+  const genStart=methodIndep+1;
+  const genEnd=methodIndep+methodGeneralDep;
+  autoCalcMethodAnchorStart();
+  const anchorEnd=methodAnchorStart+methodAnchorDep-1;
   const total=1+methodGeneralDep+methodAnchorDep;
   const el=document.getElementById('methodClaimTotal');
-  if(el)el.textContent=`독립항 1 + 일반 ${methodGeneralDep} + 앵커 ${methodAnchorDep} = ${total}개`;
+  if(el){
+    let txt=`독립항 1 (청구항 ${methodIndep})`;
+    if(methodGeneralDep>0) txt+=` + 일반 ${methodGeneralDep} (청구항 ${genStart}~${genEnd})`;
+    if(methodAnchorDep>0) txt+=` + 앵커 ${methodAnchorDep} (청구항 ${methodAnchorStart}~${anchorEnd})`;
+    txt+=` = 총 ${total}개`;
+    el.textContent=txt;
+  }
 }
 function toggleMethodAnchorThemes(mode){
   methodAnchorThemeMode=mode;
-  const el=document.getElementById('methodThemeCheckboxes');
+  const el=document.getElementById('methodThemeList');
   if(el)el.style.display=mode==='fixed'?'flex':'none';
 }
 function toggleMethodTheme(key,checked){
@@ -302,16 +358,28 @@ function toggleMethodTheme(key,checked){
 
 // ═══ Required Figures ═══
 function addRequiredFigure(){
-  const numEl=document.getElementById('reqFigNum'),descEl=document.getElementById('reqFigDesc');
+  const numEl=document.getElementById('inpRequiredFigNum'),descEl=document.getElementById('inpRequiredFigDesc');
+  const fileEl=document.getElementById('inpRequiredFigFile');
   const num=parseInt(numEl?.value);const desc=descEl?.value?.trim();
   if(!num||num<1){showToast('도면 번호를 입력하세요','error');return;}
   if(!desc){showToast('도면 설명을 입력하세요','error');return;}
   if(requiredFigures.find(f=>f.num===num)){showToast(`도 ${num}은 이미 등록됨`,'error');return;}
-  requiredFigures.push({num,description:desc});
+  const figData={num,description:desc};
+  // Handle file upload if present
+  if(fileEl&&fileEl.files&&fileEl.files[0]){
+    const file=fileEl.files[0];
+    figData.fileName=file.name;
+    figData.fileSize=file.size;
+    // Store as data URL for preview (optional)
+    const reader=new FileReader();
+    reader.onload=function(e){figData.fileDataUrl=e.target.result;renderRequiredFiguresList();};
+    reader.readAsDataURL(file);
+  }
+  requiredFigures.push(figData);
   requiredFigures.sort((a,b)=>a.num-b.num);
-  if(numEl)numEl.value='';if(descEl)descEl.value='';
+  if(numEl)numEl.value='';if(descEl)descEl.value='';if(fileEl)fileEl.value='';
   renderRequiredFiguresList();
-  showToast(`도 ${num} 필수 도면 등록`);
+  showToast(`도 ${num} 필수 도면 등록${figData.fileName?' (파일: '+figData.fileName+')':''}`);
 }
 function removeRequiredFigure(num){
   requiredFigures=requiredFigures.filter(f=>f.num!==num);
@@ -320,7 +388,7 @@ function removeRequiredFigure(num){
 function renderRequiredFiguresList(){
   const el=document.getElementById('requiredFiguresList');if(!el)return;
   if(!requiredFigures.length){el.innerHTML='';return;}
-  el.innerHTML=requiredFigures.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:4px;font-size:13px"><span class="badge badge-primary">도 ${f.num}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.description)}</span><button class="btn btn-ghost btn-sm" onclick="removeRequiredFigure(${f.num})">✕</button></div>`).join('');
+  el.innerHTML=requiredFigures.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:4px;font-size:13px"><span class="badge badge-primary">도 ${f.num}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.description)}</span>${f.fileName?`<span class="badge badge-success" title="${escapeHtml(f.fileName)}">📎 파일</span>`:''}<button class="btn btn-ghost btn-sm" onclick="removeRequiredFigure(${f.num})">✕</button></div>`).join('');
 }
 
 // ═══ Project Reference Document ═══
@@ -341,17 +409,25 @@ async function handleProjectRefUpload(event){
 }
 function clearProjectRef(){projectRefStyleText='';const st=document.getElementById('projectRefStatus');if(st){st.textContent='없음 (공통 참고 문서 사용)';st.style.color='var(--color-text-tertiary)';}showToast('프로젝트 참고 문서 제거됨');}
 
-function selectTitleType(el,type){document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitleType=type;document.getElementById('btnStep01').disabled=false;}
+function selectTitleType(el,type){document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitleType=type;const ci=document.getElementById('customTitleType');if(ci)ci.value=type;document.getElementById('btnStep01').disabled=false;showToast(`발명 유형: ~${type}`);}
+function onCustomTitleType(val){const v=val.trim();if(v){selectedTitleType=v;document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));document.getElementById('btnStep01').disabled=false;}else{selectedTitleType='';document.getElementById('btnStep01').disabled=true;}}
 function selectTitle(el,kr,en){document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitle=kr;document.getElementById('titleInput').value=kr;document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';}
 function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';}
 
 // ═══════════ API ═══════════
+function ensureApiKey(){
+  if(API_KEY)return true;
+  // Triple fallback: memory → profile → localStorage
+  if(currentProfile?.api_key_encrypted){API_KEY=currentProfile.api_key_encrypted;return true;}
+  try{const k=localStorage.getItem('patent_api_key');if(k){API_KEY=k;return true;}}catch(e){}
+  return false;
+}
 async function callClaude(prompt,maxTokens=8192){
-  if(!API_KEY){document.getElementById('apiKeyModal').style.display='flex';throw new Error('API Key 필요');}
+  if(!ensureApiKey()){showApiKeyModal();throw new Error('API Key를 먼저 입력해 주세요');}
   const model=getModel(), mc=MODELS[selectedModel];
   const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),120000);
   try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:ctrl.signal,headers:{'Content-Type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,system:SYSTEM_PROMPT,messages:[{role:'user',content:prompt}]})});clearTimeout(tout);
-    if(res.status===401){API_KEY='';if(currentProfile)currentProfile.api_key_encrypted='';try{localStorage.removeItem('patent_api_key');}catch(e){}document.getElementById('apiKeyModal').style.display='flex';throw new Error('API Key 유효하지 않음');}
+    if(res.status===401){API_KEY='';if(currentProfile)currentProfile.api_key_encrypted='';try{localStorage.removeItem('patent_api_key');}catch(e){}showToast('API Key가 유효하지 않습니다. 🔑 버튼을 눌러 다시 입력하세요.','error');throw new Error('API Key 유효하지 않음');}
     if(res.status===429)throw new Error('요청 과다. 30초 후 재시도');if(res.status>=500)throw new Error('서버 오류');
     const d=await res.json();if(d.error)throw new Error(d.error.message);
     const it=d.usage?.input_tokens||0,ot=d.usage?.output_tokens||0;
@@ -361,25 +437,47 @@ async function callClaude(prompt,maxTokens=8192){
     return{text:d.content[0].text,stopReason:d.stop_reason};
   }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃');throw e;}
 }
-// Force Sonnet for provisional
+// Force Sonnet for provisional (with cost tracking)
 async function callClaudeSonnet(prompt,maxTokens=8192){
-  if(!API_KEY){document.getElementById('apiKeyModal').style.display='flex';throw new Error('API Key 필요');}
+  if(!ensureApiKey()){showApiKeyModal();throw new Error('API Key를 먼저 입력해 주세요');}
   const mc=MODELS.sonnet;
   const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),120000);
   try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:ctrl.signal,headers:{'Content-Type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:mc.id,max_tokens:maxTokens,system:SYSTEM_PROMPT,messages:[{role:'user',content:prompt}]})});clearTimeout(tout);
     if(res.status===401)throw new Error('API Key 유효하지 않음');
     if(res.status===429)throw new Error('요청 과다');if(res.status>=500)throw new Error('서버 오류');
     const d=await res.json();if(d.error)throw new Error(d.error.message);
+    // FIX: Track provisional costs
+    const it=d.usage?.input_tokens||0,ot=d.usage?.output_tokens||0;
+    usage.calls++;usage.inputTokens+=it;usage.outputTokens+=ot;
+    usage.cost+=(it*mc.inputCost/1e6)+(ot*mc.outputCost/1e6);
     return{text:d.content[0].text,stopReason:d.stop_reason};
   }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃');throw e;}
 }
-async function callClaudeWithContinuation(prompt,pid){let full='',r=await callClaude(prompt),a=0;full=r.text;while(a<4&&r.stopReason==='max_tokens'){a++;showProgress(pid,`이어서 작성 중... (${a}/4)`,a,4);r=await callClaude(`아래 특허명세서 뒷부분을 이어서 작성. 앞부분 반복 금지. 동일 문체.\n\n[마지막]\n${full.slice(-2000)}`);full+='\n'+r.text;}clearProgress(pid);return full;}
+async function callClaudeWithContinuation(prompt,pid){let full='',r=await callClaude(prompt),a=0;full=r.text;while(a<6&&r.stopReason==='max_tokens'){a++;showProgress(pid,`이어서 작성 중... (${a}/6)`,a,6);r=await callClaude(`아래 특허명세서 뒷부분을 이어서 작성. 앞부분 반복 금지. 동일 문체.\n\n[마지막]\n${full.slice(-2000)}`);full+='\n'+r.text;}clearProgress(pid);return full;}
 
 // ═══════════ HELPERS ═══════════
 function getLatestDescription(){return outputs.step_13_applied||outputs.step_09||outputs.step_08||'';}
+// 정형문 수동 삽입: 현재 Step 8 결과에 정형문을 전후에 삽입
+function insertBoilerplate(){
+  const cur=outputs.step_08||'';
+  if(!cur){showToast('상세설명이 없습니다. 먼저 Step 8을 생성하세요.','error');return;}
+  // Check if already has boilerplate
+  if(hasBoilerplate(cur)){showToast('이미 정형문이 삽입되어 있습니다.','info');return;}
+  outputs.step_08=STEP8_PREFIX+'\n\n'+cur+'\n\n'+STEP8_SUFFIX;
+  renderOutput('step_08',outputs.step_08);
+  // Also update step_09 and step_13_applied if they exist
+  if(outputs.step_09&&!hasBoilerplate(outputs.step_09)){outputs.step_09=STEP8_PREFIX+'\n\n'+outputs.step_09+'\n\n'+STEP8_SUFFIX;}
+  if(outputs.step_13_applied&&!hasBoilerplate(outputs.step_13_applied)){outputs.step_13_applied=STEP8_PREFIX+'\n\n'+outputs.step_13_applied+'\n\n'+STEP8_SUFFIX;}
+  showToast('정형문 삽입 완료 (본문 전후에 자동 삽입됨)');
+}
+function hasBoilerplate(text){
+  return text&&text.includes('이하, 본 발명의 실시예를 첨부된 도면을');
+}
 function getFullDescription(){
   const body=getLatestDescription();
   if(!body)return '';
+  // If boilerplate already inserted manually, don't double-insert
+  if(hasBoilerplate(body))return body;
   return STEP8_PREFIX+'\n'+body+'\n'+STEP8_SUFFIX;
 }
 function getLastClaimNumber(t){const m=t.match(/【청구항\s*(\d+)】/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
@@ -583,7 +681,7 @@ ${T}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}${ge
     case 'step_10':{
       const s=getLastClaimNumber(outputs.step_06||'')+1;
       const totalDep=methodGeneralDep+methodAnchorDep;
-      const mAnchorStart=s+1+methodGeneralDep;
+      const mAnchorStart=s+methodGeneralDep+1;
       const catLabel=methodCategory==='auto'?'발명에 가장 적합한 카테고리를 선택하라':methodCategory;
       const themeInst=buildAnchorThemeInstruction(methodAnchorThemeMode,selectedMethodAnchorThemes,methodAnchorDep);
       return `방법 청구항을 작성하라.
@@ -646,37 +744,70 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}${getFullInvention()}`;}
 }
 
 // ═══════════ STEP EXECUTION ═══════════
+let globalProcessing = false;
+function setGlobalProcessing(on){
+  globalProcessing=on;
+  // Disable/enable ALL generation buttons when any task is running
+  const allBtns=['btnStep01','btnBatch25','btnStep06','btnStep10','btnStep14','btnStep15','btnStep07','btnStep08','btnStep09','btnStep11','btnStep12','btnStep13','btnApplyReview','btnBatchFinish','btnProvisionalGen','btnInsertBoilerplate'];
+  allBtns.forEach(bid=>{const b=document.getElementById(bid);if(b){if(on){b.dataset.prevDisabled=b.disabled;b.disabled=true;b.style.opacity='0.5';}else{b.disabled=b.dataset.prevDisabled==='true';b.style.opacity='';delete b.dataset.prevDisabled;}}});
+  // Also disable validation button and tab switches during processing
+  document.querySelectorAll('.tab-item').forEach(t=>{if(on){t.style.pointerEvents='none';t.style.opacity='0.7';}else{t.style.pointerEvents='';t.style.opacity='';}});
+}
 function checkDependency(s){const inv=document.getElementById('projectInput').value.trim();const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저'};return d[s]?d[s]():null;}
-async function runStep(sid){if(loadingState[sid])return;const dep=checkDependency(sid);if(dep){showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13'},bid=bm[sid];loadingState[sid]=true;if(bid)setButtonLoading(bid,true);
+async function runStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13',step_14:'btnStep14',step_15:'btnStep15'},bid=bm[sid];setGlobalProcessing(true);loadingState[sid]=true;if(bid)setButtonLoading(bid,true);
   try{
-    const r=await callClaude(buildPrompt(sid));outputs[sid]=r.text;renderOutput(sid,r.text);
+    // Step 13: use continuation for long review
+    let r;
+    if(sid==='step_13'){
+      showProgress('progressStep13'||'','AI 검토 생성 중...',0,1);
+      const text=await callClaudeWithContinuation(buildPrompt(sid),'progressStep13'||'');
+      r={text};outputs[sid]=text;
+    } else {
+      r=await callClaude(buildPrompt(sid));outputs[sid]=r.text;
+    }
+    renderOutput(sid,r.text||outputs[sid]);
+    // Step 6: auto-validation + correction
     if(sid==='step_06'){
       showProgress('progressStep06','기재불비 자동 검증 중...',1,3);
-      const issues=validateClaims(r.text);
+      const issues=validateClaims(outputs.step_06);
       if(issues.length>0){
         showProgress('progressStep06','기재불비 수정 중...',2,3);
         const issueText=issues.map(i=>i.message).join('\n');
-        const fixPrompt=`아래 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 독립항에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${r.text}`;
+        const fixPrompt=`아래 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 독립항에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${outputs.step_06}`;
         const fixR=await callClaude(fixPrompt);outputs[sid]=fixR.text;renderOutput(sid,fixR.text);
         showProgress('progressStep06','수정 완료',3,3);setTimeout(()=>clearProgress('progressStep06'),2000);
         showToast('장치 청구항 생성 + 기재불비 자동 수정 완료');
       }else{clearProgress('progressStep06');showToast('장치 청구항 완료 (기재불비 없음)');}
-    }else{
-      if(sid==='step_13')document.getElementById('btnApplyReview').style.display='block';
-      showToast(`${STEP_NAMES[sid]} 완료`);
     }
-  }catch(e){showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)setButtonLoading(bid,false);}}
-async function runLongStep(sid){if(loadingState[sid])return;const dep=checkDependency(sid);if(dep){showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';loadingState[sid]=true;setButtonLoading(bid,true);showProgress(pid,`${STEP_NAMES[sid]} 생성 중...`,0,1);try{const t=await callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;renderOutput(sid,t);showToast(`${STEP_NAMES[sid]} 완료`);}catch(e){showToast(e.message,'error');}finally{loadingState[sid]=false;setButtonLoading(bid,false);clearProgress(pid);}}
-async function runMathInsertion(){if(loadingState.step_09)return;const dep=checkDependency('step_09');if(dep){showToast(dep,'error');return;}loadingState.step_09=true;setButtonLoading('btnStep09',true);try{const r=await callClaude(buildPrompt('step_09'));outputs.step_09=insertMathBlocks(outputs.step_08,r.text);renderOutput('step_09',outputs.step_09);showToast('수학식 삽입 완료');}catch(e){showToast(e.message,'error');}finally{loadingState.step_09=false;setButtonLoading('btnStep09',false);}}
+    // Step 10: auto-validation + correction (same as Step 6)
+    else if(sid==='step_10'){
+      showProgress('progressStep10'||'','기재불비 자동 검증 중...',1,3);
+      const issues=validateClaims(outputs.step_10);
+      if(issues.length>0){
+        showProgress('progressStep10'||'','기재불비 수정 중...',2,3);
+        const issueText=issues.map(i=>i.message).join('\n');
+        const fixPrompt=`아래 방법 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 독립항에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${outputs.step_10}`;
+        const fixR=await callClaude(fixPrompt);outputs[sid]=fixR.text;renderOutput(sid,fixR.text);
+        showProgress('progressStep10'||'','수정 완료',3,3);setTimeout(()=>clearProgress('progressStep10'||''),2000);
+        showToast('방법 청구항 생성 + 기재불비 자동 수정 완료');
+      }else{clearProgress('progressStep10'||'');showToast('방법 청구항 완료 (기재불비 없음)');}
+    }
+    else{
+      if(sid==='step_13')document.getElementById('btnApplyReview').style.display='block';
+      showToast(`${STEP_NAMES[sid]} 완료 [${MODELS[selectedModel].label}]`);
+    }
+  }catch(e){showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)setButtonLoading(bid,false);setGlobalProcessing(false);}}
+async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;setButtonLoading(bid,true);showProgress(pid,`${STEP_NAMES[sid]} 생성 중...`,0,1);try{const t=await callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;renderOutput(sid,t);showToast(`${STEP_NAMES[sid]} 완료 [${MODELS[selectedModel].label}]`);}catch(e){showToast(e.message,'error');}finally{loadingState[sid]=false;setButtonLoading(bid,false);clearProgress(pid);setGlobalProcessing(false);}}
+async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;setButtonLoading('btnStep09',true);try{const r=await callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);renderOutput('step_09',outputs.step_09);showToast('수학식 삽입 완료');}catch(e){showToast(e.message,'error');}finally{loadingState.step_09=false;setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
 
 async function applyReview(){
-  if(loadingState.applyReview)return;if(!outputs.step_13){showToast('검토 결과 없음','error');return;}
+  if(globalProcessing)return;if(!outputs.step_13){showToast('검토 결과 없음','error');return;}
   const cur=getLatestDescription();if(!cur){showToast('상세설명 없음','error');return;}
-  beforeReviewText=cur;loadingState.applyReview=true;setButtonLoading('btnApplyReview',true);
+  beforeReviewText=cur;setGlobalProcessing(true);loadingState.applyReview=true;setButtonLoading('btnApplyReview',true);
   try{
     showProgress('progressApplyReview','[1/3] 검토 반영 보완 중...',1,3);
     const dlCfg={compact:{c:'약 1,000자',t:'약 3,000~4,000자'},standard:{c:'약 1,500자',t:'약 5,000~7,000자'},detailed:{c:'약 2,000자 이상',t:'8,000~10,000자'},custom:{c:'약 '+customDetailChars+'자',t:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자'}}[detailLevel];
-    const improvedDesc=await callClaudeWithContinuation(`[검토 결과]를 반영하여 【발명을 실시하기 위한 구체적인 내용】의 본문만 완전히 새로 작성하라.\n\n규칙:\n- 기존 상세설명을 기반으로 검토 지적사항을 모두 보완하라.\n- 이 항목만 작성. 다른 항목 포함 금지.\n- 서버(100)를 주어. \"구성요소(참조번호)\" 형태.\n- 도면별 \"도 N을 참조하면,\" 형태.\n- 특허문체(~한다). 글머리 금지. 생략 금지.\n- 도면 1개당 ${dlCfg.c}, 총 ${dlCfg.t}. (정형문 제외)\n- 등록 앵커 종속항의 다단계 처리, 기준값/가중치 동작, 검증/보정 루프를 구체적으로 설명하라.\n- 제한성 표현 금지.\n\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n[발명의 명칭] ${selectedTitle}\n[검토 결과] ${outputs.step_13}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}\n[현재 상세설명] ${cur}${getFullInvention()}${getStyleRef()}`,'progressApplyReview');
+    const improvedDesc=await callClaudeWithContinuation(`[검토 결과]를 반영하여 【발명을 실시하기 위한 구체적인 내용】의 본문만 완전히 새로 작성하라.\n\n규칙:\n- 기존 상세설명을 기반으로 검토 지적사항을 모두 보완하라.\n- 이 항목만 작성. 다른 항목 포함 금지.\n- 서버(100)를 주어. \"구성요소(참조번호)\" 형태.\n- 도면별 \"도 N을 참조하면,\" 형태.\n- 특허문체(~한다). 글머리 금지. 생략 금지.\n- 도면 1개당 ${dlCfg.c}, 총 ${dlCfg.t}. (정형문 제외)\n- 등록 앵커 종속항의 다단계 처리, 기준값/가중치 동작, 검증/보정 루프를 구체적으로 설명하라.\n- 제한성 표현 금지.\n- 수학식은 포함하지 마라 (별도 삽입 예정).\n\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n[발명의 명칭] ${selectedTitle}\n[검토 결과] ${outputs.step_13}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}\n[현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention()}${getStyleRef()}`,'progressApplyReview');
     outputs.step_08=improvedDesc;
     showProgress('progressApplyReview','[2/3] 수학식 삽입 중...',2,3);
     const mathR=await callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예시 대입: (수치)\n\n${selectedTitle}\n[현재 상세설명] ${improvedDesc}`);
@@ -688,16 +819,16 @@ async function applyReview(){
     if(resultArea){resultArea.style.display='block';showReviewDiff('after');}
     setTimeout(()=>clearProgress('progressApplyReview'),2000);
     showToast('검토 반영 완료');
-  }catch(e){showToast(e.message,'error');}finally{loadingState.applyReview=false;setButtonLoading('btnApplyReview',false);}
+  }catch(e){showToast(e.message,'error');}finally{loadingState.applyReview=false;setButtonLoading('btnApplyReview',false);setGlobalProcessing(false);}
 }
 function showReviewDiff(mode){
   const area=document.getElementById('reviewDiffArea'),bb=document.getElementById('btnDiffBefore'),ba=document.getElementById('btnDiffAfter');if(!area)return;
   if(mode==='before'){area.value=beforeReviewText||'(없음)';if(bb)bb.className='btn btn-primary btn-sm';if(ba)ba.className='btn btn-outline btn-sm';}
   else{area.value=outputs.step_13_applied||'(없음)';if(bb)bb.className='btn btn-outline btn-sm';if(ba)ba.className='btn btn-primary btn-sm';}
 }
-async function runDiagramStep(sid){if(loadingState[sid])return;const dep=checkDependency(sid);if(dep){showToast(dep,'error');return;}const bid=sid==='step_07'?'btnStep07':'btnStep11';loadingState[sid]=true;setButtonLoading(bid,true);try{const r=await callClaude(buildPrompt(sid));outputs[sid]=r.text;renderOutput(sid,r.text);const mr=await callClaude(buildMermaidPrompt(sid),4096);outputs[sid+'_mermaid']=mr.text;renderDiagrams(sid,mr.text);if(sid==='step_07')document.getElementById('btnPptx07').style.display='block';showToast(`${STEP_NAMES[sid]} 완료`);}catch(e){showToast(e.message,'error');}finally{loadingState[sid]=false;setButtonLoading(bid,false);}}
-async function runBatch25(){if(loadingState.batch25)return;if(!selectedTitle){showToast('명칭 먼저 확정','error');return;}loadingState.batch25=true;setButtonLoading('btnBatch25',true);document.getElementById('resultsBatch25').innerHTML='';const steps=['step_02','step_03','step_04','step_05'];try{for(let i=0;i<steps.length;i++){showProgress('progressBatch',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatch25',steps[i],r.text);}clearProgress('progressBatch');showToast('기본 항목 완료');}catch(e){clearProgress('progressBatch');showToast(e.message,'error');}finally{loadingState.batch25=false;setButtonLoading('btnBatch25',false);}}
-async function runBatchFinish(){if(loadingState.batchFinish)return;if(!outputs.step_06||!outputs.step_08){showToast('청구항+상세설명 먼저','error');return;}loadingState.batchFinish=true;setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}clearProgress('progressBatchFinish');showToast('마무리 완료');}catch(e){clearProgress('progressBatchFinish');showToast(e.message,'error');}finally{loadingState.batchFinish=false;setButtonLoading('btnBatchFinish',false);}}
+async function runDiagramStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){showToast(dep,'error');return;}const bid=sid==='step_07'?'btnStep07':'btnStep11';setGlobalProcessing(true);loadingState[sid]=true;setButtonLoading(bid,true);try{const r=await callClaude(buildPrompt(sid));outputs[sid]=r.text;renderOutput(sid,r.text);const mr=await callClaude(buildMermaidPrompt(sid),4096);outputs[sid+'_mermaid']=mr.text;renderDiagrams(sid,mr.text);if(sid==='step_07')document.getElementById('btnPptx07').style.display='block';showToast(`${STEP_NAMES[sid]} 완료 [${MODELS[selectedModel].label}]`);}catch(e){showToast(e.message,'error');}finally{loadingState[sid]=false;setButtonLoading(bid,false);setGlobalProcessing(false);}}
+async function runBatch25(){if(globalProcessing)return;if(!selectedTitle){showToast('명칭 먼저 확정','error');return;}setGlobalProcessing(true);loadingState.batch25=true;setButtonLoading('btnBatch25',true);document.getElementById('resultsBatch25').innerHTML='';const steps=['step_02','step_03','step_04','step_05'];try{for(let i=0;i<steps.length;i++){showProgress('progressBatch',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatch25',steps[i],r.text);}clearProgress('progressBatch');showToast('기본 항목 완료');}catch(e){clearProgress('progressBatch');showToast(e.message,'error');}finally{loadingState.batch25=false;setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}}
+async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}clearProgress('progressBatchFinish');showToast('마무리 완료');}catch(e){clearProgress('progressBatchFinish');showToast(e.message,'error');}finally{loadingState.batchFinish=false;setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
 
 // ═══════════ PROVISIONAL APPLICATION (가출원) ═══════════
 function openProvisionalModal(){document.getElementById('provisionalInput').value='';document.getElementById('provisionalModal').style.display='flex';}
@@ -706,14 +837,14 @@ async function runProvisionalApplication(){
   const inv=document.getElementById('provisionalInput').value.trim();
   if(!inv){showToast('발명 내용을 입력해 주세요','error');return;}
   if(!API_KEY){showApiKeyModal();return;}
-  setButtonLoading('btnProvisionalGen',true);
+  if(globalProcessing)return;
+  setGlobalProcessing(true);setButtonLoading('btnProvisionalGen',true);
   try{
-    showProgress('progressProvisional','가출원 명세서 생성 중... (1/2)',1,2);
-    // Phase 1: 명칭 + 청구항 + 기술분야 + 과제 + 효과
+    showProgress('progressProvisional','가출원 명세서 생성 중... (1/3)',1,3);
     const r1=await callClaudeSonnet(`가출원 명세서를 작성하라. 전체 문서가 4000단어를 넘지 않도록 간결하게 작성하라.
 
 [구성]
-1. 발명의 명칭: 1개 (\"~서버\" 또는 \"~방법\" 또는 \"~시스템\" 형태)
+1. 발명의 명칭: 1개 ("~서버" 또는 "~방법" 또는 "~시스템" 형태)
 2. 기술분야: 1문장
 3. 해결하고자 하는 과제: 2~3문장
 4. 과제의 해결 수단: 3~5문장
@@ -743,7 +874,7 @@ async function runProvisionalApplication(){
 【청구항 1】
 (내용)
 ===도면설계===
-(도면 설명)
+(도면 설명: 구성요소, 참조번호, 연결 관계 포함)
 ===상세설명===
 (내용)
 ===효과===
@@ -754,19 +885,29 @@ async function runProvisionalApplication(){
 [발명 내용]
 ${inv}`,8192);
 
-    showProgress('progressProvisional','Word 생성 중... (2/2)',2,2);
+    showProgress('progressProvisional','도면 Mermaid 변환 중... (2/3)',2,3);
     const text=r1.text;
-    // Parse sections
     const getSection=(key)=>{const re=new RegExp('==='+key+'===\\s*\\n([\\s\\S]*?)(?====|$)');const m=text.match(re);return m?m[1].trim():'';};
-    const title=getSection('명칭');
-    const techField=getSection('기술분야');
-    const problem=getSection('과제');
-    const solution=getSection('해결수단');
-    const claim=getSection('청구항');
-    const diagram=getSection('도면설계');
-    const desc=getSection('상세설명');
-    const effect=getSection('효과');
+    const title=getSection('명칭');const techField=getSection('기술분야');
+    const problem=getSection('과제');const solution=getSection('해결수단');
+    const claim=getSection('청구항');const diagram=getSection('도면설계');
+    const desc=getSection('상세설명');const effect=getSection('효과');
     const abstract=getSection('요약');
+
+    // Generate Mermaid code for PPTX diagram
+    let provisionalDiagramData=null;
+    try{
+      const mermaidR=await callClaudeSonnet(`아래 도면 설계를 Mermaid flowchart 코드로 변환하라. \`\`\`mermaid 블록 1개.
+규칙: graph TD, 한글 라벨, 노드ID 영문. 서브그래프 사용 가능. style/linkStyle 금지.
+
+${diagram}`,4096);
+      const blocks=extractMermaidBlocks(mermaidR.text);
+      if(blocks.length){
+        provisionalDiagramData=blocks.map(code=>{const{nodes,edges}=parseMermaidGraph(code);return{nodes,edges,positions:layoutGraph(nodes,edges)};});
+      }
+    }catch(e){/* PPTX generation is optional */}
+
+    showProgress('progressProvisional','Word + PPTX 생성 중... (3/3)',3,3);
 
     // Generate Word
     const secs=[
@@ -787,11 +928,28 @@ ${inv}`,8192);
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));
     a.download=`가출원_${title||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();
 
+    // Generate PPTX diagram — always generate as separate file
+    let pptxGenerated=false;
+    if(provisionalDiagramData&&provisionalDiagramData.length){
+      try{
+        const pptx=new PptxGenJS();pptx.layout='LAYOUT_WIDE';
+        provisionalDiagramData.forEach(({nodes,edges,positions},idx)=>{
+          const slide=pptx.addSlide({bkgd:'FFFFFF'});
+          slide.addText(`도 ${idx+1}`,{x:0.3,y:0.05,w:3,h:0.4,fontSize:16,bold:true,fontFace:'맑은 고딕',color:'000000'});
+          if(!nodes.length)return;
+          const routes=computeEdgeRoutes(edges,positions);
+          routes.forEach(route=>{route.segments.forEach(seg=>{const lineOpts={color:'000000',width:1.5};if(seg.arrow)lineOpts.endArrowType='triangle';if(Math.abs(seg.x2-seg.x1)<0.01)slide.addShape(pptx.shapes.LINE,{x:seg.x1,y:Math.min(seg.y1,seg.y2),w:0,h:Math.abs(seg.y2-seg.y1),line:lineOpts});else slide.addShape(pptx.shapes.LINE,{x:Math.min(seg.x1,seg.x2),y:seg.y1,w:Math.abs(seg.x2-seg.x1),h:0,line:lineOpts});});if(route.label&&route.labelPos)slide.addText(route.label,{x:route.labelPos.x,y:route.labelPos.y,w:1.2,h:0.24,fontSize:7,fontFace:'맑은 고딕',color:'333333',align:'left',valign:'middle'});});
+          nodes.forEach(n=>{const p=positions[n.id];if(!p)return;slide.addShape(pptx.shapes.RECTANGLE,{x:p.x,y:p.y,w:p.w,h:p.h,fill:{color:'FFFFFF'},line:{color:'000000',width:1.5},rectRadius:0.03});slide.addText(n.label,{x:p.x+0.05,y:p.y,w:p.w-0.1,h:p.h,fontSize:9,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle',bold:false});});
+        });
+        await pptx.writeFile({fileName:`가출원_도면_${title||'초안'}_${new Date().toISOString().slice(0,10)}.pptx`});
+        pptxGenerated=true;
+      }catch(e){console.error('PPTX generation error:',e);}
+    }
+
     clearProgress('progressProvisional');
     closeProvisionalModal();
-    showToast(`가출원 명세서 다운로드 완료: ${title}`);
-  }catch(e){clearProgress('progressProvisional');showToast(e.message,'error');}
-  finally{setButtonLoading('btnProvisionalGen',false);}
+    showToast(`가출원 명세서 Word 다운로드 완료${pptxGenerated?' + 도면 PPTX 다운로드':' (도면 PPTX 생성 실패 — Word에 도면 설명 포함)'}: ${title}`);  }catch(e){clearProgress('progressProvisional');showToast(e.message,'error');}
+  finally{setButtonLoading('btnProvisionalGen',false);setGlobalProcessing(false);}
 }
 
 // ═══════════ PARSERS ═══════════
@@ -799,7 +957,38 @@ function parseTitleCandidates(t){const c=[];let m;const re=/\[(\d+)\]\s*국문:\
 function parseClaimStats(t){const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,c={};let m;while((m=cp.exec(t))!==null)c[parseInt(m[1])]=m[2].trim();const tot=Object.keys(c).length;let dep=0;Object.values(c).forEach(x=>{if(/있어서|따른/.test(x))dep++;});return{total:tot,independent:tot-dep,dependent:dep,claims:c};}
 function extractMermaidBlocks(t){return(t.match(/```mermaid\n([\s\S]*?)```/g)||[]).map(b=>b.replace(/```mermaid\n/,'').replace(/```/,'').trim());}
 function parseMathBlocks(t){const b=[];let m;const re=/---MATH_BLOCK_\d+---\s*\nANCHOR:\s*(.+)\s*\nFORMULA:\s*\n([\s\S]*?)(?=---MATH_BLOCK_|\s*$)/g;while((m=re.exec(t))!==null)b.push({anchor:m[1].trim(),formula:m[2].trim()});return b;}
-function insertMathBlocks(s08,s09){let r=s08;const b=parseMathBlocks(s09);for(const x of b.reverse()){const i=r.indexOf(x.anchor);if(i>=0){const s=i+x.anchor.length,p=r.indexOf('.',s);const ip=(p>=0&&p-s<100)?p+1:s;r=r.slice(0,ip)+'\n\n'+x.formula+'\n\n'+r.slice(ip);}}return r;}
+function stripMathBlocks(text){
+  if(!text)return '';
+  // Remove existing math blocks (【수학식 N】 blocks) more thoroughly to prevent duplication
+  // Pattern 1: Full math blocks with parameters
+  let r=text.replace(/\n*【수학식\s*\d+】[\s\S]*?(?=\n(?:도\s|이때|또한|한편|다음|여기서|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}서버|\n|$))/g,'');
+  // Pattern 2: Standalone math block headers that might remain
+  r=r.replace(/\n*【수학식\s*\d+】[^\n]*\n/g,'\n');
+  // Pattern 3: Remove "여기서," blocks that follow math formulas
+  r=r.replace(/\n여기서,[\s\S]*?(?=\n\n)/g,'');
+  // Pattern 4: Remove "예시 대입:" blocks
+  r=r.replace(/\n예시 대입:[\s\S]*?(?=\n\n)/g,'');
+  // Clean up multiple newlines
+  r=r.replace(/\n{3,}/g,'\n\n');
+  return r.trim();
+}
+function insertMathBlocks(s08,s09){
+  // First strip any existing math blocks from base text to prevent duplication
+  let r=stripMathBlocks(s08);
+  const b=parseMathBlocks(s09);
+  // Track inserted positions to avoid double-insertion
+  const inserted=new Set();
+  for(const x of b.reverse()){
+    const i=r.indexOf(x.anchor);
+    if(i>=0 && !inserted.has(x.anchor)){
+      inserted.add(x.anchor);
+      const s=i+x.anchor.length,p=r.indexOf('.',s);
+      const ip=(p>=0&&p-s<100)?p+1:s;
+      r=r.slice(0,ip)+'\n\n'+x.formula+'\n\n'+r.slice(ip);
+    }
+  }
+  return r;
+}
 
 function buildMermaidPrompt(sid){
   const src=outputs[sid]||'';
@@ -870,7 +1059,8 @@ function downloadPptx(sid){
 function downloadPptxAll(){if(diagramData.step_07||outputs.step_07_mermaid)downloadPptx('step_07');else showToast('도면 없음','error');}
 
 // ═══════════ RENDERERS ═══════════
-function renderOutput(sid,text){const cid=`result${sid.charAt(0).toUpperCase()+sid.slice(1).replace('_','')}`;const el=document.getElementById(cid);if(!el)return;if(sid==='step_01')renderTitleCards(el,text);else if(sid==='step_06'||sid==='step_10')renderClaimResult(el,sid,text);else renderEditableResult(el,sid,text);}
+function renderOutput(sid,text){const cid=`result${sid.charAt(0).toUpperCase()+sid.slice(1).replace('_','')}`;const el=document.getElementById(cid);if(!el)return;if(sid==='step_01')renderTitleCards(el,text);else if(sid==='step_06'||sid==='step_10')renderClaimResult(el,sid,text);else renderEditableResult(el,sid,text);
+}
 function renderTitleCards(c,text){const cs=parseTitleCandidates(text);if(!cs.length){c.innerHTML=`<div style="margin-top:12px;padding:12px;background:var(--color-bg-tertiary);border-radius:8px;font-size:13px;white-space:pre-wrap">${escapeHtml(text)}</div>`;document.getElementById('titleConfirmArea').style.display='block';return;}c.innerHTML='<div class="selection-cards" style="margin-top:12px">'+cs.map(x=>`<div class="selection-card" onclick="selectTitle(this,\`${x.korean.replace(/`/g,'')}\`,\`${x.english.replace(/`/g,'')}\`)"><div class="selection-card-category">${x.num}</div><div class="selection-card-title">${escapeHtml(x.korean)}</div><div class="selection-card-subtitle">${escapeHtml(x.english)}</div></div>`).join('')+'</div>';document.getElementById('titleConfirmArea').style.display='block';}
 function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tossface">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tossface">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="outputs['${sid}']=this.value">${escapeHtml(text)}</textarea>`;c.innerHTML=h;}
 function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="outputs['${sid}']=this.value">${escapeHtml(text)}</textarea></div>`;}
@@ -897,13 +1087,25 @@ function runValidation(){const all=[outputs.step_06,outputs.step_10].filter(Bool
 // ═══════════ OUTPUT ═══════════
 function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;document.getElementById('statCompleted').textContent=`${c}/19`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
 function renderPreview(){const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${escapeHtml(h[1])}】</span><span class="arrow">▶</span></div><div class="accordion-body">${escapeHtml(s)}</div>`;}).join('');}
-function buildSpecification(){const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');return['【발명의 설명】',`【발명의 명칭】\n${selectedTitle}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${outputs.step_12?'\n\n'+outputs.step_12:''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${outputs.step_06||''}${outputs.step_10?'\n\n'+outputs.step_10:''}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n');}
+function buildSpecification(){
+  const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
+  // Claims: use the latest version (after auto-correction from validation)
+  const deviceClaims=outputs.step_06||'';
+  const methodClaims=outputs.step_10||'';
+  const allClaims=[deviceClaims,methodClaims].filter(Boolean).join('\n\n');
+  // Include step_14 (alternative claims) and step_15 (deficiency review) if available
+  let extras='';
+  if(outputs.step_14)extras+='\n\n[참고: 대안 청구항]\n'+outputs.step_14;
+  if(outputs.step_15)extras+='\n\n[참고: 기재불비 검토]\n'+outputs.step_15;
+  return['【발명의 설명】',`【발명의 명칭】\n${selectedTitle}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${outputs.step_12?'\n\n'+outputs.step_12:''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${allClaims}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n')+extras;
+}
 function copyToClipboard(){const t=buildSpecification();if(!t.trim()){showToast('내용 없음','error');return;}navigator.clipboard.writeText(t).then(()=>showToast('복사 완료')).catch(()=>showToast('클립보드 접근 불가','error'));}
 function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){showToast('내용 없음','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();}
 
 function downloadAsWord(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
-  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:selectedTitle},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,outputs.step_12].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:[outputs.step_06,outputs.step_10].filter(Boolean).join('\n\n')},{h:'요약서',b:outputs.step_19}];
+  const allClaims=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n\n');
+  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:selectedTitle},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,outputs.step_12].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();showToast('Word 다운로드 완료');
