@@ -240,7 +240,18 @@
         </div>
         <textarea class="textarea-field" id="projectInput" rows="6"
           placeholder="발명의 핵심 기술, 구성요소, 차별점 등을 상세히 입력해 주세요..."></textarea>
-        <div class="card-description">입력이 상세할수록 더 정확한 명세서가 생성돼요.</div>
+
+        <!-- File Upload -->
+        <div style="margin-top:10px">
+          <label for="fileUpload" class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+            <span class="tossface">📎</span> 파일 첨부
+          </label>
+          <input type="file" id="fileUpload" multiple accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.csv,.xlsx,.xls,.pptx,.ppt,.rtf,.json" style="display:none" onchange="handleFileUpload(event)" />
+          <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:8px">txt, pdf, doc(x), hwp(x), xlsx, pptx, md 등</span>
+        </div>
+        <div id="fileList" style="margin-top:8px"></div>
+
+        <div class="card-description" style="margin-top:8px">입력이 상세할수록 더 정확한 명세서가 생성돼요. 파일을 첨부하면 텍스트가 자동 추출되어 발명 내용에 추가됩니다.</div>
       </div>
 
       <!-- Step 1: Title -->
@@ -586,6 +597,10 @@
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3/dist/pptxgen.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+<script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

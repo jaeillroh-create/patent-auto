@@ -39,11 +39,11 @@ function showScreen(name){
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
   currentProjectId=null;outputs={};selectedTitle='';selectedTitleType='';includeMethodClaims=true;
-  usage={calls:0,inputTokens:0,outputTokens:0};loadingState={};beforeReviewText='';
+  usage={calls:0,inputTokens:0,outputTokens:0};loadingState={};beforeReviewText='';uploadedFiles=[];
   const ids=['projectInput','titleInput'];ids.forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   ['titleConfirmArea','titleConfirmMsg','batchArea'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   for(let i=1;i<=19;i++){const e=document.getElementById(`resultStep${String(i).padStart(2,'0')}`);if(e)e.innerHTML='';}
-  ['resultsBatch25','resultsBatchFinish','validationResults','previewArea','diagramsStep07','diagramsStep11'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
+  ['resultsBatch25','resultsBatchFinish','validationResults','previewArea','diagramsStep07','diagramsStep11','fileList'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
   ['btnApplyReview','btnPptx07','reviewApplyResult'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   document.querySelectorAll('.tab-item').forEach((t,i)=>{t.classList.toggle('active',i===0);t.setAttribute('aria-selected',i===0);});
   document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('active',i===0));
@@ -132,7 +132,161 @@ function getLastFigureNumber(t){const m=t.match(/도\s*(\d+)/g);if(!m)return 0;r
 function extractBriefDescriptions(s07,s11){const d=[];[s07,s11].forEach(t=>{if(!t)return;const i=t.indexOf('---BRIEF_DESCRIPTIONS---');if(i>=0)t.slice(i+24).trim().split('\n').filter(l=>l.trim().startsWith('도 ')).forEach(l=>d.push(l.trim()));else t.split('\n').filter(l=>/^도\s*\d+은?\s/.test(l.trim())).forEach(l=>d.push(l.trim()));});return d.join('\n');}
 function stripKoreanParticles(w){if(!w||w.length<2)return w;const ps=['에서는','으로써','에서','으로','에게','부터','까지','에는','하는','되는','된','하여','있는','없는','같은','통하여','위한','대한','의한','를','을','이','가','은','는','에','의','와','과','로','도','든','인','적','로서'];for(const p of ps){if(w.endsWith(p)&&w.length>p.length+1)return w.slice(0,-p.length);}return w;}
 
-// ═══════════ PROMPTS (v4.3 FIXES) ═══════════
+// ═══════════ FILE UPLOAD ═══════════
+let uploadedFiles = []; // {name, text, size}
+
+async function handleFileUpload(event) {
+  const files = Array.from(event.target.files);
+  if (!files.length) return;
+
+  const listEl = document.getElementById('fileList');
+
+  for (const file of files) {
+    // 중복 체크
+    if (uploadedFiles.find(f => f.name === file.name)) {
+      showToast(`"${file.name}" 이미 추가됨`, 'info');
+      continue;
+    }
+
+    const item = document.createElement('div');
+    item.className = 'file-upload-item';
+    item.id = `file_${uploadedFiles.length}`;
+    item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:6px;font-size:13px';
+    item.innerHTML = `<span class="tossface">📄</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(file.name)}</span><span class="badge badge-neutral">${formatFileSize(file.size)}</span><span style="color:var(--color-primary)">추출 중...</span>`;
+    listEl.appendChild(item);
+
+    try {
+      const text = await extractTextFromFile(file);
+      if (text && text.trim()) {
+        uploadedFiles.push({ name: file.name, text: text.trim(), size: file.size });
+
+        // 텍스트 영역에 추가
+        const ta = document.getElementById('projectInput');
+        const separator = ta.value.trim() ? '\n\n' : '';
+        ta.value += `${separator}[첨부: ${file.name}]\n${text.trim()}`;
+
+        item.innerHTML = `<span class="tossface">✅</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(file.name)}</span><span class="badge badge-success">${formatFileSize(file.size)} · ${text.trim().length.toLocaleString()}자</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length - 1},'${escapeHtml(file.name).replace(/'/g, "\\'")}')">✕</button>`;
+        showToast(`"${file.name}" 텍스트 추출 완료 (${text.trim().length.toLocaleString()}자)`);
+      } else {
+        item.innerHTML = `<span class="tossface">⚠️</span><span style="flex:1">${escapeHtml(file.name)}</span><span class="badge badge-warning">텍스트 추출 불가</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+        showToast(`"${file.name}" 텍스트를 추출할 수 없어요`, 'error');
+      }
+    } catch (e) {
+      item.innerHTML = `<span class="tossface">❌</span><span style="flex:1">${escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+      showToast(`"${file.name}" 처리 실패: ${e.message}`, 'error');
+    }
+  }
+  // 입력 초기화 (같은 파일 재선택 가능)
+  event.target.value = '';
+}
+
+function removeUploadedFile(idx, name) {
+  const f = uploadedFiles[idx];
+  if (!f) return;
+  // textarea에서 해당 파일 텍스트 제거
+  const ta = document.getElementById('projectInput');
+  const marker = `[첨부: ${f.name}]`;
+  const mIdx = ta.value.indexOf(marker);
+  if (mIdx >= 0) {
+    // 마커부터 다음 마커 또는 끝까지 제거
+    const nextMarker = ta.value.indexOf('\n\n[첨부:', mIdx + marker.length);
+    const endIdx = nextMarker >= 0 ? nextMarker : ta.value.length;
+    ta.value = (ta.value.slice(0, mIdx) + ta.value.slice(endIdx)).trim();
+  }
+  uploadedFiles.splice(idx, 1);
+  const el = document.getElementById(`file_${idx}`);
+  if (el) el.remove();
+  showToast(`"${name}" 제거됨`);
+}
+
+async function extractTextFromFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const buf = await file.arrayBuffer();
+
+  switch (ext) {
+    case 'txt':
+    case 'md':
+    case 'csv':
+    case 'json':
+    case 'rtf':
+      return new TextDecoder('utf-8').decode(buf);
+
+    case 'pdf':
+      return await extractPdfText(buf);
+
+    case 'docx':
+    case 'doc':
+      return await extractDocxText(buf);
+
+    case 'xlsx':
+    case 'xls':
+      return extractXlsxText(buf);
+
+    case 'pptx':
+    case 'ppt':
+      return await extractPptxText(buf);
+
+    case 'hwp':
+    case 'hwpx':
+      // HWP는 브라우저에서 직접 파싱 어려움 — 안내
+      return '[HWP 파일은 자동 추출이 지원되지 않습니다. 한글에서 텍스트를 복사하여 직접 붙여넣어 주세요.]';
+
+    default:
+      // 일단 텍스트로 시도
+      try { return new TextDecoder('utf-8').decode(buf); } catch { return ''; }
+  }
+}
+
+async function extractPdfText(buf) {
+  if (!window.pdfjsLib) return '[PDF.js 미로드]';
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(item => item.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+async function extractDocxText(buf) {
+  if (!window.mammoth) return '[mammoth.js 미로드]';
+  const result = await mammoth.extractRawText({ arrayBuffer: buf });
+  return result.value;
+}
+
+function extractXlsxText(buf) {
+  if (!window.XLSX) return '[XLSX.js 미로드]';
+  const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+  let text = '';
+  wb.SheetNames.forEach(name => {
+    text += `[시트: ${name}]\n`;
+    const ws = wb.Sheets[name];
+    text += XLSX.utils.sheet_to_csv(ws) + '\n\n';
+  });
+  return text;
+}
+
+async function extractPptxText(buf) {
+  // PPTX = ZIP containing XML slides
+  // Simple approach: use JSZip-like approach via XLSX's zip reader
+  try {
+    if (!window.XLSX) return '[XLSX.js 미로드]';
+    const zip = XLSX.read(new Uint8Array(buf), { type: 'array', bookSheets: true });
+    // Fallback: 텍스트로 반환
+    return '[PPTX 파일의 텍스트 자동 추출은 제한적입니다. 주요 내용을 직접 붙여넣어 주세요.]';
+  } catch {
+    return '[PPTX 텍스트 추출 실패]';
+  }
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + 'B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
+}
+
+// ═══════════ PROMPTS (v4.4) ═══════════
 function buildPrompt(stepId){
   const inv=document.getElementById('projectInput').value,T=selectedTitle;
   switch(stepId){
