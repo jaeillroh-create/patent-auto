@@ -4,31 +4,54 @@
    ============================================================ */
 
 /* ============================================================
-   0. 부모 컨테이너 오버라이드 (최우선!)
+   0. 공통 컨테이너 전체 너비 오버라이드 (최우선!)
    ============================================================ */
-#patent-dashboard-panel {
+
+/* 앱 전체 컨테이너 */
+.app-container {
   max-width: 100% !important;
   width: 100% !important;
-  padding: 0 !important;
+  padding: 0 20px !important;
   margin: 0 !important;
 }
 
-#patent-dashboard-panel.service-panel {
+/* 서비스 패널 (특허/상표 공통) */
+.service-panel {
   max-width: 100% !important;
+  width: 100% !important;
+  padding: 20px !important;
+  margin: 0 !important;
 }
 
-/* 에디터 뷰 전체 너비 */
-.editor-wrapper,
-.editor-container,
-.editor-view {
+#patent-dashboard-panel,
+#trademark-dashboard-panel {
   max-width: 100% !important;
   width: 100% !important;
 }
 
-/* 각 페이지(탭 콘텐츠) 전체 너비 */
-.page {
+/* 에디터 뷰 전체 */
+#editorView,
+.editor-view,
+.editor-wrapper,
+.editor-container,
+.editor-content {
   max-width: 100% !important;
-  padding: 20px !important;
+  width: 100% !important;
+  padding: 0 !important;
+}
+
+/* 페이지/탭 콘텐츠 */
+.page,
+.tab-content,
+.content-area {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+/* 카드 컨테이너 */
+.card-container,
+.cards-grid {
+  max-width: 100% !important;
 }
 
 /* ============================================================
