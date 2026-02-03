@@ -333,6 +333,9 @@
       case 'tm-add-from-similar':
         TM.addGoodsFromSimilar(params.classCode, params.goodsName, params.similarGroup);
         break;
+      case 'tm-toggle-more-goods':
+        TM.toggleMoreGoods(params.classCode);
+        break;
         
       // 검색 관련
       case 'tm-search-text':
@@ -1136,35 +1139,67 @@
             ${p.aiAnalysis.recommendedClasses?.length > 0 ? `
               <div class="tm-recommended-section">
                 <h5>🎯 추천 상품류 및 지정상품</h5>
-                <div class="tm-recommendation-list">
+                <div class="tm-recommendation-cards">
                   ${p.aiAnalysis.recommendedClasses.map((code, idx) => {
                     const className = TM.niceClasses[code] || '';
                     const reason = p.aiAnalysis.classReasons?.[code] || '';
                     const goods = p.aiAnalysis.recommendedGoods?.[code] || [];
                     const isAlreadyAdded = p.designatedGoods.some(g => g.classCode === code);
+                    const visibleGoods = goods.slice(0, 5);
+                    const hiddenGoods = goods.slice(5);
+                    const rankLabels = ['1순위', '2순위', '3순위', '4순위', '5순위'];
                     return `
-                      <div class="tm-rec-item ${isAlreadyAdded ? 'added' : ''}">
-                        <div class="tm-rec-item-header">
-                          <span class="tm-rec-rank">${idx + 1}</span>
-                          <span class="tm-rec-class-code">제${code}류</span>
-                          <span class="tm-rec-class-name">${className}</span>
+                      <div class="tm-rec-card ${isAlreadyAdded ? 'added' : ''}" data-class-code="${code}">
+                        <div class="tm-rec-card-header">
+                          <div class="tm-rec-rank-badge ${idx < 3 ? 'top' : ''}">${rankLabels[idx] || (idx+1)+'순위'}</div>
+                          <div class="tm-rec-class-info">
+                            <span class="tm-rec-class-code">제${code}류</span>
+                            <span class="tm-rec-class-name">${className}</span>
+                          </div>
                           ${isAlreadyAdded ? `
-                            <span class="tm-added-badge">✓ 추가됨</span>
+                            <span class="tm-added-badge">✓ 적용됨</span>
                           ` : `
                             <button class="btn btn-sm btn-primary" 
                                     data-action="tm-apply-recommendation" data-class-code="${code}">
-                              추가
+                              적용
                             </button>
                           `}
                         </div>
-                        ${reason ? `<div class="tm-rec-reason">💡 ${TM.escapeHtml(reason)}</div>` : ''}
+                        ${reason ? `
+                          <div class="tm-rec-reason-box">
+                            <span class="tm-rec-reason-icon">💡</span>
+                            <span class="tm-rec-reason-text">${TM.escapeHtml(reason)}</span>
+                          </div>
+                        ` : ''}
                         ${goods.length > 0 ? `
-                          <div class="tm-rec-goods-list">
-                            ${goods.map(g => `
-                              <span class="tm-rec-goods-tag" title="유사군: ${g.similarGroup || ''}">
-                                ${g.name} <small>(${g.similarGroup || '-'})</small>
-                              </span>
-                            `).join('')}
+                          <div class="tm-rec-goods-section">
+                            <div class="tm-rec-goods-header">
+                              <span>추천 지정상품</span>
+                              <span class="tm-rec-goods-count">${goods.length}개</span>
+                            </div>
+                            <div class="tm-rec-goods-tags">
+                              ${visibleGoods.map(g => `
+                                <span class="tm-rec-goods-tag">
+                                  ${g.name}
+                                  <small class="tm-similar-code">${g.similarGroup || ''}</small>
+                                </span>
+                              `).join('')}
+                            </div>
+                            ${hiddenGoods.length > 0 ? `
+                              <div class="tm-rec-goods-hidden" id="tm-hidden-goods-${code}" style="display:none;">
+                                <div class="tm-rec-goods-tags">
+                                  ${hiddenGoods.map(g => `
+                                    <span class="tm-rec-goods-tag">
+                                      ${g.name}
+                                      <small class="tm-similar-code">${g.similarGroup || ''}</small>
+                                    </span>
+                                  `).join('')}
+                                </div>
+                              </div>
+                              <button class="tm-rec-more-btn" data-action="tm-toggle-more-goods" data-class-code="${code}">
+                                +${hiddenGoods.length}개 더보기
+                              </button>
+                            ` : ''}
                           </div>
                         ` : ''}
                       </div>
@@ -1545,6 +1580,23 @@
     TM.renderCurrentStep();
   };
   
+  // 더보기 토글
+  TM.toggleMoreGoods = function(classCode) {
+    const hiddenDiv = document.getElementById(`tm-hidden-goods-${classCode}`);
+    const btn = document.querySelector(`[data-action="tm-toggle-more-goods"][data-class-code="${classCode}"]`);
+    
+    if (!hiddenDiv || !btn) return;
+    
+    if (hiddenDiv.style.display === 'none') {
+      hiddenDiv.style.display = 'block';
+      btn.textContent = '접기';
+    } else {
+      hiddenDiv.style.display = 'none';
+      const count = hiddenDiv.querySelectorAll('.tm-rec-goods-tag').length;
+      btn.textContent = `+${count}개 더보기`;
+    }
+  };
+  
   // AI 추천 적용 함수
   TM.applyRecommendation = function(classCode) {
     if (!TM.currentProject) return;
@@ -1872,11 +1924,47 @@
   TM.renderStep3_PriorSearch = function(container) {
     const p = TM.currentProject;
     
+    // 선택된 유사군 코드 수집
+    const selectedSimilarGroups = new Set();
+    const selectedClasses = new Set();
+    p.designatedGoods?.forEach(classData => {
+      selectedClasses.add(classData.classCode);
+      classData.goods?.forEach(g => {
+        if (g.similarGroup) {
+          g.similarGroup.split(',').forEach(sg => selectedSimilarGroups.add(sg.trim()));
+        }
+      });
+    });
+    const similarGroupList = Array.from(selectedSimilarGroups).sort();
+    const classList = Array.from(selectedClasses).sort((a,b) => parseInt(a) - parseInt(b));
+    
     container.innerHTML = `
       <div class="tm-step-header">
         <h3>🔍 선행상표 검색</h3>
         <p>출원 전 유사 상표가 있는지 검색합니다.</p>
       </div>
+      
+      <!-- 선택된 지정상품 요약 -->
+      ${classList.length > 0 ? `
+        <div class="tm-selected-summary">
+          <div class="tm-summary-header">
+            <span class="tm-summary-title">📦 선택된 지정상품</span>
+            <span class="tm-summary-count">${classList.length}개 류, ${similarGroupList.length}개 유사군</span>
+          </div>
+          <div class="tm-summary-classes">
+            ${classList.map(c => `<span class="tm-class-badge">제${c}류</span>`).join('')}
+          </div>
+          <div class="tm-summary-similar-groups">
+            <span class="tm-similar-label">유사군:</span>
+            ${similarGroupList.slice(0, 10).map(sg => `<span class="tm-similar-badge">${sg}</span>`).join('')}
+            ${similarGroupList.length > 10 ? `<span class="tm-similar-more">+${similarGroupList.length - 10}개</span>` : ''}
+          </div>
+        </div>
+      ` : `
+        <div class="tm-warning-box">
+          ⚠️ 지정상품을 먼저 선택해주세요. 유사군 코드 기반 검색이 더 정확합니다.
+        </div>
+      `}
       
       <!-- 검색 컨트롤 -->
       <div class="tm-search-section">
@@ -1885,27 +1973,42 @@
             <button class="active" data-search-type="text" onclick="TM.setSearchType('text', this)">문자 검색</button>
             <button data-search-type="figure" onclick="TM.setSearchType('figure', this)">도형 검색</button>
           </div>
-          <button class="btn btn-primary" data-action="tm-search-text">
-            🔍 검색 실행
-          </button>
         </div>
         
         <!-- 문자 검색 옵션 -->
         <div class="tm-search-options" id="tm-search-options-text">
-          <div class="tm-form-grid">
-            <div class="input-group">
-              <label>검색어</label>
-              <input type="text" class="tm-input" id="tm-search-keyword" 
-                     value="${TM.escapeHtml(p.trademarkName)}" 
-                     placeholder="상표명 입력">
+          <div class="tm-search-form">
+            <div class="tm-search-row">
+              <div class="input-group" style="flex: 2;">
+                <label>상표명</label>
+                <input type="text" class="tm-input" id="tm-search-keyword" 
+                       value="${TM.escapeHtml(p.trademarkName)}" 
+                       placeholder="검색할 상표명 입력">
+              </div>
+              <div class="input-group" style="flex: 1;">
+                <label>상태 필터</label>
+                <select class="tm-input" id="tm-search-status">
+                  <option value="all">전체</option>
+                  <option value="registered" selected>등록/출원</option>
+                  <option value="registered_only">등록만</option>
+                </select>
+              </div>
             </div>
-            <div class="input-group">
-              <label>상태 필터</label>
-              <select class="tm-input" id="tm-search-status">
-                <option value="all">전체</option>
-                <option value="registered" selected>등록/출원</option>
-                <option value="registered_only">등록만</option>
-              </select>
+            ${classList.length > 0 ? `
+              <div class="tm-search-row">
+                <div class="input-group" style="flex: 1;">
+                  <label>검색 범위</label>
+                  <select class="tm-input" id="tm-search-scope">
+                    <option value="all">전체 상품류</option>
+                    <option value="selected" selected>선택한 류만 (${classList.map(c => '제'+c+'류').join(', ')})</option>
+                  </select>
+                </div>
+              </div>
+            ` : ''}
+            <div class="tm-search-actions">
+              <button class="btn btn-primary btn-lg" data-action="tm-search-text">
+                🔍 상표 검색
+              </button>
             </div>
           </div>
         </div>
@@ -1930,6 +2033,11 @@
               <label>비엔나 코드 직접 입력</label>
               <input type="text" class="tm-input" id="tm-vienna-code" 
                      placeholder="예: 03.01.01">
+            </div>
+            <div class="tm-search-actions">
+              <button class="btn btn-primary" data-action="tm-search-figure">
+                🔍 도형 검색
+              </button>
             </div>
           </div>
         </div>
@@ -3535,18 +3643,19 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       }
       
       // === 1단계: AI가 적합한 상품류 + 검색 키워드 분석 ===
-      const classPrompt = `상표 출원 전문가로서 다음 사업을 분석하세요.
+      const classPrompt = `상표 출원 전문 변리사로서 고객의 사업에 적합한 상품류를 친절하게 추천해주세요.
 
 상표명: ${p.trademarkName || '미정'}
 사업내용: ${businessInput || '미입력'}
 
-1. 사업 분석 (2-3문장)
-2. 가장 적합한 NICE 상품류 5개 (우선순위)
-3. 각 류별 추천 이유
-4. 각 류별 고시명칭 검색용 핵심 키워드 3-5개
+응답 형식:
+1. businessAnalysis: 고객의 사업을 분석한 내용 (2-3문장, 친절한 존댓말)
+2. recommendedClasses: 가장 적합한 NICE 상품류 5개 (우선순위순)
+3. classReasons: 각 류별 추천 이유 (친절한 존댓말로 "~에 적합합니다", "~를 보호할 수 있습니다" 형태)
+4. searchKeywords: 각 류별 고시명칭 검색 키워드 5개
 
 JSON으로만 응답:
-{"businessAnalysis":"분석내용","recommendedClasses":["45","42","35","09","41"],"classReasons":{"45":"이유"},"searchKeywords":{"45":["변리","특허","상표","출원","대리"],"42":["소프트웨어","컨설팅","기술"]}}`;
+{"businessAnalysis":"고객님의 사업은 ~에 해당합니다. ~서비스를 제공하시는 것으로 보입니다.","recommendedClasses":["45","42","35","09","41"],"classReasons":{"45":"변리사 서비스의 핵심인 특허·상표 출원대리업을 보호할 수 있습니다.","42":"소프트웨어 개발 및 기술 컨설팅 서비스를 보호하는 데 적합합니다."},"searchKeywords":{"45":["변리","특허","상표","출원","대리"],"42":["소프트웨어","컨설팅","기술","개발","설계"]}}`;
 
       const classResponse = await App.callClaude(classPrompt, 2000);
       

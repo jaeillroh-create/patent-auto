@@ -2374,3 +2374,275 @@ details.tm-accordion .tm-accordion-content {
 .tm-goods-count .warning {
   color: #f59e0b;
 }
+
+/* ============================================================
+   22. AI 추천 카드 UI 개선
+   ============================================================ */
+
+.tm-recommendation-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tm-rec-card {
+  background: #fff;
+  border: 1px solid #e5e8eb;
+  border-radius: 16px;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.tm-rec-card:hover {
+  border-color: #3182f6;
+  box-shadow: 0 4px 12px rgba(49, 130, 246, 0.12);
+}
+
+.tm-rec-card.added {
+  background: linear-gradient(to right, #f0fdf4, #fff);
+  border-color: #10b981;
+}
+
+.tm-rec-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: #f9fafb;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.tm-rec-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 6px 12px;
+  background: #e5e8eb;
+  color: #4e5968;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tm-rec-rank-badge.top {
+  background: linear-gradient(135deg, #3182f6, #1a73e8);
+  color: #fff;
+}
+
+.tm-rec-class-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.tm-rec-class-code {
+  font-size: 18px;
+  font-weight: 700;
+  color: #333d4b;
+}
+
+.tm-rec-class-name {
+  font-size: 14px;
+  color: #6b7684;
+}
+
+.tm-rec-reason-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.tm-rec-reason-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.tm-rec-reason-text {
+  font-size: 14px;
+  color: #4e5968;
+  line-height: 1.6;
+}
+
+.tm-rec-goods-section {
+  padding: 16px 20px;
+}
+
+.tm-rec-goods-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #6b7684;
+}
+
+.tm-rec-goods-count {
+  background: #e5e8eb;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.tm-rec-goods-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tm-rec-goods-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #f0f6ff;
+  border: 1px solid #d0e1ff;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #1a73e8;
+  transition: all 0.2s;
+}
+
+.tm-rec-goods-tag:hover {
+  background: #e0edff;
+}
+
+.tm-rec-goods-tag .tm-similar-code {
+  font-size: 11px;
+  color: #8b95a1;
+  padding: 2px 6px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 8px;
+}
+
+.tm-rec-more-btn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  background: #f1f5f9;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  color: #6b7684;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tm-rec-more-btn:hover {
+  background: #e5e8eb;
+  border-color: #9ca3af;
+}
+
+.tm-rec-goods-hidden {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #e5e8eb;
+}
+
+/* ============================================================
+   23. 선행상표 검색 UI 개선
+   ============================================================ */
+
+.tm-selected-summary {
+  background: linear-gradient(135deg, #f0f6ff, #f8fafc);
+  border: 1px solid #d0e1ff;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.tm-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tm-summary-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333d4b;
+}
+
+.tm-summary-count {
+  font-size: 13px;
+  color: #6b7684;
+}
+
+.tm-summary-classes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tm-class-badge {
+  padding: 4px 12px;
+  background: #3182f6;
+  color: #fff;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tm-summary-similar-groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.tm-similar-label {
+  font-size: 12px;
+  color: #6b7684;
+}
+
+.tm-similar-badge {
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #e5e8eb;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #4e5968;
+}
+
+.tm-similar-more {
+  font-size: 11px;
+  color: #8b95a1;
+}
+
+.tm-warning-box {
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  color: #92400e;
+}
+
+.tm-search-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tm-search-row {
+  display: flex;
+  gap: 12px;
+}
+
+.tm-search-actions {
+  margin-top: 8px;
+}
+
+.btn-lg {
+  padding: 14px 28px;
+  font-size: 15px;
+}
