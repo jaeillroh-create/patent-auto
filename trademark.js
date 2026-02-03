@@ -502,26 +502,22 @@
     
     return `
       <div class="tm-project-card" data-action="tm-open-project" data-id="${project.id}">
-        <div class="tm-project-card-header">
-          <div class="tm-project-title">${TM.escapeHtml(project.title)}</div>
-          <span class="tm-project-status ${project.status}">${statusLabels[project.status] || project.status}</span>
-        </div>
-        <div class="tm-project-meta">
-          ${typeLabels[project.trademark_type] || '문자'} 상표 · 수정일 ${updatedAt}
-        </div>
-        ${project.trademark_name ? `
-          <div class="tm-project-trademark">
-            <div class="tm-project-specimen">
-              <span style="font-size: 20px;">🏷️</span>
-            </div>
-            <div>
-              <div style="font-weight: 600;">${TM.escapeHtml(project.trademark_name)}</div>
-            </div>
+        <div class="tm-card-icon">🏷️</div>
+        <div class="tm-card-content">
+          <h4 class="tm-card-title">${TM.escapeHtml(project.trademark_name || project.title || '새 상표')}</h4>
+          <div class="tm-card-meta">
+            <span class="tm-card-type">${typeLabels[project.trademark_type] || '문자'} 상표</span>
+            <span class="tm-card-date">수정: ${updatedAt}</span>
           </div>
-        ` : ''}
-        <div style="margin-top: 12px; display: flex; gap: 8px;">
-          <button class="btn btn-sm btn-secondary" data-action="tm-open-project" data-id="${project.id}">열기</button>
-          <button class="btn btn-sm btn-ghost" data-action="tm-delete-project" data-id="${project.id}" onclick="event.stopPropagation()">삭제</button>
+          <span class="tm-card-status ${project.status}">${statusLabels[project.status] || '작성 중'}</span>
+        </div>
+        <div class="tm-card-actions">
+          <button class="btn btn-primary btn-sm" data-action="tm-open-project" data-id="${project.id}">
+            📂 열기
+          </button>
+          <button class="btn btn-ghost btn-sm" data-action="tm-delete-project" data-id="${project.id}" onclick="event.stopPropagation()">
+            🗑️ 삭제
+          </button>
         </div>
       </div>
     `;
@@ -689,15 +685,50 @@
     }
   };
   
-  TM.backToList = function() {
+  TM.backToList = async function() {
     if (TM.currentProject) {
-      if (!confirm('저장하지 않은 변경사항이 있을 수 있습니다. 목록으로 돌아가시겠습니까?')) {
-        return;
+      // 먼저 자동 저장 시도
+      try {
+        App.showToast('변경사항 저장 중...', 'info');
+        await TM.saveProject();
+        App.showToast('저장 완료! 목록으로 이동합니다.', 'success');
+      } catch (error) {
+        // 저장 실패 시 확인
+        if (!confirm('저장에 실패했습니다. 그래도 목록으로 돌아가시겠습니까?\n(변경사항이 손실될 수 있습니다)')) {
+          return;
+        }
       }
     }
     TM.currentProject = null;
     TM.renderDashboard();
   };
+  
+  // 주기적 자동저장 (30초)
+  TM.startAutoSave = function() {
+    if (TM.autoSaveTimer) clearInterval(TM.autoSaveTimer);
+    TM.autoSaveTimer = setInterval(async () => {
+      if (TM.currentProject && TM.hasUnsavedChanges) {
+        console.log('[TM] 자동 저장 중...');
+        try {
+          await TM.saveProject();
+          TM.hasUnsavedChanges = false;
+          console.log('[TM] 자동 저장 완료');
+        } catch (e) {
+          console.warn('[TM] 자동 저장 실패:', e);
+        }
+      }
+    }, 30000);
+  };
+  
+  TM.stopAutoSave = function() {
+    if (TM.autoSaveTimer) {
+      clearInterval(TM.autoSaveTimer);
+      TM.autoSaveTimer = null;
+    }
+  };
+  
+  // 변경 감지 플래그
+  TM.hasUnsavedChanges = false;
 
   // ============================================================
   // 7. 워크스페이스 렌더링 (좌측 사이드바 + 우측 메인)
@@ -713,17 +744,23 @@
         <aside class="tm-sidebar">
           <div class="tm-sidebar-header">
             <button class="tm-back-btn" data-action="tm-back-to-list">
-              <span>←</span> 목록
+              <span>←</span> 목록으로
             </button>
           </div>
           
           <div class="tm-sidebar-project">
             <div class="tm-project-icon">🏷️</div>
             <div class="tm-project-info">
-              <h3 id="tm-project-title">${TM.escapeHtml(TM.currentProject.trademarkName || TM.currentProject.title)}</h3>
+              <h3 id="tm-project-title">${TM.escapeHtml(TM.currentProject.trademarkName || TM.currentProject.title || '새 상표')}</h3>
               <span class="tm-status-badge ${TM.currentProject.status}">${TM.getStatusLabel(TM.currentProject.status)}</span>
             </div>
-            <button class="tm-save-btn" data-action="tm-save-project" title="저장">💾</button>
+          </div>
+          
+          <!-- 저장 버튼 별도 영역 -->
+          <div class="tm-sidebar-save">
+            <button class="tm-save-btn-large" data-action="tm-save-project">
+              💾 저장하기
+            </button>
           </div>
           
           <nav class="tm-step-nav">
@@ -749,19 +786,33 @@
         <main class="tm-main">
           <div class="tm-main-header">
             <h2>${TM.steps[TM.currentStep - 1]?.icon || ''} ${TM.steps[TM.currentStep - 1]?.name || ''}</h2>
+            <!-- 헤더에 네비게이션 버튼 추가 -->
+            <div class="tm-header-nav">
+              <button class="btn btn-sm btn-secondary" data-action="tm-prev-step" ${TM.currentStep === 1 ? 'disabled' : ''}>
+                ← 이전
+              </button>
+              <span class="tm-step-indicator">${TM.currentStep} / ${TM.steps.length}</span>
+              <button class="btn btn-sm btn-primary" data-action="tm-next-step" ${TM.currentStep === TM.steps.length ? 'disabled' : ''}>
+                다음 →
+              </button>
+            </div>
           </div>
           
           <div class="tm-main-content" id="tm-step-content">
             <!-- 스텝 컨텐츠 동적 렌더링 -->
           </div>
           
+          <!-- 하단 네비게이션 (스크롤 시에도 보임) -->
           <div class="tm-main-footer">
             <button class="btn btn-secondary" data-action="tm-prev-step" ${TM.currentStep === 1 ? 'disabled' : ''}>
-              ← 이전
+              ← 이전 단계
             </button>
-            <span class="tm-step-indicator">${TM.currentStep} / ${TM.steps.length}</span>
+            <div class="tm-footer-center">
+              <span class="tm-step-indicator">${TM.currentStep} / ${TM.steps.length}</span>
+              <button class="btn btn-sm btn-ghost" data-action="tm-save-project">💾 저장</button>
+            </div>
             <button class="btn btn-primary" data-action="tm-next-step" ${TM.currentStep === TM.steps.length ? 'disabled' : ''}>
-              다음 →
+              다음 단계 →
             </button>
           </div>
         </main>
@@ -959,6 +1010,9 @@
     }
     
     obj[parts[parts.length - 1]] = value;
+    
+    // 변경 플래그 설정
+    TM.hasUnsavedChanges = true;
   };
   
   TM.getField = function(field) {
@@ -1137,9 +1191,10 @@
             <div class="tm-panel">
               <div class="tm-panel-header">
                 <h3>🎯 추천 상품류</h3>
-                <button class="btn btn-sm btn-ghost" data-action="tm-apply-all-recommendations">전체 적용</button>
+                <button class="btn btn-sm btn-primary" data-action="tm-apply-all-recommendations">✓ 전체 적용</button>
               </div>
               <div class="tm-panel-body">
+                <p style="font-size: 13px; color: #6b7684; margin: 0 0 16px;">AI가 분석한 결과, 아래 상품류가 사업에 적합합니다. <strong>적용</strong> 버튼을 클릭하면 지정상품에 추가됩니다.</p>
                 <div class="tm-rec-list">
                   ${p.aiAnalysis.recommendedClasses.map((code, idx) => {
                     const className = TM.niceClasses[code] || '';
@@ -1153,14 +1208,17 @@
                         <div class="tm-rec-info">
                           <div class="tm-rec-class">제${code}류 <span>${className}</span></div>
                           ${reason ? `<div class="tm-rec-desc">${TM.escapeHtml(reason)}</div>` : ''}
-                          <div class="tm-rec-tags">
-                            ${goods.slice(0, 3).map(g => `<span>${g.name}</span>`).join('')}
-                            ${goods.length > 3 ? `<span class="more">+${goods.length - 3}</span>` : ''}
-                          </div>
+                          ${goods.length > 0 ? `
+                            <div class="tm-rec-goods-label">추천 지정상품:</div>
+                            <div class="tm-rec-tags">
+                              ${goods.slice(0, 4).map(g => `<span>${g.name || g}</span>`).join('')}
+                              ${goods.length > 4 ? `<span class="more">+${goods.length - 4}개 더</span>` : ''}
+                            </div>
+                          ` : ''}
                         </div>
                         <div class="tm-rec-btn">
                           ${isAdded ? `<span class="applied">✓</span>` : 
-                            `<button class="btn btn-xs btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">적용</button>`}
+                            `<button class="btn btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">+ 적용</button>`}
                         </div>
                       </div>
                     `;
@@ -2593,31 +2651,43 @@
     
     console.log('[KIPRIS] API 호출:', type, params);
     
-    // 동시성 제한 + 재시도 적용
-    return TM.throttledCall(() => TM.withRetry(async () => {
-      const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
-        body: { type, params }
-      });
-      
-      if (error) {
-        console.error('[KIPRIS] Edge Function 오류:', error);
-        throw error;
-      }
-      
-      if (!data.success) {
-        console.warn('[KIPRIS] API 오류:', data.error);
-        // API 오류 시 시뮬레이션 모드
+    try {
+      // App.sb (Supabase) 존재 여부 확인
+      if (!App.sb || !App.sb.functions) {
+        console.warn('[KIPRIS] Supabase 함수 없음, 시뮬레이션 모드');
         return TM.simulateSearchResults(type, params);
       }
       
-      const results = data.results || [];
-      
-      // 캐시 저장
-      TM.setToCache(cacheKey, results);
-      
-      console.log(`[KIPRIS] 검색 결과: ${results.length}건`);
-      return results;
-    }));
+      // 동시성 제한 + 재시도 적용
+      return await TM.throttledCall(() => TM.withRetry(async () => {
+        const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
+          body: { type, params }
+        });
+        
+        if (error) {
+          console.error('[KIPRIS] Edge Function 오류:', error);
+          throw error;
+        }
+        
+        if (!data || !data.success) {
+          console.warn('[KIPRIS] API 오류:', data?.error || 'Unknown error');
+          // API 오류 시 시뮬레이션 모드
+          return TM.simulateSearchResults(type, params);
+        }
+        
+        const results = data.results || [];
+        
+        // 캐시 저장
+        TM.setToCache(cacheKey, results);
+        
+        console.log(`[KIPRIS] 검색 결과: ${results.length}건`);
+        return results;
+      }));
+    } catch (error) {
+      console.error('[KIPRIS] API 호출 실패, 시뮬레이션 모드:', error);
+      // 모든 오류에서 시뮬레이션 결과 반환
+      return TM.simulateSearchResults(type, params);
+    }
   };
   
   // ====== 상세 조회 (Stage B) ======

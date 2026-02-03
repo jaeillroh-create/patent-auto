@@ -1543,3 +1543,932 @@
     max-width: 200px;
   }
 }
+
+/* ============================================================
+   25. UI 개선 - 추천 상품류, 대시보드, 저장버튼
+   ============================================================ */
+
+/* 저장 버튼 영역 */
+.tm-sidebar-save {
+  padding: 12px;
+  border-bottom: 1px solid var(--tm-gray-100);
+}
+
+.tm-save-btn-large {
+  width: 100%;
+  padding: 10px 16px;
+  background: var(--tm-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--tm-radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.tm-save-btn-large:hover {
+  background: var(--tm-primary-dark);
+}
+
+/* 헤더 네비게이션 */
+.tm-main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: #fff;
+  border-bottom: 1px solid var(--tm-gray-200);
+}
+
+.tm-header-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 푸터 중앙 영역 */
+.tm-footer-center {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 대시보드 프로젝트 카드 개선 */
+.tm-project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  padding: 20px;
+}
+
+.tm-project-card {
+  background: #fff;
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius);
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tm-project-card:hover {
+  border-color: var(--tm-primary);
+  box-shadow: var(--tm-shadow-lg);
+  transform: translateY(-2px);
+}
+
+.tm-project-card h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--tm-gray-800);
+  margin: 0 0 8px;
+}
+
+.tm-project-card-meta {
+  font-size: 13px;
+  color: var(--tm-gray-500);
+  margin-bottom: 16px;
+}
+
+.tm-project-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 추천 상품류 카드 개선 */
+.tm-rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tm-rec-item {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  background: var(--tm-gray-50);
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius);
+  transition: all 0.15s;
+}
+
+.tm-rec-item:hover {
+  border-color: var(--tm-primary);
+  background: #fff;
+}
+
+.tm-rec-item.added {
+  background: var(--tm-success-light);
+  border-color: var(--tm-success);
+}
+
+.tm-rec-num {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tm-primary);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tm-rec-item.added .tm-rec-num {
+  background: var(--tm-success);
+}
+
+.tm-rec-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tm-rec-class {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tm-gray-800);
+  margin-bottom: 6px;
+}
+
+.tm-rec-class span {
+  font-weight: 400;
+  color: var(--tm-gray-600);
+  font-size: 14px;
+}
+
+.tm-rec-desc {
+  font-size: 13px;
+  color: var(--tm-gray-600);
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.tm-rec-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tm-rec-tags span {
+  padding: 4px 10px;
+  background: #fff;
+  border: 1px solid var(--tm-gray-300);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--tm-gray-600);
+}
+
+.tm-rec-tags span.more {
+  background: var(--tm-gray-200);
+  border-color: var(--tm-gray-300);
+  color: var(--tm-gray-500);
+}
+
+.tm-rec-btn {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.tm-rec-btn .applied {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--tm-success);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 16px;
+}
+
+.btn-xs {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 분석 결과 패널 */
+.tm-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--tm-gray-100);
+}
+
+.tm-panel-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--tm-gray-800);
+  margin: 0;
+}
+
+.tm-panel-body {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.tm-summary {
+  color: var(--tm-gray-700);
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--tm-gray-50);
+  border-radius: var(--tm-radius-sm);
+}
+
+.tm-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tm-kw {
+  padding: 4px 12px;
+  background: var(--tm-primary-light);
+  color: var(--tm-primary);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* 지정상품 AI 추천 영역 개선 */
+.tm-ai-recommendation {
+  background: linear-gradient(135deg, var(--tm-primary-light), #f0f9ff);
+  border: 2px solid var(--tm-primary);
+  border-radius: var(--tm-radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.tm-ai-rec-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.tm-ai-rec-header h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--tm-gray-800);
+  margin: 0;
+}
+
+.tm-ai-rec-header .badge {
+  padding: 4px 10px;
+  background: var(--tm-primary);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tm-ai-rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tm-ai-rec-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #fff;
+  border-radius: var(--tm-radius-sm);
+}
+
+.tm-ai-rec-row.applied {
+  opacity: 0.6;
+}
+
+.tm-ai-rec-row .num {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tm-gray-200);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.tm-ai-rec-row .info {
+  flex: 1;
+  font-size: 14px;
+  color: var(--tm-gray-700);
+}
+
+.tm-ai-rec-row .info strong {
+  color: var(--tm-gray-800);
+}
+
+/* 빈 상태 개선 */
+.tm-panel-empty {
+  background: var(--tm-gray-50);
+  border: 2px dashed var(--tm-gray-300);
+}
+
+.tm-empty {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.tm-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.tm-empty h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--tm-gray-700);
+  margin: 0 0 8px;
+}
+
+.tm-empty p {
+  font-size: 14px;
+  color: var(--tm-gray-500);
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* 선택된 지정상품 개선 */
+.tm-selected-goods-panel {
+  background: #fff;
+  border: 2px solid var(--tm-success);
+  border-radius: var(--tm-radius);
+  padding: 20px;
+}
+
+.tm-selected-goods-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tm-selected-goods-header h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tm-gray-800);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tm-selected-count {
+  font-size: 13px;
+  color: var(--tm-success);
+  font-weight: 600;
+}
+
+.tm-selected-class-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--tm-success);
+  color: #fff;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  margin: 4px;
+}
+
+.tm-selected-class-tag .remove {
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.tm-selected-class-tag .remove:hover {
+  opacity: 1;
+}
+
+.tm-goods-search {
+  margin-bottom: 12px;
+}
+
+.tm-goods-search input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--tm-gray-300);
+  border-radius: var(--tm-radius-sm);
+  font-size: 14px;
+}
+
+.tm-selected-goods-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.tm-goods-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--tm-gray-100);
+  border: 1px solid var(--tm-gray-200);
+  border-radius: 16px;
+  font-size: 13px;
+  color: var(--tm-gray-700);
+}
+
+.tm-goods-chip .remove {
+  cursor: pointer;
+  color: var(--tm-gray-400);
+  font-size: 14px;
+}
+
+.tm-goods-chip .remove:hover {
+  color: var(--tm-danger);
+}
+
+/* ============================================================
+   26. 대시보드 프로젝트 카드 개선
+   ============================================================ */
+.trademark-dashboard {
+  padding: 24px;
+  max-width: 1200px;
+}
+
+.trademark-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--tm-gray-200);
+}
+
+.trademark-header h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.tm-project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 24px;
+}
+
+.tm-project-card {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid var(--tm-gray-200);
+  border-radius: 16px;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.tm-project-card:hover {
+  border-color: var(--tm-primary);
+  box-shadow: 0 8px 24px rgba(49, 130, 246, 0.15);
+  transform: translateY(-4px);
+}
+
+.tm-card-icon {
+  font-size: 40px;
+  margin-bottom: 16px;
+}
+
+.tm-card-content {
+  flex: 1;
+}
+
+.tm-card-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--tm-gray-800);
+  margin: 0 0 8px;
+}
+
+.tm-card-meta {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.tm-card-type {
+  font-size: 13px;
+  color: var(--tm-gray-600);
+  background: var(--tm-gray-100);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.tm-card-date {
+  font-size: 13px;
+  color: var(--tm-gray-500);
+}
+
+.tm-card-status {
+  display: inline-block;
+  padding: 4px 12px;
+  background: var(--tm-gray-100);
+  color: var(--tm-gray-600);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tm-card-status.draft {
+  background: var(--tm-warning-light);
+  color: #b45309;
+}
+
+.tm-card-status.completed {
+  background: var(--tm-success-light);
+  color: var(--tm-success);
+}
+
+.tm-card-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--tm-gray-100);
+}
+
+/* ============================================================
+   27. 추천 상품류 시인성 대폭 개선
+   ============================================================ */
+.tm-rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tm-rec-item {
+  display: flex;
+  gap: 16px;
+  padding: 20px;
+  background: #fff;
+  border: 2px solid var(--tm-gray-200);
+  border-radius: 16px;
+  transition: all 0.2s;
+}
+
+.tm-rec-item:hover {
+  border-color: var(--tm-primary);
+  background: var(--tm-primary-light);
+}
+
+.tm-rec-item.added {
+  background: var(--tm-success-light);
+  border-color: var(--tm-success);
+}
+
+.tm-rec-num {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tm-primary);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tm-rec-item.added .tm-rec-num {
+  background: var(--tm-success);
+}
+
+.tm-rec-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tm-rec-class {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--tm-primary-dark);
+  margin-bottom: 8px;
+}
+
+.tm-rec-class span {
+  font-weight: 500;
+  color: var(--tm-gray-700);
+  font-size: 15px;
+  margin-left: 6px;
+}
+
+.tm-rec-desc {
+  font-size: 14px;
+  color: var(--tm-gray-600);
+  line-height: 1.6;
+  margin-bottom: 12px;
+  padding: 10px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 8px;
+}
+
+.tm-rec-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tm-rec-tags span {
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid var(--tm-gray-300);
+  border-radius: 16px;
+  font-size: 13px;
+  color: var(--tm-gray-700);
+  font-weight: 500;
+}
+
+.tm-rec-tags span.more {
+  background: var(--tm-gray-100);
+  color: var(--tm-gray-500);
+}
+
+.tm-rec-btn {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.tm-rec-btn .applied {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--tm-success);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.tm-rec-btn .btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ============================================================
+   28. 지정상품 AI 추천 UI 개선
+   ============================================================ */
+.tm-ai-rec-section {
+  background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+  border: 2px solid var(--tm-primary);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.tm-ai-rec-section h4 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--tm-gray-800);
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tm-ai-rec-section h4 .badge {
+  padding: 4px 12px;
+  background: var(--tm-primary);
+  color: #fff;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tm-ai-rec-section > p {
+  font-size: 14px;
+  color: var(--tm-gray-600);
+  margin: 0 0 20px;
+}
+
+.tm-ai-rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tm-ai-rec-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--tm-gray-200);
+}
+
+.tm-ai-rec-row.applied {
+  opacity: 0.6;
+  background: var(--tm-gray-50);
+}
+
+.tm-ai-rec-row .num {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tm-primary);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tm-ai-rec-row .info {
+  flex: 1;
+}
+
+.tm-ai-rec-row .info strong {
+  font-size: 15px;
+  color: var(--tm-gray-800);
+}
+
+.tm-ai-rec-row .info span {
+  display: block;
+  font-size: 13px;
+  color: var(--tm-gray-500);
+  margin-top: 4px;
+}
+
+.tm-ai-rec-row .btn {
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   29. 분석 결과 패널 개선
+   ============================================================ */
+.tm-summary {
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--tm-gray-700);
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--tm-gray-50);
+  border-radius: 12px;
+  border-left: 4px solid var(--tm-primary);
+}
+
+.tm-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tm-kw {
+  padding: 6px 16px;
+  background: var(--tm-primary-light);
+  color: var(--tm-primary-dark);
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ============================================================
+   30. 선택된 지정상품 패널 개선
+   ============================================================ */
+.tm-selected-panel {
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  border: 2px solid var(--tm-success);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.tm-selected-panel h4 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--tm-gray-800);
+  margin: 0 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tm-selected-panel .count {
+  padding: 2px 10px;
+  background: var(--tm-success);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.tm-class-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.tm-class-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.tm-class-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tm-class-badge {
+  padding: 6px 14px;
+  background: var(--tm-success);
+  color: #fff;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tm-similar-group {
+  font-size: 12px;
+  color: var(--tm-gray-500);
+  background: #fff;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.tm-goods-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tm-goods-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #fff;
+  border: 1px solid var(--tm-gray-200);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--tm-gray-700);
+}
+
+.tm-goods-chip .remove {
+  cursor: pointer;
+  color: var(--tm-gray-400);
+  font-size: 16px;
+  margin-left: 4px;
+}
+
+.tm-goods-chip .remove:hover {
+  color: var(--tm-danger);
+}
+
+/* 추천 지정상품 라벨 */
+.tm-rec-goods-label {
+  font-size: 12px;
+  color: var(--tm-gray-500);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+/* 패널 헤더 개선 */
+.tm-panel-header h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--tm-gray-800);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tm-panel-body > p {
+  font-size: 13px;
+  color: var(--tm-gray-600);
+  margin: 0 0 16px;
+  line-height: 1.6;
+}
+
+.tm-panel-body > p strong {
+  color: var(--tm-primary);
+}
