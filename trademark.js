@@ -2007,7 +2007,7 @@
   "notes": "평가 근거 설명"
 }`;
 
-      const response = await App.callClaude(prompt, { maxTokens: 1000 });
+      const response = await App.callClaude(prompt, 1000);
       
       // JSON 파싱
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -2231,7 +2231,7 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
   "recommendation": "권고사항..."
 }`;
 
-      const response = await App.callClaude(prompt, { maxTokens: 1500 });
+      const response = await App.callClaude(prompt, 1500);
       
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -2711,7 +2711,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
 
 한국 특허청 형식에 맞게 공식적이고 설득력 있는 문체로 작성하세요.`;
 
-      const response = await App.callClaude(prompt, { maxTokens: 2000 });
+      const response = await App.callClaude(prompt, 2000);
       
       pe.generatedDocument = response;
       TM.renderCurrentStep();
@@ -3137,7 +3137,7 @@ NICE 분류 참고:
   }
 }`;
 
-      const response = await App.callClaude(prompt, { maxTokens: 1000 });
+      const response = await App.callClaude(prompt, 1000);
       
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -3235,7 +3235,7 @@ JSON 형식으로 응답하세요:
 }`;
       }
       
-      const response = await App.callClaude(prompt, { maxTokens: 800 });
+      const response = await App.callClaude(prompt, 800);
       
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -3288,7 +3288,7 @@ JSON 형식:
   ]
 }`;
 
-      const response = await App.callClaude(prompt, { maxTokens: 800 });
+      const response = await App.callClaude(prompt, 800);
       
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -3334,7 +3334,7 @@ JSON 형식:
 
 텍스트로만 응답하세요 (JSON 형식 불필요).`;
 
-      const response = await App.callClaude(prompt, { maxTokens: 300 });
+      const response = await App.callClaude(prompt, 300);
       return response.trim();
       
     } catch (error) {
@@ -3383,7 +3383,7 @@ ${goodsList}
 
 공식적이고 정확한 문체로 작성하세요.`;
 
-      const response = await App.callClaude(prompt, { maxTokens: 1500 });
+      const response = await App.callClaude(prompt, 1500);
       return response;
       
     } catch (error) {
@@ -3431,7 +3431,7 @@ ${p.designatedGoods?.map(c => `제${c.classCode}류: ${c.goods.length}개 상품
 
 전문적이고 명확한 문체로 작성하세요.`;
 
-      const response = await App.callClaude(prompt, { maxTokens: 2000 });
+      const response = await App.callClaude(prompt, 2000);
       
       p.aiAnalysis.fullReport = response;
       App.showToast('보고서가 생성되었습니다.', 'success');
