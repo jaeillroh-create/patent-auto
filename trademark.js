@@ -214,50 +214,32 @@
   };
 
   // ============================================================
-  // 3. 캐시 로드 (전처리된 데이터)
+  // 3. 캐시 초기화 (고시명칭은 DB에서 직접 검색)
   // ============================================================
   
   TM.loadCaches = async function() {
-    console.log('[TM] 캐시 로드 시작');
+    console.log('[TM] 캐시 초기화');
     
-    // Supabase에서 고시명칭 캐시 로드
+    // 고시명칭은 5만건이므로 클라이언트에 로드하지 않음
+    // 검색 시 DB에서 직접 쿼리
+    TM.cache.gazettedGoods = [];
+    
+    // DB 연결 확인 (건수만 체크)
     try {
-      const { data: gazettedData, error: gazettedError } = await App.sb
+      const { count, error } = await App.sb
         .from('gazetted_goods_cache')
-        .select('*')
-        .eq('version', 'NICE13')
-        .limit(10000);
+        .select('*', { count: 'exact', head: true });
       
-      if (gazettedError) {
-        console.warn('[TM] 고시명칭 캐시 로드 실패, 빈 캐시 사용:', gazettedError);
-        TM.cache.gazettedGoods = [];
+      if (error) {
+        console.warn('[TM] DB 연결 확인 실패:', error);
       } else {
-        TM.cache.gazettedGoods = gazettedData || [];
-        console.log(`[TM] 고시명칭 ${TM.cache.gazettedGoods.length}건 로드`);
+        console.log(`[TM] 고시명칭 DB 연결 확인: ${count?.toLocaleString()}건`);
       }
     } catch (e) {
-      console.warn('[TM] 고시명칭 캐시 로드 예외:', e);
-      TM.cache.gazettedGoods = [];
+      console.warn('[TM] DB 연결 확인 예외:', e);
     }
     
-    // KIPRIS API 스펙 캐시 로드
-    try {
-      const { data: apiData, error: apiError } = await App.sb
-        .from('kipris_api_cache')
-        .select('*');
-      
-      if (apiError) {
-        console.warn('[TM] KIPRIS API 캐시 로드 실패:', apiError);
-        TM.cache.kiprisApiSpec = null;
-      } else {
-        TM.cache.kiprisApiSpec = apiData || [];
-        console.log(`[TM] KIPRIS API 스펙 ${TM.cache.kiprisApiSpec.length}건 로드`);
-      }
-    } catch (e) {
-      console.warn('[TM] KIPRIS API 캐시 로드 예외:', e);
-      TM.cache.kiprisApiSpec = null;
-    }
-    
+    TM.cache.kiprisApiSpec = null;
     TM.cache.loadedAt = new Date().toISOString();
   };
 
@@ -1853,34 +1835,21 @@
         return;
       }
       
-      // 캐시에서 검색
+      // DB에서 직접 검색 (캐시 사용 안함)
       let results = [];
-      if (TM.cache.gazettedGoods && TM.cache.gazettedGoods.length > 0) {
-        results = TM.cache.gazettedGoods.filter(g => 
-          g.class_code === classCode && 
-          (g.goods_name.includes(query) || (g.goods_name_en && g.goods_name_en.toLowerCase().includes(query.toLowerCase())))
-        ).slice(0, 10);
-      }
-      
-      // Supabase에서 검색 (캐시에 없으면)
-      if (results.length === 0) {
-        try {
-          const { data, error } = await App.sb.rpc('search_gazetted_goods', {
-            p_query: query,
-            p_class_code: classCode,
-            p_limit: 10
-          });
-          
-          if (!error && data) {
-            results = data.map(d => ({
-              goods_name: d.goods_name,
-              goods_name_en: d.goods_name_en,
-              similar_group_code: d.similar_group_code
-            }));
-          }
-        } catch (e) {
-          console.warn('[TM] 지정상품 검색 실패:', e);
+      try {
+        const { data, error } = await App.sb
+          .from('gazetted_goods_cache')
+          .select('goods_name, goods_name_en, similar_group_code')
+          .eq('class_code', classCode)
+          .ilike('goods_name', `%${query}%`)
+          .limit(10);
+        
+        if (!error && data) {
+          results = data;
         }
+      } catch (e) {
+        console.warn('[TM] 지정상품 검색 실패:', e);
       }
       
       if (results.length === 0) {
