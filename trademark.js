@@ -1890,10 +1890,13 @@
     const similarGroupList = Array.from(selectedSimilarGroups).sort();
     const classList = Array.from(selectedClasses).sort((a,b) => parseInt(a) - parseInt(b));
     
+    // 검색 통계
+    const stats = p.searchResults.stats || {};
+    
     container.innerHTML = `
       <div class="tm-step-header">
         <h3>🔍 선행상표 검색</h3>
-        <p>출원 전 유사 상표가 있는지 검색합니다.</p>
+        <p>출원 전 유사 상표가 있는지 검색합니다. <strong>2-Stage AI 검색 엔진</strong>이 문자+도형을 병렬 분석합니다.</p>
       </div>
       
       <!-- 선택된 지정상품 요약 -->
@@ -1957,10 +1960,19 @@
                 </div>
               </div>
             ` : ''}
+            
             <div class="tm-search-actions">
               <button class="btn btn-primary btn-lg" data-action="tm-search-text">
                 🔍 상표 검색
               </button>
+            </div>
+            
+            <!-- 검색 진행 상태 -->
+            <div class="tm-search-progress" id="tm-search-progress" style="display: none;">
+              <div class="tm-progress-track">
+                <div class="tm-progress-fill" id="tm-search-progress-fill" style="width: 0%"></div>
+              </div>
+              <div class="tm-progress-text" id="tm-search-progress-text">준비 중...</div>
             </div>
           </div>
         </div>
@@ -2042,36 +2054,116 @@
       `;
     }
     
-    return allResults.map(r => `
-      <div class="tm-search-result-item" data-id="${r.applicationNumber}">
-        <div class="tm-result-image">
-          ${r.drawing ? `<img src="${r.drawing}" alt="상표 이미지">` : '<span>🏷️</span>'}
+    // 결과 요약 통계
+    const highRiskCount = allResults.filter(r => r.isHighRisk || r.riskLevel === 'high').length;
+    const mediumRiskCount = allResults.filter(r => r.riskLevel === 'medium').length;
+    
+    return `
+      <!-- 검색 결과 요약 -->
+      <div class="tm-search-summary">
+        <div class="tm-summary-stat">
+          <span class="tm-stat-num">${allResults.length}</span>
+          <span class="tm-stat-label">총 결과</span>
         </div>
+        ${highRiskCount > 0 ? `
+          <div class="tm-summary-stat risk-high">
+            <span class="tm-stat-num">${highRiskCount}</span>
+            <span class="tm-stat-label">⚠️ 고위험</span>
+          </div>
+        ` : ''}
+        ${mediumRiskCount > 0 ? `
+          <div class="tm-summary-stat risk-medium">
+            <span class="tm-stat-num">${mediumRiskCount}</span>
+            <span class="tm-stat-label">주의</span>
+          </div>
+        ` : ''}
+      </div>
+      
+      <!-- 결과 목록 -->
+      <div class="tm-results-list">
+        ${allResults.map((r, idx) => TM.renderSearchResultItem(r, idx + 1)).join('')}
+      </div>
+    `;
+  };
+  
+  // 개별 검색 결과 아이템 렌더링
+  TM.renderSearchResultItem = function(r, rank) {
+    const score = r.similarityScore || 0;
+    const riskLevel = r.riskLevel || (score >= 80 ? 'high' : score >= 50 ? 'medium' : 'low');
+    const riskClass = riskLevel === 'high' ? 'risk-high' : riskLevel === 'medium' ? 'risk-medium' : 'risk-low';
+    
+    return `
+      <div class="tm-search-result-item ${riskClass}" data-id="${r.applicationNumber}">
+        <!-- 순위 & 위험도 -->
+        <div class="tm-result-rank">
+          <span class="tm-rank-num">${rank}</span>
+          ${r.isHighRisk || riskLevel === 'high' ? '<span class="tm-risk-icon">⚠️</span>' : ''}
+        </div>
+        
+        <!-- 상표 이미지 -->
+        <div class="tm-result-image">
+          ${r.drawing || r.drawingUrl ? 
+            `<img src="${r.drawing || r.drawingUrl}" alt="상표 이미지" onerror="this.outerHTML='<span>🏷️</span>'">` : 
+            '<span>🏷️</span>'}
+        </div>
+        
+        <!-- 상표 정보 -->
         <div class="tm-result-info">
           <div class="tm-result-title">${TM.escapeHtml(r.title || r.trademarkName || '(명칭없음)')}</div>
           <div class="tm-result-meta">
-            출원번호: ${r.applicationNumber || '-'} · 
-            출원일: ${r.applicationDate || '-'} · 
-            ${r.applicantName || ''}
+            <span class="tm-meta-item">📋 ${r.applicationNumber || '-'}</span>
+            <span class="tm-meta-item">📅 ${r.applicationDate || '-'}</span>
+            ${r.applicantName ? `<span class="tm-meta-item">👤 ${TM.escapeHtml(r.applicantName)}</span>` : ''}
           </div>
-          <span class="tm-result-status ${TM.getStatusClass(r.applicationStatus)}">
-            ${r.applicationStatus || '-'}
-          </span>
-          ${r.classificationCode ? `
-            <div class="tm-result-classes">
-              지정상품류: ${r.classificationCode}
+          <div class="tm-result-tags">
+            <span class="tm-result-status ${TM.getStatusClass(r.applicationStatus)}">
+              ${r.applicationStatus || '-'}
+            </span>
+            ${r.classificationCode ? `
+              <span class="tm-result-class">제${r.classificationCode}류</span>
+            ` : ''}
+            ${r._isIntersection ? '<span class="tm-result-intersection">문자+도형</span>' : ''}
+          </div>
+        </div>
+        
+        <!-- 유사도 점수 -->
+        <div class="tm-result-score">
+          ${score > 0 ? `
+            <div class="tm-score-circle ${riskClass}">
+              <span class="tm-score-num">${score}</span>
+              <span class="tm-score-label">점</span>
             </div>
-          ` : ''}
+            <div class="tm-score-breakdown">
+              <div class="tm-score-bar" title="문자 ${r.scoreBreakdown?.text || 0}%">
+                <span class="tm-bar-label">문자</span>
+                <div class="tm-bar-track"><div class="tm-bar-fill" style="width: ${r.scoreBreakdown?.text || 0}%"></div></div>
+              </div>
+              <div class="tm-score-bar" title="도형 ${r.scoreBreakdown?.vienna || 0}%">
+                <span class="tm-bar-label">도형</span>
+                <div class="tm-bar-track"><div class="tm-bar-fill" style="width: ${r.scoreBreakdown?.vienna || 0}%"></div></div>
+              </div>
+              <div class="tm-score-bar" title="범위 ${r.scoreBreakdown?.scope || 0}%">
+                <span class="tm-bar-label">범위</span>
+                <div class="tm-bar-track"><div class="tm-bar-fill" style="width: ${r.scoreBreakdown?.scope || 0}%"></div></div>
+              </div>
+            </div>
+          ` : `
+            <button class="btn btn-sm btn-secondary" 
+                    data-action="tm-evaluate-similarity" 
+                    data-target-id="${r.applicationNumber}">
+              유사도 평가
+            </button>
+          `}
         </div>
-        <div class="tm-result-similarity">
-          <button class="btn btn-sm btn-secondary" 
-                  data-action="tm-evaluate-similarity" 
-                  data-target-id="${r.applicationNumber}">
-            유사도 평가
-          </button>
-        </div>
+        
+        <!-- 위험 사유 -->
+        ${r.riskReason ? `
+          <div class="tm-result-reason">
+            <span class="tm-reason-text">${TM.escapeHtml(r.riskReason)}</span>
+          </div>
+        ` : ''}
       </div>
-    `).join('');
+    `;
   };
   
   TM.getStatusClass = function(status) {
@@ -2089,22 +2181,63 @@
       return;
     }
     
-    const statusFilter = document.getElementById('tm-search-status')?.value || 'all';
+    const statusFilter = document.getElementById('tm-search-status')?.value || 'registered';
+    const searchScope = document.getElementById('tm-search-scope')?.value || 'all';
+    const p = TM.currentProject;
+    
+    // 선택된 상품류와 유사군 수집
+    const targetClasses = [];
+    const targetGroups = [];
+    p.designatedGoods?.forEach(classData => {
+      targetClasses.push(classData.classCode);
+      classData.goods?.forEach(g => {
+        if (g.similarGroup) {
+          g.similarGroup.split(',').forEach(sg => targetGroups.push(sg.trim()));
+        }
+      });
+    });
     
     try {
-      App.showToast('검색 중...', 'info');
+      // 검색 버튼 비활성화 & 로딩 표시
+      const searchBtn = document.querySelector('[data-action="tm-search-text"]');
+      if (searchBtn) {
+        searchBtn.disabled = true;
+        searchBtn.innerHTML = '🔄 검색 중...';
+      }
       
-      // KIPRIS API 호출 (또는 시뮬레이션)
-      const results = await TM.callKiprisSearch('text', {
-        trademarkName: keyword,
-        application: statusFilter !== 'registered_only',
-        registration: true,
-        refused: statusFilter === 'all',
-        numOfRows: 30
+      // 프로그레스 표시
+      const progressEl = document.getElementById('tm-search-progress');
+      if (progressEl) progressEl.style.display = 'block';
+      
+      App.showToast('선행상표 검색 중... (최대 30초 소요)', 'info');
+      
+      // 2-Stage 검색 엔진 호출
+      const results = await TM.searchPriorMarks({
+        trademark: keyword,
+        viennaCodes: p.aiAnalysis.viennaCodeSuggestion?.map(v => v.code) || [],
+        targetClasses: searchScope === 'selected' ? targetClasses : [],
+        targetGroups: targetGroups,
+        statusFilter: statusFilter,
+        topK: 30,
+        fetchDetails: true,
+        onProgress: (step, total, msg) => {
+          const pct = Math.round((step / total) * 100);
+          const fillEl = document.getElementById('tm-search-progress-fill');
+          const textEl = document.getElementById('tm-search-progress-text');
+          if (fillEl) fillEl.style.width = pct + '%';
+          if (textEl) textEl.textContent = msg || `${pct}%`;
+        }
       });
       
+      // 결과 저장
       TM.currentProject.searchResults.text = results;
       TM.currentProject.searchResults.searchedAt = new Date().toISOString();
+      TM.currentProject.searchResults.query = keyword;
+      TM.currentProject.searchResults.stats = {
+        total: results.length,
+        highRisk: results.filter(r => r.isHighRisk).length,
+        mediumRisk: results.filter(r => r.riskLevel === 'medium').length
+      };
       
       // UI 업데이트
       const resultsEl = document.getElementById('tm-search-results');
@@ -2112,11 +2245,28 @@
         resultsEl.innerHTML = TM.renderSearchResults(TM.currentProject.searchResults);
       }
       
-      App.showToast(`${results.length}건의 검색 결과가 있습니다.`, 'success');
+      // 고위험 경고
+      const highRiskCount = results.filter(r => r.isHighRisk).length;
+      if (highRiskCount > 0) {
+        App.showToast(`⚠️ ${highRiskCount}건의 고위험 유사상표 발견!`, 'warning');
+      } else {
+        App.showToast(`✅ ${results.length}건 검색 완료 (고위험 없음)`, 'success');
+      }
       
     } catch (error) {
       console.error('[TM] 검색 실패:', error);
       App.showToast('검색 실패: ' + error.message, 'error');
+    } finally {
+      // 버튼 복구
+      const searchBtn = document.querySelector('[data-action="tm-search-text"]');
+      if (searchBtn) {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = '🔍 상표 검색';
+      }
+      
+      // 프로그레스 숨기기
+      const progressEl = document.getElementById('tm-search-progress');
+      if (progressEl) progressEl.style.display = 'none';
     }
   };
   
@@ -2153,50 +2303,863 @@
     }
   };
   
-  // KIPRIS API 호출 (Supabase Edge Function 프록시 사용)
-  TM.callKiprisSearch = async function(type, params) {
-    console.log('[TM] KIPRIS 검색 요청:', type, params);
-    
-    try {
-      // Supabase Edge Function 호출 (JWT 인증 포함)
-      const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
-        body: { type, params },
-        headers: {
-          Authorization: `Bearer ${TM.supabaseAnonKey}`
+  // ============================================================
+  // KIPRIS 선행상표 검색 엔진 (2-Stage Retrieval + Re-rank)
+  // GPT 알고리즘 기반 최적화 구현
+  // ============================================================
+  
+  // 검색 캐시 (24시간 유지)
+  TM.searchCache = {
+    queries: new Map(), // query_hash -> results
+    details: new Map(), // applicationNumber -> detail
+    maxAge: 24 * 60 * 60 * 1000 // 24시간
+  };
+  
+  // 캐시 해시 생성
+  TM.getCacheKey = function(type, params) {
+    const normalized = JSON.stringify({ type, ...params });
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i++) {
+      hash = ((hash << 5) - hash) + normalized.charCodeAt(i);
+      hash |= 0;
+    }
+    return `${type}_${hash}`;
+  };
+  
+  // 캐시 조회
+  TM.getFromCache = function(key) {
+    const cached = TM.searchCache.queries.get(key);
+    if (cached && (Date.now() - cached.timestamp < TM.searchCache.maxAge)) {
+      console.log('[KIPRIS] 캐시 히트:', key);
+      return cached.data;
+    }
+    return null;
+  };
+  
+  // 캐시 저장
+  TM.setToCache = function(key, data) {
+    TM.searchCache.queries.set(key, { data, timestamp: Date.now() });
+  };
+  
+  // ====== 텍스트 정규화 함수들 ======
+  
+  // 한글 자모 분해
+  TM.decomposeHangul = function(char) {
+    const code = char.charCodeAt(0) - 0xAC00;
+    if (code < 0 || code > 11171) return [char];
+    const cho = Math.floor(code / 588);
+    const jung = Math.floor((code % 588) / 28);
+    const jong = code % 28;
+    const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+    const JUNG = ['ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ'];
+    const JONG = ['','ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+    return [CHO[cho], JUNG[jung], JONG[jong]].filter(x => x);
+  };
+  
+  // 초성 추출
+  TM.extractChosung = function(text) {
+    const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+    let result = '';
+    for (const char of text) {
+      const code = char.charCodeAt(0) - 0xAC00;
+      if (code >= 0 && code <= 11171) {
+        result += CHO[Math.floor(code / 588)];
+      } else {
+        result += char;
+      }
+    }
+    return result;
+  };
+  
+  // 텍스트 정규화 (공백/특수문자 제거, 소문자 변환)
+  TM.normalizeText = function(text) {
+    if (!text) return '';
+    return text
+      .toLowerCase()
+      .replace(/[\s\-_\.·,;:'"!@#$%^&*()+=\[\]{}|\\/<>?~`]/g, '')
+      .trim();
+  };
+  
+  // 레벤슈타인 편집 거리
+  TM.levenshteinDistance = function(a, b) {
+    if (!a || !b) return Math.max(a?.length || 0, b?.length || 0);
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b[i-1] === a[j-1]) {
+          matrix[i][j] = matrix[i-1][j-1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i-1][j-1] + 1,
+            matrix[i][j-1] + 1,
+            matrix[i-1][j] + 1
+          );
         }
-      });
+      }
+    }
+    return matrix[b.length][a.length];
+  };
+  
+  // 자카드 유사도 (토큰 기반)
+  TM.jaccardSimilarity = function(a, b) {
+    const setA = new Set(a.split(''));
+    const setB = new Set(b.split(''));
+    const intersection = new Set([...setA].filter(x => setB.has(x)));
+    const union = new Set([...setA, ...setB]);
+    return union.size > 0 ? intersection.size / union.size : 0;
+  };
+  
+  // ====== 문자 검색 쿼리 빌더 (최대 4회) ======
+  
+  TM.buildTextQueries = function(trademark, maxQueries = 4) {
+    if (!trademark) return [];
+    
+    const queries = [];
+    const added = new Set();
+    
+    // Q1: 원문
+    const q1 = trademark.trim();
+    if (q1 && !added.has(q1)) {
+      queries.push({ type: 'exact', query: q1 });
+      added.add(q1);
+    }
+    
+    // Q2: 정규화 (공백/특수문자 제거)
+    const q2 = TM.normalizeText(trademark);
+    if (q2 && !added.has(q2) && q2 !== q1) {
+      queries.push({ type: 'normalized', query: q2 });
+      added.add(q2);
+    }
+    
+    // Q3: 접두 확장 (2~3글자 + 와일드카드)
+    if (queries.length < maxQueries && q2.length >= 2) {
+      const prefix = q2.slice(0, Math.min(3, q2.length));
+      const q3 = prefix + '*';
+      if (!added.has(q3)) {
+        queries.push({ type: 'prefix', query: q3 });
+        added.add(q3);
+      }
+    }
+    
+    // Q4: 핵심 토큰 (복합 상표 대응)
+    if (queries.length < maxQueries) {
+      // 한글/영문 분리 추출
+      const korean = trademark.replace(/[^가-힣]/g, '');
+      const english = trademark.replace(/[^a-zA-Z]/g, '').toLowerCase();
       
-      if (error) {
-        console.error('[TM] Edge Function 오류:', error);
-        throw new Error('KIPRIS 프록시 호출 실패: ' + error.message);
+      if (korean.length >= 2 && !added.has(korean)) {
+        queries.push({ type: 'korean', query: korean });
+        added.add(korean);
+      } else if (english.length >= 2 && !added.has(english)) {
+        queries.push({ type: 'english', query: english });
+        added.add(english);
+      }
+    }
+    
+    console.log('[KIPRIS] 문자 쿼리 생성:', queries.length, '개');
+    return queries.slice(0, maxQueries);
+  };
+  
+  // ====== 비엔나 코드 쿼리 빌더 (계층 확장) ======
+  
+  TM.buildViennaQueries = function(viennaCodes, maxQueries = 6) {
+    if (!viennaCodes || viennaCodes.length === 0) return [];
+    
+    const queries = [];
+    const added = new Set();
+    
+    // 입력된 코드들을 배열로 정규화
+    const codes = Array.isArray(viennaCodes) ? viennaCodes : [viennaCodes];
+    
+    for (const code of codes) {
+      if (queries.length >= maxQueries) break;
+      
+      const cleanCode = code.toString().trim();
+      if (!cleanCode) continue;
+      
+      // 1. Exact (leaf) 코드 검색
+      if (!added.has(cleanCode)) {
+        queries.push({ type: 'exact', code: cleanCode });
+        added.add(cleanCode);
       }
       
-      if (!data.success) {
-        console.warn('[TM] KIPRIS API 오류:', data.error);
-        // API 오류 시 시뮬레이션 데이터 반환
-        console.log('[TM] 시뮬레이션 모드로 전환');
-        return TM.simulateSearchResults(type, params);
+      // 2. 상위 (prefix) 코드 확대
+      const parts = cleanCode.split('.');
+      if (parts.length >= 2 && queries.length < maxQueries) {
+        const parentCode = parts.slice(0, -1).join('.');
+        if (!added.has(parentCode)) {
+          queries.push({ type: 'parent', code: parentCode });
+          added.add(parentCode);
+        }
       }
       
-      console.log(`[TM] KIPRIS 검색 결과: ${data.results?.length || 0}건`);
-      return data.results || [];
+      // 3. 섹션 코드 (첫 번째 숫자만)
+      if (parts.length >= 1 && queries.length < maxQueries) {
+        const sectionCode = parts[0];
+        if (!added.has(sectionCode) && sectionCode !== cleanCode) {
+          queries.push({ type: 'section', code: sectionCode });
+          added.add(sectionCode);
+        }
+      }
+    }
+    
+    console.log('[KIPRIS] 비엔나 쿼리 생성:', queries.length, '개');
+    return queries.slice(0, maxQueries);
+  };
+  
+  // ====== 동시성 제어 & 백오프 ======
+  
+  TM.apiQueue = {
+    running: 0,
+    maxConcurrent: 3, // 동시 요청 3개 제한
+    queue: [],
+    retryDelays: [1000, 2000, 4000] // 지수 백오프
+  };
+  
+  // 동시성 제한된 API 호출
+  TM.throttledCall = async function(fn) {
+    return new Promise((resolve, reject) => {
+      const execute = async () => {
+        TM.apiQueue.running++;
+        try {
+          const result = await fn();
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        } finally {
+          TM.apiQueue.running--;
+          if (TM.apiQueue.queue.length > 0) {
+            const next = TM.apiQueue.queue.shift();
+            next();
+          }
+        }
+      };
       
-    } catch (error) {
-      console.error('[TM] KIPRIS 검색 실패:', error);
-      // 오류 시 시뮬레이션 데이터 반환
-      console.log('[TM] 시뮬레이션 모드로 전환');
-      return TM.simulateSearchResults(type, params);
+      if (TM.apiQueue.running < TM.apiQueue.maxConcurrent) {
+        execute();
+      } else {
+        TM.apiQueue.queue.push(execute);
+      }
+    });
+  };
+  
+  // 지수 백오프 재시도
+  TM.withRetry = async function(fn, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await fn();
+      } catch (error) {
+        if (i === maxRetries - 1) throw error;
+        const delay = TM.apiQueue.retryDelays[i] || 4000;
+        console.log(`[KIPRIS] 재시도 ${i + 1}/${maxRetries} (${delay}ms 후)`);
+        await new Promise(r => setTimeout(r, delay));
+      }
     }
   };
   
-  TM.parseKiprisResponse = function(data) {
-    // Edge Function에서 이미 파싱된 데이터 반환
-    return data.results || [];
+  // ====== 시간창 필터 (최근 연도 우선) ======
+  
+  TM.getYearFilter = function(yearsBack = 5) {
+    const now = new Date();
+    const startYear = now.getFullYear() - yearsBack;
+    return {
+      startDate: `${startYear}0101`,
+      endDate: `${now.getFullYear()}1231`
+    };
   };
   
+  // ====== KIPRIS API 호출 (단일) ======
+  
+  TM.callKiprisAPI = async function(type, params, options = {}) {
+    const { useRecent = false, recentYears = 5 } = options;
+    
+    // 시간창 필터 적용
+    if (useRecent) {
+      const yearFilter = TM.getYearFilter(recentYears);
+      params = { ...params, ...yearFilter };
+    }
+    
+    const cacheKey = TM.getCacheKey(type, params);
+    
+    // 캐시 확인
+    const cached = TM.getFromCache(cacheKey);
+    if (cached) return cached;
+    
+    console.log('[KIPRIS] API 호출:', type, params);
+    
+    // 동시성 제한 + 재시도 적용
+    return TM.throttledCall(() => TM.withRetry(async () => {
+      const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
+        body: { type, params }
+      });
+      
+      if (error) {
+        console.error('[KIPRIS] Edge Function 오류:', error);
+        throw error;
+      }
+      
+      if (!data.success) {
+        console.warn('[KIPRIS] API 오류:', data.error);
+        // API 오류 시 시뮬레이션 모드
+        return TM.simulateSearchResults(type, params);
+      }
+      
+      const results = data.results || [];
+      
+      // 캐시 저장
+      TM.setToCache(cacheKey, results);
+      
+      console.log(`[KIPRIS] 검색 결과: ${results.length}건`);
+      return results;
+    }));
+  };
+  
+  // ====== 상세 조회 (Stage B) ======
+  
+  TM.fetchDetailInfo = async function(applicationNumber) {
+    // 상세 캐시 확인
+    const cached = TM.searchCache.details.get(applicationNumber);
+    if (cached && (Date.now() - cached.timestamp < 7 * 24 * 60 * 60 * 1000)) {
+      return cached.data;
+    }
+    
+    try {
+      const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
+        body: { 
+          type: 'detail', 
+          params: { applicationNumber } 
+        }
+      });
+      
+      if (error || !data.success) {
+        console.warn('[KIPRIS] 상세 조회 실패:', applicationNumber);
+        return null;
+      }
+      
+      // 상세 캐시 저장 (7일)
+      TM.searchCache.details.set(applicationNumber, {
+        data: data.result,
+        timestamp: Date.now()
+      });
+      
+      return data.result;
+    } catch (error) {
+      console.error('[KIPRIS] 상세 조회 오류:', error);
+      return null;
+    }
+  };
+  
+  // Top-K 상세 조회 (병렬, 제한적)
+  TM.fetchDetailsForTopK = async function(results, topK = 30) {
+    const top = results.slice(0, topK);
+    console.log(`[KIPRIS] Top ${top.length}건 상세 조회 시작`);
+    
+    const details = await Promise.all(
+      top.map(r => TM.fetchDetailInfo(r.applicationNumber))
+    );
+    
+    // 상세 정보 병합
+    top.forEach((r, i) => {
+      if (details[i]) {
+        Object.assign(r, {
+          similarityGroup: details[i].similarityGroup,
+          designatedGoods: details[i].designatedGoods,
+          drawingUrl: details[i].drawingUrl,
+          applicantAddress: details[i].applicantAddress
+        });
+      }
+    });
+    
+    console.log(`[KIPRIS] 상세 조회 완료`);
+    return top;
+  };
+  
+  // ====== Stage A: 후보 회수 (Retrieval) ======
+  
+  TM.retrieveCandidates = async function(trademark, viennaCodes, targetClasses, options = {}) {
+    const { 
+      textBudget = 4, 
+      viennaBudget = 6, 
+      statusFilter = 'registered',
+      useRecentFirst = true,  // 최근 연도 우선 스캔
+      recentYears = 5
+    } = options;
+    
+    const textResults = [];
+    const viennaResults = [];
+    const SUFFICIENT_THRESHOLD = 50;
+    const VIENNA_THRESHOLD = 30;
+    
+    // 진행상황 콜백 (UI 업데이트용)
+    const onProgress = options.onProgress || (() => {});
+    let progressStep = 0;
+    const totalSteps = textBudget + viennaBudget;
+    
+    // ===== A1) 문자 검색 (적응형 확장) =====
+    if (trademark) {
+      const textQueries = TM.buildTextQueries(trademark, textBudget);
+      let totalTextHits = 0;
+      
+      // 1단계: 최근 연도 우선 스캔
+      if (useRecentFirst) {
+        for (let i = 0; i < Math.min(2, textQueries.length); i++) {
+          onProgress(++progressStep, totalSteps, `문자 검색 (최근 ${recentYears}년)...`);
+          
+          const q = textQueries[i];
+          const results = await TM.callKiprisAPI('text', {
+            searchString: q.query,
+            application: statusFilter !== 'registered_only',
+            registration: true,
+            refused: statusFilter === 'all',
+            numOfRows: 50
+          }, { useRecent: true, recentYears });
+          
+          totalTextHits += results.length;
+          textResults.push(...results);
+        }
+      }
+      
+      // 2단계: 부족하면 전체 연도 확장
+      if (totalTextHits < SUFFICIENT_THRESHOLD) {
+        console.log('[KIPRIS] 최근 결과 부족, 전체 연도 확장');
+        
+        for (let i = 0; i < textQueries.length; i++) {
+          if (totalTextHits >= SUFFICIENT_THRESHOLD * 2) {
+            console.log('[KIPRIS] 문자 검색 충분, 추가 쿼리 스킵');
+            break;
+          }
+          
+          onProgress(++progressStep, totalSteps, `문자 검색 Q${i + 1}...`);
+          
+          const q = textQueries[i];
+          const results = await TM.callKiprisAPI('text', {
+            searchString: q.query,
+            application: statusFilter !== 'registered_only',
+            registration: true,
+            refused: statusFilter === 'all',
+            numOfRows: 50
+          });
+          
+          // 중복 제거하며 추가
+          for (const r of results) {
+            if (!textResults.find(x => x.applicationNumber === r.applicationNumber)) {
+              textResults.push(r);
+              totalTextHits++;
+            }
+          }
+        }
+      }
+      
+      console.log(`[KIPRIS] 문자 검색 완료: ${textResults.length}건`);
+    }
+    
+    // ===== A2) 비엔나 검색 (계층형 확장) =====
+    if (viennaCodes && viennaCodes.length > 0) {
+      const viennaQueries = TM.buildViennaQueries(viennaCodes, viennaBudget);
+      let exactHits = 0;
+      let totalViennaHits = 0;
+      
+      for (let i = 0; i < viennaQueries.length; i++) {
+        const q = viennaQueries[i];
+        
+        // exact 결과가 충분하면 parent/section 스킵
+        if (q.type !== 'exact' && exactHits >= VIENNA_THRESHOLD) {
+          console.log('[KIPRIS] 비엔나 exact 충분, 계층 확장 스킵');
+          break;
+        }
+        
+        onProgress(++progressStep, totalSteps, `도형 검색 (${q.code})...`);
+        
+        const results = await TM.callKiprisAPI('figure', {
+          viennaCode: q.code,
+          application: statusFilter !== 'registered_only',
+          registration: true,
+          numOfRows: 30
+        });
+        
+        // 중복 제거하며 추가
+        for (const r of results) {
+          if (!viennaResults.find(x => x.applicationNumber === r.applicationNumber)) {
+            viennaResults.push(r);
+            totalViennaHits++;
+            if (q.type === 'exact') exactHits++;
+          }
+        }
+      }
+      
+      console.log(`[KIPRIS] 비엔나 검색 완료: ${viennaResults.length}건`);
+    }
+    
+    // ===== A3) 합치기 & 교집합 태깅 =====
+    const deduped = new Map();
+    const textSet = new Set(textResults.map(r => r.applicationNumber));
+    const viennaSet = new Set(viennaResults.map(r => r.applicationNumber));
+    
+    // 모든 결과 합치기
+    for (const r of [...textResults, ...viennaResults]) {
+      const key = r.applicationNumber;
+      if (!deduped.has(key)) {
+        deduped.set(key, {
+          ...r,
+          _sources: [],
+          _isIntersection: false
+        });
+      }
+    }
+    
+    // 출처 태깅
+    for (const [key, r] of deduped) {
+      if (textSet.has(key)) r._sources.push('text');
+      if (viennaSet.has(key)) r._sources.push('vienna');
+      r._isIntersection = r._sources.includes('text') && r._sources.includes('vienna');
+    }
+    
+    // 교집합 통계
+    const intersectionCount = Array.from(deduped.values()).filter(r => r._isIntersection).length;
+    console.log(`[KIPRIS] Stage A 완료: ${deduped.size}건 (교집합: ${intersectionCount}건)`);
+    
+    onProgress(totalSteps, totalSteps, '검색 완료');
+    
+    return Array.from(deduped.values());
+  };
+  
+  // ====== 유사도 스코어링 ======
+  
+  TM.calculateTextSimilarity = function(source, target) {
+    if (!source || !target) return 0;
+    
+    const normSource = TM.normalizeText(source);
+    const normTarget = TM.normalizeText(target);
+    
+    // 완전 일치
+    if (normSource === normTarget) return 1.0;
+    
+    // 편집 거리 기반
+    const maxLen = Math.max(normSource.length, normTarget.length);
+    const editDist = TM.levenshteinDistance(normSource, normTarget);
+    const editScore = maxLen > 0 ? 1 - (editDist / maxLen) : 0;
+    
+    // 자카드 유사도
+    const jaccardScore = TM.jaccardSimilarity(normSource, normTarget);
+    
+    // 접두/접미 일치
+    let prefixScore = 0;
+    for (let i = 1; i <= Math.min(normSource.length, normTarget.length); i++) {
+      if (normSource.slice(0, i) === normTarget.slice(0, i)) prefixScore = i / maxLen;
+    }
+    
+    // 초성 유사도 (한글)
+    let chosungScore = 0;
+    const srcChosung = TM.extractChosung(source);
+    const tgtChosung = TM.extractChosung(target);
+    if (srcChosung && tgtChosung) {
+      chosungScore = TM.jaccardSimilarity(srcChosung, tgtChosung);
+    }
+    
+    // 가중 평균
+    return (editScore * 0.4) + (jaccardScore * 0.25) + (prefixScore * 0.2) + (chosungScore * 0.15);
+  };
+  
+  TM.calculateViennaSimilarity = function(sourceCodes, targetCode) {
+    if (!sourceCodes || !targetCode) return 0;
+    
+    const sources = Array.isArray(sourceCodes) ? sourceCodes : [sourceCodes];
+    let maxScore = 0;
+    
+    for (const src of sources) {
+      const srcParts = src.toString().split('.');
+      const tgtParts = targetCode.toString().split('.');
+      
+      // Exact 일치
+      if (src === targetCode) {
+        maxScore = Math.max(maxScore, 1.0);
+        continue;
+      }
+      
+      // Prefix 일치 (상위 코드)
+      let matchDepth = 0;
+      for (let i = 0; i < Math.min(srcParts.length, tgtParts.length); i++) {
+        if (srcParts[i] === tgtParts[i]) matchDepth++;
+        else break;
+      }
+      
+      if (matchDepth > 0) {
+        const score = matchDepth / Math.max(srcParts.length, tgtParts.length);
+        maxScore = Math.max(maxScore, score * 0.8); // prefix는 80% 가중
+      }
+      
+      // 같은 섹션 (첫 번째 숫자만 일치)
+      if (srcParts[0] === tgtParts[0]) {
+        maxScore = Math.max(maxScore, 0.3);
+      }
+    }
+    
+    return maxScore;
+  };
+  
+  TM.calculateScopeSimilarity = function(targetClasses, targetGroups, resultClasses, resultGroups) {
+    let classScore = 0;
+    let groupScore = 0;
+    
+    // 니스류 교집합
+    if (targetClasses && resultClasses) {
+      const tgtSet = new Set(targetClasses.map(c => c.toString()));
+      const resClasses = resultClasses.toString().split(/[,\s]+/).map(c => c.trim());
+      const intersection = resClasses.filter(c => tgtSet.has(c));
+      classScore = intersection.length > 0 ? Math.min(intersection.length / tgtSet.size, 1) : 0;
+    }
+    
+    // 유사군 코드 교집합 (있으면 최대 가산)
+    if (targetGroups && targetGroups.length > 0 && resultGroups) {
+      const tgtSet = new Set(targetGroups);
+      const resGroups = Array.isArray(resultGroups) ? resultGroups : resultGroups.toString().split(/[,\s]+/);
+      const intersection = resGroups.filter(g => tgtSet.has(g.trim()));
+      groupScore = intersection.length > 0 ? Math.min(intersection.length / tgtSet.size, 1) : 0;
+    }
+    
+    // 유사군이 있으면 가중치 높임
+    return targetGroups && targetGroups.length > 0 
+      ? (classScore * 0.3) + (groupScore * 0.7)
+      : classScore;
+  };
+  
+  TM.calculateStatusScore = function(status) {
+    if (!status) return 0.5;
+    if (status.includes('등록')) return 1.0;
+    if (status.includes('출원')) return 0.8;
+    if (status.includes('공고')) return 0.7;
+    if (status.includes('거절') || status.includes('취하') || status.includes('소멸')) return 0.2;
+    return 0.5;
+  };
+  
+  // ====== Stage B: 상세 검증 & Re-rank ======
+  
+  TM.rankAndFilter = function(candidates, sourceText, viennaCodes, targetClasses, targetGroups, topK = 200) {
+    // 점수 계산
+    for (const r of candidates) {
+      // S_text (문자 유사도): 0.38
+      r._scoreText = TM.calculateTextSimilarity(sourceText, r.title || r.trademarkName);
+      
+      // S_logo (도형 유사도): 0.32
+      r._scoreVienna = viennaCodes && r.viennaCode 
+        ? TM.calculateViennaSimilarity(viennaCodes, r.viennaCode) 
+        : 0;
+      
+      // S_scope (범위 유사도): 0.25
+      r._scoreScope = TM.calculateScopeSimilarity(
+        targetClasses, targetGroups, 
+        r.classificationCode, r.similarityGroup
+      );
+      
+      // S_status (상태): 0.05
+      r._scoreStatus = TM.calculateStatusScore(r.applicationStatus);
+      
+      // 최종 점수
+      r._totalScore = (r._scoreText * 0.38) + 
+                      (r._scoreVienna * 0.32) + 
+                      (r._scoreScope * 0.25) + 
+                      (r._scoreStatus * 0.05);
+      
+      // 교집합 후보 부스트
+      if (r._isIntersection) {
+        r._totalScore *= 1.2;
+      }
+    }
+    
+    // 정렬 및 상위 K개 반환
+    candidates.sort((a, b) => b._totalScore - a._totalScore);
+    
+    console.log(`[KIPRIS] 랭킹 완료: Top ${Math.min(topK, candidates.length)}건 반환`);
+    
+    return candidates.slice(0, topK);
+  };
+  
+  // ====== 메인 검색 함수 (통합 2-Stage) ======
+  
+  TM.searchPriorMarks = async function(options = {}) {
+    const {
+      trademark,
+      viennaCodes = [],
+      targetClasses = [],
+      targetGroups = [],
+      statusFilter = 'registered',
+      topK = 30,
+      fetchDetails = true,  // Stage B 상세 조회 여부
+      onProgress = null     // 진행상황 콜백
+    } = options;
+    
+    console.log('[KIPRIS] ═══════════════════════════════════════');
+    console.log('[KIPRIS] 선행상표 검색 시작');
+    console.log('[KIPRIS] 입력:', { trademark, viennaCodes, targetClasses: targetClasses.length, targetGroups: targetGroups.length });
+    console.log('[KIPRIS] ═══════════════════════════════════════');
+    
+    try {
+      // ===== Stage A: 후보 회수 =====
+      const candidates = await TM.retrieveCandidates(
+        trademark, viennaCodes, targetClasses,
+        { 
+          statusFilter,
+          onProgress: onProgress ? (step, total, msg) => onProgress(step, total + 2, msg) : null
+        }
+      );
+      
+      if (candidates.length === 0) {
+        console.log('[KIPRIS] 검색 결과 없음');
+        return [];
+      }
+      
+      // ===== Stage B-1: 1차 랭킹 (K0 = 200) =====
+      onProgress?.(8, 10, '유사도 계산 중...');
+      
+      const ranked = TM.rankAndFilter(
+        candidates, trademark, viennaCodes, 
+        targetClasses, targetGroups,
+        200 // K0
+      );
+      
+      // 교집합 후보 우선 정렬
+      ranked.sort((a, b) => {
+        // 교집합 최우선
+        if (a._isIntersection && !b._isIntersection) return -1;
+        if (!a._isIntersection && b._isIntersection) return 1;
+        // 그 다음 점수순
+        return b._totalScore - a._totalScore;
+      });
+      
+      // ===== Stage B-2: 상세 조회 (K1 = 30) =====
+      let detailedResults = ranked.slice(0, topK);
+      
+      if (fetchDetails && detailedResults.length > 0) {
+        onProgress?.(9, 10, '상세 정보 조회 중...');
+        detailedResults = await TM.fetchDetailsForTopK(detailedResults, topK);
+        
+        // 상세 정보로 재계산 (유사군 코드가 추가됨)
+        for (const r of detailedResults) {
+          if (r.similarityGroup) {
+            r._scoreScope = TM.calculateScopeSimilarity(
+              targetClasses, targetGroups,
+              r.classificationCode, r.similarityGroup
+            );
+            r._totalScore = (r._scoreText * 0.38) + 
+                            (r._scoreVienna * 0.32) + 
+                            (r._scoreScope * 0.25) + 
+                            (r._scoreStatus * 0.05);
+            if (r._isIntersection) r._totalScore *= 1.2;
+          }
+        }
+        
+        // 최종 재정렬
+        detailedResults.sort((a, b) => b._totalScore - a._totalScore);
+      }
+      
+      // ===== 최종 결과 포맷팅 =====
+      onProgress?.(10, 10, '완료');
+      
+      const results = detailedResults.map((r, idx) => ({
+        ...r,
+        rank: idx + 1,
+        similarityScore: Math.round(r._totalScore * 100),
+        scoreBreakdown: {
+          text: Math.round((r._scoreText || 0) * 100),
+          vienna: Math.round((r._scoreVienna || 0) * 100),
+          scope: Math.round((r._scoreScope || 0) * 100),
+          status: Math.round((r._scoreStatus || 0) * 100)
+        },
+        isHighRisk: r._isIntersection || r._totalScore >= 0.7,
+        riskLevel: r._totalScore >= 0.8 ? 'high' : 
+                   r._totalScore >= 0.5 ? 'medium' : 'low',
+        riskReason: TM.generateRiskReason(r, trademark, targetClasses)
+      }));
+      
+      console.log('[KIPRIS] ═══════════════════════════════════════');
+      console.log(`[KIPRIS] 최종 결과: ${results.length}건`);
+      console.log('[KIPRIS] 고위험:', results.filter(r => r.isHighRisk).length, '건');
+      console.log('[KIPRIS] ═══════════════════════════════════════');
+      
+      return results;
+      
+    } catch (error) {
+      console.error('[KIPRIS] 검색 실패:', error);
+      throw error;
+    }
+  };
+  
+  // 위험 사유 생성 (LLM 없이 규칙 기반)
+  TM.generateRiskReason = function(result, sourceMark, targetClasses) {
+    const reasons = [];
+    
+    // 교집합 (문자+도형 모두 유사)
+    if (result._isIntersection) {
+      reasons.push('문자와 도형이 모두 유사');
+    }
+    
+    // 문자 유사도
+    if (result._scoreText >= 0.8) {
+      reasons.push('상표명 매우 유사');
+    } else if (result._scoreText >= 0.6) {
+      reasons.push('상표명 유사');
+    }
+    
+    // 범위 유사도
+    if (result._scoreScope >= 0.7) {
+      reasons.push('지정상품 범위 중복');
+    }
+    
+    // 상태
+    if (result.applicationStatus?.includes('등록')) {
+      reasons.push('등록상표');
+    }
+    
+    if (reasons.length === 0) {
+      return result.riskLevel === 'low' ? '유사도 낮음' : '주의 필요';
+    }
+    
+    return reasons.join(', ');
+      return results;
+      
+    } catch (error) {
+      console.error('[KIPRIS] 검색 실패:', error);
+      throw error;
+    }
+  };
+  
+  // ====== 레거시 호환 함수 ======
+  
+  TM.callKiprisSearch = async function(type, params) {
+    console.log('[KIPRIS] 레거시 호출:', type, params);
+    
+    if (type === 'text') {
+      const results = await TM.searchPriorMarks({
+        trademark: params.trademarkName || params.searchString,
+        targetClasses: params.classificationCode ? [params.classificationCode] : [],
+        statusFilter: params.registration ? 'registered' : 'all',
+        topK: params.numOfRows || 30
+      });
+      return results;
+    }
+    
+    if (type === 'figure') {
+      const results = await TM.searchPriorMarks({
+        viennaCodes: [params.viennaCode],
+        statusFilter: params.registration ? 'registered' : 'all',
+        topK: params.numOfRows || 30
+      });
+      return results;
+    }
+    
+    // 폴백: 직접 API 호출
+    return TM.callKiprisAPI(type, params);
+  };
+  
+  // 시뮬레이션 데이터 (API 실패 시)
   TM.simulateSearchResults = function(type, params) {
-    // 시뮬레이션 데이터
-    const keyword = params.trademarkName || params.viennaCode || '';
+    const keyword = params.trademarkName || params.viennaCode || '테스트';
     
     return [
       {
@@ -2206,8 +3169,11 @@
         title: keyword + ' (유사상표1)',
         applicationStatus: '등록',
         classificationCode: '09, 42',
+        viennaCode: '26.04.01',
         applicantName: '테스트회사',
-        drawing: null
+        drawing: null,
+        similarityScore: 85,
+        isHighRisk: true
       },
       {
         applicationNumber: '40-2024-0005678',
@@ -2215,8 +3181,11 @@
         title: keyword + 'Plus',
         applicationStatus: '출원',
         classificationCode: '09',
+        viennaCode: '26.04.02',
         applicantName: '예시기업',
-        drawing: null
+        drawing: null,
+        similarityScore: 72,
+        isHighRisk: false
       },
       {
         applicationNumber: '40-2023-0098765',
@@ -2225,8 +3194,11 @@
         title: '슈퍼' + keyword,
         applicationStatus: '등록',
         classificationCode: '35, 42',
+        viennaCode: '26.04.01',
         applicantName: '(주)마케팅',
-        drawing: null
+        drawing: null,
+        similarityScore: 65,
+        isHighRisk: false
       }
     ];
   };
