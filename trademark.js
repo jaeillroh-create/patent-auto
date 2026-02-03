@@ -1942,47 +1942,42 @@
     }
   };
   
-  // KIPRIS API 호출 (CORS 문제로 프론트엔드에서는 시뮬레이션 모드 사용)
+  // KIPRIS API 호출 (Supabase Edge Function 프록시 사용)
   TM.callKiprisSearch = async function(type, params) {
-    // ⚠️ CORS 정책: 브라우저에서 KIPRIS API 직접 호출 불가
-    // GitHub Pages → KIPRIS API 요청은 CORS에 의해 차단됨
-    // 해결책: Supabase Edge Function 프록시 (추후 구현) 또는 시뮬레이션 모드
+    console.log('[TM] KIPRIS 검색 요청:', type, params);
     
-    console.log('[TM] KIPRIS 시뮬레이션 모드 (CORS 우회)');
-    console.log('[TM] 검색 파라미터:', params);
-    
-    // 시뮬레이션 데이터 반환 (실제 API 대신)
-    return TM.simulateSearchResults(type, params);
-    
-    /* 
-    // 향후 Supabase Edge Function 프록시 사용 시:
-    // const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
-    //   body: { type, params }
-    // });
-    // if (error) throw error;
-    // return data;
-    */
+    try {
+      // Supabase Edge Function 호출
+      const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
+        body: { type, params }
+      });
+      
+      if (error) {
+        console.error('[TM] Edge Function 오류:', error);
+        throw new Error('KIPRIS 프록시 호출 실패: ' + error.message);
+      }
+      
+      if (!data.success) {
+        console.warn('[TM] KIPRIS API 오류:', data.error);
+        // API 오류 시 시뮬레이션 데이터 반환
+        console.log('[TM] 시뮬레이션 모드로 전환');
+        return TM.simulateSearchResults(type, params);
+      }
+      
+      console.log(`[TM] KIPRIS 검색 결과: ${data.results?.length || 0}건`);
+      return data.results || [];
+      
+    } catch (error) {
+      console.error('[TM] KIPRIS 검색 실패:', error);
+      // 오류 시 시뮬레이션 데이터 반환
+      console.log('[TM] 시뮬레이션 모드로 전환');
+      return TM.simulateSearchResults(type, params);
+    }
   };
   
   TM.parseKiprisResponse = function(data) {
-    // KIPRIS 응답 파싱 (Edge Function 사용 시 필요)
-    const items = data?.response?.body?.items?.item || [];
-    if (!Array.isArray(items)) {
-      return items ? [items] : [];
-    }
-    
-    return items.map(item => ({
-      applicationNumber: item.ApplicationNumber,
-      applicationDate: item.ApplicationDate,
-      registrationNumber: item.RegistrationNumber,
-      title: item.Title,
-      trademarkName: item.Title,
-      applicationStatus: item.ApplicationStatus,
-      classificationCode: item.ClassificationCode,
-      viennaCode: item.ViennaCode,
-      applicantName: item.ApplicantName,
-      drawing: item.Drawing || item.BigDrawing
-    }));
+    // Edge Function에서 이미 파싱된 데이터 반환
+    return data.results || [];
   };
   
   TM.simulateSearchResults = function(type, params) {
