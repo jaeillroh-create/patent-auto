@@ -1,0 +1,941 @@
+/* ============================================================
+   상표출원 우선심사 자동화 시스템 - 전용 스타일
+   Version: 2.1
+   ============================================================ */
+
+/* ============================================================
+   1. 상표 대시보드
+   ============================================================ */
+.trademark-dashboard {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.trademark-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.trademark-header h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #191f28;
+}
+
+/* ============================================================
+   2. 워크플로우 스텝 네비게이션
+   ============================================================ */
+.tm-workflow-nav {
+  display: flex;
+  gap: 4px;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  overflow-x: auto;
+}
+
+.tm-step-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7684;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.tm-step-tab:hover {
+  background: #fff;
+  color: #3182f6;
+}
+
+.tm-step-tab.active {
+  background: #fff;
+  color: #3182f6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.tm-step-tab.completed {
+  color: #00c471;
+}
+
+.tm-step-tab.completed::before {
+  content: '✓';
+  margin-right: 4px;
+}
+
+.tm-step-tab.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tm-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e5e8eb;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tm-step-tab.active .tm-step-number {
+  background: #3182f6;
+  color: #fff;
+}
+
+.tm-step-tab.completed .tm-step-number {
+  background: #00c471;
+  color: #fff;
+}
+
+/* ============================================================
+   3. 스텝 컨텐츠 영역
+   ============================================================ */
+.tm-step-content {
+  display: none;
+  animation: fadeIn 0.3s ease;
+}
+
+.tm-step-content.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tm-step-header {
+  margin-bottom: 20px;
+}
+
+.tm-step-header h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #191f28;
+  margin-bottom: 8px;
+}
+
+.tm-step-header p {
+  font-size: 14px;
+  color: #6b7684;
+}
+
+/* ============================================================
+   4. 상표명 입력 영역
+   ============================================================ */
+.tm-trademark-input {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.tm-trademark-input .input-group {
+  flex: 1;
+}
+
+.tm-trademark-preview {
+  width: 200px;
+  height: 200px;
+  border: 2px dashed #e5e8eb;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #fafbfc;
+}
+
+.tm-trademark-preview:hover {
+  border-color: #3182f6;
+  background: #f0f6ff;
+}
+
+.tm-trademark-preview img {
+  max-width: 180px;
+  max-height: 180px;
+  object-fit: contain;
+}
+
+.tm-trademark-preview .placeholder {
+  text-align: center;
+  color: #8b95a1;
+}
+
+.tm-trademark-preview .placeholder .icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+/* ============================================================
+   5. 지정상품 선택 영역
+   ============================================================ */
+.tm-goods-section {
+  margin-bottom: 24px;
+}
+
+.tm-class-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tm-class-btn {
+  padding: 12px 8px;
+  border: 1px solid #e5e8eb;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.tm-class-btn:hover {
+  border-color: #3182f6;
+  background: #f0f6ff;
+}
+
+.tm-class-btn.selected {
+  border-color: #3182f6;
+  background: #3182f6;
+  color: #fff;
+}
+
+.tm-class-btn .class-num {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.tm-class-btn .class-label {
+  font-size: 10px;
+  color: #8b95a1;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tm-class-btn.selected .class-label {
+  color: rgba(255,255,255,0.8);
+}
+
+/* 고시명칭 토글 */
+.tm-gazette-toggle {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.tm-gazette-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.tm-gazette-toggle label:hover {
+  background: #e5e8eb;
+}
+
+.tm-gazette-toggle input:checked + span {
+  color: #3182f6;
+  font-weight: 600;
+}
+
+.tm-gazette-toggle .fee-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #e8f3ff;
+  color: #3182f6;
+}
+
+/* 지정상품 입력 */
+.tm-goods-input-area {
+  position: relative;
+}
+
+.tm-goods-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e5e8eb;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.tm-goods-input:focus {
+  outline: none;
+  border-color: #3182f6;
+  box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.1);
+}
+
+.tm-goods-autocomplete {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #e5e8eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 100;
+  display: none;
+}
+
+.tm-goods-autocomplete.show {
+  display: block;
+}
+
+.tm-goods-autocomplete-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f4f6f8;
+}
+
+.tm-goods-autocomplete-item:hover {
+  background: #f0f6ff;
+}
+
+.tm-goods-autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.tm-goods-autocomplete-item .goods-name {
+  font-weight: 500;
+  color: #191f28;
+}
+
+.tm-goods-autocomplete-item .goods-meta {
+  font-size: 12px;
+  color: #8b95a1;
+  margin-top: 4px;
+}
+
+/* 선택된 지정상품 목록 */
+.tm-selected-goods {
+  margin-top: 16px;
+}
+
+.tm-goods-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f4f6f8;
+  border-radius: 6px;
+  margin: 4px;
+  font-size: 14px;
+}
+
+.tm-goods-tag.non-gazetted {
+  background: #fff5e6;
+  border: 1px solid #ffc078;
+}
+
+.tm-goods-tag .remove-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e5e8eb;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.tm-goods-tag .remove-btn:hover {
+  background: #ff5252;
+  color: #fff;
+}
+
+/* ============================================================
+   6. 검색 결과 영역
+   ============================================================ */
+.tm-search-section {
+  margin-bottom: 24px;
+}
+
+.tm-search-controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tm-search-type-toggle {
+  display: flex;
+  background: #f4f6f8;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.tm-search-type-toggle button {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7684;
+  transition: all 0.2s;
+}
+
+.tm-search-type-toggle button.active {
+  background: #fff;
+  color: #3182f6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.tm-search-results {
+  border: 1px solid #e5e8eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.tm-search-result-item {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid #f4f6f8;
+  transition: background 0.2s;
+}
+
+.tm-search-result-item:hover {
+  background: #fafbfc;
+}
+
+.tm-search-result-item:last-child {
+  border-bottom: none;
+}
+
+.tm-result-image {
+  width: 80px;
+  height: 80px;
+  border: 1px solid #e5e8eb;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f9fafb;
+}
+
+.tm-result-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.tm-result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tm-result-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #191f28;
+  margin-bottom: 4px;
+}
+
+.tm-result-meta {
+  font-size: 13px;
+  color: #6b7684;
+  margin-bottom: 8px;
+}
+
+.tm-result-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tm-result-status.registered {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.tm-result-status.pending {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.tm-result-status.refused {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.tm-result-similarity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+}
+
+.tm-similarity-badge {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.tm-similarity-badge.high {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.tm-similarity-badge.medium {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.tm-similarity-badge.low {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+/* ============================================================
+   7. 비용 계산 영역
+   ============================================================ */
+.tm-fee-section {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.tm-fee-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e8eb;
+}
+
+.tm-fee-header h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #191f28;
+}
+
+.tm-fee-total {
+  font-size: 24px;
+  font-weight: 700;
+  color: #3182f6;
+}
+
+.tm-fee-breakdown {
+  display: grid;
+  gap: 8px;
+}
+
+.tm-fee-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.tm-fee-row.reduction {
+  color: #00c471;
+}
+
+.tm-fee-row.total {
+  border-top: 1px solid #e5e8eb;
+  padding-top: 16px;
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+/* ============================================================
+   8. 리스크 평가 카드
+   ============================================================ */
+.tm-risk-card {
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.tm-risk-card.high {
+  background: linear-gradient(135deg, #fff5f5 0%, #ffebee 100%);
+  border: 1px solid #ffcdd2;
+}
+
+.tm-risk-card.medium {
+  background: linear-gradient(135deg, #fff8e6 0%, #fff3e0 100%);
+  border: 1px solid #ffe0b2;
+}
+
+.tm-risk-card.low {
+  background: linear-gradient(135deg, #f0fff4 0%, #e8f5e9 100%);
+  border: 1px solid #c8e6c9;
+}
+
+.tm-risk-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tm-risk-level {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.tm-risk-card.high .tm-risk-level { color: #c62828; }
+.tm-risk-card.medium .tm-risk-level { color: #ef6c00; }
+.tm-risk-card.low .tm-risk-level { color: #2e7d32; }
+
+.tm-risk-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.tm-risk-stat {
+  text-align: center;
+}
+
+.tm-risk-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #191f28;
+}
+
+.tm-risk-stat-label {
+  font-size: 12px;
+  color: #6b7684;
+}
+
+/* ============================================================
+   9. 우선심사 설명서 편집기
+   ============================================================ */
+.tm-document-editor {
+  border: 1px solid #e5e8eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.tm-document-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e8eb;
+}
+
+.tm-document-toolbar button {
+  padding: 8px 16px;
+  border: 1px solid #e5e8eb;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.tm-document-toolbar button:hover {
+  background: #f4f6f8;
+}
+
+.tm-document-content {
+  padding: 24px;
+  min-height: 400px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.tm-document-content h4 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 16px 0 8px 0;
+  color: #191f28;
+}
+
+.tm-document-content p {
+  margin-bottom: 12px;
+}
+
+/* ============================================================
+   10. 증거자료 관리
+   ============================================================ */
+.tm-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.tm-evidence-card {
+  border: 1px solid #e5e8eb;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.tm-evidence-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.tm-evidence-preview {
+  height: 140px;
+  background: #f4f6f8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.tm-evidence-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: cover;
+}
+
+.tm-evidence-info {
+  padding: 12px;
+}
+
+.tm-evidence-title {
+  font-weight: 500;
+  color: #191f28;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tm-evidence-type {
+  font-size: 12px;
+  color: #8b95a1;
+}
+
+.tm-evidence-upload {
+  border: 2px dashed #e5e8eb;
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tm-evidence-upload:hover {
+  border-color: #3182f6;
+  background: #f0f6ff;
+}
+
+/* ============================================================
+   11. 프로젝트 카드 (상표)
+   ============================================================ */
+.tm-project-card {
+  border: 1px solid #e5e8eb;
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #fff;
+}
+
+.tm-project-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+}
+
+.tm-project-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.tm-project-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #191f28;
+}
+
+.tm-project-status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tm-project-status.draft { background: #f4f6f8; color: #6b7684; }
+.tm-project-status.searching { background: #e8f3ff; color: #3182f6; }
+.tm-project-status.documenting { background: #fff3e0; color: #ef6c00; }
+.tm-project-status.completed { background: #e8f5e9; color: #2e7d32; }
+
+.tm-project-meta {
+  font-size: 13px;
+  color: #8b95a1;
+}
+
+.tm-project-trademark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f4f6f8;
+}
+
+.tm-project-specimen {
+  width: 48px;
+  height: 48px;
+  border: 1px solid #e5e8eb;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f9fafb;
+}
+
+.tm-project-specimen img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* ============================================================
+   12. 로딩 및 빈 상태
+   ============================================================ */
+.tm-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #8b95a1;
+}
+
+.tm-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e8eb;
+  border-top-color: #3182f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.tm-empty-state {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.tm-empty-state .icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.tm-empty-state h4 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #191f28;
+  margin-bottom: 8px;
+}
+
+.tm-empty-state p {
+  color: #8b95a1;
+  margin-bottom: 20px;
+}
+
+/* ============================================================
+   13. 반응형
+   ============================================================ */
+@media (max-width: 768px) {
+  .tm-workflow-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .tm-trademark-input {
+    flex-direction: column;
+  }
+  
+  .tm-trademark-preview {
+    width: 100%;
+    height: 160px;
+  }
+  
+  .tm-class-selector {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  
+  .tm-search-controls {
+    flex-direction: column;
+  }
+  
+  .tm-search-result-item {
+    flex-direction: column;
+  }
+  
+  .tm-result-image {
+    width: 100%;
+    height: 120px;
+  }
+  
+  .tm-risk-stats {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .tm-evidence-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ============================================================
+   14. 프린트 스타일
+   ============================================================ */
+@media print {
+  .tm-workflow-nav,
+  .tm-document-toolbar,
+  .btn {
+    display: none !important;
+  }
+  
+  .tm-document-content {
+    padding: 0;
+    border: none;
+  }
+}
