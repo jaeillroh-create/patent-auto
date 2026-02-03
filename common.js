@@ -276,6 +276,16 @@ Object.assign(App, {
   _onDashboard: null  // Hook for patent.js to register dashboard load callback
 });
 
+// currentUser를 App에서 접근 가능하게 (trademark.js 등에서 사용)
+Object.defineProperty(App, 'currentUser', {
+  get: function() { return currentUser; },
+  set: function(v) { currentUser = v; }
+});
+Object.defineProperty(App, 'currentProfile', {
+  get: function() { return currentProfile; },
+  set: function(v) { currentProfile = v; }
+});
+
 // ═══ Service Tab Switching (특허 / 상표) ═══
 App.switchService = function(service) {
   // 탭 버튼 활성화
