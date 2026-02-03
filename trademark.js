@@ -985,183 +985,177 @@
   }
 
   // ============================================================
-  // Step 1: 상표 정보 입력
+  // Step 1: 상표 정보 입력 (2-column 레이아웃)
   // ============================================================
   
   TM.renderStep1_TrademarkInfo = function(container) {
     const p = TM.currentProject;
+    const hasAiResult = p.aiAnalysis.businessAnalysis;
     
     container.innerHTML = `
-      <div class="tm-step-header">
-        <h3>🏷️ 상표 정보 입력</h3>
-        <p>출원할 상표의 기본 정보를 입력하세요.</p>
-      </div>
-      
-      <!-- 상표 유형 (심플) -->
-      <div class="tm-form-section">
-        <h4>상표 유형</h4>
-        <div class="tm-type-selector-simple">
-          ${[
-            {type: 'text', label: '문자'},
-            {type: 'figure', label: '도형'},
-            {type: 'combined', label: '결합'},
-            {type: 'sound', label: '소리'},
-            {type: 'color', label: '색채'},
-            {type: '3d', label: '입체'}
-          ].map(t => `
-            <label class="tm-type-chip ${p.trademarkType === t.type ? 'selected' : ''}">
-              <input type="radio" name="trademarkType" value="${t.type}" 
-                     data-field="trademarkType" ${p.trademarkType === t.type ? 'checked' : ''}>
-              <span>${t.label}</span>
-            </label>
-          `).join('')}
-        </div>
-      </div>
-      
-      <!-- 상표명 + 견본 -->
-      <div class="tm-form-row">
-        <div class="tm-form-section" style="flex: 2;">
-          <h4>상표 명칭</h4>
-          <div class="input-group">
-            <label>상표명 <span class="required">*</span></label>
-            <input type="text" class="tm-input tm-input-lg" data-field="trademarkName" 
-                   value="${TM.escapeHtml(p.trademarkName)}" 
-                   placeholder="한글, 영문, 한자 등 입력">
+      <div class="tm-2col-layout">
+        <!-- 좌측: 입력 영역 -->
+        <div class="tm-col-left">
+          <div class="tm-panel">
+            <div class="tm-panel-header">
+              <h3>🏷️ 상표 기본 정보</h3>
+            </div>
+            <div class="tm-panel-body">
+              <!-- 상표 유형 -->
+              <div class="tm-field-row">
+                <label class="tm-field-label">상표 유형</label>
+                <div class="tm-type-chips">
+                  ${[
+                    {type: 'text', label: '문자'},
+                    {type: 'figure', label: '도형'},
+                    {type: 'combined', label: '결합'},
+                    {type: 'sound', label: '소리'},
+                    {type: 'color', label: '색채'},
+                    {type: '3d', label: '입체'}
+                  ].map(t => `
+                    <label class="tm-chip ${p.trademarkType === t.type ? 'active' : ''}">
+                      <input type="radio" name="trademarkType" value="${t.type}" 
+                             data-field="trademarkType" ${p.trademarkType === t.type ? 'checked' : ''}>
+                      ${t.label}
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+              
+              <!-- 상표명 + 견본 (가로 배치) -->
+              <div class="tm-field-row tm-field-inline">
+                <div class="tm-field-main">
+                  <label class="tm-field-label">상표명 <span class="required">*</span></label>
+                  <input type="text" class="tm-input tm-input-lg" data-field="trademarkName" 
+                         value="${TM.escapeHtml(p.trademarkName)}" 
+                         placeholder="한글, 영문, 한자 등">
+                </div>
+                <div class="tm-field-side">
+                  <label class="tm-field-label">견본</label>
+                  <div class="tm-specimen-mini" onclick="document.getElementById('tm-specimen-input').click()">
+                    ${p.specimenUrl ? `<img src="${p.specimenUrl}" alt="견본">` : `<span>🖼️</span>`}
+                  </div>
+                  <input type="file" id="tm-specimen-input" data-field="specimen" 
+                         accept="image/jpeg,image/png,image/gif" style="display: none;">
+                </div>
+              </div>
+            </div>
           </div>
+          
+          <!-- AI 분석 입력 -->
+          <div class="tm-panel tm-panel-highlight">
+            <div class="tm-panel-header">
+              <h3>🤖 AI 사업 분석</h3>
+              <span class="tm-badge-rec">추천</span>
+            </div>
+            <div class="tm-panel-body">
+              <p class="tm-hint">사업 내용을 입력하면 AI가 상품류와 지정상품을 추천합니다.</p>
+              <div class="tm-ai-input-group">
+                <input type="text" class="tm-input" id="tm-business-url" 
+                       value="${TM.escapeHtml(p.businessDescription || '')}"
+                       placeholder="예: 소프트웨어 개발, 특허 출원 대행">
+                <button class="btn btn-primary" data-action="tm-analyze-business">
+                  🔍 분석
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 출원인 정보 -->
+          <details class="tm-panel tm-panel-collapsible">
+            <summary class="tm-panel-header">
+              <h3>👤 출원인 정보</h3>
+              <span class="tm-badge-opt">${p.applicant.name ? '입력됨' : '선택'}</span>
+            </summary>
+            <div class="tm-panel-body">
+              <div class="tm-field-grid">
+                <div class="tm-field">
+                  <label>성명/상호</label>
+                  <input type="text" class="tm-input" data-field="applicant.name" 
+                         value="${TM.escapeHtml(p.applicant.name)}" placeholder="홍길동">
+                </div>
+                <div class="tm-field">
+                  <label>유형</label>
+                  <select class="tm-input" data-field="applicant.type">
+                    <option value="individual" ${p.applicant.type === 'individual' ? 'selected' : ''}>개인</option>
+                    <option value="corporation" ${p.applicant.type === 'corporation' ? 'selected' : ''}>법인</option>
+                    <option value="sme" ${p.applicant.type === 'sme' ? 'selected' : ''}>중소기업</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </details>
         </div>
         
-        <div class="tm-form-section" style="flex: 1;">
-          <h4>상표 견본</h4>
-          <div class="tm-trademark-preview-sm" id="tm-specimen-preview" onclick="document.getElementById('tm-specimen-input').click()">
-            ${p.specimenUrl ? `
-              <img src="${p.specimenUrl}" alt="견본">
-            ` : `
-              <div class="placeholder-sm">
-                <span>🖼️</span>
-                <span>이미지 업로드</span>
+        <!-- 우측: 결과/미리보기 영역 -->
+        <div class="tm-col-right">
+          ${hasAiResult ? `
+            <div class="tm-panel tm-panel-result">
+              <div class="tm-panel-header">
+                <h3>📋 분석 결과</h3>
               </div>
-            `}
-          </div>
-          <input type="file" id="tm-specimen-input" data-field="specimen" 
-                 accept="image/jpeg,image/png,image/gif" style="display: none;">
-          ${p.specimenUrl ? `<button class="btn btn-sm btn-ghost" onclick="TM.removeSpecimen()">제거</button>` : ''}
-        </div>
-      </div>
-      
-      <!-- AI 사업 분석 (강조) -->
-      <div class="tm-ai-section">
-        <div class="tm-ai-header">
-          <h4>🤖 AI 사업 분석</h4>
-          <span class="tm-ai-badge">추천</span>
-        </div>
-        <p class="tm-hint">사업 내용을 입력하면 AI가 적합한 상품류와 지정상품을 추천합니다.</p>
-        <div class="tm-ai-input-row">
-          <input type="text" class="tm-input" id="tm-business-url" 
-                 value="${TM.escapeHtml(p.businessDescription || '')}"
-                 placeholder="예: 소프트웨어 개발 및 판매, 특허 출원 대행 서비스">
-          <button class="btn btn-primary btn-ai" data-action="tm-analyze-business">
-            🔍 AI 분석
-          </button>
-        </div>
-      </div>
-      
-      <!-- AI 분석 결과 -->
-      ${p.aiAnalysis.businessAnalysis ? `
-        <div class="tm-ai-result">
-          <div class="tm-ai-analysis-box">
-            <h5>📋 사업 분석 결과</h5>
-            <div class="tm-ai-content">${TM.escapeHtml(p.aiAnalysis.businessAnalysis)}</div>
-          </div>
-          ${p.aiAnalysis.recommendedClasses?.length > 0 ? `
-            <div class="tm-recommended-section">
-              <div class="tm-rec-header">
-                <h5>🎯 추천 상품류</h5>
+              <div class="tm-panel-body">
+                <div class="tm-result-summary">${TM.escapeHtml(p.aiAnalysis.businessAnalysis)}</div>
+                
+                ${p.aiAnalysis.coreKeywords?.length > 0 ? `
+                  <div class="tm-keywords">
+                    ${p.aiAnalysis.coreKeywords.slice(0, 6).map(k => `<span class="tm-kw">${k}</span>`).join('')}
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+            
+            <div class="tm-panel">
+              <div class="tm-panel-header">
+                <h3>🎯 추천 상품류</h3>
                 <button class="btn btn-sm btn-ghost" data-action="tm-apply-all-recommendations">전체 적용</button>
               </div>
-              ${p.aiAnalysis.coreKeywords?.length > 0 ? `
-                <div class="tm-analysis-keywords">
-                  <span class="tm-keywords-label">키워드:</span>
-                  ${p.aiAnalysis.coreKeywords.slice(0, 6).map(k => `<span class="tm-keyword-tag">${k}</span>`).join('')}
-                </div>
-              ` : ''}
-              <div class="tm-recommendation-list">
+              <div class="tm-panel-body tm-rec-list">
                 ${p.aiAnalysis.recommendedClasses.map((code, idx) => {
                   const className = TM.niceClasses[code] || '';
                   const reason = p.aiAnalysis.classReasons?.[code] || '';
                   const goods = p.aiAnalysis.recommendedGoods?.[code] || [];
-                  const isAlreadyAdded = p.designatedGoods.some(g => g.classCode === code);
-                  const visibleGoods = goods.slice(0, 5);
-                  const hiddenCount = goods.length - 5;
+                  const isAdded = p.designatedGoods.some(g => g.classCode === code);
                   
                   return `
-                    <div class="tm-rec-row ${isAlreadyAdded ? 'added' : ''}">
-                      <div class="tm-rec-rank">${idx + 1}</div>
-                      <div class="tm-rec-main">
-                        <div class="tm-rec-title">
-                          <strong>제${code}류</strong>
-                          <span class="tm-rec-classname">${className}</span>
-                        </div>
-                        ${reason ? `<div class="tm-rec-reason">${TM.escapeHtml(reason)}</div>` : ''}
-                        <div class="tm-rec-goods">
-                          ${visibleGoods.map(g => `<span class="tm-goods-chip">${g.name}</span>`).join('')}
-                          ${hiddenCount > 0 ? `<span class="tm-goods-more">+${hiddenCount}개</span>` : ''}
+                    <div class="tm-rec-item ${isAdded ? 'added' : ''}">
+                      <div class="tm-rec-num">${idx + 1}</div>
+                      <div class="tm-rec-info">
+                        <div class="tm-rec-class">제${code}류 <span>${className}</span></div>
+                        ${reason ? `<div class="tm-rec-desc">${TM.escapeHtml(reason)}</div>` : ''}
+                        <div class="tm-rec-tags">
+                          ${goods.slice(0, 4).map(g => `<span>${g.name}</span>`).join('')}
+                          ${goods.length > 4 ? `<span class="more">+${goods.length - 4}</span>` : ''}
                         </div>
                       </div>
-                      <div class="tm-rec-action">
-                        ${isAlreadyAdded ? `
-                          <span class="tm-applied-badge">✓ 적용됨</span>
-                        ` : `
-                          <button class="btn btn-sm btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">적용</button>
-                        `}
+                      <div class="tm-rec-btn">
+                        ${isAdded ? `<span class="applied">✓</span>` : 
+                          `<button class="btn btn-sm btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">적용</button>`}
                       </div>
                     </div>
                   `;
                 }).join('')}
               </div>
             </div>
-          ` : ''}
+          ` : `
+            <div class="tm-panel tm-panel-empty">
+              <div class="tm-empty-state">
+                <div class="tm-empty-icon">🔍</div>
+                <h4>AI 분석을 시작하세요</h4>
+                <p>사업 내용을 입력하고 분석 버튼을 클릭하면<br>적합한 상품류를 추천받을 수 있습니다.</p>
+              </div>
+            </div>
+          `}
         </div>
-      ` : ''}
-      
-      <!-- 출원인 정보 (선택) - 맨 아래 -->
-      <details class="tm-accordion tm-accordion-bottom">
-        <summary>
-          <span>👤 출원인 정보 (선택)</span>
-          <span class="tm-accordion-badge">${p.applicant.name ? '입력됨' : '미입력'}</span>
-        </summary>
-        <div class="tm-accordion-content">
-          <div class="tm-form-grid">
-            <div class="input-group">
-              <label>출원인 성명/상호</label>
-              <input type="text" class="tm-input" data-field="applicant.name" 
-                     value="${TM.escapeHtml(p.applicant.name)}" 
-                     placeholder="홍길동 / (주)예시회사">
-            </div>
-            <div class="input-group">
-              <label>출원인 유형</label>
-              <select class="tm-input" data-field="applicant.type">
-                <option value="individual" ${p.applicant.type === 'individual' ? 'selected' : ''}>개인</option>
-                <option value="corporation" ${p.applicant.type === 'corporation' ? 'selected' : ''}>법인</option>
-                <option value="sme" ${p.applicant.type === 'sme' ? 'selected' : ''}>중소기업</option>
-              </select>
-            </div>
-            <div class="input-group" style="grid-column: span 2;">
-              <label>주소</label>
-              <input type="text" class="tm-input" data-field="applicant.address" 
-                     value="${TM.escapeHtml(p.applicant.address)}" 
-                     placeholder="서울특별시 강남구...">
-            </div>
-          </div>
-        </div>
-      </details>
+      </div>
     `;
     
     // 상표 유형 변경 이벤트
     container.querySelectorAll('input[name="trademarkType"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         TM.updateField('trademarkType', e.target.value);
-        container.querySelectorAll('.tm-type-chip').forEach(opt => {
-          opt.classList.toggle('selected', opt.querySelector('input').value === e.target.value);
+        container.querySelectorAll('.tm-chip').forEach(opt => {
+          opt.classList.toggle('active', opt.querySelector('input').value === e.target.value);
         });
       });
     });
@@ -1266,151 +1260,142 @@
   };
 
   // ============================================================
-  // Step 2: 지정상품 선택
+  // Step 2: 지정상품 선택 (2-column 레이아웃)
   // ============================================================
   
   TM.renderStep2_DesignatedGoods = function(container) {
     const p = TM.currentProject;
-    const hasAiRecommendation = p.aiAnalysis?.recommendedClasses?.length > 0;
+    const hasAiRec = p.aiAnalysis?.recommendedClasses?.length > 0;
+    const totalGoods = p.designatedGoods.reduce((sum, c) => sum + c.goods.length, 0);
     
     container.innerHTML = `
-      <div class="tm-step-header">
-        <h3>📦 지정상품 선택</h3>
-        <p>출원할 상표가 사용될 상품/서비스 분류를 선택하세요.</p>
-      </div>
-      
-      <!-- AI 추천 결과 (있을 경우) -->
-      ${hasAiRecommendation ? `
-        <div class="tm-ai-recommendation">
-          <div class="tm-recommendation-header">
-            <h4>🤖 AI 추천 상품류 및 지정상품</h4>
-            <button class="btn btn-sm btn-ghost" data-action="tm-apply-all-recommendations">
-              전체 적용
-            </button>
+      <div class="tm-2col-layout">
+        <!-- 좌측: 상품류 선택 -->
+        <div class="tm-col-left">
+          <!-- 고시명칭 토글 -->
+          <div class="tm-panel tm-panel-compact">
+            <div class="tm-toggle-row">
+              <label class="tm-toggle ${p.gazettedOnly ? 'active' : ''}">
+                <input type="radio" name="gazettedMode" value="true" ${p.gazettedOnly ? 'checked' : ''}>
+                고시명칭 Only <span class="fee">46,000원/류</span>
+              </label>
+              <label class="tm-toggle ${!p.gazettedOnly ? 'active' : ''}">
+                <input type="radio" name="gazettedMode" value="false" ${!p.gazettedOnly ? 'checked' : ''}>
+                비고시 허용 <span class="fee">52,000원/류</span>
+              </label>
+            </div>
           </div>
           
-          <div class="tm-recommendation-analysis">
-            <p>${TM.escapeHtml(p.aiAnalysis.businessAnalysis || '')}</p>
-          </div>
-          
-          <div class="tm-recommendation-classes">
-            ${p.aiAnalysis.recommendedClasses.map((code, idx) => {
-              const className = TM.niceClasses[code] || '알 수 없음';
-              const reason = p.aiAnalysis.classReasons?.[code] || '';
-              const goods = p.aiAnalysis.recommendedGoods?.[code] || [];
-              const isSelected = p.designatedGoods.some(g => g.classCode === code);
-              
-              return `
-                <div class="tm-recommendation-card ${isSelected ? 'applied' : ''}" data-class-code="${code}">
-                  <div class="tm-rec-header">
-                    <span class="tm-rec-rank">${idx + 1}순위</span>
-                    <span class="tm-rec-class">제${code}류</span>
-                    <span class="tm-rec-name">${className}</span>
-                    ${isSelected ? '<span class="tm-rec-badge">적용됨</span>' : `
-                      <button class="btn btn-sm btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">
-                        적용
-                      </button>
-                    `}
-                  </div>
-                  <div class="tm-rec-reason">${TM.escapeHtml(reason)}</div>
-                  ${goods.length > 0 ? `
-                    <div class="tm-rec-goods">
-                      <span class="tm-rec-goods-label">추천 지정상품:</span>
-                      ${goods.slice(0, 5).map(g => `
-                        <span class="tm-rec-goods-item" title="${g.similarGroup || ''}">${g.name}</span>
-                      `).join('')}
-                      ${goods.length > 5 ? `<span class="tm-rec-more">+${goods.length - 5}개 더</span>` : ''}
+          ${hasAiRec ? `
+            <!-- AI 추천 -->
+            <div class="tm-panel">
+              <div class="tm-panel-header">
+                <h3>🤖 AI 추천</h3>
+                <button class="btn btn-sm btn-ghost" data-action="tm-apply-all-recommendations">전체 적용</button>
+              </div>
+              <div class="tm-panel-body tm-rec-compact">
+                ${p.aiAnalysis.recommendedClasses.slice(0, 5).map((code, idx) => {
+                  const isAdded = p.designatedGoods.some(g => g.classCode === code);
+                  return `
+                    <div class="tm-rec-mini ${isAdded ? 'added' : ''}" data-class="${code}">
+                      <span class="num">${idx + 1}</span>
+                      <span class="code">제${code}류</span>
+                      <span class="name">${TM.niceClasses[code] || ''}</span>
+                      ${isAdded ? '<span class="check">✓</span>' : 
+                        `<button class="btn btn-xs btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">+</button>`}
                     </div>
-                  ` : ''}
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <!-- 전체 상품류 그리드 -->
+          <div class="tm-panel">
+            <div class="tm-panel-header">
+              <h3>📋 상품류 선택</h3>
+              <span class="tm-badge-info">NICE 13판</span>
+            </div>
+            <div class="tm-panel-body">
+              <div class="tm-class-grid">
+                ${Object.keys(TM.niceClasses).sort((a, b) => parseInt(a) - parseInt(b)).map(code => {
+                  const isSelected = p.designatedGoods.some(g => g.classCode === code);
+                  const isRec = p.aiAnalysis?.recommendedClasses?.includes(code);
+                  return `
+                    <button class="tm-class-btn ${isSelected ? 'selected' : ''} ${isRec ? 'rec' : ''}" 
+                            data-action="${isSelected ? 'tm-remove-class' : 'tm-add-class'}" 
+                            data-class-code="${code}" title="${TM.niceClasses[code]}">
+                      ${code}
+                    </button>
+                  `;
+                }).join('')}
+              </div>
+              <div class="tm-grid-legend">
+                <span><i class="dot sel"></i> 선택</span>
+                <span><i class="dot rec"></i> AI추천</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 우측: 선택된 지정상품 -->
+        <div class="tm-col-right">
+          <div class="tm-panel tm-panel-sticky">
+            <div class="tm-panel-header">
+              <h3>📦 선택된 지정상품</h3>
+              <span class="tm-count">${p.designatedGoods.length}류 / ${totalGoods}개</span>
+            </div>
+            <div class="tm-panel-body tm-goods-list">
+              ${p.designatedGoods.length === 0 ? `
+                <div class="tm-empty-mini">
+                  <span>📦</span>
+                  <p>좌측에서 상품류를 선택하세요</p>
                 </div>
-              `;
-            }).join('')}
+              ` : p.designatedGoods.map(classData => TM.renderClassGoodsCompact(classData)).join('')}
+            </div>
           </div>
         </div>
-      ` : ''}
-      
-      <!-- 고시명칭 토글 -->
-      <div class="tm-gazette-toggle">
-        <label>
-          <input type="radio" name="gazettedMode" value="true" 
-                 ${p.gazettedOnly ? 'checked' : ''} data-field="gazettedOnly">
-          <span>고시명칭 Only</span>
-          <span class="fee-badge">46,000원/류</span>
-        </label>
-        <label>
-          <input type="radio" name="gazettedMode" value="false" 
-                 ${!p.gazettedOnly ? 'checked' : ''} data-field="gazettedOnly">
-          <span>고시명칭 외 허용</span>
-          <span class="fee-badge">52,000원/류</span>
-        </label>
       </div>
-      
-      <!-- 상품류 선택 (접기 가능) -->
-      <details class="tm-accordion" ${!hasAiRecommendation ? 'open' : ''}>
-        <summary>
-          <span>📋 전체 상품류 보기 (NICE 13판)</span>
-        </summary>
-        <div class="tm-accordion-content">
-          <div class="tm-class-grid-compact" id="tm-class-selector">
-            ${Object.keys(TM.niceClasses).sort((a, b) => parseInt(a) - parseInt(b)).map(code => {
-              const name = TM.niceClasses[code];
-              const isSelected = p.designatedGoods.some(g => g.classCode === code);
-              const isRecommended = p.aiAnalysis?.recommendedClasses?.includes(code);
-              return `
-                <button class="tm-class-chip ${isSelected ? 'selected' : ''} ${isRecommended ? 'recommended' : ''}" 
-                        data-action="${isSelected ? 'tm-remove-class' : 'tm-add-class'}" 
-                        data-class-code="${code}"
-                        title="${name}">
-                  ${code}
-                </button>
-              `;
-            }).join('')}
-          </div>
-          <div class="tm-class-legend">
-            <span><span class="dot selected"></span> 선택됨</span>
-            <span><span class="dot recommended"></span> AI 추천</span>
-          </div>
-        </div>
-      </details>
-      
-      <!-- 선택된 류별 지정상품 -->
-      <div class="tm-selected-classes" id="tm-selected-classes">
-        ${p.designatedGoods.length === 0 ? `
-          <div class="tm-empty-state" style="padding: 40px;">
-            <div class="icon">📦</div>
-            <h4>선택된 상품류가 없습니다</h4>
-            <p>${hasAiRecommendation ? 'AI 추천을 적용하거나 위에서 상품류를 선택하세요.' : '위에서 상품류를 선택하세요.'}</p>
-          </div>
-        ` : p.designatedGoods.map(classData => TM.renderClassGoods(classData)).join('')}
-      </div>
-      
-      <!-- 요약 -->
-      ${p.designatedGoods.length > 0 ? `
-        <div class="tm-goods-summary">
-          <div class="summary-item">
-            <span class="label">선택된 류</span>
-            <span class="value">${p.designatedGoods.length}개</span>
-          </div>
-          <div class="summary-item">
-            <span class="label">총 지정상품</span>
-            <span class="value">${p.designatedGoods.reduce((sum, c) => sum + c.goods.length, 0)}개</span>
-          </div>
-          <div class="summary-item">
-            <span class="label">비고시명칭</span>
-            <span class="value ${p.designatedGoods.reduce((sum, c) => sum + (c.nonGazettedCount || 0), 0) > 0 ? 'warning' : ''}">
-              ${p.designatedGoods.reduce((sum, c) => sum + (c.nonGazettedCount || 0), 0)}개
-            </span>
-          </div>
-        </div>
-      ` : ''}
     `;
     
-    // 고시명칭 모드 변경 이벤트
+    // 고시명칭 모드 이벤트
     container.querySelectorAll('input[name="gazettedMode"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         TM.currentProject.gazettedOnly = e.target.value === 'true';
+        container.querySelectorAll('.tm-toggle').forEach(t => t.classList.remove('active'));
+        e.target.closest('.tm-toggle').classList.add('active');
       });
     });
+  };
+  
+  // 컴팩트 지정상품 카드
+  TM.renderClassGoodsCompact = function(classData) {
+    return `
+      <div class="tm-goods-card" data-class="${classData.classCode}">
+        <div class="tm-goods-card-header">
+          <strong>제${classData.classCode}류</strong>
+          <span>${TM.niceClasses[classData.classCode] || ''}</span>
+          <button class="btn-icon" data-action="tm-remove-class" data-class-code="${classData.classCode}">✕</button>
+        </div>
+        <div class="tm-goods-card-body">
+          <div class="tm-goods-search">
+            <input type="text" class="tm-input-sm" placeholder="지정상품 검색" 
+                   id="tm-goods-input-${classData.classCode}" data-class="${classData.classCode}">
+            <div class="tm-autocomplete" id="tm-autocomplete-${classData.classCode}"></div>
+          </div>
+          <div class="tm-goods-tags">
+            ${classData.goods.map(g => `
+              <span class="tm-tag" title="${g.similarGroup || ''}">
+                ${g.name}
+                <button class="tm-tag-remove" data-action="tm-remove-goods" 
+                        data-class="${classData.classCode}" data-name="${TM.escapeHtml(g.name)}">×</button>
+              </span>
+            `).join('')}
+            ${classData.goods.length === 0 ? '<span class="tm-tag-empty">지정상품을 추가하세요</span>' : ''}
+          </div>
+        </div>
+      </div>
+    `;
   };
   
   TM.renderClassGoods = function(classData) {
