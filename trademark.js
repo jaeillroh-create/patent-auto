@@ -3380,59 +3380,119 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         btn.innerHTML = '<span class="tossface">⏳</span> 분석 중...';
       }
       
-      const prompt = `상표 출원 전문가로서 다음 사업에 적합한 상품류를 추천하세요.
+      // === 1단계: AI가 적합한 상품류 분석 ===
+      const classPrompt = `상표 출원 전문가로서 다음 사업에 가장 적합한 NICE 상품류 5개를 추천하세요.
 
 상표명: ${p.trademarkName || '미정'}
 사업내용: ${businessInput || '미입력'}
 
-아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력:
+JSON 형식으로만 응답:
+{"businessAnalysis":"사업분석 2-3문장","recommendedClasses":["45","42","35","09","41"],"classReasons":{"45":"이유","42":"이유","35":"이유","09":"이유","41":"이유"}}`;
 
-{"businessAnalysis":"사업분석 2-3문장","recommendedClasses":["45","42","35"],"classReasons":{"45":"이유","42":"이유","35":"이유"},"recommendedGoods":{"45":[{"name":"변리사업","similarGroup":"G5001"}],"42":[{"name":"소프트웨어개발업","similarGroup":"G4901"}]}}`;
-
-      const response = await App.callClaude(prompt, 2000);
+      const classResponse = await App.callClaude(classPrompt, 1500);
       
-      // JSON 추출
-      const text = response.text || '';
-      let jsonStr = '';
-      
-      // 방법 1: 중괄호 매칭
+      // JSON 파싱
+      const text = classResponse.text || '';
       const startIdx = text.indexOf('{');
       const endIdx = text.lastIndexOf('}');
-      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-        jsonStr = text.substring(startIdx, endIdx + 1);
+      let jsonStr = (startIdx !== -1 && endIdx > startIdx) ? text.substring(startIdx, endIdx + 1) : '';
+      
+      if (!jsonStr) throw new Error('AI 응답 파싱 실패');
+      
+      jsonStr = jsonStr.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/,(\s*[}\]])/g, '$1').replace(/\n/g, ' ');
+      const classAnalysis = JSON.parse(jsonStr);
+      
+      p.aiAnalysis.businessAnalysis = classAnalysis.businessAnalysis || '';
+      p.aiAnalysis.recommendedClasses = classAnalysis.recommendedClasses || [];
+      p.aiAnalysis.classReasons = classAnalysis.classReasons || {};
+      p.aiAnalysis.recommendedGoods = {};
+      
+      // === 2단계: 각 상품류에서 DB 조회 후 AI가 10개 선택 ===
+      for (const classCode of p.aiAnalysis.recommendedClasses.slice(0, 5)) {
+        try {
+          // Supabase에서 해당 류의 고시명칭 조회 (최대 200개)
+          const { data: goodsList, error } = await App.sb
+            .from('gazetted_goods_cache')
+            .select('goods_name, similar_group_code')
+            .eq('class_code', classCode.padStart(2, '0'))
+            .limit(200);
+          
+          if (error || !goodsList || goodsList.length === 0) {
+            console.warn(`[TM] 제${classCode}류 고시명칭 조회 실패`);
+            continue;
+          }
+          
+          // 고시명칭 목록을 AI에게 전달하여 10개 선택
+          const goodsListText = goodsList.map(g => `${g.goods_name}(${g.similar_group_code})`).join(', ');
+          
+          const selectPrompt = `다음은 제${classCode}류의 실제 고시명칭 목록입니다:
+${goodsListText}
+
+"${p.trademarkName || ''}" 상표와 "${businessInput || ''}" 사업에 가장 적합한 지정상품 10개를 선택하세요.
+반드시 위 목록에 있는 정확한 명칭과 유사군코드를 사용하세요.
+
+JSON 배열로만 응답:
+[{"name":"정확한고시명칭","similarGroup":"정확한유사군코드"},...]`;
+
+          const selectResponse = await App.callClaude(selectPrompt, 1000);
+          const selectText = selectResponse.text || '';
+          
+          // JSON 배열 추출
+          const arrStart = selectText.indexOf('[');
+          const arrEnd = selectText.lastIndexOf(']');
+          if (arrStart !== -1 && arrEnd > arrStart) {
+            let arrStr = selectText.substring(arrStart, arrEnd + 1);
+            arrStr = arrStr.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/,(\s*[\]\}])/g, '$1');
+            
+            try {
+              const selectedGoods = JSON.parse(arrStr);
+              // 실제 DB에 있는 것만 필터링
+              const validGoods = selectedGoods.filter(sg => 
+                goodsList.some(g => g.goods_name === sg.name)
+              ).slice(0, 10);
+              
+              // DB에서 직접 매칭하여 정확한 유사군코드 보장
+              p.aiAnalysis.recommendedGoods[classCode] = validGoods.map(sg => {
+                const dbMatch = goodsList.find(g => g.goods_name === sg.name);
+                return {
+                  name: sg.name,
+                  similarGroup: dbMatch?.similar_group_code || sg.similarGroup
+                };
+              });
+              
+              // 10개 미만이면 DB에서 추가로 채움
+              if (p.aiAnalysis.recommendedGoods[classCode].length < 10) {
+                const existing = p.aiAnalysis.recommendedGoods[classCode].map(g => g.name);
+                const additional = goodsList
+                  .filter(g => !existing.includes(g.goods_name))
+                  .slice(0, 10 - p.aiAnalysis.recommendedGoods[classCode].length);
+                
+                for (const g of additional) {
+                  p.aiAnalysis.recommendedGoods[classCode].push({
+                    name: g.goods_name,
+                    similarGroup: g.similar_group_code
+                  });
+                }
+              }
+            } catch (e) {
+              console.warn(`[TM] 제${classCode}류 선택 파싱 실패, DB 데이터로 대체`);
+              // 파싱 실패 시 DB에서 상위 10개 사용
+              p.aiAnalysis.recommendedGoods[classCode] = goodsList.slice(0, 10).map(g => ({
+                name: g.goods_name,
+                similarGroup: g.similar_group_code
+              }));
+            }
+          } else {
+            // AI 응답 실패 시 DB에서 상위 10개 사용
+            p.aiAnalysis.recommendedGoods[classCode] = goodsList.slice(0, 10).map(g => ({
+              name: g.goods_name,
+              similarGroup: g.similar_group_code
+            }));
+          }
+        } catch (classError) {
+          console.error(`[TM] 제${classCode}류 처리 실패:`, classError);
+        }
       }
-      
-      if (!jsonStr) {
-        throw new Error('AI 응답에서 JSON을 찾을 수 없습니다.');
-      }
-      
-      // JSON 정리
-      jsonStr = jsonStr
-        .replace(/[\x00-\x1F\x7F]/g, ' ')  // 제어문자 제거
-        .replace(/,(\s*[}\]])/g, '$1')      // trailing comma 제거
-        .replace(/\n/g, ' ')
-        .replace(/\r/g, ' ');
-      
-      let analysis;
-      try {
-        analysis = JSON.parse(jsonStr);
-      } catch (e) {
-        console.error('[TM] JSON 파싱 실패:', e.message);
-        console.error('[TM] 원본 (처음 500자):', jsonStr.slice(0, 500));
-        
-        // 기본값 사용
-        analysis = {
-          businessAnalysis: '사업 분석에 실패했습니다. 다시 시도해주세요.',
-          recommendedClasses: [],
-          classReasons: {},
-          recommendedGoods: {}
-        };
-      }
-      
-      p.aiAnalysis.businessAnalysis = analysis.businessAnalysis || '';
-      p.aiAnalysis.recommendedClasses = analysis.recommendedClasses || [];
-      p.aiAnalysis.classReasons = analysis.classReasons || {};
-      p.aiAnalysis.recommendedGoods = analysis.recommendedGoods || {};
       
       TM.renderCurrentStep();
       App.showToast('사업 분석 완료! 추천 상품류를 확인하세요.', 'success');
