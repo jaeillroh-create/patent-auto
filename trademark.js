@@ -112,7 +112,7 @@
     
     // KIPRIS API 설정
     kiprisConfig: {
-      baseUrl: 'http://plus.kipris.or.kr/kipo-api/kipi',
+      baseUrl: 'https://plus.kipris.or.kr/kipo-api/kipi',
       apiKey: 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE=', // KIPRIS OpenAPI 인증키
       rateLimit: 30, // 분당 호출 제한
       timeout: 10000
@@ -1327,17 +1327,19 @@
           <span>📋 전체 상품류 보기 (NICE 13판 - 45류)</span>
         </summary>
         <div class="tm-accordion-content">
-          <div class="tm-class-selector" id="tm-class-selector">
-            ${Object.entries(TM.niceClasses).map(([code, name]) => {
+          <div class="tm-class-grid" id="tm-class-selector">
+            ${Object.keys(TM.niceClasses).sort((a, b) => parseInt(a) - parseInt(b)).map(code => {
+              const name = TM.niceClasses[code];
               const isSelected = p.designatedGoods.some(g => g.classCode === code);
               const isRecommended = p.aiAnalysis?.recommendedClasses?.includes(code);
               return `
-                <button class="tm-class-btn ${isSelected ? 'selected' : ''} ${isRecommended ? 'recommended' : ''}" 
+                <button class="tm-class-item ${isSelected ? 'selected' : ''} ${isRecommended ? 'recommended' : ''}" 
                         data-action="${isSelected ? 'tm-remove-class' : 'tm-add-class'}" 
                         data-class-code="${code}">
-                  <div class="class-num">${code}</div>
-                  <div class="class-label">${name.slice(0, 8)}...</div>
-                  ${isRecommended ? '<div class="rec-badge">AI</div>' : ''}
+                  <span class="tm-class-code">${code}</span>
+                  <span class="tm-class-name">${name}</span>
+                  ${isRecommended ? '<span class="tm-ai-badge">AI</span>' : ''}
+                  ${isSelected ? '<span class="tm-check-badge">✓</span>' : ''}
                 </button>
               `;
             }).join('')}
@@ -1456,6 +1458,78 @@
     );
     
     TM.renderCurrentStep();
+  };
+  
+  // AI 추천 적용 함수
+  TM.applyRecommendation = function(classCode) {
+    if (!TM.currentProject) return;
+    
+    const p = TM.currentProject;
+    
+    // 이미 선택되어 있으면 무시
+    if (p.designatedGoods.some(g => g.classCode === classCode)) {
+      App.showToast('이미 추가된 상품류입니다.', 'info');
+      return;
+    }
+    
+    // 추천 지정상품 가져오기
+    const recommendedGoods = p.aiAnalysis?.recommendedGoods?.[classCode] || [];
+    
+    // 상품류 추가
+    const newClass = {
+      classCode: classCode,
+      className: TM.niceClasses[classCode],
+      goods: recommendedGoods.map(g => ({
+        name: g.name,
+        similarGroup: g.similarGroup,
+        gazetted: true
+      })),
+      goodsCount: recommendedGoods.length,
+      nonGazettedCount: 0
+    };
+    
+    p.designatedGoods.push(newClass);
+    
+    TM.renderCurrentStep();
+    App.showToast(`제${classCode}류가 추가되었습니다.`, 'success');
+  };
+  
+  // 전체 AI 추천 적용
+  TM.applyAllRecommendations = function() {
+    if (!TM.currentProject) return;
+    
+    const p = TM.currentProject;
+    const recommendedClasses = p.aiAnalysis?.recommendedClasses || [];
+    
+    if (recommendedClasses.length === 0) {
+      App.showToast('추천 상품류가 없습니다.', 'warning');
+      return;
+    }
+    
+    let addedCount = 0;
+    
+    recommendedClasses.forEach(classCode => {
+      if (!p.designatedGoods.some(g => g.classCode === classCode)) {
+        const recommendedGoods = p.aiAnalysis?.recommendedGoods?.[classCode] || [];
+        
+        p.designatedGoods.push({
+          classCode: classCode,
+          className: TM.niceClasses[classCode],
+          goods: recommendedGoods.map(g => ({
+            name: g.name,
+            similarGroup: g.similarGroup,
+            gazetted: true
+          })),
+          goodsCount: recommendedGoods.length,
+          nonGazettedCount: 0
+        });
+        
+        addedCount++;
+      }
+    });
+    
+    TM.renderCurrentStep();
+    App.showToast(`${addedCount}개 상품류가 추가되었습니다.`, 'success');
   };
   
   TM.addGoods = function(classCode, goodsData) {

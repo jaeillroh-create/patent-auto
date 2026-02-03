@@ -197,6 +197,117 @@
   margin-bottom: 16px;
 }
 
+/* 새로운 상품류 그리드 (가로 순서) */
+.tm-class-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 8px;
+}
+
+.tm-class-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 8px;
+  border: 1px solid #e5e8eb;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  min-height: 70px;
+}
+
+.tm-class-item:hover {
+  border-color: #3182f6;
+  background: #f0f6ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(49, 130, 246, 0.15);
+}
+
+.tm-class-item.selected {
+  border-color: #3182f6;
+  background: linear-gradient(135deg, #3182f6, #1a73e8);
+  color: #fff;
+}
+
+.tm-class-item.recommended {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
+
+.tm-class-item.recommended.selected {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.tm-class-code {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tm-class-name {
+  font-size: 10px;
+  color: #6b7684;
+  margin-top: 4px;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tm-class-item.selected .tm-class-name {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.tm-class-item.recommended .tm-class-name {
+  color: #047857;
+}
+
+.tm-ai-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px 5px;
+  background: #10b981;
+  color: #fff;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.tm-check-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  color: #3182f6;
+  border-radius: 50%;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+/* 반응형 상품류 그리드 */
+@media (max-width: 900px) {
+  .tm-class-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .tm-class-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 .tm-class-btn {
   padding: 12px 8px;
   border: 1px solid #e5e8eb;
@@ -1547,4 +1658,367 @@ details.tm-accordion .tm-accordion-content {
   font-size: 14px;
   line-height: 1.7;
   color: #4e5968;
+}
+
+/* ============================================================
+   19. Step 1 AI 추천 UI 개선
+   ============================================================ */
+
+/* AI 분석 입력 영역 */
+.tm-business-input {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tm-business-input .tm-input {
+  flex: 1;
+}
+
+/* AI 추천 카드 (Step 1) */
+.tm-recommendation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tm-rec-item {
+  background: #fff;
+  border: 1px solid #e5e8eb;
+  border-radius: 12px;
+  padding: 16px 20px;
+  transition: all 0.2s;
+}
+
+.tm-rec-item:hover {
+  border-color: #3182f6;
+  box-shadow: 0 4px 12px rgba(49, 130, 246, 0.1);
+}
+
+.tm-rec-item-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.tm-rec-rank {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #3182f6, #1a73e8);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tm-rec-class-code {
+  font-size: 18px;
+  font-weight: 700;
+  color: #333d4b;
+}
+
+.tm-rec-class-name {
+  font-size: 14px;
+  color: #6b7684;
+  flex: 1;
+}
+
+.tm-rec-reason {
+  font-size: 13px;
+  color: #4e5968;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #f0f6ff, #e8f4ff);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  line-height: 1.6;
+  border-left: 3px solid #3182f6;
+}
+
+.tm-rec-goods-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tm-rec-goods-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e8eb;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #4e5968;
+  transition: all 0.2s;
+}
+
+.tm-rec-goods-tag:hover {
+  background: #f0f6ff;
+  border-color: #3182f6;
+}
+
+.tm-rec-goods-tag small {
+  color: #8b95a1;
+  font-size: 11px;
+}
+
+/* Step 2 AI 추천 영역 */
+.tm-ai-recommendation {
+  background: linear-gradient(135deg, #f8fafc, #f0f6ff);
+  border: 1px solid #e5e8eb;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.tm-recommendation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tm-recommendation-header h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333d4b;
+}
+
+.tm-recommendation-analysis {
+  background: #fff;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 1px solid #e5e8eb;
+}
+
+.tm-recommendation-analysis p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #4e5968;
+}
+
+.tm-recommendation-classes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tm-recommendation-card {
+  background: #fff;
+  border: 1px solid #e5e8eb;
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.2s;
+}
+
+.tm-recommendation-card:hover {
+  border-color: #3182f6;
+  box-shadow: 0 2px 8px rgba(49, 130, 246, 0.1);
+}
+
+.tm-recommendation-card.applied {
+  background: #f0fdf4;
+  border-color: #10b981;
+}
+
+.tm-rec-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.tm-rec-badge {
+  padding: 4px 10px;
+  background: #10b981;
+  color: #fff;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tm-rec-goods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.tm-rec-goods-label {
+  font-size: 12px;
+  color: #8b95a1;
+  margin-right: 4px;
+}
+
+.tm-rec-goods-item {
+  padding: 4px 10px;
+  background: #f0f6ff;
+  color: #3182f6;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.tm-rec-more {
+  font-size: 12px;
+  color: #8b95a1;
+}
+
+/* ============================================================
+   20. 전반적 UI 개선
+   ============================================================ */
+
+/* 힌트 스타일 */
+.tm-hint {
+  font-size: 13px;
+  color: #8b95a1;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+/* 폼 섹션 */
+.tm-form-section {
+  margin-bottom: 28px;
+}
+
+.tm-form-section h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333d4b;
+  margin-bottom: 14px;
+}
+
+/* 폼 행 */
+.tm-form-row {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+/* 타입 선택 */
+.tm-type-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tm-type-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: 1px solid #e5e8eb;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #fff;
+}
+
+.tm-type-option:hover {
+  border-color: #3182f6;
+  background: #f0f6ff;
+}
+
+.tm-type-option.selected {
+  border-color: #3182f6;
+  background: #f0f6ff;
+}
+
+.tm-type-option input {
+  display: none;
+}
+
+.tm-type-icon {
+  font-size: 20px;
+}
+
+.tm-type-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* 아코디언 스타일 개선 */
+details.tm-accordion {
+  margin-bottom: 20px;
+  border: 1px solid #e5e8eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+details.tm-accordion summary {
+  padding: 16px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #f9fafb;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+details.tm-accordion summary:hover {
+  background: #f1f5f9;
+}
+
+details.tm-accordion[open] summary {
+  border-bottom: 1px solid #e5e8eb;
+}
+
+details.tm-accordion .tm-accordion-content {
+  padding: 20px;
+}
+
+/* 고시명칭 토글 개선 */
+.tm-gazette-toggle {
+  display: flex;
+  gap: 16px;
+  padding: 16px 20px;
+  background: #f9fafb;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.tm-gazette-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 10px 16px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  flex: 1;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid #e5e8eb;
+}
+
+.tm-gazette-toggle label:hover {
+  border-color: #3182f6;
+}
+
+.tm-gazette-toggle label:has(input:checked) {
+  background: #f0f6ff;
+  border-color: #3182f6;
+}
+
+.tm-gazette-toggle .fee-badge {
+  padding: 4px 8px;
+  background: #e5e8eb;
+  border-radius: 12px;
+  font-size: 11px;
+  color: #6b7684;
+}
+
+.tm-gazette-toggle label:has(input:checked) .fee-badge {
+  background: #3182f6;
+  color: #fff;
 }
