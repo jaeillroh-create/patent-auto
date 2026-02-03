@@ -700,7 +700,7 @@
   };
 
   // ============================================================
-  // 7. 워크스페이스 렌더링
+  // 7. 워크스페이스 렌더링 (좌측 사이드바 + 우측 메인)
   // ============================================================
   
   TM.renderWorkspace = function() {
@@ -708,54 +708,80 @@
     if (!panel || !TM.currentProject) return;
     
     panel.innerHTML = `
-      <div class="trademark-workspace">
-        <!-- 헤더 -->
-        <div class="tm-workspace-header">
-          <div class="tm-workspace-title">
-            <button class="btn btn-ghost btn-sm" data-action="tm-back-to-list">← 목록</button>
-            <h3 id="tm-project-title">${TM.escapeHtml(TM.currentProject.title)}</h3>
-            <span class="tm-project-status ${TM.currentProject.status}">${TM.getStatusLabel(TM.currentProject.status)}</span>
-          </div>
-          <div class="tm-workspace-actions">
-            <button class="btn btn-secondary btn-sm" data-action="tm-save-project">💾 저장</button>
-          </div>
-        </div>
-        
-        <!-- 스텝 네비게이션 -->
-        <nav class="tm-workflow-nav" id="tm-workflow-nav">
-          ${TM.steps.map(step => `
-            <button class="tm-step-tab ${step.id === TM.currentStep ? 'active' : ''} ${TM.isStepCompleted(step.id) ? 'completed' : ''}"
-                    data-action="tm-goto-step" data-step="${step.id}">
-              <span class="tm-step-number">${step.id}</span>
-              <span>${step.icon} ${step.name}</span>
+      <div class="tm-app-layout">
+        <!-- 좌측 사이드바 -->
+        <aside class="tm-sidebar">
+          <div class="tm-sidebar-header">
+            <button class="tm-back-btn" data-action="tm-back-to-list">
+              <span>←</span> 목록
             </button>
-          `).join('')}
-        </nav>
-        
-        <!-- 스텝 컨텐츠 -->
-        <div class="tm-step-contents" id="tm-step-contents">
-          ${TM.steps.map(step => `
-            <div class="tm-step-content ${step.id === TM.currentStep ? 'active' : ''}" id="tm-step-${step.id}">
-              <!-- 각 스텝 컨텐츠는 동적으로 렌더링 -->
+          </div>
+          
+          <div class="tm-sidebar-project">
+            <div class="tm-project-icon">🏷️</div>
+            <div class="tm-project-info">
+              <h3 id="tm-project-title">${TM.escapeHtml(TM.currentProject.trademarkName || TM.currentProject.title)}</h3>
+              <span class="tm-status-badge ${TM.currentProject.status}">${TM.getStatusLabel(TM.currentProject.status)}</span>
             </div>
-          `).join('')}
-        </div>
+            <button class="tm-save-btn" data-action="tm-save-project" title="저장">💾</button>
+          </div>
+          
+          <nav class="tm-step-nav">
+            ${TM.steps.map(step => `
+              <button class="tm-step-item ${step.id === TM.currentStep ? 'active' : ''} ${TM.isStepCompleted(step.id) ? 'completed' : ''}"
+                      data-action="tm-goto-step" data-step="${step.id}">
+                <span class="tm-step-num">${step.id}</span>
+                <span class="tm-step-name">${step.name}</span>
+                ${TM.isStepCompleted(step.id) ? '<span class="tm-step-check">✓</span>' : ''}
+              </button>
+            `).join('')}
+          </nav>
+          
+          <div class="tm-sidebar-footer">
+            <div class="tm-progress">
+              <div class="tm-progress-bar" style="width: ${TM.getProgressPercent()}%"></div>
+            </div>
+            <span class="tm-progress-text">${TM.getCompletedSteps()}/${TM.steps.length} 완료</span>
+          </div>
+        </aside>
         
-        <!-- 하단 네비게이션 -->
-        <div class="tm-step-footer">
-          <button class="btn btn-secondary" data-action="tm-prev-step" ${TM.currentStep === 1 ? 'disabled' : ''}>
-            ← 이전
-          </button>
-          <span class="tm-step-indicator">${TM.currentStep} / ${TM.steps.length}</span>
-          <button class="btn btn-primary" data-action="tm-next-step" ${TM.currentStep === TM.steps.length ? 'disabled' : ''}>
-            다음 →
-          </button>
-        </div>
+        <!-- 우측 메인 영역 -->
+        <main class="tm-main">
+          <div class="tm-main-header">
+            <h2>${TM.steps[TM.currentStep - 1]?.icon || ''} ${TM.steps[TM.currentStep - 1]?.name || ''}</h2>
+          </div>
+          
+          <div class="tm-main-content" id="tm-step-content">
+            <!-- 스텝 컨텐츠 동적 렌더링 -->
+          </div>
+          
+          <div class="tm-main-footer">
+            <button class="btn btn-secondary" data-action="tm-prev-step" ${TM.currentStep === 1 ? 'disabled' : ''}>
+              ← 이전
+            </button>
+            <span class="tm-step-indicator">${TM.currentStep} / ${TM.steps.length}</span>
+            <button class="btn btn-primary" data-action="tm-next-step" ${TM.currentStep === TM.steps.length ? 'disabled' : ''}>
+              다음 →
+            </button>
+          </div>
+        </main>
       </div>
     `;
     
     // 현재 스텝 컨텐츠 렌더링
     TM.renderCurrentStep();
+  };
+  
+  TM.getProgressPercent = function() {
+    return Math.round((TM.getCompletedSteps() / TM.steps.length) * 100);
+  };
+  
+  TM.getCompletedSteps = function() {
+    let count = 0;
+    TM.steps.forEach(step => {
+      if (TM.isStepCompleted(step.id)) count++;
+    });
+    return count;
   };
   
   TM.getStatusLabel = function(status) {
@@ -813,20 +839,20 @@
   };
   
   TM.updateStepUI = function() {
-    // 탭 상태 업데이트
-    const tabs = document.querySelectorAll('.tm-step-tab');
-    tabs.forEach(tab => {
-      const stepNum = parseInt(tab.dataset.step);
-      tab.classList.toggle('active', stepNum === TM.currentStep);
-      tab.classList.toggle('completed', TM.isStepCompleted(stepNum));
+    // 사이드바 스텝 상태 업데이트
+    const stepItems = document.querySelectorAll('.tm-step-item');
+    stepItems.forEach(item => {
+      const stepNum = parseInt(item.dataset.step);
+      item.classList.toggle('active', stepNum === TM.currentStep);
+      item.classList.toggle('completed', TM.isStepCompleted(stepNum));
     });
     
-    // 컨텐츠 표시 업데이트
-    const contents = document.querySelectorAll('.tm-step-content');
-    contents.forEach(content => {
-      const stepNum = parseInt(content.id.replace('tm-step-', ''));
-      content.classList.toggle('active', stepNum === TM.currentStep);
-    });
+    // 메인 헤더 업데이트
+    const mainHeader = document.querySelector('.tm-main-header h2');
+    if (mainHeader) {
+      const step = TM.steps[TM.currentStep - 1];
+      mainHeader.textContent = `${step?.icon || ''} ${step?.name || ''}`;
+    }
     
     // 하단 버튼 상태
     const prevBtn = document.querySelector('[data-action="tm-prev-step"]');
@@ -837,10 +863,16 @@
     // 인디케이터
     const indicator = document.querySelector('.tm-step-indicator');
     if (indicator) indicator.textContent = `${TM.currentStep} / ${TM.steps.length}`;
+    
+    // 진행률 업데이트
+    const progressBar = document.querySelector('.tm-progress-bar');
+    const progressText = document.querySelector('.tm-progress-text');
+    if (progressBar) progressBar.style.width = `${TM.getProgressPercent()}%`;
+    if (progressText) progressText.textContent = `${TM.getCompletedSteps()}/${TM.steps.length} 완료`;
   };
   
   TM.renderCurrentStep = function() {
-    const stepEl = document.getElementById(`tm-step-${TM.currentStep}`);
+    const stepEl = document.getElementById('tm-step-content');
     if (!stepEl) return;
     
     switch (TM.currentStep) {
@@ -993,18 +1025,18 @@
     const hasAiResult = p.aiAnalysis.businessAnalysis;
     
     container.innerHTML = `
-      <div class="tm-2col-layout">
+      <div class="tm-2col">
         <!-- 좌측: 입력 영역 -->
-        <div class="tm-col-left">
+        <div class="tm-col">
           <div class="tm-panel">
             <div class="tm-panel-header">
               <h3>🏷️ 상표 기본 정보</h3>
             </div>
             <div class="tm-panel-body">
               <!-- 상표 유형 -->
-              <div class="tm-field-row">
-                <label class="tm-field-label">상표 유형</label>
-                <div class="tm-type-chips">
+              <div class="tm-field">
+                <label>상표 유형</label>
+                <div class="tm-chips">
                   ${[
                     {type: 'text', label: '문자'},
                     {type: 'figure', label: '도형'},
@@ -1022,21 +1054,21 @@
                 </div>
               </div>
               
-              <!-- 상표명 + 견본 (가로 배치) -->
-              <div class="tm-field-row tm-field-inline">
-                <div class="tm-field-main">
-                  <label class="tm-field-label">상표명 <span class="required">*</span></label>
+              <!-- 상표명 + 견본 -->
+              <div class="tm-field-row">
+                <div class="tm-field" style="flex:3">
+                  <label>상표명 <span class="required">*</span></label>
                   <input type="text" class="tm-input tm-input-lg" data-field="trademarkName" 
                          value="${TM.escapeHtml(p.trademarkName)}" 
                          placeholder="한글, 영문, 한자 등">
                 </div>
-                <div class="tm-field-side">
-                  <label class="tm-field-label">견본</label>
-                  <div class="tm-specimen-mini" onclick="document.getElementById('tm-specimen-input').click()">
-                    ${p.specimenUrl ? `<img src="${p.specimenUrl}" alt="견본">` : `<span>🖼️</span>`}
+                <div class="tm-field" style="flex:1">
+                  <label>견본</label>
+                  <div class="tm-specimen" onclick="document.getElementById('tm-specimen-input').click()">
+                    ${p.specimenUrl ? `<img src="${p.specimenUrl}" alt="견본">` : `<span style="font-size:24px">🖼️</span>`}
                   </div>
                   <input type="file" id="tm-specimen-input" data-field="specimen" 
-                         accept="image/jpeg,image/png,image/gif" style="display: none;">
+                         accept="image/jpeg,image/png,image/gif" style="display:none">
                 </div>
               </div>
             </div>
@@ -1046,26 +1078,24 @@
           <div class="tm-panel tm-panel-highlight">
             <div class="tm-panel-header">
               <h3>🤖 AI 사업 분석</h3>
-              <span class="tm-badge-rec">추천</span>
+              <span class="tm-badge tm-badge-primary">추천</span>
             </div>
             <div class="tm-panel-body">
               <p class="tm-hint">사업 내용을 입력하면 AI가 상품류와 지정상품을 추천합니다.</p>
-              <div class="tm-ai-input-group">
+              <div class="tm-ai-input">
                 <input type="text" class="tm-input" id="tm-business-url" 
                        value="${TM.escapeHtml(p.businessDescription || '')}"
                        placeholder="예: 소프트웨어 개발, 특허 출원 대행">
-                <button class="btn btn-primary" data-action="tm-analyze-business">
-                  🔍 분석
-                </button>
+                <button class="btn btn-primary" data-action="tm-analyze-business">🔍 분석</button>
               </div>
             </div>
           </div>
           
           <!-- 출원인 정보 -->
-          <details class="tm-panel tm-panel-collapsible">
+          <details class="tm-panel">
             <summary class="tm-panel-header">
               <h3>👤 출원인 정보</h3>
-              <span class="tm-badge-opt">${p.applicant.name ? '입력됨' : '선택'}</span>
+              <span class="tm-badge tm-badge-gray">${p.applicant.name ? '입력됨' : '선택'}</span>
             </summary>
             <div class="tm-panel-body">
               <div class="tm-field-grid">
@@ -1087,16 +1117,15 @@
           </details>
         </div>
         
-        <!-- 우측: 결과/미리보기 영역 -->
-        <div class="tm-col-right">
+        <!-- 우측: 결과 영역 -->
+        <div class="tm-col">
           ${hasAiResult ? `
-            <div class="tm-panel tm-panel-result">
+            <div class="tm-panel">
               <div class="tm-panel-header">
                 <h3>📋 분석 결과</h3>
               </div>
               <div class="tm-panel-body">
-                <div class="tm-result-summary">${TM.escapeHtml(p.aiAnalysis.businessAnalysis)}</div>
-                
+                <div class="tm-summary">${TM.escapeHtml(p.aiAnalysis.businessAnalysis)}</div>
                 ${p.aiAnalysis.coreKeywords?.length > 0 ? `
                   <div class="tm-keywords">
                     ${p.aiAnalysis.coreKeywords.slice(0, 6).map(k => `<span class="tm-kw">${k}</span>`).join('')}
@@ -1110,36 +1139,38 @@
                 <h3>🎯 추천 상품류</h3>
                 <button class="btn btn-sm btn-ghost" data-action="tm-apply-all-recommendations">전체 적용</button>
               </div>
-              <div class="tm-panel-body tm-rec-list">
-                ${p.aiAnalysis.recommendedClasses.map((code, idx) => {
-                  const className = TM.niceClasses[code] || '';
-                  const reason = p.aiAnalysis.classReasons?.[code] || '';
-                  const goods = p.aiAnalysis.recommendedGoods?.[code] || [];
-                  const isAdded = p.designatedGoods.some(g => g.classCode === code);
-                  
-                  return `
-                    <div class="tm-rec-item ${isAdded ? 'added' : ''}">
-                      <div class="tm-rec-num">${idx + 1}</div>
-                      <div class="tm-rec-info">
-                        <div class="tm-rec-class">제${code}류 <span>${className}</span></div>
-                        ${reason ? `<div class="tm-rec-desc">${TM.escapeHtml(reason)}</div>` : ''}
-                        <div class="tm-rec-tags">
-                          ${goods.slice(0, 4).map(g => `<span>${g.name}</span>`).join('')}
-                          ${goods.length > 4 ? `<span class="more">+${goods.length - 4}</span>` : ''}
+              <div class="tm-panel-body">
+                <div class="tm-rec-list">
+                  ${p.aiAnalysis.recommendedClasses.map((code, idx) => {
+                    const className = TM.niceClasses[code] || '';
+                    const reason = p.aiAnalysis.classReasons?.[code] || '';
+                    const goods = p.aiAnalysis.recommendedGoods?.[code] || [];
+                    const isAdded = p.designatedGoods.some(g => g.classCode === code);
+                    
+                    return `
+                      <div class="tm-rec-item ${isAdded ? 'added' : ''}">
+                        <div class="tm-rec-num">${idx + 1}</div>
+                        <div class="tm-rec-info">
+                          <div class="tm-rec-class">제${code}류 <span>${className}</span></div>
+                          ${reason ? `<div class="tm-rec-desc">${TM.escapeHtml(reason)}</div>` : ''}
+                          <div class="tm-rec-tags">
+                            ${goods.slice(0, 3).map(g => `<span>${g.name}</span>`).join('')}
+                            ${goods.length > 3 ? `<span class="more">+${goods.length - 3}</span>` : ''}
+                          </div>
+                        </div>
+                        <div class="tm-rec-btn">
+                          ${isAdded ? `<span class="applied">✓</span>` : 
+                            `<button class="btn btn-xs btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">적용</button>`}
                         </div>
                       </div>
-                      <div class="tm-rec-btn">
-                        ${isAdded ? `<span class="applied">✓</span>` : 
-                          `<button class="btn btn-sm btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">적용</button>`}
-                      </div>
-                    </div>
-                  `;
-                }).join('')}
+                    `;
+                  }).join('')}
+                </div>
               </div>
             </div>
           ` : `
             <div class="tm-panel tm-panel-empty">
-              <div class="tm-empty-state">
+              <div class="tm-empty">
                 <div class="tm-empty-icon">🔍</div>
                 <h4>AI 분석을 시작하세요</h4>
                 <p>사업 내용을 입력하고 분석 버튼을 클릭하면<br>적합한 상품류를 추천받을 수 있습니다.</p>
@@ -1269,20 +1300,22 @@
     const totalGoods = p.designatedGoods.reduce((sum, c) => sum + c.goods.length, 0);
     
     container.innerHTML = `
-      <div class="tm-2col-layout">
+      <div class="tm-2col">
         <!-- 좌측: 상품류 선택 -->
-        <div class="tm-col-left">
+        <div class="tm-col">
           <!-- 고시명칭 토글 -->
-          <div class="tm-panel tm-panel-compact">
-            <div class="tm-toggle-row">
-              <label class="tm-toggle ${p.gazettedOnly ? 'active' : ''}">
-                <input type="radio" name="gazettedMode" value="true" ${p.gazettedOnly ? 'checked' : ''}>
-                고시명칭 Only <span class="fee">46,000원/류</span>
-              </label>
-              <label class="tm-toggle ${!p.gazettedOnly ? 'active' : ''}">
-                <input type="radio" name="gazettedMode" value="false" ${!p.gazettedOnly ? 'checked' : ''}>
-                비고시 허용 <span class="fee">52,000원/류</span>
-              </label>
+          <div class="tm-panel">
+            <div class="tm-panel-body">
+              <div class="tm-toggles">
+                <label class="tm-toggle ${p.gazettedOnly ? 'active' : ''}">
+                  <input type="radio" name="gazettedMode" value="true" ${p.gazettedOnly ? 'checked' : ''}>
+                  고시명칭 Only <span class="fee">46,000원/류</span>
+                </label>
+                <label class="tm-toggle ${!p.gazettedOnly ? 'active' : ''}">
+                  <input type="radio" name="gazettedMode" value="false" ${!p.gazettedOnly ? 'checked' : ''}>
+                  비고시 허용 <span class="fee">52,000원/류</span>
+                </label>
+              </div>
             </div>
           </div>
           
@@ -1293,11 +1326,11 @@
                 <h3>🤖 AI 추천</h3>
                 <button class="btn btn-sm btn-ghost" data-action="tm-apply-all-recommendations">전체 적용</button>
               </div>
-              <div class="tm-panel-body tm-rec-compact">
+              <div class="tm-panel-body">
                 ${p.aiAnalysis.recommendedClasses.slice(0, 5).map((code, idx) => {
                   const isAdded = p.designatedGoods.some(g => g.classCode === code);
                   return `
-                    <div class="tm-rec-mini ${isAdded ? 'added' : ''}" data-class="${code}">
+                    <div class="tm-rec-mini ${isAdded ? 'added' : ''}">
                       <span class="num">${idx + 1}</span>
                       <span class="code">제${code}류</span>
                       <span class="name">${TM.niceClasses[code] || ''}</span>
@@ -1314,7 +1347,7 @@
           <div class="tm-panel">
             <div class="tm-panel-header">
               <h3>📋 상품류 선택</h3>
-              <span class="tm-badge-info">NICE 13판</span>
+              <span class="tm-badge tm-badge-gray">NICE 13판</span>
             </div>
             <div class="tm-panel-body">
               <div class="tm-class-grid">
@@ -1331,27 +1364,29 @@
                 }).join('')}
               </div>
               <div class="tm-grid-legend">
-                <span><i class="dot sel"></i> 선택</span>
-                <span><i class="dot rec"></i> AI추천</span>
+                <span><i class="sel"></i> 선택</span>
+                <span><i class="rec"></i> AI추천</span>
               </div>
             </div>
           </div>
         </div>
         
         <!-- 우측: 선택된 지정상품 -->
-        <div class="tm-col-right">
-          <div class="tm-panel tm-panel-sticky">
+        <div class="tm-col">
+          <div class="tm-panel">
             <div class="tm-panel-header">
               <h3>📦 선택된 지정상품</h3>
               <span class="tm-count">${p.designatedGoods.length}류 / ${totalGoods}개</span>
             </div>
-            <div class="tm-panel-body tm-goods-list">
-              ${p.designatedGoods.length === 0 ? `
-                <div class="tm-empty-mini">
-                  <span>📦</span>
-                  <p>좌측에서 상품류를 선택하세요</p>
-                </div>
-              ` : p.designatedGoods.map(classData => TM.renderClassGoodsCompact(classData)).join('')}
+            <div class="tm-panel-body">
+              <div class="tm-goods-list">
+                ${p.designatedGoods.length === 0 ? `
+                  <div class="tm-empty">
+                    <div class="tm-empty-icon">📦</div>
+                    <p>좌측에서 상품류를 선택하세요</p>
+                  </div>
+                ` : p.designatedGoods.map(classData => TM.renderClassGoodsCompact(classData)).join('')}
+              </div>
             </div>
           </div>
         </div>
