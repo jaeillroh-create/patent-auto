@@ -3121,12 +3121,6 @@
     }
     
     return reasons.join(', ');
-      return results;
-      
-    } catch (error) {
-      console.error('[KIPRIS] 검색 실패:', error);
-      throw error;
-    }
   };
   
   // ====== 레거시 호환 함수 ======
