@@ -264,7 +264,7 @@
   
   TM.bindEvents = function() {
     // 탭 패널 내 이벤트 위임
-    const panel = document.getElementById('trademark-panel');
+    const panel = document.getElementById('trademark-dashboard-panel');
     if (!panel) return;
     
     panel.addEventListener('click', TM.handleClick);
@@ -411,7 +411,7 @@
   // ============================================================
   
   TM.renderDashboard = async function() {
-    const panel = document.getElementById('trademark-panel');
+    const panel = document.getElementById('trademark-dashboard-panel');
     if (!panel) return;
     
     panel.innerHTML = `
@@ -701,7 +701,7 @@
   // ============================================================
   
   TM.renderWorkspace = function() {
-    const panel = document.getElementById('trademark-panel');
+    const panel = document.getElementById('trademark-dashboard-panel');
     if (!panel || !TM.currentProject) return;
     
     panel.innerHTML = `
