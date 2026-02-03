@@ -2010,7 +2010,7 @@
       const response = await App.callClaude(prompt, 1000);
       
       // JSON 파싱
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('AI 응답을 파싱할 수 없습니다.');
       }
@@ -2233,7 +2233,7 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
 
       const response = await App.callClaude(prompt, 1500);
       
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('AI 응답을 파싱할 수 없습니다.');
       }
@@ -2713,7 +2713,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
 
       const response = await App.callClaude(prompt, 2000);
       
-      pe.generatedDocument = response;
+      pe.generatedDocument = response.text;
       TM.renderCurrentStep();
       
       App.showToast('설명서가 생성되었습니다.', 'success');
@@ -3139,7 +3139,7 @@ NICE 분류 참고:
 
       const response = await App.callClaude(prompt, 1000);
       
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('AI 응답을 파싱할 수 없습니다.');
       }
@@ -3237,7 +3237,7 @@ JSON 형식으로 응답하세요:
       
       const response = await App.callClaude(prompt, 800);
       
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('AI 응답을 파싱할 수 없습니다.');
       }
@@ -3290,7 +3290,7 @@ JSON 형식:
 
       const response = await App.callClaude(prompt, 800);
       
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const result = JSON.parse(jsonMatch[0]);
         return result.recommendedGoods || [];
@@ -3335,7 +3335,7 @@ JSON 형식:
 텍스트로만 응답하세요 (JSON 형식 불필요).`;
 
       const response = await App.callClaude(prompt, 300);
-      return response.trim();
+      return response.text.trim();
       
     } catch (error) {
       console.error('[TM] 상표 설명 생성 실패:', error);
@@ -3433,7 +3433,7 @@ ${p.designatedGoods?.map(c => `제${c.classCode}류: ${c.goods.length}개 상품
 
       const response = await App.callClaude(prompt, 2000);
       
-      p.aiAnalysis.fullReport = response;
+      p.aiAnalysis.fullReport = response.text;
       App.showToast('보고서가 생성되었습니다.', 'success');
       
       return response;
