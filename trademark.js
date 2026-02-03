@@ -272,6 +272,9 @@
       case 'tm-open-project':
         TM.openProject(params.id);
         break;
+      case 'tm-edit-project':
+        TM.editProject(params.id, params.title);
+        break;
       case 'tm-delete-project':
         TM.deleteProject(params.id);
         break;
@@ -348,6 +351,9 @@
         break;
       case 'tm-assess-risk':
         TM.assessRisk();
+        break;
+      case 'tm-set-priority':
+        TM.setPriorityChoice(params.enabled === 'true');
         break;
       case 'tm-generate-priority-doc':
         TM.generatePriorityDocument();
@@ -515,8 +521,11 @@
           <button class="btn btn-primary btn-sm" data-action="tm-open-project" data-id="${project.id}">
             📂 열기
           </button>
-          <button class="btn btn-ghost btn-sm" data-action="tm-delete-project" data-id="${project.id}" onclick="event.stopPropagation()">
-            🗑️ 삭제
+          <button class="btn btn-secondary btn-sm" data-action="tm-edit-project" data-id="${project.id}" data-title="${TM.escapeHtml(project.title || '')}" onclick="event.stopPropagation()">
+            ✏️ 편집
+          </button>
+          <button class="btn btn-ghost btn-sm tm-delete-btn" data-action="tm-delete-project" data-id="${project.id}" onclick="event.stopPropagation()">
+            🗑️
           </button>
         </div>
       </div>
@@ -682,6 +691,28 @@
     } catch (error) {
       console.error('[TM] 삭제 실패:', error);
       App.showToast('삭제 실패: ' + error.message, 'error');
+    }
+  };
+  
+  // 프로젝트 편집 (이름 변경)
+  TM.editProject = async function(projectId, currentTitle) {
+    const newTitle = prompt('프로젝트 이름을 입력하세요:', currentTitle || '새 상표 프로젝트');
+    if (!newTitle || newTitle === currentTitle) return;
+    
+    try {
+      const { error } = await App.sb
+        .from('trademark_projects')
+        .update({ title: newTitle, updated_at: new Date().toISOString() })
+        .eq('id', projectId);
+      
+      if (error) throw error;
+      
+      App.showToast('프로젝트 이름이 변경되었습니다.', 'success');
+      TM.loadProjectList();
+      
+    } catch (error) {
+      console.error('[TM] 편집 실패:', error);
+      App.showToast('편집 실패: ' + error.message, 'error');
     }
   };
   
@@ -861,8 +892,8 @@
         return !!(TM.currentProject.riskAssessment.level);
       case 6: // 비용 산출
         return TM.currentProject.feeCalculation.totalFee > 0;
-      case 7: // 우선심사
-        return !TM.currentProject.priorityExam.enabled || !!(TM.currentProject.priorityExam.generatedDocument);
+      case 7: // 우선심사 - 사용자가 명시적으로 선택 여부를 결정해야 완료
+        return TM.currentProject.priorityExam.userConfirmed === true;
       case 8: // 문서 출력
         return false; // 항상 미완료 (언제든 다운로드 가능)
       default:
@@ -1357,43 +1388,70 @@
     const hasAiRec = p.aiAnalysis?.recommendedClasses?.length > 0;
     const totalGoods = p.designatedGoods.reduce((sum, c) => sum + c.goods.length, 0);
     
+    // 모든 유사군 코드 수집
+    const allSimilarGroups = new Set();
+    p.designatedGoods.forEach(classData => {
+      classData.goods?.forEach(g => {
+        if (g.similarGroup) {
+          g.similarGroup.split(',').forEach(sg => allSimilarGroups.add(sg.trim()));
+        }
+      });
+    });
+    
     container.innerHTML = `
       <div class="tm-2col">
         <!-- 좌측: 상품류 선택 -->
         <div class="tm-col">
           <!-- 고시명칭 토글 -->
-          <div class="tm-panel">
-            <div class="tm-panel-body">
-              <div class="tm-toggles">
-                <label class="tm-toggle ${p.gazettedOnly ? 'active' : ''}">
-                  <input type="radio" name="gazettedMode" value="true" ${p.gazettedOnly ? 'checked' : ''}>
-                  고시명칭 Only <span class="fee">46,000원/류</span>
-                </label>
-                <label class="tm-toggle ${!p.gazettedOnly ? 'active' : ''}">
-                  <input type="radio" name="gazettedMode" value="false" ${!p.gazettedOnly ? 'checked' : ''}>
-                  비고시 허용 <span class="fee">52,000원/류</span>
-                </label>
-              </div>
+          <div class="tm-panel tm-panel-sm">
+            <div class="tm-toggles">
+              <label class="tm-toggle ${p.gazettedOnly ? 'active' : ''}">
+                <input type="radio" name="gazettedMode" value="true" ${p.gazettedOnly ? 'checked' : ''}>
+                고시명칭 Only <span class="fee">46,000원/류</span>
+              </label>
+              <label class="tm-toggle ${!p.gazettedOnly ? 'active' : ''}">
+                <input type="radio" name="gazettedMode" value="false" ${!p.gazettedOnly ? 'checked' : ''}>
+                비고시 허용 <span class="fee">52,000원/류</span>
+              </label>
             </div>
           </div>
           
           ${hasAiRec ? `
-            <!-- AI 추천 -->
-            <div class="tm-panel">
+            <!-- AI 추천 상품류 (상세 표시) -->
+            <div class="tm-panel tm-panel-ai">
               <div class="tm-panel-header">
-                <h3>🤖 AI 추천</h3>
-                <button class="btn btn-sm btn-ghost" data-action="tm-apply-all-recommendations">전체 적용</button>
+                <h3>🤖 AI 추천 상품류</h3>
+                <button class="btn btn-sm btn-primary" data-action="tm-apply-all-recommendations">✓ 전체 적용</button>
               </div>
-              <div class="tm-panel-body">
+              <div class="tm-ai-rec-desc">
+                사업 분석 결과, 아래 상품류가 적합합니다. <strong>+</strong> 버튼을 클릭하면 추가됩니다.
+              </div>
+              <div class="tm-ai-rec-list">
                 ${p.aiAnalysis.recommendedClasses.slice(0, 5).map((code, idx) => {
                   const isAdded = p.designatedGoods.some(g => g.classCode === code);
+                  const reason = p.aiAnalysis.classReasons?.[code] || '';
+                  const recGoods = p.aiAnalysis.recommendedGoods?.[code] || [];
+                  
                   return `
-                    <div class="tm-rec-mini ${isAdded ? 'added' : ''}">
-                      <span class="num">${idx + 1}</span>
-                      <span class="code">제${code}류</span>
-                      <span class="name">${TM.niceClasses[code] || ''}</span>
-                      ${isAdded ? '<span class="check">✓</span>' : 
-                        `<button class="btn btn-xs btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">+</button>`}
+                    <div class="tm-ai-rec-item ${isAdded ? 'added' : ''}">
+                      <div class="tm-ai-rec-num">${idx + 1}</div>
+                      <div class="tm-ai-rec-content">
+                        <div class="tm-ai-rec-class">
+                          <strong>제${code}류</strong> ${TM.niceClasses[code] || ''}
+                        </div>
+                        ${reason ? `<div class="tm-ai-rec-reason">${TM.escapeHtml(reason.slice(0, 80))}${reason.length > 80 ? '...' : ''}</div>` : ''}
+                        ${recGoods.length > 0 ? `
+                          <div class="tm-ai-rec-goods">
+                            <span class="label">추천 지정상품:</span>
+                            ${recGoods.slice(0, 3).map(g => `<span class="tag">${g.name || g}</span>`).join('')}
+                            ${recGoods.length > 3 ? `<span class="more">+${recGoods.length - 3}</span>` : ''}
+                          </div>
+                        ` : ''}
+                      </div>
+                      <div class="tm-ai-rec-action">
+                        ${isAdded ? '<span class="applied">✓ 적용됨</span>' : 
+                          `<button class="btn btn-primary btn-sm" data-action="tm-apply-recommendation" data-class-code="${code}">+ 추가</button>`}
+                      </div>
                     </div>
                   `;
                 }).join('')}
@@ -1404,8 +1462,8 @@
           <!-- 전체 상품류 그리드 -->
           <div class="tm-panel">
             <div class="tm-panel-header">
-              <h3>📋 상품류 선택</h3>
-              <span class="tm-badge tm-badge-gray">NICE 13판</span>
+              <h3>📋 전체 상품류</h3>
+              <span class="tm-badge">NICE 13판 (45류)</span>
             </div>
             <div class="tm-panel-body">
               <div class="tm-class-grid">
@@ -1422,8 +1480,8 @@
                 }).join('')}
               </div>
               <div class="tm-grid-legend">
-                <span><i class="sel"></i> 선택</span>
-                <span><i class="rec"></i> AI추천</span>
+                <span><span class="dot selected"></span> 선택됨</span>
+                <span><span class="dot rec"></span> AI추천</span>
               </div>
             </div>
           </div>
@@ -1431,20 +1489,35 @@
         
         <!-- 우측: 선택된 지정상품 -->
         <div class="tm-col">
-          <div class="tm-panel">
+          <div class="tm-panel tm-panel-selected">
             <div class="tm-panel-header">
-              <h3>📦 선택된 지정상품</h3>
-              <span class="tm-count">${p.designatedGoods.length}류 / ${totalGoods}개</span>
-            </div>
-            <div class="tm-panel-body">
-              <div class="tm-goods-list">
-                ${p.designatedGoods.length === 0 ? `
-                  <div class="tm-empty">
-                    <div class="tm-empty-icon">📦</div>
-                    <p>좌측에서 상품류를 선택하세요</p>
-                  </div>
-                ` : p.designatedGoods.map(classData => TM.renderClassGoodsCompact(classData)).join('')}
+              <h3>✅ 선택된 지정상품</h3>
+              <div class="tm-selected-stats">
+                <span class="tm-stat-item"><strong>${p.designatedGoods.length}</strong>류</span>
+                <span class="tm-stat-item"><strong>${totalGoods}</strong>개 상품</span>
+                <span class="tm-stat-item"><strong>${allSimilarGroups.size}</strong>개 유사군</span>
               </div>
+            </div>
+            
+            ${p.designatedGoods.length > 0 ? `
+              <!-- 유사군 요약 -->
+              <div class="tm-similar-summary">
+                <span class="label">유사군 코드:</span>
+                <div class="tm-similar-tags">
+                  ${Array.from(allSimilarGroups).slice(0, 8).map(sg => `<span class="tm-similar-tag">${sg}</span>`).join('')}
+                  ${allSimilarGroups.size > 8 ? `<span class="tm-similar-more">+${allSimilarGroups.size - 8}개</span>` : ''}
+                </div>
+              </div>
+            ` : ''}
+            
+            <div class="tm-goods-container">
+              ${p.designatedGoods.length === 0 ? `
+                <div class="tm-empty-goods">
+                  <div class="icon">📦</div>
+                  <h4>지정상품을 선택하세요</h4>
+                  <p>좌측에서 상품류를 클릭하거나<br>AI 추천을 적용하세요.</p>
+                </div>
+              ` : p.designatedGoods.map(classData => TM.renderClassGoodsCard(classData)).join('')}
             </div>
           </div>
         </div>
@@ -1457,35 +1530,54 @@
         TM.currentProject.gazettedOnly = e.target.value === 'true';
         container.querySelectorAll('.tm-toggle').forEach(t => t.classList.remove('active'));
         e.target.closest('.tm-toggle').classList.add('active');
+        TM.hasUnsavedChanges = true;
       });
     });
   };
   
-  // 컴팩트 지정상품 카드
-  TM.renderClassGoodsCompact = function(classData) {
+  // 상품류별 지정상품 카드 (개선된 버전)
+  TM.renderClassGoodsCard = function(classData) {
+    const similarGroups = new Set();
+    classData.goods?.forEach(g => {
+      if (g.similarGroup) {
+        g.similarGroup.split(',').forEach(sg => similarGroups.add(sg.trim()));
+      }
+    });
+    
     return `
       <div class="tm-goods-card" data-class="${classData.classCode}">
         <div class="tm-goods-card-header">
-          <strong>제${classData.classCode}류</strong>
-          <span>${TM.niceClasses[classData.classCode] || ''}</span>
-          <button class="btn-icon" data-action="tm-remove-class" data-class-code="${classData.classCode}">✕</button>
+          <div class="tm-goods-card-title">
+            <span class="class-badge">제${classData.classCode}류</span>
+            <span class="class-name">${TM.niceClasses[classData.classCode] || ''}</span>
+          </div>
+          <button class="btn-icon-sm" data-action="tm-remove-class" data-class-code="${classData.classCode}" title="삭제">✕</button>
         </div>
-        <div class="tm-goods-card-body">
-          <div class="tm-goods-search">
-            <input type="text" class="tm-input-sm" placeholder="지정상품 검색" 
-                   id="tm-goods-input-${classData.classCode}" data-class="${classData.classCode}">
-            <div class="tm-autocomplete" id="tm-autocomplete-${classData.classCode}"></div>
+        
+        ${similarGroups.size > 0 ? `
+          <div class="tm-goods-similar">
+            <span class="label">유사군:</span>
+            ${Array.from(similarGroups).map(sg => `<span class="sg-tag">${sg}</span>`).join('')}
           </div>
-          <div class="tm-goods-tags">
-            ${classData.goods.map(g => `
-              <span class="tm-tag" title="${g.similarGroup || ''}">
-                ${g.name}
-                <button class="tm-tag-remove" data-action="tm-remove-goods" 
-                        data-class="${classData.classCode}" data-name="${TM.escapeHtml(g.name)}">×</button>
+        ` : ''}
+        
+        <div class="tm-goods-input-area">
+          <input type="text" class="tm-goods-search-input" 
+                 placeholder="지정상품명 검색 (자동완성)"
+                 data-class="${classData.classCode}">
+        </div>
+        
+        <div class="tm-goods-chips">
+          ${classData.goods.length === 0 ? 
+            '<span class="tm-goods-empty">지정상품을 추가하세요</span>' : 
+            classData.goods.map(g => `
+              <span class="tm-goods-chip">
+                ${TM.escapeHtml(g.name)}
+                ${g.similarGroup ? `<small>(${g.similarGroup})</small>` : ''}
+                <button class="remove" data-action="tm-remove-good" data-class="${classData.classCode}" data-name="${TM.escapeHtml(g.name)}">×</button>
               </span>
-            `).join('')}
-            ${classData.goods.length === 0 ? '<span class="tm-tag-empty">지정상품을 추가하세요</span>' : ''}
-          </div>
+            `).join('')
+          }
         </div>
       </div>
     `;
@@ -3986,22 +4078,45 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
   TM.renderStep7_PriorityExam = function(container) {
     const p = TM.currentProject;
     const pe = p.priorityExam || {};
+    const isConfirmed = pe.userConfirmed === true;
     
     container.innerHTML = `
       <div class="tm-step-header">
-        <h3>⚡ 우선심사 신청</h3>
+        <h3>⚡ 우선심사 신청 여부 결정</h3>
         <p>상표를 사용 중이거나 사용 준비 중인 경우 우선심사를 신청할 수 있습니다.</p>
       </div>
       
-      <!-- 우선심사 활성화 -->
-      <div class="tm-form-section">
-        <label class="tm-checkbox-label">
-          <input type="checkbox" id="tm-pe-enabled" 
-                 ${pe.enabled ? 'checked' : ''}
-                 onchange="TM.setPriorityExamEnabled(this.checked)">
-          <span>우선심사 신청</span>
-        </label>
-        <p class="tm-hint">우선심사 신청시 심사 기간이 약 2~3개월로 단축됩니다. (일반: 12~14개월)</p>
+      <!-- 우선심사 선택 -->
+      <div class="tm-form-section tm-priority-choice">
+        <h4>우선심사 신청 여부를 선택해주세요</h4>
+        
+        <div class="tm-choice-cards">
+          <div class="tm-choice-card ${pe.enabled ? 'selected' : ''}" data-action="tm-set-priority" data-enabled="true">
+            <div class="tm-choice-icon">⚡</div>
+            <div class="tm-choice-title">우선심사 신청</div>
+            <div class="tm-choice-desc">
+              심사 기간: <strong>2~3개월</strong><br>
+              추가 비용: 160,000원/류
+            </div>
+            ${pe.enabled ? '<div class="tm-choice-check">✓</div>' : ''}
+          </div>
+          
+          <div class="tm-choice-card ${pe.enabled === false && isConfirmed ? 'selected' : ''}" data-action="tm-set-priority" data-enabled="false">
+            <div class="tm-choice-icon">📋</div>
+            <div class="tm-choice-title">일반 심사</div>
+            <div class="tm-choice-desc">
+              심사 기간: <strong>12~14개월</strong><br>
+              추가 비용: 없음
+            </div>
+            ${pe.enabled === false && isConfirmed ? '<div class="tm-choice-check">✓</div>' : ''}
+          </div>
+        </div>
+        
+        ${!isConfirmed ? `
+          <div class="tm-choice-hint">
+            ⚠️ 우선심사 신청 여부를 선택해야 다음 단계로 진행할 수 있습니다.
+          </div>
+        ` : ''}
       </div>
       
       ${pe.enabled ? `
@@ -4101,13 +4216,27 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
   TM.setPriorityExamEnabled = function(enabled) {
     if (!TM.currentProject) return;
     TM.currentProject.priorityExam.enabled = enabled;
+    TM.currentProject.priorityExam.userConfirmed = true; // 사용자가 명시적으로 선택
+    TM.hasUnsavedChanges = true;
     TM.calculateFee(); // 비용 재계산
     TM.renderCurrentStep();
+  };
+  
+  // 우선심사 선택 카드 클릭
+  TM.setPriorityChoice = function(enabled) {
+    if (!TM.currentProject) return;
+    TM.currentProject.priorityExam.enabled = enabled;
+    TM.currentProject.priorityExam.userConfirmed = true;
+    TM.hasUnsavedChanges = true;
+    TM.calculateFee();
+    TM.renderCurrentStep();
+    App.showToast(enabled ? '우선심사 신청으로 설정되었습니다.' : '일반 심사로 설정되었습니다.', 'success');
   };
   
   TM.updatePriorityReason = function(reason) {
     if (!TM.currentProject) return;
     TM.currentProject.priorityExam.reason = reason;
+    TM.hasUnsavedChanges = true;
   };
   
   TM.handleEvidenceUpload = async function(files) {
