@@ -939,3 +939,145 @@
     border: none;
   }
 }
+
+/* ============================================================
+   15. UI 간격 개선 (v2.2)
+   ============================================================ */
+
+/* 입력 필드 간격 확대 */
+.tm-form-section {
+  margin-bottom: 28px;
+}
+
+.tm-form-section h4 {
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* 입력 그룹 간격 */
+.input-group {
+  margin-bottom: 20px;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333d4b;
+}
+
+/* 입력 필드 높이 및 패딩 */
+.tm-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #e5e8eb;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: border-color 0.2s;
+}
+
+.tm-input:focus {
+  outline: none;
+  border-color: #3182f6;
+}
+
+/* 그리드 입력 레이아웃 */
+.tm-input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px 24px;
+}
+
+/* 라디오/체크박스 그룹 간격 */
+.tm-radio-group,
+.tm-type-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.tm-radio-group label,
+.tm-type-selector label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid #e5e8eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tm-radio-group label:hover,
+.tm-type-selector label:hover {
+  border-color: #3182f6;
+  background: #f0f6ff;
+}
+
+.tm-radio-group input:checked + span,
+.tm-type-selector input:checked + span {
+  color: #3182f6;
+  font-weight: 600;
+}
+
+/* 출원인 정보 아코디언 */
+details.tm-accordion {
+  margin-bottom: 24px;
+  border: 1px solid #e5e8eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+details.tm-accordion summary {
+  padding: 16px 20px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #f9fafb;
+}
+
+details.tm-accordion[open] summary {
+  border-bottom: 1px solid #e5e8eb;
+}
+
+details.tm-accordion .tm-accordion-content {
+  padding: 24px 20px;
+}
+
+/* 스텝 헤더 간격 */
+.tm-step-header {
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e8eb;
+}
+
+.tm-step-header h3 {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+/* 버튼 간격 */
+.tm-button-group {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* 힌트 텍스트 */
+.tm-hint {
+  font-size: 13px;
+  color: #8b95a1;
+  margin-top: 8px;
+}
+
+/* 섹션 타이틀 */
+.tm-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333d4b;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e5e8eb;
+}

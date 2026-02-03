@@ -1044,18 +1044,6 @@
                 <option value="mid" ${p.applicant.type === 'mid' ? 'selected' : ''}>중견기업</option>
               </select>
             </div>
-            <div class="input-group">
-              <label>감면 유형</label>
-              <select class="tm-input" data-field="applicant.reductionType">
-                <option value="" ${!p.applicant.reductionType ? 'selected' : ''}>해당 없음</option>
-                <option value="sme" ${p.applicant.reductionType === 'sme' ? 'selected' : ''}>중소기업 (70%)</option>
-                <option value="individual" ${p.applicant.reductionType === 'individual' ? 'selected' : ''}>개인 (70%)</option>
-                <option value="mid" ${p.applicant.reductionType === 'mid' ? 'selected' : ''}>중견기업 (30%)</option>
-                <option value="veteran" ${p.applicant.reductionType === 'veteran' ? 'selected' : ''}>국가유공자 (100%)</option>
-                <option value="disabled" ${p.applicant.reductionType === 'disabled' ? 'selected' : ''}>장애인 (100%)</option>
-                <option value="age" ${p.applicant.reductionType === 'age' ? 'selected' : ''}>19~30세/65세+ (85%)</option>
-              </select>
-            </div>
             <div class="input-group" style="grid-column: span 2;">
               <label>주소</label>
               <input type="text" class="tm-input" data-field="applicant.address" 
@@ -2273,24 +2261,7 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
     container.innerHTML = `
       <div class="tm-step-header">
         <h3>💰 비용 산출</h3>
-        <p>2026년 기준 관납료 및 예상 비용을 계산합니다.</p>
-      </div>
-      
-      <!-- 감면 유형 선택 -->
-      <div class="tm-form-section">
-        <h4>감면 적용</h4>
-        <div class="tm-reduction-selector">
-          <select class="tm-input" id="tm-reduction-type" onchange="TM.calculateFee()">
-            <option value="" ${!p.applicant?.reductionType ? 'selected' : ''}>감면 없음</option>
-            <option value="sme" ${p.applicant?.reductionType === 'sme' ? 'selected' : ''}>중소기업 (70%)</option>
-            <option value="individual" ${p.applicant?.reductionType === 'individual' ? 'selected' : ''}>개인 (70%)</option>
-            <option value="mid" ${p.applicant?.reductionType === 'mid' ? 'selected' : ''}>중견기업 (30%)</option>
-            <option value="veteran" ${p.applicant?.reductionType === 'veteran' ? 'selected' : ''}>국가유공자 (100%)</option>
-            <option value="disabled" ${p.applicant?.reductionType === 'disabled' ? 'selected' : ''}>장애인 (100%)</option>
-            <option value="age" ${p.applicant?.reductionType === 'age' ? 'selected' : ''}>19~30세/65세+ (85%)</option>
-          </select>
-          <button class="btn btn-secondary" data-action="tm-calc-fee">재계산</button>
-        </div>
+        <p>2026년 기준 관납료 및 예상 비용을 계산합니다. (상표 출원료는 감면 없음)</p>
       </div>
       
       <!-- 우선심사 여부 -->
@@ -2299,7 +2270,7 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
           <input type="checkbox" id="tm-priority-exam-enabled" 
                  ${p.priorityExam?.enabled ? 'checked' : ''}
                  onchange="TM.togglePriorityExam(this.checked)">
-          <span>우선심사 신청 (류당 160,000원 추가, 감면 없음)</span>
+          <span>우선심사 신청 (류당 160,000원 추가)</span>
         </label>
       </div>
       
@@ -2327,19 +2298,10 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
             <tr><td>출원료 (전자+비고시명칭)</td><td>52,000원/류</td><td>+6,000원</td></tr>
             <tr><td>서면 출원 가산</td><td>10,000원</td><td>전자출원 권장</td></tr>
             <tr><td>지정상품 가산료</td><td>2,000원/개</td><td>류당 10개 초과시</td></tr>
-            <tr><td>우선심사 신청료</td><td>160,000원/류</td><td>감면 없음</td></tr>
+            <tr><td>우선심사 신청료</td><td>160,000원/류</td><td>-</td></tr>
             <tr><td>등록료 (10년)</td><td>211,000원/류</td><td>참고</td></tr>
           </table>
-          
-          <h5 style="margin-top: 16px;">감면율</h5>
-          <table class="tm-info-table">
-            <tr><th>대상</th><th>감면율</th><th>연간한도</th></tr>
-            <tr><td>중소기업</td><td>70%</td><td>-</td></tr>
-            <tr><td>개인</td><td>70%</td><td>20건</td></tr>
-            <tr><td>중견기업</td><td>30%</td><td>-</td></tr>
-            <tr><td>국가유공자/장애인</td><td>100%</td><td>10건</td></tr>
-            <tr><td>만 19~30세 또는 65세+</td><td>85%</td><td>20건</td></tr>
-          </table>
+          <p style="margin-top: 12px; font-size: 13px; color: #6b7684;">※ 상표 출원료는 특허와 달리 감면 제도가 없습니다.</p>
         </div>
       </details>
     `;
@@ -2361,9 +2323,6 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
   TM.calculateFee = function() {
     const p = TM.currentProject;
     if (!p) return;
-    
-    const reductionType = document.getElementById('tm-reduction-type')?.value || p.applicant?.reductionType;
-    const reductionRate = reductionType ? TM.feeTable.reductionRates[reductionType] || 0 : 0;
     
     let breakdown = [];
     let subtotal = 0;
@@ -2396,38 +2355,18 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
     }
     
     // 우선심사 비용
-    if (p.priorityExam?.enabled && p.designatedGoods) {
-      const priorityFee = p.designatedGoods.length * TM.feeTable.priorityExam;
-      breakdown.push({
-        label: `우선심사 신청료 (${p.designatedGoods.length}류)`,
-        amount: priorityFee,
-        type: 'priority'
-      });
-      // 우선심사는 감면 전에 더함
-    }
-    
-    // 소계
-    const applicationSubtotal = subtotal;
-    
-    // 감면 적용 (출원료에만, 우선심사는 제외)
-    let reductionAmount = 0;
-    if (reductionRate > 0) {
-      reductionAmount = Math.round(applicationSubtotal * reductionRate);
-      breakdown.push({
-        label: `감면 (${Math.round(reductionRate * 100)}%)`,
-        amount: reductionAmount,
-        type: 'reduction'
-      });
-    }
-    
-    // 우선심사 추가 (감면 후)
     let priorityExamFee = 0;
     if (p.priorityExam?.enabled && p.designatedGoods) {
       priorityExamFee = p.designatedGoods.length * TM.feeTable.priorityExam;
+      breakdown.push({
+        label: `우선심사 신청료 (${p.designatedGoods.length}류)`,
+        amount: priorityExamFee,
+        type: 'priority'
+      });
     }
     
-    // 총액
-    const totalFee = subtotal - reductionAmount + priorityExamFee;
+    // 총액 (상표 출원료는 감면 없음)
+    const totalFee = subtotal + priorityExamFee;
     breakdown.push({
       label: '총 납부액',
       amount: totalFee,
@@ -2438,11 +2377,11 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
     p.feeCalculation = {
       applicationFee: TM.feeTable.applicationGazetted,
       classCount: p.designatedGoods?.length || 0,
-      totalApplicationFee: applicationSubtotal,
+      totalApplicationFee: subtotal,
       excessGoodsFee: breakdown.filter(b => b.type === 'excess').reduce((sum, b) => sum + b.amount, 0),
       priorityExamFee: priorityExamFee,
-      reductionRate: reductionRate,
-      reductionAmount: reductionAmount,
+      reductionRate: 0,
+      reductionAmount: 0,
       totalFee: totalFee,
       breakdown: breakdown
     };
