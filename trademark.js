@@ -118,6 +118,9 @@
       timeout: 10000
     },
     
+    // Supabase 설정
+    supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cnp3aGZqdHpxdWphd21zY2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgzMTcyNjMsImV4cCI6MjA1Mzg5MzI2M30.2-0MUEC8EfRpwjYXxMfTOOFNz5e59sI0-6Mmzx13oUo',
+    
     // 2026년 관납료 테이블
     feeTable: {
       applicationGazetted: 46000,    // 류당 (전자+고시명칭)
@@ -2095,9 +2098,12 @@
     console.log('[TM] KIPRIS 검색 요청:', type, params);
     
     try {
-      // Supabase Edge Function 호출
+      // Supabase Edge Function 호출 (JWT 인증 포함)
       const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
-        body: { type, params }
+        body: { type, params },
+        headers: {
+          Authorization: `Bearer ${TM.supabaseAnonKey}`
+        }
       });
       
       if (error) {
