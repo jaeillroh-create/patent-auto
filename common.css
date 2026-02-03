@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════
-   특허명세서 자동 생성 v5.2 — Common Design System
+   특허명세서 자동 생성 v5.3 — Common Design System
+   전체 너비 최적화 버전
    ═══════════════════════════════════════════════════════ */
 
 /* ── Design Tokens ── */
@@ -76,10 +77,17 @@ a:hover { text-decoration: underline; }
 .page { display: none; }
 .page.active { display: block; }
 
-/* ── App Container ── */
-.app-container { max-width: 640px; margin: 0 auto; padding: 0 16px 40px; }
+/* ══════════════════════════════════════════════════════════
+   ★★★ 전체 너비 레이아웃 (핵심 수정!) ★★★
+   ══════════════════════════════════════════════════════════ */
+.app-container {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 24px 40px;
+}
 
-/* ── Auth ── */
+/* ── Auth (로그인만 중앙 정렬) ── */
 .auth-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
 .auth-logo { margin-bottom: 32px; }
 .logo-img { width: 160px; height: auto; }
@@ -128,13 +136,14 @@ a:hover { text-decoration: underline; }
 .input-field::placeholder, .textarea-field::placeholder { color: var(--color-text-tertiary); }
 .input-sm { width: 80px; display: inline-block; padding: 8px 12px; text-align: center; }
 .input-hint { font-size: var(--font-size-small); color: var(--color-text-tertiary); margin-top: var(--spacing-6); }
+.input-highlight { border-color: var(--color-primary); background: var(--color-primary-light); }
 
 /* ── Tabs ── */
-.tab-container { display: flex; gap: var(--spacing-4); margin-bottom: var(--spacing-20); overflow-x: auto; scrollbar-width: none; }
+.tab-container { display: flex; gap: var(--spacing-4); margin-bottom: var(--spacing-20); overflow-x: auto; scrollbar-width: none; background: var(--color-bg-primary); padding: 6px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); }
 .tab-container::-webkit-scrollbar { display: none; }
-.tab-item { flex: 1; min-width: 64px; display: flex; flex-direction: column; align-items: center; gap: var(--spacing-4); padding: 12px 8px; border-radius: var(--radius-md); background: var(--color-bg-primary); border: 1.5px solid var(--color-border); cursor: pointer; transition: all var(--transition-fast); user-select: none; font-family: var(--font-family); }
-.tab-item:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
-.tab-item.active { border-color: var(--color-primary); background: var(--color-primary-light); box-shadow: 0 0 0 1px var(--color-primary); }
+.tab-item { flex: 1; min-width: 80px; display: flex; flex-direction: column; align-items: center; gap: var(--spacing-4); padding: 12px 8px; border-radius: var(--radius-md); background: transparent; border: none; cursor: pointer; transition: all var(--transition-fast); user-select: none; font-family: var(--font-family); }
+.tab-item:hover { background: var(--color-bg-secondary); }
+.tab-item.active { background: var(--color-primary-light); }
 .tab-icon { font-size: 18px; line-height: 1; }
 .tab-label { font-size: var(--font-size-small); font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); }
 .tab-item.active .tab-label { color: var(--color-primary); }
@@ -189,6 +198,11 @@ a:hover { text-decoration: underline; }
 .checkbox-label { display: flex; align-items: flex-start; gap: var(--spacing-8); font-size: var(--font-size-body); cursor: pointer; line-height: var(--line-height-normal); }
 .checkbox-label input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--color-primary); flex-shrink: 0; }
 
+/* ── Step Description ── */
+.step-desc-list { padding: 12px 16px; background: var(--color-bg-tertiary); border-radius: var(--radius-md); margin: 8px 0 12px; }
+.step-desc-item { font-size: var(--font-size-caption); color: var(--color-text-secondary); line-height: 1.6; }
+.step-desc-item strong { color: var(--color-primary); }
+
 /* ── Project List ── */
 .project-list { max-height: 200px; overflow-y: auto; }
 .project-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: var(--spacing-6); cursor: pointer; transition: background var(--transition-fast); }
@@ -206,15 +220,6 @@ a:hover { text-decoration: underline; }
 
 /* ── Footer ── */
 .app-footer { text-align: center; padding: 24px 0; font-size: var(--font-size-small); color: var(--color-text-tertiary); }
-
-/* ── Responsive ── */
-@media (max-width: 480px) {
-  .stat-row { flex-direction: column; }
-  .option-row { flex-direction: column; align-items: flex-start; }
-  .option-row .input-sm { width: 100%; }
-  .service-tab-nav { padding: 0 12px; }
-  .service-tab { padding: 12px 16px; font-size: 13px; }
-}
 
 /* ═══ Service Tabs (특허 / 상표) ═══ */
 .service-tab-nav {
@@ -257,6 +262,8 @@ a:hover { text-decoration: underline; }
 
 .service-panel {
   display: none;
+  width: 100%;
+  max-width: 100%;
 }
 
 .service-panel.active {
@@ -279,4 +286,40 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius-full);
   font-size: 13px;
   color: var(--color-text-secondary);
+}
+
+/* ══════════════════════════════════════════════════════════
+   ★★★ 2-Column 그리드 레이아웃 (PC 최적화) ★★★
+   ══════════════════════════════════════════════════════════ */
+
+/* 대시보드 카드 그리드 */
+#patent-dashboard-panel > div:first-child,
+#trademark-dashboard-panel > div:first-child {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+/* 프로젝트/가출원 목록 그리드 */
+#dashProjectList,
+#dashProvisionalList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .app-container {
+    padding: 0 12px 40px;
+  }
+  .stat-row { flex-direction: column; }
+  .option-row { flex-direction: column; align-items: flex-start; }
+  .option-row .input-sm { width: 100%; }
+  .service-tab-nav { padding: 0 12px; }
+  .service-tab { padding: 12px 16px; font-size: 13px; }
+  #dashProjectList,
+  #dashProvisionalList {
+    grid-template-columns: 1fr;
+  }
 }
