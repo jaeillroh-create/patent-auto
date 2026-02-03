@@ -1660,6 +1660,21 @@ details.tm-accordion .tm-accordion-content {
   color: #4e5968;
 }
 
+/* 추가됨 배지 */
+.tm-added-badge {
+  padding: 6px 14px;
+  background: #10b981;
+  color: #fff;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tm-rec-item.added {
+  background: #f0fdf4;
+  border-color: #10b981;
+}
+
 /* ============================================================
    19. Step 1 AI 추천 UI 개선
    ============================================================ */

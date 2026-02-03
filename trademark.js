@@ -1132,16 +1132,21 @@
                     const className = TM.niceClasses[code] || '';
                     const reason = p.aiAnalysis.classReasons?.[code] || '';
                     const goods = p.aiAnalysis.recommendedGoods?.[code] || [];
+                    const isAlreadyAdded = p.designatedGoods.some(g => g.classCode === code);
                     return `
-                      <div class="tm-rec-item">
+                      <div class="tm-rec-item ${isAlreadyAdded ? 'added' : ''}">
                         <div class="tm-rec-item-header">
                           <span class="tm-rec-rank">${idx + 1}</span>
                           <span class="tm-rec-class-code">제${code}류</span>
                           <span class="tm-rec-class-name">${className}</span>
-                          <button class="btn btn-sm btn-primary" 
-                                  data-action="tm-add-class" data-class-code="${code}">
-                            추가
-                          </button>
+                          ${isAlreadyAdded ? `
+                            <span class="tm-added-badge">✓ 추가됨</span>
+                          ` : `
+                            <button class="btn btn-sm btn-primary" 
+                                    data-action="tm-apply-recommendation" data-class-code="${code}">
+                              추가
+                            </button>
+                          `}
                         </div>
                         ${reason ? `<div class="tm-rec-reason">💡 ${TM.escapeHtml(reason)}</div>` : ''}
                         ${goods.length > 0 ? `
@@ -1937,43 +1942,30 @@
     }
   };
   
-  // KIPRIS API 호출 (실제 구현 또는 시뮬레이션)
+  // KIPRIS API 호출 (CORS 문제로 프론트엔드에서는 시뮬레이션 모드 사용)
   TM.callKiprisSearch = async function(type, params) {
-    // KIPRIS API Key가 없으면 시뮬레이션 데이터 반환
-    if (!TM.kiprisConfig.apiKey) {
-      console.warn('[TM] KIPRIS API Key가 설정되지 않았습니다. 시뮬레이션 모드로 실행합니다.');
-      return TM.simulateSearchResults(type, params);
-    }
+    // ⚠️ CORS 정책: 브라우저에서 KIPRIS API 직접 호출 불가
+    // GitHub Pages → KIPRIS API 요청은 CORS에 의해 차단됨
+    // 해결책: Supabase Edge Function 프록시 (추후 구현) 또는 시뮬레이션 모드
     
-    // 실제 KIPRIS API 호출
-    const endpoint = type === 'text' 
-      ? '/trademarkNameSearchInfo' 
-      : '/viennaCodesearchInfo';
+    console.log('[TM] KIPRIS 시뮬레이션 모드 (CORS 우회)');
+    console.log('[TM] 검색 파라미터:', params);
     
-    const url = new URL(TM.kiprisConfig.baseUrl + endpoint);
-    url.searchParams.set('ServiceKey', TM.kiprisConfig.apiKey);
+    // 시뮬레이션 데이터 반환 (실제 API 대신)
+    return TM.simulateSearchResults(type, params);
     
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        url.searchParams.set(key, value.toString());
-      }
-    });
-    
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`KIPRIS API 오류: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return TM.parseKiprisResponse(data);
+    /* 
+    // 향후 Supabase Edge Function 프록시 사용 시:
+    // const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
+    //   body: { type, params }
+    // });
+    // if (error) throw error;
+    // return data;
+    */
   };
   
   TM.parseKiprisResponse = function(data) {
-    // KIPRIS 응답 파싱
+    // KIPRIS 응답 파싱 (Edge Function 사용 시 필요)
     const items = data?.response?.body?.items?.item || [];
     if (!Array.isArray(items)) {
       return items ? [items] : [];
