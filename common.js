@@ -295,6 +295,11 @@ App.switchService = function(service) {
   // 현재 서비스 저장
   App.currentService = service;
 
+  // 상표 모듈 초기화 (trademark.js 로드 시)
+  if (service === 'trademark' && window.TM && typeof TM.init === 'function') {
+    TM.init();
+  }
+
   // URL 해시 업데이트
   history.replaceState(null, '', '#' + service);
 };
