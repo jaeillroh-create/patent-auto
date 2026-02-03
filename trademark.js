@@ -113,7 +113,7 @@
     // KIPRIS API 설정
     kiprisConfig: {
       baseUrl: 'http://plus.kipris.or.kr/kipo-api/kipi',
-      apiKey: '', // 환경변수에서 로드
+      apiKey: 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE=', // KIPRIS OpenAPI 인증키
       rateLimit: 30, // 분당 호출 제한
       timeout: 10000
     },
@@ -340,8 +340,17 @@
       case 'tm-analyze-business':
         TM.analyzeBusiness();
         break;
+      case 'tm-apply-recommendation':
+        TM.applyRecommendation(params.classCode);
+        break;
+      case 'tm-apply-all-recommendations':
+        TM.applyAllRecommendations();
+        break;
       case 'tm-evaluate-similarity':
         TM.evaluateSimilarity(params.targetId);
+        break;
+      case 'tm-evaluate-all-similarity':
+        TM.evaluateAllSimilarity();
         break;
       case 'tm-assess-risk':
         TM.assessRisk();
@@ -1079,16 +1088,43 @@
         </div>
         ${p.aiAnalysis.businessAnalysis ? `
           <div class="tm-ai-result">
-            <h5>분석 결과</h5>
-            <div class="tm-ai-content">${TM.escapeHtml(p.aiAnalysis.businessAnalysis)}</div>
-            ${p.aiAnalysis.recommendedClasses.length > 0 ? `
-              <div class="tm-recommended-classes">
-                <strong>추천 상품류:</strong>
-                ${p.aiAnalysis.recommendedClasses.map(c => `
-                  <span class="tm-class-badge" data-action="tm-add-class" data-class-code="${c}">
-                    제${c}류
-                  </span>
-                `).join('')}
+            <div class="tm-ai-analysis-box">
+              <h5>📋 사업 분석 결과</h5>
+              <div class="tm-ai-content">${TM.escapeHtml(p.aiAnalysis.businessAnalysis)}</div>
+            </div>
+            ${p.aiAnalysis.recommendedClasses?.length > 0 ? `
+              <div class="tm-recommended-section">
+                <h5>🎯 추천 상품류 및 지정상품</h5>
+                <div class="tm-recommendation-list">
+                  ${p.aiAnalysis.recommendedClasses.map((code, idx) => {
+                    const className = TM.niceClasses[code] || '';
+                    const reason = p.aiAnalysis.classReasons?.[code] || '';
+                    const goods = p.aiAnalysis.recommendedGoods?.[code] || [];
+                    return `
+                      <div class="tm-rec-item">
+                        <div class="tm-rec-item-header">
+                          <span class="tm-rec-rank">${idx + 1}</span>
+                          <span class="tm-rec-class-code">제${code}류</span>
+                          <span class="tm-rec-class-name">${className}</span>
+                          <button class="btn btn-sm btn-primary" 
+                                  data-action="tm-add-class" data-class-code="${code}">
+                            추가
+                          </button>
+                        </div>
+                        ${reason ? `<div class="tm-rec-reason">💡 ${TM.escapeHtml(reason)}</div>` : ''}
+                        ${goods.length > 0 ? `
+                          <div class="tm-rec-goods-list">
+                            ${goods.map(g => `
+                              <span class="tm-rec-goods-tag" title="유사군: ${g.similarGroup || ''}">
+                                ${g.name} <small>(${g.similarGroup || '-'})</small>
+                              </span>
+                            `).join('')}
+                          </div>
+                        ` : ''}
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
               </div>
             ` : ''}
           </div>
@@ -1211,12 +1247,63 @@
   
   TM.renderStep2_DesignatedGoods = function(container) {
     const p = TM.currentProject;
+    const hasAiRecommendation = p.aiAnalysis?.recommendedClasses?.length > 0;
     
     container.innerHTML = `
       <div class="tm-step-header">
         <h3>📦 지정상품 선택</h3>
         <p>출원할 상표가 사용될 상품/서비스 분류를 선택하세요.</p>
       </div>
+      
+      <!-- AI 추천 결과 (있을 경우) -->
+      ${hasAiRecommendation ? `
+        <div class="tm-ai-recommendation">
+          <div class="tm-recommendation-header">
+            <h4>🤖 AI 추천 상품류 및 지정상품</h4>
+            <button class="btn btn-sm btn-ghost" data-action="tm-apply-all-recommendations">
+              전체 적용
+            </button>
+          </div>
+          
+          <div class="tm-recommendation-analysis">
+            <p>${TM.escapeHtml(p.aiAnalysis.businessAnalysis || '')}</p>
+          </div>
+          
+          <div class="tm-recommendation-classes">
+            ${p.aiAnalysis.recommendedClasses.map((code, idx) => {
+              const className = TM.niceClasses[code] || '알 수 없음';
+              const reason = p.aiAnalysis.classReasons?.[code] || '';
+              const goods = p.aiAnalysis.recommendedGoods?.[code] || [];
+              const isSelected = p.designatedGoods.some(g => g.classCode === code);
+              
+              return `
+                <div class="tm-recommendation-card ${isSelected ? 'applied' : ''}" data-class-code="${code}">
+                  <div class="tm-rec-header">
+                    <span class="tm-rec-rank">${idx + 1}순위</span>
+                    <span class="tm-rec-class">제${code}류</span>
+                    <span class="tm-rec-name">${className}</span>
+                    ${isSelected ? '<span class="tm-rec-badge">적용됨</span>' : `
+                      <button class="btn btn-sm btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">
+                        적용
+                      </button>
+                    `}
+                  </div>
+                  <div class="tm-rec-reason">${TM.escapeHtml(reason)}</div>
+                  ${goods.length > 0 ? `
+                    <div class="tm-rec-goods">
+                      <span class="tm-rec-goods-label">추천 지정상품:</span>
+                      ${goods.slice(0, 5).map(g => `
+                        <span class="tm-rec-goods-item" title="${g.similarGroup || ''}">${g.name}</span>
+                      `).join('')}
+                      ${goods.length > 5 ? `<span class="tm-rec-more">+${goods.length - 5}개 더</span>` : ''}
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : ''}
       
       <!-- 고시명칭 토글 -->
       <div class="tm-gazette-toggle">
@@ -1234,23 +1321,29 @@
         </label>
       </div>
       
-      <!-- 상품류 선택 -->
-      <div class="tm-form-section">
-        <h4>상품류 선택 (NICE 13판)</h4>
-        <div class="tm-class-selector" id="tm-class-selector">
-          ${Object.entries(TM.niceClasses).map(([code, name]) => {
-            const isSelected = p.designatedGoods.some(g => g.classCode === code);
-            return `
-              <button class="tm-class-btn ${isSelected ? 'selected' : ''}" 
-                      data-action="${isSelected ? 'tm-remove-class' : 'tm-add-class'}" 
-                      data-class-code="${code}">
-                <div class="class-num">${code}</div>
-                <div class="class-label">${name.slice(0, 8)}...</div>
-              </button>
-            `;
-          }).join('')}
+      <!-- 상품류 선택 (접기 가능) -->
+      <details class="tm-accordion" ${!hasAiRecommendation ? 'open' : ''}>
+        <summary>
+          <span>📋 전체 상품류 보기 (NICE 13판 - 45류)</span>
+        </summary>
+        <div class="tm-accordion-content">
+          <div class="tm-class-selector" id="tm-class-selector">
+            ${Object.entries(TM.niceClasses).map(([code, name]) => {
+              const isSelected = p.designatedGoods.some(g => g.classCode === code);
+              const isRecommended = p.aiAnalysis?.recommendedClasses?.includes(code);
+              return `
+                <button class="tm-class-btn ${isSelected ? 'selected' : ''} ${isRecommended ? 'recommended' : ''}" 
+                        data-action="${isSelected ? 'tm-remove-class' : 'tm-add-class'}" 
+                        data-class-code="${code}">
+                  <div class="class-num">${code}</div>
+                  <div class="class-label">${name.slice(0, 8)}...</div>
+                  ${isRecommended ? '<div class="rec-badge">AI</div>' : ''}
+                </button>
+              `;
+            }).join('')}
+          </div>
         </div>
-      </div>
+      </details>
       
       <!-- 선택된 류별 지정상품 -->
       <div class="tm-selected-classes" id="tm-selected-classes">
@@ -1258,7 +1351,7 @@
           <div class="tm-empty-state" style="padding: 40px;">
             <div class="icon">📦</div>
             <h4>선택된 상품류가 없습니다</h4>
-            <p>위에서 상품류를 선택하세요.</p>
+            <p>${hasAiRecommendation ? 'AI 추천을 적용하거나 위에서 상품류를 선택하세요.' : '위에서 상품류를 선택하세요.'}</p>
           </div>
         ` : p.designatedGoods.map(classData => TM.renderClassGoods(classData)).join('')}
       </div>
@@ -1838,6 +1931,7 @@
   TM.renderStep4_Similarity = function(container) {
     const p = TM.currentProject;
     const evaluations = p.similarityEvaluations || [];
+    const allSearchResults = [...(p.searchResults.text || []), ...(p.searchResults.figure || [])].slice(0, 10);
     
     container.innerHTML = `
       <div class="tm-step-header">
@@ -1846,63 +1940,87 @@
       </div>
       
       <!-- 출원상표 정보 -->
-      <div class="tm-target-trademark">
-        <h4>출원 상표</h4>
-        <div class="tm-trademark-card">
-          ${p.specimenUrl ? `<img src="${p.specimenUrl}" alt="출원상표">` : ''}
-          <div class="tm-trademark-name">${TM.escapeHtml(p.trademarkName)}</div>
-          ${p.trademarkNameEn ? `<div class="tm-trademark-name-en">${TM.escapeHtml(p.trademarkNameEn)}</div>` : ''}
+      <div class="tm-similarity-info-card">
+        <div class="tm-sim-source">
+          <div class="tm-sim-label">출원 상표</div>
+          <div class="tm-sim-trademark">
+            ${p.specimenUrl ? `<img src="${p.specimenUrl}" alt="출원상표" class="tm-sim-img">` : ''}
+            <span class="tm-sim-name">${TM.escapeHtml(p.trademarkName || '(미입력)')}</span>
+          </div>
         </div>
       </div>
       
       <!-- 평가 대상 선택 -->
-      <div class="tm-evaluation-targets">
-        <h4>평가 대상 선행상표</h4>
-        ${(p.searchResults.text || []).length === 0 && (p.searchResults.figure || []).length === 0 ? `
-          <div class="tm-hint">
-            먼저 선행상표 검색을 실행하세요.
-            <button class="btn btn-sm btn-secondary" data-action="tm-goto-step" data-step="3">
-              검색하러 가기 →
+      <div class="tm-form-section">
+        <div class="tm-section-header">
+          <h4>📋 평가 대상 선행상표</h4>
+          <span class="tm-badge">${allSearchResults.length}건</span>
+        </div>
+        
+        ${allSearchResults.length === 0 ? `
+          <div class="tm-empty-state" style="padding: 32px;">
+            <div class="icon">🔍</div>
+            <h4>선행상표 검색이 필요합니다</h4>
+            <p>먼저 선행상표 검색을 실행한 후 유사도를 평가하세요.</p>
+            <button class="btn btn-primary" data-action="tm-goto-step" data-step="3">
+              선행상표 검색 →
             </button>
           </div>
         ` : `
-          <div class="tm-target-list">
-            ${[...(p.searchResults.text || []), ...(p.searchResults.figure || [])].slice(0, 10).map(r => {
+          <!-- 전체 평가 버튼 & 프로그레스 -->
+          <div class="tm-eval-control">
+            <button class="btn btn-primary" id="tm-eval-all-btn" data-action="tm-evaluate-all-similarity">
+              🤖 전체 AI 평가 실행
+            </button>
+            <div class="tm-eval-progress" id="tm-eval-progress" style="display: none;">
+              <div class="tm-progress-bar">
+                <div class="tm-progress-fill" id="tm-progress-fill"></div>
+              </div>
+              <div class="tm-progress-text" id="tm-progress-text">0 / ${allSearchResults.length}</div>
+            </div>
+          </div>
+          
+          <!-- 선행상표 목록 (간결한 표시) -->
+          <div class="tm-target-list-compact">
+            ${allSearchResults.map((r, idx) => {
               const evaluated = evaluations.find(e => e.targetId === r.applicationNumber);
               return `
-                <div class="tm-target-item ${evaluated ? 'evaluated' : ''}">
-                  <div class="tm-target-info">
-                    <strong>${TM.escapeHtml(r.title || r.trademarkName)}</strong>
-                    <span>${r.applicationNumber}</span>
+                <div class="tm-target-row ${evaluated ? 'evaluated' : ''}">
+                  <div class="tm-target-num">${idx + 1}</div>
+                  <div class="tm-target-main">
+                    <span class="tm-target-name">${TM.escapeHtml(r.title || r.trademarkName || '(명칭없음)')}</span>
+                    <span class="tm-target-app-no">${r.applicationNumber}</span>
                   </div>
-                  ${evaluated ? `
-                    <div class="tm-eval-summary">
-                      <span class="tm-eval-badge ${evaluated.overall}">
+                  <div class="tm-target-action">
+                    ${evaluated ? `
+                      <span class="tm-eval-badge-sm ${evaluated.overall}">
                         ${TM.getSimilarityLabel(evaluated.overall)}
                       </span>
-                    </div>
-                  ` : `
-                    <button class="btn btn-sm btn-secondary" 
-                            data-action="tm-evaluate-similarity" 
-                            data-target-id="${r.applicationNumber}">
-                      평가하기
-                    </button>
-                  `}
+                    ` : `
+                      <button class="btn btn-sm btn-ghost" 
+                              data-action="tm-evaluate-similarity" 
+                              data-target-id="${r.applicationNumber}">
+                        평가
+                      </button>
+                    `}
+                  </div>
                 </div>
               `;
             }).join('')}
           </div>
-          <button class="btn btn-primary" onclick="TM.evaluateAllSimilarity()" style="margin-top: 16px;">
-            🤖 전체 AI 평가 실행
-          </button>
         `}
       </div>
       
       <!-- 평가 결과 상세 -->
       ${evaluations.length > 0 ? `
-        <div class="tm-evaluation-details">
-          <h4>평가 결과 상세</h4>
-          ${evaluations.map(e => TM.renderEvaluationDetail(e)).join('')}
+        <div class="tm-form-section">
+          <div class="tm-section-header">
+            <h4>📊 평가 결과 상세</h4>
+            <span class="tm-badge">${evaluations.length}건 완료</span>
+          </div>
+          <div class="tm-eval-results">
+            ${evaluations.map(e => TM.renderEvaluationDetail(e)).join('')}
+          </div>
         </div>
       ` : ''}
     `;
@@ -1920,30 +2038,35 @@
   TM.renderEvaluationDetail = function(evaluation) {
     return `
       <div class="tm-eval-card">
-        <div class="tm-eval-header">
-          <strong>${TM.escapeHtml(evaluation.targetName || evaluation.targetId)}</strong>
+        <div class="tm-eval-card-header">
+          <div class="tm-eval-card-title">
+            <strong>${TM.escapeHtml(evaluation.targetName || evaluation.targetId)}</strong>
+            <span class="tm-eval-app-no">${evaluation.targetId}</span>
+          </div>
           <span class="tm-eval-badge ${evaluation.overall}">
             ${TM.getSimilarityLabel(evaluation.overall)}
           </span>
         </div>
-        <div class="tm-eval-scores">
-          <div class="tm-eval-score">
-            <span class="label">외관</span>
-            <span class="score ${evaluation.appearance}">${TM.getSimilarityLabel(evaluation.appearance)}</span>
+        
+        <div class="tm-eval-scores-grid">
+          <div class="tm-eval-score-item">
+            <div class="tm-score-label">외관</div>
+            <div class="tm-score-value ${evaluation.appearance}">${TM.getSimilarityLabel(evaluation.appearance)}</div>
           </div>
-          <div class="tm-eval-score">
-            <span class="label">호칭</span>
-            <span class="score ${evaluation.pronunciation}">${TM.getSimilarityLabel(evaluation.pronunciation)}</span>
+          <div class="tm-eval-score-item">
+            <div class="tm-score-label">호칭</div>
+            <div class="tm-score-value ${evaluation.pronunciation}">${TM.getSimilarityLabel(evaluation.pronunciation)}</div>
           </div>
-          <div class="tm-eval-score">
-            <span class="label">관념</span>
-            <span class="score ${evaluation.concept}">${TM.getSimilarityLabel(evaluation.concept)}</span>
+          <div class="tm-eval-score-item">
+            <div class="tm-score-label">관념</div>
+            <div class="tm-score-value ${evaluation.concept}">${TM.getSimilarityLabel(evaluation.concept)}</div>
           </div>
         </div>
+        
         ${evaluation.notes ? `
-          <div class="tm-eval-notes">
-            <strong>평가 근거:</strong>
-            <p>${TM.escapeHtml(evaluation.notes)}</p>
+          <div class="tm-eval-notes-box">
+            <div class="tm-notes-title">💡 평가 근거</div>
+            <p class="tm-notes-content">${TM.escapeHtml(evaluation.notes)}</p>
           </div>
         ` : ''}
       </div>
@@ -2017,7 +2140,7 @@
       }
       
       TM.renderCurrentStep();
-      App.showToast('유사도 평가가 완료되었습니다.', 'success');
+      // 개별 평가 시 토스트 제거 (전체 평가에서 중복 방지)
       
     } catch (error) {
       console.error('[TM] 유사도 평가 실패:', error);
@@ -2027,20 +2150,109 @@
   
   TM.evaluateAllSimilarity = async function() {
     const p = TM.currentProject;
-    const allResults = [...(p.searchResults.text || []), ...(p.searchResults.figure || [])].slice(0, 5);
+    const allResults = [...(p.searchResults.text || []), ...(p.searchResults.figure || [])].slice(0, 10);
     
     if (allResults.length === 0) {
       App.showToast('평가할 선행상표가 없습니다.', 'warning');
       return;
     }
     
+    // UI 업데이트 - 프로그레스 바 표시
+    const btn = document.getElementById('tm-eval-all-btn');
+    const progressEl = document.getElementById('tm-eval-progress');
+    const progressFill = document.getElementById('tm-progress-fill');
+    const progressText = document.getElementById('tm-progress-text');
+    
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '⏳ 평가 중...';
+    }
+    if (progressEl) progressEl.style.display = 'flex';
+    
+    let completed = 0;
+    const total = allResults.length;
+    
     for (const target of allResults) {
-      await TM.evaluateSimilarity(target.applicationNumber);
+      try {
+        await TM.evaluateSimilarityQuiet(target.applicationNumber);
+        completed++;
+        
+        // 프로그레스 업데이트
+        if (progressFill) progressFill.style.width = `${(completed / total) * 100}%`;
+        if (progressText) progressText.textContent = `${completed} / ${total}`;
+        
+      } catch (error) {
+        console.error('[TM] 개별 평가 실패:', error);
+      }
       // Rate limit 방지
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
-    App.showToast('전체 유사도 평가가 완료되었습니다.', 'success');
+    // 완료
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🤖 전체 AI 평가 실행';
+    }
+    if (progressEl) progressEl.style.display = 'none';
+    
+    TM.renderCurrentStep();
+    App.showToast(`전체 ${completed}건 유사도 평가 완료!`, 'success');
+  };
+  
+  // 토스트 없이 조용히 평가하는 버전
+  TM.evaluateSimilarityQuiet = async function(targetId) {
+    const p = TM.currentProject;
+    const allResults = [...(p.searchResults.text || []), ...(p.searchResults.figure || [])];
+    const target = allResults.find(r => r.applicationNumber === targetId);
+    
+    if (!target) return;
+    
+    const prompt = `당신은 상표 유사도 평가 전문가입니다. 다음 두 상표의 유사도를 평가하세요.
+
+[출원상표]
+- 상표명: ${p.trademarkName}
+- 영문명: ${p.trademarkNameEn || '없음'}
+- 상표유형: ${TM.getTypeLabel(p.trademarkType)}
+
+[선행상표]
+- 상표명: ${target.title || target.trademarkName || ''}
+- 출원번호: ${target.applicationNumber}
+- 상태: ${target.applicationStatus || ''}
+
+다음 3가지 기준으로 평가하고 JSON 형식으로 응답하세요:
+
+1. appearance (외관 유사도): 시각적 구성요소 비교
+2. pronunciation (호칭 유사도): 발음의 유사성
+3. concept (관념 유사도): 의미, 개념의 유사성
+
+각 항목은 "high" (유사), "medium" (주의), "low" (비유사) 중 하나로 평가.
+overall은 종합 판단 결과.
+notes는 평가 근거를 3-4문장으로 서술.
+
+응답 형식:
+{
+  "appearance": "high",
+  "pronunciation": "high",
+  "concept": "high",
+  "overall": "high",
+  "notes": "외관: ... 호칭: ... 관념: ... 종합판단: ..."
+}`;
+
+    const response = await App.callClaude(prompt, 1000);
+    const jsonMatch = response.text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('AI 응답 파싱 실패');
+    
+    const evaluation = JSON.parse(jsonMatch[0]);
+    evaluation.targetId = targetId;
+    evaluation.targetName = target.title || target.trademarkName;
+    evaluation.evaluatedAt = new Date().toISOString();
+    
+    const existingIndex = p.similarityEvaluations.findIndex(e => e.targetId === targetId);
+    if (existingIndex >= 0) {
+      p.similarityEvaluations[existingIndex] = evaluation;
+    } else {
+      p.similarityEvaluations.push(evaluation);
+    }
   };
 
 })();
@@ -2074,10 +2286,16 @@
       
       <!-- 리스크 평가 실행 -->
       <div class="tm-risk-action">
-        <button class="btn btn-primary btn-lg" data-action="tm-assess-risk">
+        <button class="btn btn-primary btn-lg" id="tm-risk-btn" data-action="tm-assess-risk">
           🤖 AI 리스크 종합 평가
         </button>
-        <p class="tm-hint">유사도 평가 결과, 지정상품 중복 여부, 상표 유형 등을 종합 분석합니다.</p>
+        <div class="tm-risk-progress" id="tm-risk-progress" style="display: none;">
+          <div class="tm-progress-bar">
+            <div class="tm-progress-fill tm-progress-indeterminate"></div>
+          </div>
+          <span class="tm-progress-text">AI가 종합 분석 중입니다...</span>
+        </div>
+        <p class="tm-hint" id="tm-risk-hint">유사도 평가 결과, 지정상품 중복 여부, 상표 유형 등을 종합 분석합니다.</p>
       </div>
       
       <!-- 리스크 평가 결과 -->
@@ -2109,7 +2327,7 @@
           
           ${risk.details ? `
             <div class="tm-risk-details">
-              <h5>상세 분석</h5>
+              <h5>📋 상세 분석</h5>
               <div class="tm-risk-content">${TM.formatRiskDetails(risk.details)}</div>
             </div>
           ` : ''}
@@ -2176,9 +2394,19 @@
       return;
     }
     
+    // UI 업데이트 - 프로그레스 표시
+    const btn = document.getElementById('tm-risk-btn');
+    const progress = document.getElementById('tm-risk-progress');
+    const hint = document.getElementById('tm-risk-hint');
+    
+    if (btn) {
+      btn.disabled = true;
+      btn.style.display = 'none';
+    }
+    if (progress) progress.style.display = 'flex';
+    if (hint) hint.style.display = 'none';
+    
     try {
-      App.showToast('리스크 평가 중...', 'info');
-      
       // 평가 데이터 수집
       const highSimilarity = (p.similarityEvaluations || []).filter(e => e.overall === 'high').length;
       const mediumSimilarity = (p.similarityEvaluations || []).filter(e => e.overall === 'medium').length;
@@ -2242,6 +2470,18 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
     } catch (error) {
       console.error('[TM] 리스크 평가 실패:', error);
       App.showToast('평가 실패: ' + error.message, 'error');
+      
+      // UI 복구
+      const btn = document.getElementById('tm-risk-btn');
+      const progress = document.getElementById('tm-risk-progress');
+      const hint = document.getElementById('tm-risk-hint');
+      
+      if (btn) {
+        btn.disabled = false;
+        btn.style.display = 'block';
+      }
+      if (progress) progress.style.display = 'none';
+      if (hint) hint.style.display = 'block';
     }
   };
 
@@ -3027,7 +3267,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
   }
 
   // ============================================================
-  // 1. 비즈니스 분석 (상품류 추천)
+  // 1. 비즈니스 분석 (상품류 + 지정상품 추천)
   // ============================================================
   
   TM.analyzeBusiness = async function() {
@@ -3040,9 +3280,14 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
     }
     
     try {
-      App.showToast('AI 사업 분석 중...', 'info');
+      // 프로그레스 표시
+      const btn = document.querySelector('[data-action="tm-analyze-business"]');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="tossface">⏳</span> 분석 중...';
+      }
       
-      const prompt = `당신은 상표 출원 전문가입니다. 다음 정보를 바탕으로 적합한 상품/서비스 분류를 분석하세요.
+      const prompt = `당신은 대한민국 특허청(KIPO) 상표 출원 전문 변리사입니다. 다음 정보를 바탕으로 적합한 상품/서비스 분류와 지정상품을 추천하세요.
 
 [입력 정보]
 - 상표명: ${p.trademarkName || '(미입력)'}
@@ -3050,33 +3295,43 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
 
 다음 항목을 분석하고 JSON 형식으로 응답하세요:
 
-1. businessAnalysis: 사업 분야 분석 (2-3문장)
-2. recommendedClasses: 추천 상품류 배열 (NICE 분류 기준, 최대 5개)
-   - 각 류는 2자리 문자열로 (예: "09", "35", "42")
-3. classReasons: 각 류 추천 이유 (객체)
+1. businessAnalysis: 사업 분야 상세 분석 (3-4문장, 핵심 사업영역 파악)
+2. recommendedClasses: 추천 상품류 배열 (NICE 분류 기준, 우선순위대로 최대 5개)
+3. classReasons: 각 류 추천 이유 (구체적으로)
+4. recommendedGoods: 각 류별 추천 지정상품 (고시명칭 기준, 류당 최대 10개)
+   - 한국 특허청 고시명칭을 정확히 사용
+   - 유사군코드도 함께 제시
 
-NICE 분류 참고:
-- 09류: 컴퓨터, 소프트웨어, 전자기기
-- 35류: 광고, 사업관리, 온라인 쇼핑
-- 42류: IT 서비스, 소프트웨어 개발
-- 41류: 교육, 엔터테인먼트
-- 38류: 통신 서비스
-- 25류: 의류, 신발
-- 30류: 식품 (커피, 과자 등)
-- 43류: 음식점, 숙박
+NICE 분류 및 주요 고시명칭 예시:
+- 09류: 컴퓨터소프트웨어(G3901), 모바일응용소프트웨어(G3901), 스마트폰(G3911)
+- 35류: 광고업(G5201), 온라인쇼핑몰운영업(G5203), 사업컨설팅업(G5202)
+- 42류: 컴퓨터소프트웨어개발업(G4901), 클라우드컴퓨팅업(G4902), 웹호스팅업(G4903)
+- 41류: 교육업(G4101), 온라인교육업(G4101), 게임제공업(G4102)
+- 45류: 변리사업(G5001), 법률서비스업(G5001), 상표등록대리업(G5001)
 
 응답 형식:
 {
-  "businessAnalysis": "분석 내용...",
-  "recommendedClasses": ["09", "35", "42"],
+  "businessAnalysis": "상세 분석 내용...",
+  "recommendedClasses": ["45", "42", "35", "09", "41"],
   "classReasons": {
-    "09": "소프트웨어 제품 판매를 위해",
-    "35": "온라인 마케팅 서비스를 위해",
-    "42": "IT 서비스 제공을 위해"
+    "45": "변리사업, 상표/특허 출원대리 서비스의 핵심 분류",
+    "42": "지식재산권 관련 IT 서비스, 플랫폼 개발",
+    "35": "지식재산권 컨설팅, 사업관리 서비스"
+  },
+  "recommendedGoods": {
+    "45": [
+      {"name": "변리사업", "similarGroup": "G5001"},
+      {"name": "상표등록대리업", "similarGroup": "G5001"},
+      {"name": "특허소송대리업", "similarGroup": "G5001"}
+    ],
+    "42": [
+      {"name": "컴퓨터소프트웨어개발업", "similarGroup": "G4901"},
+      {"name": "웹사이트개발업", "similarGroup": "G4901"}
+    ]
   }
 }`;
 
-      const response = await App.callClaude(prompt, 1000);
+      const response = await App.callClaude(prompt, 2000);
       
       const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -3088,13 +3343,20 @@ NICE 분류 참고:
       p.aiAnalysis.businessAnalysis = analysis.businessAnalysis;
       p.aiAnalysis.recommendedClasses = analysis.recommendedClasses || [];
       p.aiAnalysis.classReasons = analysis.classReasons || {};
+      p.aiAnalysis.recommendedGoods = analysis.recommendedGoods || {};
       
       TM.renderCurrentStep();
-      App.showToast('사업 분석이 완료되었습니다.', 'success');
+      App.showToast('사업 분석 완료! 추천 상품류를 확인하세요.', 'success');
       
     } catch (error) {
       console.error('[TM] 사업 분석 실패:', error);
       App.showToast('분석 실패: ' + error.message, 'error');
+    } finally {
+      const btn = document.querySelector('[data-action="tm-analyze-business"]');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'AI 분석 🔍';
+      }
     }
   };
 

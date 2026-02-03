@@ -1081,3 +1081,470 @@ details.tm-accordion .tm-accordion-content {
   padding-bottom: 8px;
   border-bottom: 1px solid #e5e8eb;
 }
+
+/* ============================================================
+   16. AI 추천 결과 스타일 (v2.3)
+   ============================================================ */
+
+/* AI 분석 결과 박스 */
+.tm-ai-result {
+  margin-top: 20px;
+  border: 1px solid #e5e8eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.tm-ai-analysis-box {
+  padding: 20px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e5e8eb;
+}
+
+.tm-ai-analysis-box h5 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333d4b;
+  margin-bottom: 12px;
+}
+
+.tm-ai-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #4e5968;
+}
+
+/* 추천 상품류 섹션 */
+.tm-recommended-section {
+  padding: 20px;
+}
+
+.tm-recommended-section h5 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333d4b;
+  margin-bottom: 16px;
+}
+
+.tm-recommendation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 추천 아이템 카드 */
+.tm-rec-item {
+  background: #fff;
+  border: 1px solid #e5e8eb;
+  border-radius: 10px;
+  padding: 16px;
+  transition: all 0.2s;
+}
+
+.tm-rec-item:hover {
+  border-color: #3182f6;
+  box-shadow: 0 2px 8px rgba(49, 130, 246, 0.1);
+}
+
+.tm-rec-item-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.tm-rec-rank {
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #3182f6, #1a73e8);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tm-rec-class-code {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333d4b;
+}
+
+.tm-rec-class-name {
+  font-size: 14px;
+  color: #6b7684;
+  flex: 1;
+}
+
+.tm-rec-reason {
+  font-size: 13px;
+  color: #4e5968;
+  padding: 10px 12px;
+  background: #f0f6ff;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+/* 추천 지정상품 */
+.tm-rec-goods-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tm-rec-goods-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e8eb;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #4e5968;
+  cursor: default;
+}
+
+.tm-rec-goods-tag small {
+  color: #8b95a1;
+  font-size: 11px;
+}
+
+.tm-rec-goods-tag:hover {
+  background: #f0f6ff;
+  border-color: #3182f6;
+}
+
+/* ============================================================
+   17. 프로그레스 바 스타일
+   ============================================================ */
+
+.tm-eval-control,
+.tm-risk-action {
+  margin-bottom: 24px;
+}
+
+.tm-eval-progress,
+.tm-risk-progress {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.tm-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #e5e8eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.tm-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3182f6, #1a73e8);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.tm-progress-indeterminate {
+  width: 30% !important;
+  animation: progress-indeterminate 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(200%); }
+  100% { transform: translateX(-100%); }
+}
+
+.tm-progress-text {
+  font-size: 13px;
+  color: #6b7684;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   18. 유사도 평가 UI 개선
+   ============================================================ */
+
+.tm-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tm-section-header h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.tm-badge {
+  padding: 4px 10px;
+  background: #f0f6ff;
+  color: #3182f6;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 선행상표 목록 (간결) */
+.tm-target-list-compact {
+  border: 1px solid #e5e8eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.tm-target-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f3f5;
+  gap: 12px;
+}
+
+.tm-target-row:last-child {
+  border-bottom: none;
+}
+
+.tm-target-row.evaluated {
+  background: #f8fdf9;
+}
+
+.tm-target-num {
+  width: 24px;
+  height: 24px;
+  background: #f1f3f5;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7684;
+}
+
+.tm-target-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tm-target-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333d4b;
+}
+
+.tm-target-app-no {
+  font-size: 12px;
+  color: #8b95a1;
+}
+
+.tm-target-action {
+  flex-shrink: 0;
+}
+
+/* 평가 배지 (소형) */
+.tm-eval-badge-sm {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tm-eval-badge-sm.high {
+  background: #fff0f0;
+  color: #e53935;
+}
+
+.tm-eval-badge-sm.medium {
+  background: #fff8e1;
+  color: #f57c00;
+}
+
+.tm-eval-badge-sm.low {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+/* 평가 결과 카드 (개선) */
+.tm-eval-results {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tm-eval-card {
+  border: 1px solid #e5e8eb;
+  border-radius: 12px;
+  padding: 20px;
+  background: #fff;
+}
+
+.tm-eval-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tm-eval-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tm-eval-card-title strong {
+  font-size: 15px;
+  color: #333d4b;
+}
+
+.tm-eval-app-no {
+  font-size: 12px;
+  color: #8b95a1;
+}
+
+.tm-eval-badge {
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tm-eval-badge.high {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.tm-eval-badge.medium {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.tm-eval-badge.low {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+/* 점수 그리드 */
+.tm-eval-scores-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tm-eval-score-item {
+  text-align: center;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.tm-score-label {
+  font-size: 12px;
+  color: #8b95a1;
+  margin-bottom: 6px;
+}
+
+.tm-score-value {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tm-score-value.high { color: #c62828; }
+.tm-score-value.medium { color: #e65100; }
+.tm-score-value.low { color: #2e7d32; }
+
+/* 평가 근거 박스 */
+.tm-eval-notes-box {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+  border-left: 3px solid #3182f6;
+}
+
+.tm-notes-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333d4b;
+  margin-bottom: 8px;
+}
+
+.tm-notes-content {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #4e5968;
+  margin: 0;
+}
+
+/* 출원상표 정보 카드 */
+.tm-similarity-info-card {
+  background: linear-gradient(135deg, #f0f6ff, #e8f0fe);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.tm-sim-source {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.tm-sim-label {
+  font-size: 12px;
+  color: #6b7684;
+  margin-bottom: 4px;
+}
+
+.tm-sim-trademark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tm-sim-img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
+}
+
+.tm-sim-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #333d4b;
+}
+
+/* 리스크 평가 스타일 개선 */
+.tm-risk-details,
+.tm-risk-recommendation {
+  margin-top: 20px;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.tm-risk-details h5,
+.tm-risk-recommendation h5 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #333d4b;
+}
+
+.tm-risk-content {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #4e5968;
+}
