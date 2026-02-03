@@ -1,245 +1,71 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IP 자동화 시스템 | 특허 · 상표</title>
-  
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link href="https://cdn.jsdelivr.net/gh/toss/tossface/dist/tossface.css" rel="stylesheet" />
-  <link href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet" />
-  
-  <!-- Stylesheets -->
-  <link rel="stylesheet" href="common.css">
-  <link rel="stylesheet" href="patent.css">
-  <link rel="stylesheet" href="trademark.css">
-</head>
-<body>
-  <!-- ============================================================
-       인증 화면 (로그인/회원가입)
-       ============================================================ -->
-  <div id="auth-screen" class="auth-screen">
-    <div class="auth-container">
-      <div class="auth-logo">
-        <span class="logo-icon">⚖️</span>
-        <h1>IP 자동화 시스템</h1>
-        <p>특허 명세서 · 상표 출원 자동화</p>
-      </div>
-      
-      <div class="auth-tabs">
-        <button class="auth-tab active" data-tab="login">로그인</button>
-        <button class="auth-tab" data-tab="signup">회원가입</button>
-      </div>
-      
-      <!-- 로그인 폼 -->
-      <form id="login-form" class="auth-form">
-        <div class="input-group">
-          <label for="login-email">이메일</label>
-          <input type="email" id="login-email" required placeholder="email@example.com">
-        </div>
-        <div class="input-group">
-          <label for="login-password">비밀번호</label>
-          <input type="password" id="login-password" required placeholder="••••••••">
-        </div>
-        <button type="submit" class="btn btn-primary btn-lg btn-block">로그인</button>
-      </form>
-      
-      <!-- 회원가입 폼 -->
-      <form id="signup-form" class="auth-form" style="display: none;">
-        <div class="input-group">
-          <label for="signup-name">이름</label>
-          <input type="text" id="signup-name" required placeholder="홍길동">
-        </div>
-        <div class="input-group">
-          <label for="signup-email">이메일</label>
-          <input type="email" id="signup-email" required placeholder="email@example.com">
-        </div>
-        <div class="input-group">
-          <label for="signup-password">비밀번호</label>
-          <input type="password" id="signup-password" required minlength="6" placeholder="6자 이상">
-        </div>
-        <button type="submit" class="btn btn-primary btn-lg btn-block">가입하기</button>
-      </form>
-    </div>
-  </div>
+.stat-row { flex-direction: column; }
+.option-row { flex-direction: column; align-items: flex-start; }
+.option-row .input-sm { width: 100%; }
+  .service-tab-nav { padding: 0 12px; }
+  .service-tab { padding: 12px 16px; font-size: 13px; }
+}
 
-  <!-- ============================================================
-       ToS 동의 화면
-       ============================================================ -->
-  <div id="tos-screen" class="tos-screen" style="display: none;">
-    <div class="tos-container">
-      <h2>서비스 이용 동의</h2>
-      <div class="tos-content">
-        <div class="tos-item">
-          <label>
-            <input type="checkbox" id="tos-terms">
-            <span>[필수] 서비스 이용약관에 동의합니다.</span>
-          </label>
-        </div>
-        <div class="tos-item">
-          <label>
-            <input type="checkbox" id="tos-privacy">
-            <span>[필수] 개인정보 처리방침에 동의합니다.</span>
-          </label>
-        </div>
-        <div class="tos-item">
-          <label>
-            <input type="checkbox" id="tos-confidential">
-            <span>[필수] 발명/상표 내용의 기밀 유지에 동의합니다.</span>
-          </label>
-        </div>
-      </div>
-      <button id="tos-agree-btn" class="btn btn-primary btn-lg btn-block" disabled>동의하고 시작하기</button>
-    </div>
-  </div>
+/* ═══ Service Tabs (특허 / 상표) ═══ */
+.service-tab-nav {
+  display: flex;
+  gap: 0;
+  background: var(--color-bg-tertiary);
+  border-bottom: 2px solid var(--color-border);
+  padding: 0 16px;
+  margin-bottom: 16px;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
 
-  <!-- ============================================================
-       승인 대기 화면
-       ============================================================ -->
-  <div id="pending-screen" class="pending-screen" style="display: none;">
-    <div class="pending-container">
-      <div class="pending-icon">⏳</div>
-      <h2>관리자 승인 대기 중</h2>
-      <p>계정이 승인되면 서비스를 이용하실 수 있습니다.</p>
-      <p>문의: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="86e7e2ebefe8c6e3fee7ebf6eae3a8e5e9eb">[email&#160;protected]</a></p>
-      <button class="btn btn-secondary" onclick="App.signOut()">로그아웃</button>
-    </div>
-  </div>
+.service-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 24px;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  font-weight: var(--font-weight-medium);
+  font-family: var(--font-family);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all var(--transition-fast);
+}
 
-  <!-- ============================================================
-       메인 앱 화면
-       ============================================================ -->
-  <div id="main-app" class="main-app" style="display: none;">
-    <!-- 헤더 -->
-    <header class="app-header">
-      <div class="header-left">
-        <span class="logo">⚖️ IP 자동화</span>
-        
-        <!-- 서비스 탭 -->
-        <nav class="service-tabs">
-          <button class="service-tab active" data-service="patent">
-            📝 특허 명세서
-          </button>
-          <button class="service-tab" data-service="trademark">
-            🏷️ 상표 출원
-          </button>
-        </nav>
-      </div>
-      
-      <div class="header-right">
-        <div class="user-menu">
-          <span id="user-display-name">사용자</span>
-          <button class="btn btn-ghost btn-sm" onclick="App.showProfileModal()">설정</button>
-          <button class="btn btn-ghost btn-sm" onclick="App.signOut()">로그아웃</button>
-        </div>
-      </div>
-    </header>
+.service-tab:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+}
 
-    <!-- 메인 컨텐츠 -->
-    <main class="app-main">
-      <!-- 특허 패널 -->
-      <div id="patent-panel" class="service-panel">
-        <!-- patent.js에서 렌더링 -->
-        <div class="loading-placeholder">
-          <div class="spinner"></div>
-          <p>특허 명세서 모듈 로딩 중...</p>
-        </div>
-      </div>
-      
-      <!-- 상표 패널 -->
-      <div id="trademark-panel" class="service-panel" style="display: none;">
-        <!-- trademark.js에서 렌더링 -->
-        <div class="loading-placeholder">
-          <div class="spinner"></div>
-          <p>상표 출원 모듈 로딩 중...</p>
-        </div>
-      </div>
-    </main>
+.service-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+}
 
-    <!-- 푸터 -->
-    <footer class="app-footer">
-      <p>© 2026 특허그룹 디딤 · 시너지앤</p>
-    </footer>
-  </div>
+.service-panel {
+  display: none;
+}
 
-  <!-- ============================================================
-       모달: 프로필 설정
-       ============================================================ -->
-  <div id="profile-modal" class="modal" style="display: none;">
-    <div class="modal-backdrop" onclick="App.closeModal('profile-modal')"></div>
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>프로필 설정</h3>
-        <button class="modal-close" onclick="App.closeModal('profile-modal')">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="input-group">
-          <label>표시 이름</label>
-          <input type="text" id="profile-display-name" placeholder="이름">
-        </div>
-        <div class="input-group">
-          <label>Claude API Key</label>
-          <input type="password" id="profile-api-key" placeholder="sk-ant-...">
-          <small>API Key는 브라우저에만 저장됩니다.</small>
-        </div>
-        <div class="input-group">
-          <label>KIPRIS API Key (선택)</label>
-          <input type="text" id="profile-kipris-key" placeholder="특허청 KIPRIS Open API Key">
-          <small>상표 검색 기능에 사용됩니다.</small>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="App.closeModal('profile-modal')">취소</button>
-        <button class="btn btn-primary" onclick="App.saveProfile()">저장</button>
-      </div>
-    </div>
-  </div>
+.service-panel.active {
+  display: block;
+}
 
-  <!-- ============================================================
-       모달: 관리자 화면
-       ============================================================ -->
-  <div id="admin-modal" class="modal" style="display: none;">
-    <div class="modal-backdrop" onclick="App.closeModal('admin-modal')"></div>
-    <div class="modal-content modal-lg">
-      <div class="modal-header">
-        <h3>👑 관리자 화면</h3>
-        <button class="modal-close" onclick="App.closeModal('admin-modal')">×</button>
-      </div>
-      <div class="modal-body">
-        <h4>승인 대기 사용자</h4>
-        <div id="pending-users-list">
-          <p class="loading">로딩 중...</p>
-        </div>
-      </div>
-    </div>
-  </div>
+/* ═══ Trademark Placeholder ═══ */
+.trademark-placeholder {
+  text-align: center;
+  padding: 60px 20px 80px;
+}
 
-  <!-- ============================================================
-       토스트 알림
-       ============================================================ -->
-  <div id="toast-container" class="toast-container"></div>
-
-  <!-- ============================================================
-       스크립트
-       ============================================================ -->
-  <!-- CDN 라이브러리 -->
-  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3/dist/pptxgen.bundle.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.min.js"></script>
-  
-  <!-- 앱 스크립트 -->
-  <script src="common.js"></script>
-  <script src="patent.js"></script>
-  <script src="trademark.js"></script>
-  <script src="trademark_steps_1_4.js"></script>
-  <script src="trademark_steps_5_8.js"></script>
-  <script src="trademark_ai.js"></script>
-  
-  <!-- 초기화 -->
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // Mermaid 초기화
-      mermaid.initialize({ 
-        startOnLoad:
+.trademark-feature-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
