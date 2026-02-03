@@ -2726,3 +2726,399 @@ details.tm-accordion .tm-accordion-content {
 .tm-note-text {
   line-height: 1.5;
 }
+
+/* ============================================================
+   25. Step 1 개선 - 상표 유형, AI 분석, 추천 리스트
+   ============================================================ */
+
+/* 상표 유형 - 심플 칩 */
+.tm-type-selector-simple {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tm-type-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: #f8fafc;
+  border: 2px solid #e5e8eb;
+  border-radius: 20px;
+  font-size: 14px;
+  color: #4e5968;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tm-type-chip:hover {
+  border-color: #3182f6;
+  color: #3182f6;
+}
+
+.tm-type-chip.selected {
+  background: #3182f6;
+  border-color: #3182f6;
+  color: #fff;
+}
+
+.tm-type-chip input {
+  display: none;
+}
+
+/* 상표명 입력 */
+.tm-input-lg {
+  font-size: 18px;
+  padding: 14px 16px;
+}
+
+/* 상표 견본 - 작게 */
+.tm-trademark-preview-sm {
+  width: 100px;
+  height: 100px;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  background: #f9fafb;
+}
+
+.tm-trademark-preview-sm:hover {
+  border-color: #3182f6;
+  background: #f0f6ff;
+}
+
+.tm-trademark-preview-sm img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.placeholder-sm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #8b95a1;
+}
+
+/* AI 분석 섹션 */
+.tm-ai-section {
+  background: linear-gradient(135deg, #f0f6ff, #f8fafc);
+  border: 1px solid #d0e1ff;
+  border-radius: 16px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.tm-ai-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.tm-ai-header h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.tm-ai-badge {
+  padding: 2px 8px;
+  background: #3182f6;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tm-ai-input-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.tm-ai-input-row .tm-input {
+  flex: 1;
+}
+
+.btn-ai {
+  white-space: nowrap;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* AI 추천 리스트 (심플) */
+.tm-rec-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tm-rec-header h5 {
+  margin: 0;
+}
+
+.tm-recommendation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tm-rec-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e5e8eb;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.tm-rec-row:hover {
+  border-color: #3182f6;
+  box-shadow: 0 2px 8px rgba(49, 130, 246, 0.1);
+}
+
+.tm-rec-row.added {
+  background: #f0fdf4;
+  border-color: #10b981;
+}
+
+.tm-rec-rank {
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #3182f6, #1a73e8);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tm-rec-row:nth-child(n+4) .tm-rec-rank {
+  background: #e5e8eb;
+  color: #6b7684;
+}
+
+.tm-rec-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.tm-rec-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.tm-rec-title strong {
+  font-size: 15px;
+}
+
+.tm-rec-classname {
+  font-size: 13px;
+  color: #6b7684;
+}
+
+.tm-rec-reason {
+  font-size: 13px;
+  color: #4e5968;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.tm-rec-goods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tm-goods-chip {
+  padding: 4px 10px;
+  background: #f0f6ff;
+  border-radius: 12px;
+  font-size: 12px;
+  color: #1a73e8;
+}
+
+.tm-goods-more {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #8b95a1;
+}
+
+.tm-rec-action {
+  flex-shrink: 0;
+}
+
+.tm-applied-badge {
+  padding: 6px 12px;
+  background: #d1fae5;
+  color: #065f46;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ============================================================
+   26. Step 2 개선 - 컴팩트 상품류 그리드
+   ============================================================ */
+
+.tm-class-grid-compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px;
+}
+
+.tm-class-chip {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border: 2px solid #e5e8eb;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4e5968;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tm-class-chip:hover {
+  border-color: #3182f6;
+  color: #3182f6;
+  transform: scale(1.05);
+}
+
+.tm-class-chip.selected {
+  background: #3182f6;
+  border-color: #3182f6;
+  color: #fff;
+}
+
+.tm-class-chip.recommended {
+  border-color: #f59e0b;
+  color: #d97706;
+}
+
+.tm-class-chip.recommended.selected {
+  background: linear-gradient(135deg, #3182f6, #f59e0b);
+  border-color: transparent;
+  color: #fff;
+}
+
+.tm-class-legend {
+  display: flex;
+  gap: 16px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #6b7684;
+  border-top: 1px solid #e5e8eb;
+  margin-top: 8px;
+}
+
+.tm-class-legend .dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.tm-class-legend .dot.selected {
+  background: #3182f6;
+}
+
+.tm-class-legend .dot.recommended {
+  background: #f59e0b;
+}
+
+/* ============================================================
+   27. 스텝 네비게이션 개선
+   ============================================================ */
+
+.tm-workflow-nav {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  background: #f8fafc;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+
+.tm-step-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #6b7684;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.tm-step-tab:hover {
+  background: #fff;
+  color: #333d4b;
+}
+
+.tm-step-tab.active {
+  background: #fff;
+  color: #3182f6;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.tm-step-tab.completed {
+  color: #10b981;
+}
+
+.tm-step-tab.completed .tm-step-number {
+  background: #10b981;
+}
+
+.tm-step-number {
+  width: 22px;
+  height: 22px;
+  background: #e5e8eb;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7684;
+}
+
+.tm-step-tab.active .tm-step-number {
+  background: #3182f6;
+  color: #fff;
+}
+
+/* 하단 출원인 정보 */
+.tm-accordion-bottom {
+  margin-top: 24px;
+  border-top: 1px solid #e5e8eb;
+  padding-top: 16px;
+}
