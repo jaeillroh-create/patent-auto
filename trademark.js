@@ -324,6 +324,12 @@
       case 'tm-toggle-gazette-mode':
         TM.toggleGazetteMode();
         break;
+      case 'tm-search-similar':
+        TM.searchBySimilarGroup(params.classCode);
+        break;
+      case 'tm-add-from-similar':
+        TM.addGoodsFromSimilar(params.classCode, params.goodsName, params.similarGroup);
+        break;
         
       // 검색 관련
       case 'tm-search-text':
@@ -1425,6 +1431,15 @@
   };
   
   TM.renderClassGoods = function(classData) {
+    // 유사군 코드별 그룹핑
+    const groupedBySimilar = {};
+    classData.goods.forEach(g => {
+      const sg = g.similarGroup || '미분류';
+      if (!groupedBySimilar[sg]) groupedBySimilar[sg] = [];
+      groupedBySimilar[sg].push(g);
+    });
+    const similarGroups = Object.keys(groupedBySimilar).sort();
+    
     return `
       <div class="tm-class-goods-card" data-class="${classData.classCode}">
         <div class="tm-class-goods-header">
@@ -1437,26 +1452,56 @@
           </button>
         </div>
         
-        <div class="tm-goods-input-area">
-          <input type="text" class="tm-goods-input" 
-                 id="tm-goods-input-${classData.classCode}"
-                 placeholder="지정상품 입력 (자동완성 지원)"
-                 data-class="${classData.classCode}">
-          <div class="tm-goods-autocomplete" id="tm-autocomplete-${classData.classCode}"></div>
+        <!-- 검색 영역 -->
+        <div class="tm-goods-search-area">
+          <div class="tm-goods-input-row">
+            <input type="text" class="tm-goods-input" 
+                   id="tm-goods-input-${classData.classCode}"
+                   placeholder="지정상품명 검색 (자동완성)"
+                   data-class="${classData.classCode}">
+            <div class="tm-goods-autocomplete" id="tm-autocomplete-${classData.classCode}"></div>
+          </div>
+          <div class="tm-similar-search-row">
+            <input type="text" class="tm-similar-input" 
+                   id="tm-similar-input-${classData.classCode}"
+                   placeholder="유사군 코드 (예: G5001)"
+                   data-class="${classData.classCode}">
+            <button class="btn btn-sm btn-secondary" 
+                    data-action="tm-search-similar" 
+                    data-class-code="${classData.classCode}">
+              유사군 검색
+            </button>
+          </div>
         </div>
         
+        <!-- 유사군 검색 결과 (동적) -->
+        <div class="tm-similar-results" id="tm-similar-results-${classData.classCode}" style="display:none;"></div>
+        
+        <!-- 선택된 지정상품 (유사군별 그룹핑) -->
         <div class="tm-selected-goods">
           ${classData.goods.length === 0 ? `
-            <div class="tm-hint">지정상품을 입력하세요.</div>
-          ` : classData.goods.map(g => `
-            <span class="tm-goods-tag ${g.gazetted === false ? 'non-gazetted' : ''}">
-              ${TM.escapeHtml(g.name)}
-              ${g.gazetted === false ? '<span class="badge warning">비고시</span>' : ''}
-              <button class="remove-btn" data-action="tm-remove-goods" 
-                      data-class-code="${classData.classCode}" 
-                      data-goods-name="${TM.escapeHtml(g.name)}">×</button>
-            </span>
-          `).join('')}
+            <div class="tm-hint">지정상품을 입력하거나 유사군 코드로 검색하세요.</div>
+          ` : `
+            ${similarGroups.map(sg => `
+              <div class="tm-similar-group">
+                <div class="tm-similar-group-header">
+                  <span class="tm-similar-code">${sg}</span>
+                  <span class="tm-similar-count">${groupedBySimilar[sg].length}개</span>
+                </div>
+                <div class="tm-goods-tags">
+                  ${groupedBySimilar[sg].map(g => `
+                    <span class="tm-goods-tag ${g.gazetted === false ? 'non-gazetted' : ''}">
+                      ${TM.escapeHtml(g.name)}
+                      ${g.gazetted === false ? '<span class="badge warning">비고시</span>' : ''}
+                      <button class="remove-btn" data-action="tm-remove-goods" 
+                              data-class-code="${classData.classCode}" 
+                              data-goods-name="${TM.escapeHtml(g.name)}">×</button>
+                    </span>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
+          `}
         </div>
         
         <div class="tm-goods-count">
@@ -1567,6 +1612,109 @@
     
     TM.renderCurrentStep();
     App.showToast(`${addedCount}개 상품류가 추가되었습니다.`, 'success');
+  };
+  
+  // 유사군 코드로 지정상품 검색
+  TM.searchBySimilarGroup = async function(classCode) {
+    const input = document.getElementById(`tm-similar-input-${classCode}`);
+    const resultsDiv = document.getElementById(`tm-similar-results-${classCode}`);
+    
+    if (!input || !resultsDiv) return;
+    
+    const similarCode = input.value.trim().toUpperCase();
+    
+    if (!similarCode) {
+      App.showToast('유사군 코드를 입력하세요. (예: G5001)', 'warning');
+      return;
+    }
+    
+    try {
+      // DB에서 유사군 코드로 검색
+      const { data, error } = await App.sb
+        .from('gazetted_goods_cache')
+        .select('goods_name, similar_group_code')
+        .eq('class_code', classCode.padStart(2, '0'))
+        .ilike('similar_group_code', `%${similarCode}%`)
+        .limit(50);
+      
+      if (error) throw error;
+      
+      if (!data || data.length === 0) {
+        resultsDiv.innerHTML = `
+          <div class="tm-similar-no-result">
+            유사군 코드 "${similarCode}"에 해당하는 지정상품이 없습니다.
+          </div>
+        `;
+        resultsDiv.style.display = 'block';
+        return;
+      }
+      
+      // 이미 선택된 상품 필터링
+      const classItem = TM.currentProject?.designatedGoods.find(g => g.classCode === classCode);
+      const existingNames = new Set(classItem?.goods.map(g => g.name) || []);
+      
+      resultsDiv.innerHTML = `
+        <div class="tm-similar-result-header">
+          <span>유사군 "${similarCode}" 검색 결과: ${data.length}건</span>
+          <button class="btn btn-xs btn-ghost" onclick="document.getElementById('tm-similar-results-${classCode}').style.display='none'">닫기</button>
+        </div>
+        <div class="tm-similar-result-list">
+          ${data.map(g => {
+            const isAdded = existingNames.has(g.goods_name);
+            return `
+              <div class="tm-similar-result-item ${isAdded ? 'added' : ''}">
+                <span class="tm-similar-item-name">${TM.escapeHtml(g.goods_name)}</span>
+                <span class="tm-similar-item-code">${g.similar_group_code}</span>
+                ${isAdded ? `
+                  <span class="tm-similar-added-badge">추가됨</span>
+                ` : `
+                  <button class="btn btn-xs btn-primary" 
+                          data-action="tm-add-from-similar" 
+                          data-class-code="${classCode}"
+                          data-goods-name="${TM.escapeHtml(g.goods_name)}"
+                          data-similar-group="${g.similar_group_code}">
+                    + 추가
+                  </button>
+                `}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+      resultsDiv.style.display = 'block';
+      
+    } catch (error) {
+      console.error('[TM] 유사군 검색 실패:', error);
+      App.showToast('검색 실패: ' + error.message, 'error');
+    }
+  };
+  
+  // 유사군 검색 결과에서 지정상품 추가
+  TM.addGoodsFromSimilar = function(classCode, goodsName, similarGroup) {
+    if (!TM.currentProject) return;
+    
+    const classItem = TM.currentProject.designatedGoods.find(g => g.classCode === classCode);
+    if (!classItem) {
+      App.showToast('먼저 상품류를 선택하세요.', 'warning');
+      return;
+    }
+    
+    // 중복 체크
+    if (classItem.goods.some(g => g.name === goodsName)) {
+      App.showToast('이미 추가된 지정상품입니다.', 'info');
+      return;
+    }
+    
+    classItem.goods.push({
+      name: goodsName,
+      similarGroup: similarGroup,
+      gazetted: true
+    });
+    classItem.goodsCount = classItem.goods.length;
+    
+    // 검색 결과 UI 업데이트 (추가됨 표시)
+    TM.renderCurrentStep();
+    App.showToast(`"${goodsName}" 추가됨`, 'success');
   };
   
   TM.addGoods = function(classCode, goodsData) {
@@ -3380,16 +3528,21 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         btn.innerHTML = '<span class="tossface">⏳</span> 분석 중...';
       }
       
-      // === 1단계: AI가 적합한 상품류 분석 ===
-      const classPrompt = `상표 출원 전문가로서 다음 사업에 가장 적합한 NICE 상품류 5개를 추천하세요.
+      // === 1단계: AI가 적합한 상품류 + 검색 키워드 분석 ===
+      const classPrompt = `상표 출원 전문가로서 다음 사업을 분석하세요.
 
 상표명: ${p.trademarkName || '미정'}
 사업내용: ${businessInput || '미입력'}
 
-JSON 형식으로만 응답:
-{"businessAnalysis":"사업분석 2-3문장","recommendedClasses":["45","42","35","09","41"],"classReasons":{"45":"이유","42":"이유","35":"이유","09":"이유","41":"이유"}}`;
+1. 사업 분석 (2-3문장)
+2. 가장 적합한 NICE 상품류 5개 (우선순위)
+3. 각 류별 추천 이유
+4. 각 류별 고시명칭 검색용 핵심 키워드 3-5개
 
-      const classResponse = await App.callClaude(classPrompt, 1500);
+JSON으로만 응답:
+{"businessAnalysis":"분석내용","recommendedClasses":["45","42","35","09","41"],"classReasons":{"45":"이유"},"searchKeywords":{"45":["변리","특허","상표","출원","대리"],"42":["소프트웨어","컨설팅","기술"]}}`;
+
+      const classResponse = await App.callClaude(classPrompt, 2000);
       
       // JSON 파싱
       const text = classResponse.text || '';
@@ -3407,84 +3560,120 @@ JSON 형식으로만 응답:
       p.aiAnalysis.classReasons = classAnalysis.classReasons || {};
       p.aiAnalysis.recommendedGoods = {};
       
-      // === 2단계: 각 상품류에서 DB 조회 후 AI가 10개 선택 ===
+      // === 2단계: 각 상품류에서 키워드 기반 DB 검색 ===
       for (const classCode of p.aiAnalysis.recommendedClasses.slice(0, 5)) {
+        const paddedCode = classCode.padStart(2, '0');
+        const keywords = classAnalysis.searchKeywords?.[classCode] || [];
+        
         try {
-          // Supabase에서 해당 류의 고시명칭 조회 (최대 200개)
-          const { data: goodsList, error } = await App.sb
-            .from('gazetted_goods_cache')
-            .select('goods_name, similar_group_code')
-            .eq('class_code', classCode.padStart(2, '0'))
-            .limit(200);
+          let allGoods = [];
           
-          if (error || !goodsList || goodsList.length === 0) {
-            console.warn(`[TM] 제${classCode}류 고시명칭 조회 실패`);
-            continue;
+          // 키워드별로 DB 검색
+          for (const keyword of keywords.slice(0, 5)) {
+            const { data, error } = await App.sb
+              .from('gazetted_goods_cache')
+              .select('goods_name, similar_group_code')
+              .eq('class_code', paddedCode)
+              .ilike('goods_name', `%${keyword}%`)
+              .limit(20);
+            
+            if (data && data.length > 0) {
+              allGoods.push(...data);
+            }
           }
           
-          // 고시명칭 목록을 AI에게 전달하여 10개 선택
-          const goodsListText = goodsList.map(g => `${g.goods_name}(${g.similar_group_code})`).join(', ');
+          // 중복 제거
+          const uniqueGoods = [];
+          const seen = new Set();
+          for (const g of allGoods) {
+            if (!seen.has(g.goods_name)) {
+              seen.add(g.goods_name);
+              uniqueGoods.push(g);
+            }
+          }
           
-          const selectPrompt = `다음은 제${classCode}류의 실제 고시명칭 목록입니다:
+          // 키워드 검색 결과가 부족하면 해당 류 전체에서 추가
+          if (uniqueGoods.length < 10) {
+            const { data: moreGoods } = await App.sb
+              .from('gazetted_goods_cache')
+              .select('goods_name, similar_group_code')
+              .eq('class_code', paddedCode)
+              .limit(50);
+            
+            if (moreGoods) {
+              for (const g of moreGoods) {
+                if (!seen.has(g.goods_name)) {
+                  seen.add(g.goods_name);
+                  uniqueGoods.push(g);
+                  if (uniqueGoods.length >= 30) break;
+                }
+              }
+            }
+          }
+          
+          if (uniqueGoods.length === 0) continue;
+          
+          // AI에게 검색된 고시명칭 중 최적 10개 선택 요청
+          const goodsListText = uniqueGoods.slice(0, 50).map(g => 
+            `${g.goods_name}(${g.similar_group_code})`
+          ).join(', ');
+          
+          const selectPrompt = `"${p.trademarkName || ''}" 상표, "${businessInput || ''}" 사업에 가장 적합한 지정상품 10개를 선택하세요.
+
+제${classCode}류 고시명칭 후보:
 ${goodsListText}
 
-"${p.trademarkName || ''}" 상표와 "${businessInput || ''}" 사업에 가장 적합한 지정상품 10개를 선택하세요.
-반드시 위 목록에 있는 정확한 명칭과 유사군코드를 사용하세요.
+반드시 위 목록의 정확한 명칭과 유사군코드를 사용하세요.
+JSON 배열로만 응답: [{"name":"고시명칭","similarGroup":"유사군코드"},...]`;
 
-JSON 배열로만 응답:
-[{"name":"정확한고시명칭","similarGroup":"정확한유사군코드"},...]`;
-
-          const selectResponse = await App.callClaude(selectPrompt, 1000);
+          const selectResponse = await App.callClaude(selectPrompt, 800);
           const selectText = selectResponse.text || '';
           
-          // JSON 배열 추출
           const arrStart = selectText.indexOf('[');
           const arrEnd = selectText.lastIndexOf(']');
+          
           if (arrStart !== -1 && arrEnd > arrStart) {
             let arrStr = selectText.substring(arrStart, arrEnd + 1);
             arrStr = arrStr.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/,(\s*[\]\}])/g, '$1');
             
             try {
               const selectedGoods = JSON.parse(arrStr);
-              // 실제 DB에 있는 것만 필터링
-              const validGoods = selectedGoods.filter(sg => 
-                goodsList.some(g => g.goods_name === sg.name)
-              ).slice(0, 10);
               
-              // DB에서 직접 매칭하여 정확한 유사군코드 보장
-              p.aiAnalysis.recommendedGoods[classCode] = validGoods.map(sg => {
-                const dbMatch = goodsList.find(g => g.goods_name === sg.name);
-                return {
-                  name: sg.name,
-                  similarGroup: dbMatch?.similar_group_code || sg.similarGroup
-                };
-              });
+              // DB에 있는 것만 필터링 + 정확한 유사군코드 적용
+              p.aiAnalysis.recommendedGoods[classCode] = selectedGoods
+                .filter(sg => uniqueGoods.some(g => g.goods_name === sg.name))
+                .slice(0, 10)
+                .map(sg => {
+                  const dbMatch = uniqueGoods.find(g => g.goods_name === sg.name);
+                  return {
+                    name: sg.name,
+                    similarGroup: dbMatch?.similar_group_code || sg.similarGroup
+                  };
+                });
               
-              // 10개 미만이면 DB에서 추가로 채움
+              // 10개 미만이면 채움
               if (p.aiAnalysis.recommendedGoods[classCode].length < 10) {
-                const existing = p.aiAnalysis.recommendedGoods[classCode].map(g => g.name);
-                const additional = goodsList
-                  .filter(g => !existing.includes(g.goods_name))
-                  .slice(0, 10 - p.aiAnalysis.recommendedGoods[classCode].length);
-                
-                for (const g of additional) {
-                  p.aiAnalysis.recommendedGoods[classCode].push({
-                    name: g.goods_name,
-                    similarGroup: g.similar_group_code
-                  });
+                const existing = new Set(p.aiAnalysis.recommendedGoods[classCode].map(g => g.name));
+                for (const g of uniqueGoods) {
+                  if (!existing.has(g.goods_name)) {
+                    p.aiAnalysis.recommendedGoods[classCode].push({
+                      name: g.goods_name,
+                      similarGroup: g.similar_group_code
+                    });
+                    if (p.aiAnalysis.recommendedGoods[classCode].length >= 10) break;
+                  }
                 }
               }
             } catch (e) {
-              console.warn(`[TM] 제${classCode}류 선택 파싱 실패, DB 데이터로 대체`);
-              // 파싱 실패 시 DB에서 상위 10개 사용
-              p.aiAnalysis.recommendedGoods[classCode] = goodsList.slice(0, 10).map(g => ({
+              // 파싱 실패 시 검색 결과 상위 10개
+              p.aiAnalysis.recommendedGoods[classCode] = uniqueGoods.slice(0, 10).map(g => ({
                 name: g.goods_name,
                 similarGroup: g.similar_group_code
               }));
             }
           } else {
-            // AI 응답 실패 시 DB에서 상위 10개 사용
-            p.aiAnalysis.recommendedGoods[classCode] = goodsList.slice(0, 10).map(g => ({
+            // AI 응답 실패 시 검색 결과 상위 10개
+            p.aiAnalysis.recommendedGoods[classCode] = uniqueGoods.slice(0, 10).map(g => ({
               name: g.goods_name,
               similarGroup: g.similar_group_code
             }));
