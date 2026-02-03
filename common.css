@@ -292,12 +292,16 @@ a:hover { text-decoration: underline; }
    ★★★ 2-Column 그리드 레이아웃 (PC 최적화) ★★★
    ══════════════════════════════════════════════════════════ */
 
-/* 대시보드 카드 그리드 */
-#patent-dashboard-panel > div:first-child,
-#trademark-dashboard-panel > div:first-child {
+/* 대시보드 카드 그리드 - 특허만 적용 (상표는 flexbox 레이아웃 사용) */
+#patent-dashboard-panel > div:first-child {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
+}
+
+/* 상표는 flexbox 레이아웃 유지 (grid 적용 안 함) */
+#trademark-dashboard-panel > div:first-child {
+  display: flex !important;
 }
 
 /* 프로젝트/가출원 목록 그리드 */

@@ -1,9 +1,9 @@
 /* ============================================================
    상표출원 우선심사 자동화 시스템
-   Version: 4.0 - 전체 너비 최적화
+   Version: 5.0 - 레이아웃 완전 재구성 (좌측 정렬)
    ============================================================ */
 
-/* ★★★★★ 강제 전체 너비 오버라이드 (최우선!) ★★★★★ */
+/* ★★★★★ 최우선 오버라이드 - common.css의 grid 스타일 무효화 ★★★★★ */
 #trademark-dashboard-panel {
   width: 100% !important;
   max-width: 100% !important;
@@ -11,39 +11,12 @@
   margin: 0 !important;
 }
 
-.tm-dashboard {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
+/* common.css의 grid 스타일을 flex로 강제 변경 */
+#trademark-dashboard-panel > div:first-child,
+#trademark-dashboard-panel > .tm-app-layout,
 .tm-app-layout {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
-.tm-main {
-  flex: 1 !important;
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
-.tm-main-content {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
-.tm-2col,
-.tm-grid-2 {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
-.tm-col {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
-.tm-panel {
+  display: flex !important;
+  grid-template-columns: none !important;
   width: 100% !important;
   max-width: 100% !important;
 }
@@ -60,6 +33,7 @@
   --tm-warning: #f59e0b;
   --tm-warning-light: #fef3c7;
   --tm-danger: #ef4444;
+  --tm-danger-light: #fee2e2;
   --tm-gray-50: #f9fafb;
   --tm-gray-100: #f3f4f6;
   --tm-gray-200: #e5e7eb;
@@ -77,27 +51,28 @@
 }
 
 /* ============================================================
-   2. 앱 레이아웃 - 전체 너비!
+   2. 앱 레이아웃 - 사이드바 + 메인 (FLEXBOX 강제!)
    ============================================================ */
 .tm-app-layout {
-  display: flex;
-  width: 100%;
+  display: flex !important;
+  flex-direction: row !important;
+  width: 100% !important;
   min-height: calc(100vh - 120px);
   background: var(--tm-gray-50);
 }
 
 /* ============================================================
-   3. 좌측 사이드바 (200px 고정)
+   3. 좌측 사이드바 (200px 고정, flex-shrink: 0)
    ============================================================ */
 .tm-sidebar {
-  width: var(--tm-sidebar-width);
-  min-width: var(--tm-sidebar-width);
-  max-width: var(--tm-sidebar-width);
+  width: var(--tm-sidebar-width) !important;
+  min-width: var(--tm-sidebar-width) !important;
+  max-width: var(--tm-sidebar-width) !important;
+  flex-shrink: 0 !important;
   background: #fff;
   border-right: 1px solid var(--tm-gray-200);
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
   position: sticky;
   top: 0;
   height: calc(100vh - 120px);
@@ -286,14 +261,18 @@
 }
 
 /* ============================================================
-   4. 우측 메인 영역 (나머지 전체 너비!)
+   4. 우측 메인 영역 (flex: 1, 사이드바 바로 옆에서 시작!)
    ============================================================ */
 .tm-main {
-  flex: 1;
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  max-width: none !important;
   display: flex;
   flex-direction: column;
-  min-width: 0;
   background: var(--tm-gray-50);
+  /* 중요: margin-left 없음! 사이드바 바로 옆에서 시작 */
+  margin-left: 0 !important;
+  padding-left: 0 !important;
 }
 
 .tm-main-header {
@@ -303,19 +282,27 @@
 }
 
 .tm-main-header h2 {
-  font-size: 16px;
+  margin: 0;
+  font-size: 18px;
   font-weight: 600;
   color: var(--tm-gray-800);
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
+/* ★★★ 메인 콘텐츠 - 좌측 정렬! ★★★ */
 .tm-main-content {
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+  /* 중요: 좌측 정렬, margin: auto 없음! */
+  margin: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* 콘텐츠 내부도 좌측 정렬 */
+.tm-main-content > * {
+  margin-left: 0 !important;
+  margin-right: auto !important;
 }
 
 .tm-main-footer {
@@ -328,7 +315,7 @@
 }
 
 .tm-nav-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 10px 20px;
@@ -337,35 +324,69 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
-}
-
-.tm-nav-btn-prev {
-  background: #fff;
-  color: var(--tm-gray-600);
   border: 1px solid var(--tm-gray-300);
+  background: #fff;
+  color: var(--tm-gray-700);
 }
 
-.tm-nav-btn-prev:hover {
+.tm-nav-btn:hover {
   background: var(--tm-gray-100);
 }
 
-.tm-nav-btn-next {
+.tm-nav-btn.primary {
   background: var(--tm-primary);
+  border-color: var(--tm-primary);
   color: #fff;
-  border: none;
 }
 
-.tm-nav-btn-next:hover {
+.tm-nav-btn.primary:hover {
   background: var(--tm-primary-dark);
 }
 
-.tm-step-indicator {
-  font-size: 13px;
+/* ============================================================
+   5. 스텝 헤더 & 폼 섹션
+   ============================================================ */
+.tm-step-header {
+  margin-bottom: 24px;
+}
+
+.tm-step-header h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--tm-gray-800);
+  margin: 0 0 8px;
+}
+
+.tm-step-header p {
+  font-size: 14px;
   color: var(--tm-gray-500);
+  margin: 0;
+}
+
+.tm-form-section {
+  background: #fff;
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.tm-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tm-section-header h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tm-gray-800);
+  margin: 0;
 }
 
 /* ============================================================
-   5. 콘텐츠 그리드 (핵심!)
+   6. 2-Column 그리드 (메인 콘텐츠 내부)
    ============================================================ */
 .tm-2col {
   display: grid;
@@ -375,17 +396,7 @@
 }
 
 .tm-col {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
   min-width: 0;
-}
-
-.tm-grid-1 {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  width: 100%;
 }
 
 .tm-col-full {
@@ -393,177 +404,93 @@
 }
 
 /* ============================================================
-   6. 패널
+   7. 입력 필드 & 폼 요소
    ============================================================ */
-.tm-panel {
-  background: #fff;
-  border: 1px solid var(--tm-gray-200);
-  border-radius: var(--tm-radius);
-  overflow: hidden;
-}
-
-.tm-panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 18px;
-  background: var(--tm-gray-50);
-  border-bottom: 1px solid var(--tm-gray-100);
-}
-
-.tm-panel-header h3 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--tm-gray-700);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-}
-
-.tm-panel-body {
-  padding: 18px;
-}
-
-/* AI 패널 (강조) */
-.tm-panel-highlight {
-  border: 2px solid var(--tm-primary);
-  background: linear-gradient(180deg, var(--tm-primary-light) 0%, #fff 100%);
-}
-
-.tm-panel-highlight .tm-panel-header {
-  background: transparent;
-  border-bottom-color: rgba(49, 130, 246, 0.2);
-}
-
-/* 빈 상태 */
-.tm-empty-state {
-  text-align: center;
-  padding: 48px 24px;
-}
-
-.tm-empty-icon {
-  font-size: 48px;
+.input-group {
   margin-bottom: 16px;
 }
 
-.tm-empty-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--tm-gray-700);
-  margin-bottom: 8px;
-}
-
-.tm-empty-desc {
-  font-size: 14px;
-  color: var(--tm-gray-500);
-  line-height: 1.5;
-}
-
-/* ============================================================
-   7. 입력 필드
-   ============================================================ */
-.tm-field {
-  margin-bottom: 16px;
-}
-
-.tm-field:last-child {
-  margin-bottom: 0;
-}
-
-.tm-field label {
+.input-group label {
   display: block;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--tm-gray-700);
   margin-bottom: 6px;
 }
 
-.tm-field .required {
-  color: var(--tm-danger);
-}
-
-.tm-input {
+.tm-input,
+.tm-textarea,
+.tm-select {
   width: 100%;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--tm-gray-300);
   border-radius: var(--tm-radius-sm);
   font-size: 14px;
+  color: var(--tm-gray-800);
+  background: #fff;
   transition: all 0.15s;
 }
 
-.tm-input:focus {
+.tm-input:focus,
+.tm-textarea:focus,
+.tm-select:focus {
   outline: none;
   border-color: var(--tm-primary);
   box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.1);
 }
 
-.tm-input::placeholder {
-  color: var(--tm-gray-400);
+.tm-input:disabled,
+.tm-textarea:disabled {
+  background: var(--tm-gray-100);
+  color: var(--tm-gray-500);
 }
 
-.tm-input-lg {
-  padding: 14px 16px;
-  font-size: 16px;
+.tm-textarea {
+  min-height: 100px;
+  resize: vertical;
 }
 
-.tm-field-row {
-  display: flex;
-  gap: 16px;
-}
-
-.tm-field-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+.tm-hint {
+  font-size: 12px;
+  color: var(--tm-gray-500);
+  margin-top: 4px;
 }
 
 /* ============================================================
-   8. 칩/토글
+   8. 패널 & 카드
    ============================================================ */
-.tm-chips {
+.tm-panel {
+  background: #fff;
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.tm-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tm-gray-800);
+  margin: 0 0 12px;
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
 }
 
-.tm-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 10px 18px;
-  border: 1px solid var(--tm-gray-300);
-  border-radius: var(--tm-radius-sm);
-  background: #fff;
-  font-size: 14px;
-  color: var(--tm-gray-600);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.tm-chip:hover {
-  border-color: var(--tm-primary);
-  color: var(--tm-primary);
-}
-
-.tm-chip.active {
-  background: var(--tm-primary);
-  border-color: var(--tm-primary);
-  color: #fff;
-}
-
-.tm-chip input {
-  display: none;
+.tm-panel-highlight {
+  border: 2px solid var(--tm-primary);
+  background: linear-gradient(135deg, rgba(49,130,246,0.03), rgba(16,185,129,0.03));
 }
 
 /* ============================================================
    9. 버튼
    ============================================================ */
-.tm-btn {
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 12px 20px;
+  padding: 10px 16px;
   border-radius: var(--tm-radius-sm);
   font-size: 14px;
   font-weight: 500;
@@ -572,287 +499,57 @@
   border: none;
 }
 
-.tm-btn-primary {
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn-lg {
+  padding: 12px 24px;
+  font-size: 15px;
+}
+
+.btn-primary {
   background: var(--tm-primary);
   color: #fff;
 }
 
-.tm-btn-primary:hover {
+.btn-primary:hover {
   background: var(--tm-primary-dark);
 }
 
-.tm-btn-secondary {
-  background: var(--tm-gray-100);
-  color: var(--tm-gray-700);
+.btn-primary:disabled {
+  background: var(--tm-gray-300);
+  cursor: not-allowed;
 }
 
-.tm-btn-secondary:hover {
+.btn-secondary {
+  background: var(--tm-gray-100);
+  color: var(--tm-gray-700);
+  border: 1px solid var(--tm-gray-300);
+}
+
+.btn-secondary:hover {
   background: var(--tm-gray-200);
 }
 
-.tm-btn-outline {
-  background: #fff;
-  color: var(--tm-gray-700);
-  border: 1px solid var(--tm-gray-300);
+.btn-ghost {
+  background: transparent;
+  color: var(--tm-gray-600);
 }
 
-.tm-btn-outline:hover {
-  border-color: var(--tm-primary);
-  color: var(--tm-primary);
-}
-
-.tm-btn-full {
-  width: 100%;
-}
-
-.tm-btn-sm {
-  padding: 8px 14px;
-  font-size: 13px;
-}
-
-/* ============================================================
-   10. 배지
-   ============================================================ */
-.tm-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.tm-badge-primary {
-  background: var(--tm-primary-light);
-  color: var(--tm-primary);
-}
-
-.tm-badge-success {
-  background: var(--tm-success-light);
-  color: var(--tm-success);
-}
-
-.tm-badge-warning {
-  background: var(--tm-warning-light);
-  color: var(--tm-warning);
-}
-
-.tm-badge-gray {
+.btn-ghost:hover {
   background: var(--tm-gray-100);
-  color: var(--tm-gray-600);
 }
 
 /* ============================================================
-   11. 상품류 그리드
-   ============================================================ */
-.tm-class-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
-}
-
-.tm-class-btn {
-  padding: 12px 8px;
-  border: 1px solid var(--tm-gray-300);
-  border-radius: var(--tm-radius-sm);
-  background: #fff;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--tm-gray-700);
-  cursor: pointer;
-  transition: all 0.15s;
-  text-align: center;
-}
-
-.tm-class-btn:hover {
-  border-color: var(--tm-primary);
-  color: var(--tm-primary);
-}
-
-.tm-class-btn.selected {
-  background: var(--tm-primary);
-  border-color: var(--tm-primary);
-  color: #fff;
-}
-
-.tm-class-btn.ai-recommended {
-  border-color: var(--tm-warning);
-  background: var(--tm-warning-light);
-}
-
-.tm-grid-legend {
-  display: flex;
-  gap: 16px;
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--tm-gray-500);
-}
-
-/* ============================================================
-   12. AI 분석 입력
-   ============================================================ */
-.tm-ai-input {
-  display: flex;
-  gap: 8px;
-}
-
-.tm-ai-input .tm-input {
-  flex: 1;
-}
-
-.tm-hint {
-  font-size: 13px;
-  color: var(--tm-gray-500);
-  margin-bottom: 12px;
-  line-height: 1.5;
-}
-
-.tm-summary {
-  padding: 16px;
-  background: var(--tm-gray-50);
-  border-radius: var(--tm-radius-sm);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.tm-keywords {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.tm-keyword {
-  padding: 4px 10px;
-  background: var(--tm-primary-light);
-  border-radius: 12px;
-  font-size: 12px;
-  color: var(--tm-primary);
-}
-
-/* ============================================================
-   13. 견본 이미지
-   ============================================================ */
-.tm-specimen {
-  width: 80px;
-  height: 80px;
-  border: 2px dashed var(--tm-gray-300);
-  border-radius: var(--tm-radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s;
-  overflow: hidden;
-}
-
-.tm-specimen:hover {
-  border-color: var(--tm-primary);
-  background: var(--tm-primary-light);
-}
-
-.tm-specimen img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
-/* ============================================================
-   14. 검색 결과
-   ============================================================ */
-.tm-search-results {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.tm-search-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  border-bottom: 1px solid var(--tm-gray-100);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.tm-search-item:hover {
-  background: var(--tm-gray-50);
-}
-
-.tm-search-item:last-child {
-  border-bottom: none;
-}
-
-.tm-search-thumb {
-  width: 48px;
-  height: 48px;
-  border: 1px solid var(--tm-gray-200);
-  border-radius: var(--tm-radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  color: var(--tm-gray-400);
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.tm-search-thumb img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
-.tm-search-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.tm-search-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--tm-gray-800);
-}
-
-.tm-search-meta {
-  font-size: 12px;
-  color: var(--tm-gray-500);
-  margin-top: 2px;
-}
-
-/* ============================================================
-   15. 비용
-   ============================================================ */
-.tm-cost-summary {
-  background: var(--tm-primary-light);
-  padding: 20px;
-  border-radius: var(--tm-radius);
-  text-align: center;
-  margin-bottom: 16px;
-}
-
-.tm-cost-total {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--tm-primary);
-}
-
-.tm-cost-label {
-  font-size: 13px;
-  color: var(--tm-gray-600);
-  margin-top: 4px;
-}
-
-/* ============================================================
-   16. 체크박스
+   10. 체크박스 & 칩
    ============================================================ */
 .tm-checkbox {
   display: flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  font-size: 14px;
-  color: var(--tm-gray-700);
 }
 
 .tm-checkbox input {
@@ -861,136 +558,226 @@
   accent-color: var(--tm-primary);
 }
 
-/* ============================================================
-   17. 대시보드
-   ============================================================ */
-.tm-dashboard {
-  padding: 24px;
-}
-
-.tm-dashboard-header {
-  display: flex;
-  justify-content: space-between;
+.tm-chip {
+  display: inline-flex;
   align-items: center;
-  margin-bottom: 24px;
-}
-
-.tm-dashboard-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--tm-gray-800);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tm-project-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.tm-project-card {
-  padding: 20px;
-  background: #fff;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--tm-gray-100);
   border: 1px solid var(--tm-gray-200);
-  border-radius: var(--tm-radius);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--tm-gray-700);
+  cursor: pointer;
   transition: all 0.15s;
 }
 
-.tm-project-card:hover {
+.tm-chip:hover {
+  background: var(--tm-gray-200);
+}
+
+.tm-chip.active {
+  background: var(--tm-primary);
   border-color: var(--tm-primary);
-  box-shadow: var(--tm-shadow);
+  color: #fff;
 }
 
-.tm-project-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--tm-gray-800);
-  margin-bottom: 4px;
+/* ============================================================
+   11. 배지 & 태그
+   ============================================================ */
+.tm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  background: var(--tm-primary-light);
+  color: var(--tm-primary);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.tm-project-meta {
-  font-size: 13px;
-  color: var(--tm-gray-500);
-  margin-bottom: 12px;
+.tm-badge.success {
+  background: var(--tm-success-light);
+  color: var(--tm-success);
 }
 
-.tm-project-actions {
-  display: flex;
+.tm-badge.warning {
+  background: var(--tm-warning-light);
+  color: var(--tm-warning);
+}
+
+.tm-badge.danger {
+  background: var(--tm-danger-light);
+  color: var(--tm-danger);
+}
+
+/* ============================================================
+   12. 상품류 그리드
+   ============================================================ */
+.tm-class-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
   gap: 8px;
 }
 
-/* ============================================================
-   18. 반응형
-   ============================================================ */
-@media (max-width: 1200px) {
-  .tm-2col {
-    grid-template-columns: 1fr;
-  }
-  .tm-class-grid {
-    grid-template-columns: repeat(5, 1fr);
-  }
+.tm-class-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: var(--tm-gray-50);
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--tm-gray-700);
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
-@media (max-width: 768px) {
-  .tm-app-layout {
-    flex-direction: column;
-  }
-  
-  .tm-sidebar {
-    width: 100%;
-    min-width: 100%;
-    max-width: 100%;
-    height: auto;
-    position: relative;
-    border-right: none;
-    border-bottom: 1px solid var(--tm-gray-200);
-  }
-  
-  .tm-step-nav {
-    display: flex;
-    overflow-x: auto;
-    padding: 8px;
-    gap: 4px;
-  }
-  
-  .tm-step-item {
-    flex-shrink: 0;
-    margin-bottom: 0;
-  }
-  
-  .tm-sidebar-project,
-  .tm-sidebar-footer {
-    display: none;
-  }
-  
-  .tm-main-content {
-    padding: 16px;
-  }
-  
-  .tm-class-grid {
-    grid-template-columns: repeat(5, 1fr);
-  }
-  
-  .tm-project-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .tm-field-row {
-    flex-direction: column;
-  }
-  
-  .tm-field-grid {
-    grid-template-columns: 1fr;
-  }
+.tm-class-btn:hover {
+  background: var(--tm-gray-100);
+  border-color: var(--tm-gray-300);
+}
+
+.tm-class-btn.selected {
+  background: var(--tm-primary);
+  border-color: var(--tm-primary);
+  color: #fff;
 }
 
 /* ============================================================
-   23. 검색 결과 시각화 (KIPRIS 2-Stage)
+   13. 상품 목록
    ============================================================ */
+.tm-goods-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius-sm);
+}
 
-/* 검색 요약 */
+.tm-goods-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--tm-gray-100);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.tm-goods-item:last-child {
+  border-bottom: none;
+}
+
+.tm-goods-item:hover {
+  background: var(--tm-gray-50);
+}
+
+.tm-goods-item.selected {
+  background: var(--tm-primary-light);
+}
+
+.tm-goods-checkbox {
+  flex-shrink: 0;
+}
+
+.tm-goods-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tm-goods-name {
+  font-size: 14px;
+  color: var(--tm-gray-800);
+  margin-bottom: 2px;
+}
+
+.tm-goods-code {
+  font-size: 12px;
+  color: var(--tm-gray-500);
+}
+
+/* ============================================================
+   14. 검색 영역
+   ============================================================ */
+.tm-search-section {
+  background: #fff;
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.tm-search-controls {
+  margin-bottom: 16px;
+}
+
+.tm-search-type-toggle {
+  display: inline-flex;
+  background: var(--tm-gray-100);
+  border-radius: var(--tm-radius-sm);
+  padding: 4px;
+}
+
+.tm-search-type-toggle button {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--tm-gray-600);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tm-search-type-toggle button.active {
+  background: #fff;
+  color: var(--tm-primary);
+  font-weight: 600;
+  box-shadow: var(--tm-shadow);
+}
+
+.tm-search-form {
+  margin-top: 16px;
+}
+
+.tm-search-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.tm-search-actions {
+  margin-top: 16px;
+}
+
+/* ============================================================
+   15. 검색 결과
+   ============================================================ */
+.tm-search-results-section {
+  margin-top: 24px;
+}
+
+.tm-search-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tm-search-results-header h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.tm-search-time {
+  font-size: 12px;
+  color: var(--tm-gray-500);
+}
+
+/* 검색 결과 요약 */
 .tm-search-summary {
   display: flex;
   gap: 16px;
@@ -1023,7 +810,7 @@
 
 .tm-summary-stat.risk-high {
   border-color: var(--tm-danger);
-  background: rgba(239, 68, 68, 0.05);
+  background: var(--tm-danger-light);
 }
 
 .tm-summary-stat.risk-high .tm-stat-num {
@@ -1032,7 +819,7 @@
 
 .tm-summary-stat.risk-medium {
   border-color: var(--tm-warning);
-  background: rgba(245, 158, 11, 0.05);
+  background: var(--tm-warning-light);
 }
 
 .tm-summary-stat.risk-medium .tm-stat-num {
@@ -1213,17 +1000,17 @@
 
 .tm-score-circle.risk-high {
   border-color: var(--tm-danger);
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--tm-danger-light);
 }
 
 .tm-score-circle.risk-medium {
   border-color: var(--tm-warning);
-  background: rgba(245, 158, 11, 0.1);
+  background: var(--tm-warning-light);
 }
 
 .tm-score-circle.risk-low {
   border-color: var(--tm-success);
-  background: rgba(16, 185, 129, 0.1);
+  background: var(--tm-success-light);
 }
 
 .tm-score-num {
@@ -1241,7 +1028,7 @@
   color: var(--tm-gray-500);
 }
 
-/* 점수 breakdown 바 */
+/* 점수 breakdown */
 .tm-score-breakdown {
   width: 100%;
 }
@@ -1312,14 +1099,432 @@
   transition: width 0.3s;
 }
 
-.tm-progress-text {
-  font-size: 12px;
-  color: var(--tm-gray-500);
+/* ============================================================
+   16. 빈 상태 & 경고
+   ============================================================ */
+.tm-empty-state {
   text-align: center;
+  padding: 48px 24px;
+  color: var(--tm-gray-500);
 }
 
-/* 반응형 */
-@media (max-width: 900px) {
+.tm-empty-state .icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.tm-empty-state h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--tm-gray-700);
+  margin: 0 0 8px;
+}
+
+.tm-empty-state p {
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+
+.tm-warning-box {
+  padding: 16px;
+  background: var(--tm-warning-light);
+  border: 1px solid var(--tm-warning);
+  border-radius: var(--tm-radius-sm);
+  color: #92400e;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+/* ============================================================
+   17. 선택된 상품 요약
+   ============================================================ */
+.tm-selected-summary {
+  background: var(--tm-primary-light);
+  border: 1px solid rgba(49, 130, 246, 0.2);
+  border-radius: var(--tm-radius);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.tm-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.tm-summary-title {
+  font-weight: 600;
+  color: var(--tm-gray-800);
+}
+
+.tm-summary-count {
+  font-size: 13px;
+  color: var(--tm-primary);
+}
+
+.tm-summary-classes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.tm-class-badge {
+  padding: 4px 10px;
+  background: var(--tm-primary);
+  color: #fff;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tm-summary-similar-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.tm-similar-label {
+  font-size: 12px;
+  color: var(--tm-gray-600);
+}
+
+.tm-similar-badge {
+  padding: 2px 8px;
+  background: #fff;
+  border: 1px solid var(--tm-gray-300);
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--tm-gray-600);
+}
+
+.tm-similar-more {
+  font-size: 11px;
+  color: var(--tm-gray-500);
+}
+
+/* ============================================================
+   18. 비엔나 코드 섹션
+   ============================================================ */
+.tm-vienna-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.tm-vienna-suggestions {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--tm-gray-50);
+  border-radius: var(--tm-radius-sm);
+}
+
+.tm-vienna-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #fff;
+  border: 1px solid var(--tm-gray-300);
+  border-radius: 12px;
+  font-size: 12px;
+  margin: 4px;
+}
+
+/* ============================================================
+   19. 견본 이미지 업로드
+   ============================================================ */
+.tm-specimen-upload {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.tm-specimen-preview {
+  width: 100px;
+  height: 100px;
+  border: 2px dashed var(--tm-gray-300);
+  border-radius: var(--tm-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--tm-gray-50);
+  cursor: pointer;
+}
+
+.tm-specimen-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.tm-specimen-preview.has-image {
+  border-style: solid;
+  border-color: var(--tm-primary);
+}
+
+.tm-specimen-info {
+  flex: 1;
+}
+
+/* ============================================================
+   20. 평가 결과
+   ============================================================ */
+.tm-eval-control {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.tm-eval-progress {
+  flex: 1;
+}
+
+.tm-target-list-compact {
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius);
+  overflow: hidden;
+}
+
+.tm-target-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--tm-gray-100);
+  background: #fff;
+}
+
+.tm-target-row:last-child {
+  border-bottom: none;
+}
+
+.tm-target-row.evaluated {
+  background: var(--tm-success-light);
+}
+
+.tm-target-num {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tm-gray-200);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.tm-target-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.tm-target-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--tm-gray-800);
+  display: block;
+}
+
+.tm-target-app-no {
+  font-size: 12px;
+  color: var(--tm-gray-500);
+}
+
+.tm-target-action {
+  flex-shrink: 0;
+}
+
+.tm-eval-badge-sm {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.tm-eval-badge-sm.high {
+  background: var(--tm-danger-light);
+  color: var(--tm-danger);
+}
+
+.tm-eval-badge-sm.medium {
+  background: var(--tm-warning-light);
+  color: var(--tm-warning);
+}
+
+.tm-eval-badge-sm.low {
+  background: var(--tm-success-light);
+  color: var(--tm-success);
+}
+
+/* ============================================================
+   21. 비용 산출 테이블
+   ============================================================ */
+.tm-fee-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tm-fee-table th,
+.tm-fee-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--tm-gray-200);
+}
+
+.tm-fee-table th {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tm-gray-600);
+  background: var(--tm-gray-50);
+}
+
+.tm-fee-table td {
+  font-size: 14px;
+  color: var(--tm-gray-800);
+}
+
+.tm-fee-table .amount {
+  text-align: right;
+  font-weight: 500;
+}
+
+.tm-fee-table .total {
+  font-weight: 700;
+  background: var(--tm-primary-light);
+}
+
+/* ============================================================
+   22. 문서 생성 결과
+   ============================================================ */
+.tm-document-result {
+  background: var(--tm-gray-50);
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  white-space: pre-wrap;
+  font-family: 'Pretendard', sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.tm-document-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ============================================================
+   23. 프로젝트 목록 (대시보드)
+   ============================================================ */
+.tm-project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.tm-project-card {
+  background: #fff;
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius);
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tm-project-card:hover {
+  border-color: var(--tm-primary);
+  box-shadow: var(--tm-shadow);
+}
+
+.tm-project-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.tm-project-card-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tm-primary-light);
+  border-radius: var(--tm-radius-sm);
+  font-size: 20px;
+}
+
+.tm-project-card-title {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--tm-gray-800);
+}
+
+.tm-project-card-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--tm-gray-500);
+}
+
+/* ============================================================
+   24. 반응형
+   ============================================================ */
+@media (max-width: 1200px) {
+  .tm-2col {
+    grid-template-columns: 1fr;
+  }
+  
+  .tm-class-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .tm-app-layout {
+    flex-direction: column !important;
+  }
+  
+  .tm-sidebar {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    position: relative !important;
+    border-right: none;
+    border-bottom: 1px solid var(--tm-gray-200);
+  }
+  
+  .tm-step-nav {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 8px;
+    gap: 4px;
+  }
+  
+  .tm-step-item {
+    flex-shrink: 0;
+    padding: 8px 12px;
+  }
+  
+  .tm-main-content {
+    padding: 16px;
+  }
+  
+  .tm-class-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  
   .tm-search-result-item {
     grid-template-columns: 30px 50px 1fr;
   }
