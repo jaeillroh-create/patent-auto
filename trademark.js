@@ -1139,14 +1139,27 @@
             ${p.aiAnalysis.recommendedClasses?.length > 0 ? `
               <div class="tm-recommended-section">
                 <h5>🎯 추천 상품류 및 지정상품</h5>
+                ${p.aiAnalysis.coreKeywords?.length > 0 ? `
+                  <div class="tm-analysis-keywords">
+                    <span class="tm-keywords-label">분석 키워드:</span>
+                    ${p.aiAnalysis.coreKeywords.slice(0, 8).map(k => `<span class="tm-keyword-tag">${k}</span>`).join('')}
+                  </div>
+                ` : ''}
                 <div class="tm-recommendation-cards">
                   ${p.aiAnalysis.recommendedClasses.map((code, idx) => {
                     const className = TM.niceClasses[code] || '';
                     const reason = p.aiAnalysis.classReasons?.[code] || '';
                     const goods = p.aiAnalysis.recommendedGoods?.[code] || [];
+                    const coverage = p.aiAnalysis.coverageAnalysis?.[code] || {};
                     const isAlreadyAdded = p.designatedGoods.some(g => g.classCode === code);
-                    const visibleGoods = goods.slice(0, 5);
-                    const hiddenGoods = goods.slice(5);
+                    
+                    // 핵심/일반 분류
+                    const coreGoods = goods.filter(g => g.isCore);
+                    const normalGoods = goods.filter(g => !g.isCore);
+                    const visibleCore = coreGoods.slice(0, 5);
+                    const visibleNormal = normalGoods.slice(0, 5);
+                    const hiddenGoods = [...coreGoods.slice(5), ...normalGoods.slice(5)];
+                    
                     const rankLabels = ['1순위', '2순위', '3순위', '4순위', '5순위'];
                     return `
                       <div class="tm-rec-card ${isAlreadyAdded ? 'added' : ''}" data-class-code="${code}">
@@ -1175,21 +1188,39 @@
                           <div class="tm-rec-goods-section">
                             <div class="tm-rec-goods-header">
                               <span>추천 지정상품</span>
-                              <span class="tm-rec-goods-count">${goods.length}개</span>
+                              <span class="tm-rec-goods-count">${goods.length}개 ${coreGoods.length > 0 ? `(핵심 ${coreGoods.length}개)` : ''}</span>
                             </div>
-                            <div class="tm-rec-goods-tags">
-                              ${visibleGoods.map(g => `
-                                <span class="tm-rec-goods-tag">
-                                  ${g.name}
-                                  <small class="tm-similar-code">${g.similarGroup || ''}</small>
-                                </span>
-                              `).join('')}
-                            </div>
+                            ${visibleCore.length > 0 ? `
+                              <div class="tm-rec-goods-group">
+                                <div class="tm-rec-group-label core">⭐ 핵심 보호</div>
+                                <div class="tm-rec-goods-tags">
+                                  ${visibleCore.map(g => `
+                                    <span class="tm-rec-goods-tag core" title="점수: ${g.score?.toFixed(1) || '-'}">
+                                      ${g.name}
+                                      <small class="tm-similar-code">${g.similarGroup || ''}</small>
+                                    </span>
+                                  `).join('')}
+                                </div>
+                              </div>
+                            ` : ''}
+                            ${visibleNormal.length > 0 ? `
+                              <div class="tm-rec-goods-group">
+                                ${visibleCore.length > 0 ? '<div class="tm-rec-group-label">🛡️ 방어 확장</div>' : ''}
+                                <div class="tm-rec-goods-tags">
+                                  ${visibleNormal.map(g => `
+                                    <span class="tm-rec-goods-tag" title="점수: ${g.score?.toFixed(1) || '-'}">
+                                      ${g.name}
+                                      <small class="tm-similar-code">${g.similarGroup || ''}</small>
+                                    </span>
+                                  `).join('')}
+                                </div>
+                              </div>
+                            ` : ''}
                             ${hiddenGoods.length > 0 ? `
                               <div class="tm-rec-goods-hidden" id="tm-hidden-goods-${code}" style="display:none;">
                                 <div class="tm-rec-goods-tags">
                                   ${hiddenGoods.map(g => `
-                                    <span class="tm-rec-goods-tag">
+                                    <span class="tm-rec-goods-tag ${g.isCore ? 'core' : ''}">
                                       ${g.name}
                                       <small class="tm-similar-code">${g.similarGroup || ''}</small>
                                     </span>
@@ -1200,6 +1231,12 @@
                                 +${hiddenGoods.length}개 더보기
                               </button>
                             ` : ''}
+                          </div>
+                        ` : ''}
+                        ${coverage.note ? `
+                          <div class="tm-rec-note">
+                            <span class="tm-note-icon">📝</span>
+                            <span class="tm-note-text">${TM.escapeHtml(coverage.note)}</span>
                           </div>
                         ` : ''}
                       </div>
@@ -3622,7 +3659,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
   }
 
   // ============================================================
-  // 1. 비즈니스 분석 (상품류 + 지정상품 추천)
+  // 1. 비즈니스 분석 (상품류 + 지정상품 추천) - 개선된 알고리즘
   // ============================================================
   
   TM.analyzeBusiness = async function() {
@@ -3639,25 +3676,27 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       const btn = document.querySelector('[data-action="tm-analyze-business"]');
       if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span class="tossface">⏳</span> 분석 중...';
+        btn.innerHTML = '<span class="tossface">⏳</span> AI 분석 중...';
       }
       
-      // === 1단계: AI가 적합한 상품류 + 검색 키워드 분석 ===
-      const classPrompt = `상표 출원 전문 변리사로서 고객의 사업에 적합한 상품류를 친절하게 추천해주세요.
+      // === 1단계: AI가 적합한 상품류 + 도메인 태그 + 핵심 키워드 분석 ===
+      const classPrompt = `상표 출원 전문 변리사로서 고객의 사업에 적합한 상품류를 분석해주세요.
 
 상표명: ${p.trademarkName || '미정'}
 사업내용: ${businessInput || '미입력'}
 
-응답 형식:
-1. businessAnalysis: 고객의 사업을 분석한 내용 (2-3문장, 친절한 존댓말)
-2. recommendedClasses: 가장 적합한 NICE 상품류 5개 (우선순위순)
-3. classReasons: 각 류별 추천 이유 (친절한 존댓말로 "~에 적합합니다", "~를 보호할 수 있습니다" 형태)
-4. searchKeywords: 각 류별 고시명칭 검색 키워드 5개
+다음 정보를 JSON으로 응답하세요:
+1. businessAnalysis: 사업 분석 내용 (2-3문장, 친절한 존댓말)
+2. domainTags: 사업 분야 태그 1-3개 (예: ["IT서비스", "교육"] 또는 ["변리사", "컨설팅"])
+3. recommendedClasses: 가장 적합한 NICE 상품류 5개 (우선순위순, 문자열 배열)
+4. classReasons: 각 류별 추천 이유 (친절한 존댓말)
+5. coreKeywords: 사업의 핵심 키워드 5-10개 (지정상품 검색용)
+6. actionTypes: 사업의 행위 유형 (예: ["개발", "판매", "서비스", "컨설팅", "교육"] 중 해당하는 것)
 
-JSON으로만 응답:
-{"businessAnalysis":"고객님의 사업은 ~에 해당합니다. ~서비스를 제공하시는 것으로 보입니다.","recommendedClasses":["45","42","35","09","41"],"classReasons":{"45":"변리사 서비스의 핵심인 특허·상표 출원대리업을 보호할 수 있습니다.","42":"소프트웨어 개발 및 기술 컨설팅 서비스를 보호하는 데 적합합니다."},"searchKeywords":{"45":["변리","특허","상표","출원","대리"],"42":["소프트웨어","컨설팅","기술","개발","설계"]}}`;
+JSON만 응답:
+{"businessAnalysis":"고객님의 사업은...","domainTags":["IT서비스"],"recommendedClasses":["42","09","35","38","41"],"classReasons":{"42":"소프트웨어 개발 서비스를 보호합니다."},"coreKeywords":["소프트웨어","플랫폼","앱","서비스","개발"],"actionTypes":["개발","서비스"]}`;
 
-      const classResponse = await App.callClaude(classPrompt, 2000);
+      const classResponse = await App.callClaude(classPrompt, 2500);
       
       // JSON 파싱
       const text = classResponse.text || '';
@@ -3668,131 +3707,143 @@ JSON으로만 응답:
       if (!jsonStr) throw new Error('AI 응답 파싱 실패');
       
       jsonStr = jsonStr.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/,(\s*[}\]])/g, '$1').replace(/\n/g, ' ');
-      const classAnalysis = JSON.parse(jsonStr);
+      const analysis = JSON.parse(jsonStr);
       
-      p.aiAnalysis.businessAnalysis = classAnalysis.businessAnalysis || '';
-      p.aiAnalysis.recommendedClasses = classAnalysis.recommendedClasses || [];
-      p.aiAnalysis.classReasons = classAnalysis.classReasons || {};
+      p.aiAnalysis.businessAnalysis = analysis.businessAnalysis || '';
+      p.aiAnalysis.domainTags = analysis.domainTags || [];
+      p.aiAnalysis.recommendedClasses = analysis.recommendedClasses || [];
+      p.aiAnalysis.classReasons = analysis.classReasons || {};
+      p.aiAnalysis.coreKeywords = analysis.coreKeywords || [];
+      p.aiAnalysis.actionTypes = analysis.actionTypes || [];
       p.aiAnalysis.recommendedGoods = {};
+      p.aiAnalysis.coverageAnalysis = {};
       
-      // === 2단계: 각 상품류에서 키워드 기반 DB 검색 ===
+      // === 2단계: 각 류별 DB 기반 후보 생성 + 스코어링 ===
       for (const classCode of p.aiAnalysis.recommendedClasses.slice(0, 5)) {
         const paddedCode = classCode.padStart(2, '0');
-        const keywords = classAnalysis.searchKeywords?.[classCode] || [];
         
         try {
-          let allGoods = [];
+          if (btn) btn.innerHTML = `<span class="tossface">⏳</span> 제${classCode}류 분석 중...`;
           
-          // 키워드별로 DB 검색
-          for (const keyword of keywords.slice(0, 5)) {
-            const { data, error } = await App.sb
-              .from('gazetted_goods_cache')
-              .select('goods_name, similar_group_code')
-              .eq('class_code', paddedCode)
-              .ilike('goods_name', `%${keyword}%`)
-              .limit(20);
+          // 2-1. 키워드 기반 DB 검색 (스코어링 포함)
+          const candidates = await TM.searchGoodsCandidates(
+            paddedCode, 
+            p.aiAnalysis.coreKeywords,
+            businessInput,
+            150  // 후보 최대 150개
+          );
+          
+          if (candidates.length === 0) {
+            console.warn(`[TM] 제${classCode}류 후보 없음`);
+            continue;
+          }
+          
+          // 2-2. 유사군코드별 그룹핑
+          const groupedByCode = {};
+          candidates.forEach(c => {
+            const code = c.similar_group_code || 'UNKNOWN';
+            if (!groupedByCode[code]) groupedByCode[code] = [];
+            groupedByCode[code].push(c);
+          });
+          
+          // 2-3. 유사군코드 커버리지 최적화 선택
+          // 핵심 유사군코드당 최소 1개, 최대 2개
+          const selectedGoods = [];
+          const usedCodes = new Set();
+          const codeList = Object.keys(groupedByCode).sort((a, b) => {
+            // 높은 점수 우선
+            const scoreA = Math.max(...groupedByCode[a].map(g => g.score || 0));
+            const scoreB = Math.max(...groupedByCode[b].map(g => g.score || 0));
+            return scoreB - scoreA;
+          });
+          
+          // 라운드 1: 각 유사군코드에서 상위 1개씩
+          for (const code of codeList) {
+            if (selectedGoods.length >= 15) break;
+            const best = groupedByCode[code].sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+            selectedGoods.push({
+              name: best.goods_name,
+              similarGroup: best.similar_group_code,
+              score: best.score,
+              isCore: best.isCore || false
+            });
+            usedCodes.add(code);
+          }
+          
+          // 라운드 2: 고득점 항목 추가 (10개까지)
+          if (selectedGoods.length < 10) {
+            const remaining = candidates
+              .filter(c => !selectedGoods.some(s => s.name === c.goods_name))
+              .sort((a, b) => (b.score || 0) - (a.score || 0));
             
-            if (data && data.length > 0) {
-              allGoods.push(...data);
+            for (const c of remaining) {
+              if (selectedGoods.length >= 10) break;
+              selectedGoods.push({
+                name: c.goods_name,
+                similarGroup: c.similar_group_code,
+                score: c.score,
+                isCore: false
+              });
             }
           }
           
-          // 중복 제거
-          const uniqueGoods = [];
-          const seen = new Set();
-          for (const g of allGoods) {
-            if (!seen.has(g.goods_name)) {
-              seen.add(g.goods_name);
-              uniqueGoods.push(g);
-            }
-          }
-          
-          // 키워드 검색 결과가 부족하면 해당 류 전체에서 추가
-          if (uniqueGoods.length < 10) {
-            const { data: moreGoods } = await App.sb
-              .from('gazetted_goods_cache')
-              .select('goods_name, similar_group_code')
-              .eq('class_code', paddedCode)
-              .limit(50);
+          // 2-4. LLM에게 최종 검토 요청 (선택적)
+          if (selectedGoods.length > 5) {
+            const goodsList = selectedGoods.map(g => 
+              `${g.name}(${g.similarGroup}, 점수:${g.score?.toFixed(1) || '?'})`
+            ).join('\n');
             
-            if (moreGoods) {
-              for (const g of moreGoods) {
-                if (!seen.has(g.goods_name)) {
-                  seen.add(g.goods_name);
-                  uniqueGoods.push(g);
-                  if (uniqueGoods.length >= 30) break;
-                }
-              }
-            }
-          }
-          
-          if (uniqueGoods.length === 0) continue;
-          
-          // AI에게 검색된 고시명칭 중 최적 10개 선택 요청
-          const goodsListText = uniqueGoods.slice(0, 50).map(g => 
-            `${g.goods_name}(${g.similar_group_code})`
-          ).join(', ');
-          
-          const selectPrompt = `"${p.trademarkName || ''}" 상표, "${businessInput || ''}" 사업에 가장 적합한 지정상품 10개를 선택하세요.
+            const reviewPrompt = `"${p.trademarkName || ''}" 상표, "${businessInput}" 사업을 위한 지정상품 후보입니다.
 
-제${classCode}류 고시명칭 후보:
-${goodsListText}
+후보 목록:
+${goodsList}
 
-반드시 위 목록의 정확한 명칭과 유사군코드를 사용하세요.
-JSON 배열로만 응답: [{"name":"고시명칭","similarGroup":"유사군코드"},...]`;
+위 후보 중에서:
+1. 사업에 가장 핵심적인 상품 5개를 "core" 배열에
+2. 방어적으로 추가할 상품 5개를 "defense" 배열에
+3. 제외를 권장하는 상품이 있으면 "exclude" 배열에 (이유 포함)
 
-          const selectResponse = await App.callClaude(selectPrompt, 800);
-          const selectText = selectResponse.text || '';
-          
-          const arrStart = selectText.indexOf('[');
-          const arrEnd = selectText.lastIndexOf(']');
-          
-          if (arrStart !== -1 && arrEnd > arrStart) {
-            let arrStr = selectText.substring(arrStart, arrEnd + 1);
-            arrStr = arrStr.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/,(\s*[\]\}])/g, '$1');
-            
+JSON만 응답:
+{"core":["상품명1","상품명2"],"defense":["상품명3"],"exclude":[{"name":"상품명","reason":"이유"}],"note":"추가 조언"}`;
+
             try {
-              const selectedGoods = JSON.parse(arrStr);
+              const reviewResponse = await App.callClaude(reviewPrompt, 1000);
+              const reviewText = reviewResponse.text || '';
+              const rStart = reviewText.indexOf('{');
+              const rEnd = reviewText.lastIndexOf('}');
               
-              // DB에 있는 것만 필터링 + 정확한 유사군코드 적용
-              p.aiAnalysis.recommendedGoods[classCode] = selectedGoods
-                .filter(sg => uniqueGoods.some(g => g.goods_name === sg.name))
-                .slice(0, 10)
-                .map(sg => {
-                  const dbMatch = uniqueGoods.find(g => g.goods_name === sg.name);
-                  return {
-                    name: sg.name,
-                    similarGroup: dbMatch?.similar_group_code || sg.similarGroup
-                  };
-                });
-              
-              // 10개 미만이면 채움
-              if (p.aiAnalysis.recommendedGoods[classCode].length < 10) {
-                const existing = new Set(p.aiAnalysis.recommendedGoods[classCode].map(g => g.name));
-                for (const g of uniqueGoods) {
-                  if (!existing.has(g.goods_name)) {
-                    p.aiAnalysis.recommendedGoods[classCode].push({
-                      name: g.goods_name,
-                      similarGroup: g.similar_group_code
-                    });
-                    if (p.aiAnalysis.recommendedGoods[classCode].length >= 10) break;
+              if (rStart !== -1 && rEnd > rStart) {
+                const review = JSON.parse(reviewText.substring(rStart, rEnd + 1));
+                
+                // 점수 보정
+                selectedGoods.forEach(g => {
+                  if (review.core?.includes(g.name)) {
+                    g.isCore = true;
+                    g.score = (g.score || 0) + 2;
                   }
-                }
+                  if (review.exclude?.some(e => e.name === g.name)) {
+                    g.excluded = true;
+                    g.excludeReason = review.exclude.find(e => e.name === g.name)?.reason;
+                  }
+                });
+                
+                p.aiAnalysis.coverageAnalysis[classCode] = {
+                  note: review.note,
+                  coreCount: review.core?.length || 0,
+                  defenseCount: review.defense?.length || 0
+                };
               }
-            } catch (e) {
-              // 파싱 실패 시 검색 결과 상위 10개
-              p.aiAnalysis.recommendedGoods[classCode] = uniqueGoods.slice(0, 10).map(g => ({
-                name: g.goods_name,
-                similarGroup: g.similar_group_code
-              }));
+            } catch (reviewError) {
+              console.warn(`[TM] 제${classCode}류 리뷰 실패:`, reviewError);
             }
-          } else {
-            // AI 응답 실패 시 검색 결과 상위 10개
-            p.aiAnalysis.recommendedGoods[classCode] = uniqueGoods.slice(0, 10).map(g => ({
-              name: g.goods_name,
-              similarGroup: g.similar_group_code
-            }));
           }
+          
+          // 제외된 항목 필터링 후 저장
+          p.aiAnalysis.recommendedGoods[classCode] = selectedGoods
+            .filter(g => !g.excluded)
+            .slice(0, 10)
+            .sort((a, b) => (b.score || 0) - (a.score || 0));
+          
         } catch (classError) {
           console.error(`[TM] 제${classCode}류 처리 실패:`, classError);
         }
@@ -3811,6 +3862,96 @@ JSON 배열로만 응답: [{"name":"고시명칭","similarGroup":"유사군코�
         btn.innerHTML = 'AI 분석 🔍';
       }
     }
+  };
+  
+  // === DB 기반 후보 검색 함수 ===
+  TM.searchGoodsCandidates = async function(classCode, keywords, businessText, limit = 100) {
+    const results = [];
+    const seen = new Set();
+    
+    // 1. 키워드별 검색 + 스코어링
+    for (const keyword of keywords) {
+      try {
+        const { data, error } = await App.sb
+          .from('gazetted_goods_cache')
+          .select('goods_name, similar_group_code')
+          .eq('class_code', classCode)
+          .ilike('goods_name', `%${keyword}%`)
+          .limit(30);
+        
+        if (data) {
+          data.forEach(item => {
+            if (!seen.has(item.goods_name)) {
+              seen.add(item.goods_name);
+              
+              // 스코어 계산
+              let score = 0;
+              
+              // 키워드 매칭 점수 (정확도에 따라)
+              const name = item.goods_name.toLowerCase();
+              const kw = keyword.toLowerCase();
+              if (name === kw) score += 3;           // 완전 일치
+              else if (name.startsWith(kw)) score += 2;  // 시작 일치
+              else if (name.includes(kw)) score += 1;    // 포함
+              
+              // 키워드 다중 매칭 보너스
+              let matchCount = 0;
+              keywords.forEach(k => {
+                if (name.includes(k.toLowerCase())) matchCount++;
+              });
+              score += matchCount * 0.5;
+              
+              // 사업 설명 키워드 매칭
+              if (businessText) {
+                const bizLower = businessText.toLowerCase();
+                if (bizLower.includes(kw) || name.split(/[,\s]+/).some(w => bizLower.includes(w))) {
+                  score += 1;
+                }
+              }
+              
+              results.push({
+                goods_name: item.goods_name,
+                similar_group_code: item.similar_group_code,
+                score: score,
+                matchedKeyword: keyword
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.warn(`[TM] 키워드 "${keyword}" 검색 실패:`, err);
+      }
+    }
+    
+    // 2. 결과가 부족하면 해당 류 전체에서 추가
+    if (results.length < limit / 2) {
+      try {
+        const { data } = await App.sb
+          .from('gazetted_goods_cache')
+          .select('goods_name, similar_group_code')
+          .eq('class_code', classCode)
+          .limit(100);
+        
+        if (data) {
+          data.forEach(item => {
+            if (!seen.has(item.goods_name)) {
+              seen.add(item.goods_name);
+              results.push({
+                goods_name: item.goods_name,
+                similar_group_code: item.similar_group_code,
+                score: 0.1,  // 기본 점수
+                matchedKeyword: null
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[TM] 추가 검색 실패:', err);
+      }
+    }
+    
+    // 3. 점수순 정렬 후 반환
+    return results.sort((a, b) => b.score - a.score).slice(0, limit);
   };
 
   // ============================================================

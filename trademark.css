@@ -2646,3 +2646,83 @@ details.tm-accordion .tm-accordion-content {
   padding: 14px 28px;
   font-size: 15px;
 }
+
+/* ============================================================
+   24. 분석 키워드 및 핵심/방어 분류 스타일
+   ============================================================ */
+
+.tm-analysis-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.tm-keywords-label {
+  font-size: 13px;
+  color: #6b7684;
+  font-weight: 500;
+}
+
+.tm-keyword-tag {
+  padding: 4px 10px;
+  background: #e0edff;
+  color: #1a73e8;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+/* 핵심/방어 그룹 */
+.tm-rec-goods-group {
+  margin-bottom: 12px;
+}
+
+.tm-rec-group-label {
+  font-size: 12px;
+  color: #6b7684;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tm-rec-group-label.core {
+  color: #d97706;
+  font-weight: 600;
+}
+
+/* 핵심 지정상품 태그 */
+.tm-rec-goods-tag.core {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-color: #fbbf24;
+  color: #92400e;
+}
+
+.tm-rec-goods-tag.core .tm-similar-code {
+  background: rgba(255,255,255,0.8);
+  color: #b45309;
+}
+
+/* 추가 노트 */
+.tm-rec-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f0fdf4;
+  border-top: 1px solid #d1fae5;
+  font-size: 13px;
+  color: #065f46;
+}
+
+.tm-note-icon {
+  flex-shrink: 0;
+}
+
+.tm-note-text {
+  line-height: 1.5;
+}
