@@ -888,6 +888,38 @@
     return div.innerHTML;
   };
   
+  // AI 응답 JSON 안전 파싱
+  TM.safeJsonParse = function(text) {
+    // JSON 블록 추출
+    let jsonStr = text.match(/\{[\s\S]*\}/)?.[0];
+    if (!jsonStr) {
+      throw new Error('JSON을 찾을 수 없습니다.');
+    }
+    
+    // 1차 시도: 그대로 파싱
+    try {
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      // 2차 시도: 정리 후 파싱
+    }
+    
+    // JSON 정리 (trailing comma, 제어문자 제거)
+    jsonStr = jsonStr
+      .replace(/,\s*}/g, '}')
+      .replace(/,\s*]/g, ']')
+      .replace(/[\x00-\x1F\x7F]/g, ' ')
+      .replace(/\n/g, ' ')
+      .replace(/\r/g, ' ')
+      .replace(/\t/g, ' ');
+    
+    try {
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      console.error('[TM] JSON 파싱 최종 실패:', jsonStr.slice(0, 300));
+      throw new Error('AI 응답 형식 오류. 다시 시도해주세요.');
+    }
+  };
+  
   TM.updateField = function(field, value) {
     if (!TM.currentProject) return;
     
@@ -3361,60 +3393,56 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         btn.innerHTML = '<span class="tossface">⏳</span> 분석 중...';
       }
       
-      const prompt = `당신은 대한민국 특허청(KIPO) 상표 출원 전문 변리사입니다. 다음 정보를 바탕으로 적합한 상품/서비스 분류와 지정상품을 추천하세요.
+      const prompt = `상표 출원 전문가로서 다음 사업에 적합한 상품류를 추천하세요.
 
-[입력 정보]
-- 상표명: ${p.trademarkName || '(미입력)'}
-- 사업 내용/URL: ${businessInput || '(미입력)'}
+상표명: ${p.trademarkName || '미정'}
+사업내용: ${businessInput || '미입력'}
 
-다음 항목을 분석하고 JSON 형식으로 응답하세요:
+아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력:
 
-1. businessAnalysis: 사업 분야 상세 분석 (3-4문장, 핵심 사업영역 파악)
-2. recommendedClasses: 추천 상품류 배열 (NICE 분류 기준, 우선순위대로 최대 5개)
-3. classReasons: 각 류 추천 이유 (구체적으로)
-4. recommendedGoods: 각 류별 추천 지정상품 (고시명칭 기준, 류당 최대 10개)
-   - 한국 특허청 고시명칭을 정확히 사용
-   - 유사군코드도 함께 제시
-
-NICE 분류 및 주요 고시명칭 예시:
-- 09류: 컴퓨터소프트웨어(G3901), 모바일응용소프트웨어(G3901), 스마트폰(G3911)
-- 35류: 광고업(G5201), 온라인쇼핑몰운영업(G5203), 사업컨설팅업(G5202)
-- 42류: 컴퓨터소프트웨어개발업(G4901), 클라우드컴퓨팅업(G4902), 웹호스팅업(G4903)
-- 41류: 교육업(G4101), 온라인교육업(G4101), 게임제공업(G4102)
-- 45류: 변리사업(G5001), 법률서비스업(G5001), 상표등록대리업(G5001)
-
-응답 형식:
-{
-  "businessAnalysis": "상세 분석 내용...",
-  "recommendedClasses": ["45", "42", "35", "09", "41"],
-  "classReasons": {
-    "45": "변리사업, 상표/특허 출원대리 서비스의 핵심 분류",
-    "42": "지식재산권 관련 IT 서비스, 플랫폼 개발",
-    "35": "지식재산권 컨설팅, 사업관리 서비스"
-  },
-  "recommendedGoods": {
-    "45": [
-      {"name": "변리사업", "similarGroup": "G5001"},
-      {"name": "상표등록대리업", "similarGroup": "G5001"},
-      {"name": "특허소송대리업", "similarGroup": "G5001"}
-    ],
-    "42": [
-      {"name": "컴퓨터소프트웨어개발업", "similarGroup": "G4901"},
-      {"name": "웹사이트개발업", "similarGroup": "G4901"}
-    ]
-  }
-}`;
+{"businessAnalysis":"사업분석 2-3문장","recommendedClasses":["45","42","35"],"classReasons":{"45":"이유","42":"이유","35":"이유"},"recommendedGoods":{"45":[{"name":"변리사업","similarGroup":"G5001"}],"42":[{"name":"소프트웨어개발업","similarGroup":"G4901"}]}}`;
 
       const response = await App.callClaude(prompt, 2000);
       
-      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('AI 응답을 파싱할 수 없습니다.');
+      // JSON 추출
+      const text = response.text || '';
+      let jsonStr = '';
+      
+      // 방법 1: 중괄호 매칭
+      const startIdx = text.indexOf('{');
+      const endIdx = text.lastIndexOf('}');
+      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+        jsonStr = text.substring(startIdx, endIdx + 1);
       }
       
-      const analysis = JSON.parse(jsonMatch[0]);
+      if (!jsonStr) {
+        throw new Error('AI 응답에서 JSON을 찾을 수 없습니다.');
+      }
       
-      p.aiAnalysis.businessAnalysis = analysis.businessAnalysis;
+      // JSON 정리
+      jsonStr = jsonStr
+        .replace(/[\x00-\x1F\x7F]/g, ' ')  // 제어문자 제거
+        .replace(/,(\s*[}\]])/g, '$1')      // trailing comma 제거
+        .replace(/\n/g, ' ')
+        .replace(/\r/g, ' ');
+      
+      let analysis;
+      try {
+        analysis = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error('[TM] JSON 파싱 실패:', e.message);
+        console.error('[TM] 원본 (처음 500자):', jsonStr.slice(0, 500));
+        
+        // 기본값 사용
+        analysis = {
+          businessAnalysis: '사업 분석에 실패했습니다. 다시 시도해주세요.',
+          recommendedClasses: [],
+          classReasons: {},
+          recommendedGoods: {}
+        };
+      }
+      
+      p.aiAnalysis.businessAnalysis = analysis.businessAnalysis || '';
       p.aiAnalysis.recommendedClasses = analysis.recommendedClasses || [];
       p.aiAnalysis.classReasons = analysis.classReasons || {};
       p.aiAnalysis.recommendedGoods = analysis.recommendedGoods || {};
