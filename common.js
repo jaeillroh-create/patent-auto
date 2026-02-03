@@ -442,3 +442,25 @@ window.onerror = function(msg, url, lineNo, columnNo, error) {
 window.addEventListener('unhandledrejection', function(event) {
   console.error('Unhandled Promise Rejection:', event.reason);
 });
+// ============================================================
+// 탭 전환 시스템 (상표 모듈용)
+// ============================================================
+
+App.currentService = 'patent';
+
+App.switchService = function(service) {
+  if (service === App.currentService) return;
+  App.currentService = service;
+  
+  // 패널 전환
+  var patentPanel = document.getElementById('patent-panel');
+  var trademarkPanel = document.getElementById('trademark-panel');
+  
+  if (patentPanel) patentPanel.style.display = service === 'patent' ? 'block' : 'none';
+  if (trademarkPanel) trademarkPanel.style.display = service === 'trademark' ? 'block' : 'none';
+  
+  // 상표 모듈 초기화
+  if (service === 'trademark' && window.TM) {
+    TM.init();
+  }
+};
