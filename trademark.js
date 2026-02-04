@@ -1428,40 +1428,40 @@
           </div>
           
           ${hasAiRec ? `
-            <!-- AI 추천 상품류 (상세 표시) -->
-            <div class="tm-panel tm-panel-ai">
+            <!-- AI 추천 상품류 (콤팩트 표시) -->
+            <div class="tm-panel tm-panel-ai tm-panel-compact">
               <div class="tm-panel-header">
                 <h3>🤖 AI 추천 상품류</h3>
                 <button class="btn btn-sm btn-primary" data-action="tm-apply-all-recommendations">✓ 전체 적용</button>
               </div>
-              <div class="tm-ai-rec-desc">
-                사업 분석 결과, 아래 상품류가 적합합니다. <strong>+</strong> 버튼을 클릭하면 추가됩니다.
+              <div class="tm-ai-rec-desc" style="font-size: 12px; padding: 6px 10px; margin-bottom: 8px;">
+                사업 분석 결과, 아래 상품류가 적합합니다. <strong>+</strong> 버튼을 클릭하면 지정상품에 추가됩니다.
               </div>
-              <div class="tm-ai-rec-list">
+              <div class="tm-ai-rec-list" style="gap: 8px;">
                 ${p.aiAnalysis.recommendedClasses.slice(0, 5).map((code, idx) => {
                   const isAdded = p.designatedGoods.some(g => g.classCode === code);
                   const reason = p.aiAnalysis.classReasons?.[code] || '';
                   const recGoods = p.aiAnalysis.recommendedGoods?.[code] || [];
                   
                   return `
-                    <div class="tm-ai-rec-item ${isAdded ? 'added' : ''}">
-                      <div class="tm-ai-rec-num">${idx + 1}</div>
-                      <div class="tm-ai-rec-content">
-                        <div class="tm-ai-rec-class">
+                    <div class="tm-ai-rec-item ${isAdded ? 'added' : ''}" style="padding: 10px; gap: 8px;">
+                      <div class="tm-ai-rec-num" style="width: 24px; height: 24px; font-size: 12px;">${idx + 1}</div>
+                      <div class="tm-ai-rec-content" style="flex: 1; min-width: 0;">
+                        <div class="tm-ai-rec-class" style="font-size: 13px;">
                           <strong>제${code}류</strong> ${TM.niceClasses[code] || ''}
                         </div>
-                        ${reason ? `<div class="tm-ai-rec-reason">${TM.escapeHtml(reason.slice(0, 80))}${reason.length > 80 ? '...' : ''}</div>` : ''}
+                        ${reason ? `<div class="tm-ai-rec-reason" style="font-size: 11px; line-height: 1.4; max-height: 36px; overflow: hidden;">${TM.escapeHtml(reason.slice(0, 60))}${reason.length > 60 ? '...' : ''}</div>` : ''}
                         ${recGoods.length > 0 ? `
-                          <div class="tm-ai-rec-goods">
-                            <span class="label">추천 지정상품:</span>
-                            ${recGoods.slice(0, 3).map(g => `<span class="tag">${g.name || g}</span>`).join('')}
-                            ${recGoods.length > 3 ? `<span class="more">+${recGoods.length - 3}</span>` : ''}
+                          <div class="tm-ai-rec-goods" style="margin-top: 4px; font-size: 11px;">
+                            <span class="label" style="margin-right: 4px;">추천 지정상품:</span>
+                            ${recGoods.slice(0, 2).map(g => `<span class="tag" style="padding: 1px 4px;">${(g.name || g).slice(0, 12)}${(g.name || g).length > 12 ? '..' : ''}</span>`).join('')}
+                            ${recGoods.length > 2 ? `<span class="more">+${recGoods.length - 2}</span>` : ''}
                           </div>
                         ` : ''}
                       </div>
                       <div class="tm-ai-rec-action">
-                        ${isAdded ? '<span class="applied">✓ 적용됨</span>' : 
-                          `<button class="btn btn-primary btn-sm" data-action="tm-apply-recommendation" data-class-code="${code}">+ 추가</button>`}
+                        ${isAdded ? '<span class="applied" style="font-size: 11px;">✓적용</span>' : 
+                          `<button class="btn btn-primary btn-sm" style="padding: 4px 8px; font-size: 11px;" data-action="tm-apply-recommendation" data-class-code="${code}">+ 추가</button>`}
                       </div>
                     </div>
                   `;
@@ -1601,6 +1601,13 @@
         }, 500);
       });
     }
+    
+    // ★★★ 각 상품류의 검색 자동완성 초기화 ★★★
+    setTimeout(() => {
+      p.designatedGoods.forEach(classData => {
+        TM.initGoodsAutocomplete(classData.classCode);
+      });
+    }, 100);
   };
   
   // 비고시명칭 목록 HTML 생성
@@ -1801,10 +1808,15 @@
           </div>
         ` : ''}
         
-        <div class="tm-goods-input-area">
+        <div class="tm-goods-input-area" style="position: relative;">
           <input type="text" class="tm-goods-search-input" 
+                 id="tm-goods-input-${classData.classCode}"
                  placeholder="지정상품명 검색 (자동완성)"
-                 data-class="${classData.classCode}">
+                 data-class="${classData.classCode}"
+                 autocomplete="off"
+                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+          <div class="tm-goods-autocomplete" id="tm-autocomplete-${classData.classCode}"
+               style="position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; display: none;"></div>
         </div>
         
         <div class="tm-goods-chips">
@@ -1815,7 +1827,7 @@
                 ${TM.escapeHtml(g.name)}
                 ${g.isCustom ? '<span class="chip-badge custom">비고시</span>' : ''}
                 ${g.similarGroup ? `<small>(${g.similarGroup})</small>` : ''}
-                <button class="remove" data-action="${g.isCustom ? 'tm-remove-custom-term' : 'tm-remove-good'}" data-class="${classData.classCode}" data-name="${TM.escapeHtml(g.name)}">×</button>
+                <button class="remove" data-action="tm-remove-goods" data-class-code="${classData.classCode}" data-goods-name="${TM.escapeHtml(g.name)}">×</button>
               </span>
             `).join('')
           }
@@ -2168,7 +2180,7 @@
     
     const searchGoods = TM.debounce(async (query) => {
       if (query.length < 2) {
-        autocomplete.classList.remove('show');
+        autocomplete.style.display = 'none';
         return;
       }
       
@@ -2193,19 +2205,22 @@
         // 비고시명칭 허용 모드면 직접 입력 옵션 표시
         if (!TM.currentProject.gazettedOnly) {
           autocomplete.innerHTML = `
-            <div class="tm-goods-autocomplete-item" data-name="${TM.escapeHtml(query)}" data-gazetted="false">
-              <div class="goods-name">"${TM.escapeHtml(query)}" 직접 입력</div>
-              <div class="goods-meta">비고시명칭 (52,000원/류 적용)</div>
+            <div class="tm-goods-autocomplete-item" data-name="${TM.escapeHtml(query)}" data-gazetted="false"
+                 style="padding: 8px 12px; cursor: pointer;"
+                 onmouseover="this.style.backgroundColor='#f5f5f5'" 
+                 onmouseout="this.style.backgroundColor='white'">
+              <div class="goods-name" style="font-weight: 500;">"${TM.escapeHtml(query)}" 직접 입력</div>
+              <div class="goods-meta" style="font-size: 11px; color: #888;">비고시명칭 (52,000원/류 적용)</div>
             </div>
           `;
-          autocomplete.classList.add('show');
+          autocomplete.style.display = 'block';
         } else {
           autocomplete.innerHTML = `
-            <div class="tm-goods-autocomplete-item" style="color: #8b95a1;">
+            <div class="tm-goods-autocomplete-item" style="padding: 8px 12px; color: #8b95a1;">
               검색 결과가 없습니다. (고시명칭 모드)
             </div>
           `;
-          autocomplete.classList.add('show');
+          autocomplete.style.display = 'block';
         }
         return;
       }
@@ -2215,19 +2230,22 @@
              data-name="${TM.escapeHtml(r.goods_name)}" 
              data-name-en="${TM.escapeHtml(r.goods_name_en || '')}"
              data-similar-group="${r.similar_group_code || ''}"
-             data-gazetted="true">
-          <div class="goods-name">${TM.escapeHtml(r.goods_name)}</div>
-          <div class="goods-meta">${r.goods_name_en || ''} · ${r.similar_group_code || ''}</div>
+             data-gazetted="true"
+             style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;"
+             onmouseover="this.style.backgroundColor='#f5f5f5'" 
+             onmouseout="this.style.backgroundColor='white'">
+          <div class="goods-name" style="font-weight: 500;">${TM.escapeHtml(r.goods_name)}</div>
+          <div class="goods-meta" style="font-size: 11px; color: #888;">${r.goods_name_en || ''} · ${r.similar_group_code || ''}</div>
         </div>
       `).join('');
       
-      autocomplete.classList.add('show');
+      autocomplete.style.display = 'block';
     }, 300);
     
     input.addEventListener('input', (e) => searchGoods(e.target.value));
     
     input.addEventListener('blur', () => {
-      setTimeout(() => autocomplete.classList.remove('show'), 200);
+      setTimeout(() => { autocomplete.style.display = 'none'; }, 200);
     });
     
     autocomplete.addEventListener('click', (e) => {
@@ -2242,7 +2260,7 @@
       });
       
       input.value = '';
-      autocomplete.classList.remove('show');
+      autocomplete.style.display = 'none';
     });
     
     // Enter 키로 직접 입력 (비고시 모드)
@@ -2255,7 +2273,7 @@
           similarGroup: ''
         });
         input.value = '';
-        autocomplete.classList.remove('show');
+        autocomplete.style.display = 'none';
       }
     });
   };
@@ -5030,6 +5048,11 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         btn.disabled = true;
         btn.innerHTML = '<span class="tossface">⏳</span> AI 분석 중...';
       }
+      
+      // ★★★ 새 분석 시 기존 선택 완전 초기화 ★★★
+      p.classes = [];
+      p.aiAnalysis = null;
+      console.log('[TM] 기존 선택 초기화 완료');
       
       // ================================================================
       // 1단계: 사업 내용 분석 + 핵심 유사군코드 추정
