@@ -114,14 +114,21 @@
         <div style="flex:1;min-width:0">
           <!-- 사건 목록 카드 -->
           <div class="card" style="padding:0;overflow:hidden">
-            <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
+              <colgroup>
+                <col style="width:100px">
+                <col style="width:auto">
+                <col style="width:70px">
+                <col style="width:80px">
+                <col style="width:150px">
+              </colgroup>
               <thead>
                 <tr style="background:var(--color-bg-tertiary);border-bottom:1px solid var(--color-border)">
-                  <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--color-text-secondary);width:100px">사건번호</th>
+                  <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--color-text-secondary)">사건번호</th>
                   <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--color-text-secondary)">사건명</th>
-                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:70px">상태</th>
-                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:85px">수정일</th>
-                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:140px">작업</th>
+                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">상태</th>
+                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">수정일</th>
+                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">작업</th>
                 </tr>
               </thead>
               <tbody id="dashProjectList"></tbody>
@@ -135,7 +142,13 @@
               <span class="tossface">⚡</span>
               <span style="font-weight:600;font-size:13px;color:var(--color-warning)">가출원 내역</span>
             </div>
-            <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
+              <colgroup>
+                <col style="width:100px">
+                <col style="width:auto">
+                <col style="width:80px">
+                <col style="width:120px">
+              </colgroup>
               <tbody id="dashProvisionalList"></tbody>
             </table>
           </div>
