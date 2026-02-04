@@ -5066,6 +5066,25 @@ JSON만 응답:
       p.aiAnalysis.recommendedGoods = {};
       p.aiAnalysis.coverageAnalysis = {};
       
+      // ★★★ 중요: 사용자 입력에서 직접 키워드 추출하여 추가 ★★★
+      // LLM이 핵심 키워드를 빼먹는 것 방지
+      const userInputKeywords = businessInput
+        .replace(/[^\w가-힣]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 2)
+        .slice(0, 10);
+      
+      // 사용자 입력 키워드를 맨 앞에 추가 (중복 제거)
+      const existingKeywords = new Set(p.aiAnalysis.coreKeywords.map(k => k.toLowerCase()));
+      userInputKeywords.forEach(kw => {
+        if (!existingKeywords.has(kw.toLowerCase())) {
+          p.aiAnalysis.coreKeywords.unshift(kw); // 맨 앞에 추가
+          existingKeywords.add(kw.toLowerCase());
+        }
+      });
+      
+      console.log('[TM] 최종 coreKeywords:', p.aiAnalysis.coreKeywords);
+      
       // === 2단계: 각 류별 DB 기반 후보 생성 + 스코어링 ===
       for (const classCode of p.aiAnalysis.recommendedClasses.slice(0, 5)) {
         const paddedCode = classCode.padStart(2, '0');
@@ -5195,20 +5214,32 @@ JSON만 응답:
     const results = [];
     const seen = new Set();
     
-    console.log(`[TM] 후보 검색 시작: 제${classCode}류, 키워드: ${keywords.slice(0, 5).join(', ')}...`);
+    console.log(`[TM] ════════════════════════════════════════`);
+    console.log(`[TM] 후보 검색 시작: 제${classCode}류`);
+    console.log(`[TM] 키워드 (${keywords.length}개):`, keywords);
+    console.log(`[TM] 사업설명:`, businessText?.substring(0, 50) + '...');
     
-    // === 키워드 기반 FTS 검색만 수행 (관련성 최우선) ===
-    // 유사군 커버리지 보강 제거 - 관련 없는 상품 추가 방지
+    // === 키워드 기반 FTS 검색 (관련성 최우선) ===
     for (const keyword of keywords.slice(0, 15)) {
       try {
-        const { data } = await App.sb
+        const { data, error } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
           .eq('class_code', classCode)
           .ilike('goods_name', `%${keyword}%`)
           .limit(80);
         
-        if (data) {
+        if (error) {
+          console.error(`[TM] DB 오류 (키워드: ${keyword}):`, error);
+          continue;
+        }
+        
+        console.log(`[TM] 키워드 "${keyword}" → ${data?.length || 0}건`);
+        
+        if (data && data.length > 0) {
+          // 첫 3개 결과 로그
+          console.log(`[TM]   샘플:`, data.slice(0, 3).map(d => d.goods_name));
+          
           data.forEach(item => {
             if (!seen.has(item.goods_name)) {
               seen.add(item.goods_name);
@@ -5236,6 +5267,8 @@ JSON만 응답:
         .filter(w => w.length >= 2 && !keywords.some(k => k.includes(w) || w.includes(k)))
         .slice(0, 10);
       
+      console.log(`[TM] 사업설명 추가 키워드:`, bizWords);
+      
       for (const word of bizWords) {
         try {
           const { data } = await App.sb
@@ -5246,6 +5279,7 @@ JSON만 응답:
             .limit(30);
           
           if (data) {
+            console.log(`[TM] 추가 키워드 "${word}" → ${data.length}건`);
             data.forEach(item => {
               if (!seen.has(item.goods_name)) {
                 seen.add(item.goods_name);
@@ -5268,7 +5302,11 @@ JSON만 응답:
     // === 점수순 정렬 (관련성 우선) ===
     const sorted = results.sort((a, b) => b.score - a.score).slice(0, limit);
     
-    console.log(`[TM] 후보 검색 완료: 총 ${sorted.length}건`);
+    console.log(`[TM] 최종 결과: ${sorted.length}건`);
+    if (sorted.length > 0) {
+      console.log(`[TM] 상위 5개:`, sorted.slice(0, 5).map(s => `${s.goods_name}(${s.score.toFixed(2)})`));
+    }
+    console.log(`[TM] ════════════════════════════════════════`);
     
     return sorted;
   };
