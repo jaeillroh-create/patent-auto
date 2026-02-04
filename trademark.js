@@ -546,7 +546,7 @@
     try {
       const { data: projects, error } = await App.sb
         .from('trademark_projects')
-        .select('id, title, status, trademark_name, trademark_type, management_number, created_at, updated_at')
+        .select('id, title, status, trademark_name, trademark_type, created_at, updated_at')
         .order('updated_at', { ascending: false });
       
       if (error) throw error;
@@ -570,7 +570,6 @@
             <thead>
               <tr style="background: #f8fafc; border-bottom: 2px solid #e5e7eb;">
                 <th style="padding: 16px 20px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">상표명</th>
-                <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 120px;">관리번호</th>
                 <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 80px;">유형</th>
                 <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px;">상태</th>
                 <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 100px;">수정일</th>
@@ -644,9 +643,6 @@
               <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">${TM.escapeHtml(project.title || '')}</div>
             </div>
           </div>
-        </td>
-        <td style="padding: 14px 12px; text-align: center;">
-          <span style="font-size: 12px; color: #6b7280; font-family: monospace;">${TM.escapeHtml(project.management_number || '-')}</span>
         </td>
         <td style="padding: 14px 12px; text-align: center;">
           <span style="font-size: 12px; color: #6b7280;">${typeLabels[project.trademark_type] || '문자'}</span>
