@@ -81,35 +81,89 @@ function clearAllState(){
 }
 
 // ═══════════ DASHBOARD ═══════════
-// ═══════════ DASHBOARD ═══════════
 async function loadDashboardProjects(){
-  const{data}=await App.sb.from('projects').select('id,title,invention_content,current_state_json,created_at,updated_at').eq('owner_user_id',currentUser.id).order('updated_at',{ascending:false});
-  const el=document.getElementById('dashProjectList'),cnt=document.getElementById('dashProjectCount');
-  const provEl=document.getElementById('dashProvisionalList'),provCnt=document.getElementById('dashProvisionalCount');
+  const{data}=await App.sb.from('projects').select('id,title,project_number,invention_content,current_state_json,created_at,updated_at').eq('owner_user_id',currentUser.id).order('updated_at',{ascending:false});
+  const el=document.getElementById('dashProjectList');
+  const cntEl=document.getElementById('dashProjectCount');
+  const provEl=document.getElementById('dashProvisionalList');
+  const provCntEl=document.getElementById('dashProvisionalCount');
+  const completedCntEl=document.getElementById('dashCompletedCount');
+  
   if(!data?.length){
-    el.innerHTML='<div style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:40px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></div>';cnt.textContent='0건';
-    if(provEl)provEl.innerHTML='<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)"><p style="font-size:13px">가출원 내역 없음</p></div>';if(provCnt)provCnt.textContent='0건';
+    el.innerHTML='<div class="pt-empty-state"><div class="pt-empty-icon"><span class="tossface">📭</span></div><div class="pt-empty-text">아직 생성된 사건이 없어요.<br>새 사건을 만들어 보세요!</div></div>';
+    if(cntEl)cntEl.textContent='0';
+    if(provEl)provEl.innerHTML='<div class="pt-empty-state"><div class="pt-empty-icon"><span class="tossface">⚡</span></div><div class="pt-empty-text">가출원 내역이 없어요.</div></div>';
+    if(provCntEl)provCntEl.textContent='0';
+    if(completedCntEl)completedCntEl.textContent='0';
     return;
   }
+  
   // Separate regular and provisional
   const regular=data.filter(p=>!p.current_state_json?.type||p.current_state_json.type!=='provisional');
   const provisional=data.filter(p=>p.current_state_json?.type==='provisional');
-  cnt.textContent=`${regular.length}건`;
-  if(!regular.length){el.innerHTML='<div style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:40px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></div>';}
-  else{
-    el.innerHTML=regular.map(p=>{const s=p.current_state_json||{},o=s.outputs||{},c=Object.keys(o).filter(k=>o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length,pct=Math.round(c/19*100);
-      return `<div class="card" style="margin-bottom:12px;cursor:pointer;transition:box-shadow 0.15s" onmouseover="this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'" onclick="openProject('${p.id}')"><div style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(p.title)}</div><div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">생성 ${new Date(p.created_at).toLocaleDateString('ko-KR')} · 수정 ${new Date(p.updated_at).toLocaleDateString('ko-KR')}</div></div><div style="display:flex;gap:6px;margin-left:12px;flex-shrink:0"><span class="badge ${pct===100?'badge-success':pct>0?'badge-primary':'badge-neutral'}">${c}/19 (${pct}%)</span><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\\\'")}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\\\'")}')">🗑️</button></div></div><div class="progress-bar-bg" style="margin-top:10px;height:4px"><div class="progress-bar-fill" style="width:${pct}%;height:4px"></div></div></div></div>`;
+  const completed=regular.filter(p=>{
+    const s=p.current_state_json||{},o=s.outputs||{};
+    const c=Object.keys(o).filter(k=>o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;
+    return c>=19;
+  });
+  
+  if(cntEl)cntEl.textContent=regular.length;
+  if(provCntEl)provCntEl.textContent=provisional.length;
+  if(completedCntEl)completedCntEl.textContent=completed.length;
+  
+  // Regular project cards
+  if(!regular.length){
+    el.innerHTML='<div class="pt-empty-state"><div class="pt-empty-icon"><span class="tossface">📭</span></div><div class="pt-empty-text">아직 생성된 사건이 없어요.<br>새 사건을 만들어 보세요!</div></div>';
+  } else {
+    el.innerHTML=regular.map(p=>{
+      const s=p.current_state_json||{},o=s.outputs||{};
+      const c=Object.keys(o).filter(k=>o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;
+      const pct=Math.round(c/19*100);
+      const isCompleted=pct===100;
+      const caseNum=p.project_number||s.project_number||'';
+      
+      return `<div class="pt-project-card${isCompleted?' completed':''}" onclick="openProject('${p.id}')">
+        <div class="pt-project-card-header">
+          <div class="pt-project-card-info">
+            ${caseNum?`<div class="pt-project-card-number">${App.escapeHtml(caseNum)}</div>`:''}
+            <div class="pt-project-card-title">${App.escapeHtml(p.title)}</div>
+            <div class="pt-project-card-meta">생성 ${new Date(p.created_at).toLocaleDateString('ko-KR')} · 수정 ${new Date(p.updated_at).toLocaleDateString('ko-KR')}</div>
+          </div>
+          <div class="pt-project-card-actions">
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\\\'")}')">✏️</button>
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\\\'")}')">🗑️</button>
+          </div>
+        </div>
+        <div class="pt-project-progress">
+          <div class="pt-progress-header">
+            <span class="pt-progress-label">${isCompleted?'✅ 완료':'진행중'}</span>
+            <span class="pt-progress-value">${c}/19 (${pct}%)</span>
+          </div>
+          <div class="pt-progress-bar"><div class="pt-progress-fill" style="width:${pct}%"></div></div>
+        </div>
+      </div>`;
     }).join('');
   }
-  // Provisional list
-  if(provCnt)provCnt.textContent=`${provisional.length}건`;
+  
+  // Provisional cards
   if(provEl){
-    if(!provisional.length){provEl.innerHTML='<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)"><p style="font-size:13px">가출원 내역 없음</p></div>';}
-    else{
+    if(!provisional.length){
+      provEl.innerHTML='<div class="pt-empty-state"><div class="pt-empty-icon"><span class="tossface">⚡</span></div><div class="pt-empty-text">가출원 내역이 없어요.</div></div>';
+    } else {
       provEl.innerHTML=provisional.map(p=>{
         const pd=p.current_state_json?.provisionalData||{};
         const titleEn=pd.titleEn||'';
-        return `<div class="card" style="margin-bottom:8px;cursor:pointer;transition:box-shadow 0.15s;border-left:3px solid var(--color-warning)" onmouseover="this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'" onclick="openProvisionalViewer('${p.id}')"><div style="padding:12px 16px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px"><span class="badge badge-warning" style="font-size:10px">⚡ 가출원</span><span style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(pd.title||p.title)}</span></div>${titleEn?`<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">${App.escapeHtml(titleEn)}</div>`:''}<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">${new Date(p.created_at).toLocaleDateString('ko-KR')} 생성</div></div><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\\\'")}')">🗑️</button></div></div></div>`;
+        return `<div class="pt-provisional-card" onclick="openProvisionalViewer('${p.id}')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div style="flex:1;min-width:0">
+              <div class="pt-provisional-badge">⚡ 가출원</div>
+              <div class="pt-provisional-title">${App.escapeHtml(pd.title||p.title)}</div>
+              ${titleEn?`<div class="pt-provisional-subtitle">${App.escapeHtml(titleEn)}</div>`:''}
+              <div class="pt-provisional-subtitle">${new Date(p.created_at).toLocaleDateString('ko-KR')} 생성</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\\\'")}')">🗑️</button>
+          </div>
+        </div>`;
       }).join('');
     }
   }
@@ -119,9 +173,15 @@ async function loadDashboardProjects(){
 function loadGlobalRefFromStorage(){
   try{globalRefStyleText=localStorage.getItem('patent_global_ref')||'';}catch(e){globalRefStyleText='';}
   const st=document.getElementById('globalRefStatus');
+  const badge=document.getElementById('globalRefBadge');
   if(st){
-    if(globalRefStyleText)st.innerHTML=`<span class="tossface">✅</span> 등록됨 (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px">✕</button>`;
-    else st.textContent='업로드된 문서 없음';
+    if(globalRefStyleText){
+      st.innerHTML=`<span class="tossface">✅</span> 등록됨 (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px">✕</button>`;
+      if(badge)badge.style.display='inline';
+    } else {
+      st.textContent='업로드된 문서 없음';
+      if(badge)badge.style.display='none';
+    }
   }
 }
 async function handleGlobalRefUpload(event){
@@ -140,7 +200,15 @@ async function handleGlobalRefUpload(event){
   }catch(e){st.textContent='오류 발생';st.style.color='var(--color-error)';App.showToast(e.message,'error');}
   event.target.value='';
 }
-function clearGlobalRef(){globalRefStyleText='';try{localStorage.removeItem('patent_global_ref');}catch(e){}const st=document.getElementById('globalRefStatus');if(st){st.textContent='업로드된 문서 없음';st.style.color='var(--color-text-tertiary)';}App.showToast('공통 참고 문서 제거됨');}
+function clearGlobalRef(){
+  globalRefStyleText='';
+  try{localStorage.removeItem('patent_global_ref');}catch(e){}
+  const st=document.getElementById('globalRefStatus');
+  const badge=document.getElementById('globalRefBadge');
+  if(st){st.textContent='업로드된 문서 없음';st.style.color='var(--color-text-tertiary)';}
+  if(badge)badge.style.display='none';
+  App.showToast('공통 참고 문서 제거됨');
+}
 
 // ═══ Provisional Viewer ═══
 async function openProvisionalViewer(pid){
@@ -203,9 +271,62 @@ async function confirmDeleteProvisional(){
   closeProvisionalViewer();App.showToast('삭제됨');loadDashboardProjects();
 }
 
-function openNewProjectModal(){document.getElementById('newProjectTitle').value='';document.getElementById('newProjectModal').style.display='flex';document.getElementById('newProjectTitle').focus();}
+async function openNewProjectModal(){
+  document.getElementById('newProjectTitle').value='';
+  // 다음 사건번호 자동 생성
+  const numInput=document.getElementById('newProjectNumber');
+  if(numInput){
+    try{
+      const{data}=await App.sb.from('projects').select('project_number').eq('owner_user_id',currentUser.id).not('current_state_json->type','eq','provisional').order('created_at',{ascending:false}).limit(10);
+      let nextNum=1;
+      if(data?.length){
+        const nums=data.map(p=>{
+          const pn=p.project_number||'';
+          const match=pn.match(/^26P(\d{4})$/);
+          return match?parseInt(match[1],10):0;
+        }).filter(n=>n>0);
+        if(nums.length)nextNum=Math.max(...nums)+1;
+      }
+      numInput.value=String(nextNum).padStart(4,'0');
+    }catch(e){numInput.value='0001';}
+  }
+  document.getElementById('newProjectModal').style.display='flex';
+  document.getElementById('newProjectTitle').focus();
+}
 function closeNewProjectModal(){document.getElementById('newProjectModal').style.display='none';}
-async function createAndOpenProject(){const t=document.getElementById('newProjectTitle').value.trim();if(!t){App.showToast('사건명을 입력해 주세요','error');return;}const{data,error}=await App.sb.from('projects').insert({owner_user_id:currentUser.id,title:t,invention_content:'',current_state_json:{outputs:{},selectedTitle:'',selectedTitleType:'',includeMethodClaims:true,usage:{calls:0,inputTokens:0,outputTokens:0}}}).select('id').single();if(error){App.showToast('생성 실패','error');return;}closeNewProjectModal();await openProject(data.id);}
+async function createAndOpenProject(){
+  const t=document.getElementById('newProjectTitle').value.trim();
+  const numInput=document.getElementById('newProjectNumber');
+  const numVal=numInput?numInput.value.trim():'';
+  
+  if(!t){App.showToast('사건명을 입력해 주세요','error');return;}
+  if(!numVal||!/^\d{4}$/.test(numVal)){App.showToast('사건번호 4자리를 입력해 주세요','error');return;}
+  
+  const projectNumber='26P'+numVal;
+  
+  // 중복 체크
+  const{data:existing}=await App.sb.from('projects').select('id').eq('project_number',projectNumber).eq('owner_user_id',currentUser.id).single();
+  if(existing){App.showToast('이미 사용중인 사건번호입니다','error');return;}
+  
+  const{data,error}=await App.sb.from('projects').insert({
+    owner_user_id:currentUser.id,
+    title:t,
+    project_number:projectNumber,
+    invention_content:'',
+    current_state_json:{
+      outputs:{},
+      selectedTitle:'',
+      selectedTitleType:'',
+      includeMethodClaims:true,
+      usage:{calls:0,inputTokens:0,outputTokens:0},
+      project_number:projectNumber
+    }
+  }).select('id').single();
+  
+  if(error){App.showToast('생성 실패: '+error.message,'error');return;}
+  closeNewProjectModal();
+  await openProject(data.id);
+}
 
 async function openProject(pid){
   clearAllState();const{data}=await App.sb.from('projects').select('*').eq('id',pid).single();if(!data){App.showToast('불러올 수 없어요','error');return;}

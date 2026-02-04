@@ -1,61 +1,10 @@
 /* ============================================================
-   특허명세서 자동 생성 시스템 - 전체 너비 최적화
-   Version: 3.1 - PC 화면 최적화
+   특허명세서 자동 생성 시스템 v5.4
+   상표 대시보드 스타일 적용 + 전체 너비 최적화
    ============================================================ */
 
 /* ============================================================
-   0. 공통 컨테이너 전체 너비 오버라이드 (최우선!)
-   ============================================================ */
-
-/* 앱 전체 컨테이너 */
-.app-container {
-  max-width: 100% !important;
-  width: 100% !important;
-  padding: 0 20px !important;
-  margin: 0 !important;
-}
-
-/* 서비스 패널 (특허/상표 공통) */
-.service-panel {
-  max-width: 100% !important;
-  width: 100% !important;
-  padding: 20px !important;
-  margin: 0 !important;
-}
-
-#patent-dashboard-panel,
-#trademark-dashboard-panel {
-  max-width: 100% !important;
-  width: 100% !important;
-}
-
-/* 에디터 뷰 전체 */
-#editorView,
-.editor-view,
-.editor-wrapper,
-.editor-container,
-.editor-content {
-  max-width: 100% !important;
-  width: 100% !important;
-  padding: 0 !important;
-}
-
-/* 페이지/탭 콘텐츠 */
-.page,
-.tab-content,
-.content-area {
-  max-width: 100% !important;
-  width: 100% !important;
-}
-
-/* 카드 컨테이너 */
-.card-container,
-.cards-grid {
-  max-width: 100% !important;
-}
-
-/* ============================================================
-   1. CSS 변수
+   0. CSS 변수
    ============================================================ */
 :root {
   --pt-primary: #3182f6;
@@ -75,7 +24,6 @@
   --pt-gray-600: #4e5968;
   --pt-gray-700: #333d4b;
   --pt-gray-800: #191f28;
-  --pt-sidebar-width: 220px;
   --pt-radius: 12px;
   --pt-radius-sm: 8px;
   --pt-shadow: 0 1px 3px rgba(0,0,0,0.08);
@@ -83,7 +31,463 @@
 }
 
 /* ============================================================
-   2. 탭 네비게이션 개선
+   1. 공통 컨테이너 전체 너비
+   ============================================================ */
+.app-container,
+.service-panel,
+#patent-dashboard-panel {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+#patent-dashboard-panel {
+  padding: 24px !important;
+}
+
+/* ============================================================
+   2. 대시보드 액션 카드 (새 사건, 가출원)
+   ============================================================ */
+.pt-dashboard-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.pt-action-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: #fff;
+  border: 1px solid var(--pt-gray-200);
+  border-radius: var(--pt-radius);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pt-action-card:hover {
+  border-color: var(--pt-primary);
+  box-shadow: var(--pt-shadow-lg);
+  transform: translateY(-2px);
+}
+
+.pt-action-new:hover {
+  border-color: var(--pt-primary);
+  background: var(--pt-primary-light);
+}
+
+.pt-action-provisional:hover {
+  border-color: var(--pt-warning);
+  background: var(--pt-warning-light);
+}
+
+.pt-action-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--pt-gray-100);
+  border-radius: var(--pt-radius-sm);
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.pt-action-new .pt-action-icon {
+  background: var(--pt-primary-light);
+}
+
+.pt-action-provisional .pt-action-icon {
+  background: var(--pt-warning-light);
+}
+
+.pt-action-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.pt-action-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--pt-gray-800);
+  margin-bottom: 4px;
+}
+
+.pt-action-new .pt-action-title {
+  color: var(--pt-primary);
+}
+
+.pt-action-provisional .pt-action-title {
+  color: var(--pt-warning);
+}
+
+.pt-action-desc {
+  font-size: 13px;
+  color: var(--pt-gray-500);
+}
+
+.pt-action-arrow {
+  font-size: 20px;
+  color: var(--pt-gray-400);
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   3. 통계 요약 바
+   ============================================================ */
+.pt-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 24px;
+  background: #fff;
+  border: 1px solid var(--pt-gray-200);
+  border-radius: var(--pt-radius);
+  margin-bottom: 24px;
+}
+
+.pt-stat-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pt-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--pt-primary);
+}
+
+.pt-stat-label {
+  font-size: 13px;
+  color: var(--pt-gray-500);
+}
+
+.pt-stat-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--pt-gray-200);
+}
+
+/* ============================================================
+   4. 참고문서 섹션 (접이식)
+   ============================================================ */
+.pt-ref-section {
+  margin-bottom: 24px;
+  background: #fff;
+  border: 1px solid var(--pt-gray-200);
+  border-radius: var(--pt-radius);
+  overflow: hidden;
+}
+
+.pt-ref-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pt-gray-700);
+  cursor: pointer;
+  list-style: none;
+  transition: background 0.15s;
+}
+
+.pt-ref-summary::-webkit-details-marker {
+  display: none;
+}
+
+.pt-ref-summary::after {
+  content: "▼";
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--pt-gray-400);
+  transition: transform 0.2s;
+}
+
+.pt-ref-section[open] .pt-ref-summary::after {
+  transform: rotate(180deg);
+}
+
+.pt-ref-summary:hover {
+  background: var(--pt-gray-50);
+}
+
+.pt-ref-badge {
+  padding: 2px 8px;
+  background: var(--pt-success-light);
+  color: var(--pt-success);
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 10px;
+}
+
+.pt-ref-content {
+  padding: 16px 20px;
+  border-top: 1px solid var(--pt-gray-100);
+  background: var(--pt-gray-50);
+}
+
+.pt-ref-desc {
+  font-size: 13px;
+  color: var(--pt-gray-600);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.pt-ref-upload {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pt-ref-status {
+  font-size: 12px;
+  color: var(--pt-gray-500);
+}
+
+/* ============================================================
+   5. 섹션 헤더
+   ============================================================ */
+.pt-section {
+  margin-bottom: 24px;
+}
+
+.pt-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.pt-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--pt-gray-800);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ============================================================
+   6. 프로젝트 그리드 (상표 스타일)
+   ============================================================ */
+.pt-project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+/* 빈 상태 */
+.pt-empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 48px 24px;
+  background: #fff;
+  border: 1px dashed var(--pt-gray-300);
+  border-radius: var(--pt-radius);
+}
+
+.pt-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.pt-empty-text {
+  font-size: 14px;
+  color: var(--pt-gray-500);
+}
+
+/* ============================================================
+   7. 프로젝트 카드
+   ============================================================ */
+.pt-project-card {
+  background: #fff;
+  border: 1px solid var(--pt-gray-200);
+  border-radius: var(--pt-radius);
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pt-project-card:hover {
+  border-color: var(--pt-primary);
+  box-shadow: var(--pt-shadow-lg);
+  transform: translateY(-2px);
+}
+
+.pt-project-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.pt-project-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pt-project-card-number {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: var(--pt-primary-light);
+  color: var(--pt-primary);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.pt-project-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--pt-gray-800);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.pt-project-card-meta {
+  font-size: 12px;
+  color: var(--pt-gray-500);
+  margin-top: 6px;
+}
+
+.pt-project-card-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.pt-project-card-actions .btn {
+  padding: 6px;
+  font-size: 14px;
+}
+
+/* 프로젝트 진행률 */
+.pt-project-progress {
+  margin-top: 12px;
+}
+
+.pt-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.pt-progress-label {
+  font-size: 12px;
+  color: var(--pt-gray-500);
+}
+
+.pt-progress-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pt-primary);
+}
+
+.pt-progress-bar {
+  height: 4px;
+  background: var(--pt-gray-200);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.pt-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--pt-primary), var(--pt-success));
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+/* 완료 상태 카드 */
+.pt-project-card.completed {
+  border-color: var(--pt-success);
+  background: linear-gradient(135deg, #fff 0%, var(--pt-success-light) 100%);
+}
+
+.pt-project-card.completed .pt-project-card-number {
+  background: var(--pt-success-light);
+  color: var(--pt-success);
+}
+
+/* ============================================================
+   8. 가출원 카드
+   ============================================================ */
+.pt-provisional-card {
+  background: #fff;
+  border: 1px solid var(--pt-gray-200);
+  border-left: 4px solid var(--pt-warning);
+  border-radius: var(--pt-radius);
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pt-provisional-card:hover {
+  border-color: var(--pt-warning);
+  box-shadow: var(--pt-shadow-lg);
+}
+
+.pt-provisional-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--pt-warning-light);
+  color: var(--pt-warning);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.pt-provisional-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pt-gray-800);
+  margin-bottom: 4px;
+}
+
+.pt-provisional-subtitle {
+  font-size: 12px;
+  color: var(--pt-gray-500);
+}
+
+/* ============================================================
+   9. 사건번호 입력 스타일
+   ============================================================ */
+.pt-case-prefix {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  background: var(--pt-gray-100);
+  border: 1px solid var(--pt-gray-300);
+  border-right: none;
+  border-radius: var(--pt-radius-sm) 0 0 var(--pt-radius-sm);
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--pt-gray-600);
+}
+
+#newProjectNumber {
+  border-radius: 0 var(--pt-radius-sm) var(--pt-radius-sm) 0 !important;
+}
+
+/* ============================================================
+   10. 탭 네비게이션 (에디터)
    ============================================================ */
 .tab-container {
   display: flex;
@@ -126,7 +530,7 @@
 }
 
 /* ============================================================
-   3. 페이지(탭 콘텐츠) 2-Column 그리드
+   11. 페이지(탭 콘텐츠) 2-Column 그리드
    ============================================================ */
 .page {
   display: grid !important;
@@ -136,12 +540,10 @@
   align-content: start !important;
 }
 
-/* 페이지 내 카드들 */
 .page > .card {
   margin: 0 !important;
 }
 
-/* 전체 너비 카드 (결과 영역 등) */
 .page > .card.full-width,
 .page > .card:has(.result-textarea),
 .page > .card:has(#previewArea),
@@ -149,7 +551,6 @@
   grid-column: span 2;
 }
 
-/* 통계 카드 행 */
 .stat-row {
   grid-column: span 2;
   display: flex !important;
@@ -157,7 +558,6 @@
   margin-bottom: 0 !important;
 }
 
-/* 반응형 */
 @media (max-width: 1200px) {
   .page {
     grid-template-columns: 1fr !important;
@@ -169,7 +569,7 @@
 }
 
 /* ============================================================
-   4. 카드 스타일 개선
+   12. 카드 스타일
    ============================================================ */
 .card {
   background: #fff;
@@ -209,35 +609,36 @@
 }
 
 /* ============================================================
-   5. 대시보드 레이아웃
+   13. 통계 카드 (산출물 탭)
    ============================================================ */
-#patent-dashboard-panel {
-  padding: 20px !important;
+.stat-card {
+  flex: 1;
+  min-width: 120px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid var(--pt-gray-200);
+  border-radius: var(--pt-radius);
+  text-align: center;
 }
 
-/* 대시보드 상단 카드 (새 사건, 가출원) */
-#patent-dashboard-panel > div:first-child {
-  display: grid !important;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
-  gap: 16px !important;
-  margin-bottom: 20px !important;
+.stat-card-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--pt-primary);
 }
 
-/* 대시보드 카드 크기 조정 */
-#patent-dashboard-panel .card {
-  min-width: 0 !important;
+.stat-card-label {
+  font-size: 12px;
+  color: var(--pt-gray-500);
+  margin-top: 4px;
 }
 
-/* 프로젝트 목록 카드 - 2열 그리드 */
-#dashProjectList,
-#dashProvisionalList {
-  display: grid !important;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
-  gap: 12px !important;
-}
+.stat-card-steps .stat-card-value { color: var(--pt-primary); }
+.stat-card-api .stat-card-value { color: var(--pt-warning); }
+.stat-card-cost .stat-card-value { color: var(--pt-success); }
 
 /* ============================================================
-   6. 입력 필드 스타일
+   14. 입력 필드
    ============================================================ */
 .input-field {
   width: 100%;
@@ -254,7 +655,6 @@
   box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.1);
 }
 
-/* 텍스트에어리어 */
 textarea.input-field,
 .result-textarea {
   min-height: 120px;
@@ -264,7 +664,7 @@ textarea.input-field,
 }
 
 /* ============================================================
-   7. 버튼 스타일
+   15. 버튼
    ============================================================ */
 .btn {
   display: inline-flex;
@@ -311,42 +711,7 @@ textarea.input-field,
 }
 
 /* ============================================================
-   8. 통계 카드
-   ============================================================ */
-.stat-row {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.stat-card {
-  flex: 1;
-  min-width: 120px;
-  padding: 16px;
-  background: #fff;
-  border: 1px solid var(--pt-gray-200);
-  border-radius: var(--pt-radius);
-  text-align: center;
-}
-
-.stat-card-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--pt-primary);
-}
-
-.stat-card-label {
-  font-size: 12px;
-  color: var(--pt-gray-500);
-  margin-top: 4px;
-}
-
-.stat-card-steps .stat-card-value { color: var(--pt-primary); }
-.stat-card-api .stat-card-value { color: var(--pt-warning); }
-.stat-card-cost .stat-card-value { color: var(--pt-success); }
-
-/* ============================================================
-   9. 결과 영역
+   16. 결과 영역
    ============================================================ */
 .result-textarea {
   width: 100%;
@@ -358,13 +723,12 @@ textarea.input-field,
   line-height: 1.7;
 }
 
-/* 결과 내용이 있는 카드 강조 */
 .card:has(.result-textarea:not(:empty)) {
   border-color: var(--pt-success);
 }
 
 /* ============================================================
-   10. 진행률 표시
+   17. 진행률 표시
    ============================================================ */
 [id^="progress"] {
   height: 4px;
@@ -380,7 +744,97 @@ textarea.input-field,
 }
 
 /* ============================================================
-   11. 체크박스/라디오
+   18. 미리보기 영역
+   ============================================================ */
+#previewArea {
+  padding: 20px;
+  background: #fff;
+  border: 1px solid var(--pt-gray-200);
+  border-radius: var(--pt-radius-sm);
+  max-height: 500px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+#previewArea:empty::before {
+  content: "생성된 결과가 여기에 표시됩니다.";
+  color: var(--pt-gray-400);
+  font-style: italic;
+}
+
+/* ============================================================
+   19. 스텝 설명 리스트
+   ============================================================ */
+.step-desc-list {
+  padding: 12px 18px;
+  background: var(--pt-gray-50);
+  border-radius: var(--pt-radius-sm);
+  margin: 12px 18px;
+}
+
+.step-desc-item {
+  font-size: 13px;
+  color: var(--pt-gray-600);
+  line-height: 1.6;
+}
+
+.step-desc-item strong {
+  color: var(--pt-primary);
+}
+
+/* ============================================================
+   20. Selection Cards
+   ============================================================ */
+.selection-cards {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 18px 18px;
+}
+
+.selection-card {
+  flex: 1;
+  min-width: 100px;
+  padding: 12px;
+  border: 1px solid var(--pt-gray-200);
+  border-radius: var(--pt-radius-sm);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: #fff;
+}
+
+.selection-card:hover {
+  border-color: var(--pt-primary);
+  background: var(--pt-primary-light);
+}
+
+.selection-card.selected {
+  border-color: var(--pt-primary);
+  background: var(--pt-primary-light);
+  box-shadow: 0 0 0 2px rgba(49, 130, 246, 0.2);
+}
+
+.selection-card-category {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.selection-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pt-gray-700);
+}
+
+.selection-card-subtitle {
+  font-size: 11px;
+  color: var(--pt-gray-500);
+  margin-top: 2px;
+}
+
+/* ============================================================
+   21. 체크박스/토글
    ============================================================ */
 .checkbox-label {
   display: inline-flex;
@@ -397,9 +851,6 @@ textarea.input-field,
   accent-color: var(--pt-primary);
 }
 
-/* ============================================================
-   12. 토글 스위치
-   ============================================================ */
 .toggle-switch {
   position: relative;
   display: inline-block;
@@ -446,65 +897,7 @@ textarea.input-field,
 }
 
 /* ============================================================
-   13. 미리보기 영역
-   ============================================================ */
-#previewArea {
-  padding: 20px;
-  background: #fff;
-  border: 1px solid var(--pt-gray-200);
-  border-radius: var(--pt-radius-sm);
-  max-height: 500px;
-  overflow-y: auto;
-  font-size: 14px;
-  line-height: 1.8;
-}
-
-#previewArea:empty::before {
-  content: "생성된 결과가 여기에 표시됩니다.";
-  color: var(--pt-gray-400);
-  font-style: italic;
-}
-
-/* ============================================================
-   14. 헤더 영역
-   ============================================================ */
-.header-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 20px;
-  background: #fff;
-  border-bottom: 1px solid var(--pt-gray-200);
-}
-
-.header-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--pt-gray-800);
-}
-
-/* ============================================================
-   15. 스텝 설명 리스트
-   ============================================================ */
-.step-desc-list {
-  padding: 12px 18px;
-  background: var(--pt-gray-50);
-  border-radius: var(--pt-radius-sm);
-  margin: 12px 18px;
-}
-
-.step-desc-item {
-  font-size: 13px;
-  color: var(--pt-gray-600);
-  line-height: 1.6;
-}
-
-.step-desc-item strong {
-  color: var(--pt-primary);
-}
-
-/* ============================================================
-   16. 파일 업로드 영역
+   22. 파일 업로드 영역
    ============================================================ */
 .upload-area {
   border: 2px dashed var(--pt-gray-300);
@@ -526,7 +919,7 @@ textarea.input-field,
 }
 
 /* ============================================================
-   17. 모달
+   23. 모달
    ============================================================ */
 .modal-overlay {
   position: fixed;
@@ -551,8 +944,24 @@ textarea.input-field,
   box-shadow: var(--pt-shadow-lg);
 }
 
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--pt-gray-800);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.modal-body {
+  font-size: 14px;
+  color: var(--pt-gray-600);
+  line-height: 1.6;
+}
+
 /* ============================================================
-   18. 배지
+   24. 배지
    ============================================================ */
 .badge {
   display: inline-block;
@@ -577,22 +986,36 @@ textarea.input-field,
   color: var(--pt-warning);
 }
 
-/* ============================================================
-   19. 애니메이션
-   ============================================================ */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.card {
-  animation: fadeIn 0.2s ease;
+.badge-neutral {
+  background: var(--pt-gray-200);
+  color: var(--pt-gray-600);
 }
 
 /* ============================================================
-   20. 반응형 조정
+   25. 반응형
    ============================================================ */
 @media (max-width: 768px) {
+  #patent-dashboard-panel {
+    padding: 16px !important;
+  }
+
+  .pt-dashboard-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .pt-stats-row {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .pt-stat-divider {
+    display: none;
+  }
+
+  .pt-project-grid {
+    grid-template-columns: 1fr;
+  }
+
   .tab-container {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -602,20 +1025,18 @@ textarea.input-field,
     padding: 8px 14px;
     font-size: 12px;
   }
-  
-  .page {
-    padding: 12px !important;
-  }
-  
-  .card-header {
-    padding: 12px 14px;
-  }
-  
-  .stat-row {
-    flex-direction: column;
-  }
-  
-  .stat-card {
-    min-width: 100%;
-  }
+}
+
+/* ============================================================
+   26. 애니메이션
+   ============================================================ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pt-project-card,
+.pt-provisional-card,
+.pt-action-card {
+  animation: fadeIn 0.2s ease;
 }
