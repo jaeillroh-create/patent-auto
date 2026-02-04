@@ -92,75 +92,35 @@
 
     <!-- ═══ 특허 대시보드 패널 ═══ -->
     <div id="patent-dashboard-panel" class="service-panel active">
-      <!-- 상단 액션 카드 영역 -->
-      <div class="pt-dashboard-actions">
-        <div class="pt-action-card pt-action-new" onclick="openNewProjectModal()">
-          <div class="pt-action-icon"><span class="tossface">📝</span></div>
-          <div class="pt-action-content">
-            <div class="pt-action-title">새 사건 만들기</div>
-            <div class="pt-action-desc">정식 특허명세서 작성 (19단계)</div>
-          </div>
-          <div class="pt-action-arrow">→</div>
-        </div>
-        <div class="pt-action-card pt-action-provisional" onclick="openProvisionalModal()">
-          <div class="pt-action-icon"><span class="tossface">⚡</span></div>
-          <div class="pt-action-content">
-            <div class="pt-action-title">가출원 명세서</div>
-            <div class="pt-action-desc">독립항 1개 + 도면 1개 · 빠른 생성</div>
-          </div>
-          <div class="pt-action-arrow">→</div>
-        </div>
+    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div class="card" style="flex:1;min-width:200px;text-align:center;padding:28px;cursor:pointer;border:2px dashed var(--color-border)" onclick="openNewProjectModal()">
+        <div style="font-size:40px;margin-bottom:8px"><span class="tossface">➕</span></div>
+        <div style="font-size:16px;font-weight:600;color:var(--color-primary)">새 사건 만들기</div>
+        <div style="font-size:12px;color:var(--color-text-tertiary);margin-top:4px">정식 특허명세서 작성</div>
       </div>
-
-      <!-- 통계 요약 -->
-      <div class="pt-stats-row">
-        <div class="pt-stat-item">
-          <span class="pt-stat-value" id="dashProjectCount">0</span>
-          <span class="pt-stat-label">정식 사건</span>
-        </div>
-        <div class="pt-stat-divider"></div>
-        <div class="pt-stat-item">
-          <span class="pt-stat-value" id="dashProvisionalCount">0</span>
-          <span class="pt-stat-label">가출원</span>
-        </div>
-        <div class="pt-stat-divider"></div>
-        <div class="pt-stat-item">
-          <span class="pt-stat-value" id="dashCompletedCount">0</span>
-          <span class="pt-stat-label">완료</span>
-        </div>
+      <div class="card" style="flex:1;min-width:200px;text-align:center;padding:28px;cursor:pointer;border:2px dashed var(--color-warning)" onclick="openProvisionalModal()">
+        <div style="font-size:40px;margin-bottom:8px"><span class="tossface">⚡</span></div>
+        <div style="font-size:16px;font-weight:600;color:var(--color-warning)">가출원 명세서</div>
+        <div style="font-size:12px;color:var(--color-text-tertiary);margin-top:4px">독립항 1개 + 도면 1개 · 빠른 생성</div>
       </div>
-
-      <!-- 공통 참고 문서 (접이식) -->
-      <details class="pt-ref-section">
-        <summary class="pt-ref-summary">
-          <span class="tossface">📎</span> 공통 참고 문서 (문체 참고용)
-          <span id="globalRefBadge" class="pt-ref-badge" style="display:none">등록됨</span>
-        </summary>
-        <div class="pt-ref-content">
-          <p class="pt-ref-desc">기존 특허명세서를 업로드하면 <strong>모든 프로젝트</strong>에서 문장 형태·단락 구조를 참고합니다. <span style="color:var(--color-error)">※ 내용 참조 없음. 문체만 참고.</span></p>
-          <div class="pt-ref-upload">
-            <label for="globalRefUpload" class="btn btn-outline btn-sm"><span class="tossface">📄</span> 파일 업로드</label>
-            <input type="file" id="globalRefUpload" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="handleGlobalRefUpload(event)" />
-            <span id="globalRefStatus" class="pt-ref-status">업로드된 문서 없음</span>
-          </div>
-        </div>
-      </details>
-
-      <!-- 사건 목록 섹션 -->
-      <div class="pt-section">
-        <div class="pt-section-header">
-          <h3 class="pt-section-title"><span class="tossface">📂</span> 내 사건 목록</h3>
-        </div>
-        <div id="dashProjectList" class="pt-project-grid"></div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><div class="card-title"><span class="tossface">📎</span> 공통 참고 문서 (문체 참고용)</div></div>
+      <p class="card-description" style="margin-bottom:8px">기존 특허명세서를 업로드하면 <strong>모든 프로젝트</strong>에서 문장 형태·단락 구조를 참고합니다. <span style="color:var(--color-error)">※ 내용 참조 없음. 문체만 참고.</span></p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label for="globalRefUpload" class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px"><span class="tossface">📄</span> 공통 참고 문서 업로드</label>
+        <input type="file" id="globalRefUpload" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="handleGlobalRefUpload(event)" />
+        <span id="globalRefStatus" style="font-size:12px;color:var(--color-text-tertiary)">업로드된 문서 없음</span>
       </div>
-
-      <!-- 가출원 내역 섹션 -->
-      <div class="pt-section">
-        <div class="pt-section-header">
-          <h3 class="pt-section-title"><span class="tossface">⚡</span> 가출원 내역</h3>
-        </div>
-        <div id="dashProvisionalList" class="pt-project-grid"></div>
-      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><div class="card-title"><span class="tossface">📂</span> 내 사건 목록</div><div class="card-description" id="dashProjectCount">0건</div></div>
+      <div id="dashProjectList" style="padding:0 16px 16px"></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title"><span class="tossface">⚡</span> 가출원 내역</div><div class="card-description" id="dashProvisionalCount">0건</div></div>
+      <div id="dashProvisionalList" style="padding:0 16px 16px"></div>
+    </div>
     </div><!-- /patent-dashboard-panel -->
 
     <!-- ═══ 상표 대시보드 패널 ═══ -->
@@ -201,28 +161,11 @@
 
 <!-- Modals -->
 <div id="newProjectModal" class="modal-overlay" style="display:none">
-  <div class="modal-content" style="max-width:480px">
+  <div class="modal-content">
     <div class="modal-title"><span class="tossface">📝</span> 새 사건 만들기</div>
-    <div class="modal-body" style="margin-bottom:16px">사건번호와 사건명을 입력해 주세요.</div>
-    
-    <div style="margin-bottom:16px">
-      <label style="font-size:13px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:6px">사건번호</label>
-      <div style="display:flex;align-items:center;gap:4px">
-        <span class="pt-case-prefix">26P</span>
-        <input type="text" class="input-field" id="newProjectNumber" placeholder="0001" maxlength="4" pattern="[0-9]*" style="width:100px;text-align:center;font-family:monospace;font-size:16px" oninput="this.value=this.value.replace(/[^0-9]/g,'')" />
-      </div>
-      <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px">예: 26P0001, 26P0002 형식의 사건번호</p>
-    </div>
-    
-    <div style="margin-bottom:16px">
-      <label style="font-size:13px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:6px">사건명 (발명의 명칭)</label>
-      <input type="text" class="input-field" id="newProjectTitle" placeholder="예: 공기 청결도 기반 가습기 분무량 제어 서버" />
-    </div>
-    
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-ghost" onclick="closeNewProjectModal()" style="flex:1">취소</button>
-      <button class="btn btn-primary" onclick="createAndOpenProject()" style="flex:1">만들기</button>
-    </div>
+    <div class="modal-body">사건명을 입력해 주세요.</div>
+    <input type="text" class="input-field" id="newProjectTitle" placeholder="예: 공기 청결도 기반 가습기 분무량 제어 서버" />
+    <div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-ghost" onclick="closeNewProjectModal()" style="flex:1">취소</button><button class="btn btn-primary" onclick="createAndOpenProject()" style="flex:1">만들기</button></div>
   </div>
 </div>
 <div id="provisionalModal" class="modal-overlay" style="display:none">
@@ -311,32 +254,29 @@
       <div class="page-left">
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">📁</span> 발명 내용</div></div>
-          <textarea class="textarea-field" id="projectInput" rows="6" placeholder="발명의 핵심 기술, 구성요소, 차별점 등을 상세히 입력해 주세요..."></textarea>
+          <textarea class="textarea-field" id="projectInput" rows="5" placeholder="발명의 핵심 기술, 구성요소, 차별점 등을 상세히 입력해 주세요..."></textarea>
           <div style="margin-top:10px">
-            <label for="fileUpload" class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px"><span class="tossface">📎</span> 파일 첨부</label>
+            <label for="fileUpload" class="btn btn-outline btn-sm" style="cursor:pointer"><span class="tossface">📎</span> 파일 첨부</label>
             <input type="file" id="fileUpload" multiple accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.csv,.xlsx,.xls,.pptx,.ppt,.rtf,.json" style="display:none" onchange="handleFileUpload(event)" />
             <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:8px">txt, pdf, doc(x), hwp(x), xlsx, pptx</span>
           </div>
           <div id="fileList" style="margin-top:8px"></div>
         </div>
         <div class="card">
-          <div class="card-header"><div class="card-title"><span class="tossface">📎</span> 프로젝트 전용 참고 문서 (선택)</div></div>
-          <p class="card-description" style="margin-bottom:8px">이 프로젝트에서만 사용할 참고 문서. 미등록 시 공통 참고 문서 적용.</p>
+          <div class="card-header"><div class="card-title"><span class="tossface">📎</span> 프로젝트 참고 문서</div></div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <label for="projectRefUpload" class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px"><span class="tossface">📄</span> 프로젝트 참고 문서</label>
+            <label for="projectRefUpload" class="btn btn-outline btn-sm" style="cursor:pointer"><span class="tossface">📄</span> 참고 문서 등록</label>
             <input type="file" id="projectRefUpload" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="handleProjectRefUpload(event)" />
-            <span id="projectRefStatus" style="font-size:12px;color:var(--color-text-tertiary)">없음 (공통 참고 문서 사용)</span>
+            <span id="projectRefStatus" style="font-size:12px;color:var(--color-text-tertiary)">없음</span>
           </div>
         </div>
         <div class="card" id="cardStep01">
           <div class="card-header"><div class="card-title"><span class="tossface">🏷️</span> Step 1: 발명의 명칭</div></div>
-          <p class="card-description" style="margin-bottom:8px">발명의 유형을 입력하세요. 아래 참고 유형을 클릭하거나 직접 입력할 수 있습니다.</p>
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
             <label style="font-size:13px;font-weight:600;color:var(--color-text-secondary);white-space:nowrap">발명 유형:</label>
-            <input type="text" class="input-field" id="customTitleType" placeholder="예: 서버, 방법, 시스템, 장치, 단말기, 서버 및 방법 등" style="flex:1" oninput="onCustomTitleType(this.value)" />
+            <input type="text" class="input-field" id="customTitleType" placeholder="서버, 방법, 시스템 등" style="flex:1" oninput="onCustomTitleType(this.value)" />
           </div>
           <div style="margin-bottom:12px">
-            <label style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;display:block">참고 유형 (클릭하면 자동 입력)</label>
             <div class="selection-cards" id="titleTypeCards" style="grid-template-columns:repeat(4,1fr)">
               <div class="selection-card" onclick="selectTitleType(this,'서버')" style="padding:8px"><div class="selection-card-title" style="font-size:12px">~서버</div></div>
               <div class="selection-card" onclick="selectTitleType(this,'방법')" style="padding:8px"><div class="selection-card-title" style="font-size:12px">~방법</div></div>
@@ -344,25 +284,23 @@
               <div class="selection-card" onclick="selectTitleType(this,'서버 및 방법')" style="padding:8px"><div class="selection-card-title" style="font-size:12px">~서버 및 방법</div></div>
             </div>
           </div>
-          <button class="btn btn-primary btn-full" id="btnStep01" onclick="runStep('step_01')" disabled><span class="tossface">🤖</span> 명칭 후보 생성 (5개)</button>
+          <button class="btn btn-primary btn-full" id="btnStep01" onclick="runStep('step_01')" disabled><span class="tossface">🤖</span> 명칭 후보 생성</button>
         </div>
         <div id="batchArea" style="display:none">
           <div class="card">
-            <div class="card-header"><div class="card-title"><span class="tossface">🚀</span> Step 2~5: 기본 항목 일괄 생성</div></div>
-            <div class="step-desc-list">
-              <div class="step-desc-item"><strong>Step 2</strong> 기술분야 · <strong>Step 3</strong> 배경기술 · <strong>Step 4</strong> 선행기술문헌 · <strong>Step 5</strong> 해결과제</div>
-            </div>
-            <div id="progressBatch" style="margin:12px 0"></div>
-            <button class="btn btn-primary btn-full" id="btnBatch25" onclick="runBatch25()"><span class="tossface">🚀</span> 일괄 생성</button>
+            <div class="card-header"><div class="card-title"><span class="tossface">🚀</span> Step 2~5: 일괄 생성</div></div>
+            <p style="font-size:12px;color:var(--pt-gray-500);padding:0 18px 12px">기술분야 · 배경기술 · 선행기술문헌 · 해결과제</p>
+            <div id="progressBatch" style="margin:0 18px 12px"></div>
+            <div style="padding:0 18px 18px"><button class="btn btn-primary btn-full" id="btnBatch25" onclick="runBatch25()"><span class="tossface">🚀</span> 일괄 생성</button></div>
           </div>
         </div>
       </div>
       <!-- 오른쪽: 결과 출력 -->
       <div class="page-right">
-        <div class="card result-card">
+        <div class="result-card" id="resultCard01">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 1 결과: 발명의 명칭</div></div>
           <div id="resultStep01" class="result-area"></div>
-          <div id="titleConfirmArea" style="display:none;margin-top:12px;padding:0 18px 18px">
+          <div id="titleConfirmArea" style="display:none;padding:0 18px 18px">
             <label style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">확정 명칭 (국문)</label>
             <input type="text" class="input-field input-highlight" id="titleInput" oninput="onTitleInput()" style="margin-top:4px" />
             <label style="font-size:13px;font-weight:600;color:var(--color-text-secondary);margin-top:8px;display:block">확정 명칭 (영문)</label>
@@ -370,7 +308,7 @@
             <div id="titleConfirmMsg" class="confirm-msg" style="display:none"><span class="tossface">✅</span> 명칭이 확정되었어요</div>
           </div>
         </div>
-        <div class="card result-card">
+        <div class="result-card" id="resultCard25">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 2~5 결과</div></div>
           <div id="resultsBatch25" class="result-area"></div>
         </div>
@@ -379,33 +317,31 @@
 
     <!-- ══ TAB 1: 청구범위 ══ -->
     <div id="page1" class="page" role="tabpanel">
-      <!-- 왼쪽: 설정/입력 -->
+      <!-- 왼쪽: 설정 -->
       <div class="page-left">
         <!-- Step 6 장치 청구항 설정 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">⚖️</span> Step 6: 장치 청구항</div></div>
-          <p class="card-description" style="margin-bottom:12px">독립항 카테고리와 일반/앵커 종속항을 설정하세요.</p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+          <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:12px">
             <div><label style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">독립항 카테고리</label>
               <select class="input-field" id="selDeviceCategory" onchange="updateDeviceCategory(this.value)" style="margin-top:4px">
                 <option value="server">서버</option><option value="system">시스템</option><option value="apparatus">장치</option><option value="electronic_device">전자단말</option><option value="auto">자동 (AI 선택)</option>
               </select></div>
-            <div></div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
-            <div><label style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">일반 종속항</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+            <div><label style="font-size:11px;font-weight:600;color:var(--color-text-secondary)">일반 종속항</label>
               <input type="number" class="input-field" id="inpDeviceGeneralDep" min="0" max="20" value="5" onchange="updateDeviceGeneralDep(this.value)" style="margin-top:4px" /></div>
-            <div><label style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">앵커 종속항</label>
+            <div><label style="font-size:11px;font-weight:600;color:var(--color-text-secondary)">앵커 종속항</label>
               <input type="number" class="input-field" id="inpDeviceAnchorDep" min="0" max="10" value="4" onchange="updateDeviceAnchorDep(this.value)" style="margin-top:4px" /></div>
-            <div><label style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">앵커 시작번호</label>
+            <div><label style="font-size:11px;font-weight:600;color:var(--color-text-secondary)">앵커 시작</label>
               <input type="number" class="input-field" id="inpDeviceAnchorStart" min="3" max="30" value="7" onchange="updateDeviceAnchorStart(this.value)" style="margin-top:4px" /></div>
           </div>
           <div id="deviceClaimTotal" style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:12px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px">독립항 1 + 일반 5 + 앵커 4 = 10개</div>
           <div style="margin-bottom:12px">
-            <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">앵커 테마 모드</label>
+            <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">앵커 테마</label>
             <div style="display:flex;gap:12px;margin-top:6px">
-              <label class="checkbox-label"><input type="radio" name="deviceThemeMode" value="auto" checked onchange="toggleDeviceAnchorThemes('auto')" /><span>Claude 자동</span></label>
-              <label class="checkbox-label"><input type="radio" name="deviceThemeMode" value="fixed" onchange="toggleDeviceAnchorThemes('fixed')" /><span>직접 선택</span></label>
+              <label class="checkbox-label" style="font-size:12px"><input type="radio" name="deviceThemeMode" value="auto" checked onchange="toggleDeviceAnchorThemes('auto')" /><span>Claude 자동</span></label>
+              <label class="checkbox-label" style="font-size:12px"><input type="radio" name="deviceThemeMode" value="fixed" onchange="toggleDeviceAnchorThemes('fixed')" /><span>직접 선택</span></label>
             </div>
             <div id="deviceThemeList" style="display:none;margin-top:8px">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px">
@@ -413,10 +349,6 @@
                 <label class="checkbox-label"><input type="checkbox" onchange="toggleDeviceTheme('threshold_adaptation',this.checked)" /><span>임계값 적응</span></label>
                 <label class="checkbox-label"><input type="checkbox" onchange="toggleDeviceTheme('cross_validation',this.checked)" /><span>교차검증</span></label>
                 <label class="checkbox-label"><input type="checkbox" onchange="toggleDeviceTheme('fallback_retry',this.checked)" /><span>장애복구/재시도</span></label>
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleDeviceTheme('explainability_trace',this.checked)" /><span>설명가능성 추적</span></label>
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleDeviceTheme('bias_normalization',this.checked)" /><span>편향 정규화</span></label>
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleDeviceTheme('feedback_reweighting',this.checked)" /><span>피드백 재가중치</span></label>
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleDeviceTheme('privacy_audit',this.checked)" /><span>프라이버시 감사</span></label>
               </div>
             </div>
           </div>
@@ -425,7 +357,7 @@
         </div>
 
         <!-- Method Toggle -->
-        <div class="card" style="padding:12px 18px;display:flex;align-items:center;justify-content:space-between">
+        <div class="card" style="padding:14px 18px;display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:8px">
             <span class="tossface">⚖️</span>
             <span style="font-weight:600;font-size:14px">방법 청구항 포함</span>
@@ -433,180 +365,143 @@
           <label class="toggle-switch"><input type="checkbox" id="methodToggle" checked onchange="toggleMethod()" /><span class="toggle-slider"></span></label>
         </div>
 
-        <!-- Step 10 방법 청구항 설정 -->
+        <!-- Step 10 방법 청구항 -->
         <div class="card" id="methodClaimsCard">
           <div class="card-header"><div class="card-title"><span class="tossface">⚖️</span> Step 10: 방법 청구항</div></div>
-          <p class="card-description" style="margin-bottom:12px">장치 청구항의 핵심만 선별·병합.</p>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-            <div><label style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">카테고리</label>
+            <div><label style="font-size:11px;font-weight:600;color:var(--color-text-secondary)">카테고리</label>
               <select class="input-field" id="selMethodCategory" onchange="updateMethodCategory(this.value)" style="margin-top:4px">
                 <option value="method">방법</option><option value="recording_medium">기록매체</option><option value="computer_program_product">컴퓨터 프로그램</option>
               </select></div>
             <div></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-            <div><label style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">일반 종속항</label>
+            <div><label style="font-size:11px;font-weight:600;color:var(--color-text-secondary)">일반 종속항</label>
               <input type="number" class="input-field" id="inpMethodGeneralDep" min="0" max="15" value="3" onchange="updateMethodGeneralDep(this.value)" style="margin-top:4px" /></div>
-            <div><label style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">앵커 종속항</label>
+            <div><label style="font-size:11px;font-weight:600;color:var(--color-text-secondary)">앵커 종속항</label>
               <input type="number" class="input-field" id="inpMethodAnchorDep" min="0" max="8" value="2" onchange="updateMethodAnchorDep(this.value)" style="margin-top:4px" /></div>
           </div>
           <div id="methodClaimTotal" style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:12px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px">독립항 1 + 일반 3 + 앵커 2 = 6개</div>
-          <div style="margin-bottom:12px">
-            <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">앵커 테마</label>
-            <div style="display:flex;gap:12px;margin-top:6px">
-              <label class="checkbox-label"><input type="radio" name="methodThemeMode" value="auto" checked onchange="toggleMethodAnchorThemes('auto')" /><span>Claude 자동</span></label>
-              <label class="checkbox-label"><input type="radio" name="methodThemeMode" value="fixed" onchange="toggleMethodAnchorThemes('fixed')" /><span>직접 선택</span></label>
-            </div>
-            <div id="methodThemeList" style="display:none;margin-top:8px">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px">
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleMethodTheme('reliability_weighting',this.checked)" /><span>신뢰도 가중치</span></label>
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleMethodTheme('threshold_adaptation',this.checked)" /><span>임계값 적응</span></label>
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleMethodTheme('cross_validation',this.checked)" /><span>교차검증</span></label>
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleMethodTheme('fallback_retry',this.checked)" /><span>장애복구/재시도</span></label>
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleMethodTheme('explainability_trace',this.checked)" /><span>설명가능성 추적</span></label>
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleMethodTheme('bias_normalization',this.checked)" /><span>편향 정규화</span></label>
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleMethodTheme('feedback_reweighting',this.checked)" /><span>피드백 재가중치</span></label>
-                <label class="checkbox-label"><input type="checkbox" onchange="toggleMethodTheme('privacy_audit',this.checked)" /><span>프라이버시 감사</span></label>
-              </div>
-            </div>
-          </div>
           <div id="progressStep10" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnStep10" onclick="runStep('step_10')"><span class="tossface">🤖</span> 방법 청구항 생성</button>
         </div>
 
-        <!-- Step 14/15 버튼 -->
+        <!-- 추가 기능 버튼 -->
         <div class="card">
-          <div class="card-header"><div class="card-title"><span class="tossface">🔄</span> 추가 기능</div></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 18px">
-            <button class="btn btn-outline" id="btnStep14" onclick="runStep('step_14')"><span class="tossface">🔄</span> 대안 청구항</button>
-            <button class="btn btn-outline" id="btnStep15" onclick="runStep('step_15')"><span class="tossface">🔍</span> 특허성 검토</button>
-            <button class="btn btn-outline" onclick="runValidation()"><span class="tossface">✅</span> 자동 검증</button>
+          <div class="card-header"><div class="card-title"><span class="tossface">🔧</span> 추가 기능</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-outline btn-full" id="btnStep14" onclick="runStep('step_14')"><span class="tossface">🔄</span> Step 14: 대안 청구항</button>
+            <button class="btn btn-outline btn-full" id="btnStep15" onclick="runStep('step_15')"><span class="tossface">🔍</span> Step 15: 특허성 검토</button>
+            <button class="btn btn-outline btn-full" onclick="runValidation()"><span class="tossface">✅</span> 자동 검증</button>
           </div>
         </div>
       </div>
 
       <!-- 오른쪽: 결과 출력 -->
       <div class="page-right">
-        <div class="card result-card">
+        <div class="result-card" id="resultCard06">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 6 결과: 장치 청구항</div></div>
           <div id="resultStep06" class="result-area"></div>
         </div>
-        <div class="card result-card">
+        <div class="result-card" id="resultCard10">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 10 결과: 방법 청구항</div></div>
           <div id="resultStep10" class="result-area"></div>
         </div>
-        <div class="card result-card">
+        <div class="result-card" id="resultCardExtra">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> 대안/검토 결과</div></div>
-          <div id="resultStep14" class="result-area"></div>
-          <div id="resultStep15" class="result-area"></div>
-          <div id="validationResults" class="result-area"></div>
+          <div id="resultStep14" class="result-area" style="min-height:60px"></div>
+          <div id="resultStep15" class="result-area" style="min-height:60px"></div>
+          <div id="validationResults" class="result-area" style="min-height:60px"></div>
         </div>
       </div>
     </div>
 
     <!-- ══ TAB 2: 도면·설명 ══ -->
     <div id="page2" class="page" role="tabpanel">
-      <!-- 왼쪽: 설정/입력 -->
+      <!-- 왼쪽: 설정 -->
       <div class="page-left">
         <!-- 필수 도면 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">📌</span> 필수 도면 (선택)</div></div>
-          <div style="padding:0 18px 18px">
-            <p style="font-size:12px;color:var(--pt-gray-500);margin-bottom:8px">반드시 포함할 도면을 등록하면 AI가 해당 번호를 제외하고 생성합니다.</p>
-            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">
-              <div><label style="font-size:11px;color:var(--pt-gray-500)">번호</label>
-                <input type="number" class="input-field" id="inpRequiredFigNum" min="1" max="30" placeholder="1" style="width:60px;margin-top:2px" /></div>
-              <div style="flex:1"><label style="font-size:11px;color:var(--pt-gray-500)">설명</label>
-                <input type="text" class="input-field" id="inpRequiredFigDesc" placeholder="예: 시스템 블록도" style="margin-top:2px" /></div>
-              <button class="btn btn-outline btn-sm" onclick="addRequiredFigure()">추가</button>
-            </div>
-            <div id="requiredFiguresList"></div>
+          <div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">
+            <div><label style="font-size:11px;color:var(--color-text-tertiary)">번호</label>
+              <input type="number" class="input-field" id="inpRequiredFigNum" min="1" max="30" placeholder="1" style="width:60px;margin-top:2px" /></div>
+            <div style="flex:1"><label style="font-size:11px;color:var(--color-text-tertiary)">설명</label>
+              <input type="text" class="input-field" id="inpRequiredFigDesc" placeholder="도면 설명" style="margin-top:2px" /></div>
+            <button class="btn btn-outline btn-sm" onclick="addRequiredFigure()">추가</button>
           </div>
+          <div id="requiredFiguresList"></div>
         </div>
 
         <!-- Step 7 장치 도면 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">🖼️</span> Step 7: 장치 도면</div></div>
-          <div style="padding:12px 18px">
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-              <label style="font-size:13px">총 도면 수:</label>
-              <input type="number" class="input-field" id="optDeviceFigures" min="1" max="10" value="4" style="width:80px" />
-            </div>
-            <button class="btn btn-primary btn-full" id="btnStep07" onclick="runDiagramStep('step_07')"><span class="tossface">🤖</span> 장치 도면 설계</button>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+            <label style="font-size:13px">총 도면 수:</label>
+            <input type="number" class="input-field" id="optDeviceFigures" min="1" max="10" value="4" style="width:70px" />
           </div>
+          <button class="btn btn-primary btn-full" id="btnStep07" onclick="runDiagramStep('step_07')"><span class="tossface">🤖</span> 장치 도면 설계</button>
         </div>
 
         <!-- Step 8 상세설명 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">📝</span> Step 8: 상세설명</div></div>
-          <div class="selection-cards" id="detailLevelCards" style="padding:12px 18px">
-            <div class="selection-card" onclick="selectDetailLevel(this,'compact')"><div class="selection-card-category">💨</div><div class="selection-card-title">간략</div></div>
-            <div class="selection-card selected" onclick="selectDetailLevel(this,'standard')"><div class="selection-card-category">📝</div><div class="selection-card-title">표준</div></div>
-            <div class="selection-card" onclick="selectDetailLevel(this,'detailed')"><div class="selection-card-category">📖</div><div class="selection-card-title">상세</div></div>
+          <div class="selection-cards" id="detailLevelCards" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px">
+            <div class="selection-card" onclick="selectDetailLevel(this,'compact')" style="padding:10px"><div class="selection-card-category">💨</div><div class="selection-card-title" style="font-size:12px">간략</div></div>
+            <div class="selection-card selected" onclick="selectDetailLevel(this,'standard')" style="padding:10px"><div class="selection-card-category">📝</div><div class="selection-card-title" style="font-size:12px">표준</div></div>
+            <div class="selection-card" onclick="selectDetailLevel(this,'detailed')" style="padding:10px"><div class="selection-card-category">📖</div><div class="selection-card-title" style="font-size:12px">상세</div></div>
           </div>
-          <div style="padding:0 18px 18px">
-            <div id="progressStep08" style="margin:8px 0"></div>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-primary" id="btnStep08" onclick="runLongStep('step_08')" style="flex:1"><span class="tossface">🤖</span> 생성</button>
-              <button class="btn btn-outline" id="btnInsertBoilerplate" onclick="insertBoilerplate()"><span class="tossface">📎</span> 정형문</button>
-            </div>
-          </div>
+          <div id="progressStep08" style="margin:8px 0"></div>
+          <button class="btn btn-primary btn-full" id="btnStep08" onclick="runLongStep('step_08')"><span class="tossface">🤖</span> 상세설명 생성</button>
         </div>
 
         <!-- Step 9 수학식 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">🧮</span> Step 9: 수학식</div></div>
-          <div style="padding:12px 18px">
-            <button class="btn btn-primary btn-full" id="btnStep09" onclick="runMathInsertion()"><span class="tossface">🤖</span> 수학식 삽입</button>
-          </div>
+          <button class="btn btn-primary btn-full" id="btnStep09" onclick="runMathInsertion()"><span class="tossface">🤖</span> 수학식 삽입</button>
         </div>
 
         <!-- Step 11 방법 도면 -->
         <div class="card" id="methodDiagramCard">
           <div class="card-header"><div class="card-title"><span class="tossface">🖼️</span> Step 11: 방법 도면</div></div>
-          <div style="padding:12px 18px">
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-              <label style="font-size:13px">흐름도 수:</label>
-              <input type="number" class="input-field" id="optMethodFigures" min="1" max="10" value="2" style="width:80px" />
-            </div>
-            <button class="btn btn-primary btn-full" id="btnStep11" onclick="runDiagramStep('step_11')"><span class="tossface">🤖</span> 방법 도면 설계</button>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+            <label style="font-size:13px">흐름도 수:</label>
+            <input type="number" class="input-field" id="optMethodFigures" min="1" max="10" value="2" style="width:70px" />
           </div>
+          <button class="btn btn-primary btn-full" id="btnStep11" onclick="runDiagramStep('step_11')"><span class="tossface">🤖</span> 방법 도면 설계</button>
         </div>
 
         <!-- Step 12 방법 상세설명 -->
         <div class="card" id="methodDescCard">
           <div class="card-header"><div class="card-title"><span class="tossface">📝</span> Step 12: 방법 상세설명</div></div>
-          <div style="padding:12px 18px">
-            <div id="progressStep12" style="margin:8px 0"></div>
-            <button class="btn btn-primary btn-full" id="btnStep12" onclick="runLongStep('step_12')"><span class="tossface">🤖</span> 방법 상세설명 생성</button>
-          </div>
+          <div id="progressStep12" style="margin:8px 0"></div>
+          <button class="btn btn-primary btn-full" id="btnStep12" onclick="runLongStep('step_12')"><span class="tossface">🤖</span> 방법 상세설명</button>
         </div>
       </div>
 
-      <!-- 오른쪽: 결과 출력 -->
+      <!-- 오른쪽: 결과 -->
       <div class="page-right">
-        <div class="card result-card">
+        <div class="result-card" id="resultCard07">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 7 결과: 장치 도면</div></div>
           <div id="resultStep07" class="result-area"></div>
-          <div id="diagramsStep07" style="padding:0 18px 18px"></div>
-          <div style="padding:0 18px 18px">
-            <button class="btn btn-outline btn-full" id="btnPptx07" onclick="downloadPptxAll()" style="display:none"><span class="tossface">📊</span> PPTX 다운로드</button>
-          </div>
+          <div id="diagramsStep07" style="padding:0 16px 16px"></div>
+          <div style="padding:0 16px 16px"><button class="btn btn-outline btn-full" id="btnPptx07" onclick="downloadPptxAll()" style="display:none"><span class="tossface">📊</span> PPTX 다운로드</button></div>
         </div>
-        <div class="card result-card">
+        <div class="result-card" id="resultCard08">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 8 결과: 상세설명</div></div>
           <div id="resultStep08" class="result-area"></div>
+          <div style="padding:0 16px 16px"><button class="btn btn-outline" id="btnInsertBoilerplate" onclick="insertBoilerplate()"><span class="tossface">📎</span> 정형문 삽입</button></div>
         </div>
-        <div class="card result-card">
+        <div class="result-card" id="resultCard09">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 9 결과: 수학식</div></div>
           <div id="resultStep09" class="result-area"></div>
         </div>
-        <div class="card result-card">
+        <div class="result-card" id="resultCard11">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 11 결과: 방법 도면</div></div>
           <div id="resultStep11" class="result-area"></div>
-          <div id="diagramsStep11" style="padding:0 18px 18px"></div>
+          <div id="diagramsStep11" style="padding:0 16px 16px"></div>
         </div>
-        <div class="card result-card">
+        <div class="result-card" id="resultCard12">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 12 결과: 방법 상세설명</div></div>
           <div id="resultStep12" class="result-area"></div>
         </div>
@@ -615,34 +510,30 @@
 
     <!-- ══ TAB 3: 검토 ══ -->
     <div id="page3" class="page" role="tabpanel">
-      <!-- 왼쪽: 설정/버튼 -->
+      <!-- 왼쪽: 설정 -->
       <div class="page-left">
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">🔍</span> Step 13: AI 검토</div></div>
-          <div style="padding:12px 18px">
-            <p style="font-size:12px;color:var(--pt-gray-500);margin-bottom:12px">청구범위 뒷받침, 기술적 비약, 수학식 정합성, 반복실시 가능성을 검토합니다.</p>
-            <div id="progressStep13" style="margin:8px 0"></div>
-            <button class="btn btn-primary btn-full" id="btnStep13" onclick="runStep('step_13')"><span class="tossface">🤖</span> AI 검토 실행</button>
-          </div>
+          <p style="font-size:12px;color:var(--pt-gray-500);margin-bottom:12px">청구범위 뒷받침, 기술적 비약, 수학식 정합성 검토</p>
+          <div id="progressStep13" style="margin:8px 0"></div>
+          <button class="btn btn-primary btn-full" id="btnStep13" onclick="runStep('step_13')"><span class="tossface">🤖</span> AI 검토 실행</button>
         </div>
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">🔧</span> 검토 반영</div></div>
-          <div style="padding:12px 18px">
-            <p style="font-size:12px;color:var(--pt-gray-500);margin-bottom:8px">Step 8 보완 → Step 9 수학식 재삽입</p>
-            <div id="progressApplyReview" style="margin:8px 0"></div>
-            <button class="btn btn-primary btn-full" id="btnApplyReview" onclick="applyReview()" style="display:none"><span class="tossface">🔧</span> 검토 반영</button>
-          </div>
+          <p style="font-size:12px;color:var(--pt-gray-500);margin-bottom:12px">Step 8 보완 → Step 9 수학식 재삽입</p>
+          <div id="progressApplyReview" style="margin:8px 0"></div>
+          <button class="btn btn-primary btn-full" id="btnApplyReview" onclick="applyReview()" style="display:none"><span class="tossface">🔧</span> 검토 반영</button>
         </div>
       </div>
       <!-- 오른쪽: 결과 -->
       <div class="page-right">
-        <div class="card result-card">
+        <div class="result-card" id="resultCard13">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 13 결과: AI 검토</div></div>
           <div id="resultStep13" class="result-area"></div>
         </div>
-        <div class="card result-card" id="reviewApplyResult" style="display:none">
+        <div class="result-card" id="resultCardReview">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> 검토 반영 결과</div></div>
-          <div style="padding:12px 18px">
+          <div id="reviewApplyResult" class="result-area" style="display:none">
             <div style="display:flex;gap:6px;margin-bottom:8px">
               <button id="btnDiffBefore" class="btn btn-outline btn-sm" onclick="showReviewDiff('before')">반영 전</button>
               <button id="btnDiffAfter" class="btn btn-primary btn-sm" onclick="showReviewDiff('after')">반영 후</button>
@@ -655,39 +546,37 @@
 
     <!-- ══ TAB 4: 산출물 ══ -->
     <div id="page4" class="page" role="tabpanel">
-      <!-- 왼쪽: 통계/버튼 -->
+      <!-- 왼쪽: 설정 -->
       <div class="page-left">
-        <div class="stat-row" style="flex-direction:column;gap:8px">
+        <div class="stat-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
           <div class="stat-card stat-card-steps"><div class="stat-card-value" id="statCompleted">0/19</div><div class="stat-card-label">완료</div></div>
-          <div class="stat-card stat-card-api"><div class="stat-card-value" id="statApiCalls">0</div><div class="stat-card-label">API 호출</div></div>
+          <div class="stat-card stat-card-api"><div class="stat-card-value" id="statApiCalls">0</div><div class="stat-card-label">API</div></div>
           <div class="stat-card stat-card-cost"><div class="stat-card-value" id="statCost">$0.00</div><div class="stat-card-label">비용</div></div>
         </div>
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">🏁</span> Step 16~19: 마무리</div></div>
-          <div style="padding:12px 18px">
-            <p style="font-size:12px;color:var(--pt-gray-500);margin-bottom:8px">효과 · 해결수단 · 부호설명 · 요약서</p>
-            <div id="progressBatchFinish" style="margin:8px 0"></div>
-            <button class="btn btn-primary btn-full" id="btnBatchFinish" onclick="runBatchFinish()"><span class="tossface">🏁</span> 마무리 일괄 생성</button>
-          </div>
+          <p style="font-size:12px;color:var(--pt-gray-500);padding:0 0 12px">효과 · 해결수단 · 부호설명 · 요약서</p>
+          <div id="progressBatchFinish" style="margin:8px 0"></div>
+          <button class="btn btn-primary btn-full" id="btnBatchFinish" onclick="runBatchFinish()"><span class="tossface">🏁</span> 마무리 일괄 생성</button>
         </div>
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">📥</span> 다운로드</div></div>
-          <div style="display:flex;flex-direction:column;gap:8px;padding:12px 18px">
-            <button class="btn btn-primary btn-full" onclick="downloadAsWord()"><span class="tossface">📄</span> Word (.doc)</button>
-            <button class="btn btn-outline btn-full" onclick="downloadAsTxt()"><span class="tossface">📝</span> TXT</button>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-primary btn-full" onclick="downloadAsWord()"><span class="tossface">📄</span> Word (.doc) 다운로드</button>
+            <button class="btn btn-outline btn-full" onclick="downloadAsTxt()"><span class="tossface">📝</span> TXT 다운로드</button>
             <button class="btn btn-outline btn-full" onclick="copyToClipboard()"><span class="tossface">📋</span> 클립보드 복사</button>
           </div>
         </div>
       </div>
-      <!-- 오른쪽: 결과/미리보기 -->
+      <!-- 오른쪽: 결과 -->
       <div class="page-right">
-        <div class="card result-card">
+        <div class="result-card" id="resultCardFinish">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 16~19 결과</div></div>
           <div id="resultsBatchFinish" class="result-area"></div>
         </div>
-        <div class="card result-card" style="min-height:400px">
-          <div class="card-header"><div class="card-title"><span class="tossface">👁️</span> 전체 미리보기</div></div>
-          <div id="previewArea" style="padding:18px;max-height:500px;overflow-y:auto;font-size:14px;line-height:1.8"></div>
+        <div class="result-card" id="resultCardPreview">
+          <div class="card-header"><div class="card-title"><span class="tossface">👁️</span> 미리보기</div></div>
+          <div id="previewArea" class="result-area" style="min-height:300px"></div>
         </div>
       </div>
     </div>
