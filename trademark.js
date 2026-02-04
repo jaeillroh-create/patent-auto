@@ -5007,7 +5007,12 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
   }
 
   // ============================================================
-  // 1. 비즈니스 분석 (상품류 + 지정상품 추천) - 개선된 알고리즘
+  // 1. 비즈니스 분석 (상품류 + 지정상품 추천) - 완전 재설계
+  // ============================================================
+  // 핵심 원칙:
+  // 1. 사용자 입력(텍스트, 파일, URL)의 맥락적 의미 파악
+  // 2. 고시명칭 DB에서만 추천 (LLM이 직접 생성 금지)
+  // 3. LLM은 "선택자" 역할만 수행
   // ============================================================
   
   TM.analyzeBusiness = async function() {
@@ -5020,171 +5025,117 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
     }
     
     try {
-      // 프로그레스 표시
       const btn = document.querySelector('[data-action="tm-analyze-business"]');
       if (btn) {
         btn.disabled = true;
         btn.innerHTML = '<span class="tossface">⏳</span> AI 분석 중...';
       }
       
-      // === 1단계: AI가 적합한 상품류 + 도메인 태그 + 핵심 키워드 분석 ===
-      const classPrompt = `상표 출원 전문 변리사로서 고객의 사업에 적합한 상품류를 분석해주세요.
+      // ================================================================
+      // 1단계: 사업 내용 맥락 분석 + 추천 상품류 도출
+      // ================================================================
+      const classPrompt = `당신은 상표 출원 전문 변리사입니다. 고객의 사업 내용을 깊이 분석하여 적합한 상품류를 추천해주세요.
 
-상표명: ${p.trademarkName || '미정'}
-사업내용: ${businessInput || '미입력'}
+【고객 정보】
+- 상표명: ${p.trademarkName || '미정'}
+- 사업 내용: ${businessInput || '미입력'}
 
-다음 정보를 JSON으로 응답하세요:
-1. businessAnalysis: 사업 분석 내용 (2-3문장, 친절한 존댓말)
-2. domainTags: 사업 분야 태그 1-3개 (예: ["IT서비스", "교육"] 또는 ["변리사", "컨설팅"])
-3. recommendedClasses: 가장 적합한 NICE 상품류 5개 (우선순위순, 문자열 배열)
-4. classReasons: 각 류별 추천 이유 (친절한 존댓말)
-5. coreKeywords: 사업의 핵심 키워드 5-10개 (지정상품 검색용)
-6. actionTypes: 사업의 행위 유형 (예: ["개발", "판매", "서비스", "컨설팅", "교육"] 중 해당하는 것)
+【분석 요청】
+고객의 사업 내용을 읽고 다음을 파악하세요:
+1. 이 사업이 실제로 무엇을 하는 사업인지 (핵심 서비스/상품)
+2. 누구에게 제공하는지 (B2B/B2C, 대상 고객)
+3. 어떤 방식으로 제공하는지 (온라인/오프라인, 플랫폼/직접 등)
 
-JSON만 응답:
-{"businessAnalysis":"고객님의 사업은...","domainTags":["IT서비스"],"recommendedClasses":["42","09","35","38","41"],"classReasons":{"42":"소프트웨어 개발 서비스를 보호합니다."},"coreKeywords":["소프트웨어","플랫폼","앱","서비스","개발"],"actionTypes":["개발","서비스"]}`;
+【응답 형식 - JSON만】
+{
+  "businessAnalysis": "고객님의 사업은 ... (2-3문장, 존댓말)",
+  "coreService": "핵심 서비스/상품을 한 문장으로",
+  "targetCustomer": "대상 고객",
+  "serviceMethod": "제공 방식",
+  "recommendedClasses": ["45", "42", "35", "41", "09"],
+  "classReasons": {
+    "45": "이 류를 추천하는 구체적 이유",
+    "42": "이 류를 추천하는 구체적 이유"
+  },
+  "searchKeywords": ["DB검색용 핵심 키워드 10-15개 - 사업의 핵심 단어들"]
+}`;
 
-      const classResponse = await App.callClaude(classPrompt, 2500);
+      if (btn) btn.innerHTML = '<span class="tossface">⏳</span> 사업 분석 중...';
       
-      // JSON 파싱
+      const classResponse = await App.callClaude(classPrompt, 2000);
       const text = classResponse.text || '';
       const startIdx = text.indexOf('{');
       const endIdx = text.lastIndexOf('}');
-      let jsonStr = (startIdx !== -1 && endIdx > startIdx) ? text.substring(startIdx, endIdx + 1) : '';
       
-      if (!jsonStr) throw new Error('AI 응답 파싱 실패');
+      if (startIdx === -1 || endIdx <= startIdx) {
+        throw new Error('AI 응답 파싱 실패');
+      }
       
-      jsonStr = jsonStr.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/,(\s*[}\]])/g, '$1').replace(/\n/g, ' ');
+      let jsonStr = text.substring(startIdx, endIdx + 1)
+        .replace(/[\x00-\x1F\x7F]/g, ' ')
+        .replace(/,(\s*[}\]])/g, '$1')
+        .replace(/\n/g, ' ');
+      
       const analysis = JSON.parse(jsonStr);
       
-      p.aiAnalysis.businessAnalysis = analysis.businessAnalysis || '';
-      p.aiAnalysis.domainTags = analysis.domainTags || [];
-      p.aiAnalysis.recommendedClasses = analysis.recommendedClasses || [];
-      p.aiAnalysis.classReasons = analysis.classReasons || {};
-      p.aiAnalysis.coreKeywords = analysis.coreKeywords || [];
-      p.aiAnalysis.actionTypes = analysis.actionTypes || [];
-      p.aiAnalysis.recommendedGoods = {};
-      p.aiAnalysis.coverageAnalysis = {};
+      // 사용자 입력에서 직접 키워드 추출 (LLM이 놓칠 수 있으므로)
+      const userKeywords = TM.extractKeywordsFromInput(businessInput);
       
-      // ★★★ 중요: 사용자 입력에서 직접 키워드 추출하여 추가 ★★★
-      // LLM이 핵심 키워드를 빼먹는 것 방지
-      const userInputKeywords = businessInput
-        .replace(/[^\w가-힣]/g, ' ')
-        .split(/\s+/)
-        .filter(w => w.length >= 2)
-        .slice(0, 10);
+      // 모든 키워드 합치기 (사용자 입력 우선)
+      const allKeywords = [...new Set([...userKeywords, ...(analysis.searchKeywords || [])])];
       
-      // 사용자 입력 키워드를 맨 앞에 추가 (중복 제거)
-      const existingKeywords = new Set(p.aiAnalysis.coreKeywords.map(k => k.toLowerCase()));
-      userInputKeywords.forEach(kw => {
-        if (!existingKeywords.has(kw.toLowerCase())) {
-          p.aiAnalysis.coreKeywords.unshift(kw); // 맨 앞에 추가
-          existingKeywords.add(kw.toLowerCase());
-        }
-      });
+      console.log('[TM] ★ 사업 분석 완료');
+      console.log('[TM] - 핵심 서비스:', analysis.coreService);
+      console.log('[TM] - 추천 류:', analysis.recommendedClasses);
+      console.log('[TM] - 검색 키워드:', allKeywords);
       
-      console.log('[TM] 최종 coreKeywords:', p.aiAnalysis.coreKeywords);
+      p.aiAnalysis = {
+        businessAnalysis: analysis.businessAnalysis || '',
+        coreService: analysis.coreService || '',
+        recommendedClasses: analysis.recommendedClasses || [],
+        classReasons: analysis.classReasons || {},
+        searchKeywords: allKeywords,
+        recommendedGoods: {}
+      };
       
-      // === 2단계: 각 류별 DB 기반 후보 생성 + 스코어링 ===
+      // ================================================================
+      // 2단계: 각 류별로 DB에서 고시명칭 후보 조회 → LLM이 선택
+      // ================================================================
       for (const classCode of p.aiAnalysis.recommendedClasses.slice(0, 5)) {
         const paddedCode = classCode.padStart(2, '0');
         
         try {
           if (btn) btn.innerHTML = `<span class="tossface">⏳</span> 제${classCode}류 분석 중...`;
           
-          // 2-1. 키워드 기반 DB 검색 (스코어링 포함)
-          const candidates = await TM.searchGoodsCandidates(
-            paddedCode, 
-            p.aiAnalysis.coreKeywords,
-            businessInput,
-            150  // 후보 최대 150개
-          );
+          // 2-1. DB에서 고시명칭 후보 조회 (키워드 기반)
+          const dbCandidates = await TM.fetchGazettedCandidates(paddedCode, allKeywords, businessInput);
           
-          if (candidates.length === 0) {
-            console.warn(`[TM] 제${classCode}류 후보 없음`);
+          console.log(`[TM] 제${classCode}류 DB 후보: ${dbCandidates.length}건`);
+          
+          if (dbCandidates.length === 0) {
+            console.warn(`[TM] 제${classCode}류 - DB에서 관련 고시명칭 없음`);
+            p.aiAnalysis.recommendedGoods[classCode] = [];
             continue;
           }
           
-          // 2-2. 점수순으로 상위 항목 선택 (관련성 우선)
-          // 유사군코드 분산보다 키워드 매칭 점수 우선
-          const sortedCandidates = candidates.sort((a, b) => (b.score || 0) - (a.score || 0));
+          // 2-2. LLM에게 "이 목록 중에서만 선택"하도록 요청
+          const selectedGoods = await TM.selectGoodsWithLLM(
+            classCode,
+            dbCandidates,
+            businessInput,
+            analysis.coreService
+          );
           
-          const selectedGoods = [];
-          const usedNames = new Set();
+          p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
           
-          // 상위 10개 선택 (점수순)
-          for (const c of sortedCandidates) {
-            if (selectedGoods.length >= 10) break;
-            if (usedNames.has(c.goods_name)) continue;
-            
-            usedNames.add(c.goods_name);
-            selectedGoods.push({
-              name: c.goods_name,
-              similarGroup: c.similar_group_code,
-              score: c.score,
-              isCore: c.score >= 2 // 높은 점수는 핵심으로 표시
-            });
+          console.log(`[TM] 제${classCode}류 최종 선택: ${selectedGoods.length}건`);
+          if (selectedGoods.length > 0) {
+            console.log(`[TM]   → ${selectedGoods.slice(0, 3).map(g => g.name).join(', ')}...`);
           }
-          
-          // 2-3. LLM에게 최종 검토 요청 (선택적)
-          if (selectedGoods.length > 5) {
-            const goodsList = selectedGoods.map(g => 
-              `${g.name}(${g.similarGroup}, 점수:${g.score?.toFixed(1) || '?'})`
-            ).join('\n');
-            
-            const reviewPrompt = `"${p.trademarkName || ''}" 상표, "${businessInput}" 사업을 위한 지정상품 후보입니다.
-
-후보 목록:
-${goodsList}
-
-위 후보 중에서:
-1. 사업에 가장 핵심적인 상품 5개를 "core" 배열에
-2. 방어적으로 추가할 상품 5개를 "defense" 배열에
-3. 제외를 권장하는 상품이 있으면 "exclude" 배열에 (이유 포함)
-
-JSON만 응답:
-{"core":["상품명1","상품명2"],"defense":["상품명3"],"exclude":[{"name":"상품명","reason":"이유"}],"note":"추가 조언"}`;
-
-            try {
-              const reviewResponse = await App.callClaude(reviewPrompt, 1000);
-              const reviewText = reviewResponse.text || '';
-              const rStart = reviewText.indexOf('{');
-              const rEnd = reviewText.lastIndexOf('}');
-              
-              if (rStart !== -1 && rEnd > rStart) {
-                const review = JSON.parse(reviewText.substring(rStart, rEnd + 1));
-                
-                // 점수 보정
-                selectedGoods.forEach(g => {
-                  if (review.core?.includes(g.name)) {
-                    g.isCore = true;
-                    g.score = (g.score || 0) + 2;
-                  }
-                  if (review.exclude?.some(e => e.name === g.name)) {
-                    g.excluded = true;
-                    g.excludeReason = review.exclude.find(e => e.name === g.name)?.reason;
-                  }
-                });
-                
-                p.aiAnalysis.coverageAnalysis[classCode] = {
-                  note: review.note,
-                  coreCount: review.core?.length || 0,
-                  defenseCount: review.defense?.length || 0
-                };
-              }
-            } catch (reviewError) {
-              console.warn(`[TM] 제${classCode}류 리뷰 실패:`, reviewError);
-            }
-          }
-          
-          // 제외된 항목 필터링 후 저장
-          p.aiAnalysis.recommendedGoods[classCode] = selectedGoods
-            .filter(g => !g.excluded)
-            .slice(0, 10)
-            .sort((a, b) => (b.score || 0) - (a.score || 0));
           
         } catch (classError) {
           console.error(`[TM] 제${classCode}류 처리 실패:`, classError);
+          p.aiAnalysis.recommendedGoods[classCode] = [];
         }
       }
       
@@ -5203,175 +5154,271 @@ JSON만 응답:
     }
   };
   
-  // === DB 기반 후보 검색 함수 ===
-  // ============================================================
-  // AI 지정상품 추천 엔진 (개선된 버전)
-  // - 유사군코드 커버리지 최적화
-  // - 고시명칭 우선, 비고시명칭은 사용자 입력 시만
-  // ============================================================
+  // ================================================================
+  // 사용자 입력에서 키워드 추출 (접미사 제거 포함)
+  // ================================================================
+  TM.extractKeywordsFromInput = function(input) {
+    if (!input) return [];
+    
+    const keywords = [];
+    const seen = new Set();
+    
+    // 1. 원문 그대로 (2글자 이상이면)
+    const trimmed = input.trim();
+    if (trimmed.length >= 2 && trimmed.length <= 20) {
+      keywords.push(trimmed);
+      seen.add(trimmed.toLowerCase());
+    }
+    
+    // 2. 단어 분리
+    const words = input
+      .replace(/[^\w가-힣]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 2);
+    
+    // 3. 접미사 제거 버전 생성
+    const suffixes = ['사업', '업', '사', '서비스', '회사', '업체', '기관', '센터', '대행', '컨설팅'];
+    
+    words.forEach(word => {
+      // 원본 추가
+      if (!seen.has(word.toLowerCase())) {
+        keywords.push(word);
+        seen.add(word.toLowerCase());
+      }
+      
+      // 접미사 제거 버전 추가
+      for (const suffix of suffixes) {
+        if (word.endsWith(suffix) && word.length > suffix.length + 1) {
+          const stem = word.slice(0, -suffix.length);
+          if (stem.length >= 2 && !seen.has(stem.toLowerCase())) {
+            keywords.push(stem);
+            seen.add(stem.toLowerCase());
+          }
+        }
+      }
+    });
+    
+    return keywords.slice(0, 20);
+  };
   
-  TM.searchGoodsCandidates = async function(classCode, keywords, businessText, limit = 200) {
+  // ================================================================
+  // DB에서 고시명칭 후보 조회
+  // ================================================================
+  TM.fetchGazettedCandidates = async function(classCode, keywords, businessText) {
     const results = [];
     const seen = new Set();
     
-    console.log(`[TM] ════════════════════════════════════════`);
-    console.log(`[TM] 후보 검색 시작: 제${classCode}류`);
-    console.log(`[TM] 키워드 (${keywords.length}개):`, keywords);
-    console.log(`[TM] 사업설명:`, businessText?.substring(0, 50) + '...');
+    console.log(`[TM] ════ DB 검색 시작: 제${classCode}류 ════`);
+    console.log(`[TM] 검색 키워드 (${keywords.length}개):`, keywords.slice(0, 10));
     
-    // === 키워드 기반 FTS 검색 (관련성 최우선) ===
-    for (const keyword of keywords.slice(0, 15)) {
+    // 1. 키워드 기반 검색
+    for (const keyword of keywords.slice(0, 20)) {
       try {
         const { data, error } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
           .eq('class_code', classCode)
           .ilike('goods_name', `%${keyword}%`)
-          .limit(80);
+          .limit(50);
         
         if (error) {
-          console.error(`[TM] DB 오류 (키워드: ${keyword}):`, error);
+          console.warn(`[TM] DB 오류 (${keyword}):`, error.message);
           continue;
         }
         
-        console.log(`[TM] 키워드 "${keyword}" → ${data?.length || 0}건`);
-        
         if (data && data.length > 0) {
-          // 첫 3개 결과 로그
-          console.log(`[TM]   샘플:`, data.slice(0, 3).map(d => d.goods_name));
+          console.log(`[TM] 키워드 "${keyword}" → ${data.length}건`);
           
           data.forEach(item => {
             if (!seen.has(item.goods_name)) {
               seen.add(item.goods_name);
-              const scoreData = TM.calculateGoodsScore(item, keyword, keywords, businessText);
               results.push({
-                goods_name: item.goods_name,
-                similar_group_code: item.similar_group_code,
-                ...scoreData
+                name: item.goods_name,
+                similarGroup: item.similar_group_code,
+                matchedKeyword: keyword
               });
             }
           });
         }
       } catch (err) {
-        console.warn(`[TM] 키워드 "${keyword}" 검색 실패:`, err);
+        console.warn(`[TM] 검색 실패 (${keyword}):`, err.message);
       }
     }
     
-    console.log(`[TM] 키워드 검색 완료: ${results.length}건`);
-    
-    // === 사업 설명에서 추가 키워드 추출하여 검색 ===
-    if (businessText && results.length < 30) {
-      const bizWords = businessText
-        .replace(/[^\w가-힣]/g, ' ')
-        .split(/\s+/)
-        .filter(w => w.length >= 2 && !keywords.some(k => k.includes(w) || w.includes(k)))
-        .slice(0, 10);
-      
-      console.log(`[TM] 사업설명 추가 키워드:`, bizWords);
-      
-      for (const word of bizWords) {
-        try {
-          const { data } = await App.sb
-            .from('gazetted_goods_cache')
-            .select('goods_name, similar_group_code')
-            .eq('class_code', classCode)
-            .ilike('goods_name', `%${word}%`)
-            .limit(30);
-          
-          if (data) {
-            console.log(`[TM] 추가 키워드 "${word}" → ${data.length}건`);
-            data.forEach(item => {
-              if (!seen.has(item.goods_name)) {
-                seen.add(item.goods_name);
-                const scoreData = TM.calculateGoodsScore(item, word, keywords, businessText);
-                scoreData.score += 0.3;
-                results.push({
-                  goods_name: item.goods_name,
-                  similar_group_code: item.similar_group_code,
-                  ...scoreData
-                });
-              }
-            });
-          }
-        } catch (err) {
-          // 무시
+    // 2. 결과가 부족하면 해당 류의 대표 상품 추가
+    if (results.length < 20) {
+      try {
+        const { data } = await App.sb
+          .from('gazetted_goods_cache')
+          .select('goods_name, similar_group_code')
+          .eq('class_code', classCode)
+          .limit(100);
+        
+        if (data) {
+          data.forEach(item => {
+            if (!seen.has(item.goods_name)) {
+              seen.add(item.goods_name);
+              results.push({
+                name: item.goods_name,
+                similarGroup: item.similar_group_code,
+                matchedKeyword: null
+              });
+            }
+          });
         }
+      } catch (err) {
+        // 무시
       }
     }
     
-    // === 점수순 정렬 (관련성 우선) ===
-    const sorted = results.sort((a, b) => b.score - a.score).slice(0, limit);
-    
-    console.log(`[TM] 최종 결과: ${sorted.length}건`);
-    if (sorted.length > 0) {
-      console.log(`[TM] 상위 5개:`, sorted.slice(0, 5).map(s => `${s.goods_name}(${s.score.toFixed(2)})`));
-    }
+    console.log(`[TM] DB 검색 완료: 총 ${results.length}건`);
     console.log(`[TM] ════════════════════════════════════════`);
     
-    return sorted;
+    return results;
   };
-  // 지정상품 스코어 계산 (분리된 함수)
-  TM.calculateGoodsScore = function(item, matchedKeyword, allKeywords, businessText) {
-    let score = 0;
-    let fitScore = 0;    // 사업 적합도
-    let matchScore = 0;  // 키워드 매칭
-    let riskPenalty = 0; // 리스크 페널티
+  
+  // ================================================================
+  // LLM에게 고시명칭 목록에서 선택하도록 요청
+  // ================================================================
+  TM.selectGoodsWithLLM = async function(classCode, candidates, businessText, coreService) {
+    // 후보 목록 준비 (최대 100개)
+    const candidateList = candidates.slice(0, 100).map((c, i) => 
+      `${i + 1}. ${c.name} (${c.similarGroup || '?'})`
+    ).join('\n');
     
-    const name = (item.goods_name || '').toLowerCase();
-    
-    // 1. 키워드 매칭 점수 (Match)
-    if (matchedKeyword) {
-      const kw = matchedKeyword.toLowerCase();
-      if (name === kw) matchScore += 3;           // 완전 일치
-      else if (name.startsWith(kw)) matchScore += 2.5; // 시작 일치
-      else if (name.includes(kw)) matchScore += 1.5;   // 포함
-    }
-    
-    // 다중 키워드 매칭 보너스
-    let multiMatchCount = 0;
-    allKeywords.forEach(k => {
-      if (name.includes(k.toLowerCase())) multiMatchCount++;
-    });
-    matchScore += multiMatchCount * 0.3;
-    
-    // 2. 사업 설명 적합도 (Fit)
-    if (businessText) {
-      const bizLower = businessText.toLowerCase();
-      const nameWords = name.split(/[,\s/]+/).filter(w => w.length > 1);
+    const selectPrompt = `당신은 상표 출원 전문 변리사입니다.
+
+【고객의 사업】
+${businessText}
+
+【핵심 서비스】
+${coreService}
+
+【제${classCode}류 고시명칭 목록】
+아래는 특허청에 등록된 공식 고시명칭입니다. 이 목록에서만 선택해야 합니다.
+
+${candidateList}
+
+【선택 기준】
+1. 고객의 사업 내용과 직접적으로 관련된 상품/서비스 우선
+2. 사업의 핵심을 보호할 수 있는 상품/서비스 선택
+3. 향후 확장 가능성을 고려한 방어적 선택도 포함
+4. ★중요★ 반드시 위 목록에 있는 고시명칭만 선택 (새로 만들지 마세요!)
+
+【응답 형식 - JSON만】
+{
+  "selected": [
+    {"name": "정확한 고시명칭 (목록에서 복사)", "reason": "선택 이유", "priority": "core 또는 defense"},
+    ...
+  ]
+}
+
+최대 10개까지 선택하세요. 목록에 없는 상품명은 절대 작성하지 마세요.`;
+
+    try {
+      const response = await App.callClaude(selectPrompt, 2000);
+      const text = response.text || '';
+      const startIdx = text.indexOf('{');
+      const endIdx = text.lastIndexOf('}');
       
-      nameWords.forEach(word => {
-        if (bizLower.includes(word)) fitScore += 0.5;
-      });
+      if (startIdx === -1 || endIdx <= startIdx) {
+        console.warn('[TM] LLM 선택 응답 파싱 실패, 점수 기반 선택으로 대체');
+        return TM.fallbackScoreBasedSelection(candidates, businessText);
+      }
       
-      // 핵심 행위 키워드 매칭
-      const actionKeywords = ['서비스', '제공', '판매', '개발', '컨설팅', '교육', '중개', '대행', '제조', '가공'];
-      actionKeywords.forEach(action => {
-        if (name.includes(action) && bizLower.includes(action)) {
-          fitScore += 0.3;
+      const jsonStr = text.substring(startIdx, endIdx + 1)
+        .replace(/[\x00-\x1F\x7F]/g, ' ')
+        .replace(/,(\s*[}\]])/g, '$1');
+      
+      const result = JSON.parse(jsonStr);
+      const selected = result.selected || [];
+      
+      // 고시명칭 목록에 있는 것만 필터링 (LLM이 잘못 생성한 것 제외)
+      const candidateNames = new Set(candidates.map(c => c.name));
+      const validSelected = [];
+      
+      for (const item of selected) {
+        // 정확히 일치하는 것 찾기
+        const exactMatch = candidates.find(c => c.name === item.name);
+        if (exactMatch) {
+          validSelected.push({
+            name: exactMatch.name,
+            similarGroup: exactMatch.similarGroup,
+            reason: item.reason,
+            isCore: item.priority === 'core'
+          });
+        } else {
+          // 부분 일치 시도
+          const partialMatch = candidates.find(c => 
+            c.name.includes(item.name) || item.name.includes(c.name)
+          );
+          if (partialMatch) {
+            validSelected.push({
+              name: partialMatch.name,
+              similarGroup: partialMatch.similarGroup,
+              reason: item.reason,
+              isCore: item.priority === 'core'
+            });
+          } else {
+            console.warn(`[TM] LLM이 목록에 없는 상품 선택 시도 (무시됨): "${item.name}"`);
+          }
         }
-      });
+      }
+      
+      // LLM 선택이 부족하면 점수 기반으로 보충
+      if (validSelected.length < 5) {
+        const additional = TM.fallbackScoreBasedSelection(
+          candidates.filter(c => !validSelected.some(v => v.name === c.name)),
+          businessText
+        ).slice(0, 5 - validSelected.length);
+        
+        validSelected.push(...additional);
+      }
+      
+      return validSelected.slice(0, 10);
+      
+    } catch (err) {
+      console.error('[TM] LLM 선택 실패:', err);
+      return TM.fallbackScoreBasedSelection(candidates, businessText);
     }
+  };
+  
+  // ================================================================
+  // 폴백: 점수 기반 선택 (LLM 실패 시)
+  // ================================================================
+  TM.fallbackScoreBasedSelection = function(candidates, businessText) {
+    const bizLower = (businessText || '').toLowerCase();
     
-    // 3. 리스크 페널티 (과포괄/불명확 용어)
-    const riskyTerms = ['기타', '그밖의', '등', '일반', '종합'];
-    riskyTerms.forEach(term => {
-      if (name.includes(term)) riskPenalty += 0.3;
+    const scored = candidates.map(c => {
+      let score = 0;
+      const name = c.name.toLowerCase();
+      
+      // 키워드 매칭 점수
+      if (c.matchedKeyword) {
+        const kw = c.matchedKeyword.toLowerCase();
+        if (name === kw || name === kw + '업') score += 5;
+        else if (name.startsWith(kw)) score += 3;
+        else if (name.includes(kw)) score += 2;
+      }
+      
+      // 사업 설명 포함 여부
+      const nameWords = name.split(/[\s,/]+/).filter(w => w.length > 1);
+      nameWords.forEach(word => {
+        if (bizLower.includes(word)) score += 1;
+      });
+      
+      return { ...c, score };
     });
     
-    // 너무 짧거나 긴 명칭 페널티
-    if (name.length < 3) riskPenalty += 0.5;
-    if (name.length > 30) riskPenalty += 0.2;
-    
-    // 최종 점수 = 0.40*Fit + 0.35*Match - 0.10*Risk + 기본점수
-    score = (0.40 * fitScore) + (0.35 * matchScore) - (0.10 * riskPenalty) + 0.5;
-    
-    return {
-      score: Math.max(0.1, score),
-      fitScore,
-      matchScore,
-      riskPenalty,
-      matchedKeyword
-    };
+    return scored
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10)
+      .map(c => ({
+        name: c.name,
+        similarGroup: c.similarGroup,
+        reason: c.matchedKeyword ? `"${c.matchedKeyword}" 키워드 매칭` : '관련 상품',
+        isCore: c.score >= 3
+      }));
   };
   
   // 유사군코드 커버리지 최적화 선택
