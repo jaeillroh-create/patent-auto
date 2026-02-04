@@ -6064,10 +6064,10 @@ ${criticalResults.slice(0, 5).map(r =>
       designatedGoods: ''
     };
     
-    // 공백/줄바꿈 정규화 (단, 한글 사이 공백은 제거)
+    // 공백/줄바꿈 정규화
     let normalizedText = text.replace(/\s+/g, ' ');
     
-    // "출 원 번 호" -> "출원번호" 형태로 정규화
+    // OCR 오류 보정 및 띄어쓰기 정규화
     normalizedText = normalizedText
       .replace(/출\s*원\s*일\s*자/g, '출원일자')
       .replace(/출\s*원\s*번\s*호/g, '출원번호')
@@ -6077,10 +6077,10 @@ ${criticalResults.slice(0, 5).map(r =>
     
     console.log('[TM] 정규화된 텍스트:', normalizedText.substring(0, 1000));
     
-    // 출원번호 패턴: 40-2025-0097799 등
+    // 출원번호 패턴: 40-2025-0097799
     const appNumPatterns = [
-      /출원번호[^\d]*(40-\d{4}-\d{6,7})/i,
-      /출원번호[^\d]*(40\d{10,11})/i,
+      /출원번호[^0-9]*(40-\d{4}-\d{6,7})/i,
+      /출원번호[^0-9]*(40\d{10,11})/i,
       /(40-\d{4}-\d{6,7})/,
       /(40\d{10,11})/
     ];
@@ -6088,51 +6088,47 @@ ${criticalResults.slice(0, 5).map(r =>
       const match = normalizedText.match(pattern);
       if (match) {
         let num = match[1].replace(/\s/g, '');
-        // 하이픈 없으면 추가
         if (!num.includes('-') && num.length >= 13) {
           num = num.substring(0, 2) + '-' + num.substring(2, 6) + '-' + num.substring(6);
         }
         result.applicationNumber = num;
-        console.log('[TM] 출원번호 매칭:', match[0], '->', num);
+        console.log('[TM] 출원번호 매칭:', num);
         break;
       }
     }
     
-    // 출원일 패턴
+    // 출원일자 패턴: 2025.06.09
     const datePatterns = [
-      /출원일자?[^\d]*(\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2})/i,
-      /출원일[^\d]*(\d{4}년\s*\d{1,2}월\s*\d{1,2}일?)/i,
-      /일반상표[^\d]*(\d{4}[-]\d{2}[-]\d{2})/i,
+      /출원일자[^0-9]*(\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2})/i,
+      /출원일[^0-9]*(\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2})/i,
       /(\d{4}[.]\d{2}[.]\d{2})/
     ];
     for (const pattern of datePatterns) {
       const match = normalizedText.match(pattern);
       if (match) {
         let date = match[1].trim();
-        date = date.replace(/년\s*/g, '.').replace(/월\s*/g, '.').replace(/일/g, '');
-        date = date.replace(/[-\/]/g, '.');
-        date = date.replace(/\.+/g, '.').replace(/\s/g, '');
+        date = date.replace(/[-\/]/g, '.').replace(/\s/g, '');
         result.applicationDate = date;
-        console.log('[TM] 출원일 매칭:', match[0], '->', date);
+        console.log('[TM] 출원일자 매칭:', date);
         break;
       }
     }
     
-    // 출원인 패턴
+    // 출원인 명칭 패턴: 삼인시스템 주식회사
     const applicantPatterns = [
-      /출원인명칭[^가-힣]*([가-힣]+(?:\s*주식회사|주식회사\s*[가-힣]*|[가-힣]*))/i,
-      /출원인[^가-힣]*(?:명칭)?[^가-힣]*([가-힣]+(?:\s*주식회사|주식회사)?[가-힣]*)/i,
+      /출원인\s*명칭[^가-힣]*([가-힣]+(?:\s*주식회사|주식회사\s*[가-힣]*)?)/i,
+      /출원인명칭[^가-힣]*([가-힣]+(?:\s*주식회사|주식회사\s*[가-힣]*)?)/i,
+      /출원인[^가-힣]*([가-힣]+\s*주식회사|주식회사\s*[가-힣]+)/i,
       /([가-힣]+\s*주식회사|주식회사\s*[가-힣]+)/i
     ];
     for (const pattern of applicantPatterns) {
       const match = normalizedText.match(pattern);
       if (match) {
         let name = match[1].trim().replace(/\s+/g, ' ');
-        // 괄호 이전까지만
         name = name.split(/[(\[]/)[0].trim();
         if (!/^(대리인|노재일|특허|상표|출원)/.test(name) && name.length >= 2 && name.length <= 30) {
           result.applicantName = name;
-          console.log('[TM] 출원인 매칭:', name);
+          console.log('[TM] 출원인 명칭 매칭:', name);
           break;
         }
       }
@@ -6141,8 +6137,7 @@ ${criticalResults.slice(0, 5).map(r =>
     // 상표명 패턴
     const tmPatterns = [
       /상표견본[^A-Za-z가-힣]*([A-Za-z][A-Za-z0-9]{0,20})/i,
-      /상표견본[^A-Za-z가-힣]*([가-힣]{2,10})/i,
-      /상표명[^A-Za-z가-힣]*([A-Za-z가-힣][A-Za-z가-힣0-9]{0,15})/i
+      /상표견본[^A-Za-z가-힣]*([가-힣]{2,10})/i
     ];
     for (const pattern of tmPatterns) {
       const match = normalizedText.match(pattern);
@@ -6165,15 +6160,14 @@ ${criticalResults.slice(0, 5).map(r =>
       const match = normalizedText.match(pattern);
       if (match) {
         result.classCode = match[1].padStart(2, '0');
-        console.log('[TM] 상품류 매칭:', match[0], '->', result.classCode);
+        console.log('[TM] 상품류 매칭:', result.classCode);
         break;
       }
     }
     
     // 지정상품 패턴
     const goodsPatterns = [
-      /지정\s*상품[】\]\s:]*([^【\[]{10,500})/i,
-      /【\s*지정\s*상품\s*】\s*([^【\[]{10,500})/i
+      /지정\s*상품[】\]\s:]*([^【\[]{10,500})/i
     ];
     for (const pattern of goodsPatterns) {
       const match = normalizedText.match(pattern);
