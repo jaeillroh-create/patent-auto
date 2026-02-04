@@ -243,18 +243,118 @@
   font-size: 14px;
 }
 
-/* Outline 버튼 */
-.btn-outline {
-  background: #fff;
-  border: 1px solid var(--pt-gray-300);
-  color: var(--pt-gray-700);
-  font-weight: 500;
+/* ============================================================
+   ★★★ Outline 버튼 시인성 대폭 개선 ★★★
+   ============================================================ */
+.btn-outline,
+.btn.btn-outline {
+  background: #f8fafc !important;
+  border: 2px solid #d1d5db !important;
+  color: #374151 !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+  border-radius: 8px !important;
 }
 
-.btn-outline:hover:not(:disabled) {
-  background: var(--pt-gray-50);
-  border-color: var(--pt-primary);
-  color: var(--pt-primary);
+.btn-outline:hover:not(:disabled),
+.btn.btn-outline:hover:not(:disabled) {
+  background: #e8f3ff !important;
+  border-color: #3182f6 !important;
+  color: #3182f6 !important;
+  box-shadow: 0 2px 6px rgba(49, 130, 246, 0.25) !important;
+}
+
+/* 작은 버튼 - 파일첨부, 참고문서 등록 등 */
+.btn-sm,
+.btn.btn-sm {
+  padding: 8px 14px !important;
+  font-size: 12px !important;
+  border-radius: 8px !important;
+}
+
+.btn-outline.btn-sm,
+.btn.btn-outline.btn-sm {
+  border: 2px solid #d1d5db !important;
+  background: #f3f4f6 !important;
+}
+
+.btn-outline.btn-sm:hover:not(:disabled) {
+  background: #e8f3ff !important;
+  border-color: #3182f6 !important;
+  color: #3182f6 !important;
+}
+
+/* ============================================================
+   ★★★ 선택 카드 스타일 (~서버, ~방법 등) ★★★
+   ============================================================ */
+.selection-cards {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 8px !important;
+}
+
+.selection-card {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 14px 10px !important;
+  border: 2px solid #d1d5db !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  text-align: center !important;
+  min-height: 50px !important;
+}
+
+.selection-card:hover {
+  border-color: #3182f6 !important;
+  background: #e8f3ff !important;
+  box-shadow: 0 2px 8px rgba(49, 130, 246, 0.2) !important;
+}
+
+.selection-card.selected {
+  border-color: #3182f6 !important;
+  background: #e8f3ff !important;
+  box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.25) !important;
+}
+
+.selection-card-category {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.selection-card-title {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #374151 !important;
+}
+
+.selection-card.selected .selection-card-title {
+  color: #3182f6 !important;
+}
+
+.selection-card-subtitle {
+  font-size: 10px;
+  color: var(--pt-gray-500);
+  margin-top: 2px;
+}
+
+/* ============================================================
+   ★★★ Ghost 버튼 (편집/삭제 등) ★★★
+   ============================================================ */
+.btn-ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--pt-gray-500);
+  padding: 6px 10px;
+}
+
+.btn-ghost:hover {
+  background: var(--pt-gray-100);
+  border-color: var(--pt-gray-200);
+  color: var(--pt-gray-700);
 }
 
 /* 성공 버튼 */
@@ -272,11 +372,6 @@
 
 .btn-primary.btn-full:not(:disabled) .tossface {
   font-size: 16px;
-}
-}
-
-.result-card.has-result .card-title {
-  color: var(--pt-success);
 }
 
 /* 반응형: 태블릿 이하 세로 배치 */
@@ -960,4 +1055,155 @@ textarea.input-field,
   .stat-card {
     min-width: 100%;
   }
+}
+
+/* ============================================================
+   21. Input / Select / Checkbox 시인성 개선
+   ============================================================ */
+
+/* Input 필드 */
+.input-field {
+  border: 2px solid var(--pt-gray-200);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  background: #fff;
+  transition: all 0.15s ease;
+}
+
+.input-field:hover {
+  border-color: var(--pt-gray-300);
+}
+
+.input-field:focus {
+  border-color: var(--pt-primary);
+  box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.15);
+  outline: none;
+}
+
+/* Select 드롭다운 */
+select.input-field {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7684' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+/* Number Input */
+input[type="number"].input-field {
+  text-align: center;
+}
+
+/* Textarea */
+textarea.input-field,
+.textarea-field {
+  border: 2px solid var(--pt-gray-200);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 100px;
+}
+
+textarea.input-field:focus,
+.textarea-field:focus {
+  border-color: var(--pt-primary);
+  box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.15);
+  outline: none;
+}
+
+/* Checkbox / Radio 레이블 */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--pt-gray-700);
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.checkbox-label:hover {
+  background: var(--pt-gray-50);
+}
+
+.checkbox-label input[type="checkbox"],
+.checkbox-label input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--pt-primary);
+  cursor: pointer;
+}
+
+/* Toggle Switch 개선 */
+.toggle-switch {
+  position: relative;
+  width: 48px;
+  height: 26px;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--pt-gray-300);
+  border-radius: 13px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--pt-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(22px);
+}
+
+/* ============================================================
+   22. 라벨 스타일
+   ============================================================ */
+label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pt-gray-600);
+}
+
+/* ============================================================
+   23. 결과 텍스트 영역
+   ============================================================ */
+.result-textarea {
+  width: 100%;
+  min-height: 150px;
+  border: 2px solid var(--pt-gray-200);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.7;
+  font-family: inherit;
+  resize: vertical;
+  background: var(--pt-gray-50);
+}
+
+.result-textarea:focus {
+  border-color: var(--pt-primary);
+  background: #fff;
+  outline: none;
 }

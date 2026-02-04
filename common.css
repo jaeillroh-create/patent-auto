@@ -113,8 +113,8 @@ a:hover { text-decoration: underline; }
 .btn-primary:active { background: var(--color-primary-pressed); transform: scale(0.98); }
 .btn-secondary { background: var(--color-bg-secondary); color: var(--color-text-primary); }
 .btn-secondary:hover { background: #E8EBED; }
-.btn-outline { background: transparent; color: var(--color-text-primary); border: 1px solid var(--color-border); }
-.btn-outline:hover { background: var(--color-bg-secondary); }
+.btn-outline { background: #f8fafc; color: var(--color-text-primary); border: 2px solid #d1d5db; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.btn-outline:hover { background: #e8f3ff; border-color: var(--color-primary); color: var(--color-primary); }
 .btn-ghost { background: transparent; color: var(--color-text-secondary); }
 .btn-ghost:hover { background: var(--color-bg-secondary); }
 .btn-sm { padding: 8px 14px; font-size: var(--font-size-small); }

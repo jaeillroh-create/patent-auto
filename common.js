@@ -17,7 +17,7 @@ const API_PROVIDERS = {
     models:{
       sonnet:{id:'claude-sonnet-4-5-20250929',label:'Sonnet 4.5',inputCost:3,outputCost:15},
       opus:{id:'claude-opus-4-5-20251101',label:'Opus 4.5',inputCost:15,outputCost:75}
-    }, defaultModel:'sonnet', cheapModel:'sonnet'
+    }, defaultModel:'opus', cheapModel:'sonnet'
   },
   gpt: {
     label:'GPT (OpenAI)', short:'GPT',
@@ -38,7 +38,7 @@ const API_PROVIDERS = {
     }, defaultModel:'gemini_flash', cheapModel:'gemini_flash'
   }
 };
-let selectedProvider='claude', selectedModel='sonnet';
+let selectedProvider='claude', selectedModel='opus';
 let apiKeys={claude:'',gpt:'',gemini:''};
 let profileTempProvider='claude';
 let API_KEY='',currentUser=null,currentProfile=null,currentProjectId=null;

@@ -87,31 +87,59 @@ async function loadDashboardProjects(){
   const el=document.getElementById('dashProjectList'),cnt=document.getElementById('dashProjectCount');
   const provEl=document.getElementById('dashProvisionalList'),provCnt=document.getElementById('dashProvisionalCount');
   if(!data?.length){
-    el.innerHTML='<div style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:40px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></div>';cnt.textContent='0건';
-    if(provEl)provEl.innerHTML='<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)"><p style="font-size:13px">가출원 내역 없음</p></div>';if(provCnt)provCnt.textContent='0건';
+    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--color-text-tertiary)"><div style="font-size:32px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></td></tr>';
+    cnt.textContent='총 0건';
+    if(provEl)provEl.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--color-text-tertiary);font-size:13px">가출원 내역이 없어요.</td></tr>';
+    if(provCnt)provCnt.textContent='';
     return;
   }
   // Separate regular and provisional
   const regular=data.filter(p=>!p.current_state_json?.type||p.current_state_json.type!=='provisional');
   const provisional=data.filter(p=>p.current_state_json?.type==='provisional');
-  cnt.textContent=`${regular.length}건`;
-  if(!regular.length){el.innerHTML='<div style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:40px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></div>';}
-  else{
+  cnt.textContent=`총 ${regular.length}건`;
+  
+  if(!regular.length){
+    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--color-text-tertiary)"><div style="font-size:32px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></td></tr>';
+  } else {
     el.innerHTML=regular.map(p=>{
-      const s=p.current_state_json||{},o=s.outputs||{},c=Object.keys(o).filter(k=>o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length,pct=Math.round(c/19*100);
-      const caseNum=p.project_number||'';
-      return `<div class="card" style="margin-bottom:12px;cursor:pointer;transition:box-shadow 0.15s" onmouseover="this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'" onclick="openProject('${p.id}')"><div style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="flex:1;min-width:0">${caseNum?`<div style="font-size:11px;font-weight:600;color:var(--color-primary);margin-bottom:2px">${App.escapeHtml(caseNum)}</div>`:''}<div style="font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(p.title)}</div><div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">생성 ${new Date(p.created_at).toLocaleDateString('ko-KR')} · 수정 ${new Date(p.updated_at).toLocaleDateString('ko-KR')}</div></div><div style="display:flex;gap:6px;margin-left:12px;flex-shrink:0"><span class="badge ${pct===100?'badge-success':pct>0?'badge-primary':'badge-neutral'}">${c}/19 (${pct}%)</span><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\\\'")}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\\\'")}')">🗑️</button></div></div><div class="progress-bar-bg" style="margin-top:10px;height:4px"><div class="progress-bar-fill" style="width:${pct}%;height:4px"></div></div></div></div>`;
+      const s=p.current_state_json||{},o=s.outputs||{};
+      const c=Object.keys(o).filter(k=>o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;
+      const pct=Math.round(c/19*100);
+      const caseNum=p.project_number||'-';
+      const statusBadge=pct===100?'badge-success':pct>0?'badge-warning':'badge-neutral';
+      const statusText=pct===100?'완료':pct>0?'작성 중':'대기';
+      return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-bg-tertiary)'" onmouseout="this.style.background=''" onclick="openProject('${p.id}')">
+        <td style="padding:12px 16px"><span style="color:var(--color-primary);font-weight:600">${App.escapeHtml(caseNum)}</span></td>
+        <td style="padding:12px 16px"><div style="display:flex;align-items:center;gap:8px"><span class="tossface">📁</span><span style="font-weight:500">${App.escapeHtml(p.title)}</span></div></td>
+        <td style="padding:12px 16px;text-align:center"><span class="badge ${statusBadge}">${statusText}</span></td>
+        <td style="padding:12px 16px;text-align:center;color:var(--color-text-tertiary);font-size:12px">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</td>
+        <td style="padding:12px 16px;text-align:center" onclick="event.stopPropagation()">
+          <button class="btn btn-primary btn-sm" onclick="openProject('${p.id}')" style="padding:6px 12px;font-size:11px">열기</button>
+          <button class="btn btn-outline btn-sm" onclick="renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:6px 10px;font-size:11px">편집</button>
+          <button class="btn btn-ghost btn-sm" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:6px 10px;font-size:11px;color:var(--color-error)">삭제</button>
+        </td>
+      </tr>`;
     }).join('');
   }
+  
   // Provisional list
-  if(provCnt)provCnt.textContent=`${provisional.length}건`;
+  if(provCnt)provCnt.textContent=provisional.length?`총 ${provisional.length}건`:'';
   if(provEl){
-    if(!provisional.length){provEl.innerHTML='<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)"><p style="font-size:13px">가출원 내역 없음</p></div>';}
-    else{
+    if(!provisional.length){
+      provEl.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--color-text-tertiary);font-size:13px">가출원 내역이 없어요.</td></tr>';
+    } else {
       provEl.innerHTML=provisional.map(p=>{
         const pd=p.current_state_json?.provisionalData||{};
-        const titleEn=pd.titleEn||'';
-        return `<div class="card" style="margin-bottom:8px;cursor:pointer;transition:box-shadow 0.15s;border-left:3px solid var(--color-warning)" onmouseover="this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'" onclick="openProvisionalViewer('${p.id}')"><div style="padding:12px 16px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px"><span class="badge badge-warning" style="font-size:10px">⚡ 가출원</span><span style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(pd.title||p.title)}</span></div>${titleEn?`<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">${App.escapeHtml(titleEn)}</div>`:''}<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">${new Date(p.created_at).toLocaleDateString('ko-KR')} 생성</div></div><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\\\'")}')">🗑️</button></div></div></div>`;
+        const caseNum=p.project_number||'-';
+        return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-warning-light)'" onmouseout="this.style.background=''" onclick="openProvisionalViewer('${p.id}')">
+          <td style="padding:10px 16px"><span style="color:var(--color-warning);font-weight:600">${App.escapeHtml(caseNum)}</span></td>
+          <td style="padding:10px 16px" colspan="2"><div style="display:flex;align-items:center;gap:8px"><span class="tossface">⚡</span><span style="font-weight:500">${App.escapeHtml(pd.title||p.title)}</span></div></td>
+          <td style="padding:10px 16px;text-align:center;color:var(--color-text-tertiary);font-size:12px">${new Date(p.created_at).toLocaleDateString('ko-KR')}</td>
+          <td style="padding:10px 16px;text-align:center" onclick="event.stopPropagation()">
+            <button class="btn btn-outline btn-sm" onclick="openProvisionalViewer('${p.id}')" style="padding:6px 12px;font-size:11px">보기</button>
+            <button class="btn btn-ghost btn-sm" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:6px 10px;font-size:11px;color:var(--color-error)">삭제</button>
+          </td>
+        </tr>`;
       }).join('');
     }
   }
@@ -896,7 +924,27 @@ async function runBatch25(){if(globalProcessing)return;if(!selectedTitle){App.sh
 async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
 
 // ═══════════ PROVISIONAL APPLICATION (가출원) ═══════════
-function openProvisionalModal(){document.getElementById('provisionalInput').value='';document.getElementById('provisionalModal').style.display='flex';}
+async function openProvisionalModal(){
+  document.getElementById('provisionalInput').value='';
+  // 다음 사건번호 자동 생성 (가출원)
+  const numInput=document.getElementById('provisionalProjectNumber');
+  if(numInput){
+    try{
+      const{data}=await App.sb.from('projects').select('project_number').eq('owner_user_id',currentUser.id).not('project_number','is',null).order('created_at',{ascending:false}).limit(50);
+      let nextNum=1;
+      if(data?.length){
+        const nums=data.map(p=>{
+          const pn=p.project_number||'';
+          const match=pn.match(/^26P(\d{4})$/);
+          return match?parseInt(match[1],10):0;
+        }).filter(n=>n>0);
+        if(nums.length)nextNum=Math.max(...nums)+1;
+      }
+      numInput.value=String(nextNum).padStart(4,'0');
+    }catch(e){numInput.value='0001';}
+  }
+  document.getElementById('provisionalModal').style.display='flex';
+}
 function closeProvisionalModal(){document.getElementById('provisionalModal').style.display='none';}
 async function runProvisionalApplication(){
   const inv=document.getElementById('provisionalInput').value.trim();
@@ -977,12 +1025,17 @@ ${diagram}`,4096);
 
     App.showProgress('progressProvisional','Word + PPTX 생성 및 저장 중... (3/3)',3,3);
 
-    // v4.9: Save provisional to DB
+    // v4.9: Save provisional to DB with project_number
+    const numInput=document.getElementById('provisionalProjectNumber');
+    const numVal=numInput?numInput.value.trim():'';
+    const projectNumber=numVal&&/^\d{4}$/.test(numVal)?'26P'+numVal:null;
+    
     const provisionalData={title,titleEn,techField,problem,solution,claim,diagram,desc,effect,abstract};
     try{
       await App.sb.from('projects').insert({
         owner_user_id:currentUser.id,
         title:`[가출원] ${title||'초안'}`,
+        project_number:projectNumber,
         invention_content:inv,
         current_state_json:{type:'provisional',provisionalData,usage:{calls:usage.calls,inputTokens:usage.inputTokens,outputTokens:usage.outputTokens,cost:usage.cost}}
       });
