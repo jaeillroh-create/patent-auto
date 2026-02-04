@@ -382,6 +382,17 @@
       case 'tm-calc-fee':
         TM.calculateFee();
         break;
+        
+      // 비고시명칭 처리
+      case 'tm-add-custom-term':
+        TM.handleAddCustomTerm();
+        break;
+      case 'tm-remove-custom-term':
+        TM.removeCustomTerm(params.class, params.name);
+        break;
+      case 'tm-replace-custom-term':
+        TM.replaceCustomTerm(params.class, params.old, params.new);
+        break;
     }
   };
   
@@ -1520,6 +1531,37 @@
               ` : p.designatedGoods.map(classData => TM.renderClassGoodsCard(classData)).join('')}
             </div>
           </div>
+          
+          <!-- 비고시명칭 직접 입력 섹션 -->
+          ${p.designatedGoods.length > 0 ? `
+            <div class="tm-panel tm-panel-custom">
+              <div class="tm-panel-header">
+                <h3>✏️ 비고시명칭 직접 입력 <span class="optional">(선택)</span></h3>
+              </div>
+              <div class="tm-custom-term-info">
+                <p>고시명칭에 없는 상품/서비스명을 직접 입력할 수 있습니다.</p>
+                <p class="tm-custom-term-fee">💰 비고시명칭 사용 시 류당 <strong>+6,000원</strong> (52,000원/류)</p>
+              </div>
+              
+              <div class="tm-custom-term-input">
+                <select id="tm-custom-term-class" class="tm-select-sm">
+                  ${p.designatedGoods.map(g => `<option value="${g.classCode}">제${g.classCode}류</option>`).join('')}
+                </select>
+                <input type="text" id="tm-custom-term-input" 
+                       placeholder="예: AI 기반 지원사업 매칭 서비스업" 
+                       class="tm-input-flex">
+                <button class="btn btn-secondary btn-sm" data-action="tm-add-custom-term">
+                  + 추가
+                </button>
+              </div>
+              
+              <!-- 비고시명칭 분석 결과 표시 영역 -->
+              <div id="tm-custom-term-result" class="tm-custom-term-result" style="display:none;"></div>
+              
+              <!-- 추가된 비고시명칭 목록 -->
+              ${TM.getCustomTermsHtml(p)}
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -1533,6 +1575,204 @@
         TM.hasUnsavedChanges = true;
       });
     });
+    
+    // 비고시명칭 입력 이벤트
+    const customInput = container.querySelector('#tm-custom-term-input');
+    if (customInput) {
+      // Enter 키로 추가
+      customInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          TM.handleAddCustomTerm();
+        }
+      });
+      
+      // 입력 중 실시간 분석 (디바운스)
+      let debounceTimer;
+      customInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          const value = customInput.value.trim();
+          if (value.length >= 3) {
+            TM.previewCustomTermAnalysis(value);
+          } else {
+            document.getElementById('tm-custom-term-result').style.display = 'none';
+          }
+        }, 500);
+      });
+    }
+  };
+  
+  // 비고시명칭 목록 HTML 생성
+  TM.getCustomTermsHtml = function(p) {
+    const customTerms = [];
+    p.designatedGoods.forEach(classData => {
+      classData.goods?.filter(g => g.isCustom).forEach(g => {
+        customTerms.push({ ...g, classCode: classData.classCode });
+      });
+    });
+    
+    if (customTerms.length === 0) return '';
+    
+    return `
+      <div class="tm-custom-terms-list">
+        <div class="tm-custom-terms-header">
+          <span>추가된 비고시명칭 (${customTerms.length}개)</span>
+        </div>
+        ${customTerms.map(term => `
+          <div class="tm-custom-term-item ${term.riskLevel === 'high' ? 'high-risk' : ''}">
+            <div class="tm-custom-term-main">
+              <span class="class-badge-sm">제${term.classCode}류</span>
+              <span class="term-name">${TM.escapeHtml(term.name)}</span>
+              <span class="badge ${term.riskLevel === 'high' ? 'danger' : 'warning'}">비고시</span>
+            </div>
+            <div class="tm-custom-term-meta">
+              <span>추정 유사군: ${term.similarGroup || '(미확인)'}</span>
+              ${term.confidence ? `<span>매칭도: ${Math.round(term.confidence * 100)}%</span>` : ''}
+              ${term.riskLevel === 'high' ? '<span class="risk-warn">⚠️ 보정 가능성 높음</span>' : ''}
+            </div>
+            ${term.mappingCandidates?.length > 0 ? `
+              <div class="tm-custom-term-alts">
+                <span class="label">표준명칭 대체안:</span>
+                ${term.mappingCandidates.slice(0, 2).map(c => 
+                  `<span class="alt-term" data-action="tm-replace-custom-term" 
+                         data-class="${term.classCode}" 
+                         data-old="${TM.escapeHtml(term.name)}" 
+                         data-new="${TM.escapeHtml(c.goods_name)}"
+                         title="클릭하여 대체">${c.goods_name}</span>`
+                ).join('')}
+              </div>
+            ` : ''}
+            <button class="btn-icon-xs" data-action="tm-remove-custom-term" 
+                    data-class="${term.classCode}" data-name="${TM.escapeHtml(term.name)}">✕</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  };
+  
+  // 비고시명칭 실시간 분석 미리보기
+  TM.previewCustomTermAnalysis = async function(term) {
+    const resultDiv = document.getElementById('tm-custom-term-result');
+    const classSelect = document.getElementById('tm-custom-term-class');
+    
+    if (!resultDiv || !classSelect) return;
+    
+    const classCode = classSelect.value;
+    
+    resultDiv.innerHTML = '<div class="tm-loading-sm">분석 중...</div>';
+    resultDiv.style.display = 'block';
+    
+    try {
+      const analysis = await TM.processCustomTerm(term, classCode);
+      
+      if (analysis.error) {
+        resultDiv.innerHTML = `<div class="tm-error-sm">${analysis.error}</div>`;
+        return;
+      }
+      
+      const statusClass = {
+        'replace_recommended': 'status-info',
+        'usable_with_warning': 'status-warning',
+        'high_risk': 'status-danger',
+        'very_high_risk': 'status-danger'
+      }[analysis.status] || 'status-warning';
+      
+      resultDiv.innerHTML = `
+        <div class="tm-custom-analysis ${statusClass}">
+          <div class="tm-analysis-header">
+            <strong>"${TM.escapeHtml(analysis.normalizedTerm)}"</strong>
+            <span class="confidence">매칭도: ${Math.round(analysis.confidence * 100)}%</span>
+          </div>
+          
+          ${analysis.estimatedSimilarGroup ? `
+            <div class="tm-analysis-row">
+              <span class="label">추정 유사군:</span>
+              <span class="value">${analysis.estimatedSimilarGroup}</span>
+            </div>
+          ` : ''}
+          
+          ${analysis.mappingCandidates?.length > 0 ? `
+            <div class="tm-analysis-row">
+              <span class="label">표준명칭 대체안:</span>
+              <div class="tm-alt-terms">
+                ${analysis.mappingCandidates.map((c, i) => `
+                  <span class="alt-option" data-term="${TM.escapeHtml(c.goods_name)}">
+                    ${i + 1}. ${c.goods_name} <small>(${Math.round(c.similarity * 100)}%)</small>
+                  </span>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <div class="tm-analysis-recommendation">
+            ${analysis.recommendation}
+          </div>
+          
+          ${analysis.riskAnalysis?.risks?.length > 0 ? `
+            <div class="tm-analysis-risks">
+              ${analysis.riskAnalysis.risks.map(r => `<span class="risk-item">⚠️ ${r}</span>`).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+      
+      // 대체안 클릭 시 입력란에 반영
+      resultDiv.querySelectorAll('.alt-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+          const input = document.getElementById('tm-custom-term-input');
+          if (input) {
+            input.value = opt.dataset.term;
+            TM.previewCustomTermAnalysis(opt.dataset.term);
+          }
+        });
+      });
+      
+    } catch (err) {
+      resultDiv.innerHTML = `<div class="tm-error-sm">분석 실패: ${err.message}</div>`;
+    }
+  };
+  
+  // 비고시명칭 추가 핸들러
+  TM.handleAddCustomTerm = async function() {
+    const input = document.getElementById('tm-custom-term-input');
+    const classSelect = document.getElementById('tm-custom-term-class');
+    
+    if (!input || !classSelect) return;
+    
+    const term = input.value.trim();
+    const classCode = classSelect.value;
+    
+    if (term.length < 2) {
+      App.showToast('지정상품명을 2자 이상 입력해주세요.', 'warning');
+      return;
+    }
+    
+    try {
+      App.showToast('비고시명칭 분석 중...', 'info');
+      
+      const analysis = await TM.processCustomTerm(term, classCode);
+      
+      if (analysis.error) {
+        App.showToast(analysis.error, 'error');
+        return;
+      }
+      
+      // 프로젝트에 추가
+      const success = await TM.addCustomTermToProject(classCode, analysis);
+      
+      if (success) {
+        input.value = '';
+        document.getElementById('tm-custom-term-result').style.display = 'none';
+        
+        App.showToast(`비고시명칭 "${analysis.normalizedTerm}" 추가됨 (제${classCode}류)`, 'success');
+        
+        // UI 새로고침
+        TM.renderCurrentStep();
+      }
+    } catch (err) {
+      App.showToast('비고시명칭 추가 실패: ' + err.message, 'error');
+    }
   };
   
   // 상품류별 지정상품 카드 (개선된 버전)
@@ -1571,10 +1811,11 @@
           ${classData.goods.length === 0 ? 
             '<span class="tm-goods-empty">지정상품을 추가하세요</span>' : 
             classData.goods.map(g => `
-              <span class="tm-goods-chip">
+              <span class="tm-goods-chip ${g.isCustom ? 'custom' : ''} ${g.riskLevel === 'high' ? 'high-risk' : ''}">
                 ${TM.escapeHtml(g.name)}
+                ${g.isCustom ? '<span class="chip-badge custom">비고시</span>' : ''}
                 ${g.similarGroup ? `<small>(${g.similarGroup})</small>` : ''}
-                <button class="remove" data-action="tm-remove-good" data-class="${classData.classCode}" data-name="${TM.escapeHtml(g.name)}">×</button>
+                <button class="remove" data-action="${g.isCustom ? 'tm-remove-custom-term' : 'tm-remove-good'}" data-class="${classData.classCode}" data-name="${TM.escapeHtml(g.name)}">×</button>
               </span>
             `).join('')
           }
@@ -2741,29 +2982,56 @@
     const cached = TM.getFromCache(cacheKey);
     if (cached) return cached;
     
-    console.log('[KIPRIS] API 호출:', type, params);
+    console.log('[KIPRIS] API 호출 시작:', type, JSON.stringify(params));
     
     try {
       // App.sb (Supabase) 존재 여부 확인
       if (!App.sb || !App.sb.functions) {
-        console.warn('[KIPRIS] Supabase 함수 없음, 시뮬레이션 모드');
+        console.warn('[KIPRIS] ⚠️ Supabase 함수 없음 - 시뮬레이션 모드');
+        App.showToast('KIPRIS API 연결 안됨 (시뮬레이션 모드)', 'warning');
         return TM.simulateSearchResults(type, params);
+      }
+      
+      // Edge Function 연결 테스트 (첫 호출 시)
+      if (!TM._kiprisTestDone) {
+        TM._kiprisTestDone = true;
+        console.log('[KIPRIS] Edge Function 연결 테스트...');
+        try {
+          const testResult = await App.sb.functions.invoke('kipris-proxy', {
+            body: { type: 'test', params: {} }
+          });
+          console.log('[KIPRIS] Edge Function 테스트 결과:', testResult);
+        } catch (testErr) {
+          console.error('[KIPRIS] ❌ Edge Function 연결 실패:', testErr);
+        }
       }
       
       // 동시성 제한 + 재시도 적용
       return await TM.throttledCall(() => TM.withRetry(async () => {
+        console.log('[KIPRIS] 📡 Edge Function 호출...');
+        
         const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
           body: { type, params }
         });
         
+        console.log('[KIPRIS] 응답:', { data, error });
+        
         if (error) {
-          console.error('[KIPRIS] Edge Function 오류:', error);
+          console.error('[KIPRIS] ❌ Edge Function 오류:', error);
           throw error;
         }
         
-        if (!data || !data.success) {
-          console.warn('[KIPRIS] API 오류:', data?.error || 'Unknown error');
-          // API 오류 시 시뮬레이션 모드
+        if (!data) {
+          console.warn('[KIPRIS] ⚠️ 응답 데이터 없음');
+          return TM.simulateSearchResults(type, params);
+        }
+        
+        if (!data.success) {
+          console.warn('[KIPRIS] ⚠️ API 실패:', data.error || 'Unknown error');
+          // 에러 메시지 표시
+          if (data.error) {
+            App.showToast(`KIPRIS: ${data.error}`, 'warning');
+          }
           return TM.simulateSearchResults(type, params);
         }
         
@@ -2772,12 +3040,12 @@
         // 캐시 저장
         TM.setToCache(cacheKey, results);
         
-        console.log(`[KIPRIS] 검색 결과: ${results.length}건`);
+        console.log(`[KIPRIS] ✅ 검색 성공: ${results.length}건 (총 ${data.totalCount || 0}건)`);
         return results;
       }));
     } catch (error) {
-      console.error('[KIPRIS] API 호출 실패, 시뮬레이션 모드:', error);
-      // 모든 오류에서 시뮬레이션 결과 반환
+      console.error('[KIPRIS] ❌ API 호출 실패:', error);
+      App.showToast('KIPRIS 검색 실패 - 시뮬레이션 결과 표시', 'warning');
       return TM.simulateSearchResults(type, params);
     }
   };
@@ -4945,56 +5213,47 @@ JSON만 응답:
   };
   
   // === DB 기반 후보 검색 함수 ===
-  TM.searchGoodsCandidates = async function(classCode, keywords, businessText, limit = 100) {
+  // ============================================================
+  // AI 지정상품 추천 엔진 (개선된 버전)
+  // - 유사군코드 커버리지 최적화
+  // - 고시명칭 우선, 비고시명칭은 사용자 입력 시만
+  // ============================================================
+  
+  TM.searchGoodsCandidates = async function(classCode, keywords, businessText, limit = 200) {
     const results = [];
     const seen = new Set();
+    const similarGroupStats = {}; // 유사군코드별 통계
     
-    // 1. 키워드별 검색 + 스코어링
-    for (const keyword of keywords) {
+    console.log(`[TM] 후보 검색 시작: 제${classCode}류, 키워드: ${keywords.slice(0, 5).join(', ')}...`);
+    
+    // === 1단계: 키워드 기반 FTS 검색 (높은 점수) ===
+    for (const keyword of keywords.slice(0, 10)) { // 상위 10개 키워드만
       try {
-        const { data, error } = await App.sb
+        const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
           .eq('class_code', classCode)
           .ilike('goods_name', `%${keyword}%`)
-          .limit(30);
+          .limit(50);
         
         if (data) {
           data.forEach(item => {
             if (!seen.has(item.goods_name)) {
               seen.add(item.goods_name);
-              
-              // 스코어 계산
-              let score = 0;
-              
-              // 키워드 매칭 점수 (정확도에 따라)
-              const name = item.goods_name.toLowerCase();
-              const kw = keyword.toLowerCase();
-              if (name === kw) score += 3;           // 완전 일치
-              else if (name.startsWith(kw)) score += 2;  // 시작 일치
-              else if (name.includes(kw)) score += 1;    // 포함
-              
-              // 키워드 다중 매칭 보너스
-              let matchCount = 0;
-              keywords.forEach(k => {
-                if (name.includes(k.toLowerCase())) matchCount++;
-              });
-              score += matchCount * 0.5;
-              
-              // 사업 설명 키워드 매칭
-              if (businessText) {
-                const bizLower = businessText.toLowerCase();
-                if (bizLower.includes(kw) || name.split(/[,\s]+/).some(w => bizLower.includes(w))) {
-                  score += 1;
-                }
-              }
-              
+              const scoreData = TM.calculateGoodsScore(item, keyword, keywords, businessText);
               results.push({
                 goods_name: item.goods_name,
                 similar_group_code: item.similar_group_code,
-                score: score,
-                matchedKeyword: keyword
+                ...scoreData
               });
+              
+              // 유사군코드 통계 수집
+              const sgCode = item.similar_group_code || 'UNKNOWN';
+              if (!similarGroupStats[sgCode]) {
+                similarGroupStats[sgCode] = { count: 0, maxScore: 0 };
+              }
+              similarGroupStats[sgCode].count++;
+              similarGroupStats[sgCode].maxScore = Math.max(similarGroupStats[sgCode].maxScore, scoreData.score);
             }
           });
         }
@@ -5003,35 +5262,537 @@ JSON만 응답:
       }
     }
     
-    // 2. 결과가 부족하면 해당 류 전체에서 추가
-    if (results.length < limit / 2) {
+    console.log(`[TM] 1단계 키워드 검색 완료: ${results.length}건, ${Object.keys(similarGroupStats).length}개 유사군`);
+    
+    // === 2단계: 유사군코드 커버리지 보강 ===
+    // 해당 류의 주요 유사군코드에서 대표 상품 확보
+    if (results.length < limit) {
       try {
-        const { data } = await App.sb
+        // 해당 류의 모든 유사군코드 조회 (고유값)
+        const { data: allCodes } = await App.sb
+          .from('gazetted_goods_cache')
+          .select('similar_group_code')
+          .eq('class_code', classCode)
+          .limit(1000);
+        
+        if (allCodes) {
+          // 유사군코드별 대표 상품 1개씩 추가
+          const uniqueCodes = [...new Set(allCodes.map(d => d.similar_group_code).filter(Boolean))];
+          const missingCodes = uniqueCodes.filter(code => !similarGroupStats[code]);
+          
+          console.log(`[TM] 2단계 유사군 보강: ${missingCodes.length}개 코드 추가 검색`);
+          
+          for (const sgCode of missingCodes.slice(0, 30)) { // 최대 30개 유사군 보강
+            try {
+              const { data: sgData } = await App.sb
+                .from('gazetted_goods_cache')
+                .select('goods_name, similar_group_code')
+                .eq('class_code', classCode)
+                .eq('similar_group_code', sgCode)
+                .limit(3);
+              
+              if (sgData) {
+                sgData.forEach(item => {
+                  if (!seen.has(item.goods_name)) {
+                    seen.add(item.goods_name);
+                    const scoreData = TM.calculateGoodsScore(item, null, keywords, businessText);
+                    scoreData.score += 0.5; // 유사군 커버리지 보너스
+                    scoreData.fromCoverage = true;
+                    results.push({
+                      goods_name: item.goods_name,
+                      similar_group_code: item.similar_group_code,
+                      ...scoreData
+                    });
+                  }
+                });
+              }
+            } catch (err) {
+              // 개별 실패는 무시
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[TM] 유사군 커버리지 검색 실패:', err);
+      }
+    }
+    
+    // === 3단계: 점수순 정렬 + 유사군코드 정보 포함 ===
+    const sorted = results.sort((a, b) => b.score - a.score).slice(0, limit);
+    
+    console.log(`[TM] 후보 검색 완료: 총 ${sorted.length}건`);
+    
+    return sorted;
+  };
+  
+  // 지정상품 스코어 계산 (분리된 함수)
+  TM.calculateGoodsScore = function(item, matchedKeyword, allKeywords, businessText) {
+    let score = 0;
+    let fitScore = 0;    // 사업 적합도
+    let matchScore = 0;  // 키워드 매칭
+    let riskPenalty = 0; // 리스크 페널티
+    
+    const name = (item.goods_name || '').toLowerCase();
+    
+    // 1. 키워드 매칭 점수 (Match)
+    if (matchedKeyword) {
+      const kw = matchedKeyword.toLowerCase();
+      if (name === kw) matchScore += 3;           // 완전 일치
+      else if (name.startsWith(kw)) matchScore += 2.5; // 시작 일치
+      else if (name.includes(kw)) matchScore += 1.5;   // 포함
+    }
+    
+    // 다중 키워드 매칭 보너스
+    let multiMatchCount = 0;
+    allKeywords.forEach(k => {
+      if (name.includes(k.toLowerCase())) multiMatchCount++;
+    });
+    matchScore += multiMatchCount * 0.3;
+    
+    // 2. 사업 설명 적합도 (Fit)
+    if (businessText) {
+      const bizLower = businessText.toLowerCase();
+      const nameWords = name.split(/[,\s/]+/).filter(w => w.length > 1);
+      
+      nameWords.forEach(word => {
+        if (bizLower.includes(word)) fitScore += 0.5;
+      });
+      
+      // 핵심 행위 키워드 매칭
+      const actionKeywords = ['서비스', '제공', '판매', '개발', '컨설팅', '교육', '중개', '대행', '제조', '가공'];
+      actionKeywords.forEach(action => {
+        if (name.includes(action) && bizLower.includes(action)) {
+          fitScore += 0.3;
+        }
+      });
+    }
+    
+    // 3. 리스크 페널티 (과포괄/불명확 용어)
+    const riskyTerms = ['기타', '그밖의', '등', '일반', '종합'];
+    riskyTerms.forEach(term => {
+      if (name.includes(term)) riskPenalty += 0.3;
+    });
+    
+    // 너무 짧거나 긴 명칭 페널티
+    if (name.length < 3) riskPenalty += 0.5;
+    if (name.length > 30) riskPenalty += 0.2;
+    
+    // 최종 점수 = 0.40*Fit + 0.35*Match - 0.10*Risk + 기본점수
+    score = (0.40 * fitScore) + (0.35 * matchScore) - (0.10 * riskPenalty) + 0.5;
+    
+    return {
+      score: Math.max(0.1, score),
+      fitScore,
+      matchScore,
+      riskPenalty,
+      matchedKeyword
+    };
+  };
+  
+  // 유사군코드 커버리지 최적화 선택
+  TM.optimizeSimilarCodeCoverage = function(candidates, targetCount = 10, options = {}) {
+    const { minPerCode = 1, maxPerCode = 2, priorityCodes = [] } = options;
+    
+    // 1. 유사군코드별 그룹핑
+    const groupedByCode = {};
+    candidates.forEach(c => {
+      const code = c.similar_group_code || 'UNKNOWN';
+      if (!groupedByCode[code]) groupedByCode[code] = [];
+      groupedByCode[code].push(c);
+    });
+    
+    // 2. 유사군코드 정렬 (우선순위 코드 먼저, 그 다음 최고점수 순)
+    const codeList = Object.keys(groupedByCode).sort((a, b) => {
+      const aPriority = priorityCodes.includes(a) ? 1 : 0;
+      const bPriority = priorityCodes.includes(b) ? 1 : 0;
+      if (aPriority !== bPriority) return bPriority - aPriority;
+      
+      const scoreA = Math.max(...groupedByCode[a].map(g => g.score || 0));
+      const scoreB = Math.max(...groupedByCode[b].map(g => g.score || 0));
+      return scoreB - scoreA;
+    });
+    
+    const selectedGoods = [];
+    const usedCodes = new Map(); // code -> count
+    
+    // 3. 라운드 1: 각 유사군코드에서 최소 minPerCode개 선택
+    for (const code of codeList) {
+      if (selectedGoods.length >= targetCount) break;
+      
+      const sorted = groupedByCode[code].sort((a, b) => (b.score || 0) - (a.score || 0));
+      const toSelect = Math.min(minPerCode, sorted.length);
+      
+      for (let i = 0; i < toSelect && selectedGoods.length < targetCount; i++) {
+        selectedGoods.push({
+          name: sorted[i].goods_name,
+          similarGroup: sorted[i].similar_group_code,
+          score: sorted[i].score,
+          fitScore: sorted[i].fitScore,
+          isCore: priorityCodes.includes(code) || sorted[i].score > 2,
+          source: 'gazetted' // 고시명칭
+        });
+        usedCodes.set(code, (usedCodes.get(code) || 0) + 1);
+      }
+    }
+    
+    // 4. 라운드 2: 고득점 항목 추가 (targetCount까지)
+    if (selectedGoods.length < targetCount) {
+      const remaining = candidates
+        .filter(c => !selectedGoods.some(s => s.name === c.goods_name))
+        .sort((a, b) => (b.score || 0) - (a.score || 0));
+      
+      for (const c of remaining) {
+        if (selectedGoods.length >= targetCount) break;
+        
+        const code = c.similar_group_code || 'UNKNOWN';
+        const codeCount = usedCodes.get(code) || 0;
+        
+        // 같은 코드에서 maxPerCode 초과 시 스킵 (다양성 확보)
+        if (codeCount >= maxPerCode) continue;
+        
+        selectedGoods.push({
+          name: c.goods_name,
+          similarGroup: c.similar_group_code,
+          score: c.score,
+          fitScore: c.fitScore,
+          isCore: false,
+          source: 'gazetted'
+        });
+        usedCodes.set(code, codeCount + 1);
+      }
+    }
+    
+    // 5. 커버리지 통계 생성
+    const coverageStats = {
+      totalSelected: selectedGoods.length,
+      uniqueCodes: usedCodes.size,
+      codeDistribution: Object.fromEntries(usedCodes)
+    };
+    
+    console.log(`[TM] 커버리지 최적화: ${selectedGoods.length}개 선택, ${usedCodes.size}개 유사군 커버`);
+    
+    return { selectedGoods, coverageStats };
+  };
+  
+  // ============================================================
+  // 비고시명칭 처리 (사용자 직접 입력)
+  // - 표준명칭 매핑
+  // - 유사군코드 추정
+  // - 리스크 경고
+  // ============================================================
+  
+  TM.processCustomTerm = async function(rawTerm, classCode) {
+    if (!rawTerm || rawTerm.trim().length < 2) {
+      return { error: '지정상품명을 2자 이상 입력해주세요.' };
+    }
+    
+    const normalizedTerm = TM.normalizeCustomTerm(rawTerm);
+    console.log(`[TM] 비고시명칭 처리: "${rawTerm}" → "${normalizedTerm}"`);
+    
+    // 1. 표준명칭(고시명칭) 매핑 검색
+    const mappingResults = await TM.findSimilarGazettedTerms(normalizedTerm, classCode);
+    
+    // 2. 신뢰도 계산
+    const confidence = mappingResults.length > 0 ? mappingResults[0].similarity : 0;
+    
+    // 3. 유사군코드 추정
+    let estimatedSimilarGroup = null;
+    if (mappingResults.length > 0 && mappingResults[0].similarity >= 0.5) {
+      estimatedSimilarGroup = mappingResults[0].similar_group_code;
+    }
+    
+    // 4. 리스크 분석
+    const riskAnalysis = TM.analyzeCustomTermRisk(normalizedTerm, confidence);
+    
+    // 5. 처리 권장사항 결정
+    let recommendation = '';
+    let status = 'warning';
+    
+    if (confidence >= 0.80) {
+      recommendation = `표준명칭 "${mappingResults[0].goods_name}"으로 대체를 강력 권장합니다.`;
+      status = 'replace_recommended';
+    } else if (confidence >= 0.60) {
+      recommendation = '비고시명칭 유지 가능하나, 보정 요청 가능성이 있습니다. 표준명칭 병기를 권장합니다.';
+      status = 'usable_with_warning';
+    } else if (confidence >= 0.40) {
+      recommendation = '표준명칭과 매칭이 낮습니다. 심사 시 거절 또는 보정 가능성이 높습니다.';
+      status = 'high_risk';
+    } else {
+      recommendation = '매칭되는 표준명칭을 찾기 어렵습니다. 명칭 재검토를 권장합니다.';
+      status = 'very_high_risk';
+    }
+    
+    return {
+      originalTerm: rawTerm,
+      normalizedTerm: normalizedTerm,
+      confidence: confidence,
+      estimatedSimilarGroup: estimatedSimilarGroup,
+      mappingCandidates: mappingResults.slice(0, 3), // 상위 3개
+      riskAnalysis: riskAnalysis,
+      recommendation: recommendation,
+      status: status,
+      isGazetted: false, // 비고시명칭
+      feeNote: '비고시명칭 사용 시 류당 +6,000원 (52,000원/류)'
+    };
+  };
+  
+  // 비고시명칭 정규화
+  TM.normalizeCustomTerm = function(rawTerm) {
+    let term = rawTerm.trim();
+    
+    // 1. 불필요한 문자 제거
+    term = term.replace(/[""'']/g, '');
+    term = term.replace(/\s+/g, ' ');
+    
+    // 2. 서비스업 표기 통일
+    if (!term.endsWith('업') && !term.endsWith('품') && !term.endsWith('기') && !term.endsWith('기기')) {
+      // 행위성 명사로 끝나면 '업' 추가 권장
+      const serviceEndings = ['서비스', '제공', '중개', '대행', '컨설팅', '교육', '판매', '개발'];
+      for (const ending of serviceEndings) {
+        if (term.endsWith(ending)) {
+          term = term + '업';
+          break;
+        }
+      }
+    }
+    
+    return term;
+  };
+  
+  // 유사 고시명칭 검색 (텍스트 유사도 기반)
+  TM.findSimilarGazettedTerms = async function(term, classCode) {
+    const results = [];
+    const termLower = term.toLowerCase();
+    const termWords = termLower.split(/[\s,/]+/).filter(w => w.length > 1);
+    
+    try {
+      // 1. 부분 일치 검색
+      const searchPromises = termWords.slice(0, 5).map(word =>
+        App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
-          .eq('class_code', classCode)
-          .limit(100);
-        
+          .eq('class_code', classCode.padStart(2, '0'))
+          .ilike('goods_name', `%${word}%`)
+          .limit(20)
+      );
+      
+      const searchResults = await Promise.all(searchPromises);
+      const seen = new Set();
+      
+      searchResults.forEach(({ data }) => {
         if (data) {
           data.forEach(item => {
             if (!seen.has(item.goods_name)) {
               seen.add(item.goods_name);
+              
+              // 유사도 계산 (단순 단어 겹침 기반)
+              const gazettedLower = item.goods_name.toLowerCase();
+              const gazettedWords = gazettedLower.split(/[\s,/]+/).filter(w => w.length > 1);
+              
+              // Jaccard 유사도 + 부분 일치 보너스
+              const intersection = termWords.filter(w => 
+                gazettedWords.some(gw => gw.includes(w) || w.includes(gw))
+              ).length;
+              const union = new Set([...termWords, ...gazettedWords]).size;
+              let similarity = union > 0 ? intersection / union : 0;
+              
+              // 완전 포함 보너스
+              if (gazettedLower.includes(termLower) || termLower.includes(gazettedLower)) {
+                similarity += 0.3;
+              }
+              
+              // 시작 일치 보너스
+              if (gazettedLower.startsWith(termLower.substring(0, 3))) {
+                similarity += 0.1;
+              }
+              
+              similarity = Math.min(1, similarity);
+              
               results.push({
                 goods_name: item.goods_name,
                 similar_group_code: item.similar_group_code,
-                score: 0.1,  // 기본 점수
-                matchedKeyword: null
+                similarity: similarity
               });
             }
           });
         }
+      });
+      
+      // 2. 유사도 순 정렬
+      results.sort((a, b) => b.similarity - a.similarity);
+      
+    } catch (err) {
+      console.error('[TM] 유사 명칭 검색 실패:', err);
+    }
+    
+    return results.slice(0, 10);
+  };
+  
+  // 비고시명칭 리스크 분석
+  TM.analyzeCustomTermRisk = function(term, confidence) {
+    const risks = [];
+    const warnings = [];
+    
+    // 1. 과포괄 용어 체크
+    const broadTerms = ['일반', '종합', '전반', '모든', '각종', '기타'];
+    broadTerms.forEach(bt => {
+      if (term.includes(bt)) {
+        risks.push(`"${bt}" - 과포괄 용어로 보정 요청 가능성`);
+      }
+    });
+    
+    // 2. 불명확 표현 체크
+    const vagueTerms = ['등', '및', '관련', '기반'];
+    vagueTerms.forEach(vt => {
+      if (term.includes(vt) && term.split(vt).length > 2) {
+        warnings.push(`"${vt}" 다수 사용 - 명확성 검토 필요`);
+      }
+    });
+    
+    // 3. 서비스/상품 구분 체크
+    const isService = term.endsWith('업') || term.endsWith('서비스');
+    const isGoods = term.endsWith('품') || term.endsWith('기') || term.endsWith('기기') || term.endsWith('장치');
+    
+    if (!isService && !isGoods) {
+      warnings.push('서비스업(~업)인지 상품(~품, ~기)인지 명확히 표기 권장');
+    }
+    
+    // 4. 영문 혼용 체크
+    if (/[a-zA-Z]/.test(term) && /[가-힣]/.test(term)) {
+      warnings.push('한글/영문 혼용 - 심사 시 명확성 이슈 가능');
+    }
+    
+    // 5. 길이 체크
+    if (term.length > 30) {
+      warnings.push('명칭이 길어 심사 시 축약 요청 가능성');
+    }
+    
+    // 6. 신뢰도 기반 추가 리스크
+    if (confidence < 0.40) {
+      risks.push('표준명칭과 매칭도 낮음 - 거절 가능성 높음');
+    }
+    
+    return {
+      riskLevel: risks.length > 0 ? 'high' : (warnings.length > 0 ? 'medium' : 'low'),
+      risks: risks,
+      warnings: warnings
+    };
+  };
+  
+  // 비고시명칭을 프로젝트에 추가
+  TM.addCustomTermToProject = async function(classCode, customTermResult) {
+    const p = TM.currentProject;
+    
+    // 해당 류의 지정상품 배열 찾기
+    let classData = p.designatedGoods.find(g => g.classCode === classCode);
+    
+    if (!classData) {
+      // 해당 류가 없으면 추가
+      classData = {
+        classCode: classCode,
+        goods: [],
+        goodsCount: 0
+      };
+      p.designatedGoods.push(classData);
+    }
+    
+    // 중복 체크
+    if (classData.goods.some(g => g.name === customTermResult.normalizedTerm)) {
+      App.showToast('이미 추가된 지정상품입니다.', 'warning');
+      return false;
+    }
+    
+    // 비고시명칭 추가
+    classData.goods.push({
+      name: customTermResult.normalizedTerm,
+      similarGroup: customTermResult.estimatedSimilarGroup || '(추정필요)',
+      isGazetted: false,
+      isCustom: true, // 사용자 직접 입력 표시
+      confidence: customTermResult.confidence,
+      mappingCandidates: customTermResult.mappingCandidates,
+      riskLevel: customTermResult.riskAnalysis.riskLevel
+    });
+    
+    classData.goodsCount = classData.goods.length;
+    
+    // 비고시명칭 사용 시 gazettedOnly 해제
+    if (p.gazettedOnly) {
+      p.gazettedOnly = false;
+      App.showToast('비고시명칭 추가로 "비고시 허용" 모드로 변경되었습니다.', 'info');
+    }
+    
+    TM.hasUnsavedChanges = true;
+    
+    return true;
+  };
+  
+  // 비고시명칭 삭제
+  TM.removeCustomTerm = function(classCode, termName) {
+    const p = TM.currentProject;
+    const classData = p.designatedGoods.find(g => g.classCode === classCode);
+    
+    if (!classData) return;
+    
+    const idx = classData.goods.findIndex(g => g.name === termName && g.isCustom);
+    if (idx !== -1) {
+      classData.goods.splice(idx, 1);
+      classData.goodsCount = classData.goods.length;
+      TM.hasUnsavedChanges = true;
+      
+      App.showToast(`비고시명칭 "${termName}" 삭제됨`, 'info');
+      TM.renderCurrentStep();
+    }
+  };
+  
+  // 비고시명칭을 표준명칭으로 대체
+  TM.replaceCustomTerm = async function(classCode, oldTerm, newTerm) {
+    const p = TM.currentProject;
+    const classData = p.designatedGoods.find(g => g.classCode === classCode);
+    
+    if (!classData) return;
+    
+    // 기존 비고시명칭 찾기
+    const idx = classData.goods.findIndex(g => g.name === oldTerm && g.isCustom);
+    if (idx === -1) return;
+    
+    // 새 표준명칭이 이미 있는지 확인
+    if (classData.goods.some(g => g.name === newTerm)) {
+      // 기존 비고시명칭만 삭제
+      classData.goods.splice(idx, 1);
+      App.showToast(`"${oldTerm}" 삭제됨 (표준명칭 "${newTerm}"이 이미 있음)`, 'info');
+    } else {
+      // DB에서 표준명칭 정보 조회
+      try {
+        const { data } = await App.sb
+          .from('gazetted_goods_cache')
+          .select('goods_name, similar_group_code')
+          .eq('class_code', classCode.padStart(2, '0'))
+          .eq('goods_name', newTerm)
+          .limit(1);
+        
+        if (data && data.length > 0) {
+          // 표준명칭으로 대체
+          classData.goods[idx] = {
+            name: data[0].goods_name,
+            similarGroup: data[0].similar_group_code,
+            isGazetted: true,
+            isCustom: false
+          };
+          App.showToast(`"${oldTerm}" → "${newTerm}" 대체됨 (표준명칭)`, 'success');
+        } else {
+          // DB에 없으면 그냥 이름만 변경
+          classData.goods[idx].name = newTerm;
+          classData.goods[idx].isCustom = false;
+          App.showToast(`"${oldTerm}" → "${newTerm}" 변경됨`, 'info');
+        }
       } catch (err) {
-        console.warn('[TM] 추가 검색 실패:', err);
+        console.error('[TM] 표준명칭 조회 실패:', err);
+        classData.goods[idx].name = newTerm;
       }
     }
     
-    // 3. 점수순 정렬 후 반환
-    return results.sort((a, b) => b.score - a.score).slice(0, limit);
+    classData.goodsCount = classData.goods.length;
+    TM.hasUnsavedChanges = true;
+    TM.renderCurrentStep();
   };
 
   // ============================================================

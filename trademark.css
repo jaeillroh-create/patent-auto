@@ -2973,3 +2973,354 @@
   color: #92400e;
   font-size: 14px;
 }
+
+/* ============================================================
+   33. 비고시명칭 입력 UI
+   ============================================================ */
+
+/* 비고시명칭 패널 */
+.tm-panel-custom {
+  border: 2px dashed var(--tm-gray-300);
+  background: linear-gradient(135deg, #fefce8, #fffbeb);
+}
+
+.tm-panel-custom .tm-panel-header h3 .optional {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--tm-gray-500);
+  margin-left: 8px;
+}
+
+.tm-custom-term-info {
+  padding: 12px 16px;
+  background: #fff;
+  border-radius: var(--tm-radius-sm);
+  margin-bottom: 16px;
+}
+
+.tm-custom-term-info p {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  color: var(--tm-gray-600);
+}
+
+.tm-custom-term-fee {
+  color: var(--tm-warning) !important;
+  font-weight: 500;
+}
+
+.tm-custom-term-fee strong {
+  color: #b45309;
+}
+
+/* 비고시명칭 입력 영역 */
+.tm-custom-term-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 0 16px 16px;
+}
+
+.tm-select-sm {
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius-sm);
+  background: #fff;
+  min-width: 90px;
+}
+
+.tm-input-flex {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius-sm);
+}
+
+.tm-input-flex:focus {
+  outline: none;
+  border-color: var(--tm-primary);
+  box-shadow: 0 0 0 3px var(--tm-primary-light);
+}
+
+/* 비고시명칭 분석 결과 */
+.tm-custom-term-result {
+  margin: 0 16px 16px;
+}
+
+.tm-loading-sm {
+  padding: 12px;
+  text-align: center;
+  color: var(--tm-gray-500);
+  font-size: 13px;
+}
+
+.tm-error-sm {
+  padding: 12px;
+  background: var(--tm-danger-light);
+  color: #b91c1c;
+  border-radius: var(--tm-radius-sm);
+  font-size: 13px;
+}
+
+.tm-custom-analysis {
+  padding: 16px;
+  background: #fff;
+  border-radius: var(--tm-radius-sm);
+  border-left: 4px solid var(--tm-gray-300);
+}
+
+.tm-custom-analysis.status-info {
+  border-left-color: var(--tm-primary);
+  background: var(--tm-primary-light);
+}
+
+.tm-custom-analysis.status-warning {
+  border-left-color: var(--tm-warning);
+  background: #fffbeb;
+}
+
+.tm-custom-analysis.status-danger {
+  border-left-color: var(--tm-danger);
+  background: #fef2f2;
+}
+
+.tm-analysis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tm-analysis-header strong {
+  font-size: 15px;
+  color: var(--tm-gray-800);
+}
+
+.tm-analysis-header .confidence {
+  font-size: 12px;
+  padding: 3px 8px;
+  background: var(--tm-gray-100);
+  border-radius: 10px;
+  color: var(--tm-gray-600);
+}
+
+.tm-analysis-row {
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.tm-analysis-row .label {
+  color: var(--tm-gray-500);
+  margin-right: 8px;
+}
+
+.tm-analysis-row .value {
+  font-weight: 500;
+  color: var(--tm-gray-800);
+}
+
+.tm-alt-terms {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.tm-alt-terms .alt-option {
+  padding: 6px 10px;
+  background: var(--tm-gray-50);
+  border: 1px solid var(--tm-gray-200);
+  border-radius: var(--tm-radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tm-alt-terms .alt-option:hover {
+  background: var(--tm-primary-light);
+  border-color: var(--tm-primary);
+}
+
+.tm-alt-terms .alt-option small {
+  color: var(--tm-gray-500);
+}
+
+.tm-analysis-recommendation {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--tm-gray-50);
+  border-radius: var(--tm-radius-sm);
+  font-size: 13px;
+  color: var(--tm-gray-700);
+  line-height: 1.5;
+}
+
+.tm-analysis-risks {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tm-analysis-risks .risk-item {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+/* 추가된 비고시명칭 목록 */
+.tm-custom-terms-list {
+  margin: 0 16px 16px;
+  background: #fff;
+  border-radius: var(--tm-radius-sm);
+  border: 1px solid var(--tm-gray-200);
+}
+
+.tm-custom-terms-header {
+  padding: 10px 14px;
+  background: var(--tm-gray-50);
+  border-bottom: 1px solid var(--tm-gray-200);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tm-gray-700);
+}
+
+.tm-custom-term-item {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--tm-gray-100);
+  position: relative;
+}
+
+.tm-custom-term-item:last-child {
+  border-bottom: none;
+}
+
+.tm-custom-term-item.high-risk {
+  background: #fef2f2;
+}
+
+.tm-custom-term-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.class-badge-sm {
+  padding: 2px 6px;
+  background: var(--tm-gray-200);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tm-gray-700);
+}
+
+.tm-custom-term-main .term-name {
+  font-weight: 500;
+  color: var(--tm-gray-800);
+}
+
+.tm-custom-term-main .badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.tm-custom-term-main .badge.warning {
+  background: var(--tm-warning-light);
+  color: #92400e;
+}
+
+.tm-custom-term-main .badge.danger {
+  background: var(--tm-danger-light);
+  color: #b91c1c;
+}
+
+.tm-custom-term-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--tm-gray-500);
+}
+
+.tm-custom-term-meta .risk-warn {
+  color: #b91c1c;
+  font-weight: 500;
+}
+
+.tm-custom-term-alts {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.tm-custom-term-alts .label {
+  color: var(--tm-gray-500);
+  margin-right: 8px;
+}
+
+.tm-custom-term-alts .alt-term {
+  display: inline-block;
+  padding: 3px 8px;
+  margin-right: 6px;
+  background: var(--tm-primary-light);
+  color: var(--tm-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tm-custom-term-alts .alt-term:hover {
+  background: var(--tm-primary);
+  color: #fff;
+}
+
+.tm-custom-term-item .btn-icon-xs {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--tm-gray-100);
+  color: var(--tm-gray-500);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tm-custom-term-item .btn-icon-xs:hover {
+  background: var(--tm-danger-light);
+  color: var(--tm-danger);
+}
+
+/* 지정상품 칩 - 비고시명칭 스타일 */
+.tm-goods-chip.custom {
+  background: #fffbeb;
+  border-color: var(--tm-warning);
+}
+
+.tm-goods-chip.custom.high-risk {
+  background: #fef2f2;
+  border-color: var(--tm-danger);
+}
+
+.tm-goods-chip .chip-badge {
+  display: inline-block;
+  padding: 1px 4px;
+  margin-left: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.tm-goods-chip .chip-badge.custom {
+  background: var(--tm-warning);
+  color: #fff;
+}
