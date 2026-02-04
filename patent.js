@@ -728,11 +728,21 @@ ${T}${getFullInvention()}${styleRef}`;}
       const reqInst=getRequiredFiguresInstruction();
       const skipNums=requiredFigures.map(rf=>rf.num);
       const genCount=parseInt(f)-(requiredFigures.length);
-      return `청구범위 도면을 설계하라. 총 도면 수: ${f}개.
+      return `【장치 청구범위】에 대한 도면만 설계하라. 총 도면 수: ${f}개.
+
+⚠️ 중요: 방법 단계(S100, S200, ~단계 등)는 절대 포함하지 마라. 이 도면은 오직 장치/서버의 구성요소만 표현한다.
 ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 (${skipNums.map(n=>'도 '+n).join(', ')}).\n새로 생성할 도면: ${genCount>0?genCount:0}개.\n필수 도면 번호는 건너뛰고 나머지 번호로 생성하라.`:''}
 
 [파트1: 도면 설계]
-각 도면: 제목/유형, 구성요소+참조번호, 연결관계. 참조번호: 서버100번대, 단말200번대, 외부300번대.
+각 도면: 제목/유형, 구성요소+참조번호, 연결관계.
+참조번호 규칙:
+- 서버/시스템: 100번대 (100, 110, 120...)
+- 사용자 단말: 200번대 (200, 210...)
+- 외부 시스템: 300번대 (300, 310...)
+- 데이터베이스: 400번대 (400, 410...)
+
+⚠️ 구성요소 명칭에 참조번호를 포함하여 표기하라 (예: "통신부(110)", "프로세서(120)").
+⚠️ 청구항에 기재된 구성요소만 도면에 포함하라. 방법 단계는 Step 11에서 별도로 설계한다.
 
 [파트2: 도면의 간단한 설명]
 ---BRIEF_DESCRIPTIONS---
@@ -741,9 +751,9 @@ ${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 �
 
 파트2에서는 필수 도면 포함 모든 도면의 간단한 설명을 기재하라.
 
-★★★ 발명 내용을 단 하나도 누락 없이 모두 도면에 반영하라. ★★★
+★★★ 장치 청구항의 구성요소를 빠짐없이 도면에 반영하라. 방법 단계는 포함 금지. ★★★
 
-${T}\n[청구범위] ${outputs.step_06||''}${getFullInvention()}`;}
+${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
 
     case 'step_08':{
       const dlCfg={
@@ -809,25 +819,29 @@ ${themeInst}
 
 ${T}\n[장치 청구항] ${outputs.step_06||''}\n[상세설명] ${(outputs.step_08||'').slice(0,3000)}${getFullInvention()}${styleRef}`;}
 
-    // ═══ Step 11: 방법 도면 (장치 1:1 대응 제거) ═══
-    case 'step_11':{const f=document.getElementById('optMethodFigures').value,lf=getLastFigureNumber(outputs.step_07||'');return `방법 흐름도 ${f}개를 설계하라. 도 ${lf+1}부터.
+    // ═══ Step 11: 방법 도면 (장치 구성요소 제외) ═══
+    case 'step_11':{const f=document.getElementById('optMethodFigures').value,lf=getLastFigureNumber(outputs.step_07||'');return `【방법 청구범위】에 대한 흐름도 ${f}개를 설계하라. 도 ${lf+1}부터.
+
+⚠️ 중요: 이 도면은 오직 방법의 단계(S100, S200...)만 표현한다. 
+장치 구성요소(통신부, 프로세서 등)는 포함하지 마라. 장치 구성요소는 Step 7에서 이미 설계되었다.
 
 규칙:
 - 방법 도면은 장치 도면과 1:1 대응될 필요가 없다.
 - 사용자가 지정한 ${f}개의 도면에 맞추어 방법 청구항의 핵심 동작 흐름을 설계하라.
-- 장치 도면의 구성요소를 참조하되, 방법의 단계적 흐름에 적합하게 재구성하라.
-- S100,S200 단계번호.
+- 단계 번호: S${lf+1}01, S${lf+1}02... 형식 (도면번호*100 + 순서)
+- 각 단계는 "~단계" 또는 "~하는 단계"로 명명
 
 [파트1: 도면 설계]
-단계: 번호, 내용, 연결.
+각 단계: 번호(S100), 단계명, 다음 단계와의 연결.
+⚠️ 단계명에 단계번호를 포함하여 표기하라 (예: "사용자 인증 단계(S101)", "데이터 수신 단계(S102)").
 
 [파트2: 도면의 간단한 설명]
 ---BRIEF_DESCRIPTIONS---
 도 ${lf+1}은 (방법 이름)의 (설명)을 나타내는 순서도이다.
 
-★★★ 발명 내용을 단 하나도 누락 없이 모두 흐름도에 반영하라. ★★★
+★★★ 방법 청구항의 모든 단계를 빠짐없이 흐름도에 반영하라. 장치 구성요소는 포함 금지. ★★★
 
-${T}\n[방법 청구항] ${outputs.step_10||''}${getFullInvention()}`;}
+${T}\n[방법 청구항] ${outputs.step_10||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
 
     case 'step_12':return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: \"이하에서는 앞서 설명한 서버의 구성 및 동작을 참조하여 방법을 설명한다.\" 생략 금지. 제한성 표현 금지.\n\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${getFullInvention()}${styleRef}`;
     case 'step_13':return `청구범위와 상세설명 검토:\n1.청구항뒷받침 2.기술적비약 3.수학식정합성 4.반복실시가능성 5.보완/수정 구체적 문장\n${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}`;
@@ -845,7 +859,11 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}${getFullInvention()}`;}
 ${T}\n[전체 청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명 요약] ${(getLatestDescription()||'').slice(0,3000)}\n[발명 내용] ${inv.slice(0,2000)}`;
     case 'step_16':return `발명의 효과. \"본 발명에 따르면,\"시작. 50단어 이내. 마지막: \"본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며, 언급되지 않은 또 다른 효과들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\"\n${T}\n[과제] ${outputs.step_05||''}\n[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
     case 'step_17':return `과제의 해결 수단. \"본 발명의 일 실시예에 따른\"시작. 마지막: \"본 발명의 기타 구체적인 사항들은 상세한 설명 및 도면들에 포함되어 있다.\"\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}${styleRef}`;
-    case 'step_18':return `【부호의 설명】작성. \"구성요소 : 참조번호\". 참조번호 오름차순.\n${T}\n[도면] ${outputs.step_07||''}\n[방법도면] ${outputs.step_11||''}`;
+    case 'step_18':{
+      const hasMethod=includeMethodClaims&&outputs.step_11;
+      return `【부호의 설명】작성. \"구성요소 : 참조번호\". 참조번호 오름차순.
+${hasMethod?'장치 구성요소와 방법 단계를 구분하여 작성하라.':'장치 구성요소만 작성하라. 방법 단계(S100 등)는 포함하지 마라.'}
+${T}\n[장치 도면] ${outputs.step_07||''}${hasMethod?`\n[방법 도면] ${outputs.step_11||''}`:''}`}
     case 'step_19':return `요약서. 청구항1 기준 150단어. \"본 발명은\"시작.\n출력:\n【요약】\n(본문)\n\n【대표도】\n도 1\n\n위 형식만.\n${T}\n[청구항1] ${(outputs.step_06||'').slice(0,1500)}${styleRef}`;
     default:return '';
   }
@@ -1121,7 +1139,22 @@ ${diagram}`,4096);
           const frameW=PAGE_W-0.8;
           const maxFrameH=Math.min(AVAILABLE_H, nodeCount*1.0+0.6);
           const frameH=maxFrameH;
-          const frameRefNum=figNum*100;
+          
+          // 참조번호 추출 함수
+          function extractRefNum(label,fallback){
+            const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
+            return match?match[1]:fallback;
+          }
+          
+          // 외곽 프레임 참조번호 추출
+          let frameRefNum=figNum*100;
+          if(nodes.length>0){
+            const firstRef=extractRefNum(nodes[0].label,'');
+            if(firstRef&&!firstRef.startsWith('S')){
+              const num=parseInt(firstRef);
+              if(num>=100) frameRefNum=Math.floor(num/100)*100;
+            }
+          }
           
           // 박스 크기 동적 계산
           const framePadY=0.3;
@@ -1143,16 +1176,20 @@ ${diagram}`,4096);
           
           // 내부 구성요소 박스들
           nodes.forEach((n,i)=>{
-            const bx=boxStartX, by=boxStartY+i*(boxH+boxGap), refNum=frameRefNum+10*(i+1);
+            const bx=boxStartX, by=boxStartY+i*(boxH+boxGap);
+            // 참조번호 추출
+            const fallbackRef=frameRefNum+10*(i+1);
+            const refNum=extractRefNum(n.label,String(fallbackRef));
+            const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
             // 그림자
             slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
             // 박스 본체
             slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
-            // 박스 텍스트
-            slide.addText(n.label,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+            // 박스 텍스트 (참조번호 제외)
+            slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
             // 리더라인
             slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
-            // 부호 라벨
+            // 부호 라벨 (추출된 참조번호)
             slide.addText(String(refNum),{x:refLabelX+0.25,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
             // 양방향 화살표
             if(i<nodes.length-1){
@@ -1256,13 +1293,31 @@ function computeEdgeRoutes(edges,positions){
   }).filter(Boolean);
 }
 function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
-  // ═══ KIPO 특허 도면 규칙 v2.0 (SVG 미리보기) ═══
-  const PX=72; // 1인치 = 72px
-  const PAD=0.5;
-  const SHADOW_OFFSET=4; // px
-  const frameRefNum=figNum*100;
+  // ═══ KIPO 특허 도면 규칙 v2.2 (참조번호 추출) ═══
+  const PX=72;
+  const SHADOW_OFFSET=4;
   
-  // 레이아웃 계산
+  // 노드 라벨에서 참조번호 추출 함수
+  function extractRefNum(label,fallback){
+    // "사용자 단말 200" → "200"
+    // "통신부(110)" → "110"
+    // "프로세서 120" → "120"
+    // "S401" → "S401"
+    // "식사 시간 정보 수신 단계 S401" → "S401"
+    const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
+    return match?match[1]:fallback;
+  }
+  
+  // 외곽 프레임 참조번호 추출 (첫 번째 노드에서 100단위 추출)
+  let frameRefNum=figNum*100;
+  if(nodes.length>0){
+    const firstRef=extractRefNum(nodes[0].label,'');
+    if(firstRef&&!firstRef.startsWith('S')){
+      const num=parseInt(firstRef);
+      if(num>=100) frameRefNum=Math.floor(num/100)*100;
+    }
+  }
+  
   const frameX=0.5*PX, frameY=0.5*PX;
   const boxW=5.0*PX, boxH=0.7*PX, boxGap=0.8*PX;
   const boxStartX=frameX+0.6*PX, boxStartY=frameY+0.4*PX;
@@ -1276,9 +1331,6 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   const mkId=`ah_${containerId}`;
   svg+=`<defs>
     <marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#000"/>
-    </marker>
-    <marker id="${mkId}_both" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M0 0 L10 5 L0 10 z" fill="#000"/>
     </marker>
   </defs>`;
@@ -1297,23 +1349,26 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   nodes.forEach((n,i)=>{
     const bx=boxStartX;
     const by=boxStartY+i*(boxH+boxGap);
-    const refNum=frameRefNum+10*(i+1);
+    // 노드 라벨에서 참조번호 추출 (없으면 자동 생성)
+    const fallbackRef=frameRefNum+10*(i+1);
+    const refNum=extractRefNum(n.label,String(fallbackRef));
     
     // 그림자
     svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" fill="#000"/>`;
     // 박스 본체
     svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
-    // 박스 텍스트
-    const label=n.label.length>18?n.label.slice(0,16)+'…':n.label;
-    svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="12" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(label)}</text>`;
+    // 박스 텍스트 (참조번호 제외한 라벨만 표시)
+    const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+    const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
+    svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="12" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
     
-    // 리더라인 (박스 우측 → 프레임 우측 → 부호)
+    // 리더라인
     const leaderEndX=frameX+frameW+0.3*PX;
     svg+=`<line x1="${bx+boxW}" y1="${by+boxH/2}" x2="${leaderEndX}" y2="${by+boxH/2}" stroke="#000" stroke-width="1"/>`;
     // 부호 라벨
     svg+=`<text x="${leaderEndX+8}" y="${by+boxH/2+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
     
-    // 3. 구성요소 간 양방향 화살표 (↕)
+    // 양방향 화살표 (↕)
     if(i<nodes.length-1){
       const arrowX=bx+boxW/2;
       const arrowY1=by+boxH+2;
@@ -1361,12 +1416,18 @@ function downloadPptx(sid){
   const LINE_ARROW=1.0;
   const SHADOW_OFFSET=0.04;
   
+  // 노드 라벨에서 참조번호 추출 함수
+  function extractRefNum(label,fallback){
+    const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
+    return match?match[1]:fallback;
+  }
+  
   // 페이지 여백
   const PAGE_MARGIN=0.6;
-  const PAGE_W=8.27-PAGE_MARGIN*2; // 약 7.07"
-  const PAGE_H=11.69-PAGE_MARGIN*2; // 약 10.49"
+  const PAGE_W=8.27-PAGE_MARGIN*2;
+  const PAGE_H=11.69-PAGE_MARGIN*2;
   const TITLE_H=0.5;
-  const AVAILABLE_H=PAGE_H-TITLE_H-0.3; // 약 9.69"
+  const AVAILABLE_H=PAGE_H-TITLE_H-0.3;
   
   data.forEach(({nodes,edges,positions},idx)=>{
     const slide=pptx.addSlide({bkgd:'FFFFFF'});
@@ -1380,11 +1441,21 @@ function downloadPptx(sid){
     
     if(!nodes.length)return;
     
+    // 외곽 프레임 참조번호 추출
+    let frameRefNum=figNum*100;
+    if(nodes.length>0){
+      const firstRef=extractRefNum(nodes[0].label,'');
+      if(firstRef&&!firstRef.startsWith('S')){
+        const num=parseInt(firstRef);
+        if(num>=100) frameRefNum=Math.floor(num/100)*100;
+      }
+    }
+    
     // 노드 수에 따라 동적 스케일링
     const nodeCount=nodes.length;
     const frameX=PAGE_MARGIN;
     const frameY=PAGE_MARGIN+TITLE_H;
-    const frameW=PAGE_W-0.8; // 부호 라벨 공간 확보
+    const frameW=PAGE_W-0.8;
     
     // 프레임 높이 계산 (페이지 내 맞춤)
     const maxFrameH=Math.min(AVAILABLE_H, nodeCount*1.0+0.6);
@@ -1410,7 +1481,6 @@ function downloadPptx(sid){
     });
     
     // 외곽 부호
-    const frameRefNum=figNum*100;
     const refLabelX=frameX+frameW+0.1;
     slide.addShape(pptx.shapes.LINE,{
       x:frameX+frameW,y:frameY+frameH/2,w:0.25,h:0,
@@ -1425,7 +1495,11 @@ function downloadPptx(sid){
     nodes.forEach((n,i)=>{
       const bx=boxStartX;
       const by=boxStartY+i*(boxH+boxGap);
-      const refNum=frameRefNum+10*(i+1);
+      // 노드 라벨에서 참조번호 추출
+      const fallbackRef=frameRefNum+10*(i+1);
+      const refNum=extractRefNum(n.label,String(fallbackRef));
+      // 참조번호 제외한 라벨
+      const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
       
       // 그림자
       slide.addShape(pptx.shapes.RECTANGLE,{
@@ -1437,8 +1511,8 @@ function downloadPptx(sid){
         x:bx,y:by,w:boxW,h:boxH,
         fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}
       });
-      // 박스 텍스트
-      slide.addText(n.label,{
+      // 박스 텍스트 (참조번호 제외)
+      slide.addText(cleanLabel,{
         x:bx+0.08,y:by,w:boxW-0.16,h:boxH,
         fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),
         fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'
@@ -1493,6 +1567,12 @@ async function downloadDiagramImages(sid){
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
   const caseNum=selectedProjectNumber||'도면';
   
+  // 노드 라벨에서 참조번호 추출 함수
+  function extractRefNum(label,fallback){
+    const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
+    return match?match[1]:fallback;
+  }
+  
   App.showToast(`도면 이미지 생성 중... (${data.length}개)`);
   
   for(let idx=0;idx<data.length;idx++){
@@ -1521,6 +1601,16 @@ async function downloadDiagramImages(sid){
     
     if(!nodes.length)continue;
     
+    // 외곽 프레임 참조번호 추출
+    let frameRefNum=figNum*100;
+    if(nodes.length>0){
+      const firstRef=extractRefNum(nodes[0].label,'');
+      if(firstRef&&!firstRef.startsWith('S')){
+        const num=parseInt(firstRef);
+        if(num>=100) frameRefNum=Math.floor(num/100)*100;
+      }
+    }
+    
     // 레이아웃 계산
     const nodeCount=nodes.length;
     const frameX=30,frameY=50;
@@ -1537,7 +1627,6 @@ async function downloadDiagramImages(sid){
     ctx.strokeRect(frameX,frameY,frameW,frameH);
     
     // 외곽 부호
-    const frameRefNum=figNum*100;
     ctx.beginPath();
     ctx.moveTo(frameX+frameW,frameY+frameH/2);
     ctx.lineTo(frameX+frameW+25,frameY+frameH/2);
@@ -1558,7 +1647,10 @@ async function downloadDiagramImages(sid){
     nodes.forEach((n,i)=>{
       const bx=boxStartX;
       const by=boxStartY+i*(boxH+boxGap);
-      const refNum=frameRefNum+10*(i+1);
+      // 참조번호 추출
+      const fallbackRef=frameRefNum+10*(i+1);
+      const refNum=extractRefNum(n.label,String(fallbackRef));
+      const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
       
       // 그림자
       ctx.fillStyle='#000000';
@@ -1569,13 +1661,13 @@ async function downloadDiagramImages(sid){
       ctx.lineWidth=1.5;
       ctx.strokeRect(bx,by,boxW,boxH);
       
-      // 텍스트
+      // 텍스트 (참조번호 제외)
       ctx.fillStyle='#000000';
       ctx.font=`${Math.min(13,14-nodeCount*0.5)}px "맑은 고딕", sans-serif`;
       ctx.textAlign='center';
       ctx.textBaseline='middle';
-      const label=n.label.length>25?n.label.slice(0,23)+'…':n.label;
-      ctx.fillText(label,bx+boxW/2,by+boxH/2);
+      const displayLabel=cleanLabel.length>25?cleanLabel.slice(0,23)+'…':cleanLabel;
+      ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
       ctx.textAlign='left';
       
       // 리더라인
@@ -1585,7 +1677,7 @@ async function downloadDiagramImages(sid){
       ctx.lineWidth=1;
       ctx.stroke();
       
-      // 부호
+      // 부호 (추출된 참조번호 사용)
       ctx.font='11px "맑은 고딕", sans-serif';
       ctx.fillText(String(refNum),frameX+frameW+30,by+boxH/2+4);
       
