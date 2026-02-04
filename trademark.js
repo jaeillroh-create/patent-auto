@@ -5968,27 +5968,89 @@ ${criticalResults.slice(0, 5).map(r =>
   TM.extractFromPDF = async function(file) {
     // PDF.js 로드
     if (!window.pdfjsLib) {
+      console.log('[TM] PDF.js 로드 중...');
       await TM.loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      console.log('[TM] PDF.js 로드 완료');
     }
     
     const arrayBuffer = await file.arrayBuffer();
+    console.log('[TM] PDF 파일 크기:', arrayBuffer.byteLength);
+    
     const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    console.log('[TM] PDF 페이지 수:', pdf.numPages);
     
     let fullText = '';
     
     // 모든 페이지에서 텍스트 추출
-    for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) { // 최대 5페이지
+    for (let i = 1; i <= Math.min(pdf.numPages, 3); i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
+      console.log('[TM] 페이지', i, '텍스트 아이템 수:', textContent.items.length);
+      
       const pageText = textContent.items.map(item => item.str).join(' ');
       fullText += pageText + '\n';
     }
     
-    console.log('[TM] PDF 텍스트 추출:', fullText.substring(0, 500));
+    // 텍스트가 거의 없으면 이미지 기반 PDF -> OCR 시도
+    const cleanText = fullText.replace(/\s+/g, '').trim();
+    console.log('[TM] 추출된 텍스트 길이:', cleanText.length);
+    
+    if (cleanText.length < 30) {
+      console.log('[TM] 이미지 기반 PDF 감지 - OCR 시도');
+      App.showToast('이미지 PDF 감지. OCR 처리 중...', 'info');
+      fullText = await TM.ocrPDF(pdf);
+    }
+    
+    console.log('[TM] 최종 텍스트:', fullText.substring(0, 500));
     
     // 정규식으로 정보 추출
     return TM.parseApplicationText(fullText);
+  };
+  
+  // PDF를 이미지로 렌더링 후 OCR
+  TM.ocrPDF = async function(pdf) {
+    // Tesseract.js 로드
+    if (!window.Tesseract) {
+      console.log('[TM] Tesseract.js 로드 중...');
+      await TM.loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js');
+      console.log('[TM] Tesseract.js 로드 완료');
+    }
+    
+    let fullText = '';
+    
+    // 첫 페이지만 OCR (속도 위해)
+    const page = await pdf.getPage(1);
+    const scale = 2.0; // 고해상도로 렌더링
+    const viewport = page.getViewport({ scale });
+    
+    // Canvas에 렌더링
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    
+    await page.render({
+      canvasContext: context,
+      viewport: viewport
+    }).promise;
+    
+    console.log('[TM] PDF 이미지 렌더링 완료:', canvas.width, 'x', canvas.height);
+    
+    // OCR 실행 (한국어)
+    const result = await Tesseract.recognize(canvas, 'kor', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          console.log('[TM] OCR 진행:', pct + '%');
+        }
+      }
+    });
+    
+    fullText = result.data.text;
+    console.log('[TM] OCR 결과:', fullText.substring(0, 500));
+    
+    return fullText;
   };
   
   // 텍스트에서 출원 정보 파싱
