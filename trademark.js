@@ -1520,88 +1520,7 @@
                 <strong style="color: #28a745;">🟢 확장</strong>은 사업 확장 시 고려하세요.
               </div>
               
-              ${(() => {
-                const classRec = p.aiAnalysis.classRecommendations || {};
-                const coreClasses = classRec.core || [];
-                const recommendedClasses = classRec.recommended || [];
-                const expansionClasses = classRec.expansion || [];
-                
-                // 핵심 류 렌더링
-                const renderClassItem = (item, category, emoji) => {
-                  const code = item.class;
-                  const isAdded = p.designatedGoods.some(g => g.classCode === code);
-                  const recGoods = p.aiAnalysis.recommendedGoods?.[code] || [];
-                  return \`
-                    <div class="tm-ai-rec-item \${isAdded ? 'added' : ''}" data-category="\${category}" style="padding: 10px; gap: 8px; border-left: 3px solid \${category === 'core' ? '#dc3545' : category === 'recommended' ? '#fd7e14' : '#28a745'};">
-                      <div class="tm-ai-rec-content" style="flex: 1; min-width: 0;">
-                        <div class="tm-ai-rec-class" style="font-size: 13px;">
-                          <span style="margin-right: 4px;">\${emoji}</span>
-                          <strong>제\${code}류</strong> \${TM.niceClasses[code] || ''}
-                        </div>
-                        <div class="tm-ai-rec-reason" style="font-size: 11px; color: #666; margin-top: 2px;">\${TM.escapeHtml(item.reason || '')}</div>
-                        \${recGoods.length > 0 ? \`
-                          <div class="tm-ai-rec-goods" style="margin-top: 4px; font-size: 11px;">
-                            <span class="label" style="margin-right: 4px;">추천 지정상품:</span>
-                            \${recGoods.slice(0, 3).map(g => \`<span class="tag" style="padding: 1px 4px;">\${(g.name || g).slice(0, 15)}\${(g.name || g).length > 15 ? '..' : ''}</span>\`).join('')}
-                            \${recGoods.length > 3 ? \`<span class="more">+\${recGoods.length - 3}</span>\` : ''}
-                          </div>
-                        \` : ''}
-                      </div>
-                      <div class="tm-ai-rec-action">
-                        \${isAdded ? '<span class="applied" style="font-size: 11px; color: #28a745;">✓적용됨</span>' : 
-                          \`<button class="btn btn-primary btn-sm" style="padding: 4px 10px; font-size: 11px;" data-action="tm-apply-recommendation" data-class-code="\${code}">+ 추가</button>\`}
-                      </div>
-                    </div>
-                  \`;
-                };
-                
-                let html = '';
-                
-                // 🔴 핵심 류
-                if (coreClasses.length > 0) {
-                  html += \`
-                    <div class="tm-rec-section">
-                      <div class="tm-rec-section-header" style="background: #fff5f5; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #dc3545; border-radius: 4px; margin-bottom: 6px;">
-                        🔴 핵심 (필수 등록) - \${coreClasses.length}개 류
-                      </div>
-                      <div class="tm-ai-rec-list" style="gap: 6px; margin-bottom: 12px;">
-                        \${coreClasses.map(item => renderClassItem(item, 'core', '🔴')).join('')}
-                      </div>
-                    </div>
-                  \`;
-                }
-                
-                // 🟠 권장 류
-                if (recommendedClasses.length > 0) {
-                  html += \`
-                    <div class="tm-rec-section">
-                      <div class="tm-rec-section-header" style="background: #fff8f0; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #fd7e14; border-radius: 4px; margin-bottom: 6px;">
-                        🟠 권장 (권리 보호) - \${recommendedClasses.length}개 류
-                      </div>
-                      <div class="tm-ai-rec-list" style="gap: 6px; margin-bottom: 12px;">
-                        \${recommendedClasses.map(item => renderClassItem(item, 'recommended', '🟠')).join('')}
-                      </div>
-                    </div>
-                  \`;
-                }
-                
-                // 🟢 확장 류 (접기/펼치기)
-                if (expansionClasses.length > 0) {
-                  html += \`
-                    <div class="tm-rec-section tm-rec-expansion">
-                      <div class="tm-rec-section-header" style="background: #f0fff4; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #28a745; border-radius: 4px; margin-bottom: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" data-action="tm-toggle-expansion">
-                        <span>🟢 확장 (사업 확장 시 고려) - \${expansionClasses.length}개 류</span>
-                        <span class="tm-expansion-toggle">▼ 펼치기</span>
-                      </div>
-                      <div class="tm-ai-rec-list tm-expansion-list" style="gap: 6px; display: none;">
-                        \${expansionClasses.map(item => renderClassItem(item, 'expansion', '🟢')).join('')}
-                      </div>
-                    </div>
-                  \`;
-                }
-                
-                return html;
-              })()}
+              <div id="tm-ai-recommendations-container"></div>
               
               <!-- 추가 추천 요청 버튼 -->
               <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #eee; text-align: center;">
@@ -1799,6 +1718,144 @@
         `).join('')}
       </div>
     `;
+    
+    // AI 추천 렌더링 (3단계 구조)
+    setTimeout(() => TM.renderAiRecommendations(), 0);
+  };
+  
+  // AI 추천 상품류 렌더링 (3단계: 핵심/권장/확장)
+  TM.renderAiRecommendations = function() {
+    const container = document.getElementById('tm-ai-recommendations-container');
+    if (!container) return;
+    
+    const p = TM.currentProject;
+    if (!p || !p.aiAnalysis || !p.aiAnalysis.classRecommendations) {
+      container.innerHTML = '';
+      return;
+    }
+    
+    const classRec = p.aiAnalysis.classRecommendations;
+    const coreClasses = classRec.core || [];
+    const recommendedClasses = classRec.recommended || [];
+    const expansionClasses = classRec.expansion || [];
+    
+    // 개별 아이템 렌더링 함수
+    const renderClassItem = (item, category, emoji) => {
+      const code = item.class;
+      const isAdded = p.designatedGoods.some(g => g.classCode === code);
+      const recGoods = p.aiAnalysis.recommendedGoods?.[code] || [];
+      const borderColor = category === 'core' ? '#dc3545' : category === 'recommended' ? '#fd7e14' : '#28a745';
+      
+      let goodsHtml = '';
+      if (recGoods.length > 0) {
+        const goodsTags = recGoods.slice(0, 3).map(g => {
+          const name = g.name || g;
+          const displayName = name.length > 15 ? name.slice(0, 15) + '..' : name;
+          return '<span class="tag" style="padding: 1px 4px;">' + TM.escapeHtml(displayName) + '</span>';
+        }).join('');
+        const moreCount = recGoods.length > 3 ? '<span class="more">+' + (recGoods.length - 3) + '</span>' : '';
+        goodsHtml = '<div class="tm-ai-rec-goods" style="margin-top: 4px; font-size: 11px;">' +
+          '<span class="label" style="margin-right: 4px;">추천 지정상품:</span>' +
+          goodsTags + moreCount + '</div>';
+      }
+      
+      const actionHtml = isAdded 
+        ? '<span class="applied" style="font-size: 11px; color: #28a745;">✓적용됨</span>'
+        : '<button class="btn btn-primary btn-sm" style="padding: 4px 10px; font-size: 11px;" data-action="tm-apply-recommendation" data-class-code="' + code + '">+ 추가</button>';
+      
+      return '<div class="tm-ai-rec-item ' + (isAdded ? 'added' : '') + '" data-category="' + category + '" style="padding: 10px; gap: 8px; border-left: 3px solid ' + borderColor + ';">' +
+        '<div class="tm-ai-rec-content" style="flex: 1; min-width: 0;">' +
+          '<div class="tm-ai-rec-class" style="font-size: 13px;">' +
+            '<span style="margin-right: 4px;">' + emoji + '</span>' +
+            '<strong>제' + code + '류</strong> ' + (TM.niceClasses[code] || '') +
+          '</div>' +
+          '<div class="tm-ai-rec-reason" style="font-size: 11px; color: #666; margin-top: 2px;">' + TM.escapeHtml(item.reason || '') + '</div>' +
+          goodsHtml +
+        '</div>' +
+        '<div class="tm-ai-rec-action">' + actionHtml + '</div>' +
+      '</div>';
+    };
+    
+    let html = '';
+    
+    // 🔴 핵심 류
+    if (coreClasses.length > 0) {
+      html += '<div class="tm-rec-section">' +
+        '<div class="tm-rec-section-header" style="background: #fff5f5; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #dc3545; border-radius: 4px; margin-bottom: 6px;">' +
+          '🔴 핵심 (필수 등록) - ' + coreClasses.length + '개 류' +
+        '</div>' +
+        '<div class="tm-ai-rec-list" style="gap: 6px; margin-bottom: 12px; display: flex; flex-direction: column;">' +
+          coreClasses.map(item => renderClassItem(item, 'core', '🔴')).join('') +
+        '</div>' +
+      '</div>';
+    }
+    
+    // 🟠 권장 류
+    if (recommendedClasses.length > 0) {
+      html += '<div class="tm-rec-section">' +
+        '<div class="tm-rec-section-header" style="background: #fff8f0; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #fd7e14; border-radius: 4px; margin-bottom: 6px;">' +
+          '🟠 권장 (권리 보호) - ' + recommendedClasses.length + '개 류' +
+        '</div>' +
+        '<div class="tm-ai-rec-list" style="gap: 6px; margin-bottom: 12px; display: flex; flex-direction: column;">' +
+          recommendedClasses.map(item => renderClassItem(item, 'recommended', '🟠')).join('') +
+        '</div>' +
+      '</div>';
+    }
+    
+    // 🟢 확장 류 (접기/펼치기)
+    if (expansionClasses.length > 0) {
+      html += '<div class="tm-rec-section tm-rec-expansion">' +
+        '<div class="tm-rec-section-header" style="background: #f0fff4; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #28a745; border-radius: 4px; margin-bottom: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" data-action="tm-toggle-expansion">' +
+          '<span>🟢 확장 (사업 확장 시 고려) - ' + expansionClasses.length + '개 류</span>' +
+          '<span class="tm-expansion-toggle">▼ 펼치기</span>' +
+        '</div>' +
+        '<div class="tm-ai-rec-list tm-expansion-list" style="gap: 6px; display: none; flex-direction: column;">' +
+          expansionClasses.map(item => renderClassItem(item, 'expansion', '🟢')).join('') +
+        '</div>' +
+      '</div>';
+    }
+    
+    // 구버전 호환 (classRecommendations가 없고 recommendedClasses만 있는 경우)
+    if (html === '' && p.aiAnalysis.recommendedClasses?.length > 0) {
+      html = '<div class="tm-ai-rec-list" style="gap: 8px; display: flex; flex-direction: column;">';
+      p.aiAnalysis.recommendedClasses.slice(0, 5).forEach((code, idx) => {
+        const isAdded = p.designatedGoods.some(g => g.classCode === code);
+        const reason = p.aiAnalysis.classReasons?.[code] || '';
+        const recGoods = p.aiAnalysis.recommendedGoods?.[code] || [];
+        
+        let goodsHtml = '';
+        if (recGoods.length > 0) {
+          const goodsTags = recGoods.slice(0, 2).map(g => {
+            const name = g.name || g;
+            const displayName = name.length > 12 ? name.slice(0, 12) + '..' : name;
+            return '<span class="tag" style="padding: 1px 4px;">' + TM.escapeHtml(displayName) + '</span>';
+          }).join('');
+          const moreCount = recGoods.length > 2 ? '<span class="more">+' + (recGoods.length - 2) + '</span>' : '';
+          goodsHtml = '<div class="tm-ai-rec-goods" style="margin-top: 4px; font-size: 11px;">' +
+            '<span class="label" style="margin-right: 4px;">추천 지정상품:</span>' +
+            goodsTags + moreCount + '</div>';
+        }
+        
+        const actionHtml = isAdded 
+          ? '<span class="applied" style="font-size: 11px;">✓적용</span>'
+          : '<button class="btn btn-primary btn-sm" style="padding: 4px 8px; font-size: 11px;" data-action="tm-apply-recommendation" data-class-code="' + code + '">+ 추가</button>';
+        
+        html += '<div class="tm-ai-rec-item ' + (isAdded ? 'added' : '') + '" style="padding: 10px; gap: 8px;">' +
+          '<div class="tm-ai-rec-num" style="width: 24px; height: 24px; font-size: 12px;">' + (idx + 1) + '</div>' +
+          '<div class="tm-ai-rec-content" style="flex: 1; min-width: 0;">' +
+            '<div class="tm-ai-rec-class" style="font-size: 13px;">' +
+              '<strong>제' + code + '류</strong> ' + (TM.niceClasses[code] || '') +
+            '</div>' +
+            (reason ? '<div class="tm-ai-rec-reason" style="font-size: 11px; line-height: 1.4; max-height: 36px; overflow: hidden;">' + TM.escapeHtml(reason.slice(0, 60)) + (reason.length > 60 ? '...' : '') + '</div>' : '') +
+            goodsHtml +
+          '</div>' +
+          '<div class="tm-ai-rec-action">' + actionHtml + '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
+    
+    container.innerHTML = html;
   };
   
   // 비고시명칭 실시간 분석 미리보기
