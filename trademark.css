@@ -4544,6 +4544,584 @@
   color: #166534;
 }
 
+/* ========== 유사도 평가 개선 ========== */
+.tm-eval-control-panel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.tm-eval-control-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tm-eval-hint {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+}
+
+.tm-eval-progress-wrap {
+  min-width: 200px;
+}
+
+/* 선행상표 그리드 */
+.tm-eval-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.tm-eval-card-mini {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  transition: all 0.2s;
+}
+
+.tm-eval-card-mini:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.tm-eval-card-mini.evaluated {
+  border-left: 4px solid #10b981;
+}
+
+.tm-eval-card-mini.evaluated.high {
+  border-left-color: #ef4444;
+}
+
+.tm-eval-card-mini.evaluated.medium {
+  border-left-color: #f59e0b;
+}
+
+.tm-eval-card-num {
+  width: 28px;
+  height: 28px;
+  background: #f1f5f9;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.tm-eval-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.tm-eval-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tm-eval-card-appno {
+  font-size: 11px;
+  color: #9ca3af;
+  font-family: monospace;
+}
+
+.tm-eval-scores-mini {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.tm-score-mini {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.tm-score-mini.high {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.tm-score-mini.medium {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.tm-score-mini.low {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.tm-eval-card-status {
+  flex-shrink: 0;
+}
+
+.tm-eval-result-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tm-eval-result-badge.high {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.tm-eval-result-badge.medium {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.tm-eval-result-badge.low {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+/* 평가 결과 상세 아코디언 */
+.tm-eval-detail-section {
+  margin-top: 24px;
+}
+
+.tm-eval-detail-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tm-eval-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tm-eval-detail-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tm-eval-detail-item summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  background: #f8fafc;
+}
+
+.tm-eval-detail-item[open] summary {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tm-eval-detail-name {
+  font-weight: 500;
+}
+
+.tm-eval-detail-badge {
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.tm-eval-detail-badge.high { background: #fee2e2; color: #dc2626; }
+.tm-eval-detail-badge.medium { background: #fef3c7; color: #d97706; }
+.tm-eval-detail-badge.low { background: #dcfce7; color: #16a34a; }
+
+.tm-eval-detail-content {
+  padding: 16px;
+}
+
+.tm-eval-scores-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.tm-eval-score-box {
+  flex: 1;
+  padding: 12px;
+  text-align: center;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.tm-eval-score-box .score-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.tm-eval-score-box .score-value {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tm-eval-score-box.high { background: #fee2e2; }
+.tm-eval-score-box.high .score-value { color: #dc2626; }
+.tm-eval-score-box.medium { background: #fef3c7; }
+.tm-eval-score-box.medium .score-value { color: #d97706; }
+.tm-eval-score-box.low { background: #dcfce7; }
+.tm-eval-score-box.low .score-value { color: #16a34a; }
+
+.tm-eval-notes {
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.6;
+}
+
+/* ========== 리스크 평가 개선 ========== */
+.tm-risk-action-panel {
+  padding: 20px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.tm-risk-dashboard {
+  background: white;
+  border-radius: 16px;
+  border: 2px solid #e2e8f0;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.tm-risk-dashboard.high { border-color: #fca5a5; }
+.tm-risk-dashboard.medium { border-color: #fcd34d; }
+.tm-risk-dashboard.low { border-color: #86efac; }
+
+.tm-risk-level-display {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  background: #f8fafc;
+}
+
+.tm-risk-dashboard.high .tm-risk-level-display { background: #fef2f2; }
+.tm-risk-dashboard.medium .tm-risk-level-display { background: #fffbeb; }
+.tm-risk-dashboard.low .tm-risk-level-display { background: #f0fdf4; }
+
+.tm-risk-icon {
+  font-size: 48px;
+}
+
+.tm-risk-main-text {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.tm-risk-sub-text {
+  font-size: 14px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.tm-risk-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: #e2e8f0;
+}
+
+.tm-risk-metric {
+  padding: 20px;
+  background: white;
+  text-align: center;
+}
+
+.tm-risk-metric.warning .tm-metric-value {
+  color: #dc2626;
+}
+
+.tm-metric-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.tm-metric-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.tm-risk-analysis {
+  padding: 20px;
+}
+
+.tm-analysis-section {
+  margin-bottom: 20px;
+}
+
+.tm-analysis-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+}
+
+.tm-analysis-content {
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #475569;
+}
+
+.tm-analysis-section.recommendation .tm-analysis-content {
+  background: #eff6ff;
+  border-left: 4px solid #3b82f6;
+}
+
+.tm-fee-accordion {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.tm-fee-accordion summary {
+  padding: 14px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #f8fafc;
+}
+
+.tm-fee-content {
+  padding: 16px;
+}
+
+.tm-criteria-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.tm-criteria-item {
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.tm-criteria-item.high { background: #fef2f2; border-color: #fecaca; }
+.tm-criteria-item.medium { background: #fffbeb; border-color: #fde68a; }
+.tm-criteria-item.low { background: #f0fdf4; border-color: #bbf7d0; }
+
+.tm-criteria-label {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.tm-criteria-desc {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* ========== 종합 요약 대시보드 ========== */
+.tm-summary-dashboard {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .tm-summary-dashboard {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.tm-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.tm-summary-card.tm-card-trademark {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: #93c5fd;
+}
+
+.tm-summary-card.tm-card-risk.high {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border-color: #fca5a5;
+}
+
+.tm-summary-card.tm-card-risk.medium {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-color: #fcd34d;
+}
+
+.tm-summary-card.tm-card-risk.low {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-color: #86efac;
+}
+
+.tm-card-icon {
+  font-size: 32px;
+}
+
+.tm-card-content {
+  flex: 1;
+}
+
+.tm-card-title {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.tm-card-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.tm-card-sub {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+.tm-summary-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.tm-summary-section {
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+
+.tm-summary-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 12px 0;
+}
+
+.tm-summary-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.tm-info-badge {
+  padding: 4px 10px;
+  background: #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.tm-goods-summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tm-goods-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.tm-class-badge {
+  font-weight: 600;
+  color: #3b82f6;
+  font-size: 13px;
+}
+
+.tm-goods-count {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.tm-summary-stats {
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.tm-fee-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tm-fee-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 6px 0;
+}
+
+.tm-fee-item.total {
+  font-weight: 600;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+  margin-top: 4px;
+}
+
+.tm-output-section {
+  padding: 20px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-radius: 12px;
+  border: 1px solid #86efac;
+}
+
+.tm-output-section h4 {
+  margin: 0 0 16px 0;
+  font-size: 15px;
+  color: #166534;
+}
+
+.tm-output-buttons {
+  display: flex;
+  gap: 12px;
+}
+
 /* 추출 정보 표시 */
 .tm-extracted-info {
   margin-top: 16px;

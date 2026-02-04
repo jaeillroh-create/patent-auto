@@ -22,9 +22,8 @@
       { id: 3, name: '선행상표 검색', icon: '🔍', key: 'prior_search' },
       { id: 4, name: '유사도 평가', icon: '⚖️', key: 'similarity' },
       { id: 5, name: '리스크 평가', icon: '📊', key: 'risk' },
-      { id: 6, name: '비용 산출', icon: '💰', key: 'fee' },
-      { id: 7, name: '우선심사', icon: '⚡', key: 'priority_exam' },
-      { id: 8, name: '문서 출력', icon: '📄', key: 'output' }
+      { id: 6, name: '우선심사', icon: '⚡', key: 'priority_exam' },
+      { id: 7, name: '종합 요약', icon: '📋', key: 'summary' }
     ],
     
     // 프로젝트 데이터 구조
@@ -1081,12 +1080,10 @@
         return TM.currentProject.similarityEvaluations && TM.currentProject.similarityEvaluations.length > 0;
       case 5: // 리스크 평가
         return !!(TM.currentProject.riskAssessment.level);
-      case 6: // 비용 산출
-        return TM.currentProject.feeCalculation.totalFee > 0;
-      case 7: // 우선심사 - 사용자가 명시적으로 선택 여부를 결정해야 완료
+      case 6: // 우선심사 - 사용자가 명시적으로 선택 여부를 결정해야 완료
         return TM.currentProject.priorityExam.userConfirmed === true;
-      case 8: // 문서 출력
-        return false; // 항상 미완료 (언제든 다운로드 가능)
+      case 7: // 종합 요약
+        return false; // 항상 미완료 (언제든 출력 가능)
       default:
         return false;
     }
@@ -1168,13 +1165,10 @@
         TM.renderStep5_Risk(stepEl);
         break;
       case 6:
-        TM.renderStep6_Fee(stepEl);
-        break;
-      case 7:
         TM.renderStep7_PriorityExam(stepEl);
         break;
-      case 8:
-        TM.renderStep8_Output(stepEl);
+      case 7:
+        TM.renderStep7_Summary(stepEl);
         break;
     }
   };
@@ -4873,93 +4867,104 @@
     container.innerHTML = `
       <div class="tm-step-header">
         <h3>⚖️ 유사도 평가</h3>
-        <p>AI가 선행상표와의 유사도를 외관, 호칭, 관념 기준으로 평가합니다.</p>
       </div>
       
-      <!-- 출원상표 정보 -->
-      <div class="tm-similarity-info-card">
-        <div class="tm-sim-source">
-          <div class="tm-sim-label">출원 상표</div>
-          <div class="tm-sim-trademark">
-            ${p.specimenUrl ? `<img src="${p.specimenUrl}" alt="출원상표" class="tm-sim-img">` : ''}
-            <span class="tm-sim-name">${TM.escapeHtml(p.trademarkName || '(미입력)')}</span>
-          </div>
+      ${allSearchResults.length === 0 ? `
+        <div class="tm-empty-state" style="padding: 60px;">
+          <div class="icon">🔍</div>
+          <h4>선행상표 검색이 필요합니다</h4>
+          <p>먼저 선행상표 검색을 실행한 후 유사도를 평가하세요.</p>
+          <button class="btn btn-primary" data-action="tm-goto-step" data-step="3">
+            선행상표 검색 →
+          </button>
         </div>
-      </div>
-      
-      <!-- 평가 대상 선택 -->
-      <div class="tm-form-section">
-        <div class="tm-section-header">
-          <h4>📋 평가 대상 선행상표</h4>
-          <span class="tm-badge">${allSearchResults.length}건</span>
-        </div>
-        
-        ${allSearchResults.length === 0 ? `
-          <div class="tm-empty-state" style="padding: 32px;">
-            <div class="icon">🔍</div>
-            <h4>선행상표 검색이 필요합니다</h4>
-            <p>먼저 선행상표 검색을 실행한 후 유사도를 평가하세요.</p>
-            <button class="btn btn-primary" data-action="tm-goto-step" data-step="3">
-              선행상표 검색 →
-            </button>
-          </div>
-        ` : `
-          <!-- 전체 평가 버튼 & 프로그레스 -->
-          <div class="tm-eval-control">
-            <button class="btn btn-primary" id="tm-eval-all-btn" data-action="tm-evaluate-all-similarity">
+      ` : `
+        <!-- AI 평가 컨트롤 -->
+        <div class="tm-eval-control-panel">
+          <div class="tm-eval-control-left">
+            <button class="btn btn-primary btn-lg" id="tm-eval-all-btn" data-action="tm-evaluate-all-similarity">
               🤖 전체 AI 평가 실행
             </button>
-            <div class="tm-eval-progress" id="tm-eval-progress" style="display: none;">
-              <div class="tm-progress-bar">
-                <div class="tm-progress-fill" id="tm-progress-fill"></div>
-              </div>
-              <div class="tm-progress-text" id="tm-progress-text">0 / ${allSearchResults.length}</div>
+            <p class="tm-eval-hint">선행상표 ${allSearchResults.length}건에 대해 외관·호칭·관념 유사도를 AI가 일괄 분석합니다.</p>
+          </div>
+          <div class="tm-eval-progress-wrap" id="tm-eval-progress" style="display: none;">
+            <div class="tm-progress-bar">
+              <div class="tm-progress-fill" id="tm-progress-fill"></div>
             </div>
-          </div>
-          
-          <!-- 선행상표 목록 (간결한 표시) -->
-          <div class="tm-target-list-compact">
-            ${allSearchResults.map((r, idx) => {
-              const evaluated = evaluations.find(e => e.targetId === r.applicationNumber);
-              return `
-                <div class="tm-target-row ${evaluated ? 'evaluated' : ''}">
-                  <div class="tm-target-num">${idx + 1}</div>
-                  <div class="tm-target-main">
-                    <span class="tm-target-name">${TM.escapeHtml(r.title || r.trademarkName || '(명칭없음)')}</span>
-                    <span class="tm-target-app-no">${r.applicationNumber}</span>
-                  </div>
-                  <div class="tm-target-action">
-                    ${evaluated ? `
-                      <span class="tm-eval-badge-sm ${evaluated.overall}">
-                        ${TM.getSimilarityLabel(evaluated.overall)}
-                      </span>
-                    ` : `
-                      <button class="btn btn-sm btn-ghost" 
-                              data-action="tm-evaluate-similarity" 
-                              data-target-id="${r.applicationNumber}">
-                        평가
-                      </button>
-                    `}
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        `}
-      </div>
-      
-      <!-- 평가 결과 상세 -->
-      ${evaluations.length > 0 ? `
-        <div class="tm-form-section">
-          <div class="tm-section-header">
-            <h4>📊 평가 결과 상세</h4>
-            <span class="tm-badge">${evaluations.length}건 완료</span>
-          </div>
-          <div class="tm-eval-results">
-            ${evaluations.map(e => TM.renderEvaluationDetail(e)).join('')}
+            <div class="tm-progress-text" id="tm-progress-text">0 / ${allSearchResults.length}</div>
           </div>
         </div>
-      ` : ''}
+        
+        <!-- 선행상표 그리드 -->
+        <div class="tm-eval-grid">
+          ${allSearchResults.map((r, idx) => {
+            const evaluated = evaluations.find(e => e.targetId === r.applicationNumber);
+            return `
+              <div class="tm-eval-card-mini ${evaluated ? 'evaluated ' + evaluated.overall : ''}">
+                <div class="tm-eval-card-num">${idx + 1}</div>
+                <div class="tm-eval-card-content">
+                  <div class="tm-eval-card-name">${TM.escapeHtml(r.title || r.trademarkName || '(명칭없음)')}</div>
+                  <div class="tm-eval-card-appno">${r.applicationNumber}</div>
+                  ${evaluated ? `
+                    <div class="tm-eval-scores-mini">
+                      <span class="tm-score-mini ${evaluated.appearance}">외관</span>
+                      <span class="tm-score-mini ${evaluated.pronunciation}">호칭</span>
+                      <span class="tm-score-mini ${evaluated.concept}">관념</span>
+                    </div>
+                  ` : ''}
+                </div>
+                <div class="tm-eval-card-status">
+                  ${evaluated ? `
+                    <span class="tm-eval-result-badge ${evaluated.overall}">
+                      ${evaluated.overall === 'high' ? '유사' : evaluated.overall === 'medium' ? '주의' : '비유사'}
+                    </span>
+                  ` : `
+                    <button class="btn btn-sm btn-outline" 
+                            data-action="tm-evaluate-similarity" 
+                            data-target-id="${r.applicationNumber}">평가</button>
+                  `}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+        
+        <!-- 평가 결과 상세 (아코디언) -->
+        ${evaluations.length > 0 ? `
+          <div class="tm-eval-detail-section">
+            <h4>📊 평가 결과 상세 <span class="tm-badge">${evaluations.length}건</span></h4>
+            <div class="tm-eval-details-list">
+              ${evaluations.map(e => `
+                <details class="tm-eval-detail-item ${e.overall}">
+                  <summary>
+                    <span class="tm-eval-detail-name">${TM.escapeHtml(e.targetName || e.targetId)}</span>
+                    <span class="tm-eval-detail-badge ${e.overall}">
+                      ${e.overall === 'high' ? '높음 (유사)' : e.overall === 'medium' ? '중간 (주의)' : '낮음 (비유사)'}
+                    </span>
+                  </summary>
+                  <div class="tm-eval-detail-content">
+                    <div class="tm-eval-scores-row">
+                      <div class="tm-eval-score-box ${e.appearance}">
+                        <div class="score-label">외관</div>
+                        <div class="score-value">${e.appearance === 'high' ? '유사' : e.appearance === 'medium' ? '보통' : '상이'}</div>
+                      </div>
+                      <div class="tm-eval-score-box ${e.pronunciation}">
+                        <div class="score-label">호칭</div>
+                        <div class="score-value">${e.pronunciation === 'high' ? '유사' : e.pronunciation === 'medium' ? '보통' : '상이'}</div>
+                      </div>
+                      <div class="tm-eval-score-box ${e.concept}">
+                        <div class="score-label">관념</div>
+                        <div class="score-value">${e.concept === 'high' ? '유사' : e.concept === 'medium' ? '보통' : '상이'}</div>
+                      </div>
+                    </div>
+                    ${e.notes ? `<div class="tm-eval-notes">${TM.escapeHtml(e.notes)}</div>` : ''}
+                  </div>
+                </details>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+      `}
     `;
   };
   
@@ -5214,15 +5219,20 @@ notes는 평가 근거를 3-4문장으로 서술.
   TM.renderStep5_Risk = function(container) {
     const p = TM.currentProject;
     const risk = p.riskAssessment || {};
+    const fee = p.feeCalculation || {};
+    
+    // 비용 자동 계산
+    if (p.designatedGoods?.length > 0 && !fee.totalFee) {
+      TM.calculateFee();
+    }
     
     container.innerHTML = `
       <div class="tm-step-header">
         <h3>📊 리스크 평가</h3>
-        <p>선행상표 검색 및 유사도 평가 결과를 종합하여 등록 가능성을 평가합니다.</p>
       </div>
       
-      <!-- 리스크 평가 실행 -->
-      <div class="tm-risk-action">
+      <!-- AI 평가 버튼 -->
+      <div class="tm-risk-action-panel">
         <button class="btn btn-primary btn-lg" id="tm-risk-btn" data-action="tm-assess-risk">
           🤖 AI 리스크 종합 평가
         </button>
@@ -5232,93 +5242,109 @@ notes는 평가 근거를 3-4문장으로 서술.
           </div>
           <span class="tm-progress-text">AI가 종합 분석 중입니다...</span>
         </div>
-        <p class="tm-hint" id="tm-risk-hint">유사도 평가 결과, 지정상품 중복 여부, 상표 유형 등을 종합 분석합니다.</p>
       </div>
       
-      <!-- 리스크 평가 결과 -->
       ${risk.level ? `
-        <div class="tm-risk-card ${risk.level}">
-          <div class="tm-risk-header">
-            <div>
-              <span class="tm-risk-level">
-                ${risk.level === 'high' ? '⚠️ 높은 위험' : risk.level === 'medium' ? '⚡ 주의 필요' : '✅ 낮은 위험'}
-              </span>
-              <span class="tm-risk-sublevel">등록 가능성: ${TM.getRiskProbability(risk.level)}</span>
+        <!-- 리스크 결과 대시보드 -->
+        <div class="tm-risk-dashboard ${risk.level}">
+          <!-- 리스크 수준 표시 -->
+          <div class="tm-risk-level-display">
+            <div class="tm-risk-icon">
+              ${risk.level === 'high' ? '⚠️' : risk.level === 'medium' ? '⚡' : '✅'}
+            </div>
+            <div class="tm-risk-level-text">
+              <div class="tm-risk-main-text">
+                ${risk.level === 'high' ? '높은 위험' : risk.level === 'medium' ? '주의 필요' : '낮은 위험'}
+              </div>
+              <div class="tm-risk-sub-text">등록 가능성 ${TM.getRiskProbability(risk.level)}</div>
             </div>
           </div>
           
-          <div class="tm-risk-stats">
-            <div class="tm-risk-stat">
-              <div class="tm-risk-stat-value">${p.similarityEvaluations?.length || 0}</div>
-              <div class="tm-risk-stat-label">검토 상표</div>
+          <!-- 핵심 지표 -->
+          <div class="tm-risk-metrics">
+            <div class="tm-risk-metric">
+              <div class="tm-metric-value">${p.similarityEvaluations?.length || 0}</div>
+              <div class="tm-metric-label">검토 상표</div>
             </div>
-            <div class="tm-risk-stat">
-              <div class="tm-risk-stat-value">${risk.conflictCount || 0}</div>
-              <div class="tm-risk-stat-label">충돌 우려</div>
+            <div class="tm-risk-metric warning">
+              <div class="tm-metric-value">${risk.conflictCount || 0}</div>
+              <div class="tm-metric-label">충돌 우려</div>
             </div>
-            <div class="tm-risk-stat">
-              <div class="tm-risk-stat-value">${p.designatedGoods?.length || 0}</div>
-              <div class="tm-risk-stat-label">지정상품류</div>
+            <div class="tm-risk-metric">
+              <div class="tm-metric-value">${p.designatedGoods?.length || 0}</div>
+              <div class="tm-metric-label">상품류</div>
+            </div>
+            <div class="tm-risk-metric">
+              <div class="tm-metric-value">${TM.formatNumber(fee.totalFee || 0)}</div>
+              <div class="tm-metric-label">예상 비용(원)</div>
             </div>
           </div>
-          
+        </div>
+        
+        <!-- 상세 분석 & 권고사항 -->
+        <div class="tm-risk-analysis">
           ${risk.details ? `
-            <div class="tm-risk-details">
-              <h5>📋 상세 분석</h5>
-              <div class="tm-risk-content">${TM.formatRiskDetails(risk.details)}</div>
+            <div class="tm-analysis-section">
+              <h4>📋 상세 분석</h4>
+              <div class="tm-analysis-content">${TM.formatRiskDetails(risk.details)}</div>
             </div>
           ` : ''}
           
           ${risk.recommendation ? `
-            <div class="tm-risk-recommendation">
-              <h5>💡 권고사항</h5>
-              <div class="tm-risk-content">${TM.escapeHtml(risk.recommendation)}</div>
+            <div class="tm-analysis-section recommendation">
+              <h4>💡 권고사항</h4>
+              <div class="tm-analysis-content">${TM.formatRiskRecommendation(risk.recommendation)}</div>
             </div>
           ` : ''}
         </div>
+        
+        <!-- 비용 명세 (접힘) -->
+        <details class="tm-fee-accordion" open>
+          <summary>💰 비용 명세</summary>
+          <div class="tm-fee-content">
+            <div class="tm-fee-list">
+              ${TM.renderFeeBreakdown(fee)}
+            </div>
+          </div>
+        </details>
       ` : `
         <div class="tm-empty-state" style="padding: 60px;">
           <div class="icon">📊</div>
-          <h4>리스크 평가가 필요합니다</h4>
-          <p>위의 버튼을 클릭하여 AI 리스크 평가를 실행하세요.</p>
+          <h4>리스크 평가를 실행하세요</h4>
+          <p>유사도 평가 결과, 지정상품, 상표 유형 등을 AI가 종합 분석합니다.</p>
         </div>
       `}
       
-      <!-- 평가 기준 안내 (유사군 중심) -->
+      <!-- 평가 기준 -->
       <details class="tm-accordion">
-        <summary>
-          <span>📋 리스크 평가 기준 (유사군 중심)</span>
-        </summary>
+        <summary>📋 평가 기준 안내</summary>
         <div class="tm-accordion-content">
-          <div class="tm-risk-principle">
-            <strong>★ 핵심 원칙:</strong> 상표의 유사 여부는 <em>"동일 유사군 코드"</em> 내에서만 판단됩니다.
+          <div class="tm-criteria-grid">
+            <div class="tm-criteria-item high">
+              <div class="tm-criteria-label">⛔ 높은 위험</div>
+              <div class="tm-criteria-desc">유사군 중복 + 상표 유사 → 거절 가능성 높음</div>
+            </div>
+            <div class="tm-criteria-item medium">
+              <div class="tm-criteria-label">⚠️ 중간 위험</div>
+              <div class="tm-criteria-desc">유사군 중복, 상표 다소 유사 → 심사관 판단</div>
+            </div>
+            <div class="tm-criteria-item low">
+              <div class="tm-criteria-label">✅ 낮은 위험</div>
+              <div class="tm-criteria-desc">유사군 비중복 또는 상표 상이 → 등록 가능성 높음</div>
+            </div>
           </div>
-          <table class="tm-info-table">
-            <tr>
-              <th>⛔ 높은 위험 (High)</th>
-              <td>
-                <strong>유사군 중복 + 상표 유사</strong><br>
-                동일/유사 유사군에 동일/유사 상표가 등록/출원되어 있음. 거절 가능성 높음.
-              </td>
-            </tr>
-            <tr>
-              <th>⚠️ 중간 위험 (Medium)</th>
-              <td>
-                <strong>유사군 중복 + 상표 다소 유사</strong><br>
-                유사군은 중복되나 상표명에 차별성 존재. 심사관 판단에 따라 결과 달라질 수 있음.
-              </td>
-            </tr>
-            <tr>
-              <th>✅ 낮은 위험 (Low)</th>
-              <td>
-                <strong>유사군 비중복 또는 상표 상이</strong><br>
-                유사군이 다르면 상표명이 동일해도 등록 가능. 등록 가능성 높음.
-              </td>
-            </tr>
-          </table>
         </div>
       </details>
     `;
+  };
+  
+  // 리스크 권고사항 포맷팅
+  TM.formatRiskRecommendation = function(text) {
+    if (!text) return '';
+    // 번호 매기기나 항목을 하이라이트
+    return text
+      .replace(/첫째,|둘째,|셋째,|넷째,/g, '<strong>$&</strong>')
+      .replace(/\n/g, '<br>');
   };
   
   TM.getRiskProbability = function(level) {
@@ -7318,85 +7344,137 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
   // Step 8: 문서 출력
   // ============================================================
   
-  TM.renderStep8_Output = function(container) {
+  // Step 7: 종합 요약 (대시보드)
+  // ============================================================
+  
+  TM.renderStep7_Summary = function(container) {
     const p = TM.currentProject;
+    const risk = p.riskAssessment || {};
+    const fee = p.feeCalculation || {};
+    const evaluations = p.similarityEvaluations || [];
+    const allSearchResults = [...(p.searchResults.text || []), ...(p.searchResults.figure || [])];
+    
+    // 비용 계산
+    if (p.designatedGoods?.length > 0 && !fee.totalFee) {
+      TM.calculateFee();
+    }
     
     container.innerHTML = `
       <div class="tm-step-header">
-        <h3>📄 문서 출력</h3>
-        <p>작성된 내용을 문서로 출력합니다.</p>
+        <h3>📋 종합 요약</h3>
       </div>
       
-      <!-- 프로젝트 요약 -->
-      <div class="tm-output-summary">
-        <h4>📋 프로젝트 요약</h4>
-        <table class="tm-summary-table">
-          <tr><th>상표명</th><td>${TM.escapeHtml(p.trademarkName) || '-'}</td></tr>
-          <tr><th>상표 유형</th><td>${TM.getTypeLabel(p.trademarkType)}</td></tr>
-          <tr><th>지정상품</th><td>${p.designatedGoods?.length || 0}개 류, ${p.designatedGoods?.reduce((sum, g) => sum + g.goods.length, 0) || 0}개 상품</td></tr>
-          <tr><th>리스크 수준</th><td>${p.riskAssessment?.level ? TM.getRiskProbability(p.riskAssessment.level) : '미평가'}</td></tr>
-          <tr><th>예상 비용</th><td>${TM.formatNumber(p.feeCalculation?.totalFee || 0)}원</td></tr>
-          <tr><th>우선심사</th><td>${p.priorityExam?.enabled ? '신청' : '미신청'}</td></tr>
-        </table>
-      </div>
-      
-      <!-- 출력 옵션 -->
-      <div class="tm-output-options">
-        <h4>📥 다운로드</h4>
-        <div class="tm-output-buttons">
-          <button class="btn btn-lg btn-primary" data-action="tm-download-docx">
-            📝 Word 문서 (.docx)
-          </button>
-          <button class="btn btn-lg btn-secondary" data-action="tm-preview-document">
-            👁️ 미리보기
-          </button>
+      <!-- 요약 대시보드 -->
+      <div class="tm-summary-dashboard">
+        <!-- 상표 정보 카드 -->
+        <div class="tm-summary-card tm-card-trademark">
+          <div class="tm-card-icon">🏷️</div>
+          <div class="tm-card-content">
+            <div class="tm-card-title">상표명</div>
+            <div class="tm-card-value">${TM.escapeHtml(p.trademarkName) || '-'}</div>
+            <div class="tm-card-sub">${TM.getTypeLabel(p.trademarkType)}</div>
+          </div>
         </div>
         
-        <div class="tm-output-includes">
-          <h5>포함 내용</h5>
-          <div class="tm-checkbox-grid">
-            <label class="tm-checkbox-label">
-              <input type="checkbox" id="tm-include-summary" checked>
-              <span>프로젝트 요약</span>
-            </label>
-            <label class="tm-checkbox-label">
-              <input type="checkbox" id="tm-include-goods" checked>
-              <span>지정상품 목록</span>
-            </label>
-            <label class="tm-checkbox-label">
-              <input type="checkbox" id="tm-include-search" checked>
-              <span>선행상표 검색 결과</span>
-            </label>
-            <label class="tm-checkbox-label">
-              <input type="checkbox" id="tm-include-similarity" checked>
-              <span>유사도 평가 결과</span>
-            </label>
-            <label class="tm-checkbox-label">
-              <input type="checkbox" id="tm-include-risk" checked>
-              <span>리스크 평가</span>
-            </label>
-            <label class="tm-checkbox-label">
-              <input type="checkbox" id="tm-include-fee" checked>
-              <span>비용 명세</span>
-            </label>
-            ${p.priorityExam?.enabled ? `
-              <label class="tm-checkbox-label">
-                <input type="checkbox" id="tm-include-priority" checked>
-                <span>우선심사 설명서</span>
-              </label>
-            ` : ''}
+        <!-- 지정상품 카드 -->
+        <div class="tm-summary-card">
+          <div class="tm-card-icon">📦</div>
+          <div class="tm-card-content">
+            <div class="tm-card-title">지정상품</div>
+            <div class="tm-card-value">${p.designatedGoods?.length || 0}개 류</div>
+            <div class="tm-card-sub">${p.designatedGoods?.reduce((sum, g) => sum + g.goods.length, 0) || 0}개 상품</div>
+          </div>
+        </div>
+        
+        <!-- 리스크 카드 -->
+        <div class="tm-summary-card tm-card-risk ${risk.level || ''}">
+          <div class="tm-card-icon">${risk.level === 'high' ? '⚠️' : risk.level === 'medium' ? '⚡' : risk.level === 'low' ? '✅' : '❓'}</div>
+          <div class="tm-card-content">
+            <div class="tm-card-title">리스크</div>
+            <div class="tm-card-value">${risk.level ? (risk.level === 'high' ? '높음' : risk.level === 'medium' ? '주의' : '낮음') : '미평가'}</div>
+            <div class="tm-card-sub">${risk.level ? '등록 가능성 ' + TM.getRiskProbability(risk.level) : '-'}</div>
+          </div>
+        </div>
+        
+        <!-- 비용 카드 -->
+        <div class="tm-summary-card">
+          <div class="tm-card-icon">💰</div>
+          <div class="tm-card-content">
+            <div class="tm-card-title">예상 비용</div>
+            <div class="tm-card-value">${TM.formatNumber(fee.totalFee || 0)}원</div>
+            <div class="tm-card-sub">${p.priorityExam?.enabled ? '우선심사 포함' : '일반심사'}</div>
           </div>
         </div>
       </div>
       
-      <!-- 미리보기 영역 -->
-      <div class="tm-preview-area" id="tm-preview-area" style="display: none;">
-        <div class="tm-preview-header">
-          <h4>문서 미리보기</h4>
-          <button class="btn btn-sm btn-ghost" onclick="document.getElementById('tm-preview-area').style.display='none'">닫기</button>
-        </div>
-        <div class="tm-preview-content" id="tm-preview-content">
-          <!-- 미리보기 내용 -->
+      <!-- 세부 정보 섹션들 -->
+      <div class="tm-summary-sections">
+        <!-- 출원인 정보 -->
+        ${p.applicant?.name ? `
+          <div class="tm-summary-section">
+            <h4>👤 출원인</h4>
+            <div class="tm-summary-info">
+              <span>${TM.escapeHtml(p.applicant.name)}</span>
+              ${p.managementNumber ? `<span class="tm-info-badge">관리번호: ${TM.escapeHtml(p.managementNumber)}</span>` : ''}
+            </div>
+          </div>
+        ` : ''}
+        
+        <!-- 지정상품 요약 -->
+        ${p.designatedGoods?.length > 0 ? `
+          <div class="tm-summary-section">
+            <h4>📦 지정상품 요약</h4>
+            <div class="tm-goods-summary-grid">
+              ${p.designatedGoods.map(dg => `
+                <div class="tm-goods-summary-item">
+                  <span class="tm-class-badge">제${dg.classCode}류</span>
+                  <span class="tm-goods-count">${dg.goods.length}개</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+        
+        <!-- 선행상표 검색 결과 -->
+        ${allSearchResults.length > 0 ? `
+          <div class="tm-summary-section">
+            <h4>🔍 선행상표 검색</h4>
+            <div class="tm-summary-stats">
+              <span>검색 결과 ${allSearchResults.length}건</span>
+              <span>평가 완료 ${evaluations.length}건</span>
+              <span>충돌 우려 ${risk.conflictCount || 0}건</span>
+            </div>
+          </div>
+        ` : ''}
+        
+        <!-- 비용 명세 -->
+        ${fee.breakdown?.length > 0 ? `
+          <div class="tm-summary-section">
+            <h4>💰 비용 명세</h4>
+            <div class="tm-fee-summary">
+              ${fee.breakdown.slice(0, 5).map(item => `
+                <div class="tm-fee-item ${item.type === 'total' ? 'total' : ''}">
+                  <span>${TM.escapeHtml(item.label)}</span>
+                  <span>${TM.formatNumber(item.amount)}원</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+      
+      <!-- 문서 출력 -->
+      <div class="tm-output-section">
+        <h4>📥 문서 다운로드</h4>
+        <div class="tm-output-buttons">
+          <button class="btn btn-primary" data-action="tm-download-docx">
+            📝 검토 보고서 (Word)
+          </button>
+          ${p.priorityExam?.enabled ? `
+            <button class="btn btn-secondary" data-action="tm-generate-priority-doc">
+              ⚡ 우선심사 설명서 (Word)
+            </button>
+          ` : ''}
         </div>
       </div>
     `;
