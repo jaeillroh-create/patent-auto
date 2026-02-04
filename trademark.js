@@ -409,6 +409,12 @@
       case 'tm-request-more-recommendations':
         TM.requestMoreRecommendations();
         break;
+      case 'tm-revalidate':
+        TM.revalidateRecommendations();
+        break;
+      case 'tm-add-class':
+        TM.addSuggestedClass(params.classCode);
+        break;
       case 'tm-copy-goods':
         TM.copyDesignatedGoods();
         break;
@@ -978,6 +984,44 @@
             </div>
           </div>
           
+          <!-- ★ 프로젝트 정보 요약 (항상 표시) -->
+          <div class="tm-project-summary" id="tm-project-summary" style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 20px;">🏷️</span>
+              <div>
+                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">상표명</div>
+                <div style="font-size: 14px; font-weight: 600; color: #0c4a6e;">${TM.escapeHtml(TM.currentProject.trademarkName || '(미입력)')}</div>
+              </div>
+            </div>
+            
+            ${TM.currentProject.aiAnalysis?.businessAnalysis ? `
+              <div style="flex: 1; min-width: 200px; border-left: 2px solid #bae6fd; padding-left: 16px;">
+                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">사업 내용</div>
+                <div style="font-size: 13px; color: #1e3a5f; line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(TM.currentProject.aiAnalysis.businessAnalysis.slice(0, 100))}${TM.currentProject.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
+              </div>
+            ` : ''}
+            
+            ${TM.currentProject.designatedGoods?.length > 0 ? `
+              <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
+                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">지정상품</div>
+                <div style="font-size: 13px; color: #1e3a5f;">
+                  <strong>${TM.currentProject.designatedGoods.length}</strong>개 류 / 
+                  <strong>${TM.currentProject.designatedGoods.reduce((sum, g) => sum + (g.goods?.length || 0), 0)}</strong>개 상품
+                </div>
+              </div>
+            ` : ''}
+            
+            ${TM.currentProject.aiAnalysis?.classRecommendations?.core?.length > 0 ? `
+              <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
+                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">추천 류</div>
+                <div style="font-size: 12px; color: #1e3a5f;">
+                  ${TM.currentProject.aiAnalysis.classRecommendations.core.map(c => '제' + c.class + '류').join(', ')}
+                  ${TM.currentProject.aiAnalysis.classRecommendations.recommended?.length > 0 ? ' 외 ' + TM.currentProject.aiAnalysis.classRecommendations.recommended.length + '개' : ''}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+          
           <div class="tm-main-content" id="tm-step-content">
             <!-- 스텝 컨텐츠 동적 렌더링 -->
           </div>
@@ -1106,6 +1150,9 @@
     const stepEl = document.getElementById('tm-step-content');
     if (!stepEl) return;
     
+    // 프로젝트 요약 정보 업데이트
+    TM.updateProjectSummary();
+    
     switch (TM.currentStep) {
       case 1:
         TM.renderStep1_TrademarkInfo(stepEl);
@@ -1132,6 +1179,61 @@
         TM.renderStep8_Output(stepEl);
         break;
     }
+  };
+  
+  // 프로젝트 요약 정보 업데이트
+  TM.updateProjectSummary = function() {
+    const summaryEl = document.getElementById('tm-project-summary');
+    if (!summaryEl || !TM.currentProject) return;
+    
+    const p = TM.currentProject;
+    
+    let html = `
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 20px;">🏷️</span>
+        <div>
+          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">상표명</div>
+          <div style="font-size: 14px; font-weight: 600; color: #0c4a6e;">${TM.escapeHtml(p.trademarkName || '(미입력)')}</div>
+        </div>
+      </div>
+    `;
+    
+    if (p.aiAnalysis?.businessAnalysis) {
+      html += `
+        <div style="flex: 1; min-width: 200px; border-left: 2px solid #bae6fd; padding-left: 16px;">
+          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">사업 내용</div>
+          <div style="font-size: 13px; color: #1e3a5f; line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(p.aiAnalysis.businessAnalysis.slice(0, 100))}${p.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
+        </div>
+      `;
+    }
+    
+    if (p.designatedGoods?.length > 0) {
+      const totalGoods = p.designatedGoods.reduce((sum, g) => sum + (g.goods?.length || 0), 0);
+      html += `
+        <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
+          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">지정상품</div>
+          <div style="font-size: 13px; color: #1e3a5f;">
+            <strong>${p.designatedGoods.length}</strong>개 류 / 
+            <strong>${totalGoods}</strong>개 상품
+          </div>
+        </div>
+      `;
+    }
+    
+    if (p.aiAnalysis?.classRecommendations?.core?.length > 0) {
+      const coreClasses = p.aiAnalysis.classRecommendations.core.map(c => '제' + c.class + '류').join(', ');
+      const recCount = p.aiAnalysis.classRecommendations.recommended?.length || 0;
+      html += `
+        <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
+          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">추천 류</div>
+          <div style="font-size: 12px; color: #1e3a5f;">
+            ${coreClasses}${recCount > 0 ? ' 외 ' + recCount + '개' : ''}
+          </div>
+        </div>
+      `;
+    }
+    
+    summaryEl.innerHTML = html;
   };
 
   // ============================================================
@@ -1918,44 +2020,110 @@
       const v = p.aiAnalysis.validation;
       const scoreColor = v.overallScore >= 80 ? '#10b981' : v.overallScore >= 60 ? '#f59e0b' : '#ef4444';
       const scoreEmoji = v.overallScore >= 80 ? '✅' : v.overallScore >= 60 ? '⚠️' : '❌';
+      const bgColor = v.overallScore >= 80 ? '#d1fae5' : v.overallScore >= 60 ? '#fef3c7' : '#fee2e2';
+      const borderColor = v.overallScore >= 80 ? '#6ee7b7' : v.overallScore >= 60 ? '#fcd34d' : '#fca5a5';
       
-      html += '<div style="margin-top: 16px; padding: 12px; background: ' + (v.hasIssues ? '#fef3c7' : '#d1fae5') + '; border-radius: 8px; border: 1px solid ' + (v.hasIssues ? '#fcd34d' : '#6ee7b7') + ';">';
+      html += '<div style="margin-top: 16px; padding: 14px; background: ' + bgColor + '; border-radius: 10px; border: 1px solid ' + borderColor + ';">';
       
       // 검증 헤더
-      html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">' +
-        '<span style="font-weight: 600; font-size: 13px;">' + scoreEmoji + ' 추천 검증 결과</span>' +
-        '<span style="font-size: 12px; color: ' + scoreColor + '; font-weight: 600;">정확도: ' + v.overallScore + '%</span>' +
+      html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid ' + borderColor + ';">' +
+        '<span style="font-weight: 700; font-size: 14px;">' + scoreEmoji + ' 3단계 검증 결과</span>' +
+        '<span style="font-size: 13px; color: ' + scoreColor + '; font-weight: 700; background: white; padding: 4px 10px; border-radius: 12px;">정확도 ' + v.overallScore + '%</span>' +
       '</div>';
       
       // 요약
       if (v.summary) {
-        html += '<div style="font-size: 12px; color: #374151; margin-bottom: 8px;">' + TM.escapeHtml(v.summary) + '</div>';
+        html += '<div style="font-size: 13px; color: #374151; margin-bottom: 12px; font-weight: 500;">' + TM.escapeHtml(v.summary) + '</div>';
       }
       
-      // 경고 사항
-      if (v.warnings?.length > 0) {
-        html += '<div style="margin-top: 8px;">';
-        v.warnings.forEach(w => {
-          html += '<div style="font-size: 11px; color: #d97706; padding: 4px 8px; background: #fffbeb; border-radius: 4px; margin-bottom: 4px;">' +
-            '⚠️ 제' + w.class + '류: ' + TM.escapeHtml(w.message) +
+      // 제거된 류 표시
+      if (v.invalidClasses?.length > 0) {
+        html += '<div style="margin-bottom: 10px;">' +
+          '<div style="font-size: 11px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">❌ 제거된 류 (' + v.invalidClasses.length + '개)</div>';
+        v.invalidClasses.forEach(c => {
+          html += '<div style="font-size: 11px; color: #7f1d1d; padding: 6px 10px; background: #fef2f2; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #dc2626;">' +
+            '<strong>제' + c.class + '류</strong>: ' + TM.escapeHtml(c.reason) +
           '</div>';
         });
         html += '</div>';
       }
       
-      // 추가 제안
-      if (v.suggestions?.length > 0) {
-        html += '<div style="margin-top: 8px;">';
-        v.suggestions.forEach(s => {
-          if (s.type === 'add_class') {
-            html += '<div style="font-size: 11px; color: #059669; padding: 4px 8px; background: #ecfdf5; border-radius: 4px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">' +
-              '<span>💡 제' + s.class + '류 추가 권장: ' + TM.escapeHtml(s.reason) + '</span>' +
-              '<button class="btn btn-sm" style="padding: 2px 8px; font-size: 10px;" data-action="tm-add-class" data-class-code="' + s.class + '">+ 추가</button>' +
-            '</div>';
-          }
+      // 제거된 지정상품 표시
+      if (v.invalidGoods?.length > 0) {
+        html += '<div style="margin-bottom: 10px;">' +
+          '<div style="font-size: 11px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">❌ 제거된 지정상품 (' + v.invalidGoods.length + '개)</div>';
+        v.invalidGoods.forEach(g => {
+          const errorLabel = g.errorType === 'homonym' ? '🔤 동음이의어' : 
+                            g.errorType === 'partial_match' ? '📝 부분매칭 오류' : '⚠️ 관련성 부족';
+          html += '<div style="font-size: 11px; color: #7f1d1d; padding: 6px 10px; background: #fef2f2; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #f87171;">' +
+            '<span style="background: #fee2e2; padding: 1px 6px; border-radius: 4px; margin-right: 6px; font-size: 10px;">' + errorLabel + '</span>' +
+            '<strong>제' + g.classCode + '류</strong> "' + TM.escapeHtml(g.goodsName) + '": ' + TM.escapeHtml(g.reason) +
+          '</div>';
         });
         html += '</div>';
       }
+      
+      // 대체 추천된 상품
+      if (v.replacementGoods?.length > 0) {
+        html += '<div style="margin-bottom: 10px;">' +
+          '<div style="font-size: 11px; font-weight: 600; color: #059669; margin-bottom: 6px;">🔄 대체 추천 (' + v.replacementGoods.length + '개)</div>';
+        v.replacementGoods.forEach(r => {
+          html += '<div style="font-size: 11px; color: #065f46; padding: 6px 10px; background: #ecfdf5; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #10b981;">' +
+            '<strong>제' + r.classCode + '류</strong>: ' +
+            '<span style="text-decoration: line-through; color: #9ca3af;">' + TM.escapeHtml(r.remove) + '</span> → ' +
+            '<strong>' + TM.escapeHtml(r.addInstead) + '</strong>' +
+          '</div>';
+        });
+        html += '</div>';
+      }
+      
+      // 경고 사항
+      if (v.warnings?.length > 0) {
+        html += '<div style="margin-bottom: 10px;">' +
+          '<div style="font-size: 11px; font-weight: 600; color: #d97706; margin-bottom: 6px;">⚠️ 확인 필요</div>';
+        v.warnings.forEach(w => {
+          html += '<div style="font-size: 11px; color: #92400e; padding: 6px 10px; background: #fffbeb; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #f59e0b;">' +
+            '제' + w.class + '류: ' + TM.escapeHtml(w.message) +
+          '</div>';
+        });
+        html += '</div>';
+      }
+      
+      // 누락된 류 추가 제안
+      if (v.suggestions?.length > 0 || v.missingClasses?.length > 0) {
+        const suggestions = v.suggestions || [];
+        const addClassSuggestions = suggestions.filter(s => s.type === 'add_class');
+        
+        if (addClassSuggestions.length > 0) {
+          html += '<div style="margin-bottom: 10px;">' +
+            '<div style="font-size: 11px; font-weight: 600; color: #2563eb; margin-bottom: 6px;">💡 추가 권장 류</div>';
+          addClassSuggestions.forEach(s => {
+            const priorityBadge = s.priority === '핵심' ? '🔴' : s.priority === '권장' ? '🟠' : '🟢';
+            html += '<div style="font-size: 11px; color: #1e40af; padding: 6px 10px; background: #eff6ff; border-radius: 6px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #3b82f6;">' +
+              '<span>' + priorityBadge + ' <strong>제' + s.class + '류</strong>: ' + TM.escapeHtml(s.reason) + '</span>' +
+              '<button class="btn btn-sm" style="padding: 3px 10px; font-size: 10px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;" data-action="tm-add-class" data-class-code="' + s.class + '">+ 추가</button>' +
+            '</div>';
+          });
+          html += '</div>';
+        }
+      }
+      
+      // 누락된 지정상품
+      if (v.missingGoods?.length > 0) {
+        html += '<div>' +
+          '<div style="font-size: 11px; font-weight: 600; color: #7c3aed; margin-bottom: 6px;">📦 추가 권장 상품</div>';
+        v.missingGoods.forEach(g => {
+          html += '<div style="font-size: 11px; color: #5b21b6; padding: 6px 10px; background: #f5f3ff; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #8b5cf6;">' +
+            '<strong>제' + g.classCode + '류</strong>: ' + TM.escapeHtml(g.goodsName) + ' - ' + TM.escapeHtml(g.reason) +
+          '</div>';
+        });
+        html += '</div>';
+      }
+      
+      // 재검증 버튼
+      html += '<div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid ' + borderColor + '; text-align: center;">' +
+        '<button class="btn btn-sm" style="padding: 6px 16px; font-size: 11px; background: white; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer;" data-action="tm-revalidate">🔄 다시 검증</button>' +
+      '</div>';
       
       html += '</div>';
     }
@@ -2346,6 +2514,149 @@
     
     TM.renderCurrentStep();
     App.showToast(`핵심+권장 ${addedCount}개 상품류가 추가되었습니다. (확장 류는 개별 추가 가능)`, 'success');
+  };
+  
+  // 재검증 요청
+  TM.revalidateRecommendations = async function() {
+    const p = TM.currentProject;
+    if (!p || !p.aiAnalysis) {
+      App.showToast('먼저 사업 분석을 진행하세요.', 'warning');
+      return;
+    }
+    
+    const businessInput = document.getElementById('tm-business-url')?.value?.trim() || 
+                          p.aiAnalysis.businessAnalysis || '';
+    
+    if (!businessInput) {
+      App.showToast('사업 내용이 없습니다.', 'warning');
+      return;
+    }
+    
+    try {
+      App.showToast('재검증 중...', 'info');
+      
+      const validationResult = await TM.validateRecommendations(businessInput, p.aiAnalysis);
+      
+      if (validationResult) {
+        p.aiAnalysis.validation = validationResult;
+        
+        if (validationResult.hasIssues) {
+          await TM.applyValidationResult(p.aiAnalysis, validationResult);
+          App.showToast('검증 완료: 문제 항목이 수정되었습니다.', 'success');
+        } else {
+          App.showToast('검증 완료: 모든 추천이 적합합니다.', 'success');
+        }
+        
+        TM.renderCurrentStep();
+      }
+      
+    } catch (error) {
+      console.error('[TM] 재검증 실패:', error);
+      App.showToast('재검증 실패: ' + error.message, 'error');
+    }
+  };
+  
+  // 검증에서 제안된 류 추가
+  TM.addSuggestedClass = async function(classCode) {
+    const p = TM.currentProject;
+    if (!p) return;
+    
+    // 이미 추가된 경우
+    if (p.designatedGoods.some(g => g.classCode === classCode)) {
+      App.showToast(`제${classCode}류는 이미 추가되어 있습니다.`, 'warning');
+      return;
+    }
+    
+    try {
+      App.showToast(`제${classCode}류 지정상품 조회 중...`, 'info');
+      
+      // DB에서 해당 류의 인기 상품 조회
+      const businessInput = document.getElementById('tm-business-url')?.value?.trim() || 
+                            p.aiAnalysis?.businessAnalysis || '';
+      
+      const keywords = TM.extractKeywordsFromInput(businessInput);
+      
+      // 키워드로 관련 상품 검색
+      let recommendedGoods = [];
+      
+      for (const keyword of keywords.slice(0, 5)) {
+        try {
+          const { data } = await App.sb
+            .from('gazetted_goods_cache')
+            .select('goods_name, similar_group_code')
+            .eq('class_code', classCode)
+            .ilike('goods_name', `%${keyword}%`)
+            .limit(5);
+          
+          if (data) {
+            data.forEach(item => {
+              if (!recommendedGoods.some(g => g.name === item.goods_name)) {
+                recommendedGoods.push({
+                  name: item.goods_name,
+                  similarGroup: item.similar_group_code
+                });
+              }
+            });
+          }
+        } catch (e) {
+          // 무시
+        }
+      }
+      
+      // 부족하면 해당 류에서 기본 상품 조회
+      if (recommendedGoods.length < 5) {
+        const { data } = await App.sb
+          .from('gazetted_goods_cache')
+          .select('goods_name, similar_group_code')
+          .eq('class_code', classCode)
+          .limit(10);
+        
+        if (data) {
+          data.forEach(item => {
+            if (recommendedGoods.length < 10 && !recommendedGoods.some(g => g.name === item.goods_name)) {
+              recommendedGoods.push({
+                name: item.goods_name,
+                similarGroup: item.similar_group_code
+              });
+            }
+          });
+        }
+      }
+      
+      // 추가
+      p.designatedGoods.push({
+        classCode: classCode,
+        className: TM.niceClasses[classCode],
+        goods: recommendedGoods.map(g => ({
+          name: g.name,
+          similarGroup: g.similarGroup,
+          gazetted: true
+        })),
+        goodsCount: recommendedGoods.length,
+        nonGazettedCount: 0
+      });
+      
+      // classRecommendations에도 추가 (권장 류로)
+      if (!p.aiAnalysis) p.aiAnalysis = {};
+      if (!p.aiAnalysis.classRecommendations) p.aiAnalysis.classRecommendations = { core: [], recommended: [], expansion: [] };
+      if (!p.aiAnalysis.recommendedClasses) p.aiAnalysis.recommendedClasses = [];
+      if (!p.aiAnalysis.recommendedGoods) p.aiAnalysis.recommendedGoods = {};
+      
+      p.aiAnalysis.recommendedClasses.push(classCode);
+      p.aiAnalysis.classRecommendations.recommended.push({
+        class: classCode,
+        reason: '검증에서 추가 권장됨',
+        priority: 99
+      });
+      p.aiAnalysis.recommendedGoods[classCode] = recommendedGoods;
+      
+      TM.renderCurrentStep();
+      App.showToast(`제${classCode}류가 추가되었습니다. (${recommendedGoods.length}개 상품)`, 'success');
+      
+    } catch (error) {
+      console.error('[TM] 류 추가 실패:', error);
+      App.showToast('추가 실패: ' + error.message, 'error');
+    }
   };
   
   // 확장 류 접기/펼치기
@@ -6061,61 +6372,19 @@ ${TM.PRACTICE_GUIDELINES}
       }
       
       // ================================================================
-      // 4단계: 추천 결과 검증 (Validation)
+      // 4단계: 추천 결과 3단계 검증 (Validation)
       // ================================================================
-      if (btn) btn.innerHTML = '<span class="tossface">🔍</span> 추천 결과 검증 중...';
+      if (btn) btn.innerHTML = '<span class="tossface">🔍</span> 1/3 류 검증 중...';
       
       const validationResult = await TM.validateRecommendations(businessInput, p.aiAnalysis);
       
       if (validationResult) {
         p.aiAnalysis.validation = validationResult;
         
-        // 검증 결과에 따라 수정
+        // 검증 결과 적용 (잘못된 항목 제거 + 대체 추천)
         if (validationResult.hasIssues) {
-          console.log('[TM] ⚠️ 검증 이슈 발견, 수정 적용');
-          
-          // 잘못된 류 제거
-          if (validationResult.invalidClasses?.length > 0) {
-            for (const invalidClass of validationResult.invalidClasses) {
-              const classCode = invalidClass.class;
-              
-              // recommendedClasses에서 제거
-              const idx = p.aiAnalysis.recommendedClasses.indexOf(classCode);
-              if (idx > -1) {
-                p.aiAnalysis.recommendedClasses.splice(idx, 1);
-              }
-              
-              // classRecommendations에서 제거
-              ['core', 'recommended', 'expansion'].forEach(cat => {
-                if (p.aiAnalysis.classRecommendations?.[cat]) {
-                  p.aiAnalysis.classRecommendations[cat] = 
-                    p.aiAnalysis.classRecommendations[cat].filter(c => c.class !== classCode);
-                }
-              });
-              
-              // classReasons에서 제거
-              delete p.aiAnalysis.classReasons[classCode];
-              
-              // recommendedGoods에서 제거
-              delete p.aiAnalysis.recommendedGoods[classCode];
-              
-              console.log(`[TM] 제${classCode}류 제거: ${invalidClass.reason}`);
-            }
-          }
-          
-          // 잘못된 지정상품 제거
-          if (validationResult.invalidGoods?.length > 0) {
-            for (const invalidGood of validationResult.invalidGoods) {
-              const { classCode, goodsName, reason } = invalidGood;
-              
-              if (p.aiAnalysis.recommendedGoods?.[classCode]) {
-                p.aiAnalysis.recommendedGoods[classCode] = 
-                  p.aiAnalysis.recommendedGoods[classCode].filter(g => g.name !== goodsName);
-                
-                console.log(`[TM] 제${classCode}류 "${goodsName}" 제거: ${reason}`);
-              }
-            }
-          }
+          if (btn) btn.innerHTML = '<span class="tossface">🔧</span> 검증 결과 적용 중...';
+          await TM.applyValidationResult(p.aiAnalysis, validationResult);
         }
         
         console.log('[TM] ✅ 검증 완료');
@@ -6314,6 +6583,7 @@ ${TM.PRACTICE_GUIDELINES}
   // ================================================================
   TM.selectOptimalGoods = async function(classCode, candidates, businessText, analysis) {
     const MIN_GOODS = 10;
+    const MAX_CORE_MATCH = 5;  // 핵심 키워드당 최대 매칭 수
     const selected = [];
     const usedNames = new Set();
     
@@ -6325,9 +6595,11 @@ ${TM.PRACTICE_GUIDELINES}
     
     for (const term of coreTerms) {
       const termLower = term.toLowerCase();
+      let termMatchCount = 0;
       
       for (const c of candidates) {
         if (usedNames.has(c.name)) continue;
+        if (termMatchCount >= MAX_CORE_MATCH) break;  // 키워드당 최대 5개
         
         const nameLower = c.name.toLowerCase();
         
@@ -6345,7 +6617,7 @@ ${TM.PRACTICE_GUIDELINES}
             reason: `핵심: "${term}"`
           });
           
-          if (selected.length >= 3) break;
+          termMatchCount++;
         }
       }
     }
@@ -6466,18 +6738,37 @@ ${numberedList}
   };
   
   // ================================================================
-  // 추천 결과 검증 (Validation)
-  // - 원래 사업 내용과 추천 결과의 일치성 검증
-  // - 잘못된 추천 식별 및 수정 제안
+  // 추천 결과 검증 (Validation) - 고도화 버전
+  // 3단계 검증: 류 검증 → 지정상품 검증 → 누락 검토
   // ================================================================
   TM.validateRecommendations = async function(businessInput, aiAnalysis) {
     if (!aiAnalysis || !aiAnalysis.recommendedClasses?.length) {
       return null;
     }
     
-    console.log('[TM] ════ 추천 결과 검증 시작 ════');
+    console.log('[TM] ════════════════════════════════════');
+    console.log('[TM] 추천 결과 3단계 검증 시작');
+    console.log('[TM] ════════════════════════════════════');
     
-    // 검증할 데이터 준비
+    const validationResult = {
+      hasIssues: false,
+      overallScore: 100,
+      summary: '',
+      stages: {
+        classValidation: null,
+        goodsValidation: null,
+        missingReview: null
+      },
+      invalidClasses: [],
+      invalidGoods: [],
+      replacementGoods: [],  // 대체 추천된 상품
+      warnings: [],
+      suggestions: [],
+      missingClasses: [],    // 누락된 류
+      missingGoods: []       // 누락된 상품
+    };
+    
+    // 검증 데이터 준비
     const classRec = aiAnalysis.classRecommendations || {};
     const allClasses = [
       ...(classRec.core || []),
@@ -6485,99 +6776,322 @@ ${numberedList}
       ...(classRec.expansion || [])
     ];
     
-    // 류별 지정상품 요약
-    const goodsSummary = {};
-    for (const classCode of aiAnalysis.recommendedClasses || []) {
-      const goods = aiAnalysis.recommendedGoods?.[classCode] || [];
-      goodsSummary[classCode] = goods.slice(0, 5).map(g => g.name);
-    }
+    // ==============================================
+    // 1단계: 류 적합성 검증
+    // ==============================================
+    console.log('[TM] ▶ 1단계: 류 적합성 검증');
     
-    const validationPrompt = `당신은 상표 출원 전문 변리사입니다. 아래 AI 추천 결과를 검증해주세요.
+    try {
+      const classValidationPrompt = `당신은 상표 출원 전문 변리사입니다.
 
-【원본 사업 내용】
+【사업 내용】
 "${businessInput}"
 
-【AI 분석 결과】
-- 사업 요약: ${aiAnalysis.businessAnalysis || '없음'}
-- 핵심 상품: ${(aiAnalysis.coreProducts || []).join(', ') || '없음'}
-- 핵심 서비스: ${(aiAnalysis.coreServices || []).join(', ') || '없음'}
+【추천된 상품류】
+${allClasses.map(c => `- 제${c.class}류: ${c.reason}`).join('\n')}
 
-【추천된 상품류 및 지정상품】
-${allClasses.map(c => {
-  const goods = goodsSummary[c.class] || [];
-  return `■ 제${c.class}류: ${c.reason}
-  → 지정상품: ${goods.length > 0 ? goods.join(', ') : '(없음)'}`;
-}).join('\n\n')}
+【검증 과제】
+각 추천 류가 위 사업과 직접적으로 관련 있는지 검증하세요.
 
-【검증 기준】
-1. 각 추천 류가 "${businessInput}" 사업과 직접적으로 관련 있는가?
-2. 각 지정상품이 해당 사업에서 실제로 판매/제공하는 것인가?
-3. 동음이의어 오류가 있는가? (예: 생화(꽃)↔생화학, 가구(furniture)↔가구(家口))
-4. 논리적으로 맞지 않는 추천이 있는가?
+검증 기준:
+1. 해당 사업에서 실제로 판매하거나 제공하는 상품/서비스가 포함된 류인가?
+2. 해당 류 없이 사업을 영위할 수 없는가? (필수성)
+3. 추천 이유가 사업 내용과 논리적으로 연결되는가?
 
-【검증 결과 - JSON 형식으로만 응답】
+【JSON으로만 응답】
 {
-  "hasIssues": true/false,
-  "overallScore": 0-100,
-  "summary": "전체 검증 요약 (1-2문장)",
+  "validClasses": [
+    {"class": "31", "score": 95, "comment": "꽃 재배 - 핵심 사업과 직접 연결"}
+  ],
   "invalidClasses": [
-    {"class": "42", "reason": "이 사업은 IT 서비스가 아님"}
+    {"class": "42", "score": 20, "reason": "IT/연구개발 서비스는 이 사업과 무관"}
+  ],
+  "classScoreAvg": 85
+}`;
+
+      const classResponse = await App.callClaude(classValidationPrompt, 1000);
+      const classResult = TM.safeJsonParse(classResponse.text);
+      
+      validationResult.stages.classValidation = classResult;
+      
+      if (classResult.invalidClasses?.length > 0) {
+        validationResult.hasIssues = true;
+        validationResult.invalidClasses = classResult.invalidClasses;
+        console.log(`[TM] 부적합 류 발견: ${classResult.invalidClasses.map(c => c.class).join(', ')}`);
+      }
+      
+      console.log(`[TM] 류 검증 평균 점수: ${classResult.classScoreAvg || 'N/A'}`);
+      
+    } catch (e) {
+      console.warn('[TM] 1단계 검증 실패:', e.message);
+    }
+    
+    // ==============================================
+    // 2단계: 지정상품별 상세 검증
+    // ==============================================
+    console.log('[TM] ▶ 2단계: 지정상품별 상세 검증');
+    
+    // 유효한 류만 검증 (1단계에서 무효 판정된 류 제외)
+    const invalidClassCodes = validationResult.invalidClasses.map(c => c.class);
+    const validClassCodes = aiAnalysis.recommendedClasses.filter(c => !invalidClassCodes.includes(c));
+    
+    for (const classCode of validClassCodes) {
+      const goods = aiAnalysis.recommendedGoods?.[classCode] || [];
+      if (goods.length === 0) continue;
+      
+      try {
+        const goodsValidationPrompt = `당신은 상표 출원 전문 변리사입니다.
+
+【사업 내용】
+"${businessInput}"
+
+【제${classCode}류 추천 지정상품】
+${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
+
+【검증 과제】
+각 지정상품이 위 사업과 관련 있는지 검증하세요.
+
+★★★ 특히 주의할 오류 유형 ★★★
+1. 동음이의어: "생화(꽃)"와 "생화학(화학)", "가구(furniture)"와 "가구(家口)"
+2. 부분 문자열 매칭 오류: "꽃" 검색 시 "꽃게", "불꽃" 등 무관한 상품 포함
+3. 업종 불일치: 사업 내용과 전혀 다른 분야의 상품
+4. 확대 해석: 사업에서 실제로 취급하지 않는 상품
+
+【JSON으로만 응답】
+{
+  "validGoods": [
+    {"name": "생화 소매업", "score": 95, "comment": "꽃 판매와 직접 관련"}
   ],
   "invalidGoods": [
-    {"classCode": "35", "goodsName": "생화학적 촉매 도매업", "reason": "생화(꽃)와 생화학(화학) 혼동"}
+    {"name": "생화학적 촉매 도매업", "score": 5, "reason": "동음이의어 오류 - 생화(꽃)와 생화학(화학) 혼동", "errorType": "homonym"}
   ],
-  "warnings": [
-    {"class": "35", "message": "온라인 판매 여부 확인 필요"}
-  ],
-  "suggestions": [
-    {"type": "add_class", "class": "44", "reason": "꽃 장식 서비스 추가 권장"}
+  "suggestedReplacements": [
+    {"remove": "생화학적 촉매 도매업", "addInstead": "절화 소매업", "reason": "꽃 판매에 적합"}
   ]
+}`;
+
+        const goodsResponse = await App.callClaude(goodsValidationPrompt, 1200);
+        const goodsResult = TM.safeJsonParse(goodsResponse.text);
+        
+        if (goodsResult.invalidGoods?.length > 0) {
+          validationResult.hasIssues = true;
+          goodsResult.invalidGoods.forEach(g => {
+            validationResult.invalidGoods.push({
+              classCode: classCode,
+              goodsName: g.name,
+              reason: g.reason,
+              errorType: g.errorType || 'relevance',
+              score: g.score
+            });
+          });
+          console.log(`[TM] 제${classCode}류 부적합 상품: ${goodsResult.invalidGoods.map(g => g.name).join(', ')}`);
+        }
+        
+        // 대체 추천 저장
+        if (goodsResult.suggestedReplacements?.length > 0) {
+          goodsResult.suggestedReplacements.forEach(r => {
+            validationResult.replacementGoods.push({
+              classCode: classCode,
+              remove: r.remove,
+              addInstead: r.addInstead,
+              reason: r.reason
+            });
+          });
+        }
+        
+      } catch (e) {
+        console.warn(`[TM] 제${classCode}류 검증 실패:`, e.message);
+      }
+    }
+    
+    // ==============================================
+    // 3단계: 누락 검토 (빠진 류/상품 확인)
+    // ==============================================
+    console.log('[TM] ▶ 3단계: 누락 검토');
+    
+    try {
+      const missingReviewPrompt = `당신은 상표 출원 전문 변리사입니다.
+
+【사업 내용】
+"${businessInput}"
+
+【현재 추천된 류】
+${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
+
+【검토 과제】
+위 사업을 영위하는데 반드시 필요하지만 누락된 상품류가 있는지 검토하세요.
+
+검토 기준:
+1. 사업의 핵심 활동을 보호하기 위해 필수적인 류가 빠졌는가?
+2. 판매 채널(온라인/오프라인)에 따른 필수 류가 있는가?
+3. 관련 서비스(유지보수, 컨설팅 등)에 필요한 류가 있는가?
+4. 경쟁사가 일반적으로 등록하는 류 중 빠진 것이 있는가?
+
+【JSON으로만 응답】
+{
+  "isSufficient": true/false,
+  "missingClasses": [
+    {"class": "44", "reason": "꽃 장식/꽃꽂이 서비스는 44류에 해당", "priority": "권장"}
+  ],
+  "missingGoods": [
+    {"classCode": "31", "goodsName": "분재", "reason": "식물 판매 시 분재도 포함 권장"}
+  ],
+  "overallComment": "전반적인 검토 의견"
 }
 
-문제가 없으면 hasIssues: false, invalidClasses: [], invalidGoods: []로 응답하세요.`;
+누락이 없으면 isSufficient: true, missingClasses: [], missingGoods: []로 응답하세요.`;
 
-    try {
-      const response = await App.callClaude(validationPrompt, 1500);
-      const text = response.text || '';
+      const missingResponse = await App.callClaude(missingReviewPrompt, 1000);
+      const missingResult = TM.safeJsonParse(missingResponse.text);
       
-      const startIdx = text.indexOf('{');
-      const endIdx = text.lastIndexOf('}');
+      validationResult.stages.missingReview = missingResult;
       
-      if (startIdx === -1 || endIdx <= startIdx) {
-        console.warn('[TM] 검증 응답 파싱 실패');
-        return null;
+      if (missingResult.missingClasses?.length > 0) {
+        validationResult.missingClasses = missingResult.missingClasses;
+        validationResult.suggestions.push(...missingResult.missingClasses.map(c => ({
+          type: 'add_class',
+          class: c.class,
+          reason: c.reason,
+          priority: c.priority
+        })));
+        console.log(`[TM] 누락된 류 발견: ${missingResult.missingClasses.map(c => c.class).join(', ')}`);
       }
       
-      const jsonStr = text.substring(startIdx, endIdx + 1)
-        .replace(/[\x00-\x1F\x7F]/g, ' ')
-        .replace(/,(\s*[}\]])/g, '$1');
-      
-      const result = JSON.parse(jsonStr);
-      
-      console.log('[TM] 검증 결과:', {
-        hasIssues: result.hasIssues,
-        score: result.overallScore,
-        summary: result.summary,
-        invalidClasses: result.invalidClasses?.length || 0,
-        invalidGoods: result.invalidGoods?.length || 0
-      });
-      
-      if (result.invalidClasses?.length > 0) {
-        console.log('[TM] 잘못된 류:', result.invalidClasses);
-      }
-      if (result.invalidGoods?.length > 0) {
-        console.log('[TM] 잘못된 지정상품:', result.invalidGoods);
-      }
-      if (result.suggestions?.length > 0) {
-        console.log('[TM] 추가 제안:', result.suggestions);
+      if (missingResult.missingGoods?.length > 0) {
+        validationResult.missingGoods = missingResult.missingGoods;
+        console.log(`[TM] 누락된 상품 발견: ${missingResult.missingGoods.map(g => g.goodsName).join(', ')}`);
       }
       
-      return result;
-      
-    } catch (error) {
-      console.error('[TM] 검증 실패:', error);
-      return null;
+    } catch (e) {
+      console.warn('[TM] 3단계 검증 실패:', e.message);
     }
+    
+    // ==============================================
+    // 최종 점수 계산 및 요약
+    // ==============================================
+    const totalIssues = validationResult.invalidClasses.length + validationResult.invalidGoods.length;
+    const totalItems = allClasses.length + aiAnalysis.recommendedClasses.reduce((sum, c) => 
+      sum + (aiAnalysis.recommendedGoods?.[c]?.length || 0), 0);
+    
+    validationResult.overallScore = Math.max(0, Math.round(100 - (totalIssues / Math.max(totalItems, 1)) * 100));
+    
+    // 요약 생성
+    if (totalIssues === 0 && validationResult.missingClasses.length === 0) {
+      validationResult.summary = '✅ 모든 추천이 사업 내용과 적합합니다.';
+    } else {
+      const parts = [];
+      if (validationResult.invalidClasses.length > 0) {
+        parts.push(`부적합 류 ${validationResult.invalidClasses.length}개 제거됨`);
+      }
+      if (validationResult.invalidGoods.length > 0) {
+        parts.push(`부적합 상품 ${validationResult.invalidGoods.length}개 제거됨`);
+      }
+      if (validationResult.missingClasses.length > 0) {
+        parts.push(`추가 권장 류 ${validationResult.missingClasses.length}개`);
+      }
+      validationResult.summary = parts.join(', ');
+    }
+    
+    console.log('[TM] ════════════════════════════════════');
+    console.log(`[TM] 검증 완료 - 점수: ${validationResult.overallScore}점`);
+    console.log(`[TM] 요약: ${validationResult.summary}`);
+    console.log('[TM] ════════════════════════════════════');
+    
+    return validationResult;
+  };
+  
+  // ================================================================
+  // 검증 결과 적용 (잘못된 항목 제거 + 대체 추천)
+  // ================================================================
+  TM.applyValidationResult = async function(aiAnalysis, validationResult) {
+    if (!validationResult || !validationResult.hasIssues) return;
+    
+    console.log('[TM] 검증 결과 적용 시작');
+    
+    // 1. 잘못된 류 제거
+    if (validationResult.invalidClasses?.length > 0) {
+      for (const invalidClass of validationResult.invalidClasses) {
+        const classCode = invalidClass.class;
+        
+        // recommendedClasses에서 제거
+        const idx = aiAnalysis.recommendedClasses.indexOf(classCode);
+        if (idx > -1) {
+          aiAnalysis.recommendedClasses.splice(idx, 1);
+        }
+        
+        // classRecommendations에서 제거
+        ['core', 'recommended', 'expansion'].forEach(cat => {
+          if (aiAnalysis.classRecommendations?.[cat]) {
+            aiAnalysis.classRecommendations[cat] = 
+              aiAnalysis.classRecommendations[cat].filter(c => c.class !== classCode);
+          }
+        });
+        
+        // 관련 데이터 제거
+        delete aiAnalysis.classReasons?.[classCode];
+        delete aiAnalysis.recommendedGoods?.[classCode];
+        
+        console.log(`[TM] ✗ 제${classCode}류 제거: ${invalidClass.reason}`);
+      }
+    }
+    
+    // 2. 잘못된 지정상품 제거
+    if (validationResult.invalidGoods?.length > 0) {
+      for (const invalidGood of validationResult.invalidGoods) {
+        const { classCode, goodsName } = invalidGood;
+        
+        if (aiAnalysis.recommendedGoods?.[classCode]) {
+          const before = aiAnalysis.recommendedGoods[classCode].length;
+          aiAnalysis.recommendedGoods[classCode] = 
+            aiAnalysis.recommendedGoods[classCode].filter(g => g.name !== goodsName);
+          const after = aiAnalysis.recommendedGoods[classCode].length;
+          
+          if (before !== after) {
+            console.log(`[TM] ✗ 제${classCode}류 "${goodsName}" 제거: ${invalidGood.reason}`);
+          }
+        }
+      }
+    }
+    
+    // 3. 대체 상품 추가 (DB에서 조회)
+    if (validationResult.replacementGoods?.length > 0) {
+      for (const replacement of validationResult.replacementGoods) {
+        const { classCode, addInstead, reason } = replacement;
+        
+        // 이미 있는지 확인
+        const existingGoods = aiAnalysis.recommendedGoods?.[classCode] || [];
+        const alreadyExists = existingGoods.some(g => g.name === addInstead);
+        
+        if (!alreadyExists) {
+          // DB에서 해당 상품 조회
+          try {
+            const { data } = await App.sb
+              .from('gazetted_goods_cache')
+              .select('goods_name, similar_group_code')
+              .eq('class_code', classCode)
+              .ilike('goods_name', `%${addInstead}%`)
+              .limit(1);
+            
+            if (data?.length > 0) {
+              if (!aiAnalysis.recommendedGoods[classCode]) {
+                aiAnalysis.recommendedGoods[classCode] = [];
+              }
+              aiAnalysis.recommendedGoods[classCode].push({
+                name: data[0].goods_name,
+                similarGroup: data[0].similar_group_code,
+                isReplacement: true,
+                reason: reason
+              });
+              console.log(`[TM] ✓ 제${classCode}류 "${data[0].goods_name}" 대체 추가`);
+            }
+          } catch (e) {
+            console.warn(`[TM] 대체 상품 조회 실패: ${addInstead}`);
+          }
+        }
+      }
+    }
+    
+    console.log('[TM] 검증 결과 적용 완료');
   };
   
   // ================================================================
