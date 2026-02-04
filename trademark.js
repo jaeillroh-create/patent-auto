@@ -6004,8 +6004,9 @@ ${criticalResults.slice(0, 5).map(r =>
     
     console.log('[TM] 최종 텍스트:', fullText.substring(0, 500));
     
-    // 정규식으로 정보 추출
-    return TM.parseApplicationText(fullText);
+    // Claude API로 정보 추출
+    App.showToast('AI가 텍스트 분석 중...', 'info');
+    return await TM.parseApplicationText(fullText);
   };
   
   // PDF를 이미지로 렌더링 후 OCR
@@ -6053,8 +6054,8 @@ ${criticalResults.slice(0, 5).map(r =>
     return fullText;
   };
   
-  // 텍스트에서 출원 정보 파싱
-  TM.parseApplicationText = function(text) {
+  // 텍스트에서 출원 정보 파싱 (Claude API 사용)
+  TM.parseApplicationText = async function(text) {
     const result = {
       applicationNumber: '',
       applicationDate: '',
@@ -6064,136 +6065,87 @@ ${criticalResults.slice(0, 5).map(r =>
       designatedGoods: ''
     };
     
-    // 공백/줄바꿈 정규화
+    if (!text || text.trim().length < 10) {
+      console.log('[TM] 텍스트가 너무 짧음');
+      return result;
+    }
+    
+    console.log('[TM] Claude API로 텍스트 분석 시작');
+    console.log('[TM] 원본 텍스트:', text.substring(0, 800));
+    
+    try {
+      const prompt = `다음은 상표 출원번호통지서 또는 출원서를 OCR한 텍스트입니다. 띄어쓰기가 잘못되어 있거나 글자가 누락되었을 수 있습니다.
+
+아래 정보를 추출해주세요:
+1. 출원번호 (40-XXXX-XXXXXXX 형식)
+2. 출원일자 (YYYY.MM.DD 형식)
+3. 출원인 명칭 (회사명 또는 개인명)
+
+【OCR 텍스트】
+${text.substring(0, 1500)}
+
+【응답 형식 - JSON만】
+{"applicationNumber": "40-2025-0097799", "applicationDate": "2025.06.09", "applicantName": "삼인시스템 주식회사"}
+
+찾을 수 없는 항목은 빈 문자열("")로 설정하세요. JSON만 응답하세요.`;
+
+      const response = await App.callClaude(prompt, 500);
+      const responseText = response.text || '';
+      
+      console.log('[TM] Claude 응답:', responseText);
+      
+      // JSON 추출
+      const startIdx = responseText.indexOf('{');
+      const endIdx = responseText.lastIndexOf('}');
+      
+      if (startIdx !== -1 && endIdx > startIdx) {
+        const jsonStr = responseText.substring(startIdx, endIdx + 1);
+        const parsed = JSON.parse(jsonStr);
+        
+        if (parsed.applicationNumber) result.applicationNumber = parsed.applicationNumber;
+        if (parsed.applicationDate) result.applicationDate = parsed.applicationDate;
+        if (parsed.applicantName) result.applicantName = parsed.applicantName;
+        if (parsed.trademarkName) result.trademarkName = parsed.trademarkName;
+        
+        console.log('[TM] Claude 파싱 결과:', result);
+      }
+    } catch (error) {
+      console.error('[TM] Claude 분석 실패, 정규식 폴백:', error);
+      // 정규식 폴백
+      return TM.parseApplicationTextRegex(text);
+    }
+    
+    return result;
+  };
+  
+  // 정규식 기반 파싱 (폴백용)
+  TM.parseApplicationTextRegex = function(text) {
+    const result = {
+      applicationNumber: '',
+      applicationDate: '',
+      applicantName: '',
+      trademarkName: '',
+      classCode: '',
+      designatedGoods: ''
+    };
+    
     let normalizedText = text.replace(/\s+/g, ' ');
     
-    // OCR 오류 보정: 띄어쓰기 정규화
-    normalizedText = normalizedText
-      .replace(/출\s*원\s*일\s*자/g, '출원일자')
-      .replace(/출\s*원\s*번\s*호/g, '출원번호')
-      .replace(/출\s*원\s*인\s*명\s*칭/g, '출원인명칭')
-      .replace(/대\s*리\s*인\s*성\s*명/g, '대리인성명')
-      .replace(/특\s*기\s*사\s*항/g, '특기사항')
-      .replace(/주\s*식\s*회\s*사/g, '주식회사');
+    // 출원번호
+    const appNumMatch = normalizedText.match(/(40-\d{4}-\d{6,7})/);
+    if (appNumMatch) result.applicationNumber = appNumMatch[1];
     
-    console.log('[TM] 정규화된 텍스트:', normalizedText.substring(0, 1000));
+    // 출원일자
+    const dateMatch = normalizedText.match(/(\d{4})[.\s]*(\d{2})[.\s]*(\d{2})/);
+    if (dateMatch) result.applicationDate = `${dateMatch[1]}.${dateMatch[2]}.${dateMatch[3]}`;
     
-    // 출원번호 패턴: 40-2025-0097799
-    const appNumPatterns = [
-      /출원번호[^0-9]*(40-\d{4}-\d{6,7})/i,
-      /출원번호[^0-9]*(40\d{10,11})/i,
-      /(40-\d{4}-\d{6,7})/,
-      /(40\d{10,11})/
-    ];
-    for (const pattern of appNumPatterns) {
-      const match = normalizedText.match(pattern);
-      if (match) {
-        let num = match[1].replace(/\s/g, '');
-        if (!num.includes('-') && num.length >= 13) {
-          num = num.substring(0, 2) + '-' + num.substring(2, 6) + '-' + num.substring(6);
-        }
-        result.applicationNumber = num;
-        console.log('[TM] 출원번호 매칭:', num);
-        break;
-      }
+    // 출원인 (주식회사 패턴)
+    const companyMatch = normalizedText.match(/([가-힣]+)\s*주\s*식\s*회\s*사|주\s*식\s*회\s*사\s*([가-힣]+)/);
+    if (companyMatch) {
+      let name = (companyMatch[1] || companyMatch[2] || '').replace(/\s/g, '');
+      if (name) result.applicantName = name + ' 주식회사';
     }
     
-    // 출원일자 패턴: 2025.06.09, 202506.09 등
-    const datePatterns = [
-      /출원일자[^0-9]*(\d{4})[.\s]*(\d{2})[.\s]*(\d{2})/i,
-      /출원일[^0-9]*(\d{4})[.\s]*(\d{2})[.\s]*(\d{2})/i,
-      /(\d{4})[.](\d{2})[.](\d{2})/
-    ];
-    for (const pattern of datePatterns) {
-      const match = normalizedText.match(pattern);
-      if (match) {
-        // 년.월.일 형식으로 조합
-        result.applicationDate = `${match[1]}.${match[2]}.${match[3]}`;
-        console.log('[TM] 출원일자 매칭:', result.applicationDate);
-        break;
-      }
-    }
-    
-    // 출원인 명칭 패턴: 삼인시스템 주식회사
-    // 먼저 "출원인명칭" 뒤의 텍스트에서 한글 사이 공백 제거
-    const applicantMatch = normalizedText.match(/출원인명칭[^가-힣]*([가-힣\s]+(?:주식회사)?)/i);
-    if (applicantMatch) {
-      // 한글 사이의 공백 제거
-      let name = applicantMatch[1].replace(/([가-힣])\s+([가-힣])/g, '$1$2');
-      name = name.replace(/([가-힣])\s+([가-힣])/g, '$1$2'); // 두 번 적용
-      name = name.trim();
-      // 괄호 이전까지만
-      name = name.split(/[(\[]/)[0].trim();
-      if (!/^(대리인|노재일|특허|상표|출원)/.test(name) && name.length >= 2 && name.length <= 30) {
-        result.applicantName = name;
-        console.log('[TM] 출원인 명칭 매칭:', name);
-      }
-    }
-    
-    // 출원인 못 찾으면 "주식회사" 패턴으로 재시도
-    if (!result.applicantName) {
-      const companyMatch = normalizedText.match(/([가-힣\s]+주식회사|주식회사[가-힣\s]+)/i);
-      if (companyMatch) {
-        let name = companyMatch[1].replace(/([가-힣])\s+([가-힣])/g, '$1$2');
-        name = name.replace(/([가-힣])\s+([가-힣])/g, '$1$2');
-        name = name.trim();
-        if (name.length >= 4 && name.length <= 30) {
-          result.applicantName = name;
-          console.log('[TM] 출원인 (회사명) 매칭:', name);
-        }
-      }
-    }
-    
-    // 상표명 패턴
-    const tmPatterns = [
-      /상표견본[^A-Za-z가-힣]*([A-Za-z][A-Za-z0-9]{0,20})/i,
-      /상표견본[^A-Za-z가-힣]*([가-힣]{2,10})/i
-    ];
-    for (const pattern of tmPatterns) {
-      const match = normalizedText.match(pattern);
-      if (match) {
-        let tm = match[1].trim();
-        if (tm.length >= 1 && tm.length <= 20 && !/^(제|상품|지정|류|일반|문자|도형)/.test(tm)) {
-          result.trademarkName = tm;
-          console.log('[TM] 상표명 매칭:', tm);
-          break;
-        }
-      }
-    }
-    
-    // 상품류 패턴
-    const classPatterns = [
-      /상품류[^0-9]*제?\s*(\d{1,2})\s*류/i,
-      /제\s*(\d{1,2})\s*류/i
-    ];
-    for (const pattern of classPatterns) {
-      const match = normalizedText.match(pattern);
-      if (match) {
-        result.classCode = match[1].padStart(2, '0');
-        console.log('[TM] 상품류 매칭:', result.classCode);
-        break;
-      }
-    }
-    
-    // 지정상품 패턴
-    const goodsPatterns = [
-      /지정\s*상품[】\]\s:]*([^【\[]{10,500})/i
-    ];
-    for (const pattern of goodsPatterns) {
-      const match = normalizedText.match(pattern);
-      if (match) {
-        let goods = match[1].trim();
-        goods = goods.split(/(?:【|상표유형|신청이유|출원인|상표견본)/i)[0].trim();
-        goods = goods.replace(/\s+/g, ' ').substring(0, 300);
-        if (goods.length > 5) {
-          result.designatedGoods = goods;
-          console.log('[TM] 지정상품 매칭:', goods.substring(0, 80) + '...');
-          break;
-        }
-      }
-    }
-    
-    console.log('[TM] 최종 파싱 결과:', result);
     return result;
   };
   
