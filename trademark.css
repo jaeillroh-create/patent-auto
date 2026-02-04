@@ -3872,3 +3872,100 @@
     flex-direction: column;
   }
 }
+
+/* ============================================================
+   출원 정보 편집 폼 스타일
+   ============================================================ */
+
+/* 로딩 스피너 */
+.tm-dropzone-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px;
+}
+
+.tm-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e2e8f0;
+  border-top-color: #3182f6;
+  border-radius: 50%;
+  animation: tm-spin 1s linear infinite;
+}
+
+@keyframes tm-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 편집 모드 스타일 */
+.tm-extracted-info.edit-mode {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: #3182f6;
+}
+
+.tm-extracted-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 편집 폼 */
+.tm-extracted-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tm-form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.tm-form-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tm-form-field.full-width {
+  flex: 2;
+}
+
+.tm-form-field label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.tm-form-field label .required {
+  color: #ef4444;
+}
+
+.tm-form-field .tm-input {
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+/* 추출 정보 그리드 - full-width 지원 */
+.tm-extracted-item.full-width {
+  grid-column: 1 / -1;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .tm-form-row {
+    flex-direction: column;
+  }
+  
+  .tm-form-field.full-width {
+    flex: 1;
+  }
+  
+  .tm-extracted-header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+}
