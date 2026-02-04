@@ -5639,13 +5639,13 @@ ${criticalResults.slice(0, 5).map(r =>
                     <label>출원번호 <span class="required">*</span></label>
                     <input type="text" class="tm-input" id="tm-extract-applicationNumber" 
                            value="${pe.applicationNumber || ''}" 
-                           placeholder="예: 40-2025-0097799">
+                           placeholder="예: 40-2024-0012345">
                   </div>
                   <div class="tm-form-field">
                     <label>출원일 <span class="required">*</span></label>
                     <input type="text" class="tm-input" id="tm-extract-applicationDate" 
                            value="${pe.applicationDate || ''}" 
-                           placeholder="예: 2025.06.09">
+                           placeholder="예: 2024.03.15">
                   </div>
                 </div>
                 <div class="tm-form-row">
@@ -5653,13 +5653,13 @@ ${criticalResults.slice(0, 5).map(r =>
                     <label>출원인 <span class="required">*</span></label>
                     <input type="text" class="tm-input" id="tm-extract-applicantName" 
                            value="${pe.applicantName || ''}" 
-                           placeholder="예: 삼인시스템 주식회사">
+                           placeholder="예: 주식회사 가나다">
                   </div>
                   <div class="tm-form-field">
                     <label>상표명</label>
                     <input type="text" class="tm-input" id="tm-extract-trademarkNameFromApp" 
                            value="${pe.trademarkNameFromApp || p.trademarkName || ''}" 
-                           placeholder="예: MINBAS">
+                           placeholder="예: SAMPLE">
                   </div>
                 </div>
                 <div class="tm-form-row">
@@ -5667,13 +5667,13 @@ ${criticalResults.slice(0, 5).map(r =>
                     <label>상품류</label>
                     <input type="text" class="tm-input" id="tm-extract-classCode" 
                            value="${pe.classCode || ''}" 
-                           placeholder="예: 09">
+                           placeholder="예: 35">
                   </div>
                   <div class="tm-form-field full-width">
                     <label>지정상품</label>
                     <input type="text" class="tm-input" id="tm-extract-designatedGoodsFromApp" 
                            value="${pe.designatedGoodsFromApp || ''}" 
-                           placeholder="예: 건물 자동화 시스템, 무인경비시스템">
+                           placeholder="예: 광고업, 경영컨설팅업">
                   </div>
                 </div>
               </div>
@@ -5900,118 +5900,37 @@ ${criticalResults.slice(0, 5).map(r =>
       dropzone.innerHTML = `
         <div class="tm-dropzone-loading">
           <div class="tm-spinner"></div>
-          <div>출원서 분석 중...</div>
+          <div>파일 처리 중...</div>
         </div>
       `;
     }
     
     try {
-      // 파일을 Base64로 변환
-      const reader = new FileReader();
+      // 기본값 설정 (편집 가능 모드)
+      if (!p.priorityExam) p.priorityExam = {};
+      p.priorityExam.extractedFromApplication = true;
+      p.priorityExam.editMode = true;
+      p.priorityExam.uploadedFileName = file.name;
       
-      reader.onload = async function(e) {
-        const base64Data = e.target.result.split(',')[1];
-        const mimeType = file.type || 'application/pdf';
-        
-        // 기본값 설정 (편집 가능 모드)
-        if (!p.priorityExam) p.priorityExam = {};
-        p.priorityExam.extractedFromApplication = true;
-        p.priorityExam.editMode = true; // 편집 모드 활성화
-        
-        try {
-          // Claude API로 출원서 정보 추출 시도
-          if (typeof App.callClaudeWithImage === 'function') {
-            const extractPrompt = `다음은 상표 출원서 또는 출원번호통지서 파일입니다. 이 파일에서 아래 정보를 추출해주세요:
-
-【추출할 정보】
-1. 출원번호 (예: 40-2024-0012345 또는 40-2025-0097799)
-2. 출원일 (예: 2025.06.09)
-3. 상표명/상표견본 (한글 또는 영문)
-4. 출원인 이름/명칭
-5. 상품류 (예: 09)
-6. 지정상품 (콤마로 구분된 목록)
-
-【응답 형식 - JSON만】
-{
-  "applicationNumber": "40-2025-0097799",
-  "applicationDate": "2025.06.09",
-  "trademarkName": "MINBAS",
-  "applicantName": "삼인시스템 주식회사",
-  "classCode": "09",
-  "designatedGoods": "건물 자동화 시스템, 무인경비시스템, 홈네트워크시스템용서버"
-}
-
-정보를 찾을 수 없는 경우 해당 필드를 null로 설정하세요. JSON만 응답하세요.`;
-
-            App.showToast('AI가 출원서를 분석 중...', 'info');
-            
-            const response = await App.callClaudeWithImage(extractPrompt, base64Data, mimeType, 3000);
-            const text = response.text || '';
-            
-            const startIdx = text.indexOf('{');
-            const endIdx = text.lastIndexOf('}');
-            
-            if (startIdx !== -1 && endIdx > startIdx) {
-              const jsonStr = text.substring(startIdx, endIdx + 1)
-                .replace(/[\x00-\x1F\x7F]/g, ' ')
-                .replace(/,(\s*[}\]])/g, '$1');
-              
-              const extracted = JSON.parse(jsonStr);
-              
-              // 추출된 정보 저장
-              p.priorityExam.applicationNumber = extracted.applicationNumber || '';
-              p.priorityExam.applicationDate = extracted.applicationDate || '';
-              p.priorityExam.trademarkNameFromApp = extracted.trademarkName || p.trademarkName || '';
-              p.priorityExam.applicantName = extracted.applicantName || '';
-              p.priorityExam.classCode = extracted.classCode || '';
-              p.priorityExam.designatedGoodsFromApp = extracted.designatedGoods || '';
-              
-              App.showToast('출원서 정보가 추출되었습니다. 필요시 수정하세요.', 'success');
-            } else {
-              // JSON 파싱 실패 - 빈 폼 표시
-              p.priorityExam.applicationNumber = '';
-              p.priorityExam.applicationDate = '';
-              p.priorityExam.trademarkNameFromApp = p.trademarkName || '';
-              p.priorityExam.applicantName = '';
-              p.priorityExam.classCode = '';
-              p.priorityExam.designatedGoodsFromApp = '';
-              
-              App.showToast('자동 추출에 실패했습니다. 직접 입력해주세요.', 'warning');
-            }
-          } else {
-            // AI 없음 - 빈 폼 표시
-            p.priorityExam.applicationNumber = '';
-            p.priorityExam.applicationDate = '';
-            p.priorityExam.trademarkNameFromApp = p.trademarkName || '';
-            p.priorityExam.applicantName = '';
-            p.priorityExam.classCode = '';
-            p.priorityExam.designatedGoodsFromApp = '';
-            
-            App.showToast('출원 정보를 직접 입력해주세요.', 'info');
-          }
-          
-        } catch (innerError) {
-          console.error('[TM] 출원서 분석 실패:', innerError);
-          
-          // 실패해도 편집 폼 표시
-          p.priorityExam.applicationNumber = '';
-          p.priorityExam.applicationDate = '';
-          p.priorityExam.trademarkNameFromApp = p.trademarkName || '';
-          p.priorityExam.applicantName = '';
-          
-          App.showToast('자동 추출에 실패했습니다. 직접 입력해주세요.', 'warning');
-        }
-        
-        // UI 업데이트 (편집 가능 폼으로)
-        TM.renderCurrentStep();
-      };
+      // 기존 프로젝트 정보로 초기값 설정
+      p.priorityExam.applicationNumber = '';
+      p.priorityExam.applicationDate = '';
+      p.priorityExam.trademarkNameFromApp = p.trademarkName || '';
+      p.priorityExam.applicantName = p.applicantName || '';
       
-      reader.onerror = function() {
-        App.showToast('파일 읽기 실패', 'error');
-        TM.renderCurrentStep();
-      };
+      // 지정상품 정보가 있으면 자동 설정
+      if (p.designatedGoods && p.designatedGoods.length > 0) {
+        const classCodes = p.designatedGoods.map(d => d.classCode).join(', ');
+        const goodsList = p.designatedGoods.flatMap(d => (d.goods || []).map(g => g.name)).join(', ');
+        p.priorityExam.classCode = classCodes;
+        p.priorityExam.designatedGoodsFromApp = goodsList;
+      } else {
+        p.priorityExam.classCode = '';
+        p.priorityExam.designatedGoodsFromApp = '';
+      }
       
-      reader.readAsDataURL(file);
+      App.showToast('출원 정보를 입력해주세요.', 'info');
+      TM.renderCurrentStep();
       
     } catch (error) {
       console.error('[TM] 출원서 업로드 실패:', error);
