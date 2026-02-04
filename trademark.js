@@ -112,7 +112,7 @@
     // KIPRIS API 설정
     kiprisConfig: {
       baseUrl: 'https://plus.kipris.or.kr/kipo-api/kipi',
-      apiKey: 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE=', // KIPRIS OpenAPI 인증키
+      apiKey: localStorage.getItem('tm_kipris_api_key') || 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE=', // KIPRIS OpenAPI 인증키
       rateLimit: 30, // 분당 호출 제한
       timeout: 10000
     },
@@ -325,6 +325,15 @@
       case 'tm-new-project':
         TM.createNewProject();
         break;
+      case 'tm-open-settings':
+        TM.openSettings();
+        break;
+      case 'tm-save-settings':
+        TM.saveSettings();
+        break;
+      case 'tm-close-settings':
+        TM.closeSettings();
+        break;
       case 'tm-open-project':
         // 버튼이 아닌 카드 클릭인 경우에만 실행
         if (target.classList.contains('tm-project-card') || target.tagName === 'BUTTON') {
@@ -522,10 +531,16 @@
           <div style="flex-shrink: 0; width: 220px;">
             <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: #1f2937;">🏷️ 상표 출원 관리</h2>
             <p style="margin: 0 0 24px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">특허그룹 디딤 상표 출원 프로젝트를 관리합니다.</p>
-            <button class="btn btn-primary" data-action="tm-new-project" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap;">
-              <span style="font-size: 18px;">+</span>
-              새 프로젝트
-            </button>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <button class="btn btn-primary" data-action="tm-new-project" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap;">
+                <span style="font-size: 18px;">+</span>
+                새 프로젝트
+              </button>
+              <button class="btn btn-secondary" data-action="tm-open-settings" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; white-space: nowrap;">
+                <span style="font-size: 16px;">⚙️</span>
+                설정
+              </button>
+            </div>
           </div>
           
           <!-- 우측: 프로젝트 목록 -->
@@ -545,6 +560,112 @@
     await TM.loadProjectList();
   };
   
+  // ============================================================
+  // 설정 모달
+  // ============================================================
+  
+  TM.openSettings = function() {
+    const currentApiKey = TM.config.kiprisConfig.apiKey || '';
+    
+    // 모달 생성
+    const modal = document.createElement('div');
+    modal.id = 'tm-settings-modal';
+    modal.innerHTML = `
+      <div class="tm-modal-overlay" data-action="tm-close-settings">
+        <div class="tm-modal-content" onclick="event.stopPropagation()" style="max-width: 500px;">
+          <div class="tm-modal-header">
+            <h3 style="margin: 0; font-size: 18px; font-weight: 600;">⚙️ 상표 출원 설정</h3>
+            <button class="tm-modal-close" data-action="tm-close-settings">✕</button>
+          </div>
+          
+          <div class="tm-modal-body" style="padding: 24px;">
+            <!-- KIPRIS API 키 설정 -->
+            <div class="tm-settings-section">
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #374151;">
+                🔑 KIPRIS API 키
+              </h4>
+              <p style="margin: 0 0 12px 0; font-size: 12px; color: #6b7280; line-height: 1.5;">
+                KIPRIS OpenAPI 인증키를 입력하세요. 
+                <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" style="color: #3b82f6;">
+                  KIPRIS Plus에서 발급
+                </a>
+              </p>
+              <input type="text" id="tm-settings-kipris-key" class="tm-input" 
+                     value="${TM.escapeHtml(currentApiKey)}"
+                     placeholder="API 키를 입력하세요"
+                     style="width: 100%; font-family: monospace; font-size: 13px;">
+            </div>
+            
+            <!-- 자동 저장 설정 -->
+            <div class="tm-settings-section" style="margin-top: 20px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #374151;">
+                💾 자동 저장
+              </h4>
+              <p style="margin: 0 0 12px 0; font-size: 12px; color: #6b7280; line-height: 1.5;">
+                변경사항이 있을 경우 자동으로 저장됩니다.
+              </p>
+              <div style="display: flex; gap: 16px; font-size: 13px; color: #374151;">
+                <span>• 입력 후 3초 후 자동 저장</span>
+              </div>
+              <div style="display: flex; gap: 16px; font-size: 13px; color: #374151; margin-top: 4px;">
+                <span>• 15초마다 주기적 저장</span>
+              </div>
+            </div>
+            
+            <!-- 현재 상태 -->
+            <div class="tm-settings-section" style="margin-top: 20px; padding: 12px; background: #f9fafb; border-radius: 8px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600; color: #374151;">
+                ℹ️ 현재 상태
+              </h4>
+              <div style="font-size: 12px; color: #6b7280; line-height: 1.6;">
+                <div>• KIPRIS API 키: ${currentApiKey ? '설정됨 ✓' : '미설정'}</div>
+                <div>• 자동 저장: 활성화됨 ✓</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="tm-modal-footer" style="padding: 16px 24px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 12px;">
+            <button class="btn btn-secondary" data-action="tm-close-settings" style="padding: 10px 20px;">
+              취소
+            </button>
+            <button class="btn btn-primary" data-action="tm-save-settings" style="padding: 10px 20px;">
+              저장
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+  };
+  
+  TM.saveSettings = function() {
+    const keyInput = document.getElementById('tm-settings-kipris-key');
+    if (!keyInput) return;
+    
+    const newApiKey = keyInput.value.trim();
+    
+    // localStorage에 저장
+    if (newApiKey) {
+      localStorage.setItem('tm_kipris_api_key', newApiKey);
+      TM.config.kiprisConfig.apiKey = newApiKey;
+      App.showToast('KIPRIS API 키가 저장되었습니다.', 'success');
+    } else {
+      localStorage.removeItem('tm_kipris_api_key');
+      TM.config.kiprisConfig.apiKey = 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE='; // 기본값
+      App.showToast('기본 API 키로 복원되었습니다.', 'info');
+    }
+    
+    TM.closeSettings();
+  };
+  
+  TM.closeSettings = function() {
+    const modal = document.getElementById('tm-settings-modal');
+    if (modal) {
+      modal.remove();
+    }
+  };
+
   TM.loadProjectList = async function() {
     const listEl = document.getElementById('tm-project-list');
     if (!listEl) return;
@@ -756,6 +877,7 @@
       if (data.ai_analysis) TM.currentProject.aiAnalysis = { ...TM.currentProject.aiAnalysis, ...data.ai_analysis };
       
       TM.currentStep = 1;
+      TM.hasUnsavedChanges = false;
       
       // 히스토리 관리 (브라우저 뒤로가기 지원)
       if (!skipHistory) {
@@ -765,6 +887,9 @@
       // 워크스페이스 렌더링
       TM.renderWorkspace();
       
+      // 자동 저장 시작
+      TM.startAutoSave();
+      
       App.showToast('프로젝트를 불러왔습니다.', 'success');
       
     } catch (error) {
@@ -773,14 +898,14 @@
     }
   };
   
-  TM.saveProject = async function() {
+  TM.saveProject = async function(silent = false) {
     if (!TM.currentProject || !TM.currentProject.id) {
-      App.showToast('저장할 프로젝트가 없습니다.', 'warning');
+      if (!silent) App.showToast('저장할 프로젝트가 없습니다.', 'warning');
       return;
     }
     
     try {
-      App.showToast('저장 중...', 'info');
+      if (!silent) App.showToast('저장 중...', 'info');
       
       const updateData = {
         title: TM.currentProject.title,
@@ -808,7 +933,8 @@
           feeCalculation: TM.currentProject.feeCalculation,
           priorityExam: TM.currentProject.priorityExam,
           aiAnalysis: TM.currentProject.aiAnalysis
-        }
+        },
+        updated_at: new Date().toISOString()
       };
       
       const { error } = await App.sb
@@ -818,11 +944,16 @@
       
       if (error) throw error;
       
-      App.showToast('저장되었습니다.', 'success');
+      TM.hasUnsavedChanges = false;
+      if (!silent) {
+        App.showToast('저장되었습니다.', 'success');
+      } else {
+        console.log('[TM] 자동 저장 완료');
+      }
       
     } catch (error) {
       console.error('[TM] 저장 실패:', error);
-      App.showToast('저장 실패: ' + error.message, 'error');
+      if (!silent) App.showToast('저장 실패: ' + error.message, 'error');
     }
   };
   
@@ -905,38 +1036,41 @@
   };
   
   TM.backToList = async function() {
-    if (TM.currentProject) {
-      // 먼저 자동 저장 시도
+    // 자동 저장 타이머 중지
+    TM.stopAutoSave();
+    
+    if (TM.currentProject && TM.hasUnsavedChanges) {
+      // 변경사항이 있으면 저장
       try {
         App.showToast('변경사항 저장 중...', 'info');
-        await TM.saveProject();
-        App.showToast('저장 완료! 목록으로 이동합니다.', 'success');
+        await TM.saveProject(false); // 토스트 표시
       } catch (error) {
         // 저장 실패 시 확인
         if (!confirm('저장에 실패했습니다. 그래도 목록으로 돌아가시겠습니까?\n(변경사항이 손실될 수 있습니다)')) {
+          TM.startAutoSave(); // 자동 저장 재시작
           return;
         }
       }
     }
+    
     TM.currentProject = null;
+    TM.hasUnsavedChanges = false;
     TM.renderDashboard();
   };
   
-  // 주기적 자동저장 (30초)
+  // 주기적 자동저장 (15초)
   TM.startAutoSave = function() {
-    if (TM.autoSaveTimer) clearInterval(TM.autoSaveTimer);
+    TM.stopAutoSave();
     TM.autoSaveTimer = setInterval(async () => {
       if (TM.currentProject && TM.hasUnsavedChanges) {
-        console.log('[TM] 자동 저장 중...');
+        console.log('[TM] 주기적 자동 저장 중...');
         try {
-          await TM.saveProject();
-          TM.hasUnsavedChanges = false;
-          console.log('[TM] 자동 저장 완료');
+          await TM.saveProject(true); // silent
         } catch (e) {
-          console.warn('[TM] 자동 저장 실패:', e);
+          console.warn('[TM] 주기적 자동 저장 실패:', e);
         }
       }
-    }, 30000);
+    }, 15000); // 15초
   };
   
   TM.stopAutoSave = function() {
@@ -944,6 +1078,33 @@
       clearInterval(TM.autoSaveTimer);
       TM.autoSaveTimer = null;
     }
+    if (TM.debounceSaveTimer) {
+      clearTimeout(TM.debounceSaveTimer);
+      TM.debounceSaveTimer = null;
+    }
+  };
+  
+  // 디바운스된 자동 저장 (변경 후 3초 후 저장)
+  TM.debounceSave = function() {
+    if (TM.debounceSaveTimer) {
+      clearTimeout(TM.debounceSaveTimer);
+    }
+    TM.debounceSaveTimer = setTimeout(async () => {
+      if (TM.currentProject && TM.hasUnsavedChanges) {
+        console.log('[TM] 디바운스 자동 저장 중...');
+        try {
+          await TM.saveProject(true); // silent
+        } catch (e) {
+          console.warn('[TM] 디바운스 자동 저장 실패:', e);
+        }
+      }
+    }, 3000); // 3초
+  };
+  
+  // 변경 감지 및 자동 저장 트리거
+  TM.markChanged = function() {
+    TM.hasUnsavedChanges = true;
+    TM.debounceSave();
   };
   
   // 변경 감지 플래그
@@ -1324,8 +1485,8 @@
     
     obj[parts[parts.length - 1]] = value;
     
-    // 변경 플래그 설정
-    TM.hasUnsavedChanges = true;
+    // 변경 감지 및 자동 저장 트리거
+    TM.markChanged();
   };
   
   TM.getField = function(field) {
@@ -4087,7 +4248,7 @@
         console.log('[KIPRIS] Edge Function 연결 테스트...');
         try {
           const testResult = await App.sb.functions.invoke('kipris-proxy', {
-            body: { type: 'test', params: {} }
+            body: { type: 'test', params: {}, apiKey: TM.config.kiprisConfig.apiKey }
           });
           console.log('[KIPRIS] Edge Function 테스트 결과:', testResult);
         } catch (testErr) {
@@ -4100,7 +4261,11 @@
         console.log('[KIPRIS] 📡 Edge Function 호출...');
         
         const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
-          body: { type, params }
+          body: { 
+            type, 
+            params,
+            apiKey: TM.config.kiprisConfig.apiKey // API 키 전달
+          }
         });
         
         console.log('[KIPRIS] 응답:', { data, error });
@@ -4152,7 +4317,8 @@
       const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
         body: { 
           type: 'detail', 
-          params: { applicationNumber } 
+          params: { applicationNumber },
+          apiKey: TM.config.kiprisConfig.apiKey // API 키 전달
         }
       });
       

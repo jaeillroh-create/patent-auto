@@ -4021,6 +4021,7 @@
   z-index: 10000;
 }
 
+.tm-modal-content,
 .tm-modal {
   background: white;
   border-radius: 16px;
