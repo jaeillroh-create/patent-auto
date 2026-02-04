@@ -92,53 +92,53 @@
 
     <!-- ═══ 특허 대시보드 패널 ═══ -->
     <div id="patent-dashboard-panel" class="service-panel active">
-      <div style="display:flex;gap:24px;align-items:flex-start">
-        <!-- 왼쪽: 액션 패널 -->
-        <div style="width:260px;flex-shrink:0">
-          <h2 style="font-size:22px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px"><span class="tossface">📑</span> 특허 명세서</h2>
-          <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:20px;line-height:1.5">AI 기반 특허명세서 자동 생성 시스템입니다.</p>
+      <div style="display:flex;gap:20px;align-items:flex-start">
+        <!-- 왼쪽: 액션 패널 (좁게) -->
+        <div style="width:240px;flex-shrink:0">
+          <h2 style="font-size:20px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px"><span class="tossface">📑</span> 특허 명세서</h2>
+          <p style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:16px;line-height:1.4">AI 기반 특허명세서 자동 생성 시스템입니다.</p>
           
-          <button class="btn btn-primary btn-full" onclick="openNewProjectModal()" style="margin-bottom:10px;padding:14px"><span class="tossface">➕</span> 새 사건 만들기</button>
-          <button class="btn btn-outline btn-full" onclick="openProvisionalModal()" style="margin-bottom:20px;padding:12px"><span class="tossface">⚡</span> 가출원 명세서</button>
+          <button class="btn btn-primary btn-full" onclick="openNewProjectModal()" style="margin-bottom:8px;padding:12px;font-size:14px"><span class="tossface">➕</span> 새 사건 만들기</button>
+          <button class="btn btn-outline btn-full" onclick="openProvisionalModal()" style="margin-bottom:16px;padding:10px;font-size:13px"><span class="tossface">⚡</span> 가출원 명세서</button>
           
-          <div class="card" style="padding:14px">
-            <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tossface">📎</span> 공통 참고 문서</div>
-            <p style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px;line-height:1.4">기존 특허명세서 문체를 참고합니다.</p>
-            <label for="globalRefUpload" class="btn btn-outline btn-sm btn-full" style="cursor:pointer"><span class="tossface">📄</span> 문서 업로드</label>
+          <div class="card" style="padding:12px">
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px"><span class="tossface">📎</span> 공통 참고 문서</div>
+            <p style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px;line-height:1.3">기존 특허명세서 문체를 참고합니다.</p>
+            <label for="globalRefUpload" class="btn btn-outline btn-sm btn-full" style="cursor:pointer;font-size:11px"><span class="tossface">📄</span> 문서 업로드</label>
             <input type="file" id="globalRefUpload" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="handleGlobalRefUpload(event)" />
-            <div id="globalRefStatus" style="font-size:11px;color:var(--color-text-tertiary);margin-top:8px;text-align:center">없음</div>
+            <div id="globalRefStatus" style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px;text-align:center">없음</div>
           </div>
         </div>
         
-        <!-- 오른쪽: 사건 테이블 -->
+        <!-- 오른쪽: 사건 목록 (flex:1로 나머지 전체 차지) -->
         <div style="flex:1;min-width:0">
+          <!-- 사건 목록 카드 -->
           <div class="card" style="padding:0;overflow:hidden">
-            <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
               <thead>
                 <tr style="background:var(--color-bg-tertiary);border-bottom:1px solid var(--color-border)">
-                  <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--color-text-secondary);width:120px;white-space:nowrap">사건번호</th>
-                  <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--color-text-secondary);white-space:nowrap">사건명</th>
-                  <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:80px;white-space:nowrap">상태</th>
-                  <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:90px;white-space:nowrap">수정일</th>
-                  <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:150px;white-space:nowrap">작업</th>
+                  <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--color-text-secondary);width:100px">사건번호</th>
+                  <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--color-text-secondary)">사건명</th>
+                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:70px">상태</th>
+                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:85px">수정일</th>
+                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:140px">작업</th>
                 </tr>
               </thead>
               <tbody id="dashProjectList"></tbody>
             </table>
           </div>
-          <div style="text-align:right;margin-top:8px;font-size:12px;color:var(--color-text-tertiary)" id="dashProjectCount">총 0건</div>
+          <div style="text-align:right;margin-top:6px;font-size:11px;color:var(--color-text-tertiary)" id="dashProjectCount">총 0건</div>
           
           <!-- 가출원 내역 -->
-          <div class="card" style="padding:0;overflow:hidden;margin-top:16px">
-            <div style="padding:12px 16px;background:var(--color-warning-light);border-bottom:1px solid var(--color-warning);display:flex;align-items:center;gap:6px">
+          <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
+            <div style="padding:10px 12px;background:var(--color-warning-light);border-bottom:1px solid var(--color-warning);display:flex;align-items:center;gap:6px">
               <span class="tossface">⚡</span>
-              <span style="font-weight:600;color:var(--color-warning)">가출원 내역</span>
+              <span style="font-weight:600;font-size:13px;color:var(--color-warning)">가출원 내역</span>
             </div>
-            <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
               <tbody id="dashProvisionalList"></tbody>
             </table>
           </div>
-          <div style="text-align:right;margin-top:8px;font-size:12px;color:var(--color-text-tertiary)" id="dashProvisionalCount"></div>
         </div>
       </div>
     </div><!-- /patent-dashboard-panel -->

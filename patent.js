@@ -85,21 +85,19 @@ function clearAllState(){
 async function loadDashboardProjects(){
   const{data}=await App.sb.from('projects').select('id,title,project_number,invention_content,current_state_json,created_at,updated_at').eq('owner_user_id',currentUser.id).order('updated_at',{ascending:false});
   const el=document.getElementById('dashProjectList'),cnt=document.getElementById('dashProjectCount');
-  const provEl=document.getElementById('dashProvisionalList'),provCnt=document.getElementById('dashProvisionalCount');
+  const provEl=document.getElementById('dashProvisionalList');
   if(!data?.length){
-    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--color-text-tertiary)"><div style="font-size:32px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></td></tr>';
+    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="tossface">📭</span></div><p style="font-size:13px">아직 생성된 사건이 없어요.</p></td></tr>';
     cnt.textContent='총 0건';
-    if(provEl)provEl.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--color-text-tertiary);font-size:13px">가출원 내역이 없어요.</td></tr>';
-    if(provCnt)provCnt.textContent='';
+    if(provEl)provEl.innerHTML='<tr><td style="text-align:center;padding:16px;color:var(--color-text-tertiary);font-size:12px">가출원 내역이 없어요.</td></tr>';
     return;
   }
-  // Separate regular and provisional
   const regular=data.filter(p=>!p.current_state_json?.type||p.current_state_json.type!=='provisional');
   const provisional=data.filter(p=>p.current_state_json?.type==='provisional');
-  cnt.textContent=`총 ${regular.length}개 프로젝트`;
+  cnt.textContent=`총 ${regular.length}건`;
   
   if(!regular.length){
-    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--color-text-tertiary)"><div style="font-size:32px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></td></tr>';
+    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="tossface">📭</span></div><p style="font-size:13px">아직 생성된 사건이 없어요.</p></td></tr>';
   } else {
     el.innerHTML=regular.map(p=>{
       const s=p.current_state_json||{},o=s.outputs||{};
@@ -109,35 +107,33 @@ async function loadDashboardProjects(){
       const statusBadge=pct===100?'badge-success':pct>0?'badge-warning':'badge-neutral';
       const statusText=pct===100?'완료':pct>0?'작성 중':'대기';
       return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-bg-tertiary)'" onmouseout="this.style.background=''" onclick="openProject('${p.id}')">
-        <td style="padding:12px 16px;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tossface">📁</span><span style="color:var(--color-primary);font-weight:600">${App.escapeHtml(caseNum)}</span></div></td>
-        <td style="padding:12px 16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(p.title)}</span></td>
-        <td style="padding:12px 16px;text-align:center;white-space:nowrap"><span class="badge ${statusBadge}">${statusText}</span></td>
-        <td style="padding:12px 16px;text-align:center;color:var(--color-text-tertiary);font-size:12px;white-space:nowrap">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</td>
-        <td style="padding:8px 12px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
-          <button class="btn btn-primary btn-sm" onclick="openProject('${p.id}')" style="padding:5px 10px;font-size:11px">열기</button>
-          <button class="btn btn-outline btn-sm" onclick="renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:5px 8px;font-size:11px">편집</button>
-          <button class="btn btn-ghost btn-sm" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:5px 8px;font-size:11px;color:var(--color-error)">삭제</button>
+        <td style="padding:10px 12px"><div style="display:flex;align-items:center;gap:6px"><span class="tossface">📁</span><span style="color:var(--color-primary);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
+        <td style="padding:10px 12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(p.title)}</span></td>
+        <td style="padding:10px 12px;text-align:center"><span class="badge ${statusBadge}" style="font-size:11px">${statusText}</span></td>
+        <td style="padding:10px 12px;text-align:center;color:var(--color-text-tertiary);font-size:11px">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</td>
+        <td style="padding:6px 8px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
+          <button class="btn btn-primary btn-sm" onclick="openProject('${p.id}')" style="padding:4px 10px;font-size:11px">열기</button>
+          <button class="btn btn-outline btn-sm" onclick="renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:4px 8px;font-size:11px">편집</button>
+          <span style="color:var(--color-error);cursor:pointer;font-size:11px;margin-left:4px" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</span>
         </td>
       </tr>`;
     }).join('');
   }
   
-  // Provisional list
-  if(provCnt)provCnt.textContent=provisional.length?`총 ${provisional.length}건`:'';
   if(provEl){
     if(!provisional.length){
-      provEl.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--color-text-tertiary);font-size:13px">가출원 내역이 없어요.</td></tr>';
+      provEl.innerHTML='<tr><td style="text-align:center;padding:16px;color:var(--color-text-tertiary);font-size:12px">가출원 내역이 없어요.</td></tr>';
     } else {
       provEl.innerHTML=provisional.map(p=>{
         const pd=p.current_state_json?.provisionalData||{};
         const caseNum=p.project_number||'-';
         return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-warning-light)'" onmouseout="this.style.background=''" onclick="openProvisionalViewer('${p.id}')">
-          <td style="padding:10px 16px;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tossface">⚡</span><span style="color:var(--color-warning);font-weight:600">${App.escapeHtml(caseNum)}</span></div></td>
-          <td style="padding:10px 16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" colspan="2"><span style="font-weight:500">${App.escapeHtml(pd.title||p.title)}</span></td>
-          <td style="padding:10px 16px;text-align:center;color:var(--color-text-tertiary);font-size:12px;white-space:nowrap">${new Date(p.created_at).toLocaleDateString('ko-KR')}</td>
-          <td style="padding:8px 12px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
-            <button class="btn btn-outline btn-sm" onclick="openProvisionalViewer('${p.id}')" style="padding:5px 10px;font-size:11px">보기</button>
-            <button class="btn btn-ghost btn-sm" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:5px 8px;font-size:11px;color:var(--color-error)">삭제</button>
+          <td style="padding:8px 12px"><div style="display:flex;align-items:center;gap:6px"><span class="tossface">⚡</span><span style="color:var(--color-warning);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
+          <td style="padding:8px 12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(pd.title||p.title)}</span></td>
+          <td style="padding:8px 12px;text-align:center;color:var(--color-text-tertiary);font-size:11px">${new Date(p.created_at).toLocaleDateString('ko-KR')}</td>
+          <td style="padding:6px 8px;text-align:right;white-space:nowrap" onclick="event.stopPropagation()">
+            <button class="btn btn-outline btn-sm" onclick="openProvisionalViewer('${p.id}')" style="padding:4px 10px;font-size:11px">보기</button>
+            <span style="color:var(--color-error);cursor:pointer;font-size:11px;margin-left:4px" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</span>
           </td>
         </tr>`;
       }).join('');
