@@ -1477,23 +1477,10 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   svg+=`<rect x="${frameX+SHADOW_OFFSET}" y="${frameY+SHADOW_OFFSET}" width="${frameW}" height="${frameH}" fill="#000"/>`;
   svg+=`<rect x="${frameX}" y="${frameY}" width="${frameW}" height="${frameH}" fill="#fff" stroke="#000" stroke-width="2.25"/>`;
   
-  // 외곽 부호 (우측) - 물결 곡선
+  // 외곽 부호 (우측) - 단순 직선
   const frameRefX=frameX+frameW+0.3*PX;
   const frameRefY=frameY+frameH/2;
-  const fWaveLen=frameRefX-(frameX+frameW);
-  const fWaveAmp=4;
-  const fWaveCount=Math.max(2,Math.floor(fWaveLen/18));
-  const fSegLen=fWaveLen/fWaveCount;
-  let fWavePath=`M${frameX+frameW} ${frameRefY}`;
-  for(let w=0;w<fWaveCount;w++){
-    const x1=(frameX+frameW)+w*fSegLen+fSegLen/4;
-    const x2=(frameX+frameW)+w*fSegLen+fSegLen*3/4;
-    const x3=(frameX+frameW)+(w+1)*fSegLen;
-    const dir=(w%2===0)?1:-1;
-    fWavePath+=` Q${x1} ${frameRefY+fWaveAmp*dir} ${(frameX+frameW)+w*fSegLen+fSegLen/2} ${frameRefY}`;
-    fWavePath+=` Q${x2} ${frameRefY-fWaveAmp*dir} ${x3} ${frameRefY}`;
-  }
-  svg+=`<path d="${fWavePath}" fill="none" stroke="#000" stroke-width="1"/>`;
+  svg+=`<line x1="${frameX+frameW}" y1="${frameRefY}" x2="${frameRefX}" y2="${frameRefY}" stroke="#000" stroke-width="1"/>`;
   svg+=`<text x="${frameRefX+8}" y="${frameRefY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
   
   // 2. 내부 구성요소 박스들
@@ -1513,24 +1500,10 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
     svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="12" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
     
-    // 리더라인 (물결 곡선)
-    const leaderStartX=bx+boxW;
+    // 리더라인 (단순 직선)
     const leaderEndX=frameX+frameW+0.3*PX;
     const leaderY=by+boxH/2;
-    const waveLen=leaderEndX-leaderStartX;
-    const waveAmp=4; // 물결 진폭
-    const waveCount=Math.max(2,Math.floor(waveLen/20)); // 물결 개수
-    const segLen=waveLen/waveCount;
-    let wavePath=`M${leaderStartX} ${leaderY}`;
-    for(let w=0;w<waveCount;w++){
-      const x1=leaderStartX+w*segLen+segLen/4;
-      const x2=leaderStartX+w*segLen+segLen*3/4;
-      const x3=leaderStartX+(w+1)*segLen;
-      const dir=(w%2===0)?1:-1;
-      wavePath+=` Q${x1} ${leaderY+waveAmp*dir} ${leaderStartX+w*segLen+segLen/2} ${leaderY}`;
-      wavePath+=` Q${x2} ${leaderY-waveAmp*dir} ${x3} ${leaderY}`;
-    }
-    svg+=`<path d="${wavePath}" fill="none" stroke="#000" stroke-width="1"/>`;
+    svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
     // 부호 라벨
     svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
     
@@ -1555,6 +1528,12 @@ function renderDiagrams(sid,mt){
   blocks.forEach((code,i)=>{const{nodes,edges}=parseMermaidGraph(code);const positions=layoutGraph(nodes,edges);diagramData[sid].push({nodes,edges,positions});renderDiagramSvg(`diagram_${sid}_${i}`,nodes,edges,positions,figOffset+i+1);});
 }
 function downloadPptx(sid){
+  // 라이브러리 체크
+  if(typeof PptxGenJS==='undefined'){
+    App.showToast('PPTX 라이브러리 로드 안됨. 페이지 새로고침 후 다시 시도해주세요.','error');
+    return;
+  }
+  
   const data=diagramData[sid];
   if(!data||!data.length){
     const mt=outputs[sid+'_mermaid'];
@@ -1646,30 +1625,14 @@ function downloadPptx(sid){
       fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}
     });
     
-    // 외곽 부호 (물결선 시뮬레이션)
+    // 외곽 부호 (단순 직선)
     const refLabelX=frameX+frameW+0.1;
-    const fLeaderStartX=frameX+frameW;
-    const fLeaderEndX=frameX+frameW+0.25;
-    const fLeaderY=frameY+frameH/2;
-    const fWaveAmp=0.02;
-    const fWaveCount=3;
-    const fSegLen=(fLeaderEndX-fLeaderStartX)/fWaveCount;
-    for(let w=0;w<fWaveCount;w++){
-      const x1=fLeaderStartX+w*fSegLen;
-      const x2=fLeaderStartX+(w+0.5)*fSegLen;
-      const x3=fLeaderStartX+(w+1)*fSegLen;
-      const dir=(w%2===0)?1:-1;
-      slide.addShape(pptx.shapes.LINE,{
-        x:x1,y:fLeaderY,w:x2-x1,h:fWaveAmp*dir,
-        line:{color:'000000',width:LINE_ARROW}
-      });
-      slide.addShape(pptx.shapes.LINE,{
-        x:x2,y:fLeaderY+fWaveAmp*dir,w:x3-x2,h:-fWaveAmp*dir,
-        line:{color:'000000',width:LINE_ARROW}
-      });
-    }
+    slide.addShape(pptx.shapes.LINE,{
+      x:frameX+frameW,y:frameY+frameH/2,w:0.3,h:0,
+      line:{color:'000000',width:LINE_ARROW}
+    });
     slide.addText(String(frameRefNum),{
-      x:refLabelX+0.25,y:frameY+frameH/2-0.12,w:0.5,h:0.24,
+      x:refLabelX+0.3,y:frameY+frameH/2-0.12,w:0.5,h:0.24,
       fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
     });
     
@@ -1700,33 +1663,14 @@ function downloadPptx(sid){
         fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'
       });
       
-      // 리더라인 (물결선 시뮬레이션 - 여러 선분)
-      const leaderStartX=bx+boxW;
-      const leaderEndX=frameX+frameW+0.25;
-      const leaderY=by+boxH/2;
-      const waveLen=leaderEndX-leaderStartX;
-      const waveAmp=0.03; // 물결 진폭 (인치)
-      const waveCount=Math.max(3,Math.floor(waveLen/0.15));
-      const segLen=waveLen/waveCount;
-      for(let w=0;w<waveCount;w++){
-        const x1=leaderStartX+w*segLen;
-        const x2=leaderStartX+(w+0.5)*segLen;
-        const x3=leaderStartX+(w+1)*segLen;
-        const dir=(w%2===0)?1:-1;
-        // 상승 선분
-        slide.addShape(pptx.shapes.LINE,{
-          x:x1,y:leaderY,w:x2-x1,h:waveAmp*dir,
-          line:{color:'000000',width:LINE_ARROW}
-        });
-        // 하강 선분
-        slide.addShape(pptx.shapes.LINE,{
-          x:x2,y:leaderY+waveAmp*dir,w:x3-x2,h:-waveAmp*dir,
-          line:{color:'000000',width:LINE_ARROW}
-        });
-      }
+      // 리더라인 (단순 직선)
+      slide.addShape(pptx.shapes.LINE,{
+        x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.3,h:0,
+        line:{color:'000000',width:LINE_ARROW}
+      });
       // 부호 라벨
       slide.addText(String(refNum),{
-        x:refLabelX+0.25,y:by+boxH/2-0.12,w:0.5,h:0.24,
+        x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,
         fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
       });
       
@@ -1746,8 +1690,13 @@ function downloadPptx(sid){
   });
   
   const fileName=selectedProjectNumber||selectedTitle||'도면';
-  pptx.writeFile({fileName:`${fileName}_도면_${new Date().toISOString().slice(0,10)}.pptx`});
-  App.showToast('PPTX 다운로드 완료');
+  try{
+    pptx.writeFile({fileName:`${fileName}_도면_${new Date().toISOString().slice(0,10)}.pptx`});
+    App.showToast('PPTX 다운로드 완료');
+  }catch(e){
+    console.error('PPTX 생성 실패:',e);
+    App.showToast('PPTX 생성 실패: '+e.message,'error');
+  }
 }
 
 // ═══ 이미지 다운로드 (KIPO 규격 JPEG/TIF) ═══
@@ -1827,25 +1776,10 @@ async function downloadDiagramImages(sid, format='jpeg'){
     ctx.lineWidth=2;
     ctx.strokeRect(frameX,frameY,frameW,frameH);
     
-    // 외곽 부호 (물결 곡선)
-    const frameLeaderStartX=frameX+frameW;
-    const frameLeaderEndX=frameX+frameW+25;
-    const frameLeaderY=frameY+frameH/2;
-    const fWaveAmp=3;
-    const fWaveLen=frameLeaderEndX-frameLeaderStartX;
-    const fWaveCount=Math.max(2,Math.floor(fWaveLen/12));
-    const fSegLen=fWaveLen/fWaveCount;
-    
+    // 외곽 부호 (단순 직선)
     ctx.beginPath();
-    ctx.moveTo(frameLeaderStartX,frameLeaderY);
-    for(let w=0;w<fWaveCount;w++){
-      const cp1x=frameLeaderStartX+w*fSegLen+fSegLen*0.25;
-      const cp2x=frameLeaderStartX+w*fSegLen+fSegLen*0.75;
-      const endX=frameLeaderStartX+(w+1)*fSegLen;
-      const dir=(w%2===0)?1:-1;
-      ctx.quadraticCurveTo(cp1x,frameLeaderY+fWaveAmp*dir,frameLeaderStartX+w*fSegLen+fSegLen*0.5,frameLeaderY);
-      ctx.quadraticCurveTo(cp2x,frameLeaderY-fWaveAmp*dir,endX,frameLeaderY);
-    }
+    ctx.moveTo(frameX+frameW,frameY+frameH/2);
+    ctx.lineTo(frameX+frameW+25,frameY+frameH/2);
     ctx.lineWidth=1;
     ctx.stroke();
     
@@ -1888,25 +1822,10 @@ async function downloadDiagramImages(sid, format='jpeg'){
       ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
       ctx.textAlign='left';
       
-      // 리더라인 (물결 곡선)
-      const leaderStartX=bx+boxW;
-      const leaderEndX=frameX+frameW+25;
-      const leaderY=by+boxH/2;
-      const waveAmp=3; // 물결 진폭
-      const waveLen=leaderEndX-leaderStartX;
-      const waveCount=Math.max(3,Math.floor(waveLen/15));
-      const segLen=waveLen/waveCount;
-      
+      // 리더라인 (단순 직선)
       ctx.beginPath();
-      ctx.moveTo(leaderStartX,leaderY);
-      for(let w=0;w<waveCount;w++){
-        const cp1x=leaderStartX+w*segLen+segLen*0.25;
-        const cp2x=leaderStartX+w*segLen+segLen*0.75;
-        const endX=leaderStartX+(w+1)*segLen;
-        const dir=(w%2===0)?1:-1;
-        ctx.quadraticCurveTo(cp1x,leaderY+waveAmp*dir,leaderStartX+w*segLen+segLen*0.5,leaderY);
-        ctx.quadraticCurveTo(cp2x,leaderY-waveAmp*dir,endX,leaderY);
-      }
+      ctx.moveTo(bx+boxW,by+boxH/2);
+      ctx.lineTo(frameX+frameW+25,by+boxH/2);
       ctx.lineWidth=1;
       ctx.stroke();
       
@@ -1942,9 +1861,15 @@ async function downloadDiagramImages(sid, format='jpeg'){
     
     // 다운로드
     const link=document.createElement('a');
+    link.style.display='none';
+    document.body.appendChild(link);
+    
     if(format==='tif'||format==='tiff'){
       // TIF 형식 다운로드
       try{
+        if(typeof UTIF==='undefined'){
+          throw new Error('UTIF 라이브러리 로드 안됨');
+        }
         const imageData=ctx.getImageData(0,0,W,H);
         const rgba=new Uint8Array(imageData.data.buffer);
         const tiffData=UTIF.encodeImage(rgba,W,H);
@@ -1963,7 +1888,12 @@ async function downloadDiagramImages(sid, format='jpeg'){
       link.download=`${caseNum}_도${figNum}.jpg`;
       link.href=canvas.toDataURL('image/jpeg',0.95);
     }
+    
     link.click();
+    document.body.removeChild(link);
+    
+    // URL 해제
+    if(link.href.startsWith('blob:')) URL.revokeObjectURL(link.href);
     
     // 약간 딜레이
     await new Promise(r=>setTimeout(r,300));
