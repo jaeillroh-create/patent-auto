@@ -532,7 +532,13 @@
 /* ============================================================
    11. 페이지 좌우 2패널 레이아웃 (핵심!)
    ============================================================ */
+/* 기본 page는 숨김 (탭 전환용) */
 .page {
+  display: none;
+}
+
+/* 활성 탭만 표시 + 좌우 레이아웃 */
+.page.active {
   display: flex !important;
   gap: 24px !important;
   align-items: flex-start !important;
@@ -620,7 +626,7 @@
 
 /* 반응형: 모바일에서 세로 배치 */
 @media (max-width: 1024px) {
-  .page {
+  .page.active {
     flex-direction: column !important;
   }
   
