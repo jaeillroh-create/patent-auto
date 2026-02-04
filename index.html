@@ -487,10 +487,34 @@
         <!-- Step 8 상세설명 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">📝</span> Step 8: 상세설명</div></div>
-          <div class="selection-cards" id="detailLevelCards" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px">
-            <div class="selection-card" onclick="selectDetailLevel(this,'compact')" style="padding:10px"><div class="selection-card-category">💨</div><div class="selection-card-title" style="font-size:12px">간략</div></div>
-            <div class="selection-card selected" onclick="selectDetailLevel(this,'standard')" style="padding:10px"><div class="selection-card-category">📝</div><div class="selection-card-title" style="font-size:12px">표준</div></div>
-            <div class="selection-card" onclick="selectDetailLevel(this,'detailed')" style="padding:10px"><div class="selection-card-category">📖</div><div class="selection-card-title" style="font-size:12px">상세</div></div>
+          <div class="selection-cards" id="detailLevelCards" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px">
+            <div class="selection-card" onclick="selectDetailLevel(this,'compact')" style="padding:10px">
+              <div class="selection-card-category">💨</div>
+              <div class="selection-card-title" style="font-size:12px">간략</div>
+              <div class="selection-card-subtitle" style="font-size:10px;color:var(--color-text-tertiary)">~1,000자/도면</div>
+            </div>
+            <div class="selection-card selected" onclick="selectDetailLevel(this,'standard')" style="padding:10px">
+              <div class="selection-card-category">📝</div>
+              <div class="selection-card-title" style="font-size:12px">표준</div>
+              <div class="selection-card-subtitle" style="font-size:10px;color:var(--color-text-tertiary)">~1,500자/도면</div>
+            </div>
+            <div class="selection-card" onclick="selectDetailLevel(this,'detailed')" style="padding:10px">
+              <div class="selection-card-category">📖</div>
+              <div class="selection-card-title" style="font-size:12px">상세</div>
+              <div class="selection-card-subtitle" style="font-size:10px;color:var(--color-text-tertiary)">~2,000자/도면</div>
+            </div>
+            <div class="selection-card" onclick="selectDetailLevel(this,'custom')" style="padding:10px">
+              <div class="selection-card-category">✏️</div>
+              <div class="selection-card-title" style="font-size:12px">사용자 지정</div>
+              <div class="selection-card-subtitle" style="font-size:10px;color:var(--color-text-tertiary)">직접 입력</div>
+            </div>
+          </div>
+          <div id="customDetailInput" style="display:none;margin-bottom:12px">
+            <label style="font-size:12px;color:var(--color-text-secondary);display:block;margin-bottom:4px">도면당 글자수</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="number" class="input-field" id="customDetailChars" min="500" max="5000" value="2000" style="width:100px;text-align:center" />
+              <span style="font-size:12px;color:var(--color-text-tertiary)">자/도면 (500~5,000)</span>
+            </div>
           </div>
           <div id="progressStep08" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnStep08" onclick="runLongStep('step_08')"><span class="tossface">🤖</span> 상세설명 생성</button>

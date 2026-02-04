@@ -349,6 +349,11 @@ function selectDetailLevel(el,level){
   document.querySelectorAll('#detailLevelCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');detailLevel=level;
   const ci=document.getElementById('customDetailInput');
   if(ci) ci.style.display = level==='custom' ? 'block' : 'none';
+  // 사용자 지정 모드일 때 입력값 동기화
+  if(level==='custom'){
+    const inp=document.getElementById('customDetailChars');
+    if(inp) inp.onchange=function(){customDetailChars=parseInt(this.value)||2000;};
+  }
 }
 
 // Claim config update handlers
@@ -483,7 +488,28 @@ function clearProjectRef(){projectRefStyleText='';const st=document.getElementBy
 
 function selectTitleType(el,type){document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitleType=type;const ci=document.getElementById('customTitleType');if(ci)ci.value=type;document.getElementById('btnStep01').disabled=false;autoSetDeviceCategoryFromType(type);App.showToast(`발명 유형: ~${type}`);}
 function onCustomTitleType(val){const v=val.trim();if(v){selectedTitleType=v;document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));document.getElementById('btnStep01').disabled=false;autoSetDeviceCategoryFromType(v);}else{selectedTitleType='';document.getElementById('btnStep01').disabled=true;}}
-function selectTitle(el,kr,en){document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitle=kr;selectedTitleEn=en||'';document.getElementById('titleInput').value=kr;const enInp=document.getElementById('titleInputEn');if(enInp)enInp.value=en||'';document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';autoSetDeviceCategoryFromTitle(kr);}
+function selectTitle(el,kr,en){
+  // 모든 후보의 선택 해제
+  document.querySelectorAll('#resultStep01 .title-candidate-row').forEach(c=>{
+    c.classList.remove('selected');
+    c.style.borderColor='var(--color-border)';
+    c.style.background='#fff';
+  });
+  // 선택된 항목 강조
+  el.classList.add('selected');
+  el.style.borderColor='var(--color-primary)';
+  el.style.background='var(--color-primary-light)';
+  
+  selectedTitle=kr;
+  selectedTitleEn=en||'';
+  document.getElementById('titleInput').value=kr;
+  const enInp=document.getElementById('titleInputEn');
+  if(enInp)enInp.value=en||'';
+  document.getElementById('titleConfirmArea').style.display='block';
+  document.getElementById('titleConfirmMsg').style.display='block';
+  document.getElementById('batchArea').style.display='block';
+  autoSetDeviceCategoryFromTitle(kr);
+}
 function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';if(v)autoSetDeviceCategoryFromTitle(v);}
 function onTitleEnInput(){selectedTitleEn=document.getElementById('titleInputEn')?.value?.trim()||'';}
 
@@ -1061,18 +1087,58 @@ ${diagram}`,4096);
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));
     a.download=`가출원_${title||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();
 
-    // Generate PPTX diagram — always generate as separate file
+    // Generate PPTX diagram — KIPO 규칙 v2.0 적용
     let pptxGenerated=false;
     if(provisionalDiagramData&&provisionalDiagramData.length){
       try{
-        const pptx=new PptxGenJS();pptx.layout='LAYOUT_WIDE';
+        const pptx=new PptxGenJS();
+        pptx.defineLayout({name:'A4_PORTRAIT',width:7.5,height:10});
+        pptx.layout='A4_PORTRAIT';
+        
+        // 선 굵기 상수 (KIPO 기준)
+        const LINE_FRAME=2.25, LINE_BOX=1.5, LINE_ARROW=1.0, SHADOW_OFFSET=0.06;
+        
         provisionalDiagramData.forEach(({nodes,edges,positions},idx)=>{
           const slide=pptx.addSlide({bkgd:'FFFFFF'});
-          slide.addText(`도 ${idx+1}`,{x:0.3,y:0.05,w:3,h:0.4,fontSize:16,bold:true,fontFace:'맑은 고딕',color:'000000'});
+          const figNum=idx+1;
+          
+          // 도면 번호
+          slide.addText(`도 ${figNum}`,{x:0.3,y:0.25,w:2,h:0.4,fontSize:14,bold:true,fontFace:'맑은 고딕',color:'000000'});
           if(!nodes.length)return;
-          const routes=computeEdgeRoutes(edges,positions);
-          routes.forEach(route=>{route.segments.forEach(seg=>{const lineOpts={color:'000000',width:1.5};if(seg.arrow)lineOpts.endArrowType='triangle';if(Math.abs(seg.x2-seg.x1)<0.01)slide.addShape(pptx.shapes.LINE,{x:seg.x1,y:Math.min(seg.y1,seg.y2),w:0,h:Math.abs(seg.y2-seg.y1),line:lineOpts});else slide.addShape(pptx.shapes.LINE,{x:Math.min(seg.x1,seg.x2),y:seg.y1,w:Math.abs(seg.x2-seg.x1),h:0,line:lineOpts});});if(route.label&&route.labelPos)slide.addText(route.label,{x:route.labelPos.x,y:route.labelPos.y,w:1.2,h:0.24,fontSize:7,fontFace:'맑은 고딕',color:'333333',align:'left',valign:'middle'});});
-          nodes.forEach(n=>{const p=positions[n.id];if(!p)return;slide.addShape(pptx.shapes.RECTANGLE,{x:p.x,y:p.y,w:p.w,h:p.h,fill:{color:'FFFFFF'},line:{color:'000000',width:1.5},rectRadius:0.03});slide.addText(n.label,{x:p.x+0.05,y:p.y,w:p.w-0.1,h:p.h,fontSize:9,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle',bold:false});});
+          
+          // 외곽 프레임 (그림자 포함)
+          const frameX=0.5, frameY=0.8, frameW=6.5, frameH=nodes.length*1.2+0.8;
+          const frameRefNum=figNum*100;
+          
+          // 그림자
+          slide.addShape(pptx.shapes.RECTANGLE,{x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,fill:{color:'000000'},line:{width:0}});
+          // 외곽 본체
+          slide.addShape(pptx.shapes.RECTANGLE,{x:frameX,y:frameY,w:frameW,h:frameH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
+          // 외곽 부호
+          slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameY+frameH/2,w:0.4,h:0,line:{color:'000000',width:LINE_ARROW}});
+          slide.addText(String(frameRefNum),{x:frameX+frameW+0.45,y:frameY+frameH/2-0.15,w:0.5,h:0.3,fontSize:11,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+          
+          // 내부 구성요소 박스들
+          const boxW=5.0, boxH=0.7, boxStartX=frameX+0.75, boxStartY=frameY+0.5, boxGap=1.0, refLabelX=frameX+frameW+0.45;
+          
+          nodes.forEach((n,i)=>{
+            const bx=boxStartX, by=boxStartY+i*(boxH+boxGap), refNum=frameRefNum+10*(i+1);
+            // 그림자
+            slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
+            // 박스 본체
+            slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+            // 박스 텍스트
+            slide.addText(n.label,{x:bx+0.1,y:by,w:boxW-0.2,h:boxH,fontSize:12,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+            // 리더라인
+            slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.4,h:0,line:{color:'000000',width:LINE_ARROW}});
+            // 부호 라벨
+            slide.addText(String(refNum),{x:refLabelX,y:by+boxH/2-0.15,w:0.5,h:0.3,fontSize:11,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+            // 양방향 화살표
+            if(i<nodes.length-1){
+              const arrowY1=by+boxH, arrowY2=boxStartY+(i+1)*(boxH+boxGap), arrowX=bx+boxW/2;
+              slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+            }
+          });
         });
         await pptx.writeFile({fileName:`가출원_도면_${title||'초안'}_${new Date().toISOString().slice(0,10)}.pptx`});
         pptxGenerated=true;
@@ -1164,14 +1230,75 @@ function computeEdgeRoutes(edges,positions){
   }).filter(Boolean);
 }
 function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
-  let maxX=0,maxY=0;Object.values(positions).forEach(p=>{maxX=Math.max(maxX,p.x+p.w);maxY=Math.max(maxY,p.y+p.h);});
-  const PX=72,PAD=0.3,svgW=(maxX+PAD*2)*PX,svgH=(maxY+PAD*2)*PX,ox=PAD*PX,mkId=`ah_${containerId}`;
-  let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${Math.min(svgW,960)}px;background:white;border-radius:8px">`;
-  svg+=`<defs><marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#000"/></marker></defs>`;
-  const routes=computeEdgeRoutes(edges,positions);
-  routes.forEach(route=>{route.segments.forEach(seg=>{const x1=seg.x1*PX+ox,y1=seg.y1*PX+ox,x2=seg.x2*PX+ox,y2=seg.y2*PX+ox;const me=seg.arrow?` marker-end="url(#${mkId})"`:' ';svg+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#000" stroke-width="1.5"${me}/>`;});if(route.label&&route.labelPos){const lx=route.labelPos.x*PX+ox,ly=route.labelPos.y*PX+ox;svg+=`<text x="${lx}" y="${ly+10}" font-size="10" font-family="맑은 고딕,sans-serif" fill="#333">${App.escapeHtml(route.label)}</text>`;}});
-  nodes.forEach(n=>{const p=positions[n.id];if(!p)return;const xP=p.x*PX+ox,yP=p.y*PX+ox,wP=p.w*PX,hP=p.h*PX;svg+=`<rect x="${xP}" y="${yP}" width="${wP}" height="${hP}" fill="#fff" stroke="#000" stroke-width="1.5" rx="3"/>`;const label=n.label.length>20?n.label.slice(0,18)+'…':n.label;svg+=`<text x="${xP+wP/2}" y="${yP+hP/2+4}" text-anchor="middle" font-size="11" font-family="맑은 고딕,sans-serif" fill="#000">${App.escapeHtml(label)}</text>`;});
-  svg+='</svg>';const c=document.getElementById(containerId);if(c)c.innerHTML=svg;
+  // ═══ KIPO 특허 도면 규칙 v2.0 (SVG 미리보기) ═══
+  const PX=72; // 1인치 = 72px
+  const PAD=0.5;
+  const SHADOW_OFFSET=4; // px
+  const frameRefNum=figNum*100;
+  
+  // 레이아웃 계산
+  const frameX=0.5*PX, frameY=0.5*PX;
+  const boxW=5.0*PX, boxH=0.7*PX, boxGap=0.8*PX;
+  const boxStartX=frameX+0.6*PX, boxStartY=frameY+0.4*PX;
+  const frameW=6.2*PX, frameH=(nodes.length*(boxH+boxGap)+0.3*PX);
+  
+  const svgW=frameW+2.5*PX, svgH=frameH+1.5*PX;
+  
+  let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:600px;background:white;border-radius:8px">`;
+  
+  // 화살표 마커 정의
+  const mkId=`ah_${containerId}`;
+  svg+=`<defs>
+    <marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#000"/>
+    </marker>
+    <marker id="${mkId}_both" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#000"/>
+    </marker>
+  </defs>`;
+  
+  // 1. 외곽 프레임 (그림자 + 본체)
+  svg+=`<rect x="${frameX+SHADOW_OFFSET}" y="${frameY+SHADOW_OFFSET}" width="${frameW}" height="${frameH}" fill="#000"/>`;
+  svg+=`<rect x="${frameX}" y="${frameY}" width="${frameW}" height="${frameH}" fill="#fff" stroke="#000" stroke-width="2.25"/>`;
+  
+  // 외곽 부호 (우측)
+  const frameRefX=frameX+frameW+0.3*PX;
+  const frameRefY=frameY+frameH/2;
+  svg+=`<line x1="${frameX+frameW}" y1="${frameRefY}" x2="${frameRefX}" y2="${frameRefY}" stroke="#000" stroke-width="1"/>`;
+  svg+=`<text x="${frameRefX+8}" y="${frameRefY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
+  
+  // 2. 내부 구성요소 박스들
+  nodes.forEach((n,i)=>{
+    const bx=boxStartX;
+    const by=boxStartY+i*(boxH+boxGap);
+    const refNum=frameRefNum+10*(i+1);
+    
+    // 그림자
+    svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" fill="#000"/>`;
+    // 박스 본체
+    svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
+    // 박스 텍스트
+    const label=n.label.length>18?n.label.slice(0,16)+'…':n.label;
+    svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="12" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(label)}</text>`;
+    
+    // 리더라인 (박스 우측 → 프레임 우측 → 부호)
+    const leaderEndX=frameX+frameW+0.3*PX;
+    svg+=`<line x1="${bx+boxW}" y1="${by+boxH/2}" x2="${leaderEndX}" y2="${by+boxH/2}" stroke="#000" stroke-width="1"/>`;
+    // 부호 라벨
+    svg+=`<text x="${leaderEndX+8}" y="${by+boxH/2+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+    
+    // 3. 구성요소 간 양방향 화살표 (↕)
+    if(i<nodes.length-1){
+      const arrowX=bx+boxW/2;
+      const arrowY1=by+boxH+2;
+      const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+      svg+=`<line x1="${arrowX}" y1="${arrowY1}" x2="${arrowX}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
+    }
+  });
+  
+  svg+='</svg>';
+  const c=document.getElementById(containerId);
+  if(c)c.innerHTML=svg;
 }
 function renderDiagrams(sid,mt){
   const cid=sid==='step_07'?'diagramsStep07':'diagramsStep11';const el=document.getElementById(cid);const blocks=extractMermaidBlocks(mt);
@@ -1182,21 +1309,167 @@ function renderDiagrams(sid,mt){
 }
 function downloadPptx(sid){
   const data=diagramData[sid];
-  if(!data||!data.length){const mt=outputs[sid+'_mermaid'];if(!mt){App.showToast('도면 없음','error');return;}const blocks=extractMermaidBlocks(mt);if(!blocks.length){App.showToast('Mermaid 코드 없음','error');return;}diagramData[sid]=blocks.map(code=>{const{nodes,edges}=parseMermaidGraph(code);return{nodes,edges,positions:layoutGraph(nodes,edges)};});return downloadPptx(sid);}
-  const pptx=new PptxGenJS();pptx.layout='LAYOUT_WIDE';const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
-  data.forEach(({nodes,edges,positions},idx)=>{const slide=pptx.addSlide({bkgd:'FFFFFF'});const figNum=figOffset+idx+1;slide.addText(`도 ${figNum}`,{x:0.3,y:0.05,w:3,h:0.4,fontSize:16,bold:true,fontFace:'맑은 고딕',color:'000000'});if(!nodes.length)return;
-    const routes=computeEdgeRoutes(edges,positions);
-    routes.forEach(route=>{route.segments.forEach(seg=>{const lineOpts={color:'000000',width:1.5};if(seg.arrow)lineOpts.endArrowType='triangle';if(Math.abs(seg.x2-seg.x1)<0.01)slide.addShape(pptx.shapes.LINE,{x:seg.x1,y:Math.min(seg.y1,seg.y2),w:0,h:Math.abs(seg.y2-seg.y1),line:lineOpts});else slide.addShape(pptx.shapes.LINE,{x:Math.min(seg.x1,seg.x2),y:seg.y1,w:Math.abs(seg.x2-seg.x1),h:0,line:lineOpts});});if(route.label&&route.labelPos)slide.addText(route.label,{x:route.labelPos.x,y:route.labelPos.y,w:1.2,h:0.24,fontSize:7,fontFace:'맑은 고딕',color:'333333',align:'left',valign:'middle'});});
-    nodes.forEach(n=>{const p=positions[n.id];if(!p)return;slide.addShape(pptx.shapes.RECTANGLE,{x:p.x,y:p.y,w:p.w,h:p.h,fill:{color:'FFFFFF'},line:{color:'000000',width:1.5},rectRadius:0.03});slide.addText(n.label,{x:p.x+0.05,y:p.y,w:p.w-0.1,h:p.h,fontSize:9,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle',bold:false});});
+  if(!data||!data.length){
+    const mt=outputs[sid+'_mermaid'];
+    if(!mt){App.showToast('도면 없음','error');return;}
+    const blocks=extractMermaidBlocks(mt);
+    if(!blocks.length){App.showToast('Mermaid 코드 없음','error');return;}
+    diagramData[sid]=blocks.map(code=>{
+      const{nodes,edges}=parseMermaidGraph(code);
+      return{nodes,edges,positions:layoutGraph(nodes,edges)};
+    });
+    return downloadPptx(sid);
+  }
+  
+  // ═══ KIPO 특허 도면 규칙 v2.0 적용 ═══
+  const pptx=new PptxGenJS();
+  // A4 세로 비율에 가깝게 설정 (7.5" x 10")
+  pptx.defineLayout({name:'A4_PORTRAIT',width:7.5,height:10});
+  pptx.layout='A4_PORTRAIT';
+  
+  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+  
+  // 선 굵기 상수 (KIPO 기준)
+  const LINE_FRAME=2.25;    // 외곽 프레임
+  const LINE_BOX=1.5;       // 구성요소 박스
+  const LINE_ARROW=1.0;     // 화살표/리더라인
+  const SHADOW_OFFSET=0.06; // 그림자 오프셋
+  
+  data.forEach(({nodes,edges,positions},idx)=>{
+    const slide=pptx.addSlide({bkgd:'FFFFFF'});
+    const figNum=figOffset+idx+1;
+    
+    // 도면 번호
+    slide.addText(`도 ${figNum}`,{
+      x:0.3,y:0.25,w:2,h:0.4,
+      fontSize:14,bold:true,fontFace:'맑은 고딕',color:'000000'
+    });
+    
+    if(!nodes.length)return;
+    
+    // 레이아웃 재계산 (A4 세로에 맞게)
+    const layoutPos=layoutGraphForPatent(nodes,edges);
+    
+    // 1. 외곽 프레임 (그림자 포함)
+    const frameX=0.5, frameY=0.8;
+    const frameW=6.5, frameH=nodes.length*1.2+0.8;
+    
+    // 그림자 (먼저 그림)
+    slide.addShape(pptx.shapes.RECTANGLE,{
+      x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,
+      fill:{color:'000000'},line:{width:0}
+    });
+    // 외곽 본체
+    slide.addShape(pptx.shapes.RECTANGLE,{
+      x:frameX,y:frameY,w:frameW,h:frameH,
+      fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}
+    });
+    
+    // 외곽 부호 (우측)
+    const frameRefNum=figNum*100;
+    slide.addShape(pptx.shapes.LINE,{
+      x:frameX+frameW,y:frameY+frameH/2,w:0.4,h:0,
+      line:{color:'000000',width:LINE_ARROW}
+    });
+    slide.addText(String(frameRefNum),{
+      x:frameX+frameW+0.45,y:frameY+frameH/2-0.15,w:0.5,h:0.3,
+      fontSize:11,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
+    });
+    
+    // 2. 내부 구성요소 박스들 (세로 배치)
+    const boxW=5.0, boxH=0.7;
+    const boxStartX=frameX+0.75;
+    const boxStartY=frameY+0.5;
+    const boxGap=1.0;
+    const refLabelX=frameX+frameW+0.45; // 부호 라벨 x 좌표 통일
+    
+    nodes.forEach((n,i)=>{
+      const bx=boxStartX;
+      const by=boxStartY+i*(boxH+boxGap);
+      const refNum=frameRefNum+10*(i+1);
+      
+      // 그림자 (먼저 그림)
+      slide.addShape(pptx.shapes.RECTANGLE,{
+        x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,
+        fill:{color:'000000'},line:{width:0}
+      });
+      // 박스 본체
+      slide.addShape(pptx.shapes.RECTANGLE,{
+        x:bx,y:by,w:boxW,h:boxH,
+        fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}
+      });
+      // 박스 텍스트
+      slide.addText(n.label,{
+        x:bx+0.1,y:by,w:boxW-0.2,h:boxH,
+        fontSize:12,fontFace:'맑은 고딕',color:'000000',
+        align:'center',valign:'middle',bold:false
+      });
+      
+      // 리더라인 (박스 우측에서 수평으로)
+      slide.addShape(pptx.shapes.LINE,{
+        x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.4,h:0,
+        line:{color:'000000',width:LINE_ARROW}
+      });
+      // 부호 라벨
+      slide.addText(String(refNum),{
+        x:refLabelX,y:by+boxH/2-0.15,w:0.5,h:0.3,
+        fontSize:11,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
+      });
+      
+      // 3. 구성요소 간 양방향 화살표 (↕)
+      if(i<nodes.length-1){
+        const arrowY1=by+boxH;
+        const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
+        const arrowX=bx+boxW/2;
+        const arrowLen=arrowY2-arrowY1;
+        
+        // 양방향 화살표 (위↔아래)
+        slide.addShape(pptx.shapes.LINE,{
+          x:arrowX,y:arrowY1,w:0,h:arrowLen,
+          line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}
+        });
+      }
+    });
   });
-  pptx.writeFile({fileName:`도면_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.pptx`});App.showToast('PPTX 다운로드 완료');
+  
+  pptx.writeFile({fileName:`도면_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.pptx`});
+  App.showToast('PPTX 다운로드 완료 (KIPO 규칙 적용)');
+}
+
+// 특허 도면용 레이아웃 계산 (A4 세로)
+function layoutGraphForPatent(nodes,edges){
+  const positions={};
+  const boxW=5.0, boxH=0.7, boxGap=1.0;
+  const startX=1.25, startY=1.3;
+  
+  nodes.forEach((n,i)=>{
+    positions[n.id]={
+      x:startX,
+      y:startY+i*(boxH+boxGap),
+      w:boxW,
+      h:boxH,
+      cx:startX+boxW/2,
+      cy:startY+i*(boxH+boxGap)+boxH/2
+    };
+  });
+  return positions;
 }
 function downloadPptxAll(){if(diagramData.step_07||outputs.step_07_mermaid)downloadPptx('step_07');else App.showToast('도면 없음','error');}
 
 // ═══════════ RENDERERS ═══════════
 function renderOutput(sid,text){const cid=`result${sid.charAt(0).toUpperCase()+sid.slice(1).replace('_','')}`;const el=document.getElementById(cid);if(!el)return;if(sid==='step_01')renderTitleCards(el,text);else if(sid==='step_06'||sid==='step_10')renderClaimResult(el,sid,text);else renderEditableResult(el,sid,text);
 }
-function renderTitleCards(c,text){const cs=parseTitleCandidates(text);if(!cs.length){c.innerHTML=`<div style="margin-top:12px;padding:12px;background:var(--color-bg-tertiary);border-radius:8px;font-size:13px;white-space:pre-wrap">${App.escapeHtml(text)}</div>`;document.getElementById('titleConfirmArea').style.display='block';return;}c.innerHTML='<div class="selection-cards" style="margin-top:12px">'+cs.map(x=>`<div class="selection-card" onclick="selectTitle(this,\`${x.korean.replace(/`/g,'')}\`,\`${x.english.replace(/`/g,'')}\`)"><div class="selection-card-category">${x.num}</div><div class="selection-card-title">${App.escapeHtml(x.korean)}</div><div class="selection-card-subtitle">${App.escapeHtml(x.english)}</div></div>`).join('')+'</div>';document.getElementById('titleConfirmArea').style.display='block';}
+function renderTitleCards(c,text){
+  const cs=parseTitleCandidates(text);
+  if(!cs.length){
+    c.innerHTML=`<div style="margin-top:12px;padding:12px;background:var(--color-bg-tertiary);border-radius:8px;font-size:13px;white-space:pre-wrap">${App.escapeHtml(text)}</div>`;
+    document.getElementById('titleConfirmArea').style.display='block';
+    return;
+  }
+  // 세로 리스트 형태로 표시
+  c.innerHTML='<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'+cs.map(x=>`<div class="title-candidate-row" onclick="selectTitle(this,\`${x.korean.replace(/\`/g,'')}\`,\`${x.english.replace(/\`/g,'')}\`)" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:2px solid var(--color-border);border-radius:10px;cursor:pointer;transition:all 0.15s;background:#fff" onmouseover="this.style.borderColor='var(--color-primary)';this.style.background='var(--color-primary-light)'" onmouseout="if(!this.classList.contains('selected')){this.style.borderColor='var(--color-border)';this.style.background='#fff'}"><div style="width:28px;height:28px;border-radius:50%;background:var(--color-primary-light);color:var(--color-primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${x.num}</div><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--color-text-primary)">${App.escapeHtml(x.korean)}</div><div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">${App.escapeHtml(x.english)}</div></div></div>`).join('')+'</div>';
+  document.getElementById('titleConfirmArea').style.display='block';
+}
 function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tossface">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tossface">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
 function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
 function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tossface">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
