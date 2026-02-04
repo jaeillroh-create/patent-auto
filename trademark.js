@@ -384,6 +384,12 @@
       case 'tm-apply-all-recommendations':
         TM.applyAllRecommendations();
         break;
+      case 'tm-toggle-expansion':
+        TM.toggleExpansionClasses(e.target);
+        break;
+      case 'tm-request-more-recommendations':
+        TM.requestMoreRecommendations();
+        break;
       case 'tm-evaluate-similarity':
         TM.evaluateSimilarity(params.targetId);
         break;
@@ -1469,44 +1475,106 @@
           </div>
           
           ${hasAiRec ? `
-            <!-- AI 추천 상품류 (콤팩트 표시) -->
-            <div class="tm-panel tm-panel-ai tm-panel-compact">
+            <!-- AI 추천 상품류 (3단계: 핵심/권장/확장) -->
+            <div class="tm-panel tm-panel-ai">
               <div class="tm-panel-header">
                 <h3>🤖 AI 추천 상품류</h3>
                 <button class="btn btn-sm btn-primary" data-action="tm-apply-all-recommendations">✓ 전체 적용</button>
               </div>
-              <div class="tm-ai-rec-desc" style="font-size: 12px; padding: 6px 10px; margin-bottom: 8px;">
-                사업 분석 결과, 아래 상품류가 적합합니다. <strong>+</strong> 버튼을 클릭하면 지정상품에 추가됩니다.
+              <div class="tm-ai-rec-desc" style="font-size: 12px; padding: 8px 12px; background: #f8f9fa; margin: 0 0 10px 0; border-radius: 4px;">
+                사업 분석 결과입니다. <strong style="color: #dc3545;">🔴 핵심</strong>은 필수, 
+                <strong style="color: #fd7e14;">🟠 권장</strong>은 권리 보호용, 
+                <strong style="color: #28a745;">🟢 확장</strong>은 사업 확장 시 고려하세요.
               </div>
-              <div class="tm-ai-rec-list" style="gap: 8px;">
-                ${p.aiAnalysis.recommendedClasses.slice(0, 5).map((code, idx) => {
+              
+              ${(() => {
+                const classRec = p.aiAnalysis.classRecommendations || {};
+                const coreClasses = classRec.core || [];
+                const recommendedClasses = classRec.recommended || [];
+                const expansionClasses = classRec.expansion || [];
+                
+                // 핵심 류 렌더링
+                const renderClassItem = (item, category, emoji) => {
+                  const code = item.class;
                   const isAdded = p.designatedGoods.some(g => g.classCode === code);
-                  const reason = p.aiAnalysis.classReasons?.[code] || '';
                   const recGoods = p.aiAnalysis.recommendedGoods?.[code] || [];
-                  
-                  return `
-                    <div class="tm-ai-rec-item ${isAdded ? 'added' : ''}" style="padding: 10px; gap: 8px;">
-                      <div class="tm-ai-rec-num" style="width: 24px; height: 24px; font-size: 12px;">${idx + 1}</div>
+                  return \`
+                    <div class="tm-ai-rec-item \${isAdded ? 'added' : ''}" data-category="\${category}" style="padding: 10px; gap: 8px; border-left: 3px solid \${category === 'core' ? '#dc3545' : category === 'recommended' ? '#fd7e14' : '#28a745'};">
                       <div class="tm-ai-rec-content" style="flex: 1; min-width: 0;">
                         <div class="tm-ai-rec-class" style="font-size: 13px;">
-                          <strong>제${code}류</strong> ${TM.niceClasses[code] || ''}
+                          <span style="margin-right: 4px;">\${emoji}</span>
+                          <strong>제\${code}류</strong> \${TM.niceClasses[code] || ''}
                         </div>
-                        ${reason ? `<div class="tm-ai-rec-reason" style="font-size: 11px; line-height: 1.4; max-height: 36px; overflow: hidden;">${TM.escapeHtml(reason.slice(0, 60))}${reason.length > 60 ? '...' : ''}</div>` : ''}
-                        ${recGoods.length > 0 ? `
+                        <div class="tm-ai-rec-reason" style="font-size: 11px; color: #666; margin-top: 2px;">\${TM.escapeHtml(item.reason || '')}</div>
+                        \${recGoods.length > 0 ? \`
                           <div class="tm-ai-rec-goods" style="margin-top: 4px; font-size: 11px;">
                             <span class="label" style="margin-right: 4px;">추천 지정상품:</span>
-                            ${recGoods.slice(0, 2).map(g => `<span class="tag" style="padding: 1px 4px;">${(g.name || g).slice(0, 12)}${(g.name || g).length > 12 ? '..' : ''}</span>`).join('')}
-                            ${recGoods.length > 2 ? `<span class="more">+${recGoods.length - 2}</span>` : ''}
+                            \${recGoods.slice(0, 3).map(g => \`<span class="tag" style="padding: 1px 4px;">\${(g.name || g).slice(0, 15)}\${(g.name || g).length > 15 ? '..' : ''}</span>\`).join('')}
+                            \${recGoods.length > 3 ? \`<span class="more">+\${recGoods.length - 3}</span>\` : ''}
                           </div>
-                        ` : ''}
+                        \` : ''}
                       </div>
                       <div class="tm-ai-rec-action">
-                        ${isAdded ? '<span class="applied" style="font-size: 11px;">✓적용</span>' : 
-                          `<button class="btn btn-primary btn-sm" style="padding: 4px 8px; font-size: 11px;" data-action="tm-apply-recommendation" data-class-code="${code}">+ 추가</button>`}
+                        \${isAdded ? '<span class="applied" style="font-size: 11px; color: #28a745;">✓적용됨</span>' : 
+                          \`<button class="btn btn-primary btn-sm" style="padding: 4px 10px; font-size: 11px;" data-action="tm-apply-recommendation" data-class-code="\${code}">+ 추가</button>\`}
                       </div>
                     </div>
-                  `;
-                }).join('')}
+                  \`;
+                };
+                
+                let html = '';
+                
+                // 🔴 핵심 류
+                if (coreClasses.length > 0) {
+                  html += \`
+                    <div class="tm-rec-section">
+                      <div class="tm-rec-section-header" style="background: #fff5f5; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #dc3545; border-radius: 4px; margin-bottom: 6px;">
+                        🔴 핵심 (필수 등록) - \${coreClasses.length}개 류
+                      </div>
+                      <div class="tm-ai-rec-list" style="gap: 6px; margin-bottom: 12px;">
+                        \${coreClasses.map(item => renderClassItem(item, 'core', '🔴')).join('')}
+                      </div>
+                    </div>
+                  \`;
+                }
+                
+                // 🟠 권장 류
+                if (recommendedClasses.length > 0) {
+                  html += \`
+                    <div class="tm-rec-section">
+                      <div class="tm-rec-section-header" style="background: #fff8f0; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #fd7e14; border-radius: 4px; margin-bottom: 6px;">
+                        🟠 권장 (권리 보호) - \${recommendedClasses.length}개 류
+                      </div>
+                      <div class="tm-ai-rec-list" style="gap: 6px; margin-bottom: 12px;">
+                        \${recommendedClasses.map(item => renderClassItem(item, 'recommended', '🟠')).join('')}
+                      </div>
+                    </div>
+                  \`;
+                }
+                
+                // 🟢 확장 류 (접기/펼치기)
+                if (expansionClasses.length > 0) {
+                  html += \`
+                    <div class="tm-rec-section tm-rec-expansion">
+                      <div class="tm-rec-section-header" style="background: #f0fff4; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #28a745; border-radius: 4px; margin-bottom: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" data-action="tm-toggle-expansion">
+                        <span>🟢 확장 (사업 확장 시 고려) - \${expansionClasses.length}개 류</span>
+                        <span class="tm-expansion-toggle">▼ 펼치기</span>
+                      </div>
+                      <div class="tm-ai-rec-list tm-expansion-list" style="gap: 6px; display: none;">
+                        \${expansionClasses.map(item => renderClassItem(item, 'expansion', '🟢')).join('')}
+                      </div>
+                    </div>
+                  \`;
+                }
+                
+                return html;
+              })()}
+              
+              <!-- 추가 추천 요청 버튼 -->
+              <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #eee; text-align: center;">
+                <button class="btn btn-outline btn-sm" data-action="tm-request-more-recommendations" style="font-size: 12px;">
+                  🔍 추가 추천 요청
+                </button>
               </div>
             </div>
           ` : ''}
@@ -2040,21 +2108,27 @@
     App.showToast(`제${classCode}류가 추가되었습니다.`, 'success');
   };
   
-  // 전체 AI 추천 적용
+  // 전체 AI 추천 적용 (핵심 + 권장만, 확장은 제외)
   TM.applyAllRecommendations = function() {
     if (!TM.currentProject) return;
     
     const p = TM.currentProject;
-    const recommendedClasses = p.aiAnalysis?.recommendedClasses || [];
+    const classRec = p.aiAnalysis?.classRecommendations || {};
     
-    if (recommendedClasses.length === 0) {
+    // 핵심 + 권장 류만 자동 적용 (확장은 사용자 선택)
+    const classesToApply = [
+      ...(classRec.core || []).map(c => c.class),
+      ...(classRec.recommended || []).map(c => c.class)
+    ];
+    
+    if (classesToApply.length === 0) {
       App.showToast('추천 상품류가 없습니다.', 'warning');
       return;
     }
     
     let addedCount = 0;
     
-    recommendedClasses.forEach(classCode => {
+    classesToApply.forEach(classCode => {
       if (!p.designatedGoods.some(g => g.classCode === classCode)) {
         const recommendedGoods = p.aiAnalysis?.recommendedGoods?.[classCode] || [];
         
@@ -2075,7 +2149,107 @@
     });
     
     TM.renderCurrentStep();
-    App.showToast(`${addedCount}개 상품류가 추가되었습니다.`, 'success');
+    App.showToast(`핵심+권장 ${addedCount}개 상품류가 추가되었습니다. (확장 류는 개별 추가 가능)`, 'success');
+  };
+  
+  // 확장 류 접기/펼치기
+  TM.toggleExpansionClasses = function(target) {
+    const section = target.closest('.tm-rec-expansion');
+    if (!section) return;
+    
+    const list = section.querySelector('.tm-expansion-list');
+    const toggle = section.querySelector('.tm-expansion-toggle');
+    
+    if (list && toggle) {
+      const isHidden = list.style.display === 'none';
+      list.style.display = isHidden ? 'flex' : 'none';
+      list.style.flexDirection = 'column';
+      toggle.textContent = isHidden ? '▲ 접기' : '▼ 펼치기';
+    }
+  };
+  
+  // 추가 추천 요청
+  TM.requestMoreRecommendations = async function() {
+    const p = TM.currentProject;
+    if (!p || !p.aiAnalysis) {
+      App.showToast('먼저 사업 분석을 진행하세요.', 'warning');
+      return;
+    }
+    
+    const existingClasses = p.aiAnalysis.recommendedClasses || [];
+    const businessInput = document.getElementById('tm-business-url')?.value?.trim() || '';
+    
+    try {
+      App.showToast('추가 추천을 분석 중...', 'info');
+      
+      const additionalPrompt = `당신은 상표 출원 전문 변리사입니다.
+
+【고객 정보】
+- 상표명: ${p.trademarkName || '미정'}
+- 사업 내용: ${businessInput || p.aiAnalysis.businessAnalysis}
+- 이미 추천된 류: ${existingClasses.join(', ')}류
+
+【요청】
+이미 추천된 류 외에, 추가로 고려할 만한 상품류를 찾아주세요.
+- 방어적 등록 관점
+- 경쟁사가 일반적으로 등록하는 류
+- 브랜드 확장 시 자주 사용되는 류
+- 유사 업종에서 분쟁이 많은 류
+
+【응답 형식 - JSON만】
+{
+  "additionalClasses": [
+    {"class": "14", "reason": "액세서리 확장 - 패션 브랜드 방어적 등록", "priority": 1},
+    {"class": "26", "reason": "장식품 - 의류 관련 부자재 보호", "priority": 2}
+  ]
+}`;
+
+      const response = await App.callClaude(additionalPrompt, 2000);
+      const text = response.text || '';
+      const startIdx = text.indexOf('{');
+      const endIdx = text.lastIndexOf('}');
+      
+      if (startIdx === -1 || endIdx <= startIdx) {
+        throw new Error('응답 파싱 실패');
+      }
+      
+      const jsonStr = text.substring(startIdx, endIdx + 1)
+        .replace(/[\x00-\x1F\x7F]/g, ' ')
+        .replace(/,(\s*[}\]])/g, '$1');
+      
+      const result = JSON.parse(jsonStr);
+      const additionalClasses = result.additionalClasses || [];
+      
+      if (additionalClasses.length === 0) {
+        App.showToast('추가 추천할 상품류가 없습니다.', 'info');
+        return;
+      }
+      
+      // 기존 확장 류에 추가
+      if (!p.aiAnalysis.classRecommendations) {
+        p.aiAnalysis.classRecommendations = { core: [], recommended: [], expansion: [] };
+      }
+      
+      const existingExpansion = p.aiAnalysis.classRecommendations.expansion || [];
+      const existingAllCodes = existingClasses;
+      
+      additionalClasses.forEach(item => {
+        if (!existingAllCodes.includes(item.class)) {
+          existingExpansion.push(item);
+          p.aiAnalysis.recommendedClasses.push(item.class);
+          p.aiAnalysis.classReasons[item.class] = `🟢 추가 확장: ${item.reason}`;
+        }
+      });
+      
+      p.aiAnalysis.classRecommendations.expansion = existingExpansion;
+      
+      TM.renderCurrentStep();
+      App.showToast(`${additionalClasses.length}개 추가 류가 확장 목록에 추가되었습니다.`, 'success');
+      
+    } catch (err) {
+      console.error('[TM] 추가 추천 요청 실패:', err);
+      App.showToast('추가 추천 요청에 실패했습니다.', 'error');
+    }
   };
   
   // 유사군 코드로 지정상품 검색
@@ -5297,7 +5471,23 @@ ${TM.PRACTICE_GUIDELINES}
 2. 핵심 상품/서비스 식별
 3. 판매/유통 채널 분석
 4. 사업 확장 가능성
-5. 최적 상품류 추천 (근거와 함께)
+5. 상품류 추천 (3단계로 구분)
+
+【상품류 추천 3단계 기준】
+■ 핵심 (core): 현재 사업에 반드시 필요, 없으면 권리 보호 불가
+  - 실제로 제조/제공하는 상품/서비스의 류
+  - 현재 진행 중인 사업에 직접 해당
+
+■ 권장 (recommended): 권리 보호를 위해 강력히 권장
+  - 판매 채널 보호 (온라인 판매 → 35류 등)
+  - 관련 서비스 보호 (제품+A/S → 37류 등)
+  - 브랜드 확장에 흔히 사용되는 류
+  - 경쟁사가 일반적으로 등록하는 류
+
+■ 확장 (expansion): 사업 확장 시 고려할 류
+  - 자연스러운 사업 확장 방향
+  - 시너지 있는 관련 분야
+  - 방어적 등록 고려 대상
 
 【응답 형식 - JSON만】
 {
@@ -5310,19 +5500,24 @@ ${TM.PRACTICE_GUIDELINES}
     "offline": false,
     "b2b": false,
     "b2c": true,
+    "franchise": false,
     "details": "온라인 자사몰 운영"
   },
-  "expansionPotential": ["댄스 용품", "스포츠 의류"],
-  "recommendedClasses": ["25", "35", "28"],
-  "classReasons": {
-    "25": "핵심: 발레 의류, 댄스복 상품",
-    "35": "권장: 온라인 쇼핑몰 운영으로 의류 소매업 필요",
-    "28": "확장: 댄스 용품, 스포츠 장비"
+  "expansionPotential": ["댄스 용품", "스포츠 의류", "댄스 교육"],
+  "classRecommendations": {
+    "core": [
+      {"class": "25", "reason": "발레 의류, 댄스복 - 핵심 상품", "priority": 1}
+    ],
+    "recommended": [
+      {"class": "35", "reason": "온라인 쇼핑몰 운영 - 소매업 보호 필수", "priority": 1},
+      {"class": "18", "reason": "가방, 파우치 - 의류 브랜드 필수 확장", "priority": 2}
+    ],
+    "expansion": [
+      {"class": "28", "reason": "댄스 용품, 스포츠 장비 - 자연스러운 확장", "priority": 1},
+      {"class": "41", "reason": "댄스 교육 서비스 - 시너지 사업", "priority": 2},
+      {"class": "9", "reason": "댄스 교육 앱/영상 - 디지털 확장", "priority": 3}
+    ]
   },
-  "suggestions": [
-    {"type": "recommend", "class": "35", "reason": "온라인 판매 채널 운영 시 의류 소매업 등록 권장"},
-    {"type": "optional", "class": "41", "reason": "향후 댄스 교육 사업 확장 시 고려"}
-  ],
   "searchKeywords": ["발레", "댄스", "의류", "레오타드", "판매"]
 }`;
 
@@ -5345,27 +5540,34 @@ ${TM.PRACTICE_GUIDELINES}
       
       const analysis = JSON.parse(jsonStr);
       
-      console.log('[TM] ★ 사업 분석 완료 (LLM 기반)');
+      // ================================================================
+      // 3단계 추천 구조 처리 (핵심/권장/확장)
+      // ================================================================
+      const classRec = analysis.classRecommendations || {};
+      const coreClasses = (classRec.core || []).sort((a, b) => (a.priority || 99) - (b.priority || 99));
+      const recommendedClasses = (classRec.recommended || []).sort((a, b) => (a.priority || 99) - (b.priority || 99));
+      const expansionClasses = (classRec.expansion || []).sort((a, b) => (a.priority || 99) - (b.priority || 99));
+      
+      console.log('[TM] ★ 사업 분석 완료 (3단계 추천)');
       console.log('[TM] - 사업 요약:', analysis.businessSummary);
-      console.log('[TM] - 사업 유형:', analysis.businessTypes);
-      console.log('[TM] - 핵심 상품:', analysis.coreProducts);
-      console.log('[TM] - 핵심 서비스:', analysis.coreServices);
-      console.log('[TM] - 판매 채널:', analysis.salesChannels);
-      console.log('[TM] - 추천 류:', analysis.recommendedClasses);
-      console.log('[TM] - 추천 이유:', analysis.classReasons);
-      console.log('[TM] - 추가 제안:', analysis.suggestions);
+      console.log('[TM] - 핵심 류 (core):', coreClasses);
+      console.log('[TM] - 권장 류 (recommended):', recommendedClasses);
+      console.log('[TM] - 확장 류 (expansion):', expansionClasses);
       
-      // ================================================================
-      // LLM 추천 결과 사용 (하드코딩 강제 로직 제거)
-      // - LLM이 실무 가이드라인을 참고하여 이미 적절한 류를 추천함
-      // - 별도의 강제 추가 로직 없이 LLM 결과를 신뢰
-      // ================================================================
-      let recommendedClasses = [...(analysis.recommendedClasses || [])];
+      // 전체 추천 류 목록 (중복 제거)
+      const allClassCodes = [...new Set([
+        ...coreClasses.map(c => c.class),
+        ...recommendedClasses.map(c => c.class),
+        ...expansionClasses.map(c => c.class)
+      ])];
       
-      // 중복 제거 및 최대 5개로 제한
-      recommendedClasses = [...new Set(recommendedClasses)].slice(0, 5);
+      // classReasons 구성 (호환성 유지)
+      const classReasons = {};
+      coreClasses.forEach(c => { classReasons[c.class] = `🔴 핵심: ${c.reason}`; });
+      recommendedClasses.forEach(c => { classReasons[c.class] = `🟠 권장: ${c.reason}`; });
+      expansionClasses.forEach(c => { classReasons[c.class] = `🟢 확장: ${c.reason}`; });
       
-      console.log('[TM] 최종 추천 류:', recommendedClasses);
+      console.log('[TM] 전체 추천 류:', allClassCodes);
       
       // 사용자 입력에서 키워드 추출
       const userKeywords = TM.extractKeywordsFromInput(businessInput);
@@ -5386,16 +5588,30 @@ ${TM.PRACTICE_GUIDELINES}
         salesChannels: analysis.salesChannels || {},
         expansionPotential: analysis.expansionPotential || [],
         coreActivity: (analysis.coreProducts?.[0] || '') + ' ' + (analysis.coreServices?.[0] || ''),
-        recommendedClasses: recommendedClasses,
-        classReasons: analysis.classReasons || {},
+        // ★ 3단계 추천 구조
+        classRecommendations: {
+          core: coreClasses,
+          recommended: recommendedClasses,
+          expansion: expansionClasses
+        },
+        // ★ 호환성을 위한 기존 필드 유지
+        recommendedClasses: allClassCodes,
+        classReasons: classReasons,
         searchKeywords: allKeywords,
-        recommendedGoods: {}
+        recommendedGoods: {},
+        // ★ 현재 선택된 류 (기본: 핵심+권장만 자동 선택)
+        selectedCategories: ['core', 'recommended']
       };
       
       // ================================================================
-      // 3단계: 각 류별 최적 지정상품 선택
+      // 핵심+권장 류에 대해서만 지정상품 선택 (확장은 사용자 요청 시)
       // ================================================================
-      for (const classCode of recommendedClasses) {
+      const initialClasses = [
+        ...coreClasses.map(c => c.class),
+        ...recommendedClasses.map(c => c.class)
+      ];
+      
+      for (const classCode of initialClasses) {
         const paddedCode = classCode.padStart(2, '0');
         
         try {
