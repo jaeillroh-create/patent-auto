@@ -5900,36 +5900,61 @@ ${criticalResults.slice(0, 5).map(r =>
       dropzone.innerHTML = `
         <div class="tm-dropzone-loading">
           <div class="tm-spinner"></div>
-          <div>파일 처리 중...</div>
+          <div>문서 분석 중...</div>
         </div>
       `;
     }
     
     try {
-      // 기본값 설정 (편집 가능 모드)
+      // 기본값 설정
       if (!p.priorityExam) p.priorityExam = {};
       p.priorityExam.extractedFromApplication = true;
       p.priorityExam.editMode = true;
       p.priorityExam.uploadedFileName = file.name;
       
-      // 기존 프로젝트 정보로 초기값 설정
+      // 초기값 설정
       p.priorityExam.applicationNumber = '';
       p.priorityExam.applicationDate = '';
       p.priorityExam.trademarkNameFromApp = p.trademarkName || '';
       p.priorityExam.applicantName = p.applicantName || '';
+      p.priorityExam.classCode = '';
+      p.priorityExam.designatedGoodsFromApp = '';
       
-      // 지정상품 정보가 있으면 자동 설정
+      // 기존 프로젝트의 지정상품 정보 설정
       if (p.designatedGoods && p.designatedGoods.length > 0) {
         const classCodes = p.designatedGoods.map(d => d.classCode).join(', ');
         const goodsList = p.designatedGoods.flatMap(d => (d.goods || []).map(g => g.name)).join(', ');
         p.priorityExam.classCode = classCodes;
         p.priorityExam.designatedGoodsFromApp = goodsList;
-      } else {
-        p.priorityExam.classCode = '';
-        p.priorityExam.designatedGoodsFromApp = '';
       }
       
-      App.showToast('출원 정보를 입력해주세요.', 'info');
+      // PDF인 경우 텍스트 추출 시도
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        try {
+          App.showToast('PDF 분석 중...', 'info');
+          const extracted = await TM.extractFromPDF(file);
+          
+          if (extracted.applicationNumber) p.priorityExam.applicationNumber = extracted.applicationNumber;
+          if (extracted.applicationDate) p.priorityExam.applicationDate = extracted.applicationDate;
+          if (extracted.applicantName) p.priorityExam.applicantName = extracted.applicantName;
+          if (extracted.trademarkName) p.priorityExam.trademarkNameFromApp = extracted.trademarkName;
+          if (extracted.classCode) p.priorityExam.classCode = extracted.classCode;
+          if (extracted.designatedGoods) p.priorityExam.designatedGoodsFromApp = extracted.designatedGoods;
+          
+          const extractedCount = Object.values(extracted).filter(v => v).length;
+          if (extractedCount > 0) {
+            App.showToast(`${extractedCount}개 항목이 추출되었습니다. 확인 후 수정하세요.`, 'success');
+          } else {
+            App.showToast('자동 추출에 실패했습니다. 직접 입력해주세요.', 'warning');
+          }
+        } catch (pdfError) {
+          console.error('[TM] PDF 추출 실패:', pdfError);
+          App.showToast('PDF 분석 실패. 직접 입력해주세요.', 'warning');
+        }
+      } else {
+        App.showToast('출원 정보를 입력해주세요.', 'info');
+      }
+      
       TM.renderCurrentStep();
       
     } catch (error) {
@@ -5937,6 +5962,120 @@ ${criticalResults.slice(0, 5).map(r =>
       App.showToast('업로드 실패: ' + error.message, 'error');
       TM.renderCurrentStep();
     }
+  };
+  
+  // PDF에서 텍스트 추출 및 파싱
+  TM.extractFromPDF = async function(file) {
+    // PDF.js 로드
+    if (!window.pdfjsLib) {
+      await TM.loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    
+    let fullText = '';
+    
+    // 모든 페이지에서 텍스트 추출
+    for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) { // 최대 5페이지
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      fullText += pageText + '\n';
+    }
+    
+    console.log('[TM] PDF 텍스트 추출:', fullText.substring(0, 500));
+    
+    // 정규식으로 정보 추출
+    return TM.parseApplicationText(fullText);
+  };
+  
+  // 텍스트에서 출원 정보 파싱
+  TM.parseApplicationText = function(text) {
+    const result = {
+      applicationNumber: '',
+      applicationDate: '',
+      applicantName: '',
+      trademarkName: '',
+      classCode: '',
+      designatedGoods: ''
+    };
+    
+    // 출원번호 패턴: 40-2024-0012345, 40-2025-0097799 등
+    const appNumMatch = text.match(/(?:출원번호|출원번호\s*[】\]:]?\s*)?\s*(40-\d{4}-\d{7})/i);
+    if (appNumMatch) {
+      result.applicationNumber = appNumMatch[1];
+    }
+    
+    // 출원일 패턴: 2025.06.09, 2025-06-09, 2025년 06월 09일
+    const datePatterns = [
+      /(?:출원일|출원일자)\s*[】\]:]?\s*(\d{4}[.\-\/]\d{2}[.\-\/]\d{2})/i,
+      /(?:출원일|출원일자)\s*[】\]:]?\s*(\d{4}년\s*\d{2}월\s*\d{2}일)/i,
+      /(\d{4}[.]\d{2}[.]\d{2})/
+    ];
+    for (const pattern of datePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        result.applicationDate = match[1].replace(/년\s*/g, '.').replace(/월\s*/g, '.').replace(/일/g, '');
+        break;
+      }
+    }
+    
+    // 출원인/신청인 패턴
+    const applicantPatterns = [
+      /(?:출원인|신청인|우선심사\s*신청인)\s*[】\]:]?\s*(?:【?명칭】?)?\s*([가-힣a-zA-Z\s]+(?:주식회사|㈜|회사|법인)?[가-힣a-zA-Z\s]*)/i,
+      /(?:【\s*명칭\s*】)\s*([가-힣a-zA-Z\s]+)/i
+    ];
+    for (const pattern of applicantPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        result.applicantName = match[1].trim().replace(/\s+/g, ' ');
+        // 불필요한 텍스트 제거
+        result.applicantName = result.applicantName.replace(/출원번호.*$/i, '').trim();
+        if (result.applicantName.length > 2 && result.applicantName.length < 50) {
+          break;
+        }
+        result.applicantName = '';
+      }
+    }
+    
+    // 상표명/상표견본 패턴
+    const tmPatterns = [
+      /(?:상표견본|상표명)\s*[】\]:]?\s*([A-Za-z가-힣0-9\s]+)/i,
+      /【\s*상표견본\s*】\s*([A-Za-z가-힣0-9\s]+)/i
+    ];
+    for (const pattern of tmPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        result.trademarkName = match[1].trim().split(/\s+/)[0]; // 첫 단어만
+        if (result.trademarkName.length > 1 && result.trademarkName.length < 30) {
+          break;
+        }
+        result.trademarkName = '';
+      }
+    }
+    
+    // 상품류 패턴: 제 09류, 제09류, 09류
+    const classMatch = text.match(/(?:상품류|상품류구분)\s*[】\]:]?\s*제?\s*(\d{1,2})\s*류/i);
+    if (classMatch) {
+      result.classCode = classMatch[1].padStart(2, '0');
+    }
+    
+    // 지정상품 패턴
+    const goodsMatch = text.match(/(?:지정상품)\s*[】\]:]?\s*([^【\[]+)/i);
+    if (goodsMatch) {
+      let goods = goodsMatch[1].trim();
+      // 다음 섹션 시작 전까지만
+      goods = goods.split(/(?:【|신청이유|출원인)/)[0].trim();
+      goods = goods.replace(/\s+/g, ' ').substring(0, 200);
+      if (goods.length > 5) {
+        result.designatedGoods = goods;
+      }
+    }
+    
+    console.log('[TM] 파싱 결과:', result);
+    return result;
   };
   
   // 추출 정보 필드 업데이트
