@@ -94,7 +94,7 @@
     <div id="patent-dashboard-panel" class="service-panel active">
       <div style="display:flex;gap:24px;align-items:flex-start">
         <!-- 왼쪽: 액션 패널 -->
-        <div style="width:280px;flex-shrink:0">
+        <div style="width:260px;flex-shrink:0">
           <h2 style="font-size:22px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px"><span class="tossface">📑</span> 특허 명세서</h2>
           <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:20px;line-height:1.5">AI 기반 특허명세서 자동 생성 시스템입니다.</p>
           
@@ -113,14 +113,14 @@
         <!-- 오른쪽: 사건 테이블 -->
         <div style="flex:1;min-width:0">
           <div class="card" style="padding:0;overflow:hidden">
-            <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
               <thead>
                 <tr style="background:var(--color-bg-tertiary);border-bottom:1px solid var(--color-border)">
-                  <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--color-text-secondary)">사건번호</th>
-                  <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--color-text-secondary)">사건명</th>
-                  <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:80px">진행률</th>
-                  <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:100px">수정일</th>
-                  <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:140px">작업</th>
+                  <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--color-text-secondary);width:120px;white-space:nowrap">사건번호</th>
+                  <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--color-text-secondary);white-space:nowrap">사건명</th>
+                  <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:80px;white-space:nowrap">상태</th>
+                  <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:90px;white-space:nowrap">수정일</th>
+                  <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--color-text-secondary);width:150px;white-space:nowrap">작업</th>
                 </tr>
               </thead>
               <tbody id="dashProjectList"></tbody>
@@ -134,7 +134,7 @@
               <span class="tossface">⚡</span>
               <span style="font-weight:600;color:var(--color-warning)">가출원 내역</span>
             </div>
-            <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
               <tbody id="dashProvisionalList"></tbody>
             </table>
           </div>
@@ -550,7 +550,13 @@
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 7 결과: 장치 도면</div></div>
           <div id="resultStep07" class="result-area"></div>
           <div id="diagramsStep07" style="padding:0 16px 16px"></div>
-          <div style="padding:0 16px 16px"><button class="btn btn-outline btn-full" id="btnPptx07" onclick="downloadPptxAll()" style="display:none"><span class="tossface">📊</span> PPTX 다운로드</button></div>
+          <div id="diagramDownload07" style="padding:0 16px 16px;display:none">
+            <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;font-weight:600">도면 다운로드</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-outline" onclick="downloadPptx('step_07')" style="flex:1;min-width:120px"><span class="tossface">📊</span> PPTX</button>
+              <button class="btn btn-outline" onclick="downloadDiagramImages('step_07')" style="flex:1;min-width:120px"><span class="tossface">🖼️</span> JPEG 이미지</button>
+            </div>
+          </div>
         </div>
         <div class="result-card" id="resultCard08">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 8 결과: 상세설명</div></div>
@@ -565,6 +571,13 @@
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 11 결과: 방법 도면</div></div>
           <div id="resultStep11" class="result-area"></div>
           <div id="diagramsStep11" style="padding:0 16px 16px"></div>
+          <div id="diagramDownload11" style="padding:0 16px 16px;display:none">
+            <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;font-weight:600">도면 다운로드</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-outline" onclick="downloadPptx('step_11')" style="flex:1;min-width:120px"><span class="tossface">📊</span> PPTX</button>
+              <button class="btn btn-outline" onclick="downloadDiagramImages('step_11')" style="flex:1;min-width:120px"><span class="tossface">🖼️</span> JPEG 이미지</button>
+            </div>
+          </div>
         </div>
         <div class="result-card" id="resultCard12">
           <div class="card-header"><div class="card-title"><span class="tossface">📄</span> Step 12 결과: 방법 상세설명</div></div>

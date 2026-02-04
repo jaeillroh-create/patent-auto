@@ -71,7 +71,7 @@ function clearAllState(){
   ['titleConfirmArea','titleConfirmMsg','batchArea'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   for(let i=1;i<=19;i++){const e=document.getElementById(`resultStep${String(i).padStart(2,'0')}`);if(e)e.innerHTML='';}
   ['resultsBatch25','resultsBatchFinish','validationResults','previewArea','diagramsStep07','diagramsStep11','fileList','requiredFiguresList'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
-  ['btnApplyReview','btnPptx07','reviewApplyResult'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
+  ['btnApplyReview','diagramDownload07','diagramDownload11','reviewApplyResult'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   document.querySelectorAll('.tab-item').forEach((t,i)=>{t.classList.toggle('active',i===0);t.setAttribute('aria-selected',i===0);});
   document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('active',i===0));
   const mt=document.getElementById('methodToggle');if(mt){mt.checked=true;toggleMethod();}
@@ -96,7 +96,7 @@ async function loadDashboardProjects(){
   // Separate regular and provisional
   const regular=data.filter(p=>!p.current_state_json?.type||p.current_state_json.type!=='provisional');
   const provisional=data.filter(p=>p.current_state_json?.type==='provisional');
-  cnt.textContent=`총 ${regular.length}건`;
+  cnt.textContent=`총 ${regular.length}개 프로젝트`;
   
   if(!regular.length){
     el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--color-text-tertiary)"><div style="font-size:32px;margin-bottom:8px"><span class="tossface">📭</span></div><p>아직 생성된 사건이 없어요.</p></td></tr>';
@@ -109,14 +109,14 @@ async function loadDashboardProjects(){
       const statusBadge=pct===100?'badge-success':pct>0?'badge-warning':'badge-neutral';
       const statusText=pct===100?'완료':pct>0?'작성 중':'대기';
       return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-bg-tertiary)'" onmouseout="this.style.background=''" onclick="openProject('${p.id}')">
-        <td style="padding:12px 16px"><span style="color:var(--color-primary);font-weight:600">${App.escapeHtml(caseNum)}</span></td>
-        <td style="padding:12px 16px"><div style="display:flex;align-items:center;gap:8px"><span class="tossface">📁</span><span style="font-weight:500">${App.escapeHtml(p.title)}</span></div></td>
-        <td style="padding:12px 16px;text-align:center"><span class="badge ${statusBadge}">${statusText}</span></td>
-        <td style="padding:12px 16px;text-align:center;color:var(--color-text-tertiary);font-size:12px">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</td>
-        <td style="padding:12px 16px;text-align:center" onclick="event.stopPropagation()">
-          <button class="btn btn-primary btn-sm" onclick="openProject('${p.id}')" style="padding:6px 12px;font-size:11px">열기</button>
-          <button class="btn btn-outline btn-sm" onclick="renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:6px 10px;font-size:11px">편집</button>
-          <button class="btn btn-ghost btn-sm" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:6px 10px;font-size:11px;color:var(--color-error)">삭제</button>
+        <td style="padding:12px 16px;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tossface">📁</span><span style="color:var(--color-primary);font-weight:600">${App.escapeHtml(caseNum)}</span></div></td>
+        <td style="padding:12px 16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(p.title)}</span></td>
+        <td style="padding:12px 16px;text-align:center;white-space:nowrap"><span class="badge ${statusBadge}">${statusText}</span></td>
+        <td style="padding:12px 16px;text-align:center;color:var(--color-text-tertiary);font-size:12px;white-space:nowrap">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</td>
+        <td style="padding:8px 12px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
+          <button class="btn btn-primary btn-sm" onclick="openProject('${p.id}')" style="padding:5px 10px;font-size:11px">열기</button>
+          <button class="btn btn-outline btn-sm" onclick="renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:5px 8px;font-size:11px">편집</button>
+          <button class="btn btn-ghost btn-sm" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:5px 8px;font-size:11px;color:var(--color-error)">삭제</button>
         </td>
       </tr>`;
     }).join('');
@@ -132,12 +132,12 @@ async function loadDashboardProjects(){
         const pd=p.current_state_json?.provisionalData||{};
         const caseNum=p.project_number||'-';
         return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-warning-light)'" onmouseout="this.style.background=''" onclick="openProvisionalViewer('${p.id}')">
-          <td style="padding:10px 16px"><span style="color:var(--color-warning);font-weight:600">${App.escapeHtml(caseNum)}</span></td>
-          <td style="padding:10px 16px" colspan="2"><div style="display:flex;align-items:center;gap:8px"><span class="tossface">⚡</span><span style="font-weight:500">${App.escapeHtml(pd.title||p.title)}</span></div></td>
-          <td style="padding:10px 16px;text-align:center;color:var(--color-text-tertiary);font-size:12px">${new Date(p.created_at).toLocaleDateString('ko-KR')}</td>
-          <td style="padding:10px 16px;text-align:center" onclick="event.stopPropagation()">
-            <button class="btn btn-outline btn-sm" onclick="openProvisionalViewer('${p.id}')" style="padding:6px 12px;font-size:11px">보기</button>
-            <button class="btn btn-ghost btn-sm" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:6px 10px;font-size:11px;color:var(--color-error)">삭제</button>
+          <td style="padding:10px 16px;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tossface">⚡</span><span style="color:var(--color-warning);font-weight:600">${App.escapeHtml(caseNum)}</span></div></td>
+          <td style="padding:10px 16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" colspan="2"><span style="font-weight:500">${App.escapeHtml(pd.title||p.title)}</span></td>
+          <td style="padding:10px 16px;text-align:center;color:var(--color-text-tertiary);font-size:12px;white-space:nowrap">${new Date(p.created_at).toLocaleDateString('ko-KR')}</td>
+          <td style="padding:8px 12px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
+            <button class="btn btn-outline btn-sm" onclick="openProvisionalViewer('${p.id}')" style="padding:5px 10px;font-size:11px">보기</button>
+            <button class="btn btn-ghost btn-sm" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:5px 8px;font-size:11px;color:var(--color-error)">삭제</button>
           </td>
         </tr>`;
       }).join('');
@@ -307,6 +307,9 @@ async function openProject(pid){
   if(selectedTitleType){const ci=document.getElementById('customTitleType');if(ci)ci.value=selectedTitleType;document.getElementById('btnStep01').disabled=false;}
   if(selectedTitle){document.getElementById('titleInput').value=selectedTitle;const enInp=document.getElementById('titleInputEn');if(enInp)enInp.value=selectedTitleEn||'';document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';}
   Object.keys(outputs).forEach(k=>{if(outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied'))renderOutput(k,outputs[k]);});
+  // Restore diagrams and show download buttons
+  if(outputs.step_07_mermaid){renderDiagrams('step_07',outputs.step_07_mermaid);const dl07=document.getElementById('diagramDownload07');if(dl07)dl07.style.display='block';}
+  if(outputs.step_11_mermaid){renderDiagrams('step_11',outputs.step_11_mermaid);const dl11=document.getElementById('diagramDownload11');if(dl11)dl11.style.display='block';}
   document.getElementById('headerProjectName').textContent=data.title;document.getElementById('headerUserName').textContent=currentProfile?.display_name||currentUser?.email||'';
   if(currentProfile?.role==='admin')document.getElementById('btnAdmin').style.display='inline-flex';
   updateStats();
@@ -945,7 +948,7 @@ function showReviewDiff(mode){
   if(mode==='before'){area.value=beforeReviewText||'(없음)';if(bb)bb.className='btn btn-primary btn-sm';if(ba)ba.className='btn btn-outline btn-sm';}
   else{area.value=outputs.step_13_applied||'(없음)';if(bb)bb.className='btn btn-outline btn-sm';if(ba)ba.className='btn btn-primary btn-sm';}
 }
-async function runDiagramStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_07'?'btnStep07':'btnStep11';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);try{const r=await App.callClaude(buildPrompt(sid));outputs[sid]=r.text;renderOutput(sid,r.text);const mr=await App.callClaude(buildMermaidPrompt(sid),4096);outputs[sid+'_mermaid']=mr.text;renderDiagrams(sid,mr.text);if(sid==='step_07')document.getElementById('btnPptx07').style.display='block';App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
+async function runDiagramStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_07'?'btnStep07':'btnStep11';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);try{const r=await App.callClaude(buildPrompt(sid));outputs[sid]=r.text;renderOutput(sid,r.text);const mr=await App.callClaude(buildMermaidPrompt(sid),4096);outputs[sid+'_mermaid']=mr.text;renderDiagrams(sid,mr.text);const dlId=sid==='step_07'?'diagramDownload07':'diagramDownload11';const dlEl=document.getElementById(dlId);if(dlEl)dlEl.style.display='block';App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
 async function runBatch25(){if(globalProcessing)return;if(!selectedTitle){App.showToast('명칭 먼저 확정','error');return;}setGlobalProcessing(true);loadingState.batch25=true;App.setButtonLoading('btnBatch25',true);document.getElementById('resultsBatch25').innerHTML='';const steps=['step_02','step_03','step_04','step_05'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatch',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatch25',steps[i],r.text);}App.clearProgress('progressBatch');App.showToast('기본 항목 완료');}catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}}
 async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
 
@@ -1087,40 +1090,58 @@ ${diagram}`,4096);
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));
     a.download=`가출원_${title||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();
 
-    // Generate PPTX diagram — KIPO 규칙 v2.0 적용
+    // Generate PPTX diagram — KIPO 규칙 v2.1 - 페이지 내 맞춤
     let pptxGenerated=false;
     if(provisionalDiagramData&&provisionalDiagramData.length){
       try{
         const pptx=new PptxGenJS();
-        pptx.defineLayout({name:'A4_PORTRAIT',width:7.5,height:10});
+        pptx.defineLayout({name:'A4_PORTRAIT',width:8.27,height:11.69});
         pptx.layout='A4_PORTRAIT';
         
         // 선 굵기 상수 (KIPO 기준)
-        const LINE_FRAME=2.25, LINE_BOX=1.5, LINE_ARROW=1.0, SHADOW_OFFSET=0.06;
+        const LINE_FRAME=2.0, LINE_BOX=1.5, LINE_ARROW=1.0, SHADOW_OFFSET=0.04;
+        const PAGE_MARGIN=0.6;
+        const PAGE_W=8.27-PAGE_MARGIN*2;
+        const PAGE_H=11.69-PAGE_MARGIN*2;
+        const TITLE_H=0.5;
+        const AVAILABLE_H=PAGE_H-TITLE_H-0.3;
         
         provisionalDiagramData.forEach(({nodes,edges,positions},idx)=>{
           const slide=pptx.addSlide({bkgd:'FFFFFF'});
           const figNum=idx+1;
           
           // 도면 번호
-          slide.addText(`도 ${figNum}`,{x:0.3,y:0.25,w:2,h:0.4,fontSize:14,bold:true,fontFace:'맑은 고딕',color:'000000'});
+          slide.addText(`도 ${figNum}`,{x:PAGE_MARGIN,y:PAGE_MARGIN,w:2,h:TITLE_H,fontSize:14,bold:true,fontFace:'맑은 고딕',color:'000000'});
           if(!nodes.length)return;
           
-          // 외곽 프레임 (그림자 포함)
-          const frameX=0.5, frameY=0.8, frameW=6.5, frameH=nodes.length*1.2+0.8;
+          // 노드 수에 따라 동적 스케일링
+          const nodeCount=nodes.length;
+          const frameX=PAGE_MARGIN;
+          const frameY=PAGE_MARGIN+TITLE_H;
+          const frameW=PAGE_W-0.8;
+          const maxFrameH=Math.min(AVAILABLE_H, nodeCount*1.0+0.6);
+          const frameH=maxFrameH;
           const frameRefNum=figNum*100;
+          
+          // 박스 크기 동적 계산
+          const framePadY=0.3;
+          const innerH=frameH-framePadY*2;
+          const boxH=Math.min(0.55, (innerH-0.15*(nodeCount-1))/nodeCount);
+          const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
+          const boxW=frameW-1.0;
+          const boxStartX=frameX+0.5;
+          const boxStartY=frameY+framePadY;
+          const refLabelX=frameX+frameW+0.1;
           
           // 그림자
           slide.addShape(pptx.shapes.RECTANGLE,{x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,fill:{color:'000000'},line:{width:0}});
           // 외곽 본체
           slide.addShape(pptx.shapes.RECTANGLE,{x:frameX,y:frameY,w:frameW,h:frameH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
           // 외곽 부호
-          slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameY+frameH/2,w:0.4,h:0,line:{color:'000000',width:LINE_ARROW}});
-          slide.addText(String(frameRefNum),{x:frameX+frameW+0.45,y:frameY+frameH/2-0.15,w:0.5,h:0.3,fontSize:11,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+          slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameY+frameH/2,w:0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
+          slide.addText(String(frameRefNum),{x:refLabelX+0.25,y:frameY+frameH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
           // 내부 구성요소 박스들
-          const boxW=5.0, boxH=0.7, boxStartX=frameX+0.75, boxStartY=frameY+0.5, boxGap=1.0, refLabelX=frameX+frameW+0.45;
-          
           nodes.forEach((n,i)=>{
             const bx=boxStartX, by=boxStartY+i*(boxH+boxGap), refNum=frameRefNum+10*(i+1);
             // 그림자
@@ -1128,19 +1149,24 @@ ${diagram}`,4096);
             // 박스 본체
             slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
             // 박스 텍스트
-            slide.addText(n.label,{x:bx+0.1,y:by,w:boxW-0.2,h:boxH,fontSize:12,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+            slide.addText(n.label,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
             // 리더라인
-            slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.4,h:0,line:{color:'000000',width:LINE_ARROW}});
+            slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
             // 부호 라벨
-            slide.addText(String(refNum),{x:refLabelX,y:by+boxH/2-0.15,w:0.5,h:0.3,fontSize:11,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+            slide.addText(String(refNum),{x:refLabelX+0.25,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
             // 양방향 화살표
             if(i<nodes.length-1){
-              const arrowY1=by+boxH, arrowY2=boxStartY+(i+1)*(boxH+boxGap), arrowX=bx+boxW/2;
-              slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+              const arrowY1=by+boxH;
+              const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
+              const arrowX=bx+boxW/2;
+              if(arrowY2>arrowY1+0.05){
+                slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+              }
             }
           });
         });
-        await pptx.writeFile({fileName:`가출원_도면_${title||'초안'}_${new Date().toISOString().slice(0,10)}.pptx`});
+        const caseNum=selectedProjectNumber||title||'가출원';
+        await pptx.writeFile({fileName:`${caseNum}_도면_${new Date().toISOString().slice(0,10)}.pptx`});
         pptxGenerated=true;
       }catch(e){console.error('PPTX generation error:',e);}
     }
@@ -1321,19 +1347,26 @@ function downloadPptx(sid){
     return downloadPptx(sid);
   }
   
-  // ═══ KIPO 특허 도면 규칙 v2.0 적용 ═══
+  // ═══ KIPO 특허 도면 규칙 v2.1 - 페이지 내 맞춤 ═══
   const pptx=new PptxGenJS();
-  // A4 세로 비율에 가깝게 설정 (7.5" x 10")
-  pptx.defineLayout({name:'A4_PORTRAIT',width:7.5,height:10});
+  // A4 세로 (인치 단위: 8.27" x 11.69")
+  pptx.defineLayout({name:'A4_PORTRAIT',width:8.27,height:11.69});
   pptx.layout='A4_PORTRAIT';
   
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
   
   // 선 굵기 상수 (KIPO 기준)
-  const LINE_FRAME=2.25;    // 외곽 프레임
-  const LINE_BOX=1.5;       // 구성요소 박스
-  const LINE_ARROW=1.0;     // 화살표/리더라인
-  const SHADOW_OFFSET=0.06; // 그림자 오프셋
+  const LINE_FRAME=2.0;
+  const LINE_BOX=1.5;
+  const LINE_ARROW=1.0;
+  const SHADOW_OFFSET=0.04;
+  
+  // 페이지 여백
+  const PAGE_MARGIN=0.6;
+  const PAGE_W=8.27-PAGE_MARGIN*2; // 약 7.07"
+  const PAGE_H=11.69-PAGE_MARGIN*2; // 약 10.49"
+  const TITLE_H=0.5;
+  const AVAILABLE_H=PAGE_H-TITLE_H-0.3; // 약 9.69"
   
   data.forEach(({nodes,edges,positions},idx)=>{
     const slide=pptx.addSlide({bkgd:'FFFFFF'});
@@ -1341,54 +1374,60 @@ function downloadPptx(sid){
     
     // 도면 번호
     slide.addText(`도 ${figNum}`,{
-      x:0.3,y:0.25,w:2,h:0.4,
+      x:PAGE_MARGIN,y:PAGE_MARGIN,w:2,h:TITLE_H,
       fontSize:14,bold:true,fontFace:'맑은 고딕',color:'000000'
     });
     
     if(!nodes.length)return;
     
-    // 레이아웃 재계산 (A4 세로에 맞게)
-    const layoutPos=layoutGraphForPatent(nodes,edges);
+    // 노드 수에 따라 동적 스케일링
+    const nodeCount=nodes.length;
+    const frameX=PAGE_MARGIN;
+    const frameY=PAGE_MARGIN+TITLE_H;
+    const frameW=PAGE_W-0.8; // 부호 라벨 공간 확보
     
-    // 1. 외곽 프레임 (그림자 포함)
-    const frameX=0.5, frameY=0.8;
-    const frameW=6.5, frameH=nodes.length*1.2+0.8;
+    // 프레임 높이 계산 (페이지 내 맞춤)
+    const maxFrameH=Math.min(AVAILABLE_H, nodeCount*1.0+0.6);
+    const frameH=maxFrameH;
     
-    // 그림자 (먼저 그림)
+    // 박스 크기 동적 계산
+    const framePadY=0.3;
+    const innerH=frameH-framePadY*2;
+    const boxH=Math.min(0.55, (innerH-0.15*(nodeCount-1))/nodeCount);
+    const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
+    const boxW=frameW-1.0;
+    const boxStartX=frameX+0.5;
+    const boxStartY=frameY+framePadY;
+    
+    // 1. 외곽 프레임
     slide.addShape(pptx.shapes.RECTANGLE,{
       x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,
       fill:{color:'000000'},line:{width:0}
     });
-    // 외곽 본체
     slide.addShape(pptx.shapes.RECTANGLE,{
       x:frameX,y:frameY,w:frameW,h:frameH,
       fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}
     });
     
-    // 외곽 부호 (우측)
+    // 외곽 부호
     const frameRefNum=figNum*100;
+    const refLabelX=frameX+frameW+0.1;
     slide.addShape(pptx.shapes.LINE,{
-      x:frameX+frameW,y:frameY+frameH/2,w:0.4,h:0,
+      x:frameX+frameW,y:frameY+frameH/2,w:0.25,h:0,
       line:{color:'000000',width:LINE_ARROW}
     });
     slide.addText(String(frameRefNum),{
-      x:frameX+frameW+0.45,y:frameY+frameH/2-0.15,w:0.5,h:0.3,
-      fontSize:11,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
+      x:refLabelX+0.25,y:frameY+frameH/2-0.12,w:0.5,h:0.24,
+      fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
     });
     
-    // 2. 내부 구성요소 박스들 (세로 배치)
-    const boxW=5.0, boxH=0.7;
-    const boxStartX=frameX+0.75;
-    const boxStartY=frameY+0.5;
-    const boxGap=1.0;
-    const refLabelX=frameX+frameW+0.45; // 부호 라벨 x 좌표 통일
-    
+    // 2. 내부 구성요소 박스들
     nodes.forEach((n,i)=>{
       const bx=boxStartX;
       const by=boxStartY+i*(boxH+boxGap);
       const refNum=frameRefNum+10*(i+1);
       
-      // 그림자 (먼저 그림)
+      // 그림자
       slide.addShape(pptx.shapes.RECTANGLE,{
         x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,
         fill:{color:'000000'},line:{width:0}
@@ -1398,6 +1437,196 @@ function downloadPptx(sid){
         x:bx,y:by,w:boxW,h:boxH,
         fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}
       });
+      // 박스 텍스트
+      slide.addText(n.label,{
+        x:bx+0.08,y:by,w:boxW-0.16,h:boxH,
+        fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),
+        fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'
+      });
+      
+      // 리더라인
+      slide.addShape(pptx.shapes.LINE,{
+        x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.25,h:0,
+        line:{color:'000000',width:LINE_ARROW}
+      });
+      // 부호 라벨
+      slide.addText(String(refNum),{
+        x:refLabelX+0.25,y:by+boxH/2-0.12,w:0.5,h:0.24,
+        fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
+      });
+      
+      // 양방향 화살표
+      if(i<nodes.length-1){
+        const arrowY1=by+boxH;
+        const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
+        const arrowX=bx+boxW/2;
+        if(arrowY2>arrowY1+0.05){
+          slide.addShape(pptx.shapes.LINE,{
+            x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,
+            line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}
+          });
+        }
+      }
+    });
+  });
+  
+  const fileName=selectedProjectNumber||selectedTitle||'도면';
+  pptx.writeFile({fileName:`${fileName}_도면_${new Date().toISOString().slice(0,10)}.pptx`});
+  App.showToast('PPTX 다운로드 완료');
+}
+
+// ═══ 이미지 다운로드 (KIPO 규격 JPEG) ═══
+async function downloadDiagramImages(sid){
+  const data=diagramData[sid];
+  if(!data||!data.length){
+    const mt=outputs[sid+'_mermaid'];
+    if(!mt){App.showToast('도면 없음','error');return;}
+    const blocks=extractMermaidBlocks(mt);
+    if(!blocks.length){App.showToast('Mermaid 코드 없음','error');return;}
+    diagramData[sid]=blocks.map(code=>{
+      const{nodes,edges}=parseMermaidGraph(code);
+      return{nodes,edges,positions:layoutGraph(nodes,edges)};
+    });
+    return downloadDiagramImages(sid);
+  }
+  
+  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+  const caseNum=selectedProjectNumber||'도면';
+  
+  App.showToast(`도면 이미지 생성 중... (${data.length}개)`);
+  
+  for(let idx=0;idx<data.length;idx++){
+    const{nodes}=data[idx];
+    const figNum=figOffset+idx+1;
+    
+    // KIPO 규격: A4 300dpi (2480x3508px), 여기서는 축소 버전 사용
+    const canvas=document.createElement('canvas');
+    const scale=3; // 고해상도
+    const W=800*scale, H=1000*scale;
+    canvas.width=W;
+    canvas.height=H;
+    const ctx=canvas.getContext('2d');
+    
+    // 배경 흰색
+    ctx.fillStyle='#FFFFFF';
+    ctx.fillRect(0,0,W,H);
+    
+    // 스케일 적용
+    ctx.scale(scale,scale);
+    
+    // 도면 번호
+    ctx.fillStyle='#000000';
+    ctx.font='bold 16px "맑은 고딕", sans-serif';
+    ctx.fillText(`도 ${figNum}`,30,35);
+    
+    if(!nodes.length)continue;
+    
+    // 레이아웃 계산
+    const nodeCount=nodes.length;
+    const frameX=30,frameY=50;
+    const frameW=680,frameH=Math.min(900,nodeCount*80+50);
+    const SHADOW=3;
+    
+    // 외곽 프레임 (그림자)
+    ctx.fillStyle='#000000';
+    ctx.fillRect(frameX+SHADOW,frameY+SHADOW,frameW,frameH);
+    ctx.fillStyle='#FFFFFF';
+    ctx.fillRect(frameX,frameY,frameW,frameH);
+    ctx.strokeStyle='#000000';
+    ctx.lineWidth=2;
+    ctx.strokeRect(frameX,frameY,frameW,frameH);
+    
+    // 외곽 부호
+    const frameRefNum=figNum*100;
+    ctx.beginPath();
+    ctx.moveTo(frameX+frameW,frameY+frameH/2);
+    ctx.lineTo(frameX+frameW+25,frameY+frameH/2);
+    ctx.stroke();
+    ctx.font='11px "맑은 고딕", sans-serif';
+    ctx.fillStyle='#000000';
+    ctx.fillText(String(frameRefNum),frameX+frameW+30,frameY+frameH/2+4);
+    
+    // 박스들
+    const padY=20;
+    const innerH=frameH-padY*2;
+    const boxH=Math.min(45,(innerH-10*(nodeCount-1))/nodeCount);
+    const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
+    const boxW=frameW-100;
+    const boxStartX=frameX+35;
+    const boxStartY=frameY+padY;
+    
+    nodes.forEach((n,i)=>{
+      const bx=boxStartX;
+      const by=boxStartY+i*(boxH+boxGap);
+      const refNum=frameRefNum+10*(i+1);
+      
+      // 그림자
+      ctx.fillStyle='#000000';
+      ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
+      // 박스
+      ctx.fillStyle='#FFFFFF';
+      ctx.fillRect(bx,by,boxW,boxH);
+      ctx.lineWidth=1.5;
+      ctx.strokeRect(bx,by,boxW,boxH);
+      
+      // 텍스트
+      ctx.fillStyle='#000000';
+      ctx.font=`${Math.min(13,14-nodeCount*0.5)}px "맑은 고딕", sans-serif`;
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      const label=n.label.length>25?n.label.slice(0,23)+'…':n.label;
+      ctx.fillText(label,bx+boxW/2,by+boxH/2);
+      ctx.textAlign='left';
+      
+      // 리더라인
+      ctx.beginPath();
+      ctx.moveTo(bx+boxW,by+boxH/2);
+      ctx.lineTo(frameX+frameW+25,by+boxH/2);
+      ctx.lineWidth=1;
+      ctx.stroke();
+      
+      // 부호
+      ctx.font='11px "맑은 고딕", sans-serif';
+      ctx.fillText(String(refNum),frameX+frameW+30,by+boxH/2+4);
+      
+      // 화살표
+      if(i<nodes.length-1){
+        const arrowX=bx+boxW/2;
+        const arrowY1=by+boxH+2;
+        const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+        if(arrowY2>arrowY1){
+          ctx.beginPath();
+          ctx.moveTo(arrowX,arrowY1);
+          ctx.lineTo(arrowX,arrowY2);
+          ctx.stroke();
+          // 위 화살촉
+          ctx.beginPath();
+          ctx.moveTo(arrowX-4,arrowY1+8);
+          ctx.lineTo(arrowX,arrowY1);
+          ctx.lineTo(arrowX+4,arrowY1+8);
+          ctx.stroke();
+          // 아래 화살촉
+          ctx.beginPath();
+          ctx.moveTo(arrowX-4,arrowY2-8);
+          ctx.lineTo(arrowX,arrowY2);
+          ctx.lineTo(arrowX+4,arrowY2-8);
+          ctx.stroke();
+        }
+      }
+    });
+    
+    // 다운로드
+    const link=document.createElement('a');
+    link.download=`${caseNum}_도${figNum}.jpg`;
+    link.href=canvas.toDataURL('image/jpeg',0.95);
+    link.click();
+    
+    // 약간 딜레이
+    await new Promise(r=>setTimeout(r,300));
+  }
+  
+  App.showToast(`도면 이미지 ${data.length}개 다운로드 완료`);
+}
       // 박스 텍스트
       slide.addText(n.label,{
         x:bx+0.1,y:by,w:boxW-0.2,h:boxH,
