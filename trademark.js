@@ -5086,56 +5086,28 @@ JSON만 응답:
             continue;
           }
           
-          // 2-2. 유사군코드별 그룹핑
-          const groupedByCode = {};
-          candidates.forEach(c => {
-            const code = c.similar_group_code || 'UNKNOWN';
-            if (!groupedByCode[code]) groupedByCode[code] = [];
-            groupedByCode[code].push(c);
-          });
+          // 2-2. 점수순으로 상위 항목 선택 (관련성 우선)
+          // 유사군코드 분산보다 키워드 매칭 점수 우선
+          const sortedCandidates = candidates.sort((a, b) => (b.score || 0) - (a.score || 0));
           
-          // 2-3. 유사군코드 커버리지 최적화 선택
-          // 핵심 유사군코드당 최소 1개, 최대 2개
           const selectedGoods = [];
-          const usedCodes = new Set();
-          const codeList = Object.keys(groupedByCode).sort((a, b) => {
-            // 높은 점수 우선
-            const scoreA = Math.max(...groupedByCode[a].map(g => g.score || 0));
-            const scoreB = Math.max(...groupedByCode[b].map(g => g.score || 0));
-            return scoreB - scoreA;
-          });
+          const usedNames = new Set();
           
-          // 라운드 1: 각 유사군코드에서 상위 1개씩
-          for (const code of codeList) {
-            if (selectedGoods.length >= 15) break;
-            const best = groupedByCode[code].sort((a, b) => (b.score || 0) - (a.score || 0))[0];
-            selectedGoods.push({
-              name: best.goods_name,
-              similarGroup: best.similar_group_code,
-              score: best.score,
-              isCore: best.isCore || false
-            });
-            usedCodes.add(code);
-          }
-          
-          // 라운드 2: 고득점 항목 추가 (10개까지)
-          if (selectedGoods.length < 10) {
-            const remaining = candidates
-              .filter(c => !selectedGoods.some(s => s.name === c.goods_name))
-              .sort((a, b) => (b.score || 0) - (a.score || 0));
+          // 상위 10개 선택 (점수순)
+          for (const c of sortedCandidates) {
+            if (selectedGoods.length >= 10) break;
+            if (usedNames.has(c.goods_name)) continue;
             
-            for (const c of remaining) {
-              if (selectedGoods.length >= 10) break;
-              selectedGoods.push({
-                name: c.goods_name,
-                similarGroup: c.similar_group_code,
-                score: c.score,
-                isCore: false
-              });
-            }
+            usedNames.add(c.goods_name);
+            selectedGoods.push({
+              name: c.goods_name,
+              similarGroup: c.similar_group_code,
+              score: c.score,
+              isCore: c.score >= 2 // 높은 점수는 핵심으로 표시
+            });
           }
           
-          // 2-4. LLM에게 최종 검토 요청 (선택적)
+          // 2-3. LLM에게 최종 검토 요청 (선택적)
           if (selectedGoods.length > 5) {
             const goodsList = selectedGoods.map(g => 
               `${g.name}(${g.similarGroup}, 점수:${g.score?.toFixed(1) || '?'})`
@@ -5222,19 +5194,19 @@ JSON만 응답:
   TM.searchGoodsCandidates = async function(classCode, keywords, businessText, limit = 200) {
     const results = [];
     const seen = new Set();
-    const similarGroupStats = {}; // 유사군코드별 통계
     
     console.log(`[TM] 후보 검색 시작: 제${classCode}류, 키워드: ${keywords.slice(0, 5).join(', ')}...`);
     
-    // === 1단계: 키워드 기반 FTS 검색 (높은 점수) ===
-    for (const keyword of keywords.slice(0, 10)) { // 상위 10개 키워드만
+    // === 키워드 기반 FTS 검색만 수행 (관련성 최우선) ===
+    // 유사군 커버리지 보강 제거 - 관련 없는 상품 추가 방지
+    for (const keyword of keywords.slice(0, 15)) {
       try {
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
           .eq('class_code', classCode)
           .ilike('goods_name', `%${keyword}%`)
-          .limit(50);
+          .limit(80);
         
         if (data) {
           data.forEach(item => {
@@ -5246,14 +5218,6 @@ JSON만 응답:
                 similar_group_code: item.similar_group_code,
                 ...scoreData
               });
-              
-              // 유사군코드 통계 수집
-              const sgCode = item.similar_group_code || 'UNKNOWN';
-              if (!similarGroupStats[sgCode]) {
-                similarGroupStats[sgCode] = { count: 0, maxScore: 0 };
-              }
-              similarGroupStats[sgCode].count++;
-              similarGroupStats[sgCode].maxScore = Math.max(similarGroupStats[sgCode].maxScore, scoreData.score);
             }
           });
         }
@@ -5262,68 +5226,52 @@ JSON만 응답:
       }
     }
     
-    console.log(`[TM] 1단계 키워드 검색 완료: ${results.length}건, ${Object.keys(similarGroupStats).length}개 유사군`);
+    console.log(`[TM] 키워드 검색 완료: ${results.length}건`);
     
-    // === 2단계: 유사군코드 커버리지 보강 ===
-    // 해당 류의 주요 유사군코드에서 대표 상품 확보
-    if (results.length < limit) {
-      try {
-        // 해당 류의 모든 유사군코드 조회 (고유값)
-        const { data: allCodes } = await App.sb
-          .from('gazetted_goods_cache')
-          .select('similar_group_code')
-          .eq('class_code', classCode)
-          .limit(1000);
-        
-        if (allCodes) {
-          // 유사군코드별 대표 상품 1개씩 추가
-          const uniqueCodes = [...new Set(allCodes.map(d => d.similar_group_code).filter(Boolean))];
-          const missingCodes = uniqueCodes.filter(code => !similarGroupStats[code]);
+    // === 사업 설명에서 추가 키워드 추출하여 검색 ===
+    if (businessText && results.length < 30) {
+      const bizWords = businessText
+        .replace(/[^\w가-힣]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 2 && !keywords.some(k => k.includes(w) || w.includes(k)))
+        .slice(0, 10);
+      
+      for (const word of bizWords) {
+        try {
+          const { data } = await App.sb
+            .from('gazetted_goods_cache')
+            .select('goods_name, similar_group_code')
+            .eq('class_code', classCode)
+            .ilike('goods_name', `%${word}%`)
+            .limit(30);
           
-          console.log(`[TM] 2단계 유사군 보강: ${missingCodes.length}개 코드 추가 검색`);
-          
-          for (const sgCode of missingCodes.slice(0, 30)) { // 최대 30개 유사군 보강
-            try {
-              const { data: sgData } = await App.sb
-                .from('gazetted_goods_cache')
-                .select('goods_name, similar_group_code')
-                .eq('class_code', classCode)
-                .eq('similar_group_code', sgCode)
-                .limit(3);
-              
-              if (sgData) {
-                sgData.forEach(item => {
-                  if (!seen.has(item.goods_name)) {
-                    seen.add(item.goods_name);
-                    const scoreData = TM.calculateGoodsScore(item, null, keywords, businessText);
-                    scoreData.score += 0.5; // 유사군 커버리지 보너스
-                    scoreData.fromCoverage = true;
-                    results.push({
-                      goods_name: item.goods_name,
-                      similar_group_code: item.similar_group_code,
-                      ...scoreData
-                    });
-                  }
+          if (data) {
+            data.forEach(item => {
+              if (!seen.has(item.goods_name)) {
+                seen.add(item.goods_name);
+                const scoreData = TM.calculateGoodsScore(item, word, keywords, businessText);
+                scoreData.score += 0.3;
+                results.push({
+                  goods_name: item.goods_name,
+                  similar_group_code: item.similar_group_code,
+                  ...scoreData
                 });
               }
-            } catch (err) {
-              // 개별 실패는 무시
-            }
+            });
           }
+        } catch (err) {
+          // 무시
         }
-      } catch (err) {
-        console.warn('[TM] 유사군 커버리지 검색 실패:', err);
       }
     }
     
-    // === 3단계: 점수순 정렬 + 유사군코드 정보 포함 ===
+    // === 점수순 정렬 (관련성 우선) ===
     const sorted = results.sort((a, b) => b.score - a.score).slice(0, limit);
     
     console.log(`[TM] 후보 검색 완료: 총 ${sorted.length}건`);
     
     return sorted;
   };
-  
   // 지정상품 스코어 계산 (분리된 함수)
   TM.calculateGoodsScore = function(item, matchedKeyword, allKeywords, businessText) {
     let score = 0;
