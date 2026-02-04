@@ -5927,14 +5927,6 @@ ${criticalResults.slice(0, 5).map(r =>
         p.priorityExam.applicantName = p.applicantName || '';
         p.priorityExam.classCode = '';
         p.priorityExam.designatedGoodsFromApp = '';
-        
-        // 기존 프로젝트의 지정상품 정보 설정
-        if (p.designatedGoods && p.designatedGoods.length > 0) {
-          const classCodes = p.designatedGoods.map(d => d.classCode).join(', ');
-          const goodsList = p.designatedGoods.flatMap(d => (d.goods || []).map(g => g.name)).join(', ');
-          p.priorityExam.classCode = classCodes;
-          p.priorityExam.designatedGoodsFromApp = goodsList;
-        }
       }
       
       p.priorityExam.extractedFromApplication = true;
@@ -5970,7 +5962,7 @@ ${criticalResults.slice(0, 5).map(r =>
           try {
             const extracted = await TM.extractFromPDF(file);
             
-            // 빈 항목만 채우기 (기존 값 유지)
+            // 추출된 항목 적용 (빈 항목만 채우기)
             if (!p.priorityExam.applicationNumber && extracted.applicationNumber) {
               p.priorityExam.applicationNumber = extracted.applicationNumber;
               totalExtracted++;
@@ -5987,11 +5979,12 @@ ${criticalResults.slice(0, 5).map(r =>
               p.priorityExam.trademarkNameFromApp = extracted.trademarkName;
               totalExtracted++;
             }
-            if (!p.priorityExam.classCode && extracted.classCode) {
+            // 상품류와 지정상품은 출원서에서 추출된 값 우선 적용
+            if (extracted.classCode) {
               p.priorityExam.classCode = extracted.classCode;
               totalExtracted++;
             }
-            if (!p.priorityExam.designatedGoodsFromApp && extracted.designatedGoods) {
+            if (extracted.designatedGoods) {
               p.priorityExam.designatedGoodsFromApp = extracted.designatedGoods;
               totalExtracted++;
             }
@@ -6003,6 +5996,14 @@ ${criticalResults.slice(0, 5).map(r =>
       }
       
       p.priorityExam.uploadedFileName = fileNames.join(', ');
+      
+      // 추출되지 않은 항목은 기존 프로젝트 정보로 채우기
+      if (!p.priorityExam.classCode && p.designatedGoods && p.designatedGoods.length > 0) {
+        p.priorityExam.classCode = p.designatedGoods.map(d => d.classCode).join(', ');
+      }
+      if (!p.priorityExam.designatedGoodsFromApp && p.designatedGoods && p.designatedGoods.length > 0) {
+        p.priorityExam.designatedGoodsFromApp = p.designatedGoods.flatMap(d => (d.goods || []).map(g => g.name)).join(', ');
+      }
       
       if (totalExtracted > 0) {
         App.showToast(`${totalExtracted}개 항목이 추출되었습니다. 확인 후 수정하세요.`, 'success');
