@@ -553,8 +553,9 @@
           <div id="diagramDownload07" style="padding:0 16px 16px;display:none">
             <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;font-weight:600">도면 다운로드</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-outline" onclick="downloadPptx('step_07')" style="flex:1;min-width:120px"><span class="tossface">📊</span> PPTX</button>
-              <button class="btn btn-outline" onclick="downloadDiagramImages('step_07')" style="flex:1;min-width:120px"><span class="tossface">🖼️</span> JPEG 이미지</button>
+              <button class="btn btn-outline" onclick="downloadPptx('step_07')" style="flex:1;min-width:90px"><span class="tossface">📊</span> PPTX</button>
+              <button class="btn btn-outline" onclick="downloadDiagramImages('step_07','jpeg')" style="flex:1;min-width:90px"><span class="tossface">🖼️</span> JPEG</button>
+              <button class="btn btn-outline" onclick="downloadDiagramImages('step_07','tif')" style="flex:1;min-width:90px"><span class="tossface">📄</span> TIF</button>
             </div>
           </div>
         </div>
@@ -574,8 +575,9 @@
           <div id="diagramDownload11" style="padding:0 16px 16px;display:none">
             <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;font-weight:600">도면 다운로드</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-outline" onclick="downloadPptx('step_11')" style="flex:1;min-width:120px"><span class="tossface">📊</span> PPTX</button>
-              <button class="btn btn-outline" onclick="downloadDiagramImages('step_11')" style="flex:1;min-width:120px"><span class="tossface">🖼️</span> JPEG 이미지</button>
+              <button class="btn btn-outline" onclick="downloadPptx('step_11')" style="flex:1;min-width:90px"><span class="tossface">📊</span> PPTX</button>
+              <button class="btn btn-outline" onclick="downloadDiagramImages('step_11','jpeg')" style="flex:1;min-width:90px"><span class="tossface">🖼️</span> JPEG</button>
+              <button class="btn btn-outline" onclick="downloadDiagramImages('step_11','tif')" style="flex:1;min-width:90px"><span class="tossface">📄</span> TIF</button>
             </div>
           </div>
         </div>
@@ -666,6 +668,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>

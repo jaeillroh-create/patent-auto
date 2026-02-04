@@ -1673,8 +1673,8 @@ function downloadPptx(sid){
   App.showToast('PPTX 다운로드 완료');
 }
 
-// ═══ 이미지 다운로드 (KIPO 규격 JPEG) ═══
-async function downloadDiagramImages(sid){
+// ═══ 이미지 다운로드 (KIPO 규격 JPEG/TIF) ═══
+async function downloadDiagramImages(sid, format='jpeg'){
   const data=diagramData[sid];
   if(!data||!data.length){
     const mt=outputs[sid+'_mermaid'];
@@ -1685,7 +1685,7 @@ async function downloadDiagramImages(sid){
       const{nodes,edges}=parseMermaidGraph(code);
       return{nodes,edges,positions:layoutGraph(nodes,edges)};
     });
-    return downloadDiagramImages(sid);
+    return downloadDiagramImages(sid, format);
   }
   
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
@@ -1697,7 +1697,7 @@ async function downloadDiagramImages(sid){
     return match?match[1]:fallback;
   }
   
-  App.showToast(`도면 이미지 생성 중... (${data.length}개)`);
+  App.showToast(`도면 이미지 생성 중... (${data.length}개, ${format.toUpperCase()})`);
   
   for(let idx=0;idx<data.length;idx++){
     const{nodes}=data[idx];
@@ -1833,15 +1833,34 @@ async function downloadDiagramImages(sid){
     
     // 다운로드
     const link=document.createElement('a');
-    link.download=`${caseNum}_도${figNum}.jpg`;
-    link.href=canvas.toDataURL('image/jpeg',0.95);
+    if(format==='tif'||format==='tiff'){
+      // TIF 형식 다운로드
+      try{
+        const imageData=ctx.getImageData(0,0,W,H);
+        const rgba=new Uint8Array(imageData.data.buffer);
+        const tiffData=UTIF.encodeImage(rgba,W,H);
+        const blob=new Blob([tiffData],{type:'image/tiff'});
+        link.download=`${caseNum}_도${figNum}.tif`;
+        link.href=URL.createObjectURL(blob);
+      }catch(e){
+        console.error('TIF 변환 실패:',e);
+        // 실패 시 PNG로 대체
+        link.download=`${caseNum}_도${figNum}.png`;
+        link.href=canvas.toDataURL('image/png');
+        App.showToast('TIF 변환 실패, PNG로 대체','warning');
+      }
+    }else{
+      // JPEG 형식 다운로드 (기본)
+      link.download=`${caseNum}_도${figNum}.jpg`;
+      link.href=canvas.toDataURL('image/jpeg',0.95);
+    }
     link.click();
     
     // 약간 딜레이
     await new Promise(r=>setTimeout(r,300));
   }
   
-  App.showToast(`도면 이미지 ${data.length}개 다운로드 완료`);
+  App.showToast(`도면 이미지 ${data.length}개 다운로드 완료 (${format.toUpperCase()})`);
 }
 
 // 특허 도면용 레이아웃 계산 (A4 세로)

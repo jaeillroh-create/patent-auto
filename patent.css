@@ -652,12 +652,9 @@
   padding: 20px !important;
 }
 
-/* 대시보드 상단 카드 (새 사건, 가출원) */
+/* 대시보드 flex 레이아웃 유지 (HTML inline style) */
 #patent-dashboard-panel > div:first-child {
-  display: grid !important;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
-  gap: 16px !important;
-  margin-bottom: 20px !important;
+  /* flex 레이아웃 유지 - HTML에서 지정 */
 }
 
 /* 대시보드 카드 크기 조정 */
@@ -665,12 +662,10 @@
   min-width: 0 !important;
 }
 
-/* 프로젝트 목록 카드 - 2열 그리드 */
+/* 프로젝트 목록 테이블 - 테이블 레이아웃 유지 */
 #dashProjectList,
 #dashProvisionalList {
-  display: grid !important;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
-  gap: 12px !important;
+  /* 테이블 tbody로 테이블 레이아웃 유지 */
 }
 
 /* ============================================================
