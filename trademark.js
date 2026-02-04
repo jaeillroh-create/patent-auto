@@ -389,6 +389,9 @@
       case 'tm-search-figure':
         TM.searchByFigure();
         break;
+      case 'tm-search-by-similarity-only':
+        TM.searchBySimilarityOnly();
+        break;
       case 'tm-analyze-vienna':
         TM.analyzeViennaCode();
         break;
@@ -3141,6 +3144,7 @@
         <!-- 문자 검색 옵션 -->
         <div class="tm-search-options" id="tm-search-options-text">
           <div class="tm-search-form">
+            <!-- 1행: 상표명 + 상태 필터 -->
             <div class="tm-search-row">
               <div class="input-group" style="flex: 2;">
                 <label>상표명</label>
@@ -3157,21 +3161,69 @@
                 </select>
               </div>
             </div>
-            ${classList.length > 0 ? `
-              <div class="tm-search-row">
-                <div class="input-group" style="flex: 1;">
-                  <label>검색 범위</label>
-                  <select class="tm-input" id="tm-search-scope">
+            
+            <!-- 2행: 상품류 필터 -->
+            <div class="tm-search-row">
+              <div class="input-group" style="flex: 1;">
+                <label>상품류 필터</label>
+                <div class="tm-class-filter">
+                  <select class="tm-input" id="tm-search-class-mode" onchange="TM.toggleClassFilter(this.value)">
                     <option value="all">전체 상품류</option>
-                    <option value="selected" selected>선택한 류만 (${classList.map(c => '제'+c+'류').join(', ')})</option>
+                    ${classList.length > 0 ? `<option value="selected" selected>선택한 류만</option>` : ''}
+                    <option value="custom">직접 선택</option>
                   </select>
                 </div>
               </div>
-            ` : ''}
+              <div class="input-group tm-custom-class-input" id="tm-custom-class-group" style="flex: 1; ${classList.length > 0 ? 'display: none;' : ''}">
+                <label>상품류 직접 입력</label>
+                <input type="text" class="tm-input" id="tm-search-class-custom" 
+                       placeholder="예: 09, 35, 42 (쉼표로 구분)">
+              </div>
+            </div>
+            
+            <!-- 3행: 유사군코드 필터 -->
+            <div class="tm-search-row">
+              <div class="input-group" style="flex: 1;">
+                <label>유사군코드 필터 (선택)</label>
+                <div class="tm-similarity-filter">
+                  <select class="tm-input" id="tm-search-similarity-mode" onchange="TM.toggleSimilarityFilter(this.value)">
+                    <option value="none">사용 안 함</option>
+                    ${similarGroupList.length > 0 ? `<option value="selected">선택한 유사군만 (${similarGroupList.length}개)</option>` : ''}
+                    <option value="custom">직접 입력</option>
+                  </select>
+                </div>
+              </div>
+              <div class="input-group tm-custom-similarity-input" id="tm-custom-similarity-group" style="flex: 1; display: none;">
+                <label>유사군코드 직접 입력</label>
+                <input type="text" class="tm-input" id="tm-search-similarity-custom" 
+                       placeholder="예: G390101, S120401 (쉼표로 구분)">
+              </div>
+            </div>
+            
+            <!-- 선택된 필터 미리보기 -->
+            <div class="tm-filter-preview" id="tm-filter-preview">
+              ${classList.length > 0 ? `
+                <div class="tm-preview-section">
+                  <span class="tm-preview-label">📦 상품류:</span>
+                  <span class="tm-preview-values" id="tm-preview-classes">${classList.map(c => '제'+c+'류').join(', ')}</span>
+                </div>
+              ` : ''}
+              ${similarGroupList.length > 0 ? `
+                <div class="tm-preview-section">
+                  <span class="tm-preview-label">🏷️ 유사군:</span>
+                  <span class="tm-preview-values" id="tm-preview-similarities">
+                    ${similarGroupList.slice(0, 5).join(', ')}${similarGroupList.length > 5 ? ` 외 ${similarGroupList.length - 5}개` : ''}
+                  </span>
+                </div>
+              ` : ''}
+            </div>
             
             <div class="tm-search-actions">
               <button class="btn btn-primary btn-lg" data-action="tm-search-text">
                 🔍 상표 검색
+              </button>
+              <button class="btn btn-secondary" data-action="tm-search-by-similarity-only" title="유사군코드만으로 검색 (상표명 무시)">
+                🏷️ 유사군 검색
               </button>
             </div>
             
@@ -3247,6 +3299,98 @@
     }
   };
   
+  // 상품류 필터 토글
+  TM.toggleClassFilter = function(mode) {
+    const customGroup = document.getElementById('tm-custom-class-group');
+    const previewClasses = document.getElementById('tm-preview-classes');
+    
+    if (mode === 'custom') {
+      if (customGroup) customGroup.style.display = 'block';
+      if (previewClasses) previewClasses.textContent = '직접 입력';
+    } else if (mode === 'all') {
+      if (customGroup) customGroup.style.display = 'none';
+      if (previewClasses) previewClasses.textContent = '전체';
+    } else {
+      if (customGroup) customGroup.style.display = 'none';
+      // 선택된 상품류 표시
+      const p = TM.currentProject;
+      if (p && previewClasses) {
+        const classes = (p.designatedGoods || []).map(g => '제' + g.classCode + '류');
+        previewClasses.textContent = classes.join(', ') || '없음';
+      }
+    }
+  };
+  
+  // 유사군코드 필터 토글
+  TM.toggleSimilarityFilter = function(mode) {
+    const customGroup = document.getElementById('tm-custom-similarity-group');
+    const previewSimilarities = document.getElementById('tm-preview-similarities');
+    
+    if (mode === 'custom') {
+      if (customGroup) customGroup.style.display = 'block';
+      if (previewSimilarities) previewSimilarities.textContent = '직접 입력';
+    } else if (mode === 'none') {
+      if (customGroup) customGroup.style.display = 'none';
+      if (previewSimilarities) previewSimilarities.textContent = '사용 안 함';
+    } else {
+      if (customGroup) customGroup.style.display = 'none';
+      // 선택된 유사군 표시
+      const p = TM.currentProject;
+      if (p && previewSimilarities) {
+        const groups = [];
+        (p.designatedGoods || []).forEach(classData => {
+          (classData.goods || []).forEach(g => {
+            if (g.similarGroup) {
+              g.similarGroup.split(',').forEach(sg => {
+                const trimmed = sg.trim();
+                if (trimmed && !groups.includes(trimmed)) groups.push(trimmed);
+              });
+            }
+          });
+        });
+        previewSimilarities.textContent = groups.slice(0, 5).join(', ') + (groups.length > 5 ? ` 외 ${groups.length - 5}개` : '') || '없음';
+      }
+    }
+  };
+  
+  // 현재 선택된 필터 값 가져오기
+  TM.getSearchFilters = function() {
+    const p = TM.currentProject;
+    
+    // 상품류 필터
+    const classMode = document.getElementById('tm-search-class-mode')?.value || 'all';
+    let targetClasses = [];
+    
+    if (classMode === 'selected') {
+      targetClasses = (p.designatedGoods || []).map(g => g.classCode);
+    } else if (classMode === 'custom') {
+      const customInput = document.getElementById('tm-search-class-custom')?.value || '';
+      targetClasses = customInput.split(',').map(c => c.trim().replace(/[^0-9]/g, '')).filter(c => c);
+    }
+    
+    // 유사군코드 필터
+    const similarityMode = document.getElementById('tm-search-similarity-mode')?.value || 'none';
+    let targetGroups = [];
+    
+    if (similarityMode === 'selected') {
+      (p.designatedGoods || []).forEach(classData => {
+        (classData.goods || []).forEach(g => {
+          if (g.similarGroup) {
+            g.similarGroup.split(',').forEach(sg => {
+              const trimmed = sg.trim();
+              if (trimmed && !targetGroups.includes(trimmed)) targetGroups.push(trimmed);
+            });
+          }
+        });
+      });
+    } else if (similarityMode === 'custom') {
+      const customInput = document.getElementById('tm-search-similarity-custom')?.value || '';
+      targetGroups = customInput.split(',').map(sg => sg.trim()).filter(sg => sg);
+    }
+    
+    return { targetClasses, targetGroups, classMode, similarityMode };
+  };
+  
   TM.renderSearchResults = function(results) {
     const textResults = results.text || [];
     const figureResults = results.figure || [];
@@ -3262,29 +3406,41 @@
       `;
     }
     
-    // 결과 요약 통계
-    const highRiskCount = allResults.filter(r => r.isHighRisk || r.riskLevel === 'high').length;
+    // ★ 유사군 기반 통계
+    const groupOverlapCount = allResults.filter(r => r.hasGroupOverlap).length;
+    const noOverlapCount = allResults.filter(r => !r.hasGroupOverlap).length;
+    const highRiskCount = allResults.filter(r => r.isHighRisk || r.riskLevel === 'high' || r.riskLevel === 'critical').length;
     const mediumRiskCount = allResults.filter(r => r.riskLevel === 'medium').length;
     
     return `
-      <!-- 검색 결과 요약 -->
+      <!-- 검색 결과 요약 (유사군 기준) -->
       <div class="tm-search-summary">
         <div class="tm-summary-stat">
           <span class="tm-stat-num">${allResults.length}</span>
           <span class="tm-stat-label">총 결과</span>
         </div>
+        <div class="tm-summary-stat risk-overlap">
+          <span class="tm-stat-num">${groupOverlapCount}</span>
+          <span class="tm-stat-label">⚠️ 유사군 중복</span>
+        </div>
+        <div class="tm-summary-stat risk-safe">
+          <span class="tm-stat-num">${noOverlapCount}</span>
+          <span class="tm-stat-label">✅ 등록가능</span>
+        </div>
         ${highRiskCount > 0 ? `
           <div class="tm-summary-stat risk-high">
             <span class="tm-stat-num">${highRiskCount}</span>
-            <span class="tm-stat-label">⚠️ 고위험</span>
+            <span class="tm-stat-label">⛔ 고위험</span>
           </div>
         ` : ''}
-        ${mediumRiskCount > 0 ? `
-          <div class="tm-summary-stat risk-medium">
-            <span class="tm-stat-num">${mediumRiskCount}</span>
-            <span class="tm-stat-label">주의</span>
-          </div>
-        ` : ''}
+      </div>
+      
+      <!-- 유사군 중복 여부 설명 -->
+      <div class="tm-overlap-explanation">
+        <span class="tm-explanation-icon">💡</span>
+        <span class="tm-explanation-text">
+          <strong>유사군 비중복 = 등록 가능:</strong> 상표명이 동일하더라도 유사군이 다르면 심사 시 충돌하지 않습니다.
+        </span>
       </div>
       
       <!-- 결과 목록 -->
@@ -3294,18 +3450,35 @@
     `;
   };
   
-  // 개별 검색 결과 아이템 렌더링
+  // 개별 검색 결과 아이템 렌더링 (유사군 중심)
   TM.renderSearchResultItem = function(r, rank) {
     const score = r.similarityScore || 0;
-    const riskLevel = r.riskLevel || (score >= 80 ? 'high' : score >= 50 ? 'medium' : 'low');
-    const riskClass = riskLevel === 'high' ? 'risk-high' : riskLevel === 'medium' ? 'risk-medium' : 'risk-low';
+    const hasGroupOverlap = r.hasGroupOverlap;
+    
+    // ★ 유사군 기반 리스크 클래스 결정
+    let riskClass = 'risk-safe';
+    let riskBadge = '✅ 등록가능';
+    
+    if (hasGroupOverlap) {
+      const riskLevel = r.riskLevel || 'medium';
+      if (riskLevel === 'critical' || riskLevel === 'high') {
+        riskClass = 'risk-high';
+        riskBadge = '⛔ 고위험';
+      } else if (riskLevel === 'medium') {
+        riskClass = 'risk-medium';
+        riskBadge = '⚠️ 주의';
+      } else {
+        riskClass = 'risk-low';
+        riskBadge = '🔶 저위험';
+      }
+    }
     
     return `
-      <div class="tm-search-result-item ${riskClass}" data-id="${r.applicationNumber}">
-        <!-- 순위 & 위험도 -->
+      <div class="tm-search-result-item ${riskClass} ${hasGroupOverlap ? 'has-overlap' : 'no-overlap'}" data-id="${r.applicationNumber}">
+        <!-- 순위 & 유사군 중복 표시 -->
         <div class="tm-result-rank">
           <span class="tm-rank-num">${rank}</span>
-          ${r.isHighRisk || riskLevel === 'high' ? '<span class="tm-risk-icon">⚠️</span>' : ''}
+          <span class="tm-overlap-badge ${hasGroupOverlap ? 'overlap' : 'safe'}">${riskBadge}</span>
         </div>
         
         <!-- 상표 이미지 -->
@@ -3330,13 +3503,15 @@
             ${r.classificationCode ? `
               <span class="tm-result-class">제${r.classificationCode}류</span>
             ` : ''}
-            ${r._isIntersection ? '<span class="tm-result-intersection">문자+도형</span>' : ''}
+            ${r.overlappingGroups && r.overlappingGroups.length > 0 ? `
+              <span class="tm-overlap-groups">중복: ${r.overlappingGroups.slice(0, 2).join(', ')}${r.overlappingGroups.length > 2 ? '...' : ''}</span>
+            ` : ''}
           </div>
         </div>
         
-        <!-- 유사도 점수 -->
+        <!-- 유사도 점수 (유사군 중복 시에만 의미있음) -->
         <div class="tm-result-score">
-          ${score > 0 ? `
+          ${hasGroupOverlap ? `
             <div class="tm-score-circle ${riskClass}">
               <span class="tm-score-num">${score}</span>
               <span class="tm-score-label">점</span>
@@ -3350,26 +3525,19 @@
                 <span class="tm-bar-label">도형</span>
                 <div class="tm-bar-track"><div class="tm-bar-fill" style="width: ${r.scoreBreakdown?.vienna || 0}%"></div></div>
               </div>
-              <div class="tm-score-bar" title="범위 ${r.scoreBreakdown?.scope || 0}%">
-                <span class="tm-bar-label">범위</span>
-                <div class="tm-bar-track"><div class="tm-bar-fill" style="width: ${r.scoreBreakdown?.scope || 0}%"></div></div>
-              </div>
             </div>
           ` : `
-            <button class="btn btn-sm btn-secondary" 
-                    data-action="tm-evaluate-similarity" 
-                    data-target-id="${r.applicationNumber}">
-              유사도 평가
-            </button>
+            <div class="tm-safe-indicator">
+              <span class="tm-safe-icon">✓</span>
+              <span class="tm-safe-text">유사군 다름</span>
+            </div>
           `}
         </div>
         
         <!-- 위험 사유 -->
-        ${r.riskReason ? `
-          <div class="tm-result-reason">
-            <span class="tm-reason-text">${TM.escapeHtml(r.riskReason)}</span>
-          </div>
-        ` : ''}
+        <div class="tm-result-reason ${hasGroupOverlap ? '' : 'safe'}">
+          <span class="tm-reason-text">${TM.escapeHtml(r.riskReason || (hasGroupOverlap ? '심사관 판단 필요' : '유사군 비중복 → 등록 가능'))}</span>
+        </div>
       </div>
     `;
   };
@@ -3390,19 +3558,15 @@
     }
     
     const statusFilter = document.getElementById('tm-search-status')?.value || 'registered';
-    const searchScope = document.getElementById('tm-search-scope')?.value || 'all';
     const p = TM.currentProject;
     
-    // 선택된 상품류와 유사군 수집
-    const targetClasses = [];
-    const targetGroups = [];
-    p.designatedGoods?.forEach(classData => {
-      targetClasses.push(classData.classCode);
-      classData.goods?.forEach(g => {
-        if (g.similarGroup) {
-          g.similarGroup.split(',').forEach(sg => targetGroups.push(sg.trim()));
-        }
-      });
+    // 새 필터 시스템에서 값 가져오기
+    const { targetClasses, targetGroups, classMode, similarityMode } = TM.getSearchFilters();
+    
+    // 필터 정보 로깅
+    console.log('[TM] 검색 필터:', { 
+      keyword, statusFilter, classMode, similarityMode,
+      targetClasses, targetGroups 
     });
     
     try {
@@ -3423,8 +3587,10 @@
       const results = await TM.searchPriorMarks({
         trademark: keyword,
         viennaCodes: p.aiAnalysis.viennaCodeSuggestion?.map(v => v.code) || [],
-        targetClasses: searchScope === 'selected' ? targetClasses : [],
+        targetClasses: targetClasses,
         targetGroups: targetGroups,
+        similarityCode: targetGroups.length > 0 ? targetGroups[0] : null, // KIPRIS API용
+        classification: targetClasses.length > 0 ? targetClasses[0] : null, // KIPRIS API용
         statusFilter: statusFilter,
         topK: 30,
         fetchDetails: true,
@@ -3473,6 +3639,122 @@
       }
       
       // 프로그레스 숨기기
+      const progressEl = document.getElementById('tm-search-progress');
+      if (progressEl) progressEl.style.display = 'none';
+    }
+  };
+  
+  // 유사군코드만으로 검색 (상표명 없이)
+  TM.searchBySimilarityOnly = async function() {
+    const { targetClasses, targetGroups } = TM.getSearchFilters();
+    
+    if (targetGroups.length === 0 && targetClasses.length === 0) {
+      App.showToast('유사군코드 또는 상품류를 선택하세요.', 'warning');
+      return;
+    }
+    
+    const statusFilter = document.getElementById('tm-search-status')?.value || 'registered';
+    const p = TM.currentProject;
+    
+    console.log('[TM] 유사군 검색:', { targetClasses, targetGroups });
+    
+    try {
+      // 버튼 상태 변경
+      const searchBtn = document.querySelector('[data-action="tm-search-by-similarity-only"]');
+      if (searchBtn) {
+        searchBtn.disabled = true;
+        searchBtn.innerHTML = '🔄 검색 중...';
+      }
+      
+      const progressEl = document.getElementById('tm-search-progress');
+      if (progressEl) progressEl.style.display = 'block';
+      
+      App.showToast('유사군코드 기반 검색 중...', 'info');
+      
+      // 각 유사군/상품류별로 검색 실행
+      let allResults = [];
+      const searchTargets = targetGroups.length > 0 ? targetGroups : targetClasses;
+      const searchType = targetGroups.length > 0 ? 'similarityCode' : 'classification';
+      
+      for (let i = 0; i < Math.min(searchTargets.length, 5); i++) { // 최대 5개 유사군만
+        const target = searchTargets[i];
+        
+        // 진행 상태 업데이트
+        const pct = Math.round(((i + 1) / Math.min(searchTargets.length, 5)) * 100);
+        const fillEl = document.getElementById('tm-search-progress-fill');
+        const textEl = document.getElementById('tm-search-progress-text');
+        if (fillEl) fillEl.style.width = pct + '%';
+        if (textEl) textEl.textContent = `${target} 검색 중... (${i + 1}/${Math.min(searchTargets.length, 5)})`;
+        
+        try {
+          const params = {
+            application: statusFilter !== 'registered_only',
+            registration: true,
+            refused: statusFilter === 'all',
+            expiration: false,
+            withdrawal: false,
+            publication: false,
+            cancel: false,
+            abandonment: false,
+            trademark: true,
+            serviceMark: true,
+            character: true,
+            figure: true,
+            compositionCharacter: true,
+            figureComposition: true,
+            numOfRows: 50,
+            pageNo: 1
+          };
+          
+          // 유사군코드 또는 상품류 추가
+          if (searchType === 'similarityCode') {
+            params.similarityCode = target;
+          } else {
+            params.classification = target;
+          }
+          
+          const results = await TM.callKiprisAPI('text', params);
+          
+          // 중복 제거하며 추가
+          for (const r of results) {
+            if (!allResults.find(x => x.applicationNumber === r.applicationNumber)) {
+              allResults.push(r);
+            }
+          }
+        } catch (err) {
+          console.warn(`[TM] ${target} 검색 실패:`, err);
+        }
+      }
+      
+      // 결과 저장
+      TM.currentProject.searchResults.text = allResults;
+      TM.currentProject.searchResults.searchedAt = new Date().toISOString();
+      TM.currentProject.searchResults.query = `[유사군: ${searchTargets.slice(0, 5).join(', ')}]`;
+      TM.currentProject.searchResults.stats = {
+        total: allResults.length,
+        highRisk: 0,
+        mediumRisk: 0
+      };
+      
+      // UI 업데이트
+      const resultsEl = document.getElementById('tm-search-results');
+      if (resultsEl) {
+        resultsEl.innerHTML = TM.renderSearchResults(TM.currentProject.searchResults);
+      }
+      
+      App.showToast(`${allResults.length}건의 검색 결과가 있습니다.`, 'success');
+      
+    } catch (error) {
+      console.error('[TM] 유사군 검색 실패:', error);
+      App.showToast('검색 실패: ' + error.message, 'error');
+    } finally {
+      // 버튼 복원
+      const searchBtn = document.querySelector('[data-action="tm-search-by-similarity-only"]');
+      if (searchBtn) {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = '🏷️ 유사군 검색';
+      }
+      
       const progressEl = document.getElementById('tm-search-progress');
       if (progressEl) progressEl.style.display = 'none';
     }
@@ -3934,6 +4216,8 @@
       textBudget = 4, 
       viennaBudget = 6, 
       statusFilter = 'registered',
+      classification = null,     // 상품류 필터
+      similarityCode = null,     // 유사군코드 필터
       useRecentFirst = true,  // 최근 연도 우선 스캔
       recentYears = 5
     } = options;
@@ -3959,7 +4243,7 @@
           onProgress(++progressStep, totalSteps, `문자 검색 (최근 ${recentYears}년)...`);
           
           const q = textQueries[i];
-          const results = await TM.callKiprisAPI('text', {
+          const apiParams = {
             trademarkName: q.query,
             application: statusFilter !== 'registered_only',
             registration: true,
@@ -3977,7 +4261,13 @@
             figureComposition: true,
             numOfRows: 50,
             pageNo: 1
-          });
+          };
+          
+          // 상품류/유사군코드 필터 추가
+          if (classification) apiParams.classification = classification;
+          if (similarityCode) apiParams.similarityCode = similarityCode;
+          
+          const results = await TM.callKiprisAPI('text', apiParams);
           
           totalTextHits += results.length;
           textResults.push(...results);
@@ -3997,7 +4287,7 @@
           onProgress(++progressStep, totalSteps, `문자 검색 Q${i + 1}...`);
           
           const q = textQueries[i];
-          const results = await TM.callKiprisAPI('text', {
+          const apiParams = {
             trademarkName: q.query,
             application: statusFilter !== 'registered_only',
             registration: true,
@@ -4015,7 +4305,13 @@
             figureComposition: true,
             numOfRows: 50,
             pageNo: 1
-          });
+          };
+          
+          // 상품류/유사군코드 필터 추가
+          if (classification) apiParams.classification = classification;
+          if (similarityCode) apiParams.similarityCode = similarityCode;
+          
+          const results = await TM.callKiprisAPI('text', apiParams);
           
           // 중복 제거하며 추가
           for (const r of results) {
@@ -4200,6 +4496,93 @@
       : classScore;
   };
   
+  // ============================================================
+  // 유사군 중복 체크 (상표 심사의 핵심 판단 기준)
+  // 상표의 유사 여부는 "동일 유사군 코드" 내에서만 판단됨
+  // ============================================================
+  
+  TM.checkSimilarGroupOverlap = function(targetGroups, resultGroups) {
+    // 타겟 유사군이 없으면 상품류 기준으로만 판단 (보수적 접근)
+    if (!targetGroups || targetGroups.length === 0) {
+      return { hasOverlap: true, overlapType: 'unknown', overlappingGroups: [] };
+    }
+    
+    // 결과 유사군이 없으면 (아직 상세 정보 미조회)
+    if (!resultGroups) {
+      return { hasOverlap: true, overlapType: 'unknown', overlappingGroups: [] };
+    }
+    
+    const tgtSet = new Set(targetGroups.map(g => g.trim().toUpperCase()));
+    const resGroups = Array.isArray(resultGroups) 
+      ? resultGroups.map(g => g.trim().toUpperCase())
+      : resultGroups.toString().split(/[,\s]+/).map(g => g.trim().toUpperCase()).filter(g => g);
+    
+    // 중복되는 유사군 찾기
+    const overlappingGroups = resGroups.filter(g => tgtSet.has(g));
+    
+    if (overlappingGroups.length > 0) {
+      return { 
+        hasOverlap: true, 
+        overlapType: 'exact',  // 정확히 일치하는 유사군 있음
+        overlappingGroups,
+        overlapCount: overlappingGroups.length,
+        totalTargetGroups: tgtSet.size
+      };
+    }
+    
+    return { 
+      hasOverlap: false, 
+      overlapType: 'none',  // 유사군 중복 없음 = 충돌 없음
+      overlappingGroups: [],
+      overlapCount: 0,
+      totalTargetGroups: tgtSet.size
+    };
+  };
+  
+  // 유사군 중복 여부에 따른 리스크 레벨 결정
+  TM.determineRiskLevel = function(hasGroupOverlap, textSimilarity, statusScore) {
+    // ★ 핵심 원칙: 유사군 중복이 없으면 상표명이 동일해도 등록 가능
+    if (!hasGroupOverlap) {
+      return {
+        level: 'safe',      // 등록 가능
+        isHighRisk: false,
+        reason: '유사군 비중복 (등록 가능)'
+      };
+    }
+    
+    // 유사군 중복이 있는 경우에만 상표명 유사도로 판단
+    if (textSimilarity >= 0.85) {
+      return {
+        level: 'critical',  // 거절 확실
+        isHighRisk: true,
+        reason: '유사군 중복 + 상표명 매우 유사 (거절 가능성 높음)'
+      };
+    }
+    
+    if (textSimilarity >= 0.70) {
+      return {
+        level: 'high',      // 거절 가능성 높음
+        isHighRisk: true,
+        reason: '유사군 중복 + 상표명 유사 (주의 필요)'
+      };
+    }
+    
+    if (textSimilarity >= 0.50) {
+      return {
+        level: 'medium',    // 심사관 판단에 따라 다름
+        isHighRisk: false,
+        reason: '유사군 중복 + 상표명 다소 유사 (심사관 판단)'
+      };
+    }
+    
+    // 유사군은 중복되지만 상표명이 많이 다른 경우
+    return {
+      level: 'low',
+      isHighRisk: false,
+      reason: '유사군 중복 있으나 상표명 상이'
+    };
+  };
+  
   TM.calculateStatusScore = function(status) {
     if (!status) return 0.5;
     if (status.includes('등록')) return 1.0;
@@ -4212,41 +4595,77 @@
   // ====== Stage B: 상세 검증 & Re-rank ======
   
   TM.rankAndFilter = function(candidates, sourceText, viennaCodes, targetClasses, targetGroups, topK = 200) {
-    // 점수 계산
+    // ============================================================
+    // 상표 심사 핵심 원칙: 유사군 교집합이 있어야만 유사 판단
+    // 유사군 교집합 없음 → 상표명 동일해도 등록 가능
+    // ============================================================
+    
     for (const r of candidates) {
-      // S_text (문자 유사도): 0.38
+      // Step 1: 유사군 교집합 체크 (가장 중요!)
+      const groupOverlap = TM.checkSimilarGroupOverlap(targetGroups, r.similarityGroup);
+      r._groupOverlap = groupOverlap;
+      r._hasGroupOverlap = groupOverlap.hasOverlap;
+      r._overlappingGroups = groupOverlap.overlappingGroups || [];
+      
+      // Step 2: 문자 유사도 계산 (항상 계산 - 표시용)
       r._scoreText = TM.calculateTextSimilarity(sourceText, r.title || r.trademarkName);
       
-      // S_logo (도형 유사도): 0.32
+      // Step 3: 도형 유사도 계산
       r._scoreVienna = viennaCodes && r.viennaCode 
         ? TM.calculateViennaSimilarity(viennaCodes, r.viennaCode) 
         : 0;
       
-      // S_scope (범위 유사도): 0.25
+      // Step 4: 상태 점수 (등록상표가 더 위험)
+      r._scoreStatus = TM.calculateStatusScore(r.applicationStatus);
+      
+      // Step 5: 최종 점수 및 리스크 레벨 결정
+      if (!r._hasGroupOverlap && groupOverlap.overlapType !== 'unknown') {
+        // ★ 유사군 교집합 없음 = 등록 가능 (Safe)
+        r._totalScore = 0;
+        r._riskLevel = 'safe';
+        r._riskReason = '유사군 비중복 → 등록 가능';
+        r._isHighRisk = false;
+      } else {
+        // ★ 유사군 교집합 있음 = 상표명/도형 유사도로 판단
+        // 가중치: 문자 45%, 도형 30%, 상태 25%
+        const combinedScore = (r._scoreText * 0.45) + (r._scoreVienna * 0.30) + (r._scoreStatus * 0.25);
+        r._totalScore = combinedScore;
+        
+        // 교집합 + 문자/도형 모두 유사하면 추가 가중
+        if (r._isIntersection) {
+          r._totalScore = Math.min(r._totalScore * 1.3, 1.0);
+        }
+        
+        // 리스크 레벨 결정 (유사군 교집합이 있는 경우에만)
+        const risk = TM.determineRiskLevel(true, r._scoreText, r._scoreStatus);
+        r._riskLevel = risk.level;
+        r._riskReason = risk.reason;
+        r._isHighRisk = risk.isHighRisk;
+        
+        // 중복 유사군 정보 추가
+        if (r._overlappingGroups.length > 0) {
+          r._riskReason += ` [중복: ${r._overlappingGroups.join(', ')}]`;
+        }
+      }
+      
+      // 상품류 중복 체크 (보조 정보)
       r._scoreScope = TM.calculateScopeSimilarity(
         targetClasses, targetGroups, 
         r.classificationCode, r.similarityGroup
       );
-      
-      // S_status (상태): 0.05
-      r._scoreStatus = TM.calculateStatusScore(r.applicationStatus);
-      
-      // 최종 점수
-      r._totalScore = (r._scoreText * 0.38) + 
-                      (r._scoreVienna * 0.32) + 
-                      (r._scoreScope * 0.25) + 
-                      (r._scoreStatus * 0.05);
-      
-      // 교집합 후보 부스트
-      if (r._isIntersection) {
-        r._totalScore *= 1.2;
-      }
     }
     
-    // 정렬 및 상위 K개 반환
-    candidates.sort((a, b) => b._totalScore - a._totalScore);
+    // 정렬: 유사군 중복 있는 것 우선, 그 다음 점수순
+    candidates.sort((a, b) => {
+      // 1차: 유사군 중복 여부 (중복 있는 것 우선)
+      if (a._hasGroupOverlap && !b._hasGroupOverlap) return -1;
+      if (!a._hasGroupOverlap && b._hasGroupOverlap) return 1;
+      // 2차: 점수순
+      return b._totalScore - a._totalScore;
+    });
     
-    console.log(`[KIPRIS] 랭킹 완료: Top ${Math.min(topK, candidates.length)}건 반환`);
+    console.log(`[KIPRIS] 랭킹 완료: Top ${Math.min(topK, candidates.length)}건`);
+    console.log(`[KIPRIS] 유사군 중복: ${candidates.filter(c => c._hasGroupOverlap).length}건`);
     
     return candidates.slice(0, topK);
   };
@@ -4259,6 +4678,8 @@
       viennaCodes = [],
       targetClasses = [],
       targetGroups = [],
+      classification = null,    // KIPRIS API용 상품류
+      similarityCode = null,    // KIPRIS API용 유사군코드
       statusFilter = 'registered',
       topK = 30,
       fetchDetails = true,  // Stage B 상세 조회 여부
@@ -4267,7 +4688,7 @@
     
     console.log('[KIPRIS] ═══════════════════════════════════════');
     console.log('[KIPRIS] 선행상표 검색 시작');
-    console.log('[KIPRIS] 입력:', { trademark, viennaCodes, targetClasses: targetClasses.length, targetGroups: targetGroups.length });
+    console.log('[KIPRIS] 입력:', { trademark, viennaCodes, targetClasses: targetClasses.length, targetGroups: targetGroups.length, classification, similarityCode });
     console.log('[KIPRIS] ═══════════════════════════════════════');
     
     try {
@@ -4276,6 +4697,8 @@
         trademark, viennaCodes, targetClasses,
         { 
           statusFilter,
+          classification,      // 상품류 필터 전달
+          similarityCode,      // 유사군코드 필터 전달
           onProgress: onProgress ? (step, total, msg) => onProgress(step, total + 2, msg) : null
         }
       );
@@ -4294,12 +4717,12 @@
         200 // K0
       );
       
-      // 교집합 후보 우선 정렬
+      // 교집합 후보 우선 → 유사군 중복 우선으로 변경
       ranked.sort((a, b) => {
-        // 교집합 최우선
-        if (a._isIntersection && !b._isIntersection) return -1;
-        if (!a._isIntersection && b._isIntersection) return 1;
-        // 그 다음 점수순
+        // 1차: 유사군 중복 여부 (중복 있는 것 우선)
+        if (a._hasGroupOverlap && !b._hasGroupOverlap) return -1;
+        if (!a._hasGroupOverlap && b._hasGroupOverlap) return 1;
+        // 2차: 점수순
         return b._totalScore - a._totalScore;
       });
       
@@ -4310,26 +4733,53 @@
         onProgress?.(9, 10, '상세 정보 조회 중...');
         detailedResults = await TM.fetchDetailsForTopK(detailedResults, topK);
         
-        // 상세 정보로 재계산 (유사군 코드가 추가됨)
+        // ★ 상세 정보로 유사군 교집합 재계산 (핵심!)
         for (const r of detailedResults) {
           if (r.similarityGroup) {
+            // 유사군 교집합 재체크
+            const groupOverlap = TM.checkSimilarGroupOverlap(targetGroups, r.similarityGroup);
+            r._groupOverlap = groupOverlap;
+            r._hasGroupOverlap = groupOverlap.hasOverlap;
+            r._overlappingGroups = groupOverlap.overlappingGroups || [];
+            
+            // 유사군 교집합 여부에 따라 점수 재계산
+            if (!r._hasGroupOverlap && groupOverlap.overlapType !== 'unknown') {
+              // 유사군 비중복 → Safe
+              r._totalScore = 0;
+              r._riskLevel = 'safe';
+              r._riskReason = '유사군 비중복 → 등록 가능';
+              r._isHighRisk = false;
+            } else {
+              // 유사군 중복 → 상표 유사도로 판단
+              r._totalScore = (r._scoreText * 0.45) + (r._scoreVienna * 0.30) + (r._scoreStatus * 0.25);
+              if (r._isIntersection) r._totalScore = Math.min(r._totalScore * 1.3, 1.0);
+              
+              const risk = TM.determineRiskLevel(true, r._scoreText, r._scoreStatus);
+              r._riskLevel = risk.level;
+              r._riskReason = risk.reason;
+              r._isHighRisk = risk.isHighRisk;
+              
+              if (r._overlappingGroups.length > 0) {
+                r._riskReason += ` [중복: ${r._overlappingGroups.join(', ')}]`;
+              }
+            }
+            
             r._scoreScope = TM.calculateScopeSimilarity(
               targetClasses, targetGroups,
               r.classificationCode, r.similarityGroup
             );
-            r._totalScore = (r._scoreText * 0.38) + 
-                            (r._scoreVienna * 0.32) + 
-                            (r._scoreScope * 0.25) + 
-                            (r._scoreStatus * 0.05);
-            if (r._isIntersection) r._totalScore *= 1.2;
           }
         }
         
-        // 최종 재정렬
-        detailedResults.sort((a, b) => b._totalScore - a._totalScore);
+        // 최종 재정렬 (유사군 중복 우선)
+        detailedResults.sort((a, b) => {
+          if (a._hasGroupOverlap && !b._hasGroupOverlap) return -1;
+          if (!a._hasGroupOverlap && b._hasGroupOverlap) return 1;
+          return b._totalScore - a._totalScore;
+        });
       }
       
-      // ===== 최종 결과 포맷팅 =====
+      // ===== 최종 결과 포맷팅 (유사군 기반) =====
       onProgress?.(10, 10, '완료');
       
       const results = detailedResults.map((r, idx) => ({
@@ -4342,15 +4792,23 @@
           scope: Math.round((r._scoreScope || 0) * 100),
           status: Math.round((r._scoreStatus || 0) * 100)
         },
-        isHighRisk: r._isIntersection || r._totalScore >= 0.7,
-        riskLevel: r._totalScore >= 0.8 ? 'high' : 
-                   r._totalScore >= 0.5 ? 'medium' : 'low',
-        riskReason: TM.generateRiskReason(r, trademark, targetClasses)
+        // ★ 유사군 기반 리스크 정보
+        hasGroupOverlap: r._hasGroupOverlap,
+        overlappingGroups: r._overlappingGroups || [],
+        isHighRisk: r._isHighRisk || false,
+        riskLevel: r._riskLevel || 'safe',
+        riskReason: r._riskReason || TM.generateRiskReason(r, trademark, targetClasses, targetGroups)
       }));
+      
+      // 통계 로깅
+      const groupOverlapCount = results.filter(r => r.hasGroupOverlap).length;
+      const highRiskCount = results.filter(r => r.isHighRisk).length;
       
       console.log('[KIPRIS] ═══════════════════════════════════════');
       console.log(`[KIPRIS] 최종 결과: ${results.length}건`);
-      console.log('[KIPRIS] 고위험:', results.filter(r => r.isHighRisk).length, '건');
+      console.log(`[KIPRIS] 유사군 중복: ${groupOverlapCount}건 (실질적 충돌 가능)`);
+      console.log(`[KIPRIS] 고위험: ${highRiskCount}건`);
+      console.log(`[KIPRIS] 유사군 비중복: ${results.length - groupOverlapCount}건 (등록 가능)`);
       console.log('[KIPRIS] ═══════════════════════════════════════');
       
       return results;
@@ -4361,37 +4819,48 @@
     }
   };
   
-  // 위험 사유 생성 (LLM 없이 규칙 기반)
-  TM.generateRiskReason = function(result, sourceMark, targetClasses) {
+  // 위험 사유 생성 (유사군 중심 - 상표심사 원칙 반영)
+  TM.generateRiskReason = function(result, sourceMark, targetClasses, targetGroups) {
+    // ★ 핵심: 유사군 중복 여부가 가장 중요
+    if (!result._hasGroupOverlap && result._groupOverlap?.overlapType !== 'unknown') {
+      return '✅ 유사군 비중복 → 등록 가능';
+    }
+    
     const reasons = [];
     
-    // 교집합 (문자+도형 모두 유사)
-    if (result._isIntersection) {
-      reasons.push('문자와 도형이 모두 유사');
+    // 유사군 중복 정보
+    if (result._overlappingGroups && result._overlappingGroups.length > 0) {
+      reasons.push(`⚠️ 유사군 중복: ${result._overlappingGroups.slice(0, 3).join(', ')}${result._overlappingGroups.length > 3 ? ' 외' : ''}`);
+    } else if (result._hasGroupOverlap) {
+      reasons.push('⚠️ 유사군 중복');
     }
     
-    // 문자 유사도
-    if (result._scoreText >= 0.8) {
-      reasons.push('상표명 매우 유사');
-    } else if (result._scoreText >= 0.6) {
-      reasons.push('상표명 유사');
+    // 문자 유사도 (유사군 중복이 있는 경우에만 의미있음)
+    if (result._scoreText >= 0.85) {
+      reasons.push('상표명 매우 유사 (거절 가능성 높음)');
+    } else if (result._scoreText >= 0.70) {
+      reasons.push('상표명 유사 (주의 필요)');
+    } else if (result._scoreText >= 0.50) {
+      reasons.push('상표명 다소 유사');
     }
     
-    // 범위 유사도
-    if (result._scoreScope >= 0.7) {
-      reasons.push('지정상품 범위 중복');
+    // 도형 유사
+    if (result._scoreVienna >= 0.7) {
+      reasons.push('도형 유사');
     }
     
     // 상태
     if (result.applicationStatus?.includes('등록')) {
       reasons.push('등록상표');
+    } else if (result.applicationStatus?.includes('출원')) {
+      reasons.push('출원중');
     }
     
     if (reasons.length === 0) {
-      return result.riskLevel === 'low' ? '유사도 낮음' : '주의 필요';
+      return result._riskLevel === 'safe' ? '등록 가능' : '심사관 판단 필요';
     }
     
-    return reasons.join(', ');
+    return reasons.join(' · ');
   };
   
   // ====== 레거시 호환 함수 ======
@@ -4891,24 +5360,36 @@ notes는 평가 근거를 3-4문장으로 서술.
         </div>
       `}
       
-      <!-- 평가 기준 안내 -->
+      <!-- 평가 기준 안내 (유사군 중심) -->
       <details class="tm-accordion">
         <summary>
-          <span>📋 리스크 평가 기준</span>
+          <span>📋 리스크 평가 기준 (유사군 중심)</span>
         </summary>
         <div class="tm-accordion-content">
+          <div class="tm-risk-principle">
+            <strong>★ 핵심 원칙:</strong> 상표의 유사 여부는 <em>"동일 유사군 코드"</em> 내에서만 판단됩니다.
+          </div>
           <table class="tm-info-table">
             <tr>
-              <th>높은 위험 (High)</th>
-              <td>동일/유사 상표가 동일/유사 상품류에 등록되어 있음. 거절 가능성 높음.</td>
+              <th>⛔ 높은 위험 (High)</th>
+              <td>
+                <strong>유사군 중복 + 상표 유사</strong><br>
+                동일/유사 유사군에 동일/유사 상표가 등록/출원되어 있음. 거절 가능성 높음.
+              </td>
             </tr>
             <tr>
-              <th>중간 위험 (Medium)</th>
-              <td>유사 상표가 있으나 상품류 차이 또는 부분적 차별성 존재. 의견제출 필요 가능성.</td>
+              <th>⚠️ 중간 위험 (Medium)</th>
+              <td>
+                <strong>유사군 중복 + 상표 다소 유사</strong><br>
+                유사군은 중복되나 상표명에 차별성 존재. 심사관 판단에 따라 결과 달라질 수 있음.
+              </td>
             </tr>
             <tr>
-              <th>낮은 위험 (Low)</th>
-              <td>충돌 우려 상표 없음 또는 명확한 차별성 존재. 등록 가능성 높음.</td>
+              <th>✅ 낮은 위험 (Low)</th>
+              <td>
+                <strong>유사군 비중복 또는 상표 상이</strong><br>
+                유사군이 다르면 상표명이 동일해도 등록 가능. 등록 가능성 높음.
+              </td>
             </tr>
           </table>
         </div>
@@ -4951,37 +5432,66 @@ notes는 평가 근거를 3-4문장으로 서술.
     if (hint) hint.style.display = 'none';
     
     try {
-      // 평가 데이터 수집
-      const highSimilarity = (p.similarityEvaluations || []).filter(e => e.overall === 'high').length;
-      const mediumSimilarity = (p.similarityEvaluations || []).filter(e => e.overall === 'medium').length;
-      const totalSearched = (p.searchResults.text?.length || 0) + (p.searchResults.figure?.length || 0);
+      // ★ 유사군 기반 평가 데이터 수집
+      const searchResults = p.searchResults?.text || [];
+      const totalSearched = searchResults.length;
       
-      const prompt = `당신은 상표 등록 리스크 평가 전문가입니다. 다음 정보를 바탕으로 종합적인 리스크 평가를 수행하세요.
+      // 유사군 중복 있는 상표만 카운트 (실질적 충돌 후보)
+      const groupOverlapResults = searchResults.filter(r => r.hasGroupOverlap);
+      const noOverlapCount = searchResults.filter(r => !r.hasGroupOverlap).length;
+      
+      // 유사군 중복 + 상표 유사도 높은 것 = 고위험
+      const criticalResults = groupOverlapResults.filter(r => r.riskLevel === 'critical' || r.riskLevel === 'high');
+      const mediumResults = groupOverlapResults.filter(r => r.riskLevel === 'medium');
+      const safeResults = groupOverlapResults.filter(r => r.riskLevel === 'low' || r.riskLevel === 'safe');
+      
+      // 유사군 목록 수집
+      const myGroups = [];
+      (p.designatedGoods || []).forEach(classData => {
+        (classData.goods || []).forEach(g => {
+          if (g.similarGroup) {
+            g.similarGroup.split(',').forEach(sg => {
+              const trimmed = sg.trim();
+              if (trimmed && !myGroups.includes(trimmed)) myGroups.push(trimmed);
+            });
+          }
+        });
+      });
+      
+      const prompt = `당신은 상표 등록 리스크 평가 전문가입니다. 
+★ 핵심 원칙: 상표의 유사 여부는 "동일 유사군 코드" 내에서만 판단됩니다.
+- 유사군 중복 없음 → 상표명이 동일해도 등록 가능
+- 유사군 중복 있음 → 상표명/도형 유사도에 따라 거절 가능성 판단
 
 [출원 상표 정보]
 - 상표명: ${p.trademarkName}
 - 영문명: ${p.trademarkNameEn || '없음'}
 - 상표 유형: ${TM.getTypeLabel(p.trademarkType)}
 - 지정상품류: ${p.designatedGoods?.map(g => '제' + g.classCode + '류').join(', ') || '미선택'}
-- 총 지정상품 수: ${p.designatedGoods?.reduce((sum, g) => sum + g.goods.length, 0) || 0}개
+- 출원인 유사군코드: ${myGroups.slice(0, 10).join(', ') || '미확인'}${myGroups.length > 10 ? ` 외 ${myGroups.length - 10}개` : ''}
 
-[검색 결과 요약]
-- 검색된 선행상표: ${totalSearched}건
-- 유사도 평가 완료: ${p.similarityEvaluations?.length || 0}건
-  - 높은 유사도: ${highSimilarity}건
-  - 중간 유사도: ${mediumSimilarity}건
+[검색 결과 분석 - 유사군 기준]
+- 총 검색 결과: ${totalSearched}건
+- ✅ 유사군 비중복 (등록 가능): ${noOverlapCount}건
+- ⚠️ 유사군 중복 (충돌 검토 필요): ${groupOverlapResults.length}건
+  - ⛔ 고위험 (유사군 중복 + 상표 유사): ${criticalResults.length}건
+  - ⚠️ 중위험 (유사군 중복 + 상표 다소 유사): ${mediumResults.length}건
+  - 🔶 저위험 (유사군 중복 + 상표 상이): ${safeResults.length}건
 
-[유사도 평가 상세]
-${(p.similarityEvaluations || []).slice(0, 5).map(e => 
-  `- ${e.targetName}: 외관(${e.appearance}), 호칭(${e.pronunciation}), 관념(${e.concept}) → 종합(${e.overall})`
-).join('\n') || '평가 결과 없음'}
+[고위험 상표 상세]
+${criticalResults.slice(0, 5).map(r => 
+  `- ${r.title || r.trademarkName}: ${r.applicationStatus || '-'} / 문자유사도 ${r.scoreBreakdown?.text || 0}% / 중복유사군: ${(r.overlappingGroups || []).join(', ') || '미확인'}`
+).join('\n') || '없음'}
 
 다음 항목을 분석하고 JSON 형식으로 응답하세요:
 
-1. level: 전체 리스크 수준 ("high", "medium", "low")
-2. conflictCount: 실질적 충돌 우려가 있는 상표 수
-3. details: 상세 분석 내용 (2-3문단)
-4. recommendation: 출원인에게 권고사항 (명확하고 실용적인 조언)
+1. level: 전체 리스크 수준 
+   - "high": 유사군 중복 + 상표 유사한 등록상표 있음 → 거절 가능성 높음
+   - "medium": 유사군 중복은 있으나 상표 차별성 있음 → 심사관 판단 필요
+   - "low": 유사군 중복 없음 또는 상표 명확히 상이 → 등록 가능성 높음
+2. conflictCount: 유사군 중복 + 상표 유사한 실질적 충돌 상표 수
+3. details: 상세 분석 (유사군 중복 여부를 핵심으로 설명)
+4. recommendation: 출원인 권고사항
 
 응답 형식:
 {

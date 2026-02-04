@@ -3324,3 +3324,320 @@
   background: var(--tm-warning);
   color: #fff;
 }
+
+/* ============================================================
+   선행상표 검색 필터 스타일 (추가)
+   ============================================================ */
+
+/* 필터 행 */
+.tm-search-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.tm-search-row .input-group {
+  min-width: 200px;
+}
+
+/* 필터 미리보기 */
+.tm-filter-preview {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  border: 1px solid #e5e8eb;
+}
+
+.tm-preview-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.tm-preview-section:last-child {
+  margin-bottom: 0;
+}
+
+.tm-preview-label {
+  font-weight: 600;
+  color: #4b5563;
+  font-size: 13px;
+  min-width: 70px;
+}
+
+.tm-preview-values {
+  color: #3182f6;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+/* 검색 액션 버튼 그룹 */
+.tm-search-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.tm-search-actions .btn {
+  min-width: 140px;
+}
+
+/* 유사군 검색 버튼 */
+.tm-search-actions .btn[data-action="tm-search-by-similarity-only"] {
+  background: #6366f1;
+  border-color: #6366f1;
+}
+
+.tm-search-actions .btn[data-action="tm-search-by-similarity-only"]:hover {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+
+/* 커스텀 입력 필드 애니메이션 */
+.tm-custom-class-input,
+.tm-custom-similarity-input {
+  transition: all 0.3s ease;
+}
+
+/* 선택된 지정상품 요약 개선 */
+.tm-selected-summary {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.tm-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tm-summary-title {
+  font-weight: 600;
+  color: #0369a1;
+  font-size: 15px;
+}
+
+.tm-summary-count {
+  font-size: 13px;
+  color: #0284c7;
+  background: #fff;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.tm-summary-classes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tm-class-badge {
+  background: #0ea5e9;
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tm-summary-similar-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.tm-similar-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-right: 4px;
+}
+
+.tm-similar-badge {
+  background: #e2e8f0;
+  color: #475569;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.tm-similar-more {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* 경고 박스 */
+.tm-warning-box {
+  background: #fef3c7;
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  color: #92400e;
+  font-size: 14px;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .tm-search-row {
+    flex-direction: column;
+  }
+  
+  .tm-search-row .input-group {
+    flex: 1 !important;
+    min-width: 100%;
+  }
+  
+  .tm-search-actions {
+    flex-direction: column;
+  }
+  
+  .tm-search-actions .btn {
+    width: 100%;
+  }
+}
+
+/* ============================================================
+   유사군 기반 리스크 표시 스타일
+   ============================================================ */
+
+/* Safe (유사군 비중복) */
+.risk-safe,
+.tm-search-result-item.risk-safe {
+  border-left-color: #10b981 !important;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
+}
+
+.tm-summary-stat.risk-safe {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.tm-summary-stat.risk-overlap {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* 유사군 중복 표시 배지 */
+.tm-overlap-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+.tm-overlap-badge.overlap {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.tm-overlap-badge.safe {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+/* 중복 유사군 표시 */
+.tm-overlap-groups {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: monospace;
+}
+
+/* Safe 인디케이터 */
+.tm-safe-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  background: #d1fae5;
+  border-radius: 8px;
+}
+
+.tm-safe-icon {
+  font-size: 24px;
+  color: #10b981;
+}
+
+.tm-safe-text {
+  font-size: 11px;
+  color: #065f46;
+  font-weight: 600;
+}
+
+/* 유사군 비중복 결과 아이템 */
+.tm-search-result-item.no-overlap {
+  opacity: 0.85;
+}
+
+.tm-search-result-item.no-overlap .tm-result-reason.safe {
+  background: #d1fae5;
+  color: #065f46;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* 유사군 중복 설명 */
+.tm-overlap-explanation {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.tm-explanation-icon {
+  font-size: 18px;
+}
+
+.tm-explanation-text {
+  font-size: 13px;
+  color: #1e40af;
+  line-height: 1.5;
+}
+
+/* 리스크 원칙 설명 */
+.tm-risk-principle {
+  background: #fef3c7;
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: #92400e;
+}
+
+.tm-risk-principle em {
+  color: #dc2626;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* Critical 리스크 레벨 추가 */
+.risk-critical,
+.tm-search-result-item.risk-critical {
+  border-left-color: #7f1d1d !important;
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%) !important;
+}
+
+.tm-score-circle.risk-critical {
+  background: linear-gradient(135deg, #7f1d1d, #991b1b);
+}
