@@ -4417,6 +4417,133 @@
   margin-left: auto;
 }
 
+/* ========== 견본 업로드 개선 ========== */
+.tm-specimen-upload {
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #fafafa;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tm-specimen-upload:hover {
+  border-color: #3182f6;
+  background: #eff6ff;
+}
+
+.tm-specimen-upload.dragover {
+  border-color: #3182f6;
+  background: #dbeafe;
+  transform: scale(1.01);
+}
+
+.tm-specimen-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.tm-specimen-icon {
+  font-size: 40px;
+  opacity: 0.6;
+}
+
+.tm-specimen-text {
+  font-size: 14px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.tm-specimen-hint {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.tm-specimen-preview {
+  position: relative;
+  max-width: 200px;
+}
+
+.tm-specimen-preview img {
+  max-width: 100%;
+  max-height: 150px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.tm-specimen-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.tm-specimen-preview:hover .tm-specimen-overlay {
+  opacity: 1;
+}
+
+.tm-specimen-overlay span {
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* 3열 그리드 */
+.tm-field-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .tm-field-grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* btn-block */
+.btn-block {
+  width: 100%;
+  display: block;
+}
+
+/* ========== KIPRIS 링크 스타일 ========== */
+.tm-kipris-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: #f0fdf4;
+  color: #15803d;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid #bbf7d0;
+  transition: all 0.2s;
+}
+
+.tm-kipris-link:hover {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
 /* 추출 정보 표시 */
 .tm-extracted-info {
   margin-top: 16px;

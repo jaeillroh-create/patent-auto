@@ -516,10 +516,10 @@
     }
     
     panel.innerHTML = `
-      <div class="trademark-dashboard" style="max-width: 1200px; margin: 0 auto; padding: 20px;">
-        <div class="trademark-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e5e7eb;">
-          <h2 style="margin: 0; font-size: 24px; font-weight: 600; color: #1f2937;">🏷️ 상표 출원 관리</h2>
-          <button class="btn btn-primary" data-action="tm-new-project" style="display: flex; align-items: center; gap: 6px; padding: 10px 20px; font-size: 14px; font-weight: 500;">
+      <div class="trademark-dashboard" style="max-width: 1400px; margin: 0 auto; padding: 32px 24px;">
+        <div class="trademark-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+          <h2 style="margin: 0; font-size: 26px; font-weight: 700; color: #1f2937;">🏷️ 상표 출원 관리</h2>
+          <button class="btn btn-primary" data-action="tm-new-project" style="display: flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px;">
             <span style="font-size: 18px;">+</span>
             새 프로젝트
           </button>
@@ -547,18 +547,18 @@
     try {
       const { data: projects, error } = await App.sb
         .from('trademark_projects')
-        .select('id, title, status, trademark_name, trademark_type, created_at, updated_at')
+        .select('id, title, status, trademark_name, trademark_type, management_number, created_at, updated_at')
         .order('updated_at', { ascending: false });
       
       if (error) throw error;
       
       if (!projects || projects.length === 0) {
         listEl.innerHTML = `
-          <div style="text-align: center; padding: 60px 20px; background: #f9fafb; border-radius: 12px; border: 2px dashed #e5e7eb;">
-            <div style="font-size: 48px; margin-bottom: 16px;">🏷️</div>
-            <h4 style="margin: 0 0 8px; font-size: 18px; color: #374151;">상표 프로젝트가 없습니다</h4>
-            <p style="margin: 0 0 20px; color: #6b7280;">새 프로젝트를 만들어 상표 출원을 시작하세요.</p>
-            <button class="btn btn-primary" data-action="tm-new-project" style="padding: 12px 24px;">새 프로젝트 만들기</button>
+          <div style="text-align: center; padding: 80px 20px; background: #f9fafb; border-radius: 16px; border: 2px dashed #d1d5db;">
+            <div style="font-size: 56px; margin-bottom: 20px;">🏷️</div>
+            <h4 style="margin: 0 0 12px; font-size: 20px; color: #374151;">상표 프로젝트가 없습니다</h4>
+            <p style="margin: 0 0 24px; color: #6b7280; font-size: 15px;">새 프로젝트를 만들어 상표 출원을 시작하세요.</p>
+            <button class="btn btn-primary" data-action="tm-new-project" style="padding: 14px 28px; font-size: 15px; border-radius: 10px;">+ 새 프로젝트 만들기</button>
           </div>
         `;
         return;
@@ -566,15 +566,16 @@
       
       // 테이블 형식 목록
       listEl.innerHTML = `
-        <div style="background: white; border-radius: 12px; border: 1px solid #e5e7eb; overflow: hidden;">
+        <div style="background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
           <table style="width: 100%; border-collapse: collapse;">
             <thead>
-              <tr style="background: #f9fafb; border-bottom: 1px solid #e5e7eb;">
-                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">상표명</th>
-                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 100px;">유형</th>
-                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 100px;">상태</th>
-                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 120px;">수정일</th>
-                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 180px;">작업</th>
+              <tr style="background: #f8fafc; border-bottom: 2px solid #e5e7eb;">
+                <th style="padding: 16px 20px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">상표명</th>
+                <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 120px;">관리번호</th>
+                <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 80px;">유형</th>
+                <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px;">상태</th>
+                <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 100px;">수정일</th>
+                <th style="padding: 16px 20px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 160px;">작업</th>
               </tr>
             </thead>
             <tbody>
@@ -582,7 +583,7 @@
             </tbody>
           </table>
         </div>
-        <div style="margin-top: 12px; text-align: right; color: #6b7280; font-size: 13px;">
+        <div style="margin-top: 16px; text-align: right; color: #6b7280; font-size: 13px;">
           총 ${projects.length}개 프로젝트
         </div>
       `;
@@ -631,9 +632,9 @@
       <tr style="border-bottom: 1px solid #f3f4f6; transition: background 0.15s;" 
           onmouseover="this.style.background='#f9fafb'" 
           onmouseout="this.style.background='white'">
-        <td style="padding: 16px;">
+        <td style="padding: 14px 20px;">
           <div style="display: flex; align-items: center; gap: 12px;">
-            <span style="font-size: 24px;">🏷️</span>
+            <span style="font-size: 22px;">🏷️</span>
             <div>
               <div style="font-weight: 600; color: #1f2937; font-size: 14px; cursor: pointer;" 
                    onclick="TM.openProject('${project.id}')"
@@ -641,41 +642,38 @@
                    onmouseout="this.style.color='#1f2937'">
                 ${TM.escapeHtml(project.trademark_name || project.title || '새 상표')}
               </div>
-              <div style="font-size: 12px; color: #9ca3af;">${TM.escapeHtml(project.title || '')}</div>
+              <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">${TM.escapeHtml(project.title || '')}</div>
             </div>
           </div>
         </td>
-        <td style="padding: 16px; text-align: center;">
-          <span style="font-size: 13px; color: #6b7280;">${typeLabels[project.trademark_type] || '문자'}</span>
+        <td style="padding: 14px 12px; text-align: center;">
+          <span style="font-size: 12px; color: #6b7280; font-family: monospace;">${TM.escapeHtml(project.management_number || '-')}</span>
         </td>
-        <td style="padding: 16px; text-align: center;">
-          <span style="display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; background: ${statusColor}15; color: ${statusColor};">
+        <td style="padding: 14px 12px; text-align: center;">
+          <span style="font-size: 12px; color: #6b7280;">${typeLabels[project.trademark_type] || '문자'}</span>
+        </td>
+        <td style="padding: 14px 12px; text-align: center;">
+          <span style="display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; background: ${statusColor}15; color: ${statusColor};">
             ${statusLabels[project.status] || '작성 중'}
           </span>
         </td>
-        <td style="padding: 16px; text-align: center; font-size: 13px; color: #6b7280;">
+        <td style="padding: 14px 12px; text-align: center; font-size: 12px; color: #6b7280;">
           ${updatedAt}
         </td>
-        <td style="padding: 16px; text-align: center;">
-          <div style="display: flex; gap: 8px; justify-content: center;">
+        <td style="padding: 14px 20px; text-align: center;">
+          <div style="display: inline-flex; gap: 6px; align-items: center;">
             <button onclick="TM.openProject('${project.id}')" 
-                    style="padding: 6px 12px; font-size: 12px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;"
+                    style="padding: 5px 10px; font-size: 11px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 500; white-space: nowrap;"
                     onmouseover="this.style.background='#2563eb'" 
-                    onmouseout="this.style.background='#3b82f6'">
-              열기
-            </button>
+                    onmouseout="this.style.background='#3b82f6'">열기</button>
             <button onclick="TM.editProject('${project.id}', '${TM.escapeHtml(project.title || '').replace(/'/g, "\\'")}')" 
-                    style="padding: 6px 12px; font-size: 12px; background: #f3f4f6; color: #374151; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;"
+                    style="padding: 5px 10px; font-size: 11px; background: #f3f4f6; color: #374151; border: none; border-radius: 5px; cursor: pointer; font-weight: 500; white-space: nowrap;"
                     onmouseover="this.style.background='#e5e7eb'" 
-                    onmouseout="this.style.background='#f3f4f6'">
-              편집
-            </button>
+                    onmouseout="this.style.background='#f3f4f6'">편집</button>
             <button onclick="TM.deleteProject('${project.id}')" 
-                    style="padding: 6px 12px; font-size: 12px; background: #fef2f2; color: #dc2626; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;"
+                    style="padding: 5px 10px; font-size: 11px; background: #fef2f2; color: #dc2626; border: none; border-radius: 5px; cursor: pointer; font-weight: 500; white-space: nowrap;"
                     onmouseover="this.style.background='#fee2e2'" 
-                    onmouseout="this.style.background='#fef2f2'">
-              삭제
-            </button>
+                    onmouseout="this.style.background='#fef2f2'">삭제</button>
           </div>
         </td>
       </tr>
@@ -1390,22 +1388,39 @@
                 </div>
               </div>
               
-              <!-- 상표명 + 견본 -->
-              <div class="tm-field-row">
-                <div class="tm-field" style="flex:3">
-                  <label>상표명 <span class="required">*</span></label>
-                  <input type="text" class="tm-input tm-input-lg" data-field="trademarkName" 
-                         value="${TM.escapeHtml(p.trademarkName)}" 
-                         placeholder="한글, 영문, 한자 등">
+              <!-- 상표명 -->
+              <div class="tm-field">
+                <label>상표명 <span class="required">*</span></label>
+                <input type="text" class="tm-input tm-input-lg" data-field="trademarkName" 
+                       value="${TM.escapeHtml(p.trademarkName)}" 
+                       placeholder="한글, 영문, 한자 등">
+              </div>
+              
+              <!-- 견본 업로드 (개선) -->
+              <div class="tm-field">
+                <label>견본 <span style="font-weight:400;color:#9ca3af;font-size:12px;">(도형/결합 상표 시 필수)</span></label>
+                <div class="tm-specimen-upload" id="tm-specimen-dropzone"
+                     ondragover="TM.handleDragOver(event)"
+                     ondragleave="TM.handleDragLeave(event)"
+                     ondrop="TM.handleSpecimenDrop(event)"
+                     onclick="document.getElementById('tm-specimen-input').click()">
+                  ${p.specimenUrl ? `
+                    <div class="tm-specimen-preview">
+                      <img src="${p.specimenUrl}" alt="견본">
+                      <div class="tm-specimen-overlay">
+                        <span>클릭하여 변경</span>
+                      </div>
+                    </div>
+                  ` : `
+                    <div class="tm-specimen-empty">
+                      <span class="tm-specimen-icon">🖼️</span>
+                      <span class="tm-specimen-text">클릭 또는 드래그하여 업로드</span>
+                      <span class="tm-specimen-hint">JPG, PNG, GIF (최대 5MB)</span>
+                    </div>
+                  `}
                 </div>
-                <div class="tm-field" style="flex:1">
-                  <label>견본</label>
-                  <div class="tm-specimen" onclick="document.getElementById('tm-specimen-input').click()">
-                    ${p.specimenUrl ? `<img src="${p.specimenUrl}" alt="견본">` : `<span style="font-size:24px">🖼️</span>`}
-                  </div>
-                  <input type="file" id="tm-specimen-input" data-field="specimen" 
-                         accept="image/jpeg,image/png,image/gif" style="display:none">
-                </div>
+                <input type="file" id="tm-specimen-input" data-field="specimen" 
+                       accept="image/jpeg,image/png,image/gif" style="display:none">
               </div>
             </div>
           </div>
@@ -1418,36 +1433,61 @@
             </div>
             <div class="tm-panel-body">
               <p class="tm-hint">사업 내용을 입력하면 AI가 상품류와 지정상품을 추천합니다.</p>
-              <div class="tm-ai-input">
+              <div class="tm-field" style="margin-bottom: 16px;">
                 <input type="text" class="tm-input" id="tm-business-url" 
                        value="${TM.escapeHtml(p.businessDescription || '')}"
                        placeholder="예: 소프트웨어 개발, 특허 출원 대행">
-                <button class="btn btn-primary" data-action="tm-analyze-business">🔍 분석</button>
               </div>
+              <button class="btn btn-primary btn-block" data-action="tm-analyze-business" style="padding: 12px;">🔍 분석</button>
             </div>
           </div>
           
-          <!-- 출원인 정보 -->
-          <details class="tm-panel">
+          <!-- 출원인 정보 (확장) -->
+          <details class="tm-panel" ${p.applicant.name ? 'open' : ''}>
             <summary class="tm-panel-header">
               <h3>👤 출원인 정보</h3>
               <span class="tm-badge tm-badge-gray">${p.applicant.name ? '입력됨' : '선택'}</span>
             </summary>
             <div class="tm-panel-body">
-              <div class="tm-field-grid">
+              <div class="tm-field-grid tm-field-grid-3">
                 <div class="tm-field">
-                  <label>성명/상호</label>
-                  <input type="text" class="tm-input" data-field="applicant.name" 
-                         value="${TM.escapeHtml(p.applicant.name)}" placeholder="홍길동">
+                  <label>디딤 관리번호</label>
+                  <input type="text" class="tm-input" data-field="managementNumber" 
+                         value="${TM.escapeHtml(p.managementNumber || '')}" placeholder="예: 2024-TM-001">
                 </div>
                 <div class="tm-field">
-                  <label>유형</label>
+                  <label>성명/상호 <span class="required">*</span></label>
+                  <input type="text" class="tm-input" data-field="applicant.name" 
+                         value="${TM.escapeHtml(p.applicant.name)}" placeholder="홍길동 / (주)디딤">
+                </div>
+                <div class="tm-field">
+                  <label>출원인 유형</label>
                   <select class="tm-input" data-field="applicant.type">
                     <option value="individual" ${p.applicant.type === 'individual' ? 'selected' : ''}>개인</option>
                     <option value="corporation" ${p.applicant.type === 'corporation' ? 'selected' : ''}>법인</option>
                     <option value="sme" ${p.applicant.type === 'sme' ? 'selected' : ''}>중소기업</option>
                   </select>
                 </div>
+                <div class="tm-field">
+                  <label>사업자/주민등록번호</label>
+                  <input type="text" class="tm-input" data-field="applicant.registrationNumber" 
+                         value="${TM.escapeHtml(p.applicant.registrationNumber || '')}" placeholder="000-00-00000">
+                </div>
+                <div class="tm-field">
+                  <label>연락처</label>
+                  <input type="text" class="tm-input" data-field="applicant.phone" 
+                         value="${TM.escapeHtml(p.applicant.phone || '')}" placeholder="010-0000-0000">
+                </div>
+                <div class="tm-field">
+                  <label>이메일</label>
+                  <input type="text" class="tm-input" data-field="applicant.email" 
+                         value="${TM.escapeHtml(p.applicant.email || '')}" placeholder="example@email.com">
+                </div>
+              </div>
+              <div class="tm-field" style="margin-top: 12px;">
+                <label>주소</label>
+                <input type="text" class="tm-input" data-field="applicant.address" 
+                       value="${TM.escapeHtml(p.applicant.address || '')}" placeholder="서울시 강남구...">
               </div>
             </div>
           </details>
@@ -3499,6 +3539,12 @@
             ` : ''}
             ${r.overlappingGroups && r.overlappingGroups.length > 0 ? `
               <span class="tm-overlap-groups">중복: ${r.overlappingGroups.slice(0, 2).join(', ')}${r.overlappingGroups.length > 2 ? '...' : ''}</span>
+            ` : ''}
+            ${r.applicationNumber ? `
+              <a href="http://kipris.or.kr/khome/main.jsp#702${r.applicationNumber.replace(/-/g, '')}" 
+                 target="_blank" class="tm-kipris-link" title="KIPRIS에서 보기">
+                🔗 KIPRIS
+              </a>
             ` : ''}
           </div>
         </div>
@@ -6225,6 +6271,32 @@ ${text.substring(0, 2000)}
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.classList.remove('dragover');
+  };
+  
+  // 견본 드래그앤드롭
+  TM.handleSpecimenDrop = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('dragover');
+    
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      if (file.type.startsWith('image/')) {
+        // 파일 input에 파일 설정하고 처리
+        const input = document.getElementById('tm-specimen-input');
+        if (input) {
+          // DataTransfer를 이용해 input의 files 설정
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          input.files = dt.files;
+          // 변경 이벤트 트리거
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      } else {
+        App.showToast('이미지 파일만 업로드 가능합니다.', 'warning');
+      }
+    }
   };
   
   TM.handleApplicationDrop = function(e) {
