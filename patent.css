@@ -530,42 +530,124 @@
 }
 
 /* ============================================================
-   11. 페이지(탭 콘텐츠) 2-Column 그리드
+   11. 페이지 좌우 2패널 레이아웃 (핵심!)
    ============================================================ */
 .page {
-  display: grid !important;
-  grid-template-columns: repeat(2, 1fr) !important;
-  gap: 20px !important;
-  align-items: start !important;
-  align-content: start !important;
+  display: flex !important;
+  gap: 24px !important;
+  align-items: flex-start !important;
 }
 
+/* 왼쪽 패널: 입력/설정 */
+.page-left {
+  flex: 0 0 420px;
+  width: 420px;
+  min-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 80px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+/* 왼쪽 패널 스크롤바 스타일 */
+.page-left::-webkit-scrollbar {
+  width: 4px;
+}
+
+.page-left::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.page-left::-webkit-scrollbar-thumb {
+  background: var(--pt-gray-300);
+  border-radius: 2px;
+}
+
+/* 오른쪽 패널: 결과 출력 */
+.page-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 결과 카드 스타일 */
+.result-card {
+  min-height: 200px;
+}
+
+.result-card .card-header {
+  background: var(--pt-primary-light);
+  border-bottom-color: var(--pt-primary);
+}
+
+.result-card .card-title {
+  color: var(--pt-primary);
+}
+
+/* 결과 영역 */
+.result-area {
+  padding: 16px 18px;
+  min-height: 100px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.result-area:empty::before {
+  content: "결과가 여기에 표시됩니다";
+  color: var(--pt-gray-400);
+  font-style: italic;
+}
+
+/* 결과 있을 때 카드 강조 */
+.result-card:has(.result-area:not(:empty)) {
+  border-color: var(--pt-success);
+}
+
+.result-card:has(.result-area:not(:empty)) .card-header {
+  background: var(--pt-success-light);
+  border-bottom-color: var(--pt-success);
+}
+
+.result-card:has(.result-area:not(:empty)) .card-title {
+  color: var(--pt-success);
+}
+
+/* 반응형: 모바일에서 세로 배치 */
+@media (max-width: 1024px) {
+  .page {
+    flex-direction: column !important;
+  }
+  
+  .page-left {
+    flex: none;
+    width: 100%;
+    min-width: 100%;
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+    padding-right: 0;
+  }
+  
+  .page-right {
+    width: 100%;
+  }
+}
+
+/* 기존 그리드 스타일 제거/오버라이드 */
 .page > .card {
   margin: 0 !important;
 }
 
-.page > .card.full-width,
-.page > .card:has(.result-textarea),
-.page > .card:has(#previewArea),
-.page > .card:has(#resultsBatchFinish) {
-  grid-column: span 2;
-}
-
 .stat-row {
-  grid-column: span 2;
   display: flex !important;
   gap: 12px !important;
   margin-bottom: 0 !important;
-}
-
-@media (max-width: 1200px) {
-  .page {
-    grid-template-columns: 1fr !important;
-  }
-  .page > .card.full-width,
-  .stat-row {
-    grid-column: span 1;
-  }
 }
 
 /* ============================================================
