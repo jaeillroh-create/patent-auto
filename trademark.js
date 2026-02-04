@@ -256,6 +256,25 @@
     panel.addEventListener('input', TM.handleInput);
     panel.addEventListener('change', TM.handleChange);
     
+    // 브라우저 뒤로가기/앞으로가기 처리
+    window.addEventListener('popstate', (e) => {
+      if (e.state && e.state.tmModule) {
+        if (e.state.view === 'dashboard') {
+          // 대시보드로 돌아가기 (저장 없이)
+          TM.currentProject = null;
+          TM.renderDashboard(true); // skipHistory = true
+        } else if (e.state.view === 'project' && e.state.projectId) {
+          // 프로젝트 열기 (저장 없이)
+          TM.openProject(e.state.projectId, true); // skipHistory = true
+        }
+      }
+    });
+    
+    // 초기 상태 설정 (대시보드)
+    if (!history.state || !history.state.tmModule) {
+      history.replaceState({ tmModule: true, view: 'dashboard' }, '', window.location.href);
+    }
+    
     // 뒤로가기(Backspace) 키 처리 - 이전 스텝으로 이동
     document.addEventListener('keydown', (e) => {
       // input, textarea 등에서는 무시
@@ -390,6 +409,9 @@
       case 'tm-request-more-recommendations':
         TM.requestMoreRecommendations();
         break;
+      case 'tm-copy-goods':
+        TM.copyDesignatedGoods();
+        break;
       case 'tm-evaluate-similarity':
         TM.evaluateSimilarity(params.targetId);
         break;
@@ -477,9 +499,15 @@
   // 5. 대시보드 (프로젝트 목록)
   // ============================================================
   
-  TM.renderDashboard = async function() {
+  TM.renderDashboard = async function(skipHistory = false) {
     const panel = document.getElementById('trademark-dashboard-panel');
     if (!panel) return;
+    
+    // 히스토리 관리 (브라우저 뒤로가기 지원)
+    if (!skipHistory && TM.currentProject) {
+      // 프로젝트에서 대시보드로 전환할 때만 히스토리 추가
+      history.pushState({ tmModule: true, view: 'dashboard' }, '', window.location.href);
+    }
     
     panel.innerHTML = `
       <div class="trademark-dashboard">
@@ -624,7 +652,7 @@
     }
   };
   
-  TM.openProject = async function(projectId) {
+  TM.openProject = async function(projectId, skipHistory = false) {
     try {
       App.showToast('프로젝트 로딩 중...', 'info');
       
@@ -658,6 +686,11 @@
       if (data.ai_analysis) TM.currentProject.aiAnalysis = { ...TM.currentProject.aiAnalysis, ...data.ai_analysis };
       
       TM.currentStep = 1;
+      
+      // 히스토리 관리 (브라우저 뒤로가기 지원)
+      if (!skipHistory) {
+        history.pushState({ tmModule: true, view: 'project', projectId: projectId }, '', window.location.href);
+      }
       
       // 워크스페이스 렌더링
       TM.renderWorkspace();
@@ -1616,6 +1649,7 @@
                 <span class="tm-stat-item"><strong>${p.designatedGoods.length}</strong>류</span>
                 <span class="tm-stat-item"><strong>${totalGoods}</strong>개 상품</span>
                 <span class="tm-stat-item"><strong>${allSimilarGroups.size}</strong>개 유사군</span>
+                ${totalGoods > 0 ? `<button class="btn btn-sm btn-outline" data-action="tm-copy-goods" title="지정상품 복사">📋 복사</button>` : ''}
               </div>
             </div>
             
@@ -2250,6 +2284,54 @@
       console.error('[TM] 추가 추천 요청 실패:', err);
       App.showToast('추가 추천 요청에 실패했습니다.', 'error');
     }
+  };
+  
+  // 지정상품 복사 (콤마로 연결, 유사군코드 제외)
+  TM.copyDesignatedGoods = function() {
+    const p = TM.currentProject;
+    if (!p || p.designatedGoods.length === 0) {
+      App.showToast('복사할 지정상품이 없습니다.', 'warning');
+      return;
+    }
+    
+    // 류별로 상품명 수집
+    const goodsByClass = {};
+    p.designatedGoods.forEach(classData => {
+      const classCode = classData.classCode;
+      const goodsNames = (classData.goods || []).map(g => g.name);
+      if (goodsNames.length > 0) {
+        goodsByClass[classCode] = goodsNames;
+      }
+    });
+    
+    // 포맷 선택 (류별 구분 vs 전체 합치기)
+    const classKeys = Object.keys(goodsByClass).sort((a, b) => parseInt(a) - parseInt(b));
+    
+    if (classKeys.length === 0) {
+      App.showToast('복사할 지정상품이 없습니다.', 'warning');
+      return;
+    }
+    
+    // 류별로 구분하여 복사
+    const formattedText = classKeys.map(classCode => {
+      const goods = goodsByClass[classCode];
+      return `【제${classCode}류】 ${goods.join(', ')}`;
+    }).join('\n\n');
+    
+    // 클립보드에 복사
+    navigator.clipboard.writeText(formattedText).then(() => {
+      App.showToast(`${classKeys.length}개 류, ${Object.values(goodsByClass).flat().length}개 상품이 복사되었습니다.`, 'success');
+    }).catch(err => {
+      console.error('[TM] 복사 실패:', err);
+      // 폴백: textarea 사용
+      const textarea = document.createElement('textarea');
+      textarea.value = formattedText;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      App.showToast(`${classKeys.length}개 류 지정상품이 복사되었습니다.`, 'success');
+    });
   };
   
   // 유사군 코드로 지정상품 검색
@@ -4616,6 +4698,35 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
         <p>상표를 사용 중이거나 사용 준비 중인 경우 우선심사를 신청할 수 있습니다.</p>
       </div>
       
+      <!-- 출원서 업로드로 정보 추출 -->
+      <div class="tm-form-section tm-upload-application">
+        <h4>📄 출원서 업로드 (선택)</h4>
+        <p class="tm-hint">출원 완료된 상표 출원서(PDF, 이미지)를 업로드하면 정보를 자동으로 추출합니다.</p>
+        
+        <div class="tm-upload-box" id="tm-application-upload-box">
+          <input type="file" id="tm-application-input" style="display: none;" 
+                 accept=".pdf,image/*" onchange="TM.handleApplicationUpload(this.files)">
+          <button class="btn btn-outline" onclick="document.getElementById('tm-application-input').click()">
+            📎 출원서 파일 업로드
+          </button>
+          <span class="tm-upload-hint" style="margin-left: 10px; font-size: 12px; color: #666;">
+            PDF, JPG, PNG 지원
+          </span>
+        </div>
+        
+        ${pe.extractedFromApplication ? `
+          <div class="tm-extracted-info" style="margin-top: 12px; padding: 12px; background: #f0fff4; border-radius: 8px; border: 1px solid #28a745;">
+            <div style="font-weight: bold; color: #28a745; margin-bottom: 8px;">✅ 출원서에서 추출된 정보</div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 13px;">
+              <div><strong>출원번호:</strong> ${pe.applicationNumber || '-'}</div>
+              <div><strong>출원인:</strong> ${pe.applicantName || '-'}</div>
+              <div><strong>상표명:</strong> ${pe.trademarkNameFromApp || p.trademarkName || '-'}</div>
+              <div><strong>출원일:</strong> ${pe.applicationDate || '-'}</div>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+      
       <!-- 우선심사 선택 -->
       <div class="tm-form-section tm-priority-choice">
         <h4>우선심사 신청 여부를 선택해주세요</h4>
@@ -4767,6 +4878,141 @@ ${(p.similarityEvaluations || []).slice(0, 5).map(e =>
     if (!TM.currentProject) return;
     TM.currentProject.priorityExam.reason = reason;
     TM.hasUnsavedChanges = true;
+  };
+  
+  // 출원서 업로드로 정보 추출
+  TM.handleApplicationUpload = async function(files) {
+    if (!files || files.length === 0) return;
+    
+    const file = files[0];
+    const p = TM.currentProject;
+    
+    // 파일 크기 체크 (20MB)
+    if (file.size > 20 * 1024 * 1024) {
+      App.showToast('파일 크기는 20MB 이하여야 합니다.', 'error');
+      return;
+    }
+    
+    try {
+      App.showToast('출원서 분석 중...', 'info');
+      
+      // 파일을 Base64로 변환
+      const reader = new FileReader();
+      
+      reader.onload = async function(e) {
+        const base64Data = e.target.result.split(',')[1];
+        const mimeType = file.type || 'application/pdf';
+        
+        try {
+          // Claude API로 출원서 정보 추출
+          // App.callClaudeWithImage가 없으면 수동 입력 폼 제공
+          if (typeof App.callClaudeWithImage !== 'function') {
+            // 수동 입력 폼 표시
+            const applicationNumber = prompt('출원번호를 입력하세요 (예: 40-2024-0012345):');
+            const applicationDate = prompt('출원일을 입력하세요 (예: 2024-01-15):');
+            const applicantName = prompt('출원인 이름을 입력하세요:');
+            
+            if (applicationNumber) {
+              if (!p.priorityExam) p.priorityExam = {};
+              p.priorityExam.extractedFromApplication = true;
+              p.priorityExam.applicationNumber = applicationNumber;
+              p.priorityExam.applicationDate = applicationDate;
+              p.priorityExam.applicantName = applicantName;
+              
+              TM.renderCurrentStep();
+              App.showToast('출원 정보가 입력되었습니다.', 'success');
+            }
+            return;
+          }
+          
+          const extractPrompt = `다음은 상표 출원서 파일입니다. 이 출원서에서 아래 정보를 추출해주세요:
+
+【추출할 정보】
+1. 출원번호 (예: 40-2024-0012345)
+2. 출원일
+3. 상표명 (한글, 영문 모두)
+4. 출원인 이름
+5. 지정상품 (류별로 구분)
+
+【응답 형식 - JSON만】
+{
+  "applicationNumber": "40-2024-0012345",
+  "applicationDate": "2024-01-15",
+  "trademarkName": "상표명",
+  "applicantName": "홍길동",
+  "designatedGoods": {
+    "35": ["광고업", "경영컨설팅업"],
+    "42": ["소프트웨어개발업"]
+  },
+  "confidence": "high"
+}
+
+정보를 찾을 수 없는 경우 해당 필드를 null로 설정하세요.`;
+
+          // 이미지/PDF를 Claude에 전송
+          const response = await App.callClaudeWithImage(extractPrompt, base64Data, mimeType, 3000);
+          const text = response.text || '';
+          
+          const startIdx = text.indexOf('{');
+          const endIdx = text.lastIndexOf('}');
+          
+          if (startIdx === -1 || endIdx <= startIdx) {
+            throw new Error('출원서 정보 추출 실패');
+          }
+          
+          const jsonStr = text.substring(startIdx, endIdx + 1)
+            .replace(/[\x00-\x1F\x7F]/g, ' ')
+            .replace(/,(\s*[}\]])/g, '$1');
+          
+          const extracted = JSON.parse(jsonStr);
+          
+          // 추출된 정보 저장
+          if (!p.priorityExam) p.priorityExam = {};
+          p.priorityExam.extractedFromApplication = true;
+          p.priorityExam.applicationNumber = extracted.applicationNumber;
+          p.priorityExam.applicationDate = extracted.applicationDate;
+          p.priorityExam.trademarkNameFromApp = extracted.trademarkName;
+          p.priorityExam.applicantName = extracted.applicantName;
+          
+          // 상표명 업데이트 (비어있는 경우)
+          if (!p.trademarkName && extracted.trademarkName) {
+            p.trademarkName = extracted.trademarkName;
+          }
+          
+          // 지정상품 업데이트 (비어있는 경우)
+          if (p.designatedGoods.length === 0 && extracted.designatedGoods) {
+            Object.entries(extracted.designatedGoods).forEach(([classCode, goods]) => {
+              if (Array.isArray(goods) && goods.length > 0) {
+                p.designatedGoods.push({
+                  classCode: classCode,
+                  className: TM.niceClasses[classCode] || '',
+                  goods: goods.map(name => ({ name, similarGroup: '', gazetted: true })),
+                  goodsCount: goods.length,
+                  nonGazettedCount: 0
+                });
+              }
+            });
+          }
+          
+          TM.renderCurrentStep();
+          App.showToast('출원서 정보가 추출되었습니다.', 'success');
+          
+        } catch (innerError) {
+          console.error('[TM] 출원서 분석 실패:', innerError);
+          App.showToast('출원서 분석에 실패했습니다. 파일을 확인해주세요.', 'error');
+        }
+      };
+      
+      reader.onerror = function() {
+        App.showToast('파일 읽기 실패', 'error');
+      };
+      
+      reader.readAsDataURL(file);
+      
+    } catch (error) {
+      console.error('[TM] 출원서 업로드 실패:', error);
+      App.showToast('업로드 실패: ' + error.message, 'error');
+    }
   };
   
   TM.handleEvidenceUpload = async function(files) {
