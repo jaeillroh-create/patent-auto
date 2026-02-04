@@ -3699,6 +3699,34 @@
   margin-top: 4px;
 }
 
+/* 증거자료 드롭존 */
+.tm-evidence-dropzone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #f8fafc;
+  margin-bottom: 16px;
+}
+
+.tm-evidence-dropzone:hover {
+  border-color: #3182f6;
+  background: #eff6ff;
+}
+
+.tm-evidence-dropzone.dragover {
+  border-color: #3182f6;
+  background: #dbeafe;
+  transform: scale(1.01);
+}
+
+.tm-evidence-dropzone .tm-dropzone-icon {
+  font-size: 36px;
+  opacity: 0.6;
+}
+
 /* 추출 정보 표시 */
 .tm-extracted-info {
   margin-top: 16px;

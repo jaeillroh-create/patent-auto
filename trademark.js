@@ -5773,15 +5773,34 @@ ${criticalResults.slice(0, 5).map(r =>
         <!-- 증거자료 관리 -->
         <div class="tm-form-section">
           <h4>증거자료</h4>
-          <p class="tm-hint">상표 사용 증거(사업자등록증, 제안서, 계약서, 홈페이지 캡처 등)를 첨부하세요.</p>
+          <p class="tm-hint">상표 사용 증거(사업자등록증, 제안서, 계약서, 홈페이지 캡처 등)를 첨부하세요. 파일을 업로드하면 AI가 자동으로 증빙자료명을 생성합니다.</p>
+          
+          <!-- 파일 업로드 드롭존 -->
+          <div class="tm-evidence-dropzone" id="tm-evidence-dropzone"
+               ondragover="TM.handleDragOver(event)"
+               ondragleave="TM.handleDragLeave(event)"
+               ondrop="TM.handleEvidenceDrop(event)"
+               onclick="document.getElementById('tm-evidence-input').click()">
+            <input type="file" id="tm-evidence-input" style="display: none;" 
+                   accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,image/*" multiple 
+                   onchange="TM.handleEvidenceUpload(this.files)">
+            <div class="tm-dropzone-content">
+              <div class="tm-dropzone-icon">📁</div>
+              <div class="tm-dropzone-text">
+                <strong>증거자료 파일 업로드</strong><br>
+                <span>클릭하거나 파일을 끌어다 놓으세요 (여러 파일 가능)</span>
+              </div>
+              <div class="tm-dropzone-formats">PDF, Word, 이미지 지원 · AI가 자동으로 증빙자료명 생성</div>
+            </div>
+          </div>
           
           <div class="tm-evidence-list" id="tm-evidence-list">
             ${(pe.evidences || []).map((ev, idx) => `
               <div class="tm-evidence-item">
-                <span class="tm-evidence-num">${idx + 1}</span>
+                <span class="tm-evidence-num">첨부자료 ${idx + 1}</span>
                 <div class="tm-evidence-info">
                   <div class="tm-evidence-title">${TM.escapeHtml(ev.title)}</div>
-                  <div class="tm-evidence-desc">${TM.escapeHtml(ev.description || '')}</div>
+                  <div class="tm-evidence-desc">${TM.escapeHtml(ev.description || ev.fileName || '')}</div>
                 </div>
                 <button class="btn btn-sm btn-ghost" data-action="tm-remove-evidence" data-index="${idx}">삭제</button>
               </div>
@@ -6329,6 +6348,226 @@ ${text.substring(0, 2000)}
     App.showToast('첨부자료가 추가되었습니다.', 'success');
   };
   
+  // 증거자료 드롭 핸들러
+  TM.handleEvidenceDrop = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('dragover');
+    
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      TM.handleEvidenceUpload(files);
+    }
+  };
+  
+  // 증거자료 파일 업로드 및 AI 분석
+  TM.handleEvidenceUpload = async function(files) {
+    if (!files || files.length === 0) return;
+    
+    const p = TM.currentProject;
+    if (!p.priorityExam) p.priorityExam = {};
+    if (!p.priorityExam.evidences) p.priorityExam.evidences = [];
+    
+    const dropzone = document.getElementById('tm-evidence-dropzone');
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
+      // 파일 크기 체크 (10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        App.showToast(`${file.name}: 파일 크기 초과 (10MB 이하)`, 'warning');
+        continue;
+      }
+      
+      // 로딩 표시
+      if (dropzone) {
+        dropzone.innerHTML = `
+          <div class="tm-dropzone-loading">
+            <div class="tm-spinner"></div>
+            <div>증거자료 분석 중... (${i + 1}/${files.length}) ${file.name}</div>
+          </div>
+        `;
+      }
+      
+      try {
+        // 파일 타입에 따라 텍스트 추출
+        let fileContent = '';
+        let fileType = '';
+        
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          fileType = 'PDF';
+          fileContent = await TM.extractTextFromPDF(file);
+        } else if (file.name.toLowerCase().match(/\.(doc|docx)$/)) {
+          fileType = 'Word';
+          fileContent = await TM.extractTextFromWord(file);
+        } else if (file.type.startsWith('image/')) {
+          fileType = '이미지';
+          fileContent = await TM.extractTextFromImage(file);
+        } else {
+          fileType = '파일';
+          fileContent = file.name;
+        }
+        
+        // AI로 증빙자료명 생성
+        const evidenceTitle = await TM.generateEvidenceTitle(file.name, fileContent, fileType);
+        
+        p.priorityExam.evidences.push({
+          title: evidenceTitle,
+          fileName: file.name,
+          fileType: fileType,
+          description: `원본 파일: ${file.name}`,
+          addedAt: new Date().toISOString()
+        });
+        
+        console.log('[TM] 증거자료 추가:', evidenceTitle);
+        
+      } catch (error) {
+        console.error('[TM] 증거자료 분석 실패:', error);
+        // 실패해도 파일명으로 추가
+        p.priorityExam.evidences.push({
+          title: TM.guessEvidenceTitle(file.name),
+          fileName: file.name,
+          description: `원본 파일: ${file.name}`,
+          addedAt: new Date().toISOString()
+        });
+      }
+    }
+    
+    TM.hasUnsavedChanges = true;
+    TM.renderCurrentStep();
+    App.showToast(`${files.length}개 증거자료가 추가되었습니다.`, 'success');
+  };
+  
+  // PDF에서 텍스트 추출 (증거자료용)
+  TM.extractTextFromPDF = async function(file) {
+    if (!window.pdfjsLib) {
+      await TM.loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    
+    let text = '';
+    for (let i = 1; i <= Math.min(pdf.numPages, 3); i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(item => item.str).join(' ') + '\n';
+    }
+    
+    // 텍스트가 적으면 OCR 시도
+    if (text.replace(/\s/g, '').length < 50) {
+      const page = await pdf.getPage(1);
+      const scale = 1.5;
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: context, viewport }).promise;
+      
+      if (window.Tesseract) {
+        const result = await Tesseract.recognize(canvas, 'kor');
+        text = result.data.text;
+      }
+    }
+    
+    return text.substring(0, 2000);
+  };
+  
+  // Word에서 텍스트 추출
+  TM.extractTextFromWord = async function(file) {
+    // mammoth.js 로드
+    if (!window.mammoth) {
+      await TM.loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+    }
+    
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    return result.value.substring(0, 2000);
+  };
+  
+  // 이미지에서 텍스트 추출 (OCR)
+  TM.extractTextFromImage = async function(file) {
+    if (!window.Tesseract) {
+      await TM.loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js');
+    }
+    
+    const result = await Tesseract.recognize(file, 'kor');
+    return result.data.text.substring(0, 2000);
+  };
+  
+  // AI로 증빙자료명 생성
+  TM.generateEvidenceTitle = async function(fileName, content, fileType) {
+    const p = TM.currentProject;
+    const trademarkName = p.trademarkName || '';
+    const applicantName = p.applicantName || p.priorityExam?.applicantName || '';
+    
+    try {
+      const prompt = `다음은 상표 우선심사 신청을 위한 증거자료 파일입니다.
+파일을 분석하여 적절한 "증빙자료명"을 생성해주세요.
+
+【상표 정보】
+- 상표명: ${trademarkName}
+- 출원인: ${applicantName}
+
+【파일 정보】
+- 파일명: ${fileName}
+- 파일타입: ${fileType}
+
+【파일 내용 (일부)】
+${content.substring(0, 1500)}
+
+【증빙자료명 예시】
+- 사업자등록증
+- OO회사 제안서
+- OO 시스템 납품 계약서
+- 홈페이지 캡처 화면
+- OO 소프트웨어 사용 설명서
+- 제품 카탈로그
+- 거래명세서
+
+파일 내용과 맥락을 분석하여 가장 적절한 증빙자료명을 한 줄로 응답하세요.
+증빙자료명만 응답하세요. 다른 설명 없이.`;
+
+      const response = await App.callClaude(prompt, 100);
+      let title = (response.text || '').trim();
+      
+      // 응답 정리
+      title = title.replace(/^["']|["']$/g, '').trim();
+      title = title.split('\n')[0].trim();
+      
+      if (title && title.length > 2 && title.length < 50) {
+        return title;
+      }
+    } catch (error) {
+      console.error('[TM] AI 증빙자료명 생성 실패:', error);
+    }
+    
+    // AI 실패 시 파일명 기반 추측
+    return TM.guessEvidenceTitle(fileName);
+  };
+  
+  // 파일명으로 증빙자료명 추측
+  TM.guessEvidenceTitle = function(fileName) {
+    const name = fileName.toLowerCase();
+    
+    if (name.includes('사업자') || name.includes('business')) return '사업자등록증';
+    if (name.includes('제안서') || name.includes('proposal')) return '제안서';
+    if (name.includes('계약서') || name.includes('contract')) return '계약서';
+    if (name.includes('견적서') || name.includes('quotation')) return '견적서';
+    if (name.includes('납품') || name.includes('delivery')) return '납품 확인서';
+    if (name.includes('카탈로그') || name.includes('catalog')) return '제품 카탈로그';
+    if (name.includes('매뉴얼') || name.includes('manual')) return '사용 설명서';
+    if (name.includes('홈페이지') || name.includes('website') || name.includes('캡처')) return '홈페이지 캡처 화면';
+    if (name.includes('명세') || name.includes('invoice')) return '거래명세서';
+    if (name.includes('등록증') || name.includes('certificate')) return '등록증';
+    if (name.includes('특허') || name.includes('patent')) return '특허 관련 서류';
+    
+    // 확장자 제거 후 파일명 반환
+    return fileName.replace(/\.[^/.]+$/, '');
+  };
+  
   // 우선심사 설명서 미리보기
   TM.previewPriorityDoc = function() {
     const previewEl = document.getElementById('tm-priority-doc-preview');
@@ -6390,9 +6629,10 @@ ${text.substring(0, 2000)}
     
     // 증거자료 목록
     const evidences = pe.evidences || [];
-    const evidencesList = evidences.map((ev, idx) => 
-      `첨부자료 ${idx + 1} : ${ev.title}${ev.description ? ' (' + ev.description + ')' : ''}`
-    ).join('\n');
+    
+    // 첨부자료 참조 문자열 생성
+    const evidence1Ref = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
+    const evidence2Ref = evidences.length > 1 ? `(첨부자료 2: ${evidences[1].title})` : '';
     
     // 신청이유 선택에 따른 법조문
     let reasonText = '';
@@ -6437,7 +6677,7 @@ ${text.substring(0, 2000)}
           <h3>【우선심사 신청이유】</h3>
           <p>${reasonText}</p>
           <p style="margin-top: 12px;">
-            본 출원인 "${applicantName}"는 본 신청서의 첨부자료에 기재된 바와 같이, 
+            본 출원인 "${applicantName}"는 본 신청서의 첨부자료${evidence1Ref}에 기재된 바와 같이, 
             이건 출원상표가 표시된 ${goodsWithGroups.slice(0, 5).join(', ')}${goodsWithGroups.length > 5 ? ' 등' : ''}을 
             사용 및 사용 준비 중입니다.
           </p>
@@ -6445,7 +6685,7 @@ ${text.substring(0, 2000)}
             따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 사용예정 중에 있습니다.
           </p>
           <p style="margin-top: 12px;">
-            이건 출원인 "${applicantName}"은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 
+            이건 출원인 "${applicantName}"${evidence2Ref}은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 
             부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
           </p>
         </div>
@@ -6453,7 +6693,7 @@ ${text.substring(0, 2000)}
         ${evidences.length > 0 ? `
           <div class="tm-doc-section">
             <h3>【증빙자료】</h3>
-            <ul style="margin: 0; padding-left: 20px;">
+            <ul style="margin: 0; padding-left: 0; list-style: none;">
               ${evidences.map((ev, idx) => `<li>첨부자료 ${idx + 1} : ${ev.title}</li>`).join('')}
             </ul>
           </div>
@@ -6531,18 +6771,15 @@ ${text.substring(0, 2000)}
         reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라 우선심사를 신청합니다.';
       }
       
-      // 증거자료 참조 문자열 생성
-      let evidenceRefStr = '';
-      if (evidences.length > 0) {
-        const refs = evidences.map((ev, idx) => `첨부자료 ${idx + 1}: ${ev.title}`);
-        evidenceRefStr = `본 신청서의 첨부자료(${refs.join(', ')})에 기재된 바와 같이, `;
-      }
+      // 증거자료 참조 문자열 생성 (첨부자료 1, 2 개별 참조)
+      const evidence1Ref = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
+      const evidence2Ref = evidences.length > 1 ? `(첨부자료 2: ${evidences[1].title})` : '';
       
-      const reasonText2 = `본 출원인 "${applicantName}"는 ${evidenceRefStr}이건 출원상표가 표시된 ${goodsWithGroups.slice(0, 5).join(', ')}${goodsWithGroups.length > 5 ? ' 등' : ''}을 사용 및 사용 준비 중입니다.`;
+      const reasonText2 = `본 출원인 "${applicantName}"는 본 신청서의 첨부자료${evidence1Ref}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsWithGroups.slice(0, 5).join(', ')}${goodsWithGroups.length > 5 ? ' 등' : ''}을 사용 및 사용 준비 중입니다.`;
       
       const reasonText3 = '따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 사용예정 중에 있습니다.';
       
-      const reasonText4 = `이건 출원인 "${applicantName}"은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`;
+      const reasonText4 = `이건 출원인 "${applicantName}"${evidence2Ref}은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`;
       
       // Edge Function으로 Word 생성 요청
       const docData = {
@@ -6724,61 +6961,6 @@ ${text.substring(0, 2000)}
       script.onerror = reject;
       document.head.appendChild(script);
     });
-  };
-  
-  TM.handleEvidenceUpload = async function(files) {
-    if (!files || files.length === 0) return;
-    
-    const file = files[0];
-    
-    // 파일 크기 체크 (10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      App.showToast('파일 크기는 10MB 이하여야 합니다.', 'error');
-      return;
-    }
-    
-    try {
-      App.showToast('업로드 중...', 'info');
-      
-      const fileName = `${TM.currentProject.id}_evidence_${Date.now()}.${file.name.split('.').pop()}`;
-      
-      const { data, error } = await App.sb.storage
-        .from('trademark-evidences')
-        .upload(fileName, file);
-      
-      if (error) throw error;
-      
-      const { data: urlData } = App.sb.storage
-        .from('trademark-evidences')
-        .getPublicUrl(fileName);
-      
-      // 증거자료 추가
-      const title = prompt('증거자료 제목을 입력하세요:', file.name);
-      if (!title) return;
-      
-      const evidenceType = prompt('증거 유형을 선택하세요:\n1. 사용 사진\n2. 광고물\n3. 계약서\n4. 매출 자료\n5. 웹사이트\n6. 기타', '1');
-      const types = ['usage_photo', 'advertisement', 'contract', 'sales_record', 'website', 'other'];
-      const selectedType = types[parseInt(evidenceType) - 1] || 'other';
-      
-      if (!TM.currentProject.priorityExam.evidences) {
-        TM.currentProject.priorityExam.evidences = [];
-      }
-      
-      TM.currentProject.priorityExam.evidences.push({
-        type: selectedType,
-        title: title,
-        description: '',
-        fileUrl: urlData.publicUrl,
-        fileName: fileName
-      });
-      
-      TM.renderCurrentStep();
-      App.showToast('증거자료가 추가되었습니다.', 'success');
-      
-    } catch (error) {
-      console.error('[TM] 증거자료 업로드 실패:', error);
-      App.showToast('업로드 실패: ' + error.message, 'error');
-    }
   };
   
   TM.removeEvidence = async function(index) {
