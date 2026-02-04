@@ -515,15 +515,22 @@
     }
     
     panel.innerHTML = `
-      <div class="trademark-dashboard" style="max-width: 1400px; margin: 0 auto; padding: 32px 24px;">
-        <div class="trademark-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
-          <h2 style="margin: 0; font-size: 26px; font-weight: 700; color: #1f2937;">🏷️ 상표 출원 관리</h2>
-          <button class="btn btn-primary" data-action="tm-new-project" style="display: flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px;">
-            <span style="font-size: 18px;">+</span>
+      <div class="trademark-dashboard" style="max-width: 1400px; margin: 0 auto; padding: 40px 32px;">
+        <!-- 헤더 영역 -->
+        <div class="trademark-header" style="margin-bottom: 40px;">
+          <h2 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 700; color: #1f2937;">🏷️ 상표 출원 관리</h2>
+          <p style="margin: 0; color: #6b7280; font-size: 14px;">특허그룹 디딤 상표 출원 프로젝트를 관리합니다.</p>
+        </div>
+        
+        <!-- 새 프로젝트 버튼 -->
+        <div style="margin-bottom: 24px;">
+          <button class="btn btn-primary" data-action="tm-new-project" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; font-size: 15px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">
+            <span style="font-size: 20px;">+</span>
             새 프로젝트
           </button>
         </div>
         
+        <!-- 프로젝트 목록 -->
         <div class="tm-project-list" id="tm-project-list">
           <div style="text-align: center; padding: 40px; color: #6b7280;">
             <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
@@ -565,15 +572,16 @@
       
       // 테이블 형식 목록
       listEl.innerHTML = `
-        <div style="background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
           <table style="width: 100%; border-collapse: collapse;">
             <thead>
               <tr style="background: #f8fafc; border-bottom: 2px solid #e5e7eb;">
-                <th style="padding: 16px 20px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">상표명</th>
+                <th style="padding: 16px 20px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">디딤 관리번호</th>
+                <th style="padding: 16px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">상표명</th>
                 <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 80px;">유형</th>
                 <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px;">상태</th>
                 <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 100px;">수정일</th>
-                <th style="padding: 16px 20px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 160px;">작업</th>
+                <th style="padding: 16px 20px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 150px;">작업</th>
               </tr>
             </thead>
             <tbody>
@@ -630,18 +638,23 @@
       <tr style="border-bottom: 1px solid #f3f4f6; transition: background 0.15s;" 
           onmouseover="this.style.background='#f9fafb'" 
           onmouseout="this.style.background='white'">
-        <td style="padding: 14px 20px;">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <span style="font-size: 22px;">🏷️</span>
-            <div>
-              <div style="font-weight: 600; color: #1f2937; font-size: 14px; cursor: pointer;" 
-                   onclick="TM.openProject('${project.id}')"
-                   onmouseover="this.style.color='#3b82f6'" 
-                   onmouseout="this.style.color='#1f2937'">
-                ${TM.escapeHtml(project.trademark_name || project.title || '새 상표')}
-              </div>
-              <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">${TM.escapeHtml(project.title || '')}</div>
+        <td style="padding: 16px 20px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 20px;">📁</span>
+            <div style="font-weight: 600; color: #3b82f6; font-size: 13px; cursor: pointer; font-family: monospace;" 
+                 onclick="TM.openProject('${project.id}')"
+                 onmouseover="this.style.textDecoration='underline'" 
+                 onmouseout="this.style.textDecoration='none'">
+              ${TM.escapeHtml(project.title || '(미지정)')}
             </div>
+          </div>
+        </td>
+        <td style="padding: 16px 16px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">🏷️</span>
+            <span style="font-weight: 500; color: #1f2937; font-size: 14px;">
+              ${TM.escapeHtml(project.trademark_name || '-')}
+            </span>
           </div>
         </td>
         <td style="padding: 14px 12px; text-align: center;">
@@ -680,8 +693,15 @@
   // ============================================================
   
   TM.createNewProject = async function() {
-    const title = prompt('프로젝트 이름을 입력하세요:', '새 상표 프로젝트');
-    if (!title) return;
+    // 년도 기반 기본값 생성
+    const year = new Date().getFullYear();
+    const defaultNumber = `TM-${year}-`;
+    
+    const managementNumber = prompt(
+      '디딤 관리번호를 입력하세요:\n(특허그룹 디딤 내부 사건 식별번호)\n\n예: TM-2026-001, 디딤-상표-001',
+      defaultNumber
+    );
+    if (!managementNumber || !managementNumber.trim()) return;
     
     try {
       App.showToast('프로젝트 생성 중...', 'info');
@@ -690,7 +710,7 @@
         .from('trademark_projects')
         .insert({
           owner_user_id: App.currentUser.id,
-          title: title,
+          title: managementNumber.trim(),
           status: 'draft',
           trademark_type: 'text',
           current_state_json: JSON.parse(JSON.stringify(TM.defaultProjectData))
@@ -844,23 +864,50 @@
   
   // 프로젝트 편집 (이름 변경)
   TM.editProject = async function(projectId, currentTitle) {
-    const newTitle = prompt('프로젝트 이름을 입력하세요:', currentTitle || '새 상표 프로젝트');
+    const newTitle = prompt('디딤 관리번호를 수정하세요:', currentTitle || '');
     if (!newTitle || newTitle === currentTitle) return;
     
     try {
       const { error } = await App.sb
         .from('trademark_projects')
-        .update({ title: newTitle, updated_at: new Date().toISOString() })
+        .update({ title: newTitle.trim(), updated_at: new Date().toISOString() })
         .eq('id', projectId);
       
       if (error) throw error;
       
-      App.showToast('프로젝트 이름이 변경되었습니다.', 'success');
+      App.showToast('관리번호가 변경되었습니다.', 'success');
       TM.loadProjectList();
       
     } catch (error) {
       console.error('[TM] 편집 실패:', error);
       App.showToast('편집 실패: ' + error.message, 'error');
+    }
+  };
+  
+  // 프로젝트 제목(관리번호) 업데이트 (상표 정보 탭에서 호출)
+  TM.updateProjectTitle = async function(newTitle) {
+    if (!TM.currentProject || !newTitle?.trim()) return;
+    
+    const trimmedTitle = newTitle.trim();
+    if (trimmedTitle === TM.currentProject.title) return;
+    
+    try {
+      const { error } = await App.sb
+        .from('trademark_projects')
+        .update({ title: trimmedTitle, updated_at: new Date().toISOString() })
+        .eq('id', TM.currentProject.id);
+      
+      if (error) throw error;
+      
+      TM.currentProject.title = trimmedTitle;
+      TM.hasUnsavedChanges = true;
+      
+      // 사이드바 프로젝트명 업데이트
+      const titleEl = document.querySelector('.tm-project-name');
+      if (titleEl) titleEl.textContent = trimmedTitle;
+      
+    } catch (error) {
+      console.error('[TM] 관리번호 업데이트 실패:', error);
     }
   };
   
@@ -930,7 +977,10 @@
           <div class="tm-sidebar-project">
             <div class="tm-project-icon">🏷️</div>
             <div class="tm-project-info">
-              <h3 id="tm-project-title">${TM.escapeHtml(TM.currentProject.trademarkName || TM.currentProject.title || '새 상표')}</h3>
+              <h3 class="tm-project-name">${TM.escapeHtml(TM.currentProject.trademarkName || '(상표명 미입력)')}</h3>
+              <div style="font-size: 11px; color: #9ca3af; margin-top: 2px; font-family: monospace;">
+                ${TM.escapeHtml(TM.currentProject.title || '')}
+              </div>
               <span class="tm-status-badge ${TM.currentProject.status}">${TM.getStatusLabel(TM.currentProject.status)}</span>
             </div>
           </div>
@@ -1441,9 +1491,11 @@
             <div class="tm-panel-body">
               <div class="tm-field-grid tm-field-grid-3">
                 <div class="tm-field">
-                  <label>디딤 관리번호</label>
-                  <input type="text" class="tm-input" data-field="managementNumber" 
-                         value="${TM.escapeHtml(p.managementNumber || '')}" placeholder="예: 2024-TM-001">
+                  <label>디딤 관리번호 <span style="font-weight:400;color:#9ca3af;font-size:11px;">(프로젝트 식별)</span></label>
+                  <input type="text" class="tm-input" id="tm-project-title-input"
+                         value="${TM.escapeHtml(TM.currentProject?.title || '')}" 
+                         placeholder="예: TM-2026-001"
+                         onchange="TM.updateProjectTitle(this.value)">
                 </div>
                 <div class="tm-field">
                   <label>성명/상호 <span class="required">*</span></label>
@@ -1477,7 +1529,7 @@
               <div class="tm-field" style="margin-top: 12px;">
                 <label>주소</label>
                 <input type="text" class="tm-input" data-field="applicant.address" 
-                       value="${TM.escapeHtml(p.applicant.address || '')}" placeholder="서울시 강남구...">
+                       value="${TM.escapeHtml(p.applicant.address || '')}" placeholder="서울시 강남구..."">
               </div>
             </div>
           </details>
@@ -7411,7 +7463,8 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
             <h4>👤 출원인</h4>
             <div class="tm-summary-info">
               <span>${TM.escapeHtml(p.applicant.name)}</span>
-              ${p.managementNumber ? `<span class="tm-info-badge">관리번호: ${TM.escapeHtml(p.managementNumber)}</span>` : ''}
+              ${p.managementNumber ? `<span class="tm-info-badge">관리번호: ${TM.escapeHtml(p.managementNumber)}</span>` : 
+                (TM.currentProject?.title ? `<span class="tm-info-badge">관리번호: ${TM.escapeHtml(TM.currentProject.title)}</span>` : '')}
             </div>
           </div>
         ` : ''}
