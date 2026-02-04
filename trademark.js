@@ -5119,10 +5119,46 @@
     const evaluations = p.similarityEvaluations || [];
     const allSearchResults = [...(p.searchResults.text || []), ...(p.searchResults.figure || [])].slice(0, 10);
     
+    // KIPRIS API 키 확인
+    const apiKey = TM.kiprisConfig?.apiKey || '';
+    const defaultKey = 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE=';
+    const hasCustomApiKey = apiKey && apiKey !== defaultKey;
+    
+    const apiKeyWarning = !hasCustomApiKey ? `
+      <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+          <span style="font-size: 24px;">⚠️</span>
+          <div>
+            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #92400e;">KIPRIS API 키가 설정되지 않았습니다</h4>
+            <p style="margin: 0 0 10px 0; font-size: 13px; color: #a16207; line-height: 1.5;">
+              선행상표 검색을 위해 개인 API 키가 필요합니다. 기본 키는 호출 제한에 걸릴 수 있습니다.
+            </p>
+            <div style="display: flex; gap: 12px; align-items: center;">
+              <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" 
+                 style="font-size: 12px; color: #d97706; text-decoration: underline;">
+                👉 KIPRIS Plus에서 무료 API 키 발급받기
+              </a>
+              <button class="btn btn-sm" onclick="TM.openSettings()" 
+                      style="padding: 4px 12px; font-size: 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                설정에서 입력
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    ` : `
+      <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+        <span>✅</span>
+        <span style="font-size: 13px; color: #166534;">KIPRIS API 키 설정됨</span>
+      </div>
+    `;
+    
     container.innerHTML = `
       <div class="tm-step-header">
         <h3>⚖️ 유사도 평가</h3>
       </div>
+      
+      ${apiKeyWarning}
       
       ${allSearchResults.length === 0 ? `
         <div class="tm-empty-state" style="padding: 60px;">
@@ -5481,10 +5517,46 @@ notes는 평가 근거를 3-4문장으로 서술.
       TM.calculateFee();
     }
     
+    // KIPRIS API 키 확인
+    const apiKey = TM.kiprisConfig?.apiKey || '';
+    const defaultKey = 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE=';
+    const hasCustomApiKey = apiKey && apiKey !== defaultKey;
+    
+    const apiKeyWarning = !hasCustomApiKey ? `
+      <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+          <span style="font-size: 24px;">⚠️</span>
+          <div>
+            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #92400e;">KIPRIS API 키가 설정되지 않았습니다</h4>
+            <p style="margin: 0 0 10px 0; font-size: 13px; color: #a16207; line-height: 1.5;">
+              정확한 리스크 평가를 위해 개인 API 키가 필요합니다. 기본 키는 호출 제한에 걸릴 수 있습니다.
+            </p>
+            <div style="display: flex; gap: 12px; align-items: center;">
+              <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" 
+                 style="font-size: 12px; color: #d97706; text-decoration: underline;">
+                👉 KIPRIS Plus에서 무료 API 키 발급받기
+              </a>
+              <button class="btn btn-sm" onclick="TM.openSettings()" 
+                      style="padding: 4px 12px; font-size: 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                설정에서 입력
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    ` : `
+      <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+        <span>✅</span>
+        <span style="font-size: 13px; color: #166534;">KIPRIS API 키 설정됨</span>
+      </div>
+    `;
+    
     container.innerHTML = `
       <div class="tm-step-header">
         <h3>📊 리스크 평가</h3>
       </div>
+      
+      ${apiKeyWarning}
       
       <!-- AI 평가 버튼 -->
       <div class="tm-risk-action-panel">
