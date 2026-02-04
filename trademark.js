@@ -510,22 +510,25 @@
     }
     
     panel.innerHTML = `
-      <div class="trademark-dashboard">
-        <div class="trademark-header">
-          <h2>🏷️ 상표 출원 자동화</h2>
-          <button class="btn btn-primary" data-action="tm-new-project">
-            <span class="btn-icon">+</span>
+      <div class="trademark-dashboard" style="max-width: 1200px; margin: 0 auto; padding: 20px;">
+        <div class="trademark-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e5e7eb;">
+          <h2 style="margin: 0; font-size: 24px; font-weight: 600; color: #1f2937;">🏷️ 상표 출원 관리</h2>
+          <button class="btn btn-primary" data-action="tm-new-project" style="display: flex; align-items: center; gap: 6px; padding: 10px 20px; font-size: 14px; font-weight: 500;">
+            <span style="font-size: 18px;">+</span>
             새 프로젝트
           </button>
         </div>
         
         <div class="tm-project-list" id="tm-project-list">
-          <div class="tm-loading">
-            <div class="tm-loading-spinner"></div>
-            <p>프로젝트 목록 로딩 중...</p>
+          <div style="text-align: center; padding: 40px; color: #6b7280;">
+            <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
+            <p style="margin: 0;">프로젝트 목록 로딩 중...</p>
           </div>
         </div>
       </div>
+      <style>
+        @keyframes spin { to { transform: rotate(360deg); } }
+      </style>
     `;
     
     await TM.loadProjectList();
@@ -545,40 +548,65 @@
       
       if (!projects || projects.length === 0) {
         listEl.innerHTML = `
-          <div class="tm-empty-state">
-            <div class="icon">🏷️</div>
-            <h4>상표 프로젝트가 없습니다</h4>
-            <p>새 프로젝트를 만들어 상표 출원을 시작하세요.</p>
-            <button class="btn btn-primary" data-action="tm-new-project">새 프로젝트 만들기</button>
+          <div style="text-align: center; padding: 60px 20px; background: #f9fafb; border-radius: 12px; border: 2px dashed #e5e7eb;">
+            <div style="font-size: 48px; margin-bottom: 16px;">🏷️</div>
+            <h4 style="margin: 0 0 8px; font-size: 18px; color: #374151;">상표 프로젝트가 없습니다</h4>
+            <p style="margin: 0 0 20px; color: #6b7280;">새 프로젝트를 만들어 상표 출원을 시작하세요.</p>
+            <button class="btn btn-primary" data-action="tm-new-project" style="padding: 12px 24px;">새 프로젝트 만들기</button>
           </div>
         `;
         return;
       }
       
+      // 테이블 형식 목록
       listEl.innerHTML = `
-        <div class="tm-project-grid">
-          ${projects.map(p => TM.renderProjectCard(p)).join('')}
+        <div style="background: white; border-radius: 12px; border: 1px solid #e5e7eb; overflow: hidden;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="background: #f9fafb; border-bottom: 1px solid #e5e7eb;">
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">상표명</th>
+                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 100px;">유형</th>
+                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 100px;">상태</th>
+                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 120px;">수정일</th>
+                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 180px;">작업</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${projects.map(p => TM.renderProjectRow(p)).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top: 12px; text-align: right; color: #6b7280; font-size: 13px;">
+          총 ${projects.length}개 프로젝트
         </div>
       `;
       
     } catch (error) {
       console.error('[TM] 프로젝트 목록 로드 실패:', error);
       listEl.innerHTML = `
-        <div class="tm-empty-state">
-          <div class="icon">⚠️</div>
-          <h4>로드 실패</h4>
-          <p>${error.message}</p>
+        <div style="text-align: center; padding: 40px; background: #fef2f2; border-radius: 12px; border: 1px solid #fecaca;">
+          <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
+          <h4 style="margin: 0 0 8px; color: #991b1b;">로드 실패</h4>
+          <p style="margin: 0; color: #dc2626;">${error.message}</p>
         </div>
       `;
     }
   };
   
-  TM.renderProjectCard = function(project) {
+  // 프로젝트 행 렌더링 (테이블용)
+  TM.renderProjectRow = function(project) {
     const statusLabels = {
       draft: '작성 중',
       searching: '검색 중',
       documenting: '문서 작성',
       completed: '완료'
+    };
+    
+    const statusColors = {
+      draft: '#f59e0b',
+      searching: '#3b82f6',
+      documenting: '#8b5cf6',
+      completed: '#10b981'
     };
     
     const typeLabels = {
@@ -591,30 +619,60 @@
     };
     
     const updatedAt = new Date(project.updated_at).toLocaleDateString('ko-KR');
+    const statusColor = statusColors[project.status] || '#6b7280';
     
     return `
-      <div class="tm-project-card" data-action="tm-open-project" data-id="${project.id}">
-        <div class="tm-card-icon">🏷️</div>
-        <div class="tm-card-content">
-          <h4 class="tm-card-title">${TM.escapeHtml(project.trademark_name || project.title || '새 상표')}</h4>
-          <div class="tm-card-meta">
-            <span class="tm-card-type">${typeLabels[project.trademark_type] || '문자'} 상표</span>
-            <span class="tm-card-date">수정: ${updatedAt}</span>
+      <tr style="border-bottom: 1px solid #f3f4f6; transition: background 0.15s;" 
+          onmouseover="this.style.background='#f9fafb'" 
+          onmouseout="this.style.background='white'">
+        <td style="padding: 16px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 24px;">🏷️</span>
+            <div>
+              <div style="font-weight: 600; color: #1f2937; font-size: 14px; cursor: pointer;" 
+                   onclick="TM.openProject('${project.id}')"
+                   onmouseover="this.style.color='#3b82f6'" 
+                   onmouseout="this.style.color='#1f2937'">
+                ${TM.escapeHtml(project.trademark_name || project.title || '새 상표')}
+              </div>
+              <div style="font-size: 12px; color: #9ca3af;">${TM.escapeHtml(project.title || '')}</div>
+            </div>
           </div>
-          <span class="tm-card-status ${project.status}">${statusLabels[project.status] || '작성 중'}</span>
-        </div>
-        <div class="tm-card-actions" onclick="event.stopPropagation()">
-          <button class="btn btn-primary btn-sm" data-action="tm-open-project" data-id="${project.id}">
-            📂 열기
-          </button>
-          <button class="btn btn-secondary btn-sm" data-action="tm-edit-project" data-id="${project.id}" data-title="${TM.escapeHtml(project.title || '')}">
-            ✏️ 편집
-          </button>
-          <button class="btn btn-ghost btn-sm tm-delete-btn" data-action="tm-delete-project" data-id="${project.id}">
-            🗑️
-          </button>
-        </div>
-      </div>
+        </td>
+        <td style="padding: 16px; text-align: center;">
+          <span style="font-size: 13px; color: #6b7280;">${typeLabels[project.trademark_type] || '문자'}</span>
+        </td>
+        <td style="padding: 16px; text-align: center;">
+          <span style="display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; background: ${statusColor}15; color: ${statusColor};">
+            ${statusLabels[project.status] || '작성 중'}
+          </span>
+        </td>
+        <td style="padding: 16px; text-align: center; font-size: 13px; color: #6b7280;">
+          ${updatedAt}
+        </td>
+        <td style="padding: 16px; text-align: center;">
+          <div style="display: flex; gap: 8px; justify-content: center;">
+            <button onclick="TM.openProject('${project.id}')" 
+                    style="padding: 6px 12px; font-size: 12px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;"
+                    onmouseover="this.style.background='#2563eb'" 
+                    onmouseout="this.style.background='#3b82f6'">
+              열기
+            </button>
+            <button onclick="TM.editProject('${project.id}', '${TM.escapeHtml(project.title || '').replace(/'/g, "\\'")}')" 
+                    style="padding: 6px 12px; font-size: 12px; background: #f3f4f6; color: #374151; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;"
+                    onmouseover="this.style.background='#e5e7eb'" 
+                    onmouseout="this.style.background='#f3f4f6'">
+              편집
+            </button>
+            <button onclick="TM.deleteProject('${project.id}')" 
+                    style="padding: 6px 12px; font-size: 12px; background: #fef2f2; color: #dc2626; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;"
+                    onmouseover="this.style.background='#fee2e2'" 
+                    onmouseout="this.style.background='#fef2f2'">
+              삭제
+            </button>
+          </div>
+        </td>
+      </tr>
     `;
   };
 
@@ -1852,6 +1910,53 @@
           '<div class="tm-ai-rec-action">' + actionHtml + '</div>' +
         '</div>';
       });
+      html += '</div>';
+    }
+    
+    // 검증 결과 표시
+    if (p.aiAnalysis.validation) {
+      const v = p.aiAnalysis.validation;
+      const scoreColor = v.overallScore >= 80 ? '#10b981' : v.overallScore >= 60 ? '#f59e0b' : '#ef4444';
+      const scoreEmoji = v.overallScore >= 80 ? '✅' : v.overallScore >= 60 ? '⚠️' : '❌';
+      
+      html += '<div style="margin-top: 16px; padding: 12px; background: ' + (v.hasIssues ? '#fef3c7' : '#d1fae5') + '; border-radius: 8px; border: 1px solid ' + (v.hasIssues ? '#fcd34d' : '#6ee7b7') + ';">';
+      
+      // 검증 헤더
+      html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">' +
+        '<span style="font-weight: 600; font-size: 13px;">' + scoreEmoji + ' 추천 검증 결과</span>' +
+        '<span style="font-size: 12px; color: ' + scoreColor + '; font-weight: 600;">정확도: ' + v.overallScore + '%</span>' +
+      '</div>';
+      
+      // 요약
+      if (v.summary) {
+        html += '<div style="font-size: 12px; color: #374151; margin-bottom: 8px;">' + TM.escapeHtml(v.summary) + '</div>';
+      }
+      
+      // 경고 사항
+      if (v.warnings?.length > 0) {
+        html += '<div style="margin-top: 8px;">';
+        v.warnings.forEach(w => {
+          html += '<div style="font-size: 11px; color: #d97706; padding: 4px 8px; background: #fffbeb; border-radius: 4px; margin-bottom: 4px;">' +
+            '⚠️ 제' + w.class + '류: ' + TM.escapeHtml(w.message) +
+          '</div>';
+        });
+        html += '</div>';
+      }
+      
+      // 추가 제안
+      if (v.suggestions?.length > 0) {
+        html += '<div style="margin-top: 8px;">';
+        v.suggestions.forEach(s => {
+          if (s.type === 'add_class') {
+            html += '<div style="font-size: 11px; color: #059669; padding: 4px 8px; background: #ecfdf5; border-radius: 4px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">' +
+              '<span>💡 제' + s.class + '류 추가 권장: ' + TM.escapeHtml(s.reason) + '</span>' +
+              '<button class="btn btn-sm" style="padding: 2px 8px; font-size: 10px;" data-action="tm-add-class" data-class-code="' + s.class + '">+ 추가</button>' +
+            '</div>';
+          }
+        });
+        html += '</div>';
+      }
+      
       html += '</div>';
     }
     
@@ -5955,6 +6060,67 @@ ${TM.PRACTICE_GUIDELINES}
         }
       }
       
+      // ================================================================
+      // 4단계: 추천 결과 검증 (Validation)
+      // ================================================================
+      if (btn) btn.innerHTML = '<span class="tossface">🔍</span> 추천 결과 검증 중...';
+      
+      const validationResult = await TM.validateRecommendations(businessInput, p.aiAnalysis);
+      
+      if (validationResult) {
+        p.aiAnalysis.validation = validationResult;
+        
+        // 검증 결과에 따라 수정
+        if (validationResult.hasIssues) {
+          console.log('[TM] ⚠️ 검증 이슈 발견, 수정 적용');
+          
+          // 잘못된 류 제거
+          if (validationResult.invalidClasses?.length > 0) {
+            for (const invalidClass of validationResult.invalidClasses) {
+              const classCode = invalidClass.class;
+              
+              // recommendedClasses에서 제거
+              const idx = p.aiAnalysis.recommendedClasses.indexOf(classCode);
+              if (idx > -1) {
+                p.aiAnalysis.recommendedClasses.splice(idx, 1);
+              }
+              
+              // classRecommendations에서 제거
+              ['core', 'recommended', 'expansion'].forEach(cat => {
+                if (p.aiAnalysis.classRecommendations?.[cat]) {
+                  p.aiAnalysis.classRecommendations[cat] = 
+                    p.aiAnalysis.classRecommendations[cat].filter(c => c.class !== classCode);
+                }
+              });
+              
+              // classReasons에서 제거
+              delete p.aiAnalysis.classReasons[classCode];
+              
+              // recommendedGoods에서 제거
+              delete p.aiAnalysis.recommendedGoods[classCode];
+              
+              console.log(`[TM] 제${classCode}류 제거: ${invalidClass.reason}`);
+            }
+          }
+          
+          // 잘못된 지정상품 제거
+          if (validationResult.invalidGoods?.length > 0) {
+            for (const invalidGood of validationResult.invalidGoods) {
+              const { classCode, goodsName, reason } = invalidGood;
+              
+              if (p.aiAnalysis.recommendedGoods?.[classCode]) {
+                p.aiAnalysis.recommendedGoods[classCode] = 
+                  p.aiAnalysis.recommendedGoods[classCode].filter(g => g.name !== goodsName);
+                
+                console.log(`[TM] 제${classCode}류 "${goodsName}" 제거: ${reason}`);
+              }
+            }
+          }
+        }
+        
+        console.log('[TM] ✅ 검증 완료');
+      }
+      
       TM.renderCurrentStep();
       App.showToast('사업 분석 완료!', 'success');
       
@@ -5979,6 +6145,31 @@ ${TM.PRACTICE_GUIDELINES}
     
     console.log(`[TM] ════ DB 검색: 제${classCode}류 ════`);
     
+    // 사업 맥락 추출 (필터링용)
+    const businessContext = [
+      ...(analysis.coreProducts || []),
+      ...(analysis.coreServices || []),
+      ...(analysis.expansionPotential || [])
+    ].join(' ').toLowerCase();
+    
+    // 혼동 방지용 필터 (동음이의어/유사어 처리)
+    const confusionFilters = {
+      '생화': ['생화학', '생화학적'],  // 생화(꽃) vs 생화학
+      '가구': ['가구원', '한가구'],     // 가구(furniture) vs 가구(家口)
+      '화분': ['화분증'],               // 화분(pot) vs 화분(花粉)
+    };
+    
+    // 현재 사업과 관련 없는 키워드 감지
+    const getExcludePatterns = (keyword) => {
+      const patterns = [];
+      for (const [key, excludes] of Object.entries(confusionFilters)) {
+        if (keyword.includes(key)) {
+          patterns.push(...excludes);
+        }
+      }
+      return patterns;
+    };
+    
     // 1. 핵심 상품/서비스 키워드로 검색 (최우선)
     const coreTerms = [
       ...(analysis.coreProducts || []),
@@ -5986,6 +6177,8 @@ ${TM.PRACTICE_GUIDELINES}
     ];
     
     for (const term of coreTerms) {
+      const excludePatterns = getExcludePatterns(term);
+      
       try {
         const { data } = await App.sb
           .from('gazetted_goods_cache')
@@ -5998,6 +6191,15 @@ ${TM.PRACTICE_GUIDELINES}
           console.log(`[TM] 핵심 키워드 "${term}" → ${data.length}건`);
           data.forEach(item => {
             if (!seen.has(item.goods_name)) {
+              // 혼동 필터 적용
+              const nameLower = item.goods_name.toLowerCase();
+              const shouldExclude = excludePatterns.some(p => nameLower.includes(p));
+              
+              if (shouldExclude) {
+                console.log(`[TM] 제외 (혼동방지): ${item.goods_name}`);
+                return;
+              }
+              
               seen.add(item.goods_name);
               results.push({
                 name: item.goods_name,
@@ -6018,6 +6220,8 @@ ${TM.PRACTICE_GUIDELINES}
     for (const keyword of keywords.slice(0, 15)) {
       if (coreTerms.includes(keyword)) continue;
       
+      const excludePatterns = getExcludePatterns(keyword);
+      
       try {
         const { data } = await App.sb
           .from('gazetted_goods_cache')
@@ -6030,10 +6234,18 @@ ${TM.PRACTICE_GUIDELINES}
           console.log(`[TM] 키워드 "${keyword}" → ${data.length}건`);
           data.forEach(item => {
             if (!seen.has(item.goods_name)) {
+              // 혼동 필터 적용
+              const nameLower = item.goods_name.toLowerCase();
+              const shouldExclude = excludePatterns.some(p => nameLower.includes(p));
+              
+              if (shouldExclude) {
+                console.log(`[TM] 제외 (혼동방지): ${item.goods_name}`);
+                return;
+              }
+              
               seen.add(item.goods_name);
               
               // 우선순위 계산
-              const nameLower = item.goods_name.toLowerCase();
               const kwLower = keyword.toLowerCase();
               let priority = 2;
               
@@ -6140,7 +6352,7 @@ ${TM.PRACTICE_GUIDELINES}
     
     console.log(`[TM] 직접 매칭 결과: ${selected.length}개`);
     
-    // 2. LLM이 나머지 선택
+    // 2. LLM이 나머지 선택 (관련성 검증 강화)
     if (selected.length < MIN_GOODS && candidates.length > selected.length) {
       const remainingCandidates = candidates.filter(c => !usedNames.has(c.name));
       
@@ -6151,20 +6363,31 @@ ${TM.PRACTICE_GUIDELINES}
         
         const businessTypes = analysis.businessTypes?.join(', ') || '';
         const expansion = analysis.expansionPotential?.join(', ') || '';
+        const coreProducts = analysis.coreProducts?.join(', ') || '';
+        const coreServices = analysis.coreServices?.join(', ') || '';
         
-        const selectPrompt = `사업: ${businessText}
-사업유형: ${businessTypes}
-확장가능: ${expansion}
+        const selectPrompt = `【사업 정보】
+- 사업 내용: ${businessText}
+- 핵심 상품: ${coreProducts || '없음'}
+- 핵심 서비스: ${coreServices || '없음'}
+- 사업 유형: ${businessTypes || '미정'}
+- 확장 가능: ${expansion || '미정'}
 
-【제${classCode}류 고시명칭】
+【제${classCode}류 고시명칭 후보】
 ${numberedList}
 
-위 목록에서 이 사업에 적합한 ${MIN_GOODS - selected.length}개를 선택하세요.
-- 사업의 핵심 활동과 관련된 것
-- 향후 사업 확장에 필요한 것
-- 방어적 등록이 필요한 것
+【선택 기준 - 매우 중요】
+★★★ 반드시 사업 내용과 직접적으로 관련 있는 것만 선택하세요 ★★★
 
-응답: 숫자만 쉼표로 (예: 1,2,3,4,5)
+1. "${businessText}"와 관련된 상품/서비스만 선택
+2. 유사한 발음이나 글자가 포함되어도 의미가 다르면 제외
+   - 예: "꽃/생화(花)" 사업인데 "생화학(化學)" 관련 상품은 제외
+   - 예: "가구" 사업인데 "가구(家口=가족)" 관련 상품은 제외
+3. 해당 사업의 실제 판매/제공 대상과 맞는 것만 선택
+
+선택할 개수: ${MIN_GOODS - selected.length}개 이하 (관련 있는 것이 없으면 0개도 가능)
+
+응답: 숫자만 쉼표로 (예: 1,2,3) 또는 관련 없으면 "없음"
 선택:`;
 
         try {
@@ -6173,30 +6396,35 @@ ${numberedList}
           
           console.log(`[TM] LLM 응답: "${responseText.substring(0, 80)}..."`);
           
-          // 번호 파싱
-          const numbers = responseText
-            .replace(/[^\d,\s]/g, '')
-            .split(/[,\s]+/)
-            .map(n => parseInt(n.trim()))
-            .filter(n => !isNaN(n) && n >= 1 && n <= remainingCandidates.length);
-          
-          console.log(`[TM] 파싱된 번호: ${numbers.length}개`);
-          
-          // 번호로 상품 추가
-          const usedIndices = new Set();
-          for (const num of numbers) {
-            if (selected.length >= MIN_GOODS) break;
-            if (usedIndices.has(num)) continue;
+          // "없음" 응답 처리
+          if (responseText.includes('없음') || responseText.includes('0개') || responseText.includes('해당없음')) {
+            console.log('[TM] LLM: 관련 상품 없음');
+          } else {
+            // 번호 파싱
+            const numbers = responseText
+              .replace(/[^\d,\s]/g, '')
+              .split(/[,\s]+/)
+              .map(n => parseInt(n.trim()))
+              .filter(n => !isNaN(n) && n >= 1 && n <= remainingCandidates.length);
             
-            usedIndices.add(num);
-            const item = remainingCandidates[num - 1];
-            if (!usedNames.has(item.name)) {
-              usedNames.add(item.name);
-              selected.push({
-                name: item.name,
-                similarGroup: item.similarGroup,
-                isCore: false
-              });
+            console.log(`[TM] 파싱된 번호: ${numbers.length}개`);
+            
+            // 번호로 상품 추가
+            const usedIndices = new Set();
+            for (const num of numbers) {
+              if (selected.length >= MIN_GOODS) break;
+              if (usedIndices.has(num)) continue;
+              
+              usedIndices.add(num);
+              const item = remainingCandidates[num - 1];
+              if (!usedNames.has(item.name)) {
+                usedNames.add(item.name);
+                selected.push({
+                  name: item.name,
+                  similarGroup: item.similarGroup,
+                  isCore: false
+                });
+              }
             }
           }
         } catch (err) {
@@ -6205,11 +6433,16 @@ ${numberedList}
       }
     }
     
-    // 3. 부족하면 우선순위순 보충
+    // 3. 부족하면 core/keyword 매칭된 것만 보충 (class 매칭은 제외)
     if (selected.length < MIN_GOODS) {
-      console.log(`[TM] ${MIN_GOODS - selected.length}개 보충 필요`);
+      console.log(`[TM] ${MIN_GOODS - selected.length}개 보충 필요 (관련 항목만)`);
       
-      for (const c of candidates) {
+      // core 또는 keyword 매칭된 것만 보충 (class 전체 조회 결과는 제외)
+      const relatedCandidates = candidates.filter(c => 
+        c.matchType === 'core' || c.matchType === 'keyword'
+      );
+      
+      for (const c of relatedCandidates) {
         if (selected.length >= MIN_GOODS) break;
         if (usedNames.has(c.name)) continue;
         
@@ -6220,11 +6453,131 @@ ${numberedList}
           isCore: false
         });
       }
+      
+      // 여전히 부족하면 최소 5개만 채움 (관련 없는 것으로 채우지 않음)
+      if (selected.length < 5) {
+        console.log(`[TM] 관련 후보 부족, ${selected.length}개만 반환`);
+      }
     }
     
     console.log(`[TM] 제${classCode}류 최종: ${selected.length}개`);
     
     return selected.slice(0, MIN_GOODS);
+  };
+  
+  // ================================================================
+  // 추천 결과 검증 (Validation)
+  // - 원래 사업 내용과 추천 결과의 일치성 검증
+  // - 잘못된 추천 식별 및 수정 제안
+  // ================================================================
+  TM.validateRecommendations = async function(businessInput, aiAnalysis) {
+    if (!aiAnalysis || !aiAnalysis.recommendedClasses?.length) {
+      return null;
+    }
+    
+    console.log('[TM] ════ 추천 결과 검증 시작 ════');
+    
+    // 검증할 데이터 준비
+    const classRec = aiAnalysis.classRecommendations || {};
+    const allClasses = [
+      ...(classRec.core || []),
+      ...(classRec.recommended || []),
+      ...(classRec.expansion || [])
+    ];
+    
+    // 류별 지정상품 요약
+    const goodsSummary = {};
+    for (const classCode of aiAnalysis.recommendedClasses || []) {
+      const goods = aiAnalysis.recommendedGoods?.[classCode] || [];
+      goodsSummary[classCode] = goods.slice(0, 5).map(g => g.name);
+    }
+    
+    const validationPrompt = `당신은 상표 출원 전문 변리사입니다. 아래 AI 추천 결과를 검증해주세요.
+
+【원본 사업 내용】
+"${businessInput}"
+
+【AI 분석 결과】
+- 사업 요약: ${aiAnalysis.businessAnalysis || '없음'}
+- 핵심 상품: ${(aiAnalysis.coreProducts || []).join(', ') || '없음'}
+- 핵심 서비스: ${(aiAnalysis.coreServices || []).join(', ') || '없음'}
+
+【추천된 상품류 및 지정상품】
+${allClasses.map(c => {
+  const goods = goodsSummary[c.class] || [];
+  return `■ 제${c.class}류: ${c.reason}
+  → 지정상품: ${goods.length > 0 ? goods.join(', ') : '(없음)'}`;
+}).join('\n\n')}
+
+【검증 기준】
+1. 각 추천 류가 "${businessInput}" 사업과 직접적으로 관련 있는가?
+2. 각 지정상품이 해당 사업에서 실제로 판매/제공하는 것인가?
+3. 동음이의어 오류가 있는가? (예: 생화(꽃)↔생화학, 가구(furniture)↔가구(家口))
+4. 논리적으로 맞지 않는 추천이 있는가?
+
+【검증 결과 - JSON 형식으로만 응답】
+{
+  "hasIssues": true/false,
+  "overallScore": 0-100,
+  "summary": "전체 검증 요약 (1-2문장)",
+  "invalidClasses": [
+    {"class": "42", "reason": "이 사업은 IT 서비스가 아님"}
+  ],
+  "invalidGoods": [
+    {"classCode": "35", "goodsName": "생화학적 촉매 도매업", "reason": "생화(꽃)와 생화학(화학) 혼동"}
+  ],
+  "warnings": [
+    {"class": "35", "message": "온라인 판매 여부 확인 필요"}
+  ],
+  "suggestions": [
+    {"type": "add_class", "class": "44", "reason": "꽃 장식 서비스 추가 권장"}
+  ]
+}
+
+문제가 없으면 hasIssues: false, invalidClasses: [], invalidGoods: []로 응답하세요.`;
+
+    try {
+      const response = await App.callClaude(validationPrompt, 1500);
+      const text = response.text || '';
+      
+      const startIdx = text.indexOf('{');
+      const endIdx = text.lastIndexOf('}');
+      
+      if (startIdx === -1 || endIdx <= startIdx) {
+        console.warn('[TM] 검증 응답 파싱 실패');
+        return null;
+      }
+      
+      const jsonStr = text.substring(startIdx, endIdx + 1)
+        .replace(/[\x00-\x1F\x7F]/g, ' ')
+        .replace(/,(\s*[}\]])/g, '$1');
+      
+      const result = JSON.parse(jsonStr);
+      
+      console.log('[TM] 검증 결과:', {
+        hasIssues: result.hasIssues,
+        score: result.overallScore,
+        summary: result.summary,
+        invalidClasses: result.invalidClasses?.length || 0,
+        invalidGoods: result.invalidGoods?.length || 0
+      });
+      
+      if (result.invalidClasses?.length > 0) {
+        console.log('[TM] 잘못된 류:', result.invalidClasses);
+      }
+      if (result.invalidGoods?.length > 0) {
+        console.log('[TM] 잘못된 지정상품:', result.invalidGoods);
+      }
+      if (result.suggestions?.length > 0) {
+        console.log('[TM] 추가 제안:', result.suggestions);
+      }
+      
+      return result;
+      
+    } catch (error) {
+      console.error('[TM] 검증 실패:', error);
+      return null;
+    }
   };
   
   // ================================================================
