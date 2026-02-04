@@ -584,7 +584,7 @@
   // ============================================================
   
   TM.openSettings = function() {
-    const currentApiKey = TM.config.kiprisConfig.apiKey || '';
+    const currentApiKey = TM.kiprisConfig.apiKey || '';
     
     // 모달 생성
     const modal = document.createElement('div');
@@ -665,11 +665,11 @@
     // localStorage에 저장
     if (newApiKey) {
       localStorage.setItem('tm_kipris_api_key', newApiKey);
-      TM.config.kiprisConfig.apiKey = newApiKey;
+      TM.kiprisConfig.apiKey = newApiKey;
       App.showToast('KIPRIS API 키가 저장되었습니다.', 'success');
     } else {
       localStorage.removeItem('tm_kipris_api_key');
-      TM.config.kiprisConfig.apiKey = 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE='; // 기본값
+      TM.kiprisConfig.apiKey = 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE='; // 기본값
       App.showToast('기본 API 키로 복원되었습니다.', 'info');
     }
     
@@ -4265,7 +4265,7 @@
         console.log('[KIPRIS] Edge Function 연결 테스트...');
         try {
           const testResult = await App.sb.functions.invoke('kipris-proxy', {
-            body: { type: 'test', params: {}, apiKey: TM.config.kiprisConfig.apiKey }
+            body: { type: 'test', params: {}, apiKey: TM.kiprisConfig.apiKey }
           });
           console.log('[KIPRIS] Edge Function 테스트 결과:', testResult);
         } catch (testErr) {
@@ -4281,7 +4281,7 @@
           body: { 
             type, 
             params,
-            apiKey: TM.config.kiprisConfig.apiKey // API 키 전달
+            apiKey: TM.kiprisConfig.apiKey // API 키 전달
           }
         });
         
@@ -4335,7 +4335,7 @@
         body: { 
           type: 'detail', 
           params: { applicationNumber },
-          apiKey: TM.config.kiprisConfig.apiKey // API 키 전달
+          apiKey: TM.kiprisConfig.apiKey // API 키 전달
         }
       });
       
