@@ -652,9 +652,24 @@
   padding: 20px !important;
 }
 
-/* 대시보드 flex 레이아웃 유지 (HTML inline style) */
+/* 대시보드 내부 flex 레이아웃 강제 */
 #patent-dashboard-panel > div:first-child {
-  /* flex 레이아웃 유지 - HTML에서 지정 */
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 20px !important;
+  align-items: flex-start !important;
+}
+
+/* 왼쪽 액션 패널 */
+#patent-dashboard-panel > div:first-child > div:first-child {
+  width: 240px !important;
+  flex-shrink: 0 !important;
+}
+
+/* 오른쪽 테이블 영역 */
+#patent-dashboard-panel > div:first-child > div:last-child {
+  flex: 1 !important;
+  min-width: 0 !important;
 }
 
 /* 대시보드 카드 크기 조정 */
@@ -662,10 +677,24 @@
   min-width: 0 !important;
 }
 
-/* 프로젝트 목록 테이블 - 테이블 레이아웃 유지 */
+/* 대시보드 테이블 스타일 강제 */
+#patent-dashboard-panel table {
+  width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+}
+
+#patent-dashboard-panel th,
+#patent-dashboard-panel td {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* 프로젝트 목록 테이블 */
 #dashProjectList,
 #dashProvisionalList {
-  /* 테이블 tbody로 테이블 레이아웃 유지 */
+  display: table-row-group !important;
 }
 
 /* ============================================================
