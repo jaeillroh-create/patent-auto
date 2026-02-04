@@ -5595,156 +5595,89 @@ ${criticalResults.slice(0, 5).map(r =>
         <p>상표를 사용 중이거나 사용 준비 중인 경우 우선심사를 신청할 수 있습니다.</p>
       </div>
       
-      <!-- 출원서 업로드 (드래그 앤 드롭) -->
-      <div class="tm-form-section tm-upload-section">
-        <h4>📄 출원서 업로드 (선택)</h4>
-        <p class="tm-hint">출원 완료된 상표 출원서(PDF, 이미지)를 업로드하면 정보를 자동으로 추출합니다.</p>
+      <!-- 출원서 업로드 (컴팩트) -->
+      <div class="tm-form-section tm-upload-section-compact">
+        <div class="tm-upload-header">
+          <span>📄 출원서 업로드 (선택)</span>
+          <span class="tm-hint-inline">출원서(PDF)를 업로드하면 정보를 자동 추출합니다</span>
+        </div>
         
-        <div class="tm-dropzone" id="tm-application-dropzone"
+        <div class="tm-dropzone-compact" id="tm-application-dropzone"
              ondragover="TM.handleDragOver(event)" 
              ondragleave="TM.handleDragLeave(event)"
              ondrop="TM.handleApplicationDrop(event)"
              onclick="document.getElementById('tm-application-input').click()">
           <input type="file" id="tm-application-input" style="display: none;" 
                  accept=".pdf,image/*" multiple onchange="TM.handleApplicationUpload(this.files)">
-          <div class="tm-dropzone-content">
-            <div class="tm-dropzone-icon">📎</div>
-            <div class="tm-dropzone-text">
-              <strong>출원서 파일 업로드</strong><br>
-              <span>클릭하거나 파일을 끌어다 놓으세요 (여러 파일 가능)</span>
-            </div>
-            <div class="tm-dropzone-formats">PDF, JPG, PNG 지원 · 여러 파일에서 빈 항목 자동 채움</div>
-          </div>
+          <span class="tm-dropzone-compact-icon">📎</span>
+          <span class="tm-dropzone-compact-text">파일 선택 또는 드래그</span>
+          <span class="tm-dropzone-compact-formats">PDF, 이미지</span>
         </div>
         
         ${pe.extractedFromApplication ? `
-          <div class="tm-extracted-info ${pe.editMode ? 'edit-mode' : ''}">
-            <div class="tm-extracted-header">
-              <span class="tm-extracted-badge">${pe.editMode ? '📝 출원 정보 입력/수정' : '✅ 출원서에서 추출된 정보'}</span>
-              <div class="tm-extracted-actions">
+          <div class="tm-extracted-info-compact ${pe.editMode ? 'edit-mode' : ''}">
+            <div class="tm-extracted-header-compact">
+              <span>${pe.editMode ? '📝 출원 정보' : '✅ 추출 완료'}</span>
+              <div class="tm-extracted-actions-compact">
                 ${pe.editMode ? `
-                  <button class="btn btn-sm btn-primary" onclick="TM.confirmExtractedInfo()">✓ 확인</button>
+                  <button class="btn btn-xs btn-primary" onclick="TM.confirmExtractedInfo()">확인</button>
                 ` : `
-                  <button class="btn btn-sm btn-ghost" onclick="TM.editExtractedInfo()">수정</button>
+                  <button class="btn btn-xs btn-ghost" onclick="TM.editExtractedInfo()">수정</button>
                 `}
-                <button class="btn btn-sm btn-ghost" onclick="TM.clearExtractedInfo()">초기화</button>
+                <button class="btn btn-xs btn-ghost" onclick="TM.clearExtractedInfo()">초기화</button>
               </div>
             </div>
             
             ${pe.editMode ? `
-              <!-- 편집 모드: 입력 필드 -->
-              <div class="tm-extracted-form">
-                <div class="tm-form-row">
-                  <div class="tm-form-field">
-                    <label>출원번호 <span class="required">*</span></label>
-                    <input type="text" class="tm-input" id="tm-extract-applicationNumber" 
-                           value="${pe.applicationNumber || ''}" 
-                           placeholder="예: 40-2024-0012345">
+              <div class="tm-extracted-form-compact">
+                <div class="tm-form-grid-compact">
+                  <div class="tm-field-compact">
+                    <label>출원번호 *</label>
+                    <input type="text" id="tm-extract-applicationNumber" value="${pe.applicationNumber || ''}" placeholder="40-2024-0012345">
                   </div>
-                  <div class="tm-form-field">
-                    <label>출원일 <span class="required">*</span></label>
-                    <input type="text" class="tm-input" id="tm-extract-applicationDate" 
-                           value="${pe.applicationDate || ''}" 
-                           placeholder="예: 2024.03.15">
+                  <div class="tm-field-compact">
+                    <label>출원일 *</label>
+                    <input type="text" id="tm-extract-applicationDate" value="${pe.applicationDate || ''}" placeholder="2024.03.15">
                   </div>
-                </div>
-                <div class="tm-form-row">
-                  <div class="tm-form-field">
-                    <label>출원인 <span class="required">*</span></label>
-                    <input type="text" class="tm-input" id="tm-extract-applicantName" 
-                           value="${pe.applicantName || ''}" 
-                           placeholder="예: 주식회사 가나다">
+                  <div class="tm-field-compact">
+                    <label>출원인 *</label>
+                    <input type="text" id="tm-extract-applicantName" value="${pe.applicantName || ''}" placeholder="주식회사 OOO">
                   </div>
-                  <div class="tm-form-field">
+                  <div class="tm-field-compact">
                     <label>상표명</label>
-                    <input type="text" class="tm-input" id="tm-extract-trademarkNameFromApp" 
-                           value="${pe.trademarkNameFromApp || p.trademarkName || ''}" 
-                           placeholder="예: SAMPLE">
+                    <input type="text" id="tm-extract-trademarkNameFromApp" value="${pe.trademarkNameFromApp || ''}" placeholder="상표명">
                   </div>
-                </div>
-                <div class="tm-form-row">
-                  <div class="tm-form-field">
+                  <div class="tm-field-compact">
                     <label>상품류</label>
-                    <input type="text" class="tm-input" id="tm-extract-classCode" 
-                           value="${pe.classCode || ''}" 
-                           placeholder="예: 35">
+                    <input type="text" id="tm-extract-classCode" value="${pe.classCode || ''}" placeholder="09">
                   </div>
-                  <div class="tm-form-field full-width">
+                  <div class="tm-field-compact tm-field-wide">
                     <label>지정상품</label>
-                    <input type="text" class="tm-input" id="tm-extract-designatedGoodsFromApp" 
-                           value="${pe.designatedGoodsFromApp || ''}" 
-                           placeholder="예: 광고업, 경영컨설팅업">
+                    <input type="text" id="tm-extract-designatedGoodsFromApp" value="${pe.designatedGoodsFromApp || ''}" placeholder="지정상품 목록">
                   </div>
                 </div>
               </div>
             ` : `
-              <!-- 읽기 모드: 정보 표시 -->
-              <div class="tm-extracted-grid">
-                <div class="tm-extracted-item">
-                  <label>출원번호</label>
-                  <span>${pe.applicationNumber || '-'}</span>
-                </div>
-                <div class="tm-extracted-item">
-                  <label>출원인</label>
-                  <span>${pe.applicantName || '-'}</span>
-                </div>
-                <div class="tm-extracted-item">
-                  <label>상표명</label>
-                  <span>${pe.trademarkNameFromApp || p.trademarkName || '-'}</span>
-                </div>
-                <div class="tm-extracted-item">
-                  <label>출원일</label>
-                  <span>${pe.applicationDate || '-'}</span>
-                </div>
-                ${pe.classCode ? `
-                  <div class="tm-extracted-item">
-                    <label>상품류</label>
-                    <span>제${pe.classCode}류</span>
-                  </div>
-                ` : ''}
-                ${pe.designatedGoodsFromApp ? `
-                  <div class="tm-extracted-item full-width">
-                    <label>지정상품</label>
-                    <span>${pe.designatedGoodsFromApp}</span>
-                  </div>
-                ` : ''}
+              <div class="tm-extracted-summary">
+                <span><strong>${pe.applicationNumber || '-'}</strong> | ${pe.applicationDate || '-'} | ${pe.applicantName || '-'}</span>
               </div>
             `}
           </div>
         ` : ''}
       </div>
       
-      <!-- 우선심사 선택 -->
-      <div class="tm-form-section tm-priority-choice">
-        <h4>우선심사 신청 여부를 선택해주세요</h4>
-        
-        <div class="tm-choice-cards">
-          <div class="tm-choice-card ${pe.enabled ? 'selected' : ''}" data-action="tm-set-priority" data-enabled="true">
-            <div class="tm-choice-icon">⚡</div>
-            <div class="tm-choice-title">우선심사 신청</div>
-            <div class="tm-choice-desc">
-              심사 기간: <strong>2~3개월</strong><br>
-              추가 비용: 160,000원/류
-            </div>
-            ${pe.enabled ? '<div class="tm-choice-check">✓</div>' : ''}
-          </div>
-          
-          <div class="tm-choice-card ${pe.enabled === false && isConfirmed ? 'selected' : ''}" data-action="tm-set-priority" data-enabled="false">
-            <div class="tm-choice-icon">📋</div>
-            <div class="tm-choice-title">일반 심사</div>
-            <div class="tm-choice-desc">
-              심사 기간: <strong>12~14개월</strong><br>
-              추가 비용: 없음
-            </div>
-            ${pe.enabled === false && isConfirmed ? '<div class="tm-choice-check">✓</div>' : ''}
-          </div>
+      <!-- 우선심사 선택 (컴팩트) -->
+      <div class="tm-priority-choice-compact">
+        <span class="tm-choice-label">우선심사 신청</span>
+        <div class="tm-choice-buttons">
+          <button class="tm-choice-btn ${pe.enabled ? 'selected' : ''}" data-action="tm-set-priority" data-enabled="true">
+            ⚡ 신청 <small>(2~3개월, +160,000원/류)</small>
+          </button>
+          <button class="tm-choice-btn ${pe.enabled === false && isConfirmed ? 'selected' : ''}" data-action="tm-set-priority" data-enabled="false">
+            📋 일반심사 <small>(12~14개월)</small>
+          </button>
         </div>
-        
-        ${!isConfirmed ? `
-          <div class="tm-choice-hint">
-            ⚠️ 우선심사 신청 여부를 선택해야 다음 단계로 진행할 수 있습니다.
-          </div>
-        ` : ''}
+        ${!isConfirmed ? '<span class="tm-choice-required">← 선택 필요</span>' : ''}
       </div>
       
       ${pe.enabled ? `
@@ -5820,6 +5753,17 @@ ${criticalResults.slice(0, 5).map(r =>
         <div class="tm-form-section">
           <h4>📝 우선심사 신청 설명서</h4>
           <p class="tm-hint">아래 버튼을 클릭하면 우선심사 신청 설명서가 Word 파일로 생성됩니다.</p>
+          
+          ${TM.checkGoodsMismatch() ? `
+            <div class="tm-goods-mismatch-warning">
+              <div class="tm-warning-icon">⚠️</div>
+              <div class="tm-warning-content">
+                <strong>지정상품 정보 불일치</strong>
+                <p>2단계 지정상품(${(p.designatedGoods || []).map(d => d.classCode).join(',')}류)과 출원서 추출 정보(${pe.classCode || '-'}류)가 다릅니다.</p>
+                <p class="tm-warning-hint">Word 생성 시 어떤 정보를 사용할지 선택할 수 있습니다.</p>
+              </div>
+            </div>
+          ` : ''}
           
           <div class="tm-doc-actions">
             <button class="btn btn-primary btn-lg" data-action="tm-generate-priority-doc">
@@ -6395,22 +6339,33 @@ ${text.substring(0, 2000)}
         let fileContent = '';
         let fileType = '';
         
-        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-          fileType = 'PDF';
-          fileContent = await TM.extractTextFromPDF(file);
-        } else if (file.name.toLowerCase().match(/\.(doc|docx)$/)) {
-          fileType = 'Word';
-          fileContent = await TM.extractTextFromWord(file);
-        } else if (file.type.startsWith('image/')) {
-          fileType = '이미지';
-          fileContent = await TM.extractTextFromImage(file);
-        } else {
-          fileType = '파일';
+        try {
+          if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+            fileType = 'PDF';
+            fileContent = await TM.extractTextFromPDF(file);
+          } else if (file.name.toLowerCase().match(/\.(doc|docx)$/)) {
+            fileType = 'Word';
+            fileContent = await TM.extractTextFromWord(file);
+          } else if (file.type.startsWith('image/')) {
+            fileType = '이미지';
+            fileContent = await TM.extractTextFromImage(file);
+          } else {
+            fileType = '파일';
+            fileContent = file.name;
+          }
+        } catch (extractError) {
+          console.warn('[TM] 텍스트 추출 실패, 파일명만 사용:', extractError.message);
           fileContent = file.name;
         }
         
-        // AI로 증빙자료명 생성
-        const evidenceTitle = await TM.generateEvidenceTitle(file.name, fileContent, fileType);
+        // AI로 증빙자료명 생성 (실패 시 파일명 기반 추측)
+        let evidenceTitle;
+        try {
+          evidenceTitle = await TM.generateEvidenceTitle(file.name, fileContent, fileType);
+        } catch (aiError) {
+          console.warn('[TM] AI 분석 실패, 파일명 기반 추측:', aiError.message);
+          evidenceTitle = TM.guessEvidenceTitle(file.name);
+        }
         
         p.priorityExam.evidences.push({
           title: evidenceTitle,
@@ -6552,7 +6507,22 @@ ${content.substring(0, 1500)}
   // 파일명으로 증빙자료명 추측
   TM.guessEvidenceTitle = function(fileName) {
     const name = fileName.toLowerCase();
+    const nameKor = fileName;
     
+    // 한글 패턴
+    if (nameKor.includes('사업자등록증')) return '사업자등록증';
+    if (nameKor.includes('기술설명서') || nameKor.includes('기술소개')) return '기술설명서';
+    if (nameKor.includes('제안서')) return '제안서';
+    if (nameKor.includes('계약서')) return '계약서';
+    if (nameKor.includes('견적서')) return '견적서';
+    if (nameKor.includes('납품')) return '납품 확인서';
+    if (nameKor.includes('발명설명서')) return '발명설명서';
+    if (nameKor.includes('출원')) return '출원 관련 서류';
+    if (nameKor.includes('실증명원')) return '출원사실증명원';
+    if (nameKor.includes('증명원')) return '증명원';
+    if (nameKor.includes('첨부')) return '첨부서류';
+    
+    // 영문 패턴
     if (name.includes('사업자') || name.includes('business')) return '사업자등록증';
     if (name.includes('제안서') || name.includes('proposal')) return '제안서';
     if (name.includes('계약서') || name.includes('contract')) return '계약서';
@@ -6576,13 +6546,17 @@ ${content.substring(0, 1500)}
     
     if (!previewEl || !contentEl) return;
     
-    const docContent = TM.generatePriorityDocContent();
+    // 추출 정보가 있으면 추출 정보 사용
+    const pe = TM.currentProject?.priorityExam || {};
+    const hasExtracted = pe.classCode || pe.designatedGoodsFromApp;
+    
+    const docContent = TM.generatePriorityDocContent(hasExtracted);
     contentEl.innerHTML = docContent;
     previewEl.style.display = 'block';
   };
   
   // 우선심사 설명서 내용 생성
-  TM.generatePriorityDocContent = function() {
+  TM.generatePriorityDocContent = function(useExtracted = null) {
     const p = TM.currentProject;
     const pe = p.priorityExam || {};
     
@@ -6592,41 +6566,51 @@ ${content.substring(0, 1500)}
     const applicationDate = pe.applicationDate || '[출원일]';
     const trademarkName = pe.trademarkNameFromApp || p.trademarkName || '[상표명]';
     
-    // 상품류 및 지정상품
-    const classGroups = {};
-    (p.designatedGoods || []).forEach(classData => {
-      if (!classGroups[classData.classCode]) {
-        classGroups[classData.classCode] = [];
-      }
-      (classData.goods || []).forEach(g => {
-        classGroups[classData.classCode].push({
-          name: g.name,
-          similarGroup: g.similarGroup || ''
+    // 추출 정보가 있고, 명시적으로 추출 정보 사용이 선택된 경우
+    const hasExtracted = pe.classCode || pe.designatedGoodsFromApp;
+    let classCodeStr, designatedGoodsStr, goodsWithGroups;
+    
+    if (useExtracted === true && hasExtracted) {
+      // 추출 정보 사용
+      classCodeStr = pe.classCode ? `제 ${pe.classCode}류` : '[상품류]';
+      designatedGoodsStr = pe.designatedGoodsFromApp || '[지정상품]';
+      goodsWithGroups = pe.designatedGoodsFromApp ? 
+        pe.designatedGoodsFromApp.split(',').slice(0, 10).map(g => `『${g.trim()}』`) : [];
+    } else {
+      // 2단계 정보 사용 (기본)
+      const classGroups = {};
+      (p.designatedGoods || []).forEach(classData => {
+        if (!classGroups[classData.classCode]) {
+          classGroups[classData.classCode] = [];
+        }
+        (classData.goods || []).forEach(g => {
+          classGroups[classData.classCode].push({
+            name: g.name,
+            similarGroup: g.similarGroup || ''
+          });
         });
       });
-    });
-    
-    const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
-    const classCodeStr = classCodeList.map(c => '제 ' + c + '류').join(', ');
-    
-    // 지정상품 문자열
-    const goodsList = [];
-    Object.values(classGroups).forEach(goods => {
-      goods.forEach(g => goodsList.push(g.name));
-    });
-    const designatedGoodsStr = goodsList.join(', ');
-    
-    // 지정상품 + 유사군코드 상세
-    const goodsWithGroups = [];
-    Object.entries(classGroups).forEach(([classCode, goods]) => {
-      goods.forEach(g => {
-        if (g.similarGroup) {
-          goodsWithGroups.push(`『${g.similarGroup} ${g.name}』`);
-        } else {
-          goodsWithGroups.push(`『${g.name}』`);
-        }
+      
+      const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
+      classCodeStr = classCodeList.length > 0 ? classCodeList.map(c => '제 ' + c + '류').join(', ') : '[상품류]';
+      
+      const goodsList = [];
+      Object.values(classGroups).forEach(goods => {
+        goods.forEach(g => goodsList.push(g.name));
       });
-    });
+      designatedGoodsStr = goodsList.length > 0 ? goodsList.join(', ') : '[지정상품]';
+      
+      goodsWithGroups = [];
+      Object.entries(classGroups).forEach(([classCode, goods]) => {
+        goods.forEach(g => {
+          if (g.similarGroup) {
+            goodsWithGroups.push(`『${g.similarGroup} ${g.name}』`);
+          } else {
+            goodsWithGroups.push(`『${g.name}』`);
+          }
+        });
+      });
+    }
     
     // 증거자료 목록
     const evidences = pe.evidences || [];
@@ -6704,13 +6688,34 @@ ${content.substring(0, 1500)}
   };
   
   // 우선심사 설명서 Word 파일 생성
-  TM.generatePriorityDoc = async function() {
+  TM.generatePriorityDoc = async function(useExtracted = null) {
     const p = TM.currentProject;
     const pe = p.priorityExam || {};
     
     // 필수 정보 체크
     if (!pe.applicationNumber && !p.trademarkName) {
       App.showToast('출원번호 또는 상표명이 필요합니다.', 'warning');
+      return;
+    }
+    
+    // 2단계 지정상품 정보
+    const step2ClassCodes = (p.designatedGoods || []).map(d => d.classCode).sort().join(',');
+    const step2GoodsList = (p.designatedGoods || []).flatMap(d => (d.goods || []).map(g => g.name));
+    const step2GoodsStr = step2GoodsList.join(', ');
+    
+    // 7단계 추출 지정상품 정보
+    const extractedClassCode = pe.classCode || '';
+    const extractedGoodsStr = pe.designatedGoodsFromApp || '';
+    
+    // 불일치 감지 (추출 정보가 있을 때만)
+    const hasExtracted = extractedClassCode || extractedGoodsStr;
+    const classCodeMismatch = hasExtracted && extractedClassCode && step2ClassCodes && extractedClassCode !== step2ClassCodes;
+    const goodsMismatch = hasExtracted && extractedGoodsStr && step2GoodsStr && 
+                          extractedGoodsStr.substring(0, 50) !== step2GoodsStr.substring(0, 50);
+    
+    if ((classCodeMismatch || goodsMismatch) && useExtracted === null) {
+      // 불일치 발견 - 선택 모달 표시
+      TM.showGoodsMismatchModal(step2ClassCodes, step2GoodsStr, extractedClassCode, extractedGoodsStr);
       return;
     }
     
@@ -6723,41 +6728,49 @@ ${content.substring(0, 1500)}
       const applicationDate = pe.applicationDate || '[출원일]';
       const trademarkName = pe.trademarkNameFromApp || p.trademarkName || '[상표명]';
       
-      // 상품류 및 지정상품
-      const classGroups = {};
-      (p.designatedGoods || []).forEach(classData => {
-        if (!classGroups[classData.classCode]) {
-          classGroups[classData.classCode] = [];
-        }
-        (classData.goods || []).forEach(g => {
-          classGroups[classData.classCode].push({
-            name: g.name,
-            similarGroup: g.similarGroup || ''
+      // 상품류 및 지정상품 - 선택에 따라 결정
+      let classCodeStr, designatedGoodsStr, goodsWithGroups;
+      
+      if (useExtracted === true && hasExtracted) {
+        // 7단계 추출 정보 사용
+        classCodeStr = extractedClassCode ? `제 ${extractedClassCode}류` : '[상품류]';
+        designatedGoodsStr = extractedGoodsStr || '[지정상품]';
+        goodsWithGroups = extractedGoodsStr ? extractedGoodsStr.split(',').map(g => `『${g.trim()}』`) : [];
+      } else {
+        // 2단계 지정상품 정보 사용 (기본값)
+        const classGroups = {};
+        (p.designatedGoods || []).forEach(classData => {
+          if (!classGroups[classData.classCode]) {
+            classGroups[classData.classCode] = [];
+          }
+          (classData.goods || []).forEach(g => {
+            classGroups[classData.classCode].push({
+              name: g.name,
+              similarGroup: g.similarGroup || ''
+            });
           });
         });
-      });
-      
-      const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
-      const classCodeStr = classCodeList.map(c => '제 ' + c + '류').join(', ');
-      
-      // 지정상품 문자열
-      const goodsList = [];
-      Object.values(classGroups).forEach(goods => {
-        goods.forEach(g => goodsList.push(g.name));
-      });
-      const designatedGoodsStr = goodsList.join(', ');
-      
-      // 지정상품 + 유사군코드 상세
-      const goodsWithGroups = [];
-      Object.entries(classGroups).forEach(([classCode, goods]) => {
-        goods.forEach(g => {
-          if (g.similarGroup) {
-            goodsWithGroups.push(`『${g.similarGroup} ${g.name}』`);
-          } else {
-            goodsWithGroups.push(`『${g.name}』`);
-          }
+        
+        const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
+        classCodeStr = classCodeList.length > 0 ? classCodeList.map(c => '제 ' + c + '류').join(', ') : '[상품류]';
+        
+        const goodsList = [];
+        Object.values(classGroups).forEach(goods => {
+          goods.forEach(g => goodsList.push(g.name));
         });
-      });
+        designatedGoodsStr = goodsList.length > 0 ? goodsList.join(', ') : '[지정상품]';
+        
+        goodsWithGroups = [];
+        Object.entries(classGroups).forEach(([classCode, goods]) => {
+          goods.forEach(g => {
+            if (g.similarGroup) {
+              goodsWithGroups.push(`『${g.similarGroup} ${g.name}』`);
+            } else {
+              goodsWithGroups.push(`『${g.name}』`);
+            }
+          });
+        });
+      }
       
       // 증거자료 목록
       const evidences = pe.evidences || [];
@@ -6820,11 +6833,120 @@ ${content.substring(0, 1500)}
     }
   };
   
+  // 지정상품 불일치 모달 표시
+  TM.showGoodsMismatchModal = function(step2Class, step2Goods, extractedClass, extractedGoods) {
+    // 기존 모달 제거
+    const existingModal = document.getElementById('tm-goods-mismatch-modal');
+    if (existingModal) existingModal.remove();
+    
+    const modal = document.createElement('div');
+    modal.id = 'tm-goods-mismatch-modal';
+    modal.className = 'tm-modal-overlay';
+    modal.innerHTML = `
+      <div class="tm-modal tm-goods-mismatch-modal">
+        <div class="tm-modal-header">
+          <h3>⚠️ 지정상품 정보 불일치</h3>
+          <button class="tm-modal-close" onclick="TM.closeGoodsMismatchModal()">✕</button>
+        </div>
+        <div class="tm-modal-body">
+          <p class="tm-modal-desc">2단계에서 지정한 상품 정보와 출원서에서 추출한 정보가 다릅니다.<br>어떤 정보로 우선심사 신청 설명서를 작성하시겠습니까?</p>
+          
+          <div class="tm-goods-compare">
+            <div class="tm-goods-option" data-option="step2" onclick="TM.selectGoodsOption('step2')">
+              <div class="tm-goods-option-header">
+                <input type="radio" name="goods-option" id="opt-step2" checked>
+                <label for="opt-step2"><strong>📋 2단계 지정상품</strong> (프로젝트에 저장된 정보)</label>
+              </div>
+              <div class="tm-goods-option-content">
+                <div class="tm-goods-item"><span class="tm-label">상품류:</span> <span>${step2Class || '-'}</span></div>
+                <div class="tm-goods-item"><span class="tm-label">지정상품:</span> <span class="tm-goods-text">${step2Goods.substring(0, 150)}${step2Goods.length > 150 ? '...' : ''}</span></div>
+              </div>
+            </div>
+            
+            <div class="tm-goods-option" data-option="extracted" onclick="TM.selectGoodsOption('extracted')">
+              <div class="tm-goods-option-header">
+                <input type="radio" name="goods-option" id="opt-extracted">
+                <label for="opt-extracted"><strong>📄 출원서 추출 정보</strong> (PDF에서 추출한 정보)</label>
+              </div>
+              <div class="tm-goods-option-content">
+                <div class="tm-goods-item"><span class="tm-label">상품류:</span> <span>제 ${extractedClass || '-'}류</span></div>
+                <div class="tm-goods-item"><span class="tm-label">지정상품:</span> <span class="tm-goods-text">${extractedGoods.substring(0, 150)}${extractedGoods.length > 150 ? '...' : ''}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="tm-modal-footer">
+          <button class="btn btn-secondary" onclick="TM.closeGoodsMismatchModal()">취소</button>
+          <button class="btn btn-primary" onclick="TM.confirmGoodsSelection()">선택한 정보로 생성</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // 기본 선택
+    TM.selectedGoodsOption = 'step2';
+  };
+  
+  // 지정상품 옵션 선택
+  TM.selectGoodsOption = function(option) {
+    TM.selectedGoodsOption = option;
+    document.querySelectorAll('.tm-goods-option').forEach(el => el.classList.remove('selected'));
+    document.querySelector(`.tm-goods-option[data-option="${option}"]`).classList.add('selected');
+    document.getElementById(option === 'step2' ? 'opt-step2' : 'opt-extracted').checked = true;
+  };
+  
+  // 지정상품 선택 확인
+  TM.confirmGoodsSelection = function() {
+    TM.closeGoodsMismatchModal();
+    const useExtracted = TM.selectedGoodsOption === 'extracted';
+    TM.generatePriorityDoc(useExtracted);
+  };
+  
+  // 모달 닫기
+  TM.closeGoodsMismatchModal = function() {
+    const modal = document.getElementById('tm-goods-mismatch-modal');
+    if (modal) modal.remove();
+  };
+  
+  // 지정상품 불일치 체크
+  TM.checkGoodsMismatch = function() {
+    const p = TM.currentProject;
+    if (!p) return false;
+    
+    const pe = p.priorityExam || {};
+    
+    // 2단계 지정상품 정보
+    const step2ClassCodes = (p.designatedGoods || []).map(d => d.classCode).sort().join(',');
+    
+    // 7단계 추출 지정상품 정보
+    const extractedClassCode = pe.classCode || '';
+    
+    // 불일치 감지 (추출 정보가 있을 때만)
+    const hasExtracted = extractedClassCode || pe.designatedGoodsFromApp;
+    const classCodeMismatch = hasExtracted && extractedClassCode && step2ClassCodes && extractedClassCode !== step2ClassCodes;
+    
+    return classCodeMismatch;
+  };
+  
   // 우선심사 설명서 Blob 생성 (클라이언트 사이드)
   TM.createPriorityDocBlob = async function(data) {
-    // docx 라이브러리 로드 (CDN)
+    // docx 라이브러리 로드 (CDN) - UMD 버전 사용
     if (!window.docx) {
-      await TM.loadScript('https://cdn.jsdelivr.net/npm/docx@8.2.2/build/index.min.js');
+      console.log('[TM] docx 라이브러리 로드 중...');
+      await TM.loadScript('https://unpkg.com/docx@8.2.2/build/index.umd.js');
+      
+      // 로드 대기
+      let retries = 0;
+      while (!window.docx && retries < 20) {
+        await new Promise(r => setTimeout(r, 100));
+        retries++;
+      }
+      
+      if (!window.docx) {
+        throw new Error('docx 라이브러리 로드 실패');
+      }
+      console.log('[TM] docx 라이브러리 로드 완료');
     }
     
     const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, 
