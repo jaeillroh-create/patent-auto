@@ -434,7 +434,7 @@
         TM.setPriorityChoice(params.enabled === 'true');
         break;
       case 'tm-generate-priority-doc':
-        TM.generatePriorityDocument();
+        TM.generatePriorityDoc();
         break;
         
       // 증거자료
@@ -5699,36 +5699,69 @@ ${criticalResults.slice(0, 5).map(r =>
     const pe = p.priorityExam || {};
     const isConfirmed = pe.userConfirmed === true;
     
+    // 지정상품 목록 (유사군코드 포함)
+    const designatedGoodsList = [];
+    (p.designatedGoods || []).forEach(classData => {
+      (classData.goods || []).forEach(g => {
+        designatedGoodsList.push({
+          name: g.name,
+          classCode: classData.classCode,
+          similarGroup: g.similarGroup || ''
+        });
+      });
+    });
+    
     container.innerHTML = `
       <div class="tm-step-header">
         <h3>⚡ 우선심사 신청 여부 결정</h3>
         <p>상표를 사용 중이거나 사용 준비 중인 경우 우선심사를 신청할 수 있습니다.</p>
       </div>
       
-      <!-- 출원서 업로드로 정보 추출 -->
-      <div class="tm-form-section tm-upload-application">
+      <!-- 출원서 업로드 (드래그 앤 드롭) -->
+      <div class="tm-form-section tm-upload-section">
         <h4>📄 출원서 업로드 (선택)</h4>
         <p class="tm-hint">출원 완료된 상표 출원서(PDF, 이미지)를 업로드하면 정보를 자동으로 추출합니다.</p>
         
-        <div class="tm-upload-box" id="tm-application-upload-box">
+        <div class="tm-dropzone" id="tm-application-dropzone"
+             ondragover="TM.handleDragOver(event)" 
+             ondragleave="TM.handleDragLeave(event)"
+             ondrop="TM.handleApplicationDrop(event)"
+             onclick="document.getElementById('tm-application-input').click()">
           <input type="file" id="tm-application-input" style="display: none;" 
                  accept=".pdf,image/*" onchange="TM.handleApplicationUpload(this.files)">
-          <button class="btn btn-outline" onclick="document.getElementById('tm-application-input').click()">
-            📎 출원서 파일 업로드
-          </button>
-          <span class="tm-upload-hint" style="margin-left: 10px; font-size: 12px; color: #666;">
-            PDF, JPG, PNG 지원
-          </span>
+          <div class="tm-dropzone-content">
+            <div class="tm-dropzone-icon">📎</div>
+            <div class="tm-dropzone-text">
+              <strong>출원서 파일 업로드</strong><br>
+              <span>클릭하거나 파일을 끌어다 놓으세요</span>
+            </div>
+            <div class="tm-dropzone-formats">PDF, JPG, PNG 지원</div>
+          </div>
         </div>
         
         ${pe.extractedFromApplication ? `
-          <div class="tm-extracted-info" style="margin-top: 12px; padding: 12px; background: #f0fff4; border-radius: 8px; border: 1px solid #28a745;">
-            <div style="font-weight: bold; color: #28a745; margin-bottom: 8px;">✅ 출원서에서 추출된 정보</div>
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 13px;">
-              <div><strong>출원번호:</strong> ${pe.applicationNumber || '-'}</div>
-              <div><strong>출원인:</strong> ${pe.applicantName || '-'}</div>
-              <div><strong>상표명:</strong> ${pe.trademarkNameFromApp || p.trademarkName || '-'}</div>
-              <div><strong>출원일:</strong> ${pe.applicationDate || '-'}</div>
+          <div class="tm-extracted-info">
+            <div class="tm-extracted-header">
+              <span class="tm-extracted-badge">✅ 출원서에서 추출된 정보</span>
+              <button class="btn btn-sm btn-ghost" onclick="TM.clearExtractedInfo()">초기화</button>
+            </div>
+            <div class="tm-extracted-grid">
+              <div class="tm-extracted-item">
+                <label>출원번호</label>
+                <span>${pe.applicationNumber || '-'}</span>
+              </div>
+              <div class="tm-extracted-item">
+                <label>출원인</label>
+                <span>${pe.applicantName || '-'}</span>
+              </div>
+              <div class="tm-extracted-item">
+                <label>상표명</label>
+                <span>${pe.trademarkNameFromApp || p.trademarkName || '-'}</span>
+              </div>
+              <div class="tm-extracted-item">
+                <label>출원일</label>
+                <span>${pe.applicationDate || '-'}</span>
+              </div>
             </div>
           </div>
         ` : ''}
@@ -5773,64 +5806,72 @@ ${criticalResults.slice(0, 5).map(r =>
           <h4>우선심사 신청 사유</h4>
           <select class="tm-input" id="tm-pe-reason" onchange="TM.updatePriorityReason(this.value)">
             <option value="" ${!pe.reason ? 'selected' : ''}>선택하세요</option>
-            <option value="using" ${pe.reason === 'using' ? 'selected' : ''}>상표를 이미 사용 중</option>
-            <option value="preparing" ${pe.reason === 'preparing' ? 'selected' : ''}>상표 사용 준비 중</option>
-            <option value="infringement" ${pe.reason === 'infringement' ? 'selected' : ''}>제3자의 무단 사용</option>
-            <option value="export" ${pe.reason === 'export' ? 'selected' : ''}>수출 관련 긴급성</option>
+            <option value="using" ${pe.reason === 'using' ? 'selected' : ''}>상표를 지정상품 전부에 사용 중 (상표법 시행령 제12조 제1호)</option>
+            <option value="preparing" ${pe.reason === 'preparing' ? 'selected' : ''}>상표 사용 준비 중 (상표법 시행령 제12조 제1호)</option>
+            <option value="infringement" ${pe.reason === 'infringement' ? 'selected' : ''}>제3자의 무단 사용 (상표법 시행령 제12조 제2호)</option>
+            <option value="export" ${pe.reason === 'export' ? 'selected' : ''}>수출 관련 긴급성 (상표법 시행령 제12조 제3호)</option>
             <option value="other" ${pe.reason === 'other' ? 'selected' : ''}>기타</option>
           </select>
+          
+          ${pe.reason ? `
+            <div class="tm-reason-detail" style="margin-top: 12px;">
+              <label>상세 설명</label>
+              <textarea class="tm-input" id="tm-pe-reason-detail" rows="3" 
+                        placeholder="구체적인 사용 현황 또는 준비 상황을 입력하세요..."
+                        onchange="TM.updatePriorityReasonDetail(this.value)">${pe.reasonDetail || ''}</textarea>
+            </div>
+          ` : ''}
         </div>
         
         <!-- 증거자료 관리 -->
         <div class="tm-form-section">
           <h4>증거자료</h4>
-          <p class="tm-hint">상표 사용 증거(사진, 광고물, 계약서 등)를 첨부하세요.</p>
+          <p class="tm-hint">상표 사용 증거(사업자등록증, 제안서, 계약서, 홈페이지 캡처 등)를 첨부하세요.</p>
           
-          <div class="tm-evidence-grid" id="tm-evidence-grid">
+          <div class="tm-evidence-list" id="tm-evidence-list">
             ${(pe.evidences || []).map((ev, idx) => `
-              <div class="tm-evidence-card">
-                <div class="tm-evidence-preview">
-                  ${ev.fileUrl ? `<img src="${ev.fileUrl}" alt="${ev.title}">` : '<span style="font-size: 32px;">📎</span>'}
-                </div>
+              <div class="tm-evidence-item">
+                <span class="tm-evidence-num">${idx + 1}</span>
                 <div class="tm-evidence-info">
                   <div class="tm-evidence-title">${TM.escapeHtml(ev.title)}</div>
-                  <div class="tm-evidence-type">${TM.getEvidenceTypeLabel(ev.type)}</div>
+                  <div class="tm-evidence-desc">${TM.escapeHtml(ev.description || '')}</div>
                 </div>
                 <button class="btn btn-sm btn-ghost" data-action="tm-remove-evidence" data-index="${idx}">삭제</button>
               </div>
             `).join('')}
-            
-            <div class="tm-evidence-upload" onclick="document.getElementById('tm-evidence-input').click()">
-              <div style="font-size: 32px;">➕</div>
-              <div>증거자료 추가</div>
+          </div>
+          
+          <div class="tm-evidence-add" style="margin-top: 12px;">
+            <div class="tm-evidence-add-row">
+              <input type="text" class="tm-input" id="tm-evidence-title" placeholder="첨부자료 제목 (예: 사업자등록증)">
+              <input type="text" class="tm-input" id="tm-evidence-desc" placeholder="설명 (선택)">
+              <button class="btn btn-secondary" onclick="TM.addEvidenceManual()">➕ 추가</button>
             </div>
           </div>
-          <input type="file" id="tm-evidence-input" style="display: none;" 
-                 accept="image/*,.pdf,.doc,.docx" onchange="TM.handleEvidenceUpload(this.files)">
         </div>
         
         <!-- 우선심사 설명서 생성 -->
         <div class="tm-form-section">
-          <h4>우선심사 설명서</h4>
-          <button class="btn btn-primary" data-action="tm-generate-priority-doc">
-            🤖 AI 설명서 자동 생성
-          </button>
+          <h4>📝 우선심사 신청 설명서</h4>
+          <p class="tm-hint">아래 버튼을 클릭하면 우선심사 신청 설명서가 Word 파일로 생성됩니다.</p>
           
-          ${pe.generatedDocument ? `
-            <div class="tm-document-editor" style="margin-top: 16px;">
-              <div class="tm-document-toolbar">
-                <button onclick="TM.copyPriorityDoc()">📋 복사</button>
-                <button onclick="TM.regeneratePriorityDoc()">🔄 재생성</button>
-              </div>
-              <div class="tm-document-content" id="tm-priority-doc-content" contenteditable="true">
-                ${TM.formatPriorityDocument(pe.generatedDocument)}
-              </div>
+          <div class="tm-doc-actions">
+            <button class="btn btn-primary btn-lg" data-action="tm-generate-priority-doc">
+              📄 우선심사 설명서 생성 (Word)
+            </button>
+            <button class="btn btn-secondary" onclick="TM.previewPriorityDoc()">
+              👁️ 미리보기
+            </button>
+          </div>
+          
+          <!-- 미리보기 영역 -->
+          <div class="tm-doc-preview" id="tm-priority-doc-preview" style="display: none;">
+            <div class="tm-doc-preview-header">
+              <span>우선심사 신청 설명서 미리보기</span>
+              <button class="btn btn-sm btn-ghost" onclick="document.getElementById('tm-priority-doc-preview').style.display='none'">닫기</button>
             </div>
-          ` : `
-            <div class="tm-hint" style="margin-top: 12px;">
-              증거자료를 추가한 후 AI 설명서 생성 버튼을 클릭하세요.
-            </div>
-          `}
+            <div class="tm-doc-preview-content" id="tm-priority-doc-content"></div>
+          </div>
         </div>
       ` : `
         <div class="tm-info-box">
@@ -5840,6 +5881,12 @@ ${criticalResults.slice(0, 5).map(r =>
             <li>일반 심사: 약 12~14개월</li>
             <li>우선심사: 약 2~3개월</li>
           </ul>
+          <p><strong>신청 요건 (상표법 제53조 제2항, 시행령 제12조)</strong></p>
+          <ol>
+            <li>상표를 지정상품 전부에 사용 중이거나 사용 준비 중인 경우</li>
+            <li>제3자가 출원인의 상표를 무단 사용 중인 경우</li>
+            <li>조약에 따른 우선권 주장이 있는 경우</li>
+          </ol>
           <p>우선심사 신청시 류당 160,000원의 추가 비용이 발생합니다.</p>
         </div>
       `}
@@ -6020,6 +6067,475 @@ ${criticalResults.slice(0, 5).map(r =>
       console.error('[TM] 출원서 업로드 실패:', error);
       App.showToast('업로드 실패: ' + error.message, 'error');
     }
+  };
+  
+  // 드래그 앤 드롭 핸들러
+  TM.handleDragOver = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.add('dragover');
+  };
+  
+  TM.handleDragLeave = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('dragover');
+  };
+  
+  TM.handleApplicationDrop = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('dragover');
+    
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      TM.handleApplicationUpload(files);
+    }
+  };
+  
+  // 추출 정보 초기화
+  TM.clearExtractedInfo = function() {
+    if (!TM.currentProject) return;
+    TM.currentProject.priorityExam.extractedFromApplication = false;
+    TM.currentProject.priorityExam.applicationNumber = null;
+    TM.currentProject.priorityExam.applicationDate = null;
+    TM.currentProject.priorityExam.trademarkNameFromApp = null;
+    TM.currentProject.priorityExam.applicantName = null;
+    TM.currentProject.priorityExam.trademarkImage = null;
+    TM.currentProject.priorityExam.classCode = null;
+    TM.currentProject.priorityExam.designatedGoodsFromApp = null;
+    TM.renderCurrentStep();
+    App.showToast('추출 정보가 초기화되었습니다.', 'info');
+  };
+  
+  // 우선심사 사유 상세 업데이트
+  TM.updatePriorityReasonDetail = function(detail) {
+    if (!TM.currentProject) return;
+    TM.currentProject.priorityExam.reasonDetail = detail;
+    TM.hasUnsavedChanges = true;
+  };
+  
+  // 증거자료 수동 추가
+  TM.addEvidenceManual = function() {
+    const titleInput = document.getElementById('tm-evidence-title');
+    const descInput = document.getElementById('tm-evidence-desc');
+    
+    const title = titleInput?.value?.trim();
+    if (!title) {
+      App.showToast('첨부자료 제목을 입력하세요.', 'warning');
+      return;
+    }
+    
+    if (!TM.currentProject.priorityExam.evidences) {
+      TM.currentProject.priorityExam.evidences = [];
+    }
+    
+    TM.currentProject.priorityExam.evidences.push({
+      title: title,
+      description: descInput?.value?.trim() || '',
+      addedAt: new Date().toISOString()
+    });
+    
+    TM.hasUnsavedChanges = true;
+    TM.renderCurrentStep();
+    App.showToast('첨부자료가 추가되었습니다.', 'success');
+  };
+  
+  // 우선심사 설명서 미리보기
+  TM.previewPriorityDoc = function() {
+    const previewEl = document.getElementById('tm-priority-doc-preview');
+    const contentEl = document.getElementById('tm-priority-doc-content');
+    
+    if (!previewEl || !contentEl) return;
+    
+    const docContent = TM.generatePriorityDocContent();
+    contentEl.innerHTML = docContent;
+    previewEl.style.display = 'block';
+  };
+  
+  // 우선심사 설명서 내용 생성
+  TM.generatePriorityDocContent = function() {
+    const p = TM.currentProject;
+    const pe = p.priorityExam || {};
+    
+    // 출원인 정보
+    const applicantName = pe.applicantName || p.applicantName || '[출원인명]';
+    const applicationNumber = pe.applicationNumber || '[출원번호]';
+    const applicationDate = pe.applicationDate || '[출원일]';
+    const trademarkName = pe.trademarkNameFromApp || p.trademarkName || '[상표명]';
+    
+    // 상품류 및 지정상품
+    const classGroups = {};
+    (p.designatedGoods || []).forEach(classData => {
+      if (!classGroups[classData.classCode]) {
+        classGroups[classData.classCode] = [];
+      }
+      (classData.goods || []).forEach(g => {
+        classGroups[classData.classCode].push({
+          name: g.name,
+          similarGroup: g.similarGroup || ''
+        });
+      });
+    });
+    
+    const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
+    const classCodeStr = classCodeList.map(c => '제 ' + c + '류').join(', ');
+    
+    // 지정상품 문자열
+    const goodsList = [];
+    Object.values(classGroups).forEach(goods => {
+      goods.forEach(g => goodsList.push(g.name));
+    });
+    const designatedGoodsStr = goodsList.join(', ');
+    
+    // 지정상품 + 유사군코드 상세
+    const goodsWithGroups = [];
+    Object.entries(classGroups).forEach(([classCode, goods]) => {
+      goods.forEach(g => {
+        if (g.similarGroup) {
+          goodsWithGroups.push(`『${g.similarGroup} ${g.name}』`);
+        } else {
+          goodsWithGroups.push(`『${g.name}』`);
+        }
+      });
+    });
+    
+    // 증거자료 목록
+    const evidences = pe.evidences || [];
+    const evidencesList = evidences.map((ev, idx) => 
+      `첨부자료 ${idx + 1} : ${ev.title}${ev.description ? ' (' + ev.description + ')' : ''}`
+    ).join('\n');
+    
+    // 신청이유 선택에 따른 법조문
+    let reasonText = '';
+    if (pe.reason === 'using' || pe.reason === 'preparing') {
+      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로 우선심사를 신청합니다.`;
+    } else if (pe.reason === 'infringement') {
+      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 우선심사를 신청합니다.`;
+    } else {
+      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라 우선심사를 신청합니다.`;
+    }
+    
+    // HTML 형식의 미리보기
+    return `
+      <div class="tm-doc-preview-body">
+        <h2 style="text-align: center; margin-bottom: 24px;">상표 우선심사 신청 설명서</h2>
+        
+        <div class="tm-doc-section">
+          <h3>【서지사항】</h3>
+          <table class="tm-doc-table">
+            <tr><td width="150"><strong>【우선심사 신청인】</strong></td><td>${applicantName}</td></tr>
+            <tr><td><strong>【출원번호】</strong></td><td>${applicationNumber}</td></tr>
+            <tr><td><strong>【출원일】</strong></td><td>${applicationDate}</td></tr>
+          </table>
+        </div>
+        
+        <div class="tm-doc-section">
+          <h3>【상표견본】</h3>
+          <p style="font-size: 18px; font-weight: bold;">${trademarkName}</p>
+        </div>
+        
+        <div class="tm-doc-section">
+          <h3>【상품류】</h3>
+          <p>${classCodeStr || '[상품류]'}</p>
+        </div>
+        
+        <div class="tm-doc-section">
+          <h3>【지정상품】</h3>
+          <p>${designatedGoodsStr || '[지정상품]'}</p>
+        </div>
+        
+        <div class="tm-doc-section">
+          <h3>【우선심사 신청이유】</h3>
+          <p>${reasonText}</p>
+          <p style="margin-top: 12px;">
+            본 출원인 "${applicantName}"는 본 신청서의 첨부자료에 기재된 바와 같이, 
+            이건 출원상표가 표시된 ${goodsWithGroups.slice(0, 5).join(', ')}${goodsWithGroups.length > 5 ? ' 등' : ''}을 
+            사용 및 사용 준비 중입니다.
+          </p>
+          <p style="margin-top: 12px;">
+            따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 사용예정 중에 있습니다.
+          </p>
+          <p style="margin-top: 12px;">
+            이건 출원인 "${applicantName}"은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 
+            부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
+          </p>
+        </div>
+        
+        ${evidences.length > 0 ? `
+          <div class="tm-doc-section">
+            <h3>【증빙자료】</h3>
+            <ul style="margin: 0; padding-left: 20px;">
+              ${evidences.map((ev, idx) => `<li>첨부자료 ${idx + 1} : ${ev.title}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  };
+  
+  // 우선심사 설명서 Word 파일 생성
+  TM.generatePriorityDoc = async function() {
+    const p = TM.currentProject;
+    const pe = p.priorityExam || {};
+    
+    // 필수 정보 체크
+    if (!pe.applicationNumber && !p.trademarkName) {
+      App.showToast('출원번호 또는 상표명이 필요합니다.', 'warning');
+      return;
+    }
+    
+    try {
+      App.showToast('Word 문서 생성 중...', 'info');
+      
+      // 출원인 정보
+      const applicantName = pe.applicantName || p.applicantName || '[출원인명]';
+      const applicationNumber = pe.applicationNumber || '[출원번호]';
+      const applicationDate = pe.applicationDate || '[출원일]';
+      const trademarkName = pe.trademarkNameFromApp || p.trademarkName || '[상표명]';
+      
+      // 상품류 및 지정상품
+      const classGroups = {};
+      (p.designatedGoods || []).forEach(classData => {
+        if (!classGroups[classData.classCode]) {
+          classGroups[classData.classCode] = [];
+        }
+        (classData.goods || []).forEach(g => {
+          classGroups[classData.classCode].push({
+            name: g.name,
+            similarGroup: g.similarGroup || ''
+          });
+        });
+      });
+      
+      const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
+      const classCodeStr = classCodeList.map(c => '제 ' + c + '류').join(', ');
+      
+      // 지정상품 문자열
+      const goodsList = [];
+      Object.values(classGroups).forEach(goods => {
+        goods.forEach(g => goodsList.push(g.name));
+      });
+      const designatedGoodsStr = goodsList.join(', ');
+      
+      // 지정상품 + 유사군코드 상세
+      const goodsWithGroups = [];
+      Object.entries(classGroups).forEach(([classCode, goods]) => {
+        goods.forEach(g => {
+          if (g.similarGroup) {
+            goodsWithGroups.push(`『${g.similarGroup} ${g.name}』`);
+          } else {
+            goodsWithGroups.push(`『${g.name}』`);
+          }
+        });
+      });
+      
+      // 증거자료 목록
+      const evidences = pe.evidences || [];
+      
+      // 신청이유 선택에 따른 법조문
+      let reasonText1 = '';
+      if (pe.reason === 'using' || pe.reason === 'preparing') {
+        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로 우선심사를 신청합니다.';
+      } else if (pe.reason === 'infringement') {
+        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 우선심사를 신청합니다.';
+      } else {
+        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라 우선심사를 신청합니다.';
+      }
+      
+      // 증거자료 참조 문자열 생성
+      let evidenceRefStr = '';
+      if (evidences.length > 0) {
+        const refs = evidences.map((ev, idx) => `첨부자료 ${idx + 1}: ${ev.title}`);
+        evidenceRefStr = `본 신청서의 첨부자료(${refs.join(', ')})에 기재된 바와 같이, `;
+      }
+      
+      const reasonText2 = `본 출원인 "${applicantName}"는 ${evidenceRefStr}이건 출원상표가 표시된 ${goodsWithGroups.slice(0, 5).join(', ')}${goodsWithGroups.length > 5 ? ' 등' : ''}을 사용 및 사용 준비 중입니다.`;
+      
+      const reasonText3 = '따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 사용예정 중에 있습니다.';
+      
+      const reasonText4 = `이건 출원인 "${applicantName}"은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`;
+      
+      // Edge Function으로 Word 생성 요청
+      const docData = {
+        type: 'priority_exam_doc',
+        applicantName,
+        applicationNumber,
+        applicationDate,
+        trademarkName,
+        classCodeStr,
+        designatedGoodsStr,
+        goodsWithGroups,
+        evidences,
+        reasonText1,
+        reasonText2,
+        reasonText3,
+        reasonText4
+      };
+      
+      // Supabase Edge Function 호출 또는 클라이언트 사이드 생성
+      const blob = await TM.createPriorityDocBlob(docData);
+      
+      // 다운로드
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `우선심사신청설명서_${applicationNumber.replace(/[^0-9]/g, '') || Date.now()}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      App.showToast('우선심사 설명서가 다운로드되었습니다.', 'success');
+      
+    } catch (error) {
+      console.error('[TM] 우선심사 설명서 생성 실패:', error);
+      App.showToast('문서 생성 실패: ' + error.message, 'error');
+    }
+  };
+  
+  // 우선심사 설명서 Blob 생성 (클라이언트 사이드)
+  TM.createPriorityDocBlob = async function(data) {
+    // docx 라이브러리 로드 (CDN)
+    if (!window.docx) {
+      await TM.loadScript('https://cdn.jsdelivr.net/npm/docx@8.2.2/build/index.min.js');
+    }
+    
+    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, 
+            AlignmentType, WidthType, BorderStyle, HeadingLevel } = window.docx;
+    
+    // 테이블 스타일
+    const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+    const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
+    
+    // 문서 생성
+    const doc = new Document({
+      styles: {
+        default: {
+          document: {
+            run: { font: '맑은 고딕', size: 22 }
+          }
+        }
+      },
+      sections: [{
+        properties: {
+          page: {
+            size: { width: 11906, height: 16838 }, // A4
+            margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
+          }
+        },
+        children: [
+          // 제목
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 },
+            children: [
+              new TextRun({ text: '상표 우선심사 신청 설명서', bold: true, size: 32 })
+            ]
+          }),
+          
+          // 서지사항
+          new Paragraph({
+            spacing: { before: 200, after: 100 },
+            children: [new TextRun({ text: '【서지사항】', bold: true, size: 24 })]
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: `【우선심사 신청인】 ${data.applicantName}`, size: 22 })]
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: `【출원번호】 ${data.applicationNumber}`, size: 22 })]
+          }),
+          new Paragraph({
+            spacing: { after: 200 },
+            children: [new TextRun({ text: `【출원일】 ${data.applicationDate}`, size: 22 })]
+          }),
+          
+          // 상표견본
+          new Paragraph({
+            spacing: { before: 200, after: 100 },
+            children: [new TextRun({ text: '【상표견본】', bold: true, size: 24 })]
+          }),
+          new Paragraph({
+            spacing: { after: 200 },
+            children: [new TextRun({ text: data.trademarkName, bold: true, size: 28 })]
+          }),
+          
+          // 상품류
+          new Paragraph({
+            spacing: { before: 200, after: 100 },
+            children: [new TextRun({ text: '【상품류】', bold: true, size: 24 })]
+          }),
+          new Paragraph({
+            spacing: { after: 200 },
+            children: [new TextRun({ text: data.classCodeStr || '[상품류]', size: 22 })]
+          }),
+          
+          // 지정상품
+          new Paragraph({
+            spacing: { before: 200, after: 100 },
+            children: [new TextRun({ text: '【지정상품】', bold: true, size: 24 })]
+          }),
+          new Paragraph({
+            spacing: { after: 200 },
+            children: [new TextRun({ text: data.designatedGoodsStr || '[지정상품]', size: 22 })]
+          }),
+          
+          // 우선심사 신청이유
+          new Paragraph({
+            spacing: { before: 200, after: 100 },
+            children: [new TextRun({ text: '【우선심사 신청이유】', bold: true, size: 24 })]
+          }),
+          new Paragraph({
+            spacing: { after: 150 },
+            children: [new TextRun({ text: data.reasonText1, size: 22 })]
+          }),
+          new Paragraph({
+            spacing: { after: 150 },
+            children: [new TextRun({ text: data.reasonText2, size: 22 })]
+          }),
+          new Paragraph({
+            spacing: { after: 150 },
+            children: [new TextRun({ text: data.reasonText3, size: 22 })]
+          }),
+          new Paragraph({
+            spacing: { after: 200 },
+            children: [new TextRun({ text: data.reasonText4, size: 22 })]
+          }),
+          
+          // 증빙자료
+          ...(data.evidences.length > 0 ? [
+            new Paragraph({
+              spacing: { before: 200, after: 100 },
+              children: [new TextRun({ text: '【증빙자료】', bold: true, size: 24 })]
+            }),
+            ...data.evidences.map((ev, idx) => 
+              new Paragraph({
+                children: [new TextRun({ text: `첨부자료 ${idx + 1} : ${ev.title}`, size: 22 })]
+              })
+            )
+          ] : [])
+        ]
+      }]
+    });
+    
+    // Blob으로 변환
+    const blob = await Packer.toBlob(doc);
+    return blob;
+  };
+  
+  // 스크립트 동적 로드
+  TM.loadScript = function(src) {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) {
+        resolve();
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
   };
   
   TM.handleEvidenceUpload = async function(files) {

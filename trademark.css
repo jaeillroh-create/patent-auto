@@ -3641,3 +3641,234 @@
 .tm-score-circle.risk-critical {
   background: linear-gradient(135deg, #7f1d1d, #991b1b);
 }
+
+/* ============================================================
+   우선심사 드래그 앤 드롭 / 문서 미리보기 스타일
+   ============================================================ */
+
+/* 드롭존 */
+.tm-dropzone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #f8fafc;
+}
+
+.tm-dropzone:hover {
+  border-color: #3182f6;
+  background: #eff6ff;
+}
+
+.tm-dropzone.dragover {
+  border-color: #3182f6;
+  background: #dbeafe;
+  transform: scale(1.01);
+}
+
+.tm-dropzone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.tm-dropzone-icon {
+  font-size: 48px;
+  opacity: 0.6;
+}
+
+.tm-dropzone-text {
+  color: #64748b;
+}
+
+.tm-dropzone-text strong {
+  color: #3182f6;
+  font-size: 15px;
+}
+
+.tm-dropzone-text span {
+  font-size: 13px;
+}
+
+.tm-dropzone-formats {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+/* 추출 정보 표시 */
+.tm-extracted-info {
+  margin-top: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-radius: 12px;
+  border: 1px solid #86efac;
+}
+
+.tm-extracted-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tm-extracted-badge {
+  font-weight: 600;
+  color: #16a34a;
+  font-size: 14px;
+}
+
+.tm-extracted-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.tm-extracted-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tm-extracted-item label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.tm-extracted-item span {
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+/* 증거자료 목록 */
+.tm-evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tm-evidence-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.tm-evidence-num {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #3182f6;
+  color: white;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tm-evidence-info {
+  flex: 1;
+}
+
+.tm-evidence-title {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.tm-evidence-desc {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* 증거자료 추가 */
+.tm-evidence-add-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tm-evidence-add-row .tm-input {
+  flex: 1;
+  min-width: 150px;
+}
+
+/* 문서 액션 버튼 */
+.tm-doc-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* 문서 미리보기 */
+.tm-doc-preview {
+  margin-top: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.tm-doc-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  font-weight: 600;
+}
+
+.tm-doc-preview-content {
+  padding: 24px;
+  background: white;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.tm-doc-preview-body h2 {
+  font-size: 20px;
+  margin-bottom: 24px;
+}
+
+.tm-doc-preview-body h3 {
+  font-size: 15px;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.tm-doc-section {
+  margin-bottom: 20px;
+}
+
+.tm-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tm-doc-table td {
+  padding: 4px 8px;
+  vertical-align: top;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .tm-extracted-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .tm-evidence-add-row {
+    flex-direction: column;
+  }
+  
+  .tm-doc-actions {
+    flex-direction: column;
+  }
+}
