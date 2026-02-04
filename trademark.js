@@ -6002,23 +6002,31 @@ ${criticalResults.slice(0, 5).map(r =>
       designatedGoods: ''
     };
     
-    // 공백/줄바꿈 정규화
-    const normalizedText = text.replace(/\s+/g, ' ');
+    // 공백/줄바꿈 정규화 (단, 한글 사이 공백은 제거)
+    let normalizedText = text.replace(/\s+/g, ' ');
     
-    console.log('[TM] 정규화된 텍스트:', normalizedText.substring(0, 800));
+    // "출 원 번 호" -> "출원번호" 형태로 정규화
+    normalizedText = normalizedText
+      .replace(/출\s*원\s*일\s*자/g, '출원일자')
+      .replace(/출\s*원\s*번\s*호/g, '출원번호')
+      .replace(/출\s*원\s*인\s*명\s*칭/g, '출원인명칭')
+      .replace(/대\s*리\s*인\s*성\s*명/g, '대리인성명')
+      .replace(/특\s*기\s*사\s*항/g, '특기사항');
     
-    // 출원번호 패턴: 40-2024-0012345, 4020240012345, 40 2024 0012345 등
+    console.log('[TM] 정규화된 텍스트:', normalizedText.substring(0, 1000));
+    
+    // 출원번호 패턴: 40-2025-0097799 등
     const appNumPatterns = [
-      /(?:출원번호|출원\s*번호)[^\d]*(40[-\s]?\d{4}[-\s]?\d{6,7})/i,
+      /출원번호[^\d]*(40-\d{4}-\d{6,7})/i,
+      /출원번호[^\d]*(40\d{10,11})/i,
       /(40-\d{4}-\d{6,7})/,
-      /(40\d{4}\d{6,7})/,
-      /【\s*출원번호\s*】\s*([\d\-\s]+)/i
+      /(40\d{10,11})/
     ];
     for (const pattern of appNumPatterns) {
       const match = normalizedText.match(pattern);
       if (match) {
         let num = match[1].replace(/\s/g, '');
-        // 하이픈 없으면 추가: 4020240012345 -> 40-2024-0012345
+        // 하이픈 없으면 추가
         if (!num.includes('-') && num.length >= 13) {
           num = num.substring(0, 2) + '-' + num.substring(2, 6) + '-' + num.substring(6);
         }
@@ -6028,44 +6036,39 @@ ${criticalResults.slice(0, 5).map(r =>
       }
     }
     
-    // 출원일 패턴: 2025.06.09, 2025-06-09, 2025/06/09, 2025년 06월 09일
+    // 출원일 패턴
     const datePatterns = [
-      /(?:출원일|출원\s*일자?|출원\s*일)[^\d]*(\d{4}[.\-\/]\s*\d{1,2}[.\-\/]\s*\d{1,2})/i,
-      /(?:출원일|출원\s*일자?)[^\d]*(\d{4}년\s*\d{1,2}월\s*\d{1,2}일?)/i,
-      /【\s*출원일\s*】\s*(\d{4}[.\-\/\s]\d{1,2}[.\-\/\s]\d{1,2})/i,
-      /출원일[:\s]*(\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2})/i
+      /출원일자?[^\d]*(\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2})/i,
+      /출원일[^\d]*(\d{4}년\s*\d{1,2}월\s*\d{1,2}일?)/i,
+      /일반상표[^\d]*(\d{4}[-]\d{2}[-]\d{2})/i,
+      /(\d{4}[.]\d{2}[.]\d{2})/
     ];
     for (const pattern of datePatterns) {
       const match = normalizedText.match(pattern);
       if (match) {
         let date = match[1].trim();
-        // 형식 통일: 2025.06.09
         date = date.replace(/년\s*/g, '.').replace(/월\s*/g, '.').replace(/일/g, '');
-        date = date.replace(/[-\/\s]/g, '.');
-        date = date.replace(/\.+/g, '.');
+        date = date.replace(/[-\/]/g, '.');
+        date = date.replace(/\.+/g, '.').replace(/\s/g, '');
         result.applicationDate = date;
         console.log('[TM] 출원일 매칭:', match[0], '->', date);
         break;
       }
     }
     
-    // 출원인/신청인 패턴
+    // 출원인 패턴
     const applicantPatterns = [
-      /(?:출원인|신청인|우선심사\s*신청인)[^가-힣]*(?:명칭)?[^가-힣]*([가-힣]+(?:\s*주식회사|주식회사\s*)?[가-힣]*)/i,
-      /(?:【\s*명칭\s*】|【\s*출원인\s*】)[^가-힣]*([가-힣a-zA-Z\s]+)/i,
-      /(?:주식회사|㈜)\s*([가-힣]+)/i,
-      /([가-힣]+)\s*(?:주식회사|㈜)/i
+      /출원인명칭[^가-힣]*([가-힣]+(?:\s*주식회사|주식회사\s*[가-힣]*|[가-힣]*))/i,
+      /출원인[^가-힣]*(?:명칭)?[^가-힣]*([가-힣]+(?:\s*주식회사|주식회사)?[가-힣]*)/i,
+      /([가-힣]+\s*주식회사|주식회사\s*[가-힣]+)/i
     ];
     for (const pattern of applicantPatterns) {
       const match = normalizedText.match(pattern);
       if (match) {
-        let name = match[1].trim();
-        // "주식회사"가 포함된 전체 이름 찾기
-        const fullMatch = normalizedText.match(/([가-힣]+\s*주식회사|주식회사\s*[가-힣]+|㈜[가-힣]+|[가-힣]+㈜)/);
-        if (fullMatch) {
-          name = fullMatch[1].replace(/\s+/g, ' ').trim();
-        }
-        if (name.length >= 2 && name.length <= 30) {
+        let name = match[1].trim().replace(/\s+/g, ' ');
+        // 괄호 이전까지만
+        name = name.split(/[(\[]/)[0].trim();
+        if (!/^(대리인|노재일|특허|상표|출원)/.test(name) && name.length >= 2 && name.length <= 30) {
           result.applicantName = name;
           console.log('[TM] 출원인 매칭:', name);
           break;
@@ -6073,16 +6076,17 @@ ${criticalResults.slice(0, 5).map(r =>
       }
     }
     
-    // 상표명/상표견본 패턴
+    // 상표명 패턴
     const tmPatterns = [
-      /(?:상표견본|상표명|상표\s*견본)[^A-Za-z가-힣]*([A-Za-z가-힣][A-Za-z가-힣0-9\s]{0,20})/i,
-      /【\s*상표견본\s*】[^A-Za-z가-힣]*([A-Za-z가-힣][A-Za-z가-힣0-9\s]{0,20})/i
+      /상표견본[^A-Za-z가-힣]*([A-Za-z][A-Za-z0-9]{0,20})/i,
+      /상표견본[^A-Za-z가-힣]*([가-힣]{2,10})/i,
+      /상표명[^A-Za-z가-힣]*([A-Za-z가-힣][A-Za-z가-힣0-9]{0,15})/i
     ];
     for (const pattern of tmPatterns) {
       const match = normalizedText.match(pattern);
       if (match) {
-        let tm = match[1].trim().split(/[\s,，]/)[0]; // 첫 단어만
-        if (tm.length >= 1 && tm.length <= 20 && !/^(제|상품|지정|류)/.test(tm)) {
+        let tm = match[1].trim();
+        if (tm.length >= 1 && tm.length <= 20 && !/^(제|상품|지정|류|일반|문자|도형)/.test(tm)) {
           result.trademarkName = tm;
           console.log('[TM] 상표명 매칭:', tm);
           break;
@@ -6090,11 +6094,10 @@ ${criticalResults.slice(0, 5).map(r =>
       }
     }
     
-    // 상품류 패턴: 제 09류, 제09류, 09류, 상품류 09
+    // 상품류 패턴
     const classPatterns = [
-      /(?:상품류|상품\s*류)[^0-9]*제?\s*(\d{1,2})\s*류/i,
-      /제\s*(\d{1,2})\s*류/i,
-      /(\d{2})\s*류/
+      /상품류[^0-9]*제?\s*(\d{1,2})\s*류/i,
+      /제\s*(\d{1,2})\s*류/i
     ];
     for (const pattern of classPatterns) {
       const match = normalizedText.match(pattern);
@@ -6107,19 +6110,18 @@ ${criticalResults.slice(0, 5).map(r =>
     
     // 지정상품 패턴
     const goodsPatterns = [
-      /(?:지정상품|지정\s*상품)[】\]\s:]*([^【\[]{10,300})/i,
-      /【\s*지정상품\s*】\s*([^【\[]{10,300})/i
+      /지정\s*상품[】\]\s:]*([^【\[]{10,500})/i,
+      /【\s*지정\s*상품\s*】\s*([^【\[]{10,500})/i
     ];
     for (const pattern of goodsPatterns) {
       const match = normalizedText.match(pattern);
       if (match) {
         let goods = match[1].trim();
-        // 다음 섹션 시작 전까지만
-        goods = goods.split(/(?:【|신청이유|출원인|상표견본)/)[0].trim();
-        goods = goods.replace(/\s+/g, ' ').substring(0, 200);
+        goods = goods.split(/(?:【|상표유형|신청이유|출원인|상표견본)/i)[0].trim();
+        goods = goods.replace(/\s+/g, ' ').substring(0, 300);
         if (goods.length > 5) {
           result.designatedGoods = goods;
-          console.log('[TM] 지정상품 매칭:', goods.substring(0, 50) + '...');
+          console.log('[TM] 지정상품 매칭:', goods.substring(0, 80) + '...');
           break;
         }
       }
