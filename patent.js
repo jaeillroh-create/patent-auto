@@ -724,7 +724,7 @@ ${themeInst}
 
 ${T}${getFullInvention()}${styleRef}`;}
 
-    // ═══ Step 7: 도면 설계 (계층적 참조번호 체계) ═══
+    // ═══ Step 7: 도면 설계 (도 1=최상위, 도 2+=하위 상세) ═══
     case 'step_07':{
       const f=document.getElementById('optDeviceFigures').value;
       const reqInst=getRequiredFiguresInstruction();
@@ -733,59 +733,73 @@ ${T}${getFullInvention()}${styleRef}`;}
       return `【장치 청구범위】에 대한 도면을 설계하라. 총 도면 수: ${f}개.
 ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 (${skipNums.map(n=>'도 '+n).join(', ')}).\n새로 생성할 도면: ${genCount>0?genCount:0}개.\n필수 도면 번호는 건너뛰고 나머지 번호로 생성하라.`:''}
 
-⛔⛔⛔ 절대 금지 사항 (위반 시 도면 전체 무효) ⛔⛔⛔
-- "~단계", "~하는 단계" 표현 금지
-- "S100", "S200", "S401" 등 S로 시작하는 번호 금지
-- 방법/프로세스/흐름 관련 표현 금지
-- 이 도면은 오직 "장치의 구성요소(~부, ~모듈, ~유닛)"만 표현한다
+⛔⛔⛔ 절대 금지 사항 ⛔⛔⛔
+- "~단계", "S100", "S200" 등 방법 표현 금지
+- 이 도면은 오직 "장치의 구성요소"만 표현
 
-[도면부호(Reference Numeral) 계층적 체계 — 필수 준수]
+═══════════════════════════════════════════════════════════
+★★★ 도면 생성 핵심 규칙 (v3.0) ★★★
+═══════════════════════════════════════════════════════════
 
-■ 레벨1 (L1): 최상위 구성요소 — X00 형식 (100 단위)
-- 서버/시스템: 100
-- 사용자 단말: 200
-- 외부 시스템/서버: 300
-- 데이터베이스/저장소: 400
-- 네트워크: 500 (필요시)
+[1. 도면부호 계층 체계]
+■ L1 (최상위): X00 형식 — 100 단위
+  서버/시스템(100), 사용자 단말(200), 외부 시스템(300), 데이터베이스(400), 네트워크(500)
 
-■ 레벨2 (L2): L1의 하위 모듈 — XY0 형식 (10 단위)
-- 서버(100)의 하위: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)...
-- 사용자 단말(200)의 하위: 입력부(210), 출력부(220), 제어부(230)...
-- 부모의 백 자릿수 유지 + 십 자릿수 1~9 증가
+■ L2 (하위 모듈): XY0 형식 — 10 단위
+  서버(100) 하위: 통신부(110), 프로세서(120), 메모리(130)...
 
-■ 레벨3 (L3): L2의 하위 부품 — XYZ 형식 (1 단위)
-- 통신부(110)의 하위: 수신모듈(111), 송신모듈(112), 암호화모듈(113)...
-- 프로세서(120)의 하위: 연산유닛(121), 캐시(122)...
-- 부모의 앞 두 자릿수 유지 + 일 자릿수 1~9 증가
+■ L3 (하위 부품): XYZ 형식 — 1 단위
+  통신부(110) 하위: 수신모듈(111), 송신모듈(112)...
 
-■ 핵심 규칙
-- 부모 접두(prefix) 유지: 자식은 부모의 앞자리를 반드시 유지
-- 같은 레벨은 같은 증가 단위: L1=100단위, L2=10단위, L3=1단위
-- 동일 도면 내 번호 중복 금지
-- 0번은 그룹 대표 번호로 예약 (130은 131~139의 상위)
+[2. 박스 소속 규칙]
+- 박스 = 해당 장치의 "구비/보유" 범위
+- 서버(100)가 프로세서(110)를 구비 → 110은 반드시 100 박스 내부
+- 소속 위반 금지: 110이 200 박스 안에 들어가면 오류
+
+[3. 도면별 표현 레벨 ★핵심★]
+
+■ 도 1: 전체 시스템 구성도
+  ✅ 허용: L1(최상위) 장치 박스만 — 100, 200, 300, 400
+  ✅ 허용: L1 장치들 간의 연결선만
+  ⛔ 금지: L2/L3 하위 구성요소 표시 금지
+  ⛔ 금지: 하위 요소 간 연결선 금지
+  
+  예시: [서버(100)] ←→ [사용자 단말(200)] ←→ [데이터베이스(400)]
+
+■ 도 2 이후: 세부 블록도
+  특정 L1 장치(예: 서버(100))를 주제로 내부 L2, L3 상세화
+  
+  예시 (도 2 - 서버 상세):
+  [서버(100)] 내부: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)
+
+[4. 연결 규칙]
+- 도 1: L1 박스 ↔ L1 박스 연결만
+- 도 2+: 내부 모듈 간 연결 가능
+
+═══════════════════════════════════════════════════════════
 
 [파트1: 도면 설계]
-각 도면별로 아래 형식 출력:
----
-도 N: (도면 제목)
-유형: (블록도/구성도)
-구성요소 및 참조번호:
-- (최상위 장치명)(X00)
-  - (하위 모듈명)(XY0)
-    - (하위 부품명)(XYZ) [필요시]
-연결관계: (데이터 흐름/통신 관계)
----
 
-⚠️ 각 구성요소 명칭에 참조번호를 반드시 포함: "통신부(110)", "프로세서(120)"
-⚠️ 청구항에 기재된 구성요소만 도면에 포함
+도 1: 전체 시스템 구성도
+유형: 블록도
+구성요소: L1 장치만 (서버(100), 사용자 단말(200), 데이터베이스(400)...)
+연결관계: L1 장치 간 통신/데이터 연결 (양방향 화살표)
+
+도 2: 서버(100) 상세 블록도
+유형: 구성도
+구성요소: 서버(100) + 내부 L2/L3 모듈 (통신부(110), 프로세서(120)...)
+연결관계: 내부 모듈 간 데이터 흐름
+
+(도면 수에 맞게 도 3, 도 4... 추가)
 
 [파트2: 도면의 간단한 설명]
 ---BRIEF_DESCRIPTIONS---
 ${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 도면이다.`).join('\n')}
-도 N은 (장치명)(참조번호)의 (내용)을 나타내는 (블록도/구성도)이다.
+도 1은 본 발명의 전체 시스템 구성을 나타내는 블록도이다.
+도 2는 서버(100)의 내부 구성을 나타내는 블록도이다.
 
-★★★ 장치 청구항의 모든 구성요소를 빠짐없이 도면에 반영하라 ★★★
-★★★ "단계", "S숫자" 표현은 방법 도면(Step 11)에서만 사용 — 여기서는 절대 금지 ★★★
+★★★ 도 1은 반드시 L1(100,200,300,400) 장치 간 연결만 표시 ★★★
+★★★ 하위 구성(110,120...)은 도 2부터 표시 ★★★
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
 
@@ -1463,10 +1477,23 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   svg+=`<rect x="${frameX+SHADOW_OFFSET}" y="${frameY+SHADOW_OFFSET}" width="${frameW}" height="${frameH}" fill="#000"/>`;
   svg+=`<rect x="${frameX}" y="${frameY}" width="${frameW}" height="${frameH}" fill="#fff" stroke="#000" stroke-width="2.25"/>`;
   
-  // 외곽 부호 (우측)
+  // 외곽 부호 (우측) - 물결 곡선
   const frameRefX=frameX+frameW+0.3*PX;
   const frameRefY=frameY+frameH/2;
-  svg+=`<line x1="${frameX+frameW}" y1="${frameRefY}" x2="${frameRefX}" y2="${frameRefY}" stroke="#000" stroke-width="1"/>`;
+  const fWaveLen=frameRefX-(frameX+frameW);
+  const fWaveAmp=4;
+  const fWaveCount=Math.max(2,Math.floor(fWaveLen/18));
+  const fSegLen=fWaveLen/fWaveCount;
+  let fWavePath=`M${frameX+frameW} ${frameRefY}`;
+  for(let w=0;w<fWaveCount;w++){
+    const x1=(frameX+frameW)+w*fSegLen+fSegLen/4;
+    const x2=(frameX+frameW)+w*fSegLen+fSegLen*3/4;
+    const x3=(frameX+frameW)+(w+1)*fSegLen;
+    const dir=(w%2===0)?1:-1;
+    fWavePath+=` Q${x1} ${frameRefY+fWaveAmp*dir} ${(frameX+frameW)+w*fSegLen+fSegLen/2} ${frameRefY}`;
+    fWavePath+=` Q${x2} ${frameRefY-fWaveAmp*dir} ${x3} ${frameRefY}`;
+  }
+  svg+=`<path d="${fWavePath}" fill="none" stroke="#000" stroke-width="1"/>`;
   svg+=`<text x="${frameRefX+8}" y="${frameRefY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
   
   // 2. 내부 구성요소 박스들
@@ -1486,11 +1513,26 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
     svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="12" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
     
-    // 리더라인
+    // 리더라인 (물결 곡선)
+    const leaderStartX=bx+boxW;
     const leaderEndX=frameX+frameW+0.3*PX;
-    svg+=`<line x1="${bx+boxW}" y1="${by+boxH/2}" x2="${leaderEndX}" y2="${by+boxH/2}" stroke="#000" stroke-width="1"/>`;
+    const leaderY=by+boxH/2;
+    const waveLen=leaderEndX-leaderStartX;
+    const waveAmp=4; // 물결 진폭
+    const waveCount=Math.max(2,Math.floor(waveLen/20)); // 물결 개수
+    const segLen=waveLen/waveCount;
+    let wavePath=`M${leaderStartX} ${leaderY}`;
+    for(let w=0;w<waveCount;w++){
+      const x1=leaderStartX+w*segLen+segLen/4;
+      const x2=leaderStartX+w*segLen+segLen*3/4;
+      const x3=leaderStartX+(w+1)*segLen;
+      const dir=(w%2===0)?1:-1;
+      wavePath+=` Q${x1} ${leaderY+waveAmp*dir} ${leaderStartX+w*segLen+segLen/2} ${leaderY}`;
+      wavePath+=` Q${x2} ${leaderY-waveAmp*dir} ${x3} ${leaderY}`;
+    }
+    svg+=`<path d="${wavePath}" fill="none" stroke="#000" stroke-width="1"/>`;
     // 부호 라벨
-    svg+=`<text x="${leaderEndX+8}" y="${by+boxH/2+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+    svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
     
     // 양방향 화살표 (↕)
     if(i<nodes.length-1){
@@ -1604,12 +1646,28 @@ function downloadPptx(sid){
       fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}
     });
     
-    // 외곽 부호
+    // 외곽 부호 (물결선 시뮬레이션)
     const refLabelX=frameX+frameW+0.1;
-    slide.addShape(pptx.shapes.LINE,{
-      x:frameX+frameW,y:frameY+frameH/2,w:0.25,h:0,
-      line:{color:'000000',width:LINE_ARROW}
-    });
+    const fLeaderStartX=frameX+frameW;
+    const fLeaderEndX=frameX+frameW+0.25;
+    const fLeaderY=frameY+frameH/2;
+    const fWaveAmp=0.02;
+    const fWaveCount=3;
+    const fSegLen=(fLeaderEndX-fLeaderStartX)/fWaveCount;
+    for(let w=0;w<fWaveCount;w++){
+      const x1=fLeaderStartX+w*fSegLen;
+      const x2=fLeaderStartX+(w+0.5)*fSegLen;
+      const x3=fLeaderStartX+(w+1)*fSegLen;
+      const dir=(w%2===0)?1:-1;
+      slide.addShape(pptx.shapes.LINE,{
+        x:x1,y:fLeaderY,w:x2-x1,h:fWaveAmp*dir,
+        line:{color:'000000',width:LINE_ARROW}
+      });
+      slide.addShape(pptx.shapes.LINE,{
+        x:x2,y:fLeaderY+fWaveAmp*dir,w:x3-x2,h:-fWaveAmp*dir,
+        line:{color:'000000',width:LINE_ARROW}
+      });
+    }
     slide.addText(String(frameRefNum),{
       x:refLabelX+0.25,y:frameY+frameH/2-0.12,w:0.5,h:0.24,
       fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
@@ -1642,11 +1700,30 @@ function downloadPptx(sid){
         fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'
       });
       
-      // 리더라인
-      slide.addShape(pptx.shapes.LINE,{
-        x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.25,h:0,
-        line:{color:'000000',width:LINE_ARROW}
-      });
+      // 리더라인 (물결선 시뮬레이션 - 여러 선분)
+      const leaderStartX=bx+boxW;
+      const leaderEndX=frameX+frameW+0.25;
+      const leaderY=by+boxH/2;
+      const waveLen=leaderEndX-leaderStartX;
+      const waveAmp=0.03; // 물결 진폭 (인치)
+      const waveCount=Math.max(3,Math.floor(waveLen/0.15));
+      const segLen=waveLen/waveCount;
+      for(let w=0;w<waveCount;w++){
+        const x1=leaderStartX+w*segLen;
+        const x2=leaderStartX+(w+0.5)*segLen;
+        const x3=leaderStartX+(w+1)*segLen;
+        const dir=(w%2===0)?1:-1;
+        // 상승 선분
+        slide.addShape(pptx.shapes.LINE,{
+          x:x1,y:leaderY,w:x2-x1,h:waveAmp*dir,
+          line:{color:'000000',width:LINE_ARROW}
+        });
+        // 하강 선분
+        slide.addShape(pptx.shapes.LINE,{
+          x:x2,y:leaderY+waveAmp*dir,w:x3-x2,h:-waveAmp*dir,
+          line:{color:'000000',width:LINE_ARROW}
+        });
+      }
       // 부호 라벨
       slide.addText(String(refNum),{
         x:refLabelX+0.25,y:by+boxH/2-0.12,w:0.5,h:0.24,
@@ -1750,11 +1827,28 @@ async function downloadDiagramImages(sid, format='jpeg'){
     ctx.lineWidth=2;
     ctx.strokeRect(frameX,frameY,frameW,frameH);
     
-    // 외곽 부호
+    // 외곽 부호 (물결 곡선)
+    const frameLeaderStartX=frameX+frameW;
+    const frameLeaderEndX=frameX+frameW+25;
+    const frameLeaderY=frameY+frameH/2;
+    const fWaveAmp=3;
+    const fWaveLen=frameLeaderEndX-frameLeaderStartX;
+    const fWaveCount=Math.max(2,Math.floor(fWaveLen/12));
+    const fSegLen=fWaveLen/fWaveCount;
+    
     ctx.beginPath();
-    ctx.moveTo(frameX+frameW,frameY+frameH/2);
-    ctx.lineTo(frameX+frameW+25,frameY+frameH/2);
+    ctx.moveTo(frameLeaderStartX,frameLeaderY);
+    for(let w=0;w<fWaveCount;w++){
+      const cp1x=frameLeaderStartX+w*fSegLen+fSegLen*0.25;
+      const cp2x=frameLeaderStartX+w*fSegLen+fSegLen*0.75;
+      const endX=frameLeaderStartX+(w+1)*fSegLen;
+      const dir=(w%2===0)?1:-1;
+      ctx.quadraticCurveTo(cp1x,frameLeaderY+fWaveAmp*dir,frameLeaderStartX+w*fSegLen+fSegLen*0.5,frameLeaderY);
+      ctx.quadraticCurveTo(cp2x,frameLeaderY-fWaveAmp*dir,endX,frameLeaderY);
+    }
+    ctx.lineWidth=1;
     ctx.stroke();
+    
     ctx.font='11px "맑은 고딕", sans-serif';
     ctx.fillStyle='#000000';
     ctx.fillText(String(frameRefNum),frameX+frameW+30,frameY+frameH/2+4);
@@ -1794,10 +1888,25 @@ async function downloadDiagramImages(sid, format='jpeg'){
       ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
       ctx.textAlign='left';
       
-      // 리더라인
+      // 리더라인 (물결 곡선)
+      const leaderStartX=bx+boxW;
+      const leaderEndX=frameX+frameW+25;
+      const leaderY=by+boxH/2;
+      const waveAmp=3; // 물결 진폭
+      const waveLen=leaderEndX-leaderStartX;
+      const waveCount=Math.max(3,Math.floor(waveLen/15));
+      const segLen=waveLen/waveCount;
+      
       ctx.beginPath();
-      ctx.moveTo(bx+boxW,by+boxH/2);
-      ctx.lineTo(frameX+frameW+25,by+boxH/2);
+      ctx.moveTo(leaderStartX,leaderY);
+      for(let w=0;w<waveCount;w++){
+        const cp1x=leaderStartX+w*segLen+segLen*0.25;
+        const cp2x=leaderStartX+w*segLen+segLen*0.75;
+        const endX=leaderStartX+(w+1)*segLen;
+        const dir=(w%2===0)?1:-1;
+        ctx.quadraticCurveTo(cp1x,leaderY+waveAmp*dir,leaderStartX+w*segLen+segLen*0.5,leaderY);
+        ctx.quadraticCurveTo(cp2x,leaderY-waveAmp*dir,endX,leaderY);
+      }
       ctx.lineWidth=1;
       ctx.stroke();
       
