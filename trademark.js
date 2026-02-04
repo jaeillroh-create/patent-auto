@@ -389,9 +389,6 @@
       case 'tm-search-figure':
         TM.searchByFigure();
         break;
-      case 'tm-search-by-similarity-only':
-        TM.searchBySimilarityOnly();
-        break;
       case 'tm-analyze-vienna':
         TM.analyzeViennaCode();
         break;
@@ -3222,9 +3219,6 @@
               <button class="btn btn-primary btn-lg" data-action="tm-search-text">
                 🔍 상표 검색
               </button>
-              <button class="btn btn-secondary" data-action="tm-search-by-similarity-only" title="유사군코드만으로 검색 (상표명 무시)">
-                🏷️ 유사군 검색
-              </button>
             </div>
             
             <!-- 검색 진행 상태 -->
@@ -3639,122 +3633,6 @@
       }
       
       // 프로그레스 숨기기
-      const progressEl = document.getElementById('tm-search-progress');
-      if (progressEl) progressEl.style.display = 'none';
-    }
-  };
-  
-  // 유사군코드만으로 검색 (상표명 없이)
-  TM.searchBySimilarityOnly = async function() {
-    const { targetClasses, targetGroups } = TM.getSearchFilters();
-    
-    if (targetGroups.length === 0 && targetClasses.length === 0) {
-      App.showToast('유사군코드 또는 상품류를 선택하세요.', 'warning');
-      return;
-    }
-    
-    const statusFilter = document.getElementById('tm-search-status')?.value || 'registered';
-    const p = TM.currentProject;
-    
-    console.log('[TM] 유사군 검색:', { targetClasses, targetGroups });
-    
-    try {
-      // 버튼 상태 변경
-      const searchBtn = document.querySelector('[data-action="tm-search-by-similarity-only"]');
-      if (searchBtn) {
-        searchBtn.disabled = true;
-        searchBtn.innerHTML = '🔄 검색 중...';
-      }
-      
-      const progressEl = document.getElementById('tm-search-progress');
-      if (progressEl) progressEl.style.display = 'block';
-      
-      App.showToast('유사군코드 기반 검색 중...', 'info');
-      
-      // 각 유사군/상품류별로 검색 실행
-      let allResults = [];
-      const searchTargets = targetGroups.length > 0 ? targetGroups : targetClasses;
-      const searchType = targetGroups.length > 0 ? 'similarityCode' : 'classification';
-      
-      for (let i = 0; i < Math.min(searchTargets.length, 5); i++) { // 최대 5개 유사군만
-        const target = searchTargets[i];
-        
-        // 진행 상태 업데이트
-        const pct = Math.round(((i + 1) / Math.min(searchTargets.length, 5)) * 100);
-        const fillEl = document.getElementById('tm-search-progress-fill');
-        const textEl = document.getElementById('tm-search-progress-text');
-        if (fillEl) fillEl.style.width = pct + '%';
-        if (textEl) textEl.textContent = `${target} 검색 중... (${i + 1}/${Math.min(searchTargets.length, 5)})`;
-        
-        try {
-          const params = {
-            application: statusFilter !== 'registered_only',
-            registration: true,
-            refused: statusFilter === 'all',
-            expiration: false,
-            withdrawal: false,
-            publication: false,
-            cancel: false,
-            abandonment: false,
-            trademark: true,
-            serviceMark: true,
-            character: true,
-            figure: true,
-            compositionCharacter: true,
-            figureComposition: true,
-            numOfRows: 50,
-            pageNo: 1
-          };
-          
-          // 유사군코드 또는 상품류 추가
-          if (searchType === 'similarityCode') {
-            params.similarityCode = target;
-          } else {
-            params.classification = target;
-          }
-          
-          const results = await TM.callKiprisAPI('text', params);
-          
-          // 중복 제거하며 추가
-          for (const r of results) {
-            if (!allResults.find(x => x.applicationNumber === r.applicationNumber)) {
-              allResults.push(r);
-            }
-          }
-        } catch (err) {
-          console.warn(`[TM] ${target} 검색 실패:`, err);
-        }
-      }
-      
-      // 결과 저장
-      TM.currentProject.searchResults.text = allResults;
-      TM.currentProject.searchResults.searchedAt = new Date().toISOString();
-      TM.currentProject.searchResults.query = `[유사군: ${searchTargets.slice(0, 5).join(', ')}]`;
-      TM.currentProject.searchResults.stats = {
-        total: allResults.length,
-        highRisk: 0,
-        mediumRisk: 0
-      };
-      
-      // UI 업데이트
-      const resultsEl = document.getElementById('tm-search-results');
-      if (resultsEl) {
-        resultsEl.innerHTML = TM.renderSearchResults(TM.currentProject.searchResults);
-      }
-      
-      App.showToast(`${allResults.length}건의 검색 결과가 있습니다.`, 'success');
-      
-    } catch (error) {
-      console.error('[TM] 유사군 검색 실패:', error);
-      App.showToast('검색 실패: ' + error.message, 'error');
-    } finally {
-      // 버튼 복원
-      const searchBtn = document.querySelector('[data-action="tm-search-by-similarity-only"]');
-      if (searchBtn) {
-        searchBtn.disabled = false;
-        searchBtn.innerHTML = '🏷️ 유사군 검색';
-      }
-      
       const progressEl = document.getElementById('tm-search-progress');
       if (progressEl) progressEl.style.display = 'none';
     }
