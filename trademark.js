@@ -5681,95 +5681,96 @@ ${criticalResults.slice(0, 5).map(r =>
       </div>
       
       ${pe.enabled ? `
-        <!-- 우선심사 사유 -->
-        <div class="tm-form-section">
-          <h4>우선심사 신청 사유</h4>
-          <select class="tm-input" id="tm-pe-reason" onchange="TM.updatePriorityReason(this.value)">
-            <option value="" ${!pe.reason ? 'selected' : ''}>선택하세요</option>
-            <option value="using" ${pe.reason === 'using' ? 'selected' : ''}>상표를 지정상품 전부에 사용 중 (상표법 시행령 제12조 제1호)</option>
-            <option value="preparing" ${pe.reason === 'preparing' ? 'selected' : ''}>상표 사용 준비 중 (상표법 시행령 제12조 제1호)</option>
-            <option value="infringement" ${pe.reason === 'infringement' ? 'selected' : ''}>제3자의 무단 사용 (상표법 시행령 제12조 제2호)</option>
-            <option value="export" ${pe.reason === 'export' ? 'selected' : ''}>수출 관련 긴급성 (상표법 시행령 제12조 제3호)</option>
-            <option value="other" ${pe.reason === 'other' ? 'selected' : ''}>기타</option>
-          </select>
-          
+        <!-- 우선심사 사유 (컴팩트) -->
+        <div class="tm-section-compact">
+          <div class="tm-section-header-compact">
+            <span>📋 신청 사유</span>
+            <select class="tm-select-compact" id="tm-pe-reason" onchange="TM.updatePriorityReason(this.value)">
+              <option value="" ${!pe.reason ? 'selected' : ''}>선택</option>
+              <option value="using" ${pe.reason === 'using' ? 'selected' : ''}>사용 중 (시행령 §12①)</option>
+              <option value="preparing" ${pe.reason === 'preparing' ? 'selected' : ''}>사용 준비 중 (시행령 §12①)</option>
+              <option value="infringement" ${pe.reason === 'infringement' ? 'selected' : ''}>제3자 무단사용 (시행령 §12②)</option>
+              <option value="export" ${pe.reason === 'export' ? 'selected' : ''}>수출 긴급 (시행령 §12③)</option>
+            </select>
+          </div>
           ${pe.reason ? `
-            <div class="tm-reason-detail" style="margin-top: 12px;">
-              <label>상세 설명</label>
-              <textarea class="tm-input" id="tm-pe-reason-detail" rows="3" 
-                        placeholder="구체적인 사용 현황 또는 준비 상황을 입력하세요..."
-                        onchange="TM.updatePriorityReasonDetail(this.value)">${pe.reasonDetail || ''}</textarea>
-            </div>
+            <textarea class="tm-textarea-compact" id="tm-pe-reason-detail" rows="2" 
+                      placeholder="구체적인 사용 현황 또는 준비 상황 (선택)"
+                      onchange="TM.updatePriorityReasonDetail(this.value)">${pe.reasonDetail || ''}</textarea>
           ` : ''}
         </div>
         
-        <!-- 증거자료 관리 -->
-        <div class="tm-form-section">
-          <h4>증거자료</h4>
-          <p class="tm-hint">상표 사용 증거(사업자등록증, 제안서, 계약서, 홈페이지 캡처 등)를 첨부하세요. 파일을 업로드하면 AI가 자동으로 증빙자료명을 생성합니다.</p>
-          
-          <!-- 파일 업로드 드롭존 -->
-          <div class="tm-evidence-dropzone" id="tm-evidence-dropzone"
-               ondragover="TM.handleDragOver(event)"
-               ondragleave="TM.handleDragLeave(event)"
-               ondrop="TM.handleEvidenceDrop(event)"
-               onclick="document.getElementById('tm-evidence-input').click()">
+        <!-- 증거자료 (컴팩트) -->
+        <div class="tm-section-compact">
+          <div class="tm-section-header-compact">
+            <span>📎 증거자료</span>
+            <div class="tm-evidence-upload-btn" onclick="document.getElementById('tm-evidence-input').click()">
+              + 파일 추가
+            </div>
             <input type="file" id="tm-evidence-input" style="display: none;" 
-                   accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,image/*" multiple 
+                   accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,image/*" multiple 
                    onchange="TM.handleEvidenceUpload(this.files)">
-            <div class="tm-dropzone-content">
-              <div class="tm-dropzone-icon">📁</div>
-              <div class="tm-dropzone-text">
-                <strong>증거자료 파일 업로드</strong><br>
-                <span>클릭하거나 파일을 끌어다 놓으세요 (여러 파일 가능)</span>
-              </div>
-              <div class="tm-dropzone-formats">PDF, Word, 이미지 지원 · AI가 자동으로 증빙자료명 생성</div>
-            </div>
           </div>
           
-          <div class="tm-evidence-list" id="tm-evidence-list">
-            ${(pe.evidences || []).map((ev, idx) => `
-              <div class="tm-evidence-item">
-                <span class="tm-evidence-num">첨부자료 ${idx + 1}</span>
-                <div class="tm-evidence-info">
-                  <div class="tm-evidence-title">${TM.escapeHtml(ev.title)}</div>
-                  <div class="tm-evidence-desc">${TM.escapeHtml(ev.description || ev.fileName || '')}</div>
+          ${(pe.evidences || []).length > 0 ? `
+            <div class="tm-evidence-list-compact">
+              ${(pe.evidences || []).map((ev, idx) => `
+                <div class="tm-evidence-item-compact">
+                  <span class="tm-evidence-badge">${idx + 1}</span>
+                  <div class="tm-evidence-info-compact">
+                    <span class="tm-evidence-title-compact">${TM.escapeHtml(ev.title)}</span>
+                    <span class="tm-evidence-file-compact">${TM.escapeHtml(ev.fileName || '')}</span>
+                  </div>
+                  <button class="tm-evidence-delete" data-action="tm-remove-evidence" data-index="${idx}">✕</button>
                 </div>
-                <button class="btn btn-sm btn-ghost" data-action="tm-remove-evidence" data-index="${idx}">삭제</button>
-              </div>
-            `).join('')}
-          </div>
-          
-          <div class="tm-evidence-add" style="margin-top: 12px;">
-            <div class="tm-evidence-add-row">
-              <input type="text" class="tm-input" id="tm-evidence-title" placeholder="첨부자료 제목 (예: 사업자등록증)">
-              <input type="text" class="tm-input" id="tm-evidence-desc" placeholder="설명 (선택)">
-              <button class="btn btn-secondary" onclick="TM.addEvidenceManual()">➕ 추가</button>
+              `).join('')}
             </div>
+          ` : `
+            <div class="tm-evidence-empty" 
+                 ondragover="TM.handleDragOver(event)"
+                 ondragleave="TM.handleDragLeave(event)"
+                 ondrop="TM.handleEvidenceDrop(event)"
+                 onclick="document.getElementById('tm-evidence-input').click()">
+              <span>📁 파일을 드래그하거나 클릭하여 업로드</span>
+              <small>사업자등록증, 제안서, 계약서 등</small>
+            </div>
+          `}
+          
+          <div class="tm-evidence-manual-compact">
+            <input type="text" id="tm-evidence-title" placeholder="수동 추가: 자료명 입력">
+            <button class="tm-btn-add" onclick="TM.addEvidenceManual()">+</button>
           </div>
         </div>
         
-        <!-- 우선심사 설명서 생성 -->
-        <div class="tm-form-section">
-          <h4>📝 우선심사 신청 설명서</h4>
-          <p class="tm-hint">아래 버튼을 클릭하면 우선심사 신청 설명서가 Word 파일로 생성됩니다.</p>
+        <!-- 우선심사 설명서 생성 (컴팩트) -->
+        <div class="tm-section-compact tm-doc-section">
+          <div class="tm-section-header-compact">
+            <span>📝 설명서 생성</span>
+          </div>
           
           ${TM.checkGoodsMismatch() ? `
-            <div class="tm-goods-mismatch-warning">
-              <div class="tm-warning-icon">⚠️</div>
-              <div class="tm-warning-content">
-                <strong>지정상품 정보 불일치</strong>
-                <p>2단계 지정상품(${(p.designatedGoods || []).map(d => d.classCode).join(',')}류)과 출원서 추출 정보(${pe.classCode || '-'}류)가 다릅니다.</p>
-                <p class="tm-warning-hint">Word 생성 시 어떤 정보를 사용할지 선택할 수 있습니다.</p>
+            <div class="tm-goods-selector">
+              <div class="tm-goods-selector-header">⚠️ 지정상품 정보 불일치 - 사용할 정보 선택:</div>
+              <div class="tm-goods-selector-options">
+                <label class="tm-goods-option-inline ${!pe.useExtractedGoods ? 'selected' : ''}" onclick="TM.selectGoodsSource(false)">
+                  <input type="radio" name="goods-source" ${!pe.useExtractedGoods ? 'checked' : ''}>
+                  <span class="tm-option-label">📋 2단계 지정상품</span>
+                  <span class="tm-option-value">${(p.designatedGoods || []).map(d => d.classCode).join(',')}류</span>
+                </label>
+                <label class="tm-goods-option-inline ${pe.useExtractedGoods ? 'selected' : ''}" onclick="TM.selectGoodsSource(true)">
+                  <input type="radio" name="goods-source" ${pe.useExtractedGoods ? 'checked' : ''}>
+                  <span class="tm-option-label">📄 출원서 추출</span>
+                  <span class="tm-option-value">${pe.classCode}류</span>
+                </label>
               </div>
             </div>
           ` : ''}
           
-          <div class="tm-doc-actions">
-            <button class="btn btn-primary btn-lg" data-action="tm-generate-priority-doc">
-              📄 우선심사 설명서 생성 (Word)
+          <div class="tm-doc-actions-compact">
+            <button class="tm-btn-generate" data-action="tm-generate-priority-doc">
+              📄 Word 생성
             </button>
-            <button class="btn btn-secondary" onclick="TM.previewPriorityDoc()">
+            <button class="tm-btn-preview" onclick="TM.previewPriorityDoc()">
               👁️ 미리보기
             </button>
           </div>
@@ -6340,12 +6341,18 @@ ${text.substring(0, 2000)}
         let fileType = '';
         
         try {
-          if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          const ext = file.name.toLowerCase().split('.').pop();
+          
+          if (file.type === 'application/pdf' || ext === 'pdf') {
             fileType = 'PDF';
             fileContent = await TM.extractTextFromPDF(file);
-          } else if (file.name.toLowerCase().match(/\.(doc|docx)$/)) {
+          } else if (ext === 'doc' || ext === 'docx') {
             fileType = 'Word';
             fileContent = await TM.extractTextFromWord(file);
+          } else if (ext === 'ppt' || ext === 'pptx') {
+            fileType = 'PowerPoint';
+            // pptx는 파일명 기반으로 처리 (텍스트 추출 복잡)
+            fileContent = file.name;
           } else if (file.type.startsWith('image/')) {
             fileType = '이미지';
             fileContent = await TM.extractTextFromImage(file);
@@ -6453,45 +6460,61 @@ ${text.substring(0, 2000)}
     return result.data.text.substring(0, 2000);
   };
   
+  // 파일명 정리 함수 (공통)
+  TM.cleanFileName = function(fileName) {
+    return fileName
+      .replace(/^\d{3}-\d{4}-[가-힣a-zA-Z]+_/, '')  // "005-0001-기타첨부서류_" 제거
+      .replace(/^[A-Z]?\d+-\d+-/, '')               // "A001-0001-" 형식 제거
+      .replace(/_첨부\.?/g, '')                      // "_첨부" 제거
+      .replace(/첨부$/, '')                          // 끝의 "첨부" 제거
+      .replace(/\.[^/.]+$/, '')                      // 확장자 제거
+      .replace(/_/g, ' ')                            // 언더스코어를 공백으로
+      .trim();
+  };
+  
   // AI로 증빙자료명 생성
   TM.generateEvidenceTitle = async function(fileName, content, fileType) {
     const p = TM.currentProject;
     const trademarkName = p.trademarkName || '';
     const applicantName = p.applicantName || p.priorityExam?.applicantName || '';
     
+    // 파일명 정리
+    const cleanedFileName = TM.cleanFileName(fileName);
+    
     try {
-      const prompt = `다음은 상표 우선심사 신청을 위한 증거자료 파일입니다.
-파일을 분석하여 적절한 "증빙자료명"을 생성해주세요.
+      const prompt = `상표 우선심사 신청용 증거자료의 증빙자료명을 생성하세요.
 
 【상표 정보】
 - 상표명: ${trademarkName}
 - 출원인: ${applicantName}
 
 【파일 정보】
-- 파일명: ${fileName}
+- 파일명: ${cleanedFileName}
 - 파일타입: ${fileType}
 
-【파일 내용 (일부)】
-${content.substring(0, 1500)}
+【파일 내용】
+${content.substring(0, 1200)}
 
-【증빙자료명 예시】
+【좋은 증빙자료명 예시】
 - 사업자등록증
-- OO회사 제안서
-- OO 시스템 납품 계약서
-- 홈페이지 캡처 화면
-- OO 소프트웨어 사용 설명서
-- 제품 카탈로그
-- 거래명세서
+- 건물관리시스템 기술설명서
+- 출원사실증명원
+- 소프트웨어 제품 소개서
+- 시스템 납품 계약서
+- 서비스 이용 약관
+- 홈페이지 캡처화면
 
-파일 내용과 맥락을 분석하여 가장 적절한 증빙자료명을 한 줄로 응답하세요.
-증빙자료명만 응답하세요. 다른 설명 없이.`;
+파일 내용을 분석하여 적절한 증빙자료명을 한 줄로 응답하세요.
+파일번호나 코드(예: 005-0001)는 제외하고 내용 중심으로 작성하세요.`;
 
-      const response = await App.callClaude(prompt, 100);
+      const response = await App.callClaude(prompt, 80);
       let title = (response.text || '').trim();
       
       // 응답 정리
       title = title.replace(/^["']|["']$/g, '').trim();
       title = title.split('\n')[0].trim();
+      // 불필요한 접두사 다시 제거
+      title = title.replace(/^\d{3}-\d{4}-[가-힣a-zA-Z_]+/, '').trim();
       
       if (title && title.length > 2 && title.length < 50) {
         return title;
@@ -6504,39 +6527,70 @@ ${content.substring(0, 1500)}
     return TM.guessEvidenceTitle(fileName);
   };
   
-  // 파일명으로 증빙자료명 추측
+  // 파일명으로 증빙자료명 추측 (개선된 버전)
   TM.guessEvidenceTitle = function(fileName) {
-    const name = fileName.toLowerCase();
-    const nameKor = fileName;
+    // 파일명 정리 - 불필요한 접두사 제거
+    let cleanName = TM.cleanFileName(fileName);
     
-    // 한글 패턴
-    if (nameKor.includes('사업자등록증')) return '사업자등록증';
-    if (nameKor.includes('기술설명서') || nameKor.includes('기술소개')) return '기술설명서';
-    if (nameKor.includes('제안서')) return '제안서';
-    if (nameKor.includes('계약서')) return '계약서';
-    if (nameKor.includes('견적서')) return '견적서';
-    if (nameKor.includes('납품')) return '납품 확인서';
-    if (nameKor.includes('발명설명서')) return '발명설명서';
-    if (nameKor.includes('출원')) return '출원 관련 서류';
-    if (nameKor.includes('실증명원')) return '출원사실증명원';
-    if (nameKor.includes('증명원')) return '증명원';
-    if (nameKor.includes('첨부')) return '첨부서류';
+    const name = cleanName.toLowerCase();
+    const nameKor = cleanName;
     
-    // 영문 패턴
-    if (name.includes('사업자') || name.includes('business')) return '사업자등록증';
-    if (name.includes('제안서') || name.includes('proposal')) return '제안서';
-    if (name.includes('계약서') || name.includes('contract')) return '계약서';
-    if (name.includes('견적서') || name.includes('quotation')) return '견적서';
-    if (name.includes('납품') || name.includes('delivery')) return '납품 확인서';
-    if (name.includes('카탈로그') || name.includes('catalog')) return '제품 카탈로그';
-    if (name.includes('매뉴얼') || name.includes('manual')) return '사용 설명서';
-    if (name.includes('홈페이지') || name.includes('website') || name.includes('캡처')) return '홈페이지 캡처 화면';
-    if (name.includes('명세') || name.includes('invoice')) return '거래명세서';
-    if (name.includes('등록증') || name.includes('certificate')) return '등록증';
-    if (name.includes('특허') || name.includes('patent')) return '특허 관련 서류';
+    // 특정 키워드 매칭 (우선순위 순)
+    const patterns = [
+      // 사업자 관련
+      { keywords: ['사업자등록증', '사업자 등록증'], title: '사업자등록증' },
+      { keywords: ['business registration', 'business license'], title: '사업자등록증' },
+      
+      // 기술 문서
+      { keywords: ['기술설명서', '기술 설명서', '기술소개서'], title: '기술설명서' },
+      { keywords: ['발명설명서', '발명 설명서'], title: '발명설명서' },
+      { keywords: ['사용설명서', '사용 설명서', '매뉴얼', 'manual'], title: '사용 설명서' },
+      
+      // 출원/증명 관련
+      { keywords: ['출원사실증명원', '출원사실 증명원'], title: '출원사실증명원' },
+      { keywords: ['출원서', '출원 서류'], title: '출원서' },
+      { keywords: ['등록증', 'certificate'], title: '등록증' },
+      { keywords: ['증명원', '증명서'], title: '증명원' },
+      
+      // 계약/거래 관련
+      { keywords: ['제안서', 'proposal'], title: '제안서' },
+      { keywords: ['계약서', 'contract', 'agreement'], title: '계약서' },
+      { keywords: ['견적서', 'quotation', 'estimate'], title: '견적서' },
+      { keywords: ['거래명세', 'invoice', '세금계산서'], title: '거래명세서' },
+      { keywords: ['납품', 'delivery', '인수인계'], title: '납품확인서' },
+      
+      // 홍보/마케팅
+      { keywords: ['카탈로그', 'catalog', 'catalogue', '브로슈어', 'brochure'], title: '제품 카탈로그' },
+      { keywords: ['홈페이지', 'website', '캡처', 'screenshot'], title: '홈페이지 캡처 화면' },
+      { keywords: ['광고', 'advertisement', 'ad', '홍보'], title: '광고 자료' },
+      
+      // 특허 관련
+      { keywords: ['특허', 'patent'], title: '특허 관련 서류' },
+      { keywords: ['상표', 'trademark'], title: '상표 관련 서류' },
+      
+      // 기타
+      { keywords: ['ppt', 'pptx', 'presentation', '프레젠테이션'], title: '발표자료' },
+      { keywords: ['report', '보고서', '리포트'], title: '보고서' },
+    ];
     
-    // 확장자 제거 후 파일명 반환
-    return fileName.replace(/\.[^/.]+$/, '');
+    // 패턴 매칭
+    for (const pattern of patterns) {
+      for (const keyword of pattern.keywords) {
+        if (name.includes(keyword.toLowerCase()) || nameKor.includes(keyword)) {
+          return pattern.title;
+        }
+      }
+    }
+    
+    // 매칭 안되면 정리된 파일명 반환 (너무 짧으면 원본 사용)
+    if (cleanName.length < 3) {
+      cleanName = fileName.replace(/\.[^/.]+$/, '');
+    }
+    
+    // 언더스코어를 공백으로
+    cleanName = cleanName.replace(/_/g, ' ').trim();
+    
+    return cleanName || '첨부자료';
   };
   
   // 우선심사 설명서 미리보기
@@ -6546,17 +6600,17 @@ ${content.substring(0, 1500)}
     
     if (!previewEl || !contentEl) return;
     
-    // 추출 정보가 있으면 추출 정보 사용
+    // 인라인 선택 값 사용
     const pe = TM.currentProject?.priorityExam || {};
-    const hasExtracted = pe.classCode || pe.designatedGoodsFromApp;
+    const useExtracted = pe.useExtractedGoods || false;
     
-    const docContent = TM.generatePriorityDocContent(hasExtracted);
+    const docContent = TM.generatePriorityDocContent(useExtracted);
     contentEl.innerHTML = docContent;
     previewEl.style.display = 'block';
   };
   
   // 우선심사 설명서 내용 생성
-  TM.generatePriorityDocContent = function(useExtracted = null) {
+  TM.generatePriorityDocContent = function(useExtracted = false) {
     const p = TM.currentProject;
     const pe = p.priorityExam || {};
     
@@ -6566,16 +6620,17 @@ ${content.substring(0, 1500)}
     const applicationDate = pe.applicationDate || '[출원일]';
     const trademarkName = pe.trademarkNameFromApp || p.trademarkName || '[상표명]';
     
-    // 추출 정보가 있고, 명시적으로 추출 정보 사용이 선택된 경우
+    // 인라인 선택 값 적용
     const hasExtracted = pe.classCode || pe.designatedGoodsFromApp;
+    const finalUseExtracted = useExtracted || pe.useExtractedGoods || false;
     let classCodeStr, designatedGoodsStr, goodsWithGroups;
     
-    if (useExtracted === true && hasExtracted) {
+    if (finalUseExtracted && hasExtracted) {
       // 추출 정보 사용
       classCodeStr = pe.classCode ? `제 ${pe.classCode}류` : '[상품류]';
       designatedGoodsStr = pe.designatedGoodsFromApp || '[지정상품]';
       goodsWithGroups = pe.designatedGoodsFromApp ? 
-        pe.designatedGoodsFromApp.split(',').slice(0, 10).map(g => `『${g.trim()}』`) : [];
+        pe.designatedGoodsFromApp.split(',').map(g => `『${g.trim()}』`) : [];
     } else {
       // 2단계 정보 사용 (기본)
       const classGroups = {};
@@ -6663,7 +6718,7 @@ ${content.substring(0, 1500)}
           <p>${reasonText}</p>
           <p style="margin-top: 12px;">
             본 출원인 "${applicantName}"는 본 신청서의 첨부자료${evidence1Ref}에 기재된 바와 같이, 
-            이건 출원상표가 표시된 ${goodsWithGroups.slice(0, 5).join(', ')}${goodsWithGroups.length > 5 ? ' 등' : ''}을 
+            이건 출원상표가 표시된 ${goodsWithGroups.join(', ')}을 
             사용 및 사용 준비 중입니다.
           </p>
           <p style="margin-top: 12px;">
@@ -6707,17 +6762,9 @@ ${content.substring(0, 1500)}
     const extractedClassCode = pe.classCode || '';
     const extractedGoodsStr = pe.designatedGoodsFromApp || '';
     
-    // 불일치 감지 (추출 정보가 있을 때만)
+    // 불일치 시 인라인 선택 값 사용 (useExtracted 파라미터가 null이면 pe.useExtractedGoods 사용)
     const hasExtracted = extractedClassCode || extractedGoodsStr;
-    const classCodeMismatch = hasExtracted && extractedClassCode && step2ClassCodes && extractedClassCode !== step2ClassCodes;
-    const goodsMismatch = hasExtracted && extractedGoodsStr && step2GoodsStr && 
-                          extractedGoodsStr.substring(0, 50) !== step2GoodsStr.substring(0, 50);
-    
-    if ((classCodeMismatch || goodsMismatch) && useExtracted === null) {
-      // 불일치 발견 - 선택 모달 표시
-      TM.showGoodsMismatchModal(step2ClassCodes, step2GoodsStr, extractedClassCode, extractedGoodsStr);
-      return;
-    }
+    const finalUseExtracted = useExtracted !== null ? useExtracted : (pe.useExtractedGoods || false);
     
     try {
       App.showToast('Word 문서 생성 중...', 'info');
@@ -6731,7 +6778,7 @@ ${content.substring(0, 1500)}
       // 상품류 및 지정상품 - 선택에 따라 결정
       let classCodeStr, designatedGoodsStr, goodsWithGroups;
       
-      if (useExtracted === true && hasExtracted) {
+      if (finalUseExtracted && hasExtracted) {
         // 7단계 추출 정보 사용
         classCodeStr = extractedClassCode ? `제 ${extractedClassCode}류` : '[상품류]';
         designatedGoodsStr = extractedGoodsStr || '[지정상품]';
@@ -6789,7 +6836,7 @@ ${content.substring(0, 1500)}
       const evidence1Ref = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
       const evidence2Ref = evidences.length > 1 ? `(첨부자료 2: ${evidences[1].title})` : '';
       
-      const reasonText2 = `본 출원인 "${applicantName}"는 본 신청서의 첨부자료${evidence1Ref}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsWithGroups.slice(0, 5).join(', ')}${goodsWithGroups.length > 5 ? ' 등' : ''}을 사용 및 사용 준비 중입니다.`;
+      const reasonText2 = `본 출원인 "${applicantName}"는 본 신청서의 첨부자료${evidence1Ref}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsWithGroups.join(', ')}을 사용 및 사용 준비 중입니다.`;
       
       const reasonText3 = '따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 사용예정 중에 있습니다.';
       
@@ -6927,6 +6974,14 @@ ${content.substring(0, 1500)}
     const classCodeMismatch = hasExtracted && extractedClassCode && step2ClassCodes && extractedClassCode !== step2ClassCodes;
     
     return classCodeMismatch;
+  };
+  
+  // 지정상품 소스 선택
+  TM.selectGoodsSource = function(useExtracted) {
+    if (!TM.currentProject?.priorityExam) return;
+    TM.currentProject.priorityExam.useExtractedGoods = useExtracted;
+    TM.hasUnsavedChanges = true;
+    TM.renderCurrentStep();
   };
   
   // 우선심사 설명서 Blob 생성 (클라이언트 사이드)
