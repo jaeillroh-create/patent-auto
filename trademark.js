@@ -255,6 +255,27 @@
     panel.addEventListener('click', TM.handleClick);
     panel.addEventListener('input', TM.handleInput);
     panel.addEventListener('change', TM.handleChange);
+    
+    // 뒤로가기(Backspace) 키 처리 - 이전 스텝으로 이동
+    document.addEventListener('keydown', (e) => {
+      // input, textarea 등에서는 무시
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+        return;
+      }
+      
+      // Backspace 키
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        
+        // 프로젝트가 열려있고 스텝이 1보다 크면 이전 스텝으로
+        if (TM.currentProject && TM.currentProject.currentStep > 1) {
+          TM.prevStep();
+        } else if (TM.currentProject) {
+          // 스텝 1이면 대시보드로
+          TM.backToList();
+        }
+      }
+    });
   };
   
   TM.handleClick = function(e) {
@@ -264,13 +285,33 @@
     const action = target.dataset.action;
     const params = { ...target.dataset };
     
+    // 편집/삭제/제거 버튼은 이벤트 전파 중지 (카드 클릭과 충돌 방지)
+    if (action === 'tm-edit-project' || action === 'tm-delete-project' || 
+        action === 'tm-remove-goods' || action === 'tm-remove-class') {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
+    // 카드 내부의 버튼 클릭 시, 카드 이벤트 무시
+    if (target.tagName === 'BUTTON' && target.closest('.tm-project-card')) {
+      // 버튼 클릭이면 카드의 open-project 실행 안 함
+      if (action !== 'tm-open-project') {
+        e.stopPropagation();
+      }
+    }
+    
+    console.log('[TM] Click action:', action, params);
+    
     switch (action) {
       // 프로젝트 관련
       case 'tm-new-project':
         TM.createNewProject();
         break;
       case 'tm-open-project':
-        TM.openProject(params.id);
+        // 버튼이 아닌 카드 클릭인 경우에만 실행
+        if (target.classList.contains('tm-project-card') || target.tagName === 'BUTTON') {
+          TM.openProject(params.id);
+        }
         break;
       case 'tm-edit-project':
         TM.editProject(params.id, params.title);
@@ -528,14 +569,14 @@
           </div>
           <span class="tm-card-status ${project.status}">${statusLabels[project.status] || '작성 중'}</span>
         </div>
-        <div class="tm-card-actions">
+        <div class="tm-card-actions" onclick="event.stopPropagation()">
           <button class="btn btn-primary btn-sm" data-action="tm-open-project" data-id="${project.id}">
             📂 열기
           </button>
-          <button class="btn btn-secondary btn-sm" data-action="tm-edit-project" data-id="${project.id}" data-title="${TM.escapeHtml(project.title || '')}" onclick="event.stopPropagation()">
+          <button class="btn btn-secondary btn-sm" data-action="tm-edit-project" data-id="${project.id}" data-title="${TM.escapeHtml(project.title || '')}">
             ✏️ 편집
           </button>
-          <button class="btn btn-ghost btn-sm tm-delete-btn" data-action="tm-delete-project" data-id="${project.id}" onclick="event.stopPropagation()">
+          <button class="btn btn-ghost btn-sm tm-delete-btn" data-action="tm-delete-project" data-id="${project.id}">
             🗑️
           </button>
         </div>
@@ -2161,24 +2202,53 @@
   };
   
   TM.removeGoods = function(classCode, goodsName) {
-    if (!TM.currentProject) return;
+    console.log('[TM] removeGoods 호출:', classCode, goodsName);
+    
+    if (!TM.currentProject) {
+      console.log('[TM] removeGoods: currentProject 없음');
+      return;
+    }
     
     const classItem = TM.currentProject.designatedGoods.find(g => g.classCode === classCode);
-    if (!classItem) return;
+    if (!classItem) {
+      console.log('[TM] removeGoods: classItem 없음', classCode);
+      return;
+    }
     
+    const beforeCount = classItem.goods.length;
     classItem.goods = classItem.goods.filter(g => g.name !== goodsName);
+    const afterCount = classItem.goods.length;
+    
+    console.log('[TM] removeGoods: 삭제 결과', beforeCount, '->', afterCount);
+    
     classItem.goodsCount = classItem.goods.length;
     classItem.nonGazettedCount = classItem.goods.filter(g => !g.gazetted).length;
     
     TM.renderCurrentStep();
+    App.showToast(`"${goodsName}" 삭제됨`, 'info');
   };
   
   TM.initGoodsAutocomplete = function(classCode) {
+    console.log('[TM] initGoodsAutocomplete 호출:', classCode);
+    
     const input = document.getElementById(`tm-goods-input-${classCode}`);
     const autocomplete = document.getElementById(`tm-autocomplete-${classCode}`);
-    if (!input || !autocomplete) return;
+    
+    if (!input || !autocomplete) {
+      console.log('[TM] initGoodsAutocomplete: 요소를 찾을 수 없음', {
+        input: !!input,
+        autocomplete: !!autocomplete,
+        inputId: `tm-goods-input-${classCode}`,
+        autocompleteId: `tm-autocomplete-${classCode}`
+      });
+      return;
+    }
+    
+    console.log('[TM] initGoodsAutocomplete: 요소 찾음, 이벤트 연결');
     
     const searchGoods = TM.debounce(async (query) => {
+      console.log('[TM] searchGoods 호출:', query);
+      
       if (query.length < 2) {
         autocomplete.style.display = 'none';
         return;
@@ -5066,24 +5136,32 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
 【분석 요청】
 1. 이 사업의 핵심이 무엇인지 파악하세요
 2. 상표 출원 시 반드시 포함해야 할 핵심 유사군코드를 추정하세요
+3. ★중요★ 판매/유통 채널도 반드시 고려하세요!
 
-【유사군코드 참고 - 서비스업 예시】
-- S1204: 법률서비스 (S120401: 법무, S120402: 변리, 특허대리)
-- S1205: 컨설팅 (S120503: 지식재산권 컨설팅)
-- G39: 소프트웨어, G42: 기술서비스
-- S0601: 온라인서비스, S1213: 정보제공
+【상품류 참고】
+- 제25류: 의류, 신발, 모자 (G450101~G450401)
+- 제35류: 광고업, 판매대행업, 도소매업, 전자상거래, 온라인 쇼핑몰 (S0101, S123101, S1370)
+- 제38류: 통신업, 방송업 (G460401)
+- 제42류: IT서비스, 소프트웨어, 웹서비스 (G4203, G4206)
+
+【★ 온라인 판매 사업의 경우 필수 류 ★】
+- 제35류: 전자상거래업, 온라인 쇼핑몰 운영업, 판매대행업, 광고업
+- 해당 상품 류 (예: 의류 판매 → 제25류)
 
 【응답 형식 - JSON만】
 {
   "businessSummary": "이 사업은 ... (핵심을 1문장으로)",
-  "coreActivity": "주된 활동 (예: 특허출원대행, 소프트웨어개발, 교육서비스)",
-  "recommendedClasses": ["45", "42", "35", "41", "09"],
+  "coreActivity": "주된 활동 (예: 의류 온라인 판매, 특허출원대행)",
+  "recommendedClasses": ["35", "25", "42"],
   "classReasons": {
-    "45": "추천 이유"
+    "35": "온라인 쇼핑몰 운영 및 판매대행 서비스",
+    "25": "의류 상품 직접 취급"
   },
-  "coreSimilarGroups": ["S120402", "S120401", "S120503"],
-  "searchKeywords": ["변리", "특허", "상표", "출원", "지식재산권"]
-}`;
+  "coreSimilarGroups": ["S0101", "S123101", "G450101"],
+  "searchKeywords": ["의류", "온라인", "판매", "쇼핑몰"]
+}
+
+★ 판매업의 경우 제35류(전자상거래, 도소매)를 반드시 포함하세요!`;
 
       if (btn) btn.innerHTML = '<span class="tossface">⏳</span> 사업 분석 중...';
       
