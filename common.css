@@ -75,6 +75,7 @@ a:hover { text-decoration: underline; }
 .screen { display: none; min-height: 100vh; }
 .screen.active { display: block; }
 .page { display: none; }
+/* .page.active는 patent.css에서 flex로 오버라이드됨 */
 .page.active { display: block; }
 
 /* ══════════════════════════════════════════════════════════

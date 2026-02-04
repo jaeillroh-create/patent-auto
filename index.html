@@ -163,8 +163,19 @@
 <div id="newProjectModal" class="modal-overlay" style="display:none">
   <div class="modal-content">
     <div class="modal-title"><span class="tossface">📝</span> 새 사건 만들기</div>
-    <div class="modal-body">사건명을 입력해 주세요.</div>
-    <input type="text" class="input-field" id="newProjectTitle" placeholder="예: 공기 청결도 기반 가습기 분무량 제어 서버" />
+    <div class="modal-body">사건 정보를 입력해 주세요.</div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:4px">사건번호</label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:14px;font-weight:600;color:var(--color-primary)">26P</span>
+        <input type="text" class="input-field" id="newProjectNumber" maxlength="4" placeholder="0001" style="width:80px;text-align:center" />
+        <span style="font-size:11px;color:var(--color-text-tertiary)">(자동 증가)</span>
+      </div>
+    </div>
+    <div>
+      <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:4px">사건명</label>
+      <input type="text" class="input-field" id="newProjectTitle" placeholder="예: 공기 청결도 기반 가습기 분무량 제어 서버" />
+    </div>
     <div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-ghost" onclick="closeNewProjectModal()" style="flex:1">취소</button><button class="btn btn-primary" onclick="createAndOpenProject()" style="flex:1">만들기</button></div>
   </div>
 </div>
