@@ -3960,12 +3960,24 @@
           
           const q = textQueries[i];
           const results = await TM.callKiprisAPI('text', {
-            searchString: q.query,
+            trademarkName: q.query,
             application: statusFilter !== 'registered_only',
             registration: true,
             refused: statusFilter === 'all',
-            numOfRows: 50
-          }, { useRecent: true, recentYears });
+            expiration: false,
+            withdrawal: false,
+            publication: false,
+            cancel: false,
+            abandonment: false,
+            trademark: true,
+            serviceMark: true,
+            character: true,
+            figure: true,
+            compositionCharacter: true,
+            figureComposition: true,
+            numOfRows: 50,
+            pageNo: 1
+          });
           
           totalTextHits += results.length;
           textResults.push(...results);
@@ -3986,11 +3998,23 @@
           
           const q = textQueries[i];
           const results = await TM.callKiprisAPI('text', {
-            searchString: q.query,
+            trademarkName: q.query,
             application: statusFilter !== 'registered_only',
             registration: true,
             refused: statusFilter === 'all',
-            numOfRows: 50
+            expiration: false,
+            withdrawal: false,
+            publication: false,
+            cancel: false,
+            abandonment: false,
+            trademark: true,
+            serviceMark: true,
+            character: true,
+            figure: true,
+            compositionCharacter: true,
+            figureComposition: true,
+            numOfRows: 50,
+            pageNo: 1
           });
           
           // 중복 제거하며 추가
