@@ -6067,13 +6067,14 @@ ${criticalResults.slice(0, 5).map(r =>
     // 공백/줄바꿈 정규화
     let normalizedText = text.replace(/\s+/g, ' ');
     
-    // OCR 오류 보정 및 띄어쓰기 정규화
+    // OCR 오류 보정: 띄어쓰기 정규화
     normalizedText = normalizedText
       .replace(/출\s*원\s*일\s*자/g, '출원일자')
       .replace(/출\s*원\s*번\s*호/g, '출원번호')
       .replace(/출\s*원\s*인\s*명\s*칭/g, '출원인명칭')
       .replace(/대\s*리\s*인\s*성\s*명/g, '대리인성명')
-      .replace(/특\s*기\s*사\s*항/g, '특기사항');
+      .replace(/특\s*기\s*사\s*항/g, '특기사항')
+      .replace(/주\s*식\s*회\s*사/g, '주식회사');
     
     console.log('[TM] 정규화된 텍스트:', normalizedText.substring(0, 1000));
     
@@ -6097,39 +6098,48 @@ ${criticalResults.slice(0, 5).map(r =>
       }
     }
     
-    // 출원일자 패턴: 2025.06.09
+    // 출원일자 패턴: 2025.06.09, 202506.09 등
     const datePatterns = [
-      /출원일자[^0-9]*(\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2})/i,
-      /출원일[^0-9]*(\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2})/i,
-      /(\d{4}[.]\d{2}[.]\d{2})/
+      /출원일자[^0-9]*(\d{4})[.\s]*(\d{2})[.\s]*(\d{2})/i,
+      /출원일[^0-9]*(\d{4})[.\s]*(\d{2})[.\s]*(\d{2})/i,
+      /(\d{4})[.](\d{2})[.](\d{2})/
     ];
     for (const pattern of datePatterns) {
       const match = normalizedText.match(pattern);
       if (match) {
-        let date = match[1].trim();
-        date = date.replace(/[-\/]/g, '.').replace(/\s/g, '');
-        result.applicationDate = date;
-        console.log('[TM] 출원일자 매칭:', date);
+        // 년.월.일 형식으로 조합
+        result.applicationDate = `${match[1]}.${match[2]}.${match[3]}`;
+        console.log('[TM] 출원일자 매칭:', result.applicationDate);
         break;
       }
     }
     
     // 출원인 명칭 패턴: 삼인시스템 주식회사
-    const applicantPatterns = [
-      /출원인\s*명칭[^가-힣]*([가-힣]+(?:\s*주식회사|주식회사\s*[가-힣]*)?)/i,
-      /출원인명칭[^가-힣]*([가-힣]+(?:\s*주식회사|주식회사\s*[가-힣]*)?)/i,
-      /출원인[^가-힣]*([가-힣]+\s*주식회사|주식회사\s*[가-힣]+)/i,
-      /([가-힣]+\s*주식회사|주식회사\s*[가-힣]+)/i
-    ];
-    for (const pattern of applicantPatterns) {
-      const match = normalizedText.match(pattern);
-      if (match) {
-        let name = match[1].trim().replace(/\s+/g, ' ');
-        name = name.split(/[(\[]/)[0].trim();
-        if (!/^(대리인|노재일|특허|상표|출원)/.test(name) && name.length >= 2 && name.length <= 30) {
+    // 먼저 "출원인명칭" 뒤의 텍스트에서 한글 사이 공백 제거
+    const applicantMatch = normalizedText.match(/출원인명칭[^가-힣]*([가-힣\s]+(?:주식회사)?)/i);
+    if (applicantMatch) {
+      // 한글 사이의 공백 제거
+      let name = applicantMatch[1].replace(/([가-힣])\s+([가-힣])/g, '$1$2');
+      name = name.replace(/([가-힣])\s+([가-힣])/g, '$1$2'); // 두 번 적용
+      name = name.trim();
+      // 괄호 이전까지만
+      name = name.split(/[(\[]/)[0].trim();
+      if (!/^(대리인|노재일|특허|상표|출원)/.test(name) && name.length >= 2 && name.length <= 30) {
+        result.applicantName = name;
+        console.log('[TM] 출원인 명칭 매칭:', name);
+      }
+    }
+    
+    // 출원인 못 찾으면 "주식회사" 패턴으로 재시도
+    if (!result.applicantName) {
+      const companyMatch = normalizedText.match(/([가-힣\s]+주식회사|주식회사[가-힣\s]+)/i);
+      if (companyMatch) {
+        let name = companyMatch[1].replace(/([가-힣])\s+([가-힣])/g, '$1$2');
+        name = name.replace(/([가-힣])\s+([가-힣])/g, '$1$2');
+        name = name.trim();
+        if (name.length >= 4 && name.length <= 30) {
           result.applicantName = name;
-          console.log('[TM] 출원인 명칭 매칭:', name);
-          break;
+          console.log('[TM] 출원인 (회사명) 매칭:', name);
         }
       }
     }
