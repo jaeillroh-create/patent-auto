@@ -865,18 +865,58 @@
   border-left: 4px solid var(--tm-success);
 }
 
-/* 순위 */
-.tm-result-rank {
+/* 좌측 순위 + 리스크 영역 */
+.tm-result-left {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  min-width: 70px;
 }
 
 .tm-rank-num {
   font-size: 16px;
   font-weight: 700;
   color: var(--tm-gray-400);
+}
+
+.tm-risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tm-risk-badge.risk-high {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.tm-risk-badge.risk-medium {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.tm-risk-badge.risk-low {
+  background: #fef9c3;
+  color: #ca8a04;
+}
+
+.tm-risk-badge.risk-safe {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+/* 순위 (기존 호환) */
+.tm-result-rank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 
 .tm-risk-icon {
@@ -894,6 +934,7 @@
   justify-content: center;
   overflow: hidden;
   background: #fff;
+  flex-shrink: 0;
 }
 
 .tm-result-image img {
@@ -902,21 +943,58 @@
   object-fit: contain;
 }
 
-.tm-result-image span {
+.tm-result-image span,
+.tm-img-placeholder {
   font-size: 24px;
   color: var(--tm-gray-400);
 }
 
 /* 상표 정보 */
 .tm-result-info {
+  flex: 1;
   min-width: 0;
 }
 
 .tm-result-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--tm-gray-800);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+/* 상세 정보 행 */
+.tm-result-details {
+  margin-bottom: 8px;
+}
+
+.tm-detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.tm-detail-item {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.tm-detail-item strong {
+  color: #374151;
+  margin-right: 4px;
+}
+
+.tm-goods-detail {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tm-goods-row {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed #e5e7eb;
 }
 
 .tm-result-meta {
@@ -935,6 +1013,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  align-items: center;
 }
 
 .tm-result-status {

@@ -516,25 +516,24 @@
     
     panel.innerHTML = `
       <div class="trademark-dashboard" style="max-width: 1400px; margin: 0 auto; padding: 40px 32px;">
-        <!-- 헤더 영역 -->
-        <div class="trademark-header" style="margin-bottom: 40px;">
-          <h2 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 700; color: #1f2937;">🏷️ 상표 출원 관리</h2>
-          <p style="margin: 0; color: #6b7280; font-size: 14px;">특허그룹 디딤 상표 출원 프로젝트를 관리합니다.</p>
-        </div>
-        
-        <!-- 새 프로젝트 버튼 -->
-        <div style="margin-bottom: 24px;">
-          <button class="btn btn-primary" data-action="tm-new-project" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; font-size: 15px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">
-            <span style="font-size: 20px;">+</span>
-            새 프로젝트
-          </button>
-        </div>
-        
-        <!-- 프로젝트 목록 -->
-        <div class="tm-project-list" id="tm-project-list">
-          <div style="text-align: center; padding: 40px; color: #6b7280;">
-            <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
-            <p style="margin: 0;">프로젝트 목록 로딩 중...</p>
+        <!-- 좌측: 헤더 + 버튼 / 우측: 테이블 -->
+        <div style="display: flex; gap: 40px; align-items: flex-start;">
+          <!-- 좌측 영역 -->
+          <div style="flex-shrink: 0; width: 220px;">
+            <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: #1f2937;">🏷️ 상표 출원 관리</h2>
+            <p style="margin: 0 0 24px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">특허그룹 디딤 상표 출원 프로젝트를 관리합니다.</p>
+            <button class="btn btn-primary" data-action="tm-new-project" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap;">
+              <span style="font-size: 18px;">+</span>
+              새 프로젝트
+            </button>
+          </div>
+          
+          <!-- 우측: 프로젝트 목록 -->
+          <div class="tm-project-list" id="tm-project-list" style="flex: 1; min-width: 0;">
+            <div style="text-align: center; padding: 40px; color: #6b7280;">
+              <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
+              <p style="margin: 0;">프로젝트 목록 로딩 중...</p>
+            </div>
           </div>
         </div>
       </div>
@@ -573,15 +572,15 @@
       // 테이블 형식 목록
       listEl.innerHTML = `
         <div style="background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-          <table style="width: 100%; border-collapse: collapse;">
+          <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
             <thead>
               <tr style="background: #f8fafc; border-bottom: 2px solid #e5e7eb;">
-                <th style="padding: 16px 20px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">디딤 관리번호</th>
-                <th style="padding: 16px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">상표명</th>
-                <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 80px;">유형</th>
-                <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px;">상태</th>
-                <th style="padding: 16px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 100px;">수정일</th>
-                <th style="padding: 16px 20px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 150px;">작업</th>
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px; white-space: nowrap;">디딤 관리번호</th>
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px; white-space: nowrap;">상표명</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 70px; white-space: nowrap;">유형</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 80px; white-space: nowrap;">상태</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px; white-space: nowrap;">수정일</th>
+                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 140px; white-space: nowrap;">작업</th>
               </tr>
             </thead>
             <tbody>
@@ -589,7 +588,7 @@
             </tbody>
           </table>
         </div>
-        <div style="margin-top: 16px; text-align: right; color: #6b7280; font-size: 13px;">
+        <div style="margin-top: 12px; text-align: right; color: #9ca3af; font-size: 12px;">
           총 ${projects.length}개 프로젝트
         </div>
       `;
@@ -638,48 +637,42 @@
       <tr style="border-bottom: 1px solid #f3f4f6; transition: background 0.15s;" 
           onmouseover="this.style.background='#f9fafb'" 
           onmouseout="this.style.background='white'">
-        <td style="padding: 16px 20px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 20px;">📁</span>
-            <div style="font-weight: 600; color: #3b82f6; font-size: 13px; cursor: pointer; font-family: monospace;" 
+        <td style="padding: 12px 16px; white-space: nowrap;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">📁</span>
+            <span style="font-weight: 600; color: #3b82f6; font-size: 13px; cursor: pointer; font-family: monospace;" 
                  onclick="TM.openProject('${project.id}')"
                  onmouseover="this.style.textDecoration='underline'" 
-                 onmouseout="this.style.textDecoration='none'">
-              ${TM.escapeHtml(project.title || '(미지정)')}
-            </div>
+                 onmouseout="this.style.textDecoration='none'">${TM.escapeHtml(project.title || '(미지정)')}</span>
           </div>
         </td>
-        <td style="padding: 16px 16px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 18px;">🏷️</span>
-            <span style="font-weight: 500; color: #1f2937; font-size: 14px;">
-              ${TM.escapeHtml(project.trademark_name || '-')}
-            </span>
+        <td style="padding: 12px 16px; white-space: nowrap;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 16px;">🏷️</span>
+            <span style="font-weight: 500; color: #1f2937; font-size: 13px;">${TM.escapeHtml(project.trademark_name || '-')}</span>
           </div>
         </td>
-        <td style="padding: 14px 12px; text-align: center;">
+        <td style="padding: 12px 12px; text-align: center; white-space: nowrap;">
           <span style="font-size: 12px; color: #6b7280;">${typeLabels[project.trademark_type] || '문자'}</span>
         </td>
-        <td style="padding: 14px 12px; text-align: center;">
-          <span style="display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; background: ${statusColor}15; color: ${statusColor};">
-            ${statusLabels[project.status] || '작성 중'}
-          </span>
+        <td style="padding: 12px 12px; text-align: center; white-space: nowrap;">
+          <span style="display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; background: ${statusColor}15; color: ${statusColor};">${statusLabels[project.status] || '작성 중'}</span>
         </td>
-        <td style="padding: 14px 12px; text-align: center; font-size: 12px; color: #6b7280;">
+        <td style="padding: 12px 12px; text-align: center; font-size: 12px; color: #6b7280; white-space: nowrap;">
           ${updatedAt}
         </td>
-        <td style="padding: 14px 20px; text-align: center;">
-          <div style="display: inline-flex; gap: 6px; align-items: center;">
+        <td style="padding: 12px 16px; text-align: center; white-space: nowrap;">
+          <div style="display: inline-flex; gap: 4px; align-items: center;">
             <button onclick="TM.openProject('${project.id}')" 
-                    style="padding: 5px 10px; font-size: 11px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 500; white-space: nowrap;"
+                    style="padding: 4px 8px; font-size: 11px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
                     onmouseover="this.style.background='#2563eb'" 
                     onmouseout="this.style.background='#3b82f6'">열기</button>
             <button onclick="TM.editProject('${project.id}', '${TM.escapeHtml(project.title || '').replace(/'/g, "\\'")}')" 
-                    style="padding: 5px 10px; font-size: 11px; background: #f3f4f6; color: #374151; border: none; border-radius: 5px; cursor: pointer; font-weight: 500; white-space: nowrap;"
+                    style="padding: 4px 8px; font-size: 11px; background: #f3f4f6; color: #374151; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
                     onmouseover="this.style.background='#e5e7eb'" 
                     onmouseout="this.style.background='#f3f4f6'">편집</button>
             <button onclick="TM.deleteProject('${project.id}')" 
-                    style="padding: 5px 10px; font-size: 11px; background: #fef2f2; color: #dc2626; border: none; border-radius: 5px; cursor: pointer; font-weight: 500; white-space: nowrap;"
+                    style="padding: 4px 8px; font-size: 11px; background: #fef2f2; color: #dc2626; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
                     onmouseover="this.style.background='#fee2e2'" 
                     onmouseout="this.style.background='#fef2f2'">삭제</button>
           </div>
@@ -1573,10 +1566,9 @@
                           <div class="tm-rec-class">제${code}류 <span>${className}</span></div>
                           ${reason ? `<div class="tm-rec-desc">${TM.escapeHtml(reason)}</div>` : ''}
                           ${goods.length > 0 ? `
-                            <div class="tm-rec-goods-label">추천 지정상품:</div>
+                            <div class="tm-rec-goods-label">추천 지정상품 (${goods.length}개):</div>
                             <div class="tm-rec-tags">
-                              ${goods.slice(0, 4).map(g => `<span>${g.name || g}</span>`).join('')}
-                              ${goods.length > 4 ? `<span class="more">+${goods.length - 4}개 더</span>` : ''}
+                              ${goods.slice(0, 10).map(g => `<span>${g.name || g}</span>`).join('')}
                             </div>
                           ` : ''}
                         </div>
@@ -2535,23 +2527,28 @@
     // 추천 지정상품 가져오기
     const recommendedGoods = p.aiAnalysis?.recommendedGoods?.[classCode] || [];
     
+    console.log(`[TM] applyRecommendation - 제${classCode}류, 추천상품 ${recommendedGoods.length}개:`, recommendedGoods);
+    
     // 상품류 추가
     const newClass = {
       classCode: classCode,
       className: TM.niceClasses[classCode],
       goods: recommendedGoods.map(g => ({
-        name: g.name,
-        similarGroup: g.similarGroup,
+        name: typeof g === 'string' ? g : (g.name || g),
+        similarGroup: typeof g === 'string' ? '' : (g.similarGroup || ''),
         gazetted: true
       })),
       goodsCount: recommendedGoods.length,
       nonGazettedCount: 0
     };
     
+    console.log(`[TM] 추가할 클래스:`, newClass);
+    
     p.designatedGoods.push(newClass);
+    TM.hasUnsavedChanges = true;
     
     TM.renderCurrentStep();
-    App.showToast(`제${classCode}류가 추가되었습니다.`, 'success');
+    App.showToast(`제${classCode}류가 추가되었습니다. (${recommendedGoods.length}개 상품)`, 'success');
   };
   
   // 전체 AI 추천 적용 (핵심 + 권장만, 확장은 제외)
@@ -2578,12 +2575,14 @@
       if (!p.designatedGoods.some(g => g.classCode === classCode)) {
         const recommendedGoods = p.aiAnalysis?.recommendedGoods?.[classCode] || [];
         
+        console.log(`[TM] applyAll - 제${classCode}류, 추천상품 ${recommendedGoods.length}개`);
+        
         p.designatedGoods.push({
           classCode: classCode,
           className: TM.niceClasses[classCode],
           goods: recommendedGoods.map(g => ({
-            name: g.name,
-            similarGroup: g.similarGroup,
+            name: typeof g === 'string' ? g : (g.name || g),
+            similarGroup: typeof g === 'string' ? '' : (g.similarGroup || ''),
             gazetted: true
           })),
           goodsCount: recommendedGoods.length,
@@ -2594,6 +2593,7 @@
       }
     });
     
+    TM.hasUnsavedChanges = true;
     TM.renderCurrentStep();
     App.showToast(`핵심+권장 ${addedCount}개 상품류가 추가되었습니다. (확장 류는 개별 추가 가능)`, 'success');
   };
@@ -3533,55 +3533,79 @@
     
     // ★ 유사군 기반 리스크 클래스 결정
     let riskClass = 'risk-safe';
-    let riskBadge = '✅ 등록가능';
+    let riskBadge = '등록가능';
+    let riskIcon = '✅';
     
     if (hasGroupOverlap) {
       const riskLevel = r.riskLevel || 'medium';
       if (riskLevel === 'critical' || riskLevel === 'high') {
         riskClass = 'risk-high';
-        riskBadge = '⛔ 고위험';
+        riskBadge = '고위험';
+        riskIcon = '⛔';
       } else if (riskLevel === 'medium') {
         riskClass = 'risk-medium';
-        riskBadge = '⚠️ 주의';
+        riskBadge = '주의';
+        riskIcon = '⚠️';
       } else {
         riskClass = 'risk-low';
-        riskBadge = '🔶 저위험';
+        riskBadge = '저위험';
+        riskIcon = '🔶';
       }
     }
     
+    // 출원일 포맷팅
+    const appDate = r.applicationDate || '';
+    const formattedDate = appDate.length === 8 ? 
+      `${appDate.slice(0,4)}-${appDate.slice(4,6)}-${appDate.slice(6,8)}` : appDate;
+    
+    // 유사군 코드 추출
+    const similarGroups = r.similarGroupCodes || r.overlappingGroups || [];
+    
     return `
       <div class="tm-search-result-item ${riskClass} ${hasGroupOverlap ? 'has-overlap' : 'no-overlap'}" data-id="${r.applicationNumber}">
-        <!-- 순위 & 유사군 중복 표시 -->
-        <div class="tm-result-rank">
+        <!-- 좌측: 순위 + 리스크 뱃지 -->
+        <div class="tm-result-left">
           <span class="tm-rank-num">${rank}</span>
-          <span class="tm-overlap-badge ${hasGroupOverlap ? 'overlap' : 'safe'}">${riskBadge}</span>
+          <span class="tm-risk-badge ${riskClass}">${riskIcon} ${riskBadge}</span>
         </div>
         
         <!-- 상표 이미지 -->
         <div class="tm-result-image">
           ${r.drawing || r.drawingUrl ? 
-            `<img src="${r.drawing || r.drawingUrl}" alt="상표 이미지" onerror="this.outerHTML='<span>🏷️</span>'">` : 
-            '<span>🏷️</span>'}
+            `<img src="${r.drawing || r.drawingUrl}" alt="상표 이미지" onerror="this.outerHTML='<span class=\"tm-img-placeholder\">🏷️</span>'">` : 
+            '<span class="tm-img-placeholder">🏷️</span>'}
         </div>
         
-        <!-- 상표 정보 -->
+        <!-- 상표 정보 (메인) -->
         <div class="tm-result-info">
           <div class="tm-result-title">${TM.escapeHtml(r.title || r.trademarkName || '(명칭없음)')}</div>
-          <div class="tm-result-meta">
-            <span class="tm-meta-item">📋 ${r.applicationNumber || '-'}</span>
-            <span class="tm-meta-item">📅 ${r.applicationDate || '-'}</span>
-            ${r.applicantName ? `<span class="tm-meta-item">👤 ${TM.escapeHtml(r.applicantName)}</span>` : ''}
+          
+          <div class="tm-result-details">
+            <div class="tm-detail-row">
+              <span class="tm-detail-item"><strong>출원번호</strong> ${r.applicationNumber || '-'}</span>
+              <span class="tm-detail-item"><strong>출원일</strong> ${formattedDate || '-'}</span>
+            </div>
+            <div class="tm-detail-row">
+              ${r.applicantName ? `<span class="tm-detail-item"><strong>출원인</strong> ${TM.escapeHtml(r.applicantName)}</span>` : ''}
+              ${r.rightHolderName ? `<span class="tm-detail-item"><strong>권리자</strong> ${TM.escapeHtml(r.rightHolderName)}</span>` : ''}
+            </div>
+            <div class="tm-detail-row">
+              ${r.classificationCode ? `<span class="tm-detail-item"><strong>지정상품류</strong> 제${r.classificationCode}류</span>` : ''}
+              ${similarGroups.length > 0 ? `
+                <span class="tm-detail-item"><strong>유사군</strong> ${similarGroups.slice(0,3).join(', ')}${similarGroups.length > 3 ? '...' : ''}</span>
+              ` : ''}
+            </div>
+            ${r.designatedGoods ? `
+              <div class="tm-detail-row tm-goods-row">
+                <span class="tm-detail-item tm-goods-detail"><strong>지정상품</strong> ${TM.escapeHtml(r.designatedGoods.slice(0, 100))}${r.designatedGoods.length > 100 ? '...' : ''}</span>
+              </div>
+            ` : ''}
           </div>
+          
           <div class="tm-result-tags">
             <span class="tm-result-status ${TM.getStatusClass(r.applicationStatus)}">
               ${r.applicationStatus || '-'}
             </span>
-            ${r.classificationCode ? `
-              <span class="tm-result-class">제${r.classificationCode}류</span>
-            ` : ''}
-            ${r.overlappingGroups && r.overlappingGroups.length > 0 ? `
-              <span class="tm-overlap-groups">중복: ${r.overlappingGroups.slice(0, 2).join(', ')}${r.overlappingGroups.length > 2 ? '...' : ''}</span>
-            ` : ''}
             ${r.applicationNumber ? `
               <a href="http://kipris.or.kr/khome/main.jsp#702${r.applicationNumber.replace(/-/g, '')}" 
                  target="_blank" class="tm-kipris-link" title="KIPRIS에서 보기">
@@ -3591,7 +3615,7 @@
           </div>
         </div>
         
-        <!-- 유사도 점수 (유사군 중복 시에만 의미있음) -->
+        <!-- 유사도 점수 -->
         <div class="tm-result-score">
           ${hasGroupOverlap ? `
             <div class="tm-score-circle ${riskClass}">
@@ -3611,14 +3635,14 @@
           ` : `
             <div class="tm-safe-indicator">
               <span class="tm-safe-icon">✓</span>
-              <span class="tm-safe-text">유사군 다름</span>
+              <span class="tm-safe-text">유사군<br>비중복</span>
             </div>
           `}
         </div>
         
         <!-- 위험 사유 -->
         <div class="tm-result-reason ${hasGroupOverlap ? '' : 'safe'}">
-          <span class="tm-reason-text">${TM.escapeHtml(r.riskReason || (hasGroupOverlap ? '심사관 판단 필요' : '유사군 비중복 → 등록 가능'))}</span>
+          <span class="tm-reason-text">${TM.escapeHtml(r.riskReason || (hasGroupOverlap ? '유사군 중복 + 상표명 유사 (거절 가능성 높음)' : '유사군 비중복 → 등록 가능'))}</span>
         </div>
       </div>
     `;
