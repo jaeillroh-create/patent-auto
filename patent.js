@@ -1719,43 +1719,6 @@ async function downloadDiagramImages(sid){
   
   App.showToast(`도면 이미지 ${data.length}개 다운로드 완료`);
 }
-      // 박스 텍스트
-      slide.addText(n.label,{
-        x:bx+0.1,y:by,w:boxW-0.2,h:boxH,
-        fontSize:12,fontFace:'맑은 고딕',color:'000000',
-        align:'center',valign:'middle',bold:false
-      });
-      
-      // 리더라인 (박스 우측에서 수평으로)
-      slide.addShape(pptx.shapes.LINE,{
-        x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.4,h:0,
-        line:{color:'000000',width:LINE_ARROW}
-      });
-      // 부호 라벨
-      slide.addText(String(refNum),{
-        x:refLabelX,y:by+boxH/2-0.15,w:0.5,h:0.3,
-        fontSize:11,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
-      });
-      
-      // 3. 구성요소 간 양방향 화살표 (↕)
-      if(i<nodes.length-1){
-        const arrowY1=by+boxH;
-        const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
-        const arrowX=bx+boxW/2;
-        const arrowLen=arrowY2-arrowY1;
-        
-        // 양방향 화살표 (위↔아래)
-        slide.addShape(pptx.shapes.LINE,{
-          x:arrowX,y:arrowY1,w:0,h:arrowLen,
-          line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}
-        });
-      }
-    });
-  });
-  
-  pptx.writeFile({fileName:`도면_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.pptx`});
-  App.showToast('PPTX 다운로드 완료 (KIPO 규칙 적용)');
-}
 
 // 특허 도면용 레이아웃 계산 (A4 세로)
 function layoutGraphForPatent(nodes,edges){
