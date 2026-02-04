@@ -724,7 +724,7 @@ ${themeInst}
 
 ${T}${getFullInvention()}${styleRef}`;}
 
-    // ═══ Step 7: 도면 설계 (도 1=최상위, 도 2+=하위 상세) ═══
+    // ═══ Step 7: 도면 설계 (도면 규칙 v4.0) ═══
     case 'step_07':{
       const f=document.getElementById('optDeviceFigures').value;
       const reqInst=getRequiredFiguresInstruction();
@@ -733,62 +733,115 @@ ${T}${getFullInvention()}${styleRef}`;}
       return `【장치 청구범위】에 대한 도면을 설계하라. 총 도면 수: ${f}개.
 ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 (${skipNums.map(n=>'도 '+n).join(', ')}).\n새로 생성할 도면: ${genCount>0?genCount:0}개.\n필수 도면 번호는 건너뛰고 나머지 번호로 생성하라.`:''}
 
+════════════════════════════════════════════════════════════════
+★★★ 특허 도면 생성 규칙 v4.0 ★★★
+════════════════════════════════════════════════════════════════
+
 ⛔⛔⛔ 절대 금지 사항 ⛔⛔⛔
 - "~단계", "S100", "S200" 등 방법 표현 금지
+- "~모듈" 표현 금지 → 반드시 "~부"로 통일 (예: 송신부, 수신부, 제어부)
 - 이 도면은 오직 "장치의 구성요소"만 표현
 
-═══════════════════════════════════════════════════════════
-★★★ 도면 생성 핵심 규칙 (v3.0) ★★★
-═══════════════════════════════════════════════════════════
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[R1] 도면부호 계층 체계 (레벨별 번호 단위 고정)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[1. 도면부호 계층 체계]
-■ L1 (최상위): X00 형식 — 100 단위
-  서버/시스템(100), 사용자 단말(200), 외부 시스템(300), 데이터베이스(400), 네트워크(500)
+■ L1 (최상위 장치): X00 형식 — 100 단위
+  서버(100), 사용자 단말(200), 외부 시스템(300), 데이터베이스(400), 네트워크(500)
 
-■ L2 (하위 모듈): XY0 형식 — 10 단위
-  서버(100) 하위: 통신부(110), 프로세서(120), 메모리(130)...
+■ L2 (L1 하위 구성): XY0 형식 — 10 단위
+  서버(100) 하위: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)
+  사용자 단말(200) 하위: 입력부(210), 출력부(220), 제어부(230)
 
-■ L3 (하위 부품): XYZ 형식 — 1 단위
-  통신부(110) 하위: 수신모듈(111), 송신모듈(112)...
+■ L3 (L2 하위 요소): XYZ 형식 — 1 단위
+  통신부(110) 하위: 송신부(111), 수신부(112), 암호화부(113)
+  프로세서(120) 하위: 연산부(121), 캐시부(122)
 
-[2. 박스 소속 규칙]
-- 박스 = 해당 장치의 "구비/보유" 범위
-- 서버(100)가 프로세서(110)를 구비 → 110은 반드시 100 박스 내부
-- 소속 위반 금지: 110이 200 박스 안에 들어가면 오류
+■ 핵심 원칙
+  - 부모 접두(prefix) 유지: 130의 하위는 131, 132...
+  - 동일 도면세트 내 번호 중복 금지
+  - 레벨 혼합 금지: L2에 111 같은 번호 사용 금지
 
-[3. 도면별 표현 레벨 ★핵심★]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[R2] 박스 소속(Ownership) 규칙
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-■ 도 1: 전체 시스템 구성도
-  ✅ 허용: L1(최상위) 장치 박스만 — 100, 200, 300, 400
-  ✅ 허용: L1 장치들 간의 연결선만
-  ⛔ 금지: L2/L3 하위 구성요소 표시 금지
+■ 박스 = 해당 장치의 "구비/보유" 범위
+  "A가 X를 구비한다" → X는 반드시 A 박스 내부에 배치
+
+■ 소속 위반 금지
+  서버(100)가 프로세서(110)를 구비 → 110은 100 박스 내부에만 존재
+  110이 200 박스 안에 들어가면 오류
+
+■ 공통 구성 표현
+  서버와 단말 모두 프로세서 보유 시:
+  - 서버 프로세서: 프로세서(110)
+  - 단말 프로세서: 프로세서(210)
+  각자 자기 박스 내부에 배치 (번호 분리)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[R3] 도면별 표현 레벨 ★핵심★
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 도 1: 전체 시스템 구성도 (System Overview)
+  ✅ 허용: L1 장치 박스만 — 100, 200, 300, 400...
+  ✅ 허용: L1 장치 박스들 간의 연결선만
+  ⛔ 금지: L2/L3 하위 구성요소(110, 120, 111...) 표시 금지
   ⛔ 금지: 하위 요소 간 연결선 금지
+  ⛔ 금지: 최외곽 박스 생성 금지 (L1만 있으므로 외곽 불필요)
   
-  예시: [서버(100)] ←→ [사용자 단말(200)] ←→ [데이터베이스(400)]
+  도 1 예시:
+  [서버(100)] ←→ [사용자 단말(200)] ←→ [데이터베이스(400)]
 
-■ 도 2 이후: 세부 블록도
-  특정 L1 장치(예: 서버(100))를 주제로 내부 L2, L3 상세화
+■ 도 2 이후: 세부 블록도 (Detailed Block Diagram)
+  특정 L1 장치를 주제로 내부 L2, L3 상세화
+  최외곽 박스 = 해당 L1 장치 (예: 서버(100))
+  내부에 L2, L3 구성요소 배치
   
-  예시 (도 2 - 서버 상세):
-  [서버(100)] 내부: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)
+  도 2 예시 (서버(100) 상세):
+  ┌─────────────────────────────────┐
+  │        서버(100)                 │ ← 최외곽
+  │  ┌───────┐  ┌───────┐  ┌───────┐│
+  │  │통신부 │  │프로세서│  │메모리 ││
+  │  │ (110) │  │ (120) │  │ (130) ││
+  │  └───────┘  └───────┘  └───────┘│
+  └─────────────────────────────────┘
 
-[4. 연결 규칙]
-- 도 1: L1 박스 ↔ L1 박스 연결만
-- 도 2+: 내부 모듈 간 연결 가능
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[R4] 연결(연동) 표현 규칙
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-═══════════════════════════════════════════════════════════
+■ 도 1: L1 박스 ↔ L1 박스 연결만
+  서버(100) ↔ 사용자 단말(200) 연결선 허용
+  하위 요소(110, 210) 간 연결선 금지
 
-[파트1: 도면 설계]
+■ 도 2+: 내부 구성요소 간 연결 가능
+  통신부(110) ↔ 프로세서(120) 연결선 허용
+
+■ 연결선 의미
+  실선: 통신/데이터 링크
+  양방향 화살표: 상호 데이터 교환
+
+════════════════════════════════════════════════════════════════
+
+[파트1: 도면 설계 출력 형식]
 
 도 1: 전체 시스템 구성도
-유형: 블록도
-구성요소: L1 장치만 (서버(100), 사용자 단말(200), 데이터베이스(400)...)
-연결관계: L1 장치 간 통신/데이터 연결 (양방향 화살표)
+유형: 블록도 (최외곽 박스 없음)
+구성요소: L1 장치만 나열
+- 서버(100)
+- 사용자 단말(200)
+- 데이터베이스(400)
+연결관계: 서버(100) ↔ 사용자 단말(200) ↔ 데이터베이스(400)
 
 도 2: 서버(100) 상세 블록도
-유형: 구성도
-구성요소: 서버(100) + 내부 L2/L3 모듈 (통신부(110), 프로세서(120)...)
-연결관계: 내부 모듈 간 데이터 흐름
+유형: 블록도 (최외곽 = 서버(100))
+구성요소: 서버(100) 내부 L2 구성
+- 통신부(110)
+- 프로세서(120)
+- 메모리(130)
+- 저장부(140)
+연결관계: 통신부(110) ↔ 프로세서(120) ↔ 메모리(130)
 
 (도면 수에 맞게 도 3, 도 4... 추가)
 
@@ -798,8 +851,9 @@ ${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 �
 도 1은 본 발명의 전체 시스템 구성을 나타내는 블록도이다.
 도 2는 서버(100)의 내부 구성을 나타내는 블록도이다.
 
-★★★ 도 1은 반드시 L1(100,200,300,400) 장치 간 연결만 표시 ★★★
-★★★ 하위 구성(110,120...)은 도 2부터 표시 ★★★
+★★★ "~모듈" 절대 금지 → "~부"로 통일 ★★★
+★★★ 도 1은 L1(100,200,300,400) 장치만, 최외곽 박스 없음 ★★★
+★★★ 도 2부터 특정 L1 내부 상세, 최외곽 = 해당 L1 ★★★
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
 
@@ -1384,7 +1438,8 @@ function buildMermaidPrompt(sid){
 - 노드 라벨에 반드시 참조번호 포함: "통신부(110)", "프로세서(120)"
 - 참조번호는 숫자만 사용 (100, 110, 120...)
 - "~단계", "S숫자" 표현 절대 금지
-- 구성요소명은 "~부", "~모듈", "~유닛" 형태`;
+- 구성요소명은 반드시 "~부" 형태 사용 (예: 통신부, 제어부, 저장부)
+- "~모듈" 표현 절대 금지 → "~부"로 통일`;
   } else if(isMethod){
     rules+=`
 ⛔ 방법 도면 규칙:
@@ -1431,22 +1486,33 @@ function computeEdgeRoutes(edges,positions){
   }).filter(Boolean);
 }
 function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
-  // ═══ KIPO 특허 도면 규칙 v2.2 (참조번호 추출) ═══
+  // ═══ KIPO 특허 도면 규칙 v4.0 ═══
   const PX=72;
   const SHADOW_OFFSET=4;
   
   // 노드 라벨에서 참조번호 추출 함수
   function extractRefNum(label,fallback){
-    // "사용자 단말 200" → "200"
-    // "통신부(110)" → "110"
-    // "프로세서 120" → "120"
-    // "S401" → "S401"
-    // "식사 시간 정보 수신 단계 S401" → "S401"
     const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
     return match?match[1]:fallback;
   }
   
-  // 외곽 프레임 참조번호 추출 (첫 번째 노드에서 100단위 추출)
+  // L1 여부 판별 (X00 형식인지)
+  function isL1RefNum(ref){
+    if(!ref||ref.startsWith('S'))return false;
+    const num=parseInt(ref);
+    return num>=100&&num%100===0;
+  }
+  
+  // 모든 노드가 L1인지 확인 (도 1 판별)
+  const allL1=nodes.every(n=>{
+    const ref=extractRefNum(n.label,'');
+    return isL1RefNum(ref);
+  });
+  
+  // 도 1인 경우 (figNum===1 또는 모든 노드가 L1)
+  const isFig1=figNum===1||allL1;
+  
+  // 참조번호 추출
   let frameRefNum=figNum*100;
   if(nodes.length>0){
     const firstRef=extractRefNum(nodes[0].label,'');
@@ -1456,76 +1522,259 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     }
   }
   
-  const frameX=0.5*PX, frameY=0.5*PX;
   const boxW=5.0*PX, boxH=0.7*PX, boxGap=0.8*PX;
-  const boxStartX=frameX+0.6*PX, boxStartY=frameY+0.4*PX;
-  const frameW=6.2*PX, frameH=(nodes.length*(boxH+boxGap)+0.3*PX);
   
-  const svgW=frameW+2.5*PX, svgH=frameH+1.5*PX;
-  
-  let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:600px;background:white;border-radius:8px">`;
-  
-  // 화살표 마커 정의
-  const mkId=`ah_${containerId}`;
-  svg+=`<defs>
-    <marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#000"/>
-    </marker>
-  </defs>`;
-  
-  // 1. 외곽 프레임 (그림자 + 본체)
-  svg+=`<rect x="${frameX+SHADOW_OFFSET}" y="${frameY+SHADOW_OFFSET}" width="${frameW}" height="${frameH}" fill="#000"/>`;
-  svg+=`<rect x="${frameX}" y="${frameY}" width="${frameW}" height="${frameH}" fill="#fff" stroke="#000" stroke-width="2.25"/>`;
-  
-  // 외곽 부호 (우측) - 단순 직선
-  const frameRefX=frameX+frameW+0.3*PX;
-  const frameRefY=frameY+frameH/2;
-  svg+=`<line x1="${frameX+frameW}" y1="${frameRefY}" x2="${frameRefX}" y2="${frameRefY}" stroke="#000" stroke-width="1"/>`;
-  svg+=`<text x="${frameRefX+8}" y="${frameRefY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
-  
-  // 2. 내부 구성요소 박스들
-  nodes.forEach((n,i)=>{
-    const bx=boxStartX;
-    const by=boxStartY+i*(boxH+boxGap);
-    // 노드 라벨에서 참조번호 추출 (없으면 자동 생성)
-    const fallbackRef=frameRefNum+10*(i+1);
-    const refNum=extractRefNum(n.label,String(fallbackRef));
+  if(isFig1){
+    // ═══ 도 1: L1만 있는 경우 - 최외곽 박스 없음 ═══
+    const boxStartX=0.5*PX;
+    const boxStartY=0.5*PX;
+    const svgW=boxW+2.5*PX;
+    const svgH=nodes.length*(boxH+boxGap)+1*PX;
     
-    // 그림자
-    svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" fill="#000"/>`;
-    // 박스 본체
-    svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
-    // 박스 텍스트 (참조번호 제외한 라벨만 표시)
-    const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-    const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
-    svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="12" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+    let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:550px;background:white;border-radius:8px">`;
     
-    // 리더라인 (단순 직선)
-    const leaderEndX=frameX+frameW+0.3*PX;
-    const leaderY=by+boxH/2;
-    svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
-    // 부호 라벨
-    svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+    // 화살표 마커
+    const mkId=`ah_${containerId}`;
+    svg+=`<defs>
+      <marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#000"/>
+      </marker>
+    </defs>`;
     
-    // 양방향 화살표 (↕)
-    if(i<nodes.length-1){
-      const arrowX=bx+boxW/2;
-      const arrowY1=by+boxH+2;
-      const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
-      svg+=`<line x1="${arrowX}" y1="${arrowY1}" x2="${arrowX}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
+    // 각 L1 장치 박스 (최외곽 없이 직접 배치)
+    nodes.forEach((n,i)=>{
+      const bx=boxStartX;
+      const by=boxStartY+i*(boxH+boxGap);
+      const refNum=extractRefNum(n.label,String((i+1)*100));
+      
+      // 그림자
+      svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" fill="#000"/>`;
+      // 박스 본체
+      svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#fff" stroke="#000" stroke-width="2"/>`;
+      // 박스 텍스트 (참조번호 제외한 라벨만 표시)
+      const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+      const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
+      svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      
+      // 리더라인 + 부호
+      const leaderEndX=bx+boxW+0.3*PX;
+      const leaderY=by+boxH/2;
+      svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
+      svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      
+      // L1 간 연결선 (양방향 화살표)
+      if(i<nodes.length-1){
+        const arrowX=bx+boxW/2;
+        const arrowY1=by+boxH+2;
+        const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+        svg+=`<line x1="${arrowX}" y1="${arrowY1}" x2="${arrowX}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
+      }
+    });
+    
+    svg+='</svg>';
+    const c=document.getElementById(containerId);
+    if(c)c.innerHTML=svg;
+  } else {
+    // ═══ 도 2+: 하위 구성 있는 경우 - 최외곽 박스 있음 ═══
+    const frameX=0.5*PX, frameY=0.5*PX;
+    const boxStartX=frameX+0.6*PX, boxStartY=frameY+0.4*PX;
+    const frameW=6.2*PX, frameH=(nodes.length*(boxH+boxGap)+0.3*PX);
+    const svgW=frameW+2.5*PX, svgH=frameH+1.5*PX;
+    
+    let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:600px;background:white;border-radius:8px">`;
+    
+    // 화살표 마커
+    const mkId=`ah_${containerId}`;
+    svg+=`<defs>
+      <marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#000"/>
+      </marker>
+    </defs>`;
+    
+    // 1. 최외곽 프레임 (그림자 + 본체)
+    svg+=`<rect x="${frameX+SHADOW_OFFSET}" y="${frameY+SHADOW_OFFSET}" width="${frameW}" height="${frameH}" fill="#000"/>`;
+    svg+=`<rect x="${frameX}" y="${frameY}" width="${frameW}" height="${frameH}" fill="#fff" stroke="#000" stroke-width="2.25"/>`;
+    
+    // 최외곽 부호 (L1 번호)
+    const frameRefX=frameX+frameW+0.3*PX;
+    const frameRefY=frameY+frameH/2;
+    svg+=`<line x1="${frameX+frameW}" y1="${frameRefY}" x2="${frameRefX}" y2="${frameRefY}" stroke="#000" stroke-width="1"/>`;
+    svg+=`<text x="${frameRefX+8}" y="${frameRefY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
+    
+    // 2. 내부 구성요소 박스들
+    nodes.forEach((n,i)=>{
+      const bx=boxStartX;
+      const by=boxStartY+i*(boxH+boxGap);
+      const fallbackRef=frameRefNum+10*(i+1);
+      const refNum=extractRefNum(n.label,String(fallbackRef));
+      
+      // 그림자
+      svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" fill="#000"/>`;
+      // 박스 본체
+      svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
+      // 박스 텍스트
+      const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+      const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
+      svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="12" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      
+      // 리더라인 + 부호
+      const leaderEndX=frameX+frameW+0.3*PX;
+      const leaderY=by+boxH/2;
+      svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
+      svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      
+      // 양방향 화살표
+      if(i<nodes.length-1){
+        const arrowX=bx+boxW/2;
+        const arrowY1=by+boxH+2;
+        const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+        svg+=`<line x1="${arrowX}" y1="${arrowY1}" x2="${arrowX}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
+      }
+    });
+    
+    svg+='</svg>';
+    const c=document.getElementById(containerId);
+    if(c)c.innerHTML=svg;
+  }
+}
+
+// ═══ 도면 규칙 검증 함수 (v4.0) ═══
+function validateDiagramRules(nodes,figNum){
+  const issues=[];
+  
+  // 참조번호 추출 함수
+  function extractRefNum(label){
+    const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
+    return match?match[1]:null;
+  }
+  
+  // L1 여부 판별 (X00 형식)
+  function isL1(ref){
+    if(!ref||ref.startsWith('S'))return false;
+    const num=parseInt(ref);
+    return num>=100&&num%100===0;
+  }
+  
+  // L2 여부 판별 (XY0 형식, Y≠0)
+  function isL2(ref){
+    if(!ref||ref.startsWith('S'))return false;
+    const num=parseInt(ref);
+    return num>=100&&num%100!==0&&num%10===0;
+  }
+  
+  // L3 여부 판별 (XYZ 형식, Z≠0)
+  function isL3(ref){
+    if(!ref||ref.startsWith('S'))return false;
+    const num=parseInt(ref);
+    return num>=100&&num%10!==0;
+  }
+  
+  // 1. ~모듈 사용 금지 검증
+  nodes.forEach(n=>{
+    if(n.label.includes('모듈')){
+      issues.push({
+        severity:'WARNING',
+        message:`"${n.label}" - "~모듈" 대신 "~부"를 사용해야 합니다.`
+      });
     }
   });
   
-  svg+='</svg>';
-  const c=document.getElementById(containerId);
-  if(c)c.innerHTML=svg;
+  // 2. 도 1 규칙 검증 (L1만 허용)
+  if(figNum===1){
+    nodes.forEach(n=>{
+      const ref=extractRefNum(n.label);
+      if(ref&&!isL1(ref)&&!ref.startsWith('S')){
+        issues.push({
+          severity:'ERROR',
+          message:`도 1에 하위 구성요소 "${n.label}" 포함 불가. 도 1은 L1(X00) 장치만 허용.`
+        });
+      }
+    });
+  }
+  
+  // 3. 참조번호 형식 검증
+  nodes.forEach(n=>{
+    const ref=extractRefNum(n.label);
+    if(!ref){
+      issues.push({
+        severity:'WARNING',
+        message:`"${n.label}" - 참조번호가 없습니다.`
+      });
+    }
+  });
+  
+  // 4. 참조번호 중복 검증
+  const refs=nodes.map(n=>extractRefNum(n.label)).filter(Boolean);
+  const dupRefs=refs.filter((r,i)=>refs.indexOf(r)!==i);
+  if(dupRefs.length){
+    issues.push({
+      severity:'ERROR',
+      message:`참조번호 중복: ${[...new Set(dupRefs)].join(', ')}`
+    });
+  }
+  
+  // 5. 레벨 혼합 검증 (도 2 이상에서)
+  if(figNum>1){
+    const hasL1=nodes.some(n=>isL1(extractRefNum(n.label)));
+    const hasL2=nodes.some(n=>isL2(extractRefNum(n.label)));
+    const hasL3=nodes.some(n=>isL3(extractRefNum(n.label)));
+    
+    // L1과 L2/L3가 혼합된 경우 (정상: 외곽L1 + 내부L2/L3)
+    // L2와 L3만 있고 L1이 없으면 경고
+    if(!hasL1&&(hasL2||hasL3)){
+      issues.push({
+        severity:'INFO',
+        message:`도 ${figNum}: 최외곽 L1 장치가 명시되지 않았습니다.`
+      });
+    }
+  }
+  
+  return issues;
 }
+
 function renderDiagrams(sid,mt){
   const cid=sid==='step_07'?'diagramsStep07':'diagramsStep11';const el=document.getElementById(cid);const blocks=extractMermaidBlocks(mt);
   if(!blocks.length){el.innerHTML=`<div class="diagram-container"><pre style="font-size:12px;white-space:pre-wrap">${App.escapeHtml(mt)}</pre></div>`;return;}
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;diagramData[sid]=[];
-  el.innerHTML=blocks.map((code,i)=>{const figNum=figOffset+i+1;return `<div class="diagram-container"><div class="diagram-label">도 ${figNum}</div><div id="diagram_${sid}_${i}" style="background:#fff;border:1px solid #eee;border-radius:8px;padding:12px;overflow-x:auto"></div><details style="margin-top:8px"><summary style="font-size:11px;color:var(--color-text-tertiary);cursor:pointer">Mermaid 코드 보기</summary><pre style="font-size:11px;margin-top:4px;padding:8px;background:var(--color-bg-tertiary);border-radius:8px;overflow-x:auto">${App.escapeHtml(code)}</pre></details></div>`;}).join('');
-  blocks.forEach((code,i)=>{const{nodes,edges}=parseMermaidGraph(code);const positions=layoutGraph(nodes,edges);diagramData[sid].push({nodes,edges,positions});renderDiagramSvg(`diagram_${sid}_${i}`,nodes,edges,positions,figOffset+i+1);});
+  
+  let html='';
+  blocks.forEach((code,i)=>{
+    const figNum=figOffset+i+1;
+    const{nodes,edges}=parseMermaidGraph(code);
+    const positions=layoutGraph(nodes,edges);
+    diagramData[sid].push({nodes,edges,positions});
+    
+    // 검증 실행
+    const issues=validateDiagramRules(nodes,figNum);
+    
+    // 검증 결과 HTML 생성
+    let issuesHtml='';
+    if(issues.length){
+      issuesHtml='<div style="margin-bottom:8px">';
+      issues.forEach(iss=>{
+        const bgColor=iss.severity==='ERROR'?'#fee':iss.severity==='WARNING'?'#fff8e1':'#e3f2fd';
+        const txtColor=iss.severity==='ERROR'?'#c62828':iss.severity==='WARNING'?'#f57c00':'#1565c0';
+        issuesHtml+=`<div style="font-size:11px;padding:4px 8px;margin:2px 0;border-radius:4px;background:${bgColor};color:${txtColor}"><span style="font-weight:600">${iss.severity}:</span> ${App.escapeHtml(iss.message)}</div>`;
+      });
+      issuesHtml+='</div>';
+    }
+    
+    html+=`<div class="diagram-container">
+      <div class="diagram-label">도 ${figNum}</div>
+      ${issuesHtml}
+      <div id="diagram_${sid}_${i}" style="background:#fff;border:1px solid #eee;border-radius:8px;padding:12px;overflow-x:auto"></div>
+      <details style="margin-top:8px"><summary style="font-size:11px;color:var(--color-text-tertiary);cursor:pointer">Mermaid 코드 보기</summary><pre style="font-size:11px;margin-top:4px;padding:8px;background:var(--color-bg-tertiary);border-radius:8px;overflow-x:auto">${App.escapeHtml(code)}</pre></details>
+    </div>`;
+  });
+  
+  el.innerHTML=html;
+  
+  // SVG 렌더링
+  blocks.forEach((code,i)=>{
+    const{nodes,edges}=diagramData[sid][i];
+    const positions=diagramData[sid][i].positions;
+    renderDiagramSvg(`diagram_${sid}_${i}`,nodes,edges,positions,figOffset+i+1);
+  });
 }
 function downloadPptx(sid){
   // 라이브러리 체크
@@ -1586,7 +1835,23 @@ function downloadPptx(sid){
     
     if(!nodes.length)return;
     
-    // 외곽 프레임 참조번호 추출
+    // L1 여부 판별 함수
+    function isL1RefNum(ref){
+      if(!ref||ref.startsWith('S'))return false;
+      const num=parseInt(ref);
+      return num>=100&&num%100===0;
+    }
+    
+    // 모든 노드가 L1인지 확인
+    const allL1=nodes.every(n=>{
+      const ref=extractRefNum(n.label,'');
+      return isL1RefNum(ref);
+    });
+    
+    // 도 1 판별 (figNum===1 또는 모든 노드가 L1)
+    const isFig1=figNum===1||allL1;
+    
+    // 참조번호 추출
     let frameRefNum=figNum*100;
     if(nodes.length>0){
       const firstRef=extractRefNum(nodes[0].label,'');
@@ -1598,95 +1863,149 @@ function downloadPptx(sid){
     
     // 노드 수에 따라 동적 스케일링
     const nodeCount=nodes.length;
-    const frameX=PAGE_MARGIN;
-    const frameY=PAGE_MARGIN+TITLE_H;
-    const frameW=PAGE_W-0.8;
     
-    // 프레임 높이 계산 (페이지 내 맞춤)
-    const maxFrameH=Math.min(AVAILABLE_H, nodeCount*1.0+0.6);
-    const frameH=maxFrameH;
-    
-    // 박스 크기 동적 계산
-    const framePadY=0.3;
-    const innerH=frameH-framePadY*2;
-    const boxH=Math.min(0.55, (innerH-0.15*(nodeCount-1))/nodeCount);
-    const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
-    const boxW=frameW-1.0;
-    const boxStartX=frameX+0.5;
-    const boxStartY=frameY+framePadY;
-    
-    // 1. 외곽 프레임
-    slide.addShape(pptx.shapes.RECTANGLE,{
-      x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,
-      fill:{color:'000000'},line:{width:0}
-    });
-    slide.addShape(pptx.shapes.RECTANGLE,{
-      x:frameX,y:frameY,w:frameW,h:frameH,
-      fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}
-    });
-    
-    // 외곽 부호 (단순 직선)
-    const refLabelX=frameX+frameW+0.1;
-    slide.addShape(pptx.shapes.LINE,{
-      x:frameX+frameW,y:frameY+frameH/2,w:0.3,h:0,
-      line:{color:'000000',width:LINE_ARROW}
-    });
-    slide.addText(String(frameRefNum),{
-      x:refLabelX+0.3,y:frameY+frameH/2-0.12,w:0.5,h:0.24,
-      fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
-    });
-    
-    // 2. 내부 구성요소 박스들
-    nodes.forEach((n,i)=>{
-      const bx=boxStartX;
-      const by=boxStartY+i*(boxH+boxGap);
-      // 노드 라벨에서 참조번호 추출
-      const fallbackRef=frameRefNum+10*(i+1);
-      const refNum=extractRefNum(n.label,String(fallbackRef));
-      // 참조번호 제외한 라벨
-      const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+    if(isFig1){
+      // ═══ 도 1: 최외곽 박스 없이 L1 장치만 배치 ═══
+      const boxStartX=PAGE_MARGIN+0.3;
+      const boxStartY=PAGE_MARGIN+TITLE_H+0.2;
+      const boxW=PAGE_W-1.2;
+      const boxH=Math.min(0.6, AVAILABLE_H/nodeCount-0.2);
+      const boxGap=Math.min(0.5, (AVAILABLE_H-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1));
       
-      // 그림자
+      nodes.forEach((n,i)=>{
+        const bx=boxStartX;
+        const by=boxStartY+i*(boxH+boxGap);
+        const refNum=extractRefNum(n.label,String((i+1)*100));
+        const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+        
+        // 그림자
+        slide.addShape(pptx.shapes.RECTANGLE,{
+          x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,
+          fill:{color:'000000'},line:{width:0}
+        });
+        // 박스 본체
+        slide.addShape(pptx.shapes.RECTANGLE,{
+          x:bx,y:by,w:boxW,h:boxH,
+          fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}
+        });
+        // 박스 텍스트
+        slide.addText(cleanLabel,{
+          x:bx+0.08,y:by,w:boxW-0.16,h:boxH,
+          fontSize:Math.min(12,Math.max(9,13-nodeCount*0.3)),
+          fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'
+        });
+        
+        // 리더라인 + 부호
+        const refLabelX=bx+boxW+0.1;
+        slide.addShape(pptx.shapes.LINE,{
+          x:bx+boxW,y:by+boxH/2,w:0.3,h:0,
+          line:{color:'000000',width:LINE_ARROW}
+        });
+        slide.addText(String(refNum),{
+          x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,
+          fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
+        });
+        
+        // L1 간 연결선 (양방향 화살표)
+        if(i<nodes.length-1){
+          const arrowY1=by+boxH;
+          const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
+          const arrowX=bx+boxW/2;
+          if(arrowY2>arrowY1+0.05){
+            slide.addShape(pptx.shapes.LINE,{
+              x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,
+              line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}
+            });
+          }
+        }
+      });
+    } else {
+      // ═══ 도 2+: 최외곽 박스 있음 ═══
+      const frameX=PAGE_MARGIN;
+      const frameY=PAGE_MARGIN+TITLE_H;
+      const frameW=PAGE_W-0.8;
+      const maxFrameH=Math.min(AVAILABLE_H, nodeCount*1.0+0.6);
+      const frameH=maxFrameH;
+      
+      const framePadY=0.3;
+      const innerH=frameH-framePadY*2;
+      const boxH=Math.min(0.55, (innerH-0.15*(nodeCount-1))/nodeCount);
+      const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
+      const boxW=frameW-1.0;
+      const boxStartX=frameX+0.5;
+      const boxStartY=frameY+framePadY;
+      
+      // 최외곽 프레임 (그림자 + 본체)
       slide.addShape(pptx.shapes.RECTANGLE,{
-        x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,
+        x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,
         fill:{color:'000000'},line:{width:0}
       });
-      // 박스 본체
       slide.addShape(pptx.shapes.RECTANGLE,{
-        x:bx,y:by,w:boxW,h:boxH,
-        fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}
-      });
-      // 박스 텍스트 (참조번호 제외)
-      slide.addText(cleanLabel,{
-        x:bx+0.08,y:by,w:boxW-0.16,h:boxH,
-        fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),
-        fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'
+        x:frameX,y:frameY,w:frameW,h:frameH,
+        fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}
       });
       
-      // 리더라인 (단순 직선)
+      // 최외곽 부호
+      const refLabelX=frameX+frameW+0.1;
       slide.addShape(pptx.shapes.LINE,{
-        x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.3,h:0,
+        x:frameX+frameW,y:frameY+frameH/2,w:0.3,h:0,
         line:{color:'000000',width:LINE_ARROW}
       });
-      // 부호 라벨
-      slide.addText(String(refNum),{
-        x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,
+      slide.addText(String(frameRefNum),{
+        x:refLabelX+0.3,y:frameY+frameH/2-0.12,w:0.5,h:0.24,
         fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
       });
       
-      // 양방향 화살표
-      if(i<nodes.length-1){
-        const arrowY1=by+boxH;
-        const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
-        const arrowX=bx+boxW/2;
-        if(arrowY2>arrowY1+0.05){
-          slide.addShape(pptx.shapes.LINE,{
-            x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,
-            line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}
-          });
+      // 내부 구성요소 박스들
+      nodes.forEach((n,i)=>{
+        const bx=boxStartX;
+        const by=boxStartY+i*(boxH+boxGap);
+        const fallbackRef=frameRefNum+10*(i+1);
+        const refNum=extractRefNum(n.label,String(fallbackRef));
+        const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+        
+        // 그림자
+        slide.addShape(pptx.shapes.RECTANGLE,{
+          x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,
+          fill:{color:'000000'},line:{width:0}
+        });
+        // 박스 본체
+        slide.addShape(pptx.shapes.RECTANGLE,{
+          x:bx,y:by,w:boxW,h:boxH,
+          fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}
+        });
+        // 박스 텍스트
+        slide.addText(cleanLabel,{
+          x:bx+0.08,y:by,w:boxW-0.16,h:boxH,
+          fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),
+          fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'
+        });
+        
+        // 리더라인
+        slide.addShape(pptx.shapes.LINE,{
+          x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.3,h:0,
+          line:{color:'000000',width:LINE_ARROW}
+        });
+        // 부호 라벨
+        slide.addText(String(refNum),{
+          x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,
+          fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
+        });
+        
+        // 양방향 화살표
+        if(i<nodes.length-1){
+          const arrowY1=by+boxH;
+          const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
+          const arrowX=bx+boxW/2;
+          if(arrowY2>arrowY1+0.05){
+            slide.addShape(pptx.shapes.LINE,{
+              x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,
+              line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}
+            });
+          }
         }
-      }
-    });
+      });
+    }
   });
   
   const fileName=selectedProjectNumber||selectedTitle||'도면';
@@ -1751,7 +2070,23 @@ async function downloadDiagramImages(sid, format='jpeg'){
     
     if(!nodes.length)continue;
     
-    // 외곽 프레임 참조번호 추출
+    // L1 여부 판별 함수
+    function isL1RefNum(ref){
+      if(!ref||ref.startsWith('S'))return false;
+      const num=parseInt(ref);
+      return num>=100&&num%100===0;
+    }
+    
+    // 모든 노드가 L1인지 확인
+    const allL1=nodes.every(n=>{
+      const ref=extractRefNum(n.label,'');
+      return isL1RefNum(ref);
+    });
+    
+    // 도 1 판별 (figNum===1 또는 모든 노드가 L1)
+    const isFig1=figNum===1||allL1;
+    
+    // 참조번호 추출
     let frameRefNum=figNum*100;
     if(nodes.length>0){
       const firstRef=extractRefNum(nodes[0].label,'');
@@ -1761,103 +2096,173 @@ async function downloadDiagramImages(sid, format='jpeg'){
       }
     }
     
-    // 레이아웃 계산
     const nodeCount=nodes.length;
-    const frameX=30,frameY=50;
-    const frameW=680,frameH=Math.min(900,nodeCount*80+50);
     const SHADOW=3;
     
-    // 외곽 프레임 (그림자)
-    ctx.fillStyle='#000000';
-    ctx.fillRect(frameX+SHADOW,frameY+SHADOW,frameW,frameH);
-    ctx.fillStyle='#FFFFFF';
-    ctx.fillRect(frameX,frameY,frameW,frameH);
-    ctx.strokeStyle='#000000';
-    ctx.lineWidth=2;
-    ctx.strokeRect(frameX,frameY,frameW,frameH);
-    
-    // 외곽 부호 (단순 직선)
-    ctx.beginPath();
-    ctx.moveTo(frameX+frameW,frameY+frameH/2);
-    ctx.lineTo(frameX+frameW+25,frameY+frameH/2);
-    ctx.lineWidth=1;
-    ctx.stroke();
-    
-    ctx.font='11px "맑은 고딕", sans-serif';
-    ctx.fillStyle='#000000';
-    ctx.fillText(String(frameRefNum),frameX+frameW+30,frameY+frameH/2+4);
-    
-    // 박스들
-    const padY=20;
-    const innerH=frameH-padY*2;
-    const boxH=Math.min(45,(innerH-10*(nodeCount-1))/nodeCount);
-    const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
-    const boxW=frameW-100;
-    const boxStartX=frameX+35;
-    const boxStartY=frameY+padY;
-    
-    nodes.forEach((n,i)=>{
-      const bx=boxStartX;
-      const by=boxStartY+i*(boxH+boxGap);
-      // 참조번호 추출
-      const fallbackRef=frameRefNum+10*(i+1);
-      const refNum=extractRefNum(n.label,String(fallbackRef));
-      const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+    if(isFig1){
+      // ═══ 도 1: 최외곽 박스 없이 L1 장치만 배치 ═══
+      const boxStartX=30;
+      const boxStartY=50;
+      const boxW=620;
+      const boxH=Math.min(55, (850-10*(nodeCount-1))/nodeCount);
+      const boxGap=Math.min(40, (900-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1));
       
-      // 그림자
+      nodes.forEach((n,i)=>{
+        const bx=boxStartX;
+        const by=boxStartY+i*(boxH+boxGap);
+        const refNum=extractRefNum(n.label,String((i+1)*100));
+        const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+        
+        // 그림자
+        ctx.fillStyle='#000000';
+        ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
+        // 박스 (두꺼운 선)
+        ctx.fillStyle='#FFFFFF';
+        ctx.fillRect(bx,by,boxW,boxH);
+        ctx.strokeStyle='#000000';
+        ctx.lineWidth=2;
+        ctx.strokeRect(bx,by,boxW,boxH);
+        
+        // 텍스트
+        ctx.fillStyle='#000000';
+        ctx.font=`${Math.min(14,15-nodeCount*0.4)}px "맑은 고딕", sans-serif`;
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        const displayLabel=cleanLabel.length>25?cleanLabel.slice(0,23)+'…':cleanLabel;
+        ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
+        ctx.textAlign='left';
+        
+        // 리더라인 + 부호
+        ctx.beginPath();
+        ctx.moveTo(bx+boxW,by+boxH/2);
+        ctx.lineTo(bx+boxW+25,by+boxH/2);
+        ctx.lineWidth=1;
+        ctx.stroke();
+        
+        ctx.font='11px "맑은 고딕", sans-serif';
+        ctx.fillText(String(refNum),bx+boxW+30,by+boxH/2+4);
+        
+        // L1 간 연결선 (양방향 화살표)
+        if(i<nodes.length-1){
+          const arrowX=bx+boxW/2;
+          const arrowY1=by+boxH+2;
+          const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+          if(arrowY2>arrowY1){
+            ctx.beginPath();
+            ctx.moveTo(arrowX,arrowY1);
+            ctx.lineTo(arrowX,arrowY2);
+            ctx.stroke();
+            // 위 화살촉
+            ctx.beginPath();
+            ctx.moveTo(arrowX-4,arrowY1+8);
+            ctx.lineTo(arrowX,arrowY1);
+            ctx.lineTo(arrowX+4,arrowY1+8);
+            ctx.stroke();
+            // 아래 화살촉
+            ctx.beginPath();
+            ctx.moveTo(arrowX-4,arrowY2-8);
+            ctx.lineTo(arrowX,arrowY2);
+            ctx.lineTo(arrowX+4,arrowY2-8);
+            ctx.stroke();
+          }
+        }
+      });
+    } else {
+      // ═══ 도 2+: 최외곽 박스 있음 ═══
+      const frameX=30,frameY=50;
+      const frameW=680,frameH=Math.min(900,nodeCount*80+50);
+      
+      // 외곽 프레임 (그림자)
       ctx.fillStyle='#000000';
-      ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
-      // 박스
+      ctx.fillRect(frameX+SHADOW,frameY+SHADOW,frameW,frameH);
       ctx.fillStyle='#FFFFFF';
-      ctx.fillRect(bx,by,boxW,boxH);
-      ctx.lineWidth=1.5;
-      ctx.strokeRect(bx,by,boxW,boxH);
+      ctx.fillRect(frameX,frameY,frameW,frameH);
+      ctx.strokeStyle='#000000';
+      ctx.lineWidth=2;
+      ctx.strokeRect(frameX,frameY,frameW,frameH);
       
-      // 텍스트 (참조번호 제외)
-      ctx.fillStyle='#000000';
-      ctx.font=`${Math.min(13,14-nodeCount*0.5)}px "맑은 고딕", sans-serif`;
-      ctx.textAlign='center';
-      ctx.textBaseline='middle';
-      const displayLabel=cleanLabel.length>25?cleanLabel.slice(0,23)+'…':cleanLabel;
-      ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
-      ctx.textAlign='left';
-      
-      // 리더라인 (단순 직선)
+      // 외곽 부호 (단순 직선)
       ctx.beginPath();
-      ctx.moveTo(bx+boxW,by+boxH/2);
-      ctx.lineTo(frameX+frameW+25,by+boxH/2);
+      ctx.moveTo(frameX+frameW,frameY+frameH/2);
+      ctx.lineTo(frameX+frameW+25,frameY+frameH/2);
       ctx.lineWidth=1;
       ctx.stroke();
       
-      // 부호 (추출된 참조번호 사용)
       ctx.font='11px "맑은 고딕", sans-serif';
-      ctx.fillText(String(refNum),frameX+frameW+30,by+boxH/2+4);
+      ctx.fillStyle='#000000';
+      ctx.fillText(String(frameRefNum),frameX+frameW+30,frameY+frameH/2+4);
       
-      // 화살표
-      if(i<nodes.length-1){
-        const arrowX=bx+boxW/2;
-        const arrowY1=by+boxH+2;
-        const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
-        if(arrowY2>arrowY1){
-          ctx.beginPath();
-          ctx.moveTo(arrowX,arrowY1);
-          ctx.lineTo(arrowX,arrowY2);
-          ctx.stroke();
-          // 위 화살촉
-          ctx.beginPath();
-          ctx.moveTo(arrowX-4,arrowY1+8);
-          ctx.lineTo(arrowX,arrowY1);
-          ctx.lineTo(arrowX+4,arrowY1+8);
-          ctx.stroke();
-          // 아래 화살촉
-          ctx.beginPath();
-          ctx.moveTo(arrowX-4,arrowY2-8);
-          ctx.lineTo(arrowX,arrowY2);
-          ctx.lineTo(arrowX+4,arrowY2-8);
-          ctx.stroke();
+      // 박스들
+      const padY=20;
+      const innerH=frameH-padY*2;
+      const boxH=Math.min(45,(innerH-10*(nodeCount-1))/nodeCount);
+      const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
+      const boxW=frameW-100;
+      const boxStartX=frameX+35;
+      const boxStartY=frameY+padY;
+      
+      nodes.forEach((n,i)=>{
+        const bx=boxStartX;
+        const by=boxStartY+i*(boxH+boxGap);
+        const fallbackRef=frameRefNum+10*(i+1);
+        const refNum=extractRefNum(n.label,String(fallbackRef));
+        const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+        
+        // 그림자
+        ctx.fillStyle='#000000';
+        ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
+        // 박스
+        ctx.fillStyle='#FFFFFF';
+        ctx.fillRect(bx,by,boxW,boxH);
+        ctx.lineWidth=1.5;
+        ctx.strokeRect(bx,by,boxW,boxH);
+        
+        // 텍스트
+        ctx.fillStyle='#000000';
+        ctx.font=`${Math.min(13,14-nodeCount*0.5)}px "맑은 고딕", sans-serif`;
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        const displayLabel=cleanLabel.length>25?cleanLabel.slice(0,23)+'…':cleanLabel;
+        ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
+        ctx.textAlign='left';
+        
+        // 리더라인
+        ctx.beginPath();
+        ctx.moveTo(bx+boxW,by+boxH/2);
+        ctx.lineTo(frameX+frameW+25,by+boxH/2);
+        ctx.lineWidth=1;
+        ctx.stroke();
+        
+        // 부호
+        ctx.font='11px "맑은 고딕", sans-serif';
+        ctx.fillText(String(refNum),frameX+frameW+30,by+boxH/2+4);
+        
+        // 화살표
+        if(i<nodes.length-1){
+          const arrowX=bx+boxW/2;
+          const arrowY1=by+boxH+2;
+          const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+          if(arrowY2>arrowY1){
+            ctx.beginPath();
+            ctx.moveTo(arrowX,arrowY1);
+            ctx.lineTo(arrowX,arrowY2);
+            ctx.stroke();
+            // 위 화살촉
+            ctx.beginPath();
+            ctx.moveTo(arrowX-4,arrowY1+8);
+            ctx.lineTo(arrowX,arrowY1);
+            ctx.lineTo(arrowX+4,arrowY1+8);
+            ctx.stroke();
+            // 아래 화살촉
+            ctx.beginPath();
+            ctx.moveTo(arrowX-4,arrowY2-8);
+            ctx.lineTo(arrowX,arrowY2);
+            ctx.lineTo(arrowX+4,arrowY2-8);
+            ctx.stroke();
+          }
         }
-      }
-    });
+      });
+    }
     
     // 다운로드
     const link=document.createElement('a');
