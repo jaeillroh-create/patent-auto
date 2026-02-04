@@ -528,18 +528,27 @@
         <!-- 좌측: 헤더 + 버튼 / 우측: 테이블 -->
         <div style="display: flex; gap: 40px; align-items: flex-start;">
           <!-- 좌측 영역 -->
-          <div style="flex-shrink: 0; width: 220px;">
+          <div style="flex-shrink: 0; width: 240px;">
             <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: #1f2937;">🏷️ 상표 출원 관리</h2>
             <p style="margin: 0 0 24px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">특허그룹 디딤 상표 출원 프로젝트를 관리합니다.</p>
             <div style="display: flex; flex-direction: column; gap: 12px;">
-              <button class="btn btn-primary" data-action="tm-new-project" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap;">
+              <button class="btn btn-primary" onclick="TM.createNewProject()" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap; cursor: pointer;">
                 <span style="font-size: 18px;">+</span>
                 새 프로젝트
               </button>
-              <button class="btn btn-secondary" data-action="tm-open-settings" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; white-space: nowrap;">
+              <button class="btn btn-secondary" onclick="TM.openSettings()" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; white-space: nowrap; cursor: pointer;">
                 <span style="font-size: 16px;">⚙️</span>
                 설정
               </button>
+            </div>
+            
+            <!-- API 안내 -->
+            <div style="margin-top: 20px; padding: 12px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px;">
+              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #0369a1;">💡 KIPRIS API 키 안내</p>
+              <p style="margin: 0; font-size: 11px; color: #0c4a6e; line-height: 1.5;">
+                선행상표 검색을 위해 KIPRIS API 키가 필요합니다.
+                <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" style="color: #2563eb; text-decoration: underline;">KIPRIS Plus</a>에서 발급받으세요.
+              </p>
             </div>
           </div>
           
@@ -571,11 +580,11 @@
     const modal = document.createElement('div');
     modal.id = 'tm-settings-modal';
     modal.innerHTML = `
-      <div class="tm-modal-overlay" data-action="tm-close-settings">
+      <div class="tm-modal-overlay" onclick="TM.closeSettings()">
         <div class="tm-modal-content" onclick="event.stopPropagation()" style="max-width: 500px;">
           <div class="tm-modal-header">
             <h3 style="margin: 0; font-size: 18px; font-weight: 600;">⚙️ 상표 출원 설정</h3>
-            <button class="tm-modal-close" data-action="tm-close-settings">✕</button>
+            <button class="tm-modal-close" onclick="TM.closeSettings()">✕</button>
           </div>
           
           <div class="tm-modal-body" style="padding: 24px;">
@@ -585,15 +594,15 @@
                 🔑 KIPRIS API 키
               </h4>
               <p style="margin: 0 0 12px 0; font-size: 12px; color: #6b7280; line-height: 1.5;">
-                KIPRIS OpenAPI 인증키를 입력하세요. 
-                <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" style="color: #3b82f6;">
-                  KIPRIS Plus에서 발급
+                선행상표 검색을 위해 KIPRIS OpenAPI 인증키가 필요합니다.<br>
+                <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" style="color: #3b82f6; text-decoration: underline;">
+                  👉 KIPRIS Plus에서 무료 발급받기
                 </a>
               </p>
               <input type="text" id="tm-settings-kipris-key" class="tm-input" 
                      value="${TM.escapeHtml(currentApiKey)}"
                      placeholder="API 키를 입력하세요"
-                     style="width: 100%; font-family: monospace; font-size: 13px;">
+                     style="width: 100%; font-size: 13px; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
             </div>
             
             <!-- 자동 저장 설정 -->
@@ -604,11 +613,9 @@
               <p style="margin: 0 0 12px 0; font-size: 12px; color: #6b7280; line-height: 1.5;">
                 변경사항이 있을 경우 자동으로 저장됩니다.
               </p>
-              <div style="display: flex; gap: 16px; font-size: 13px; color: #374151;">
-                <span>• 입력 후 3초 후 자동 저장</span>
-              </div>
-              <div style="display: flex; gap: 16px; font-size: 13px; color: #374151; margin-top: 4px;">
-                <span>• 15초마다 주기적 저장</span>
+              <div style="font-size: 13px; color: #374151; line-height: 1.6;">
+                <div>• 입력 후 3초 후 자동 저장</div>
+                <div>• 15초마다 주기적 저장</div>
               </div>
             </div>
             
@@ -618,17 +625,17 @@
                 ℹ️ 현재 상태
               </h4>
               <div style="font-size: 12px; color: #6b7280; line-height: 1.6;">
-                <div>• KIPRIS API 키: ${currentApiKey ? '설정됨 ✓' : '미설정'}</div>
-                <div>• 자동 저장: 활성화됨 ✓</div>
+                <div>• KIPRIS API 키: ${currentApiKey ? '✅ 설정됨' : '❌ 미설정'}</div>
+                <div>• 자동 저장: ✅ 활성화됨</div>
               </div>
             </div>
           </div>
           
           <div class="tm-modal-footer" style="padding: 16px 24px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 12px;">
-            <button class="btn btn-secondary" data-action="tm-close-settings" style="padding: 10px 20px;">
+            <button class="btn btn-secondary" onclick="TM.closeSettings()" style="padding: 10px 20px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer;">
               취소
             </button>
-            <button class="btn btn-primary" data-action="tm-save-settings" style="padding: 10px 20px;">
+            <button class="btn btn-primary" onclick="TM.saveSettings()" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer;">
               저장
             </button>
           </div>
@@ -761,7 +768,7 @@
         <td style="padding: 12px 16px; white-space: nowrap;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="font-size: 18px;">📁</span>
-            <span style="font-weight: 600; color: #3b82f6; font-size: 13px; cursor: pointer; font-family: monospace;" 
+            <span style="font-weight: 600; color: #3b82f6; font-size: 13px; cursor: pointer;" 
                  onclick="TM.openProject('${project.id}')"
                  onmouseover="this.style.textDecoration='underline'" 
                  onmouseout="this.style.textDecoration='none'">${TM.escapeHtml(project.title || '(미지정)')}</span>
@@ -1132,8 +1139,8 @@
             <div class="tm-project-icon">🏷️</div>
             <div class="tm-project-info">
               <h3 class="tm-project-name">${TM.escapeHtml(TM.currentProject.trademarkName || '(상표명 미입력)')}</h3>
-              <div style="font-size: 11px; color: #9ca3af; margin-top: 2px; font-family: monospace;">
-                ${TM.escapeHtml(TM.currentProject.title || '')}
+              <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">
+                📁 ${TM.escapeHtml(TM.currentProject.title || '(관리번호 미지정)')}
               </div>
               <span class="tm-status-badge ${TM.currentProject.status}">${TM.getStatusLabel(TM.currentProject.status)}</span>
             </div>
