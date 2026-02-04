@@ -120,7 +120,7 @@ async function loadDashboardProjects(){
       const c=Object.keys(o).filter(k=>o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;
       const pct=Math.round(c/19*100);
       const isCompleted=pct===100;
-      const caseNum=p.project_number||s.project_number||'';
+      const caseNum=p.project_number||'';
       
       return `<div class="pt-project-card${isCompleted?' completed':''}" onclick="openProject('${p.id}')">
         <div class="pt-project-card-header">
@@ -273,11 +273,11 @@ async function confirmDeleteProvisional(){
 
 async function openNewProjectModal(){
   document.getElementById('newProjectTitle').value='';
-  // 다음 사건번호 자동 생성
+  // 다음 사건번호 자동 생성 (project_number 컬럼에서)
   const numInput=document.getElementById('newProjectNumber');
   if(numInput){
     try{
-      const{data}=await App.sb.from('projects').select('project_number').eq('owner_user_id',currentUser.id).not('current_state_json->type','eq','provisional').order('created_at',{ascending:false}).limit(10);
+      const{data}=await App.sb.from('projects').select('project_number').eq('owner_user_id',currentUser.id).not('project_number','is',null).order('created_at',{ascending:false}).limit(20);
       let nextNum=1;
       if(data?.length){
         const nums=data.map(p=>{
@@ -304,8 +304,8 @@ async function createAndOpenProject(){
   
   const projectNumber='26P'+numVal;
   
-  // 중복 체크
-  const{data:existing}=await App.sb.from('projects').select('id').eq('project_number',projectNumber).eq('owner_user_id',currentUser.id).single();
+  // 중복 체크 (project_number 컬럼)
+  const{data:existing}=await App.sb.from('projects').select('id').eq('project_number',projectNumber).eq('owner_user_id',currentUser.id).maybeSingle();
   if(existing){App.showToast('이미 사용중인 사건번호입니다','error');return;}
   
   const{data,error}=await App.sb.from('projects').insert({
@@ -318,8 +318,7 @@ async function createAndOpenProject(){
       selectedTitle:'',
       selectedTitleType:'',
       includeMethodClaims:true,
-      usage:{calls:0,inputTokens:0,outputTokens:0},
-      project_number:projectNumber
+      usage:{calls:0,inputTokens:0,outputTokens:0}
     }
   }).select('id').single();
   
