@@ -5202,11 +5202,12 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
   };
   
   // ================================================================
-  // DB에서 고시명칭 후보 조회
+  // DB에서 고시명칭 후보 조회 (최소 80개 확보)
   // ================================================================
   TM.fetchGazettedCandidates = async function(classCode, keywords, businessText) {
     const results = [];
     const seen = new Set();
+    const MIN_CANDIDATES = 80; // 최소 80개 후보 확보
     
     console.log(`[TM] ════ DB 검색 시작: 제${classCode}류 ════`);
     console.log(`[TM] 검색 키워드 (${keywords.length}개):`, keywords.slice(0, 10));
@@ -5245,14 +5246,18 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       }
     }
     
-    // 2. 결과가 부족하면 해당 류의 대표 상품 추가
-    if (results.length < 20) {
+    console.log(`[TM] 키워드 검색 결과: ${results.length}건`);
+    
+    // 2. 후보가 부족하면 해당 류의 전체 상품에서 추가 (최소 80개 확보)
+    if (results.length < MIN_CANDIDATES) {
       try {
+        console.log(`[TM] 후보 부족 (${results.length}건), 추가 조회 중...`);
+        
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
           .eq('class_code', classCode)
-          .limit(100);
+          .limit(200); // 넉넉하게 200개 조회
         
         if (data) {
           data.forEach(item => {
@@ -5261,13 +5266,15 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
               results.push({
                 name: item.goods_name,
                 similarGroup: item.similar_group_code,
-                matchedKeyword: null
+                matchedKeyword: null // 키워드 매칭 아님
               });
             }
           });
         }
+        
+        console.log(`[TM] 추가 조회 후: ${results.length}건`);
       } catch (err) {
-        // 무시
+        console.warn('[TM] 추가 조회 실패:', err.message);
       }
     }
     
@@ -5278,15 +5285,17 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
   };
   
   // ================================================================
-  // LLM에게 고시명칭 목록에서 선택하도록 요청
+  // LLM에게 고시명칭 목록에서 선택하도록 요청 (강화된 버전)
   // ================================================================
   TM.selectGoodsWithLLM = async function(classCode, candidates, businessText, coreService) {
-    // 후보 목록 준비 (최대 100개)
-    const candidateList = candidates.slice(0, 100).map((c, i) => 
+    const MIN_GOODS = 10; // ★ 최소 10개 필수
+    
+    // 후보 목록 준비 (최대 80개)
+    const candidateList = candidates.slice(0, 80).map((c, i) => 
       `${i + 1}. ${c.name} (${c.similarGroup || '?'})`
     ).join('\n');
     
-    const selectPrompt = `당신은 상표 출원 전문 변리사입니다.
+    const selectPrompt = `당신은 상표 출원 전문 변리사입니다. 고객의 사업과 관련된 지정상품을 선택해주세요.
 
 【고객의 사업】
 ${businessText}
@@ -5294,26 +5303,25 @@ ${businessText}
 【핵심 서비스】
 ${coreService}
 
-【제${classCode}류 고시명칭 목록】
-아래는 특허청에 등록된 공식 고시명칭입니다. 이 목록에서만 선택해야 합니다.
-
+【제${classCode}류 고시명칭 후보 목록】
 ${candidateList}
 
 【선택 기준】
-1. 고객의 사업 내용과 직접적으로 관련된 상품/서비스 우선
-2. 사업의 핵심을 보호할 수 있는 상품/서비스 선택
-3. 향후 확장 가능성을 고려한 방어적 선택도 포함
-4. ★중요★ 반드시 위 목록에 있는 고시명칭만 선택 (새로 만들지 마세요!)
+1. 고객의 사업 내용과 **직접적으로** 관련된 상품/서비스 우선 (core)
+2. 사업 확장 가능성을 고려한 방어적 선택 포함 (defense)
+3. 단순히 키워드가 겹친다고 선택하지 마세요!
+   - 예: "변리사업"에서 "디자인"은 "디자인권 출원"을 의미
+   - "인테리어 디자인", "패션 디자인"은 관련 없음!
+4. ★중요★ 반드시 10개를 선택하세요 (core 5개 + defense 5개 권장)
 
 【응답 형식 - JSON만】
 {
   "selected": [
-    {"name": "정확한 고시명칭 (목록에서 복사)", "reason": "선택 이유", "priority": "core 또는 defense"},
-    ...
+    {"name": "정확한 고시명칭", "reason": "선택 이유", "priority": "core 또는 defense"}
   ]
 }
 
-최대 10개까지 선택하세요. 목록에 없는 상품명은 절대 작성하지 마세요.`;
+정확히 10개를 선택하세요. 목록에 없는 상품명은 절대 작성하지 마세요.`;
 
     try {
       const response = await App.callClaude(selectPrompt, 2000);
@@ -5323,7 +5331,7 @@ ${candidateList}
       
       if (startIdx === -1 || endIdx <= startIdx) {
         console.warn('[TM] LLM 선택 응답 파싱 실패, 점수 기반 선택으로 대체');
-        return TM.fallbackScoreBasedSelection(candidates, businessText);
+        return TM.fallbackScoreBasedSelection(candidates, businessText, coreService, MIN_GOODS);
       }
       
       const jsonStr = text.substring(startIdx, endIdx + 1)
@@ -5333,14 +5341,15 @@ ${candidateList}
       const result = JSON.parse(jsonStr);
       const selected = result.selected || [];
       
-      // 고시명칭 목록에 있는 것만 필터링 (LLM이 잘못 생성한 것 제외)
-      const candidateNames = new Set(candidates.map(c => c.name));
+      // 고시명칭 목록에 있는 것만 필터링
       const validSelected = [];
+      const usedNames = new Set();
       
       for (const item of selected) {
         // 정확히 일치하는 것 찾기
-        const exactMatch = candidates.find(c => c.name === item.name);
+        const exactMatch = candidates.find(c => c.name === item.name && !usedNames.has(c.name));
         if (exactMatch) {
+          usedNames.add(exactMatch.name);
           validSelected.push({
             name: exactMatch.name,
             similarGroup: exactMatch.similarGroup,
@@ -5348,11 +5357,12 @@ ${candidateList}
             isCore: item.priority === 'core'
           });
         } else {
-          // 부분 일치 시도
+          // 부분 일치 시도 (LLM이 약간 변형한 경우)
           const partialMatch = candidates.find(c => 
-            c.name.includes(item.name) || item.name.includes(c.name)
+            !usedNames.has(c.name) && (c.name.includes(item.name) || item.name.includes(c.name))
           );
           if (partialMatch) {
+            usedNames.add(partialMatch.name);
             validSelected.push({
               name: partialMatch.name,
               similarGroup: partialMatch.similarGroup,
@@ -5360,38 +5370,56 @@ ${candidateList}
               isCore: item.priority === 'core'
             });
           } else {
-            console.warn(`[TM] LLM이 목록에 없는 상품 선택 시도 (무시됨): "${item.name}"`);
+            console.warn(`[TM] LLM이 목록에 없는 상품 선택 (무시): "${item.name}"`);
           }
         }
       }
       
-      // LLM 선택이 부족하면 점수 기반으로 보충
-      if (validSelected.length < 5) {
+      // ★★★ 10개 미만이면 점수 기반으로 보충 ★★★
+      if (validSelected.length < MIN_GOODS) {
+        console.log(`[TM] 제${classCode}류 - LLM 선택 ${validSelected.length}개, ${MIN_GOODS - validSelected.length}개 보충 필요`);
+        
         const additional = TM.fallbackScoreBasedSelection(
-          candidates.filter(c => !validSelected.some(v => v.name === c.name)),
-          businessText
-        ).slice(0, 5 - validSelected.length);
+          candidates.filter(c => !usedNames.has(c.name)),
+          businessText, 
+          coreService,
+          MIN_GOODS - validSelected.length
+        );
         
         validSelected.push(...additional);
       }
       
-      return validSelected.slice(0, 10);
+      return validSelected.slice(0, MIN_GOODS);
       
     } catch (err) {
       console.error('[TM] LLM 선택 실패:', err);
-      return TM.fallbackScoreBasedSelection(candidates, businessText);
+      return TM.fallbackScoreBasedSelection(candidates, businessText, coreService, MIN_GOODS);
     }
   };
   
   // ================================================================
-  // 폴백: 점수 기반 선택 (LLM 실패 시)
+  // 폴백: 점수 기반 선택 (LLM 실패 시 또는 보충용)
   // ================================================================
-  TM.fallbackScoreBasedSelection = function(candidates, businessText) {
-    const bizLower = (businessText || '').toLowerCase();
+  TM.fallbackScoreBasedSelection = function(candidates, businessText, coreService, count = 10) {
+    const bizLower = ((businessText || '') + ' ' + (coreService || '')).toLowerCase();
+    
+    // 관련 없는 키워드 패턴 (사업 텍스트에 없으면 감점)
+    const unrelatedPatterns = [
+      '인테리어', '항공', '헬멧', '의류', '패션', '요리', '음식',
+      '미용', '헤어', '네일', '게임', '오락', '부동산', '건설', '농업',
+      '축산', '수산', '광업', '카지노', '도박'
+    ];
     
     const scored = candidates.map(c => {
       let score = 0;
       const name = c.name.toLowerCase();
+      
+      // 관련 없는 패턴 포함 시 감점 (but 완전 제외는 안 함)
+      for (const pattern of unrelatedPatterns) {
+        if (name.includes(pattern) && !bizLower.includes(pattern)) {
+          score -= 3;
+        }
+      }
       
       // 키워드 매칭 점수
       if (c.matchedKeyword) {
@@ -5402,21 +5430,28 @@ ${candidateList}
       }
       
       // 사업 설명 포함 여부
+      const bizWords = bizLower.split(/[\s,./]+/).filter(w => w.length >= 2);
+      bizWords.forEach(word => {
+        if (name.includes(word)) score += 1;
+      });
+      
+      // 상품명이 사업 핵심어를 포함하면 보너스
       const nameWords = name.split(/[\s,/]+/).filter(w => w.length > 1);
       nameWords.forEach(word => {
-        if (bizLower.includes(word)) score += 1;
+        if (bizLower.includes(word)) score += 0.5;
       });
       
       return { ...c, score };
     });
     
+    // 점수순 정렬 후 count개 반환
     return scored
       .sort((a, b) => b.score - a.score)
-      .slice(0, 10)
+      .slice(0, count)
       .map(c => ({
         name: c.name,
         similarGroup: c.similarGroup,
-        reason: c.matchedKeyword ? `"${c.matchedKeyword}" 키워드 매칭` : '관련 상품',
+        reason: c.matchedKeyword ? `"${c.matchedKeyword}" 관련` : '관련 상품',
         isCore: c.score >= 3
       }));
   };
