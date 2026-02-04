@@ -532,11 +532,11 @@
             <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: #1f2937;">🏷️ 상표 출원 관리</h2>
             <p style="margin: 0 0 24px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">특허그룹 디딤 상표 출원 프로젝트를 관리합니다.</p>
             <div style="display: flex; flex-direction: column; gap: 12px;">
-              <button class="btn btn-primary" onclick="TM.createNewProject()" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap; cursor: pointer;">
+              <button class="btn btn-primary" onclick="window.TM.createNewProject(); return false;" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap; cursor: pointer;">
                 <span style="font-size: 18px;">+</span>
                 새 프로젝트
               </button>
-              <button class="btn btn-secondary" onclick="TM.openSettings()" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; white-space: nowrap; cursor: pointer;">
+              <button id="tm-settings-btn" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; white-space: nowrap; cursor: pointer;">
                 <span style="font-size: 16px;">⚙️</span>
                 설정
               </button>
@@ -567,6 +567,16 @@
     `;
     
     await TM.loadProjectList();
+    
+    // 설정 버튼 이벤트 바인딩
+    const settingsBtn = document.getElementById('tm-settings-btn');
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        TM.openSettings();
+      });
+    }
   };
   
   // ============================================================
@@ -814,12 +824,12 @@
   // ============================================================
   
   TM.createNewProject = async function() {
-    // 년도 기반 기본값 생성
-    const year = new Date().getFullYear();
-    const defaultNumber = `TM-${year}-`;
+    // 년도 기반 기본값 생성 (26T 형식)
+    const year = String(new Date().getFullYear()).slice(-2); // 26
+    const defaultNumber = `${year}T`;
     
     const managementNumber = prompt(
-      '디딤 관리번호를 입력하세요:\n(특허그룹 디딤 내부 사건 식별번호)\n\n예: TM-2026-001, 디딤-상표-001',
+      '디딤 관리번호를 입력하세요:\n(특허그룹 디딤 내부 사건 식별번호)\n\n예: 26T0001, 26T0002',
       defaultNumber
     );
     if (!managementNumber || !managementNumber.trim()) return;
@@ -995,7 +1005,7 @@
   
   // 프로젝트 편집 (이름 변경)
   TM.editProject = async function(projectId, currentTitle) {
-    const newTitle = prompt('디딤 관리번호를 수정하세요:', currentTitle || '');
+    const newTitle = prompt('디딤 관리번호를 수정하세요:\n\n예: 26T0001, 26T0002', currentTitle || '');
     if (!newTitle || newTitle === currentTitle) return;
     
     try {
@@ -1655,7 +1665,7 @@
                   <label>디딤 관리번호 <span style="font-weight:400;color:#9ca3af;font-size:11px;">(프로젝트 식별)</span></label>
                   <input type="text" class="tm-input" id="tm-project-title-input"
                          value="${TM.escapeHtml(TM.currentProject?.title || '')}" 
-                         placeholder="예: TM-2026-001"
+                         placeholder="예: 26T0001"
                          onchange="TM.updateProjectTitle(this.value)">
                 </div>
                 <div class="tm-field">
