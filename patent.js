@@ -1590,17 +1590,18 @@ ${src}`;
 
 // ═══ 도면 규칙 위반 시 자동 재생성 ═══
 async function regenerateDiagramWithFeedback(sid){
-  if(!window._diagramErrors||window._diagramErrors.sid!==sid){
-    App.showToast('재생성할 에러 정보가 없습니다.','error');
-    return;
-  }
-  
-  const errors=window._diagramErrors.errors;
   const stepId=sid==='step_07'?'step_07':'step_11';
   const btnId=sid==='step_07'?'btnStep07':'btnStep11';
   
   // 기존 도면 설계 가져오기
   const prevDesign=outputs[stepId]||'';
+  if(!prevDesign){
+    App.showToast('재생성할 도면 설계가 없습니다.','error');
+    return;
+  }
+  
+  // 에러 정보 (있으면 사용, 없으면 일반 재생성)
+  const errors=window._diagramErrors&&window._diagramErrors.sid===sid?window._diagramErrors.errors:'사용자 요청에 의한 재생성';
   
   // 피드백 프롬프트 생성
   const feedbackPrompt=`이전에 생성한 도면 설계에 규칙 위반이 발견되었습니다. 아래 오류를 수정하여 다시 생성하세요.
@@ -1610,10 +1611,13 @@ ${errors}
 
 ═══ 핵심 규칙 리마인더 ═══
 [R1] 도면부호 계층: L1(X00), L2(XY0), L3(XYZ)
-[R3] 도 1: L1 장치만 허용 (100, 200, 300...). L2/L3(110, 111...) 절대 금지
-[R5] 도 2+: 최외곽 박스 = 직계 부모 (세대 점프 금지)
+[R5] 도 1: L1 장치만 허용 (100, 200, 300...). L2/L3(110, 111...) 절대 금지
+[R6] 도 2+: 하나의 상위 장치만 상세화
+     - 내부가 L2(110,120,130)이면 최외곽은 L1(100) — L1은 프레임으로만 표시
      - 내부가 L3(111,112,113)이면 최외곽은 L2(110)
-     - 내부가 L2(110,120,130)이면 최외곽은 L1(100)
+     
+★★ 중요: 도 2+에서 L1(예: 서버(100))이 포함되면 L1은 최외곽 프레임이 되므로
+   내부 박스에는 L2(110,120,130...) 하위 구성요소만 포함해야 함! ★★
 
 ═══ 이전 도면 설계 (오류 포함) ═══
 ${prevDesign.slice(0,2000)}
@@ -1903,9 +1907,27 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     if(c)c.innerHTML=svg;
   } else {
     // ═══ 도 2+: 하위 구성 있는 경우 - 최외곽 박스 있음 ═══
+    
+    // ★ 핵심 수정: 최외곽 프레임과 동일한 참조번호를 가진 노드 제외 ★
+    const innerNodes=nodes.filter(n=>{
+      const ref=extractRefNum(n.label,'');
+      if(!ref)return true; // 참조번호 없으면 포함
+      const refNum=parseInt(ref);
+      return refNum!==frameRefNum; // 최외곽과 동일하면 제외
+    });
+    
+    // 최외곽 프레임 라벨 (제외된 노드에서 가져오기)
+    const frameNode=nodes.find(n=>{
+      const ref=extractRefNum(n.label,'');
+      return ref&&parseInt(ref)===frameRefNum;
+    });
+    const frameLabel=frameNode?frameNode.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim():'';
+    
+    const displayNodes=innerNodes.length>0?innerNodes:nodes; // 안전장치
+    
     const frameX=0.5*PX, frameY=0.5*PX;
     const boxStartX=frameX+0.6*PX, boxStartY=frameY+0.4*PX;
-    const frameW=6.2*PX, frameH=(nodes.length*(boxH+boxGap)+0.3*PX);
+    const frameW=6.2*PX, frameH=(displayNodes.length*(boxH+boxGap)+0.3*PX);
     const svgW=frameW+2.5*PX, svgH=frameH+1.5*PX;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:600px;background:white;border-radius:8px">`;
@@ -1928,8 +1950,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     svg+=`<line x1="${frameX+frameW}" y1="${frameRefY}" x2="${frameRefX}" y2="${frameRefY}" stroke="#000" stroke-width="1"/>`;
     svg+=`<text x="${frameRefX+8}" y="${frameRefY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
     
-    // 2. 내부 구성요소 박스들
-    nodes.forEach((n,i)=>{
+    // 2. 내부 구성요소 박스들 (최외곽 노드 제외됨)
+    displayNodes.forEach((n,i)=>{
       const bx=boxStartX;
       const by=boxStartY+i*(boxH+boxGap);
       const fallbackRef=frameRefNum+10*(i+1);
@@ -1951,7 +1973,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       
       // 양방향 화살표
-      if(i<nodes.length-1){
+      if(i<displayNodes.length-1){
         const arrowX=bx+boxW/2;
         const arrowY1=by+boxH+2;
         const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
@@ -1965,218 +1987,184 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   }
 }
 
-// ═══ 도면 규칙 검증 함수 (v4.1 - 파싱 오류 감지 추가) ═══
-function validateDiagramRules(nodes,figNum){
+// ═══ 도면 규칙 검증 함수 (v5.0 - 통합 검증) ═══
+function validateDiagramRules(nodes,figNum,designText){
   const issues=[];
   
-  // 참조번호 추출 함수
-  function extractRefNum(label){
-    const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
-    return match?match[1]:null;
+  function extractRef(label){
+    const m=(label||'').match(/[(\s]?(S?\d+)[)\s]?$/i);
+    return m?m[1]:null;
   }
+  function isL1(ref){return ref&&!ref.startsWith('S')&&parseInt(ref)>=100&&parseInt(ref)%100===0;}
+  function isL2(ref){return ref&&!ref.startsWith('S')&&parseInt(ref)>=100&&parseInt(ref)%100!==0&&parseInt(ref)%10===0;}
+  function isL3(ref){return ref&&!ref.startsWith('S')&&parseInt(ref)>=100&&parseInt(ref)%10!==0;}
   
-  // L1 여부 판별 (X00 형식)
-  function isL1(ref){
-    if(!ref||ref.startsWith('S'))return false;
-    const num=parseInt(ref);
-    return num>=100&&num%100===0;
-  }
-  
-  // L2 여부 판별 (XY0 형식, Y≠0)
-  function isL2(ref){
-    if(!ref||ref.startsWith('S'))return false;
-    const num=parseInt(ref);
-    return num>=100&&num%100!==0&&num%10===0;
-  }
-  
-  // L3 여부 판별 (XYZ 형식, Z≠0)
-  function isL3(ref){
-    if(!ref||ref.startsWith('S'))return false;
-    const num=parseInt(ref);
-    return num>=100&&num%10!==0;
-  }
-  
-  // ★ 0. 파싱 오류 검증 (최우선) ★
+  // ═══ R0. 파싱 실패 ═══
   if(!nodes||nodes.length===0){
-    issues.push({
-      severity:'ERROR',
-      message:`도 ${figNum}: Mermaid 코드 파싱 실패 - 노드가 없습니다.`
-    });
-    return issues; // 다른 검증 불필요
+    issues.push({severity:'ERROR',rule:'R0',message:`도 ${figNum}: Mermaid 파싱 실패 - 노드 없음`});
+    return issues;
   }
   
-  // 파싱 오류 감지: 라벨에 Mermaid 문법 잔재가 있는지
+  // ═══ R1. 라벨 오류 (Mermaid 코드 잔재) ═══
   nodes.forEach(n=>{
-    const label=n.label||'';
-    if(label.includes('"]')||label.includes('<-->')||label.includes('-->')||label.includes('---')){
-      issues.push({
-        severity:'ERROR',
-        message:`도 ${figNum}: 파싱 오류 - 라벨에 Mermaid 코드 포함: "${label.slice(0,30)}..."`
-      });
+    const lb=n.label||'';
+    if(lb.includes('"]')||lb.includes('<-->')||lb.includes('-->')){
+      issues.push({severity:'ERROR',rule:'R1',message:`도 ${figNum}: 파싱 오류 - "${lb.slice(0,30)}..."`});
     }
-    // 라벨이 노드 ID와 동일하면 (라벨 추출 실패)
-    if(label===n.id&&!/^\d+$/.test(label)){
-      issues.push({
-        severity:'WARNING',
-        message:`도 ${figNum}: 노드 "${n.id}"의 라벨이 추출되지 않았습니다.`
-      });
+    if(lb===n.id&&!/^\d+$/.test(lb)){
+      issues.push({severity:'WARNING',rule:'R1',message:`도 ${figNum}: 노드 "${n.id}" 라벨 추출 실패`});
     }
   });
   
-  // 1. ~모듈 사용 금지 검증
+  // ═══ R2. ~모듈 금지 ═══
   nodes.forEach(n=>{
     if(n.label.includes('모듈')){
-      issues.push({
-        severity:'WARNING',
-        message:`"${n.label}" - "~모듈" 대신 "~부"를 사용해야 합니다.`
-      });
+      issues.push({severity:'WARNING',rule:'R2',message:`"${n.label}" → "~부"로 변경 필요`});
     }
   });
   
-  // 2. 도 1 규칙 검증 (L1만 허용)
+  // ═══ R3. 참조번호 존재 여부 ═══
+  nodes.forEach(n=>{
+    if(!extractRef(n.label)){
+      issues.push({severity:'WARNING',rule:'R3',message:`"${n.label}" - 참조번호 없음`});
+    }
+  });
+  
+  // ═══ R4. 참조번호 중복 ═══
+  const allRefs=nodes.map(n=>extractRef(n.label)).filter(Boolean);
+  const dupRefs=allRefs.filter((r,i)=>allRefs.indexOf(r)!==i);
+  if(dupRefs.length){
+    issues.push({severity:'ERROR',rule:'R4',message:`참조번호 중복: ${[...new Set(dupRefs)].join(', ')}`});
+  }
+  
+  const numRefs=allRefs.filter(r=>!r.startsWith('S')).map(r=>parseInt(r));
+  const l1Refs=numRefs.filter(n=>n%100===0);
+  const l2Refs=numRefs.filter(n=>n%10===0&&n%100!==0);
+  const l3Refs=numRefs.filter(n=>n%10!==0);
+  
+  // ═══ R5. 도 1 규칙: L1만 허용 ═══
   if(figNum===1){
     nodes.forEach(n=>{
-      const ref=extractRefNum(n.label);
+      const ref=extractRef(n.label);
       if(ref&&!isL1(ref)&&!ref.startsWith('S')){
-        issues.push({
-          severity:'ERROR',
-          message:`도 1에 하위 구성요소 "${n.label}" 포함 불가. 도 1은 L1(X00) 장치만 허용.`
-        });
+        issues.push({severity:'ERROR',rule:'R5',message:`도 1에 하위 "${n.label}" 불가. L1(X00)만 허용.`});
       }
     });
   }
   
-  // 2-1. 도 2+ 규칙 검증: L1 혼합 금지 ★신규★
+  // ═══ R6. 도 2+ 계층 규칙 ═══
   if(figNum>1){
-    const numRefs=nodes.map(n=>extractRefNum(n.label)).filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
-    const l1Refs=numRefs.filter(n=>n%100===0);
-    const l2Refs=numRefs.filter(n=>n%10===0&&n%100!==0);
-    const l3Refs=numRefs.filter(n=>n%10!==0);
-    
-    // 여러 L1이 있으면 에러
+    // R6a. 여러 L1 혼합 금지
     if(l1Refs.length>1){
-      issues.push({
-        severity:'ERROR',
-        message:`도 ${figNum}: 여러 L1 장치(${l1Refs.join(', ')})가 혼합됨. 도 2+에서는 하나의 상위 장치만 상세화해야 함.`
-      });
+      issues.push({severity:'ERROR',rule:'R6a',message:`도 ${figNum}: 여러 L1(${l1Refs.join(',')}) 혼합 불가`});
     }
     
-    // L1과 L2/L3가 혼합된 경우, 계층 일치 검증
-    if(l1Refs.length===1&&(l2Refs.length>0||l3Refs.length>0)){
+    // R6b. L1+하위 혼합 시 계층 검증
+    if(l1Refs.length===1){
       const theL1=l1Refs[0];
-      // L2가 해당 L1의 하위인지 검증
-      const invalidL2=l2Refs.filter(n=>Math.floor(n/100)*100!==theL1);
-      if(invalidL2.length>0){
-        issues.push({
-          severity:'ERROR',
-          message:`도 ${figNum}: L2 구성요소(${invalidL2.join(', ')})가 L1(${theL1})의 하위가 아님.`
-        });
-      }
-      // L3가 해당 L1의 하위인지 검증
-      const invalidL3=l3Refs.filter(n=>Math.floor(n/100)*100!==theL1);
-      if(invalidL3.length>0){
-        issues.push({
-          severity:'ERROR',
-          message:`도 ${figNum}: L3 구성요소(${invalidL3.join(', ')})가 L1(${theL1})의 하위가 아님.`
-        });
-      }
+      const badL2=l2Refs.filter(n=>Math.floor(n/100)*100!==theL1);
+      const badL3=l3Refs.filter(n=>Math.floor(n/100)*100!==theL1);
+      if(badL2.length) issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L2(${badL2.join(',')})가 L1(${theL1})의 하위 아님`});
+      if(badL3.length) issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L3(${badL3.join(',')})가 L1(${theL1})의 하위 아님`});
       
-      // 정상인 경우 INFO
-      if(invalidL2.length===0&&invalidL3.length===0){
-        issues.push({
-          severity:'INFO',
-          message:`도 ${figNum} 최외곽 박스: ${theL1} (L1 포함)`
-        });
+      if(!badL2.length&&!badL3.length&&(l2Refs.length>0||l3Refs.length>0)){
+        issues.push({severity:'INFO',rule:'R6b',message:`도 ${figNum} 최외곽: ${theL1} (L1 자체가 프레임)`});
       }
     }
-  }
-  
-  // 3. 참조번호 형식 검증
-  nodes.forEach(n=>{
-    const ref=extractRefNum(n.label);
-    if(!ref){
-      issues.push({
-        severity:'WARNING',
-        message:`"${n.label}" - 참조번호가 없습니다.`
-      });
-    }
-  });
-  
-  // 4. 참조번호 중복 검증
-  const refs=nodes.map(n=>extractRefNum(n.label)).filter(Boolean);
-  const dupRefs=refs.filter((r,i)=>refs.indexOf(r)!==i);
-  if(dupRefs.length){
-    issues.push({
-      severity:'ERROR',
-      message:`참조번호 중복: ${[...new Set(dupRefs)].join(', ')}`
-    });
-  }
-  
-  // 5. 직계 부모 일치 검증 (세대 점프 금지) - 도 2 이상
-  if(figNum>1){
-    const numRefs=refs.filter(r=>!r.startsWith('S')).map(r=>parseInt(r));
-    if(numRefs.length>0){
-      // 모든 노드가 L3인 경우 (마지막 자리 ≠ 0)
-      const allL3=numRefs.every(n=>n%10!==0);
-      if(allL3){
-        // 직계 부모들 계산 (111→110, 112→110...)
-        const parents=numRefs.map(n=>Math.floor(n/10)*10);
-        const uniqueParents=[...new Set(parents)];
-        if(uniqueParents.length===1){
-          const expectedParent=uniqueParents[0];
-          issues.push({
-            severity:'INFO',
-            message:`도 ${figNum} 최외곽 박스: ${expectedParent} (직계 부모)`
-          });
-        }else{
-          issues.push({
-            severity:'WARNING',
-            message:`도 ${figNum}: 여러 L2 구성요소(${uniqueParents.join(', ')})의 하위가 혼합됨`
-          });
-        }
-      }
-      
-      // 모든 노드가 L2인 경우 (10단위, 100단위 아님)
-      const allL2Only=numRefs.every(n=>n%10===0&&n%100!==0);
-      if(allL2Only){
-        const parents=numRefs.map(n=>Math.floor(n/100)*100);
-        const uniqueParents=[...new Set(parents)];
-        if(uniqueParents.length===1){
-          const expectedParent=uniqueParents[0];
-          issues.push({
-            severity:'INFO',
-            message:`도 ${figNum} 최외곽 박스: ${expectedParent} (직계 부모)`
-          });
-        }
-      }
-    }
-  }
-  
-  // 6. 레벨 혼합 검증 (도 2 이상에서)
-  if(figNum>1){
-    const hasL1=nodes.some(n=>isL1(extractRefNum(n.label)));
-    const hasL2=nodes.some(n=>isL2(extractRefNum(n.label)));
-    const hasL3=nodes.some(n=>isL3(extractRefNum(n.label)));
     
-    // L2와 L3가 혼합된 경우 경고
-    if(hasL2&&hasL3&&!hasL1){
-      issues.push({
-        severity:'WARNING',
-        message:`도 ${figNum}: L2와 L3 구성요소가 혼합되어 있습니다. 동일 레벨 구성요소로 통일 권장.`
-      });
+    // R6c. L2만 있는 경우 직계 부모 INFO
+    if(l1Refs.length===0&&l2Refs.length>0&&l3Refs.length===0){
+      const parents=[...new Set(l2Refs.map(n=>Math.floor(n/100)*100))];
+      if(parents.length===1){
+        issues.push({severity:'INFO',rule:'R6c',message:`도 ${figNum} 최외곽: ${parents[0]} (직계 부모)`});
+      }
+    }
+    
+    // R6d. L3만 있는 경우 직계 부모 INFO
+    if(l1Refs.length===0&&l2Refs.length===0&&l3Refs.length>0){
+      const l2Parents=[...new Set(l3Refs.map(n=>Math.floor(n/10)*10))];
+      if(l2Parents.length===1){
+        issues.push({severity:'INFO',rule:'R6d',message:`도 ${figNum} 최외곽: ${l2Parents[0]} (직계 부모)`});
+      }
+    }
+  }
+  
+  // ═══ R7. 도면 설계 텍스트와 노드 수 비교 ═══
+  if(designText){
+    // 도면 설계에서 해당 도면의 구성요소 개수 추출
+    const figPattern=new RegExp(`도\\s*${figNum}[^]*?구성요소[^:：]*[：:]\\s*([^\\n]+)`,'i');
+    const figMatch=designText.match(figPattern);
+    if(figMatch){
+      const designRefs=(figMatch[1].match(/\((\d+)\)/g)||[]).map(r=>r.replace(/[()]/g,''));
+      // L1 포함 케이스: 설계에 L1이 있으면 렌더링에서 제외되므로 보정
+      const hasDesignL1=designRefs.some(r=>parseInt(r)%100===0);
+      const expectedCount=hasDesignL1?designRefs.length-1:designRefs.length;
+      const actualInnerCount=l1Refs.length>0?nodes.length-l1Refs.length:nodes.length;
+      
+      if(expectedCount>0&&actualInnerCount<expectedCount){
+        issues.push({severity:'WARNING',rule:'R7',message:`도 ${figNum}: 설계상 내부 구성요소 ${expectedCount}개인데 ${actualInnerCount}개만 파싱됨 (노드 누락 가능)`});
+      }
     }
   }
   
   return issues;
 }
 
+// ═══ 렌더링 후 시각 검증 (새 기능) ═══
+function postRenderValidation(sid){
+  const data=diagramData[sid];
+  if(!data||!data.length)return[];
+  
+  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+  const allIssues=[];
+  
+  data.forEach(({nodes},idx)=>{
+    const figNum=figOffset+idx+1;
+    const numRefs=nodes.map(n=>{
+      const m=(n.label||'').match(/[(\s]?(S?\d+)[)\s]?$/i);
+      return m?parseInt(m[1]):null;
+    }).filter(n=>n!==null&&!isNaN(n));
+    
+    const l1s=numRefs.filter(n=>n%100===0);
+    const nonL1=numRefs.filter(n=>n%100!==0);
+    
+    // 검증 V1: L1이 최외곽이 되는 경우, 내부에 L1이 중복 표시되면 안 됨
+    if(figNum>1&&l1s.length===1&&nonL1.length>0){
+      // 렌더러가 L1을 제외하는지 확인 (코드 레벨 검증)
+      allIssues.push({
+        figNum,severity:'CHECK',
+        message:`도 ${figNum}: 최외곽=${l1s[0]}, 내부 박스=${nonL1.length}개 (L1 제외 확인)`
+      });
+    }
+    
+    // 검증 V2: 도 1에 L2/L3가 있으면 안 됨
+    if(figNum===1&&nonL1.length>0){
+      allIssues.push({
+        figNum,severity:'ERROR',
+        message:`도 1에 L2/L3 참조번호(${nonL1.join(',')}) 포함`
+      });
+    }
+  });
+  
+  return allIssues;
+}
+
 function renderDiagrams(sid,mt){
-  const cid=sid==='step_07'?'diagramsStep07':'diagramsStep11';const el=document.getElementById(cid);const blocks=extractMermaidBlocks(mt);
-  if(!blocks.length){el.innerHTML=`<div class="diagram-container"><pre style="font-size:12px;white-space:pre-wrap">${App.escapeHtml(mt)}</pre></div>`;return;}
-  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;diagramData[sid]=[];
+  const cid=sid==='step_07'?'diagramsStep07':'diagramsStep11';
+  const el=document.getElementById(cid);
+  const blocks=extractMermaidBlocks(mt);
+  if(!blocks.length){
+    el.innerHTML=`<div class="diagram-container"><pre style="font-size:12px;white-space:pre-wrap">${App.escapeHtml(mt)}</pre></div>`;
+    return;
+  }
+  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+  diagramData[sid]=[];
+  
+  // 도면 설계 텍스트 (R7 검증용)
+  const designText=outputs[sid]||'';
   
   let html='';
-  let allIssues=[]; // 전체 에러 수집
+  let allIssues=[];
   let hasErrors=false;
   
   blocks.forEach((code,i)=>{
@@ -2185,19 +2173,20 @@ function renderDiagrams(sid,mt){
     const positions=layoutGraph(nodes,edges);
     diagramData[sid].push({nodes,edges,positions});
     
-    // 검증 실행
-    const issues=validateDiagramRules(nodes,figNum);
+    // 검증 실행 (설계 텍스트 포함)
+    const issues=validateDiagramRules(nodes,figNum,designText);
     allIssues.push({figNum,issues});
     if(issues.some(iss=>iss.severity==='ERROR'))hasErrors=true;
     
-    // 검증 결과 HTML 생성
+    // 검증 결과 HTML
     let issuesHtml='';
-    if(issues.length){
+    const visibleIssues=issues.filter(iss=>iss.severity!=='CHECK');
+    if(visibleIssues.length){
       issuesHtml='<div style="margin-bottom:8px">';
-      issues.forEach(iss=>{
-        const bgColor=iss.severity==='ERROR'?'#fee':iss.severity==='WARNING'?'#fff8e1':'#e3f2fd';
-        const txtColor=iss.severity==='ERROR'?'#c62828':iss.severity==='WARNING'?'#f57c00':'#1565c0';
-        issuesHtml+=`<div style="font-size:11px;padding:4px 8px;margin:2px 0;border-radius:4px;background:${bgColor};color:${txtColor}"><span style="font-weight:600">${iss.severity}:</span> ${App.escapeHtml(iss.message)}</div>`;
+      visibleIssues.forEach(iss=>{
+        const bg=iss.severity==='ERROR'?'#fee':iss.severity==='WARNING'?'#fff8e1':'#e3f2fd';
+        const fg=iss.severity==='ERROR'?'#c62828':iss.severity==='WARNING'?'#f57c00':'#1565c0';
+        issuesHtml+=`<div style="font-size:11px;padding:4px 8px;margin:2px 0;border-radius:4px;background:${bg};color:${fg}"><b>${iss.severity}</b> [${iss.rule}]: ${App.escapeHtml(iss.message)}</div>`;
       });
       issuesHtml+='</div>';
     }
@@ -2210,32 +2199,87 @@ function renderDiagrams(sid,mt){
     </div>`;
   });
   
-  // 에러 발견 시 재생성 버튼 추가
+  // 에러 발견 시 재생성 버튼
   if(hasErrors){
     const errorSummary=allIssues.filter(ai=>ai.issues.some(iss=>iss.severity==='ERROR'))
-      .map(ai=>`도 ${ai.figNum}: ${ai.issues.filter(iss=>iss.severity==='ERROR').map(iss=>iss.message).join('; ')}`)
+      .map(ai=>`도 ${ai.figNum}: ${ai.issues.filter(iss=>iss.severity==='ERROR').map(iss=>`[${iss.rule}] ${iss.message}`).join('; ')}`)
       .join('\n');
-    
-    // 에러 정보를 전역 변수에 저장
     window._diagramErrors={sid,errors:errorSummary};
-    
     html=`<div style="background:#ffebee;border:1px solid #ef5350;border-radius:8px;padding:12px;margin-bottom:16px">
       <div style="color:#c62828;font-weight:600;margin-bottom:8px">⚠️ 도면 규칙 위반 발견</div>
       <div style="font-size:12px;color:#b71c1c;margin-bottom:12px;white-space:pre-line">${App.escapeHtml(errorSummary)}</div>
-      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1976d2;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">
-        🔄 도면 규칙에 맞게 재생성
-      </button>
+      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1976d2;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">🔄 규칙에 맞게 재생성</button>
     </div>`+html;
   }
+  
+  // 도면 검증 버튼 항상 추가
+  html+=`<div style="margin-top:12px;padding:12px;background:var(--color-bg-secondary);border-radius:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button onclick="runDiagramValidation('${sid}')" style="background:#43a047;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">✅ 도면 검증</button>
+    <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1565c0;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">🔄 재생성</button>
+    <span id="validationResult_${sid}" style="font-size:12px;color:var(--color-text-secondary)"></span>
+  </div>`;
   
   el.innerHTML=html;
   
   // SVG 렌더링
   blocks.forEach((code,i)=>{
-    const{nodes,edges}=diagramData[sid][i];
-    const positions=diagramData[sid][i].positions;
+    const{nodes,edges,positions}=diagramData[sid][i];
     renderDiagramSvg(`diagram_${sid}_${i}`,nodes,edges,positions,figOffset+i+1);
   });
+}
+
+// ═══ 도면 검증 실행 함수 ═══
+function runDiagramValidation(sid){
+  const data=diagramData[sid];
+  if(!data||!data.length){
+    App.showToast('검증할 도면이 없습니다.','error');
+    return;
+  }
+  
+  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+  const designText=outputs[sid]||'';
+  let totalErrors=0,totalWarnings=0;
+  let reportHtml='';
+  
+  data.forEach(({nodes},idx)=>{
+    const figNum=figOffset+idx+1;
+    const issues=validateDiagramRules(nodes,figNum,designText);
+    const errors=issues.filter(i=>i.severity==='ERROR');
+    const warnings=issues.filter(i=>i.severity==='WARNING');
+    const infos=issues.filter(i=>i.severity==='INFO');
+    totalErrors+=errors.length;
+    totalWarnings+=warnings.length;
+    
+    if(errors.length||warnings.length){
+      reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> `;
+      errors.forEach(e=>reportHtml+=`<span style="color:#c62828;font-size:11px">❌ [${e.rule}] ${e.message} </span>`);
+      warnings.forEach(w=>reportHtml+=`<span style="color:#f57c00;font-size:11px">⚠️ [${w.rule}] ${w.message} </span>`);
+      reportHtml+='</div>';
+    }else{
+      reportHtml+=`<div style="margin:4px 0;color:#2e7d32"><b>도 ${figNum}:</b> ✅ 통과 ${infos.map(i=>`(${i.message})`).join(' ')}</div>`;
+    }
+  });
+  
+  const resultEl=document.getElementById(`validationResult_${sid}`);
+  if(resultEl){
+    if(totalErrors===0&&totalWarnings===0){
+      resultEl.innerHTML=`<span style="color:#2e7d32;font-weight:600">✅ 전체 검증 통과 (${data.length}개 도면)</span>`;
+    }else{
+      resultEl.innerHTML=`<div>
+        <span style="color:#c62828;font-weight:600">❌ 오류 ${totalErrors}건</span>, 
+        <span style="color:#f57c00">⚠️ 경고 ${totalWarnings}건</span>
+        <div style="margin-top:6px;font-size:11px">${reportHtml}</div>
+      </div>`;
+    }
+  }
+  
+  if(totalErrors>0){
+    App.showToast(`도면 검증: 오류 ${totalErrors}건 발견. 재생성 권장.`,'error');
+  }else if(totalWarnings>0){
+    App.showToast(`도면 검증: 경고 ${totalWarnings}건 (수정 권장)`);
+  }else{
+    App.showToast(`도면 검증 통과 ✅ (${data.length}개 도면)`);
+  }
 }
 function downloadPptx(sid){
   // 라이브러리 체크
@@ -2380,11 +2424,21 @@ function downloadPptx(sid){
         });
       }else{
         // 도 2+: 최외곽 박스 있음
+        
+        // ★ 최외곽 프레임과 동일한 참조번호 노드 제외 ★
+        const innerNodes=nodes.filter(n=>{
+          const ref=extractRefNum(n.label,'');
+          if(!ref)return true;
+          return parseInt(ref)!==frameRefNum;
+        });
+        const displayNodes=innerNodes.length>0?innerNodes:nodes;
+        const dCount=displayNodes.length;
+        
         const frameX=PAGE_MARGIN,frameY=PAGE_MARGIN+TITLE_H;
-        const frameW=PAGE_W-0.8,frameH=Math.min(AVAILABLE_H,nodeCount*1.0+0.6);
+        const frameW=PAGE_W-0.8,frameH=Math.min(AVAILABLE_H,dCount*1.0+0.6);
         const framePadY=0.3,innerH=frameH-framePadY*2;
-        const boxH=Math.min(0.55,(innerH-0.15*(nodeCount-1))/nodeCount);
-        const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
+        const boxH=Math.min(0.55,(innerH-0.15*(dCount-1))/dCount);
+        const boxGap=(innerH-boxH*dCount)/(dCount>1?dCount-1:1);
         const boxW=frameW-1.0,boxStartX=frameX+0.5,boxStartY=frameY+framePadY;
         const refLabelX=frameX+frameW+0.1;
         
@@ -2393,7 +2447,7 @@ function downloadPptx(sid){
         slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameY+frameH/2,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
         slide.addText(String(frameRefNum),{x:refLabelX+0.3,y:frameY+frameH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
         
-        nodes.forEach((n,i)=>{
+        displayNodes.forEach((n,i)=>{
           const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
           const fallbackRef=frameRefNum+10*(i+1);
           const refNum=extractRefNum(n.label,String(fallbackRef));
@@ -2401,11 +2455,11 @@ function downloadPptx(sid){
           
           slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
           slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
-          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-dCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
           slide.addText(String(refNum),{x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
-          if(i<nodes.length-1){
+          if(i<displayNodes.length-1){
             const arrowY1=by+boxH,arrowY2=boxStartY+(i+1)*(boxH+boxGap),arrowX=bx+boxW/2;
             if(arrowY2>arrowY1+0.05){
               slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
@@ -2608,8 +2662,18 @@ function downloadDiagramImages(sid, format='jpeg'){
         });
       }else{
         // 도 2+: 최외곽 박스 있음
+        
+        // ★ 최외곽 프레임과 동일한 참조번호 노드 제외 ★
+        const innerNodes=nodes.filter(n=>{
+          const ref=extractRefNum(n.label,'');
+          if(!ref)return true;
+          return parseInt(ref)!==frameRefNum;
+        });
+        const displayNodes=innerNodes.length>0?innerNodes:nodes;
+        const dCount=displayNodes.length;
+        
         const frameX=30,frameY=50;
-        const frameW=680,frameH=Math.min(900,nodeCount*80+50);
+        const frameW=680,frameH=Math.min(900,dCount*80+50);
         
         ctx.fillStyle='#000000';
         ctx.fillRect(frameX+SHADOW,frameY+SHADOW,frameW,frameH);
@@ -2630,11 +2694,11 @@ function downloadDiagramImages(sid, format='jpeg'){
         ctx.fillText(String(frameRefNum),frameX+frameW+30,frameY+frameH/2+4);
         
         const padY=20,innerH=frameH-padY*2;
-        const boxH=Math.min(45,(innerH-10*(nodeCount-1))/nodeCount);
-        const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
+        const boxH=Math.min(45,(innerH-10*(dCount-1))/dCount);
+        const boxGap=(innerH-boxH*dCount)/(dCount>1?dCount-1:1);
         const boxW=frameW-100,boxStartX=frameX+35,boxStartY=frameY+padY;
         
-        nodes.forEach((n,i)=>{
+        displayNodes.forEach((n,i)=>{
           const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
           const fallbackRef=frameRefNum+10*(i+1);
           const refNum=extractRefNum(n.label,String(fallbackRef));
@@ -2648,7 +2712,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.strokeRect(bx,by,boxW,boxH);
           
           ctx.fillStyle='#000000';
-          ctx.font=`${Math.min(13,14-nodeCount*0.5)}px "맑은 고딕", sans-serif`;
+          ctx.font=`${Math.min(13,14-dCount*0.5)}px "맑은 고딕", sans-serif`;
           ctx.textAlign='center';
           ctx.textBaseline='middle';
           ctx.fillText(cleanLabel.slice(0,25),bx+boxW/2,by+boxH/2);
@@ -2663,7 +2727,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.font='11px "맑은 고딕", sans-serif';
           ctx.fillText(String(refNum),frameX+frameW+30,by+boxH/2+4);
           
-          if(i<nodes.length-1){
+          if(i<displayNodes.length-1){
             const arrowX=bx+boxW/2,arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
             if(arrowY2>arrowY1){
               ctx.beginPath();
