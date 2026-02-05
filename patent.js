@@ -1951,6 +1951,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   
   if(isMethodDiagram){
     // ═══ 방법 도면: 흐름도 (최외곽 없음, 단방향 화살표, 시작/종료) ═══
+    const boxW=5.0*PX, boxH=0.7*PX, boxGap=0.8*PX;
     const boxStartX=0.5*PX;
     const boxStartY=0.5*PX;
     const svgW=boxW+2.5*PX;
