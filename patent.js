@@ -800,9 +800,20 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
   [서버(100)] ←→ [사용자 단말(200)] ←→ [데이터베이스(400)]
 
 ■ 도 2 이후: 세부 블록도 (Detailed Block Diagram)
-  특정 L1 장치를 주제로 내부 L2, L3 상세화
-  최외곽 박스 = 해당 L1 장치 (예: 서버(100))
-  내부에 L2, L3 구성요소 배치
+  ⛔⛔ 핵심: 한 도면에는 반드시 "한 레벨"만 표시 ⛔⛔
+  최외곽 박스 = 상위 장치
+  내부 박스 = 그 상위 장치의 직계 자식 레벨만
+  
+  ✅ 올바른 예 (도 2: 서버 상세):
+  최외곽=서버(100), 내부=L2만: 통신부(110), 프로세서(120), 메모리(130)
+  
+  ✅ 올바른 예 (도 3: 프로세서 상세):
+  최외곽=프로세서(120), 내부=L3만: 연산부(121), 캐시부(122)
+  
+  ⛔ 잘못된 예 (L2+L3 혼합):
+  최외곽=서버(100), 내부=프로세서(110)+연산부(111)+캐시부(112)+메모리(120)
+  → 110은 L2, 111/112는 L3 → 레벨 혼합 오류!
+  → 올바른 방법: 도 2에 L2만, 도 3에 L3만 분리
   
   도 2 예시 (서버(100) 상세):
   ┌─────────────────────────────────┐
@@ -1972,14 +1983,15 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const refNum=extractRefNum(n.label,'');
       const displayLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
       const isStartEnd=/시작|종료|START|END/i.test(n.label);
+      const SHADOW_OFFSET=3;
       
-      // 그림자
-      svg+=`<rect x="${bx+2}" y="${by+2}" width="${boxW}" height="${boxH}" rx="6" fill="#ccc" opacity="0.5"/>`;
+      // 그림자 (장치 도면과 동일: 검정 불투명)
+      const rx=isStartEnd?boxH/2:0;
+      svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#000"/>`;
       
-      // 시작/종료는 둥근 모서리 + 다른 스타일
-      const rx=isStartEnd?boxH/2:6;
+      // 박스 본체 (장치 도면과 동일: stroke-width 2, 흰색 배경)
       const fillColor=isStartEnd?'#f5f5f5':'#fff';
-      svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" rx="${rx}" fill="${fillColor}" stroke="#000" stroke-width="${isStartEnd?1.5:1}"/>`;
+      svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" rx="${rx}" fill="${fillColor}" stroke="#000" stroke-width="2"/>`;
       svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       
       // 리더라인 + 부호 (시작/종료에는 없음)
@@ -2251,7 +2263,10 @@ function validateDiagramRules(nodes,figNum,designText){
       if(badL2.length) issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L2(${badL2.join(',')})가 L1(${theL1})의 하위 아님`});
       if(badL3.length) issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L3(${badL3.join(',')})가 L1(${theL1})의 하위 아님`});
       
-      if(!badL2.length&&!badL3.length&&(l2Refs.length>0||l3Refs.length>0)){
+      // ★ 레벨 혼합 검출: L1 프레임 안에 L2+L3 동시 존재 ★
+      if(l2Refs.length>0&&l3Refs.length>0){
+        issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L2(${l2Refs.join(',')})와 L3(${l3Refs.join(',')})가 한 도면에 혼합됨. 한 도면에는 한 레벨만! L2 도면과 L3 도면을 분리해야 함.`});
+      }else if(!badL2.length&&!badL3.length&&(l2Refs.length>0||l3Refs.length>0)){
         issues.push({severity:'INFO',rule:'R6b',message:`도 ${figNum} 최외곽: ${theL1} (L1 자체가 프레임)`});
       }
     }
@@ -2985,9 +3000,19 @@ function downloadDiagramImages(sid, format='jpeg'){
           const cleanLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
           const isStartEnd=/시작|종료|START|END/i.test(n.label);
           
-          // 그림자
+          // 그림자 (시작/종료는 둥근 그림자)
           ctx.fillStyle='#000000';
-          ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
+          if(isStartEnd){
+            const r=boxH/2;
+            ctx.beginPath();
+            ctx.moveTo(bx+SHADOW+r,by+SHADOW);ctx.lineTo(bx+SHADOW+boxW-r,by+SHADOW);ctx.quadraticCurveTo(bx+SHADOW+boxW,by+SHADOW,bx+SHADOW+boxW,by+SHADOW+r);
+            ctx.lineTo(bx+SHADOW+boxW,by+SHADOW+boxH-r);ctx.quadraticCurveTo(bx+SHADOW+boxW,by+SHADOW+boxH,bx+SHADOW+boxW-r,by+SHADOW+boxH);
+            ctx.lineTo(bx+SHADOW+r,by+SHADOW+boxH);ctx.quadraticCurveTo(bx+SHADOW,by+SHADOW+boxH,bx+SHADOW,by+SHADOW+boxH-r);
+            ctx.lineTo(bx+SHADOW,by+SHADOW+r);ctx.quadraticCurveTo(bx+SHADOW,by+SHADOW,bx+SHADOW+r,by+SHADOW);
+            ctx.closePath();ctx.fill();
+          }else{
+            ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
+          }
           
           // 시작/종료는 둥근 모서리 + 다른 배경
           ctx.fillStyle=isStartEnd?'#F5F5F5':'#FFFFFF';
@@ -3001,7 +3026,7 @@ function downloadDiagramImages(sid, format='jpeg'){
             ctx.closePath();ctx.fill();ctx.strokeStyle='#000000';ctx.lineWidth=2;ctx.stroke();
           }else{
             ctx.fillRect(bx,by,boxW,boxH);
-            ctx.strokeStyle='#000000';ctx.lineWidth=1.5;ctx.strokeRect(bx,by,boxW,boxH);
+            ctx.strokeStyle='#000000';ctx.lineWidth=2;ctx.strokeRect(bx,by,boxW,boxH);
           }
           
           ctx.fillStyle='#000000';
