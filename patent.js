@@ -1132,13 +1132,17 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     else if(sid==='step_10'){
       let corrected=outputs[sid];
       let correctionRound=0;const maxRounds=3;
+      // ★ 방법 청구항 검증 시 장치 청구항도 참조 컨텍스트로 제공 ★
+      const deviceClaimsCtx=outputs.step_06||'';
       for(correctionRound=0;correctionRound<maxRounds;correctionRound++){
         App.showProgress('progressStep10',`기재불비 검증 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+1,maxRounds*2+1);
+        // 방법 청구항만 검증 (독립항 자동 감지)
         const issues=validateClaims(corrected);
         if(issues.length===0)break;
         App.showProgress('progressStep10',`기재불비 수정 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+2,maxRounds*2+1);
         const issueText=issues.map(i=>i.message).join('\n');
-        const fixPrompt=`아래 방법 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 상위항(독립항 포함)에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${corrected}`;
+        const firstClaimNum=corrected.match(/【청구항\s*(\d+)】/)?.[1]||'?';
+        const fixPrompt=`아래 방법 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n⛔⛔ 절대 금지: 청구항 번호를 변경하지 마라! 방법 독립항은 반드시 【청구항 ${firstClaimNum}】을 유지해야 한다. 절대로 【청구항 1】로 변경 금지! ⛔⛔\n\n수정 규칙:\n- 【청구항 N】형식 유지 — 번호 변경 금지\n- \"상기\" 선행기재 누락: 방법 독립항(청구항 ${firstClaimNum}) 내에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위 — 번호 유지!]\n${corrected}`;
         const fixR=await App.callClaude(fixPrompt);corrected=fixR.text;
       }
       outputs[sid]=corrected;renderOutput(sid,corrected);
@@ -1641,8 +1645,15 @@ graph TD
 ${src}`;
 }
 
+// ═══ 전역 도면 헬퍼 함수 ═══
+function _extractRefNum(label,fallback){
+  const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
+  return match?match[1]:(fallback||'');
+}
+
 // ═══ 도면 규칙 위반 시 자동 재생성 ═══
 async function regenerateDiagramWithFeedback(sid){
+  if(globalProcessing){App.showToast('다른 작업 진행 중...','error');return;}
   const stepId=sid==='step_07'?'step_07':'step_11';
   const btnId=sid==='step_07'?'btnStep07':'btnStep11';
   
@@ -1657,19 +1668,28 @@ async function regenerateDiagramWithFeedback(sid){
   const errors=window._diagramErrors&&window._diagramErrors.sid===sid?window._diagramErrors.errors:'사용자 요청에 의한 재생성';
   const aiReview=window._aiDiagramReview&&window._aiDiagramReview.sid===sid?window._aiDiagramReview.review:'';
   
+  // 방법/장치 분기
+  const isMethod=stepId==='step_11';
+  
   // 피드백 프롬프트 생성
-  const feedbackPrompt=`이전에 생성한 도면 설계에 규칙 위반이 발견되었습니다. 아래 오류를 수정하여 다시 생성하세요.
+  const feedbackPrompt=`이전에 생성한 ${isMethod?'방법':'장치'} 도면 설계에 규칙 위반이 발견되었습니다. 아래 오류를 수정하여 다시 생성하세요.
 
 ═══ 발견된 오류 ═══
 ${errors}
 ${aiReview?`\n═══ AI 연결관계 검증 결과 ═══\n${aiReview}\n`:''}
 ═══ 핵심 규칙 리마인더 ═══
+${isMethod?`[방법 도면 규칙]
+- 흐름도 형식: 시작 → 단계들 → 종료
+- 참조번호: S301, S302... (S+숫자)
+- 단방향 화살표만 사용
+- 최외곽 박스 없음
+- 시작/종료 노드 필수`:`[장치 도면 규칙]
 [R1] 도면부호 계층: L1(X00), L2(XY0), L3(XYZ), L4(XYZW)
 [R5] 도 1: L1 장치만 허용 (100, 200, 300...). L2/L3(110, 111...) 절대 금지
 [R6] 도 2+: 하나의 상위 장치만 상세화
      - 내부가 L2(110,120,130)이면 최외곽은 L1(100)
      - 내부가 L3(111,112,113)이면 최외곽은 L2(110)
-     - 내부가 L4(1211,1212)이면 최외곽은 L3(121)
+     - 내부가 L4(1211,1212)이면 최외곽은 L3(121)`}
      
 ★★ 연결관계 규칙 ★★
 - 데이터/정보 도면: 정보 항목은 서버 입력용이므로 상호 간 화살표 연결 부적절 → 병렬 배치
@@ -1680,14 +1700,17 @@ ${aiReview?`\n═══ AI 연결관계 검증 결과 ═══\n${aiReview}\n`:
 ${prevDesign.slice(0,2000)}
 
 위 오류를 모두 수정하여 도면 설계를 다시 출력하세요.
-도 1에는 반드시 L1 장치만 포함해야 합니다!`;
+${isMethod?'방법 흐름도는 시작/종료 노드를 반드시 포함!':'도 1에는 반드시 L1 장치만 포함해야 합니다!'}`;
 
-  App.setButtonLoading(btnId,true);
+  setGlobalProcessing(true);
+  const btnEl=document.getElementById(btnId);
+  if(btnEl)App.setButtonLoading(btnId,true);
   
   try{
     const r1=await App.callClaude(feedbackPrompt);
     outputs[stepId]=r1.text;
-    document.getElementById(stepId==='step_07'?'resStep07':'resStep11').value=r1.text;
+    const resEl=document.getElementById(stepId==='step_07'?'resStep07':'resStep11');
+    if(resEl)resEl.value=r1.text;
     autoSaveProject();
     
     // Mermaid 변환
@@ -1700,7 +1723,8 @@ ${prevDesign.slice(0,2000)}
   }catch(e){
     App.showToast('재생성 실패: '+e.message,'error');
   }finally{
-    App.setButtonLoading(btnId,false);
+    if(btnEl)App.setButtonLoading(btnId,false);
+    setGlobalProcessing(false);
   }
 }
 
@@ -1746,37 +1770,54 @@ function validateDiagramDesignText(text){
 function parseMermaidGraph(code){
   const nodes={},edges=[];
   
-  // 먼저 모든 노드 정의를 추출 (라벨 포함)
-  const nodeDefPattern=/(\w+)\s*\[\s*["']?([^\]"']+?)["']?\s*\]/g;
-  let nodeMatch;
-  while((nodeMatch=nodeDefPattern.exec(code))!==null){
-    const[,id,label]=nodeMatch;
-    // 라벨에 화살표 문법이 포함되어 있으면 무시 (파싱 오류)
-    if(label.includes('-->')||label.includes('<--')||label.includes('---')){
-      console.warn('Invalid label detected:',label);
-      continue;
-    }
-    if(!nodes[id]){
-      nodes[id]={id,label:label.trim()};
-    }
-  }
+  // ★ 다양한 Mermaid 노드 형태 지원 ★
+  // 1. A["label"] - 사각형
+  // 2. A(["label"]) - 스타디움 (시작/종료)
+  // 3. A("label") - 둥근 사각형
+  // 4. A{"label"} - 다이아몬드 (조건 분기)
+  // 5. A[/"label"/] - 평행사변형
+  // 6. A(("label")) - 원형
   
-  // 연결선 추출 (노드 정의 부분 제외)
+  // 먼저 줄 단위로 노드 정의 추출
+  code.split('\n').forEach(line=>{
+    const l=line.trim();
+    if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef'))return;
+    
+    // 노드 정의 패턴들 (순서 중요: 더 복잡한 패턴 먼저)
+    const patterns=[
+      /(\w+)\s*\(\[\s*["']?([^\]"']+?)["']?\s*\]\)/g,   // A(["label"]) stadium
+      /(\w+)\s*\(\(\s*["']?([^)"']+?)["']?\s*\)\)/g,     // A(("label")) circle
+      /(\w+)\s*\{\s*["']?([^}"']+?)["']?\s*\}/g,          // A{"label"} diamond
+      /(\w+)\s*\(\s*["']?([^)"']+?)["']?\s*\)/g,          // A("label") round
+      /(\w+)\s*\[\s*["']?([^\]"']+?)["']?\s*\]/g,         // A["label"] rect
+    ];
+    
+    patterns.forEach(pat=>{
+      pat.lastIndex=0;
+      let nm;
+      while((nm=pat.exec(l))!==null){
+        const[,id,label]=nm;
+        if(label.includes('-->')||label.includes('<--')||label.includes('---'))continue;
+        if(!nodes[id])nodes[id]={id,label:label.trim()};
+      }
+    });
+  });
+  
+  // 연결선 추출
   code.split('\n').forEach(line=>{
     const l=line.trim();
     if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef')||l.startsWith('subgraph'))return;
     
-    // 연결 패턴만 추출: A --> B, A <--> B, A --- B
-    const connections=l.match(/(\w+)\s*(-->|<-->|---)\s*(\w+)/g);
+    // 연결 패턴: A --> B, A <--> B, A --- B, A -->|text| B
+    const connections=l.match(/(\w+)\s*(?:-->|<-->|---)\s*(?:\|[^|]*\|\s*)?(\w+)/g);
     if(connections){
       connections.forEach(conn=>{
-        const cm=conn.match(/(\w+)\s*(-->|<-->|---)\s*(\w+)/);
+        const cm=conn.match(/(\w+)\s*(-->|<-->|---)\s*(?:\|([^|]*)\|\s*)?(\w+)/);
         if(cm){
-          const[,from,arrow,to]=cm;
-          // 노드가 없으면 ID를 라벨로 사용
+          const[,from,arrow,edgeLabel,to]=cm;
           if(!nodes[from])nodes[from]={id:from,label:from};
           if(!nodes[to])nodes[to]={id:to,label:to};
-          edges.push({from,to,label:'',bidirectional:arrow==='<-->'});
+          edges.push({from,to,label:edgeLabel||'',bidirectional:arrow==='<-->'});
         }
       });
     }
@@ -2135,12 +2176,13 @@ function validateDiagramRules(nodes,figNum,designText){
   }
   
   // ═══ R1. 라벨 오류 (Mermaid 코드 잔재) ═══
+  const isFlowchartNode=lb=>/^(시작|종료|START|END|S|E)$/i.test(lb.trim());
   nodes.forEach(n=>{
     const lb=n.label||'';
     if(lb.includes('"]')||lb.includes('<-->')||lb.includes('-->')){
       issues.push({severity:'ERROR',rule:'R1',message:`도 ${figNum}: 파싱 오류 - "${lb.slice(0,30)}..."`});
     }
-    if(lb===n.id&&!/^\d+$/.test(lb)){
+    if(lb===n.id&&!/^\d+$/.test(lb)&&!isFlowchartNode(lb)){
       issues.push({severity:'WARNING',rule:'R1',message:`도 ${figNum}: 노드 "${n.id}" 라벨 추출 실패`});
     }
   });
@@ -2152,8 +2194,9 @@ function validateDiagramRules(nodes,figNum,designText){
     }
   });
   
-  // ═══ R3. 참조번호 존재 여부 ═══
+  // ═══ R3. 참조번호 존재 여부 (시작/종료 노드 제외) ═══
   nodes.forEach(n=>{
+    if(isFlowchartNode(n.label))return; // 시작/종료 노드는 참조번호 불필요
     if(!extractRef(n.label)){
       issues.push({severity:'WARNING',rule:'R3',message:`"${n.label}" - 참조번호 없음`});
     }
@@ -2173,6 +2216,14 @@ function validateDiagramRules(nodes,figNum,designText){
   const l3Refs=numRefs.filter(n=>n>=100&&n<1000&&n%10!==0);
   const l4Refs=numRefs.filter(n=>n>=1000&&n<10000);
   const smallRefs=numRefs.filter(n=>n<100);
+  
+  // ★ 방법 도면 판별: S참조번호 또는 시작/종료 노드 ★
+  const sRefCount=allRefs.filter(r=>String(r).startsWith('S')).length;
+  const hasFlowchartNodes=nodes.some(n=>/^(시작|종료|START|END)$/i.test(n.label.trim()));
+  const isMethodFig=sRefCount>0||hasFlowchartNodes;
+  
+  // ═══ R5~R7: 장치 도면 전용 규칙 (방법 도면은 건너뜀) ═══
+  if(!isMethodFig){
   
   // ═══ R5. 도 1 규칙: L1만 허용 ═══
   if(figNum===1){
@@ -2283,6 +2334,8 @@ function validateDiagramRules(nodes,figNum,designText){
       }
     }
   }
+  
+  } // end if(!isMethodFig) — 장치 도면 전용 규칙 끝
   
   // ═══ R8. 방법 도면 검증 ═══
   const sRefs=allRefs.filter(r=>String(r).startsWith('S'));
@@ -2495,8 +2548,8 @@ async function runAIDiagramReview(sid){
   data.forEach(({nodes,edges},idx)=>{
     const figNum=figOffset+idx+1;
     const nodeList=nodes.map(n=>{
-      const ref=extractRefNum(n.label,'?');
-      const clean=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+      const ref=_extractRefNum(n.label,'?');
+      const clean=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
       return `${clean}(${ref})`;
     }).join(', ');
     const edgeList=(edges||[]).map(e=>{
@@ -2860,12 +2913,34 @@ function downloadDiagramImages(sid, format='jpeg'){
   
   App.showToast(`도면 이미지 생성 중... (${data.length}개)`);
   
-  // 순차 다운로드를 위한 인덱스
+  // ★ ZIP 일괄 다운로드 ★
+  const zip=typeof JSZip!=='undefined'?new JSZip():null;
+  const imageFiles=[];
   let currentIdx=0;
   
-  function downloadNext(){
+  function processNext(){
     if(currentIdx>=data.length){
-      App.showToast(`도면 이미지 ${data.length}개 다운로드 완료`);
+      // 모든 이미지 생성 완료 → ZIP 다운로드
+      if(zip&&imageFiles.length>0){
+        imageFiles.forEach(f=>zip.file(f.name,f.blob));
+        zip.generateAsync({type:'blob'}).then(blob=>{
+          const link=document.createElement('a');
+          link.download=`${caseNum}_도면_${format==='tif'?'png':format}.zip`;
+          link.href=URL.createObjectURL(blob);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(link.href);
+          App.showToast(`도면 ${imageFiles.length}개 ZIP 다운로드 완료`);
+        }).catch(e=>{
+          App.showToast('ZIP 생성 실패: '+e.message,'error');
+          // 폴백: 개별 다운로드
+          fallbackIndividualDownload();
+        });
+      }else{
+        // JSZip 없으면 개별 다운로드
+        fallbackIndividualDownload();
+      }
       return;
     }
     
@@ -3112,30 +3187,44 @@ function downloadDiagramImages(sid, format='jpeg'){
     } // end else (장치 도면)
     } // end if(nodes.length)
     
-    // 다운로드 실행
+    // 이미지를 ZIP에 추가
     try{
-      const link=document.createElement('a');
-      if(format==='tif'||format==='tiff'){
-        // TIF는 PNG로 대체 (UTIF 문제 많음)
-        link.download=`${caseNum}_도${figNum}.png`;
-        link.href=canvas.toDataURL('image/png');
-      }else{
-        link.download=`${caseNum}_도${figNum}.jpg`;
-        link.href=canvas.toDataURL('image/jpeg',0.95);
-      }
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const ext=(format==='tif'||format==='tiff')?'png':(format==='jpeg'?'jpg':format);
+      const mimeType=(format==='tif'||format==='tiff')?'image/png':`image/${format==='jpeg'?'jpeg':'png'}`;
+      const quality=format==='jpeg'?0.95:undefined;
+      const fileName=`${caseNum}_도${figNum}.${ext}`;
       
-      currentIdx++;
-      setTimeout(downloadNext,500); // 다음 다운로드
+      canvas.toBlob(blob=>{
+        if(blob){
+          imageFiles.push({name:fileName,blob:blob});
+        }
+        currentIdx++;
+        setTimeout(processNext,50);
+      },mimeType,quality);
     }catch(e){
-      console.error('다운로드 실패:',e);
-      App.showToast('다운로드 실패: '+e.message,'error');
+      console.error('이미지 생성 실패:',e);
+      currentIdx++;
+      setTimeout(processNext,50);
     }
   }
   
-  downloadNext();
+  // 폴백: JSZip 없을 때 개별 다운로드
+  function fallbackIndividualDownload(){
+    imageFiles.forEach((f,i)=>{
+      setTimeout(()=>{
+        const link=document.createElement('a');
+        link.download=f.name;
+        link.href=URL.createObjectURL(f.blob);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+      },i*500);
+    });
+    App.showToast(`도면 ${imageFiles.length}개 개별 다운로드`);
+  }
+  
+  processNext();
 }
 
 // 특허 도면용 레이아웃 계산 (A4 세로)
@@ -3198,7 +3287,20 @@ function validateClaims(text){
   const iss=[];if(!text)return iss;const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,claims={};let m;
   while((m=cp.exec(text))!==null)claims[parseInt(m[1])]=m[2].trim();
   if(!Object.keys(claims).length){iss.push({severity:'HIGH',message:'청구항 파싱 실패'});return iss;}
-  if(!claims[1])iss.push({severity:'CRITICAL',message:'독립항(청구항 1) 없음'});
+  
+  // ★ 동적 독립항 감지: 가장 작은 번호가 독립항 ★
+  const claimNums=Object.keys(claims).map(Number).sort((a,b)=>a-b);
+  const firstClaimNum=claimNums[0];
+  
+  // 독립항 판별: "N항에 있어서"가 없는 청구항 = 독립항
+  const independentClaims=claimNums.filter(n=>{
+    const ct=claims[n];
+    return !/청구항\s*\d+에\s*있어서/.test(ct)&&!/제\s*\d+\s*항에\s*있어서/.test(ct);
+  });
+  
+  if(independentClaims.length===0){
+    iss.push({severity:'CRITICAL',message:'독립항 없음 (모든 청구항이 종속항)'});
+  }
   
   // 각 청구항의 인용 정보 수집 (다중인용 검증용)
   const claimRefs={};
@@ -3216,7 +3318,9 @@ function validateClaims(text){
   });
   
   Object.entries(claims).forEach(([num,ct])=>{const n=parseInt(num);
-    if(n>1){const rm=ct.match(/청구항\s*(\d+)에\s*있어서/),rn=rm?parseInt(rm[1]):1;
+    // 종속항 판별: "N항에 있어서" 존재 여부
+    const isDependent=/청구항\s*\d+에\s*있어서/.test(ct)||/제\s*\d+\s*항에\s*있어서/.test(ct);
+    if(isDependent){const rm=ct.match(/청구항\s*(\d+)에\s*있어서/)||ct.match(/제\s*(\d+)\s*항에\s*있어서/),rn=rm?parseInt(rm[1]):firstClaimNum;
       if(rm){if(!claims[rn])iss.push({severity:'HIGH',message:`청구항 ${num}: 참조 청구항 ${rn} 없음`});if(rn>=n)iss.push({severity:'HIGH',message:`청구항 ${num}: 자기/후행 청구항 참조`});}
       
       // ★ 대통령령 종속항 규칙 검증 ★
