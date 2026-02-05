@@ -698,6 +698,12 @@ function buildPrompt(stepId){
 
 (R4) 일반 종속항: 상위항 인용하여 구체화·확장. 수치/수식 과도하게 고정하지 않고, 후속 Step 8/9/13에서 상세화 가능하도록 문장 구성.
 
+★★ 종속항 작성 규칙 (대통령령 — 위반 시 기재불비) ★★
+① 종속항은 독립항 또는 다른 종속항 중 1 또는 2 이상의 항을 인용하되, 인용 항의 번호를 기재
+② 2 이상의 항을 인용하는 종속항(다중인용)은 인용 항 번호를 택일적으로 기재 ("제N항 또는 제M항에 있어서")
+③ 다중인용 종속항은 다른 다중인용 종속항을 인용 불가 (다중인용의 다중인용 금지)
+④ 종속항은 인용하는 독립항 또는 종속항보다 뒤에 기재 (번호 역전 금지)
+
 (R5) 등록 앵커 종속항 (청구항 ${deviceAnchorStart}부터):
 - 신규성/진보성 방어용 \"창의적·구체적 기술수단\" 포함
 - 수치·수식·기호 과다 기재 금지 (후속 단계에서 정량화)
@@ -951,6 +957,17 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.st
 - 종결어: ${getCategoryEnding(methodCategory==='auto'?'method':methodCategory)}
 - \"~하는 단계\"를 포함하는 방법 형식
 
+★★ 청구항 번호 규칙 (필수) ★★
+- 장치 청구항의 마지막 번호가 ${s-1}이므로, 방법 독립항은 반드시 【청구항 ${s}】부터 시작
+- 방법 종속항은 반드시 방법 독립항(청구항 ${s}) 또는 방법 종속항만 인용
+- 장치 청구항(청구항 1~${s-1})을 인용해서는 안 됨
+
+★★ 종속항 작성 규칙 (대통령령 — 위반 시 기재불비) ★★
+① 종속항은 독립항 또는 다른 종속항 중 1 또는 2 이상의 항을 인용하되, 인용 항의 번호를 기재
+② 2 이상의 항을 인용하는 종속항(다중인용)은 인용 항 번호를 택일적으로 기재 (\"제N항 또는 제M항에 있어서\")
+③ 다중인용 종속항은 다른 다중인용 종속항을 인용 불가 (다중인용의 다중인용 금지)
+④ 종속항은 인용하는 독립항 또는 종속항보다 뒤에 기재 (번호 역전 금지)
+
 [필수 작성 규칙] R1~R5 장치 청구항과 동일하게 적용.
 앵커 종속항은 (R5) 규칙 동일 적용: A~C 중 최소 2개 포함.
 
@@ -974,6 +991,12 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
 - 숫자만 있는 참조번호(100, 110, 200 등) 사용 금지
 - 이 도면은 오직 "방법의 단계"만 표현한다
 
+★★★ 흐름도 필수 규칙 ★★★
+① 최외곽 박스 없음 — 흐름도는 장치가 아니므로 감싸는 프레임 박스 불필요
+② 단방향 화살표(→)만 사용 — 순서의 흐름을 나타내므로 양방향(↔) 금지
+③ "시작"과 "종료" 노드 필수 포함 — 첫 단계 전에 "시작", 마지막 단계 후에 "종료"
+④ 조건 분기가 있으면 다이아몬드(마름모) 노드 사용
+
 [방법 단계번호 체계 — 필수 준수]
 
 ■ 단계번호 형식: S + 숫자
@@ -993,12 +1016,14 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
 각 도면별로 아래 형식 출력:
 ---
 도 ${lf+1}: (방법 이름) 흐름도
-유형: 순서도
+유형: 순서도 (최외곽 박스 없음)
 단계 목록:
+- 시작
 - (단계명)(S${lf+1}01)
 - (단계명)(S${lf+1}02)
 - ...
-흐름: (단계 간 연결 순서)
+- 종료
+흐름: 시작 → S${lf+1}01 → S${lf+1}02 → ... → 종료 (단방향)
 ---
 
 [파트2: 도면의 간단한 설명]
@@ -1006,6 +1031,7 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
 도 ${lf+1}은 (방법 이름)의 (설명)을 나타내는 순서도이다.
 
 ★★★ 방법 청구항의 모든 단계를 빠짐없이 흐름도에 반영하라 ★★★
+★★★ 최외곽 프레임 박스 절대 금지 — 흐름도는 프레임 없이 단계만 나열 ★★★
 ★★★ 장치 구성요소(100, 110 등)는 절대 포함 금지 — S로 시작하는 단계번호만 사용 ★★★
 
 ${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
@@ -1092,7 +1118,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
         if(issues.length===0)break;
         App.showProgress('progressStep06',`기재불비 수정 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+2,maxRounds*2+1);
         const issueText=issues.map(i=>i.message).join('\n');
-        const fixPrompt=`아래 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 상위항(독립항 포함)에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 상위항에 추가할 때는 독립항의 범위가 과도하게 좁아지지 않도록 주의\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${corrected}`;
+        const fixPrompt=`아래 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 상위항(독립항 포함)에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 상위항에 추가할 때는 독립항의 범위가 과도하게 좁아지지 않도록 주의\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${corrected}`;
         const fixR=await App.callClaude(fixPrompt);corrected=fixR.text;
       }
       outputs[sid]=corrected;renderOutput(sid,corrected);
@@ -1112,7 +1138,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
         if(issues.length===0)break;
         App.showProgress('progressStep10',`기재불비 수정 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+2,maxRounds*2+1);
         const issueText=issues.map(i=>i.message).join('\n');
-        const fixPrompt=`아래 방법 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 상위항(독립항 포함)에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${corrected}`;
+        const fixPrompt=`아래 방법 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 상위항(독립항 포함)에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${corrected}`;
         const fixR=await App.callClaude(fixPrompt);corrected=fixR.text;
       }
       outputs[sid]=corrected;renderOutput(sid,corrected);
@@ -1412,7 +1438,7 @@ ${diagram}`,4096);
           
           // 참조번호 추출 함수
           function extractRefNum(label,fallback){
-            const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
+            const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
             return match?match[1]:fallback;
           }
           
@@ -1570,14 +1596,34 @@ graph TD
   → 렌더링: 최외곽 프레임=100, 내부 박스=110,120,130 (100은 프레임으로만)
 - 도 3+ (L2 상세화): L2(110)와 그 L3 하위(111,112,113) 포함
   → 렌더링: 최외곽 프레임=110, 내부 박스=111,112,113 (110은 프레임으로만)
+- L4 (L3 상세화): L3(121)과 그 L4 하위(1211,1212) 포함
+  → 렌더링: 최외곽 프레임=121, 내부 박스=1211,1212 (121은 프레임으로만)
+
+★★ 연결관계 규칙 ★★
+- 데이터/정보 도면(~정보, ~데이터): 정보 항목은 서버 입력 데이터 → 상호 화살표 연결 부적절 → 연결선 없이 병렬 배치 (노드 정의만, A --> B 금지)
+- 장치 블록도: 데이터 흐름이 있는 구성요소만 --> 연결
+- 상위 구성(110)과 하위 구성(111,112,113)을 같은 레벨에 표현 금지
 
 ★ 모든 구성요소를 빠짐없이 노드로 포함! ★`;
   } else if(isMethod){
     rules+=`
-═══ 방법 도면 규칙 ═══
-- 노드 라벨에 단계번호 포함: A["데이터 수신 단계(S401)"]
-- 단계번호는 S+숫자 (S401, S402...)
-- 숫자만 있는 참조번호(100, 110) 사용 금지`;
+═══ 방법 도면 규칙 (흐름도) ═══
+★★ 핵심 규칙 ★★
+① 최외곽 프레임 박스 절대 없음 — 흐름도는 단계 나열이므로 감싸는 박스 불필요
+② 단방향 화살표(-->)만 사용 — 양방향(<-->) 절대 금지
+③ "시작"과 "종료" 노드 필수 — 첫 단계 앞에 START, 마지막 단계 뒤에 END
+④ 숫자만 있는 참조번호(100, 110) 절대 사용 금지
+
+★★ 노드 형식 ★★
+- 시작/종료: START(["시작"]), END(["종료"]) — 둥근 사각형
+- 단계 노드: A["단계명(S번호)"] — 예: A["데이터 수신 단계(S901)"]
+- 조건 분기: D{"조건?"} — 다이아몬드
+
+★★ 연결 형식 ★★
+- START --> A (시작에서 첫 단계)
+- A --> B --> C (단계 순서)
+- Z --> END (마지막 단계에서 종료)
+- 모든 화살표는 --> (단방향만)`;
   }
   
   return `아래 도면 설계를 Mermaid flowchart 코드로 변환하라. 각 도면당 \`\`\`mermaid 블록 1개.
@@ -1609,22 +1655,26 @@ async function regenerateDiagramWithFeedback(sid){
   
   // 에러 정보 (있으면 사용, 없으면 일반 재생성)
   const errors=window._diagramErrors&&window._diagramErrors.sid===sid?window._diagramErrors.errors:'사용자 요청에 의한 재생성';
+  const aiReview=window._aiDiagramReview&&window._aiDiagramReview.sid===sid?window._aiDiagramReview.review:'';
   
   // 피드백 프롬프트 생성
   const feedbackPrompt=`이전에 생성한 도면 설계에 규칙 위반이 발견되었습니다. 아래 오류를 수정하여 다시 생성하세요.
 
 ═══ 발견된 오류 ═══
 ${errors}
-
+${aiReview?`\n═══ AI 연결관계 검증 결과 ═══\n${aiReview}\n`:''}
 ═══ 핵심 규칙 리마인더 ═══
-[R1] 도면부호 계층: L1(X00), L2(XY0), L3(XYZ)
+[R1] 도면부호 계층: L1(X00), L2(XY0), L3(XYZ), L4(XYZW)
 [R5] 도 1: L1 장치만 허용 (100, 200, 300...). L2/L3(110, 111...) 절대 금지
 [R6] 도 2+: 하나의 상위 장치만 상세화
-     - 내부가 L2(110,120,130)이면 최외곽은 L1(100) — L1은 프레임으로만 표시
+     - 내부가 L2(110,120,130)이면 최외곽은 L1(100)
      - 내부가 L3(111,112,113)이면 최외곽은 L2(110)
+     - 내부가 L4(1211,1212)이면 최외곽은 L3(121)
      
-★★ 중요: 도 2+에서 L1(예: 서버(100))이 포함되면 L1은 최외곽 프레임이 되므로
-   내부 박스에는 L2(110,120,130...) 하위 구성요소만 포함해야 함! ★★
+★★ 연결관계 규칙 ★★
+- 데이터/정보 도면: 정보 항목은 서버 입력용이므로 상호 간 화살표 연결 부적절 → 병렬 배치
+- 장치 블록도: 기술적 데이터 흐름이 있으면 화살표 연결
+- 상위+하위 구성이 같은 레벨에 표현 금지 → 하위는 상위 내부에 포함
 
 ═══ 이전 도면 설계 (오류 포함) ═══
 ${prevDesign.slice(0,2000)}
@@ -1762,70 +1812,155 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   
   // 노드 라벨에서 참조번호 추출 함수
   function extractRefNum(label,fallback){
-    const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
+    const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
     return match?match[1]:fallback;
   }
   
   // L1 여부 판별 (X00 형식인지)
   function isL1RefNum(ref){
-    if(!ref||ref.startsWith('S'))return false;
-    const num=parseInt(ref);
-    return num>=100&&num%100===0;
+    if(!ref||String(ref).startsWith('S'))return false;
+    const s=String(ref);
+    // D접두사: D2→최상위, D21→하위
+    if(s.startsWith('D')){const n=parseInt(s.slice(1));return !isNaN(n)&&n<10;}
+    const num=parseInt(s);
+    if(isNaN(num))return false;
+    // 소수(1~9): 최상위
+    if(num<10)return true;
+    // 2자리(10~99): 하위
+    if(num<100)return false;
+    // 3자리: L1=X00
+    if(num<1000)return num%100===0;
+    // 4자리: L4이므로 아님
+    return false;
   }
   
-  // ★ 직계 부모 찾기 함수 v5.0 ★
+  // ★ 직계 부모 찾기 함수 v6.0 (L4 + 소수 지원) ★
   function findImmediateParent(refNums){
-    const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
+    const nums=refNums.filter(r=>r&&!String(r).startsWith('S')).map(r=>{const s=String(r);return s.startsWith('D')?parseInt(s.slice(1)):parseInt(s);}).filter(n=>!isNaN(n)&&n>0);
     if(!nums.length)return null;
     
-    const l1s=nums.filter(n=>n%100===0);
-    const l2s=nums.filter(n=>n%10===0&&n%100!==0);
-    const l3s=nums.filter(n=>n%10!==0);
+    const l1s=nums.filter(n=>n>=100&&n<1000&&n%100===0);
+    const l2s=nums.filter(n=>n>=100&&n<1000&&n%10===0&&n%100!==0);
+    const l3s=nums.filter(n=>n>=100&&n<1000&&n%10!==0);
+    const l4s=nums.filter(n=>n>=1000&&n<10000);
+    const smalls=nums.filter(n=>n<100);
     
-    console.log('findImmediateParent:', {nums, l1s, l2s, l3s});
+    console.log('findImmediateParent v6:', {nums,l1s,l2s,l3s,l4s,smalls});
     
-    // 케이스 1: L1 포함
-    if(l1s.length>0){
-      if(l1s.length===1&&(l2s.length>0||l3s.length>0)){
-        const theL1=l1s[0];
-        const allBelong=l2s.every(n=>Math.floor(n/100)*100===theL1)&&
-                        l3s.every(n=>Math.floor(n/100)*100===theL1);
-        if(allBelong)return theL1;
+    // ── L4 포함 ──
+    if(l4s.length>0){
+      if(l3s.length===1&&l2s.length===0&&l1s.length===0){
+        const theL3=l3s[0];
+        if(l4s.every(n=>Math.floor(n/10)===theL3))return theL3;
+      }
+      if(l3s.length===0&&l2s.length===0&&l1s.length===0&&smalls.length===0){
+        const parents=[...new Set(l4s.map(n=>Math.floor(n/10)))];
+        if(parents.length===1)return parents[0];
       }
       return null;
     }
-    
-    // 케이스 2: L2만
-    if(l2s.length>0&&l3s.length===0){
-      const parents=[...new Set(l2s.map(n=>Math.floor(n/100)*100))];
-      return parents.length===1?parents[0]:null;
-    }
-    
-    // 케이스 3: L2+L3 혼합 ★핵심 수정★
-    if(l2s.length>0&&l3s.length>0){
-      // L2가 1개이고 모든 L3가 그 L2의 직계 자식인지 확인
-      if(l2s.length===1){
-        const theL2=l2s[0];
-        const allL3BelongToL2=l3s.every(n=>Math.floor(n/10)*10===theL2);
-        if(allL3BelongToL2){
-          return theL2; // [110, 111, 112, 113] → 110 ✅
-        }
+    // ── L1 포함 ──
+    if(l1s.length>0){
+      if(l1s.length===1&&(l2s.length>0||l3s.length>0)){
+        const t=l1s[0];
+        if(l2s.every(n=>Math.floor(n/100)*100===t)&&l3s.every(n=>Math.floor(n/100)*100===t))return t;
       }
-      // L2가 여러개이면 공통 부모 찾기
-      const allNums=[...l2s,...l3s];
-      const l1Parents=[...new Set(allNums.map(n=>Math.floor(n/100)*100))];
-      return l1Parents.length===1?l1Parents[0]:null;
+      return null;
     }
-    
-    // 케이스 4: L3만
+    // ── L2만 ──
+    if(l2s.length>0&&l3s.length===0){
+      const p=[...new Set(l2s.map(n=>Math.floor(n/100)*100))];
+      return p.length===1?p[0]:null;
+    }
+    // ── L2+L3 ──
+    if(l2s.length>0&&l3s.length>0){
+      if(l2s.length===1&&l3s.every(n=>Math.floor(n/10)*10===l2s[0]))return l2s[0];
+      const p=[...new Set([...l2s,...l3s].map(n=>Math.floor(n/100)*100))];
+      return p.length===1?p[0]:null;
+    }
+    // ── L3만 ──
     if(l3s.length>0){
-      const l2Parents=[...new Set(l3s.map(n=>Math.floor(n/10)*10))];
-      if(l2Parents.length===1)return l2Parents[0];
-      const l1Parents=[...new Set(l2Parents.map(p=>Math.floor(p/100)*100))];
-      return l1Parents.length===1?l1Parents[0]:null;
+      const l2p=[...new Set(l3s.map(n=>Math.floor(n/10)*10))];
+      if(l2p.length===1)return l2p[0];
+      const l1p=[...new Set(l2p.map(p=>Math.floor(p/100)*100))];
+      return l1p.length===1?l1p[0]:null;
     }
-    
+    // ── 소수 (<100): 데이터/정보 참조번호 ──
+    if(smalls.length>0){
+      const singles=smalls.filter(n=>n<10);
+      const doubles=smalls.filter(n=>n>=10);
+      if(singles.length===1&&doubles.length>0){
+        if(doubles.every(n=>Math.floor(n/10)===singles[0]))return singles[0];
+      }
+      if(singles.length===0&&doubles.length>0){
+        const p=[...new Set(doubles.map(n=>Math.floor(n/10)))];
+        if(p.length===1)return p[0];
+      }
+    }
     return null;
+  }
+  
+  // 화살표 표시 여부 (edges가 없으면 병렬 배치)
+  const hasEdges=edges&&edges.length>0;
+  
+  // ★ 방법 도면 판별: S접두사 참조번호 또는 "시작"/"종료" 노드 존재 ★
+  const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
+  const isMethodDiagram=allRefs.some(r=>String(r).startsWith('S'))||
+    nodes.some(n=>/시작|종료|START|END/i.test(n.label));
+  
+  if(isMethodDiagram){
+    // ═══ 방법 도면: 흐름도 (최외곽 없음, 단방향 화살표, 시작/종료) ═══
+    const boxStartX=0.5*PX;
+    const boxStartY=0.5*PX;
+    const svgW=boxW+2.5*PX;
+    const svgH=nodes.length*(boxH+boxGap)+1*PX;
+    
+    let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:550px;background:white;border-radius:8px">`;
+    
+    // 화살표 마커 (단방향만)
+    const mkId=`ah_${containerId}`;
+    svg+=`<defs>
+      <marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#000"/>
+      </marker>
+    </defs>`;
+    
+    nodes.forEach((n,i)=>{
+      const bx=boxStartX, by=boxStartY+i*(boxH+boxGap);
+      const refNum=extractRefNum(n.label,'');
+      const displayLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
+      const isStartEnd=/시작|종료|START|END/i.test(n.label);
+      
+      // 그림자
+      svg+=`<rect x="${bx+2}" y="${by+2}" width="${boxW}" height="${boxH}" rx="6" fill="#ccc" opacity="0.5"/>`;
+      
+      // 시작/종료는 둥근 모서리 + 다른 스타일
+      const rx=isStartEnd?boxH/2:6;
+      const fillColor=isStartEnd?'#f5f5f5':'#fff';
+      svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" rx="${rx}" fill="${fillColor}" stroke="#000" stroke-width="${isStartEnd?1.5:1}"/>`;
+      svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      
+      // 리더라인 + 부호 (시작/종료에는 없음)
+      if(refNum&&!isStartEnd){
+        const leaderEndX=bx+boxW+0.3*PX;
+        const leaderY=by+boxH/2;
+        svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
+        svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      }
+      
+      // 단방향 화살표 (위→아래, marker-end만)
+      if(i<nodes.length-1){
+        const arrowX=bx+boxW/2;
+        const arrowY1=by+boxH+2;
+        const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+        svg+=`<line x1="${arrowX}" y1="${arrowY1}" x2="${arrowX}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-end="url(#${mkId})"/>`;
+      }
+    });
+    
+    svg+='</svg>';
+    const c=document.getElementById(containerId);
+    if(c)c.innerHTML=svg;
+    return; // 방법 도면 처리 완료
   }
   
   // 모든 노드가 L1인지 확인 (도 1 판별)
@@ -1838,9 +1973,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   const isFig1=figNum===1||allL1;
   
   // ★ 최외곽 박스 참조번호 = 직계 부모 ★
-  const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
-  let frameRefNum=findImmediateParent(allRefs);
-  if(!frameRefNum&&allRefs.length>0){
+  const allRefsForFrame=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
+  let frameRefNum=findImmediateParent(allRefsForFrame);
+  if(!frameRefNum&&allRefsForFrame.length>0){
     // 폴백 개선: 첫 번째 참조번호의 L1 부모 사용
     const firstRef=parseInt(allRefs[0])||100;
     frameRefNum=Math.floor(firstRef/100)*100;
@@ -1887,8 +2022,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
       svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       
-      // L1 간 연결선 (양방향 화살표)
-      if(i<nodes.length-1){
+      // L1 간 연결선 (양방향 화살표) - edges가 있을 때만
+      if(hasEdges&&i<nodes.length-1){
         const arrowX=bx+boxW/2;
         const arrowY1=by+boxH+2;
         const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
@@ -1966,8 +2101,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
       svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       
-      // 양방향 화살표
-      if(i<displayNodes.length-1){
+      // 양방향 화살표 - edges가 있을 때만
+      if(hasEdges&&i<displayNodes.length-1){
         const arrowX=bx+boxW/2;
         const arrowY1=by+boxH+2;
         const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
@@ -2031,10 +2166,13 @@ function validateDiagramRules(nodes,figNum,designText){
     issues.push({severity:'ERROR',rule:'R4',message:`참조번호 중복: ${[...new Set(dupRefs)].join(', ')}`});
   }
   
-  const numRefs=allRefs.filter(r=>!r.startsWith('S')).map(r=>parseInt(r));
-  const l1Refs=numRefs.filter(n=>n%100===0);
-  const l2Refs=numRefs.filter(n=>n%10===0&&n%100!==0);
-  const l3Refs=numRefs.filter(n=>n%10!==0);
+  const numRefs=allRefs.filter(r=>!r.startsWith('S')&&!r.startsWith('D')).map(r=>parseInt(r)).filter(n=>!isNaN(n));
+  const dRefs=allRefs.filter(r=>r.startsWith('D')).map(r=>({full:r,num:parseInt(r.slice(1))}));
+  const l1Refs=numRefs.filter(n=>n>=100&&n<1000&&n%100===0);
+  const l2Refs=numRefs.filter(n=>n>=100&&n<1000&&n%10===0&&n%100!==0);
+  const l3Refs=numRefs.filter(n=>n>=100&&n<1000&&n%10!==0);
+  const l4Refs=numRefs.filter(n=>n>=1000&&n<10000);
+  const smallRefs=numRefs.filter(n=>n<100);
   
   // ═══ R5. 도 1 규칙: L1만 허용 ═══
   if(figNum===1){
@@ -2098,6 +2236,34 @@ function validateDiagramRules(nodes,figNum,designText){
         issues.push({severity:'WARNING',rule:'R6e',message:`도 ${figNum}: L2(${l2Refs.join(',')})와 L3(${l3Refs.join(',')}) 혼합 - 계층 확인 필요`});
       }
     }
+    
+    // R6f. L4 포함 시: L3가 직계 부모인지 검증
+    if(l4Refs.length>0){
+      if(l3Refs.length===1){
+        const theL3=l3Refs[0];
+        const allL4Belong=l4Refs.every(n=>Math.floor(n/10)===theL3);
+        if(allL4Belong){
+          issues.push({severity:'INFO',rule:'R6f',message:`도 ${figNum} 최외곽: ${theL3} (L3 프레임, 내부 L4: ${l4Refs.join(',')})`});
+        }else{
+          const bad=l4Refs.filter(n=>Math.floor(n/10)!==theL3);
+          issues.push({severity:'ERROR',rule:'R6f',message:`도 ${figNum}: L4(${bad.join(',')})가 L3(${theL3})의 하위가 아님`});
+        }
+      }else if(l3Refs.length===0){
+        const parents=[...new Set(l4Refs.map(n=>Math.floor(n/10)))];
+        if(parents.length===1){
+          issues.push({severity:'INFO',rule:'R6f',message:`도 ${figNum} 최외곽: ${parents[0]} (L4 직계부모)`});
+        }
+      }
+    }
+    
+    // R6g. 데이터 참조번호 (D접두사 또는 소수)
+    if(dRefs.length>0||smallRefs.length>0){
+      const topD=dRefs.filter(d=>d.num<10);
+      const subD=dRefs.filter(d=>d.num>=10);
+      if(topD.length===1&&subD.length>0){
+        issues.push({severity:'INFO',rule:'R6g',message:`도 ${figNum} 최외곽: ${topD[0].full} (데이터 프레임)`});
+      }
+    }
   }
   
   // ═══ R7. 도면 설계 텍스트와 노드 수 비교 ═══
@@ -2116,6 +2282,21 @@ function validateDiagramRules(nodes,figNum,designText){
         issues.push({severity:'WARNING',rule:'R7',message:`도 ${figNum}: 설계상 내부 구성요소 ${expectedCount}개인데 ${actualInnerCount}개만 파싱됨 (노드 누락 가능)`});
       }
     }
+  }
+  
+  // ═══ R8. 방법 도면 검증 ═══
+  const sRefs=allRefs.filter(r=>String(r).startsWith('S'));
+  if(sRefs.length>0){
+    // R8a. 방법 도면에 숫자 참조번호 혼입
+    const numericInMethod=allRefs.filter(r=>!String(r).startsWith('S')&&!String(r).startsWith('D'));
+    if(numericInMethod.length>0){
+      issues.push({severity:'ERROR',rule:'R8a',message:`도 ${figNum}: 방법 도면에 장치 참조번호(${numericInMethod.join(',')}) 혼입`});
+    }
+    // R8b. 시작/종료 노드 확인
+    const hasStart=nodes.some(n=>/시작|START/i.test(n.label));
+    const hasEnd=nodes.some(n=>/종료|END/i.test(n.label));
+    if(!hasStart)issues.push({severity:'WARNING',rule:'R8b',message:`도 ${figNum}: 흐름도에 "시작" 노드 없음`});
+    if(!hasEnd)issues.push({severity:'WARNING',rule:'R8b',message:`도 ${figNum}: 흐름도에 "종료" 노드 없음`});
   }
   
   return issues;
@@ -2226,9 +2407,11 @@ function renderDiagrams(sid,mt){
   // 도면 검증 버튼 항상 추가
   html+=`<div style="margin-top:12px;padding:12px;background:var(--color-bg-secondary);border-radius:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <button onclick="runDiagramValidation('${sid}')" style="background:#43a047;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">✅ 도면 검증</button>
+    <button onclick="runAIDiagramReview('${sid}')" style="background:#7b1fa2;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">🤖 AI 연결관계 검증</button>
     <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1565c0;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">🔄 재생성</button>
     <span id="validationResult_${sid}" style="font-size:12px;color:var(--color-text-secondary)"></span>
-  </div>`;
+  </div>
+  <div id="aiReviewResult_${sid}" style="margin-top:8px"></div>`;
   
   el.innerHTML=html;
   
@@ -2292,6 +2475,83 @@ function runDiagramValidation(sid){
     App.showToast(`도면 검증 통과 ✅ (${data.length}개 도면)`);
   }
 }
+
+// ═══ AI 정성적 도면 검증 (연결관계 적절성 평가) ═══
+async function runAIDiagramReview(sid){
+  const data=diagramData[sid];
+  if(!data||!data.length){
+    App.showToast('검증할 도면이 없습니다.','error');
+    return;
+  }
+  
+  const resultEl=document.getElementById(`aiReviewResult_${sid}`);
+  if(resultEl)resultEl.innerHTML='<div style="padding:12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a">🤖 AI 연결관계 검증 중...</div>';
+  
+  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+  const designText=outputs[sid]||'';
+  
+  // 각 도면의 구조 정보 수집
+  let diagramSummary='';
+  data.forEach(({nodes,edges},idx)=>{
+    const figNum=figOffset+idx+1;
+    const nodeList=nodes.map(n=>{
+      const ref=extractRefNum(n.label,'?');
+      const clean=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+      return `${clean}(${ref})`;
+    }).join(', ');
+    const edgeList=(edges||[]).map(e=>{
+      const fromLabel=nodes.find(n=>n.id===e.from)?.label||e.from;
+      const toLabel=nodes.find(n=>n.id===e.to)?.label||e.to;
+      return `${fromLabel} → ${toLabel}`;
+    }).join(', ');
+    diagramSummary+=`\n도 ${figNum}:\n  구성요소: ${nodeList}\n  연결관계: ${edgeList||'없음 (병렬 배치)'}\n`;
+  });
+  
+  const prompt=`당신은 특허 도면 전문가입니다. 아래 도면의 연결관계가 기술적으로 적절한지 정성적으로 평가하세요.
+
+═══ 평가 기준 ═══
+1. **데이터/정보 도면**: 정보 항목(~정보, ~데이터)은 서버로 입력되는 것이므로 상호 간 화살표 연결이 부적절함. 병렬 배치가 적절.
+2. **장치 블록도**: 하드웨어 구성요소 간 데이터 흐름이 있으면 화살표 연결 적절. 단, 메모리/저장부처럼 수동적 구성은 다른 구성에서 접근하는 방향만 적절.
+3. **계층 일관성**: 상위 구성과 하위 구성이 같은 레벨에 표현되면 안 됨. 하위는 상위 내부에 포함되어야 함.
+4. **방법 흐름도**: 단계 간 순서가 논리적이어야 함.
+
+═══ 도면 설계 ═══
+${designText.slice(0,2000)}
+
+═══ 실제 도면 구조 ═══
+${diagramSummary}
+
+═══ 출력 형식 ═══
+각 도면에 대해:
+도 N: ✅ 적절 / ⚠️ 부적절
+- (이유 한 줄)
+
+마지막에 전체 요약 한 줄.`;
+
+  try{
+    const r=await App.callClaude(prompt);
+    const reviewText=r.text||'';
+    
+    if(resultEl){
+      resultEl.innerHTML=`<div style="padding:12px;background:#f3e5f5;border:1px solid #ce93d8;border-radius:8px;margin-top:8px">
+        <div style="font-weight:600;color:#6a1b9a;margin-bottom:8px">🤖 AI 연결관계 검증 결과</div>
+        <pre style="font-size:12px;white-space:pre-wrap;margin:0;color:#4a148c;line-height:1.6">${App.escapeHtml(reviewText)}</pre>
+      </div>`;
+    }
+    
+    // 부적절 항목이 있으면 window._diagramErrors에 추가
+    if(reviewText.includes('부적절')||reviewText.includes('⚠️')){
+      window._aiDiagramReview={sid,review:reviewText};
+      App.showToast('AI 검증: 일부 도면 연결관계 수정 권장','warning');
+    }else{
+      App.showToast('AI 검증: 모든 도면 연결관계 적절 ✅');
+    }
+  }catch(e){
+    if(resultEl)resultEl.innerHTML=`<div style="padding:8px;background:#ffebee;border-radius:8px;font-size:12px;color:#c62828">AI 검증 실패: ${e.message}</div>`;
+    App.showToast('AI 검증 실패: '+e.message,'error');
+  }
+}
+
 function downloadPptx(sid){
   // 라이브러리 체크
   if(typeof PptxGenJS==='undefined'){
@@ -2328,54 +2588,57 @@ function downloadPptx(sid){
     const TITLE_H=0.5,AVAILABLE_H=PAGE_H-TITLE_H-0.3;
     
     function extractRefNum(label,fallback){
-      const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
+      const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
       return match?match[1]:fallback;
     }
     
     function isL1RefNum(ref){
-      if(!ref||ref.startsWith('S'))return false;
-      const num=parseInt(ref);
-      return num>=100&&num%100===0;
+      if(!ref||String(ref).startsWith('S'))return false;
+      const s=String(ref);
+      if(s.startsWith('D')){const n=parseInt(s.slice(1));return !isNaN(n)&&n<10;}
+      const num=parseInt(s);
+      if(isNaN(num))return false;
+      if(num<10)return true;
+      if(num<100)return false;
+      if(num<1000)return num%100===0;
+      return false;
     }
     
     function findImmediateParent(refNums){
-      const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
+      const nums=refNums.filter(r=>r&&!String(r).startsWith('S')).map(r=>{const s=String(r);return s.startsWith('D')?parseInt(s.slice(1)):parseInt(s);}).filter(n=>!isNaN(n)&&n>0);
       if(!nums.length)return null;
-      const l1s=nums.filter(n=>n%100===0);
-      const l2s=nums.filter(n=>n%10===0&&n%100!==0);
-      const l3s=nums.filter(n=>n%10!==0);
-      
-      if(l1s.length>0){
-        if(l1s.length===1&&(l2s.length>0||l3s.length>0)){
-          const theL1=l1s[0];
-          if(l2s.every(n=>Math.floor(n/100)*100===theL1)&&l3s.every(n=>Math.floor(n/100)*100===theL1))return theL1;
-        }
+      const l1s=nums.filter(n=>n>=100&&n<1000&&n%100===0);
+      const l2s=nums.filter(n=>n>=100&&n<1000&&n%10===0&&n%100!==0);
+      const l3s=nums.filter(n=>n>=100&&n<1000&&n%10!==0);
+      const l4s=nums.filter(n=>n>=1000&&n<10000);
+      const smalls=nums.filter(n=>n<100);
+      if(l4s.length>0){
+        if(l3s.length===1&&l2s.length===0&&l1s.length===0){if(l4s.every(n=>Math.floor(n/10)===l3s[0]))return l3s[0];}
+        if(l3s.length===0&&l2s.length===0&&l1s.length===0&&smalls.length===0){const p=[...new Set(l4s.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
         return null;
       }
-      if(l2s.length>0&&l3s.length===0){
-        const p=[...new Set(l2s.map(n=>Math.floor(n/100)*100))];
-        return p.length===1?p[0]:null;
+      if(l1s.length>0){
+        if(l1s.length===1&&(l2s.length>0||l3s.length>0)){const t=l1s[0];if(l2s.every(n=>Math.floor(n/100)*100===t)&&l3s.every(n=>Math.floor(n/100)*100===t))return t;}
+        return null;
       }
+      if(l2s.length>0&&l3s.length===0){const p=[...new Set(l2s.map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;}
       if(l2s.length>0&&l3s.length>0){
-        if(l2s.length===1){
-          const theL2=l2s[0];
-          if(l3s.every(n=>Math.floor(n/10)*10===theL2))return theL2;
-        }
-        const p=[...new Set([...l2s,...l3s].map(n=>Math.floor(n/100)*100))];
-        return p.length===1?p[0]:null;
+        if(l2s.length===1&&l3s.every(n=>Math.floor(n/10)*10===l2s[0]))return l2s[0];
+        const p=[...new Set([...l2s,...l3s].map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;
       }
-      if(l3s.length>0){
-        const l2p=[...new Set(l3s.map(n=>Math.floor(n/10)*10))];
-        if(l2p.length===1)return l2p[0];
-        const l1p=[...new Set(l2p.map(p=>Math.floor(p/100)*100))];
-        return l1p.length===1?l1p[0]:null;
+      if(l3s.length>0){const l2p=[...new Set(l3s.map(n=>Math.floor(n/10)*10))];if(l2p.length===1)return l2p[0];const l1p=[...new Set(l2p.map(p=>Math.floor(p/100)*100))];return l1p.length===1?l1p[0]:null;}
+      if(smalls.length>0){
+        const singles=smalls.filter(n=>n<10),doubles=smalls.filter(n=>n>=10);
+        if(singles.length===1&&doubles.length>0&&doubles.every(n=>Math.floor(n/10)===singles[0]))return singles[0];
+        if(singles.length===0&&doubles.length>0){const p=[...new Set(doubles.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
       }
       return null;
     }
     
-    data.forEach(({nodes},idx)=>{
+    data.forEach(({nodes,edges},idx)=>{
       const slide=pptx.addSlide({bkgd:'FFFFFF'});
       const figNum=figOffset+idx+1;
+      const hasEdges=edges&&edges.length>0;
       
       slide.addText(`도 ${figNum}`,{
         x:PAGE_MARGIN,y:PAGE_MARGIN,w:2,h:TITLE_H,
@@ -2384,14 +2647,55 @@ function downloadPptx(sid){
       
       if(!nodes.length)return;
       
+      const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
+      const isMethodDiagram=allRefs.some(r=>String(r).startsWith('S'))||
+        nodes.some(n=>/시작|종료|START|END/i.test(n.label));
+      
+      if(isMethodDiagram){
+        // ═══ 방법 도면: 흐름도 (최외곽 없음, 단방향) ═══
+        const boxStartX=PAGE_MARGIN+0.3,boxStartY=PAGE_MARGIN+TITLE_H+0.2;
+        const boxW=PAGE_W-1.2;
+        const nodeCount=nodes.length;
+        const boxH=Math.min(0.55,AVAILABLE_H/nodeCount-0.15);
+        const boxGap=Math.min(0.4,(AVAILABLE_H-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1));
+        
+        nodes.forEach((n,i)=>{
+          const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
+          const refNum=extractRefNum(n.label,'');
+          const cleanLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
+          const isStartEnd=/시작|종료|START|END/i.test(n.label);
+          
+          // 그림자
+          slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
+          // 시작/종료는 둥근 모서리
+          const opts={x:bx,y:by,w:boxW,h:boxH,fill:{color:isStartEnd?'F5F5F5':'FFFFFF'},line:{color:'000000',width:isStartEnd?LINE_FRAME:LINE_BOX}};
+          if(isStartEnd)opts.rectRadius=boxH*0.5*72; // 둥근 끝
+          slide.addShape(pptx.shapes.ROUNDED_RECTANGLE||pptx.shapes.RECTANGLE,opts);
+          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          
+          // 리더라인 + 부호 (시작/종료 제외)
+          if(refNum&&!isStartEnd){
+            slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
+            slide.addText(String(refNum),{x:bx+boxW+0.35,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+          }
+          
+          // 단방향 화살표만
+          if(i<nodes.length-1){
+            const arrowY1=by+boxH,arrowY2=boxStartY+(i+1)*(boxH+boxGap),arrowX=bx+boxW/2;
+            if(arrowY2>arrowY1+0.05){
+              slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle'}});
+            }
+          }
+        });
+        return; // 방법 도면 처리 완료
+      }
+      
       const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
       const isFig1=figNum===1||allL1;
-      const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
-      // fallback 개선: 첫 번째 참조번호의 L1 부모 사용
       let frameRefNum=findImmediateParent(allRefs);
       if(!frameRefNum&&allRefs.length>0){
         const firstRef=parseInt(allRefs[0])||100;
-        frameRefNum=Math.floor(firstRef/100)*100;
+        frameRefNum=firstRef<100?Math.floor(firstRef/10):Math.floor(firstRef/100)*100;
       }
       if(!frameRefNum)frameRefNum=100;
       const nodeCount=nodes.length;
@@ -2414,7 +2718,7 @@ function downloadPptx(sid){
           slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
           slide.addText(String(refNum),{x:bx+boxW+0.35,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
-          if(i<nodes.length-1){
+          if(hasEdges&&i<nodes.length-1){
             const arrowY1=by+boxH,arrowY2=boxStartY+(i+1)*(boxH+boxGap),arrowX=bx+boxW/2;
             if(arrowY2>arrowY1+0.05){
               slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
@@ -2458,7 +2762,7 @@ function downloadPptx(sid){
           slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
           slide.addText(String(refNum),{x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
-          if(i<displayNodes.length-1){
+          if(hasEdges&&i<displayNodes.length-1){
             const arrowY1=by+boxH,arrowY2=boxStartY+(i+1)*(boxH+boxGap),arrowX=bx+boxW/2;
             if(arrowY2>arrowY1+0.05){
               slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
@@ -2502,47 +2806,54 @@ function downloadDiagramImages(sid, format='jpeg'){
   const caseNum=selectedTitle||'도면';
   
   function extractRefNum(label,fallback){
-    const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
+    const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
     return match?match[1]:fallback;
   }
   
   function isL1RefNum(ref){
-    if(!ref||ref.startsWith('S'))return false;
-    const num=parseInt(ref);
-    return num>=100&&num%100===0;
+    if(!ref||String(ref).startsWith('S'))return false;
+    const s=String(ref);
+    // D접두사: D2→최상위, D21→하위
+    if(s.startsWith('D')){const n=parseInt(s.slice(1));return !isNaN(n)&&n<10;}
+    const num=parseInt(s);
+    if(isNaN(num))return false;
+    // 소수(1~9): 최상위
+    if(num<10)return true;
+    // 2자리(10~99): 하위
+    if(num<100)return false;
+    // 3자리: L1=X00
+    if(num<1000)return num%100===0;
+    // 4자리: L4이므로 아님
+    return false;
   }
   
   function findImmediateParent(refNums){
-    const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
+    const nums=refNums.filter(r=>r&&!String(r).startsWith('S')).map(r=>{const s=String(r);return s.startsWith('D')?parseInt(s.slice(1)):parseInt(s);}).filter(n=>!isNaN(n)&&n>0);
     if(!nums.length)return null;
-    const l1s=nums.filter(n=>n%100===0);
-    const l2s=nums.filter(n=>n%10===0&&n%100!==0);
-    const l3s=nums.filter(n=>n%10!==0);
-    
-    if(l1s.length>0){
-      if(l1s.length===1&&(l2s.length>0||l3s.length>0)){
-        const theL1=l1s[0];
-        if(l2s.every(n=>Math.floor(n/100)*100===theL1)&&l3s.every(n=>Math.floor(n/100)*100===theL1))return theL1;
-      }
+    const l1s=nums.filter(n=>n>=100&&n<1000&&n%100===0);
+    const l2s=nums.filter(n=>n>=100&&n<1000&&n%10===0&&n%100!==0);
+    const l3s=nums.filter(n=>n>=100&&n<1000&&n%10!==0);
+    const l4s=nums.filter(n=>n>=1000&&n<10000);
+    const smalls=nums.filter(n=>n<100);
+    if(l4s.length>0){
+      if(l3s.length===1&&l2s.length===0&&l1s.length===0){if(l4s.every(n=>Math.floor(n/10)===l3s[0]))return l3s[0];}
+      if(l3s.length===0&&l2s.length===0&&l1s.length===0&&smalls.length===0){const p=[...new Set(l4s.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
       return null;
     }
-    if(l2s.length>0&&l3s.length===0){
-      const p=[...new Set(l2s.map(n=>Math.floor(n/100)*100))];
-      return p.length===1?p[0]:null;
+    if(l1s.length>0){
+      if(l1s.length===1&&(l2s.length>0||l3s.length>0)){const t=l1s[0];if(l2s.every(n=>Math.floor(n/100)*100===t)&&l3s.every(n=>Math.floor(n/100)*100===t))return t;}
+      return null;
     }
+    if(l2s.length>0&&l3s.length===0){const p=[...new Set(l2s.map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;}
     if(l2s.length>0&&l3s.length>0){
-      if(l2s.length===1){
-        const theL2=l2s[0];
-        if(l3s.every(n=>Math.floor(n/10)*10===theL2))return theL2;
-      }
-      const p=[...new Set([...l2s,...l3s].map(n=>Math.floor(n/100)*100))];
-      return p.length===1?p[0]:null;
+      if(l2s.length===1&&l3s.every(n=>Math.floor(n/10)*10===l2s[0]))return l2s[0];
+      const p=[...new Set([...l2s,...l3s].map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;
     }
-    if(l3s.length>0){
-      const l2p=[...new Set(l3s.map(n=>Math.floor(n/10)*10))];
-      if(l2p.length===1)return l2p[0];
-      const l1p=[...new Set(l2p.map(p=>Math.floor(p/100)*100))];
-      return l1p.length===1?l1p[0]:null;
+    if(l3s.length>0){const l2p=[...new Set(l3s.map(n=>Math.floor(n/10)*10))];if(l2p.length===1)return l2p[0];const l1p=[...new Set(l2p.map(p=>Math.floor(p/100)*100))];return l1p.length===1?l1p[0]:null;}
+    if(smalls.length>0){
+      const singles=smalls.filter(n=>n<10),doubles=smalls.filter(n=>n>=10);
+      if(singles.length===1&&doubles.length>0&&doubles.every(n=>Math.floor(n/10)===singles[0]))return singles[0];
+      if(singles.length===0&&doubles.length>0){const p=[...new Set(doubles.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
     }
     return null;
   }
@@ -2558,8 +2869,9 @@ function downloadDiagramImages(sid, format='jpeg'){
       return;
     }
     
-    const{nodes}=data[currentIdx];
+    const{nodes,edges}=data[currentIdx];
     const figNum=figOffset+currentIdx+1;
+    const hasEdges=edges&&edges.length>0;
     
     // 캔버스 생성 (스케일 없이 직접 크기 설정)
     const canvas=document.createElement('canvas');
@@ -2578,14 +2890,76 @@ function downloadDiagramImages(sid, format='jpeg'){
     ctx.fillText(`도 ${figNum}`,30,35);
     
     if(nodes.length){
+      const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
+      const isMethodDiagram=allRefs.some(r=>String(r).startsWith('S'))||
+        nodes.some(n=>/시작|종료|START|END/i.test(n.label));
+      
+      if(isMethodDiagram){
+        // ═══ 방법 도면: 흐름도 (최외곽 없음, 단방향) ═══
+        const nodeCount=nodes.length;
+        const boxStartX=30,boxStartY=50;
+        const boxW=620;
+        const boxH=Math.min(55,(850-10*(nodeCount-1))/nodeCount);
+        const boxGap=Math.min(40,(900-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1));
+        const SHADOW=3;
+        
+        nodes.forEach((n,i)=>{
+          const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
+          const refNum=extractRefNum(n.label,'');
+          const cleanLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
+          const isStartEnd=/시작|종료|START|END/i.test(n.label);
+          
+          // 그림자
+          ctx.fillStyle='#000000';
+          ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
+          
+          // 시작/종료는 둥근 모서리 + 다른 배경
+          ctx.fillStyle=isStartEnd?'#F5F5F5':'#FFFFFF';
+          if(isStartEnd){
+            const r=boxH/2;
+            ctx.beginPath();
+            ctx.moveTo(bx+r,by);ctx.lineTo(bx+boxW-r,by);ctx.quadraticCurveTo(bx+boxW,by,bx+boxW,by+r);
+            ctx.lineTo(bx+boxW,by+boxH-r);ctx.quadraticCurveTo(bx+boxW,by+boxH,bx+boxW-r,by+boxH);
+            ctx.lineTo(bx+r,by+boxH);ctx.quadraticCurveTo(bx,by+boxH,bx,by+boxH-r);
+            ctx.lineTo(bx,by+r);ctx.quadraticCurveTo(bx,by,bx+r,by);
+            ctx.closePath();ctx.fill();ctx.strokeStyle='#000000';ctx.lineWidth=2;ctx.stroke();
+          }else{
+            ctx.fillRect(bx,by,boxW,boxH);
+            ctx.strokeStyle='#000000';ctx.lineWidth=1.5;ctx.strokeRect(bx,by,boxW,boxH);
+          }
+          
+          ctx.fillStyle='#000000';
+          ctx.font='13px "맑은 고딕", sans-serif';
+          ctx.textAlign='center';
+          ctx.fillText(cleanLabel,bx+boxW/2,by+boxH/2+4);
+          
+          // 리더라인 + 부호 (시작/종료 제외)
+          if(refNum&&!isStartEnd){
+            ctx.textAlign='left';
+            ctx.lineWidth=1;
+            ctx.beginPath();ctx.moveTo(bx+boxW,by+boxH/2);ctx.lineTo(bx+boxW+20,by+boxH/2);ctx.stroke();
+            ctx.font='11px "맑은 고딕", sans-serif';
+            ctx.fillText(String(refNum),bx+boxW+30,by+boxH/2+4);
+          }
+          
+          // 단방향 화살표
+          if(i<nodes.length-1){
+            const arrowX=bx+boxW/2,arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+            if(arrowY2>arrowY1){
+              ctx.beginPath();ctx.moveTo(arrowX,arrowY1);ctx.lineTo(arrowX,arrowY2);ctx.lineWidth=1;ctx.stroke();
+              // 아래쪽 화살촉만 (단방향)
+              ctx.beginPath();ctx.moveTo(arrowX-4,arrowY2-8);ctx.lineTo(arrowX,arrowY2);ctx.lineTo(arrowX+4,arrowY2-8);ctx.stroke();
+            }
+          }
+        });
+      }else{
+      // 기존 장치 도면 로직
       const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
       const isFig1=figNum===1||allL1;
-      const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
-      // fallback 개선
       let frameRefNum=findImmediateParent(allRefs);
       if(!frameRefNum&&allRefs.length>0){
         const firstRef=parseInt(allRefs[0])||100;
-        frameRefNum=Math.floor(firstRef/100)*100;
+        frameRefNum=firstRef<100?Math.floor(firstRef/10):Math.floor(firstRef/100)*100;
       }
       if(!frameRefNum)frameRefNum=100;
       const nodeCount=nodes.length;
@@ -2627,7 +3001,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.font='11px "맑은 고딕", sans-serif';
           ctx.fillText(String(refNum),bx+boxW+30,by+boxH/2+4);
           
-          if(i<nodes.length-1){
+          if(hasEdges&&i<nodes.length-1){
             const arrowX=bx+boxW/2,arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
             if(arrowY2>arrowY1){
               ctx.beginPath();
@@ -2714,7 +3088,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.font='11px "맑은 고딕", sans-serif';
           ctx.fillText(String(refNum),frameX+frameW+30,by+boxH/2+4);
           
-          if(i<displayNodes.length-1){
+          if(hasEdges&&i<displayNodes.length-1){
             const arrowX=bx+boxW/2,arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
             if(arrowY2>arrowY1){
               ctx.beginPath();
@@ -2735,7 +3109,8 @@ function downloadDiagramImages(sid, format='jpeg'){
           }
         });
       }
-    }
+    } // end else (장치 도면)
+    } // end if(nodes.length)
     
     // 다운로드 실행
     try{
@@ -2824,15 +3199,49 @@ function validateClaims(text){
   while((m=cp.exec(text))!==null)claims[parseInt(m[1])]=m[2].trim();
   if(!Object.keys(claims).length){iss.push({severity:'HIGH',message:'청구항 파싱 실패'});return iss;}
   if(!claims[1])iss.push({severity:'CRITICAL',message:'독립항(청구항 1) 없음'});
+  
+  // 각 청구항의 인용 정보 수집 (다중인용 검증용)
+  const claimRefs={};
+  Object.entries(claims).forEach(([num,ct])=>{
+    const n=parseInt(num);
+    const allCites=[];
+    // "청구항 N에 있어서" 또는 "제N항 또는 제M항에 있어서" 등
+    const citeMatches=ct.match(/(?:청구항|제)\s*(\d+)\s*(?:항)?/g)||[];
+    citeMatches.forEach(cm=>{const nm=cm.match(/(\d+)/);if(nm)allCites.push(parseInt(nm[1]));});
+    claimRefs[n]={cites:[...new Set(allCites)].filter(c=>c!==n),isMultiCite:false};
+    // 다중인용 감지: "제N항 또는 제M항" 또는 "청구항 N 또는 청구항 M"
+    if(/(?:제\s*\d+\s*항|청구항\s*\d+)\s*(?:또는|내지)\s*(?:제\s*\d+\s*항|청구항\s*\d+)/.test(ct)){
+      claimRefs[n].isMultiCite=true;
+    }
+  });
+  
   Object.entries(claims).forEach(([num,ct])=>{const n=parseInt(num);
     if(n>1){const rm=ct.match(/청구항\s*(\d+)에\s*있어서/),rn=rm?parseInt(rm[1]):1;
       if(rm){if(!claims[rn])iss.push({severity:'HIGH',message:`청구항 ${num}: 참조 청구항 ${rn} 없음`});if(rn>=n)iss.push({severity:'HIGH',message:`청구항 ${num}: 자기/후행 청구항 참조`});}
+      
+      // ★ 대통령령 종속항 규칙 검증 ★
+      const refs=claimRefs[n];
+      if(refs){
+        // ④ 번호 역전 금지: 인용 항은 자신보다 앞번호여야 함
+        refs.cites.forEach(c=>{
+          if(c>=n)iss.push({severity:'HIGH',message:`청구항 ${num}: 청구항 ${c}를 인용하나 뒤에 위치 (번호 역전 금지)`});
+        });
+        // ③ 다중인용의 다중인용 금지
+        if(refs.isMultiCite){
+          refs.cites.forEach(c=>{
+            if(claimRefs[c]&&claimRefs[c].isMultiCite){
+              iss.push({severity:'HIGH',message:`청구항 ${num}: 다중인용 종속항(청구항 ${c})을 다시 다중인용 — 대통령령 위반`});
+            }
+          });
+        }
+      }
+      
       // v5.1: 2-step validation — "인용하는 청구항만 검토"
       const citedText=getCitedChainText(n, claims);
       // selfClean: 현재 청구항에서 "상기 ..." 구문을 통째로 제거 → 독립 정의 용어만 남김
       const selfClean=ct.replace(/상기\s+[가-힣]+(?:\s[가-힣]+){0,3}/g,' ');
-      const refs=ct.match(/상기\s+([가-힣]+(?:\s[가-힣]+){0,3})/g)||[];
-      refs.forEach(ref=>{const raw=ref.replace(/^상기\s+/,''),cw=raw.split(/\s+/).slice(0,2).map(stripKoreanParticles).filter(w=>w.length>=2&&w!=='상기');if(!cw.length)return;
+      const srefs=ct.match(/상기\s+([가-힣]+(?:\s[가-힣]+){0,3})/g)||[];
+      srefs.forEach(ref=>{const raw=ref.replace(/^상기\s+/,''),cw=raw.split(/\s+/).slice(0,2).map(stripKoreanParticles).filter(w=>w.length>=2&&w!=='상기');if(!cw.length)return;
         // Step 1: 인용 청구항 체인에서 키워드 검색
         const inCited=cw.filter(w=>citedText.includes(w)).length;
         if(inCited>0)return;
