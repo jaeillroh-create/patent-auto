@@ -822,6 +822,31 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
   실선: 통신/데이터 링크
   양방향 화살표: 상호 데이터 교환
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[R5] 직계 부모 일치 규칙 (세대 점프 금지) ★★★핵심★★★
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 최외곽 박스 = 내부 구성요소들의 "직계 부모(Immediate Parent)"
+  ⛔ 조부모(Grandparent)로 건너뛰기 금지
+
+■ 예시 (계층 구조)
+  서버(100)
+    └─ 프로세서(110)
+         └─ 정보수신부(111), 알림산출부(112), 전송부(113)
+
+■ 올바른 표기
+  도 3 내부: 정보수신부(111), 알림산출부(112), 전송부(113)
+  도 3 최외곽 박스: 프로세서(110) ✅ (직계 부모)
+
+■ 잘못된 표기
+  도 3 내부: 정보수신부(111), 알림산출부(112), 전송부(113)
+  도 3 최외곽 박스: 서버(100) ❌ (세대 점프 - 조부모)
+
+■ 직계 부모 계산법
+  - L3 구성요소(111,112,113) → 직계 부모 = L2(110)
+  - L2 구성요소(110,120,130) → 직계 부모 = L1(100)
+  - 공식: 마지막 자리를 0으로 변환
+
 ════════════════════════════════════════════════════════════════
 
 [파트1: 도면 설계 출력 형식]
@@ -843,7 +868,14 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 - 저장부(140)
 연결관계: 통신부(110) ↔ 프로세서(120) ↔ 메모리(130)
 
-(도면 수에 맞게 도 3, 도 4... 추가)
+도 3: 프로세서(120) 상세 블록도 (L3 상세화 예시)
+유형: 블록도 (최외곽 = 프로세서(120), 서버(100)가 아님!)
+구성요소: 프로세서(120) 내부 L3 구성
+- 연산부(121)
+- 캐시부(122)
+- 제어부(123)
+
+(도면 수에 맞게 도 4, 도 5... 추가)
 
 [파트2: 도면의 간단한 설명]
 ---BRIEF_DESCRIPTIONS---
@@ -853,7 +885,7 @@ ${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 �
 
 ★★★ "~모듈" 절대 금지 → "~부"로 통일 ★★★
 ★★★ 도 1은 L1(100,200,300,400) 장치만, 최외곽 박스 없음 ★★★
-★★★ 도 2부터 특정 L1 내부 상세, 최외곽 = 해당 L1 ★★★
+★★★ 도 2+: 최외곽 = 직계 부모 (세대 점프 금지!) ★★★
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
 
@@ -1486,7 +1518,7 @@ function computeEdgeRoutes(edges,positions){
   }).filter(Boolean);
 }
 function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
-  // ═══ KIPO 특허 도면 규칙 v4.0 ═══
+  // ═══ KIPO 특허 도면 규칙 v4.1 (직계 부모 일치) ═══
   const PX=72;
   const SHADOW_OFFSET=4;
   
@@ -1503,6 +1535,43 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     return num>=100&&num%100===0;
   }
   
+  // ★ 직계 부모 찾기 함수 (세대 점프 방지) ★
+  function findImmediateParent(refNums){
+    // 숫자형 참조번호만 필터링
+    const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
+    if(!nums.length)return null;
+    
+    // 모든 노드가 L1이면 부모 없음
+    if(nums.every(n=>n%100===0))return null;
+    
+    // L3 체크 (마지막 자리가 0이 아닌 경우: 111, 112, 113...)
+    const allL3=nums.every(n=>n%10!==0);
+    if(allL3){
+      // L3의 직계 부모는 L2 (마지막 자리를 0으로: 111→110)
+      const parents=nums.map(n=>Math.floor(n/10)*10);
+      const uniqueParents=[...new Set(parents)];
+      if(uniqueParents.length===1)return uniqueParents[0];
+      // 여러 L2에 걸쳐있으면 공통 L1 반환
+      const l1Parents=uniqueParents.map(p=>Math.floor(p/100)*100);
+      if([...new Set(l1Parents)].length===1)return l1Parents[0];
+    }
+    
+    // L2 체크 (10단위: 110, 120, 130...)
+    const allL2=nums.every(n=>n%10===0&&n%100!==0);
+    if(allL2){
+      // L2의 직계 부모는 L1 (100단위로: 110→100)
+      const parents=nums.map(n=>Math.floor(n/100)*100);
+      const uniqueParents=[...new Set(parents)];
+      if(uniqueParents.length===1)return uniqueParents[0];
+    }
+    
+    // 혼합된 경우: 가장 낮은 공통 조상 찾기
+    const minRef=Math.min(...nums);
+    if(minRef%10!==0)return Math.floor(minRef/10)*10; // L3 → L2
+    if(minRef%100!==0)return Math.floor(minRef/100)*100; // L2 → L1
+    return null;
+  }
+  
   // 모든 노드가 L1인지 확인 (도 1 판별)
   const allL1=nodes.every(n=>{
     const ref=extractRefNum(n.label,'');
@@ -1512,14 +1581,12 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   // 도 1인 경우 (figNum===1 또는 모든 노드가 L1)
   const isFig1=figNum===1||allL1;
   
-  // 참조번호 추출
-  let frameRefNum=figNum*100;
-  if(nodes.length>0){
-    const firstRef=extractRefNum(nodes[0].label,'');
-    if(firstRef&&!firstRef.startsWith('S')){
-      const num=parseInt(firstRef);
-      if(num>=100) frameRefNum=Math.floor(num/100)*100;
-    }
+  // ★ 최외곽 박스 참조번호 = 직계 부모 ★
+  const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
+  let frameRefNum=findImmediateParent(allRefs);
+  if(!frameRefNum){
+    // 폴백: figNum 기반
+    frameRefNum=figNum*100;
   }
   
   const boxW=5.0*PX, boxH=0.7*PX, boxGap=0.8*PX;
@@ -1713,18 +1780,57 @@ function validateDiagramRules(nodes,figNum){
     });
   }
   
-  // 5. 레벨 혼합 검증 (도 2 이상에서)
+  // 5. 직계 부모 일치 검증 (세대 점프 금지) - 도 2 이상
+  if(figNum>1){
+    const numRefs=refs.filter(r=>!r.startsWith('S')).map(r=>parseInt(r));
+    if(numRefs.length>0){
+      // 모든 노드가 L3인 경우 (마지막 자리 ≠ 0)
+      const allL3=numRefs.every(n=>n%10!==0);
+      if(allL3){
+        // 직계 부모들 계산 (111→110, 112→110...)
+        const parents=numRefs.map(n=>Math.floor(n/10)*10);
+        const uniqueParents=[...new Set(parents)];
+        if(uniqueParents.length===1){
+          const expectedParent=uniqueParents[0];
+          issues.push({
+            severity:'INFO',
+            message:`도 ${figNum} 최외곽 박스: ${expectedParent} (직계 부모)`
+          });
+        }else{
+          issues.push({
+            severity:'WARNING',
+            message:`도 ${figNum}: 여러 L2 구성요소(${uniqueParents.join(', ')})의 하위가 혼합됨`
+          });
+        }
+      }
+      
+      // 모든 노드가 L2인 경우 (10단위, 100단위 아님)
+      const allL2Only=numRefs.every(n=>n%10===0&&n%100!==0);
+      if(allL2Only){
+        const parents=numRefs.map(n=>Math.floor(n/100)*100);
+        const uniqueParents=[...new Set(parents)];
+        if(uniqueParents.length===1){
+          const expectedParent=uniqueParents[0];
+          issues.push({
+            severity:'INFO',
+            message:`도 ${figNum} 최외곽 박스: ${expectedParent} (직계 부모)`
+          });
+        }
+      }
+    }
+  }
+  
+  // 6. 레벨 혼합 검증 (도 2 이상에서)
   if(figNum>1){
     const hasL1=nodes.some(n=>isL1(extractRefNum(n.label)));
     const hasL2=nodes.some(n=>isL2(extractRefNum(n.label)));
     const hasL3=nodes.some(n=>isL3(extractRefNum(n.label)));
     
-    // L1과 L2/L3가 혼합된 경우 (정상: 외곽L1 + 내부L2/L3)
-    // L2와 L3만 있고 L1이 없으면 경고
-    if(!hasL1&&(hasL2||hasL3)){
+    // L2와 L3가 혼합된 경우 경고
+    if(hasL2&&hasL3&&!hasL1){
       issues.push({
-        severity:'INFO',
-        message:`도 ${figNum}: 최외곽 L1 장치가 명시되지 않았습니다.`
+        severity:'WARNING',
+        message:`도 ${figNum}: L2와 L3 구성요소가 혼합되어 있습니다. 동일 레벨 구성요소로 통일 권장.`
       });
     }
   }
@@ -1816,6 +1922,34 @@ function downloadPptx(sid){
     return match?match[1]:fallback;
   }
   
+  // ★ 직계 부모 찾기 함수 (세대 점프 방지) ★
+  function findImmediateParent(refNums){
+    const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
+    if(!nums.length)return null;
+    if(nums.every(n=>n%100===0))return null; // 모든 노드가 L1
+    
+    const allL3=nums.every(n=>n%10!==0);
+    if(allL3){
+      const parents=nums.map(n=>Math.floor(n/10)*10);
+      const uniqueParents=[...new Set(parents)];
+      if(uniqueParents.length===1)return uniqueParents[0];
+      const l1Parents=uniqueParents.map(p=>Math.floor(p/100)*100);
+      if([...new Set(l1Parents)].length===1)return l1Parents[0];
+    }
+    
+    const allL2=nums.every(n=>n%10===0&&n%100!==0);
+    if(allL2){
+      const parents=nums.map(n=>Math.floor(n/100)*100);
+      const uniqueParents=[...new Set(parents)];
+      if(uniqueParents.length===1)return uniqueParents[0];
+    }
+    
+    const minRef=Math.min(...nums);
+    if(minRef%10!==0)return Math.floor(minRef/10)*10;
+    if(minRef%100!==0)return Math.floor(minRef/100)*100;
+    return null;
+  }
+  
   // 페이지 여백
   const PAGE_MARGIN=0.6;
   const PAGE_W=8.27-PAGE_MARGIN*2;
@@ -1851,15 +1985,10 @@ function downloadPptx(sid){
     // 도 1 판별 (figNum===1 또는 모든 노드가 L1)
     const isFig1=figNum===1||allL1;
     
-    // 참조번호 추출
-    let frameRefNum=figNum*100;
-    if(nodes.length>0){
-      const firstRef=extractRefNum(nodes[0].label,'');
-      if(firstRef&&!firstRef.startsWith('S')){
-        const num=parseInt(firstRef);
-        if(num>=100) frameRefNum=Math.floor(num/100)*100;
-      }
-    }
+    // ★ 최외곽 박스 참조번호 = 직계 부모 ★
+    const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
+    let frameRefNum=findImmediateParent(allRefs);
+    if(!frameRefNum)frameRefNum=figNum*100;
     
     // 노드 수에 따라 동적 스케일링
     const nodeCount=nodes.length;
@@ -2077,6 +2206,34 @@ async function downloadDiagramImages(sid, format='jpeg'){
       return num>=100&&num%100===0;
     }
     
+    // ★ 직계 부모 찾기 함수 (세대 점프 방지) ★
+    function findImmediateParent(refNums){
+      const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
+      if(!nums.length)return null;
+      if(nums.every(n=>n%100===0))return null;
+      
+      const allL3=nums.every(n=>n%10!==0);
+      if(allL3){
+        const parents=nums.map(n=>Math.floor(n/10)*10);
+        const uniqueParents=[...new Set(parents)];
+        if(uniqueParents.length===1)return uniqueParents[0];
+        const l1Parents=uniqueParents.map(p=>Math.floor(p/100)*100);
+        if([...new Set(l1Parents)].length===1)return l1Parents[0];
+      }
+      
+      const allL2=nums.every(n=>n%10===0&&n%100!==0);
+      if(allL2){
+        const parents=nums.map(n=>Math.floor(n/100)*100);
+        const uniqueParents=[...new Set(parents)];
+        if(uniqueParents.length===1)return uniqueParents[0];
+      }
+      
+      const minRef=Math.min(...nums);
+      if(minRef%10!==0)return Math.floor(minRef/10)*10;
+      if(minRef%100!==0)return Math.floor(minRef/100)*100;
+      return null;
+    }
+    
     // 모든 노드가 L1인지 확인
     const allL1=nodes.every(n=>{
       const ref=extractRefNum(n.label,'');
@@ -2086,15 +2243,10 @@ async function downloadDiagramImages(sid, format='jpeg'){
     // 도 1 판별 (figNum===1 또는 모든 노드가 L1)
     const isFig1=figNum===1||allL1;
     
-    // 참조번호 추출
-    let frameRefNum=figNum*100;
-    if(nodes.length>0){
-      const firstRef=extractRefNum(nodes[0].label,'');
-      if(firstRef&&!firstRef.startsWith('S')){
-        const num=parseInt(firstRef);
-        if(num>=100) frameRefNum=Math.floor(num/100)*100;
-      }
-    }
+    // ★ 최외곽 박스 참조번호 = 직계 부모 ★
+    const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
+    let frameRefNum=findImmediateParent(allRefs);
+    if(!frameRefNum)frameRefNum=figNum*100;
     
     const nodeCount=nodes.length;
     const SHADOW=3;
