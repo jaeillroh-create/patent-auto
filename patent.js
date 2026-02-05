@@ -1538,7 +1538,12 @@ function buildMermaidPrompt(sid){
 - 참조번호는 숫자만 사용 (100, 110, 120...)
 - "~단계", "S숫자" 표현 절대 금지
 - 구성요소명은 반드시 "~부" 형태 사용 (예: 통신부, 제어부, 저장부)
-- "~모듈" 표현 절대 금지 → "~부"로 통일`;
+- "~모듈" 표현 절대 금지 → "~부"로 통일
+
+★★★ 중요: 도면 설계의 모든 구성요소를 빠짐없이 포함해야 함 ★★★
+- 구성요소 목록에 있는 모든 항목을 Mermaid 노드로 변환
+- 연결관계가 없는 노드도 반드시 포함 (독립 노드로 추가)
+- 예: D[네트워크(400)] 처럼 연결 없이 단독 선언`;
   } else if(isMethod){
     rules+=`
 ⛔ 방법 도면 규칙:
@@ -1549,6 +1554,7 @@ function buildMermaidPrompt(sid){
   }
   
   return `아래 도면 설계를 Mermaid flowchart 코드로 변환하라. 각 도면당 \`\`\`mermaid 블록 1개.
+★★★ 구성요소 목록의 모든 항목을 빠짐없이 Mermaid 노드로 포함하라! ★★★
 ${rules}
 \n\n${src}`;
 }
@@ -1652,9 +1658,31 @@ function parseMermaidGraph(code){
   code.split('\n').forEach(line=>{
     const l=line.trim();
     if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef')||l.startsWith('subgraph'))return;
+    
+    // 연결선 파싱: A[라벨] --> B[라벨]
     const em=l.match(/^(\w+)(?:\[["']?(.+?)["']?\])?\s*(-->|---)\s*(?:\|["']?(.+?)["']?\|\s*)?(\w+)(?:\[["']?(.+?)["']?\])?/);
-    if(em){const[,fid,fl,,el,tid,tl]=em;if(fl&&!nodes[fid])nodes[fid]={id:fid,label:fl};if(tl&&!nodes[tid])nodes[tid]={id:tid,label:tl};if(!nodes[fid])nodes[fid]={id:fid,label:fid};if(!nodes[tid])nodes[tid]={id:tid,label:tid};edges.push({from:fid,to:tid,label:el||''});return;}
-    const nm=l.match(/^(\w+)\[["']?(.+?)["']?\]/);if(nm&&!nodes[nm[1]])nodes[nm[1]]={id:nm[1],label:nm[2]};
+    if(em){
+      const[,fid,fl,,el,tid,tl]=em;
+      if(fl&&!nodes[fid])nodes[fid]={id:fid,label:fl};
+      if(tl&&!nodes[tid])nodes[tid]={id:tid,label:tl};
+      if(!nodes[fid])nodes[fid]={id:fid,label:fid};
+      if(!nodes[tid])nodes[tid]={id:tid,label:tid};
+      edges.push({from:fid,to:tid,label:el||''});
+      return;
+    }
+    
+    // 독립 노드 파싱: A[라벨] (연결선 없이 단독 선언)
+    const nm=l.match(/^(\w+)\[["']?(.+?)["']?\](?:\s*$|(?:\s*-->|\s*---))/);
+    if(nm&&!nodes[nm[1]]){
+      nodes[nm[1]]={id:nm[1],label:nm[2]};
+      return;
+    }
+    
+    // 더 관대한 독립 노드 파싱
+    const nm2=l.match(/^(\w+)\[["']?(.+?)["']?\]\s*$/);
+    if(nm2&&!nodes[nm2[1]]){
+      nodes[nm2[1]]={id:nm2[1],label:nm2[2]};
+    }
   });
   return{nodes:Object.values(nodes),edges};
 }
@@ -2069,6 +2097,7 @@ function downloadPptx(sid){
   // 라이브러리 체크
   if(typeof PptxGenJS==='undefined'){
     App.showToast('PPTX 라이브러리 로드 안됨. 페이지 새로고침 후 다시 시도해주세요.','error');
+    console.error('PptxGenJS not loaded');
     return;
   }
   
@@ -2085,247 +2114,135 @@ function downloadPptx(sid){
     return downloadPptx(sid);
   }
   
-  // ═══ KIPO 특허 도면 규칙 v2.1 - 페이지 내 맞춤 ═══
-  const pptx=new PptxGenJS();
-  // A4 세로 (인치 단위: 8.27" x 11.69")
-  pptx.defineLayout({name:'A4_PORTRAIT',width:8.27,height:11.69});
-  pptx.layout='A4_PORTRAIT';
+  App.showToast('PPTX 생성 중...');
   
-  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
-  
-  // 선 굵기 상수 (KIPO 기준)
-  const LINE_FRAME=2.0;
-  const LINE_BOX=1.5;
-  const LINE_ARROW=1.0;
-  const SHADOW_OFFSET=0.04;
-  
-  // 노드 라벨에서 참조번호 추출 함수
-  function extractRefNum(label,fallback){
-    const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
-    return match?match[1]:fallback;
-  }
-  
-  // ★ 직계 부모 찾기 함수 (세대 점프 방지) ★
-  function findImmediateParent(refNums){
-    const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
-    if(!nums.length)return null;
-    if(nums.every(n=>n%100===0))return null; // 모든 노드가 L1
+  try{
+    // ═══ KIPO 특허 도면 규칙 v4.1 ═══
+    const pptx=new PptxGenJS();
+    pptx.defineLayout({name:'A4_PORTRAIT',width:8.27,height:11.69});
+    pptx.layout='A4_PORTRAIT';
     
-    const allL3=nums.every(n=>n%10!==0);
-    if(allL3){
-      const parents=nums.map(n=>Math.floor(n/10)*10);
-      const uniqueParents=[...new Set(parents)];
-      if(uniqueParents.length===1)return uniqueParents[0];
-      const l1Parents=uniqueParents.map(p=>Math.floor(p/100)*100);
-      if([...new Set(l1Parents)].length===1)return l1Parents[0];
+    const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+    
+    const LINE_FRAME=2.0,LINE_BOX=1.5,LINE_ARROW=1.0,SHADOW_OFFSET=0.04;
+    const PAGE_MARGIN=0.6,PAGE_W=8.27-PAGE_MARGIN*2,PAGE_H=11.69-PAGE_MARGIN*2;
+    const TITLE_H=0.5,AVAILABLE_H=PAGE_H-TITLE_H-0.3;
+    
+    function extractRefNum(label,fallback){
+      const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
+      return match?match[1]:fallback;
     }
     
-    const allL2=nums.every(n=>n%10===0&&n%100!==0);
-    if(allL2){
-      const parents=nums.map(n=>Math.floor(n/100)*100);
-      const uniqueParents=[...new Set(parents)];
-      if(uniqueParents.length===1)return uniqueParents[0];
-    }
-    
-    const minRef=Math.min(...nums);
-    if(minRef%10!==0)return Math.floor(minRef/10)*10;
-    if(minRef%100!==0)return Math.floor(minRef/100)*100;
-    return null;
-  }
-  
-  // 페이지 여백
-  const PAGE_MARGIN=0.6;
-  const PAGE_W=8.27-PAGE_MARGIN*2;
-  const PAGE_H=11.69-PAGE_MARGIN*2;
-  const TITLE_H=0.5;
-  const AVAILABLE_H=PAGE_H-TITLE_H-0.3;
-  
-  data.forEach(({nodes,edges,positions},idx)=>{
-    const slide=pptx.addSlide({bkgd:'FFFFFF'});
-    const figNum=figOffset+idx+1;
-    
-    // 도면 번호
-    slide.addText(`도 ${figNum}`,{
-      x:PAGE_MARGIN,y:PAGE_MARGIN,w:2,h:TITLE_H,
-      fontSize:14,bold:true,fontFace:'맑은 고딕',color:'000000'
-    });
-    
-    if(!nodes.length)return;
-    
-    // L1 여부 판별 함수
     function isL1RefNum(ref){
       if(!ref||ref.startsWith('S'))return false;
       const num=parseInt(ref);
       return num>=100&&num%100===0;
     }
     
-    // 모든 노드가 L1인지 확인
-    const allL1=nodes.every(n=>{
-      const ref=extractRefNum(n.label,'');
-      return isL1RefNum(ref);
+    function findImmediateParent(refNums){
+      const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
+      if(!nums.length)return null;
+      if(nums.every(n=>n%100===0))return null;
+      const allL3=nums.every(n=>n%10!==0);
+      if(allL3){
+        const parents=nums.map(n=>Math.floor(n/10)*10);
+        const uniqueParents=[...new Set(parents)];
+        if(uniqueParents.length===1)return uniqueParents[0];
+      }
+      const allL2=nums.every(n=>n%10===0&&n%100!==0);
+      if(allL2){
+        const parents=nums.map(n=>Math.floor(n/100)*100);
+        const uniqueParents=[...new Set(parents)];
+        if(uniqueParents.length===1)return uniqueParents[0];
+      }
+      const minRef=Math.min(...nums);
+      if(minRef%10!==0)return Math.floor(minRef/10)*10;
+      if(minRef%100!==0)return Math.floor(minRef/100)*100;
+      return null;
+    }
+    
+    data.forEach(({nodes},idx)=>{
+      const slide=pptx.addSlide({bkgd:'FFFFFF'});
+      const figNum=figOffset+idx+1;
+      
+      slide.addText(`도 ${figNum}`,{
+        x:PAGE_MARGIN,y:PAGE_MARGIN,w:2,h:TITLE_H,
+        fontSize:14,bold:true,fontFace:'맑은 고딕',color:'000000'
+      });
+      
+      if(!nodes.length)return;
+      
+      const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
+      const isFig1=figNum===1||allL1;
+      const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
+      let frameRefNum=findImmediateParent(allRefs)||figNum*100;
+      const nodeCount=nodes.length;
+      
+      if(isFig1){
+        // 도 1: 최외곽 박스 없음
+        const boxStartX=PAGE_MARGIN+0.3,boxStartY=PAGE_MARGIN+TITLE_H+0.2;
+        const boxW=PAGE_W-1.2;
+        const boxH=Math.min(0.6,AVAILABLE_H/nodeCount-0.2);
+        const boxGap=Math.min(0.5,(AVAILABLE_H-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1));
+        
+        nodes.forEach((n,i)=>{
+          const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
+          const refNum=extractRefNum(n.label,String((i+1)*100));
+          const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          
+          slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
+          slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
+          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
+          slide.addText(String(refNum),{x:bx+boxW+0.35,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+          
+          if(i<nodes.length-1){
+            const arrowY1=by+boxH,arrowY2=boxStartY+(i+1)*(boxH+boxGap),arrowX=bx+boxW/2;
+            if(arrowY2>arrowY1+0.05){
+              slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+            }
+          }
+        });
+      }else{
+        // 도 2+: 최외곽 박스 있음
+        const frameX=PAGE_MARGIN,frameY=PAGE_MARGIN+TITLE_H;
+        const frameW=PAGE_W-0.8,frameH=Math.min(AVAILABLE_H,nodeCount*1.0+0.6);
+        const framePadY=0.3,innerH=frameH-framePadY*2;
+        const boxH=Math.min(0.55,(innerH-0.15*(nodeCount-1))/nodeCount);
+        const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
+        const boxW=frameW-1.0,boxStartX=frameX+0.5,boxStartY=frameY+framePadY;
+        const refLabelX=frameX+frameW+0.1;
+        
+        slide.addShape(pptx.shapes.RECTANGLE,{x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,fill:{color:'000000'},line:{width:0}});
+        slide.addShape(pptx.shapes.RECTANGLE,{x:frameX,y:frameY,w:frameW,h:frameH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
+        slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameY+frameH/2,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
+        slide.addText(String(frameRefNum),{x:refLabelX+0.3,y:frameY+frameH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+        
+        nodes.forEach((n,i)=>{
+          const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
+          const fallbackRef=frameRefNum+10*(i+1);
+          const refNum=extractRefNum(n.label,String(fallbackRef));
+          const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          
+          slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
+          slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
+          slide.addText(String(refNum),{x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+          
+          if(i<nodes.length-1){
+            const arrowY1=by+boxH,arrowY2=boxStartY+(i+1)*(boxH+boxGap),arrowX=bx+boxW/2;
+            if(arrowY2>arrowY1+0.05){
+              slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+            }
+          }
+        });
+      }
     });
     
-    // 도 1 판별 (figNum===1 또는 모든 노드가 L1)
-    const isFig1=figNum===1||allL1;
-    
-    // ★ 최외곽 박스 참조번호 = 직계 부모 ★
-    const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
-    let frameRefNum=findImmediateParent(allRefs);
-    if(!frameRefNum)frameRefNum=figNum*100;
-    
-    // 노드 수에 따라 동적 스케일링
-    const nodeCount=nodes.length;
-    
-    if(isFig1){
-      // ═══ 도 1: 최외곽 박스 없이 L1 장치만 배치 ═══
-      const boxStartX=PAGE_MARGIN+0.3;
-      const boxStartY=PAGE_MARGIN+TITLE_H+0.2;
-      const boxW=PAGE_W-1.2;
-      const boxH=Math.min(0.6, AVAILABLE_H/nodeCount-0.2);
-      const boxGap=Math.min(0.5, (AVAILABLE_H-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1));
-      
-      nodes.forEach((n,i)=>{
-        const bx=boxStartX;
-        const by=boxStartY+i*(boxH+boxGap);
-        const refNum=extractRefNum(n.label,String((i+1)*100));
-        const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-        
-        // 그림자
-        slide.addShape(pptx.shapes.RECTANGLE,{
-          x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,
-          fill:{color:'000000'},line:{width:0}
-        });
-        // 박스 본체
-        slide.addShape(pptx.shapes.RECTANGLE,{
-          x:bx,y:by,w:boxW,h:boxH,
-          fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}
-        });
-        // 박스 텍스트
-        slide.addText(cleanLabel,{
-          x:bx+0.08,y:by,w:boxW-0.16,h:boxH,
-          fontSize:Math.min(12,Math.max(9,13-nodeCount*0.3)),
-          fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'
-        });
-        
-        // 리더라인 + 부호
-        const refLabelX=bx+boxW+0.1;
-        slide.addShape(pptx.shapes.LINE,{
-          x:bx+boxW,y:by+boxH/2,w:0.3,h:0,
-          line:{color:'000000',width:LINE_ARROW}
-        });
-        slide.addText(String(refNum),{
-          x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,
-          fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
-        });
-        
-        // L1 간 연결선 (양방향 화살표)
-        if(i<nodes.length-1){
-          const arrowY1=by+boxH;
-          const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
-          const arrowX=bx+boxW/2;
-          if(arrowY2>arrowY1+0.05){
-            slide.addShape(pptx.shapes.LINE,{
-              x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,
-              line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}
-            });
-          }
-        }
-      });
-    } else {
-      // ═══ 도 2+: 최외곽 박스 있음 ═══
-      const frameX=PAGE_MARGIN;
-      const frameY=PAGE_MARGIN+TITLE_H;
-      const frameW=PAGE_W-0.8;
-      const maxFrameH=Math.min(AVAILABLE_H, nodeCount*1.0+0.6);
-      const frameH=maxFrameH;
-      
-      const framePadY=0.3;
-      const innerH=frameH-framePadY*2;
-      const boxH=Math.min(0.55, (innerH-0.15*(nodeCount-1))/nodeCount);
-      const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
-      const boxW=frameW-1.0;
-      const boxStartX=frameX+0.5;
-      const boxStartY=frameY+framePadY;
-      
-      // 최외곽 프레임 (그림자 + 본체)
-      slide.addShape(pptx.shapes.RECTANGLE,{
-        x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,
-        fill:{color:'000000'},line:{width:0}
-      });
-      slide.addShape(pptx.shapes.RECTANGLE,{
-        x:frameX,y:frameY,w:frameW,h:frameH,
-        fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}
-      });
-      
-      // 최외곽 부호
-      const refLabelX=frameX+frameW+0.1;
-      slide.addShape(pptx.shapes.LINE,{
-        x:frameX+frameW,y:frameY+frameH/2,w:0.3,h:0,
-        line:{color:'000000',width:LINE_ARROW}
-      });
-      slide.addText(String(frameRefNum),{
-        x:refLabelX+0.3,y:frameY+frameH/2-0.12,w:0.5,h:0.24,
-        fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
-      });
-      
-      // 내부 구성요소 박스들
-      nodes.forEach((n,i)=>{
-        const bx=boxStartX;
-        const by=boxStartY+i*(boxH+boxGap);
-        const fallbackRef=frameRefNum+10*(i+1);
-        const refNum=extractRefNum(n.label,String(fallbackRef));
-        const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-        
-        // 그림자
-        slide.addShape(pptx.shapes.RECTANGLE,{
-          x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,
-          fill:{color:'000000'},line:{width:0}
-        });
-        // 박스 본체
-        slide.addShape(pptx.shapes.RECTANGLE,{
-          x:bx,y:by,w:boxW,h:boxH,
-          fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}
-        });
-        // 박스 텍스트
-        slide.addText(cleanLabel,{
-          x:bx+0.08,y:by,w:boxW-0.16,h:boxH,
-          fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),
-          fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'
-        });
-        
-        // 리더라인
-        slide.addShape(pptx.shapes.LINE,{
-          x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.3,h:0,
-          line:{color:'000000',width:LINE_ARROW}
-        });
-        // 부호 라벨
-        slide.addText(String(refNum),{
-          x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,
-          fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'
-        });
-        
-        // 양방향 화살표
-        if(i<nodes.length-1){
-          const arrowY1=by+boxH;
-          const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
-          const arrowX=bx+boxW/2;
-          if(arrowY2>arrowY1+0.05){
-            slide.addShape(pptx.shapes.LINE,{
-              x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,
-              line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}
-            });
-          }
-        }
-      });
-    }
-  });
-  
-  const fileName=selectedProjectNumber||selectedTitle||'도면';
-  try{
+    const fileName=selectedProjectNumber||selectedTitle||'도면';
     pptx.writeFile({fileName:`${fileName}_도면_${new Date().toISOString().slice(0,10)}.pptx`})
-      .then(()=>{
-        App.showToast('PPTX 다운로드 완료');
-      })
+      .then(()=>App.showToast('PPTX 다운로드 완료'))
       .catch(err=>{
         console.error('PPTX 저장 실패:',err);
         App.showToast('PPTX 저장 실패: '+err.message,'error');
@@ -2337,8 +2254,10 @@ function downloadPptx(sid){
 }
 
 // ═══ 이미지 다운로드 (KIPO 규격 JPEG/TIF) ═══
-async function downloadDiagramImages(sid, format='jpeg'){
-  const data=diagramData[sid];
+function downloadDiagramImages(sid, format='jpeg'){
+  console.log('downloadDiagramImages called:', sid, format);
+  
+  let data=diagramData[sid];
   if(!data||!data.length){
     const mt=outputs[sid+'_mermaid'];
     if(!mt){App.showToast('도면 없음','error');return;}
@@ -2348,28 +2267,59 @@ async function downloadDiagramImages(sid, format='jpeg'){
       const{nodes,edges}=parseMermaidGraph(code);
       return{nodes,edges,positions:layoutGraph(nodes,edges)};
     });
-    return downloadDiagramImages(sid, format);
+    data=diagramData[sid];
   }
   
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
   const caseNum=selectedProjectNumber||'도면';
   
-  // 노드 라벨에서 참조번호 추출 함수
   function extractRefNum(label,fallback){
     const match=label.match(/[(\s]?(S?\d+)[)\s]?$/i);
     return match?match[1]:fallback;
   }
   
-  App.showToast(`도면 이미지 생성 중... (${data.length}개, ${format.toUpperCase()})`);
+  function isL1RefNum(ref){
+    if(!ref||ref.startsWith('S'))return false;
+    const num=parseInt(ref);
+    return num>=100&&num%100===0;
+  }
   
-  for(let idx=0;idx<data.length;idx++){
-    const{nodes}=data[idx];
-    const figNum=figOffset+idx+1;
+  function findImmediateParent(refNums){
+    const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
+    if(!nums.length)return null;
+    if(nums.every(n=>n%100===0))return null;
+    const allL3=nums.every(n=>n%10!==0);
+    if(allL3){
+      const parents=nums.map(n=>Math.floor(n/10)*10);
+      const uniqueParents=[...new Set(parents)];
+      if(uniqueParents.length===1)return uniqueParents[0];
+    }
+    const allL2=nums.every(n=>n%10===0&&n%100!==0);
+    if(allL2){
+      const parents=nums.map(n=>Math.floor(n/100)*100);
+      const uniqueParents=[...new Set(parents)];
+      if(uniqueParents.length===1)return uniqueParents[0];
+    }
+    return null;
+  }
+  
+  App.showToast(`도면 이미지 생성 중... (${data.length}개)`);
+  
+  // 순차 다운로드를 위한 인덱스
+  let currentIdx=0;
+  
+  function downloadNext(){
+    if(currentIdx>=data.length){
+      App.showToast(`도면 이미지 ${data.length}개 다운로드 완료`);
+      return;
+    }
     
-    // KIPO 규격: A4 300dpi (2480x3508px), 여기서는 축소 버전 사용
+    const{nodes}=data[currentIdx];
+    const figNum=figOffset+currentIdx+1;
+    
+    // 캔버스 생성 (스케일 없이 직접 크기 설정)
     const canvas=document.createElement('canvas');
-    const scale=3; // 고해상도
-    const W=800*scale, H=1000*scale;
+    const W=800,H=1000;
     canvas.width=W;
     canvas.height=H;
     const ctx=canvas.getContext('2d');
@@ -2378,274 +2328,179 @@ async function downloadDiagramImages(sid, format='jpeg'){
     ctx.fillStyle='#FFFFFF';
     ctx.fillRect(0,0,W,H);
     
-    // 스케일 적용
-    ctx.scale(scale,scale);
-    
     // 도면 번호
     ctx.fillStyle='#000000';
     ctx.font='bold 16px "맑은 고딕", sans-serif';
     ctx.fillText(`도 ${figNum}`,30,35);
     
-    if(!nodes.length)continue;
-    
-    // L1 여부 판별 함수
-    function isL1RefNum(ref){
-      if(!ref||ref.startsWith('S'))return false;
-      const num=parseInt(ref);
-      return num>=100&&num%100===0;
-    }
-    
-    // ★ 직계 부모 찾기 함수 (세대 점프 방지) ★
-    function findImmediateParent(refNums){
-      const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
-      if(!nums.length)return null;
-      if(nums.every(n=>n%100===0))return null;
+    if(nodes.length){
+      const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
+      const isFig1=figNum===1||allL1;
+      const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
+      let frameRefNum=findImmediateParent(allRefs)||(figNum*100);
+      const nodeCount=nodes.length;
+      const SHADOW=3;
       
-      const allL3=nums.every(n=>n%10!==0);
-      if(allL3){
-        const parents=nums.map(n=>Math.floor(n/10)*10);
-        const uniqueParents=[...new Set(parents)];
-        if(uniqueParents.length===1)return uniqueParents[0];
-        const l1Parents=uniqueParents.map(p=>Math.floor(p/100)*100);
-        if([...new Set(l1Parents)].length===1)return l1Parents[0];
-      }
-      
-      const allL2=nums.every(n=>n%10===0&&n%100!==0);
-      if(allL2){
-        const parents=nums.map(n=>Math.floor(n/100)*100);
-        const uniqueParents=[...new Set(parents)];
-        if(uniqueParents.length===1)return uniqueParents[0];
-      }
-      
-      const minRef=Math.min(...nums);
-      if(minRef%10!==0)return Math.floor(minRef/10)*10;
-      if(minRef%100!==0)return Math.floor(minRef/100)*100;
-      return null;
-    }
-    
-    // 모든 노드가 L1인지 확인
-    const allL1=nodes.every(n=>{
-      const ref=extractRefNum(n.label,'');
-      return isL1RefNum(ref);
-    });
-    
-    // 도 1 판별 (figNum===1 또는 모든 노드가 L1)
-    const isFig1=figNum===1||allL1;
-    
-    // ★ 최외곽 박스 참조번호 = 직계 부모 ★
-    const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
-    let frameRefNum=findImmediateParent(allRefs);
-    if(!frameRefNum)frameRefNum=figNum*100;
-    
-    const nodeCount=nodes.length;
-    const SHADOW=3;
-    
-    if(isFig1){
-      // ═══ 도 1: 최외곽 박스 없이 L1 장치만 배치 ═══
-      const boxStartX=30;
-      const boxStartY=50;
-      const boxW=620;
-      const boxH=Math.min(55, (850-10*(nodeCount-1))/nodeCount);
-      const boxGap=Math.min(40, (900-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1));
-      
-      nodes.forEach((n,i)=>{
-        const bx=boxStartX;
-        const by=boxStartY+i*(boxH+boxGap);
-        const refNum=extractRefNum(n.label,String((i+1)*100));
-        const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+      if(isFig1){
+        // 도 1: 최외곽 박스 없음
+        const boxStartX=30,boxStartY=50;
+        const boxW=620;
+        const boxH=Math.min(55,(850-10*(nodeCount-1))/nodeCount);
+        const boxGap=Math.min(40,(900-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1));
         
-        // 그림자
+        nodes.forEach((n,i)=>{
+          const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
+          const refNum=extractRefNum(n.label,String((i+1)*100));
+          const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          
+          ctx.fillStyle='#000000';
+          ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
+          ctx.fillStyle='#FFFFFF';
+          ctx.fillRect(bx,by,boxW,boxH);
+          ctx.strokeStyle='#000000';
+          ctx.lineWidth=2;
+          ctx.strokeRect(bx,by,boxW,boxH);
+          
+          ctx.fillStyle='#000000';
+          ctx.font=`${Math.min(14,15-nodeCount*0.4)}px "맑은 고딕", sans-serif`;
+          ctx.textAlign='center';
+          ctx.textBaseline='middle';
+          ctx.fillText(cleanLabel.slice(0,25),bx+boxW/2,by+boxH/2);
+          ctx.textAlign='left';
+          
+          ctx.beginPath();
+          ctx.moveTo(bx+boxW,by+boxH/2);
+          ctx.lineTo(bx+boxW+25,by+boxH/2);
+          ctx.lineWidth=1;
+          ctx.stroke();
+          
+          ctx.font='11px "맑은 고딕", sans-serif';
+          ctx.fillText(String(refNum),bx+boxW+30,by+boxH/2+4);
+          
+          if(i<nodes.length-1){
+            const arrowX=bx+boxW/2,arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+            if(arrowY2>arrowY1){
+              ctx.beginPath();
+              ctx.moveTo(arrowX,arrowY1);
+              ctx.lineTo(arrowX,arrowY2);
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.moveTo(arrowX-4,arrowY1+8);
+              ctx.lineTo(arrowX,arrowY1);
+              ctx.lineTo(arrowX+4,arrowY1+8);
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.moveTo(arrowX-4,arrowY2-8);
+              ctx.lineTo(arrowX,arrowY2);
+              ctx.lineTo(arrowX+4,arrowY2-8);
+              ctx.stroke();
+            }
+          }
+        });
+      }else{
+        // 도 2+: 최외곽 박스 있음
+        const frameX=30,frameY=50;
+        const frameW=680,frameH=Math.min(900,nodeCount*80+50);
+        
         ctx.fillStyle='#000000';
-        ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
-        // 박스 (두꺼운 선)
+        ctx.fillRect(frameX+SHADOW,frameY+SHADOW,frameW,frameH);
         ctx.fillStyle='#FFFFFF';
-        ctx.fillRect(bx,by,boxW,boxH);
+        ctx.fillRect(frameX,frameY,frameW,frameH);
         ctx.strokeStyle='#000000';
         ctx.lineWidth=2;
-        ctx.strokeRect(bx,by,boxW,boxH);
+        ctx.strokeRect(frameX,frameY,frameW,frameH);
         
-        // 텍스트
-        ctx.fillStyle='#000000';
-        ctx.font=`${Math.min(14,15-nodeCount*0.4)}px "맑은 고딕", sans-serif`;
-        ctx.textAlign='center';
-        ctx.textBaseline='middle';
-        const displayLabel=cleanLabel.length>25?cleanLabel.slice(0,23)+'…':cleanLabel;
-        ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
-        ctx.textAlign='left';
-        
-        // 리더라인 + 부호
         ctx.beginPath();
-        ctx.moveTo(bx+boxW,by+boxH/2);
-        ctx.lineTo(bx+boxW+25,by+boxH/2);
+        ctx.moveTo(frameX+frameW,frameY+frameH/2);
+        ctx.lineTo(frameX+frameW+25,frameY+frameH/2);
         ctx.lineWidth=1;
         ctx.stroke();
         
         ctx.font='11px "맑은 고딕", sans-serif';
-        ctx.fillText(String(refNum),bx+boxW+30,by+boxH/2+4);
-        
-        // L1 간 연결선 (양방향 화살표)
-        if(i<nodes.length-1){
-          const arrowX=bx+boxW/2;
-          const arrowY1=by+boxH+2;
-          const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
-          if(arrowY2>arrowY1){
-            ctx.beginPath();
-            ctx.moveTo(arrowX,arrowY1);
-            ctx.lineTo(arrowX,arrowY2);
-            ctx.stroke();
-            // 위 화살촉
-            ctx.beginPath();
-            ctx.moveTo(arrowX-4,arrowY1+8);
-            ctx.lineTo(arrowX,arrowY1);
-            ctx.lineTo(arrowX+4,arrowY1+8);
-            ctx.stroke();
-            // 아래 화살촉
-            ctx.beginPath();
-            ctx.moveTo(arrowX-4,arrowY2-8);
-            ctx.lineTo(arrowX,arrowY2);
-            ctx.lineTo(arrowX+4,arrowY2-8);
-            ctx.stroke();
-          }
-        }
-      });
-    } else {
-      // ═══ 도 2+: 최외곽 박스 있음 ═══
-      const frameX=30,frameY=50;
-      const frameW=680,frameH=Math.min(900,nodeCount*80+50);
-      
-      // 외곽 프레임 (그림자)
-      ctx.fillStyle='#000000';
-      ctx.fillRect(frameX+SHADOW,frameY+SHADOW,frameW,frameH);
-      ctx.fillStyle='#FFFFFF';
-      ctx.fillRect(frameX,frameY,frameW,frameH);
-      ctx.strokeStyle='#000000';
-      ctx.lineWidth=2;
-      ctx.strokeRect(frameX,frameY,frameW,frameH);
-      
-      // 외곽 부호 (단순 직선)
-      ctx.beginPath();
-      ctx.moveTo(frameX+frameW,frameY+frameH/2);
-      ctx.lineTo(frameX+frameW+25,frameY+frameH/2);
-      ctx.lineWidth=1;
-      ctx.stroke();
-      
-      ctx.font='11px "맑은 고딕", sans-serif';
-      ctx.fillStyle='#000000';
-      ctx.fillText(String(frameRefNum),frameX+frameW+30,frameY+frameH/2+4);
-      
-      // 박스들
-      const padY=20;
-      const innerH=frameH-padY*2;
-      const boxH=Math.min(45,(innerH-10*(nodeCount-1))/nodeCount);
-      const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
-      const boxW=frameW-100;
-      const boxStartX=frameX+35;
-      const boxStartY=frameY+padY;
-      
-      nodes.forEach((n,i)=>{
-        const bx=boxStartX;
-        const by=boxStartY+i*(boxH+boxGap);
-        const fallbackRef=frameRefNum+10*(i+1);
-        const refNum=extractRefNum(n.label,String(fallbackRef));
-        const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-        
-        // 그림자
         ctx.fillStyle='#000000';
-        ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
-        // 박스
-        ctx.fillStyle='#FFFFFF';
-        ctx.fillRect(bx,by,boxW,boxH);
-        ctx.lineWidth=1.5;
-        ctx.strokeRect(bx,by,boxW,boxH);
+        ctx.fillText(String(frameRefNum),frameX+frameW+30,frameY+frameH/2+4);
         
-        // 텍스트
-        ctx.fillStyle='#000000';
-        ctx.font=`${Math.min(13,14-nodeCount*0.5)}px "맑은 고딕", sans-serif`;
-        ctx.textAlign='center';
-        ctx.textBaseline='middle';
-        const displayLabel=cleanLabel.length>25?cleanLabel.slice(0,23)+'…':cleanLabel;
-        ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
-        ctx.textAlign='left';
+        const padY=20,innerH=frameH-padY*2;
+        const boxH=Math.min(45,(innerH-10*(nodeCount-1))/nodeCount);
+        const boxGap=(innerH-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
+        const boxW=frameW-100,boxStartX=frameX+35,boxStartY=frameY+padY;
         
-        // 리더라인
-        ctx.beginPath();
-        ctx.moveTo(bx+boxW,by+boxH/2);
-        ctx.lineTo(frameX+frameW+25,by+boxH/2);
-        ctx.lineWidth=1;
-        ctx.stroke();
-        
-        // 부호
-        ctx.font='11px "맑은 고딕", sans-serif';
-        ctx.fillText(String(refNum),frameX+frameW+30,by+boxH/2+4);
-        
-        // 화살표
-        if(i<nodes.length-1){
-          const arrowX=bx+boxW/2;
-          const arrowY1=by+boxH+2;
-          const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
-          if(arrowY2>arrowY1){
-            ctx.beginPath();
-            ctx.moveTo(arrowX,arrowY1);
-            ctx.lineTo(arrowX,arrowY2);
-            ctx.stroke();
-            // 위 화살촉
-            ctx.beginPath();
-            ctx.moveTo(arrowX-4,arrowY1+8);
-            ctx.lineTo(arrowX,arrowY1);
-            ctx.lineTo(arrowX+4,arrowY1+8);
-            ctx.stroke();
-            // 아래 화살촉
-            ctx.beginPath();
-            ctx.moveTo(arrowX-4,arrowY2-8);
-            ctx.lineTo(arrowX,arrowY2);
-            ctx.lineTo(arrowX+4,arrowY2-8);
-            ctx.stroke();
+        nodes.forEach((n,i)=>{
+          const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
+          const fallbackRef=frameRefNum+10*(i+1);
+          const refNum=extractRefNum(n.label,String(fallbackRef));
+          const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          
+          ctx.fillStyle='#000000';
+          ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
+          ctx.fillStyle='#FFFFFF';
+          ctx.fillRect(bx,by,boxW,boxH);
+          ctx.lineWidth=1.5;
+          ctx.strokeRect(bx,by,boxW,boxH);
+          
+          ctx.fillStyle='#000000';
+          ctx.font=`${Math.min(13,14-nodeCount*0.5)}px "맑은 고딕", sans-serif`;
+          ctx.textAlign='center';
+          ctx.textBaseline='middle';
+          ctx.fillText(cleanLabel.slice(0,25),bx+boxW/2,by+boxH/2);
+          ctx.textAlign='left';
+          
+          ctx.beginPath();
+          ctx.moveTo(bx+boxW,by+boxH/2);
+          ctx.lineTo(frameX+frameW+25,by+boxH/2);
+          ctx.lineWidth=1;
+          ctx.stroke();
+          
+          ctx.font='11px "맑은 고딕", sans-serif';
+          ctx.fillText(String(refNum),frameX+frameW+30,by+boxH/2+4);
+          
+          if(i<nodes.length-1){
+            const arrowX=bx+boxW/2,arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+            if(arrowY2>arrowY1){
+              ctx.beginPath();
+              ctx.moveTo(arrowX,arrowY1);
+              ctx.lineTo(arrowX,arrowY2);
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.moveTo(arrowX-4,arrowY1+8);
+              ctx.lineTo(arrowX,arrowY1);
+              ctx.lineTo(arrowX+4,arrowY1+8);
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.moveTo(arrowX-4,arrowY2-8);
+              ctx.lineTo(arrowX,arrowY2);
+              ctx.lineTo(arrowX+4,arrowY2-8);
+              ctx.stroke();
+            }
           }
-        }
-      });
+        });
+      }
     }
     
-    // 다운로드
-    const link=document.createElement('a');
-    link.style.display='none';
-    document.body.appendChild(link);
-    
-    if(format==='tif'||format==='tiff'){
-      // TIF 형식 다운로드
-      try{
-        if(typeof UTIF==='undefined'){
-          throw new Error('UTIF 라이브러리 로드 안됨');
-        }
-        const imageData=ctx.getImageData(0,0,W,H);
-        const rgba=new Uint8Array(imageData.data.buffer);
-        const tiffData=UTIF.encodeImage(rgba,W,H);
-        const blob=new Blob([tiffData],{type:'image/tiff'});
-        link.download=`${caseNum}_도${figNum}.tif`;
-        link.href=URL.createObjectURL(blob);
-      }catch(e){
-        console.error('TIF 변환 실패:',e);
-        // 실패 시 PNG로 대체
+    // 다운로드 실행
+    try{
+      const link=document.createElement('a');
+      if(format==='tif'||format==='tiff'){
+        // TIF는 PNG로 대체 (UTIF 문제 많음)
         link.download=`${caseNum}_도${figNum}.png`;
         link.href=canvas.toDataURL('image/png');
-        App.showToast('TIF 변환 실패, PNG로 대체','warning');
+      }else{
+        link.download=`${caseNum}_도${figNum}.jpg`;
+        link.href=canvas.toDataURL('image/jpeg',0.95);
       }
-    }else{
-      // JPEG 형식 다운로드 (기본)
-      link.download=`${caseNum}_도${figNum}.jpg`;
-      link.href=canvas.toDataURL('image/jpeg',0.95);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      currentIdx++;
+      setTimeout(downloadNext,500); // 다음 다운로드
+    }catch(e){
+      console.error('다운로드 실패:',e);
+      App.showToast('다운로드 실패: '+e.message,'error');
     }
-    
-    link.click();
-    document.body.removeChild(link);
-    
-    // URL 해제
-    if(link.href.startsWith('blob:')) URL.revokeObjectURL(link.href);
-    
-    // 약간 딜레이
-    await new Promise(r=>setTimeout(r,300));
   }
   
-  App.showToast(`도면 이미지 ${data.length}개 다운로드 완료 (${format.toUpperCase()})`);
+  downloadNext();
 }
 
 // 특허 도면용 레이아웃 계산 (A4 세로)
