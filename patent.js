@@ -1529,34 +1529,63 @@ function buildMermaidPrompt(sid){
   const isDevice=sid==='step_07';
   const isMethod=sid==='step_11';
   
-  let rules='규칙: graph TD, 한글 라벨, 노드ID 영문. 서브그래프 사용 가능. style/linkStyle 금지.';
+  let rules=`
+═══ Mermaid 문법 규칙 (필수!) ═══
+graph TD 사용
+노드ID는 영문 (A, B, C 또는 server, client 등)
+노드 라벨은 대괄호 안에: A["서버(100)"]
+
+★★★ 올바른 Mermaid 문법 예시 ★★★
+\`\`\`mermaid
+graph TD
+    A["서버(100)"]
+    B["사용자 단말(200)"]
+    C["네트워크(300)"]
+    D["데이터베이스(400)"]
+    A --> B
+    B --> C
+    A --> D
+\`\`\`
+
+⛔ 잘못된 문법 (절대 금지):
+- A["서버(100)"] <--> B["사용자 단말(200)"]  ← <--> 사용 금지!
+- 한 줄에 노드 정의와 연결을 함께 쓰지 말 것
+
+✅ 올바른 문법:
+- 노드 정의를 먼저, 연결은 나중에
+- 연결은 --> 만 사용 (양방향은 A --> B와 B --> A 두 줄로)
+`;
   
   if(isDevice){
     rules+=`
-⛔ 장치 도면 규칙:
-- 노드 라벨에 반드시 참조번호 포함: "통신부(110)", "프로세서(120)"
-- 참조번호는 숫자만 사용 (100, 110, 120...)
-- "~단계", "S숫자" 표현 절대 금지
-- 구성요소명은 반드시 "~부" 형태 사용 (예: 통신부, 제어부, 저장부)
-- "~모듈" 표현 절대 금지 → "~부"로 통일
+═══ 장치 도면 규칙 ═══
+- 노드 라벨에 반드시 참조번호 포함: A["통신부(110)"]
+- 참조번호는 숫자만 (100, 110, 120...)
+- "~단계", "S숫자" 표현 금지
+- "~모듈" 금지 → "~부"로 통일
 
-★★★ 중요: 도면 설계의 모든 구성요소를 빠짐없이 포함해야 함 ★★★
-- 구성요소 목록에 있는 모든 항목을 Mermaid 노드로 변환
-- 연결관계가 없는 노드도 반드시 포함 (독립 노드로 추가)
-- 예: D[네트워크(400)] 처럼 연결 없이 단독 선언`;
+★ 모든 구성요소를 빠짐없이 노드로 포함! ★`;
   } else if(isMethod){
     rules+=`
-⛔ 방법 도면 규칙:
-- 노드 라벨에 반드시 단계번호 포함: "데이터 수신 단계(S401)", "분석 단계(S402)"
-- 단계번호는 S+숫자 형식 (S401, S402, S403...)
-- 숫자만 있는 참조번호(100, 110 등) 사용 금지
-- 단계명은 반드시 "~단계"로 끝남`;
+═══ 방법 도면 규칙 ═══
+- 노드 라벨에 단계번호 포함: A["데이터 수신 단계(S401)"]
+- 단계번호는 S+숫자 (S401, S402...)
+- 숫자만 있는 참조번호(100, 110) 사용 금지`;
   }
   
   return `아래 도면 설계를 Mermaid flowchart 코드로 변환하라. 각 도면당 \`\`\`mermaid 블록 1개.
-★★★ 구성요소 목록의 모든 항목을 빠짐없이 Mermaid 노드로 포함하라! ★★★
+
 ${rules}
-\n\n${src}`;
+
+═══ 출력 형식 ═══
+각 도면마다:
+\`\`\`mermaid
+graph TD
+    노드정의들...
+    연결들...
+\`\`\`
+
+${src}`;
 }
 
 // ═══ 도면 규칙 위반 시 자동 재생성 ═══
@@ -1655,36 +1684,46 @@ function validateDiagramDesignText(text){
 // ═══════════ UNIFIED DIAGRAM ENGINE ═══════════
 function parseMermaidGraph(code){
   const nodes={},edges=[];
+  
+  // 먼저 모든 노드 정의를 추출 (라벨 포함)
+  const nodeDefPattern=/(\w+)\s*\[\s*["']?([^\]"']+?)["']?\s*\]/g;
+  let nodeMatch;
+  while((nodeMatch=nodeDefPattern.exec(code))!==null){
+    const[,id,label]=nodeMatch;
+    // 라벨에 화살표 문법이 포함되어 있으면 무시 (파싱 오류)
+    if(label.includes('-->')||label.includes('<--')||label.includes('---')){
+      console.warn('Invalid label detected:',label);
+      continue;
+    }
+    if(!nodes[id]){
+      nodes[id]={id,label:label.trim()};
+    }
+  }
+  
+  // 연결선 추출 (노드 정의 부분 제외)
   code.split('\n').forEach(line=>{
     const l=line.trim();
     if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef')||l.startsWith('subgraph'))return;
     
-    // 연결선 파싱: A[라벨] --> B[라벨]
-    const em=l.match(/^(\w+)(?:\[["']?(.+?)["']?\])?\s*(-->|---)\s*(?:\|["']?(.+?)["']?\|\s*)?(\w+)(?:\[["']?(.+?)["']?\])?/);
-    if(em){
-      const[,fid,fl,,el,tid,tl]=em;
-      if(fl&&!nodes[fid])nodes[fid]={id:fid,label:fl};
-      if(tl&&!nodes[tid])nodes[tid]={id:tid,label:tl};
-      if(!nodes[fid])nodes[fid]={id:fid,label:fid};
-      if(!nodes[tid])nodes[tid]={id:tid,label:tid};
-      edges.push({from:fid,to:tid,label:el||''});
-      return;
-    }
-    
-    // 독립 노드 파싱: A[라벨] (연결선 없이 단독 선언)
-    const nm=l.match(/^(\w+)\[["']?(.+?)["']?\](?:\s*$|(?:\s*-->|\s*---))/);
-    if(nm&&!nodes[nm[1]]){
-      nodes[nm[1]]={id:nm[1],label:nm[2]};
-      return;
-    }
-    
-    // 더 관대한 독립 노드 파싱
-    const nm2=l.match(/^(\w+)\[["']?(.+?)["']?\]\s*$/);
-    if(nm2&&!nodes[nm2[1]]){
-      nodes[nm2[1]]={id:nm2[1],label:nm2[2]};
+    // 연결 패턴만 추출: A --> B, A <--> B, A --- B
+    const connections=l.match(/(\w+)\s*(-->|<-->|---)\s*(\w+)/g);
+    if(connections){
+      connections.forEach(conn=>{
+        const cm=conn.match(/(\w+)\s*(-->|<-->|---)\s*(\w+)/);
+        if(cm){
+          const[,from,arrow,to]=cm;
+          // 노드가 없으면 ID를 라벨로 사용
+          if(!nodes[from])nodes[from]={id:from,label:from};
+          if(!nodes[to])nodes[to]={id:to,label:to};
+          edges.push({from,to,label:'',bidirectional:arrow==='<-->'});
+        }
+      });
     }
   });
-  return{nodes:Object.values(nodes),edges};
+  
+  const result={nodes:Object.values(nodes),edges};
+  console.log('Parsed Mermaid:',result);
+  return result;
 }
 function layoutGraph(nodes,edges){
   const adj={};edges.forEach(e=>{if(!adj[e.from])adj[e.from]=[];adj[e.from].push(e.to);});
@@ -1893,7 +1932,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   }
 }
 
-// ═══ 도면 규칙 검증 함수 (v4.0) ═══
+// ═══ 도면 규칙 검증 함수 (v4.1 - 파싱 오류 감지 추가) ═══
 function validateDiagramRules(nodes,figNum){
   const issues=[];
   
@@ -1923,6 +1962,33 @@ function validateDiagramRules(nodes,figNum){
     const num=parseInt(ref);
     return num>=100&&num%10!==0;
   }
+  
+  // ★ 0. 파싱 오류 검증 (최우선) ★
+  if(!nodes||nodes.length===0){
+    issues.push({
+      severity:'ERROR',
+      message:`도 ${figNum}: Mermaid 코드 파싱 실패 - 노드가 없습니다.`
+    });
+    return issues; // 다른 검증 불필요
+  }
+  
+  // 파싱 오류 감지: 라벨에 Mermaid 문법 잔재가 있는지
+  nodes.forEach(n=>{
+    const label=n.label||'';
+    if(label.includes('"]')||label.includes('<-->')||label.includes('-->')||label.includes('---')){
+      issues.push({
+        severity:'ERROR',
+        message:`도 ${figNum}: 파싱 오류 - 라벨에 Mermaid 코드 포함: "${label.slice(0,30)}..."`
+      });
+    }
+    // 라벨이 노드 ID와 동일하면 (라벨 추출 실패)
+    if(label===n.id&&!/^\d+$/.test(label)){
+      issues.push({
+        severity:'WARNING',
+        message:`도 ${figNum}: 노드 "${n.id}"의 라벨이 추출되지 않았습니다.`
+      });
+    }
+  });
   
   // 1. ~모듈 사용 금지 검증
   nodes.forEach(n=>{
