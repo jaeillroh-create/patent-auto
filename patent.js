@@ -1762,40 +1762,71 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     return num>=100&&num%100===0;
   }
   
-  // ★ 직계 부모 찾기 함수 (세대 점프 방지) ★
+  // ★ 직계 부모 찾기 함수 (세대 점프 방지) v4.2 ★
   function findImmediateParent(refNums){
     // 숫자형 참조번호만 필터링
     const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
     if(!nums.length)return null;
     
-    // 모든 노드가 L1이면 부모 없음
-    if(nums.every(n=>n%100===0))return null;
+    // 레벨별 분류
+    const l1s=nums.filter(n=>n%100===0);      // 100, 200, 300...
+    const l2s=nums.filter(n=>n%10===0&&n%100!==0);  // 110, 120, 210...
+    const l3s=nums.filter(n=>n%10!==0);       // 111, 112, 121...
     
-    // L3 체크 (마지막 자리가 0이 아닌 경우: 111, 112, 113...)
-    const allL3=nums.every(n=>n%10!==0);
-    if(allL3){
-      // L3의 직계 부모는 L2 (마지막 자리를 0으로: 111→110)
-      const parents=nums.map(n=>Math.floor(n/10)*10);
-      const uniqueParents=[...new Set(parents)];
-      if(uniqueParents.length===1)return uniqueParents[0];
-      // 여러 L2에 걸쳐있으면 공통 L1 반환
-      const l1Parents=uniqueParents.map(p=>Math.floor(p/100)*100);
-      if([...new Set(l1Parents)].length===1)return l1Parents[0];
+    console.log('findImmediateParent:', {nums, l1s, l2s, l3s});
+    
+    // ★ 케이스 1: L1이 포함된 경우 ★
+    if(l1s.length>0){
+      if(l1s.length===1&&(l2s.length>0||l3s.length>0)){
+        // L1이 1개이고 하위(L2/L3)가 있으면 → L1이 최외곽
+        // 단, 하위들이 해당 L1의 자식인지 검증
+        const theL1=l1s[0];
+        const allBelongToL1=l2s.every(n=>Math.floor(n/100)*100===theL1)&&
+                            l3s.every(n=>Math.floor(n/100)*100===theL1);
+        if(allBelongToL1){
+          return theL1; // 예: [100, 110, 120] → 100
+        }
+      }
+      // L1만 있거나, 여러 L1이 있으면 → 최외곽 없음 (도 1 스타일)
+      return null;
     }
     
-    // L2 체크 (10단위: 110, 120, 130...)
-    const allL2=nums.every(n=>n%10===0&&n%100!==0);
-    if(allL2){
-      // L2의 직계 부모는 L1 (100단위로: 110→100)
-      const parents=nums.map(n=>Math.floor(n/100)*100);
+    // ★ 케이스 2: L1 없이 L2만 있는 경우 ★
+    if(l2s.length>0&&l3s.length===0){
+      const parents=l2s.map(n=>Math.floor(n/100)*100);
       const uniqueParents=[...new Set(parents)];
-      if(uniqueParents.length===1)return uniqueParents[0];
+      if(uniqueParents.length===1){
+        return uniqueParents[0]; // 예: [110, 120, 130] → 100
+      }
+      return null; // 여러 L1에 걸쳐있으면 최외곽 결정 불가
     }
     
-    // 혼합된 경우: 가장 낮은 공통 조상 찾기
-    const minRef=Math.min(...nums);
-    if(minRef%10!==0)return Math.floor(minRef/10)*10; // L3 → L2
-    if(minRef%100!==0)return Math.floor(minRef/100)*100; // L2 → L1
+    // ★ 케이스 3: L3가 있는 경우 ★
+    if(l3s.length>0){
+      // L2도 섞여있으면 공통 L1 찾기
+      if(l2s.length>0){
+        const allNums=[...l2s,...l3s];
+        const l1Parents=allNums.map(n=>Math.floor(n/100)*100);
+        const uniqueL1=[...new Set(l1Parents)];
+        if(uniqueL1.length===1){
+          return uniqueL1[0]; // 공통 L1
+        }
+        return null;
+      }
+      
+      // L3만 있으면 공통 L2 찾기
+      const l2Parents=l3s.map(n=>Math.floor(n/10)*10);
+      const uniqueL2=[...new Set(l2Parents)];
+      if(uniqueL2.length===1){
+        return uniqueL2[0]; // 예: [111, 112, 113] → 110
+      }
+      // 여러 L2에 걸쳐있으면 공통 L1
+      const l1Parents=uniqueL2.map(p=>Math.floor(p/100)*100);
+      if([...new Set(l1Parents)].length===1){
+        return l1Parents[0];
+      }
+    }
+    
     return null;
   }
   
@@ -1811,10 +1842,12 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   // ★ 최외곽 박스 참조번호 = 직계 부모 ★
   const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
   let frameRefNum=findImmediateParent(allRefs);
-  if(!frameRefNum){
-    // 폴백: figNum 기반
-    frameRefNum=figNum*100;
+  if(!frameRefNum&&allRefs.length>0){
+    // 폴백 개선: 첫 번째 참조번호의 L1 부모 사용
+    const firstRef=parseInt(allRefs[0])||100;
+    frameRefNum=Math.floor(firstRef/100)*100;
   }
+  if(!frameRefNum)frameRefNum=100; // 최종 폴백
   
   const boxW=5.0*PX, boxH=0.7*PX, boxGap=0.8*PX;
   
@@ -2013,6 +2046,51 @@ function validateDiagramRules(nodes,figNum){
     });
   }
   
+  // 2-1. 도 2+ 규칙 검증: L1 혼합 금지 ★신규★
+  if(figNum>1){
+    const numRefs=nodes.map(n=>extractRefNum(n.label)).filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
+    const l1Refs=numRefs.filter(n=>n%100===0);
+    const l2Refs=numRefs.filter(n=>n%10===0&&n%100!==0);
+    const l3Refs=numRefs.filter(n=>n%10!==0);
+    
+    // 여러 L1이 있으면 에러
+    if(l1Refs.length>1){
+      issues.push({
+        severity:'ERROR',
+        message:`도 ${figNum}: 여러 L1 장치(${l1Refs.join(', ')})가 혼합됨. 도 2+에서는 하나의 상위 장치만 상세화해야 함.`
+      });
+    }
+    
+    // L1과 L2/L3가 혼합된 경우, 계층 일치 검증
+    if(l1Refs.length===1&&(l2Refs.length>0||l3Refs.length>0)){
+      const theL1=l1Refs[0];
+      // L2가 해당 L1의 하위인지 검증
+      const invalidL2=l2Refs.filter(n=>Math.floor(n/100)*100!==theL1);
+      if(invalidL2.length>0){
+        issues.push({
+          severity:'ERROR',
+          message:`도 ${figNum}: L2 구성요소(${invalidL2.join(', ')})가 L1(${theL1})의 하위가 아님.`
+        });
+      }
+      // L3가 해당 L1의 하위인지 검증
+      const invalidL3=l3Refs.filter(n=>Math.floor(n/100)*100!==theL1);
+      if(invalidL3.length>0){
+        issues.push({
+          severity:'ERROR',
+          message:`도 ${figNum}: L3 구성요소(${invalidL3.join(', ')})가 L1(${theL1})의 하위가 아님.`
+        });
+      }
+      
+      // 정상인 경우 INFO
+      if(invalidL2.length===0&&invalidL3.length===0){
+        issues.push({
+          severity:'INFO',
+          message:`도 ${figNum} 최외곽 박스: ${theL1} (L1 포함)`
+        });
+      }
+    }
+  }
+  
   // 3. 참조번호 형식 검증
   nodes.forEach(n=>{
     const ref=extractRefNum(n.label);
@@ -2208,22 +2286,47 @@ function downloadPptx(sid){
     function findImmediateParent(refNums){
       const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
       if(!nums.length)return null;
-      if(nums.every(n=>n%100===0))return null;
-      const allL3=nums.every(n=>n%10!==0);
-      if(allL3){
-        const parents=nums.map(n=>Math.floor(n/10)*10);
+      
+      // 레벨별 분류
+      const l1s=nums.filter(n=>n%100===0);
+      const l2s=nums.filter(n=>n%10===0&&n%100!==0);
+      const l3s=nums.filter(n=>n%10!==0);
+      
+      // L1이 포함된 경우
+      if(l1s.length>0){
+        if(l1s.length===1&&(l2s.length>0||l3s.length>0)){
+          const theL1=l1s[0];
+          const allBelongToL1=l2s.every(n=>Math.floor(n/100)*100===theL1)&&
+                              l3s.every(n=>Math.floor(n/100)*100===theL1);
+          if(allBelongToL1)return theL1;
+        }
+        return null;
+      }
+      
+      // L2만 있는 경우
+      if(l2s.length>0&&l3s.length===0){
+        const parents=l2s.map(n=>Math.floor(n/100)*100);
         const uniqueParents=[...new Set(parents)];
         if(uniqueParents.length===1)return uniqueParents[0];
+        return null;
       }
-      const allL2=nums.every(n=>n%10===0&&n%100!==0);
-      if(allL2){
-        const parents=nums.map(n=>Math.floor(n/100)*100);
-        const uniqueParents=[...new Set(parents)];
-        if(uniqueParents.length===1)return uniqueParents[0];
+      
+      // L3가 있는 경우
+      if(l3s.length>0){
+        if(l2s.length>0){
+          const allNums=[...l2s,...l3s];
+          const l1Parents=allNums.map(n=>Math.floor(n/100)*100);
+          const uniqueL1=[...new Set(l1Parents)];
+          if(uniqueL1.length===1)return uniqueL1[0];
+          return null;
+        }
+        const l2Parents=l3s.map(n=>Math.floor(n/10)*10);
+        const uniqueL2=[...new Set(l2Parents)];
+        if(uniqueL2.length===1)return uniqueL2[0];
+        const l1Parents=uniqueL2.map(p=>Math.floor(p/100)*100);
+        if([...new Set(l1Parents)].length===1)return l1Parents[0];
       }
-      const minRef=Math.min(...nums);
-      if(minRef%10!==0)return Math.floor(minRef/10)*10;
-      if(minRef%100!==0)return Math.floor(minRef/100)*100;
+      
       return null;
     }
     
@@ -2241,7 +2344,13 @@ function downloadPptx(sid){
       const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
       const isFig1=figNum===1||allL1;
       const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
-      let frameRefNum=findImmediateParent(allRefs)||figNum*100;
+      // fallback 개선: 첫 번째 참조번호의 L1 부모 사용
+      let frameRefNum=findImmediateParent(allRefs);
+      if(!frameRefNum&&allRefs.length>0){
+        const firstRef=parseInt(allRefs[0])||100;
+        frameRefNum=Math.floor(firstRef/100)*100;
+      }
+      if(!frameRefNum)frameRefNum=100;
       const nodeCount=nodes.length;
       
       if(isFig1){
@@ -2353,19 +2462,47 @@ function downloadDiagramImages(sid, format='jpeg'){
   function findImmediateParent(refNums){
     const nums=refNums.filter(r=>r&&!r.startsWith('S')).map(r=>parseInt(r));
     if(!nums.length)return null;
-    if(nums.every(n=>n%100===0))return null;
-    const allL3=nums.every(n=>n%10!==0);
-    if(allL3){
-      const parents=nums.map(n=>Math.floor(n/10)*10);
+    
+    // 레벨별 분류
+    const l1s=nums.filter(n=>n%100===0);
+    const l2s=nums.filter(n=>n%10===0&&n%100!==0);
+    const l3s=nums.filter(n=>n%10!==0);
+    
+    // L1이 포함된 경우
+    if(l1s.length>0){
+      if(l1s.length===1&&(l2s.length>0||l3s.length>0)){
+        const theL1=l1s[0];
+        const allBelongToL1=l2s.every(n=>Math.floor(n/100)*100===theL1)&&
+                            l3s.every(n=>Math.floor(n/100)*100===theL1);
+        if(allBelongToL1)return theL1;
+      }
+      return null;
+    }
+    
+    // L2만 있는 경우
+    if(l2s.length>0&&l3s.length===0){
+      const parents=l2s.map(n=>Math.floor(n/100)*100);
       const uniqueParents=[...new Set(parents)];
       if(uniqueParents.length===1)return uniqueParents[0];
+      return null;
     }
-    const allL2=nums.every(n=>n%10===0&&n%100!==0);
-    if(allL2){
-      const parents=nums.map(n=>Math.floor(n/100)*100);
-      const uniqueParents=[...new Set(parents)];
-      if(uniqueParents.length===1)return uniqueParents[0];
+    
+    // L3가 있는 경우
+    if(l3s.length>0){
+      if(l2s.length>0){
+        const allNums=[...l2s,...l3s];
+        const l1Parents=allNums.map(n=>Math.floor(n/100)*100);
+        const uniqueL1=[...new Set(l1Parents)];
+        if(uniqueL1.length===1)return uniqueL1[0];
+        return null;
+      }
+      const l2Parents=l3s.map(n=>Math.floor(n/10)*10);
+      const uniqueL2=[...new Set(l2Parents)];
+      if(uniqueL2.length===1)return uniqueL2[0];
+      const l1Parents=uniqueL2.map(p=>Math.floor(p/100)*100);
+      if([...new Set(l1Parents)].length===1)return l1Parents[0];
     }
+    
     return null;
   }
   
@@ -2403,7 +2540,13 @@ function downloadDiagramImages(sid, format='jpeg'){
       const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
       const isFig1=figNum===1||allL1;
       const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
-      let frameRefNum=findImmediateParent(allRefs)||(figNum*100);
+      // fallback 개선
+      let frameRefNum=findImmediateParent(allRefs);
+      if(!frameRefNum&&allRefs.length>0){
+        const firstRef=parseInt(allRefs[0])||100;
+        frameRefNum=Math.floor(firstRef/100)*100;
+      }
+      if(!frameRefNum)frameRefNum=100;
       const nodeCount=nodes.length;
       const SHADOW=3;
       
