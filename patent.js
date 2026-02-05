@@ -1156,7 +1156,74 @@ function showReviewDiff(mode){
   if(mode==='before'){area.value=beforeReviewText||'(없음)';if(bb)bb.className='btn btn-primary btn-sm';if(ba)ba.className='btn btn-outline btn-sm';}
   else{area.value=outputs.step_13_applied||'(없음)';if(bb)bb.className='btn btn-outline btn-sm';if(ba)ba.className='btn btn-primary btn-sm';}
 }
-async function runDiagramStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_07'?'btnStep07':'btnStep11';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);try{const r=await App.callClaude(buildPrompt(sid));outputs[sid]=r.text;renderOutput(sid,r.text);const mr=await App.callClaude(buildMermaidPrompt(sid),4096);outputs[sid+'_mermaid']=mr.text;renderDiagrams(sid,mr.text);const dlId=sid==='step_07'?'diagramDownload07':'diagramDownload11';const dlEl=document.getElementById(dlId);if(dlEl)dlEl.style.display='block';App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
+async function runDiagramStep(sid){
+  if(globalProcessing)return;
+  const dep=checkDependency(sid);
+  if(dep){App.showToast(dep,'error');return;}
+  
+  const bid=sid==='step_07'?'btnStep07':'btnStep11';
+  setGlobalProcessing(true);
+  loadingState[sid]=true;
+  App.setButtonLoading(bid,true);
+  
+  try{
+    // 1. 도면 설계 생성
+    let r=await App.callClaude(buildPrompt(sid));
+    let designText=r.text;
+    
+    // 2. 도면 설계 텍스트 사전 검증 (장치 도면만)
+    if(sid==='step_07'){
+      const preIssues=validateDiagramDesignText(designText);
+      const hasPreErrors=preIssues.some(iss=>iss.severity==='ERROR');
+      
+      // 에러 발견 시 자동 재생성 시도 (최대 2회)
+      if(hasPreErrors){
+        console.log('도면 설계 규칙 위반 발견, 재생성 시도...',preIssues);
+        
+        const feedbackPrompt=`이전 도면 설계에 규칙 위반이 있습니다. 아래 오류를 수정하여 다시 생성하세요.
+
+═══ 발견된 오류 ═══
+${preIssues.map(i=>i.message).join('\n')}
+
+═══ 핵심 규칙 ═══
+[R3] 도 1: L1 장치만 허용 (100, 200, 300...). L2/L3(110, 111...) 절대 금지!
+     도 1의 구성요소에는 100, 200, 300, 400... 만 포함해야 합니다.
+[R5] 도 2+: 내부가 L2(110,120)면 최외곽=L1(100), 내부가 L3(111,112)면 최외곽=L2(110)
+
+원래 요청: ${buildPrompt(sid).slice(0,1500)}
+
+위 오류를 수정하여 도면 설계를 다시 출력하세요.`;
+
+        r=await App.callClaude(feedbackPrompt);
+        designText=r.text;
+        App.showToast('도면 규칙 위반 감지, 자동 재생성됨','warning');
+      }
+    }
+    
+    outputs[sid]=designText;
+    renderOutput(sid,designText);
+    
+    // 3. Mermaid 변환
+    const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
+    outputs[sid+'_mermaid']=mr.text;
+    
+    // 4. 렌더링 + 최종 검증
+    renderDiagrams(sid,mr.text);
+    
+    const dlId=sid==='step_07'?'diagramDownload07':'diagramDownload11';
+    const dlEl=document.getElementById(dlId);
+    if(dlEl)dlEl.style.display='block';
+    
+    autoSaveProject();
+    App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
+  }catch(e){
+    App.showToast(e.message,'error');
+  }finally{
+    loadingState[sid]=false;
+    App.setButtonLoading(bid,false);
+    setGlobalProcessing(false);
+  }
+}
 async function runBatch25(){if(globalProcessing)return;if(!selectedTitle){App.showToast('명칭 먼저 확정','error');return;}setGlobalProcessing(true);loadingState.batch25=true;App.setButtonLoading('btnBatch25',true);document.getElementById('resultsBatch25').innerHTML='';const steps=['step_02','step_03','step_04','step_05'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatch',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatch25',steps[i],r.text);}App.clearProgress('progressBatch');App.showToast('기본 항목 완료');}catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}}
 async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
 
@@ -1484,6 +1551,99 @@ function buildMermaidPrompt(sid){
   return `아래 도면 설계를 Mermaid flowchart 코드로 변환하라. 각 도면당 \`\`\`mermaid 블록 1개.
 ${rules}
 \n\n${src}`;
+}
+
+// ═══ 도면 규칙 위반 시 자동 재생성 ═══
+async function regenerateDiagramWithFeedback(sid){
+  if(!window._diagramErrors||window._diagramErrors.sid!==sid){
+    App.showToast('재생성할 에러 정보가 없습니다.','error');
+    return;
+  }
+  
+  const errors=window._diagramErrors.errors;
+  const stepId=sid==='step_07'?'step_07':'step_11';
+  const btnId=sid==='step_07'?'btnStep07':'btnStep11';
+  
+  // 기존 도면 설계 가져오기
+  const prevDesign=outputs[stepId]||'';
+  
+  // 피드백 프롬프트 생성
+  const feedbackPrompt=`이전에 생성한 도면 설계에 규칙 위반이 발견되었습니다. 아래 오류를 수정하여 다시 생성하세요.
+
+═══ 발견된 오류 ═══
+${errors}
+
+═══ 핵심 규칙 리마인더 ═══
+[R1] 도면부호 계층: L1(X00), L2(XY0), L3(XYZ)
+[R3] 도 1: L1 장치만 허용 (100, 200, 300...). L2/L3(110, 111...) 절대 금지
+[R5] 도 2+: 최외곽 박스 = 직계 부모 (세대 점프 금지)
+     - 내부가 L3(111,112,113)이면 최외곽은 L2(110)
+     - 내부가 L2(110,120,130)이면 최외곽은 L1(100)
+
+═══ 이전 도면 설계 (오류 포함) ═══
+${prevDesign.slice(0,2000)}
+
+위 오류를 모두 수정하여 도면 설계를 다시 출력하세요.
+도 1에는 반드시 L1 장치만 포함해야 합니다!`;
+
+  App.setButtonLoading(btnId,true);
+  
+  try{
+    const result=await callLLM(feedbackPrompt);
+    outputs[stepId]=result;
+    document.getElementById(stepId==='step_07'?'resStep07':'resStep11').value=result;
+    autoSaveProject();
+    
+    // Mermaid 변환
+    const mermaidPrompt=buildMermaidPrompt(stepId,result);
+    const mermaidResult=await callLLM(mermaidPrompt);
+    outputs[stepId+'_mermaid']=mermaidResult;
+    renderDiagrams(stepId,mermaidResult);
+    
+    App.showToast('도면이 규칙에 맞게 재생성되었습니다.');
+  }catch(e){
+    App.showToast('재생성 실패: '+e.message,'error');
+  }finally{
+    App.setButtonLoading(btnId,false);
+  }
+}
+
+// ═══ 도면 설계 텍스트 사전 검증 ═══
+function validateDiagramDesignText(text){
+  const issues=[];
+  
+  // 도면별로 분리
+  const figPattern=/도\s*(\d+)[:\s]*(.*?)(?=도\s*\d+[:\s]|---BRIEF|$)/gs;
+  let match;
+  
+  while((match=figPattern.exec(text))!==null){
+    const figNum=parseInt(match[1]);
+    const content=match[2];
+    
+    // 참조번호 추출
+    const refs=(content.match(/\((\d+)\)/g)||[]).map(r=>parseInt(r.replace(/[()]/g,'')));
+    
+    if(figNum===1){
+      // 도 1 검증: L1만 허용
+      const nonL1=refs.filter(r=>r%100!==0);
+      if(nonL1.length>0){
+        issues.push({
+          severity:'ERROR',
+          message:`도 1 설계에 L2/L3 참조번호 포함: ${nonL1.join(', ')}. 도 1은 L1(X00)만 허용.`
+        });
+      }
+    }
+    
+    // ~모듈 사용 검증
+    if(content.includes('모듈')){
+      issues.push({
+        severity:'WARNING',
+        message:`도 ${figNum} 설계에 "~모듈" 사용. "~부"로 변경 필요.`
+      });
+    }
+  }
+  
+  return issues;
 }
 
 // ═══════════ UNIFIED DIAGRAM ENGINE ═══════════
@@ -1844,6 +2004,9 @@ function renderDiagrams(sid,mt){
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;diagramData[sid]=[];
   
   let html='';
+  let allIssues=[]; // 전체 에러 수집
+  let hasErrors=false;
+  
   blocks.forEach((code,i)=>{
     const figNum=figOffset+i+1;
     const{nodes,edges}=parseMermaidGraph(code);
@@ -1852,6 +2015,8 @@ function renderDiagrams(sid,mt){
     
     // 검증 실행
     const issues=validateDiagramRules(nodes,figNum);
+    allIssues.push({figNum,issues});
+    if(issues.some(iss=>iss.severity==='ERROR'))hasErrors=true;
     
     // 검증 결과 HTML 생성
     let issuesHtml='';
@@ -1872,6 +2037,24 @@ function renderDiagrams(sid,mt){
       <details style="margin-top:8px"><summary style="font-size:11px;color:var(--color-text-tertiary);cursor:pointer">Mermaid 코드 보기</summary><pre style="font-size:11px;margin-top:4px;padding:8px;background:var(--color-bg-tertiary);border-radius:8px;overflow-x:auto">${App.escapeHtml(code)}</pre></details>
     </div>`;
   });
+  
+  // 에러 발견 시 재생성 버튼 추가
+  if(hasErrors){
+    const errorSummary=allIssues.filter(ai=>ai.issues.some(iss=>iss.severity==='ERROR'))
+      .map(ai=>`도 ${ai.figNum}: ${ai.issues.filter(iss=>iss.severity==='ERROR').map(iss=>iss.message).join('; ')}`)
+      .join('\n');
+    
+    // 에러 정보를 전역 변수에 저장
+    window._diagramErrors={sid,errors:errorSummary};
+    
+    html=`<div style="background:#ffebee;border:1px solid #ef5350;border-radius:8px;padding:12px;margin-bottom:16px">
+      <div style="color:#c62828;font-weight:600;margin-bottom:8px">⚠️ 도면 규칙 위반 발견</div>
+      <div style="font-size:12px;color:#b71c1c;margin-bottom:12px;white-space:pre-line">${App.escapeHtml(errorSummary)}</div>
+      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1976d2;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">
+        🔄 도면 규칙에 맞게 재생성
+      </button>
+    </div>`+html;
+  }
   
   el.innerHTML=html;
   
@@ -2139,8 +2322,14 @@ function downloadPptx(sid){
   
   const fileName=selectedProjectNumber||selectedTitle||'도면';
   try{
-    pptx.writeFile({fileName:`${fileName}_도면_${new Date().toISOString().slice(0,10)}.pptx`});
-    App.showToast('PPTX 다운로드 완료');
+    pptx.writeFile({fileName:`${fileName}_도면_${new Date().toISOString().slice(0,10)}.pptx`})
+      .then(()=>{
+        App.showToast('PPTX 다운로드 완료');
+      })
+      .catch(err=>{
+        console.error('PPTX 저장 실패:',err);
+        App.showToast('PPTX 저장 실패: '+err.message,'error');
+      });
   }catch(e){
     console.error('PPTX 생성 실패:',e);
     App.showToast('PPTX 생성 실패: '+e.message,'error');
