@@ -82,7 +82,6 @@ function clearAllState(){
 }
 
 // ═══════════ DASHBOARD ═══════════
-// ═══════════ DASHBOARD ═══════════
 async function loadDashboardProjects(){
   const{data}=await App.sb.from('projects').select('id,title,project_number,invention_content,current_state_json,created_at,updated_at').eq('owner_user_id',currentUser.id).order('updated_at',{ascending:false});
   const el=document.getElementById('dashProjectList'),cnt=document.getElementById('dashProjectCount');
@@ -274,7 +273,7 @@ async function createAndOpenProject(){
     title:t,
     project_number:projectNumber,
     invention_content:'',
-    current_state_json:{outputs:{},selectedTitle:'',selectedTitleType:'',includeMethodClaims:true,usage:{calls:0,inputTokens:0,outputTokens:0}}
+    current_state_json:{outputs:{},selectedTitle:'',selectedTitleType:'',includeMethodClaims:true,usage:{calls:0,inputTokens:0,outputTokens:0,cost:0}}
   }).select('id').single();
   
   if(error){App.showToast('생성 실패: '+error.message,'error');return;}
@@ -285,13 +284,18 @@ async function createAndOpenProject(){
 async function openProject(pid){
   clearAllState();const{data}=await App.sb.from('projects').select('*').eq('id',pid).single();if(!data){App.showToast('불러올 수 없어요','error');return;}
   currentProjectId=data.id;document.getElementById('projectInput').value=data.invention_content||'';
-  const s=data.current_state_json||{};outputs=s.outputs||{};selectedTitle=s.selectedTitle||'';selectedTitleEn=s.selectedTitleEn||'';selectedTitleType=s.selectedTitleType||'';includeMethodClaims=s.includeMethodClaims!==false;usage=s.usage||{calls:0,inputTokens:0,outputTokens:0};
+  const s=data.current_state_json||{};outputs=s.outputs||{};selectedTitle=s.selectedTitle||'';selectedTitleEn=s.selectedTitleEn||'';selectedTitleType=s.selectedTitleType||'';includeMethodClaims=s.includeMethodClaims!==false;usage=s.usage||{calls:0,inputTokens:0,outputTokens:0,cost:0};
+  // Fix: ensure cost field exists even from old saves
+  if(typeof usage.cost==='undefined')usage.cost=0;
   // Restore v4.7 claim config
   deviceCategory=s.deviceCategory||'server';deviceGeneralDep=s.deviceGeneralDep||5;deviceAnchorDep=s.deviceAnchorDep||4;deviceAnchorStart=s.deviceAnchorStart||7;
   anchorThemeMode=s.anchorThemeMode||'auto';selectedAnchorThemes=s.selectedAnchorThemes||[];
   methodCategory=s.methodCategory||'method';methodGeneralDep=s.methodGeneralDep||3;methodAnchorDep=s.methodAnchorDep||2;methodAnchorStart=s.methodAnchorStart||0;
   methodAnchorThemeMode=s.methodAnchorThemeMode||'auto';selectedMethodAnchorThemes=s.selectedMethodAnchorThemes||[];
   projectRefStyleText=s.projectRefStyleText||'';requiredFigures=s.requiredFigures||[];
+  // Restore detail level
+  detailLevel=s.detailLevel||'standard';customDetailChars=s.customDetailChars||2000;
+  diagramData=s.diagramData||{};
   // FIX: Ensure API_KEY is loaded (triple fallback)
   if(!API_KEY){
     if(currentProfile?.api_key_encrypted)API_KEY=currentProfile.api_key_encrypted;
@@ -323,6 +327,13 @@ function restoreClaimUI(){
   updateDeviceClaimTotal();updateMethodClaimTotal();
   // Restore required figures
   renderRequiredFiguresList();
+  // Restore detail level UI
+  const dlCards=document.querySelectorAll('#detailLevelCards .selection-card');
+  const dlLevels=['compact','standard','detailed','custom'];
+  dlCards.forEach((c,i)=>c.classList.toggle('selected',dlLevels[i]===detailLevel));
+  const ci=document.getElementById('customDetailInput');
+  if(ci)ci.style.display=detailLevel==='custom'?'block':'none';
+  if(detailLevel==='custom'){const inp=document.getElementById('customDetailChars');if(inp)inp.value=customDetailChars;}
   // Restore project ref
   const prs=document.getElementById('projectRefStatus');
   if(prs&&projectRefStyleText)prs.innerHTML=`<span class="tossface">✅</span> 등록됨 (${projectRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px">✕</button>`;
@@ -330,7 +341,7 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures}}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData}}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===4)renderPreview();}
@@ -603,22 +614,7 @@ function removeUploadedFile(idx, name) {
   if (mIdx >= 0) {const nextMarker = ta.value.indexOf('\n\n[첨부:', mIdx + marker.length);const endIdx = nextMarker >= 0 ? nextMarker : ta.value.length;ta.value = (ta.value.slice(0, mIdx) + ta.value.slice(endIdx)).trim();}
   uploadedFiles.splice(idx, 1);const el = document.getElementById(`file_${idx}`);if (el) el.remove();App.showToast(`"${name}" 제거됨`);
 }
-App.extractTextFromFile = async function(file) {
-  const ext = file.name.split('.').pop().toLowerCase();const buf = await file.arrayBuffer();
-  switch (ext) {
-    case 'txt':case 'md':case 'csv':case 'json':case 'rtf':return new TextDecoder('utf-8').decode(buf);
-    case 'pdf':return await extractPdfText(buf);
-    case 'docx':case 'doc':return await extractDocxText(buf);
-    case 'xlsx':case 'xls':return extractXlsxText(buf);
-    case 'pptx':case 'ppt':return '[PPTX 텍스트 추출 제한적. 주요 내용을 직접 붙여넣어 주세요.]';
-    case 'hwp':case 'hwpx':return '[HWP 파일은 한글에서 텍스트를 복사하여 직접 붙여넣어 주세요.]';
-    default:try { return new TextDecoder('utf-8').decode(buf); } catch { return ''; }
-  }
-}
-async function extractPdfText(buf) {if (!window.pdfjsLib) return '[PDF.js 미로드]';const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;let text = '';for (let i = 1; i <= pdf.numPages; i++) {const page = await pdf.getPage(i);const content = await page.getTextContent();text += content.items.map(item => item.str).join(' ') + '\n';}return text;}
-async function extractDocxText(buf) {if (!window.mammoth) return '[mammoth.js 미로드]';const result = await mammoth.extractRawText({ arrayBuffer: buf });return result.value;}
-function extractXlsxText(buf) {if (!window.XLSX) return '[XLSX.js 미로드]';const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });let text = '';wb.SheetNames.forEach(name => {text += `[시트: ${name}]\n`;text += XLSX.utils.sheet_to_csv(wb.Sheets[name]) + '\n\n';});return text;}
-App.formatFileSize = function(bytes) {if (bytes < 1024) return bytes + 'B';if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';return (bytes / (1024 * 1024)).toFixed(1) + 'MB';}
+// (File extraction functions are in common.js — App.extractTextFromFile, App.formatFileSize)
 
 // ═══════════ PROMPTS (v4.7 — Claim System Redesign) ═══════════
 // Style reference: project-level overrides global-level
@@ -1113,8 +1109,8 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     // Step 13: use continuation for long review
     let r;
     if(sid==='step_13'){
-      App.showProgress('progressStep13'||'','AI 검토 생성 중...',0,1);
-      const text=await App.callClaudeWithContinuation(buildPrompt(sid),'progressStep13'||'');
+      App.showProgress('progressStep13','AI 검토 생성 중...',0,1);
+      const text=await App.callClaudeWithContinuation(buildPrompt(sid),'progressStep13');
       r={text};outputs[sid]=text;
     } else {
       r=await App.callClaude(buildPrompt(sid));outputs[sid]=r.text;
@@ -1168,9 +1164,10 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
       if(sid==='step_13')document.getElementById('btnApplyReview').style.display='block';
       App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
     }
+    saveProject(true);
   }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
-async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);App.showProgress(pid,`${STEP_NAMES[sid]} 생성 중...`,0,1);try{const t=await App.callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;renderOutput(sid,t);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
-async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);renderOutput('step_09',outputs.step_09);App.showToast('수학식 삽입 완료');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
+async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);App.showProgress(pid,`${STEP_NAMES[sid]} 생성 중...`,0,1);try{const t=await App.callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
+async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);renderOutput('step_09',outputs.step_09);saveProject(true);App.showToast('수학식 삽입 완료');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
 
 async function applyReview(){
   if(globalProcessing)return;if(!outputs.step_13){App.showToast('검토 결과 없음','error');return;}
@@ -1190,6 +1187,7 @@ async function applyReview(){
     const resultArea=document.getElementById('reviewApplyResult');
     if(resultArea){resultArea.style.display='block';showReviewDiff('after');}
     setTimeout(()=>App.clearProgress('progressApplyReview'),2000);
+    saveProject(true);
     App.showToast('검토 반영 완료');
   }catch(e){App.showToast(e.message,'error');}finally{loadingState.applyReview=false;App.setButtonLoading('btnApplyReview',false);setGlobalProcessing(false);}
 }
@@ -1256,7 +1254,7 @@ ${preIssues.map(i=>i.message).join('\n')}
     const dlEl=document.getElementById(dlId);
     if(dlEl)dlEl.style.display='block';
     
-    autoSaveProject();
+    saveProject(true);
     App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
   }catch(e){
     App.showToast(e.message,'error');
@@ -1266,8 +1264,8 @@ ${preIssues.map(i=>i.message).join('\n')}
     setGlobalProcessing(false);
   }
 }
-async function runBatch25(){if(globalProcessing)return;if(!selectedTitle){App.showToast('명칭 먼저 확정','error');return;}setGlobalProcessing(true);loadingState.batch25=true;App.setButtonLoading('btnBatch25',true);document.getElementById('resultsBatch25').innerHTML='';const steps=['step_02','step_03','step_04','step_05'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatch',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatch25',steps[i],r.text);}App.clearProgress('progressBatch');App.showToast('기본 항목 완료');}catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}}
-async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
+async function runBatch25(){if(globalProcessing)return;if(!selectedTitle){App.showToast('명칭 먼저 확정','error');return;}setGlobalProcessing(true);loadingState.batch25=true;App.setButtonLoading('btnBatch25',true);document.getElementById('resultsBatch25').innerHTML='';const steps=['step_02','step_03','step_04','step_05'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatch',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatch25',steps[i],r.text);}App.clearProgress('progressBatch');saveProject(true);App.showToast('기본 항목 완료');}catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}}
+async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
 
 // ═══════════ PROVISIONAL APPLICATION (가출원) ═══════════
 async function openProvisionalModal(){
@@ -1723,7 +1721,7 @@ ${isMethod?'방법 흐름도는 시작/종료 노드를 반드시 포함!':'도 
     outputs[stepId]=r1.text;
     const resEl=document.getElementById(stepId==='step_07'?'resStep07':'resStep11');
     if(resEl)resEl.value=r1.text;
-    autoSaveProject();
+    saveProject(true);
     
     // Mermaid 변환
     const mermaidPrompt=buildMermaidPrompt(stepId,r1.text);
