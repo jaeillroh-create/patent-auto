@@ -656,6 +656,64 @@ function autoDetectCategoryFromTitle(){
   return 'server';
 }
 
+// ═══ Google Patents 선행기술 검색 ═══
+async function searchGooglePatents(query,maxResults=5){
+  try{
+    const encoded=encodeURIComponent(`(${query}) country:KR`);
+    const url=`https://patents.google.com/xhr/query?url=q%3D${encoded}&exp=&tags=`;
+    const resp=await fetch(url);if(!resp.ok)throw new Error(`Google Patents HTTP ${resp.status}`);
+    const data=await resp.json();
+    const results=[];
+    const clusters=data?.results?.cluster||[];
+    for(const c of clusters){
+      for(const r of(c.result||[])){
+        const p=r.patent;if(!p)continue;
+        const pubNum=p.publication_number||'';
+        // KR 등록특허만 (B1)
+        if(!/^KR\d+B\d?$/i.test(pubNum))continue;
+        results.push({
+          publicationNumber:pubNum,
+          title:(p.title||'').trim(),
+          inventor:p.inventor||'',
+          assignee:p.assignee||'',
+          filingDate:p.filing_date||'',
+          grantDate:p.grant_date||'',
+          snippet:(p.snippet||'').replace(/<[^>]*>/g,'').trim()
+        });
+        if(results.length>=maxResults)break;
+      }
+      if(results.length>=maxResults)break;
+    }
+    return results;
+  }catch(e){console.error('Google Patents search failed:',e);return[];}
+}
+function formatKRPatentNumber(pubNum){
+  // KR102444460B1 → 10-2444460
+  const m=pubNum.match(/^KR(\d+)B\d?$/i);
+  if(!m)return pubNum;
+  const num=m[1];
+  if(num.startsWith('10'))return'10-'+num.substring(2);
+  if(num.startsWith('20'))return'20-'+num.substring(2);
+  return num;
+}
+async function searchPriorArt(title){
+  // 1차: 발명 명칭으로 검색
+  let results=await searchGooglePatents(title,3);
+  // 결과 없으면 핵심 키워드로 재시도
+  if(!results.length){
+    const kw=title.replace(/[을를이가의에서로부터및과와]/g,' ').replace(/\s+/g,' ').split(' ').filter(w=>w.length>=2).slice(0,3).join(' ');
+    if(kw)results=await searchGooglePatents(kw,3);
+  }
+  if(!results.length)return null;
+  // 가장 관련성 높은 등록특허 1건 선택
+  const best=results[0];
+  const fmtNum=formatKRPatentNumber(best.publicationNumber);
+  return{
+    formatted:`【특허문헌】\n(특허문헌 1) 한국등록특허 제${fmtNum}호`,
+    patent:best
+  };
+}
+
 function buildPrompt(stepId){
   const inv=document.getElementById('projectInput').value,T=selectedTitle;
   const styleRef=getStyleRef();
@@ -663,7 +721,7 @@ function buildPrompt(stepId){
     case 'step_01':return `프로젝트를 분석하여 특허 발명의 명칭 후보를 5가지 생성하라.\n형태: \"~${selectedTitleType}\"\n각 후보에 국문+영문.\n\n출력형식:\n[1] 국문: (명칭) / 영문: (명칭)\n[2] 국문: (명칭) / 영문: (명칭)\n[3] 국문: (명칭) / 영문: (명칭)\n[4] 국문: (명칭) / 영문: (명칭)\n[5] 국문: (명칭) / 영문: (명칭)\n\n[프로젝트]\n${inv}`;
     case 'step_02':return `【기술분야】를 작성. \"본 발명은 ~에 관한 것이다.\" 한 문장만. 20단어. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}${styleRef}`;
     case 'step_03':return `【발명의 배경이 되는 기술】을 작성. 3문단(기존문제/최근동향/필요성), 각 150단어. 번호 없이. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}${styleRef}`;
-    case 'step_04':return `【선행기술문헌】작성.\n규칙: 다른 항목 포함 금지. 헤더 금지. 관련 한국 특허 딱 1건만 기재.\n출력:\n【특허문헌】\n(특허문헌 1) 한국등록특허 제__________호\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}`;
+    case 'step_04':return null; // Google Patents 실시간 검색으로 대체
     case 'step_05':return `【해결하고자 하는 과제】작성. \"본 발명은 ~을 제공하는 것을 목적으로 한다.\" 50단어 이하. 마지막: \"본 발명의 기술적 과제는 이상에서 언급한 기술적 과제로 제한되지 않으며, 언급되지 않은 또 다른 기술적 과제들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\" 헤더 금지.\n\n발명의 명칭: ${T}\n[배경기술] ${outputs.step_03||''}${styleRef}`;
 
     // ═══ Step 6: 장치 청구항 (v4.7 완전 재작성) ═══
@@ -1106,6 +1164,14 @@ function setGlobalProcessing(on){
 function checkDependency(s){const inv=document.getElementById('projectInput').value.trim();const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저'};return d[s]?d[s]():null;}
 async function runStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13',step_14:'btnStep14',step_15:'btnStep15'},bid=bm[sid];setGlobalProcessing(true);loadingState[sid]=true;if(bid)App.setButtonLoading(bid,true);
   try{
+    // Step 04: Google Patents 실시간 검색
+    if(sid==='step_04'){
+      const sr=await searchPriorArt(selectedTitle);
+      if(sr){outputs.step_04=sr.formatted;renderOutput('step_04',sr.formatted+`\n\n[검색출처: Google Patents — ${sr.patent.publicationNumber}]\n[발명명칭: ${sr.patent.title}]`);}
+      else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderOutput('step_04',outputs.step_04);}
+      saveProject(true);App.showToast('선행기술문헌 검색 완료');
+      return;
+    }
     // Step 13: use continuation for long review
     let r;
     if(sid==='step_13'){
@@ -1264,7 +1330,7 @@ ${preIssues.map(i=>i.message).join('\n')}
     setGlobalProcessing(false);
   }
 }
-async function runBatch25(){if(globalProcessing)return;if(!selectedTitle){App.showToast('명칭 먼저 확정','error');return;}setGlobalProcessing(true);loadingState.batch25=true;App.setButtonLoading('btnBatch25',true);document.getElementById('resultsBatch25').innerHTML='';const steps=['step_02','step_03','step_04','step_05'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatch',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatch25',steps[i],r.text);}App.clearProgress('progressBatch');saveProject(true);App.showToast('기본 항목 완료');}catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}}
+async function runBatch25(){if(globalProcessing)return;if(!selectedTitle){App.showToast('명칭 먼저 확정','error');return;}setGlobalProcessing(true);loadingState.batch25=true;App.setButtonLoading('btnBatch25',true);document.getElementById('resultsBatch25').innerHTML='';const steps=['step_02','step_03','step_04','step_05'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatch',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);if(steps[i]==='step_04'){const sr=await searchPriorArt(selectedTitle);if(sr){outputs.step_04=sr.formatted;renderBatchResult('resultsBatch25','step_04',sr.formatted+`\n\n[검색출처: Google Patents — ${sr.patent.publicationNumber}]\n[발명명칭: ${sr.patent.title}]`);}else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderBatchResult('resultsBatch25','step_04',outputs.step_04);}continue;}const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatch25',steps[i],r.text);}App.clearProgress('progressBatch');saveProject(true);App.showToast('기본 항목 완료');}catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}}
 async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
 
 // ═══════════ PROVISIONAL APPLICATION (가출원) ═══════════

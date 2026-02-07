@@ -19,7 +19,7 @@ const API_PROVIDERS = {
     keyPlaceholder:'sk-ant-api03-...', keyUrl:'https://console.anthropic.com/settings/keys',
     models:{
       sonnet:{id:'claude-sonnet-4-5-20250929',label:'Sonnet 4.5',inputCost:3,outputCost:15},
-      opus:{id:'claude-opus-4-5-20251101',label:'Opus 4.5',inputCost:15,outputCost:75}
+      opus:{id:'claude-opus-4-6',label:'Opus 4.6',inputCost:15,outputCost:75}
     }, defaultModel:'opus', cheapModel:'sonnet'
   },
   gpt: {
