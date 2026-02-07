@@ -112,13 +112,13 @@
     // KIPRIS API 설정
     kiprisConfig: {
       baseUrl: 'https://plus.kipris.or.kr/kipo-api/kipi',
-      apiKey: localStorage.getItem('tm_kipris_api_key') || 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE=', // KIPRIS OpenAPI 인증키
+      apiKey: localStorage.getItem('tm_kipris_api_key') || 'zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=', // KIPRIS OpenAPI 인증키 (2026.02 갱신)
       rateLimit: 30, // 분당 호출 제한
       timeout: 10000
     },
     
     // Supabase 설정
-    supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cnp3aGZqdHpxdWphd21zY2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgzMTcyNjMsImV4cCI6MjA1Mzg5MzI2M30.2-0MUEC8EfRpwjYXxMfTOOFNz5e59sI0-6Mmzx13oUo',
+    supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cnp3aGZqdHpxdWphd21zY2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTEwNDgsImV4cCI6MjA4NTUyNzA0OH0.JSSPMPIHsXfbNm6pgRzCTGH7aNQATl-okIkcXHl7Mkk',
     
     // 2026년 관납료 테이블
     feeTable: {
@@ -3010,8 +3010,65 @@
       
       p.aiAnalysis.classRecommendations.expansion = existingExpansion;
       
+      // ★★★ 추가된 류에 대해 지정상품 10개 자동 추천 ★★★
+      const newClassCodes = additionalClasses
+        .filter(item => !existingAllCodes.includes(item.class))
+        .map(item => item.class);
+      
+      if (newClassCodes.length > 0) {
+        const allKeywords = p.aiAnalysis.searchKeywords || [];
+        const analysis = {
+          businessSummary: p.aiAnalysis.businessAnalysis,
+          businessTypes: p.aiAnalysis.businessTypes,
+          coreProducts: p.aiAnalysis.coreProducts,
+          coreServices: p.aiAnalysis.coreServices,
+          salesChannels: p.aiAnalysis.salesChannels,
+          expansionPotential: p.aiAnalysis.expansionPotential,
+          searchKeywords: allKeywords
+        };
+        
+        for (const classCode of newClassCodes) {
+          const paddedCode = classCode.padStart(2, '0');
+          try {
+            App.showToast(`제${classCode}류 지정상품 추천 중...`, 'info');
+            
+            // DB에서 고시명칭 후보 조회
+            const candidates = await TM.fetchOptimalCandidates(
+              paddedCode,
+              allKeywords,
+              analysis
+            );
+            
+            console.log(`[TM] 추가 추천 제${classCode}류 후보: ${candidates.length}건`);
+            
+            if (candidates.length === 0) {
+              p.aiAnalysis.recommendedGoods[classCode] = [];
+              continue;
+            }
+            
+            // LLM이 최적 상품 선택
+            const selectedGoods = await TM.selectOptimalGoods(
+              classCode,
+              candidates,
+              businessInput || p.aiAnalysis.businessAnalysis,
+              analysis
+            );
+            
+            p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
+            console.log(`[TM] 추가 추천 제${classCode}류 최종: ${selectedGoods.length}건`);
+            
+          } catch (classError) {
+            console.error(`[TM] 추가 추천 제${classCode}류 처리 실패:`, classError);
+            p.aiAnalysis.recommendedGoods[classCode] = [];
+          }
+        }
+      }
+      
       TM.renderCurrentStep();
-      App.showToast(`${additionalClasses.length}개 추가 류가 확장 목록에 추가되었습니다.`, 'success');
+      const goodsCountMsg = newClassCodes.length > 0 
+        ? ` (각 류당 지정상품 ${newClassCodes.map(c => (p.aiAnalysis.recommendedGoods?.[c]?.length || 0) + '개').join(', ')} 추천)`
+        : '';
+      App.showToast(`${additionalClasses.length}개 추가 류가 확장 목록에 추가되었습니다.${goodsCountMsg}`, 'success');
       
     } catch (err) {
       console.error('[TM] 추가 추천 요청 실패:', err);
@@ -8802,9 +8859,21 @@ ${numberedList}
         });
       }
       
-      // 여전히 부족하면 최소 5개만 채움 (관련 없는 것으로 채우지 않음)
+      // ★ 최소 5개 보장: 관련 후보가 부족해도 해당 류의 후보에서 채움
       if (selected.length < 5) {
-        console.log(`[TM] 관련 후보 부족, ${selected.length}개만 반환`);
+        console.log(`[TM] 관련 후보 부족 (${selected.length}개), 최소 5개까지 보충`);
+        for (const c of candidates) {
+          if (selected.length >= 5) break;
+          if (usedNames.has(c.name)) continue;
+          
+          usedNames.add(c.name);
+          selected.push({
+            name: c.name,
+            similarGroup: c.similarGroup,
+            isCore: false
+          });
+        }
+        console.log(`[TM] 보충 후: ${selected.length}개`);
       }
     }
     
