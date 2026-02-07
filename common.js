@@ -1,12 +1,15 @@
 /* ═══════════════════════════════════════════════════════════
-   특허명세서 자동 생성 v5.2 — Common (Supabase, Auth, API, UI)
+   특허명세서 자동 생성 v5.3 — Common (Supabase, Auth, API, UI)
    ═══════════════════════════════════════════════════════════ */
-window.App = {};
+window.App = window.App || {};
 
-// ═══ Supabase ═══
-const SUPABASE_URL = 'https://uvrzwhfjtzqujawmscca.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cnp3aGZqdHpxdWphd21zY2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTEwNDgsImV4cCI6MjA4NTUyNzA0OH0.JSSPMPIHsXfbNm6pgRzCTGH7aNQATl-okIkcXHl7Mkk';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// ═══ Supabase (전역 변수로 중복 방지) ═══
+var SUPABASE_URL = window.SUPABASE_URL || 'https://uvrzwhfjtzqujawmscca.supabase.co';
+var SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cnp3aGZqdHpxdWphd21zY2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTEwNDgsImV4cCI6MjA4NTUyNzA0OH0.JSSPMPIHsXfbNm6pgRzCTGH7aNQATl-okIkcXHl7Mkk';
+var sb = window.sb || supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+window.SUPABASE_URL = SUPABASE_URL;
+window.SUPABASE_ANON_KEY = SUPABASE_ANON_KEY;
+window.sb = sb;
 
 // ═══ API Provider Configuration (v5.2) ═══
 const API_PROVIDERS = {
