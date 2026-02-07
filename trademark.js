@@ -1461,7 +1461,13 @@
     // JSON 블록 추출
     let jsonStr = text.match(/\{[\s\S]*\}/)?.[0];
     if (!jsonStr) {
-      throw new Error('JSON을 찾을 수 없습니다.');
+      // JSON이 잘려서 닫히지 않은 경우 복구 시도
+      jsonStr = text.match(/\{[\s\S]*/)?.[0];
+      if (jsonStr) {
+        jsonStr = TM.repairTruncatedJson(jsonStr);
+      } else {
+        throw new Error('JSON을 찾을 수 없습니다.');
+      }
     }
     
     // 1차 시도: 그대로 파싱
@@ -1483,9 +1489,44 @@
     try {
       return JSON.parse(jsonStr);
     } catch (e) {
-      console.error('[TM] JSON 파싱 최종 실패:', jsonStr.slice(0, 300));
-      throw new Error('AI 응답 형식 오류. 다시 시도해주세요.');
+      // 3차 시도: 잘린 JSON 복구
+      try {
+        const repaired = TM.repairTruncatedJson(jsonStr);
+        return JSON.parse(repaired);
+      } catch (e2) {
+        console.error('[TM] JSON 파싱 최종 실패:', jsonStr.slice(0, 300));
+        throw new Error('AI 응답 형식 오류. 다시 시도해주세요.');
+      }
     }
+  };
+  
+  // 잘린 JSON 복구 (max_tokens 초과로 응답이 잘렸을 때)
+  TM.repairTruncatedJson = function(jsonStr) {
+    // 열린 괄호/대괄호 카운트
+    let braces = 0, brackets = 0, inString = false, escaped = false;
+    for (let i = 0; i < jsonStr.length; i++) {
+      const ch = jsonStr[i];
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\') { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') braces++;
+      else if (ch === '}') braces--;
+      else if (ch === '[') brackets++;
+      else if (ch === ']') brackets--;
+    }
+    
+    // 문자열이 닫히지 않았으면 닫기
+    if (inString) jsonStr += '"';
+    
+    // 마지막 불완전한 항목 제거 (trailing comma 정리)
+    jsonStr = jsonStr.replace(/,\s*$/, '');
+    
+    // 닫히지 않은 괄호 닫기
+    while (brackets > 0) { jsonStr += ']'; brackets--; }
+    while (braces > 0) { jsonStr += '}'; braces--; }
+    
+    return jsonStr;
   };
   
   TM.updateField = function(field, value) {
@@ -9044,19 +9085,28 @@ ${allClasses.map(c => `- 제${c.class}류: ${c.reason}`).join('\n')}
 2. 해당 류 없이 사업을 영위할 수 없는가? (필수성)
 3. 추천 이유가 사업 내용과 논리적으로 연결되는가?
 
-【JSON으로만 응답】
+【JSON으로만 응답 — comment/reason은 15자 이내로 간결하게】
 {
   "validClasses": [
-    {"class": "31", "score": 95, "comment": "꽃 재배 - 핵심 사업과 직접 연결"}
+    {"class": "31", "score": 95, "comment": "꽃 재배 핵심 사업"}
   ],
   "invalidClasses": [
-    {"class": "42", "score": 20, "reason": "IT/연구개발 서비스는 이 사업과 무관"}
+    {"class": "42", "score": 20, "reason": "IT서비스 무관"}
   ],
   "classScoreAvg": 85
 }`;
 
-      const classResponse = await App.callClaude(classValidationPrompt, 1000);
-      const classResult = TM.safeJsonParse(classResponse.text);
+      const classResponse = await App.callClaude(classValidationPrompt, 2000);
+      
+      // max_tokens 초과 시 재시도 (더 큰 토큰으로)
+      let classText = classResponse.text;
+      if (classResponse.stopReason === 'max_tokens') {
+        console.warn('[TM] 1단계 검증 응답 잘림, 재시도...');
+        const retryResponse = await App.callClaude(classValidationPrompt + '\n\n★ 반드시 comment/reason을 10자 이내로 극도로 간결하게 작성하세요.', 3000);
+        classText = retryResponse.text;
+      }
+      
+      const classResult = TM.safeJsonParse(classText);
       
       validationResult.stages.classValidation = classResult;
       
@@ -9081,9 +9131,13 @@ ${allClasses.map(c => `- 제${c.class}류: ${c.reason}`).join('\n')}
     const invalidClassCodes = validationResult.invalidClasses.map(c => c.class);
     const validClassCodes = aiAnalysis.recommendedClasses.filter(c => !invalidClassCodes.includes(c));
     
-    for (const classCode of validClassCodes) {
+    for (let ci = 0; ci < validClassCodes.length; ci++) {
+      const classCode = validClassCodes[ci];
       const goods = aiAnalysis.recommendedGoods?.[classCode] || [];
       if (goods.length === 0) continue;
+      
+      // API rate limit 방지 (류 간 500ms 딜레이)
+      if (ci > 0) await new Promise(r => setTimeout(r, 500));
       
       try {
         const goodsValidationPrompt = `당신은 상표 출원 전문 변리사입니다.
@@ -9103,21 +9157,30 @@ ${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
 3. 업종 불일치: 사업 내용과 전혀 다른 분야의 상품
 4. 확대 해석: 사업에서 실제로 취급하지 않는 상품
 
-【JSON으로만 응답】
+【JSON으로만 응답 — comment/reason은 15자 이내로 간결하게】
 {
   "validGoods": [
-    {"name": "생화 소매업", "score": 95, "comment": "꽃 판매와 직접 관련"}
+    {"name": "생화 소매업", "score": 95, "comment": "꽃 판매 직접 관련"}
   ],
   "invalidGoods": [
-    {"name": "생화학적 촉매 도매업", "score": 5, "reason": "동음이의어 오류 - 생화(꽃)와 생화학(화학) 혼동", "errorType": "homonym"}
+    {"name": "생화학적 촉매 도매업", "score": 5, "reason": "동음이의어 오류", "errorType": "homonym"}
   ],
   "suggestedReplacements": [
-    {"remove": "생화학적 촉매 도매업", "addInstead": "절화 소매업", "reason": "꽃 판매에 적합"}
+    {"remove": "생화학적 촉매 도매업", "addInstead": "절화 소매업", "reason": "꽃 판매 적합"}
   ]
 }`;
 
-        const goodsResponse = await App.callClaude(goodsValidationPrompt, 1200);
-        const goodsResult = TM.safeJsonParse(goodsResponse.text);
+        const goodsResponse = await App.callClaude(goodsValidationPrompt, 2000);
+        
+        // max_tokens 초과 시 재시도
+        let goodsText = goodsResponse.text;
+        if (goodsResponse.stopReason === 'max_tokens') {
+          console.warn(`[TM] 제${classCode}류 검증 응답 잘림, 재시도...`);
+          const retryResponse = await App.callClaude(goodsValidationPrompt + '\n\n★ 반드시 comment/reason을 10자 이내로 극도로 간결하게 작성하세요. suggestedReplacements는 생략 가능.', 3000);
+          goodsText = retryResponse.text;
+        }
+        
+        const goodsResult = TM.safeJsonParse(goodsText);
         
         if (goodsResult.invalidGoods?.length > 0) {
           validationResult.hasIssues = true;
@@ -9185,10 +9248,20 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
   "overallComment": "전반적인 검토 의견"
 }
 
-누락이 없으면 isSufficient: true, missingClasses: [], missingGoods: []로 응답하세요.`;
+누락이 없으면 isSufficient: true, missingClasses: [], missingGoods: []로 응답하세요.
+★ reason/comment는 15자 이내로 간결하게 작성하세요.`;
 
-      const missingResponse = await App.callClaude(missingReviewPrompt, 1000);
-      const missingResult = TM.safeJsonParse(missingResponse.text);
+      const missingResponse = await App.callClaude(missingReviewPrompt, 1500);
+      
+      // max_tokens 초과 시 재시도
+      let missingText = missingResponse.text;
+      if (missingResponse.stopReason === 'max_tokens') {
+        console.warn('[TM] 3단계 검증 응답 잘림, 재시도...');
+        const retryResponse = await App.callClaude(missingReviewPrompt + '\n\n★ 극도로 간결하게 응답. reason 10자 이내.', 2500);
+        missingText = retryResponse.text;
+      }
+      
+      const missingResult = TM.safeJsonParse(missingText);
       
       validationResult.stages.missingReview = missingResult;
       
