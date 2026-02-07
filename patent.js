@@ -578,7 +578,47 @@ function getFullDescription(){
 }
 function getLastClaimNumber(t){const m=t.match(/【청구항\s*(\d+)】/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
 function getLastFigureNumber(t){const m=t.match(/도\s*(\d+)/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
-function extractBriefDescriptions(s07,s11){const d=[];[s07,s11].forEach(t=>{if(!t)return;const i=t.indexOf('---BRIEF_DESCRIPTIONS---');if(i>=0)t.slice(i+24).trim().split('\n').filter(l=>l.trim().startsWith('도 ')).forEach(l=>d.push(l.trim()));else t.split('\n').filter(l=>/^도\s*\d+은?\s/.test(l.trim())).forEach(l=>d.push(l.trim()));});return d.join('\n');}
+function extractBriefDescriptions(s07,s11){
+  const d=[],seen=new Set();
+  // 1. AI 출력에서 간단한 설명 추출
+  [s07,s11].forEach(t=>{if(!t)return;const i=t.indexOf('---BRIEF_DESCRIPTIONS---');
+    if(i>=0){
+      // 마커 이후: 도 N으로 시작하는 줄 추출
+      t.slice(i+24).trim().split('\n').filter(l=>/^도\s*\d+\s*[은는]\s/.test(l.trim())).forEach(l=>{const m=l.trim().match(/^도\s*(\d+)/);if(m&&!seen.has(m[1])){seen.add(m[1]);d.push(l.trim());}});
+    }else{
+      // 마커 없을 때: "도 N은/는 ~이다." 형식만 추출 (파트1 디자인 줄 제외)
+      t.split('\n').filter(l=>/^도\s*\d+\s*[은는]\s/.test(l.trim())&&/이다\.\s*$/.test(l.trim())).forEach(l=>{const m=l.trim().match(/^도\s*(\d+)/);if(m&&!seen.has(m[1])){seen.add(m[1]);d.push(l.trim());}});
+    }
+  });
+  // 2. 누락 도면 보완: diagramData 기반 폴백 생성
+  const title=selectedTitle||'본 발명';
+  const devSubject=getDeviceSubject();
+  const devData=diagramData.step_07||[];
+  const methodData=diagramData.step_11||[];
+  const devFigCount=devData.length;
+  // 2a. 장치 도면 폴백
+  devData.forEach((dd,i)=>{const fn=String(i+1);if(seen.has(fn))return;
+    function exRef(lab){const m=lab.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);return m?m[1]:'';}
+    const allL1=dd.nodes.every(n=>{const r=exRef(n.label);if(!r)return false;const num=parseInt(r);return(num>0&&num<10)||(num>=100&&num<1000&&num%100===0);});
+    if(i===0||allL1){d.push(`도 ${fn}은 ${title}의 전체 구성을 나타내는 블록도이다.`);}
+    else{const refs=dd.nodes.map(n=>exRef(n.label)).filter(Boolean).map(Number).filter(n=>n>=100&&n<1000&&n%100===0);
+      const pRef=refs.length?refs[0]:100;const pNode=dd.nodes.find(n=>{const r=exRef(n.label);return r&&parseInt(r)===pRef;});
+      const pName=pNode?pNode.label.replace(/[(\s]?\d+[)\s]?$/i,'').trim():devSubject;
+      d.push(`도 ${fn}은 ${pName}(${pRef})의 내부 구성을 나타내는 블록도이다.`);}
+    seen.add(fn);});
+  // 2b. 방법 도면 폴백
+  methodData.forEach((md,i)=>{const fn=String(devFigCount+i+1);if(seen.has(fn))return;
+    d.push(`도 ${fn}은 ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});
+  // 2c. diagramData 없을 때 텍스트 기반 폴백
+  if(!devData.length&&s07){const figs=s07.match(/도\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];
+    if(fn==='1'){d.push(`도 1은 ${title}의 전체 구성을 나타내는 블록도이다.`);}
+    else{d.push(`도 ${fn}은 ${title}의 세부 구성을 나타내는 블록도이다.`);}seen.add(fn);});}
+  if(!methodData.length&&s11){const figs=s11.match(/도\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];
+    d.push(`도 ${fn}은 ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});}
+  // 3. 정렬
+  d.sort((a,b)=>{const na=parseInt(a.match(/도\s*(\d+)/)?.[1]||0),nb=parseInt(b.match(/도\s*(\d+)/)?.[1]||0);return na-nb;});
+  return d.join('\n');
+}
 function stripKoreanParticles(w){if(!w||w.length<2)return w;const ps=['에서는','으로써','에서','으로','에게','부터','까지','에는','하는','되는','된','하여','있는','없는','같은','통하여','위한','대한','의한','를','을','이','가','은','는','에','의','와','과','로','도','든','인','적','로서'];for(const p of ps){if(w.endsWith(p)&&w.length>p.length+1)return w.slice(0,-p.length);}return w;}
 
 // ═══════════ FILE UPLOAD ═══════════
@@ -654,6 +694,18 @@ function autoDetectCategoryFromTitle(){
   if(/장치/.test(ty)||/장치/.test(t))return 'apparatus';
   if(/단말|전자/.test(ty)||/단말|전자/.test(t))return 'electronic_device';
   return 'server';
+}
+// ★ 발명 명칭에서 장치 주체명 추출 (서버/시스템/장치/단말 등) ★
+function getDeviceSubject(){
+  const ty=selectedTitleType||'';
+  if(/서버/.test(ty))return '서버';
+  if(/시스템/.test(ty))return '시스템';
+  if(/장치/.test(ty))return '장치';
+  if(/단말/.test(ty))return '단말';
+  const t=selectedTitle||'';
+  const m=t.match(/(서버|시스템|장치|단말)\s*$/);
+  if(m)return m[1];
+  return '서버';
 }
 
 // ═══ Google Patents 선행기술 검색 ═══
@@ -808,10 +860,10 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ■ L1 (최상위 장치): X00 형식 — 100 단위
-  서버(100), 사용자 단말(200), 외부 시스템(300), 데이터베이스(400), 네트워크(500)
+  ${getDeviceSubject()}(100), 사용자 단말(200), 외부 시스템(300), 데이터베이스(400), 네트워크(500)
 
 ■ L2 (L1 하위 구성): XY0 형식 — 10 단위
-  서버(100) 하위: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)
+  ${getDeviceSubject()}(100) 하위: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)
   사용자 단말(200) 하위: 입력부(210), 출력부(220), 제어부(230)
 
 ■ L3 (L2 하위 요소): XYZ 형식 — 1 단위
@@ -831,12 +883,12 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
   "A가 X를 구비한다" → X는 반드시 A 박스 내부에 배치
 
 ■ 소속 위반 금지
-  서버(100)가 프로세서(110)를 구비 → 110은 100 박스 내부에만 존재
+  ${getDeviceSubject()}(100)가 프로세서(110)를 구비 → 110은 100 박스 내부에만 존재
   110이 200 박스 안에 들어가면 오류
 
 ■ 공통 구성 표현
-  서버와 단말 모두 프로세서 보유 시:
-  - 서버 프로세서: 프로세서(110)
+  ${getDeviceSubject()}와 단말 모두 프로세서 보유 시:
+  - ${getDeviceSubject()} 프로세서: 프로세서(110)
   - 단말 프로세서: 프로세서(210)
   각자 자기 박스 내부에 배치 (번호 분리)
 
@@ -852,27 +904,27 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
   ⛔ 금지: 최외곽 박스 생성 금지 (L1만 있으므로 외곽 불필요)
   
   도 1 예시:
-  [서버(100)] ←→ [사용자 단말(200)] ←→ [데이터베이스(400)]
+  [${getDeviceSubject()}(100)] ←→ [사용자 단말(200)] ←→ [데이터베이스(400)]
 
 ■ 도 2 이후: 세부 블록도 (Detailed Block Diagram)
   ⛔⛔ 핵심: 한 도면에는 반드시 "한 레벨"만 표시 ⛔⛔
   최외곽 박스 = 상위 장치
   내부 박스 = 그 상위 장치의 직계 자식 레벨만
   
-  ✅ 올바른 예 (도 2: 서버 상세):
-  최외곽=서버(100), 내부=L2만: 통신부(110), 프로세서(120), 메모리(130)
+  ✅ 올바른 예 (도 2: ${getDeviceSubject()} 상세):
+  최외곽=${getDeviceSubject()}(100), 내부=L2만: 통신부(110), 프로세서(120), 메모리(130)
   
   ✅ 올바른 예 (도 3: 프로세서 상세):
   최외곽=프로세서(120), 내부=L3만: 연산부(121), 캐시부(122)
   
   ⛔ 잘못된 예 (L2+L3 혼합):
-  최외곽=서버(100), 내부=프로세서(110)+연산부(111)+캐시부(112)+메모리(120)
+  최외곽=${getDeviceSubject()}(100), 내부=프로세서(110)+연산부(111)+캐시부(112)+메모리(120)
   → 110은 L2, 111/112는 L3 → 레벨 혼합 오류!
   → 올바른 방법: 도 2에 L2만, 도 3에 L3만 분리
   
-  도 2 예시 (서버(100) 상세):
+  도 2 예시 (${getDeviceSubject()}(100) 상세):
   ┌─────────────────────────────────┐
-  │        서버(100)                 │ ← 최외곽
+  │        ${getDeviceSubject()}(100)                 │ ← 최외곽
   │  ┌───────┐  ┌───────┐  ┌───────┐│
   │  │통신부 │  │프로세서│  │메모리 ││
   │  │ (110) │  │ (120) │  │ (130) ││
@@ -884,7 +936,7 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ■ 도 1: L1 박스 ↔ L1 박스 연결만
-  서버(100) ↔ 사용자 단말(200) 연결선 허용
+  ${getDeviceSubject()}(100) ↔ 사용자 단말(200) 연결선 허용
   하위 요소(110, 210) 간 연결선 금지
 
 ■ 도 2+: 내부 구성요소 간 연결 가능
@@ -902,7 +954,7 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
   ⛔ 조부모(Grandparent)로 건너뛰기 금지
 
 ■ 예시 (계층 구조)
-  서버(100)
+  ${getDeviceSubject()}(100)
     └─ 프로세서(110)
          └─ 정보수신부(111), 알림산출부(112), 전송부(113)
 
@@ -912,7 +964,7 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 
 ■ 잘못된 표기
   도 3 내부: 정보수신부(111), 알림산출부(112), 전송부(113)
-  도 3 최외곽 박스: 서버(100) ❌ (세대 점프 - 조부모)
+  도 3 최외곽 박스: ${getDeviceSubject()}(100) ❌ (세대 점프 - 조부모)
 
 ■ 직계 부모 계산법
   - L3 구성요소(111,112,113) → 직계 부모 = L2(110)
@@ -926,14 +978,14 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 도 1: 전체 시스템 구성도
 유형: 블록도 (최외곽 박스 없음)
 구성요소: L1 장치만 나열
-- 서버(100)
+- ${getDeviceSubject()}(100)
 - 사용자 단말(200)
 - 데이터베이스(400)
-연결관계: 서버(100) ↔ 사용자 단말(200) ↔ 데이터베이스(400)
+연결관계: ${getDeviceSubject()}(100) ↔ 사용자 단말(200) ↔ 데이터베이스(400)
 
-도 2: 서버(100) 상세 블록도
-유형: 블록도 (최외곽 = 서버(100))
-구성요소: 서버(100) 내부 L2 구성
+도 2: ${getDeviceSubject()}(100) 상세 블록도
+유형: 블록도 (최외곽 = ${getDeviceSubject()}(100))
+구성요소: ${getDeviceSubject()}(100) 내부 L2 구성
 - 통신부(110)
 - 프로세서(120)
 - 메모리(130)
@@ -941,7 +993,7 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 연결관계: 통신부(110) ↔ 프로세서(120) ↔ 메모리(130)
 
 도 3: 프로세서(120) 상세 블록도 (L3 상세화 예시)
-유형: 블록도 (최외곽 = 프로세서(120), 서버(100)가 아님!)
+유형: 블록도 (최외곽 = 프로세서(120), ${getDeviceSubject()}(100)가 아님!)
 구성요소: 프로세서(120) 내부 L3 구성
 - 연산부(121)
 - 캐시부(122)
@@ -950,10 +1002,12 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 (도면 수에 맞게 도 4, 도 5... 추가)
 
 [파트2: 도면의 간단한 설명]
+★★★ 모든 도면에 대해 빠짐없이 간단한 설명을 작성하라 ★★★
 ---BRIEF_DESCRIPTIONS---
 ${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 도면이다.`).join('\n')}
-도 1은 본 발명의 전체 시스템 구성을 나타내는 블록도이다.
-도 2는 서버(100)의 내부 구성을 나타내는 블록도이다.
+도 1은 ${selectedTitle||'본 발명'}의 전체 구성을 나타내는 블록도이다.
+도 2는 ${getDeviceSubject()}(100)의 내부 구성을 나타내는 블록도이다.
+(도 3, 도 4... 모든 도면에 대해 작성)
 
 ★★★ "~모듈" 절대 금지 → "~부"로 통일 ★★★
 ★★★ 도 1은 L1(100,200,300,400) 장치만, 최외곽 박스 없음 ★★★
@@ -974,7 +1028,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${document.g
 
 규칙:
 - 이 항목만 작성. 기술분야, 배경기술, 과제, 효과 등 다른 항목 포함 금지.
-- 서버(100)를 주어로 사용. \"구성요소(참조번호)\" 형태 — 예: 통신부(110), 프로세서(120).
+- ${getDeviceSubject()}(100)를 주어로 사용. \"구성요소(참조번호)\" 형태 — 예: 통신부(110), 프로세서(120).
 - 도면별 \"도 N을 참조하면,\" 형태로 시작.
 - 특허문체(~한다). 글머리 기호/마크다운 절대 금지.
 - 청구항의 모든 구성요소를 빠짐없이 포함하여 설명하라. 절대 생략 금지.
@@ -995,7 +1049,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${document.g
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.step_07||''}${getFullInvention()}${styleRef}`;}
 
-    case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예시 대입: (수치)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}`;
+    case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}`;
 
     // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
     case 'step_10':{
@@ -1093,8 +1147,10 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
 ---
 
 [파트2: 도면의 간단한 설명]
+★★★ 모든 방법 도면에 대해 빠짐없이 간단한 설명을 작성하라 ★★★
 ---BRIEF_DESCRIPTIONS---
-도 ${lf+1}은 (방법 이름)의 (설명)을 나타내는 순서도이다.
+도 ${lf+1}은 ${selectedTitle||'본 발명'}의 (방법 이름)을 나타내는 순서도이다.
+(방법 도면이 여러 개이면 모두 작성)
 
 ★★★ 방법 청구항의 모든 단계를 빠짐없이 흐름도에 반영하라 ★★★
 ★★★ 최외곽 프레임 박스 절대 금지 — 흐름도는 프레임 없이 단계만 나열 ★★★
@@ -1102,7 +1158,7 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
 
 ${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
 
-    case 'step_12':return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: \"이하에서는 앞서 설명한 서버의 구성 및 동작을 참조하여 방법을 설명한다.\" 생략 금지. 제한성 표현 금지.\n\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${getFullInvention()}${styleRef}`;
+    case 'step_12':return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: \"이하에서는 앞서 설명한 ${getDeviceSubject()}의 구성 및 동작을 참조하여 ${getDeviceSubject()}에 의해 수행되는 방법을 설명한다.\" 생략 금지. 제한성 표현 금지.\n\n★ 방법의 수행 주체: \"${getDeviceSubject()}\"로 일관되게 서술하라.\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${getFullInvention()}${styleRef}`;
     case 'step_13':return `청구범위와 상세설명 검토:\n1.청구항뒷받침 2.기술적비약 3.수학식정합성 4.반복실시가능성 5.보완/수정 구체적 문장\n${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}`;
     case 'step_14':return `대안 청구항. 핵심유지 표현달리. 【청구항 N】.\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}`;
     case 'step_15':return `특허성 검토: 아래 청구범위와 상세설명에 대해 다음 항목을 검토하라.
@@ -1129,7 +1185,7 @@ ${T}\n[전체 청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상
 - 형식: 100, 110, 111, 200, 210...
 - 계층적 체계: L1(X00) → L2(XY0) → L3(XYZ)
 - 예시:
-  서버 : 100
+  ${getDeviceSubject()} : 100
   통신부 : 110
   수신모듈 : 111
   송신모듈 : 112
@@ -1242,10 +1298,10 @@ async function applyReview(){
   try{
     App.showProgress('progressApplyReview','[1/3] 검토 반영 보완 중...',1,3);
     const dlCfg={compact:{c:'약 1,000자',t:'약 3,000~4,000자'},standard:{c:'약 1,500자',t:'약 5,000~7,000자'},detailed:{c:'약 2,000자 이상',t:'8,000~10,000자'},custom:{c:'약 '+customDetailChars+'자',t:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자'}}[detailLevel];
-    const improvedDesc=await App.callClaudeWithContinuation(`[검토 결과]를 반영하여 【발명을 실시하기 위한 구체적인 내용】의 본문만 완전히 새로 작성하라.\n\n규칙:\n- 기존 상세설명을 기반으로 검토 지적사항을 모두 보완하라.\n- 이 항목만 작성. 다른 항목 포함 금지.\n- 서버(100)를 주어. \"구성요소(참조번호)\" 형태.\n- 도면별 \"도 N을 참조하면,\" 형태.\n- 특허문체(~한다). 글머리 금지. 생략 금지.\n- 도면 1개당 ${dlCfg.c}, 총 ${dlCfg.t}. (정형문 제외)\n- 등록 앵커 종속항의 다단계 처리, 기준값/가중치 동작, 검증/보정 루프를 구체적으로 설명하라.\n- 제한성 표현 금지.\n- 수학식은 포함하지 마라 (별도 삽입 예정).\n\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n[발명의 명칭] ${selectedTitle}\n[검토 결과] ${outputs.step_13}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}\n[현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention()}${getStyleRef()}`,'progressApplyReview');
+    const improvedDesc=await App.callClaudeWithContinuation(`[검토 결과]를 반영하여 【발명을 실시하기 위한 구체적인 내용】의 본문만 완전히 새로 작성하라.\n\n규칙:\n- 기존 상세설명을 기반으로 검토 지적사항을 모두 보완하라.\n- 이 항목만 작성. 다른 항목 포함 금지.\n- ${getDeviceSubject()}(100)를 주어. \"구성요소(참조번호)\" 형태.\n- 도면별 \"도 N을 참조하면,\" 형태.\n- 특허문체(~한다). 글머리 금지. 생략 금지.\n- 도면 1개당 ${dlCfg.c}, 총 ${dlCfg.t}. (정형문 제외)\n- 등록 앵커 종속항의 다단계 처리, 기준값/가중치 동작, 검증/보정 루프를 구체적으로 설명하라.\n- 제한성 표현 금지.\n- 수학식은 포함하지 마라 (별도 삽입 예정).\n\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n[발명의 명칭] ${selectedTitle}\n[검토 결과] ${outputs.step_13}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}\n[현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention()}${getStyleRef()}`,'progressApplyReview');
     outputs.step_08=improvedDesc;
     App.showProgress('progressApplyReview','[2/3] 수학식 삽입 중...',2,3);
-    const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예시 대입: (수치)\n\n${selectedTitle}\n[현재 상세설명] ${improvedDesc}`);
+    const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${improvedDesc}`);
     const finalDesc=insertMathBlocks(improvedDesc,mathR.text);
     outputs.step_09=finalDesc;outputs.step_13_applied=finalDesc;
     App.showProgress('progressApplyReview','[3/3] 완료',3,3);
@@ -1367,11 +1423,11 @@ async function runProvisionalApplication(){
     const r1=await App.callClaudeSonnet(`가출원 명세서를 작성하라. 전체 문서가 4000단어를 넘지 않도록 간결하게 작성하라.
 
 [구성]
-1. 발명의 명칭: 국문 1개 + 영문 1개 ("~서버" 또는 "~방법" 또는 "~시스템" 형태)
+1. 발명의 명칭: 국문 1개 + 영문 1개 ("~${getDeviceSubject()}" 형태)
 2. 기술분야: 1문장
 3. 해결하고자 하는 과제: 2~3문장
 4. 과제의 해결 수단: 3~5문장
-5. 독립항 1개: 핵심 구성요소만 포함한 장치/서버 청구항
+5. 독립항 1개: 핵심 구성요소만 포함한 ${getDeviceSubject()} 청구항
 6. 도면 1개: 시스템 블록도 (구성요소+참조번호+연결관계)
 7. 상세설명: 도면 참조하여 각 구성요소 기능 설명 (2000자 이내)
 8. 발명의 효과: 2~3문장
@@ -1385,7 +1441,7 @@ async function runProvisionalApplication(){
 - 총 4000단어 이내로 간결하게
 
 [도면 참조번호 규칙 — 필수 준수]
-- L1 (최상위): X00 형식 — 서버(100), 사용자 단말(200), 외부 시스템(300), 데이터베이스(400)
+- L1 (최상위): X00 형식 — ${getDeviceSubject()}(100), 사용자 단말(200), 외부 시스템(300), 데이터베이스(400)
 - L2 (하위 모듈): XY0 형식 — 통신부(110), 프로세서(120), 메모리(130)...
 - L3 (하위 부품): XYZ 형식 — 수신모듈(111), 송신모듈(112)...
 - 부모 접두(prefix) 유지: 자식은 부모의 앞자리를 반드시 유지
@@ -1601,13 +1657,13 @@ function stripMathBlocks(text){
   if(!text)return '';
   // Remove existing math blocks (【수학식 N】 blocks) more thoroughly to prevent duplication
   // Pattern 1: Full math blocks with parameters
-  let r=text.replace(/\n*【수학식\s*\d+】[\s\S]*?(?=\n(?:도\s|이때|또한|한편|다음|여기서|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}서버|\n|$))/g,'');
+  let r=text.replace(/\n*【수학식\s*\d+】[\s\S]*?(?=\n(?:도\s|이때|또한|한편|다음|여기서|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}(?:서버|시스템|장치|단말)|\n|$))/g,'');
   // Pattern 2: Standalone math block headers that might remain
   r=r.replace(/\n*【수학식\s*\d+】[^\n]*\n/g,'\n');
   // Pattern 3: Remove "여기서," blocks that follow math formulas
   r=r.replace(/\n여기서,[\s\S]*?(?=\n\n)/g,'');
-  // Pattern 4: Remove "예시 대입:" blocks
-  r=r.replace(/\n예시 대입:[\s\S]*?(?=\n\n)/g,'');
+  // Pattern 4: Remove math example blocks (old and new format)
+  r=r.replace(/\n(?:예시 대입:|예를 들어,|일 예로,|구체적 예시로,)[\s\S]*?(?=\n\n)/g,'');
   // Clean up multiple newlines
   r=r.replace(/\n{3,}/g,'\n\n');
   return r.trim();
@@ -1639,12 +1695,12 @@ function buildMermaidPrompt(sid){
 ═══ Mermaid 문법 규칙 (필수!) ═══
 graph TD 사용
 노드ID는 영문 (A, B, C 또는 server, client 등)
-노드 라벨은 대괄호 안에: A["서버(100)"]
+노드 라벨은 대괄호 안에: A["${getDeviceSubject()}(100)"]
 
 ★★★ 올바른 Mermaid 문법 예시 ★★★
 \`\`\`mermaid
 graph TD
-    A["서버(100)"]
+    A["${getDeviceSubject()}(100)"]
     B["사용자 단말(200)"]
     C["네트워크(300)"]
     D["데이터베이스(400)"]
@@ -1654,7 +1710,7 @@ graph TD
 \`\`\`
 
 ⛔ 잘못된 문법 (절대 금지):
-- A["서버(100)"] <--> B["사용자 단말(200)"]  ← <--> 사용 금지!
+- A["${getDeviceSubject()}(100)"] <--> B["사용자 단말(200)"]  ← <--> 사용 금지!
 - 한 줄에 노드 정의와 연결을 함께 쓰지 말 것
 
 ✅ 올바른 문법:
@@ -1680,7 +1736,7 @@ graph TD
   → 렌더링: 최외곽 프레임=121, 내부 박스=1211,1212 (121은 프레임으로만)
 
 ★★ 연결관계 규칙 ★★
-- 데이터/정보 도면(~정보, ~데이터): 정보 항목은 서버 입력 데이터 → 상호 화살표 연결 부적절 → 연결선 없이 병렬 배치 (노드 정의만, A --> B 금지)
+- 데이터/정보 도면(~정보, ~데이터): 정보 항목은 ${getDeviceSubject()} 입력 데이터 → 상호 화살표 연결 부적절 → 연결선 없이 병렬 배치 (노드 정의만, A --> B 금지)
 - 장치 블록도: 데이터 흐름이 있는 구성요소만 --> 연결
 - 상위 구성(110)과 하위 구성(111,112,113)을 같은 레벨에 표현 금지
 
@@ -1768,7 +1824,7 @@ ${isMethod?`[방법 도면 규칙]
      - 내부가 L4(1211,1212)이면 최외곽은 L3(121)`}
      
 ★★ 연결관계 규칙 ★★
-- 데이터/정보 도면: 정보 항목은 서버 입력용이므로 상호 간 화살표 연결 부적절 → 병렬 배치
+- 데이터/정보 도면: 정보 항목은 ${getDeviceSubject()} 입력용이므로 상호 간 화살표 연결 부적절 → 병렬 배치
 - 장치 블록도: 기술적 데이터 흐름이 있으면 화살표 연결
 - 상위+하위 구성이 같은 레벨에 표현 금지 → 하위는 상위 내부에 포함
 
@@ -2649,7 +2705,7 @@ async function runAIDiagramReview(sid){
   const prompt=`당신은 특허 도면 전문가입니다. 아래 도면의 연결관계가 기술적으로 적절한지 정성적으로 평가하세요.
 
 ═══ 평가 기준 ═══
-1. **데이터/정보 도면**: 정보 항목(~정보, ~데이터)은 서버로 입력되는 것이므로 상호 간 화살표 연결이 부적절함. 병렬 배치가 적절.
+1. **데이터/정보 도면**: 정보 항목(~정보, ~데이터)은 ${getDeviceSubject()}로 입력되는 것이므로 상호 간 화살표 연결이 부적절함. 병렬 배치가 적절.
 2. **장치 블록도**: 하드웨어 구성요소 간 데이터 흐름이 있으면 화살표 연결 적절. 단, 메모리/저장부처럼 수동적 구성은 다른 구성에서 접근하는 방향만 적절.
 3. **계층 일관성**: 상위 구성과 하위 구성이 같은 레벨에 표현되면 안 됨. 하위는 상위 내부에 포함되어야 함.
 4. **방법 흐름도**: 단계 간 순서가 논리적이어야 함.
@@ -3067,70 +3123,77 @@ function downloadDiagramImages(sid, format='jpeg'){
         nodes.some(n=>/시작|종료|START|END/i.test(n.label));
       
       if(isMethodDiagram){
-        // ═══ 방법 도면: 흐름도 (최외곽 없음, 단방향) ═══
+        // ═══ 방법 도면: 흐름도 (SVG와 동일 스타일) ═══
         const nodeCount=nodes.length;
+        const normalBoxW=620;
+        const startEndBoxW=248; // 620*0.4, matching SVG ratio 2.0/5.0
         const boxStartX=30,boxStartY=50;
-        const boxW=620;
+        const centerX=boxStartX+normalBoxW/2; // 340
         const boxH=Math.min(55,(850-10*(nodeCount-1))/nodeCount);
         const boxGap=Math.min(40,(900-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1));
         const SHADOW=3;
         
         nodes.forEach((n,i)=>{
-          const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
           const refNum=extractRefNum(n.label,'');
           const cleanLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
           const isStartEnd=/시작|종료|START|END/i.test(n.label);
+          
+          // ★ 시작/종료는 축소 폭, 모든 박스 중앙 정렬 ★
+          const curBoxW=isStartEnd?startEndBoxW:normalBoxW;
+          const bx=centerX-curBoxW/2;
+          const by=boxStartY+i*(boxH+boxGap);
           
           // 그림자 (시작/종료는 둥근 그림자)
           ctx.fillStyle='#000000';
           if(isStartEnd){
             const r=boxH/2;
             ctx.beginPath();
-            ctx.moveTo(bx+SHADOW+r,by+SHADOW);ctx.lineTo(bx+SHADOW+boxW-r,by+SHADOW);ctx.quadraticCurveTo(bx+SHADOW+boxW,by+SHADOW,bx+SHADOW+boxW,by+SHADOW+r);
-            ctx.lineTo(bx+SHADOW+boxW,by+SHADOW+boxH-r);ctx.quadraticCurveTo(bx+SHADOW+boxW,by+SHADOW+boxH,bx+SHADOW+boxW-r,by+SHADOW+boxH);
+            ctx.moveTo(bx+SHADOW+r,by+SHADOW);ctx.lineTo(bx+SHADOW+curBoxW-r,by+SHADOW);ctx.quadraticCurveTo(bx+SHADOW+curBoxW,by+SHADOW,bx+SHADOW+curBoxW,by+SHADOW+r);
+            ctx.lineTo(bx+SHADOW+curBoxW,by+SHADOW+boxH-r);ctx.quadraticCurveTo(bx+SHADOW+curBoxW,by+SHADOW+boxH,bx+SHADOW+curBoxW-r,by+SHADOW+boxH);
             ctx.lineTo(bx+SHADOW+r,by+SHADOW+boxH);ctx.quadraticCurveTo(bx+SHADOW,by+SHADOW+boxH,bx+SHADOW,by+SHADOW+boxH-r);
             ctx.lineTo(bx+SHADOW,by+SHADOW+r);ctx.quadraticCurveTo(bx+SHADOW,by+SHADOW,bx+SHADOW+r,by+SHADOW);
             ctx.closePath();ctx.fill();
           }else{
-            ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
+            ctx.fillRect(bx+SHADOW,by+SHADOW,curBoxW,boxH);
           }
           
-          // 시작/종료는 둥근 모서리 + 다른 배경
-          ctx.fillStyle=isStartEnd?'#F5F5F5':'#FFFFFF';
+          // ★ 시작/종료도 흰색 배경 (SVG와 일치) ★
+          ctx.fillStyle='#FFFFFF';
           if(isStartEnd){
             const r=boxH/2;
             ctx.beginPath();
-            ctx.moveTo(bx+r,by);ctx.lineTo(bx+boxW-r,by);ctx.quadraticCurveTo(bx+boxW,by,bx+boxW,by+r);
-            ctx.lineTo(bx+boxW,by+boxH-r);ctx.quadraticCurveTo(bx+boxW,by+boxH,bx+boxW-r,by+boxH);
+            ctx.moveTo(bx+r,by);ctx.lineTo(bx+curBoxW-r,by);ctx.quadraticCurveTo(bx+curBoxW,by,bx+curBoxW,by+r);
+            ctx.lineTo(bx+curBoxW,by+boxH-r);ctx.quadraticCurveTo(bx+curBoxW,by+boxH,bx+curBoxW-r,by+boxH);
             ctx.lineTo(bx+r,by+boxH);ctx.quadraticCurveTo(bx,by+boxH,bx,by+boxH-r);
             ctx.lineTo(bx,by+r);ctx.quadraticCurveTo(bx,by,bx+r,by);
             ctx.closePath();ctx.fill();ctx.strokeStyle='#000000';ctx.lineWidth=2;ctx.stroke();
           }else{
-            ctx.fillRect(bx,by,boxW,boxH);
-            ctx.strokeStyle='#000000';ctx.lineWidth=2;ctx.strokeRect(bx,by,boxW,boxH);
+            ctx.fillRect(bx,by,curBoxW,boxH);
+            ctx.strokeStyle='#000000';ctx.lineWidth=1.5;ctx.strokeRect(bx,by,curBoxW,boxH);
           }
           
           ctx.fillStyle='#000000';
           ctx.font='13px "맑은 고딕", sans-serif';
           ctx.textAlign='center';
-          ctx.fillText(cleanLabel,bx+boxW/2,by+boxH/2+4);
+          ctx.fillText(cleanLabel,centerX,by+boxH/2+4);
           
           // 리더라인 + 부호 (시작/종료 제외)
           if(refNum&&!isStartEnd){
+            const leaderEndX=boxStartX+normalBoxW+20;
             ctx.textAlign='left';
             ctx.lineWidth=1;
-            ctx.beginPath();ctx.moveTo(bx+boxW,by+boxH/2);ctx.lineTo(bx+boxW+20,by+boxH/2);ctx.stroke();
+            ctx.beginPath();ctx.moveTo(bx+curBoxW,by+boxH/2);ctx.lineTo(leaderEndX,by+boxH/2);ctx.stroke();
             ctx.font='11px "맑은 고딕", sans-serif';
-            ctx.fillText(String(refNum),bx+boxW+30,by+boxH/2+4);
+            ctx.fillText(String(refNum),leaderEndX+10,by+boxH/2+4);
           }
           
-          // 단방향 화살표
+          // ★ 단방향 화살표: 항상 중앙선 직선 ★
           if(i<nodes.length-1){
-            const arrowX=bx+boxW/2,arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+            const arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
             if(arrowY2>arrowY1){
-              ctx.beginPath();ctx.moveTo(arrowX,arrowY1);ctx.lineTo(arrowX,arrowY2);ctx.lineWidth=1;ctx.stroke();
+              ctx.beginPath();ctx.moveTo(centerX,arrowY1);ctx.lineTo(centerX,arrowY2);ctx.lineWidth=1;ctx.stroke();
               // 아래쪽 화살촉만 (단방향)
-              ctx.beginPath();ctx.moveTo(arrowX-4,arrowY2-8);ctx.lineTo(arrowX,arrowY2);ctx.lineTo(arrowX+4,arrowY2-8);ctx.stroke();
+              ctx.beginPath();ctx.moveTo(centerX-4,arrowY2-8);ctx.lineTo(centerX,arrowY2);ctx.lineTo(centerX+4,arrowY2-8);ctx.stroke();
             }
           }
         });
@@ -3145,7 +3208,7 @@ function downloadDiagramImages(sid, format='jpeg'){
       }
       if(!frameRefNum)frameRefNum=100;
       const nodeCount=nodes.length;
-      const SHADOW=3;
+      const SHADOW=4; // SVG와 일치
       
       if(isFig1){
         // 도 1: 최외곽 박스 없음
@@ -3167,12 +3230,14 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.lineWidth=2;
           ctx.strokeRect(bx,by,boxW,boxH);
           
+          const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
           ctx.fillStyle='#000000';
-          ctx.font=`${Math.min(14,15-nodeCount*0.4)}px "맑은 고딕", sans-serif`;
+          ctx.font='13px "맑은 고딕", sans-serif';
           ctx.textAlign='center';
           ctx.textBaseline='middle';
-          ctx.fillText(cleanLabel.slice(0,25),bx+boxW/2,by+boxH/2);
+          ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
           ctx.textAlign='left';
+          ctx.textBaseline='alphabetic';
           
           ctx.beginPath();
           ctx.moveTo(bx+boxW,by+boxH/2);
@@ -3183,12 +3248,14 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.font='11px "맑은 고딕", sans-serif';
           ctx.fillText(String(refNum),bx+boxW+30,by+boxH/2+4);
           
-          if(hasEdges&&i<nodes.length-1){
+          // ★ 양방향 화살표 — 항상 그리기 (SVG와 일치) ★
+          if(i<nodes.length-1){
             const arrowX=bx+boxW/2,arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
             if(arrowY2>arrowY1){
               ctx.beginPath();
               ctx.moveTo(arrowX,arrowY1);
               ctx.lineTo(arrowX,arrowY2);
+              ctx.lineWidth=1;
               ctx.stroke();
               ctx.beginPath();
               ctx.moveTo(arrowX-4,arrowY1+8);
@@ -3223,7 +3290,7 @@ function downloadDiagramImages(sid, format='jpeg'){
         ctx.fillStyle='#FFFFFF';
         ctx.fillRect(frameX,frameY,frameW,frameH);
         ctx.strokeStyle='#000000';
-        ctx.lineWidth=2;
+        ctx.lineWidth=2.25;
         ctx.strokeRect(frameX,frameY,frameW,frameH);
         
         ctx.beginPath();
@@ -3255,11 +3322,13 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.strokeRect(bx,by,boxW,boxH);
           
           ctx.fillStyle='#000000';
-          ctx.font=`${Math.min(13,14-dCount*0.5)}px "맑은 고딕", sans-serif`;
+          ctx.font='12px "맑은 고딕", sans-serif';
           ctx.textAlign='center';
           ctx.textBaseline='middle';
-          ctx.fillText(cleanLabel.slice(0,25),bx+boxW/2,by+boxH/2);
+          const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
+          ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
           ctx.textAlign='left';
+          ctx.textBaseline='alphabetic';
           
           ctx.beginPath();
           ctx.moveTo(bx+boxW,by+boxH/2);
