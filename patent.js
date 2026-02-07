@@ -1247,7 +1247,22 @@ ${preIssues.map(i=>i.message).join('\n')}
     const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
     outputs[sid+'_mermaid']=mr.text;
     
-    // 4. 렌더링 + 최종 검증
+    // 4. AI 아이콘 생성 (도 1 = 장치 도면 첫 블록)
+    _currentAIIcons=null;
+    if(sid==='step_07'){
+      try{
+        const _blocks=extractMermaidBlocks(mr.text);
+        if(_blocks.length>0){
+          const{nodes:_fig1Nodes}=parseMermaidGraph(_blocks[0]);
+          if(_fig1Nodes.length>=2 && _fig1Nodes.length<=8){
+            const aiIcons=await generateAIFig1Icons(sid,0,'',_fig1Nodes,1);
+            if(aiIcons)_currentAIIcons=aiIcons;
+          }
+        }
+      }catch(aiErr){console.warn('AI 아이콘 생성 스킵:',aiErr.message);}
+    }
+    
+    // 5. 렌더링 + 최종 검증
     renderDiagrams(sid,mr.text);
     
     const dlId=sid==='step_07'?'diagramDownload07':'diagramDownload11';
@@ -1727,6 +1742,22 @@ ${isMethod?'방법 흐름도는 시작/종료 노드를 반드시 포함!':'도 
     const mermaidPrompt=buildMermaidPrompt(stepId,r1.text);
     const r2=await App.callClaude(mermaidPrompt);
     outputs[stepId+'_mermaid']=r2.text;
+    
+    // AI 아이콘 재생성 (장치 도면만)
+    _currentAIIcons=null;
+    if(stepId==='step_07'){
+      try{
+        const _reBlocks=extractMermaidBlocks(r2.text);
+        if(_reBlocks.length>0){
+          const{nodes:_reFig1}=parseMermaidGraph(_reBlocks[0]);
+          if(_reFig1.length>=2&&_reFig1.length<=8){
+            const reIcons=await generateAIFig1Icons(stepId,0,'',_reFig1,1);
+            if(reIcons)_currentAIIcons=reIcons;
+          }
+        }
+      }catch(e2){console.warn('AI 재아이콘 스킵:',e2.message);}
+    }
+    
     renderDiagrams(stepId,r2.text);
     
     App.showToast('도면이 규칙에 맞게 재생성되었습니다.');
@@ -1856,6 +1887,132 @@ function computeEdgeRoutes(edges,positions){
     return{segments,label:e.label,labelPos};
   }).filter(Boolean);
 }
+// ═══════════ AI 기반 특허 도면 아이콘 생성 v8.0 ═══════════
+// 구성요소 명칭을 분석하여 실제 특허 도면 스타일 SVG 아이콘을 AI가 생성
+const _aiIconStore={};
+
+function buildAIFig1IconPrompt(nodeInfos){
+  const list=nodeInfos.map((n,i)=>`${i+1}. "${n.name}" (참조번호: ${n.ref})`).join('\n');
+  return `당신은 한국 특허 명세서(KIPRIS) 도면 전문 일러스트레이터입니다.
+아래 시스템 구성요소들의 **도 1 (시스템 구성도)** 용 아이콘 SVG를 생성하세요.
+
+═══ 구성요소 목록 ═══
+${list}
+
+═══ 필수 규칙 ═══
+1. 각 아이콘은 ---ICON_N--- 구분자 후 <g id="icon_N"> 태그로 감쌈 (N=순번 1,2,3...)
+2. 좌표계: 중심(0,0) 기준. 바운딩 박스 가로 ±55px, 세로 ±50px 이내
+3. 흑백 특허 도면 스타일: stroke="#000", fill="#fff" 또는 fill="none"
+4. stroke-width: 외곽선 1.5~2px, 내부 디테일 0.5~1px
+5. 그림자 없음, 채색/그라디언트 없음, 깔끔한 선화만
+6. 텍스트(text 요소) 절대 포함 금지 — 참조번호, 라벨 모두 제외
+7. 가로:세로 비율은 대략 1:1 ~ 1.2:1.3 정도
+
+═══ 한국 특허 명세서 도면의 구성요소별 표준 표현법 ═══
+아래는 KIPRIS에 등록된 실제 한국 특허 도면에서 관찰되는 구성요소 표현 관례입니다:
+
+• "서버", "처리 장치", "플랫폼 서버", "웹 서버":
+  3D 아이소메트릭 랙 서버. 정면 직사각형(약 70×85) + 윗면 평행사변형(깊이 ~14px) + 옆면 평행사변형.
+  정면 내부: 상단에 작은 사각 인디케이터 도트 2행, 하단에 수평 패널 칸막이 2개, 옆면에 작은 포트 사각형 3~4개.
+
+• "사용자 단말", "클라이언트 단말", "단말기", "전자 장치":
+  모니터(가장 큰, ~95×65) + 태블릿(중간, ~30×45, 우측 뒤에 겹침) + 스마트폰(작은, ~18×34, 좌측 아래 겹침).
+  모니터: 외곽+내부 화면 사각형+아래 받침대+베이스. 태블릿: 둥근모서리 직사각형+내부 화면. 스마트폰: 좁은 직사각형+내부 화면+하단 홈버튼 원.
+
+• "데이터베이스", "DB", "저장부", "데이터 저장소":
+  실린더. 상단 타원(rx~28, ry~10) + 좌우 수직선 + 하단 타원. 몸체 높이 ~70px.
+  내부에 가로 구분 곡선 1~2개(데이터 레이어 구분).
+
+• "네트워크", "통신망", "인터넷", "통신 네트워크":
+  구름 형태. 부드러운 3차 베지어 곡선(Q 또는 C)으로 구름 외곽. 폭~80, 높이~50.
+  내부 비어있음.
+
+• "외부 서버", "외부 API", "외부 시스템":
+  서버와 유사하되 약간 작은 크기의 3D 직육면체. 내부 디테일 간소화.
+
+• "관리자 단말", "운영 단말", "관리 장치":
+  모니터 1대 단독(겹침 없이). 화면+받침대+베이스.
+
+• 그 외 모든 구성요소 (매칭부, 분석부, 처리부, 수집부 등 기능 모듈):
+  둥근모서리 직사각형(~65×48, rx=3). 내부 비어있음. 가장 심플한 형태.
+
+═══ 출력 형식 (이것만 출력, 다른 설명 텍스트 일절 금지) ═══
+---ICON_1---
+<g id="icon_1">
+  (SVG elements — rect, line, ellipse, path, circle, polygon 등)
+</g>
+---ICON_2---
+<g id="icon_2">
+  (SVG elements)
+</g>`;
+}
+
+function parseAIFig1Icons(text,expectedCount){
+  const icons={};
+  const regex=/---ICON_(\d+)---\s*([\s\S]*?)(?=---ICON_\d+---|$)/g;
+  let m;
+  while((m=regex.exec(text))!==null){
+    const idx=parseInt(m[1])-1; // 0-based
+    let svg=m[2].trim();
+    // <g> 태그 추출
+    const gMatch=svg.match(/<g[^>]*>([\s\S]*?)<\/g>/);
+    if(gMatch)svg=gMatch[1].trim();
+    // 기본 검증: SVG 요소가 있는지
+    if(svg.length>20 && (svg.includes('<rect')||svg.includes('<path')||svg.includes('<ellipse')||svg.includes('<polygon')||svg.includes('<circle')||svg.includes('<line')))
+      icons[idx]=svg;
+  }
+  return icons;
+}
+
+async function generateAIFig1Icons(sid,blockIdx,containerId,nodes,figNum){
+  // 노드 정보 추출
+  const nodeInfos=nodes.map((nd,i)=>{
+    const ref=nd.label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
+    const refNum=ref?ref[1]:String((i+1)*100);
+    const cleanName=nd.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
+    return{name:cleanName,ref:refNum};
+  });
+  
+  // 캐시 체크
+  const cacheKey=nodeInfos.map(n=>n.name).join('|');
+  if(_aiIconStore[cacheKey]){
+    return _aiIconStore[cacheKey];
+  }
+  
+  // 로딩 표시
+  const container=document.getElementById(containerId);
+  let loadEl=null;
+  if(container){
+    loadEl=document.createElement('div');
+    loadEl.style.cssText='text-align:center;padding:6px;font-size:11px;color:#1976d2;background:#e3f2fd;border-radius:4px;margin-top:4px';
+    loadEl.textContent='🎨 AI 특허 도면 아이콘 생성 중...';
+    container.parentElement.insertBefore(loadEl,container.nextSibling);
+  }
+  
+  try{
+    const prompt=buildAIFig1IconPrompt(nodeInfos);
+    const r=await App.callClaudeSonnet(prompt,4096);
+    const icons=parseAIFig1Icons(r.text,nodes.length);
+    
+    if(Object.keys(icons).length>=Math.ceil(nodes.length*0.5)){
+      // 최소 절반 이상 성공해야 캐시 저장
+      _aiIconStore[cacheKey]=icons;
+      return icons;
+    }else{
+      console.warn(`AI 아이콘 파싱 부족: ${Object.keys(icons).length}/${nodes.length}`);
+      return null;
+    }
+  }catch(e){
+    console.warn('AI 아이콘 생성 실패:',e.message);
+    return null;
+  }finally{
+    if(loadEl)loadEl.remove();
+  }
+}
+
+// 전역 참조: 현재 렌더링 중인 Fig1의 AI 아이콘
+let _currentAIIcons=null;
+
 function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   // ═══ KIPO 특허 도면 규칙 v4.1 (직계 부모 일치) ═══
   const PX=72;
@@ -2052,7 +2209,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     return 'box';
   }
   
-  // ★ L1 직관적 형태 SVG 생성 함수 (패치 v5.3) ★
+  // ★ (구 drawL1Shape - drawHIcon으로 대체됨, v6.0) ★
   function drawL1Shape(type,bx,by,boxW,boxH,label,refNum){
     let svg='';
     const cx=bx+boxW/2;
@@ -2213,44 +2370,131 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   }
   
   if(isFig1){
-    // ═══ 도 1: L1 직관적 형태 v5.4 ═══
-    // - 서버: 3D 박스 + 슬롯
-    // - 단말: 모니터 + 스마트폰
-    // - 저장소: 실린더
-    // - 네트워크: 구름
-    // - 화살표: 항상 양방향 표시 (도면설계 연결관계 유무와 무관)
-    const iconBoxH=boxH*1.8;
-    const iconGap=1.0*PX;
-    const boxStartX=0.5*PX;
-    const boxStartY=0.5*PX;
-    const svgW=boxW+2.8*PX;
-    const svgH=nodes.length*(iconBoxH+iconGap)+0.8*PX;
+    // ═══ 도 1: 수평 배치 시스템 구성도 v7.0 ═══
+    // 참조 이미지 기반 재설계: 심플 흑백 특허 도면
+    // - 그림자 없음, 최소 디테일, 깔끔한 선화
+    // - 단말: 모니터+태블릿+폰 겹침 배치
+    // - 서버/DB: 3D 아이소메트릭 랙
+    // - 네트워크: 구름, 기타: 단순 박스
+    const nn=nodes.length;
+    const S=nn<=3?1.0:nn<=4?0.82:nn<=5?0.68:0.58;
+    const iW=Math.round(160*S), iH=Math.round(120*S);
+    const gap=Math.round(80*S);
+    const padX=20, padTop=8, refH=22;
+    const svgW=padX*2+nn*iW+(nn-1)*gap;
+    const svgH=padTop+refH+iH+8;
     
-    let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:550px;background:white;border-radius:8px">`;
-    
+    let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${Math.min(svgW+20,850)}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
-    svg+=`<defs>
-      <marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M0 0 L10 5 L0 10 z" fill="#000"/>
-      </marker>
-    </defs>`;
+    svg+=`<defs><marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 1 L8 5 L0 9 z" fill="#000"/></marker></defs>`;
     
-    nodes.forEach((n,i)=>{
-      const bx=boxStartX;
-      const by=boxStartY+i*(iconBoxH+iconGap);
-      const refNum=extractRefNum(n.label,String((i+1)*100));
-      const l1Type=getL1Type(n.label);
-      
-      svg+=drawL1Shape(l1Type,bx,by,boxW,iconBoxH,n.label,refNum);
-      
-      // ★ L1 간 연결선: 항상 양방향 화살표 표시 ★
-      if(i<nodes.length-1){
-        const arrowX=bx+boxW/2;
-        const arrowY1=by+iconBoxH+18;
-        const arrowY2=boxStartY+(i+1)*(iconBoxH+iconGap)-8;
-        if(arrowY2>arrowY1+5){
-          svg+=`<line x1="${arrowX}" y1="${arrowY1}" x2="${arrowX}" y2="${arrowY2}" stroke="#000" stroke-width="1.5" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
+    // ★ 특허 도면 아이콘 v7 ★
+    function drawIcon(type,cx,cy,s){
+      let o='';
+      switch(type){
+        case 'terminal':{
+          // ── 모니터 ──
+          const mW=98*s,mH=68*s;
+          const mx=cx-mW/2-2*s, my=cy-mH/2-8*s;
+          o+=`<rect x="${mx}" y="${my}" width="${mW}" height="${mH}" rx="${2*s}" fill="#fff" stroke="#000" stroke-width="${1.8*s}"/>`;
+          o+=`<rect x="${mx+5*s}" y="${my+4*s}" width="${mW-10*s}" height="${mH-10*s}" fill="#fff" stroke="#000" stroke-width="${0.8*s}"/>`;
+          const stX=mx+mW/2;
+          o+=`<rect x="${stX-8*s}" y="${my+mH}" width="${16*s}" height="${8*s}" fill="#fff" stroke="#000" stroke-width="${1.2*s}"/>`;
+          o+=`<rect x="${stX-16*s}" y="${my+mH+8*s}" width="${32*s}" height="${3*s}" rx="${1*s}" fill="#fff" stroke="#000" stroke-width="${1*s}"/>`;
+          // ── 태블릿 ──
+          const tW=32*s,tH=48*s;
+          const tx=cx+mW/2-14*s, ty=cy-tH/2+6*s;
+          o+=`<rect x="${tx}" y="${ty}" width="${tW}" height="${tH}" rx="${2*s}" fill="#fff" stroke="#000" stroke-width="${1.5*s}"/>`;
+          o+=`<rect x="${tx+3*s}" y="${ty+4*s}" width="${tW-6*s}" height="${tH-10*s}" fill="#fff" stroke="#000" stroke-width="${0.6*s}"/>`;
+          // ── 스마트폰 ──
+          const pW=20*s,pH=36*s;
+          const px=cx-mW/2-pW+6*s, py=cy+2*s;
+          o+=`<rect x="${px}" y="${py}" width="${pW}" height="${pH}" rx="${2*s}" fill="#fff" stroke="#000" stroke-width="${1.3*s}"/>`;
+          o+=`<rect x="${px+2.5*s}" y="${py+3*s}" width="${pW-5*s}" height="${pH-9*s}" fill="#fff" stroke="#000" stroke-width="${0.5*s}"/>`;
+          o+=`<circle cx="${px+pW/2}" cy="${py+pH-4*s}" r="${2*s}" fill="none" stroke="#000" stroke-width="${0.6*s}"/>`;
+          break;
         }
+        case 'server':{
+          // ── 3D 서버 랙 ──
+          const fW=72*s, fH=88*s, d=14*s;
+          const fx=cx-fW/2-d/3, fy=cy-fH/2+d/2+2*s;
+          o+=`<rect x="${fx}" y="${fy}" width="${fW}" height="${fH}" fill="#fff" stroke="#000" stroke-width="${1.8*s}"/>`;
+          o+=`<polygon points="${fx},${fy} ${fx+d},${fy-d} ${fx+fW+d},${fy-d} ${fx+fW},${fy}" fill="#fff" stroke="#000" stroke-width="${1.3*s}"/>`;
+          o+=`<polygon points="${fx+fW},${fy} ${fx+fW+d},${fy-d} ${fx+fW+d},${fy+fH-d} ${fx+fW},${fy+fH}" fill="#fff" stroke="#000" stroke-width="${1.3*s}"/>`;
+          // 상단 인디케이터 도트 2행
+          const dotS=2.8*s, dotG=10*s;
+          const nDots=Math.min(5,Math.floor((fW-16*s)/dotG));
+          const dotX0=fx+(fW-nDots*dotG+dotG)/2;
+          for(let r=0;r<2;r++){for(let c=0;c<nDots;c++){
+            o+=`<rect x="${dotX0+c*dotG-dotS/2}" y="${fy+8*s+r*12*s}" width="${dotS}" height="${dotS}" fill="none" stroke="#000" stroke-width="${0.7*s}"/>`;
+          }}
+          // 하단 패널 2개
+          const pnT=fy+fH*0.4, pnH=fH*0.5, pnG=6*s;
+          const pnW=(fW-16*s-pnG)/2;
+          const px1=fx+8*s, px2=fx+8*s+pnW+pnG;
+          o+=`<rect x="${px1}" y="${pnT}" width="${pnW}" height="${pnH}" fill="none" stroke="#000" stroke-width="${1*s}"/>`;
+          o+=`<rect x="${px2}" y="${pnT}" width="${pnW}" height="${pnH}" fill="none" stroke="#000" stroke-width="${1*s}"/>`;
+          o+=`<line x1="${px1+2*s}" y1="${pnT+pnH*0.45}" x2="${px1+pnW-2*s}" y2="${pnT+pnH*0.45}" stroke="#000" stroke-width="${0.5*s}"/>`;
+          o+=`<line x1="${px2+pnW*0.45}" y1="${pnT+3*s}" x2="${px2+pnW*0.45}" y2="${pnT+pnH-3*s}" stroke="#000" stroke-width="${0.5*s}"/>`;
+          // 오른면 포트
+          const rpx=fx+fW+d*0.2;
+          for(let j=0;j<4;j++){o+=`<rect x="${rpx}" y="${fy+8*s+j*14*s}" width="${d*0.5}" height="${d*0.35}" fill="none" stroke="#000" stroke-width="${0.5*s}"/>`;}          break;
+        }
+        case 'database':{
+          // ── 실린더 ──
+          const dW=58*s,dH=80*s,ery=10*s;
+          const tY=cy-dH/2, bY=cy+dH/2;
+          o+=`<rect x="${cx-dW/2}" y="${tY+ery*0.3}" width="${dW}" height="${dH-ery*0.6}" fill="#fff" stroke="none"/>`;
+          o+=`<line x1="${cx-dW/2}" y1="${tY+ery*0.2}" x2="${cx-dW/2}" y2="${bY-ery*0.2}" stroke="#000" stroke-width="${1.5*s}"/>`;
+          o+=`<line x1="${cx+dW/2}" y1="${tY+ery*0.2}" x2="${cx+dW/2}" y2="${bY-ery*0.2}" stroke="#000" stroke-width="${1.5*s}"/>`;
+          o+=`<ellipse cx="${cx}" cy="${bY}" rx="${dW/2}" ry="${ery}" fill="#fff" stroke="#000" stroke-width="${1.5*s}"/>`;
+          o+=`<ellipse cx="${cx}" cy="${tY}" rx="${dW/2}" ry="${ery}" fill="#fff" stroke="#000" stroke-width="${1.5*s}"/>`;
+          o+=`<path d="M${cx-dW/2} ${tY+dH*0.25} Q${cx} ${tY+dH*0.25+ery*0.7} ${cx+dW/2} ${tY+dH*0.25}" fill="none" stroke="#000" stroke-width="${0.5*s}"/>`;
+          break;
+        }
+        case 'network':{
+          // ── 구름 ──
+          const cW=80*s,cH=50*s;
+          o+=`<path d="M${cx-cW*0.38} ${cy+cH*0.15} Q${cx-cW*0.42} ${cy-cH*0.35} ${cx-cW*0.08} ${cy-cH*0.45} Q${cx+cW*0.02} ${cy-cH*0.78} ${cx+cW*0.2} ${cy-cH*0.4} Q${cx+cW*0.44} ${cy-cH*0.48} ${cx+cW*0.38} ${cy+cH*0.05} Q${cx+cW*0.42} ${cy+cH*0.42} ${cx+cW*0.05} ${cy+cH*0.4} Q${cx-cW*0.08} ${cy+cH*0.55} ${cx-cW*0.28} ${cy+cH*0.3} Q${cx-cW*0.46} ${cy+cH*0.38} ${cx-cW*0.38} ${cy+cH*0.15} Z" fill="#fff" stroke="#000" stroke-width="${1.5*s}"/>`;
+          break;
+        }
+        default:{
+          const bW=68*s,bH=50*s;
+          o+=`<rect x="${cx-bW/2}" y="${cy-bH/2}" width="${bW}" height="${bH}" fill="#fff" stroke="#000" stroke-width="${1.5*s}" rx="${3*s}"/>`;
+          break;
+        }
+      }
+      return o;
+    }
+    
+    function iconHalfW(type,s){
+      switch(type){case 'terminal':return 70*s;case 'server':return 50*s;case 'database':return 32*s;case 'network':return 38*s;default:return 36*s;}
+    }
+    
+    nodes.forEach((nd,i)=>{
+      const cx=padX+iW/2+i*(iW+gap);
+      const iconCy=padTop+refH+iH/2;
+      const ref=extractRefNum(nd.label,String((i+1)*100));
+      const tp=getL1Type(nd.label);
+      const hasAI=_currentAIIcons&&_currentAIIcons[i];
+      // 참조번호 + 리더라인
+      const topIcon=hasAI?(iconCy-50*S):(iconCy-(tp==='server'?46*S:tp==='terminal'?44*S:tp==='database'?40*S:30*S));
+      svg+=`<line x1="${cx}" y1="${topIcon}" x2="${cx}" y2="${padTop+5}" stroke="#000" stroke-width="${0.8*S}"/>`;
+      svg+=`<text x="${cx}" y="${padTop+2}" text-anchor="middle" font-size="${13*S}" font-family="serif" fill="#000">${ref}</text>`;
+      // 아이콘 (AI 우선, fallback: 하드코딩)
+      if(hasAI){
+        svg+=`<g transform="translate(${cx},${iconCy}) scale(${S})">${_currentAIIcons[i]}</g>`;
+      }else{
+        svg+=drawIcon(tp,cx,iconCy,S);
+      }
+      // 양방향 화살표
+      if(i<nn-1){
+        const tp2=getL1Type(nodes[i+1].label);
+        const hasAI2=_currentAIIcons&&_currentAIIcons[i+1];
+        const cx2=padX+iW/2+(i+1)*(iW+gap);
+        const x1=cx+(hasAI?55*S:iconHalfW(tp,S))+4*S;
+        const x2=cx2-(hasAI2?55*S:iconHalfW(tp2,S))-4*S;
+        if(x2>x1+8){svg+=`<line x1="${x1}" y1="${iconCy}" x2="${x2}" y2="${iconCy}" stroke="#000" stroke-width="${1.5*S}" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;}
       }
     });
     
