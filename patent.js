@@ -175,7 +175,7 @@ async function openProvisionalViewer(pid){
   currentProvisionalId=pid;
   const pd=data.current_state_json.provisionalData;
   document.getElementById('provisionalViewerTitle').textContent=pd.title||'가출원 명세서';
-  const titleLine=pd.titleEn?`${pd.title}\n{${pd.titleEn}}`:(pd.title||'');
+  const titleLine=pd.titleEn?`${pd.title}{${pd.titleEn}}`:(pd.title||'');
   document.getElementById('provisionalViewerMeta').textContent=`생성: ${new Date(data.created_at).toLocaleDateString('ko-KR')} · 발명 내용: ${(data.invention_content||'').length.toLocaleString()}자`;
   const content=[
     `【발명의 명칭】\n${titleLine}`,
@@ -197,7 +197,7 @@ async function redownloadProvisionalWord(){
   const{data}=await App.sb.from('projects').select('current_state_json').eq('id',currentProvisionalId).single();
   if(!data?.current_state_json?.provisionalData){App.showToast('데이터 없음','error');return;}
   const pd=data.current_state_json.provisionalData;
-  const titleLine=pd.titleEn?`${pd.title}\n{${pd.titleEn}}`:(pd.title||'');
+  const titleLine=pd.titleEn?`${pd.title}{${pd.titleEn}}`:(pd.title||'');
   const secs=[
     {h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:pd.techField},
     {h:'발명의 내용'},{h:'해결하고자 하는 과제',b:pd.problem},
@@ -647,6 +647,8 @@ async function handleFileUpload(event) {
     }
   }
   event.target.value = '';
+  // 파일 업로드 후 자동 요약 생성
+  if(uploadedFiles.length>0)await generateInventionSummary();
 }
 function removeUploadedFile(idx, name) {
   const f = uploadedFiles[idx];if (!f) return;
@@ -655,6 +657,86 @@ function removeUploadedFile(idx, name) {
   uploadedFiles.splice(idx, 1);const el = document.getElementById(`file_${idx}`);if (el) el.remove();App.showToast(`"${name}" 제거됨`);
 }
 // (File extraction functions are in common.js — App.extractTextFromFile, App.formatFileSize)
+
+// ═══ Drag & Drop 파일 업로드 지원 ═══
+function setupDragDrop(){
+  const projectArea=document.getElementById('projectInput');
+  if(!projectArea)return;
+  const wrapper=projectArea.closest('.card')||projectArea.parentElement;
+  if(!wrapper)return;
+  // 드래그인드롭 영역 스타일링
+  const overlay=document.createElement('div');
+  overlay.id='dragOverlay';
+  overlay.style.cssText='display:none;position:absolute;inset:0;background:rgba(79,70,229,0.08);border:2px dashed var(--color-primary);border-radius:12px;z-index:10;pointer-events:none;align-items:center;justify-content:center';
+  overlay.innerHTML='<div style="text-align:center;color:var(--color-primary);font-weight:600"><span class="tossface" style="font-size:32px">📎</span><br>파일을 여기에 놓으세요<br><span style="font-size:12px;font-weight:normal;color:var(--color-text-secondary)">Word, PDF, PPT, 이미지 등</span></div>';
+  wrapper.style.position='relative';
+  wrapper.appendChild(overlay);
+  let dragCounter=0;
+  wrapper.addEventListener('dragenter',e=>{e.preventDefault();e.stopPropagation();dragCounter++;overlay.style.display='flex';});
+  wrapper.addEventListener('dragover',e=>{e.preventDefault();e.stopPropagation();});
+  wrapper.addEventListener('dragleave',e=>{e.preventDefault();e.stopPropagation();dragCounter--;if(dragCounter<=0){dragCounter=0;overlay.style.display='none';}});
+  wrapper.addEventListener('drop',async e=>{e.preventDefault();e.stopPropagation();dragCounter=0;overlay.style.display='none';
+    const files=Array.from(e.dataTransfer.files);if(!files.length)return;
+    // 파일 입력 핸들러 재사용
+    await handleDroppedFiles(files);
+  });
+  // 파일 input accept 속성 설정
+  const fileInput=document.querySelector('input[type="file"][onchange*="handleFileUpload"]')||document.querySelector('#fileUploadInput');
+  if(fileInput){
+    fileInput.setAttribute('accept','.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.hwp,.hwpx,.jpg,.jpeg,.png,.gif,.bmp,.webp,.csv');
+    if(!fileInput.hasAttribute('multiple'))fileInput.setAttribute('multiple','');
+  }
+}
+async function handleDroppedFiles(files){
+  const listEl=document.getElementById('fileList');
+  for(const file of files){
+    if(uploadedFiles.find(f=>f.name===file.name)){App.showToast(`"${file.name}" 이미 추가됨`,'info');continue;}
+    const item=document.createElement('div');item.className='file-upload-item';item.id=`file_${uploadedFiles.length}`;
+    item.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:6px;font-size:13px';
+    item.innerHTML=`<span class="tossface">📄</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">추출 중...</span>`;
+    if(listEl)listEl.appendChild(item);
+    try{
+      const text=await App.extractTextFromFile(file);
+      if(text&&text.trim()){
+        uploadedFiles.push({name:file.name,text:text.trim(),size:file.size});
+        const ta=document.getElementById('projectInput');const separator=ta.value.trim()?'\n\n':'';
+        ta.value+=`${separator}[첨부: ${file.name}]\n${text.trim()}`;
+        item.innerHTML=`<span class="tossface">✅</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} · ${text.trim().length.toLocaleString()}자</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length-1},'${App.escapeHtml(file.name).replace(/'/g,"\\\\'")}')">\u2715</button>`;
+        App.showToast(`"${file.name}" 추출 완료`);
+      }else{
+        item.innerHTML=`<span class="tossface">⚠️</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">추출 불가</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
+      }
+    }catch(e){
+      item.innerHTML=`<span class="tossface">❌</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
+    }
+  }
+  // 파일 업로드 후 자동 요약 생성
+  if(uploadedFiles.length>0)await generateInventionSummary();
+}
+
+// ═══ Task 2: 업로드 파일 자동 요약 (발명 내용 요약 표시) ═══
+async function generateInventionSummary(){
+  const inv=document.getElementById('projectInput').value.trim();
+  if(!inv||inv.length<100)return;
+  let summaryEl=document.getElementById('inventionSummary');
+  if(!summaryEl){
+    const ta=document.getElementById('projectInput');
+    if(!ta)return;
+    summaryEl=document.createElement('div');
+    summaryEl.id='inventionSummary';
+    summaryEl.style.cssText='margin-top:8px;padding:12px 16px;background:var(--color-bg-secondary);border-radius:10px;border-left:3px solid var(--color-primary);font-size:13px;line-height:1.6;color:var(--color-text-secondary)';
+    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
+    ta.parentElement.insertBefore(summaryEl,ta.nextSibling);
+  }else{
+    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
+  }
+  try{
+    const r=await App.callClaude(`아래 발명 내용을 300자 이내로 핵심만 요약하라. 기술분야, 핵심 구성요소, 주요 기능을 포함. 마크다운/글머리 없이 자연스러운 문장으로.\n\n${inv.slice(0,5000)}`);
+    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br>${App.escapeHtml(r.text)}`;
+  }catch(e){
+    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-text-tertiary)">요약 생성 실패</span>`;
+  }
+}
 
 // ═══════════ PROMPTS (v4.7 — Claim System Redesign) ═══════════
 // Style reference: project-level overrides global-level
@@ -823,7 +905,7 @@ function buildPrompt(stepId){
 ⛔ (R6) 장치/방법 구분 — 절대 준수
 - 이것은 "장치" 청구항이다. "방법"이 아니다.
 - "~하는 단계", "S100", "S200" 등 방법 표현 절대 금지
-- "~부", "~모듈", "~유닛" 등 장치 구성요소 명칭 사용
+- "~부" 형태의 장치 구성요소 명칭만 사용 ("~모듈", "~유닛" 절대 금지)
 - 동작은 "~하도록 구성되는", "~을 수행하는" 형태로 표현
 
 [앵커 테마 배정 — 내부 지침, 출력 금지]
@@ -939,6 +1021,15 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
   ${getDeviceSubject()}(100) ↔ 사용자 단말(200) 연결선 허용
   하위 요소(110, 210) 간 연결선 금지
 
+★★★ 도 1 연결관계 설계 규칙 (논리적 결합) ★★★
+  - 단순히 모든 L1 박스를 일렬 연결하지 마라
+  - 각 L1 구성요소의 역할과 기능을 분석하여 논리적 결합 관계를 결정하라
+  - 예시 1 (중앙 허브형): 서버(100)가 중심이고 단말(200), DB(400)가 각각 서버에 연결 → 100↔200, 100↔400 (200↔400 직접 연결 없음)
+  - 예시 2 (순차형): 클라이언트→서버→DB 순서 → 200→100→400
+  - 예시 3 (메시형): 모든 구성요소가 상호 통신 → 100↔200, 100↔300, 200↔300
+  - 연결의 근거: 청구항에서 어떤 구성요소가 어떤 구성요소와 데이터를 주고받는지 분석
+  - 네트워크(300) 같은 매개체가 있으면 중간에 배치
+
 ■ 도 2+: 내부 구성요소 간 연결 가능
   통신부(110) ↔ 프로세서(120) 연결선 허용
 
@@ -981,7 +1072,11 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 - ${getDeviceSubject()}(100)
 - 사용자 단말(200)
 - 데이터베이스(400)
-연결관계: ${getDeviceSubject()}(100) ↔ 사용자 단말(200) ↔ 데이터베이스(400)
+연결관계 분석: (어떤 구성요소끼리 데이터를 교환하는지 청구항 기반으로 판단)
+- ${getDeviceSubject()}(100)는 사용자 단말(200)과 네트워크를 통해 데이터를 교환 → 연결
+- ${getDeviceSubject()}(100)는 데이터베이스(400)에 데이터를 저장/조회 → 연결
+- 사용자 단말(200)은 데이터베이스(400)와 직접 통신하지 않음 → 연결 없음
+연결관계: ${getDeviceSubject()}(100) ↔ 사용자 단말(200), ${getDeviceSubject()}(100) ↔ 데이터베이스(400)
 
 도 2: ${getDeviceSubject()}(100) 상세 블록도
 유형: 블록도 (최외곽 = ${getDeviceSubject()}(100))
@@ -1047,9 +1142,9 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${document.g
 
 ★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
-${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.step_07||''}${getFullInvention()}${styleRef}`;}
+${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.step_07||''}${outputs.step_15?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention()}${styleRef}`;}
 
-    case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}`;
+    case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${outputs.step_15?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
     // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
     case 'step_10':{
@@ -1107,7 +1202,7 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
       return `【방법 청구범위】에 대한 흐름도를 설계하라. 총 ${f}개, 도 ${lf+1}부터.
 
 ⛔⛔⛔ 절대 금지 사항 (위반 시 도면 전체 무효) ⛔⛔⛔
-- 장치 구성요소(통신부, 프로세서, ~부, ~모듈 등) 포함 금지
+- 장치 구성요소(통신부, 프로세서, ~부 등) 포함 금지
 - 숫자만 있는 참조번호(100, 110, 200 등) 사용 금지
 - 이 도면은 오직 "방법의 단계"만 표현한다
 
@@ -1116,6 +1211,21 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
 ② 단방향 화살표(→)만 사용 — 순서의 흐름을 나타내므로 양방향(↔) 금지
 ③ "시작"과 "종료" 노드 필수 포함 — 첫 단계 전에 "시작", 마지막 단계 후에 "종료"
 ④ 조건 분기가 있으면 다이아몬드(마름모) 노드 사용
+
+★★★ 조건 분기(Decision) 규칙 — 핵심 ★★★
+⑤ 방법 청구항에서 논리적 판단을 요구하는 단계를 식별하라:
+  - 임계값 비교 (예: "스코어가 임계값 이상인 경우")
+  - 조건 충족 판단 (예: "유효성 검증 결과가 적합한 경우")
+  - 분류/분기 (예: "카테고리가 A인 경우와 B인 경우")
+⑥ 조건 분기 단계는 마름모(다이아몬드) 형태로 표시
+  - 노드 형식: D{조건 질문?} (예: D{"타겟팅 스코어가 임계값 이상인가?"})
+  - "예(Y)" 방향과 "아니오(N)" 방향으로 분기
+  - 각 분기 후 적절한 후속 단계로 연결
+⑦ 분기 논리 검증 단계:
+  - 각 분기가 논리적으로 타당한지 자체 검증하라
+  - "예" 경로와 "아니오" 경로가 모두 최종적으로 종료 노드에 도달하는지 확인
+  - 무한 루프가 발생하지 않는지 확인
+  - 분기 조건이 방법 청구항의 기재와 일치하는지 확인
 
 [방법 단계번호 체계 — 필수 준수]
 
@@ -1141,10 +1251,18 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
 - 시작
 - (단계명)(S${lf+1}01)
 - (단계명)(S${lf+1}02)
+- [판단] (조건 질문?)(S${lf+1}03) → 예: (다음 단계), 아니오: (대안 단계)
 - ...
 - 종료
-흐름: 시작 → S${lf+1}01 → S${lf+1}02 → ... → 종료 (단방향)
+흐름: 시작 → S${lf+1}01 → S${lf+1}02 → S${lf+1}03{판단} →(예) S${lf+1}04, (아니오) S${lf+1}05 → ... → 종료 (단방향)
 ---
+
+[분기 논리 검증]
+각 분기에 대해 다음을 확인하고 출력:
+- 분기 조건: (조건 설명)
+- "예" 경로: (어떤 단계로 진행)
+- "아니오" 경로: (어떤 단계로 진행)
+- 논리적 타당성: (방법 청구항과 일치하는지, 무한 루프 없는지 확인)
 
 [파트2: 도면의 간단한 설명]
 ★★★ 모든 방법 도면에 대해 빠짐없이 간단한 설명을 작성하라 ★★★
@@ -1158,7 +1276,7 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
 
 ${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
 
-    case 'step_12':return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: \"이하에서는 앞서 설명한 ${getDeviceSubject()}의 구성 및 동작을 참조하여 ${getDeviceSubject()}에 의해 수행되는 방법을 설명한다.\" 생략 금지. 제한성 표현 금지.\n\n★ 방법의 수행 주체: \"${getDeviceSubject()}\"로 일관되게 서술하라.\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${getFullInvention()}${styleRef}`;
+    case 'step_12':return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: \"이하에서는 앞서 설명한 ${getDeviceSubject()}의 구성 및 동작을 참조하여 ${getDeviceSubject()}에 의해 수행되는 방법을 설명한다.\" 생략 금지. 제한성 표현 금지.\n\n★ 방법의 수행 주체: \"${getDeviceSubject()}\"로 일관되게 서술하라.\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${outputs.step_15?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 방법 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention()}${styleRef}`;
     case 'step_13':return `청구범위와 상세설명 검토:\n1.청구항뒷받침 2.기술적비약 3.수학식정합성 4.반복실시가능성 5.보완/수정 구체적 문장\n${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}`;
     case 'step_14':return `대안 청구항. 핵심유지 표현달리. 【청구항 N】.\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}`;
     case 'step_15':return `특허성 검토: 아래 청구범위와 상세설명에 대해 다음 항목을 검토하라.
@@ -1187,8 +1305,8 @@ ${T}\n[전체 청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상
 - 예시:
   ${getDeviceSubject()} : 100
   통신부 : 110
-  수신모듈 : 111
-  송신모듈 : 112
+  수신부 : 111
+  송신부 : 112
   프로세서 : 120
   사용자 단말 : 200
 
@@ -1442,8 +1560,8 @@ async function runProvisionalApplication(){
 
 [도면 참조번호 규칙 — 필수 준수]
 - L1 (최상위): X00 형식 — ${getDeviceSubject()}(100), 사용자 단말(200), 외부 시스템(300), 데이터베이스(400)
-- L2 (하위 모듈): XY0 형식 — 통신부(110), 프로세서(120), 메모리(130)...
-- L3 (하위 부품): XYZ 형식 — 수신모듈(111), 송신모듈(112)...
+- L2 (하위 구성): XY0 형식 — 통신부(110), 프로세서(120), 메모리(130)...
+- L3 (하위 요소): XYZ 형식 — 수신부(111), 송신부(112)...
 - 부모 접두(prefix) 유지: 자식은 부모의 앞자리를 반드시 유지
 - "~단계", "S숫자" 등 방법 표현은 도면에 포함 금지 (이것은 장치 도면)
 
@@ -1493,7 +1611,7 @@ ${inv}`,8192);
 - 노드 라벨에 반드시 참조번호 포함: "통신부(110)", "프로세서(120)"
 - 참조번호는 숫자만 사용 (100, 110, 120...)
 - "~단계", "S숫자" 표현 절대 금지
-- 구성요소명은 "~부", "~모듈", "~유닛" 형태
+- 구성요소명은 반드시 "~부" 형태만 사용 ("~모듈", "~유닛" 절대 금지)
 
 ${diagram}`,4096);
       const blocks=extractMermaidBlocks(mermaidR.text);
@@ -1521,7 +1639,7 @@ ${diagram}`,4096);
     }catch(e){console.error('Provisional save error:',e);}
 
     // Generate Word with English title
-    const titleLine=titleEn?`${title}\n{${titleEn}}`:(title||'');
+    const titleLine=titleEn?`${title}{${titleEn}}`:(title||'');
     const secs=[
       {h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:techField},
       {h:'발명의 내용'},{h:'해결하고자 하는 과제',b:problem},
@@ -1753,11 +1871,21 @@ graph TD
 ★★ 노드 형식 ★★
 - 시작/종료: START(["시작"]), END(["종료"]) — 둥근 사각형
 - 단계 노드: A["단계명(S번호)"] — 예: A["데이터 수신 단계(S901)"]
-- 조건 분기: D{"조건?"} — 다이아몬드
+- 조건 분기: D{"조건?"} — 다이아몬드(마름모)
+
+★★ 조건 분기(Decision) 표현 규칙 ★★
+- 판단이 필요한 단계는 반드시 다이아몬드 노드로 표현
+  예: D{"타겟팅 스코어가 임계값 이상인가?"}
+- "예" 분기: D -->|예| E["후속 단계(S번호)"]
+- "아니오" 분기: D -->|아니오| F["대안 단계(S번호)"]
+- 각 분기는 최종적으로 END에 도달해야 함
+- 분기 노드의 ID는 DEC1, DEC2... 사용 권장
 
 ★★ 연결 형식 ★★
 - START --> A (시작에서 첫 단계)
 - A --> B --> C (단계 순서)
+- D -->|예| E (조건 분기 — 예)
+- D -->|아니오| F (조건 분기 — 아니오)
 - Z --> END (마지막 단계에서 종료)
 - 모든 화살표는 --> (단방향만)`;
   }
@@ -1903,10 +2031,10 @@ function parseMermaidGraph(code){
   const nodes={},edges=[];
   
   // ★ 다양한 Mermaid 노드 형태 지원 ★
-  // 1. A["label"] - 사각형
-  // 2. A(["label"]) - 스타디움 (시작/종료)
-  // 3. A("label") - 둥근 사각형
-  // 4. A{"label"} - 다이아몬드 (조건 분기)
+  // 1. A["label"] - 사각형 (rect)
+  // 2. A(["label"]) - 스타디움 (stadium) - 시작/종료
+  // 3. A("label") - 둥근 사각형 (round)
+  // 4. A{"label"} - 다이아몬드 (diamond) - 조건 분기
   // 5. A[/"label"/] - 평행사변형
   // 6. A(("label")) - 원형
   
@@ -1917,20 +2045,20 @@ function parseMermaidGraph(code){
     
     // 노드 정의 패턴들 (순서 중요: 더 복잡한 패턴 먼저)
     const patterns=[
-      /(\w+)\s*\(\[\s*["']?([^\]"']+?)["']?\s*\]\)/g,   // A(["label"]) stadium
-      /(\w+)\s*\(\(\s*["']?([^)"']+?)["']?\s*\)\)/g,     // A(("label")) circle
-      /(\w+)\s*\{\s*["']?([^}"']+?)["']?\s*\}/g,          // A{"label"} diamond
-      /(\w+)\s*\(\s*["']?([^)"']+?)["']?\s*\)/g,          // A("label") round
-      /(\w+)\s*\[\s*["']?([^\]"']+?)["']?\s*\]/g,         // A["label"] rect
+      {re:/(\w+)\s*\(\[\s*["']?([^\]"']+?)["']?\s*\]\)/g, shape:'stadium'},
+      {re:/(\w+)\s*\(\(\s*["']?([^)"']+?)["']?\s*\)\)/g, shape:'circle'},
+      {re:/(\w+)\s*\{\s*["']?([^}"']+?)["']?\s*\}/g, shape:'diamond'},
+      {re:/(\w+)\s*\(\s*["']?([^)"']+?)["']?\s*\)/g, shape:'round'},
+      {re:/(\w+)\s*\[\s*["']?([^\]"']+?)["']?\s*\]/g, shape:'rect'},
     ];
     
-    patterns.forEach(pat=>{
-      pat.lastIndex=0;
+    patterns.forEach(({re,shape})=>{
+      re.lastIndex=0;
       let nm;
-      while((nm=pat.exec(l))!==null){
+      while((nm=re.exec(l))!==null){
         const[,id,label]=nm;
         if(label.includes('-->')||label.includes('<--')||label.includes('---'))continue;
-        if(!nodes[id])nodes[id]={id,label:label.trim()};
+        if(!nodes[id])nodes[id]={id,label:label.trim(),shape};
       }
     });
   });
@@ -2083,18 +2211,34 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     nodes.some(n=>/시작|종료|START|END/i.test(n.label));
   
   if(isMethodDiagram){
-    // ═══ 방법 도면: 흐름도 v5.4 ═══
-    // - 시작/종료: 폭 축소 + 완전 흑백 + stadium shape
-    // - 모든 박스를 동일 중앙선에 배치 (화살표 직선 유지)
-    const boxH=0.7*PX, boxGap=0.8*PX;
+    // ═══ 방법 도면: 흐름도 v6.0 (다이아몬드 분기 지원) ═══
+    const boxH=0.7*PX, boxGap=0.8*PX, diamondH=1.0*PX;
     const normalBoxW=5.0*PX;
     const startEndBoxW=2.0*PX;
+    const diamondW=5.5*PX;
     const boxStartY=0.5*PX;
-    const centerX=0.5*PX+normalBoxW/2;  // 모든 박스의 중앙 x좌표
-    const svgW=normalBoxW+2.5*PX;
-    const svgH=nodes.length*(boxH+boxGap)+1*PX;
+    // 분기 여부 판단
+    const hasBranching=edges.some(e=>e.label);
+    const branchOffset=hasBranching?2.8*PX:0;
+    const centerX=0.5*PX+normalBoxW/2+branchOffset/2;
+    const svgW=normalBoxW+2.5*PX+branchOffset;
     
-    let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:550px;background:white;border-radius:8px">`;
+    // 노드 위치 계산 (토폴로지 기반)
+    const nodeMap={};nodes.forEach(n=>nodeMap[n.id]=n);
+    const adj={};edges.forEach(e=>{if(!adj[e.from])adj[e.from]=[];adj[e.from].push(e);});
+    // 간단한 순서: nodes 배열 순서 사용 (이미 파싱 순서)
+    const nodePositions={};
+    let curY=boxStartY;
+    nodes.forEach((n,i)=>{
+      const isDiamond=n.shape==='diamond';
+      const isStartEnd=/시작|종료|START|END/i.test(n.label);
+      const h=isDiamond?diamondH:boxH;
+      nodePositions[n.id]={x:centerX,y:curY,h,idx:i,isDiamond,isStartEnd};
+      curY+=h+boxGap;
+    });
+    const svgH=curY+0.5*PX;
+    
+    let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${hasBranching?650:550}px;background:white;border-radius:8px">`;
     
     const mkId=`ah_${containerId}`;
     svg+=`<defs>
@@ -2103,40 +2247,105 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       </marker>
     </defs>`;
     
+    // 노드 렌더링
     nodes.forEach((n,i)=>{
+      const pos=nodePositions[n.id];
       const refNum=extractRefNum(n.label,'');
-      const displayLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
-      const isStartEnd=/시작|종료|START|END/i.test(n.label);
-      const SHADOW_OFFSET=3;
+      const displayLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').replace(/\?$/, '').trim();
+      const isDiamond=n.shape==='diamond';
+      const isStartEnd=pos.isStartEnd;
+      const SO=3;
       
-      // 박스 폭 결정 (시작/종료는 축소)
-      const boxW=isStartEnd?startEndBoxW:normalBoxW;
-      // ★ 모든 박스를 동일 중앙선에 배치 ★
-      const bx=centerX-boxW/2;
-      const by=boxStartY+i*(boxH+boxGap);
-      const rx=isStartEnd?boxH/2:0;
-      
-      // 그림자
-      svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#000"/>`;
-      // 박스 본체 (완전 흑백)
-      svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#fff" stroke="#000" stroke-width="${isStartEnd?2:1.5}"/>`;
-      svg+=`<text x="${centerX}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
-      
-      // 리더라인 + 부호 (시작/종료 제외)
-      if(refNum&&!isStartEnd){
-        const leaderEndX=0.5*PX+normalBoxW+0.3*PX;
-        const leaderY=by+boxH/2;
-        svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
-        svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-      }
-      
-      // ★ 화살표: 항상 중앙선 직선 ★
-      if(i<nodes.length-1){
-        const arrowY1=by+boxH+2;
-        const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
-        svg+=`<line x1="${centerX}" y1="${arrowY1}" x2="${centerX}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-end="url(#${mkId})"/>`;
+      if(isDiamond){
+        // ★ 다이아몬드(마름모) 렌더링 ★
+        const cx=centerX, cy=pos.y+diamondH/2;
+        const dw=diamondW/2, dh=diamondH/2;
+        // 그림자
+        svg+=`<polygon points="${cx+SO},${cy-dh+SO} ${cx+dw+SO},${cy+SO} ${cx+SO},${cy+dh+SO} ${cx-dw+SO},${cy+SO}" fill="#000"/>`;
+        // 본체
+        svg+=`<polygon points="${cx},${cy-dh} ${cx+dw},${cy} ${cx},${cy+dh} ${cx-dw},${cy}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
+        // 텍스트 (여러 줄 지원)
+        const maxChars=16;
+        if(displayLabel.length>maxChars){
+          const mid=Math.ceil(displayLabel.length/2);
+          const sp=displayLabel.lastIndexOf(' ',mid);
+          const bp=sp>0?sp:mid;
+          svg+=`<text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel.slice(0,bp))}</text>`;
+          svg+=`<text x="${cx}" y="${cy+10}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel.slice(bp).trim())}</text>`;
+        }else{
+          svg+=`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+        }
+        // 리더라인 + 부호
+        if(refNum){
+          const leaderEndX=centerX+normalBoxW/2+0.3*PX+branchOffset/2;
+          svg+=`<line x1="${cx+dw}" y1="${cy}" x2="${leaderEndX}" y2="${cy}" stroke="#000" stroke-width="1"/>`;
+          svg+=`<text x="${leaderEndX+8}" y="${cy+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+        }
+      }else{
+        // 사각형/스타디움 렌더링 (기존 코드)
+        const boxW=isStartEnd?startEndBoxW:normalBoxW;
+        const bx=centerX-boxW/2;
+        const by=pos.y;
+        const rx=isStartEnd?boxH/2:0;
+        svg+=`<rect x="${bx+SO}" y="${by+SO}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#000"/>`;
+        svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#fff" stroke="#000" stroke-width="${isStartEnd?2:1.5}"/>`;
+        svg+=`<text x="${centerX}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+        if(refNum&&!isStartEnd){
+          const leaderEndX=centerX+normalBoxW/2+0.3*PX+branchOffset/2;
+          const leaderY=by+boxH/2;
+          svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
+          svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+        }
       }
     });
+    
+    // 화살표 렌더링 (에지 기반)
+    if(edges.length>0){
+      const drawnEdges=new Set();
+      edges.forEach(e=>{
+        const fp=nodePositions[e.from],tp=nodePositions[e.to];
+        if(!fp||!tp)return;
+        const key=e.from+'->'+e.to;
+        if(drawnEdges.has(key))return;
+        drawnEdges.add(key);
+        const fromDiamond=nodeMap[e.from]?.shape==='diamond';
+        const isNoLabel=e.label&&/아니오|아니오|No|N|아니요/i.test(e.label);
+        const isYesLabel=e.label&&/예|Yes|Y/i.test(e.label);
+        
+        if(fromDiamond&&isNoLabel){
+          // "아니오" 분기: 오른쪽으로 꺾어서 연결
+          const fromCy=fp.y+fp.h/2;
+          const toCy=tp.y+(tp.isDiamond?tp.h/2:boxH/2);
+          const branchX=centerX+normalBoxW/2+0.5*PX;
+          // 다이아몬드 우측에서 출발
+          svg+=`<line x1="${centerX+diamondW/2}" y1="${fromCy}" x2="${branchX}" y2="${fromCy}" stroke="#000" stroke-width="1"/>`;
+          svg+=`<line x1="${branchX}" y1="${fromCy}" x2="${branchX}" y2="${tp.y-2}" stroke="#000" stroke-width="1"/>`;
+          svg+=`<line x1="${branchX}" y1="${tp.y-2}" x2="${centerX}" y2="${tp.y-2}" stroke="#000" stroke-width="1" marker-end="url(#${mkId})"/>`;
+          // 라벨
+          svg+=`<text x="${centerX+diamondW/2+8}" y="${fromCy-5}" font-size="10" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(e.label)}</text>`;
+        }else{
+          // 직선 연결 (예 분기 또는 일반)
+          const sy=fp.y+fp.h+2;
+          const ty=tp.y-2;
+          svg+=`<line x1="${centerX}" y1="${sy}" x2="${centerX}" y2="${ty}" stroke="#000" stroke-width="1" marker-end="url(#${mkId})"/>`;
+          if(e.label&&isYesLabel){
+            svg+=`<text x="${centerX+8}" y="${(sy+ty)/2+4}" font-size="10" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(e.label)}</text>`;
+          }else if(e.label){
+            svg+=`<text x="${centerX+8}" y="${(sy+ty)/2+4}" font-size="10" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(e.label)}</text>`;
+          }
+        }
+      });
+    }else{
+      // 에지 정보 없으면 순차 연결 (폴백)
+      nodes.forEach((n,i)=>{
+        if(i<nodes.length-1){
+          const fp=nodePositions[n.id],tp=nodePositions[nodes[i+1].id];
+          const sy=fp.y+fp.h+2;
+          const ty=tp.y-2;
+          svg+=`<line x1="${centerX}" y1="${sy}" x2="${centerX}" y2="${ty}" stroke="#000" stroke-width="1" marker-end="url(#${mkId})"/>`;
+        }
+      });
+    }
     
     svg+='</svg>';
     const c=document.getElementById(containerId);
@@ -3542,7 +3751,7 @@ function renderPreview(){const el=document.getElementById('previewArea'),spec=bu
 function buildSpecification(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
-  const titleLine=selectedTitleEn?`${selectedTitle}\n{${selectedTitleEn}}`:selectedTitle;
+  const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
   // Claims: use the latest version (after auto-correction from validation)
   const deviceClaims=outputs.step_06||'';
   const methodClaims=outputs.step_10||'';
@@ -3559,7 +3768,7 @@ function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToas
 function downloadAsWord(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
-  const titleLine=selectedTitleEn?`${selectedTitle}\n{${selectedTitleEn}}`:selectedTitle;
+  const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
   const allClaims=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n\n');
   const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,outputs.step_12].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
@@ -3576,5 +3785,7 @@ async function init(){
   const{data:{session}}=await App.sb.auth.getSession();
   if(session?.user)await onAuthSuccess(session.user);else App.showScreen('auth');
   App.sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT')App.showScreen('auth');});
+  // 드래그인드롭 초기화 (DOM 준비 후)
+  setTimeout(setupDragDrop,500);
 }
 init();
