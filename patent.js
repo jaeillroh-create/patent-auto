@@ -790,10 +790,10 @@ function getDeviceSubject(){
   return '서버';
 }
 
-// ═══ KIPRIS API 선행기술 검색 ═══
-// 통합 kipris-proxy Edge Function 사용 (trademark.js와 동일한 인터페이스)
-// type: 'patent_word' → 공공데이터포털 특허/실용신안 검색 API 경유
-const PATENT_KIPRIS_API_KEY='oa03h2FvqIFBMK2L6qf7lsf754wE6=Oit8eyadrlbNA=';
+// ═══ KIPRIS Plus 선행기술 검색 ═══
+// trademark.js와 동일한 KIPRIS Plus API 사용 (plus.kipris.or.kr)
+// type: 'patent_word' → 특허실용신안 일반검색(단어) - 발명의 명칭 + 요약서 검색
+const KIPRIS_PLUS_KEY='OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE=';
 
 // 등록번호 포맷: 1020XXXXXXX → 10-20XXXXX
 function formatRegNumber(regNum){
@@ -809,34 +809,37 @@ function formatRegNumber(regNum){
   return regNum;
 }
 
-// 전략 1: Supabase Edge Function 프록시 (통합 kipris-proxy)
-// trademark.js와 동일한 {type, params, apiKey} 인터페이스 사용
-async function searchKiprisViaProxy(query,maxResults=5){
+// 한국어 조사 제거 → 핵심 키워드 추출
+function extractPatentKeywords(title){
+  return title
+    .replace(/[을를이가의에서로부터및과와은는에게으로]/g,' ')
+    .replace(/\s+/g,' ').trim()
+    .split(' ')
+    .filter(w=>w.length>=2)
+    .slice(0,4)
+    .join(' ');
+}
+
+// KIPRIS Plus 검색 (Supabase Edge Function 경유)
+async function searchKiprisPlus(query,maxResults=5){
   try{
-    if(!App.sb?.functions)return[];
+    if(!App.sb?.functions){console.warn('[KIPRIS] Supabase 미연결');return[];}
+    console.log(`[KIPRIS] 🔍 특허 검색: "${query}"`);
     const {data,error}=await App.sb.functions.invoke('kipris-proxy',{
       body:{
         type:'patent_word',
-        params:{word:query,numOfRows:maxResults,patent:true,utility:false},
-        apiKey:PATENT_KIPRIS_API_KEY
+        params:{word:query,numOfRows:maxResults,patent:true,utility:true},
+        apiKey:KIPRIS_PLUS_KEY
       }
     });
-    if(error){console.error('KIPRIS Edge Function error:',error);return[];}
-    if(!data||!data.success){console.warn('KIPRIS API 실패:',data?.error);return[];}
+    if(error){console.error('[KIPRIS] Edge Function error:',error);return[];}
+    if(!data||!data.success){console.warn('[KIPRIS] API 실패:',data?.error);return[];}
+    console.log(`[KIPRIS] ✅ ${(data.results||[]).length}건 (총 ${data.totalCount||0}건)`);
     return data.results||[];
-  }catch(e){console.error('KIPRIS Edge Function failed:',e);return[];}
+  }catch(e){console.error('[KIPRIS] 검색 실패:',e);return[];}
 }
 
-// 전략 2: 직접 호출은 HTTP→HTTPS Mixed Content로 차단되므로 생략
-// Edge Function 실패 시 바로 Claude AI 폴백으로 전환
-async function searchKiprisDirect(query,maxResults=5){
-  // 공공데이터포털 API가 HTTP only라 HTTPS 사이트에서 직접 호출 불가
-  // Edge Function이 유일한 경로이므로, 직접 호출은 빈 배열 반환
-  console.log('[KIPRIS] 직접 호출 스킵 (HTTP→HTTPS Mixed Content 차단)');
-  return[];
-}
-
-// 전략 3: Claude AI 폴백
+// Claude AI 폴백 (KIPRIS 실패 시)
 async function searchPriorArtViaClaude(title,invention){
   try{
     const invSlice=(invention||'').slice(0,2000);
@@ -875,32 +878,25 @@ NONE`;
 
 async function searchPriorArt(title){
   const inv=document.getElementById('projectInput')?.value||'';
-  const kwExtract=(t)=>t.replace(/[을를이가의에서로부터및과와은는]/g,' ').replace(/\s+/g,' ').split(' ').filter(w=>w.length>=2).slice(0,4).join(' ');
   let results=[];
 
-  // 전략 1: Supabase Edge Function 프록시
-  results=await searchKiprisViaProxy(title,5);
+  // 1차: 발명의 명칭 그대로 검색
+  results=await searchKiprisPlus(title,5);
+
+  // 2차: 키워드 추출하여 재검색
   if(!results.length){
-    const kw=kwExtract(title);
-    if(kw)results=await searchKiprisViaProxy(kw,5);
+    const kw=extractPatentKeywords(title);
+    if(kw&&kw!==title)results=await searchKiprisPlus(kw,5);
   }
 
-  // 전략 2: KIPRIS 직접 호출
-  if(!results.length){
-    results=await searchKiprisDirect(title,5);
-    if(!results.length){
-      const kw=kwExtract(title);
-      if(kw)results=await searchKiprisDirect(kw,5);
-    }
-  }
-
-  // 전략 3: Claude AI 폴백
+  // 3차: Claude AI 폴백
   if(!results.length){
     results=await searchPriorArtViaClaude(title,inv);
   }
 
   if(!results.length)return null;
-  // 등록번호가 있는 건 우선
+
+  // 최상위 결과 1건 반환 (등록번호 있는 건 우선)
   const sorted=results.sort((a,b)=>(b.registerNumber?1:0)-(a.registerNumber?1:0));
   const best=sorted[0];
   const fmtNum=formatRegNumber(best.registerNumber);
