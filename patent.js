@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════
-   특허명세서 자동 생성 v5.3 — Patent Pipeline (19-Step)
-   패치: 방법 도면 시작/종료 폭 축소 + 완전 흑백 + 도 1 L1 직관적 형태
+   특허명세서 자동 생성 v5.4 — Patent Pipeline (19-Step)
+   패치: 방법 도면 중앙선 직선화살표 + 도 1 L1 화살표 항상표시
    ═══════════════════════════════════════════════════════════ */
 
 // ═══ Anchor Themes (v4.7) ═══
@@ -1962,18 +1962,19 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     nodes.some(n=>/시작|종료|START|END/i.test(n.label));
   
   if(isMethodDiagram){
-    // ═══ 방법 도면: 흐름도 (최외곽 없음, 단방향 화살표, 시작/종료) ═══
-    // ★ 패치 v5.3: 시작/종료 폭 축소 + 완전 흑백 (배경색 없음) ★
+    // ═══ 방법 도면: 흐름도 v5.4 ═══
+    // - 시작/종료: 폭 축소 + 완전 흑백 + stadium shape
+    // - 모든 박스를 동일 중앙선에 배치 (화살표 직선 유지)
     const boxH=0.7*PX, boxGap=0.8*PX;
-    const normalBoxW=5.0*PX;      // 일반 단계 박스 폭
-    const startEndBoxW=2.0*PX;   // 시작/종료 박스 폭 (축소)
+    const normalBoxW=5.0*PX;
+    const startEndBoxW=2.0*PX;
     const boxStartY=0.5*PX;
+    const centerX=0.5*PX+normalBoxW/2;  // 모든 박스의 중앙 x좌표
     const svgW=normalBoxW+2.5*PX;
     const svgH=nodes.length*(boxH+boxGap)+1*PX;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:550px;background:white;border-radius:8px">`;
     
-    // 화살표 마커 (단방향만)
     const mkId=`ah_${containerId}`;
     svg+=`<defs>
       <marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -1987,22 +1988,20 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const isStartEnd=/시작|종료|START|END/i.test(n.label);
       const SHADOW_OFFSET=3;
       
-      // ★ 시작/종료는 폭 축소 + 중앙 정렬 ★
+      // 박스 폭 결정 (시작/종료는 축소)
       const boxW=isStartEnd?startEndBoxW:normalBoxW;
-      const bx=isStartEnd?(svgW-boxW)/2-0.5*PX:0.5*PX;  // 중앙 정렬
+      // ★ 모든 박스를 동일 중앙선에 배치 ★
+      const bx=centerX-boxW/2;
       const by=boxStartY+i*(boxH+boxGap);
-      
-      // ★ stadium shape (둥근 양쪽 끝) ★
       const rx=isStartEnd?boxH/2:0;
       
-      // 그림자 (검정 불투명)
+      // 그림자
       svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#000"/>`;
+      // 박스 본체 (완전 흑백)
+      svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#fff" stroke="#000" stroke-width="${isStartEnd?2:1.5}"/>`;
+      svg+=`<text x="${centerX}" y="${by+boxH/2+4}" text-anchor="middle" font-size="${isStartEnd?11:13}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       
-      // ★ 박스 본체: 완전 흑백 (시작/종료도 #fff 배경) ★
-      svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#fff" stroke="#000" stroke-width="${isStartEnd?2.5:1.5}"/>`;
-      svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="${isStartEnd?12:13}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
-      
-      // 리더라인 + 부호 (시작/종료에는 없음)
+      // 리더라인 + 부호 (시작/종료 제외)
       if(refNum&&!isStartEnd){
         const leaderEndX=0.5*PX+normalBoxW+0.3*PX;
         const leaderY=by+boxH/2;
@@ -2010,30 +2009,18 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
         svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }
       
-      // 단방향 화살표 (위→아래, marker-end만)
+      // ★ 화살표: 항상 중앙선 직선 ★
       if(i<nodes.length-1){
-        const nextIsStartEnd=/시작|종료|START|END/i.test(nodes[i+1]?.label||'');
-        const nextBoxW=nextIsStartEnd?startEndBoxW:normalBoxW;
-        const nextBx=nextIsStartEnd?(svgW-nextBoxW)/2-0.5*PX:0.5*PX;
-        const arrowX1=bx+boxW/2;
-        const arrowX2=nextBx+nextBoxW/2;
         const arrowY1=by+boxH+2;
         const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
-        // 시작/종료 연결 시 화살표가 중앙으로 향하도록
-        if(Math.abs(arrowX1-arrowX2)<5){
-          svg+=`<line x1="${arrowX1}" y1="${arrowY1}" x2="${arrowX2}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-end="url(#${mkId})"/>`;
-        }else{
-          // 꺾인 화살표
-          const midY=(arrowY1+arrowY2)/2;
-          svg+=`<polyline points="${arrowX1},${arrowY1} ${arrowX1},${midY} ${arrowX2},${midY} ${arrowX2},${arrowY2}" stroke="#000" stroke-width="1" fill="none" marker-end="url(#${mkId})"/>`;
-        }
+        svg+=`<line x1="${centerX}" y1="${arrowY1}" x2="${centerX}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-end="url(#${mkId})"/>`;
       }
     });
     
     svg+='</svg>';
     const c=document.getElementById(containerId);
     if(c)c.innerHTML=svg;
-    return; // 방법 도면 처리 완료
+    return;
   }
   
   // 모든 노드가 L1인지 확인 (도 1 판별)
@@ -2228,17 +2215,21 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   }
   
   if(isFig1){
-    // ═══ 도 1: L1만 있는 경우 - 직관적 형태 사용 (패치 v5.3) ═══
-    const iconBoxH=boxH*1.6;  // 아이콘용 높이 증가
-    const iconGap=0.9*PX;
+    // ═══ 도 1: L1 직관적 형태 v5.4 ═══
+    // - 서버: 3D 박스 + 슬롯
+    // - 단말: 모니터 + 스마트폰
+    // - 저장소: 실린더
+    // - 네트워크: 구름
+    // - 화살표: 항상 양방향 표시 (도면설계 연결관계 유무와 무관)
+    const iconBoxH=boxH*1.8;
+    const iconGap=1.0*PX;
     const boxStartX=0.5*PX;
     const boxStartY=0.5*PX;
     const svgW=boxW+2.8*PX;
-    const svgH=nodes.length*(iconBoxH+iconGap)+1*PX;
+    const svgH=nodes.length*(iconBoxH+iconGap)+0.8*PX;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:550px;background:white;border-radius:8px">`;
     
-    // 화살표 마커
     const mkId=`ah_${containerId}`;
     svg+=`<defs>
       <marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -2246,22 +2237,22 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       </marker>
     </defs>`;
     
-    // 각 L1 장치 (직관적 형태 사용)
     nodes.forEach((n,i)=>{
       const bx=boxStartX;
       const by=boxStartY+i*(iconBoxH+iconGap);
       const refNum=extractRefNum(n.label,String((i+1)*100));
       const l1Type=getL1Type(n.label);
       
-      // 직관적 형태 그리기
       svg+=drawL1Shape(l1Type,bx,by,boxW,iconBoxH,n.label,refNum);
       
-      // L1 간 연결선 (양방향 화살표) - edges가 있을 때만
-      if(hasEdges&&i<nodes.length-1){
+      // ★ L1 간 연결선: 항상 양방향 화살표 표시 ★
+      if(i<nodes.length-1){
         const arrowX=bx+boxW/2;
-        const arrowY1=by+iconBoxH+15;  // 텍스트 아래
-        const arrowY2=boxStartY+(i+1)*(iconBoxH+iconGap)-5;
-        svg+=`<line x1="${arrowX}" y1="${arrowY1}" x2="${arrowX}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
+        const arrowY1=by+iconBoxH+18;
+        const arrowY2=boxStartY+(i+1)*(iconBoxH+iconGap)-8;
+        if(arrowY2>arrowY1+5){
+          svg+=`<line x1="${arrowX}" y1="${arrowY1}" x2="${arrowX}" y2="${arrowY2}" stroke="#000" stroke-width="1.5" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
+        }
       }
     });
     
@@ -2901,10 +2892,11 @@ function downloadPptx(sid){
         nodes.some(n=>/시작|종료|START|END/i.test(n.label));
       
       if(isMethodDiagram){
-        // ═══ 방법 도면: 흐름도 (패치 v5.3: 시작/종료 폭 축소 + 완전 흑백) ═══
+        // ═══ 방법 도면 PPTX v5.4: 중앙선 정렬 + 직선 화살표 ═══
         const boxStartY=PAGE_MARGIN+TITLE_H+0.2;
         const normalBoxW=PAGE_W-1.2;
-        const startEndBoxW=normalBoxW*0.4;  // 시작/종료 박스 폭 축소
+        const startEndBoxW=normalBoxW*0.35;
+        const centerX=PAGE_MARGIN+0.3+normalBoxW/2;  // 중앙선
         const nodeCount=nodes.length;
         const boxH=Math.min(0.55,AVAILABLE_H/nodeCount-0.15);
         const boxGap=Math.min(0.4,(AVAILABLE_H-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1));
@@ -2914,52 +2906,36 @@ function downloadPptx(sid){
           const cleanLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
           const isStartEnd=/시작|종료|START|END/i.test(n.label);
           
-          // ★ 시작/종료는 폭 축소 + 중앙 정렬 ★
           const boxW=isStartEnd?startEndBoxW:normalBoxW;
-          const bx=isStartEnd?PAGE_MARGIN+(PAGE_W-boxW)/2:PAGE_MARGIN+0.3;
+          const bx=centerX-boxW/2;  // 중앙선 기준 배치
           const by=boxStartY+i*(boxH+boxGap);
           
           // 그림자
           slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
           
-          // ★ 완전 흑백: 시작/종료도 FFFFFF 배경 ★
+          // 박스 (완전 흑백)
           const opts={x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:isStartEnd?LINE_FRAME:LINE_BOX}};
-          if(isStartEnd)opts.rectRadius=boxH*0.5*72; // 둥근 끝 (stadium)
+          if(isStartEnd)opts.rectRadius=boxH*0.5*72;
           slide.addShape(pptx.shapes.ROUNDED_RECTANGLE||pptx.shapes.RECTANGLE,opts);
           slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:isStartEnd?10:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
-          // 리더라인 + 부호 (시작/종료 제외)
+          // 리더라인 (시작/종료 제외)
           if(refNum&&!isStartEnd){
-            const leaderEndX=PAGE_MARGIN+0.3+normalBoxW;  // 항상 오른쪽 정렬
+            const leaderEndX=PAGE_MARGIN+0.3+normalBoxW;
             slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:leaderEndX-(bx+boxW)+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
             slide.addText(String(refNum),{x:leaderEndX+0.35,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           }
           
-          // 단방향 화살표만
+          // ★ 화살표: 중앙선 직선 ★
           if(i<nodes.length-1){
-            const nextIsStartEnd=/시작|종료|START|END/i.test(nodes[i+1]?.label||'');
-            const nextBoxW=nextIsStartEnd?startEndBoxW:normalBoxW;
-            const nextBx=nextIsStartEnd?PAGE_MARGIN+(PAGE_W-nextBoxW)/2:PAGE_MARGIN+0.3;
-            const arrowX1=bx+boxW/2;
-            const arrowX2=nextBx+nextBoxW/2;
             const arrowY1=by+boxH;
             const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
-            
             if(arrowY2>arrowY1+0.05){
-              if(Math.abs(arrowX1-arrowX2)<0.05){
-                // 직선 화살표
-                slide.addShape(pptx.shapes.LINE,{x:arrowX1,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle'}});
-              }else{
-                // 꺾인 화살표 (세 개의 선)
-                const midY=(arrowY1+arrowY2)/2;
-                slide.addShape(pptx.shapes.LINE,{x:arrowX1,y:arrowY1,w:0,h:midY-arrowY1,line:{color:'000000',width:LINE_ARROW}});
-                slide.addShape(pptx.shapes.LINE,{x:Math.min(arrowX1,arrowX2),y:midY,w:Math.abs(arrowX2-arrowX1),h:0,line:{color:'000000',width:LINE_ARROW}});
-                slide.addShape(pptx.shapes.LINE,{x:arrowX2,y:midY,w:0,h:arrowY2-midY,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle'}});
-              }
+              slide.addShape(pptx.shapes.LINE,{x:centerX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle'}});
             }
           }
         });
-        return; // 방법 도면 처리 완료
+        return;
       }
       
       const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
@@ -3092,10 +3068,10 @@ function downloadPptx(sid){
             }
           }
           
-          // L1 간 연결선 (양방향 화살표)
-          if(hasEdges&&i<nodes.length-1){
-            const arrowY1=by+iconH+0.1;
-            const arrowY2=boxStartY+(i+1)*(iconH+boxGap)-0.05;
+          // ★ L1 간 연결선: 항상 양방향 화살표 표시 ★
+          if(i<nodes.length-1){
+            const arrowY1=by+iconH+0.12;
+            const arrowY2=boxStartY+(i+1)*(iconH+boxGap)-0.08;
             const arrowX=bx+boxW/2;
             if(arrowY2>arrowY1+0.05){
               slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
