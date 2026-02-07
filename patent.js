@@ -15,9 +15,9 @@ const ANCHOR_THEMES = [
   {key:'privacy_audit', label:'프라이버시 감사', desc:'권한/마스킹/감사로그 기반 제어'}
 ];
 const CATEGORY_ENDINGS = {
-  server:'~을 포함하는 서버.', system:'~을 포함하는 시스템.',
-  apparatus:'~을 포함하는 장치.', electronic_device:'~을 포함하는 전자단말.',
-  method:'~하는 방법.',
+  server:'~을 특징으로 하는 …서버.', system:'~을 특징으로 하는 …시스템.',
+  apparatus:'~을 특징으로 하는 …장치.', electronic_device:'~을 특징으로 하는 …전자단말.',
+  method:'~을 특징으로 하는 …방법.',
   recording_medium:'컴퓨터가 …을 수행하도록 하는 프로그램을 기록한 컴퓨터 판독가능 기록매체.',
   computer_program:'컴퓨터가 …을 수행하도록 하는 프로그램.',
   computer_program_product:'컴퓨터가 …을 수행하도록 하는 프로그램.'
@@ -790,6 +790,68 @@ function getDeviceSubject(){
   return '서버';
 }
 
+// ═══ 젭슨(Jepson) 청구항 지원 (v5.4) ═══
+// 발명 명칭 말미를 분석하여 독립항의 Jepson 프리앰블을 생성
+function parseJepsonSubjects(){
+  const title=selectedTitle||'';
+  const ty=selectedTitleType||'';
+  // "및" 또는 "과" 로 분리된 복수 카테고리 감지 (예: "Z 서버 및 방법", "X 장치 및 방법")
+  const conjMatch=title.match(/^(.+?)\s*(서버|시스템|장치|단말|전자\s*장치)\s*(및|과|,)\s*(방법)\s*$/);
+  if(conjMatch){
+    const core=conjMatch[1].trim();
+    const devWord=conjMatch[2].trim();
+    return {
+      device:`${core} ${devWord}`,  // "Z 서버"
+      method:`${core} 방법`,         // "Z 방법"
+      hasDevice:true, hasMethod:true
+    };
+  }
+  // 단일 카테고리
+  const devMatch=title.match(/(서버|시스템|장치|단말|전자\s*장치)\s*$/);
+  const methMatch=title.match(/방법\s*$/);
+  if(devMatch&&!methMatch) return {device:title,method:'',hasDevice:true,hasMethod:false};
+  if(methMatch&&!devMatch) return {device:'',method:title,hasDevice:false,hasMethod:true};
+  // 타입 정보로 판단
+  if(/서버|시스템|장치|단말/.test(ty))return {device:title,method:'',hasDevice:true,hasMethod:false};
+  if(/방법/.test(ty))return {device:'',method:title,hasDevice:false,hasMethod:true};
+  // 기본: 장치로 간주
+  return {device:title,method:'',hasDevice:true,hasMethod:false};
+}
+
+function getJepsonInstruction(claimType){
+  const subj=parseJepsonSubjects();
+  const target=claimType==='method'?subj.method:subj.device;
+  if(!target)return '';
+  return `
+★★★ 젭슨(Jepson) 청구항 형식 — 독립항 필수 적용 ★★★
+독립항은 반드시 아래 젭슨(Jepson Claim) 구조를 따르라:
+
+[구조]
+(1) 전제부(Preamble): 발명이 속하는 기술분야의 공지 구성요소 또는 종래 기술 요소를 기술
+(2) 전환부(Transition): "${target}에 있어서," ← 반드시 이 문구를 사용
+(3) 특징부(Body): 본 발명의 신규하고 특징적인 구성요소를 기술
+(4) 종결부(Closing): "~을 특징으로 하는 ${target}."
+
+[작성 예시 — ${claimType==='method'?'방법':'장치'} 독립항]
+【청구항 N】
+${claimType==='method'
+?`데이터를 수집하는 단계를 포함하는 ${target}에 있어서,
+상기 수집된 데이터를 분석하는 단계;
+상기 분석 결과에 기초하여 매칭을 수행하는 단계; 및
+상기 매칭 결과를 제공하는 단계
+를 포함하는 것을 특징으로 하는 ${target}.`
+:`프로세서; 및 메모리를 포함하는 ${target}에 있어서,
+상기 프로세서는,
+데이터를 수집하도록 구성되는 수집부;
+상기 수집된 데이터를 분석하도록 구성되는 분석부; 및
+분석 결과에 기초하여 매칭을 수행하도록 구성되는 매칭부
+를 포함하는 것을 특징으로 하는 ${target}.`}
+
+⛔ 독립항에서 "~에 있어서," 전환부를 빠뜨리면 젭슨 형식 위반이다.
+⛔ 종속항은 기존 형식 유지: "제N항에 있어서, ~" (젭슨 적용 안 함)
+`;
+}
+
 // ═══ KIPRIS 선행기술 검색 ═══
 // Edge Function이 KIPRIS Plus API (plus.kipris.or.kr) 호출
 // KIPRIS Plus API 키 (localStorage에서 사용자 설정 가능)
@@ -984,8 +1046,8 @@ ${themeInst}
 
 [출력 형식]
 【청구항 1】형식. 청구항만 출력. 테마/키워드/점검 내용 출력 금지.
-\"청구항 N에 있어서,\" 시작. SW명 금지. 제한성 표현 금지.
-
+종속항은 \"청구항 N에 있어서,\" 시작. SW명 금지. 제한성 표현 금지.
+${getJepsonInstruction('device')}
 ★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
 ${T}${getFullInvention()}${styleRef}`;}
@@ -1261,7 +1323,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.st
 ${themeInst}
 
 [출력 형식] 【청구항 ${s}】부터. 청구항만 출력. 제한성 표현 금지.
-
+${getJepsonInstruction('method')}
 ★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
 ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설명 — 참고용] ${(outputs.step_08||'').slice(0,3000)}${getFullInvention()}${styleRef}`;}
@@ -1349,7 +1411,7 @@ ${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${document.g
 
     case 'step_12':return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: \"이하에서는 앞서 설명한 ${getDeviceSubject()}의 구성 및 동작을 참조하여 ${getDeviceSubject()}에 의해 수행되는 방법을 설명한다.\" 생략 금지. 제한성 표현 금지.\n\n★ 방법의 수행 주체: \"${getDeviceSubject()}\"로 일관되게 서술하라.\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${outputs.step_15?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 방법 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention()}${styleRef}`;
     case 'step_13':return `청구범위와 상세설명 검토:\n1.청구항뒷받침 2.기술적비약 3.수학식정합성 4.반복실시가능성 5.보완/수정 구체적 문장\n${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}`;
-    case 'step_14':return `대안 청구항. 핵심유지 표현달리. 【청구항 N】.\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}`;
+    case 'step_14':return `대안 청구항. 핵심유지 표현달리. 독립항은 반드시 젭슨(Jepson) 형식 유지: "~에 있어서," 전환부 + "~을 특징으로 하는" 종결부. 【청구항 N】.\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}`;
     case 'step_15':return `특허성 검토: 아래 청구범위와 상세설명에 대해 다음 항목을 검토하라.
 
 (1) 신규성: 청구항의 구성요소 조합이 선행기술과 구별되는지
