@@ -1247,22 +1247,7 @@ ${preIssues.map(i=>i.message).join('\n')}
     const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
     outputs[sid+'_mermaid']=mr.text;
     
-    // 4. AI 아이콘 생성 (도 1 = 장치 도면 첫 블록)
-    _currentAIIcons=null;
-    if(sid==='step_07'){
-      try{
-        const _blocks=extractMermaidBlocks(mr.text);
-        if(_blocks.length>0){
-          const{nodes:_fig1Nodes}=parseMermaidGraph(_blocks[0]);
-          if(_fig1Nodes.length>=2 && _fig1Nodes.length<=8){
-            const aiIcons=await generateAIFig1Icons(sid,0,'',_fig1Nodes,1);
-            if(aiIcons)_currentAIIcons=aiIcons;
-          }
-        }
-      }catch(aiErr){console.warn('AI 아이콘 생성 스킵:',aiErr.message);}
-    }
-    
-    // 5. 렌더링 + 최종 검증
+    // 4. 렌더링 + 최종 검증
     renderDiagrams(sid,mr.text);
     
     const dlId=sid==='step_07'?'diagramDownload07':'diagramDownload11';
@@ -1742,22 +1727,6 @@ ${isMethod?'방법 흐름도는 시작/종료 노드를 반드시 포함!':'도 
     const mermaidPrompt=buildMermaidPrompt(stepId,r1.text);
     const r2=await App.callClaude(mermaidPrompt);
     outputs[stepId+'_mermaid']=r2.text;
-    
-    // AI 아이콘 재생성 (장치 도면만)
-    _currentAIIcons=null;
-    if(stepId==='step_07'){
-      try{
-        const _reBlocks=extractMermaidBlocks(r2.text);
-        if(_reBlocks.length>0){
-          const{nodes:_reFig1}=parseMermaidGraph(_reBlocks[0]);
-          if(_reFig1.length>=2&&_reFig1.length<=8){
-            const reIcons=await generateAIFig1Icons(stepId,0,'',_reFig1,1);
-            if(reIcons)_currentAIIcons=reIcons;
-          }
-        }
-      }catch(e2){console.warn('AI 재아이콘 스킵:',e2.message);}
-    }
-    
     renderDiagrams(stepId,r2.text);
     
     App.showToast('도면이 규칙에 맞게 재생성되었습니다.');
@@ -1887,131 +1856,6 @@ function computeEdgeRoutes(edges,positions){
     return{segments,label:e.label,labelPos};
   }).filter(Boolean);
 }
-// ═══════════ AI 기반 특허 도면 아이콘 생성 v8.0 ═══════════
-// 구성요소 명칭을 분석하여 실제 특허 도면 스타일 SVG 아이콘을 AI가 생성
-const _aiIconStore={};
-
-function buildAIFig1IconPrompt(nodeInfos){
-  const list=nodeInfos.map((n,i)=>`${i+1}. "${n.name}" (참조번호: ${n.ref})`).join('\n');
-  return `당신은 한국 특허 명세서(KIPRIS) 도면 전문 일러스트레이터입니다.
-아래 시스템 구성요소들의 **도 1 (시스템 구성도)** 용 아이콘 SVG를 생성하세요.
-
-═══ 구성요소 목록 ═══
-${list}
-
-═══ 필수 규칙 ═══
-1. 각 아이콘은 ---ICON_N--- 구분자 후 <g id="icon_N"> 태그로 감쌈 (N=순번 1,2,3...)
-2. 좌표계: 중심(0,0) 기준. 바운딩 박스 가로 ±55px, 세로 ±50px 이내
-3. 흑백 특허 도면 스타일: stroke="#000", fill="#fff" 또는 fill="none"
-4. stroke-width: 외곽선 1.5~2px, 내부 디테일 0.5~1px
-5. 그림자 없음, 채색/그라디언트 없음, 깔끔한 선화만
-6. 텍스트(text 요소) 절대 포함 금지 — 참조번호, 라벨 모두 제외
-7. 가로:세로 비율은 대략 1:1 ~ 1.2:1.3 정도
-
-═══ 한국 특허 명세서 도면의 구성요소별 표준 표현법 ═══
-아래는 KIPRIS에 등록된 실제 한국 특허 도면에서 관찰되는 구성요소 표현 관례입니다:
-
-• "서버", "처리 장치", "플랫폼 서버", "웹 서버":
-  3D 아이소메트릭 랙 서버. 정면 직사각형(약 70×85) + 윗면 평행사변형(깊이 ~14px) + 옆면 평행사변형.
-  정면 내부: 상단에 작은 사각 인디케이터 도트 2행, 하단에 수평 패널 칸막이 2개, 옆면에 작은 포트 사각형 3~4개.
-
-• "사용자 단말", "클라이언트 단말", "단말기", "전자 장치":
-  모니터(가장 큰, ~95×65) + 태블릿(중간, ~30×45, 우측 뒤에 겹침) + 스마트폰(작은, ~18×34, 좌측 아래 겹침).
-  모니터: 외곽+내부 화면 사각형+아래 받침대+베이스. 태블릿: 둥근모서리 직사각형+내부 화면. 스마트폰: 좁은 직사각형+내부 화면+하단 홈버튼 원.
-
-• "데이터베이스", "DB", "저장부", "데이터 저장소":
-  실린더. 상단 타원(rx~28, ry~10) + 좌우 수직선 + 하단 타원. 몸체 높이 ~70px.
-  내부에 가로 구분 곡선 1~2개(데이터 레이어 구분).
-
-• "네트워크", "통신망", "인터넷", "통신 네트워크":
-  구름 형태. 부드러운 3차 베지어 곡선(Q 또는 C)으로 구름 외곽. 폭~80, 높이~50.
-  내부 비어있음.
-
-• "외부 서버", "외부 API", "외부 시스템":
-  서버와 유사하되 약간 작은 크기의 3D 직육면체. 내부 디테일 간소화.
-
-• "관리자 단말", "운영 단말", "관리 장치":
-  모니터 1대 단독(겹침 없이). 화면+받침대+베이스.
-
-• 그 외 모든 구성요소 (매칭부, 분석부, 처리부, 수집부 등 기능 모듈):
-  둥근모서리 직사각형(~65×48, rx=3). 내부 비어있음. 가장 심플한 형태.
-
-═══ 출력 형식 (이것만 출력, 다른 설명 텍스트 일절 금지) ═══
----ICON_1---
-<g id="icon_1">
-  (SVG elements — rect, line, ellipse, path, circle, polygon 등)
-</g>
----ICON_2---
-<g id="icon_2">
-  (SVG elements)
-</g>`;
-}
-
-function parseAIFig1Icons(text,expectedCount){
-  const icons={};
-  const regex=/---ICON_(\d+)---\s*([\s\S]*?)(?=---ICON_\d+---|$)/g;
-  let m;
-  while((m=regex.exec(text))!==null){
-    const idx=parseInt(m[1])-1; // 0-based
-    let svg=m[2].trim();
-    // <g> 태그 추출
-    const gMatch=svg.match(/<g[^>]*>([\s\S]*?)<\/g>/);
-    if(gMatch)svg=gMatch[1].trim();
-    // 기본 검증: SVG 요소가 있는지
-    if(svg.length>20 && (svg.includes('<rect')||svg.includes('<path')||svg.includes('<ellipse')||svg.includes('<polygon')||svg.includes('<circle')||svg.includes('<line')))
-      icons[idx]=svg;
-  }
-  return icons;
-}
-
-async function generateAIFig1Icons(sid,blockIdx,containerId,nodes,figNum){
-  // 노드 정보 추출
-  const nodeInfos=nodes.map((nd,i)=>{
-    const ref=nd.label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
-    const refNum=ref?ref[1]:String((i+1)*100);
-    const cleanName=nd.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
-    return{name:cleanName,ref:refNum};
-  });
-  
-  // 캐시 체크
-  const cacheKey=nodeInfos.map(n=>n.name).join('|');
-  if(_aiIconStore[cacheKey]){
-    return _aiIconStore[cacheKey];
-  }
-  
-  // 로딩 표시
-  const container=document.getElementById(containerId);
-  let loadEl=null;
-  if(container){
-    loadEl=document.createElement('div');
-    loadEl.style.cssText='text-align:center;padding:6px;font-size:11px;color:#1976d2;background:#e3f2fd;border-radius:4px;margin-top:4px';
-    loadEl.textContent='🎨 AI 특허 도면 아이콘 생성 중...';
-    container.parentElement.insertBefore(loadEl,container.nextSibling);
-  }
-  
-  try{
-    const prompt=buildAIFig1IconPrompt(nodeInfos);
-    const r=await App.callClaudeSonnet(prompt,4096);
-    const icons=parseAIFig1Icons(r.text,nodes.length);
-    
-    if(Object.keys(icons).length>=Math.ceil(nodes.length*0.5)){
-      // 최소 절반 이상 성공해야 캐시 저장
-      _aiIconStore[cacheKey]=icons;
-      return icons;
-    }else{
-      console.warn(`AI 아이콘 파싱 부족: ${Object.keys(icons).length}/${nodes.length}`);
-      return null;
-    }
-  }catch(e){
-    console.warn('AI 아이콘 생성 실패:',e.message);
-    return null;
-  }finally{
-    if(loadEl)loadEl.remove();
-  }
-}
-
-// 전역 참조: 현재 렌더링 중인 Fig1의 AI 아이콘
-let _currentAIIcons=null;
 
 function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   // ═══ KIPO 특허 도면 규칙 v4.1 (직계 부모 일치) ═══
@@ -2154,7 +1998,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#000"/>`;
       // 박스 본체 (완전 흑백)
       svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#fff" stroke="#000" stroke-width="${isStartEnd?2:1.5}"/>`;
-      svg+=`<text x="${centerX}" y="${by+boxH/2+4}" text-anchor="middle" font-size="${isStartEnd?11:13}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      svg+=`<text x="${centerX}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       
       // 리더라인 + 부호 (시작/종료 제외)
       if(refNum&&!isStartEnd){
@@ -2199,302 +2043,49 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   
   const boxW=5.0*PX, boxH=0.7*PX, boxGap=0.8*PX;
   
-  // ★ L1 구성요소 유형 판별 함수 (패치 v5.3) ★
-  function getL1Type(label){
-    const l=label.toLowerCase();
-    if(/저장부|데이터베이스|db|저장소|스토리지|메모리/.test(l))return 'database';
-    if(/사용자\s*단말|클라이언트|모바일|단말기|디바이스|전자\s*단말|사용자\s*기기/.test(l))return 'terminal';
-    if(/네트워크|통신망|인터넷/.test(l))return 'network';
-    if(/서버|시스템|장치|플랫폼/.test(l))return 'server';
-    return 'box';
-  }
-  
-  // ★ (구 drawL1Shape - drawHIcon으로 대체됨, v6.0) ★
-  function drawL1Shape(type,bx,by,boxW,boxH,label,refNum){
-    let svg='';
-    const cx=bx+boxW/2;
-    const cleanLabel=label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-    const displayLabel=cleanLabel.length>12?cleanLabel.slice(0,10)+'…':cleanLabel;
-    
-    switch(type){
-      case 'database':{
-        // ═══ 실린더 (저장부/데이터베이스) ═══
-        const cylH=boxH*1.4;
-        const ellipseRY=cylH*0.15;
-        const bodyTop=by+ellipseRY;
-        const bodyBottom=by+cylH-ellipseRY;
-        const cylW=boxW*0.65;
-        const cylX=bx+(boxW-cylW)/2;
-        
-        // 그림자
-        svg+=`<ellipse cx="${cylX+cylW/2+3}" cy="${bodyBottom+3}" rx="${cylW/2}" ry="${ellipseRY}" fill="#000"/>`;
-        svg+=`<rect x="${cylX+3}" y="${bodyTop+3}" width="${cylW}" height="${bodyBottom-bodyTop}" fill="#000"/>`;
-        
-        // 옆면
-        svg+=`<rect x="${cylX}" y="${bodyTop}" width="${cylW}" height="${bodyBottom-bodyTop}" fill="#fff" stroke="none"/>`;
-        svg+=`<line x1="${cylX}" y1="${bodyTop}" x2="${cylX}" y2="${bodyBottom}" stroke="#000" stroke-width="1.5"/>`;
-        svg+=`<line x1="${cylX+cylW}" y1="${bodyTop}" x2="${cylX+cylW}" y2="${bodyBottom}" stroke="#000" stroke-width="1.5"/>`;
-        
-        // 아래 타원
-        svg+=`<ellipse cx="${cylX+cylW/2}" cy="${bodyBottom}" rx="${cylW/2}" ry="${ellipseRY}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
-        // 위 타원
-        svg+=`<ellipse cx="${cylX+cylW/2}" cy="${bodyTop}" rx="${cylW/2}" ry="${ellipseRY}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
-        
-        // 텍스트
-        svg+=`<text x="${cx}" y="${by+cylH+14}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
-        
-        // 리더라인
-        const leaderEndX=bx+boxW+0.3*PX;
-        const leaderY=by+cylH/2;
-        svg+=`<line x1="${cylX+cylW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
-        svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-        break;
-      }
-      
-      case 'terminal':{
-        // ═══ 모니터 + 스마트폰 (사용자 단말) ═══
-        const monW=boxW*0.45;
-        const monH=boxH*1.0;
-        const monX=bx+boxW*0.1;
-        const monY=by;
-        
-        // 모니터 그림자
-        svg+=`<rect x="${monX+3}" y="${monY+3}" width="${monW}" height="${monH}" fill="#000" rx="2"/>`;
-        // 모니터 화면
-        svg+=`<rect x="${monX}" y="${monY}" width="${monW}" height="${monH}" fill="#fff" stroke="#000" stroke-width="1.5" rx="2"/>`;
-        // 받침대
-        svg+=`<line x1="${monX+monW/2}" y1="${monY+monH}" x2="${monX+monW/2}" y2="${monY+monH+8}" stroke="#000" stroke-width="1.5"/>`;
-        svg+=`<line x1="${monX+monW*0.25}" y1="${monY+monH+8}" x2="${monX+monW*0.75}" y2="${monY+monH+8}" stroke="#000" stroke-width="1.5"/>`;
-        
-        // 스마트폰
-        const phoneW=boxW*0.12;
-        const phoneH=boxH*0.9;
-        const phoneX=monX+monW+boxW*0.08;
-        const phoneY=monY+monH-phoneH+5;
-        
-        svg+=`<rect x="${phoneX+2}" y="${phoneY+2}" width="${phoneW}" height="${phoneH}" fill="#000" rx="2"/>`;
-        svg+=`<rect x="${phoneX}" y="${phoneY}" width="${phoneW}" height="${phoneH}" fill="#fff" stroke="#000" stroke-width="1.2" rx="2"/>`;
-        svg+=`<circle cx="${phoneX+phoneW/2}" cy="${phoneY+phoneH-5}" r="2.5" fill="none" stroke="#000" stroke-width="0.8"/>`;
-        
-        // 텍스트
-        svg+=`<text x="${cx}" y="${by+boxH+28}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
-        
-        // 리더라인
-        const leaderEndX=bx+boxW+0.3*PX;
-        const leaderY=by+boxH/2+5;
-        svg+=`<line x1="${phoneX+phoneW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
-        svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-        break;
-      }
-      
-      case 'server':{
-        // ═══ 3D 서버 박스 (서버/시스템) ═══
-        const srvW=boxW*0.55;
-        const srvH=boxH*1.2;
-        const srvX=bx+(boxW-srvW)/2;
-        const srvY=by;
-        const depth=8;
-        
-        // 그림자
-        svg+=`<rect x="${srvX+4}" y="${srvY+4}" width="${srvW}" height="${srvH}" fill="#000"/>`;
-        
-        // 정면
-        svg+=`<rect x="${srvX}" y="${srvY}" width="${srvW}" height="${srvH}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
-        
-        // 윗면 3D
-        svg+=`<polygon points="${srvX},${srvY} ${srvX+depth},${srvY-depth} ${srvX+srvW+depth},${srvY-depth} ${srvX+srvW},${srvY}" fill="#fff" stroke="#000" stroke-width="1"/>`;
-        
-        // 오른쪽면 3D
-        svg+=`<polygon points="${srvX+srvW},${srvY} ${srvX+srvW+depth},${srvY-depth} ${srvX+srvW+depth},${srvY+srvH-depth} ${srvX+srvW},${srvY+srvH}" fill="#fff" stroke="#000" stroke-width="1"/>`;
-        
-        // 서버 슬롯 (내부 수평선)
-        const slotX1=srvX+srvW*0.1;
-        const slotX2=srvX+srvW*0.9;
-        svg+=`<line x1="${slotX1}" y1="${srvY+srvH*0.25}" x2="${slotX2}" y2="${srvY+srvH*0.25}" stroke="#000" stroke-width="0.8"/>`;
-        svg+=`<line x1="${slotX1}" y1="${srvY+srvH*0.5}" x2="${slotX2}" y2="${srvY+srvH*0.5}" stroke="#000" stroke-width="0.8"/>`;
-        svg+=`<line x1="${slotX1}" y1="${srvY+srvH*0.75}" x2="${slotX2}" y2="${srvY+srvH*0.75}" stroke="#000" stroke-width="0.8"/>`;
-        
-        // 텍스트
-        svg+=`<text x="${cx}" y="${by+srvH+14}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
-        
-        // 리더라인
-        const leaderEndX=bx+boxW+0.3*PX;
-        const leaderY=srvY+srvH/2;
-        svg+=`<line x1="${srvX+srvW+depth}" y1="${leaderY-depth/2}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
-        svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-        break;
-      }
-      
-      case 'network':{
-        // ═══ 구름 모양 (네트워크/인터넷) ═══
-        const cloudW=boxW*0.6;
-        const cloudH=boxH*0.9;
-        const cloudCx=cx;
-        const cloudCy=by+cloudH*0.5;
-        
-        // 구름 path
-        svg+=`<path d="M${cloudCx-cloudW*0.35} ${cloudCy+cloudH*0.15} `;
-        svg+=`Q${cloudCx-cloudW*0.4} ${cloudCy-cloudH*0.35} ${cloudCx-cloudW*0.1} ${cloudCy-cloudH*0.4} `;
-        svg+=`Q${cloudCx} ${cloudCy-cloudH*0.7} ${cloudCx+cloudW*0.15} ${cloudCy-cloudH*0.35} `;
-        svg+=`Q${cloudCx+cloudW*0.4} ${cloudCy-cloudH*0.45} ${cloudCx+cloudW*0.35} ${cloudCy+cloudH*0.1} `;
-        svg+=`Q${cloudCx+cloudW*0.4} ${cloudCy+cloudH*0.4} ${cloudCx+cloudW*0.1} ${cloudCy+cloudH*0.35} `;
-        svg+=`Q${cloudCx-cloudW*0.05} ${cloudCy+cloudH*0.5} ${cloudCx-cloudW*0.25} ${cloudCy+cloudH*0.3} `;
-        svg+=`Q${cloudCx-cloudW*0.45} ${cloudCy+cloudH*0.35} ${cloudCx-cloudW*0.35} ${cloudCy+cloudH*0.15} Z" `;
-        svg+=`fill="#fff" stroke="#000" stroke-width="1.5"/>`;
-        
-        // 텍스트
-        svg+=`<text x="${cx}" y="${by+cloudH+18}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
-        
-        // 리더라인
-        const leaderEndX=bx+boxW+0.3*PX;
-        const leaderY=cloudCy;
-        svg+=`<line x1="${cloudCx+cloudW*0.35}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
-        svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-        break;
-      }
-      
-      default:{
-        // ═══ 기본 직사각형 ═══
-        svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" fill="#000"/>`;
-        svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#fff" stroke="#000" stroke-width="2"/>`;
-        svg+=`<text x="${cx}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
-        
-        const leaderEndX=bx+boxW+0.3*PX;
-        const leaderY=by+boxH/2;
-        svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
-        svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-        break;
-      }
-    }
-    return svg;
-  }
-  
   if(isFig1){
-    // ═══ 도 1: 수평 배치 시스템 구성도 v7.0 ═══
-    // 참조 이미지 기반 재설계: 심플 흑백 특허 도면
-    // - 그림자 없음, 최소 디테일, 깔끔한 선화
-    // - 단말: 모니터+태블릿+폰 겹침 배치
-    // - 서버/DB: 3D 아이소메트릭 랙
-    // - 네트워크: 구름, 기타: 단순 박스
+    // ═══ 도 1: 수직 블록도 v8.0 (도 2/3과 동일 스타일, 최외곽 프레임 없음) ═══
     const nn=nodes.length;
-    const S=nn<=3?1.0:nn<=4?0.82:nn<=5?0.68:0.58;
-    const iW=Math.round(160*S), iH=Math.round(120*S);
-    const gap=Math.round(80*S);
-    const padX=20, padTop=8, refH=22;
-    const svgW=padX*2+nn*iW+(nn-1)*gap;
-    const svgH=padTop+refH+iH+8;
+    const boxStartX=0.5*PX, boxStartY=0.5*PX;
+    const frameW=6.2*PX;
+    const svgH=nn*(boxH+boxGap)+0.8*PX;
+    const svgW=frameW+2.5*PX;
     
-    let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${Math.min(svgW+20,850)}px;background:white;border-radius:8px">`;
+    let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:600px;background:white;border-radius:8px">`;
+    
     const mkId=`ah_${containerId}`;
-    svg+=`<defs><marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 1 L8 5 L0 9 z" fill="#000"/></marker></defs>`;
-    
-    // ★ 특허 도면 아이콘 v7 ★
-    function drawIcon(type,cx,cy,s){
-      let o='';
-      switch(type){
-        case 'terminal':{
-          // ── 모니터 ──
-          const mW=98*s,mH=68*s;
-          const mx=cx-mW/2-2*s, my=cy-mH/2-8*s;
-          o+=`<rect x="${mx}" y="${my}" width="${mW}" height="${mH}" rx="${2*s}" fill="#fff" stroke="#000" stroke-width="${1.8*s}"/>`;
-          o+=`<rect x="${mx+5*s}" y="${my+4*s}" width="${mW-10*s}" height="${mH-10*s}" fill="#fff" stroke="#000" stroke-width="${0.8*s}"/>`;
-          const stX=mx+mW/2;
-          o+=`<rect x="${stX-8*s}" y="${my+mH}" width="${16*s}" height="${8*s}" fill="#fff" stroke="#000" stroke-width="${1.2*s}"/>`;
-          o+=`<rect x="${stX-16*s}" y="${my+mH+8*s}" width="${32*s}" height="${3*s}" rx="${1*s}" fill="#fff" stroke="#000" stroke-width="${1*s}"/>`;
-          // ── 태블릿 ──
-          const tW=32*s,tH=48*s;
-          const tx=cx+mW/2-14*s, ty=cy-tH/2+6*s;
-          o+=`<rect x="${tx}" y="${ty}" width="${tW}" height="${tH}" rx="${2*s}" fill="#fff" stroke="#000" stroke-width="${1.5*s}"/>`;
-          o+=`<rect x="${tx+3*s}" y="${ty+4*s}" width="${tW-6*s}" height="${tH-10*s}" fill="#fff" stroke="#000" stroke-width="${0.6*s}"/>`;
-          // ── 스마트폰 ──
-          const pW=20*s,pH=36*s;
-          const px=cx-mW/2-pW+6*s, py=cy+2*s;
-          o+=`<rect x="${px}" y="${py}" width="${pW}" height="${pH}" rx="${2*s}" fill="#fff" stroke="#000" stroke-width="${1.3*s}"/>`;
-          o+=`<rect x="${px+2.5*s}" y="${py+3*s}" width="${pW-5*s}" height="${pH-9*s}" fill="#fff" stroke="#000" stroke-width="${0.5*s}"/>`;
-          o+=`<circle cx="${px+pW/2}" cy="${py+pH-4*s}" r="${2*s}" fill="none" stroke="#000" stroke-width="${0.6*s}"/>`;
-          break;
-        }
-        case 'server':{
-          // ── 3D 서버 랙 ──
-          const fW=72*s, fH=88*s, d=14*s;
-          const fx=cx-fW/2-d/3, fy=cy-fH/2+d/2+2*s;
-          o+=`<rect x="${fx}" y="${fy}" width="${fW}" height="${fH}" fill="#fff" stroke="#000" stroke-width="${1.8*s}"/>`;
-          o+=`<polygon points="${fx},${fy} ${fx+d},${fy-d} ${fx+fW+d},${fy-d} ${fx+fW},${fy}" fill="#fff" stroke="#000" stroke-width="${1.3*s}"/>`;
-          o+=`<polygon points="${fx+fW},${fy} ${fx+fW+d},${fy-d} ${fx+fW+d},${fy+fH-d} ${fx+fW},${fy+fH}" fill="#fff" stroke="#000" stroke-width="${1.3*s}"/>`;
-          // 상단 인디케이터 도트 2행
-          const dotS=2.8*s, dotG=10*s;
-          const nDots=Math.min(5,Math.floor((fW-16*s)/dotG));
-          const dotX0=fx+(fW-nDots*dotG+dotG)/2;
-          for(let r=0;r<2;r++){for(let c=0;c<nDots;c++){
-            o+=`<rect x="${dotX0+c*dotG-dotS/2}" y="${fy+8*s+r*12*s}" width="${dotS}" height="${dotS}" fill="none" stroke="#000" stroke-width="${0.7*s}"/>`;
-          }}
-          // 하단 패널 2개
-          const pnT=fy+fH*0.4, pnH=fH*0.5, pnG=6*s;
-          const pnW=(fW-16*s-pnG)/2;
-          const px1=fx+8*s, px2=fx+8*s+pnW+pnG;
-          o+=`<rect x="${px1}" y="${pnT}" width="${pnW}" height="${pnH}" fill="none" stroke="#000" stroke-width="${1*s}"/>`;
-          o+=`<rect x="${px2}" y="${pnT}" width="${pnW}" height="${pnH}" fill="none" stroke="#000" stroke-width="${1*s}"/>`;
-          o+=`<line x1="${px1+2*s}" y1="${pnT+pnH*0.45}" x2="${px1+pnW-2*s}" y2="${pnT+pnH*0.45}" stroke="#000" stroke-width="${0.5*s}"/>`;
-          o+=`<line x1="${px2+pnW*0.45}" y1="${pnT+3*s}" x2="${px2+pnW*0.45}" y2="${pnT+pnH-3*s}" stroke="#000" stroke-width="${0.5*s}"/>`;
-          // 오른면 포트
-          const rpx=fx+fW+d*0.2;
-          for(let j=0;j<4;j++){o+=`<rect x="${rpx}" y="${fy+8*s+j*14*s}" width="${d*0.5}" height="${d*0.35}" fill="none" stroke="#000" stroke-width="${0.5*s}"/>`;}          break;
-        }
-        case 'database':{
-          // ── 실린더 ──
-          const dW=58*s,dH=80*s,ery=10*s;
-          const tY=cy-dH/2, bY=cy+dH/2;
-          o+=`<rect x="${cx-dW/2}" y="${tY+ery*0.3}" width="${dW}" height="${dH-ery*0.6}" fill="#fff" stroke="none"/>`;
-          o+=`<line x1="${cx-dW/2}" y1="${tY+ery*0.2}" x2="${cx-dW/2}" y2="${bY-ery*0.2}" stroke="#000" stroke-width="${1.5*s}"/>`;
-          o+=`<line x1="${cx+dW/2}" y1="${tY+ery*0.2}" x2="${cx+dW/2}" y2="${bY-ery*0.2}" stroke="#000" stroke-width="${1.5*s}"/>`;
-          o+=`<ellipse cx="${cx}" cy="${bY}" rx="${dW/2}" ry="${ery}" fill="#fff" stroke="#000" stroke-width="${1.5*s}"/>`;
-          o+=`<ellipse cx="${cx}" cy="${tY}" rx="${dW/2}" ry="${ery}" fill="#fff" stroke="#000" stroke-width="${1.5*s}"/>`;
-          o+=`<path d="M${cx-dW/2} ${tY+dH*0.25} Q${cx} ${tY+dH*0.25+ery*0.7} ${cx+dW/2} ${tY+dH*0.25}" fill="none" stroke="#000" stroke-width="${0.5*s}"/>`;
-          break;
-        }
-        case 'network':{
-          // ── 구름 ──
-          const cW=80*s,cH=50*s;
-          o+=`<path d="M${cx-cW*0.38} ${cy+cH*0.15} Q${cx-cW*0.42} ${cy-cH*0.35} ${cx-cW*0.08} ${cy-cH*0.45} Q${cx+cW*0.02} ${cy-cH*0.78} ${cx+cW*0.2} ${cy-cH*0.4} Q${cx+cW*0.44} ${cy-cH*0.48} ${cx+cW*0.38} ${cy+cH*0.05} Q${cx+cW*0.42} ${cy+cH*0.42} ${cx+cW*0.05} ${cy+cH*0.4} Q${cx-cW*0.08} ${cy+cH*0.55} ${cx-cW*0.28} ${cy+cH*0.3} Q${cx-cW*0.46} ${cy+cH*0.38} ${cx-cW*0.38} ${cy+cH*0.15} Z" fill="#fff" stroke="#000" stroke-width="${1.5*s}"/>`;
-          break;
-        }
-        default:{
-          const bW=68*s,bH=50*s;
-          o+=`<rect x="${cx-bW/2}" y="${cy-bH/2}" width="${bW}" height="${bH}" fill="#fff" stroke="#000" stroke-width="${1.5*s}" rx="${3*s}"/>`;
-          break;
-        }
-      }
-      return o;
-    }
-    
-    function iconHalfW(type,s){
-      switch(type){case 'terminal':return 70*s;case 'server':return 50*s;case 'database':return 32*s;case 'network':return 38*s;default:return 36*s;}
-    }
+    svg+=`<defs>
+      <marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#000"/>
+      </marker>
+    </defs>`;
     
     nodes.forEach((nd,i)=>{
-      const cx=padX+iW/2+i*(iW+gap);
-      const iconCy=padTop+refH+iH/2;
-      const ref=extractRefNum(nd.label,String((i+1)*100));
-      const tp=getL1Type(nd.label);
-      const hasAI=_currentAIIcons&&_currentAIIcons[i];
-      // 참조번호 + 리더라인
-      const topIcon=hasAI?(iconCy-50*S):(iconCy-(tp==='server'?46*S:tp==='terminal'?44*S:tp==='database'?40*S:30*S));
-      svg+=`<line x1="${cx}" y1="${topIcon}" x2="${cx}" y2="${padTop+5}" stroke="#000" stroke-width="${0.8*S}"/>`;
-      svg+=`<text x="${cx}" y="${padTop+2}" text-anchor="middle" font-size="${13*S}" font-family="serif" fill="#000">${ref}</text>`;
-      // 아이콘 (AI 우선, fallback: 하드코딩)
-      if(hasAI){
-        svg+=`<g transform="translate(${cx},${iconCy}) scale(${S})">${_currentAIIcons[i]}</g>`;
-      }else{
-        svg+=drawIcon(tp,cx,iconCy,S);
-      }
+      const bx=boxStartX+0.6*PX;
+      const by=boxStartY+i*(boxH+boxGap);
+      const refNum=extractRefNum(nd.label,String((i+1)*100));
+      const cleanLabel=nd.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+      const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
+      
+      // 그림자
+      svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" fill="#000"/>`;
+      // 박스 본체
+      svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#fff" stroke="#000" stroke-width="2"/>`;
+      // 박스 텍스트
+      svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      
+      // 리더라인 + 부호
+      const leaderEndX=bx+boxW+0.3*PX;
+      const leaderY=by+boxH/2;
+      svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
+      svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      
       // 양방향 화살표
       if(i<nn-1){
-        const tp2=getL1Type(nodes[i+1].label);
-        const hasAI2=_currentAIIcons&&_currentAIIcons[i+1];
-        const cx2=padX+iW/2+(i+1)*(iW+gap);
-        const x1=cx+(hasAI?55*S:iconHalfW(tp,S))+4*S;
-        const x2=cx2-(hasAI2?55*S:iconHalfW(tp2,S))-4*S;
-        if(x2>x1+8){svg+=`<line x1="${x1}" y1="${iconCy}" x2="${x2}" y2="${iconCy}" stroke="#000" stroke-width="${1.5*S}" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;}
+        const arrowX=bx+boxW/2;
+        const arrowY1=by+boxH+2;
+        const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+        svg+=`<line x1="${arrowX}" y1="${arrowY1}" x2="${arrowX}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
       }
     });
     
@@ -3191,129 +2782,27 @@ function downloadPptx(sid){
       const nodeCount=nodes.length;
       
       if(isFig1){
-        // ═══ 도 1: L1 직관적 형태 사용 (패치 v5.3) ═══
-        // L1 유형 판별 함수
-        function getL1Type(label){
-          const l=label.toLowerCase();
-          if(/저장부|데이터베이스|db|저장소|스토리지|메모리/.test(l))return 'database';
-          if(/사용자\s*단말|클라이언트|모바일|단말기|디바이스|전자\s*단말|사용자\s*기기/.test(l))return 'terminal';
-          if(/네트워크|통신망|인터넷/.test(l))return 'network';
-          if(/서버|시스템|장치|플랫폼/.test(l))return 'server';
-          return 'box';
-        }
-        
-        const boxStartX=PAGE_MARGIN+0.3,boxStartY=PAGE_MARGIN+TITLE_H+0.2;
-        const boxW=PAGE_W-1.2;
-        const iconH=0.8;  // 아이콘용 높이 증가
-        const boxGap=Math.min(0.6,(AVAILABLE_H-iconH*nodeCount)/(nodeCount>1?nodeCount-1:1));
+        // ═══ 도 1: 블록도 v8.0 (최외곽 프레임 없이 박스 나열) ═══
+        const boxStartX=PAGE_MARGIN+0.5,boxStartY=PAGE_MARGIN+TITLE_H+0.2;
+        const boxW=PAGE_W-1.6;
+        const boxH=Math.min(0.55,(AVAILABLE_H-0.15*(nodeCount-1))/nodeCount);
+        const boxGap=(AVAILABLE_H-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1);
+        const refLabelX=boxStartX+boxW+0.1;
         
         nodes.forEach((n,i)=>{
-          const bx=boxStartX,by=boxStartY+i*(iconH+boxGap);
+          const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
           const refNum=extractRefNum(n.label,String((i+1)*100));
           const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-          const l1Type=getL1Type(n.label);
           
-          // 유형별 PPTX 도형 렌더링
-          switch(l1Type){
-            case 'database':{
-              // 실린더 (PptxGenJS의 can 도형 사용)
-              const cylW=boxW*0.4;
-              const cylH=iconH*0.85;
-              const cylX=bx+(boxW-cylW)/2;
-              const cylY=by;
-              
-              slide.addShape(pptx.shapes.CAN||pptx.shapes.OVAL,{
-                x:cylX,y:cylY,w:cylW,h:cylH,
-                fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}
-              });
-              // 라벨
-              slide.addText(cleanLabel,{x:bx,y:by+cylH+0.02,w:boxW,h:0.25,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
-              // 리더라인
-              slide.addShape(pptx.shapes.LINE,{x:cylX+cylW,y:cylY+cylH/2,w:bx+boxW-(cylX+cylW)+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-              slide.addText(String(refNum),{x:bx+boxW+0.35,y:cylY+cylH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
-              break;
-            }
-            
-            case 'terminal':{
-              // 모니터 (사각형 + 받침대 라인)
-              const monW=boxW*0.35;
-              const monH=iconH*0.6;
-              const monX=bx+(boxW-monW)/2-0.3;
-              const monY=by;
-              
-              // 모니터 화면
-              slide.addShape(pptx.shapes.RECTANGLE,{x:monX,y:monY,w:monW,h:monH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
-              // 스마트폰 (작은 사각형)
-              const phoneW=monW*0.25;
-              const phoneH=monH*0.8;
-              const phoneX=monX+monW+0.15;
-              const phoneY=monY+monH-phoneH;
-              slide.addShape(pptx.shapes.RECTANGLE,{x:phoneX,y:phoneY,w:phoneW,h:phoneH,fill:{color:'FFFFFF'},line:{color:'000000',width:1.0}});
-              // 라벨
-              slide.addText(cleanLabel,{x:bx,y:monY+monH+0.08,w:boxW,h:0.25,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
-              // 리더라인
-              slide.addShape(pptx.shapes.LINE,{x:phoneX+phoneW,y:phoneY+phoneH/2,w:bx+boxW-(phoneX+phoneW)+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-              slide.addText(String(refNum),{x:bx+boxW+0.35,y:phoneY+phoneH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
-              break;
-            }
-            
-            case 'server':{
-              // 3D 서버 박스 (사각형 + 내부 수평선)
-              const srvW=boxW*0.4;
-              const srvH=iconH*0.8;
-              const srvX=bx+(boxW-srvW)/2;
-              const srvY=by;
-              
-              // 그림자
-              slide.addShape(pptx.shapes.RECTANGLE,{x:srvX+SHADOW_OFFSET,y:srvY+SHADOW_OFFSET,w:srvW,h:srvH,fill:{color:'000000'},line:{width:0}});
-              // 본체
-              slide.addShape(pptx.shapes.RECTANGLE,{x:srvX,y:srvY,w:srvW,h:srvH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
-              // 서버 슬롯 (내부 수평선)
-              slide.addShape(pptx.shapes.LINE,{x:srvX+srvW*0.1,y:srvY+srvH*0.33,w:srvW*0.8,h:0,line:{color:'000000',width:0.5}});
-              slide.addShape(pptx.shapes.LINE,{x:srvX+srvW*0.1,y:srvY+srvH*0.66,w:srvW*0.8,h:0,line:{color:'000000',width:0.5}});
-              // 라벨
-              slide.addText(cleanLabel,{x:bx,y:srvY+srvH+0.02,w:boxW,h:0.25,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
-              // 리더라인
-              slide.addShape(pptx.shapes.LINE,{x:srvX+srvW,y:srvY+srvH/2,w:bx+boxW-(srvX+srvW)+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-              slide.addText(String(refNum),{x:bx+boxW+0.35,y:srvY+srvH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
-              break;
-            }
-            
-            case 'network':{
-              // 구름 (PptxGenJS의 cloud 도형 사용)
-              const cloudW=boxW*0.45;
-              const cloudH=iconH*0.7;
-              const cloudX=bx+(boxW-cloudW)/2;
-              const cloudY=by;
-              
-              slide.addShape(pptx.shapes.CLOUD||pptx.shapes.OVAL,{
-                x:cloudX,y:cloudY,w:cloudW,h:cloudH,
-                fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}
-              });
-              // 라벨
-              slide.addText(cleanLabel,{x:bx,y:cloudY+cloudH+0.02,w:boxW,h:0.25,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
-              // 리더라인
-              slide.addShape(pptx.shapes.LINE,{x:cloudX+cloudW,y:cloudY+cloudH/2,w:bx+boxW-(cloudX+cloudW)+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-              slide.addText(String(refNum),{x:bx+boxW+0.35,y:cloudY+cloudH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
-              break;
-            }
-            
-            default:{
-              // 기본 직사각형
-              const boxH=iconH*0.65;
-              slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
-              slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
-              slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
-              slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-              slide.addText(String(refNum),{x:bx+boxW+0.35,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
-              break;
-            }
-          }
+          slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
+          slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
+          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
+          slide.addText(String(refNum),{x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
-          // ★ L1 간 연결선: 항상 양방향 화살표 표시 ★
           if(i<nodes.length-1){
-            const arrowY1=by+iconH+0.12;
-            const arrowY2=boxStartY+(i+1)*(iconH+boxGap)-0.08;
+            const arrowY1=by+boxH+0.04;
+            const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-0.04;
             const arrowX=bx+boxW/2;
             if(arrowY2>arrowY1+0.05){
               slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
