@@ -259,6 +259,12 @@
       <div style="font-weight:600;font-size:14px;margin-bottom:6px">현재 적용 상태</div>
       <div id="profileCurrentStatus" style="font-size:13px;padding:12px;background:var(--color-bg-secondary);border-radius:8px"></div>
     </div>
+    <!-- KIPRIS API 키 설정 (v5.3) -->
+    <div style="margin-bottom:20px;padding-top:16px;border-top:1px solid var(--color-border)">
+      <div style="font-weight:600;font-size:14px;margin-bottom:6px">🔍 KIPRIS API 키 <span style="font-size:11px;font-weight:400;color:var(--color-text-tertiary)">(선행기술 검색용)</span></div>
+      <input type="password" class="input-field" id="kiprisApiKeyInput" placeholder="KIPRIS Plus API 키를 입력하세요" />
+      <p class="input-hint">발급: <a href="https://plus.kipris.or.kr/portal/data/service/List.do?subTab=SC001&menuNo=200100" target="_blank" style="color:var(--color-primary)">KIPRIS Plus</a> → Open API 신청 (특허·상표 검색용)</p>
+    </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost" onclick="closeProfileSettings()" style="flex:1">닫기</button>
       <button class="btn btn-primary" onclick="saveProfileSettings()" style="flex:1">저장 및 적용</button>

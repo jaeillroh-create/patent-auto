@@ -790,10 +790,11 @@ function getDeviceSubject(){
   return '서버';
 }
 
-// ═══ KIPRIS Plus 선행기술 검색 ═══
-// trademark.js와 동일한 KIPRIS Plus API 사용 (plus.kipris.or.kr)
-// type: 'patent_word' → 특허실용신안 일반검색(단어) - 발명의 명칭 + 요약서 검색
-const KIPRIS_PLUS_KEY='OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE=';
+// ═══ KIPRIS 선행기술 검색 ═══
+// Edge Function이 KIPRIS Plus API (plus.kipris.or.kr) 호출
+// KIPRIS Plus API 키 (localStorage에서 사용자 설정 가능)
+const DEFAULT_KIPRIS_KEY='zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
+function getKiprisKey(){return localStorage.getItem('kipris_api_key')||localStorage.getItem('tm_kipris_api_key')||DEFAULT_KIPRIS_KEY;}
 
 // 등록번호 포맷: 1020XXXXXXX → 10-20XXXXX
 function formatRegNumber(regNum){
@@ -820,7 +821,7 @@ function extractPatentKeywords(title){
     .join(' ');
 }
 
-// KIPRIS Plus 검색 (Supabase Edge Function 경유)
+// KIPRIS 검색 (Supabase Edge Function → 공공데이터포털 API)
 async function searchKiprisPlus(query,maxResults=5){
   try{
     if(!App.sb?.functions){console.warn('[KIPRIS] Supabase 미연결');return[];}
@@ -829,7 +830,7 @@ async function searchKiprisPlus(query,maxResults=5){
       body:{
         type:'patent_word',
         params:{word:query,numOfRows:maxResults,patent:true,utility:true},
-        apiKey:KIPRIS_PLUS_KEY
+        apiKey:getKiprisKey()
       }
     });
     if(error){console.error('[KIPRIS] Edge Function error:',error);return[];}
@@ -3846,6 +3847,34 @@ function downloadAsWord(){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();App.showToast('Word 다운로드 완료');
 }
 
+
+// ═══════════ KIPRIS API Key 설정 연동 (v5.3) ═══════════
+(function patchKiprisKeySettings(){
+  // openProfileSettings 패치: 모달 열 때 KIPRIS 키도 표시
+  const origOpen=window.openProfileSettings;
+  window.openProfileSettings=function(){
+    if(origOpen)origOpen.apply(this,arguments);
+    const ki=document.getElementById('kiprisApiKeyInput');
+    if(ki)ki.value=localStorage.getItem('kipris_api_key')||localStorage.getItem('tm_kipris_api_key')||'';
+  };
+  // saveProfileSettings 패치: 저장 시 KIPRIS 키도 저장
+  const origSave=window.saveProfileSettings;
+  window.saveProfileSettings=function(){
+    const ki=document.getElementById('kiprisApiKeyInput');
+    if(ki){
+      const v=ki.value.trim();
+      if(v){
+        localStorage.setItem('kipris_api_key',v);
+        localStorage.setItem('tm_kipris_api_key',v); // trademark.js 동기화
+        if(window.TM&&TM.kiprisConfig)TM.kiprisConfig.apiKey=v;
+      }else{
+        localStorage.removeItem('kipris_api_key');
+        localStorage.removeItem('tm_kipris_api_key');
+      }
+    }
+    if(origSave)origSave.apply(this,arguments);
+  };
+})();
 
 // ═══════════ DASHBOARD HOOK + INIT ═══════════
 App._onDashboard = function(){ loadDashboardProjects(); loadGlobalRefFromStorage(); };
