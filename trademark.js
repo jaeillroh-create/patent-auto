@@ -669,7 +669,7 @@
       App.showToast('KIPRIS API 키가 저장되었습니다.', 'success');
     } else {
       localStorage.removeItem('tm_kipris_api_key');
-      TM.kiprisConfig.apiKey = 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE='; // 기본값
+      TM.kiprisConfig.apiKey = 'zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY='; // 기본값
       App.showToast('기본 API 키로 복원되었습니다.', 'info');
     }
     
@@ -2160,15 +2160,15 @@
       
       let goodsHtml = '';
       if (recGoods.length > 0) {
-        const goodsTags = recGoods.slice(0, 3).map(g => {
+        // ★ 추천 지정상품 전체(10개) 노출
+        const goodsTags = recGoods.map(g => {
           const name = g.name || g;
-          const displayName = name.length > 15 ? name.slice(0, 15) + '..' : name;
-          return '<span class="tag" style="padding: 1px 4px;">' + TM.escapeHtml(displayName) + '</span>';
+          const displayName = name.length > 20 ? name.slice(0, 20) + '..' : name;
+          return '<span class="tag" style="padding: 2px 6px; background: #f0f4ff; border-radius: 3px; font-size: 11px; display: inline-block; margin: 1px 2px;">' + TM.escapeHtml(displayName) + '</span>';
         }).join('');
-        const moreCount = recGoods.length > 3 ? '<span class="more">+' + (recGoods.length - 3) + '</span>' : '';
-        goodsHtml = '<div class="tm-ai-rec-goods" style="margin-top: 4px; font-size: 11px;">' +
-          '<span class="label" style="margin-right: 4px;">추천 지정상품:</span>' +
-          goodsTags + moreCount + '</div>';
+        goodsHtml = '<div class="tm-ai-rec-goods" style="margin-top: 6px; font-size: 11px; line-height: 1.8;">' +
+          '<span class="label" style="margin-right: 4px; font-weight: 600; color: #555;">추천 지정상품(' + recGoods.length + '):</span>' +
+          goodsTags + '</div>';
       }
       
       const actionHtml = isAdded 
@@ -2237,15 +2237,15 @@
         
         let goodsHtml = '';
         if (recGoods.length > 0) {
-          const goodsTags = recGoods.slice(0, 2).map(g => {
+          // ★ 추천 지정상품 전체(10개) 노출
+          const goodsTags = recGoods.map(g => {
             const name = g.name || g;
-            const displayName = name.length > 12 ? name.slice(0, 12) + '..' : name;
-            return '<span class="tag" style="padding: 1px 4px;">' + TM.escapeHtml(displayName) + '</span>';
+            const displayName = name.length > 20 ? name.slice(0, 20) + '..' : name;
+            return '<span class="tag" style="padding: 2px 6px; background: #f0f4ff; border-radius: 3px; font-size: 11px; display: inline-block; margin: 1px 2px;">' + TM.escapeHtml(displayName) + '</span>';
           }).join('');
-          const moreCount = recGoods.length > 2 ? '<span class="more">+' + (recGoods.length - 2) + '</span>' : '';
-          goodsHtml = '<div class="tm-ai-rec-goods" style="margin-top: 4px; font-size: 11px;">' +
-            '<span class="label" style="margin-right: 4px;">추천 지정상품:</span>' +
-            goodsTags + moreCount + '</div>';
+          goodsHtml = '<div class="tm-ai-rec-goods" style="margin-top: 6px; font-size: 11px; line-height: 1.8;">' +
+            '<span class="label" style="margin-right: 4px; font-weight: 600; color: #555;">추천 지정상품(' + recGoods.length + '):</span>' +
+            goodsTags + '</div>';
         }
         
         const actionHtml = isAdded 
@@ -2351,9 +2351,31 @@
             '<div style="font-size: 11px; font-weight: 600; color: #2563eb; margin-bottom: 6px;">💡 추가 권장 류</div>';
           addClassSuggestions.forEach(s => {
             const priorityBadge = s.priority === '핵심' ? '🔴' : s.priority === '권장' ? '🟠' : '🟢';
-            html += '<div style="font-size: 11px; color: #1e40af; padding: 6px 10px; background: #eff6ff; border-radius: 6px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #3b82f6;">' +
-              '<span>' + priorityBadge + ' <strong>제' + s.class + '류</strong>: ' + TM.escapeHtml(s.reason) + '</span>' +
-              '<button class="btn btn-sm" style="padding: 3px 10px; font-size: 10px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;" data-action="tm-add-class" data-class-code="' + s.class + '">+ 추가</button>' +
+            const isAdded = p.designatedGoods.some(g => g.classCode === s.class);
+            
+            // ★ 해당 류의 추천 지정상품 표시
+            const recGoods = p.aiAnalysis?.recommendedGoods?.[s.class] || [];
+            let goodsLine = '';
+            if (recGoods.length > 0) {
+              const tags = recGoods.map(g => {
+                const name = g.name || g;
+                const dn = name.length > 18 ? name.slice(0, 18) + '..' : name;
+                return '<span style="padding: 1px 5px; background: #dbeafe; border-radius: 3px; font-size: 10px; display: inline-block; margin: 1px 1px;">' + TM.escapeHtml(dn) + '</span>';
+              }).join('');
+              goodsLine = '<div style="margin-top: 4px; line-height: 1.7;">' +
+                '<span style="font-size: 10px; font-weight: 600; color: #3b82f6;">추천 지정상품(' + recGoods.length + '):</span> ' + tags + '</div>';
+            }
+            
+            const actionBtn = isAdded
+              ? '<span style="font-size: 10px; color: #28a745; white-space: nowrap;">✓적용됨</span>'
+              : '<button class="btn btn-sm" style="padding: 3px 10px; font-size: 10px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;" data-action="tm-add-class" data-class-code="' + s.class + '">+ 추가</button>';
+            
+            html += '<div style="font-size: 11px; color: #1e40af; padding: 8px 10px; background: #eff6ff; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #3b82f6;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+                '<span>' + priorityBadge + ' <strong>제' + s.class + '류</strong>: ' + TM.escapeHtml(s.reason) + '</span>' +
+                actionBtn +
+              '</div>' +
+              goodsLine +
             '</div>';
           });
           html += '</div>';
@@ -2643,24 +2665,102 @@
     `;
   };
   
-  TM.addClass = function(classCode) {
+  TM.addClass = async function(classCode) {
     if (!TM.currentProject) return;
     
+    const p = TM.currentProject;
+    
     // 이미 선택되어 있으면 무시
-    if (TM.currentProject.designatedGoods.some(g => g.classCode === classCode)) {
+    if (p.designatedGoods.some(g => g.classCode === classCode)) {
       return;
     }
     
-    TM.currentProject.designatedGoods.push({
-      classCode: classCode,
-      className: TM.niceClasses[classCode],
-      goods: [],
-      goodsCount: 0,
-      nonGazettedCount: 0
-    });
+    // ★ 이미 추천된 지정상품이 있으면 그것을 사용
+    const existingGoods = p.aiAnalysis?.recommendedGoods?.[classCode] || [];
     
-    TM.renderCurrentStep();
-    TM.initGoodsAutocomplete(classCode);
+    if (existingGoods.length > 0) {
+      p.designatedGoods.push({
+        classCode: classCode,
+        className: TM.niceClasses[classCode],
+        goods: existingGoods.map(g => ({
+          name: typeof g === 'string' ? g : (g.name || g),
+          similarGroup: typeof g === 'string' ? '' : (g.similarGroup || ''),
+          gazetted: true
+        })),
+        goodsCount: existingGoods.length,
+        nonGazettedCount: 0
+      });
+      TM.hasUnsavedChanges = true;
+      TM.renderCurrentStep();
+      App.showToast(`제${classCode}류가 추가되었습니다. (${existingGoods.length}개 상품)`, 'success');
+      return;
+    }
+    
+    // ★ 추천 지정상품이 없으면 실시간으로 10개 추천
+    try {
+      App.showToast(`제${classCode}류 지정상품 추천 중...`, 'info');
+      
+      const paddedCode = classCode.padStart(2, '0');
+      const allKeywords = p.aiAnalysis?.searchKeywords || [];
+      const analysis = {
+        businessSummary: p.aiAnalysis?.businessAnalysis || '',
+        businessTypes: p.aiAnalysis?.businessTypes || [],
+        coreProducts: p.aiAnalysis?.coreProducts || [],
+        coreServices: p.aiAnalysis?.coreServices || [],
+        salesChannels: p.aiAnalysis?.salesChannels || {},
+        expansionPotential: p.aiAnalysis?.expansionPotential || [],
+        searchKeywords: allKeywords
+      };
+      
+      const candidates = await TM.fetchOptimalCandidates(paddedCode, allKeywords, analysis);
+      let selectedGoods = [];
+      
+      if (candidates.length > 0) {
+        selectedGoods = await TM.selectOptimalGoods(
+          classCode, candidates,
+          p.aiAnalysis?.businessAnalysis || '',
+          analysis
+        );
+      }
+      
+      // 추천 결과 저장
+      if (p.aiAnalysis) {
+        if (!p.aiAnalysis.recommendedGoods) p.aiAnalysis.recommendedGoods = {};
+        p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
+      }
+      
+      p.designatedGoods.push({
+        classCode: classCode,
+        className: TM.niceClasses[classCode],
+        goods: selectedGoods.map(g => ({
+          name: typeof g === 'string' ? g : (g.name || g),
+          similarGroup: typeof g === 'string' ? '' : (g.similarGroup || ''),
+          gazetted: true
+        })),
+        goodsCount: selectedGoods.length,
+        nonGazettedCount: 0
+      });
+      
+      TM.hasUnsavedChanges = true;
+      TM.renderCurrentStep();
+      TM.initGoodsAutocomplete(classCode);
+      App.showToast(`제${classCode}류가 추가되었습니다. (${selectedGoods.length}개 상품)`, 'success');
+      
+    } catch (err) {
+      console.error(`[TM] addClass 제${classCode}류 지정상품 추천 실패:`, err);
+      // 실패해도 빈 류로 추가
+      p.designatedGoods.push({
+        classCode: classCode,
+        className: TM.niceClasses[classCode],
+        goods: [],
+        goodsCount: 0,
+        nonGazettedCount: 0
+      });
+      TM.hasUnsavedChanges = true;
+      TM.renderCurrentStep();
+      TM.initGoodsAutocomplete(classCode);
+      App.showToast(`제${classCode}류가 추가되었습니다. (지정상품은 수동 추가 필요)`, 'warning');
+    }
   };
   
   TM.removeClass = function(classCode) {
@@ -5178,7 +5278,7 @@
     
     // KIPRIS API 키 확인
     const apiKey = TM.kiprisConfig?.apiKey || '';
-    const defaultKey = 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE=';
+    const defaultKey = 'zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
     const hasCustomApiKey = apiKey && apiKey !== defaultKey;
     
     const apiKeyWarning = !hasCustomApiKey ? `
@@ -5576,7 +5676,7 @@ notes는 평가 근거를 3-4문장으로 서술.
     
     // KIPRIS API 키 확인
     const apiKey = TM.kiprisConfig?.apiKey || '';
-    const defaultKey = 'OhEw2v=FGMxkbJw7e7=8gUyhRk9ai=M83hR=c8soGRE=';
+    const defaultKey = 'zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
     const hasCustomApiKey = apiKey && apiKey !== defaultKey;
     
     const apiKeyWarning = !hasCustomApiKey ? `
@@ -8456,11 +8556,12 @@ ${TM.PRACTICE_GUIDELINES}
       };
       
       // ================================================================
-      // 핵심+권장 류에 대해서만 지정상품 선택 (확장은 사용자 요청 시)
+      // ★ 모든 추천 류(핵심+권장+확장)에 대해 지정상품 10개 선택
       // ================================================================
       const initialClasses = [
         ...coreClasses.map(c => c.class),
-        ...recommendedClasses.map(c => c.class)
+        ...recommendedClasses.map(c => c.class),
+        ...expansionClasses.map(c => c.class)
       ];
       
       for (const classCode of initialClasses) {
@@ -9100,6 +9201,38 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
           priority: c.priority
         })));
         console.log(`[TM] 누락된 류 발견: ${missingResult.missingClasses.map(c => c.class).join(', ')}`);
+        
+        // ★ 누락된 류에 대해 지정상품 10개 미리 추천
+        const allKeywords = aiAnalysis.searchKeywords || [];
+        const analysisCtx = {
+          businessSummary: aiAnalysis.businessAnalysis,
+          businessTypes: aiAnalysis.businessTypes,
+          coreProducts: aiAnalysis.coreProducts,
+          coreServices: aiAnalysis.coreServices,
+          salesChannels: aiAnalysis.salesChannels,
+          expansionPotential: aiAnalysis.expansionPotential,
+          searchKeywords: allKeywords
+        };
+        
+        for (const mc of missingResult.missingClasses) {
+          const classCode = mc.class;
+          if (aiAnalysis.recommendedGoods?.[classCode]?.length > 0) continue; // 이미 있으면 스킵
+          
+          try {
+            const paddedCode = classCode.padStart(2, '0');
+            const candidates = await TM.fetchOptimalCandidates(paddedCode, allKeywords, analysisCtx);
+            if (candidates.length > 0) {
+              const selectedGoods = await TM.selectOptimalGoods(classCode, candidates, aiAnalysis.businessAnalysis || '', analysisCtx);
+              aiAnalysis.recommendedGoods[classCode] = selectedGoods;
+              console.log(`[TM] 누락 류 제${classCode}류 지정상품 ${selectedGoods.length}개 추천 완료`);
+            } else {
+              aiAnalysis.recommendedGoods[classCode] = [];
+            }
+          } catch (goodsErr) {
+            console.warn(`[TM] 누락 류 제${classCode}류 지정상품 추천 실패:`, goodsErr);
+            aiAnalysis.recommendedGoods[classCode] = [];
+          }
+        }
       }
       
       if (missingResult.missingGoods?.length > 0) {
