@@ -3852,14 +3852,16 @@ function downloadAsWord(){
 (function patchKiprisKeySettings(){
   // openProfileSettings 패치: 모달 열 때 KIPRIS 키도 표시
   const origOpen=window.openProfileSettings;
-  window.openProfileSettings=function(){
+  const wrappedOpen=function(){
     if(origOpen)origOpen.apply(this,arguments);
     const ki=document.getElementById('kiprisApiKeyInput');
     if(ki)ki.value=localStorage.getItem('kipris_api_key')||localStorage.getItem('tm_kipris_api_key')||'';
   };
+  window.openProfileSettings=wrappedOpen;
+  if(App)App.openProfileSettings=wrappedOpen;
   // saveProfileSettings 패치: 저장 시 KIPRIS 키도 저장
   const origSave=window.saveProfileSettings;
-  window.saveProfileSettings=function(){
+  const wrappedSave=function(){
     const ki=document.getElementById('kiprisApiKeyInput');
     if(ki){
       const v=ki.value.trim();
@@ -3874,6 +3876,8 @@ function downloadAsWord(){
     }
     if(origSave)origSave.apply(this,arguments);
   };
+  window.saveProfileSettings=wrappedSave;
+  if(App)App.saveProfileSettings=wrappedSave;
 })();
 
 // ═══════════ DASHBOARD HOOK + INIT ═══════════
