@@ -751,6 +751,7 @@
     
     if (newApiKey) {
       TM.kiprisConfig.apiKey = newApiKey;
+      console.log('[TM] KIPRIS 키 저장:', newApiKey.slice(0,8) + '... → TM.kiprisConfig에 반영됨');
       
       // ★ 프로필(Supabase)에 계정별 저장
       TM.saveKiprisKeyToProfile(newApiKey);
@@ -4588,7 +4589,10 @@
       
       // 동시성 제한 + 재시도 적용
       return await TM.throttledCall(() => TM.withRetry(async () => {
+        const currentKey = TM.kiprisConfig.apiKey || '(없음)';
+        const defaultKey = 'zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
         console.log('[KIPRIS] 📡 Edge Function 호출...');
+        console.log('[KIPRIS] 🔑 사용 키:', currentKey === defaultKey ? '⚠️ 기본키' : '✅ 사용자키 (' + currentKey.slice(0,8) + '...)');
         
         const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
           body: { 
