@@ -8113,153 +8113,653 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
   
   TM.downloadDocx = async function() {
     try {
-      App.showToast('Word 문서 생성 중...', 'info');
+      App.showToast('검토 보고서 생성 중...', 'info');
       
       const p = TM.currentProject;
-      const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, AlignmentType, BorderStyle } = window.docx;
+      if (!p || !p.trademarkName) {
+        App.showToast('프로젝트 정보가 없습니다.', 'warning');
+        return;
+      }
+      
+      // docx 라이브러리 로드 (CDN)
+      if (!window.docx) {
+        console.log('[TM] docx 라이브러리 로드 중...');
+        await TM.loadScript('https://unpkg.com/docx@8.2.2/build/index.umd.js');
+        let retries = 0;
+        while (!window.docx && retries < 20) {
+          await new Promise(r => setTimeout(r, 100));
+          retries++;
+        }
+        if (!window.docx) {
+          throw new Error('docx 라이브러리 로드 실패. 네트워크를 확인하세요.');
+        }
+        console.log('[TM] docx 라이브러리 로드 완료');
+      }
+      
+      const {
+        Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+        Header, Footer, AlignmentType, HeadingLevel, BorderStyle, WidthType,
+        ShadingType, VerticalAlign, PageNumber, PageBreak
+      } = window.docx;
+      
+      // ─── 색상 ───
+      const C = {
+        primary: '1B3A5C', accent: '2563EB', danger: 'DC2626', warning: 'D97706',
+        success: '059669', lightBg: 'F0F4F8', headerBg: '1B3A5C', headerText: 'FFFFFF',
+        tableBorder: 'CBD5E1', lightGreen: 'ECFDF5', lightRed: 'FEF2F2',
+        lightYellow: 'FFFBEB', lightBlue: 'EFF6FF', gray600: '475569', gray400: '94A3B8', black: '000000'
+      };
+      
+      const border = { style: BorderStyle.SINGLE, size: 1, color: C.tableBorder };
+      const borders = { top: border, bottom: border, left: border, right: border };
+      const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+      const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
+      const cellM = { top: 60, bottom: 60, left: 100, right: 100 };
+      const TABLE_W = 9506; // A4 - margins
+      
+      // ─── 셀 헬퍼 ───
+      function hCell(text, w, opts = {}) {
+        return new TableCell({
+          borders, width: { size: w, type: WidthType.DXA },
+          shading: { fill: C.headerBg, type: ShadingType.CLEAR },
+          verticalAlign: VerticalAlign.CENTER, margins: cellM,
+          children: [new Paragraph({ alignment: opts.align || AlignmentType.CENTER, spacing: { before: 20, after: 20 },
+            children: [new TextRun({ text: String(text), bold: true, font: 'Arial', size: 18, color: C.headerText })]
+          })]
+        });
+      }
+      function dCell(text, w, opts = {}) {
+        return new TableCell({
+          borders, width: { size: w, type: WidthType.DXA },
+          shading: opts.bg ? { fill: opts.bg, type: ShadingType.CLEAR } : undefined,
+          verticalAlign: VerticalAlign.CENTER, margins: cellM, columnSpan: opts.colSpan || 1,
+          children: [new Paragraph({ alignment: opts.align || AlignmentType.LEFT, spacing: { before: 20, after: 20 },
+            children: [new TextRun({ text: String(text || '-'), bold: opts.bold || false, font: 'Arial', size: 18, color: opts.color || C.black })]
+          })]
+        });
+      }
+      function lCell(text, w) {
+        return new TableCell({
+          borders, width: { size: w, type: WidthType.DXA },
+          shading: { fill: C.lightBg, type: ShadingType.CLEAR },
+          verticalAlign: VerticalAlign.CENTER, margins: cellM,
+          children: [new Paragraph({ spacing: { before: 20, after: 20 },
+            children: [new TextRun({ text, bold: true, font: 'Arial', size: 18, color: C.primary })]
+          })]
+        });
+      }
+      function secTitle(num, title) {
+        return new Paragraph({
+          spacing: { before: 360, after: 200 },
+          border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: C.primary, space: 8 } },
+          children: [
+            new TextRun({ text: `${num}. `, font: 'Arial', size: 26, bold: true, color: C.accent }),
+            new TextRun({ text: title, font: 'Arial', size: 26, bold: true, color: C.primary })
+          ]
+        });
+      }
+      function bodyP(text, opts = {}) {
+        return new Paragraph({
+          spacing: { before: opts.before || 80, after: opts.after || 80, line: 320 },
+          children: [new TextRun({ text, font: 'Arial', size: 20, color: opts.color || C.black, bold: opts.bold || false })]
+        });
+      }
+      function gap(h = 100) { return new Paragraph({ spacing: { before: h, after: 0 }, children: [] }); }
+      function subHead(text) {
+        return new Paragraph({ spacing: { before: 200, after: 80 },
+          children: [new TextRun({ text, font: 'Arial', size: 20, bold: true, color: C.primary })]
+        });
+      }
+      function noteBox(text, opts = {}) {
+        return new Table({
+          width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [TABLE_W],
+          rows: [new TableRow({ children: [new TableCell({
+            borders, width: { size: TABLE_W, type: WidthType.DXA },
+            shading: { fill: opts.bg || C.lightYellow, type: ShadingType.CLEAR },
+            margins: { top: 80, bottom: 80, left: 140, right: 140 },
+            children: [new Paragraph({ spacing: { before: 20, after: 20 }, children: [
+              new TextRun({ text: opts.prefix || '', font: 'Arial', size: 17, bold: true, color: opts.prefixColor || C.warning }),
+              new TextRun({ text, font: 'Arial', size: 17, color: opts.textColor || C.black })
+            ]})]
+          })] })]
+        });
+      }
+      
+      // ─── 데이터 준비 ───
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}년 ${today.getMonth()+1}월 ${today.getDate()}일`;
+      const refNo = `TM-${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
+      const firmName = TM.settings?.firmName || '특허법률사무소 디딤';
+      const firmNameEn = TM.settings?.firmNameEn || 'PATENT GROUP DIDIM';
+      const attorney = TM.settings?.attorneyName || p.applicant?.name || '담당 변리사';
+      
+      const risk = p.riskAssessment || {};
+      const fee = p.feeCalculation || {};
+      const validation = p.aiAnalysis?.validation || {};
+      const searchResults = p.searchResults || {};
+      const designatedGoods = p.designatedGoods || [];
+      const totalGoods = designatedGoods.reduce((s, g) => s + (g.goods?.length || 0), 0);
+      
+      // 검색결과 분석
+      const textResults = searchResults.text || [];
+      const groupOverlap = textResults.filter(r => r.hasGroupOverlap);
+      const noOverlap = textResults.filter(r => !r.hasGroupOverlap);
+      const critical = groupOverlap.filter(r => r.riskLevel === 'critical' || r.riskLevel === 'high');
+      const medium = groupOverlap.filter(r => r.riskLevel === 'medium');
+      const safe = groupOverlap.filter(r => r.riskLevel === 'low' || r.riskLevel === 'safe');
       
       const children = [];
       
-      // 제목
-      children.push(new Paragraph({
-        text: '상표 출원 검토 보고서',
-        heading: HeadingLevel.TITLE,
-        alignment: AlignmentType.CENTER
+      // ═══════════════ 표지 ═══════════════
+      children.push(gap(1200));
+      children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 },
+        children: [new TextRun({ text: firmName, font: 'Arial', size: 36, bold: true, color: C.primary })]
       }));
-      
-      children.push(new Paragraph({
-        text: `작성일: ${new Date().toLocaleDateString('ko-KR')}`,
-        alignment: AlignmentType.CENTER
+      children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20 },
+        children: [new TextRun({ text: firmNameEn, font: 'Arial', size: 22, color: C.gray400 })]
       }));
-      
-      children.push(new Paragraph({ text: '' }));
-      
-      // 개요
-      children.push(new Paragraph({
-        text: '1. 프로젝트 개요',
-        heading: HeadingLevel.HEADING_1
+      children.push(gap(500));
+      children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 120 },
+        children: [new TextRun({ text: '상표 출원 검토 보고서', font: 'Arial', size: 48, bold: true, color: C.primary })]
       }));
+      children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 },
+        children: [new TextRun({ text: 'Trademark Application Review Report', font: 'Arial', size: 22, color: C.gray400, italics: true })]
+      }));
+      children.push(gap(600));
       
-      children.push(new Paragraph({
-        children: [
-          new TextRun({ text: '상표명: ', bold: true }),
-          new TextRun(p.trademarkName || '-')
+      // 표지 하단 정보
+      const coverRows = [
+        ['문서번호', refNo],
+        ['작 성 일', dateStr],
+        ['출원상표', `${p.trademarkName || '-'}${p.trademarkNameEn ? ' / ' + p.trademarkNameEn : ''}`],
+        ['출 원 인', p.applicant?.name || '-'],
+        ['담당변리사', attorney],
+      ];
+      children.push(new Table({
+        width: { size: 5400, type: WidthType.DXA }, columnWidths: [2000, 3400],
+        alignment: AlignmentType.CENTER,
+        rows: coverRows.map(([l, v]) => new TableRow({ children: [
+          new TableCell({ borders: noBorders, width: { size: 2000, type: WidthType.DXA }, margins: cellM,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT,
+              children: [new TextRun({ text: l, font: 'Arial', size: 20, bold: true, color: C.primary })]
+            })]
+          }),
+          new TableCell({ borders: noBorders, width: { size: 3400, type: WidthType.DXA }, margins: cellM,
+            children: [new Paragraph({
+              children: [new TextRun({ text: v, font: 'Arial', size: 20, color: C.black })]
+            })]
+          })
+        ]}))
+      }));
+      children.push(gap(500));
+      children.push(new Paragraph({ alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text: '본 보고서는 의뢰인에 대한 법률 검토 의견으로서 비밀 유지 대상입니다.', font: 'Arial', size: 16, color: C.gray400, italics: true })]
+      }));
+      children.push(new Paragraph({ children: [new PageBreak()] }));
+      
+      // ═══════════════ I. 검토 요약 ═══════════════
+      children.push(secTitle('I', '검토 요약 (Executive Summary)'));
+      
+      const riskLabel = risk.level === 'high' ? '높음 (HIGH)' : risk.level === 'medium' ? '중간 (MEDIUM)' : risk.level ? '낮음 (LOW)' : '미평가';
+      const riskColor = risk.level === 'high' ? C.danger : risk.level === 'medium' ? C.warning : C.success;
+      
+      children.push(new Table({
+        width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [2400, 7106],
+        rows: [
+          new TableRow({ children: [ lCell('출원상표', 2400), dCell(`${p.trademarkName || '-'}${p.trademarkNameEn ? ' (' + p.trademarkNameEn + ')' : ''}`, 7106, { bold: true }) ] }),
+          new TableRow({ children: [ lCell('상표 유형', 2400), dCell(TM.getTypeLabel(p.trademarkType), 7106) ] }),
+          new TableRow({ children: [ lCell('지정상품류', 2400), dCell(designatedGoods.map(g => `제${g.classCode}류(${g.className || TM.niceClasses?.[g.classCode] || ''})`).join(', ') || '미선택', 7106) ] }),
+          new TableRow({ children: [ lCell('총 지정상품 수', 2400), dCell(`${totalGoods}개 (${designatedGoods.length}개 류)`, 7106) ] }),
+          new TableRow({ children: [ lCell('리스크 수준', 2400), dCell(riskLabel, 7106, { bold: true, color: riskColor }) ] }),
+          new TableRow({ children: [ lCell('충돌 우려 상표', 2400), dCell(`${risk.conflictCount || critical.length || 0}건 (유사군 중복 기준)`, 7106, { color: C.danger }) ] }),
+          ...(validation.overallScore ? [new TableRow({ children: [ lCell('AI 검증 정확도', 2400), dCell(`${validation.overallScore}%${validation.summary ? ' — ' + validation.summary : ''}`, 7106) ] })] : []),
+          ...(fee.totalFee ? [new TableRow({ children: [ lCell('예상 출원비용', 2400), dCell(`${TM.formatNumber(fee.totalFee)}원`, 7106, { bold: true }) ] })] : []),
+          ...(risk.recommendation ? [new TableRow({ children: [ lCell('종합 의견', 2400), dCell(risk.recommendation.slice(0, 300), 7106) ] })] : []),
         ]
       }));
       
-      children.push(new Paragraph({
-        children: [
-          new TextRun({ text: '상표 유형: ', bold: true }),
-          new TextRun(TM.getTypeLabel(p.trademarkType))
+      // ═══════════════ II. 출원인 정보 ═══════════════
+      children.push(secTitle('II', '출원인 정보'));
+      children.push(new Table({
+        width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [2400, 2353, 2400, 2353],
+        rows: [
+          new TableRow({ children: [
+            lCell('출원인 명칭', 2400), dCell(p.applicant?.name || '-', 2353),
+            lCell('대표자', 2400), dCell(p.applicant?.representative || '-', 2353)
+          ] }),
+          new TableRow({ children: [
+            lCell('사업자번호', 2400), dCell(p.applicant?.bizNumber || '-', 2353),
+            lCell('주소', 2400), dCell(p.applicant?.address || '-', 2353)
+          ] }),
         ]
       }));
       
-      children.push(new Paragraph({
-        children: [
-          new TextRun({ text: '출원인: ', bold: true }),
-          new TextRun(p.applicant?.name || '-')
-        ]
-      }));
-      
-      // 지정상품
-      if (p.designatedGoods?.length > 0) {
-        children.push(new Paragraph({ text: '' }));
-        children.push(new Paragraph({
-          text: '2. 지정상품',
-          heading: HeadingLevel.HEADING_1
-        }));
+      // ═══════════════ III. 사업 분석 ═══════════════
+      if (p.aiAnalysis?.businessAnalysis) {
+        children.push(secTitle('III', '사업 분석 결과'));
+        children.push(bodyP('AI 사업 분석 시스템이 출원인의 사업 내용을 분석한 결과는 아래와 같습니다.'));
         
-        p.designatedGoods.forEach(classData => {
-          children.push(new Paragraph({
-            text: `제${classData.classCode}류 - ${classData.className}`,
-            heading: HeadingLevel.HEADING_2
-          }));
-          
-          classData.goods.forEach(g => {
-            children.push(new Paragraph({
-              text: `• ${g.name}${!g.gazetted ? ' (비고시)' : ''}`,
-              bullet: { level: 0 }
-            }));
-          });
-        });
-      }
-      
-      // 리스크 평가
-      if (p.riskAssessment?.level) {
-        children.push(new Paragraph({ text: '' }));
-        children.push(new Paragraph({
-          text: '3. 리스크 평가',
-          heading: HeadingLevel.HEADING_1
-        }));
-        
-        children.push(new Paragraph({
-          children: [
-            new TextRun({ text: '위험 수준: ', bold: true }),
-            new TextRun(p.riskAssessment.level === 'high' ? '높음' : p.riskAssessment.level === 'medium' ? '중간' : '낮음')
+        const ana = p.aiAnalysis;
+        children.push(new Table({
+          width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [2400, 7106],
+          rows: [
+            new TableRow({ children: [ lCell('사업 내용', 2400), dCell(ana.businessAnalysis || '-', 7106) ] }),
+            ...(ana.coreProducts?.length ? [new TableRow({ children: [ lCell('핵심 상품', 2400), dCell(ana.coreProducts.join(', '), 7106) ] })] : []),
+            ...(ana.coreServices?.length ? [new TableRow({ children: [ lCell('핵심 서비스', 2400), dCell(ana.coreServices.join(', '), 7106) ] })] : []),
+            ...(ana.businessTypes?.length ? [new TableRow({ children: [ lCell('사업 유형', 2400), dCell(ana.businessTypes.join(', '), 7106) ] })] : []),
+            ...(ana.expansionPotential?.length ? [new TableRow({ children: [ lCell('확장 가능 분야', 2400), dCell(ana.expansionPotential.join(', '), 7106) ] })] : []),
           ]
         }));
+      }
+      
+      // ═══════════════ IV. 지정상품 상세 ═══════════════
+      if (designatedGoods.length > 0) {
+        children.push(secTitle('IV', '지정상품 상세'));
+        children.push(bodyP('각 상품류별 지정상품 내역입니다. 모든 지정상품은 특허청 고시명칭 기준이며, 비고시명칭은 별도 표기하였습니다.'));
+        children.push(gap(40));
         
-        if (p.riskAssessment.recommendation) {
-          children.push(new Paragraph({
-            children: [
-              new TextRun({ text: '권고사항: ', bold: true }),
-              new TextRun(p.riskAssessment.recommendation)
-            ]
-          }));
+        for (const classData of designatedGoods) {
+          children.push(new Paragraph({ spacing: { before: 200, after: 100 }, children: [
+            new TextRun({ text: `제${classData.classCode}류`, font: 'Arial', size: 22, bold: true, color: C.accent }),
+            new TextRun({ text: ` — ${classData.className || TM.niceClasses?.[classData.classCode] || ''}`, font: 'Arial', size: 22, color: C.primary }),
+            new TextRun({ text: `  (${classData.goods?.length || 0}개)`, font: 'Arial', size: 18, color: C.gray400 }),
+          ] }));
+          
+          const gRows = [new TableRow({ children: [
+            hCell('No.', 600), hCell('지정상품(서비스)명', 5506), hCell('유사군코드', 1600), hCell('고시여부', 1800)
+          ] })];
+          
+          (classData.goods || []).forEach((g, idx) => {
+            const nonG = !g.gazetted;
+            const bg = nonG ? C.lightYellow : (idx % 2 === 0 ? undefined : 'F8FAFC');
+            gRows.push(new TableRow({ children: [
+              dCell(String(idx + 1), 600, { align: AlignmentType.CENTER, bg }),
+              dCell(g.name, 5506, { bg, color: nonG ? C.warning : C.black }),
+              dCell(g.similarGroup || '-', 1600, { align: AlignmentType.CENTER, bg }),
+              dCell(nonG ? '비고시' : '고시명칭', 1800, { align: AlignmentType.CENTER, bg, color: nonG ? C.danger : C.success }),
+            ] }));
+          });
+          
+          children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [600, 5506, 1600, 1800], rows: gRows }));
+        }
+        
+        // 비고시 경고
+        const nonGazettedGoods = designatedGoods.flatMap(c => (c.goods || []).filter(g => !g.gazetted).map(g => `"${g.name}"(제${c.classCode}류)`));
+        if (nonGazettedGoods.length > 0) {
+          children.push(gap(60));
+          children.push(noteBox(
+            `${nonGazettedGoods.join(', ')}은(는) 비고시명칭입니다. 심사관 판단에 따라 보정 요구가 있을 수 있습니다.`,
+            { prefix: '⚠ 유의사항: ' }
+          ));
         }
       }
       
-      // 비용 명세
-      if (p.feeCalculation?.totalFee) {
-        children.push(new Paragraph({ text: '' }));
-        children.push(new Paragraph({
-          text: '4. 비용 명세',
-          heading: HeadingLevel.HEADING_1
+      // ═══════════════ V. AI 3단계 검증 ═══════════════
+      if (validation.overallScore) {
+        children.push(secTitle('V', 'AI 3단계 검증 결과'));
+        children.push(bodyP('AI 검증 시스템이 추천 상품류 및 지정상품의 적합성을 3단계로 검증한 결과입니다.'));
+        children.push(gap(40));
+        
+        // 검증 요약 테이블
+        const s1 = validation.stages?.classValidation;
+        const s2 = validation.stages?.goodsValidation;
+        const s3 = validation.stages?.missingReview;
+        
+        children.push(new Table({
+          width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [2400, 2369, 2369, 2368],
+          rows: [
+            new TableRow({ children: [ hCell('검증 항목', 2400), hCell('1단계: 류 검증', 2369), hCell('2단계: 상품 검증', 2369), hCell('3단계: 누락 검토', 2368) ] }),
+            new TableRow({ children: [
+              lCell('검증 내용', 2400),
+              dCell('추천 류가 사업 내용에 적합한지', 2369),
+              dCell('지정상품이 정확한 고시명칭인지', 2369),
+              dCell('누락된 류 또는 상품이 있는지', 2368),
+            ] }),
+            new TableRow({ children: [
+              lCell('결과', 2400),
+              dCell(validation.invalidClasses?.length ? `${validation.invalidClasses.length}건 부적합` : '적합', 2369, { color: validation.invalidClasses?.length ? C.danger : C.success }),
+              dCell(validation.invalidGoods?.length ? `${validation.invalidGoods.length}건 보정` : '적합', 2369, { color: validation.invalidGoods?.length ? C.warning : C.success }),
+              dCell(validation.missingClasses?.length ? `${validation.missingClasses.length}건 추가 권장` : '누락 없음', 2368, { color: validation.missingClasses?.length ? C.accent : C.success }),
+            ] }),
+          ]
         }));
         
-        children.push(new Paragraph({
-          children: [
-            new TextRun({ text: '총 납부액: ', bold: true }),
-            new TextRun(`${TM.formatNumber(p.feeCalculation.totalFee)}원`)
+        children.push(gap(60));
+        children.push(new Paragraph({ spacing: { before: 40, after: 100 }, children: [
+          new TextRun({ text: '종합 정확도: ', font: 'Arial', size: 20, bold: true, color: C.primary }),
+          new TextRun({ text: `${validation.overallScore}%`, font: 'Arial', size: 24, bold: true, color: C.success }),
+        ] }));
+        
+        // 제거된 류
+        if (validation.invalidClasses?.length > 0) {
+          children.push(subHead('제거된 상품류'));
+          const icRows = [new TableRow({ children: [ hCell('류', 1200), hCell('사유', 8306) ] })];
+          validation.invalidClasses.forEach(c => {
+            icRows.push(new TableRow({ children: [ dCell(`제${c.class}류`, 1200, { align: AlignmentType.CENTER, bg: C.lightRed, bold: true }), dCell(c.reason, 8306, { bg: C.lightRed }) ] }));
+          });
+          children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [1200, 8306], rows: icRows }));
+        }
+        
+        // 보정 내역
+        if (validation.invalidGoods?.length > 0 || validation.replacementGoods?.length > 0) {
+          children.push(subHead('보정 내역'));
+          const igRows = [new TableRow({ children: [ hCell('류', 1000), hCell('제거 상품', 3203), hCell('대체 상품', 3203), hCell('사유', 2100) ] })];
+          
+          (validation.replacementGoods || []).forEach(r => {
+            igRows.push(new TableRow({ children: [
+              dCell(`제${r.classCode}류`, 1000, { align: AlignmentType.CENTER }),
+              dCell(r.remove || r.goodsName || '-', 3203, { color: C.danger }),
+              dCell(r.addInstead || '-', 3203, { color: C.success, bold: true }),
+              dCell(r.reason || '-', 2100),
+            ] }));
+          });
+          (validation.invalidGoods || []).filter(g => !(validation.replacementGoods || []).some(r => r.classCode === g.classCode && r.remove === g.goodsName)).forEach(g => {
+            igRows.push(new TableRow({ children: [
+              dCell(`제${g.classCode}류`, 1000, { align: AlignmentType.CENTER }),
+              dCell(g.goodsName, 3203, { color: C.danger }),
+              dCell('-', 3203),
+              dCell(g.reason || '-', 2100),
+            ] }));
+          });
+          children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [1000, 3203, 3203, 2100], rows: igRows }));
+        }
+        
+        // 추가 권장 류
+        if (validation.missingClasses?.length > 0 || validation.suggestions?.filter(s => s.type === 'add_class')?.length > 0) {
+          children.push(subHead('추가 권장 류'));
+          const suggestions = validation.suggestions?.filter(s => s.type === 'add_class') || validation.missingClasses || [];
+          const mcRows = [new TableRow({ children: [ hCell('류', 1200), hCell('우선순위', 1800), hCell('추가 권장 사유', 6506) ] })];
+          suggestions.forEach(s => {
+            mcRows.push(new TableRow({ children: [
+              dCell(`제${s.class}류`, 1200, { align: AlignmentType.CENTER, bold: true }),
+              dCell(s.priority || '권장', 1800, { color: C.warning }),
+              dCell(s.reason || '-', 6506),
+            ] }));
+          });
+          children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [1200, 1800, 6506], rows: mcRows }));
+        }
+        
+        // 경고 사항
+        if (validation.warnings?.length > 0) {
+          children.push(subHead('확인 필요 사항'));
+          validation.warnings.forEach(w => {
+            children.push(noteBox(
+              `제${w.class}류: ${w.message}`,
+              { prefix: '⚠ ', bg: C.lightYellow }
+            ));
+          });
+        }
+      }
+      
+      // ═══════════════ VI. 선행상표 조사 ═══════════════
+      if (searchResults.searchedAt || textResults.length > 0) {
+        children.push(new Paragraph({ children: [new PageBreak()] }));
+        children.push(secTitle('VI', '선행상표 조사 결과'));
+        children.push(bodyP('KIPRIS(한국특허정보원) 데이터베이스를 기반으로 선행상표를 조사한 결과입니다. 유사군 코드 중복 여부를 기준으로 실질적 충돌 위험을 분석하였습니다.'));
+        children.push(gap(40));
+        
+        // 조사 요약
+        children.push(new Table({
+          width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [3169, 3169, 3168],
+          rows: [
+            new TableRow({ children: [ hCell('구분', 3169), hCell('건수', 3169), hCell('비고', 3168) ] }),
+            new TableRow({ children: [ lCell('총 검색 결과', 3169), dCell(`${textResults.length}건`, 3169, { align: AlignmentType.CENTER }), dCell('문자 + 도형 검색 통합', 3168) ] }),
+            new TableRow({ children: [ dCell('유사군 비중복 (안전)', 3169, { color: C.success }), dCell(`${noOverlap.length}건`, 3169, { align: AlignmentType.CENTER }), dCell('상표명 동일해도 등록 가능', 3168) ] }),
+            new TableRow({ children: [ dCell('유사군 중복 (검토 필요)', 3169, { color: C.warning, bold: true }), dCell(`${groupOverlap.length}건`, 3169, { align: AlignmentType.CENTER, bold: true }), dCell('아래 상세 분석 참조', 3168) ] }),
+          ]
+        }));
+        
+        // 위험등급별 분류
+        children.push(gap(40));
+        children.push(new Table({
+          width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [3500, 1506, 4500],
+          rows: [
+            new TableRow({ children: [ hCell('위험 등급', 3500), hCell('건수', 1506), hCell('의미', 4500) ] }),
+            new TableRow({ children: [ dCell('고위험 (유사군 중복 + 상표 유사)', 3500, { color: C.danger, bold: true, bg: C.lightRed }), dCell(`${critical.length}건`, 1506, { align: AlignmentType.CENTER, bold: true, color: C.danger, bg: C.lightRed }), dCell('거절 가능성 높음, 의견서 준비 필요', 4500, { bg: C.lightRed }) ] }),
+            new TableRow({ children: [ dCell('중위험 (유사군 중복 + 다소 유사)', 3500, { color: C.warning, bg: C.lightYellow }), dCell(`${medium.length}건`, 1506, { align: AlignmentType.CENTER, color: C.warning, bg: C.lightYellow }), dCell('심사관 판단 필요, 차별성 논거 준비', 4500, { bg: C.lightYellow }) ] }),
+            new TableRow({ children: [ dCell('저위험 (유사군 중복 + 상표 상이)', 3500, { color: C.success, bg: C.lightGreen }), dCell(`${safe.length}건`, 1506, { align: AlignmentType.CENTER, color: C.success, bg: C.lightGreen }), dCell('등록 가능성 높음', 4500, { bg: C.lightGreen }) ] }),
+          ]
+        }));
+        
+        // 충돌 상표 상세
+        const conflictAll = [...critical, ...medium].slice(0, 10);
+        if (conflictAll.length > 0) {
+          children.push(subHead('주요 충돌 우려 상표 상세'));
+          const cfRows = [new TableRow({ children: [
+            hCell('No.', 500), hCell('위험도', 1100), hCell('상표명', 2200), hCell('출원번호', 1806),
+            hCell('상태', 900), hCell('유사도', 1100), hCell('중복유사군', 1900)
+          ] })];
+          
+          conflictAll.forEach((r, idx) => {
+            const isCrit = idx < critical.length;
+            const bg = isCrit ? C.lightRed : C.lightYellow;
+            const tmName = r.title || r.trademarkName || r.name || '-';
+            const appNo = r.applicationNumber || r.appNo || '-';
+            const status = r.applicationStatus || r.status || '-';
+            const sim = r.scoreBreakdown?.text || r.textSim || '-';
+            const overlap = (r.overlappingGroups || []).join(', ') || r.groupOverlap || '-';
+            
+            cfRows.push(new TableRow({ children: [
+              dCell(String(idx + 1), 500, { align: AlignmentType.CENTER, bg }),
+              dCell(isCrit ? '고위험' : '중위험', 1100, { align: AlignmentType.CENTER, bg, color: isCrit ? C.danger : C.warning, bold: true }),
+              dCell(tmName, 2200, { bold: true, bg }),
+              dCell(appNo, 1806, { bg }),
+              dCell(status, 900, { align: AlignmentType.CENTER, bg }),
+              dCell(typeof sim === 'number' ? `${sim}%` : String(sim), 1100, { align: AlignmentType.CENTER, bg }),
+              dCell(overlap, 1900, { align: AlignmentType.CENTER, bg }),
+            ] }));
+          });
+          children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [500, 1100, 2200, 1806, 900, 1100, 1900], rows: cfRows }));
+        }
+      }
+      
+      // ═══════════════ VII. 리스크 종합 평가 ═══════════════
+      if (risk.level) {
+        children.push(secTitle('VII', '리스크 종합 평가'));
+        
+        const rBg = risk.level === 'high' ? C.lightRed : risk.level === 'medium' ? C.lightYellow : C.lightGreen;
+        const rLbl = risk.level === 'high' ? '높음 (HIGH) — 거절 가능성 상당' :
+                     risk.level === 'medium' ? '중간 (MEDIUM) — 심사관 판단에 따라 등록 가능' : '낮음 (LOW) — 등록 가능성 높음';
+        
+        // 리스크 배너
+        children.push(new Table({
+          width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [TABLE_W],
+          rows: [new TableRow({ children: [new TableCell({
+            borders, width: { size: TABLE_W, type: WidthType.DXA },
+            shading: { fill: rBg, type: ShadingType.CLEAR },
+            margins: { top: 120, bottom: 120, left: 200, right: 200 },
+            children: [
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 },
+                children: [new TextRun({ text: '종합 리스크 등급', font: 'Arial', size: 20, color: C.gray600 })]
+              }),
+              new Paragraph({ alignment: AlignmentType.CENTER,
+                children: [new TextRun({ text: rLbl, font: 'Arial', size: 28, bold: true, color: riskColor })]
+              }),
+            ]
+          })] })]
+        }));
+        
+        children.push(gap(60));
+        children.push(new Table({
+          width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [2400, 7106],
+          rows: [
+            new TableRow({ children: [ lCell('상세 분석', 2400), dCell(risk.details || '-', 7106) ] }),
+            new TableRow({ children: [ lCell('충돌 상표 수', 2400), dCell(`${risk.conflictCount || 0}건 (유사군 중복 + 상표 유사 기준)`, 7106, { bold: true, color: C.danger }) ] }),
           ]
         }));
       }
       
-      // 우선심사 설명서
-      if (p.priorityExam?.enabled && p.priorityExam?.generatedDocument) {
-        children.push(new Paragraph({ text: '' }));
-        children.push(new Paragraph({
-          text: '5. 우선심사 설명서',
-          heading: HeadingLevel.HEADING_1
-        }));
+      // ═══════════════ VIII. 권고사항 ═══════════════
+      if (risk.recommendation) {
+        children.push(secTitle('VIII', '권고사항'));
         
-        p.priorityExam.generatedDocument.split('\n').forEach(line => {
-          children.push(new Paragraph({ text: line }));
-        });
+        // 권고사항 파싱 (번호별 분리 시도)
+        const recText = risk.recommendation;
+        const recParts = recText.split(/\d+[\)\.]\s*/).filter(Boolean);
+        
+        if (recParts.length > 1) {
+          const recRows = [new TableRow({ children: [ hCell('No.', 600), hCell('권고 내용', 8906) ] })];
+          recParts.forEach((part, idx) => {
+            recRows.push(new TableRow({ children: [ dCell(String(idx + 1), 600, { align: AlignmentType.CENTER }), dCell(part.trim(), 8906) ] }));
+          });
+          children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [600, 8906], rows: recRows }));
+        } else {
+          children.push(bodyP(recText));
+        }
       }
       
+      // ═══════════════ IX. 비용 명세 ═══════════════
+      if (fee.totalFee) {
+        children.push(secTitle('IX', '비용 명세'));
+        children.push(subHead('출원 비용'));
+        
+        const fRows = [new TableRow({ children: [ hCell('항목', 4700), hCell('금액', 2403), hCell('비고', 2403) ] })];
+        (fee.breakdown || []).forEach(item => {
+          const isRed = item.type === 'reduction';
+          fRows.push(new TableRow({ children: [
+            dCell(item.label, 4700, { color: isRed ? C.success : C.black }),
+            dCell(`${isRed ? '-' : ''}${TM.formatNumber(Math.abs(item.amount))}원`, 2403, { align: AlignmentType.RIGHT, color: isRed ? C.success : C.black, bold: isRed }),
+            dCell(item.note || '', 2403),
+          ] }));
+        });
+        
+        // 합계
+        fRows.push(new TableRow({ children: [
+          new TableCell({ borders, width: { size: 4700, type: WidthType.DXA }, shading: { fill: C.lightBg, type: ShadingType.CLEAR }, margins: cellM,
+            children: [new Paragraph({ children: [new TextRun({ text: '출원 합계', font: 'Arial', size: 20, bold: true, color: C.primary })] })]
+          }),
+          new TableCell({ borders, width: { size: 2403, type: WidthType.DXA }, shading: { fill: C.lightBg, type: ShadingType.CLEAR }, margins: cellM,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${TM.formatNumber(fee.totalFee)}원`, font: 'Arial', size: 22, bold: true, color: C.primary })] })]
+          }),
+          new TableCell({ borders, width: { size: 2403, type: WidthType.DXA }, shading: { fill: C.lightBg, type: ShadingType.CLEAR }, margins: cellM,
+            children: [new Paragraph({ children: [new TextRun({ text: '감면 적용 후', font: 'Arial', size: 18, color: C.gray600 })] })]
+          }),
+        ] }));
+        
+        children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [4700, 2403, 2403], rows: fRows }));
+        
+        children.push(gap(40));
+        children.push(noteBox(
+          '상기 비용은 특허청 관납료 기준이며, 대리인 수수료는 별도입니다. 등록료는 등록 결정 시 납부하며, 분납(5년분)도 가능합니다.',
+          { prefix: '※ 참고: ', bg: C.lightBlue, prefixColor: C.accent }
+        ));
+      }
+      
+      // ═══════════════ X. 향후 절차 ═══════════════
+      children.push(new Paragraph({ children: [new PageBreak()] }));
+      children.push(secTitle('X', '향후 절차 및 일정'));
+      
+      const procRows = [
+        new TableRow({ children: [ hCell('단계', 600), hCell('절차', 2400), hCell('예상 소요 기간', 3253), hCell('비고', 3253) ] }),
+        ['1', '출원서 제출', '의뢰인 승인 후 즉시', '전자출원 (특허로)'],
+        ['2', '방식심사', '출원 후 약 1~2주', '서류 보정 요구 가능'],
+        ['3', '실체심사', '출원 후 약 10~14개월', '우선심사 시 약 2~3개월'],
+        ['4', '거절이유통지 (예상)', '심사 중 발생 시', '의견서 제출 기한: 2개월'],
+        ['5', '등록결정', '심사 완료 후', '등록료 납부 기한: 2개월'],
+        ['6', '등록공고', '등록 후 약 1개월', '이의신청 기간: 공고일로부터 2개월'],
+      ].map(row => {
+        if (row instanceof TableRow) return row;
+        return new TableRow({ children: [
+          dCell(row[0], 600, { align: AlignmentType.CENTER }),
+          dCell(row[1], 2400, { bold: row[0] === '5' }),
+          dCell(row[2], 3253),
+          dCell(row[3], 3253),
+        ] });
+      });
+      children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [600, 2400, 3253, 3253], rows: procRows }));
+      
+      // ═══════════════ 우선심사 (있을 경우) ═══════════════
+      if (p.priorityExam?.enabled && p.priorityExam?.generatedDocument) {
+        children.push(secTitle('XI', '우선심사 설명서'));
+        const lines = p.priorityExam.generatedDocument.split('\n').filter(l => l.trim());
+        lines.forEach(line => { children.push(bodyP(line)); });
+      }
+      
+      // ═══════════════ 면책조항 ═══════════════
+      children.push(gap(300));
+      children.push(new Paragraph({
+        border: { top: { style: BorderStyle.SINGLE, size: 2, color: C.tableBorder, space: 12 } },
+        spacing: { before: 200, after: 80 },
+        children: [new TextRun({ text: '면책조항 (Disclaimer)', font: 'Arial', size: 20, bold: true, color: C.primary })]
+      }));
+      
+      const disclaimers = [
+        `1. 본 보고서는 ${firmName}(이하 "본 사무소")이 의뢰인의 요청에 따라 작성한 상표 출원 검토 의견서로서, 상표 등록의 성공을 보장하는 문서가 아닙니다.`,
+        '2. 본 보고서에 포함된 리스크 평가 및 등록 가능성 분석은 본 사무소의 전문적 판단과 AI 분석 시스템의 보조적 결과를 종합한 것이며, 최종 심사 결과는 특허청 심사관의 판단에 따라 달라질 수 있습니다.',
+        '3. AI 기반 분석 결과(사업 분석, 상품류 추천, 유사도 평가 등)는 참고 목적의 보조 자료이며, 변리사의 전문 검토를 거쳐 최종 확정됩니다.',
+        '4. 선행상표 조사는 KIPRIS 데이터베이스를 기반으로 수행되었으며, 조사 시점 이후 출원/등록된 상표 또는 미공개 상표는 반영되지 않을 수 있습니다.',
+        '5. 비용 명세는 보고서 작성일 기준 특허청 관납료이며, 법령 개정에 따라 변경될 수 있습니다. 대리인 수수료는 별도 안내합니다.',
+        '6. 본 보고서는 의뢰인과 본 사무소 간의 비밀유지 대상 문서이며, 의뢰인의 사전 동의 없이 제3자에게 공개하거나 배포할 수 없습니다.',
+        '7. 본 보고서의 내용은 작성일 기준의 법령, 심사기준 및 판례에 기초하고 있으며, 이후 변경된 사항은 반영되지 않을 수 있습니다.',
+      ];
+      disclaimers.forEach(text => {
+        children.push(new Paragraph({ spacing: { before: 40, after: 40, line: 280 },
+          children: [new TextRun({ text, font: 'Arial', size: 16, color: C.gray600 })]
+        }));
+      });
+      
+      // 서명란
+      children.push(gap(200));
+      children.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { before: 200, after: 60 },
+        children: [new TextRun({ text: dateStr, font: 'Arial', size: 20, color: C.black })]
+      }));
+      children.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 40 },
+        children: [new TextRun({ text: firmName, font: 'Arial', size: 22, bold: true, color: C.primary })]
+      }));
+      children.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 20 },
+        children: [new TextRun({ text: `담당 변리사  ${attorney}`, font: 'Arial', size: 20, color: C.black })]
+      }));
+      children.push(new Paragraph({ alignment: AlignmentType.RIGHT,
+        children: [new TextRun({ text: '(직인 생략)', font: 'Arial', size: 16, color: C.gray400, italics: true })]
+      }));
+      
+      // ═══════════════ 문서 조립 ═══════════════
       const doc = new Document({
+        styles: { default: { document: { run: { font: 'Arial', size: 20 } } } },
         sections: [{
-          properties: {},
+          properties: {
+            page: {
+              size: { width: 11906, height: 16838 },
+              margin: { top: 1200, right: 1200, bottom: 1200, left: 1200 }
+            }
+          },
+          headers: {
+            default: new Header({
+              children: [new Paragraph({ alignment: AlignmentType.RIGHT,
+                children: [new TextRun({ text: `${firmName}  |  상표 출원 검토 보고서`, font: 'Arial', size: 14, color: C.gray400, italics: true })]
+              })]
+            })
+          },
+          footers: {
+            default: new Footer({
+              children: [new Paragraph({
+                alignment: AlignmentType.CENTER,
+                border: { top: { style: BorderStyle.SINGLE, size: 1, color: C.tableBorder, space: 8 } },
+                children: [
+                  new TextRun({ text: `문서번호: ${refNo}  |  - `, font: 'Arial', size: 14, color: C.gray400 }),
+                  new TextRun({ children: [PageNumber.CURRENT], font: 'Arial', size: 14, color: C.gray400 }),
+                  new TextRun({ text: ' -  |  CONFIDENTIAL', font: 'Arial', size: 14, color: C.gray400, italics: true }),
+                ]
+              })]
+            })
+          },
           children: children
         }]
       });
       
       const blob = await Packer.toBlob(doc);
       const url = URL.createObjectURL(blob);
-      
       const a = document.createElement('a');
       a.href = url;
-      a.download = `상표검토_${p.trademarkName || 'unnamed'}_${new Date().toISOString().slice(0, 10)}.docx`;
+      a.download = `상표검토보고서_${p.trademarkName || 'unnamed'}_${new Date().toISOString().slice(0, 10)}.docx`;
       a.click();
-      
       URL.revokeObjectURL(url);
       
-      App.showToast('문서가 다운로드되었습니다.', 'success');
+      App.showToast('검토 보고서가 다운로드되었습니다.', 'success');
       
     } catch (error) {
-      console.error('[TM] Word 문서 생성 실패:', error);
-      App.showToast('문서 생성 실패: ' + error.message, 'error');
+      console.error('[TM] Word 보고서 생성 실패:', error);
+      App.showToast('보고서 생성 실패: ' + error.message, 'error');
     }
   };
 
