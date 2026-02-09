@@ -2764,6 +2764,9 @@
         );
       }
       
+      // ★ 10개 보장
+      selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods, p.aiAnalysis?.businessAnalysis || '');
+      
       // 추천 결과 저장
       if (p.aiAnalysis) {
         if (!p.aiAnalysis.recommendedGoods) p.aiAnalysis.recommendedGoods = {};
@@ -2789,18 +2792,27 @@
       
     } catch (err) {
       console.error(`[TM] addClass 제${classCode}류 지정상품 추천 실패:`, err);
-      // 실패해도 빈 류로 추가
+      // ★ 실패해도 DB에서 10개 채우기 시도
+      let fallbackGoods = [];
+      try {
+        fallbackGoods = await TM.ensureMinGoods(classCode, [], '');
+      } catch (e) { /* ignore */ }
+      
       p.designatedGoods.push({
         classCode: classCode,
         className: TM.niceClasses[classCode],
-        goods: [],
-        goodsCount: 0,
+        goods: fallbackGoods.map(g => ({
+          name: typeof g === 'string' ? g : (g.name || g),
+          similarGroup: typeof g === 'string' ? '' : (g.similarGroup || ''),
+          gazetted: true
+        })),
+        goodsCount: fallbackGoods.length,
         nonGazettedCount: 0
       });
       TM.hasUnsavedChanges = true;
       TM.renderCurrentStep();
       TM.initGoodsAutocomplete(classCode);
-      App.showToast(`제${classCode}류가 추가되었습니다. (지정상품은 수동 추가 필요)`, 'warning');
+      App.showToast(`제${classCode}류가 추가되었습니다. (${fallbackGoods.length}개 상품)`, fallbackGoods.length > 0 ? 'success' : 'warning');
     }
   };
   
@@ -3182,25 +3194,30 @@
             
             console.log(`[TM] 추가 추천 제${classCode}류 후보: ${candidates.length}건`);
             
-            if (candidates.length === 0) {
-              p.aiAnalysis.recommendedGoods[classCode] = [];
-              continue;
+            let selectedGoods = [];
+            if (candidates.length > 0) {
+              // LLM이 최적 상품 선택
+              selectedGoods = await TM.selectOptimalGoods(
+                classCode,
+                candidates,
+                businessInput || p.aiAnalysis.businessAnalysis,
+                analysis
+              );
             }
             
-            // LLM이 최적 상품 선택
-            const selectedGoods = await TM.selectOptimalGoods(
-              classCode,
-              candidates,
-              businessInput || p.aiAnalysis.businessAnalysis,
-              analysis
-            );
-            
+            // ★ 10개 보장
+            selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods, businessInput || p.aiAnalysis.businessAnalysis || '');
             p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
             console.log(`[TM] 추가 추천 제${classCode}류 최종: ${selectedGoods.length}건`);
             
           } catch (classError) {
             console.error(`[TM] 추가 추천 제${classCode}류 처리 실패:`, classError);
-            p.aiAnalysis.recommendedGoods[classCode] = [];
+            // ★ 에러 시에도 보충 시도
+            try {
+              p.aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(classCode, [], '');
+            } catch (e) {
+              p.aiAnalysis.recommendedGoods[classCode] = [];
+            }
           }
         }
       }
@@ -8621,7 +8638,65 @@ ${TM.PRACTICE_GUIDELINES}
           console.log(`[TM] 제${classCode}류 후보: ${candidates.length}건`);
           
           if (candidates.length === 0) {
-            p.aiAnalysis.recommendedGoods[classCode] = [];
+            // ★ 후보가 0건이면 해당 류 전체에서 직접 조회 시도
+            console.log(`[TM] 제${classCode}류 후보 0건 → 류 전체 조회`);
+            try {
+              const { data } = await App.sb
+                .from('gazetted_goods_cache')
+                .select('goods_name, similar_group_code')
+                .eq('class_code', paddedCode)
+                .limit(100);
+              
+              if (data?.length > 0) {
+                data.forEach(item => {
+                  candidates.push({
+                    name: item.goods_name,
+                    similarGroup: item.similar_group_code,
+                    matchType: 'class',
+                    priority: 3
+                  });
+                });
+                console.log(`[TM] 제${classCode}류 전체 조회 → ${candidates.length}건`);
+              }
+            } catch (e) {
+              console.warn(`[TM] 제${classCode}류 전체 조회 실패:`, e.message);
+            }
+          }
+          
+          if (candidates.length === 0) {
+            // ★ DB에도 없으면 LLM으로 고시명칭 10개 직접 생성
+            console.log(`[TM] 제${classCode}류 DB 후보 없음 → LLM 생성`);
+            let llmGoods = [];
+            try {
+              const genPrompt = `당신은 상표 출원 전문 변리사입니다.
+제${classCode}류의 고시명칭(지정상품/서비스) 중에서 아래 사업과 관련된 것을 정확히 10개 추천하세요.
+
+【사업 내용】
+"${businessInput}"
+
+【규칙】
+- 반드시 특허청 고시명칭에 해당하는 정확한 명칭만 사용
+- 해당 류에 실제 존재하는 지정상품/서비스만 기재
+- JSON 배열로만 응답
+
+["상품명1", "상품명2", ..., "상품명10"]`;
+              const genResponse = await App.callClaude(genPrompt, 500);
+              const genText = (genResponse.text || '').trim();
+              const nameArray = JSON.parse(genText.match(/\[[\s\S]*\]/)?.[0] || '[]');
+              
+              llmGoods = nameArray.slice(0, 10).map(name => ({
+                name: name,
+                similarGroup: '',
+                isCore: false,
+                isLlmGenerated: true
+              }));
+              console.log(`[TM] 제${classCode}류 LLM 생성: ${llmGoods.length}개`);
+            } catch (genErr) {
+              console.warn(`[TM] 제${classCode}류 LLM 생성 실패:`, genErr.message);
+            }
+            
+            // ★ LLM 결과도 10개 미만이면 ensureMinGoods로 보충
+            p.aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(classCode, llmGoods, businessInput);
             continue;
           }
           
@@ -8635,14 +8710,26 @@ ${TM.PRACTICE_GUIDELINES}
           
           p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
           
-          console.log(`[TM] 제${classCode}류 최종: ${selectedGoods.length}건`);
-          if (selectedGoods.length > 0) {
-            console.log(`[TM]   → ${selectedGoods.slice(0, 3).map(s => s.name).join(', ')}...`);
+          // ★ 10개 보장
+          p.aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(
+            classCode, p.aiAnalysis.recommendedGoods[classCode], businessInput
+          );
+          
+          const finalCount = p.aiAnalysis.recommendedGoods[classCode].length;
+          console.log(`[TM] 제${classCode}류 최종: ${finalCount}건`);
+          if (finalCount > 0) {
+            console.log(`[TM]   → ${p.aiAnalysis.recommendedGoods[classCode].slice(0, 3).map(s => s.name).join(', ')}...`);
           }
           
         } catch (classError) {
           console.error(`[TM] 제${classCode}류 처리 실패:`, classError);
-          p.aiAnalysis.recommendedGoods[classCode] = [];
+          // ★ 에러 시에도 ensureMinGoods로 최소 10개 채우기
+          try {
+            p.aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(classCode, [], businessInput);
+            console.log(`[TM] 제${classCode}류 에러 복구: ${p.aiAnalysis.recommendedGoods[classCode].length}개`);
+          } catch (e) {
+            p.aiAnalysis.recommendedGoods[classCode] = [];
+          }
         }
       }
       
@@ -8932,9 +9019,9 @@ ${numberedList}
    - 예: "가구" 사업인데 "가구(家口=가족)" 관련 상품은 제외
 3. 해당 사업의 실제 판매/제공 대상과 맞는 것만 선택
 
-선택할 개수: ${MIN_GOODS - selected.length}개 이하 (관련 있는 것이 없으면 0개도 가능)
+선택할 개수: 정확히 ${MIN_GOODS - selected.length}개를 선택하세요. 관련성이 높은 순으로 선택하되, 반드시 ${MIN_GOODS - selected.length}개를 채우세요.
 
-응답: 숫자만 쉼표로 (예: 1,2,3) 또는 관련 없으면 "없음"
+응답: 숫자만 쉼표로 (예: 1,2,3)
 선택:`;
 
         try {
@@ -8943,35 +9030,30 @@ ${numberedList}
           
           console.log(`[TM] LLM 응답: "${responseText.substring(0, 80)}..."`);
           
-          // "없음" 응답 처리
-          if (responseText.includes('없음') || responseText.includes('0개') || responseText.includes('해당없음')) {
-            console.log('[TM] LLM: 관련 상품 없음');
-          } else {
-            // 번호 파싱
-            const numbers = responseText
-              .replace(/[^\d,\s]/g, '')
-              .split(/[,\s]+/)
-              .map(n => parseInt(n.trim()))
-              .filter(n => !isNaN(n) && n >= 1 && n <= remainingCandidates.length);
+          // 번호 파싱 ("없음" 응답도 무시하고 번호만 추출)
+          const numbers = responseText
+            .replace(/[^\d,\s]/g, '')
+            .split(/[,\s]+/)
+            .map(n => parseInt(n.trim()))
+            .filter(n => !isNaN(n) && n >= 1 && n <= remainingCandidates.length);
+          
+          console.log(`[TM] 파싱된 번호: ${numbers.length}개`);
+          
+          // 번호로 상품 추가
+          const usedIndices = new Set();
+          for (const num of numbers) {
+            if (selected.length >= MIN_GOODS) break;
+            if (usedIndices.has(num)) continue;
             
-            console.log(`[TM] 파싱된 번호: ${numbers.length}개`);
-            
-            // 번호로 상품 추가
-            const usedIndices = new Set();
-            for (const num of numbers) {
-              if (selected.length >= MIN_GOODS) break;
-              if (usedIndices.has(num)) continue;
-              
-              usedIndices.add(num);
-              const item = remainingCandidates[num - 1];
-              if (!usedNames.has(item.name)) {
-                usedNames.add(item.name);
-                selected.push({
-                  name: item.name,
-                  similarGroup: item.similarGroup,
-                  isCore: false
-                });
-              }
+            usedIndices.add(num);
+            const item = remainingCandidates[num - 1];
+            if (!usedNames.has(item.name)) {
+              usedNames.add(item.name);
+              selected.push({
+                name: item.name,
+                similarGroup: item.similarGroup,
+                isCore: false
+              });
             }
           }
         } catch (err) {
@@ -9001,11 +9083,11 @@ ${numberedList}
         });
       }
       
-      // ★ 최소 5개 보장: 관련 후보가 부족해도 해당 류의 후보에서 채움
-      if (selected.length < 5) {
-        console.log(`[TM] 관련 후보 부족 (${selected.length}개), 최소 5개까지 보충`);
+      // ★ 10개 보장: 관련 후보가 부족하면 해당 류의 전체 후보에서 채움
+      if (selected.length < MIN_GOODS) {
+        console.log(`[TM] 관련 후보 부족 (${selected.length}개), ${MIN_GOODS}개까지 전체 후보에서 보충`);
         for (const c of candidates) {
-          if (selected.length >= 5) break;
+          if (selected.length >= MIN_GOODS) break;
           if (usedNames.has(c.name)) continue;
           
           usedNames.add(c.name);
@@ -9022,6 +9104,72 @@ ${numberedList}
     console.log(`[TM] 제${classCode}류 최종: ${selected.length}개`);
     
     return selected.slice(0, MIN_GOODS);
+  };
+  
+  // ================================================================
+  // ★ 공통: 지정상품 10개 보장 함수 (DB 조회 + LLM 생성 폴백)
+  // ================================================================
+  TM.ensureMinGoods = async function(classCode, currentGoods, businessText) {
+    const MIN = 10;
+    if (currentGoods.length >= MIN) return currentGoods;
+    
+    const deficit = MIN - currentGoods.length;
+    const existingNames = new Set(currentGoods.map(g => typeof g === 'string' ? g : g.name));
+    const paddedCode = classCode.padStart(2, '0');
+    
+    console.log(`[TM] ensureMinGoods 제${classCode}류: ${currentGoods.length}개 → ${deficit}개 보충 필요`);
+    
+    // 1차: DB에서 보충
+    try {
+      const { data } = await App.sb
+        .from('gazetted_goods_cache')
+        .select('goods_name, similar_group_code')
+        .eq('class_code', paddedCode)
+        .limit(50);
+      
+      if (data) {
+        for (const item of data) {
+          if (currentGoods.length >= MIN) break;
+          if (existingNames.has(item.goods_name)) continue;
+          
+          existingNames.add(item.goods_name);
+          currentGoods.push({
+            name: item.goods_name,
+            similarGroup: item.similar_group_code,
+            isCore: false,
+            isRefill: true
+          });
+        }
+      }
+    } catch (e) {
+      console.warn(`[TM] ensureMinGoods DB 보충 실패:`, e.message);
+    }
+    
+    // 2차: DB로도 부족하면 LLM 생성
+    if (currentGoods.length < MIN) {
+      try {
+        const still = MIN - currentGoods.length;
+        const existingList = currentGoods.map(g => typeof g === 'string' ? g : g.name).join(', ');
+        const genPrompt = `제${classCode}류 고시명칭 중 아래 사업과 관련된 지정상품/서비스를 정확히 ${still}개만 추천하세요.
+사업: "${businessText}"
+이미 선택됨: ${existingList}
+위 목록과 중복되지 않는 것만 추천.
+JSON 배열로만 응답: ["상품명1", "상품명2"]`;
+        const resp = await App.callClaude(genPrompt, 300);
+        const arr = JSON.parse((resp.text || '').match(/\[[\s\S]*\]/)?.[0] || '[]');
+        for (const name of arr) {
+          if (currentGoods.length >= MIN) break;
+          if (existingNames.has(name)) continue;
+          existingNames.add(name);
+          currentGoods.push({ name, similarGroup: '', isCore: false, isLlmGenerated: true });
+        }
+      } catch (e) {
+        console.warn(`[TM] ensureMinGoods LLM 보충 실패:`, e.message);
+      }
+    }
+    
+    console.log(`[TM] ensureMinGoods 제${classCode}류 최종: ${currentGoods.length}개`);
+    return currentGoods.slice(0, MIN);
   };
   
   // ================================================================
@@ -9294,16 +9442,21 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
           try {
             const paddedCode = classCode.padStart(2, '0');
             const candidates = await TM.fetchOptimalCandidates(paddedCode, allKeywords, analysisCtx);
+            let selectedGoods = [];
             if (candidates.length > 0) {
-              const selectedGoods = await TM.selectOptimalGoods(classCode, candidates, aiAnalysis.businessAnalysis || '', analysisCtx);
-              aiAnalysis.recommendedGoods[classCode] = selectedGoods;
-              console.log(`[TM] 누락 류 제${classCode}류 지정상품 ${selectedGoods.length}개 추천 완료`);
-            } else {
-              aiAnalysis.recommendedGoods[classCode] = [];
+              selectedGoods = await TM.selectOptimalGoods(classCode, candidates, aiAnalysis.businessAnalysis || '', analysisCtx);
             }
+            // ★ 10개 보장
+            selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods, aiAnalysis.businessAnalysis || '');
+            aiAnalysis.recommendedGoods[classCode] = selectedGoods;
+            console.log(`[TM] 누락 류 제${classCode}류 지정상품 ${selectedGoods.length}개 추천 완료`);
           } catch (goodsErr) {
             console.warn(`[TM] 누락 류 제${classCode}류 지정상품 추천 실패:`, goodsErr);
-            aiAnalysis.recommendedGoods[classCode] = [];
+            try {
+              aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(classCode, [], '');
+            } catch (e) {
+              aiAnalysis.recommendedGoods[classCode] = [];
+            }
           }
         }
       }
@@ -9443,6 +9596,58 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
     }
     
     console.log('[TM] 검증 결과 적용 완료');
+    
+    // 4. ★★★ 제거 후 10개 미만인 류에 대해 보충 ★★★
+    const allKeywords = aiAnalysis.searchKeywords || [];
+    const analysisCtx = {
+      businessSummary: aiAnalysis.businessAnalysis,
+      businessTypes: aiAnalysis.businessTypes,
+      coreProducts: aiAnalysis.coreProducts,
+      coreServices: aiAnalysis.coreServices,
+      salesChannels: aiAnalysis.salesChannels,
+      expansionPotential: aiAnalysis.expansionPotential,
+      searchKeywords: allKeywords
+    };
+    
+    for (const classCode of (aiAnalysis.recommendedClasses || [])) {
+      const currentGoods = aiAnalysis.recommendedGoods?.[classCode] || [];
+      if (currentGoods.length >= 10) continue;
+      
+      const deficit = 10 - currentGoods.length;
+      console.log(`[TM] 제${classCode}류 검증 후 ${currentGoods.length}개 → ${deficit}개 보충 필요`);
+      
+      try {
+        const paddedCode = classCode.padStart(2, '0');
+        const existingNames = new Set(currentGoods.map(g => g.name));
+        
+        // DB에서 추가 후보 조회
+        const { data } = await App.sb
+          .from('gazetted_goods_cache')
+          .select('goods_name, similar_group_code')
+          .eq('class_code', paddedCode)
+          .limit(50);
+        
+        if (data) {
+          let added = 0;
+          for (const item of data) {
+            if (added >= deficit) break;
+            if (existingNames.has(item.goods_name)) continue;
+            
+            existingNames.add(item.goods_name);
+            aiAnalysis.recommendedGoods[classCode].push({
+              name: item.goods_name,
+              similarGroup: item.similar_group_code,
+              isCore: false,
+              isRefill: true
+            });
+            added++;
+          }
+          console.log(`[TM] 제${classCode}류 ${added}개 보충 → 총 ${aiAnalysis.recommendedGoods[classCode].length}개`);
+        }
+      } catch (e) {
+        console.warn(`[TM] 제${classCode}류 보충 실패:`, e.message);
+      }
+    }
   };
   
   // ================================================================
