@@ -693,12 +693,13 @@
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="common.js"></script>
-<script src="patent.js"></script>
+<script src="common.js?v=20260209b"></script>
+<script src="patent.js?v=20260209b"></script>
 <script>
-  // trademark.js 조건부 로드 (파일 존재 시에만)
+  // trademark.js 조건부 로드 (캐시 버스팅 적용)
+  var _cv='?v='+Date.now();
   fetch('trademark.js',{method:'HEAD'}).then(function(r){
-    if(r.ok){var s=document.createElement('script');s.src='trademark.js';document.body.appendChild(s);}
+    if(r.ok){var s=document.createElement('script');s.src='trademark.js'+_cv;document.body.appendChild(s);}
   }).catch(function(){});
 </script>
 </body>
