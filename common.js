@@ -126,7 +126,10 @@ async function onAuthSuccess(user){
   if(profile.role==='admin'){const ab=document.getElementById('btnDashAdmin');if(ab)ab.style.display='inline-flex';}
   if(!API_KEY){
     const rawKey=profile.api_key_encrypted||'';
-    try{const pk=JSON.parse(rawKey);apiKeys={claude:pk.claude||'',gpt:pk.gpt||'',gemini:pk.gemini||''};if(pk.provider&&API_PROVIDERS[pk.provider])selectedProvider=pk.provider;}catch(e){apiKeys={claude:rawKey,gpt:'',gemini:''};}
+    try{const pk=JSON.parse(rawKey);apiKeys={claude:pk.claude||'',gpt:pk.gpt||'',gemini:pk.gemini||''};if(pk.provider&&API_PROVIDERS[pk.provider])selectedProvider=pk.provider;
+      // KIPRIS 키를 계정별 localStorage에 캐시
+      if(pk.kipris){try{localStorage.setItem('tm_kipris_api_key_'+user.id,pk.kipris);}catch(e){}}
+    }catch(e){apiKeys={claude:rawKey,gpt:'',gemini:''};}
     try{const sp=localStorage.getItem('patent_api_provider');if(sp&&API_PROVIDERS[sp])selectedProvider=sp;}catch(e){}
     selectedModel=API_PROVIDERS[selectedProvider].defaultModel;API_KEY=apiKeys[selectedProvider]||'';
     if(!API_KEY){try{API_KEY=localStorage.getItem('patent_api_key')||'';}catch(e){}}
@@ -141,7 +144,10 @@ async function saveApiKey(){
   const k=document.getElementById('apiKeyInput')?.value?.trim();
   if(!k){showToast('API Key를 입력해 주세요','error');return;}
   apiKeys[selectedProvider]=k;API_KEY=k;
-  const data={...apiKeys,provider:selectedProvider};
+  // 기존 프로필의 추가 필드(kipris 등) 보존
+  let existing={};
+  try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
+  const data={...existing,...apiKeys,provider:selectedProvider};
   try{localStorage.setItem('patent_api_key_'+selectedProvider,k);localStorage.setItem('patent_api_provider',selectedProvider);}catch(e){}
   if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
   document.getElementById('apiKeyModal').style.display='none';
@@ -180,7 +186,10 @@ async function saveProfileSettings(){
   const key=document.getElementById('profileApiKeyInput').value.trim();
   if(key)apiKeys[profileTempProvider]=key;
   selectProvider(profileTempProvider);
-  const data={...apiKeys,provider:selectedProvider};
+  // 기존 프로필의 추가 필드(kipris 등) 보존
+  let existing={};
+  try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
+  const data={...existing,...apiKeys,provider:selectedProvider};
   try{Object.entries(apiKeys).forEach(([p,k])=>{if(k)localStorage.setItem('patent_api_key_'+p,k);});localStorage.setItem('patent_api_provider',selectedProvider);}catch(e){}
   if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
   closeProfileSettings();updateModelToggle();updateProviderLabel();
