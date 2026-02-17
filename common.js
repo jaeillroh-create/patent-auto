@@ -177,10 +177,18 @@ async function saveApiKey(){
   const k=document.getElementById('apiKeyInput')?.value?.trim();
   if(!k){showToast('API Key를 입력해 주세요','error');return;}
   apiKeys[selectedProvider]=k;API_KEY=k;
-  // ★ Supabase에 전체 키 저장 (kipris 포함)
-  const data={claude:apiKeys.claude,gpt:apiKeys.gpt,gemini:apiKeys.gemini,kipris:apiKeys.kipris,provider:selectedProvider};
+  // ★ 기존 필드 보존 + Supabase 저장
+  var existing={};
+  try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
+  var data=Object.assign({},existing,{claude:apiKeys.claude||'',gpt:apiKeys.gpt||'',gemini:apiKeys.gemini||'',kipris:apiKeys.kipris||'',provider:selectedProvider});
   _lsSet('api_key_'+selectedProvider,k);_lsSet('api_provider',selectedProvider);
-  if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
+  if(currentUser){
+    try{
+      var res=await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);
+      if(res.error){console.error('[saveApiKey] Supabase error:',res.error);showToast('저장 실패: '+res.error.message,'error');return;}
+      currentProfile.api_key_encrypted=JSON.stringify(data);
+    }catch(e){console.error('[saveApiKey] Exception:',e);showToast('저장 실패','error');return;}
+  }
   document.getElementById('apiKeyModal').style.display='none';
   showToast('API Key 저장됨');
 }
@@ -223,18 +231,28 @@ async function saveProfileSettings(){
   // ★ KIPRIS 키 저장
   const kiprisInp=document.getElementById('kiprisApiKeyInput');
   if(kiprisInp){
-    const kv=kiprisInp.value.trim();
-    apiKeys.kipris=kv;
-    // TM 모듈에 즉시 동기화
-    if(window.TM&&TM.kiprisConfig)TM.kiprisConfig.apiKey=kv||DEFAULT_KIPRIS_KEY;
+    var kiprisVal=kiprisInp.value.trim();
+    apiKeys.kipris=kiprisVal;
+    if(window.TM&&TM.kiprisConfig)TM.kiprisConfig.apiKey=kiprisVal||DEFAULT_KIPRIS_KEY;
   }
-  selectProvider(profileTempProvider);
-  // ★ Supabase에 전체 키 저장 (kipris 포함, 기존 spread 방식 대신 명시적)
-  const data={claude:apiKeys.claude,gpt:apiKeys.gpt,gemini:apiKeys.gemini,kipris:apiKeys.kipris,provider:selectedProvider};
+  // ★ Provider 직접 설정 (selectProvider 호출 X — 부작용 방지)
+  selectedProvider=profileTempProvider;
+  selectedModel=API_PROVIDERS[selectedProvider].defaultModel;
+  API_KEY=apiKeys[selectedProvider]||'';
+  // ★ Supabase에 저장 — 기존 필드 보존 + 명시적 덮어쓰기
+  var existing={};
+  try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
+  var data=Object.assign({},existing,{claude:apiKeys.claude||'',gpt:apiKeys.gpt||'',gemini:apiKeys.gemini||'',kipris:apiKeys.kipris||'',provider:selectedProvider});
   // ★ user-scoped localStorage 캐시
-  Object.entries(apiKeys).forEach(function(kv){if(kv[1])_lsSet('api_key_'+kv[0],kv[1]);else _lsRemove('api_key_'+kv[0]);});
+  ['claude','gpt','gemini','kipris'].forEach(function(p){if(apiKeys[p])_lsSet('api_key_'+p,apiKeys[p]);});
   _lsSet('api_provider',selectedProvider);
-  if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
+  if(currentUser){
+    try{
+      var res=await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);
+      if(res.error){console.error('[saveProfile] Supabase error:',res.error);showToast('저장 실패: '+res.error.message,'error');return;}
+      currentProfile.api_key_encrypted=JSON.stringify(data);
+    }catch(e){console.error('[saveProfile] Exception:',e);showToast('저장 실패','error');return;}
+  }
   closeProfileSettings();updateModelToggle();updateProviderLabel();
   showToast(API_PROVIDERS[selectedProvider].short+' 적용됨 — '+getModelConfig().label);
 }
