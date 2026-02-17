@@ -1707,7 +1707,7 @@
   
   TM.renderStep1_TrademarkInfo = function(container) {
     const p = TM.currentProject;
-    const hasAiResult = p.aiAnalysis.businessAnalysis;
+    const hasAiResult = p.aiAnalysis?.businessAnalysis;
     
     container.innerHTML = `
       <div class="tm-2col">
@@ -9075,6 +9075,8 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       return;
     }
     
+    const prevAiAnalysis = p.aiAnalysis;  // 에러 시 복원용 백업
+    
     try {
       const btn = document.querySelector('[data-action="tm-analyze-business"]');
       if (btn) {
@@ -9179,7 +9181,23 @@ ${TM.PRACTICE_GUIDELINES}
       if (btn) btn.innerHTML = '<span class="tossface">⏳</span> 사업 분석 중...';
       
       console.log('[TM] LLM 기반 사업 분석 시작');
-      const analysisResponse = await App.callClaude(analysisPrompt, 4000);
+      // 529(과부하)/서버오류 시 자동 재시도 (최대 2회)
+      let analysisResponse;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          analysisResponse = await App.callClaude(analysisPrompt, 4000);
+          break;
+        } catch (retryErr) {
+          if (attempt < 2 && /서버|overload|529|500/i.test(retryErr.message)) {
+            const delay = (attempt + 1) * 3000;
+            console.warn(`[TM] API 재시도 ${attempt + 1}/2 (${delay/1000}초 후)...`);
+            if (btn) btn.innerHTML = `<span class="tossface">⏳</span> 재시도 중... (${attempt + 1}/2)`;
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          throw retryErr;
+        }
+      }
       const text = analysisResponse.text || '';
       const startIdx = text.indexOf('{');
       const endIdx = text.lastIndexOf('}');
@@ -9395,6 +9413,11 @@ ${TM.PRACTICE_GUIDELINES}
     } catch (error) {
       console.error('[TM] 사업 분석 실패:', error);
       App.showToast('분석 실패: ' + error.message, 'error');
+      // API 실패 시 이전 분석 결과 복원 (null 방지)
+      if (!p.aiAnalysis && prevAiAnalysis) {
+        p.aiAnalysis = prevAiAnalysis;
+      }
+      if (!p.aiAnalysis) p.aiAnalysis = {};
     } finally {
       const btn = document.querySelector('[data-action="tm-analyze-business"]');
       if (btn) {

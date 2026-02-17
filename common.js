@@ -42,16 +42,9 @@ const API_PROVIDERS = {
   }
 };
 let selectedProvider='claude', selectedModel='opus';
-let apiKeys={claude:'',gpt:'',gemini:'',kipris:''};
+let apiKeys={claude:'',gpt:'',gemini:''};
 let profileTempProvider='claude';
 let API_KEY='',currentUser=null,currentProfile=null,currentProjectId=null;
-const DEFAULT_KIPRIS_KEY='zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
-
-// ═══ User-scoped localStorage helpers ═══
-function _lsKey(name){return currentUser?name+'_'+currentUser.id:name;}
-function _lsGet(name){try{return localStorage.getItem(_lsKey(name))||'';}catch(e){return '';}}
-function _lsSet(name,val){try{localStorage.setItem(_lsKey(name),val);}catch(e){}}
-function _lsRemove(name){try{localStorage.removeItem(_lsKey(name));}catch(e){}}
 
 const SYSTEM_PROMPT = '너는 대한민국 특허청(KIPO) 심사 실무와 등록 가능성(신규성/진보성/명확성/지원요건)을 완벽히 이해한 15년 차 수석 변리사이다. 원칙: 1.표준문체(~한다) 2.글머리/마크다운 절대금지 3.SW명 대신 알고리즘 4.구성요소명(참조번호) 형태 5.명세서에 바로 붙여넣을 순수텍스트 6.제한성 표현(만, 반드시, ~에 한하여 등) 사용 금지';
 
@@ -70,12 +63,7 @@ function selectProvider(p){
   selectedProvider=p;selectedModel=API_PROVIDERS[p].defaultModel;
   API_KEY=apiKeys[p]||'';
   updateModelToggle();updateProviderLabel();
-  _lsSet('api_provider',p);
-  // ★ 키 없으면 경고 + 설정모달 자동 열기
-  if(!apiKeys[p]){
-    showToast(API_PROVIDERS[p].short+' API Key가 설정되지 않았습니다. 계정설정에서 입력해 주세요.','error');
-    setTimeout(function(){openProfileSettings();},300);
-  }
+  try{localStorage.setItem('patent_api_provider',p);}catch(e){}
 }
 function updateModelToggle(){
   const prov=getProvider(),keys=Object.keys(prov.models);
@@ -127,19 +115,7 @@ function showScreen(name){
 function switchAuthTab(tab){document.querySelectorAll('.auth-tab').forEach(t=>t.classList.remove('active'));if(tab==='login'){document.querySelector('.auth-tab:first-child').classList.add('active');document.getElementById('authLogin').style.display='block';document.getElementById('authSignup').style.display='none';}else{document.querySelector('.auth-tab:last-child').classList.add('active');document.getElementById('authLogin').style.display='none';document.getElementById('authSignup').style.display='block';}}
 async function handleLogin(){const e=document.getElementById('loginEmail').value.trim(),p=document.getElementById('loginPassword').value;if(!e||!p){showToast('이메일과 비밀번호를 입력해 주세요','error');return;}setButtonLoading('btnLogin',true);const{data,error}=await sb.auth.signInWithPassword({email:e,password:p});setButtonLoading('btnLogin',false);if(error){showToast(error.message,'error');return;}await onAuthSuccess(data.user);}
 async function handleSignup(){const e=document.getElementById('signupEmail').value.trim(),p=document.getElementById('signupPassword').value,n=document.getElementById('signupName').value.trim();if(!e||!p){showToast('이메일과 비밀번호를 입력해 주세요','error');return;}if(p.length<6){showToast('비밀번호는 6자 이상','error');return;}setButtonLoading('btnSignup',true);const{data,error}=await sb.auth.signUp({email:e,password:p,options:{data:{display_name:n||e}}});setButtonLoading('btnSignup',false);if(error){showToast(error.message,'error');return;}showToast('회원가입 완료!');if(data.user)await onAuthSuccess(data.user);}
-async function handleLogout(){
-  if(typeof clearAllState==='function')clearAllState();
-  // ★ 메모리 완전 초기화
-  API_KEY='';apiKeys={claude:'',gpt:'',gemini:'',kipris:''};
-  selectedProvider='claude';selectedModel='opus';profileTempProvider='claude';
-  // ★ 상표 모듈 상태 정리
-  if(window.TM){
-    if(TM.kiprisConfig)TM.kiprisConfig.apiKey=DEFAULT_KIPRIS_KEY;
-    if(TM.currentProject)TM.currentProject=null;
-    TM.projects=[];
-  }
-  await sb.auth.signOut();currentUser=null;currentProfile=null;showScreen('auth');
-}
+async function handleLogout(){if(typeof clearAllState==='function')clearAllState();API_KEY='';await sb.auth.signOut();currentUser=null;currentProfile=null;showScreen('auth');}
 
 async function onAuthSuccess(user){
   currentUser=user;let{data:profile}=await sb.from('profiles').select('*').eq('id',user.id).single();
@@ -148,25 +124,16 @@ async function onAuthSuccess(user){
   if(!profile.tos_accepted){showScreen('tos');return;}if(profile.status==='pending'){showScreen('pending');return;}if(profile.status==='suspended'){showToast('계정 정지됨','error');return;}
   const dn=document.getElementById('dashUserName');if(dn)dn.textContent=profile.display_name||user.email;
   if(profile.role==='admin'){const ab=document.getElementById('btnDashAdmin');if(ab)ab.style.display='inline-flex';}
-  // ★ 항상 Supabase에서 키 로드 (계정별 독립)
-  const rawKey=profile.api_key_encrypted||'';
-  try{
-    const pk=JSON.parse(rawKey);
-    apiKeys={claude:pk.claude||'',gpt:pk.gpt||'',gemini:pk.gemini||'',kipris:pk.kipris||''};
-    if(pk.provider&&API_PROVIDERS[pk.provider])selectedProvider=pk.provider;
-  }catch(e){
-    // 레거시: JSON이 아닌 단순 문자열이면 claude 키로 간주
-    apiKeys={claude:rawKey||'',gpt:'',gemini:'',kipris:''};
+  if(!API_KEY){
+    const rawKey=profile.api_key_encrypted||'';
+    try{const pk=JSON.parse(rawKey);apiKeys={claude:pk.claude||'',gpt:pk.gpt||'',gemini:pk.gemini||''};if(pk.provider&&API_PROVIDERS[pk.provider])selectedProvider=pk.provider;
+      // KIPRIS 키를 계정별 localStorage에 캐시
+      if(pk.kipris){try{localStorage.setItem('tm_kipris_api_key_'+user.id,pk.kipris);}catch(e){}}
+    }catch(e){apiKeys={claude:rawKey,gpt:'',gemini:''};}
+    try{const sp=localStorage.getItem('patent_api_provider');if(sp&&API_PROVIDERS[sp])selectedProvider=sp;}catch(e){}
+    selectedModel=API_PROVIDERS[selectedProvider].defaultModel;API_KEY=apiKeys[selectedProvider]||'';
+    if(!API_KEY){try{API_KEY=localStorage.getItem('patent_api_key')||'';}catch(e){}}
   }
-  // ★ user-scoped localStorage에 캐시 (같은 브라우저 재접속용)
-  Object.entries(apiKeys).forEach(function(kv){if(kv[1])_lsSet('api_key_'+kv[0],kv[1]);});
-  // ★ user-scoped provider 캐시 복원
-  var cachedProv=_lsGet('api_provider');
-  if(cachedProv&&API_PROVIDERS[cachedProv])selectedProvider=cachedProv;
-  selectedModel=API_PROVIDERS[selectedProvider].defaultModel;
-  API_KEY=apiKeys[selectedProvider]||'';
-  // ★ KIPRIS 키를 TM 모듈에 동기화
-  if(window.TM&&TM.kiprisConfig)TM.kiprisConfig.apiKey=apiKeys.kipris||DEFAULT_KIPRIS_KEY;
   if(typeof clearAllState==='function')clearAllState();showScreen('dashboard');
 }
 async function handleTosAccept(){if(!document.getElementById('tosCheck1').checked||!document.getElementById('tosCheck2').checked){showToast('모든 항목에 동의해 주세요','error');return;}await sb.from('profiles').update({tos_accepted:true,tos_accepted_at:new Date().toISOString()}).eq('id',currentUser.id);currentProfile.tos_accepted=true;if(currentProfile.status==='pending')showScreen('pending');else await onAuthSuccess(currentUser);}
@@ -177,18 +144,12 @@ async function saveApiKey(){
   const k=document.getElementById('apiKeyInput')?.value?.trim();
   if(!k){showToast('API Key를 입력해 주세요','error');return;}
   apiKeys[selectedProvider]=k;API_KEY=k;
-  // ★ 기존 필드 보존 + Supabase 저장
-  var existing={};
+  // 기존 프로필의 추가 필드(kipris 등) 보존
+  let existing={};
   try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
-  var data=Object.assign({},existing,{claude:apiKeys.claude||'',gpt:apiKeys.gpt||'',gemini:apiKeys.gemini||'',kipris:apiKeys.kipris||'',provider:selectedProvider});
-  _lsSet('api_key_'+selectedProvider,k);_lsSet('api_provider',selectedProvider);
-  if(currentUser){
-    try{
-      var res=await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);
-      if(res.error){console.error('[saveApiKey] Supabase error:',res.error);showToast('저장 실패: '+res.error.message,'error');return;}
-      currentProfile.api_key_encrypted=JSON.stringify(data);
-    }catch(e){console.error('[saveApiKey] Exception:',e);showToast('저장 실패','error');return;}
-  }
+  const data={...existing,...apiKeys,provider:selectedProvider};
+  try{localStorage.setItem('patent_api_key_'+selectedProvider,k);localStorage.setItem('patent_api_provider',selectedProvider);}catch(e){}
+  if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
   document.getElementById('apiKeyModal').style.display='none';
   showToast('API Key 저장됨');
 }
@@ -210,15 +171,11 @@ function renderProfileModal(){
   const inp=document.getElementById('profileApiKeyInput');
   inp.value=apiKeys[p]||'';inp.placeholder=prov.keyPlaceholder;
   document.getElementById('profileApiKeyHint').innerHTML='발급: <a href="'+prov.keyUrl+'" target="_blank">'+prov.keyUrl.replace('https://','')+'</a>';
-  // ★ KIPRIS 키 표시 (apiKeys.kipris에서 직접 읽기)
-  const kiprisInp=document.getElementById('kiprisApiKeyInput');
-  if(kiprisInp)kiprisInp.value=apiKeys.kipris||'';
   const curProv=API_PROVIDERS[selectedProvider];
   document.getElementById('profileCurrentStatus').innerHTML=
     '<div style="display:flex;justify-content:space-between;align-items:center"><span>서비스</span><strong>'+curProv.label+'</strong></div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span>모델</span><strong>'+getModelConfig().label+'</strong></div>'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span>API Key</span><strong style="color:'+(apiKeys[selectedProvider]?'var(--color-success)':'var(--color-error)')+'">'+(apiKeys[selectedProvider]?'설정됨 ✅':'미설정 ❌')+'</strong></div>'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span>KIPRIS</span><strong style="color:'+(apiKeys.kipris?'var(--color-success)':'var(--color-text-tertiary)')+'">'+(apiKeys.kipris?'설정됨 ✅':'기본키 사용')+'</strong></div>';
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span>API Key</span><strong style="color:'+(apiKeys[selectedProvider]?'var(--color-success)':'var(--color-error)')+'">'+(apiKeys[selectedProvider]?'설정됨 ✅':'미설정 ❌')+'</strong></div>';
 }
 function profileSelectProvider(p){
   const curKey=document.getElementById('profileApiKeyInput').value.trim();
@@ -228,33 +185,15 @@ function profileSelectProvider(p){
 async function saveProfileSettings(){
   const key=document.getElementById('profileApiKeyInput').value.trim();
   if(key)apiKeys[profileTempProvider]=key;
-  // ★ KIPRIS 키 저장
-  const kiprisInp=document.getElementById('kiprisApiKeyInput');
-  if(kiprisInp){
-    var kiprisVal=kiprisInp.value.trim();
-    apiKeys.kipris=kiprisVal;
-    if(window.TM&&TM.kiprisConfig)TM.kiprisConfig.apiKey=kiprisVal||DEFAULT_KIPRIS_KEY;
-  }
-  // ★ Provider 직접 설정 (selectProvider 호출 X — 부작용 방지)
-  selectedProvider=profileTempProvider;
-  selectedModel=API_PROVIDERS[selectedProvider].defaultModel;
-  API_KEY=apiKeys[selectedProvider]||'';
-  // ★ Supabase에 저장 — 기존 필드 보존 + 명시적 덮어쓰기
-  var existing={};
+  selectProvider(profileTempProvider);
+  // 기존 프로필의 추가 필드(kipris 등) 보존
+  let existing={};
   try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
-  var data=Object.assign({},existing,{claude:apiKeys.claude||'',gpt:apiKeys.gpt||'',gemini:apiKeys.gemini||'',kipris:apiKeys.kipris||'',provider:selectedProvider});
-  // ★ user-scoped localStorage 캐시
-  ['claude','gpt','gemini','kipris'].forEach(function(p){if(apiKeys[p])_lsSet('api_key_'+p,apiKeys[p]);});
-  _lsSet('api_provider',selectedProvider);
-  if(currentUser){
-    try{
-      var res=await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);
-      if(res.error){console.error('[saveProfile] Supabase error:',res.error);showToast('저장 실패: '+res.error.message,'error');return;}
-      currentProfile.api_key_encrypted=JSON.stringify(data);
-    }catch(e){console.error('[saveProfile] Exception:',e);showToast('저장 실패','error');return;}
-  }
+  const data={...existing,...apiKeys,provider:selectedProvider};
+  try{Object.entries(apiKeys).forEach(([p,k])=>{if(k)localStorage.setItem('patent_api_key_'+p,k);});localStorage.setItem('patent_api_provider',selectedProvider);}catch(e){}
+  if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
   closeProfileSettings();updateModelToggle();updateProviderLabel();
-  showToast(API_PROVIDERS[selectedProvider].short+' 적용됨 — '+getModelConfig().label);
+  showToast(API_PROVIDERS[selectedProvider].short+' 적용됨 · '+getModelConfig().label);
 }
 
 // ═══ Project Rename (v5.2) ═══
@@ -277,15 +216,14 @@ async function adminSuspend(id){await sb.from('profiles').update({status:'suspen
 function ensureApiKey(){
   const p=selectedProvider;
   if(apiKeys[p]){API_KEY=apiKeys[p];return true;}
-  // ★ Supabase 프로필에서 복원 시도
   if(currentProfile?.api_key_encrypted){
     try{const parsed=JSON.parse(currentProfile.api_key_encrypted);if(parsed[p]){apiKeys[p]=parsed[p];API_KEY=parsed[p];return true;}}catch(e){
-      if(p==='claude'&&currentProfile.api_key_encrypted&&!currentProfile.api_key_encrypted.startsWith('{')){apiKeys.claude=currentProfile.api_key_encrypted;API_KEY=currentProfile.api_key_encrypted;return true;}
+      if(p==='claude'&&currentProfile.api_key_encrypted){apiKeys.claude=currentProfile.api_key_encrypted;API_KEY=currentProfile.api_key_encrypted;return true;}
     }
   }
-  // ★ user-scoped localStorage 캐시에서 복원
-  var cached=_lsGet('api_key_'+p);
-  if(cached){apiKeys[p]=cached;API_KEY=cached;return true;}
+  try{const k=localStorage.getItem('patent_api_key_'+p);if(k){apiKeys[p]=k;API_KEY=k;return true;}
+    if(p==='claude'){const k2=localStorage.getItem('patent_api_key');if(k2){apiKeys.claude=k2;API_KEY=k2;return true;}}
+  }catch(e){}
   return false;
 }
 async function callClaude(prompt,maxTokens=8192){
@@ -295,7 +233,7 @@ async function callClaude(prompt,maxTokens=8192){
   const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),180000);
   try{const res=await fetch(req.url,{method:'POST',signal:ctrl.signal,headers:req.headers,body:JSON.stringify(req.body)});clearTimeout(tout);
     if(res.status===401||res.status===403){apiKeys[prov]='';API_KEY='';showToast('API Key가 유효하지 않습니다. ⚙️ 계정설정을 확인하세요.','error');throw new Error('API Key 유효하지 않음');}
-    if(res.status===429)throw new Error('요청 과다. 30초 후 재시도');if(res.status>=500)throw new Error('서버 오류');
+    if(res.status===429)throw new Error('요청 과다. 30초 후 재시도');if(res.status===529)throw new Error('서버 과부하(529). 잠시 후 재시도');if(res.status>=500)throw new Error('서버 오류');
     const d=await res.json(),parsed=parseAPIResponse(prov,d);
     if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
     usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
@@ -310,7 +248,7 @@ async function callClaudeSonnet(prompt,maxTokens=8192){
   const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),180000);
   try{const res=await fetch(req.url,{method:'POST',signal:ctrl.signal,headers:req.headers,body:JSON.stringify(req.body)});clearTimeout(tout);
     if(res.status===401||res.status===403)throw new Error('API Key 유효하지 않음');
-    if(res.status===429)throw new Error('요청 과다');if(res.status>=500)throw new Error('서버 오류');
+    if(res.status===429)throw new Error('요청 과다');if(res.status===529)throw new Error('서버 과부하(529). 잠시 후 재시도');if(res.status>=500)throw new Error('서버 오류');
     const d=await res.json(),parsed=parseAPIResponse(prov,d);
     if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
     usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
@@ -339,14 +277,13 @@ function formatFileSize(bytes) {if (bytes < 1024) return bytes + 'B';if (bytes <
 
 // ═══ Expose to App namespace ═══
 Object.assign(App, {
-  sb, SUPABASE_URL, SUPABASE_ANON_KEY, API_PROVIDERS, SYSTEM_PROMPT, DEFAULT_KIPRIS_KEY,
+  sb, SUPABASE_URL, SUPABASE_ANON_KEY, API_PROVIDERS, SYSTEM_PROMPT,
   getProvider, getModelConfig, getModel, selectModel, selectProvider,
   updateModelToggle, updateProviderLabel, buildAPIRequest, parseAPIResponse,
   escapeHtml, showToast, showProgress, clearProgress, setButtonLoading,
   showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation,
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
   openProfileSettings, closeProfileSettings,
-  _lsKey, _lsGet, _lsSet, _lsRemove,
   currentService: 'patent',
   _onDashboard: null  // Hook for patent.js to register dashboard load callback
 });
@@ -359,10 +296,6 @@ Object.defineProperty(App, 'currentUser', {
 Object.defineProperty(App, 'currentProfile', {
   get: function() { return currentProfile; },
   set: function(v) { currentProfile = v; }
-});
-Object.defineProperty(App, 'apiKeys', {
-  get: function() { return apiKeys; },
-  set: function(v) { apiKeys = v; }
 });
 
 // ═══ Service Tab Switching (특허 / 상표) ═══
