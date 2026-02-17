@@ -861,8 +861,7 @@ ${claimType==='method'
 // ═══ KIPRIS 선행기술 검색 ═══
 // Edge Function이 KIPRIS Plus API (plus.kipris.or.kr) 호출
 // KIPRIS Plus API 키 (localStorage에서 사용자 설정 가능)
-const DEFAULT_KIPRIS_KEY='zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
-function getKiprisKey(){return App.apiKeys.kipris||DEFAULT_KIPRIS_KEY;}
+function getKiprisKey(){return App.apiKeys.kipris||App.DEFAULT_KIPRIS_KEY;}
 
 // 등록번호 포맷: 1020XXXXXXX → 10-20XXXXX
 function formatRegNumber(regNum){
