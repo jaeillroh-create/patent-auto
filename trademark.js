@@ -9279,6 +9279,10 @@ ${TM.PRACTICE_GUIDELINES}
       
       for (const classCode of initialClasses) {
         if (!p.aiAnalysis) { console.error('[TM] aiAnalysis가 null — 루프 중단'); break; }
+        // ★ 류 간 1초 딜레이 (API 부하 분산)
+        if (initialClasses.indexOf(classCode) > 0) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
         const paddedCode = classCode.padStart(2, '0');
         
         try {
@@ -10153,23 +10157,40 @@ ${allClasses.map(c => `- 제${c.class}류: ${c.reason}`).join('\n')}
       console.log(`[TM] A단계 완료 (점수: ${classResult.classScoreAvg || 'N/A'})`);
       
     } catch (e) {
-      console.warn('[TM] A단계 실패, 기존 방식 fallback:', e.message);
-      try {
-        const fallbackResult = await TM.validateRecommendations(businessInput, aiAnalysis);
-        return fallbackResult;
-      } catch (fe) {
-        console.warn('[TM] fallback도 실패:', fe.message);
-        // ★ BUG-2 FIX: 류 검증 완전 실패 시 경고 추가
+      // ★ 529 과부하 시 fallback도 건너뜀 (추가 요청 방지)
+      const is529 = /과부하|529|overload/i.test(e.message);
+      if (is529) {
+        console.warn('[TM] A단계 실패 (529 과부하) — fallback 건너뜀');
         validationResult.warnings.push({
-          class: 'ALL', message: '류 적합성 자동 검증 실패. 수동 확인 권장.'
+          class: 'ALL', message: 'API 과부하로 류 검증 생략. 수동 확인 권장.'
         });
-        validationResult.summary = '류 적합성 검증 실패 — 수동 확인 필요';
+        validationResult.summary = '류 적합성 검증 생략 (API 과부하)';
+      } else {
+        console.warn('[TM] A단계 실패, 기존 방식 fallback:', e.message);
+        try {
+          const fallbackResult = await TM.validateRecommendations(businessInput, aiAnalysis);
+          return fallbackResult;
+        } catch (fe) {
+          console.warn('[TM] fallback도 실패:', fe.message);
+          // ★ BUG-2 FIX: 류 검증 완전 실패 시 경고 추가
+          validationResult.warnings.push({
+            class: 'ALL', message: '류 적합성 자동 검증 실패. 수동 확인 권장.'
+          });
+          validationResult.summary = '류 적합성 검증 실패 — 수동 확인 필요';
+        }
       }
     }
     
     // ==============================================
     // B단계: 전 류 상품 통합 검증 (기존 2단계 류별 → 한번에)
     // ==============================================
+    // ★ API 과부하 감지 시 B단계 건너뜀
+    if (typeof App.isCircuitOpen === 'function' && App.isCircuitOpen()) {
+      console.warn('[TM] API 서킷 브레이커 열림 — B단계 건너뜀');
+      validationResult.warnings.push({
+        class: 'ALL', message: 'API 과부하로 상품 검증 생략. 수동 확인 권장.'
+      });
+    } else {
     console.log('[TM] ▶ B단계: 전 류 상품 통합 검증');
     
     const invalidClassCodes = validationResult.invalidClasses.map(c => c.class);
@@ -10240,7 +10261,15 @@ ${allGoodsList}
         console.log('[TM] B단계 완료');
         
       } catch (e) {
-        console.warn('[TM] B단계 실패, 류별 개별 검증 fallback:', e.message);
+        // ★ 529 과부하 시 류별 개별 호출 fallback 금지 (역효과 방지)
+        const is529 = /과부하|529|overload/i.test(e.message);
+        if (is529) {
+          console.warn('[TM] B단계 실패 (529 과부하) — 개별 검증 건너뜀 (추가 요청 방지)');
+          validationResult.warnings.push({
+            class: 'ALL', message: 'API 과부하로 상품 검증 생략. 수동 확인 권장.'
+          });
+        } else {
+          console.warn('[TM] B단계 실패, 류별 개별 검증 fallback:', e.message);
         for (const classCode of validClassCodes) {
           const goods = aiAnalysis.recommendedGoods?.[classCode] || [];
           if (goods.length === 0) continue;
@@ -10277,8 +10306,10 @@ ${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
           }
           await new Promise(r => setTimeout(r, 500));
         }
+        } // close else
       }
     }
+    } // close circuit breaker else
     
     // ★ 누락된 류에 대해 지정상품 추천
     if (validationResult.missingClasses?.length > 0) {

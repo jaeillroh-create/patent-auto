@@ -226,8 +226,22 @@ function ensureApiKey(){
   }catch(e){}
   return false;
 }
+
+// ═══ API Circuit Breaker ═══
+const apiCircuit = { failures: 0, lastFailTime: 0, THRESHOLD: 3, COOLDOWN: 30000 };
+function isCircuitOpen() {
+  if (apiCircuit.failures >= apiCircuit.THRESHOLD) {
+    if (Date.now() - apiCircuit.lastFailTime < apiCircuit.COOLDOWN) return true;
+    apiCircuit.failures = 0; // cooldown 지남 → 리셋
+  }
+  return false;
+}
+function recordApiSuccess() { apiCircuit.failures = 0; }
+function recordApiFailure() { apiCircuit.failures++; apiCircuit.lastFailTime = Date.now(); }
+
 async function callClaude(prompt,maxTokens=8192){
   if(!ensureApiKey()){openProfileSettings();throw new Error('API Key를 먼저 입력해 주세요');}
+  if(isCircuitOpen()){throw new Error('API 과부하 감지 — '+Math.ceil((apiCircuit.COOLDOWN-(Date.now()-apiCircuit.lastFailTime))/1000)+'초 후 재시도');}
   const prov=selectedProvider,mc=getModelConfig();
   const MAX_RETRIES=2;
   for(let attempt=0;attempt<=MAX_RETRIES;attempt++){
@@ -236,7 +250,7 @@ async function callClaude(prompt,maxTokens=8192){
     try{const res=await fetch(req.url,{method:'POST',signal:ctrl.signal,headers:req.headers,body:JSON.stringify(req.body)});clearTimeout(tout);
       if(res.status===401||res.status===403){apiKeys[prov]='';API_KEY='';showToast('API Key가 유효하지 않습니다. ⚙️ 계정설정을 확인하세요.','error');throw new Error('API Key 유효하지 않음');}
       if(res.status===429){if(attempt<MAX_RETRIES){await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw new Error('요청 과다. 30초 후 재시도');}
-      if(res.status===529){if(attempt<MAX_RETRIES){console.warn('[API] 529 과부하, '+(attempt+1)+'회 재시도...');await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw new Error('서버 과부하(529). 잠시 후 재시도');}
+      if(res.status===529){recordApiFailure();if(attempt<MAX_RETRIES){const d=5000*(attempt+1);console.warn('[API] 529 과부하, '+(attempt+1)+'회 재시도 ('+d/1000+'초 후)...');await new Promise(r=>setTimeout(r,d));continue;}throw new Error('서버 과부하(529). 잠시 후 재시도');}
       if(res.status>=500){if(attempt<MAX_RETRIES){await new Promise(r=>setTimeout(r,2000*(attempt+1)));continue;}throw new Error('서버 오류');}
       const d=await res.json(),parsed=parseAPIResponse(prov,d);
       if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
@@ -248,6 +262,7 @@ async function callClaude(prompt,maxTokens=8192){
 }
 async function callClaudeSonnet(prompt,maxTokens=8192){
   if(!ensureApiKey()){openProfileSettings();throw new Error('API Key를 먼저 입력해 주세요');}
+  if(isCircuitOpen()){throw new Error('API 과부하 감지 — '+Math.ceil((apiCircuit.COOLDOWN-(Date.now()-apiCircuit.lastFailTime))/1000)+'초 후 재시도');}
   const prov=selectedProvider,cheapKey=API_PROVIDERS[prov].cheapModel,mc=API_PROVIDERS[prov].models[cheapKey];
   const MAX_RETRIES=2;
   for(let attempt=0;attempt<=MAX_RETRIES;attempt++){
@@ -255,7 +270,7 @@ async function callClaudeSonnet(prompt,maxTokens=8192){
     const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),180000);
     try{const res=await fetch(req.url,{method:'POST',signal:ctrl.signal,headers:req.headers,body:JSON.stringify(req.body)});clearTimeout(tout);
       if(res.status===401||res.status===403)throw new Error('API Key 유효하지 않음');
-      if(res.status===429||res.status===529||res.status>=500){if(attempt<MAX_RETRIES){console.warn('[API-S] '+res.status+' 재시도 '+(attempt+1));await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw new Error(res.status===529?'서버 과부하(529)':res.status===429?'요청 과다':'서버 오류');}
+      if(res.status===429||res.status===529||res.status>=500){recordApiFailure();if(attempt<MAX_RETRIES){const d=5000*(attempt+1);console.warn('[API-S] '+res.status+' 재시도 '+(attempt+1)+' ('+d/1000+'초 후)');await new Promise(r=>setTimeout(r,d));continue;}throw new Error(res.status===529?'서버 과부하(529)':res.status===429?'요청 과다':'서버 오류');}
       const d=await res.json(),parsed=parseAPIResponse(prov,d);
       if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
       usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
@@ -289,7 +304,7 @@ Object.assign(App, {
   getProvider, getModelConfig, getModel, selectModel, selectProvider,
   updateModelToggle, updateProviderLabel, buildAPIRequest, parseAPIResponse,
   escapeHtml, showToast, showProgress, clearProgress, setButtonLoading,
-  showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation,
+  showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation, isCircuitOpen, apiCircuit,
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
   openProfileSettings, closeProfileSettings,
   currentService: 'patent',
