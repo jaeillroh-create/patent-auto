@@ -9322,11 +9322,11 @@ ${TM.PRACTICE_GUIDELINES}
               const usedNames = new Set(selectedGoods.map(g => g.name));
               for (const c of fetchResult.candidates) {
                 if (selectedGoods.length >= 10) break;
-                if (usedNames.has(c.name)) continue;
-                usedNames.add(c.name);
+                if (usedNames.has(c.goods_name)) continue;
+                usedNames.add(c.goods_name);
                 selectedGoods.push({
-                  name: c.name,
-                  similarGroup: c.similarGroup || '',
+                  name: c.goods_name,
+                  similarGroup: c.similar_group_code || '',
                   isCore: false
                 });
               }
@@ -9837,18 +9837,23 @@ JSON 배열로만 응답: ["상품명1", "상품명2"]`;
     }
   };
 
-  // 대형 류(09류, 35류) 전용 필터링 조회
+  // 대형 류(09류, 35류) 전용 필터링 조회 — 키워드 그룹별 균형 보장
   TM.fetchFilteredCandidates = async function(paddedCode, businessContext) {
-    const results = [];
+    const TOP_N = 200;  // LLM에 전달할 최대 후보 수
     const seen = new Set();
-    const MAX_CANDIDATES = 3500;
     
-    const addItems = (data) => {
+    // ★ 핵심: 키워드 그룹별로 분리 수집
+    const keywordGroups = new Map(); // keyword → [items]
+    
+    const addToGroup = (keyword, data) => {
       if (!data) return;
+      if (!keywordGroups.has(keyword)) keywordGroups.set(keyword, []);
+      const group = keywordGroups.get(keyword);
       for (const item of data) {
-        if (seen.has(item.goods_name)) continue;
-        seen.add(item.goods_name);
-        results.push(item);
+        if (!seen.has(item.goods_name)) {
+          seen.add(item.goods_name);
+          group.push(item);
+        }
       }
     };
     
@@ -9857,39 +9862,21 @@ JSON 배열로만 응답: ["상품명1", "상품명2"]`;
       ...(businessContext.coreServices || [])
     ];
     
+    // 1. 핵심 키워드별 수집 (각 그룹으로 분리)
     for (const term of coreTerms.slice(0, 10)) {
-      if (results.length >= MAX_CANDIDATES) break;  // BUG-7 FIX
       try {
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code, similar_group_name')
           .eq('class_code', paddedCode)
           .ilike('goods_name', `%${term}%`)
-          .limit(100);
-        addItems(data);
+          .limit(200);
+        addToGroup(term, data);
       } catch (e) { /* continue */ }
     }
-    console.log(`[TM] 핵심 키워드 후: ${results.length}건`);
     
-    const searchKw = (businessContext.searchKeywords || [])
-      .filter(k => !coreTerms.includes(k));
-    
-    for (const kw of searchKw.slice(0, 15)) {
-      if (results.length >= MAX_CANDIDATES) break;
-      try {
-        const { data } = await App.sb
-          .from('gazetted_goods_cache')
-          .select('goods_name, similar_group_code, similar_group_name')
-          .eq('class_code', paddedCode)
-          .ilike('goods_name', `%${kw}%`)
-          .limit(50);
-        addItems(data);
-      } catch (e) { /* continue */ }
-    }
-    console.log(`[TM] 검색 키워드 후: ${results.length}건`);
-    
+    // 유사군명으로도 핵심 키워드 검색 (같은 그룹에 추가)
     for (const term of coreTerms.slice(0, 5)) {
-      if (results.length >= MAX_CANDIDATES) break;
       try {
         const { data } = await App.sb
           .from('gazetted_goods_cache')
@@ -9897,38 +9884,195 @@ JSON 배열로만 응답: ["상품명1", "상품명2"]`;
           .eq('class_code', paddedCode)
           .ilike('similar_group_name', `%${term}%`)
           .limit(200);
-        addItems(data);
+        addToGroup(term, data);
       } catch (e) { /* continue */ }
     }
-    console.log(`[TM] 유사군명 조회 후: ${results.length}건`);
     
+    const coreGroupCount = keywordGroups.size;
+    console.log(`[TM] 핵심 키워드 ${coreTerms.length}개 → ${coreGroupCount}개 그룹, 총 ${seen.size}건`);
+    for (const [kw, items] of keywordGroups) {
+      console.log(`[TM]   "${kw}": ${items.length}건`);
+    }
+    
+    // 2. 보조 키워드 수집 (별도 그룹)
+    const searchKw = (businessContext.searchKeywords || [])
+      .filter(k => !coreTerms.includes(k));
+    for (const kw of searchKw.slice(0, 15)) {
+      try {
+        const { data } = await App.sb
+          .from('gazetted_goods_cache')
+          .select('goods_name, similar_group_code, similar_group_name')
+          .eq('class_code', paddedCode)
+          .ilike('goods_name', `%${kw}%`)
+          .limit(100);
+        addToGroup('_search_' + kw, data);
+      } catch (e) { /* continue */ }
+    }
+    
+    // 3. 확장 키워드 수집 (별도 그룹)
     const expansion = (businessContext.expansionPotential || []);
     for (const term of expansion.slice(0, 5)) {
-      if (results.length >= MAX_CANDIDATES) break;
       try {
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code, similar_group_name')
           .eq('class_code', paddedCode)
           .ilike('goods_name', `%${term}%`)
-          .limit(50);
-        addItems(data);
+          .limit(100);
+        addToGroup('_exp_' + term, data);
       } catch (e) { /* continue */ }
     }
     
-    console.log(`[TM] 필터링 최종: ${results.length}건 (Tier B)`);
+    console.log(`[TM] 전체 수집: ${seen.size}건 (${keywordGroups.size}개 그룹)`);
+    
+    // ★★★ 핵심 개선: 키워드 그룹별 균형 선택 (라운드로빈) ★★★
+    const selected = [];
+    const selectedNames = new Set();
+    
+    // Phase 1: 핵심 키워드 그룹별 최소 보장 (각 그룹당 최소 슬롯)
+    const coreGroups = coreTerms
+      .filter(t => keywordGroups.has(t) && keywordGroups.get(t).length > 0)
+      .map(t => ({ keyword: t, items: [...keywordGroups.get(t)], index: 0 }));
+    
+    if (coreGroups.length > 0) {
+      const minPerGroup = Math.max(5, Math.floor(TOP_N * 0.6 / coreGroups.length));
+      console.log(`[TM] 핵심 그룹 ${coreGroups.length}개, 그룹당 최소 ${minPerGroup}건 보장`);
+      
+      // 라운드로빈: 각 그룹에서 번갈아 추출
+      let round = 0;
+      while (selected.length < TOP_N * 0.6 && round < minPerGroup) {
+        for (const group of coreGroups) {
+          if (group.index >= group.items.length) continue;
+          const item = group.items[group.index];
+          group.index++;
+          if (!selectedNames.has(item.goods_name)) {
+            selectedNames.add(item.goods_name);
+            selected.push({ ...item, _matchedKeyword: group.keyword });
+          }
+        }
+        round++;
+      }
+      console.log(`[TM] Phase 1 (핵심 균형): ${selected.length}건`);
+    }
+    
+    // Phase 2: 나머지 슬롯은 보조/확장 키워드 + 남은 핵심 항목으로 채움
+    const allRemaining = [];
+    for (const [kw, items] of keywordGroups) {
+      for (const item of items) {
+        if (!selectedNames.has(item.goods_name)) {
+          const isCoreMatch = coreTerms.includes(kw);
+          allRemaining.push({
+            ...item,
+            _score: isCoreMatch ? 30 : (kw.startsWith('_search_') ? 15 : 5),
+            _matchedKeyword: kw
+          });
+        }
+      }
+    }
+    allRemaining.sort((a, b) => b._score - a._score);
+    
+    for (const item of allRemaining) {
+      if (selected.length >= TOP_N) break;
+      if (!selectedNames.has(item.goods_name)) {
+        selectedNames.add(item.goods_name);
+        selected.push(item);
+      }
+    }
+    
+    console.log(`[TM] 필터링 최종: ${seen.size}건 수집 → 균형 선택 ${selected.length}건 (Tier B)`);
+    if (coreGroups.length > 0) {
+      for (const group of coreGroups) {
+        const count = selected.filter(s => s._matchedKeyword === group.keyword).length;
+        console.log(`[TM]   "${group.keyword}": ${count}건 포함`);
+      }
+    }
+    
     return {
-      candidates: results.slice(0, MAX_CANDIDATES),
-      totalInClass: results.length,
-      strategy: 'filtered'
+      candidates: selected,
+      totalInClass: seen.size,
+      strategy: 'filtered-balanced'
     };
   };
 
   // ★ 원샷 상품 선택 (callClaudeSonnet 사용)
   TM.selectGoodsOneshot = async function(classCode, allCandidates, businessContext) {
     const MIN_GOODS = 10;
+    const MAX_LLM_INPUT = 200;  // ★ LLM에 보내는 최대 후보 수
     
-    const numberedList = allCandidates.map((c, i) =>
+    // ★★★ 후보가 200건 초과 시 키워드 그룹별 균형 선택 ★★★
+    let candidates = allCandidates;
+    if (allCandidates.length > MAX_LLM_INPUT) {
+      console.log(`[TM] 후보 ${allCandidates.length}건 → 균형 선택으로 ${MAX_LLM_INPUT}건 축소`);
+      const coreTerms = [
+        ...(businessContext.coreProducts || []),
+        ...(businessContext.coreServices || [])
+      ].map(t => t.toLowerCase());
+      const kwTerms = (businessContext.searchKeywords || []).map(t => t.toLowerCase());
+      
+      // 핵심 키워드 그룹별 분리
+      const groups = new Map(); // keyword → items
+      const ungrouped = [];
+      
+      for (const c of allCandidates) {
+        const name = (c.goods_name || '').toLowerCase();
+        let matched = false;
+        for (const t of coreTerms) {
+          if (name.includes(t)) {
+            if (!groups.has(t)) groups.set(t, []);
+            groups.get(t).push(c);
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) ungrouped.push(c);
+      }
+      
+      // 그룹별 라운드로빈으로 60% 채움
+      const selected = [];
+      const selectedNames = new Set();
+      const groupList = [...groups.entries()].map(([kw, items]) => ({ kw, items, idx: 0 }));
+      
+      if (groupList.length > 0) {
+        const target = Math.floor(MAX_LLM_INPUT * 0.6);
+        let round = 0;
+        while (selected.length < target && round < 100) {
+          let added = false;
+          for (const g of groupList) {
+            if (g.idx >= g.items.length) continue;
+            const item = g.items[g.idx];
+            g.idx++;
+            if (!selectedNames.has(item.goods_name)) {
+              selectedNames.add(item.goods_name);
+              selected.push(item);
+              added = true;
+            }
+          }
+          if (!added) break;
+          round++;
+        }
+      }
+      
+      // 나머지 40%는 보조 키워드 매칭 + 잔여
+      const kwScored = ungrouped.map(c => {
+        const name = (c.goods_name || '').toLowerCase();
+        let score = 0;
+        for (const t of kwTerms) { if (name.includes(t)) { score = 10; break; } }
+        return { ...c, _score: score };
+      }).sort((a, b) => b._score - a._score);
+      
+      for (const item of kwScored) {
+        if (selected.length >= MAX_LLM_INPUT) break;
+        if (!selectedNames.has(item.goods_name)) {
+          selectedNames.add(item.goods_name);
+          selected.push(item);
+        }
+      }
+      
+      candidates = selected;
+      console.log(`[TM] 균형 선택: ${candidates.length}건 (그룹 ${groupList.length}개)`);
+    }
+    
+    const numberedList = candidates.map((c, i) =>
       `[${i + 1}] ${c.goods_name} (${c.similar_group_code || '?'})`
     ).join('\n');
     
@@ -9950,13 +10094,15 @@ JSON 배열로만 응답: ["상품명1", "상품명2"]`;
 【판매 채널】${salesInfo || '미정'}
 【확장 가능성】${expansion || '미정'}
 
-【제${classCode}류 고시명칭 전체 ${allCandidates.length}건】
+【제${classCode}류 고시명칭 후보 ${candidates.length}건】
 ${numberedList}
 
 위 사업과 직접 관련 있는 지정상품 ${MIN_GOODS}개를 선택하세요.
 
-【선택 기준】
-1. 사업에서 실제로 판매/제공하는 상품·서비스 우선
+【선택 기준 — 반드시 순서대로 적용】
+1. ★★★ 사업 영역 전체 커버: 핵심 상품·서비스 각각에 대해 최소 1개씩 대응하는 지정상품을 선택하세요.
+   - 예: 핵심 상품이 "커피, 케이크, 쿠키"이면 → 커피 관련 + 케이크 관련 + 쿠키 관련 모두 포함해야 합니다.
+   - 특정 영역에만 편중되면 안 됩니다.
 2. 유사군코드(괄호 안 코드)가 다양하도록 분산 선택
 3. 핵심 사업 → 부수 사업 → 확장 가능 순서로 우선순위
 
@@ -9993,12 +10139,12 @@ ${numberedList}
         if (goods.length >= MIN_GOODS) break;
         
         let matched = null;
-        if (item.no && item.no >= 1 && item.no <= allCandidates.length) {
-          matched = allCandidates[item.no - 1];
+        if (item.no && item.no >= 1 && item.no <= candidates.length) {
+          matched = candidates[item.no - 1];
         }
         if (!matched && item.name) {
           // ★ BUG-3 FIX: 엄격 매칭 (includes 오매칭 방지)
-          matched = allCandidates.find(c => c.goods_name === item.name);
+          matched = candidates.find(c => c.goods_name === item.name);
         }
         
         if (matched && !usedNames.has(matched.goods_name)) {
@@ -10159,29 +10305,41 @@ ${allClasses.map(c => `- 제${c.class}류: ${c.reason}`).join('\n')}
     
     if (allGoodsList) {
       try {
+        // ★ 사업 분석 구조화 데이터 추출 (커버리지 체크용)
+        const coreProducts = (aiAnalysis.coreProducts || []).join(', ');
+        const coreServices = (aiAnalysis.coreServices || []).join(', ');
+        const expansionAreas = (aiAnalysis.expansionPotential || []).join(', ');
+        
         const goodsPrompt = `당신은 상표 출원 전문 변리사입니다.
 
 【사업 내용】
 "${businessInput}"
 
+【사업 분석 결과 — 커버해야 할 영역】
+- 핵심 상품: ${coreProducts || '(없음)'}
+- 핵심 서비스: ${coreServices || '(없음)'}
+- 확장 가능성: ${expansionAreas || '(없음)'}
+
 【추천 지정상품 전체】
 ${allGoodsList}
 
+【과제 1: 개별 적합성 검증】
 각 상품이 위 사업과 관련 있는지 검증하세요.
+★ 주의: 동음이의어, 부분 문자열, 업종 불일치, 확대 해석
 
-★ 특히 주의할 오류:
-1. 동음이의어: "생화(꽃)" ≠ "생화학(化學)"
-2. 부분 문자열: "꽃" ≠ "꽃게", "불꽃"
-3. 업종 불일치: 사업과 다른 분야의 상품
-4. 확대 해석: 실제 취급하지 않는 상품
+【과제 2: 사업 영역 커버리지 검증 ★★★】
+위 "핵심 상품"과 "핵심 서비스" 각각에 대해, 추천 상품 중 해당 영역을 커버하는 것이 있는지 확인하세요.
+- 커버되지 않는 사업 영역이 있으면 uncoveredAreas에 기재
+- 해당 영역을 커버할 수 있는 대체 상품을 suggestedReplacements에 제안
 
 【JSON으로만 응답 — reason 15자 이내】
 {
   "validGoods": [{"class":"25","name":"티셔츠","score":95,"comment":"의류 핵심"}],
   "invalidGoods": [{"class":"35","name":"생화학 도매","score":5,"reason":"동음이의어","errorType":"homonym"}],
-  "suggestedReplacements": [{"class":"35","remove":"생화학 도매","addInstead":"절화 소매업","reason":"꽃 판매 적합"}]
+  "suggestedReplacements": [{"class":"35","remove":"생화학 도매","addInstead":"절화 소매업","reason":"꽃 판매 적합"}],
+  "uncoveredAreas": [{"area":"케이크","class":"30","suggestedGoods":["케이크","빵류"]}]
 }
-모두 적합하면 invalidGoods: [], suggestedReplacements: []로 응답.`;
+모두 적합하고 누락 없으면 invalidGoods: [], uncoveredAreas: []로 응답.`;
 
         const goodsResponse = await App.callClaudeSonnet(goodsPrompt, 4000);
         const goodsResult = TM.safeJsonParse(goodsResponse.text);
@@ -10209,6 +10367,21 @@ ${allGoodsList}
               remove: r.remove,
               addInstead: r.addInstead,
               reason: r.reason
+            });
+          });
+        }
+        
+        // ★ 커버리지 검증 결과 처리
+        if (goodsResult.uncoveredAreas?.length > 0) {
+          validationResult.hasIssues = true;
+          validationResult.uncoveredAreas = goodsResult.uncoveredAreas;
+          console.log(`[TM] 미커버 영역: ${goodsResult.uncoveredAreas.map(a => a.area).join(', ')}`);
+          
+          // 미커버 영역을 warnings에도 추가
+          goodsResult.uncoveredAreas.forEach(area => {
+            validationResult.warnings.push({
+              class: area.class || 'ALL',
+              message: `"${area.area}" 영역 미커버. 추천: ${(area.suggestedGoods || []).join(', ')}`
             });
           });
         }
