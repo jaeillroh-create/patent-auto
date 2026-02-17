@@ -229,31 +229,39 @@ function ensureApiKey(){
 async function callClaude(prompt,maxTokens=8192){
   if(!ensureApiKey()){openProfileSettings();throw new Error('API Key를 먼저 입력해 주세요');}
   const prov=selectedProvider,mc=getModelConfig();
-  const req=buildAPIRequest(prov,selectedModel,SYSTEM_PROMPT,prompt,maxTokens);
-  const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),180000);
-  try{const res=await fetch(req.url,{method:'POST',signal:ctrl.signal,headers:req.headers,body:JSON.stringify(req.body)});clearTimeout(tout);
-    if(res.status===401||res.status===403){apiKeys[prov]='';API_KEY='';showToast('API Key가 유효하지 않습니다. ⚙️ 계정설정을 확인하세요.','error');throw new Error('API Key 유효하지 않음');}
-    if(res.status===429)throw new Error('요청 과다. 30초 후 재시도');if(res.status===529)throw new Error('서버 과부하(529). 잠시 후 재시도');if(res.status>=500)throw new Error('서버 오류');
-    const d=await res.json(),parsed=parseAPIResponse(prov,d);
-    if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
-    usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
-    if(typeof updateStats==='function')updateStats();
-    return{text:parsed.text,stopReason:parsed.stopReason};
-  }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃(3분)');throw e;}
+  const MAX_RETRIES=2;
+  for(let attempt=0;attempt<=MAX_RETRIES;attempt++){
+    const req=buildAPIRequest(prov,selectedModel,SYSTEM_PROMPT,prompt,maxTokens);
+    const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),180000);
+    try{const res=await fetch(req.url,{method:'POST',signal:ctrl.signal,headers:req.headers,body:JSON.stringify(req.body)});clearTimeout(tout);
+      if(res.status===401||res.status===403){apiKeys[prov]='';API_KEY='';showToast('API Key가 유효하지 않습니다. ⚙️ 계정설정을 확인하세요.','error');throw new Error('API Key 유효하지 않음');}
+      if(res.status===429){if(attempt<MAX_RETRIES){await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw new Error('요청 과다. 30초 후 재시도');}
+      if(res.status===529){if(attempt<MAX_RETRIES){console.warn('[API] 529 과부하, '+(attempt+1)+'회 재시도...');await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw new Error('서버 과부하(529). 잠시 후 재시도');}
+      if(res.status>=500){if(attempt<MAX_RETRIES){await new Promise(r=>setTimeout(r,2000*(attempt+1)));continue;}throw new Error('서버 오류');}
+      const d=await res.json(),parsed=parseAPIResponse(prov,d);
+      if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
+      usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
+      if(typeof updateStats==='function')updateStats();
+      return{text:parsed.text,stopReason:parsed.stopReason};
+    }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃(3분)');if(attempt>=MAX_RETRIES)throw e;if(/과부하|529|서버 오류/.test(e.message)){await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw e;}
+  }
 }
 async function callClaudeSonnet(prompt,maxTokens=8192){
   if(!ensureApiKey()){openProfileSettings();throw new Error('API Key를 먼저 입력해 주세요');}
   const prov=selectedProvider,cheapKey=API_PROVIDERS[prov].cheapModel,mc=API_PROVIDERS[prov].models[cheapKey];
-  const req=buildAPIRequest(prov,cheapKey,SYSTEM_PROMPT,prompt,maxTokens);
-  const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),180000);
-  try{const res=await fetch(req.url,{method:'POST',signal:ctrl.signal,headers:req.headers,body:JSON.stringify(req.body)});clearTimeout(tout);
-    if(res.status===401||res.status===403)throw new Error('API Key 유효하지 않음');
-    if(res.status===429)throw new Error('요청 과다');if(res.status===529)throw new Error('서버 과부하(529). 잠시 후 재시도');if(res.status>=500)throw new Error('서버 오류');
-    const d=await res.json(),parsed=parseAPIResponse(prov,d);
-    if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
-    usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
-    return{text:parsed.text,stopReason:parsed.stopReason};
-  }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃');throw e;}
+  const MAX_RETRIES=2;
+  for(let attempt=0;attempt<=MAX_RETRIES;attempt++){
+    const req=buildAPIRequest(prov,cheapKey,SYSTEM_PROMPT,prompt,maxTokens);
+    const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),180000);
+    try{const res=await fetch(req.url,{method:'POST',signal:ctrl.signal,headers:req.headers,body:JSON.stringify(req.body)});clearTimeout(tout);
+      if(res.status===401||res.status===403)throw new Error('API Key 유효하지 않음');
+      if(res.status===429||res.status===529||res.status>=500){if(attempt<MAX_RETRIES){console.warn('[API-S] '+res.status+' 재시도 '+(attempt+1));await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw new Error(res.status===529?'서버 과부하(529)':res.status===429?'요청 과다':'서버 오류');}
+      const d=await res.json(),parsed=parseAPIResponse(prov,d);
+      if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
+      usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
+      return{text:parsed.text,stopReason:parsed.stopReason};
+    }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃');if(attempt>=MAX_RETRIES)throw e;if(/과부하|529|서버/.test(e.message)){await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw e;}
+  }
 }
 async function callClaudeWithContinuation(prompt,pid){let full='',r=await callClaude(prompt),a=0;full=r.text;while(a<6&&r.stopReason==='max_tokens'){a++;showProgress(pid,`이어서 작성 중... (${a}/6)`,a,6);r=await callClaude(`아래 특허명세서 뒷부분을 이어서 작성. 앞부분 반복 금지. 동일 문체.\n\n[마지막]\n${full.slice(-2000)}`);full+='\n'+r.text;}clearProgress(pid);return full;}
 

@@ -9067,10 +9067,18 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
   // ============================================================
   
   TM.analyzeBusiness = async function() {
+    // ★ 중복 실행 방지 (경합 조건 차단)
+    if (TM._analyzingBusiness) {
+      App.showToast('분석이 이미 진행 중입니다.', 'warning');
+      return;
+    }
+    TM._analyzingBusiness = true;
+    
     const p = TM.currentProject;
     const businessInput = document.getElementById('tm-business-url')?.value?.trim();
     
     if (!businessInput && !p.trademarkName) {
+      TM._analyzingBusiness = false;
       App.showToast('상표명 또는 사업 내용을 입력하세요.', 'warning');
       return;
     }
@@ -9181,23 +9189,7 @@ ${TM.PRACTICE_GUIDELINES}
       if (btn) btn.innerHTML = '<span class="tossface">⏳</span> 사업 분석 중...';
       
       console.log('[TM] LLM 기반 사업 분석 시작');
-      // 529(과부하)/서버오류 시 자동 재시도 (최대 2회)
-      let analysisResponse;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          analysisResponse = await App.callClaude(analysisPrompt, 4000);
-          break;
-        } catch (retryErr) {
-          if (attempt < 2 && /서버|overload|529|500/i.test(retryErr.message)) {
-            const delay = (attempt + 1) * 3000;
-            console.warn(`[TM] API 재시도 ${attempt + 1}/2 (${delay/1000}초 후)...`);
-            if (btn) btn.innerHTML = `<span class="tossface">⏳</span> 재시도 중... (${attempt + 1}/2)`;
-            await new Promise(r => setTimeout(r, delay));
-            continue;
-          }
-          throw retryErr;
-        }
-      }
+      const analysisResponse = await App.callClaude(analysisPrompt, 4000);
       const text = analysisResponse.text || '';
       const startIdx = text.indexOf('{');
       const endIdx = text.lastIndexOf('}');
@@ -9286,6 +9278,7 @@ ${TM.PRACTICE_GUIDELINES}
       ];
       
       for (const classCode of initialClasses) {
+        if (!p.aiAnalysis) { console.error('[TM] aiAnalysis가 null — 루프 중단'); break; }
         const paddedCode = classCode.padStart(2, '0');
         
         try {
@@ -9393,18 +9386,22 @@ ${TM.PRACTICE_GUIDELINES}
       // ================================================================
       if (btn) btn.innerHTML = '<span class="tossface">🔍</span> 검증 중...';
       
-      const validationResult = await TM.validateRecommendationsV2(businessInput, p.aiAnalysis);
+      if (!p.aiAnalysis) {
+        console.warn('[TM] aiAnalysis가 null — 검증 건너뜀');
+      } else {
+        const validationResult = await TM.validateRecommendationsV2(businessInput, p.aiAnalysis);
       
-      if (validationResult) {
-        p.aiAnalysis.validation = validationResult;
+        if (validationResult && p.aiAnalysis) {
+          p.aiAnalysis.validation = validationResult;
         
-        // 검증 결과 적용 (잘못된 항목 제거 + 대체 추천)
-        if (validationResult.hasIssues) {
-          if (btn) btn.innerHTML = '<span class="tossface">🔧</span> 검증 결과 적용 중...';
-          await TM.applyValidationResult(p.aiAnalysis, validationResult);
+          // 검증 결과 적용 (잘못된 항목 제거 + 대체 추천)
+          if (validationResult.hasIssues) {
+            if (btn) btn.innerHTML = '<span class="tossface">🔧</span> 검증 결과 적용 중...';
+            await TM.applyValidationResult(p.aiAnalysis, validationResult);
+          }
+        
+          console.log('[TM] ✅ 검증 완료');
         }
-        
-        console.log('[TM] ✅ 검증 완료');
       }
       
       TM.renderCurrentStep();
@@ -9419,6 +9416,7 @@ ${TM.PRACTICE_GUIDELINES}
       }
       if (!p.aiAnalysis) p.aiAnalysis = {};
     } finally {
+      TM._analyzingBusiness = false;  // ★ 잠금 해제
       const btn = document.querySelector('[data-action="tm-analyze-business"]');
       if (btn) {
         btn.disabled = false;
