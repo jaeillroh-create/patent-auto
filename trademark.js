@@ -1,41 +1,41 @@
 /* ============================================================
-   ìƒí‘œì¶œì› ìš°ì„ ì‹¬ì‚¬ ìžë™í™” ì‹œìŠ¤í…œ - trademark.js
+   상표출원 우선심사 자동화 시스템 - trademark.js
    Version: 2.1
-   ê¸°ëŠ¥ëª…ì„¸ì„œ v2.1 ê¸°ë°˜ ì™„ì „ êµ¬í˜„
+   기능명세서 v2.1 기반 완전 구현
    ============================================================ */
 
 (function() {
   'use strict';
 
   // ============================================================
-  // 1. ìƒíƒœ ê´€ë¦¬
+  // 1. 상태 관리
   // ============================================================
   const TM = {
-    // í˜„ìž¬ í”„ë¡œì íŠ¸ ìƒíƒœ
+    // 현재 프로젝트 상태
     currentProject: null,
     currentStep: 1,
     
-    // ì›Œí¬í”Œë¡œìš° ë‹¨ê³„ ì •ì˜
+    // 워크플로우 단계 정의
     steps: [
-      { id: 1, name: 'ìƒí‘œ ì •ë³´', icon: 'ðŸ·ï¸', key: 'trademark_info' },
-      { id: 2, name: 'ì§€ì •ìƒí’ˆ', icon: 'ðŸ“¦', key: 'designated_goods' },
-      { id: 3, name: 'ì„ í–‰ìƒí‘œ ê²€ìƒ‰', icon: 'ðŸ”', key: 'prior_search' },
-      { id: 4, name: 'ìœ ì‚¬ë„ í‰ê°€', icon: 'âš–ï¸', key: 'similarity' },
-      { id: 5, name: 'ë¦¬ìŠ¤í¬ í‰ê°€', icon: 'ðŸ“Š', key: 'risk' },
-      { id: 6, name: 'ìš°ì„ ì‹¬ì‚¬', icon: 'âš¡', key: 'priority_exam' },
-      { id: 7, name: 'ì¢…í•© ìš”ì•½', icon: 'ðŸ“‹', key: 'summary' }
+      { id: 1, name: '상표 정보', icon: '🏷️', key: 'trademark_info' },
+      { id: 2, name: '지정상품', icon: '📦', key: 'designated_goods' },
+      { id: 3, name: '선행상표 검색', icon: '🔍', key: 'prior_search' },
+      { id: 4, name: '유사도 평가', icon: '⚖️', key: 'similarity' },
+      { id: 5, name: '리스크 평가', icon: '📊', key: 'risk' },
+      { id: 6, name: '우선심사', icon: '⚡', key: 'priority_exam' },
+      { id: 7, name: '종합 요약', icon: '📋', key: 'summary' }
     ],
     
-    // í”„ë¡œì íŠ¸ ë°ì´í„° êµ¬ì¡°
+    // 프로젝트 데이터 구조
     defaultProjectData: {
-      // ìƒí‘œ ì •ë³´
+      // 상표 정보
       trademarkName: '',
       trademarkNameEn: '',
       trademarkType: 'text', // text, figure, combined, sound, color, 3d
       specimenUrl: null,
       specimenFile: null,
       
-      // ì¶œì›ì¸ ì •ë³´
+      // 출원인 정보
       applicant: {
         name: '',
         nameEn: '',
@@ -48,11 +48,11 @@
         contactPhone: ''
       },
       
-      // ì§€ì •ìƒí’ˆ
+      // 지정상품
       designatedGoods: [], // [{classCode, className, goods: [{name, nameEn, gazetted, similarGroup}]}]
       gazettedOnly: true,
       
-      // ê²€ìƒ‰ ê²°ê³¼
+      // 검색 결과
       searchResults: {
         text: [],
         figure: [],
@@ -60,10 +60,10 @@
         searchedAt: null
       },
       
-      // ìœ ì‚¬ë„ í‰ê°€
+      // 유사도 평가
       similarityEvaluations: [], // [{targetId, appearance, pronunciation, concept, overall, notes}]
       
-      // ë¦¬ìŠ¤í¬ í‰ê°€
+      // 리스크 평가
       riskAssessment: {
         level: null, // high, medium, low
         conflictCount: 0,
@@ -71,7 +71,7 @@
         recommendation: ''
       },
       
-      // ë¹„ìš©
+      // 비용
       feeCalculation: {
         applicationFee: 0,
         classCount: 0,
@@ -84,7 +84,7 @@
         breakdown: []
       },
       
-      // ìš°ì„ ì‹¬ì‚¬
+      // 우선심사
       priorityExam: {
         enabled: false,
         reason: '',
@@ -92,7 +92,7 @@
         generatedDocument: ''
       },
       
-      // AI ë¶„ì„ ê²°ê³¼
+      // AI 분석 결과
       aiAnalysis: {
         businessAnalysis: '',
         recommendedClasses: [],
@@ -101,7 +101,7 @@
       }
     },
     
-    // ìºì‹œ (ì „ì²˜ë¦¬ëœ ë°ì´í„°)
+    // 캐시 (전처리된 데이터)
     cache: {
       gazettedGoods: null,
       kiprisApiSpec: null,
@@ -109,109 +109,109 @@
       loadedAt: null
     },
     
-    // KIPRIS API ì„¤ì •
+    // KIPRIS API 설정
     kiprisConfig: {
       baseUrl: 'https://plus.kipris.or.kr/kipo-api/kipi',
-      apiKey: 'zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=', // ê¸°ë³¸ í‚¤ (TM.initì—ì„œ ê³„ì •ë³„ í‚¤ë¡œ êµì²´)
-      rateLimit: 30, // ë¶„ë‹¹ í˜¸ì¶œ ì œí•œ
+      apiKey: 'zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=', // 기본 키 (TM.init에서 계정별 키로 교체)
+      rateLimit: 30, // 분당 호출 제한
       timeout: 10000
     },
     
-    // Supabase ì„¤ì •
+    // Supabase 설정
     // Supabase: App.sb (common.js에서 초기화됨)
     
-    // 2026ë…„ ê´€ë‚©ë£Œ í…Œì´ë¸”
+    // 2026년 관납료 테이블
     feeTable: {
-      applicationGazetted: 46000,    // ë¥˜ë‹¹ (ì „ìž+ê³ ì‹œëª…ì¹­)
-      applicationNonGazetted: 52000, // ë¥˜ë‹¹ (ì „ìž+ë¹„ê³ ì‹œëª…ì¹­)
-      applicationPaper: 10000,       // ì„œë©´ ì¶”ê°€
-      excessGoods: 2000,             // 10ê°œ ì´ˆê³¼ì‹œ ê°œë‹¹
-      priorityExam: 160000,          // ë¥˜ë‹¹ (ê°ë©´ ì—†ìŒ)
-      registration10yr: 211000,      // ë¥˜ë‹¹
+      applicationGazetted: 46000,    // 류당 (전자+고시명칭)
+      applicationNonGazetted: 52000, // 류당 (전자+비고시명칭)
+      applicationPaper: 10000,       // 서면 추가
+      excessGoods: 2000,             // 10개 초과시 개당
+      priorityExam: 160000,          // 류당 (감면 없음)
+      registration10yr: 211000,      // 류당
       reductionRates: {
-        sme: 0.70,        // ì¤‘ì†Œê¸°ì—… 70%
-        individual: 0.70, // ê°œì¸ 70%
-        mid: 0.30,        // ì¤‘ê²¬ê¸°ì—… 30%
-        veteran: 1.00,    // êµ­ê°€ìœ ê³µìž 100%
-        disabled: 1.00,   // ìž¥ì• ì¸ 100%
-        age: 0.85         // 19~30ì„¸ ë˜ëŠ” 65ì„¸+ 85%
+        sme: 0.70,        // 중소기업 70%
+        individual: 0.70, // 개인 70%
+        mid: 0.30,        // 중견기업 30%
+        veteran: 1.00,    // 국가유공자 100%
+        disabled: 1.00,   // 장애인 100%
+        age: 0.85         // 19~30세 또는 65세+ 85%
       }
     },
     
-    // NICE ë¶„ë¥˜ (45ë¥˜)
+    // NICE 분류 (45류)
     niceClasses: {
-      '01': 'ê³µì—…ìš©Â·ê³¼í•™ìš©Â·ì‚¬ì§„ìš© í™”í•™ì œí’ˆ',
-      '02': 'íŽ˜ì¸íŠ¸, ë‹ˆìŠ¤, ëž˜ì»¤',
-      '03': 'í™”ìž¥í’ˆ, ì„¸ì •ì œ',
-      '04': 'ê³µì—…ìš© ì˜¤ì¼, ìœ¤í™œì œ',
-      '05': 'ì•½ì œ, ì˜ë£Œìš© ì œì œ',
-      '06': 'ë¹„ê¸ˆì† ì¼ë°˜, ê¸ˆì†ì œí’ˆ',
-      '07': 'ê¸°ê³„, ê³µìž‘ê¸°ê³„',
-      '08': 'ìˆ˜ê³µêµ¬, ë„ê²€ë¥˜',
-      '09': 'ê³¼í•™ê¸°ê¸°, ì „ê¸°ê¸°ê¸°, ì»´í“¨í„°',
-      '10': 'ì˜ë£Œê¸°ê¸°',
-      '11': 'ì¡°ëª…, ë‚œë°©, ëƒ‰ë°©ìž¥ì¹˜',
-      '12': 'ì°¨ëŸ‰, í•­ê³µê¸°, ì„ ë°•',
-      '13': 'í™”ê¸°, í­ë°œë¬¼',
-      '14': 'ê·€ê¸ˆì†, ì‹œê³„',
-      '15': 'ì•…ê¸°',
-      '16': 'ì¢…ì´, ì¸ì‡„ë¬¼, ë¬¸ë°©êµ¬',
-      '17': 'ê³ ë¬´, í”Œë¼ìŠ¤í‹± ë°˜ì œí’ˆ',
-      '18': 'ê°€ì£½, ê°€ë°©, ìš°ì‚°',
-      '19': 'ë¹„ê¸ˆì† ê±´ì¶•ìž¬ë£Œ',
-      '20': 'ê°€êµ¬, ê±°ìš¸, ì•¡ìž',
-      '21': 'ê°€ì •ìš© ê¸°êµ¬, ìœ ë¦¬ì œí’ˆ',
-      '22': 'ë¡œí”„, í…íŠ¸, í¬ëŒ€',
-      '23': 'ë°©ì ìš© ì‚¬',
-      '24': 'ì§ë¬¼, ì¹¨êµ¬ë¥˜',
-      '25': 'ì˜ë¥˜, ì‹ ë°œ, ëª¨ìž',
-      '26': 'ë ˆì´ìŠ¤, ìžìˆ˜, ë¦¬ë³¸',
-      '27': 'ë°”ë‹¥ìž¬, ë²½ì§€',
-      '28': 'ê²Œìž„, ìž¥ë‚œê°, ìš´ë™ê¸°êµ¬',
-      '29': 'ìœ¡ë¥˜, ê°€ê³µì‹í’ˆ',
-      '30': 'ì»¤í”¼, ì°¨, ì¡°ë¯¸ë£Œ',
-      '31': 'ë†ì‚°ë¬¼, ì›ì˜ˆ, ì‚¬ë£Œ',
-      '32': 'ë§¥ì£¼, ìŒë£Œ',
-      '33': 'ì•Œì½”ì˜¬ ìŒë£Œ',
-      '34': 'ë‹´ë°°, í¡ì—°ìš©í’ˆ',
-      '35': 'ê´‘ê³ , ì‚¬ì—…ê´€ë¦¬',
-      '36': 'ë³´í—˜, ê¸ˆìœµ, ë¶€ë™ì‚°',
-      '37': 'ê±´ì„¤, ìˆ˜ë¦¬',
-      '38': 'í†µì‹ ',
-      '39': 'ìš´ì†¡, ì—¬í–‰',
-      '40': 'ìž¬ë£Œì²˜ë¦¬',
-      '41': 'êµìœ¡, ì—”í„°í…Œì¸ë¨¼íŠ¸',
-      '42': 'IT, ê³¼í•™ê¸°ìˆ  ì„œë¹„ìŠ¤',
-      '43': 'ìŒì‹/ìŒë£Œ ì œê³µ, ìˆ™ë°•',
-      '44': 'ì˜ë£Œ, ë¯¸ìš©, ë†ì—…',
-      '45': 'ë²•ë¥ , ë³´ì•ˆ, ê°œì¸ì„œë¹„ìŠ¤'
+      '01': '공업용·과학용·사진용 화학제품',
+      '02': '페인트, 니스, 래커',
+      '03': '화장품, 세정제',
+      '04': '공업용 오일, 윤활제',
+      '05': '약제, 의료용 제제',
+      '06': '비금속 일반, 금속제품',
+      '07': '기계, 공작기계',
+      '08': '수공구, 도검류',
+      '09': '과학기기, 전기기기, 컴퓨터',
+      '10': '의료기기',
+      '11': '조명, 난방, 냉방장치',
+      '12': '차량, 항공기, 선박',
+      '13': '화기, 폭발물',
+      '14': '귀금속, 시계',
+      '15': '악기',
+      '16': '종이, 인쇄물, 문방구',
+      '17': '고무, 플라스틱 반제품',
+      '18': '가죽, 가방, 우산',
+      '19': '비금속 건축재료',
+      '20': '가구, 거울, 액자',
+      '21': '가정용 기구, 유리제품',
+      '22': '로프, 텐트, 포대',
+      '23': '방적용 사',
+      '24': '직물, 침구류',
+      '25': '의류, 신발, 모자',
+      '26': '레이스, 자수, 리본',
+      '27': '바닥재, 벽지',
+      '28': '게임, 장난감, 운동기구',
+      '29': '육류, 가공식품',
+      '30': '커피, 차, 조미료',
+      '31': '농산물, 원예, 사료',
+      '32': '맥주, 음료',
+      '33': '알코올 음료',
+      '34': '담배, 흡연용품',
+      '35': '광고, 사업관리',
+      '36': '보험, 금융, 부동산',
+      '37': '건설, 수리',
+      '38': '통신',
+      '39': '운송, 여행',
+      '40': '재료처리',
+      '41': '교육, 엔터테인먼트',
+      '42': 'IT, 과학기술 서비스',
+      '43': '음식/음료 제공, 숙박',
+      '44': '의료, 미용, 농업',
+      '45': '법률, 보안, 개인서비스'
     }
   };
 
   // ============================================================
-  // 2. ì´ˆê¸°í™”
+  // 2. 초기화
   // ============================================================
   
   TM.init = async function() {
-    console.log('[TM] ìƒí‘œ ëª¨ë“ˆ ì´ˆê¸°í™” ì‹œìž‘');
+    console.log('[TM] 상표 모듈 초기화 시작');
     
     try {
-      // â˜… ê³„ì •ë³„ KIPRIS API í‚¤ ë¡œë“œ
+      // ★ 계정별 KIPRIS API 키 로드
       TM.loadKiprisKeyFromProfile();
       
-      // ìºì‹œ ë¡œë“œ (ê³ ì‹œëª…ì¹­, API ìŠ¤íŽ™)
+      // 캐시 로드 (고시명칭, API 스펙)
       await TM.loadCaches();
       
-      // ì´ë²¤íŠ¸ ë¦¬ìŠ¤ë„ˆ ë“±ë¡
+      // 이벤트 리스너 등록
       TM.bindEvents();
       
-      // ëŒ€ì‹œë³´ë“œ ë Œë”ë§
+      // 대시보드 렌더링
       TM.renderDashboard();
       
-      console.log('[TM] ìƒí‘œ ëª¨ë“ˆ ì´ˆê¸°í™” ì™„ë£Œ');
+      console.log('[TM] 상표 모듈 초기화 완료');
     } catch (error) {
-      console.error('[TM] ì´ˆê¸°í™” ì‹¤íŒ¨:', error);
-      App.showToast('ìƒí‘œ ëª¨ë“ˆ ì´ˆê¸°í™” ì‹¤íŒ¨', 'error');
+      console.error('[TM] 초기화 실패:', error);
+      App.showToast('상표 모듈 초기화 실패', 'error');
     }
   };
   
@@ -240,29 +240,29 @@
     }
   };
 // ============================================================
-  // 3. ìºì‹œ ì´ˆê¸°í™” (ê³ ì‹œëª…ì¹­ì€ DBì—ì„œ ì§ì ‘ ê²€ìƒ‰)
+  // 3. 캐시 초기화 (고시명칭은 DB에서 직접 검색)
   // ============================================================
   
   TM.loadCaches = async function() {
-    console.log('[TM] ìºì‹œ ì´ˆê¸°í™”');
+    console.log('[TM] 캐시 초기화');
     
-    // ê³ ì‹œëª…ì¹­ì€ 5ë§Œê±´ì´ë¯€ë¡œ í´ë¼ì´ì–¸íŠ¸ì— ë¡œë“œí•˜ì§€ ì•ŠìŒ
-    // ê²€ìƒ‰ ì‹œ DBì—ì„œ ì§ì ‘ ì¿¼ë¦¬
+    // 고시명칭은 5만건이므로 클라이언트에 로드하지 않음
+    // 검색 시 DB에서 직접 쿼리
     TM.cache.gazettedGoods = [];
     
-    // DB ì—°ê²° í™•ì¸ (ê±´ìˆ˜ë§Œ ì²´í¬)
+    // DB 연결 확인 (건수만 체크)
     try {
       const { count, error } = await App.sb
         .from('gazetted_goods_cache')
         .select('*', { count: 'exact', head: true });
       
       if (error) {
-        console.warn('[TM] DB ì—°ê²° í™•ì¸ ì‹¤íŒ¨:', error);
+        console.warn('[TM] DB 연결 확인 실패:', error);
       } else {
-        console.log(`[TM] ê³ ì‹œëª…ì¹­ DB ì—°ê²° í™•ì¸: ${count?.toLocaleString()}ê±´`);
+        console.log(`[TM] 고시명칭 DB 연결 확인: ${count?.toLocaleString()}건`);
       }
     } catch (e) {
-      console.warn('[TM] DB ì—°ê²° í™•ì¸ ì˜ˆì™¸:', e);
+      console.warn('[TM] DB 연결 확인 예외:', e);
     }
     
     TM.cache.kiprisApiSpec = null;
@@ -270,11 +270,11 @@
   };
 
   // ============================================================
-  // 4. ì´ë²¤íŠ¸ ë°”ì¸ë”©
+  // 4. 이벤트 바인딩
   // ============================================================
   
   TM.bindEvents = function() {
-    // íƒ­ íŒ¨ë„ ë‚´ ì´ë²¤íŠ¸ ìœ„ìž„
+    // 탭 패널 내 이벤트 위임
     const panel = document.getElementById('trademark-dashboard-panel');
     if (!panel) return;
     
@@ -282,41 +282,41 @@
     panel.addEventListener('input', TM.handleInput);
     panel.addEventListener('change', TM.handleChange);
     
-    // ë¸Œë¼ìš°ì € ë’¤ë¡œê°€ê¸°/ì•žìœ¼ë¡œê°€ê¸° ì²˜ë¦¬
+    // 브라우저 뒤로가기/앞으로가기 처리
     window.addEventListener('popstate', (e) => {
       if (e.state && e.state.tmModule) {
         if (e.state.view === 'dashboard') {
-          // ëŒ€ì‹œë³´ë“œë¡œ ëŒì•„ê°€ê¸° (ì €ìž¥ ì—†ì´)
+          // 대시보드로 돌아가기 (저장 없이)
           TM.currentProject = null;
           TM.renderDashboard(true); // skipHistory = true
         } else if (e.state.view === 'project' && e.state.projectId) {
-          // í”„ë¡œì íŠ¸ ì—´ê¸° (ì €ìž¥ ì—†ì´)
+          // 프로젝트 열기 (저장 없이)
           TM.openProject(e.state.projectId, true); // skipHistory = true
         }
       }
     });
     
-    // ì´ˆê¸° ìƒíƒœ ì„¤ì • (ëŒ€ì‹œë³´ë“œ)
+    // 초기 상태 설정 (대시보드)
     if (!history.state || !history.state.tmModule) {
       history.replaceState({ tmModule: true, view: 'dashboard' }, '', window.location.href);
     }
     
-    // ë’¤ë¡œê°€ê¸°(Backspace) í‚¤ ì²˜ë¦¬ - ì´ì „ ìŠ¤í…ìœ¼ë¡œ ì´ë™
+    // 뒤로가기(Backspace) 키 처리 - 이전 스텝으로 이동
     document.addEventListener('keydown', (e) => {
-      // input, textarea ë“±ì—ì„œëŠ” ë¬´ì‹œ
+      // input, textarea 등에서는 무시
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
         return;
       }
       
-      // Backspace í‚¤
+      // Backspace 키
       if (e.key === 'Backspace') {
         e.preventDefault();
         
-        // í”„ë¡œì íŠ¸ê°€ ì—´ë ¤ìžˆê³  ìŠ¤í…ì´ 1ë³´ë‹¤ í¬ë©´ ì´ì „ ìŠ¤í…ìœ¼ë¡œ
+        // 프로젝트가 열려있고 스텝이 1보다 크면 이전 스텝으로
         if (TM.currentProject && TM.currentProject.currentStep > 1) {
           TM.prevStep();
         } else if (TM.currentProject) {
-          // ìŠ¤í… 1ì´ë©´ ëŒ€ì‹œë³´ë“œë¡œ
+          // 스텝 1이면 대시보드로
           TM.backToList();
         }
       }
@@ -330,16 +330,16 @@
     const action = target.dataset.action;
     const params = { ...target.dataset };
     
-    // íŽ¸ì§‘/ì‚­ì œ/ì œê±° ë²„íŠ¼ì€ ì´ë²¤íŠ¸ ì „íŒŒ ì¤‘ì§€ (ì¹´ë“œ í´ë¦­ê³¼ ì¶©ëŒ ë°©ì§€)
+    // 편집/삭제/제거 버튼은 이벤트 전파 중지 (카드 클릭과 충돌 방지)
     if (action === 'tm-edit-project' || action === 'tm-delete-project' || 
         action === 'tm-remove-goods' || action === 'tm-remove-class') {
       e.stopPropagation();
       e.preventDefault();
     }
     
-    // ì¹´ë“œ ë‚´ë¶€ì˜ ë²„íŠ¼ í´ë¦­ ì‹œ, ì¹´ë“œ ì´ë²¤íŠ¸ ë¬´ì‹œ
+    // 카드 내부의 버튼 클릭 시, 카드 이벤트 무시
     if (target.tagName === 'BUTTON' && target.closest('.tm-project-card')) {
-      // ë²„íŠ¼ í´ë¦­ì´ë©´ ì¹´ë“œì˜ open-project ì‹¤í–‰ ì•ˆ í•¨
+      // 버튼 클릭이면 카드의 open-project 실행 안 함
       if (action !== 'tm-open-project') {
         e.stopPropagation();
       }
@@ -348,7 +348,7 @@
     console.log('[TM] Click action:', action, params);
     
     switch (action) {
-      // í”„ë¡œì íŠ¸ ê´€ë ¨
+      // 프로젝트 관련
       case 'tm-new-project':
         TM.createNewProject();
         break;
@@ -362,7 +362,7 @@
         TM.closeSettings();
         break;
       case 'tm-open-project':
-        // ë²„íŠ¼ì´ ì•„ë‹Œ ì¹´ë“œ í´ë¦­ì¸ ê²½ìš°ì—ë§Œ ì‹¤í–‰
+        // 버튼이 아닌 카드 클릭인 경우에만 실행
         if (target.classList.contains('tm-project-card') || target.tagName === 'BUTTON') {
           TM.openProject(params.id);
         }
@@ -380,7 +380,7 @@
         TM.backToList();
         break;
         
-      // ìŠ¤í… ë„¤ë¹„ê²Œì´ì…˜
+      // 스텝 네비게이션
       case 'tm-goto-step':
         TM.goToStep(parseInt(params.step));
         break;
@@ -391,7 +391,7 @@
         TM.prevStep();
         break;
         
-      // ì§€ì •ìƒí’ˆ ê´€ë ¨
+      // 지정상품 관련
       case 'tm-add-class':
         TM.addClass(params.classCode);
         break;
@@ -417,7 +417,7 @@
         TM.toggleMoreGoods(params.classCode);
         break;
         
-      // ê²€ìƒ‰ ê´€ë ¨
+      // 검색 관련
       case 'tm-search-text':
         TM.searchByText();
         break;
@@ -428,7 +428,7 @@
         TM.analyzeViennaCode();
         break;
         
-      // AI ë¶„ì„
+      // AI 분석
       case 'tm-analyze-business':
         TM.analyzeBusiness();
         break;
@@ -469,7 +469,7 @@
         TM.generatePriorityDoc();
         break;
         
-      // ì¦ê±°ìžë£Œ
+      // 증거자료
       case 'tm-add-evidence':
         TM.addEvidence();
         break;
@@ -477,7 +477,7 @@
         TM.removeEvidence(params.index);
         break;
         
-      // ì¶œë ¥
+      // 출력
       case 'tm-download-docx':
         TM.downloadDocx();
         break;
@@ -488,12 +488,12 @@
         TM.previewDocument();
         break;
         
-      // ë¹„ìš© ê³„ì‚°
+      // 비용 계산
       case 'tm-calc-fee':
         TM.calculateFee();
         break;
         
-      // ë¹„ê³ ì‹œëª…ì¹­ ì²˜ë¦¬
+      // 비고시명칭 처리
       case 'tm-add-custom-term':
         TM.handleAddCustomTerm();
         break;
@@ -513,77 +513,77 @@
     const field = target.dataset.field;
     const value = target.value;
     
-    // í”„ë¡œì íŠ¸ ë°ì´í„° ì—…ë°ì´íŠ¸
+    // 프로젝트 데이터 업데이트
     TM.updateField(field, value);
   };
   
   TM.handleChange = function(e) {
     const target = e.target;
     
-    // íŒŒì¼ ì—…ë¡œë“œ
+    // 파일 업로드
     if (target.type === 'file' && target.dataset.field === 'specimen') {
       TM.handleSpecimenUpload(target.files[0]);
     }
     
-    // ì²´í¬ë°•ìŠ¤
+    // 체크박스
     if (target.type === 'checkbox' && target.dataset.field) {
       TM.updateField(target.dataset.field, target.checked);
     }
     
-    // ë¼ë””ì˜¤
+    // 라디오
     if (target.type === 'radio' && target.dataset.field) {
       TM.updateField(target.dataset.field, target.value);
     }
   };
 
   // ============================================================
-  // 5. ëŒ€ì‹œë³´ë“œ (í”„ë¡œì íŠ¸ ëª©ë¡)
+  // 5. 대시보드 (프로젝트 목록)
   // ============================================================
   
   TM.renderDashboard = async function(skipHistory = false) {
     const panel = document.getElementById('trademark-dashboard-panel');
     if (!panel) return;
     
-    // ížˆìŠ¤í† ë¦¬ ê´€ë¦¬ (ë¸Œë¼ìš°ì € ë’¤ë¡œê°€ê¸° ì§€ì›)
+    // 히스토리 관리 (브라우저 뒤로가기 지원)
     if (!skipHistory && TM.currentProject) {
-      // í”„ë¡œì íŠ¸ì—ì„œ ëŒ€ì‹œë³´ë“œë¡œ ì „í™˜í•  ë•Œë§Œ ížˆìŠ¤í† ë¦¬ ì¶”ê°€
+      // 프로젝트에서 대시보드로 전환할 때만 히스토리 추가
       history.pushState({ tmModule: true, view: 'dashboard' }, '', window.location.href);
     }
     
     panel.innerHTML = `
       <div class="trademark-dashboard" style="max-width: 1400px; margin: 0 auto; padding: 40px 32px;">
-        <!-- ì¢Œì¸¡: í—¤ë” + ë²„íŠ¼ / ìš°ì¸¡: í…Œì´ë¸” -->
+        <!-- 좌측: 헤더 + 버튼 / 우측: 테이블 -->
         <div style="display: flex; gap: 40px; align-items: flex-start;">
-          <!-- ì¢Œì¸¡ ì˜ì—­ -->
+          <!-- 좌측 영역 -->
           <div style="flex-shrink: 0; width: 240px;">
-            <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: #1f2937;">ðŸ·ï¸ ìƒí‘œ ì¶œì› ê´€ë¦¬</h2>
-            <p style="margin: 0 0 24px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">íŠ¹í—ˆê·¸ë£¹ ë””ë”¤ ìƒí‘œ ì¶œì› í”„ë¡œì íŠ¸ë¥¼ ê´€ë¦¬í•©ë‹ˆë‹¤.</p>
+            <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: #1f2937;">🏷️ 상표 출원 관리</h2>
+            <p style="margin: 0 0 24px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">특허그룹 디딤 상표 출원 프로젝트를 관리합니다.</p>
             <div style="display: flex; flex-direction: column; gap: 12px;">
               <button class="btn btn-primary" onclick="window.TM.createNewProject(); return false;" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap; cursor: pointer;">
                 <span style="font-size: 18px;">+</span>
-                ìƒˆ í”„ë¡œì íŠ¸
+                새 프로젝트
               </button>
               <button id="tm-settings-btn" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; white-space: nowrap; cursor: pointer;">
-                <span style="font-size: 16px;">âš™ï¸</span>
-                ì„¤ì •
+                <span style="font-size: 16px;">⚙️</span>
+                설정
               </button>
             </div>
             
-            <!-- API ì•ˆë‚´ -->
+            <!-- API 안내 -->
             <div style="margin-top: 20px; padding: 12px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px;">
-              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #0369a1;">ðŸ’¡ KIPRIS API í‚¤ ì•ˆë‚´</p>
+              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #0369a1;">💡 KIPRIS API 키 안내</p>
               <p style="margin: 0; font-size: 11px; color: #0c4a6e; line-height: 1.5;">
-                ì„ í–‰ìƒí‘œ ê²€ìƒ‰ì„ ìœ„í•´ KIPRIS API í‚¤ê°€ í•„ìš”í•©ë‹ˆë‹¤.
-                <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" style="color: #2563eb; text-decoration: underline;">KIPRIS Plus</a>ì—ì„œ ë°œê¸‰ë°›ìœ¼ì„¸ìš”.
+                선행상표 검색을 위해 KIPRIS API 키가 필요합니다.
+                <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" style="color: #2563eb; text-decoration: underline;">KIPRIS Plus</a>에서 발급받으세요.
               </p>
             </div>
           </div>
           
-          <!-- ìš°ì¸¡: í”„ë¡œì íŠ¸ ëª©ë¡ -->
+          <!-- 우측: 프로젝트 목록 -->
           <div class="tm-project-list" id="tm-project-list" style="flex: 1; min-width: 0;">
             <div style="text-align: center; padding: 40px; color: #6b7280;">
               <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
-              <p style="margin: 0;">í”„ë¡œì íŠ¸ ëª©ë¡ ë¡œë”© ì¤‘...</p>
+              <p style="margin: 0;">프로젝트 목록 로딩 중...</p>
             </div>
           </div>
         </div>
@@ -595,7 +595,7 @@
     
     await TM.loadProjectList();
     
-    // ì„¤ì • ë²„íŠ¼ ì´ë²¤íŠ¸ ë°”ì¸ë”©
+    // 설정 버튼 이벤트 바인딩
     const settingsBtn = document.getElementById('tm-settings-btn');
     if (settingsBtn) {
       settingsBtn.addEventListener('click', function(e) {
@@ -607,7 +607,7 @@
   };
   
   // ============================================================
-  // ì„¤ì • ëª¨ë‹¬
+  // 설정 모달
   // ============================================================
   
   TM.openSettings = function() {
@@ -647,8 +647,8 @@
                 💾 자동 저장
               </h4>
               <div style="font-size: 13px; color: #374151; line-height: 1.6;">
-                <div>• 입력 후 3초 후 자동 저장</div>
-                <div>• 15초마다 주기적 저장</div>
+                <div>— 입력 후 3초 후 자동 저장</div>
+                <div>— 15초마다 주기적 저장</div>
               </div>
             </div>
             
@@ -658,8 +658,8 @@
                 ℹ️ 현재 상태
               </h4>
               <div style="font-size: 12px; color: #6b7280; line-height: 1.6;">
-                <div>• KIPRIS API 키: ${isDefault ? '⚠️ 기본키' : '✅ 설정됨'}</div>
-                <div>• 자동 저장: ✅ 활성화됨</div>
+                <div>— KIPRIS API 키: ${isDefault ? '⚠️ 기본키' : '✅ 설정됨'}</div>
+                <div>— 자동 저장: ✅ 활성화됨</div>
               </div>
             </div>
           </div>
@@ -701,27 +701,27 @@ TM.closeSettings = function() {
       if (!projects || projects.length === 0) {
         listEl.innerHTML = `
           <div style="text-align: center; padding: 80px 20px; background: #f9fafb; border-radius: 16px; border: 2px dashed #d1d5db;">
-            <div style="font-size: 56px; margin-bottom: 20px;">ðŸ·ï¸</div>
-            <h4 style="margin: 0 0 12px; font-size: 20px; color: #374151;">ìƒí‘œ í”„ë¡œì íŠ¸ê°€ ì—†ìŠµë‹ˆë‹¤</h4>
-            <p style="margin: 0 0 24px; color: #6b7280; font-size: 15px;">ìƒˆ í”„ë¡œì íŠ¸ë¥¼ ë§Œë“¤ì–´ ìƒí‘œ ì¶œì›ì„ ì‹œìž‘í•˜ì„¸ìš”.</p>
-            <button class="btn btn-primary" data-action="tm-new-project" style="padding: 14px 28px; font-size: 15px; border-radius: 10px;">+ ìƒˆ í”„ë¡œì íŠ¸ ë§Œë“¤ê¸°</button>
+            <div style="font-size: 56px; margin-bottom: 20px;">🏷️</div>
+            <h4 style="margin: 0 0 12px; font-size: 20px; color: #374151;">상표 프로젝트가 없습니다</h4>
+            <p style="margin: 0 0 24px; color: #6b7280; font-size: 15px;">새 프로젝트를 만들어 상표 출원을 시작하세요.</p>
+            <button class="btn btn-primary" data-action="tm-new-project" style="padding: 14px 28px; font-size: 15px; border-radius: 10px;">+ 새 프로젝트 만들기</button>
           </div>
         `;
         return;
       }
       
-      // í…Œì´ë¸” í˜•ì‹ ëª©ë¡
+      // 테이블 형식 목록
       listEl.innerHTML = `
         <div style="background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
           <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
             <thead>
               <tr style="background: #f8fafc; border-bottom: 2px solid #e5e7eb;">
-                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px; white-space: nowrap;">ë””ë”¤ ê´€ë¦¬ë²ˆí˜¸</th>
-                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px; white-space: nowrap;">ìƒí‘œëª…</th>
-                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 70px; white-space: nowrap;">ìœ í˜•</th>
-                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 80px; white-space: nowrap;">ìƒíƒœ</th>
-                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px; white-space: nowrap;">ìˆ˜ì •ì¼</th>
-                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 140px; white-space: nowrap;">ìž‘ì—…</th>
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px; white-space: nowrap;">디딤 관리번호</th>
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px; white-space: nowrap;">상표명</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 70px; white-space: nowrap;">유형</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 80px; white-space: nowrap;">상태</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px; white-space: nowrap;">수정일</th>
+                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 140px; white-space: nowrap;">작업</th>
               </tr>
             </thead>
             <tbody>
@@ -730,29 +730,29 @@ TM.closeSettings = function() {
           </table>
         </div>
         <div style="margin-top: 12px; text-align: right; color: #9ca3af; font-size: 12px;">
-          ì´ ${projects.length}ê°œ í”„ë¡œì íŠ¸
+          총 ${projects.length}개 프로젝트
         </div>
       `;
       
     } catch (error) {
-      console.error('[TM] í”„ë¡œì íŠ¸ ëª©ë¡ ë¡œë“œ ì‹¤íŒ¨:', error);
+      console.error('[TM] 프로젝트 목록 로드 실패:', error);
       listEl.innerHTML = `
         <div style="text-align: center; padding: 40px; background: #fef2f2; border-radius: 12px; border: 1px solid #fecaca;">
-          <div style="font-size: 32px; margin-bottom: 12px;">âš ï¸</div>
-          <h4 style="margin: 0 0 8px; color: #991b1b;">ë¡œë“œ ì‹¤íŒ¨</h4>
+          <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
+          <h4 style="margin: 0 0 8px; color: #991b1b;">로드 실패</h4>
           <p style="margin: 0; color: #dc2626;">${error.message}</p>
         </div>
       `;
     }
   };
   
-  // í”„ë¡œì íŠ¸ í–‰ ë Œë”ë§ (í…Œì´ë¸”ìš©)
+  // 프로젝트 행 렌더링 (테이블용)
   TM.renderProjectRow = function(project) {
     const statusLabels = {
-      draft: 'ìž‘ì„± ì¤‘',
-      searching: 'ê²€ìƒ‰ ì¤‘',
-      documenting: 'ë¬¸ì„œ ìž‘ì„±',
-      completed: 'ì™„ë£Œ'
+      draft: '작성 중',
+      searching: '검색 중',
+      documenting: '문서 작성',
+      completed: '완료'
     };
     
     const statusColors = {
@@ -763,12 +763,12 @@ TM.closeSettings = function() {
     };
     
     const typeLabels = {
-      text: 'ë¬¸ìž',
-      figure: 'ë„í˜•',
-      combined: 'ê²°í•©',
-      sound: 'ì†Œë¦¬',
-      color: 'ìƒ‰ì±„',
-      '3d': 'ìž…ì²´'
+      text: '문자',
+      figure: '도형',
+      combined: '결합',
+      sound: '소리',
+      color: '색채',
+      '3d': '입체'
     };
     
     const updatedAt = new Date(project.updated_at).toLocaleDateString('ko-KR');
@@ -780,24 +780,24 @@ TM.closeSettings = function() {
           onmouseout="this.style.background='white'">
         <td style="padding: 12px 16px; white-space: nowrap;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 18px;">ðŸ“</span>
+            <span style="font-size: 18px;">📁</span>
             <span style="font-weight: 600; color: #3b82f6; font-size: 13px; cursor: pointer;" 
                  onclick="TM.openProject('${project.id}')"
                  onmouseover="this.style.textDecoration='underline'" 
-                 onmouseout="this.style.textDecoration='none'">${TM.escapeHtml(project.title || '(ë¯¸ì§€ì •)')}</span>
+                 onmouseout="this.style.textDecoration='none'">${TM.escapeHtml(project.title || '(미지정)')}</span>
           </div>
         </td>
         <td style="padding: 12px 16px; white-space: nowrap;">
           <div style="display: flex; align-items: center; gap: 6px;">
-            <span style="font-size: 16px;">ðŸ·ï¸</span>
+            <span style="font-size: 16px;">🏷️</span>
             <span style="font-weight: 500; color: #1f2937; font-size: 13px;">${TM.escapeHtml(project.trademark_name || '-')}</span>
           </div>
         </td>
         <td style="padding: 12px 12px; text-align: center; white-space: nowrap;">
-          <span style="font-size: 12px; color: #6b7280;">${typeLabels[project.trademark_type] || 'ë¬¸ìž'}</span>
+          <span style="font-size: 12px; color: #6b7280;">${typeLabels[project.trademark_type] || '문자'}</span>
         </td>
         <td style="padding: 12px 12px; text-align: center; white-space: nowrap;">
-          <span style="display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; background: ${statusColor}15; color: ${statusColor};">${statusLabels[project.status] || 'ìž‘ì„± ì¤‘'}</span>
+          <span style="display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; background: ${statusColor}15; color: ${statusColor};">${statusLabels[project.status] || '작성 중'}</span>
         </td>
         <td style="padding: 12px 12px; text-align: center; font-size: 12px; color: #6b7280; white-space: nowrap;">
           ${updatedAt}
@@ -807,15 +807,15 @@ TM.closeSettings = function() {
             <button onclick="TM.openProject('${project.id}')" 
                     style="padding: 4px 8px; font-size: 11px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
                     onmouseover="this.style.background='#2563eb'" 
-                    onmouseout="this.style.background='#3b82f6'">ì—´ê¸°</button>
+                    onmouseout="this.style.background='#3b82f6'">열기</button>
             <button onclick="TM.editProject('${project.id}', '${TM.escapeHtml(project.title || '').replace(/'/g, "\\'")}')" 
                     style="padding: 4px 8px; font-size: 11px; background: #f3f4f6; color: #374151; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
                     onmouseover="this.style.background='#e5e7eb'" 
-                    onmouseout="this.style.background='#f3f4f6'">íŽ¸ì§‘</button>
+                    onmouseout="this.style.background='#f3f4f6'">편집</button>
             <button onclick="TM.deleteProject('${project.id}')" 
                     style="padding: 4px 8px; font-size: 11px; background: #fef2f2; color: #dc2626; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
                     onmouseover="this.style.background='#fee2e2'" 
-                    onmouseout="this.style.background='#fef2f2'">ì‚­ì œ</button>
+                    onmouseout="this.style.background='#fef2f2'">삭제</button>
           </div>
         </td>
       </tr>
@@ -823,22 +823,22 @@ TM.closeSettings = function() {
   };
 
   // ============================================================
-  // 6. í”„ë¡œì íŠ¸ CRUD
+  // 6. 프로젝트 CRUD
   // ============================================================
   
   TM.createNewProject = async function() {
-    // ë…„ë„ ê¸°ë°˜ ê¸°ë³¸ê°’ ìƒì„± (26T í˜•ì‹)
+    // 년도 기반 기본값 생성 (26T 형식)
     const year = String(new Date().getFullYear()).slice(-2); // 26
     const defaultNumber = `${year}T`;
     
     const managementNumber = prompt(
-      'ë””ë”¤ ê´€ë¦¬ë²ˆí˜¸ë¥¼ ìž…ë ¥í•˜ì„¸ìš”:\n(íŠ¹í—ˆê·¸ë£¹ ë””ë”¤ ë‚´ë¶€ ì‚¬ê±´ ì‹ë³„ë²ˆí˜¸)\n\nì˜ˆ: 26T0001, 26T0002',
+      '디딤 관리번호를 입력하세요:\n(특허그룹 디딤 내부 사건 식별번호)\n\n예: 26T0001, 26T0002',
       defaultNumber
     );
     if (!managementNumber || !managementNumber.trim()) return;
     
     try {
-      App.showToast('í”„ë¡œì íŠ¸ ìƒì„± ì¤‘...', 'info');
+      App.showToast('프로젝트 생성 중...', 'info');
       
       const { data, error } = await App.sb
         .from('trademark_projects')
@@ -854,18 +854,18 @@ TM.closeSettings = function() {
       
       if (error) throw error;
       
-      App.showToast('í”„ë¡œì íŠ¸ê°€ ìƒì„±ë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('프로젝트가 생성되었습니다.', 'success');
       TM.openProject(data.id);
       
     } catch (error) {
-      console.error('[TM] í”„ë¡œì íŠ¸ ìƒì„± ì‹¤íŒ¨:', error);
-      App.showToast('í”„ë¡œì íŠ¸ ìƒì„± ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 프로젝트 생성 실패:', error);
+      App.showToast('프로젝트 생성 실패: ' + error.message, 'error');
     }
   };
   
   TM.openProject = async function(projectId, skipHistory = false) {
     try {
-      App.showToast('í”„ë¡œì íŠ¸ ë¡œë”© ì¤‘...', 'info');
+      App.showToast('프로젝트 로딩 중...', 'info');
       
       const { data, error } = await App.sb
         .from('trademark_projects')
@@ -875,7 +875,7 @@ TM.closeSettings = function() {
       
       if (error) throw error;
       
-      // í”„ë¡œì íŠ¸ ìƒíƒœ ì„¤ì •
+      // 프로젝트 상태 설정
       TM.currentProject = {
         id: data.id,
         title: data.title,
@@ -884,7 +884,7 @@ TM.closeSettings = function() {
         ...(data.current_state_json || {})
       };
       
-      // ê¸°ì¡´ í•„ë“œ ë§¤í•‘
+      // 기존 필드 매핑
       if (data.trademark_name) TM.currentProject.trademarkName = data.trademark_name;
       if (data.trademark_name_en) TM.currentProject.trademarkNameEn = data.trademark_name_en;
       if (data.trademark_type) TM.currentProject.trademarkType = data.trademark_type;
@@ -899,33 +899,33 @@ TM.closeSettings = function() {
       TM.currentStep = 1;
       TM.hasUnsavedChanges = false;
       
-      // ížˆìŠ¤í† ë¦¬ ê´€ë¦¬ (ë¸Œë¼ìš°ì € ë’¤ë¡œê°€ê¸° ì§€ì›)
+      // 히스토리 관리 (브라우저 뒤로가기 지원)
       if (!skipHistory) {
         history.pushState({ tmModule: true, view: 'project', projectId: projectId }, '', window.location.href);
       }
       
-      // ì›Œí¬ìŠ¤íŽ˜ì´ìŠ¤ ë Œë”ë§
+      // 워크스페이스 렌더링
       TM.renderWorkspace();
       
-      // ìžë™ ì €ìž¥ ì‹œìž‘
+      // 자동 저장 시작
       TM.startAutoSave();
       
-      App.showToast('í”„ë¡œì íŠ¸ë¥¼ ë¶ˆëŸ¬ì™”ìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('프로젝트를 불러왔습니다.', 'success');
       
     } catch (error) {
-      console.error('[TM] í”„ë¡œì íŠ¸ ì—´ê¸° ì‹¤íŒ¨:', error);
-      App.showToast('í”„ë¡œì íŠ¸ ì—´ê¸° ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 프로젝트 열기 실패:', error);
+      App.showToast('프로젝트 열기 실패: ' + error.message, 'error');
     }
   };
   
   TM.saveProject = async function(silent = false) {
     if (!TM.currentProject || !TM.currentProject.id) {
-      if (!silent) App.showToast('ì €ìž¥í•  í”„ë¡œì íŠ¸ê°€ ì—†ìŠµë‹ˆë‹¤.', 'warning');
+      if (!silent) App.showToast('저장할 프로젝트가 없습니다.', 'warning');
       return;
     }
     
     try {
-      if (!silent) App.showToast('ì €ìž¥ ì¤‘...', 'info');
+      if (!silent) App.showToast('저장 중...', 'info');
       
       const updateData = {
         title: TM.currentProject.title,
@@ -966,19 +966,19 @@ TM.closeSettings = function() {
       
       TM.hasUnsavedChanges = false;
       if (!silent) {
-        App.showToast('ì €ìž¥ë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+        App.showToast('저장되었습니다.', 'success');
       } else {
-        console.log('[TM] ìžë™ ì €ìž¥ ì™„ë£Œ');
+        console.log('[TM] 자동 저장 완료');
       }
       
     } catch (error) {
-      console.error('[TM] ì €ìž¥ ì‹¤íŒ¨:', error);
-      if (!silent) App.showToast('ì €ìž¥ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 저장 실패:', error);
+      if (!silent) App.showToast('저장 실패: ' + error.message, 'error');
     }
   };
   
   TM.deleteProject = async function(projectId) {
-    if (!confirm('ì´ í”„ë¡œì íŠ¸ë¥¼ ì‚­ì œí•˜ì‹œê² ìŠµë‹ˆê¹Œ? ì´ ìž‘ì—…ì€ ë˜ëŒë¦´ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.')) {
+    if (!confirm('이 프로젝트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
       return;
     }
     
@@ -990,9 +990,9 @@ TM.closeSettings = function() {
       
       if (error) throw error;
       
-      App.showToast('í”„ë¡œì íŠ¸ê°€ ì‚­ì œë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('프로젝트가 삭제되었습니다.', 'success');
       
-      // í˜„ìž¬ ì—´ë¦° í”„ë¡œì íŠ¸ì˜€ë‹¤ë©´ ëŒ€ì‹œë³´ë“œë¡œ
+      // 현재 열린 프로젝트였다면 대시보드로
       if (TM.currentProject && TM.currentProject.id === projectId) {
         TM.currentProject = null;
         TM.renderDashboard();
@@ -1001,14 +1001,14 @@ TM.closeSettings = function() {
       }
       
     } catch (error) {
-      console.error('[TM] ì‚­ì œ ì‹¤íŒ¨:', error);
-      App.showToast('ì‚­ì œ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 삭제 실패:', error);
+      App.showToast('삭제 실패: ' + error.message, 'error');
     }
   };
   
-  // í”„ë¡œì íŠ¸ íŽ¸ì§‘ (ì´ë¦„ ë³€ê²½)
+  // 프로젝트 편집 (이름 변경)
   TM.editProject = async function(projectId, currentTitle) {
-    const newTitle = prompt('ë””ë”¤ ê´€ë¦¬ë²ˆí˜¸ë¥¼ ìˆ˜ì •í•˜ì„¸ìš”:\n\nì˜ˆ: 26T0001, 26T0002', currentTitle || '');
+    const newTitle = prompt('디딤 관리번호를 수정하세요:\n\n예: 26T0001, 26T0002', currentTitle || '');
     if (!newTitle || newTitle === currentTitle) return;
     
     try {
@@ -1019,16 +1019,16 @@ TM.closeSettings = function() {
       
       if (error) throw error;
       
-      App.showToast('ê´€ë¦¬ë²ˆí˜¸ê°€ ë³€ê²½ë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('관리번호가 변경되었습니다.', 'success');
       TM.loadProjectList();
       
     } catch (error) {
-      console.error('[TM] íŽ¸ì§‘ ì‹¤íŒ¨:', error);
-      App.showToast('íŽ¸ì§‘ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 편집 실패:', error);
+      App.showToast('편집 실패: ' + error.message, 'error');
     }
   };
   
-  // í”„ë¡œì íŠ¸ ì œëª©(ê´€ë¦¬ë²ˆí˜¸) ì—…ë°ì´íŠ¸ (ìƒí‘œ ì •ë³´ íƒ­ì—ì„œ í˜¸ì¶œ)
+  // 프로젝트 제목(관리번호) 업데이트 (상표 정보 탭에서 호출)
   TM.updateProjectTitle = async function(newTitle) {
     if (!TM.currentProject || !newTitle?.trim()) return;
     
@@ -1046,28 +1046,28 @@ TM.closeSettings = function() {
       TM.currentProject.title = trimmedTitle;
       TM.hasUnsavedChanges = true;
       
-      // ì‚¬ì´ë“œë°” í”„ë¡œì íŠ¸ëª… ì—…ë°ì´íŠ¸
+      // 사이드바 프로젝트명 업데이트
       const titleEl = document.querySelector('.tm-project-name');
       if (titleEl) titleEl.textContent = trimmedTitle;
       
     } catch (error) {
-      console.error('[TM] ê´€ë¦¬ë²ˆí˜¸ ì—…ë°ì´íŠ¸ ì‹¤íŒ¨:', error);
+      console.error('[TM] 관리번호 업데이트 실패:', error);
     }
   };
   
   TM.backToList = async function() {
-    // ìžë™ ì €ìž¥ íƒ€ì´ë¨¸ ì¤‘ì§€
+    // 자동 저장 타이머 중지
     TM.stopAutoSave();
     
     if (TM.currentProject && TM.hasUnsavedChanges) {
-      // ë³€ê²½ì‚¬í•­ì´ ìžˆìœ¼ë©´ ì €ìž¥
+      // 변경사항이 있으면 저장
       try {
-        App.showToast('ë³€ê²½ì‚¬í•­ ì €ìž¥ ì¤‘...', 'info');
-        await TM.saveProject(false); // í† ìŠ¤íŠ¸ í‘œì‹œ
+        App.showToast('변경사항 저장 중...', 'info');
+        await TM.saveProject(false); // 토스트 표시
       } catch (error) {
-        // ì €ìž¥ ì‹¤íŒ¨ ì‹œ í™•ì¸
-        if (!confirm('ì €ìž¥ì— ì‹¤íŒ¨í–ˆìŠµë‹ˆë‹¤. ê·¸ëž˜ë„ ëª©ë¡ìœ¼ë¡œ ëŒì•„ê°€ì‹œê² ìŠµë‹ˆê¹Œ?\n(ë³€ê²½ì‚¬í•­ì´ ì†ì‹¤ë  ìˆ˜ ìžˆìŠµë‹ˆë‹¤)')) {
-          TM.startAutoSave(); // ìžë™ ì €ìž¥ ìž¬ì‹œìž‘
+        // 저장 실패 시 확인
+        if (!confirm('저장에 실패했습니다. 그래도 목록으로 돌아가시겠습니까?\n(변경사항이 손실될 수 있습니다)')) {
+          TM.startAutoSave(); // 자동 저장 재시작
           return;
         }
       }
@@ -1078,19 +1078,19 @@ TM.closeSettings = function() {
     TM.renderDashboard();
   };
   
-  // ì£¼ê¸°ì  ìžë™ì €ìž¥ (15ì´ˆ)
+  // 주기적 자동저장 (15초)
   TM.startAutoSave = function() {
     TM.stopAutoSave();
     TM.autoSaveTimer = setInterval(async () => {
       if (TM.currentProject && TM.hasUnsavedChanges) {
-        console.log('[TM] ì£¼ê¸°ì  ìžë™ ì €ìž¥ ì¤‘...');
+        console.log('[TM] 주기적 자동 저장 중...');
         try {
           await TM.saveProject(true); // silent
         } catch (e) {
-          console.warn('[TM] ì£¼ê¸°ì  ìžë™ ì €ìž¥ ì‹¤íŒ¨:', e);
+          console.warn('[TM] 주기적 자동 저장 실패:', e);
         }
       }
-    }, 15000); // 15ì´ˆ
+    }, 15000); // 15초
   };
   
   TM.stopAutoSave = function() {
@@ -1104,34 +1104,34 @@ TM.closeSettings = function() {
     }
   };
   
-  // ë””ë°”ìš´ìŠ¤ëœ ìžë™ ì €ìž¥ (ë³€ê²½ í›„ 3ì´ˆ í›„ ì €ìž¥)
+  // 디바운스된 자동 저장 (변경 후 3초 후 저장)
   TM.debounceSave = function() {
     if (TM.debounceSaveTimer) {
       clearTimeout(TM.debounceSaveTimer);
     }
     TM.debounceSaveTimer = setTimeout(async () => {
       if (TM.currentProject && TM.hasUnsavedChanges) {
-        console.log('[TM] ë””ë°”ìš´ìŠ¤ ìžë™ ì €ìž¥ ì¤‘...');
+        console.log('[TM] 디바운스 자동 저장 중...');
         try {
           await TM.saveProject(true); // silent
         } catch (e) {
-          console.warn('[TM] ë””ë°”ìš´ìŠ¤ ìžë™ ì €ìž¥ ì‹¤íŒ¨:', e);
+          console.warn('[TM] 디바운스 자동 저장 실패:', e);
         }
       }
-    }, 3000); // 3ì´ˆ
+    }, 3000); // 3초
   };
   
-  // ë³€ê²½ ê°ì§€ ë° ìžë™ ì €ìž¥ íŠ¸ë¦¬ê±°
+  // 변경 감지 및 자동 저장 트리거
   TM.markChanged = function() {
     TM.hasUnsavedChanges = true;
     TM.debounceSave();
   };
   
-  // ë³€ê²½ ê°ì§€ í”Œëž˜ê·¸
+  // 변경 감지 플래그
   TM.hasUnsavedChanges = false;
 
   // ============================================================
-  // 7. ì›Œí¬ìŠ¤íŽ˜ì´ìŠ¤ ë Œë”ë§ (ì¢Œì¸¡ ì‚¬ì´ë“œë°” + ìš°ì¸¡ ë©”ì¸)
+  // 7. 워크스페이스 렌더링 (좌측 사이드바 + 우측 메인)
   // ============================================================
   
   TM.renderWorkspace = function() {
@@ -1140,29 +1140,29 @@ TM.closeSettings = function() {
     
     panel.innerHTML = `
       <div class="tm-app-layout">
-        <!-- ì¢Œì¸¡ ì‚¬ì´ë“œë°” -->
+        <!-- 좌측 사이드바 -->
         <aside class="tm-sidebar">
           <div class="tm-sidebar-header">
             <button class="tm-back-btn" data-action="tm-back-to-list">
-              <span>â†</span> ëª©ë¡ìœ¼ë¡œ
+              <span>←</span> 목록으로
             </button>
           </div>
           
           <div class="tm-sidebar-project">
-            <div class="tm-project-icon">ðŸ·ï¸</div>
+            <div class="tm-project-icon">🏷️</div>
             <div class="tm-project-info">
-              <h3 class="tm-project-name">${TM.escapeHtml(TM.currentProject.trademarkName || '(ìƒí‘œëª… ë¯¸ìž…ë ¥)')}</h3>
+              <h3 class="tm-project-name">${TM.escapeHtml(TM.currentProject.trademarkName || '(상표명 미입력)')}</h3>
               <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">
-                ðŸ“ ${TM.escapeHtml(TM.currentProject.title || '(ê´€ë¦¬ë²ˆí˜¸ ë¯¸ì§€ì •)')}
+                📁 ${TM.escapeHtml(TM.currentProject.title || '(관리번호 미지정)')}
               </div>
               <span class="tm-status-badge ${TM.currentProject.status}">${TM.getStatusLabel(TM.currentProject.status)}</span>
             </div>
           </div>
           
-          <!-- ì €ìž¥ ë²„íŠ¼ ë³„ë„ ì˜ì—­ -->
+          <!-- 저장 버튼 별도 영역 -->
           <div class="tm-sidebar-save">
             <button class="tm-save-btn-large" data-action="tm-save-project">
-              ðŸ’¾ ì €ìž¥í•˜ê¸°
+              💾 저장하기
             </button>
           </div>
           
@@ -1172,7 +1172,7 @@ TM.closeSettings = function() {
                       data-action="tm-goto-step" data-step="${step.id}">
                 <span class="tm-step-num">${step.id}</span>
                 <span class="tm-step-name">${step.name}</span>
-                ${TM.isStepCompleted(step.id) ? '<span class="tm-step-check">âœ“</span>' : ''}
+                ${TM.isStepCompleted(step.id) ? '<span class="tm-step-check">✓</span>' : ''}
               </button>
             `).join('')}
           </nav>
@@ -1181,86 +1181,86 @@ TM.closeSettings = function() {
             <div class="tm-progress">
               <div class="tm-progress-bar" style="width: ${TM.getProgressPercent()}%"></div>
             </div>
-            <span class="tm-progress-text">${TM.getCompletedSteps()}/${TM.steps.length} ì™„ë£Œ</span>
+            <span class="tm-progress-text">${TM.getCompletedSteps()}/${TM.steps.length} 완료</span>
           </div>
         </aside>
         
-        <!-- ìš°ì¸¡ ë©”ì¸ ì˜ì—­ -->
+        <!-- 우측 메인 영역 -->
         <main class="tm-main">
           <div class="tm-main-header">
             <h2>${TM.steps[TM.currentStep - 1]?.icon || ''} ${TM.steps[TM.currentStep - 1]?.name || ''}</h2>
-            <!-- í—¤ë”ì— ë„¤ë¹„ê²Œì´ì…˜ ë²„íŠ¼ ì¶”ê°€ -->
+            <!-- 헤더에 네비게이션 버튼 추가 -->
             <div class="tm-header-nav">
               <button class="btn btn-sm btn-secondary" data-action="tm-prev-step" ${TM.currentStep === 1 ? 'disabled' : ''}>
-                â† ì´ì „
+                ← 이전
               </button>
               <span class="tm-step-indicator">${TM.currentStep} / ${TM.steps.length}</span>
               <button class="btn btn-sm btn-primary" data-action="tm-next-step" ${TM.currentStep === TM.steps.length ? 'disabled' : ''}>
-                ë‹¤ìŒ â†’
+                다음 →
               </button>
             </div>
           </div>
           
-          <!-- â˜… í”„ë¡œì íŠ¸ ì •ë³´ ìš”ì•½ (í•­ìƒ í‘œì‹œ) -->
+          <!-- ★ 프로젝트 정보 요약 (항상 표시) -->
           <div class="tm-project-summary" id="tm-project-summary" style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 20px;">ðŸ·ï¸</span>
+              <span style="font-size: 20px;">🏷️</span>
               <div>
-                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">ìƒí‘œëª…</div>
-                <div style="font-size: 14px; font-weight: 600; color: #0c4a6e;">${TM.escapeHtml(TM.currentProject.trademarkName || '(ë¯¸ìž…ë ¥)')}</div>
+                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">상표명</div>
+                <div style="font-size: 14px; font-weight: 600; color: #0c4a6e;">${TM.escapeHtml(TM.currentProject.trademarkName || '(미입력)')}</div>
               </div>
             </div>
             
             ${TM.currentProject.aiAnalysis?.businessAnalysis ? `
               <div style="flex: 1; min-width: 200px; border-left: 2px solid #bae6fd; padding-left: 16px;">
-                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">ì‚¬ì—… ë‚´ìš©</div>
+                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">사업 내용</div>
                 <div style="font-size: 13px; color: #1e3a5f; line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(TM.currentProject.aiAnalysis.businessAnalysis.slice(0, 100))}${TM.currentProject.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
               </div>
             ` : ''}
             
             ${TM.currentProject.designatedGoods?.length > 0 ? `
               <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
-                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">ì§€ì •ìƒí’ˆ</div>
+                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">지정상품</div>
                 <div style="font-size: 13px; color: #1e3a5f;">
-                  <strong>${TM.currentProject.designatedGoods.length}</strong>ê°œ ë¥˜ / 
-                  <strong>${TM.currentProject.designatedGoods.reduce((sum, g) => sum + (g.goods?.length || 0), 0)}</strong>ê°œ ìƒí’ˆ
+                  <strong>${TM.currentProject.designatedGoods.length}</strong>개 류 / 
+                  <strong>${TM.currentProject.designatedGoods.reduce((sum, g) => sum + (g.goods?.length || 0), 0)}</strong>개 상품
                 </div>
               </div>
             ` : ''}
             
             ${TM.currentProject.aiAnalysis?.classRecommendations?.core?.length > 0 ? `
               <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
-                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">ì¶”ì²œ ë¥˜</div>
+                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">추천 류</div>
                 <div style="font-size: 12px; color: #1e3a5f;">
-                  ${TM.currentProject.aiAnalysis.classRecommendations.core.map(c => 'ì œ' + c.class + 'ë¥˜').join(', ')}
-                  ${TM.currentProject.aiAnalysis.classRecommendations.recommended?.length > 0 ? ' ì™¸ ' + TM.currentProject.aiAnalysis.classRecommendations.recommended.length + 'ê°œ' : ''}
+                  ${TM.currentProject.aiAnalysis.classRecommendations.core.map(c => '제' + c.class + '류').join(', ')}
+                  ${TM.currentProject.aiAnalysis.classRecommendations.recommended?.length > 0 ? ' 외 ' + TM.currentProject.aiAnalysis.classRecommendations.recommended.length + '개' : ''}
                 </div>
               </div>
             ` : ''}
           </div>
           
           <div class="tm-main-content" id="tm-step-content">
-            <!-- ìŠ¤í… ì»¨í…ì¸  ë™ì  ë Œë”ë§ -->
+            <!-- 스텝 컨텐츠 동적 렌더링 -->
           </div>
           
-          <!-- í•˜ë‹¨ ë„¤ë¹„ê²Œì´ì…˜ (ìŠ¤í¬ë¡¤ ì‹œì—ë„ ë³´ìž„) -->
+          <!-- 하단 네비게이션 (스크롤 시에도 보임) -->
           <div class="tm-main-footer">
             <button class="btn btn-secondary" data-action="tm-prev-step" ${TM.currentStep === 1 ? 'disabled' : ''}>
-              â† ì´ì „ ë‹¨ê³„
+              ← 이전 단계
             </button>
             <div class="tm-footer-center">
               <span class="tm-step-indicator">${TM.currentStep} / ${TM.steps.length}</span>
-              <button class="btn btn-sm btn-ghost" data-action="tm-save-project">ðŸ’¾ ì €ìž¥</button>
+              <button class="btn btn-sm btn-ghost" data-action="tm-save-project">💾 저장</button>
             </div>
             <button class="btn btn-primary" data-action="tm-next-step" ${TM.currentStep === TM.steps.length ? 'disabled' : ''}>
-              ë‹¤ìŒ ë‹¨ê³„ â†’
+              다음 단계 →
             </button>
           </div>
         </main>
       </div>
     `;
     
-    // í˜„ìž¬ ìŠ¤í… ì»¨í…ì¸  ë Œë”ë§
+    // 현재 스텝 컨텐츠 렌더링
     TM.renderCurrentStep();
   };
   
@@ -1278,10 +1278,10 @@ TM.closeSettings = function() {
   
   TM.getStatusLabel = function(status) {
     const labels = {
-      draft: 'ìž‘ì„± ì¤‘',
-      searching: 'ê²€ìƒ‰ ì¤‘',
-      documenting: 'ë¬¸ì„œ ìž‘ì„±',
-      completed: 'ì™„ë£Œ'
+      draft: '작성 중',
+      searching: '검색 중',
+      documenting: '문서 작성',
+      completed: '완료'
     };
     return labels[status] || status;
   };
@@ -1290,20 +1290,20 @@ TM.closeSettings = function() {
     if (!TM.currentProject) return false;
     
     switch (stepId) {
-      case 1: // ìƒí‘œ ì •ë³´
+      case 1: // 상표 정보
         return !!(TM.currentProject.trademarkName);
-      case 2: // ì§€ì •ìƒí’ˆ
+      case 2: // 지정상품
         return TM.currentProject.designatedGoods && TM.currentProject.designatedGoods.length > 0;
-      case 3: // ì„ í–‰ìƒí‘œ ê²€ìƒ‰
+      case 3: // 선행상표 검색
         return !!(TM.currentProject.searchResults.searchedAt);
-      case 4: // ìœ ì‚¬ë„ í‰ê°€
+      case 4: // 유사도 평가
         return TM.currentProject.similarityEvaluations && TM.currentProject.similarityEvaluations.length > 0;
-      case 5: // ë¦¬ìŠ¤í¬ í‰ê°€
+      case 5: // 리스크 평가
         return !!(TM.currentProject.riskAssessment.level);
-      case 6: // ìš°ì„ ì‹¬ì‚¬ - ì‚¬ìš©ìžê°€ ëª…ì‹œì ìœ¼ë¡œ ì„ íƒ ì—¬ë¶€ë¥¼ ê²°ì •í•´ì•¼ ì™„ë£Œ
+      case 6: // 우선심사 - 사용자가 명시적으로 선택 여부를 결정해야 완료
         return TM.currentProject.priorityExam.userConfirmed === true;
-      case 7: // ì¢…í•© ìš”ì•½
-        return false; // í•­ìƒ ë¯¸ì™„ë£Œ (ì–¸ì œë“  ì¶œë ¥ ê°€ëŠ¥)
+      case 7: // 종합 요약
+        return false; // 항상 미완료 (언제든 출력 가능)
       default:
         return false;
     }
@@ -1329,7 +1329,7 @@ TM.closeSettings = function() {
   };
   
   TM.updateStepUI = function() {
-    // ì‚¬ì´ë“œë°” ìŠ¤í… ìƒíƒœ ì—…ë°ì´íŠ¸
+    // 사이드바 스텝 상태 업데이트
     const stepItems = document.querySelectorAll('.tm-step-item');
     stepItems.forEach(item => {
       const stepNum = parseInt(item.dataset.step);
@@ -1337,35 +1337,35 @@ TM.closeSettings = function() {
       item.classList.toggle('completed', TM.isStepCompleted(stepNum));
     });
     
-    // ë©”ì¸ í—¤ë” ì—…ë°ì´íŠ¸
+    // 메인 헤더 업데이트
     const mainHeader = document.querySelector('.tm-main-header h2');
     if (mainHeader) {
       const step = TM.steps[TM.currentStep - 1];
       mainHeader.textContent = `${step?.icon || ''} ${step?.name || ''}`;
     }
     
-    // í•˜ë‹¨ ë²„íŠ¼ ìƒíƒœ
+    // 하단 버튼 상태
     const prevBtn = document.querySelector('[data-action="tm-prev-step"]');
     const nextBtn = document.querySelector('[data-action="tm-next-step"]');
     if (prevBtn) prevBtn.disabled = TM.currentStep === 1;
     if (nextBtn) nextBtn.disabled = TM.currentStep === TM.steps.length;
     
-    // ì¸ë””ì¼€ì´í„°
+    // 인디케이터
     const indicator = document.querySelector('.tm-step-indicator');
     if (indicator) indicator.textContent = `${TM.currentStep} / ${TM.steps.length}`;
     
-    // ì§„í–‰ë¥  ì—…ë°ì´íŠ¸
+    // 진행률 업데이트
     const progressBar = document.querySelector('.tm-progress-bar');
     const progressText = document.querySelector('.tm-progress-text');
     if (progressBar) progressBar.style.width = `${TM.getProgressPercent()}%`;
-    if (progressText) progressText.textContent = `${TM.getCompletedSteps()}/${TM.steps.length} ì™„ë£Œ`;
+    if (progressText) progressText.textContent = `${TM.getCompletedSteps()}/${TM.steps.length} 완료`;
   };
   
   TM.renderCurrentStep = function() {
     const stepEl = document.getElementById('tm-step-content');
     if (!stepEl) return;
     
-    // í”„ë¡œì íŠ¸ ìš”ì•½ ì •ë³´ ì—…ë°ì´íŠ¸
+    // 프로젝트 요약 정보 업데이트
     TM.updateProjectSummary();
     
     switch (TM.currentStep) {
@@ -1393,7 +1393,7 @@ TM.closeSettings = function() {
     }
   };
   
-  // í”„ë¡œì íŠ¸ ìš”ì•½ ì •ë³´ ì—…ë°ì´íŠ¸
+  // 프로젝트 요약 정보 업데이트
   TM.updateProjectSummary = function() {
     const summaryEl = document.getElementById('tm-project-summary');
     if (!summaryEl || !TM.currentProject) return;
@@ -1402,10 +1402,10 @@ TM.closeSettings = function() {
     
     let html = `
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 20px;">ðŸ·ï¸</span>
+        <span style="font-size: 20px;">🏷️</span>
         <div>
-          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">ìƒí‘œëª…</div>
-          <div style="font-size: 14px; font-weight: 600; color: #0c4a6e;">${TM.escapeHtml(p.trademarkName || '(ë¯¸ìž…ë ¥)')}</div>
+          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">상표명</div>
+          <div style="font-size: 14px; font-weight: 600; color: #0c4a6e;">${TM.escapeHtml(p.trademarkName || '(미입력)')}</div>
         </div>
       </div>
     `;
@@ -1413,7 +1413,7 @@ TM.closeSettings = function() {
     if (p.aiAnalysis?.businessAnalysis) {
       html += `
         <div style="flex: 1; min-width: 200px; border-left: 2px solid #bae6fd; padding-left: 16px;">
-          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">ì‚¬ì—… ë‚´ìš©</div>
+          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">사업 내용</div>
           <div style="font-size: 13px; color: #1e3a5f; line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(p.aiAnalysis.businessAnalysis.slice(0, 100))}${p.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
         </div>
       `;
@@ -1423,23 +1423,23 @@ TM.closeSettings = function() {
       const totalGoods = p.designatedGoods.reduce((sum, g) => sum + (g.goods?.length || 0), 0);
       html += `
         <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
-          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">ì§€ì •ìƒí’ˆ</div>
+          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">지정상품</div>
           <div style="font-size: 13px; color: #1e3a5f;">
-            <strong>${p.designatedGoods.length}</strong>ê°œ ë¥˜ / 
-            <strong>${totalGoods}</strong>ê°œ ìƒí’ˆ
+            <strong>${p.designatedGoods.length}</strong>개 류 / 
+            <strong>${totalGoods}</strong>개 상품
           </div>
         </div>
       `;
     }
     
     if (p.aiAnalysis?.classRecommendations?.core?.length > 0) {
-      const coreClasses = p.aiAnalysis.classRecommendations.core.map(c => 'ì œ' + c.class + 'ë¥˜').join(', ');
+      const coreClasses = p.aiAnalysis.classRecommendations.core.map(c => '제' + c.class + '류').join(', ');
       const recCount = p.aiAnalysis.classRecommendations.recommended?.length || 0;
       html += `
         <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
-          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">ì¶”ì²œ ë¥˜</div>
+          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">추천 류</div>
           <div style="font-size: 12px; color: #1e3a5f;">
-            ${coreClasses}${recCount > 0 ? ' ì™¸ ' + recCount + 'ê°œ' : ''}
+            ${coreClasses}${recCount > 0 ? ' 외 ' + recCount + '개' : ''}
           </div>
         </div>
       `;
@@ -1449,7 +1449,7 @@ TM.closeSettings = function() {
   };
 
   // ============================================================
-  // 8. ìœ í‹¸ë¦¬í‹° í•¨ìˆ˜
+  // 8. 유틸리티 함수
   // ============================================================
   
   TM.escapeHtml = function(text) {
@@ -1459,28 +1459,28 @@ TM.closeSettings = function() {
     return div.innerHTML;
   };
   
-  // AI ì‘ë‹µ JSON ì•ˆì „ íŒŒì‹±
+  // AI 응답 JSON 안전 파싱
   TM.safeJsonParse = function(text) {
-    // JSON ë¸”ë¡ ì¶”ì¶œ
+    // JSON 블록 추출
     let jsonStr = text.match(/\{[\s\S]*\}/)?.[0];
     if (!jsonStr) {
-      // JSONì´ ìž˜ë ¤ì„œ ë‹«ížˆì§€ ì•Šì€ ê²½ìš° ë³µêµ¬ ì‹œë„
+      // JSON이 잘려서 닫히지 않은 경우 복구 시도
       jsonStr = text.match(/\{[\s\S]*/)?.[0];
       if (jsonStr) {
         jsonStr = TM.repairTruncatedJson(jsonStr);
       } else {
-        throw new Error('JSONì„ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.');
+        throw new Error('JSON을 찾을 수 없습니다.');
       }
     }
     
-    // 1ì°¨ ì‹œë„: ê·¸ëŒ€ë¡œ íŒŒì‹±
+    // 1차 시도: 그대로 파싱
     try {
       return JSON.parse(jsonStr);
     } catch (e) {
-      // 2ì°¨ ì‹œë„: ì •ë¦¬ í›„ íŒŒì‹±
+      // 2차 시도: 정리 후 파싱
     }
     
-    // JSON ì •ë¦¬ (trailing comma, ì œì–´ë¬¸ìž ì œê±°)
+    // JSON 정리 (trailing comma, 제어문자 제거)
     jsonStr = jsonStr
       .replace(/,\s*}/g, '}')
       .replace(/,\s*]/g, ']')
@@ -1492,20 +1492,20 @@ TM.closeSettings = function() {
     try {
       return JSON.parse(jsonStr);
     } catch (e) {
-      // 3ì°¨ ì‹œë„: ìž˜ë¦° JSON ë³µêµ¬
+      // 3차 시도: 잘린 JSON 복구
       try {
         const repaired = TM.repairTruncatedJson(jsonStr);
         return JSON.parse(repaired);
       } catch (e2) {
-        console.error('[TM] JSON íŒŒì‹± ìµœì¢… ì‹¤íŒ¨:', jsonStr.slice(0, 300));
-        throw new Error('AI ì‘ë‹µ í˜•ì‹ ì˜¤ë¥˜. ë‹¤ì‹œ ì‹œë„í•´ì£¼ì„¸ìš”.');
+        console.error('[TM] JSON 파싱 최종 실패:', jsonStr.slice(0, 300));
+        throw new Error('AI 응답 형식 오류. 다시 시도해주세요.');
       }
     }
   };
   
-  // ìž˜ë¦° JSON ë³µêµ¬ (max_tokens ì´ˆê³¼ë¡œ ì‘ë‹µì´ ìž˜ë ¸ì„ ë•Œ)
+  // 잘린 JSON 복구 (max_tokens 초과로 응답이 잘렸을 때)
   TM.repairTruncatedJson = function(jsonStr) {
-    // ì—´ë¦° ê´„í˜¸/ëŒ€ê´„í˜¸ ì¹´ìš´íŠ¸
+    // 열린 괄호/대괄호 카운트
     let braces = 0, brackets = 0, inString = false, escaped = false;
     for (let i = 0; i < jsonStr.length; i++) {
       const ch = jsonStr[i];
@@ -1519,13 +1519,13 @@ TM.closeSettings = function() {
       else if (ch === ']') brackets--;
     }
     
-    // ë¬¸ìžì—´ì´ ë‹«ížˆì§€ ì•Šì•˜ìœ¼ë©´ ë‹«ê¸°
+    // 문자열이 닫히지 않았으면 닫기
     if (inString) jsonStr += '"';
     
-    // ë§ˆì§€ë§‰ ë¶ˆì™„ì „í•œ í•­ëª© ì œê±° (trailing comma ì •ë¦¬)
+    // 마지막 불완전한 항목 제거 (trailing comma 정리)
     jsonStr = jsonStr.replace(/,\s*$/, '');
     
-    // ë‹«ížˆì§€ ì•Šì€ ê´„í˜¸ ë‹«ê¸°
+    // 닫히지 않은 괄호 닫기
     while (brackets > 0) { jsonStr += ']'; brackets--; }
     while (braces > 0) { jsonStr += '}'; braces--; }
     
@@ -1535,7 +1535,7 @@ TM.closeSettings = function() {
   TM.updateField = function(field, value) {
     if (!TM.currentProject) return;
     
-    // ì  í‘œê¸°ë²• ì§€ì› (ì˜ˆ: 'applicant.name')
+    // 점 표기법 지원 (예: 'applicant.name')
     const parts = field.split('.');
     let obj = TM.currentProject;
     
@@ -1546,7 +1546,7 @@ TM.closeSettings = function() {
     
     obj[parts[parts.length - 1]] = value;
     
-    // ë³€ê²½ ê°ì§€ ë° ìžë™ ì €ìž¥ íŠ¸ë¦¬ê±°
+    // 변경 감지 및 자동 저장 트리거
     TM.markChanged();
   };
   
@@ -1581,19 +1581,19 @@ TM.closeSettings = function() {
     };
   };
 
-  // ì „ì—­ ë…¸ì¶œ
+  // 전역 노출
   window.TM = TM;
   
-  // App.switchServiceì—ì„œ í˜¸ì¶œë  ë•Œ ì´ˆê¸°í™”
+  // App.switchService에서 호출될 때 초기화
   if (window.App && App.currentUser) {
-    // ì´ë¯¸ ë¡œê·¸ì¸ëœ ìƒíƒœë©´ ë°”ë¡œ ì´ˆê¸°í™”í•˜ì§€ ì•ŠìŒ
-    // switchServiceì—ì„œ í˜¸ì¶œë¨
+    // 이미 로그인된 상태면 바로 초기화하지 않음
+    // switchService에서 호출됨
   }
 
 })();
 /* ============================================================
-   ìƒí‘œì¶œì› ìš°ì„ ì‹¬ì‚¬ ìžë™í™” ì‹œìŠ¤í…œ - Step ë Œë”ë§ (Part 2)
-   Step 1~4: ìƒí‘œì •ë³´, ì§€ì •ìƒí’ˆ, ì„ í–‰ê²€ìƒ‰, ìœ ì‚¬ë„í‰ê°€
+   상표출원 우선심사 자동화 시스템 - Step 렌더링 (Part 2)
+   Step 1~4: 상표정보, 지정상품, 선행검색, 유사도평가
    ============================================================ */
 
 (function() {
@@ -1601,12 +1601,12 @@ TM.closeSettings = function() {
   
   const TM = window.TM;
   if (!TM) {
-    console.error('[TM Steps] TM ëª¨ë“ˆì´ ë¡œë“œë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.');
+    console.error('[TM Steps] TM 모듈이 로드되지 않았습니다.');
     return;
   }
 
   // ============================================================
-  // Step 1: ìƒí‘œ ì •ë³´ ìž…ë ¥ (2-column ë ˆì´ì•„ì›ƒ)
+  // Step 1: 상표 정보 입력 (2-column 레이아웃)
   // ============================================================
   
   TM.renderStep1_TrademarkInfo = function(container) {
@@ -1615,24 +1615,24 @@ TM.closeSettings = function() {
     
     container.innerHTML = `
       <div class="tm-2col">
-        <!-- ì¢Œì¸¡: ìž…ë ¥ ì˜ì—­ -->
+        <!-- 좌측: 입력 영역 -->
         <div class="tm-col">
           <div class="tm-panel">
             <div class="tm-panel-header">
-              <h3>ðŸ·ï¸ ìƒí‘œ ê¸°ë³¸ ì •ë³´</h3>
+              <h3>🏷️ 상표 기본 정보</h3>
             </div>
             <div class="tm-panel-body">
-              <!-- ìƒí‘œ ìœ í˜• -->
+              <!-- 상표 유형 -->
               <div class="tm-field">
-                <label>ìƒí‘œ ìœ í˜•</label>
+                <label>상표 유형</label>
                 <div class="tm-chips">
                   ${[
-                    {type: 'text', label: 'ë¬¸ìž'},
-                    {type: 'figure', label: 'ë„í˜•'},
-                    {type: 'combined', label: 'ê²°í•©'},
-                    {type: 'sound', label: 'ì†Œë¦¬'},
-                    {type: 'color', label: 'ìƒ‰ì±„'},
-                    {type: '3d', label: 'ìž…ì²´'}
+                    {type: 'text', label: '문자'},
+                    {type: 'figure', label: '도형'},
+                    {type: 'combined', label: '결합'},
+                    {type: 'sound', label: '소리'},
+                    {type: 'color', label: '색채'},
+                    {type: '3d', label: '입체'}
                   ].map(t => `
                     <label class="tm-chip ${p.trademarkType === t.type ? 'active' : ''}">
                       <input type="radio" name="trademarkType" value="${t.type}" 
@@ -1643,17 +1643,17 @@ TM.closeSettings = function() {
                 </div>
               </div>
               
-              <!-- ìƒí‘œëª… -->
+              <!-- 상표명 -->
               <div class="tm-field">
-                <label>ìƒí‘œëª… <span class="required">*</span></label>
+                <label>상표명 <span class="required">*</span></label>
                 <input type="text" class="tm-input tm-input-lg" data-field="trademarkName" 
                        value="${TM.escapeHtml(p.trademarkName)}" 
-                       placeholder="í•œê¸€, ì˜ë¬¸, í•œìž ë“±">
+                       placeholder="한글, 영문, 한자 등">
               </div>
               
-              <!-- ê²¬ë³¸ ì—…ë¡œë“œ (ê°œì„ ) -->
+              <!-- 견본 업로드 (개선) -->
               <div class="tm-field">
-                <label>ê²¬ë³¸ <span style="font-weight:400;color:#9ca3af;font-size:12px;">(ë„í˜•/ê²°í•© ìƒí‘œ ì‹œ í•„ìˆ˜)</span></label>
+                <label>견본 <span style="font-weight:400;color:#9ca3af;font-size:12px;">(도형/결합 상표 시 필수)</span></label>
                 <div class="tm-specimen-upload" id="tm-specimen-dropzone"
                      ondragover="TM.handleDragOver(event)"
                      ondragleave="TM.handleDragLeave(event)"
@@ -1661,16 +1661,16 @@ TM.closeSettings = function() {
                      onclick="document.getElementById('tm-specimen-input').click()">
                   ${p.specimenUrl ? `
                     <div class="tm-specimen-preview">
-                      <img src="${p.specimenUrl}" alt="ê²¬ë³¸">
+                      <img src="${p.specimenUrl}" alt="견본">
                       <div class="tm-specimen-overlay">
-                        <span>í´ë¦­í•˜ì—¬ ë³€ê²½</span>
+                        <span>클릭하여 변경</span>
                       </div>
                     </div>
                   ` : `
                     <div class="tm-specimen-empty">
-                      <span class="tm-specimen-icon">ðŸ–¼ï¸</span>
-                      <span class="tm-specimen-text">í´ë¦­ ë˜ëŠ” ë“œëž˜ê·¸í•˜ì—¬ ì—…ë¡œë“œ</span>
-                      <span class="tm-specimen-hint">JPG, PNG, GIF (ìµœëŒ€ 5MB)</span>
+                      <span class="tm-specimen-icon">🖼️</span>
+                      <span class="tm-specimen-text">클릭 또는 드래그하여 업로드</span>
+                      <span class="tm-specimen-hint">JPG, PNG, GIF (최대 5MB)</span>
                     </div>
                   `}
                 </div>
@@ -1680,82 +1680,82 @@ TM.closeSettings = function() {
             </div>
           </div>
           
-          <!-- AI ë¶„ì„ ìž…ë ¥ -->
+          <!-- AI 분석 입력 -->
           <div class="tm-panel tm-panel-highlight">
             <div class="tm-panel-header">
-              <h3>ðŸ¤– AI ì‚¬ì—… ë¶„ì„</h3>
-              <span class="tm-badge tm-badge-primary">ì¶”ì²œ</span>
+              <h3>🤖 AI 사업 분석</h3>
+              <span class="tm-badge tm-badge-primary">추천</span>
             </div>
             <div class="tm-panel-body">
-              <p class="tm-hint">ì‚¬ì—… ë‚´ìš©ì„ ìž…ë ¥í•˜ë©´ AIê°€ ìƒí’ˆë¥˜ì™€ ì§€ì •ìƒí’ˆì„ ì¶”ì²œí•©ë‹ˆë‹¤.</p>
+              <p class="tm-hint">사업 내용을 입력하면 AI가 상품류와 지정상품을 추천합니다.</p>
               <div class="tm-field" style="margin-bottom: 16px;">
                 <input type="text" class="tm-input" id="tm-business-url" 
                        value="${TM.escapeHtml(p.businessDescription || '')}"
-                       placeholder="ì˜ˆ: ì†Œí”„íŠ¸ì›¨ì–´ ê°œë°œ, íŠ¹í—ˆ ì¶œì› ëŒ€í–‰">
+                       placeholder="예: 소프트웨어 개발, 특허 출원 대행">
               </div>
-              <button class="btn btn-primary btn-block" data-action="tm-analyze-business" style="padding: 12px;">ðŸ” ë¶„ì„</button>
+              <button class="btn btn-primary btn-block" data-action="tm-analyze-business" style="padding: 12px;">🔍 분석</button>
             </div>
           </div>
           
-          <!-- ì¶œì›ì¸ ì •ë³´ (í™•ìž¥) -->
+          <!-- 출원인 정보 (확장) -->
           <details class="tm-panel" ${p.applicant.name ? 'open' : ''}>
             <summary class="tm-panel-header">
-              <h3>ðŸ‘¤ ì¶œì›ì¸ ì •ë³´</h3>
-              <span class="tm-badge tm-badge-gray">${p.applicant.name ? 'ìž…ë ¥ë¨' : 'ì„ íƒ'}</span>
+              <h3>👤 출원인 정보</h3>
+              <span class="tm-badge tm-badge-gray">${p.applicant.name ? '입력됨' : '선택'}</span>
             </summary>
             <div class="tm-panel-body">
               <div class="tm-field-grid tm-field-grid-3">
                 <div class="tm-field">
-                  <label>ë””ë”¤ ê´€ë¦¬ë²ˆí˜¸ <span style="font-weight:400;color:#9ca3af;font-size:11px;">(í”„ë¡œì íŠ¸ ì‹ë³„)</span></label>
+                  <label>디딤 관리번호 <span style="font-weight:400;color:#9ca3af;font-size:11px;">(프로젝트 식별)</span></label>
                   <input type="text" class="tm-input" id="tm-project-title-input"
                          value="${TM.escapeHtml(TM.currentProject?.title || '')}" 
-                         placeholder="ì˜ˆ: 26T0001"
+                         placeholder="예: 26T0001"
                          onchange="TM.updateProjectTitle(this.value)">
                 </div>
                 <div class="tm-field">
-                  <label>ì„±ëª…/ìƒí˜¸ <span class="required">*</span></label>
+                  <label>성명/상호 <span class="required">*</span></label>
                   <input type="text" class="tm-input" data-field="applicant.name" 
-                         value="${TM.escapeHtml(p.applicant.name)}" placeholder="í™ê¸¸ë™ / (ì£¼)ë””ë”¤">
+                         value="${TM.escapeHtml(p.applicant.name)}" placeholder="홍길동 / (주)디딤">
                 </div>
                 <div class="tm-field">
-                  <label>ì¶œì›ì¸ ìœ í˜•</label>
+                  <label>출원인 유형</label>
                   <select class="tm-input" data-field="applicant.type">
-                    <option value="individual" ${p.applicant.type === 'individual' ? 'selected' : ''}>ê°œì¸</option>
-                    <option value="corporation" ${p.applicant.type === 'corporation' ? 'selected' : ''}>ë²•ì¸</option>
-                    <option value="sme" ${p.applicant.type === 'sme' ? 'selected' : ''}>ì¤‘ì†Œê¸°ì—…</option>
+                    <option value="individual" ${p.applicant.type === 'individual' ? 'selected' : ''}>개인</option>
+                    <option value="corporation" ${p.applicant.type === 'corporation' ? 'selected' : ''}>법인</option>
+                    <option value="sme" ${p.applicant.type === 'sme' ? 'selected' : ''}>중소기업</option>
                   </select>
                 </div>
                 <div class="tm-field">
-                  <label>ì‚¬ì—…ìž/ì£¼ë¯¼ë“±ë¡ë²ˆí˜¸</label>
+                  <label>사업자/주민등록번호</label>
                   <input type="text" class="tm-input" data-field="applicant.registrationNumber" 
                          value="${TM.escapeHtml(p.applicant.registrationNumber || '')}" placeholder="000-00-00000">
                 </div>
                 <div class="tm-field">
-                  <label>ì—°ë½ì²˜</label>
+                  <label>연락처</label>
                   <input type="text" class="tm-input" data-field="applicant.phone" 
                          value="${TM.escapeHtml(p.applicant.phone || '')}" placeholder="010-0000-0000">
                 </div>
                 <div class="tm-field">
-                  <label>ì´ë©”ì¼</label>
+                  <label>이메일</label>
                   <input type="text" class="tm-input" data-field="applicant.email" 
                          value="${TM.escapeHtml(p.applicant.email || '')}" placeholder="example@email.com">
                 </div>
               </div>
               <div class="tm-field" style="margin-top: 12px;">
-                <label>ì£¼ì†Œ</label>
+                <label>주소</label>
                 <input type="text" class="tm-input" data-field="applicant.address" 
-                       value="${TM.escapeHtml(p.applicant.address || '')}" placeholder="ì„œìš¸ì‹œ ê°•ë‚¨êµ¬..."">
+                       value="${TM.escapeHtml(p.applicant.address || '')}" placeholder="서울시 강남구..."">
               </div>
             </div>
           </details>
         </div>
         
-        <!-- ìš°ì¸¡: ê²°ê³¼ ì˜ì—­ -->
+        <!-- 우측: 결과 영역 -->
         <div class="tm-col">
           ${hasAiResult ? `
             <div class="tm-panel">
               <div class="tm-panel-header">
-                <h3>ðŸ“‹ ë¶„ì„ ê²°ê³¼</h3>
+                <h3>📋 분석 결과</h3>
               </div>
               <div class="tm-panel-body">
                 <div class="tm-summary">${TM.escapeHtml(p.aiAnalysis.businessAnalysis)}</div>
@@ -1769,11 +1769,11 @@ TM.closeSettings = function() {
             
             <div class="tm-panel">
               <div class="tm-panel-header">
-                <h3>ðŸŽ¯ ì¶”ì²œ ìƒí’ˆë¥˜</h3>
-                <button class="btn btn-sm btn-primary" data-action="tm-apply-all-recommendations">âœ“ ì „ì²´ ì ìš©</button>
+                <h3>🎯 추천 상품류</h3>
+                <button class="btn btn-sm btn-primary" data-action="tm-apply-all-recommendations">✓ 전체 적용</button>
               </div>
               <div class="tm-panel-body">
-                <p style="font-size: 13px; color: #6b7684; margin: 0 0 16px;">AIê°€ ë¶„ì„í•œ ê²°ê³¼, ì•„ëž˜ ìƒí’ˆë¥˜ê°€ ì‚¬ì—…ì— ì í•©í•©ë‹ˆë‹¤. <strong>ì ìš©</strong> ë²„íŠ¼ì„ í´ë¦­í•˜ë©´ ì§€ì •ìƒí’ˆì— ì¶”ê°€ë©ë‹ˆë‹¤.</p>
+                <p style="font-size: 13px; color: #6b7684; margin: 0 0 16px;">AI가 분석한 결과, 아래 상품류가 사업에 적합합니다. <strong>적용</strong> 버튼을 클릭하면 지정상품에 추가됩니다.</p>
                 <div class="tm-rec-list">
                   ${p.aiAnalysis.recommendedClasses.map((code, idx) => {
                     const className = TM.niceClasses[code] || '';
@@ -1785,18 +1785,18 @@ TM.closeSettings = function() {
                       <div class="tm-rec-item ${isAdded ? 'added' : ''}">
                         <div class="tm-rec-num">${idx + 1}</div>
                         <div class="tm-rec-info">
-                          <div class="tm-rec-class">ì œ${code}ë¥˜ <span>${className}</span></div>
+                          <div class="tm-rec-class">제${code}류 <span>${className}</span></div>
                           ${reason ? `<div class="tm-rec-desc">${TM.escapeHtml(reason)}</div>` : ''}
                           ${goods.length > 0 ? `
-                            <div class="tm-rec-goods-label">ì¶”ì²œ ì§€ì •ìƒí’ˆ (${goods.length}ê°œ):</div>
+                            <div class="tm-rec-goods-label">추천 지정상품 (${goods.length}개):</div>
                             <div class="tm-rec-tags">
                               ${goods.slice(0, 10).map(g => `<span>${g.name || g}</span>`).join('')}
                             </div>
                           ` : ''}
                         </div>
                         <div class="tm-rec-btn">
-                          ${isAdded ? `<span class="applied">âœ“</span>` : 
-                            `<button class="btn btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">+ ì ìš©</button>`}
+                          ${isAdded ? `<span class="applied">✓</span>` : 
+                            `<button class="btn btn-primary" data-action="tm-apply-recommendation" data-class-code="${code}">+ 적용</button>`}
                         </div>
                       </div>
                     `;
@@ -1807,9 +1807,9 @@ TM.closeSettings = function() {
           ` : `
             <div class="tm-panel tm-panel-empty">
               <div class="tm-empty">
-                <div class="tm-empty-icon">ðŸ”</div>
-                <h4>AI ë¶„ì„ì„ ì‹œìž‘í•˜ì„¸ìš”</h4>
-                <p>ì‚¬ì—… ë‚´ìš©ì„ ìž…ë ¥í•˜ê³  ë¶„ì„ ë²„íŠ¼ì„ í´ë¦­í•˜ë©´<br>ì í•©í•œ ìƒí’ˆë¥˜ë¥¼ ì¶”ì²œë°›ì„ ìˆ˜ ìžˆìŠµë‹ˆë‹¤.</p>
+                <div class="tm-empty-icon">🔍</div>
+                <h4>AI 분석을 시작하세요</h4>
+                <p>사업 내용을 입력하고 분석 버튼을 클릭하면<br>적합한 상품류를 추천받을 수 있습니다.</p>
               </div>
             </div>
           `}
@@ -1817,7 +1817,7 @@ TM.closeSettings = function() {
       </div>
     `;
     
-    // ìƒí‘œ ìœ í˜• ë³€ê²½ ì´ë²¤íŠ¸
+    // 상표 유형 변경 이벤트
     container.querySelectorAll('input[name="trademarkType"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         TM.updateField('trademarkType', e.target.value);
@@ -1830,24 +1830,24 @@ TM.closeSettings = function() {
   
   TM.getTypeIcon = function(type) {
     const icons = {
-      text: 'ðŸ”¤',
-      figure: 'ðŸŽ¨',
-      combined: 'ðŸ”€',
-      sound: 'ðŸ”Š',
-      color: 'ðŸŒˆ',
-      '3d': 'ðŸŽ²'
+      text: '🔤',
+      figure: '🎨',
+      combined: '🔀',
+      sound: '🔊',
+      color: '🌈',
+      '3d': '🎲'
     };
-    return icons[type] || 'ðŸ·ï¸';
+    return icons[type] || '🏷️';
   };
   
   TM.getTypeLabel = function(type) {
     const labels = {
-      text: 'ë¬¸ìž',
-      figure: 'ë„í˜•',
-      combined: 'ê²°í•©',
-      sound: 'ì†Œë¦¬',
-      color: 'ìƒ‰ì±„',
-      '3d': 'ìž…ì²´'
+      text: '문자',
+      figure: '도형',
+      combined: '결합',
+      sound: '소리',
+      color: '색채',
+      '3d': '입체'
     };
     return labels[type] || type;
   };
@@ -1855,22 +1855,22 @@ TM.closeSettings = function() {
   TM.handleSpecimenUpload = async function(file) {
     if (!file) return;
     
-    // íŒŒì¼ í¬ê¸° ì²´í¬ (5MB)
+    // 파일 크기 체크 (5MB)
     if (file.size > 5 * 1024 * 1024) {
-      App.showToast('íŒŒì¼ í¬ê¸°ëŠ” 5MB ì´í•˜ì—¬ì•¼ í•©ë‹ˆë‹¤.', 'error');
+      App.showToast('파일 크기는 5MB 이하여야 합니다.', 'error');
       return;
     }
     
-    // íŒŒì¼ í˜•ì‹ ì²´í¬
+    // 파일 형식 체크
     if (!['image/jpeg', 'image/png', 'image/gif'].includes(file.type)) {
-      App.showToast('JPG, PNG, GIF í˜•ì‹ë§Œ ì§€ì›í•©ë‹ˆë‹¤.', 'error');
+      App.showToast('JPG, PNG, GIF 형식만 지원합니다.', 'error');
       return;
     }
     
     try {
-      App.showToast('ì´ë¯¸ì§€ ì—…ë¡œë“œ ì¤‘...', 'info');
+      App.showToast('이미지 업로드 중...', 'info');
       
-      // Supabase Storageì— ì—…ë¡œë“œ
+      // Supabase Storage에 업로드
       const fileName = `${TM.currentProject.id}_${Date.now()}.${file.name.split('.').pop()}`;
       
       const { data, error } = await App.sb.storage
@@ -1882,7 +1882,7 @@ TM.closeSettings = function() {
       
       if (error) throw error;
       
-      // ê³µê°œ URL ìƒì„±
+      // 공개 URL 생성
       const { data: urlData } = App.sb.storage
         .from('trademark-specimens')
         .getPublicUrl(fileName);
@@ -1890,17 +1890,17 @@ TM.closeSettings = function() {
       TM.currentProject.specimenUrl = urlData.publicUrl;
       TM.currentProject.specimenFile = fileName;
       
-      // ë¯¸ë¦¬ë³´ê¸° ì—…ë°ì´íŠ¸
+      // 미리보기 업데이트
       const preview = document.getElementById('tm-specimen-preview');
       if (preview) {
-        preview.innerHTML = `<img src="${urlData.publicUrl}" alt="ê²¬ë³¸ ì´ë¯¸ì§€">`;
+        preview.innerHTML = `<img src="${urlData.publicUrl}" alt="견본 이미지">`;
       }
       
-      App.showToast('ì´ë¯¸ì§€ê°€ ì—…ë¡œë“œë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('이미지가 업로드되었습니다.', 'success');
       
     } catch (error) {
-      console.error('[TM] ì´ë¯¸ì§€ ì—…ë¡œë“œ ì‹¤íŒ¨:', error);
-      App.showToast('ì´ë¯¸ì§€ ì—…ë¡œë“œ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 이미지 업로드 실패:', error);
+      App.showToast('이미지 업로드 실패: ' + error.message, 'error');
     }
   };
   
@@ -1920,14 +1920,14 @@ TM.closeSettings = function() {
       TM.currentProject.specimenFile = null;
       TM.renderCurrentStep();
       
-      App.showToast('ì´ë¯¸ì§€ê°€ ì œê±°ë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('이미지가 제거되었습니다.', 'success');
     } catch (error) {
-      console.error('[TM] ì´ë¯¸ì§€ ì œê±° ì‹¤íŒ¨:', error);
+      console.error('[TM] 이미지 제거 실패:', error);
     }
   };
 
   // ============================================================
-  // Step 2: ì§€ì •ìƒí’ˆ ì„ íƒ (2-column ë ˆì´ì•„ì›ƒ)
+  // Step 2: 지정상품 선택 (2-column 레이아웃)
   // ============================================================
   
   TM.renderStep2_DesignatedGoods = function(container) {
@@ -1935,7 +1935,7 @@ TM.closeSettings = function() {
     const hasAiRec = p.aiAnalysis?.recommendedClasses?.length > 0;
     const totalGoods = p.designatedGoods.reduce((sum, c) => sum + c.goods.length, 0);
     
-    // ëª¨ë“  ìœ ì‚¬êµ° ì½”ë“œ ìˆ˜ì§‘
+    // 모든 유사군 코드 수집
     const allSimilarGroups = new Set();
     p.designatedGoods.forEach(classData => {
       classData.goods?.forEach(g => {
@@ -1947,51 +1947,51 @@ TM.closeSettings = function() {
     
     container.innerHTML = `
       <div class="tm-2col">
-        <!-- ì¢Œì¸¡: ìƒí’ˆë¥˜ ì„ íƒ -->
+        <!-- 좌측: 상품류 선택 -->
         <div class="tm-col">
-          <!-- ê³ ì‹œëª…ì¹­ í† ê¸€ -->
+          <!-- 고시명칭 토글 -->
           <div class="tm-panel tm-panel-sm">
             <div class="tm-toggles">
               <label class="tm-toggle ${p.gazettedOnly ? 'active' : ''}">
                 <input type="radio" name="gazettedMode" value="true" ${p.gazettedOnly ? 'checked' : ''}>
-                ê³ ì‹œëª…ì¹­ Only <span class="fee">46,000ì›/ë¥˜</span>
+                고시명칭 Only <span class="fee">46,000원/류</span>
               </label>
               <label class="tm-toggle ${!p.gazettedOnly ? 'active' : ''}">
                 <input type="radio" name="gazettedMode" value="false" ${!p.gazettedOnly ? 'checked' : ''}>
-                ë¹„ê³ ì‹œ í—ˆìš© <span class="fee">52,000ì›/ë¥˜</span>
+                비고시 허용 <span class="fee">52,000원/류</span>
               </label>
             </div>
           </div>
           
           ${hasAiRec ? `
-            <!-- AI ì¶”ì²œ ìƒí’ˆë¥˜ (3ë‹¨ê³„: í•µì‹¬/ê¶Œìž¥/í™•ìž¥) -->
+            <!-- AI 추천 상품류 (3단계: 핵심/권장/확장) -->
             <div class="tm-panel tm-panel-ai">
               <div class="tm-panel-header">
-                <h3>ðŸ¤– AI ì¶”ì²œ ìƒí’ˆë¥˜</h3>
-                <button class="btn btn-sm btn-primary" data-action="tm-apply-all-recommendations">âœ“ ì „ì²´ ì ìš©</button>
+                <h3>🤖 AI 추천 상품류</h3>
+                <button class="btn btn-sm btn-primary" data-action="tm-apply-all-recommendations">✓ 전체 적용</button>
               </div>
               <div class="tm-ai-rec-desc" style="font-size: 12px; padding: 8px 12px; background: #f8f9fa; margin: 0 0 10px 0; border-radius: 4px;">
-                ì‚¬ì—… ë¶„ì„ ê²°ê³¼ìž…ë‹ˆë‹¤. <strong style="color: #dc3545;">ðŸ”´ í•µì‹¬</strong>ì€ í•„ìˆ˜, 
-                <strong style="color: #fd7e14;">ðŸŸ  ê¶Œìž¥</strong>ì€ ê¶Œë¦¬ ë³´í˜¸ìš©, 
-                <strong style="color: #28a745;">ðŸŸ¢ í™•ìž¥</strong>ì€ ì‚¬ì—… í™•ìž¥ ì‹œ ê³ ë ¤í•˜ì„¸ìš”.
+                사업 분석 결과입니다. <strong style="color: #dc3545;">🔴 핵심</strong>은 필수, 
+                <strong style="color: #fd7e14;">🟠 권장</strong>은 권리 보호용, 
+                <strong style="color: #28a745;">🟢 확장</strong>은 사업 확장 시 고려하세요.
               </div>
               
               <div id="tm-ai-recommendations-container"></div>
               
-              <!-- ì¶”ê°€ ì¶”ì²œ ìš”ì²­ ë²„íŠ¼ -->
+              <!-- 추가 추천 요청 버튼 -->
               <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #eee; text-align: center;">
                 <button class="btn btn-outline btn-sm" data-action="tm-request-more-recommendations" style="font-size: 12px;">
-                  ðŸ” ì¶”ê°€ ì¶”ì²œ ìš”ì²­
+                  🔍 추가 추천 요청
                 </button>
               </div>
             </div>
           ` : ''}
           
-          <!-- ì „ì²´ ìƒí’ˆë¥˜ ê·¸ë¦¬ë“œ -->
+          <!-- 전체 상품류 그리드 -->
           <div class="tm-panel">
             <div class="tm-panel-header">
-              <h3>ðŸ“‹ ì „ì²´ ìƒí’ˆë¥˜</h3>
-              <span class="tm-badge">NICE 13íŒ (45ë¥˜)</span>
+              <h3>📋 전체 상품류</h3>
+              <span class="tm-badge">NICE 13판 (45류)</span>
             </div>
             <div class="tm-panel-body">
               <div class="tm-class-grid">
@@ -2008,33 +2008,33 @@ TM.closeSettings = function() {
                 }).join('')}
               </div>
               <div class="tm-grid-legend">
-                <span><span class="dot selected"></span> ì„ íƒë¨</span>
-                <span><span class="dot rec"></span> AIì¶”ì²œ</span>
+                <span><span class="dot selected"></span> 선택됨</span>
+                <span><span class="dot rec"></span> AI추천</span>
               </div>
             </div>
           </div>
         </div>
         
-        <!-- ìš°ì¸¡: ì„ íƒëœ ì§€ì •ìƒí’ˆ -->
+        <!-- 우측: 선택된 지정상품 -->
         <div class="tm-col">
           <div class="tm-panel tm-panel-selected">
             <div class="tm-panel-header">
-              <h3>âœ… ì„ íƒëœ ì§€ì •ìƒí’ˆ</h3>
+              <h3>✅ 선택된 지정상품</h3>
               <div class="tm-selected-stats">
-                <span class="tm-stat-item"><strong>${p.designatedGoods.length}</strong>ë¥˜</span>
-                <span class="tm-stat-item"><strong>${totalGoods}</strong>ê°œ ìƒí’ˆ</span>
-                <span class="tm-stat-item"><strong>${allSimilarGroups.size}</strong>ê°œ ìœ ì‚¬êµ°</span>
-                ${totalGoods > 0 ? `<button class="btn btn-sm btn-outline" data-action="tm-copy-goods" title="ì§€ì •ìƒí’ˆ ë³µì‚¬">ðŸ“‹ ë³µì‚¬</button>` : ''}
+                <span class="tm-stat-item"><strong>${p.designatedGoods.length}</strong>류</span>
+                <span class="tm-stat-item"><strong>${totalGoods}</strong>개 상품</span>
+                <span class="tm-stat-item"><strong>${allSimilarGroups.size}</strong>개 유사군</span>
+                ${totalGoods > 0 ? `<button class="btn btn-sm btn-outline" data-action="tm-copy-goods" title="지정상품 복사">📋 복사</button>` : ''}
               </div>
             </div>
             
             ${p.designatedGoods.length > 0 ? `
-              <!-- ìœ ì‚¬êµ° ìš”ì•½ -->
+              <!-- 유사군 요약 -->
               <div class="tm-similar-summary">
-                <span class="label">ìœ ì‚¬êµ° ì½”ë“œ:</span>
+                <span class="label">유사군 코드:</span>
                 <div class="tm-similar-tags">
                   ${Array.from(allSimilarGroups).slice(0, 8).map(sg => `<span class="tm-similar-tag">${sg}</span>`).join('')}
-                  ${allSimilarGroups.size > 8 ? `<span class="tm-similar-more">+${allSimilarGroups.size - 8}ê°œ</span>` : ''}
+                  ${allSimilarGroups.size > 8 ? `<span class="tm-similar-more">+${allSimilarGroups.size - 8}개</span>` : ''}
                 </div>
               </div>
             ` : ''}
@@ -2042,41 +2042,41 @@ TM.closeSettings = function() {
             <div class="tm-goods-container">
               ${p.designatedGoods.length === 0 ? `
                 <div class="tm-empty-goods">
-                  <div class="icon">ðŸ“¦</div>
-                  <h4>ì§€ì •ìƒí’ˆì„ ì„ íƒí•˜ì„¸ìš”</h4>
-                  <p>ì¢Œì¸¡ì—ì„œ ìƒí’ˆë¥˜ë¥¼ í´ë¦­í•˜ê±°ë‚˜<br>AI ì¶”ì²œì„ ì ìš©í•˜ì„¸ìš”.</p>
+                  <div class="icon">📦</div>
+                  <h4>지정상품을 선택하세요</h4>
+                  <p>좌측에서 상품류를 클릭하거나<br>AI 추천을 적용하세요.</p>
                 </div>
               ` : p.designatedGoods.map(classData => TM.renderClassGoodsCard(classData)).join('')}
             </div>
           </div>
           
-          <!-- ë¹„ê³ ì‹œëª…ì¹­ ì§ì ‘ ìž…ë ¥ ì„¹ì…˜ -->
+          <!-- 비고시명칭 직접 입력 섹션 -->
           ${p.designatedGoods.length > 0 ? `
             <div class="tm-panel tm-panel-custom">
               <div class="tm-panel-header">
-                <h3>âœï¸ ë¹„ê³ ì‹œëª…ì¹­ ì§ì ‘ ìž…ë ¥ <span class="optional">(ì„ íƒ)</span></h3>
+                <h3>✏️ 비고시명칭 직접 입력 <span class="optional">(선택)</span></h3>
               </div>
               <div class="tm-custom-term-info">
-                <p>ê³ ì‹œëª…ì¹­ì— ì—†ëŠ” ìƒí’ˆ/ì„œë¹„ìŠ¤ëª…ì„ ì§ì ‘ ìž…ë ¥í•  ìˆ˜ ìžˆìŠµë‹ˆë‹¤.</p>
-                <p class="tm-custom-term-fee">ðŸ’° ë¹„ê³ ì‹œëª…ì¹­ ì‚¬ìš© ì‹œ ë¥˜ë‹¹ <strong>+6,000ì›</strong> (52,000ì›/ë¥˜)</p>
+                <p>고시명칭에 없는 상품/서비스명을 직접 입력할 수 있습니다.</p>
+                <p class="tm-custom-term-fee">💰 비고시명칭 사용 시 류당 <strong>+6,000원</strong> (52,000원/류)</p>
               </div>
               
               <div class="tm-custom-term-input">
                 <select id="tm-custom-term-class" class="tm-select-sm">
-                  ${p.designatedGoods.map(g => `<option value="${g.classCode}">ì œ${g.classCode}ë¥˜</option>`).join('')}
+                  ${p.designatedGoods.map(g => `<option value="${g.classCode}">제${g.classCode}류</option>`).join('')}
                 </select>
                 <input type="text" id="tm-custom-term-input" 
-                       placeholder="ì˜ˆ: AI ê¸°ë°˜ ì§€ì›ì‚¬ì—… ë§¤ì¹­ ì„œë¹„ìŠ¤ì—…" 
+                       placeholder="예: AI 기반 지원사업 매칭 서비스업" 
                        class="tm-input-flex">
                 <button class="btn btn-secondary btn-sm" data-action="tm-add-custom-term">
-                  + ì¶”ê°€
+                  + 추가
                 </button>
               </div>
               
-              <!-- ë¹„ê³ ì‹œëª…ì¹­ ë¶„ì„ ê²°ê³¼ í‘œì‹œ ì˜ì—­ -->
+              <!-- 비고시명칭 분석 결과 표시 영역 -->
               <div id="tm-custom-term-result" class="tm-custom-term-result" style="display:none;"></div>
               
-              <!-- ì¶”ê°€ëœ ë¹„ê³ ì‹œëª…ì¹­ ëª©ë¡ -->
+              <!-- 추가된 비고시명칭 목록 -->
               ${TM.getCustomTermsHtml(p)}
             </div>
           ` : ''}
@@ -2084,7 +2084,7 @@ TM.closeSettings = function() {
       </div>
     `;
     
-    // ê³ ì‹œëª…ì¹­ ëª¨ë“œ ì´ë²¤íŠ¸
+    // 고시명칭 모드 이벤트
     container.querySelectorAll('input[name="gazettedMode"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         TM.currentProject.gazettedOnly = e.target.value === 'true';
@@ -2094,10 +2094,10 @@ TM.closeSettings = function() {
       });
     });
     
-    // ë¹„ê³ ì‹œëª…ì¹­ ìž…ë ¥ ì´ë²¤íŠ¸
+    // 비고시명칭 입력 이벤트
     const customInput = container.querySelector('#tm-custom-term-input');
     if (customInput) {
-      // Enter í‚¤ë¡œ ì¶”ê°€
+      // Enter 키로 추가
       customInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -2105,7 +2105,7 @@ TM.closeSettings = function() {
         }
       });
       
-      // ìž…ë ¥ ì¤‘ ì‹¤ì‹œê°„ ë¶„ì„ (ë””ë°”ìš´ìŠ¤)
+      // 입력 중 실시간 분석 (디바운스)
       let debounceTimer;
       customInput.addEventListener('input', () => {
         clearTimeout(debounceTimer);
@@ -2120,7 +2120,7 @@ TM.closeSettings = function() {
       });
     }
     
-    // â˜…â˜…â˜… ê° ìƒí’ˆë¥˜ì˜ ê²€ìƒ‰ ìžë™ì™„ì„± ì´ˆê¸°í™” â˜…â˜…â˜…
+    // ★★★ 각 상품류의 검색 자동완성 초기화 ★★★
     setTimeout(() => {
       p.designatedGoods.forEach(classData => {
         TM.initGoodsAutocomplete(classData.classCode);
@@ -2128,7 +2128,7 @@ TM.closeSettings = function() {
     }, 100);
   };
   
-  // ë¹„ê³ ì‹œëª…ì¹­ ëª©ë¡ HTML ìƒì„±
+  // 비고시명칭 목록 HTML 생성
   TM.getCustomTermsHtml = function(p) {
     const customTerms = [];
     p.designatedGoods.forEach(classData => {
@@ -2142,44 +2142,44 @@ TM.closeSettings = function() {
     return `
       <div class="tm-custom-terms-list">
         <div class="tm-custom-terms-header">
-          <span>ì¶”ê°€ëœ ë¹„ê³ ì‹œëª…ì¹­ (${customTerms.length}ê°œ)</span>
+          <span>추가된 비고시명칭 (${customTerms.length}개)</span>
         </div>
         ${customTerms.map(term => `
           <div class="tm-custom-term-item ${term.riskLevel === 'high' ? 'high-risk' : ''}">
             <div class="tm-custom-term-main">
-              <span class="class-badge-sm">ì œ${term.classCode}ë¥˜</span>
+              <span class="class-badge-sm">제${term.classCode}류</span>
               <span class="term-name">${TM.escapeHtml(term.name)}</span>
-              <span class="badge ${term.riskLevel === 'high' ? 'danger' : 'warning'}">ë¹„ê³ ì‹œ</span>
+              <span class="badge ${term.riskLevel === 'high' ? 'danger' : 'warning'}">비고시</span>
             </div>
             <div class="tm-custom-term-meta">
-              <span>ì¶”ì • ìœ ì‚¬êµ°: ${term.similarGroup || '(ë¯¸í™•ì¸)'}</span>
-              ${term.confidence ? `<span>ë§¤ì¹­ë„: ${Math.round(term.confidence * 100)}%</span>` : ''}
-              ${term.riskLevel === 'high' ? '<span class="risk-warn">âš ï¸ ë³´ì • ê°€ëŠ¥ì„± ë†’ìŒ</span>' : ''}
+              <span>추정 유사군: ${term.similarGroup || '(미확인)'}</span>
+              ${term.confidence ? `<span>매칭도: ${Math.round(term.confidence * 100)}%</span>` : ''}
+              ${term.riskLevel === 'high' ? '<span class="risk-warn">⚠️ 보정 가능성 높음</span>' : ''}
             </div>
             ${term.mappingCandidates?.length > 0 ? `
               <div class="tm-custom-term-alts">
-                <span class="label">í‘œì¤€ëª…ì¹­ ëŒ€ì²´ì•ˆ:</span>
+                <span class="label">표준명칭 대체안:</span>
                 ${term.mappingCandidates.slice(0, 2).map(c => 
                   `<span class="alt-term" data-action="tm-replace-custom-term" 
                          data-class="${term.classCode}" 
                          data-old="${TM.escapeHtml(term.name)}" 
                          data-new="${TM.escapeHtml(c.goods_name)}"
-                         title="í´ë¦­í•˜ì—¬ ëŒ€ì²´">${c.goods_name}</span>`
+                         title="클릭하여 대체">${c.goods_name}</span>`
                 ).join('')}
               </div>
             ` : ''}
             <button class="btn-icon-xs" data-action="tm-remove-custom-term" 
-                    data-class="${term.classCode}" data-name="${TM.escapeHtml(term.name)}">âœ•</button>
+                    data-class="${term.classCode}" data-name="${TM.escapeHtml(term.name)}">✕</button>
           </div>
         `).join('')}
       </div>
     `;
     
-    // AI ì¶”ì²œ ë Œë”ë§ (3ë‹¨ê³„ êµ¬ì¡°)
+    // AI 추천 렌더링 (3단계 구조)
     setTimeout(() => TM.renderAiRecommendations(), 0);
   };
   
-  // AI ì¶”ì²œ ìƒí’ˆë¥˜ ë Œë”ë§ (3ë‹¨ê³„: í•µì‹¬/ê¶Œìž¥/í™•ìž¥)
+  // AI 추천 상품류 렌더링 (3단계: 핵심/권장/확장)
   TM.renderAiRecommendations = function() {
     const container = document.getElementById('tm-ai-recommendations-container');
     if (!container) return;
@@ -2195,7 +2195,7 @@ TM.closeSettings = function() {
     const recommendedClasses = classRec.recommended || [];
     const expansionClasses = classRec.expansion || [];
     
-    // ê°œë³„ ì•„ì´í…œ ë Œë”ë§ í•¨ìˆ˜
+    // 개별 아이템 렌더링 함수
     const renderClassItem = (item, category, emoji) => {
       const code = item.class;
       const isAdded = p.designatedGoods.some(g => g.classCode === code);
@@ -2204,26 +2204,26 @@ TM.closeSettings = function() {
       
       let goodsHtml = '';
       if (recGoods.length > 0) {
-        // â˜… ì¶”ì²œ ì§€ì •ìƒí’ˆ ì „ì²´(10ê°œ) ë…¸ì¶œ
+        // ★ 추천 지정상품 전체(10개) 노출
         const goodsTags = recGoods.map(g => {
           const name = g.name || g;
           const displayName = name.length > 20 ? name.slice(0, 20) + '..' : name;
           return '<span class="tag" style="padding: 2px 6px; background: #f0f4ff; border-radius: 3px; font-size: 11px; display: inline-block; margin: 1px 2px;">' + TM.escapeHtml(displayName) + '</span>';
         }).join('');
         goodsHtml = '<div class="tm-ai-rec-goods" style="margin-top: 6px; font-size: 11px; line-height: 1.8;">' +
-          '<span class="label" style="margin-right: 4px; font-weight: 600; color: #555;">ì¶”ì²œ ì§€ì •ìƒí’ˆ(' + recGoods.length + '):</span>' +
+          '<span class="label" style="margin-right: 4px; font-weight: 600; color: #555;">추천 지정상품(' + recGoods.length + '):</span>' +
           goodsTags + '</div>';
       }
       
       const actionHtml = isAdded 
-        ? '<span class="applied" style="font-size: 11px; color: #28a745;">âœ“ì ìš©ë¨</span>'
-        : '<button class="btn btn-primary btn-sm" style="padding: 4px 10px; font-size: 11px;" data-action="tm-apply-recommendation" data-class-code="' + code + '">+ ì¶”ê°€</button>';
+        ? '<span class="applied" style="font-size: 11px; color: #28a745;">✓적용됨</span>'
+        : '<button class="btn btn-primary btn-sm" style="padding: 4px 10px; font-size: 11px;" data-action="tm-apply-recommendation" data-class-code="' + code + '">+ 추가</button>';
       
       return '<div class="tm-ai-rec-item ' + (isAdded ? 'added' : '') + '" data-category="' + category + '" style="padding: 10px; gap: 8px; border-left: 3px solid ' + borderColor + ';">' +
         '<div class="tm-ai-rec-content" style="flex: 1; min-width: 0;">' +
           '<div class="tm-ai-rec-class" style="font-size: 13px;">' +
             '<span style="margin-right: 4px;">' + emoji + '</span>' +
-            '<strong>ì œ' + code + 'ë¥˜</strong> ' + (TM.niceClasses[code] || '') +
+            '<strong>제' + code + '류</strong> ' + (TM.niceClasses[code] || '') +
           '</div>' +
           '<div class="tm-ai-rec-reason" style="font-size: 11px; color: #666; margin-top: 2px;">' + TM.escapeHtml(item.reason || '') + '</div>' +
           goodsHtml +
@@ -2234,44 +2234,44 @@ TM.closeSettings = function() {
     
     let html = '';
     
-    // ðŸ”´ í•µì‹¬ ë¥˜
+    // 🔴 핵심 류
     if (coreClasses.length > 0) {
       html += '<div class="tm-rec-section">' +
         '<div class="tm-rec-section-header" style="background: #fff5f5; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #dc3545; border-radius: 4px; margin-bottom: 6px;">' +
-          'ðŸ”´ í•µì‹¬ (í•„ìˆ˜ ë“±ë¡) - ' + coreClasses.length + 'ê°œ ë¥˜' +
+          '🔴 핵심 (필수 등록) - ' + coreClasses.length + '개 류' +
         '</div>' +
         '<div class="tm-ai-rec-list" style="gap: 6px; margin-bottom: 12px; display: flex; flex-direction: column;">' +
-          coreClasses.map(item => renderClassItem(item, 'core', 'ðŸ”´')).join('') +
+          coreClasses.map(item => renderClassItem(item, 'core', '🔴')).join('') +
         '</div>' +
       '</div>';
     }
     
-    // ðŸŸ  ê¶Œìž¥ ë¥˜
+    // 🟠 권장 류
     if (recommendedClasses.length > 0) {
       html += '<div class="tm-rec-section">' +
         '<div class="tm-rec-section-header" style="background: #fff8f0; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #fd7e14; border-radius: 4px; margin-bottom: 6px;">' +
-          'ðŸŸ  ê¶Œìž¥ (ê¶Œë¦¬ ë³´í˜¸) - ' + recommendedClasses.length + 'ê°œ ë¥˜' +
+          '🟠 권장 (권리 보호) - ' + recommendedClasses.length + '개 류' +
         '</div>' +
         '<div class="tm-ai-rec-list" style="gap: 6px; margin-bottom: 12px; display: flex; flex-direction: column;">' +
-          recommendedClasses.map(item => renderClassItem(item, 'recommended', 'ðŸŸ ')).join('') +
+          recommendedClasses.map(item => renderClassItem(item, 'recommended', '🟠')).join('') +
         '</div>' +
       '</div>';
     }
     
-    // ðŸŸ¢ í™•ìž¥ ë¥˜ (ì ‘ê¸°/íŽ¼ì¹˜ê¸°)
+    // 🟢 확장 류 (접기/펼치기)
     if (expansionClasses.length > 0) {
       html += '<div class="tm-rec-section tm-rec-expansion">' +
         '<div class="tm-rec-section-header" style="background: #f0fff4; padding: 6px 10px; font-weight: bold; font-size: 12px; color: #28a745; border-radius: 4px; margin-bottom: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" data-action="tm-toggle-expansion">' +
-          '<span>ðŸŸ¢ í™•ìž¥ (ì‚¬ì—… í™•ìž¥ ì‹œ ê³ ë ¤) - ' + expansionClasses.length + 'ê°œ ë¥˜</span>' +
-          '<span class="tm-expansion-toggle">â–¼ íŽ¼ì¹˜ê¸°</span>' +
+          '<span>🟢 확장 (사업 확장 시 고려) - ' + expansionClasses.length + '개 류</span>' +
+          '<span class="tm-expansion-toggle">▼ 펼치기</span>' +
         '</div>' +
         '<div class="tm-ai-rec-list tm-expansion-list" style="gap: 6px; display: none; flex-direction: column;">' +
-          expansionClasses.map(item => renderClassItem(item, 'expansion', 'ðŸŸ¢')).join('') +
+          expansionClasses.map(item => renderClassItem(item, 'expansion', '🟢')).join('') +
         '</div>' +
       '</div>';
     }
     
-    // êµ¬ë²„ì „ í˜¸í™˜ (classRecommendationsê°€ ì—†ê³  recommendedClassesë§Œ ìžˆëŠ” ê²½ìš°)
+    // 구버전 호환 (classRecommendations가 없고 recommendedClasses만 있는 경우)
     if (html === '' && p.aiAnalysis.recommendedClasses?.length > 0) {
       html = '<div class="tm-ai-rec-list" style="gap: 8px; display: flex; flex-direction: column;">';
       p.aiAnalysis.recommendedClasses.slice(0, 5).forEach((code, idx) => {
@@ -2281,26 +2281,26 @@ TM.closeSettings = function() {
         
         let goodsHtml = '';
         if (recGoods.length > 0) {
-          // â˜… ì¶”ì²œ ì§€ì •ìƒí’ˆ ì „ì²´(10ê°œ) ë…¸ì¶œ
+          // ★ 추천 지정상품 전체(10개) 노출
           const goodsTags = recGoods.map(g => {
             const name = g.name || g;
             const displayName = name.length > 20 ? name.slice(0, 20) + '..' : name;
             return '<span class="tag" style="padding: 2px 6px; background: #f0f4ff; border-radius: 3px; font-size: 11px; display: inline-block; margin: 1px 2px;">' + TM.escapeHtml(displayName) + '</span>';
           }).join('');
           goodsHtml = '<div class="tm-ai-rec-goods" style="margin-top: 6px; font-size: 11px; line-height: 1.8;">' +
-            '<span class="label" style="margin-right: 4px; font-weight: 600; color: #555;">ì¶”ì²œ ì§€ì •ìƒí’ˆ(' + recGoods.length + '):</span>' +
+            '<span class="label" style="margin-right: 4px; font-weight: 600; color: #555;">추천 지정상품(' + recGoods.length + '):</span>' +
             goodsTags + '</div>';
         }
         
         const actionHtml = isAdded 
-          ? '<span class="applied" style="font-size: 11px;">âœ“ì ìš©</span>'
-          : '<button class="btn btn-primary btn-sm" style="padding: 4px 8px; font-size: 11px;" data-action="tm-apply-recommendation" data-class-code="' + code + '">+ ì¶”ê°€</button>';
+          ? '<span class="applied" style="font-size: 11px;">✓적용</span>'
+          : '<button class="btn btn-primary btn-sm" style="padding: 4px 8px; font-size: 11px;" data-action="tm-apply-recommendation" data-class-code="' + code + '">+ 추가</button>';
         
         html += '<div class="tm-ai-rec-item ' + (isAdded ? 'added' : '') + '" style="padding: 10px; gap: 8px;">' +
           '<div class="tm-ai-rec-num" style="width: 24px; height: 24px; font-size: 12px;">' + (idx + 1) + '</div>' +
           '<div class="tm-ai-rec-content" style="flex: 1; min-width: 0;">' +
             '<div class="tm-ai-rec-class" style="font-size: 13px;">' +
-              '<strong>ì œ' + code + 'ë¥˜</strong> ' + (TM.niceClasses[code] || '') +
+              '<strong>제' + code + '류</strong> ' + (TM.niceClasses[code] || '') +
             '</div>' +
             (reason ? '<div class="tm-ai-rec-reason" style="font-size: 11px; line-height: 1.4; max-height: 36px; overflow: hidden;">' + TM.escapeHtml(reason.slice(0, 60)) + (reason.length > 60 ? '...' : '') + '</div>' : '') +
             goodsHtml +
@@ -2311,93 +2311,93 @@ TM.closeSettings = function() {
       html += '</div>';
     }
     
-    // ê²€ì¦ ê²°ê³¼ í‘œì‹œ
+    // 검증 결과 표시
     if (p.aiAnalysis.validation) {
       const v = p.aiAnalysis.validation;
       const scoreColor = v.overallScore >= 80 ? '#10b981' : v.overallScore >= 60 ? '#f59e0b' : '#ef4444';
-      const scoreEmoji = v.overallScore >= 80 ? 'âœ…' : v.overallScore >= 60 ? 'âš ï¸' : 'âŒ';
+      const scoreEmoji = v.overallScore >= 80 ? '✅' : v.overallScore >= 60 ? '⚠️' : '❌';
       const bgColor = v.overallScore >= 80 ? '#d1fae5' : v.overallScore >= 60 ? '#fef3c7' : '#fee2e2';
       const borderColor = v.overallScore >= 80 ? '#6ee7b7' : v.overallScore >= 60 ? '#fcd34d' : '#fca5a5';
       
       html += '<div style="margin-top: 16px; padding: 14px; background: ' + bgColor + '; border-radius: 10px; border: 1px solid ' + borderColor + ';">';
       
-      // ê²€ì¦ í—¤ë”
+      // 검증 헤더
       html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid ' + borderColor + ';">' +
-        '<span style="font-weight: 700; font-size: 14px;">' + scoreEmoji + ' 3ë‹¨ê³„ ê²€ì¦ ê²°ê³¼</span>' +
-        '<span style="font-size: 13px; color: ' + scoreColor + '; font-weight: 700; background: white; padding: 4px 10px; border-radius: 12px;">ì •í™•ë„ ' + v.overallScore + '%</span>' +
+        '<span style="font-weight: 700; font-size: 14px;">' + scoreEmoji + ' 3단계 검증 결과</span>' +
+        '<span style="font-size: 13px; color: ' + scoreColor + '; font-weight: 700; background: white; padding: 4px 10px; border-radius: 12px;">정확도 ' + v.overallScore + '%</span>' +
       '</div>';
       
-      // ìš”ì•½
+      // 요약
       if (v.summary) {
         html += '<div style="font-size: 13px; color: #374151; margin-bottom: 12px; font-weight: 500;">' + TM.escapeHtml(v.summary) + '</div>';
       }
       
-      // ì œê±°ëœ ë¥˜ í‘œì‹œ
+      // 제거된 류 표시
       if (v.invalidClasses?.length > 0) {
         html += '<div style="margin-bottom: 10px;">' +
-          '<div style="font-size: 11px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">âŒ ì œê±°ëœ ë¥˜ (' + v.invalidClasses.length + 'ê°œ)</div>';
+          '<div style="font-size: 11px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">❌ 제거된 류 (' + v.invalidClasses.length + '개)</div>';
         v.invalidClasses.forEach(c => {
           html += '<div style="font-size: 11px; color: #7f1d1d; padding: 6px 10px; background: #fef2f2; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #dc2626;">' +
-            '<strong>ì œ' + c.class + 'ë¥˜</strong>: ' + TM.escapeHtml(c.reason) +
+            '<strong>제' + c.class + '류</strong>: ' + TM.escapeHtml(c.reason) +
           '</div>';
         });
         html += '</div>';
       }
       
-      // ì œê±°ëœ ì§€ì •ìƒí’ˆ í‘œì‹œ
+      // 제거된 지정상품 표시
       if (v.invalidGoods?.length > 0) {
         html += '<div style="margin-bottom: 10px;">' +
-          '<div style="font-size: 11px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">âŒ ì œê±°ëœ ì§€ì •ìƒí’ˆ (' + v.invalidGoods.length + 'ê°œ)</div>';
+          '<div style="font-size: 11px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">❌ 제거된 지정상품 (' + v.invalidGoods.length + '개)</div>';
         v.invalidGoods.forEach(g => {
-          const errorLabel = g.errorType === 'homonym' ? 'ðŸ”¤ ë™ìŒì´ì˜ì–´' : 
-                            g.errorType === 'partial_match' ? 'ðŸ“ ë¶€ë¶„ë§¤ì¹­ ì˜¤ë¥˜' : 'âš ï¸ ê´€ë ¨ì„± ë¶€ì¡±';
+          const errorLabel = g.errorType === 'homonym' ? '🔤 동음이의어' : 
+                            g.errorType === 'partial_match' ? '📝 부분매칭 오류' : '⚠️ 관련성 부족';
           html += '<div style="font-size: 11px; color: #7f1d1d; padding: 6px 10px; background: #fef2f2; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #f87171;">' +
             '<span style="background: #fee2e2; padding: 1px 6px; border-radius: 4px; margin-right: 6px; font-size: 10px;">' + errorLabel + '</span>' +
-            '<strong>ì œ' + g.classCode + 'ë¥˜</strong> "' + TM.escapeHtml(g.goodsName) + '": ' + TM.escapeHtml(g.reason) +
+            '<strong>제' + g.classCode + '류</strong> "' + TM.escapeHtml(g.goodsName) + '": ' + TM.escapeHtml(g.reason) +
           '</div>';
         });
         html += '</div>';
       }
       
-      // ëŒ€ì²´ ì¶”ì²œëœ ìƒí’ˆ
+      // 대체 추천된 상품
       if (v.replacementGoods?.length > 0) {
         html += '<div style="margin-bottom: 10px;">' +
-          '<div style="font-size: 11px; font-weight: 600; color: #059669; margin-bottom: 6px;">ðŸ”„ ëŒ€ì²´ ì¶”ì²œ (' + v.replacementGoods.length + 'ê°œ)</div>';
+          '<div style="font-size: 11px; font-weight: 600; color: #059669; margin-bottom: 6px;">🔄 대체 추천 (' + v.replacementGoods.length + '개)</div>';
         v.replacementGoods.forEach(r => {
           html += '<div style="font-size: 11px; color: #065f46; padding: 6px 10px; background: #ecfdf5; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #10b981;">' +
-            '<strong>ì œ' + r.classCode + 'ë¥˜</strong>: ' +
-            '<span style="text-decoration: line-through; color: #9ca3af;">' + TM.escapeHtml(r.remove) + '</span> â†’ ' +
+            '<strong>제' + r.classCode + '류</strong>: ' +
+            '<span style="text-decoration: line-through; color: #9ca3af;">' + TM.escapeHtml(r.remove) + '</span> → ' +
             '<strong>' + TM.escapeHtml(r.addInstead) + '</strong>' +
           '</div>';
         });
         html += '</div>';
       }
       
-      // ê²½ê³  ì‚¬í•­
+      // 경고 사항
       if (v.warnings?.length > 0) {
         html += '<div style="margin-bottom: 10px;">' +
-          '<div style="font-size: 11px; font-weight: 600; color: #d97706; margin-bottom: 6px;">âš ï¸ í™•ì¸ í•„ìš”</div>';
+          '<div style="font-size: 11px; font-weight: 600; color: #d97706; margin-bottom: 6px;">⚠️ 확인 필요</div>';
         v.warnings.forEach(w => {
           html += '<div style="font-size: 11px; color: #92400e; padding: 6px 10px; background: #fffbeb; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #f59e0b;">' +
-            'ì œ' + w.class + 'ë¥˜: ' + TM.escapeHtml(w.message) +
+            '제' + w.class + '류: ' + TM.escapeHtml(w.message) +
           '</div>';
         });
         html += '</div>';
       }
       
-      // ëˆ„ë½ëœ ë¥˜ ì¶”ê°€ ì œì•ˆ
+      // 누락된 류 추가 제안
       if (v.suggestions?.length > 0 || v.missingClasses?.length > 0) {
         const suggestions = v.suggestions || [];
         const addClassSuggestions = suggestions.filter(s => s.type === 'add_class');
         
         if (addClassSuggestions.length > 0) {
           html += '<div style="margin-bottom: 10px;">' +
-            '<div style="font-size: 11px; font-weight: 600; color: #2563eb; margin-bottom: 6px;">ðŸ’¡ ì¶”ê°€ ê¶Œìž¥ ë¥˜</div>';
+            '<div style="font-size: 11px; font-weight: 600; color: #2563eb; margin-bottom: 6px;">💡 추가 권장 류</div>';
           addClassSuggestions.forEach(s => {
-            const priorityBadge = s.priority === 'í•µì‹¬' ? 'ðŸ”´' : s.priority === 'ê¶Œìž¥' ? 'ðŸŸ ' : 'ðŸŸ¢';
+            const priorityBadge = s.priority === '핵심' ? '🔴' : s.priority === '권장' ? '🟠' : '🟢';
             const isAdded = p.designatedGoods.some(g => g.classCode === s.class);
             
-            // â˜… í•´ë‹¹ ë¥˜ì˜ ì¶”ì²œ ì§€ì •ìƒí’ˆ í‘œì‹œ
+            // ★ 해당 류의 추천 지정상품 표시
             const recGoods = p.aiAnalysis?.recommendedGoods?.[s.class] || [];
             let goodsLine = '';
             if (recGoods.length > 0) {
@@ -2407,16 +2407,16 @@ TM.closeSettings = function() {
                 return '<span style="padding: 1px 5px; background: #dbeafe; border-radius: 3px; font-size: 10px; display: inline-block; margin: 1px 1px;">' + TM.escapeHtml(dn) + '</span>';
               }).join('');
               goodsLine = '<div style="margin-top: 4px; line-height: 1.7;">' +
-                '<span style="font-size: 10px; font-weight: 600; color: #3b82f6;">ì¶”ì²œ ì§€ì •ìƒí’ˆ(' + recGoods.length + '):</span> ' + tags + '</div>';
+                '<span style="font-size: 10px; font-weight: 600; color: #3b82f6;">추천 지정상품(' + recGoods.length + '):</span> ' + tags + '</div>';
             }
             
             const actionBtn = isAdded
-              ? '<span style="font-size: 10px; color: #28a745; white-space: nowrap;">âœ“ì ìš©ë¨</span>'
-              : '<button class="btn btn-sm" style="padding: 3px 10px; font-size: 10px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;" data-action="tm-add-class" data-class-code="' + s.class + '">+ ì¶”ê°€</button>';
+              ? '<span style="font-size: 10px; color: #28a745; white-space: nowrap;">✓적용됨</span>'
+              : '<button class="btn btn-sm" style="padding: 3px 10px; font-size: 10px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;" data-action="tm-add-class" data-class-code="' + s.class + '">+ 추가</button>';
             
             html += '<div style="font-size: 11px; color: #1e40af; padding: 8px 10px; background: #eff6ff; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #3b82f6;">' +
               '<div style="display: flex; justify-content: space-between; align-items: center;">' +
-                '<span>' + priorityBadge + ' <strong>ì œ' + s.class + 'ë¥˜</strong>: ' + TM.escapeHtml(s.reason) + '</span>' +
+                '<span>' + priorityBadge + ' <strong>제' + s.class + '류</strong>: ' + TM.escapeHtml(s.reason) + '</span>' +
                 actionBtn +
               '</div>' +
               goodsLine +
@@ -2426,21 +2426,21 @@ TM.closeSettings = function() {
         }
       }
       
-      // ëˆ„ë½ëœ ì§€ì •ìƒí’ˆ
+      // 누락된 지정상품
       if (v.missingGoods?.length > 0) {
         html += '<div>' +
-          '<div style="font-size: 11px; font-weight: 600; color: #7c3aed; margin-bottom: 6px;">ðŸ“¦ ì¶”ê°€ ê¶Œìž¥ ìƒí’ˆ</div>';
+          '<div style="font-size: 11px; font-weight: 600; color: #7c3aed; margin-bottom: 6px;">📦 추가 권장 상품</div>';
         v.missingGoods.forEach(g => {
           html += '<div style="font-size: 11px; color: #5b21b6; padding: 6px 10px; background: #f5f3ff; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #8b5cf6;">' +
-            '<strong>ì œ' + g.classCode + 'ë¥˜</strong>: ' + TM.escapeHtml(g.goodsName) + ' - ' + TM.escapeHtml(g.reason) +
+            '<strong>제' + g.classCode + '류</strong>: ' + TM.escapeHtml(g.goodsName) + ' - ' + TM.escapeHtml(g.reason) +
           '</div>';
         });
         html += '</div>';
       }
       
-      // ìž¬ê²€ì¦ ë²„íŠ¼
+      // 재검증 버튼
       html += '<div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid ' + borderColor + '; text-align: center;">' +
-        '<button class="btn btn-sm" style="padding: 6px 16px; font-size: 11px; background: white; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer;" data-action="tm-revalidate">ðŸ”„ ë‹¤ì‹œ ê²€ì¦</button>' +
+        '<button class="btn btn-sm" style="padding: 6px 16px; font-size: 11px; background: white; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer;" data-action="tm-revalidate">🔄 다시 검증</button>' +
       '</div>';
       
       html += '</div>';
@@ -2449,7 +2449,7 @@ TM.closeSettings = function() {
     container.innerHTML = html;
   };
   
-  // ë¹„ê³ ì‹œëª…ì¹­ ì‹¤ì‹œê°„ ë¶„ì„ ë¯¸ë¦¬ë³´ê¸°
+  // 비고시명칭 실시간 분석 미리보기
   TM.previewCustomTermAnalysis = async function(term) {
     const resultDiv = document.getElementById('tm-custom-term-result');
     const classSelect = document.getElementById('tm-custom-term-class');
@@ -2458,7 +2458,7 @@ TM.closeSettings = function() {
     
     const classCode = classSelect.value;
     
-    resultDiv.innerHTML = '<div class="tm-loading-sm">ë¶„ì„ ì¤‘...</div>';
+    resultDiv.innerHTML = '<div class="tm-loading-sm">분석 중...</div>';
     resultDiv.style.display = 'block';
     
     try {
@@ -2480,19 +2480,19 @@ TM.closeSettings = function() {
         <div class="tm-custom-analysis ${statusClass}">
           <div class="tm-analysis-header">
             <strong>"${TM.escapeHtml(analysis.normalizedTerm)}"</strong>
-            <span class="confidence">ë§¤ì¹­ë„: ${Math.round(analysis.confidence * 100)}%</span>
+            <span class="confidence">매칭도: ${Math.round(analysis.confidence * 100)}%</span>
           </div>
           
           ${analysis.estimatedSimilarGroup ? `
             <div class="tm-analysis-row">
-              <span class="label">ì¶”ì • ìœ ì‚¬êµ°:</span>
+              <span class="label">추정 유사군:</span>
               <span class="value">${analysis.estimatedSimilarGroup}</span>
             </div>
           ` : ''}
           
           ${analysis.mappingCandidates?.length > 0 ? `
             <div class="tm-analysis-row">
-              <span class="label">í‘œì¤€ëª…ì¹­ ëŒ€ì²´ì•ˆ:</span>
+              <span class="label">표준명칭 대체안:</span>
               <div class="tm-alt-terms">
                 ${analysis.mappingCandidates.map((c, i) => `
                   <span class="alt-option" data-term="${TM.escapeHtml(c.goods_name)}">
@@ -2509,13 +2509,13 @@ TM.closeSettings = function() {
           
           ${analysis.riskAnalysis?.risks?.length > 0 ? `
             <div class="tm-analysis-risks">
-              ${analysis.riskAnalysis.risks.map(r => `<span class="risk-item">âš ï¸ ${r}</span>`).join('')}
+              ${analysis.riskAnalysis.risks.map(r => `<span class="risk-item">⚠️ ${r}</span>`).join('')}
             </div>
           ` : ''}
         </div>
       `;
       
-      // ëŒ€ì²´ì•ˆ í´ë¦­ ì‹œ ìž…ë ¥ëž€ì— ë°˜ì˜
+      // 대체안 클릭 시 입력란에 반영
       resultDiv.querySelectorAll('.alt-option').forEach(opt => {
         opt.addEventListener('click', () => {
           const input = document.getElementById('tm-custom-term-input');
@@ -2527,11 +2527,11 @@ TM.closeSettings = function() {
       });
       
     } catch (err) {
-      resultDiv.innerHTML = `<div class="tm-error-sm">ë¶„ì„ ì‹¤íŒ¨: ${err.message}</div>`;
+      resultDiv.innerHTML = `<div class="tm-error-sm">분석 실패: ${err.message}</div>`;
     }
   };
   
-  // ë¹„ê³ ì‹œëª…ì¹­ ì¶”ê°€ í•¸ë“¤ëŸ¬
+  // 비고시명칭 추가 핸들러
   TM.handleAddCustomTerm = async function() {
     const input = document.getElementById('tm-custom-term-input');
     const classSelect = document.getElementById('tm-custom-term-class');
@@ -2542,12 +2542,12 @@ TM.closeSettings = function() {
     const classCode = classSelect.value;
     
     if (term.length < 2) {
-      App.showToast('ì§€ì •ìƒí’ˆëª…ì„ 2ìž ì´ìƒ ìž…ë ¥í•´ì£¼ì„¸ìš”.', 'warning');
+      App.showToast('지정상품명을 2자 이상 입력해주세요.', 'warning');
       return;
     }
     
     try {
-      App.showToast('ë¹„ê³ ì‹œëª…ì¹­ ë¶„ì„ ì¤‘...', 'info');
+      App.showToast('비고시명칭 분석 중...', 'info');
       
       const analysis = await TM.processCustomTerm(term, classCode);
       
@@ -2556,24 +2556,24 @@ TM.closeSettings = function() {
         return;
       }
       
-      // í”„ë¡œì íŠ¸ì— ì¶”ê°€
+      // 프로젝트에 추가
       const success = await TM.addCustomTermToProject(classCode, analysis);
       
       if (success) {
         input.value = '';
         document.getElementById('tm-custom-term-result').style.display = 'none';
         
-        App.showToast(`ë¹„ê³ ì‹œëª…ì¹­ "${analysis.normalizedTerm}" ì¶”ê°€ë¨ (ì œ${classCode}ë¥˜)`, 'success');
+        App.showToast(`비고시명칭 "${analysis.normalizedTerm}" 추가됨 (제${classCode}류)`, 'success');
         
-        // UI ìƒˆë¡œê³ ì¹¨
+        // UI 새로고침
         TM.renderCurrentStep();
       }
     } catch (err) {
-      App.showToast('ë¹„ê³ ì‹œëª…ì¹­ ì¶”ê°€ ì‹¤íŒ¨: ' + err.message, 'error');
+      App.showToast('비고시명칭 추가 실패: ' + err.message, 'error');
     }
   };
   
-  // ìƒí’ˆë¥˜ë³„ ì§€ì •ìƒí’ˆ ì¹´ë“œ (ê°œì„ ëœ ë²„ì „)
+  // 상품류별 지정상품 카드 (개선된 버전)
   TM.renderClassGoodsCard = function(classData) {
     const similarGroups = new Set();
     classData.goods?.forEach(g => {
@@ -2586,15 +2586,15 @@ TM.closeSettings = function() {
       <div class="tm-goods-card" data-class="${classData.classCode}">
         <div class="tm-goods-card-header">
           <div class="tm-goods-card-title">
-            <span class="class-badge">ì œ${classData.classCode}ë¥˜</span>
+            <span class="class-badge">제${classData.classCode}류</span>
             <span class="class-name">${TM.niceClasses[classData.classCode] || ''}</span>
           </div>
-          <button class="btn-icon-sm" data-action="tm-remove-class" data-class-code="${classData.classCode}" title="ì‚­ì œ">âœ•</button>
+          <button class="btn-icon-sm" data-action="tm-remove-class" data-class-code="${classData.classCode}" title="삭제">✕</button>
         </div>
         
         ${similarGroups.size > 0 ? `
           <div class="tm-goods-similar">
-            <span class="label">ìœ ì‚¬êµ°:</span>
+            <span class="label">유사군:</span>
             ${Array.from(similarGroups).map(sg => `<span class="sg-tag">${sg}</span>`).join('')}
           </div>
         ` : ''}
@@ -2602,7 +2602,7 @@ TM.closeSettings = function() {
         <div class="tm-goods-input-area" style="position: relative;">
           <input type="text" class="tm-goods-search-input" 
                  id="tm-goods-input-${classData.classCode}"
-                 placeholder="ì§€ì •ìƒí’ˆëª… ê²€ìƒ‰ (ìžë™ì™„ì„±)"
+                 placeholder="지정상품명 검색 (자동완성)"
                  data-class="${classData.classCode}"
                  autocomplete="off"
                  style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
@@ -2612,13 +2612,13 @@ TM.closeSettings = function() {
         
         <div class="tm-goods-chips">
           ${classData.goods.length === 0 ? 
-            '<span class="tm-goods-empty">ì§€ì •ìƒí’ˆì„ ì¶”ê°€í•˜ì„¸ìš”</span>' : 
+            '<span class="tm-goods-empty">지정상품을 추가하세요</span>' : 
             classData.goods.map(g => `
               <span class="tm-goods-chip ${g.isCustom ? 'custom' : ''} ${g.riskLevel === 'high' ? 'high-risk' : ''}">
                 ${TM.escapeHtml(g.name)}
-                ${g.isCustom ? '<span class="chip-badge custom">ë¹„ê³ ì‹œ</span>' : ''}
+                ${g.isCustom ? '<span class="chip-badge custom">비고시</span>' : ''}
                 ${g.similarGroup ? `<small>(${g.similarGroup})</small>` : ''}
-                <button class="remove" data-action="tm-remove-goods" data-class-code="${classData.classCode}" data-goods-name="${TM.escapeHtml(g.name)}">Ã—</button>
+                <button class="remove" data-action="tm-remove-goods" data-class-code="${classData.classCode}" data-goods-name="${TM.escapeHtml(g.name)}">×</button>
               </span>
             `).join('')
           }
@@ -2628,10 +2628,10 @@ TM.closeSettings = function() {
   };
   
   TM.renderClassGoods = function(classData) {
-    // ìœ ì‚¬êµ° ì½”ë“œë³„ ê·¸ë£¹í•‘
+    // 유사군 코드별 그룹핑
     const groupedBySimilar = {};
     classData.goods.forEach(g => {
-      const sg = g.similarGroup || 'ë¯¸ë¶„ë¥˜';
+      const sg = g.similarGroup || '미분류';
       if (!groupedBySimilar[sg]) groupedBySimilar[sg] = [];
       groupedBySimilar[sg].push(g);
     });
@@ -2641,58 +2641,58 @@ TM.closeSettings = function() {
       <div class="tm-class-goods-card" data-class="${classData.classCode}">
         <div class="tm-class-goods-header">
           <div>
-            <strong>ì œ${classData.classCode}ë¥˜</strong>
+            <strong>제${classData.classCode}류</strong>
             <span class="tm-class-name">${TM.niceClasses[classData.classCode]}</span>
           </div>
           <button class="btn btn-sm btn-ghost" data-action="tm-remove-class" data-class-code="${classData.classCode}">
-            âœ• ì œê±°
+            ✕ 제거
           </button>
         </div>
         
-        <!-- ê²€ìƒ‰ ì˜ì—­ -->
+        <!-- 검색 영역 -->
         <div class="tm-goods-search-area">
           <div class="tm-goods-input-row">
             <input type="text" class="tm-goods-input" 
                    id="tm-goods-input-${classData.classCode}"
-                   placeholder="ì§€ì •ìƒí’ˆëª… ê²€ìƒ‰ (ìžë™ì™„ì„±)"
+                   placeholder="지정상품명 검색 (자동완성)"
                    data-class="${classData.classCode}">
             <div class="tm-goods-autocomplete" id="tm-autocomplete-${classData.classCode}"></div>
           </div>
           <div class="tm-similar-search-row">
             <input type="text" class="tm-similar-input" 
                    id="tm-similar-input-${classData.classCode}"
-                   placeholder="ìœ ì‚¬êµ° ì½”ë“œ (ì˜ˆ: G5001)"
+                   placeholder="유사군 코드 (예: G5001)"
                    data-class="${classData.classCode}">
             <button class="btn btn-sm btn-secondary" 
                     data-action="tm-search-similar" 
                     data-class-code="${classData.classCode}">
-              ìœ ì‚¬êµ° ê²€ìƒ‰
+              유사군 검색
             </button>
           </div>
         </div>
         
-        <!-- ìœ ì‚¬êµ° ê²€ìƒ‰ ê²°ê³¼ (ë™ì ) -->
+        <!-- 유사군 검색 결과 (동적) -->
         <div class="tm-similar-results" id="tm-similar-results-${classData.classCode}" style="display:none;"></div>
         
-        <!-- ì„ íƒëœ ì§€ì •ìƒí’ˆ (ìœ ì‚¬êµ°ë³„ ê·¸ë£¹í•‘) -->
+        <!-- 선택된 지정상품 (유사군별 그룹핑) -->
         <div class="tm-selected-goods">
           ${classData.goods.length === 0 ? `
-            <div class="tm-hint">ì§€ì •ìƒí’ˆì„ ìž…ë ¥í•˜ê±°ë‚˜ ìœ ì‚¬êµ° ì½”ë“œë¡œ ê²€ìƒ‰í•˜ì„¸ìš”.</div>
+            <div class="tm-hint">지정상품을 입력하거나 유사군 코드로 검색하세요.</div>
           ` : `
             ${similarGroups.map(sg => `
               <div class="tm-similar-group">
                 <div class="tm-similar-group-header">
                   <span class="tm-similar-code">${sg}</span>
-                  <span class="tm-similar-count">${groupedBySimilar[sg].length}ê°œ</span>
+                  <span class="tm-similar-count">${groupedBySimilar[sg].length}개</span>
                 </div>
                 <div class="tm-goods-tags">
                   ${groupedBySimilar[sg].map(g => `
                     <span class="tm-goods-tag ${g.gazetted === false ? 'non-gazetted' : ''}">
                       ${TM.escapeHtml(g.name)}
-                      ${g.gazetted === false ? '<span class="badge warning">ë¹„ê³ ì‹œ</span>' : ''}
+                      ${g.gazetted === false ? '<span class="badge warning">비고시</span>' : ''}
                       <button class="remove-btn" data-action="tm-remove-goods" 
                               data-class-code="${classData.classCode}" 
-                              data-goods-name="${TM.escapeHtml(g.name)}">Ã—</button>
+                              data-goods-name="${TM.escapeHtml(g.name)}">×</button>
                     </span>
                   `).join('')}
                 </div>
@@ -2702,8 +2702,8 @@ TM.closeSettings = function() {
         </div>
         
         <div class="tm-goods-count">
-          ${classData.goods.length}ê°œ ì„ íƒ
-          ${classData.goods.length > 10 ? `<span class="warning">(10ê°œ ì´ˆê³¼ ${classData.goods.length - 10}ê°œ Ã— 2,000ì› ì¶”ê°€)</span>` : ''}
+          ${classData.goods.length}개 선택
+          ${classData.goods.length > 10 ? `<span class="warning">(10개 초과 ${classData.goods.length - 10}개 × 2,000원 추가)</span>` : ''}
         </div>
       </div>
     `;
@@ -2714,12 +2714,12 @@ TM.closeSettings = function() {
     
     const p = TM.currentProject;
     
-    // ì´ë¯¸ ì„ íƒë˜ì–´ ìžˆìœ¼ë©´ ë¬´ì‹œ
+    // 이미 선택되어 있으면 무시
     if (p.designatedGoods.some(g => g.classCode === classCode)) {
       return;
     }
     
-    // â˜… ì´ë¯¸ ì¶”ì²œëœ ì§€ì •ìƒí’ˆì´ ìžˆìœ¼ë©´ ê·¸ê²ƒì„ ì‚¬ìš©
+    // ★ 이미 추천된 지정상품이 있으면 그것을 사용
     const existingGoods = p.aiAnalysis?.recommendedGoods?.[classCode] || [];
     
     if (existingGoods.length > 0) {
@@ -2736,13 +2736,13 @@ TM.closeSettings = function() {
       });
       TM.hasUnsavedChanges = true;
       TM.renderCurrentStep();
-      App.showToast(`ì œ${classCode}ë¥˜ê°€ ì¶”ê°€ë˜ì—ˆìŠµë‹ˆë‹¤. (${existingGoods.length}ê°œ ìƒí’ˆ)`, 'success');
+      App.showToast(`제${classCode}류가 추가되었습니다. (${existingGoods.length}개 상품)`, 'success');
       return;
     }
     
-    // â˜… ì¶”ì²œ ì§€ì •ìƒí’ˆì´ ì—†ìœ¼ë©´ ì‹¤ì‹œê°„ìœ¼ë¡œ 10ê°œ ì¶”ì²œ
+    // ★ 추천 지정상품이 없으면 실시간으로 10개 추천
     try {
-      App.showToast(`ì œ${classCode}ë¥˜ ì§€ì •ìƒí’ˆ ì¶”ì²œ ì¤‘...`, 'info');
+      App.showToast(`제${classCode}류 지정상품 추천 중...`, 'info');
       
       const paddedCode = classCode.padStart(2, '0');
       const allKeywords = p.aiAnalysis?.searchKeywords || [];
@@ -2767,10 +2767,10 @@ TM.closeSettings = function() {
         );
       }
       
-      // â˜… 10ê°œ ë³´ìž¥
+      // ★ 10개 보장
       selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods, p.aiAnalysis?.businessAnalysis || '');
       
-      // ì¶”ì²œ ê²°ê³¼ ì €ìž¥
+      // 추천 결과 저장
       if (p.aiAnalysis) {
         if (!p.aiAnalysis.recommendedGoods) p.aiAnalysis.recommendedGoods = {};
         p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
@@ -2791,11 +2791,11 @@ TM.closeSettings = function() {
       TM.hasUnsavedChanges = true;
       TM.renderCurrentStep();
       TM.initGoodsAutocomplete(classCode);
-      App.showToast(`ì œ${classCode}ë¥˜ê°€ ì¶”ê°€ë˜ì—ˆìŠµë‹ˆë‹¤. (${selectedGoods.length}ê°œ ìƒí’ˆ)`, 'success');
+      App.showToast(`제${classCode}류가 추가되었습니다. (${selectedGoods.length}개 상품)`, 'success');
       
     } catch (err) {
-      console.error(`[TM] addClass ì œ${classCode}ë¥˜ ì§€ì •ìƒí’ˆ ì¶”ì²œ ì‹¤íŒ¨:`, err);
-      // â˜… ì‹¤íŒ¨í•´ë„ DBì—ì„œ 10ê°œ ì±„ìš°ê¸° ì‹œë„
+      console.error(`[TM] addClass 제${classCode}류 지정상품 추천 실패:`, err);
+      // ★ 실패해도 DB에서 10개 채우기 시도
       let fallbackGoods = [];
       try {
         fallbackGoods = await TM.ensureMinGoods(classCode, [], '');
@@ -2815,7 +2815,7 @@ TM.closeSettings = function() {
       TM.hasUnsavedChanges = true;
       TM.renderCurrentStep();
       TM.initGoodsAutocomplete(classCode);
-      App.showToast(`ì œ${classCode}ë¥˜ê°€ ì¶”ê°€ë˜ì—ˆìŠµë‹ˆë‹¤. (${fallbackGoods.length}ê°œ ìƒí’ˆ)`, fallbackGoods.length > 0 ? 'success' : 'warning');
+      App.showToast(`제${classCode}류가 추가되었습니다. (${fallbackGoods.length}개 상품)`, fallbackGoods.length > 0 ? 'success' : 'warning');
     }
   };
   
@@ -2829,7 +2829,7 @@ TM.closeSettings = function() {
     TM.renderCurrentStep();
   };
   
-  // ë”ë³´ê¸° í† ê¸€
+  // 더보기 토글
   TM.toggleMoreGoods = function(classCode) {
     const hiddenDiv = document.getElementById(`tm-hidden-goods-${classCode}`);
     const btn = document.querySelector(`[data-action="tm-toggle-more-goods"][data-class-code="${classCode}"]`);
@@ -2838,32 +2838,32 @@ TM.closeSettings = function() {
     
     if (hiddenDiv.style.display === 'none') {
       hiddenDiv.style.display = 'block';
-      btn.textContent = 'ì ‘ê¸°';
+      btn.textContent = '접기';
     } else {
       hiddenDiv.style.display = 'none';
       const count = hiddenDiv.querySelectorAll('.tm-rec-goods-tag').length;
-      btn.textContent = `+${count}ê°œ ë”ë³´ê¸°`;
+      btn.textContent = `+${count}개 더보기`;
     }
   };
   
-  // AI ì¶”ì²œ ì ìš© í•¨ìˆ˜
+  // AI 추천 적용 함수
   TM.applyRecommendation = function(classCode) {
     if (!TM.currentProject) return;
     
     const p = TM.currentProject;
     
-    // ì´ë¯¸ ì„ íƒë˜ì–´ ìžˆìœ¼ë©´ ë¬´ì‹œ
+    // 이미 선택되어 있으면 무시
     if (p.designatedGoods.some(g => g.classCode === classCode)) {
-      App.showToast('ì´ë¯¸ ì¶”ê°€ëœ ìƒí’ˆë¥˜ìž…ë‹ˆë‹¤.', 'info');
+      App.showToast('이미 추가된 상품류입니다.', 'info');
       return;
     }
     
-    // ì¶”ì²œ ì§€ì •ìƒí’ˆ ê°€ì ¸ì˜¤ê¸°
+    // 추천 지정상품 가져오기
     const recommendedGoods = p.aiAnalysis?.recommendedGoods?.[classCode] || [];
     
-    console.log(`[TM] applyRecommendation - ì œ${classCode}ë¥˜, ì¶”ì²œìƒí’ˆ ${recommendedGoods.length}ê°œ:`, recommendedGoods);
+    console.log(`[TM] applyRecommendation - 제${classCode}류, 추천상품 ${recommendedGoods.length}개:`, recommendedGoods);
     
-    // ìƒí’ˆë¥˜ ì¶”ê°€
+    // 상품류 추가
     const newClass = {
       classCode: classCode,
       className: TM.niceClasses[classCode],
@@ -2876,30 +2876,30 @@ TM.closeSettings = function() {
       nonGazettedCount: 0
     };
     
-    console.log(`[TM] ì¶”ê°€í•  í´ëž˜ìŠ¤:`, newClass);
+    console.log(`[TM] 추가할 클래스:`, newClass);
     
     p.designatedGoods.push(newClass);
     TM.hasUnsavedChanges = true;
     
     TM.renderCurrentStep();
-    App.showToast(`ì œ${classCode}ë¥˜ê°€ ì¶”ê°€ë˜ì—ˆìŠµë‹ˆë‹¤. (${recommendedGoods.length}ê°œ ìƒí’ˆ)`, 'success');
+    App.showToast(`제${classCode}류가 추가되었습니다. (${recommendedGoods.length}개 상품)`, 'success');
   };
   
-  // ì „ì²´ AI ì¶”ì²œ ì ìš© (í•µì‹¬ + ê¶Œìž¥ë§Œ, í™•ìž¥ì€ ì œì™¸)
+  // 전체 AI 추천 적용 (핵심 + 권장만, 확장은 제외)
   TM.applyAllRecommendations = function() {
     if (!TM.currentProject) return;
     
     const p = TM.currentProject;
     const classRec = p.aiAnalysis?.classRecommendations || {};
     
-    // í•µì‹¬ + ê¶Œìž¥ ë¥˜ë§Œ ìžë™ ì ìš© (í™•ìž¥ì€ ì‚¬ìš©ìž ì„ íƒ)
+    // 핵심 + 권장 류만 자동 적용 (확장은 사용자 선택)
     const classesToApply = [
       ...(classRec.core || []).map(c => c.class),
       ...(classRec.recommended || []).map(c => c.class)
     ];
     
     if (classesToApply.length === 0) {
-      App.showToast('ì¶”ì²œ ìƒí’ˆë¥˜ê°€ ì—†ìŠµë‹ˆë‹¤.', 'warning');
+      App.showToast('추천 상품류가 없습니다.', 'warning');
       return;
     }
     
@@ -2909,7 +2909,7 @@ TM.closeSettings = function() {
       if (!p.designatedGoods.some(g => g.classCode === classCode)) {
         const recommendedGoods = p.aiAnalysis?.recommendedGoods?.[classCode] || [];
         
-        console.log(`[TM] applyAll - ì œ${classCode}ë¥˜, ì¶”ì²œìƒí’ˆ ${recommendedGoods.length}ê°œ`);
+        console.log(`[TM] applyAll - 제${classCode}류, 추천상품 ${recommendedGoods.length}개`);
         
         p.designatedGoods.push({
           classCode: classCode,
@@ -2929,14 +2929,14 @@ TM.closeSettings = function() {
     
     TM.hasUnsavedChanges = true;
     TM.renderCurrentStep();
-    App.showToast(`í•µì‹¬+ê¶Œìž¥ ${addedCount}ê°œ ìƒí’ˆë¥˜ê°€ ì¶”ê°€ë˜ì—ˆìŠµë‹ˆë‹¤. (í™•ìž¥ ë¥˜ëŠ” ê°œë³„ ì¶”ê°€ ê°€ëŠ¥)`, 'success');
+    App.showToast(`핵심+권장 ${addedCount}개 상품류가 추가되었습니다. (확장 류는 개별 추가 가능)`, 'success');
   };
   
-  // ìž¬ê²€ì¦ ìš”ì²­
+  // 재검증 요청
   TM.revalidateRecommendations = async function() {
     const p = TM.currentProject;
     if (!p || !p.aiAnalysis) {
-      App.showToast('ë¨¼ì € ì‚¬ì—… ë¶„ì„ì„ ì§„í–‰í•˜ì„¸ìš”.', 'warning');
+      App.showToast('먼저 사업 분석을 진행하세요.', 'warning');
       return;
     }
     
@@ -2944,12 +2944,12 @@ TM.closeSettings = function() {
                           p.aiAnalysis.businessAnalysis || '';
     
     if (!businessInput) {
-      App.showToast('ì‚¬ì—… ë‚´ìš©ì´ ì—†ìŠµë‹ˆë‹¤.', 'warning');
+      App.showToast('사업 내용이 없습니다.', 'warning');
       return;
     }
     
     try {
-      App.showToast('ìž¬ê²€ì¦ ì¤‘...', 'info');
+      App.showToast('재검증 중...', 'info');
       
       const validationResult = await TM.validateRecommendations(businessInput, p.aiAnalysis);
       
@@ -2958,41 +2958,41 @@ TM.closeSettings = function() {
         
         if (validationResult.hasIssues) {
           await TM.applyValidationResult(p.aiAnalysis, validationResult);
-          App.showToast('ê²€ì¦ ì™„ë£Œ: ë¬¸ì œ í•­ëª©ì´ ìˆ˜ì •ë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+          App.showToast('검증 완료: 문제 항목이 수정되었습니다.', 'success');
         } else {
-          App.showToast('ê²€ì¦ ì™„ë£Œ: ëª¨ë“  ì¶”ì²œì´ ì í•©í•©ë‹ˆë‹¤.', 'success');
+          App.showToast('검증 완료: 모든 추천이 적합합니다.', 'success');
         }
         
         TM.renderCurrentStep();
       }
       
     } catch (error) {
-      console.error('[TM] ìž¬ê²€ì¦ ì‹¤íŒ¨:', error);
-      App.showToast('ìž¬ê²€ì¦ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 재검증 실패:', error);
+      App.showToast('재검증 실패: ' + error.message, 'error');
     }
   };
   
-  // ê²€ì¦ì—ì„œ ì œì•ˆëœ ë¥˜ ì¶”ê°€
+  // 검증에서 제안된 류 추가
   TM.addSuggestedClass = async function(classCode) {
     const p = TM.currentProject;
     if (!p) return;
     
-    // ì´ë¯¸ ì¶”ê°€ëœ ê²½ìš°
+    // 이미 추가된 경우
     if (p.designatedGoods.some(g => g.classCode === classCode)) {
-      App.showToast(`ì œ${classCode}ë¥˜ëŠ” ì´ë¯¸ ì¶”ê°€ë˜ì–´ ìžˆìŠµë‹ˆë‹¤.`, 'warning');
+      App.showToast(`제${classCode}류는 이미 추가되어 있습니다.`, 'warning');
       return;
     }
     
     try {
-      App.showToast(`ì œ${classCode}ë¥˜ ì§€ì •ìƒí’ˆ ì¡°íšŒ ì¤‘...`, 'info');
+      App.showToast(`제${classCode}류 지정상품 조회 중...`, 'info');
       
-      // DBì—ì„œ í•´ë‹¹ ë¥˜ì˜ ì¸ê¸° ìƒí’ˆ ì¡°íšŒ
+      // DB에서 해당 류의 인기 상품 조회
       const businessInput = document.getElementById('tm-business-url')?.value?.trim() || 
                             p.aiAnalysis?.businessAnalysis || '';
       
       const keywords = TM.extractKeywordsFromInput(businessInput);
       
-      // í‚¤ì›Œë“œë¡œ ê´€ë ¨ ìƒí’ˆ ê²€ìƒ‰
+      // 키워드로 관련 상품 검색
       let recommendedGoods = [];
       
       for (const keyword of keywords.slice(0, 5)) {
@@ -3015,11 +3015,11 @@ TM.closeSettings = function() {
             });
           }
         } catch (e) {
-          // ë¬´ì‹œ
+          // 무시
         }
       }
       
-      // ë¶€ì¡±í•˜ë©´ í•´ë‹¹ ë¥˜ì—ì„œ ê¸°ë³¸ ìƒí’ˆ ì¡°íšŒ
+      // 부족하면 해당 류에서 기본 상품 조회
       if (recommendedGoods.length < 5) {
         const { data } = await App.sb
           .from('gazetted_goods_cache')
@@ -3039,7 +3039,7 @@ TM.closeSettings = function() {
         }
       }
       
-      // ì¶”ê°€
+      // 추가
       p.designatedGoods.push({
         classCode: classCode,
         className: TM.niceClasses[classCode],
@@ -3052,7 +3052,7 @@ TM.closeSettings = function() {
         nonGazettedCount: 0
       });
       
-      // classRecommendationsì—ë„ ì¶”ê°€ (ê¶Œìž¥ ë¥˜ë¡œ)
+      // classRecommendations에도 추가 (권장 류로)
       if (!p.aiAnalysis) p.aiAnalysis = {};
       if (!p.aiAnalysis.classRecommendations) p.aiAnalysis.classRecommendations = { core: [], recommended: [], expansion: [] };
       if (!p.aiAnalysis.recommendedClasses) p.aiAnalysis.recommendedClasses = [];
@@ -3061,21 +3061,21 @@ TM.closeSettings = function() {
       p.aiAnalysis.recommendedClasses.push(classCode);
       p.aiAnalysis.classRecommendations.recommended.push({
         class: classCode,
-        reason: 'ê²€ì¦ì—ì„œ ì¶”ê°€ ê¶Œìž¥ë¨',
+        reason: '검증에서 추가 권장됨',
         priority: 99
       });
       p.aiAnalysis.recommendedGoods[classCode] = recommendedGoods;
       
       TM.renderCurrentStep();
-      App.showToast(`ì œ${classCode}ë¥˜ê°€ ì¶”ê°€ë˜ì—ˆìŠµë‹ˆë‹¤. (${recommendedGoods.length}ê°œ ìƒí’ˆ)`, 'success');
+      App.showToast(`제${classCode}류가 추가되었습니다. (${recommendedGoods.length}개 상품)`, 'success');
       
     } catch (error) {
-      console.error('[TM] ë¥˜ ì¶”ê°€ ì‹¤íŒ¨:', error);
-      App.showToast('ì¶”ê°€ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 류 추가 실패:', error);
+      App.showToast('추가 실패: ' + error.message, 'error');
     }
   };
   
-  // í™•ìž¥ ë¥˜ ì ‘ê¸°/íŽ¼ì¹˜ê¸°
+  // 확장 류 접기/펼치기
   TM.toggleExpansionClasses = function(target) {
     const section = target.closest('.tm-rec-expansion');
     if (!section) return;
@@ -3087,15 +3087,15 @@ TM.closeSettings = function() {
       const isHidden = list.style.display === 'none';
       list.style.display = isHidden ? 'flex' : 'none';
       list.style.flexDirection = 'column';
-      toggle.textContent = isHidden ? 'â–² ì ‘ê¸°' : 'â–¼ íŽ¼ì¹˜ê¸°';
+      toggle.textContent = isHidden ? '▲ 접기' : '▼ 펼치기';
     }
   };
   
-  // ì¶”ê°€ ì¶”ì²œ ìš”ì²­
+  // 추가 추천 요청
   TM.requestMoreRecommendations = async function() {
     const p = TM.currentProject;
     if (!p || !p.aiAnalysis) {
-      App.showToast('ë¨¼ì € ì‚¬ì—… ë¶„ì„ì„ ì§„í–‰í•˜ì„¸ìš”.', 'warning');
+      App.showToast('먼저 사업 분석을 진행하세요.', 'warning');
       return;
     }
     
@@ -3103,27 +3103,27 @@ TM.closeSettings = function() {
     const businessInput = document.getElementById('tm-business-url')?.value?.trim() || '';
     
     try {
-      App.showToast('ì¶”ê°€ ì¶”ì²œì„ ë¶„ì„ ì¤‘...', 'info');
+      App.showToast('추가 추천을 분석 중...', 'info');
       
-      const additionalPrompt = `ë‹¹ì‹ ì€ ìƒí‘œ ì¶œì› ì „ë¬¸ ë³€ë¦¬ì‚¬ìž…ë‹ˆë‹¤.
+      const additionalPrompt = `당신은 상표 출원 전문 변리사입니다.
 
-ã€ê³ ê° ì •ë³´ã€‘
-- ìƒí‘œëª…: ${p.trademarkName || 'ë¯¸ì •'}
-- ì‚¬ì—… ë‚´ìš©: ${businessInput || p.aiAnalysis.businessAnalysis}
-- ì´ë¯¸ ì¶”ì²œëœ ë¥˜: ${existingClasses.join(', ')}ë¥˜
+【고객 정보】
+- 상표명: ${p.trademarkName || '미정'}
+- 사업 내용: ${businessInput || p.aiAnalysis.businessAnalysis}
+- 이미 추천된 류: ${existingClasses.join(', ')}류
 
-ã€ìš”ì²­ã€‘
-ì´ë¯¸ ì¶”ì²œëœ ë¥˜ ì™¸ì—, ì¶”ê°€ë¡œ ê³ ë ¤í•  ë§Œí•œ ìƒí’ˆë¥˜ë¥¼ ì°¾ì•„ì£¼ì„¸ìš”.
-- ë°©ì–´ì  ë“±ë¡ ê´€ì 
-- ê²½ìŸì‚¬ê°€ ì¼ë°˜ì ìœ¼ë¡œ ë“±ë¡í•˜ëŠ” ë¥˜
-- ë¸Œëžœë“œ í™•ìž¥ ì‹œ ìžì£¼ ì‚¬ìš©ë˜ëŠ” ë¥˜
-- ìœ ì‚¬ ì—…ì¢…ì—ì„œ ë¶„ìŸì´ ë§Žì€ ë¥˜
+【요청】
+이미 추천된 류 외에, 추가로 고려할 만한 상품류를 찾아주세요.
+- 방어적 등록 관점
+- 경쟁사가 일반적으로 등록하는 류
+- 브랜드 확장 시 자주 사용되는 류
+- 유사 업종에서 분쟁이 많은 류
 
-ã€ì‘ë‹µ í˜•ì‹ - JSONë§Œã€‘
+【응답 형식 - JSON만】
 {
   "additionalClasses": [
-    {"class": "14", "reason": "ì•¡ì„¸ì„œë¦¬ í™•ìž¥ - íŒ¨ì…˜ ë¸Œëžœë“œ ë°©ì–´ì  ë“±ë¡", "priority": 1},
-    {"class": "26", "reason": "ìž¥ì‹í’ˆ - ì˜ë¥˜ ê´€ë ¨ ë¶€ìžìž¬ ë³´í˜¸", "priority": 2}
+    {"class": "14", "reason": "액세서리 확장 - 패션 브랜드 방어적 등록", "priority": 1},
+    {"class": "26", "reason": "장식품 - 의류 관련 부자재 보호", "priority": 2}
   ]
 }`;
 
@@ -3133,7 +3133,7 @@ TM.closeSettings = function() {
       const endIdx = text.lastIndexOf('}');
       
       if (startIdx === -1 || endIdx <= startIdx) {
-        throw new Error('ì‘ë‹µ íŒŒì‹± ì‹¤íŒ¨');
+        throw new Error('응답 파싱 실패');
       }
       
       const jsonStr = text.substring(startIdx, endIdx + 1)
@@ -3144,11 +3144,11 @@ TM.closeSettings = function() {
       const additionalClasses = result.additionalClasses || [];
       
       if (additionalClasses.length === 0) {
-        App.showToast('ì¶”ê°€ ì¶”ì²œí•  ìƒí’ˆë¥˜ê°€ ì—†ìŠµë‹ˆë‹¤.', 'info');
+        App.showToast('추가 추천할 상품류가 없습니다.', 'info');
         return;
       }
       
-      // ê¸°ì¡´ í™•ìž¥ ë¥˜ì— ì¶”ê°€
+      // 기존 확장 류에 추가
       if (!p.aiAnalysis.classRecommendations) {
         p.aiAnalysis.classRecommendations = { core: [], recommended: [], expansion: [] };
       }
@@ -3160,13 +3160,13 @@ TM.closeSettings = function() {
         if (!existingAllCodes.includes(item.class)) {
           existingExpansion.push(item);
           p.aiAnalysis.recommendedClasses.push(item.class);
-          p.aiAnalysis.classReasons[item.class] = `ðŸŸ¢ ì¶”ê°€ í™•ìž¥: ${item.reason}`;
+          p.aiAnalysis.classReasons[item.class] = `🟢 추가 확장: ${item.reason}`;
         }
       });
       
       p.aiAnalysis.classRecommendations.expansion = existingExpansion;
       
-      // â˜…â˜…â˜… ì¶”ê°€ëœ ë¥˜ì— ëŒ€í•´ ì§€ì •ìƒí’ˆ 10ê°œ ìžë™ ì¶”ì²œ â˜…â˜…â˜…
+      // ★★★ 추가된 류에 대해 지정상품 10개 자동 추천 ★★★
       const newClassCodes = additionalClasses
         .filter(item => !existingAllCodes.includes(item.class))
         .map(item => item.class);
@@ -3186,20 +3186,20 @@ TM.closeSettings = function() {
         for (const classCode of newClassCodes) {
           const paddedCode = classCode.padStart(2, '0');
           try {
-            App.showToast(`ì œ${classCode}ë¥˜ ì§€ì •ìƒí’ˆ ì¶”ì²œ ì¤‘...`, 'info');
+            App.showToast(`제${classCode}류 지정상품 추천 중...`, 'info');
             
-            // DBì—ì„œ ê³ ì‹œëª…ì¹­ í›„ë³´ ì¡°íšŒ
+            // DB에서 고시명칭 후보 조회
             const candidates = await TM.fetchOptimalCandidates(
               paddedCode,
               allKeywords,
               analysis
             );
             
-            console.log(`[TM] ì¶”ê°€ ì¶”ì²œ ì œ${classCode}ë¥˜ í›„ë³´: ${candidates.length}ê±´`);
+            console.log(`[TM] 추가 추천 제${classCode}류 후보: ${candidates.length}건`);
             
             let selectedGoods = [];
             if (candidates.length > 0) {
-              // LLMì´ ìµœì  ìƒí’ˆ ì„ íƒ
+              // LLM이 최적 상품 선택
               selectedGoods = await TM.selectOptimalGoods(
                 classCode,
                 candidates,
@@ -3208,14 +3208,14 @@ TM.closeSettings = function() {
               );
             }
             
-            // â˜… 10ê°œ ë³´ìž¥
+            // ★ 10개 보장
             selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods, businessInput || p.aiAnalysis.businessAnalysis || '');
             p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
-            console.log(`[TM] ì¶”ê°€ ì¶”ì²œ ì œ${classCode}ë¥˜ ìµœì¢…: ${selectedGoods.length}ê±´`);
+            console.log(`[TM] 추가 추천 제${classCode}류 최종: ${selectedGoods.length}건`);
             
           } catch (classError) {
-            console.error(`[TM] ì¶”ê°€ ì¶”ì²œ ì œ${classCode}ë¥˜ ì²˜ë¦¬ ì‹¤íŒ¨:`, classError);
-            // â˜… ì—ëŸ¬ ì‹œì—ë„ ë³´ì¶© ì‹œë„
+            console.error(`[TM] 추가 추천 제${classCode}류 처리 실패:`, classError);
+            // ★ 에러 시에도 보충 시도
             try {
               p.aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(classCode, [], '');
             } catch (e) {
@@ -3227,25 +3227,25 @@ TM.closeSettings = function() {
       
       TM.renderCurrentStep();
       const goodsCountMsg = newClassCodes.length > 0 
-        ? ` (ê° ë¥˜ë‹¹ ì§€ì •ìƒí’ˆ ${newClassCodes.map(c => (p.aiAnalysis.recommendedGoods?.[c]?.length || 0) + 'ê°œ').join(', ')} ì¶”ì²œ)`
+        ? ` (각 류당 지정상품 ${newClassCodes.map(c => (p.aiAnalysis.recommendedGoods?.[c]?.length || 0) + '개').join(', ')} 추천)`
         : '';
-      App.showToast(`${additionalClasses.length}ê°œ ì¶”ê°€ ë¥˜ê°€ í™•ìž¥ ëª©ë¡ì— ì¶”ê°€ë˜ì—ˆìŠµë‹ˆë‹¤.${goodsCountMsg}`, 'success');
+      App.showToast(`${additionalClasses.length}개 추가 류가 확장 목록에 추가되었습니다.${goodsCountMsg}`, 'success');
       
     } catch (err) {
-      console.error('[TM] ì¶”ê°€ ì¶”ì²œ ìš”ì²­ ì‹¤íŒ¨:', err);
-      App.showToast('ì¶”ê°€ ì¶”ì²œ ìš”ì²­ì— ì‹¤íŒ¨í–ˆìŠµë‹ˆë‹¤.', 'error');
+      console.error('[TM] 추가 추천 요청 실패:', err);
+      App.showToast('추가 추천 요청에 실패했습니다.', 'error');
     }
   };
   
-  // ì§€ì •ìƒí’ˆ ë³µì‚¬ (ì½¤ë§ˆë¡œ ì—°ê²°, ìœ ì‚¬êµ°ì½”ë“œ ì œì™¸)
+  // 지정상품 복사 (콤마로 연결, 유사군코드 제외)
   TM.copyDesignatedGoods = function() {
     const p = TM.currentProject;
     if (!p || p.designatedGoods.length === 0) {
-      App.showToast('ë³µì‚¬í•  ì§€ì •ìƒí’ˆì´ ì—†ìŠµë‹ˆë‹¤.', 'warning');
+      App.showToast('복사할 지정상품이 없습니다.', 'warning');
       return;
     }
     
-    // ë¥˜ë³„ë¡œ ìƒí’ˆëª… ìˆ˜ì§‘
+    // 류별로 상품명 수집
     const goodsByClass = {};
     p.designatedGoods.forEach(classData => {
       const classCode = classData.classCode;
@@ -3255,37 +3255,37 @@ TM.closeSettings = function() {
       }
     });
     
-    // í¬ë§· ì„ íƒ (ë¥˜ë³„ êµ¬ë¶„ vs ì „ì²´ í•©ì¹˜ê¸°)
+    // 포맷 선택 (류별 구분 vs 전체 합치기)
     const classKeys = Object.keys(goodsByClass).sort((a, b) => parseInt(a) - parseInt(b));
     
     if (classKeys.length === 0) {
-      App.showToast('ë³µì‚¬í•  ì§€ì •ìƒí’ˆì´ ì—†ìŠµë‹ˆë‹¤.', 'warning');
+      App.showToast('복사할 지정상품이 없습니다.', 'warning');
       return;
     }
     
-    // ë¥˜ë³„ë¡œ êµ¬ë¶„í•˜ì—¬ ë³µì‚¬
+    // 류별로 구분하여 복사
     const formattedText = classKeys.map(classCode => {
       const goods = goodsByClass[classCode];
-      return `ã€ì œ${classCode}ë¥˜ã€‘ ${goods.join(', ')}`;
+      return `【제${classCode}류】 ${goods.join(', ')}`;
     }).join('\n\n');
     
-    // í´ë¦½ë³´ë“œì— ë³µì‚¬
+    // 클립보드에 복사
     navigator.clipboard.writeText(formattedText).then(() => {
-      App.showToast(`${classKeys.length}ê°œ ë¥˜, ${Object.values(goodsByClass).flat().length}ê°œ ìƒí’ˆì´ ë³µì‚¬ë˜ì—ˆìŠµë‹ˆë‹¤.`, 'success');
+      App.showToast(`${classKeys.length}개 류, ${Object.values(goodsByClass).flat().length}개 상품이 복사되었습니다.`, 'success');
     }).catch(err => {
-      console.error('[TM] ë³µì‚¬ ì‹¤íŒ¨:', err);
-      // í´ë°±: textarea ì‚¬ìš©
+      console.error('[TM] 복사 실패:', err);
+      // 폴백: textarea 사용
       const textarea = document.createElement('textarea');
       textarea.value = formattedText;
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand('copy');
       document.body.removeChild(textarea);
-      App.showToast(`${classKeys.length}ê°œ ë¥˜ ì§€ì •ìƒí’ˆì´ ë³µì‚¬ë˜ì—ˆìŠµë‹ˆë‹¤.`, 'success');
+      App.showToast(`${classKeys.length}개 류 지정상품이 복사되었습니다.`, 'success');
     });
   };
   
-  // ìœ ì‚¬êµ° ì½”ë“œë¡œ ì§€ì •ìƒí’ˆ ê²€ìƒ‰
+  // 유사군 코드로 지정상품 검색
   TM.searchBySimilarGroup = async function(classCode) {
     const input = document.getElementById(`tm-similar-input-${classCode}`);
     const resultsDiv = document.getElementById(`tm-similar-results-${classCode}`);
@@ -3295,12 +3295,12 @@ TM.closeSettings = function() {
     const similarCode = input.value.trim().toUpperCase();
     
     if (!similarCode) {
-      App.showToast('ìœ ì‚¬êµ° ì½”ë“œë¥¼ ìž…ë ¥í•˜ì„¸ìš”. (ì˜ˆ: G5001)', 'warning');
+      App.showToast('유사군 코드를 입력하세요. (예: G5001)', 'warning');
       return;
     }
     
     try {
-      // DBì—ì„œ ìœ ì‚¬êµ° ì½”ë“œë¡œ ê²€ìƒ‰
+      // DB에서 유사군 코드로 검색
       const { data, error } = await App.sb
         .from('gazetted_goods_cache')
         .select('goods_name, similar_group_code')
@@ -3313,21 +3313,21 @@ TM.closeSettings = function() {
       if (!data || data.length === 0) {
         resultsDiv.innerHTML = `
           <div class="tm-similar-no-result">
-            ìœ ì‚¬êµ° ì½”ë“œ "${similarCode}"ì— í•´ë‹¹í•˜ëŠ” ì§€ì •ìƒí’ˆì´ ì—†ìŠµë‹ˆë‹¤.
+            유사군 코드 "${similarCode}"에 해당하는 지정상품이 없습니다.
           </div>
         `;
         resultsDiv.style.display = 'block';
         return;
       }
       
-      // ì´ë¯¸ ì„ íƒëœ ìƒí’ˆ í•„í„°ë§
+      // 이미 선택된 상품 필터링
       const classItem = TM.currentProject?.designatedGoods.find(g => g.classCode === classCode);
       const existingNames = new Set(classItem?.goods.map(g => g.name) || []);
       
       resultsDiv.innerHTML = `
         <div class="tm-similar-result-header">
-          <span>ìœ ì‚¬êµ° "${similarCode}" ê²€ìƒ‰ ê²°ê³¼: ${data.length}ê±´</span>
-          <button class="btn btn-xs btn-ghost" onclick="document.getElementById('tm-similar-results-${classCode}').style.display='none'">ë‹«ê¸°</button>
+          <span>유사군 "${similarCode}" 검색 결과: ${data.length}건</span>
+          <button class="btn btn-xs btn-ghost" onclick="document.getElementById('tm-similar-results-${classCode}').style.display='none'">닫기</button>
         </div>
         <div class="tm-similar-result-list">
           ${data.map(g => {
@@ -3337,14 +3337,14 @@ TM.closeSettings = function() {
                 <span class="tm-similar-item-name">${TM.escapeHtml(g.goods_name)}</span>
                 <span class="tm-similar-item-code">${g.similar_group_code}</span>
                 ${isAdded ? `
-                  <span class="tm-similar-added-badge">ì¶”ê°€ë¨</span>
+                  <span class="tm-similar-added-badge">추가됨</span>
                 ` : `
                   <button class="btn btn-xs btn-primary" 
                           data-action="tm-add-from-similar" 
                           data-class-code="${classCode}"
                           data-goods-name="${TM.escapeHtml(g.goods_name)}"
                           data-similar-group="${g.similar_group_code}">
-                    + ì¶”ê°€
+                    + 추가
                   </button>
                 `}
               </div>
@@ -3355,24 +3355,24 @@ TM.closeSettings = function() {
       resultsDiv.style.display = 'block';
       
     } catch (error) {
-      console.error('[TM] ìœ ì‚¬êµ° ê²€ìƒ‰ ì‹¤íŒ¨:', error);
-      App.showToast('ê²€ìƒ‰ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 유사군 검색 실패:', error);
+      App.showToast('검색 실패: ' + error.message, 'error');
     }
   };
   
-  // ìœ ì‚¬êµ° ê²€ìƒ‰ ê²°ê³¼ì—ì„œ ì§€ì •ìƒí’ˆ ì¶”ê°€
+  // 유사군 검색 결과에서 지정상품 추가
   TM.addGoodsFromSimilar = function(classCode, goodsName, similarGroup) {
     if (!TM.currentProject) return;
     
     const classItem = TM.currentProject.designatedGoods.find(g => g.classCode === classCode);
     if (!classItem) {
-      App.showToast('ë¨¼ì € ìƒí’ˆë¥˜ë¥¼ ì„ íƒí•˜ì„¸ìš”.', 'warning');
+      App.showToast('먼저 상품류를 선택하세요.', 'warning');
       return;
     }
     
-    // ì¤‘ë³µ ì²´í¬
+    // 중복 체크
     if (classItem.goods.some(g => g.name === goodsName)) {
-      App.showToast('ì´ë¯¸ ì¶”ê°€ëœ ì§€ì •ìƒí’ˆìž…ë‹ˆë‹¤.', 'info');
+      App.showToast('이미 추가된 지정상품입니다.', 'info');
       return;
     }
     
@@ -3383,9 +3383,9 @@ TM.closeSettings = function() {
     });
     classItem.goodsCount = classItem.goods.length;
     
-    // ê²€ìƒ‰ ê²°ê³¼ UI ì—…ë°ì´íŠ¸ (ì¶”ê°€ë¨ í‘œì‹œ)
+    // 검색 결과 UI 업데이트 (추가됨 표시)
     TM.renderCurrentStep();
-    App.showToast(`"${goodsName}" ì¶”ê°€ë¨`, 'success');
+    App.showToast(`"${goodsName}" 추가됨`, 'success');
   };
   
   TM.addGoods = function(classCode, goodsData) {
@@ -3394,9 +3394,9 @@ TM.closeSettings = function() {
     const classItem = TM.currentProject.designatedGoods.find(g => g.classCode === classCode);
     if (!classItem) return;
     
-    // ì¤‘ë³µ ì²´í¬
+    // 중복 체크
     if (classItem.goods.some(g => g.name === goodsData.name)) {
-      App.showToast('ì´ë¯¸ ì¶”ê°€ëœ ì§€ì •ìƒí’ˆìž…ë‹ˆë‹¤.', 'warning');
+      App.showToast('이미 추가된 지정상품입니다.', 'warning');
       return;
     }
     
@@ -3409,16 +3409,16 @@ TM.closeSettings = function() {
   };
   
   TM.removeGoods = function(classCode, goodsName) {
-    console.log('[TM] removeGoods í˜¸ì¶œ:', classCode, goodsName);
+    console.log('[TM] removeGoods 호출:', classCode, goodsName);
     
     if (!TM.currentProject) {
-      console.log('[TM] removeGoods: currentProject ì—†ìŒ');
+      console.log('[TM] removeGoods: currentProject 없음');
       return;
     }
     
     const classItem = TM.currentProject.designatedGoods.find(g => g.classCode === classCode);
     if (!classItem) {
-      console.log('[TM] removeGoods: classItem ì—†ìŒ', classCode);
+      console.log('[TM] removeGoods: classItem 없음', classCode);
       return;
     }
     
@@ -3426,23 +3426,23 @@ TM.closeSettings = function() {
     classItem.goods = classItem.goods.filter(g => g.name !== goodsName);
     const afterCount = classItem.goods.length;
     
-    console.log('[TM] removeGoods: ì‚­ì œ ê²°ê³¼', beforeCount, '->', afterCount);
+    console.log('[TM] removeGoods: 삭제 결과', beforeCount, '->', afterCount);
     
     classItem.goodsCount = classItem.goods.length;
     classItem.nonGazettedCount = classItem.goods.filter(g => !g.gazetted).length;
     
     TM.renderCurrentStep();
-    App.showToast(`"${goodsName}" ì‚­ì œë¨`, 'info');
+    App.showToast(`"${goodsName}" 삭제됨`, 'info');
   };
   
   TM.initGoodsAutocomplete = function(classCode) {
-    console.log('[TM] initGoodsAutocomplete í˜¸ì¶œ:', classCode);
+    console.log('[TM] initGoodsAutocomplete 호출:', classCode);
     
     const input = document.getElementById(`tm-goods-input-${classCode}`);
     const autocomplete = document.getElementById(`tm-autocomplete-${classCode}`);
     
     if (!input || !autocomplete) {
-      console.log('[TM] initGoodsAutocomplete: ìš”ì†Œë¥¼ ì°¾ì„ ìˆ˜ ì—†ìŒ', {
+      console.log('[TM] initGoodsAutocomplete: 요소를 찾을 수 없음', {
         input: !!input,
         autocomplete: !!autocomplete,
         inputId: `tm-goods-input-${classCode}`,
@@ -3451,17 +3451,17 @@ TM.closeSettings = function() {
       return;
     }
     
-    console.log('[TM] initGoodsAutocomplete: ìš”ì†Œ ì°¾ìŒ, ì´ë²¤íŠ¸ ì—°ê²°');
+    console.log('[TM] initGoodsAutocomplete: 요소 찾음, 이벤트 연결');
     
     const searchGoods = TM.debounce(async (query) => {
-      console.log('[TM] searchGoods í˜¸ì¶œ:', query);
+      console.log('[TM] searchGoods 호출:', query);
       
       if (query.length < 2) {
         autocomplete.style.display = 'none';
         return;
       }
       
-      // DBì—ì„œ ì§ì ‘ ê²€ìƒ‰ (ìºì‹œ ì‚¬ìš© ì•ˆí•¨)
+      // DB에서 직접 검색 (캐시 사용 안함)
       let results = [];
       try {
         const { data, error } = await App.sb
@@ -3475,26 +3475,26 @@ TM.closeSettings = function() {
           results = data;
         }
       } catch (e) {
-        console.warn('[TM] ì§€ì •ìƒí’ˆ ê²€ìƒ‰ ì‹¤íŒ¨:', e);
+        console.warn('[TM] 지정상품 검색 실패:', e);
       }
       
       if (results.length === 0) {
-        // ë¹„ê³ ì‹œëª…ì¹­ í—ˆìš© ëª¨ë“œë©´ ì§ì ‘ ìž…ë ¥ ì˜µì…˜ í‘œì‹œ
+        // 비고시명칭 허용 모드면 직접 입력 옵션 표시
         if (!TM.currentProject.gazettedOnly) {
           autocomplete.innerHTML = `
             <div class="tm-goods-autocomplete-item" data-name="${TM.escapeHtml(query)}" data-gazetted="false"
                  style="padding: 8px 12px; cursor: pointer;"
                  onmouseover="this.style.backgroundColor='#f5f5f5'" 
                  onmouseout="this.style.backgroundColor='white'">
-              <div class="goods-name" style="font-weight: 500;">"${TM.escapeHtml(query)}" ì§ì ‘ ìž…ë ¥</div>
-              <div class="goods-meta" style="font-size: 11px; color: #888;">ë¹„ê³ ì‹œëª…ì¹­ (52,000ì›/ë¥˜ ì ìš©)</div>
+              <div class="goods-name" style="font-weight: 500;">"${TM.escapeHtml(query)}" 직접 입력</div>
+              <div class="goods-meta" style="font-size: 11px; color: #888;">비고시명칭 (52,000원/류 적용)</div>
             </div>
           `;
           autocomplete.style.display = 'block';
         } else {
           autocomplete.innerHTML = `
             <div class="tm-goods-autocomplete-item" style="padding: 8px 12px; color: #8b95a1;">
-              ê²€ìƒ‰ ê²°ê³¼ê°€ ì—†ìŠµë‹ˆë‹¤. (ê³ ì‹œëª…ì¹­ ëª¨ë“œ)
+              검색 결과가 없습니다. (고시명칭 모드)
             </div>
           `;
           autocomplete.style.display = 'block';
@@ -3512,7 +3512,7 @@ TM.closeSettings = function() {
              onmouseover="this.style.backgroundColor='#f5f5f5'" 
              onmouseout="this.style.backgroundColor='white'">
           <div class="goods-name" style="font-weight: 500;">${TM.escapeHtml(r.goods_name)}</div>
-          <div class="goods-meta" style="font-size: 11px; color: #888;">${r.goods_name_en || ''} Â· ${r.similar_group_code || ''}</div>
+          <div class="goods-meta" style="font-size: 11px; color: #888;">${r.goods_name_en || ''} · ${r.similar_group_code || ''}</div>
         </div>
       `).join('');
       
@@ -3540,7 +3540,7 @@ TM.closeSettings = function() {
       autocomplete.style.display = 'none';
     });
     
-    // Enter í‚¤ë¡œ ì§ì ‘ ìž…ë ¥ (ë¹„ê³ ì‹œ ëª¨ë“œ)
+    // Enter 키로 직접 입력 (비고시 모드)
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && input.value.trim() && !TM.currentProject.gazettedOnly) {
         TM.addGoods(classCode, {
@@ -3556,13 +3556,13 @@ TM.closeSettings = function() {
   };
 
   // ============================================================
-  // Step 3: ì„ í–‰ìƒí‘œ ê²€ìƒ‰
+  // Step 3: 선행상표 검색
   // ============================================================
   
   TM.renderStep3_PriorSearch = function(container) {
     const p = TM.currentProject;
     
-    // ì„ íƒëœ ìœ ì‚¬êµ° ì½”ë“œ ìˆ˜ì§‘
+    // 선택된 유사군 코드 수집
     const selectedSimilarGroups = new Set();
     const selectedClasses = new Set();
     p.designatedGoods?.forEach(classData => {
@@ -3576,118 +3576,118 @@ TM.closeSettings = function() {
     const similarGroupList = Array.from(selectedSimilarGroups).sort();
     const classList = Array.from(selectedClasses).sort((a,b) => parseInt(a) - parseInt(b));
     
-    // ê²€ìƒ‰ í†µê³„
+    // 검색 통계
     const stats = p.searchResults.stats || {};
     
     container.innerHTML = `
       <div class="tm-step-header">
-        <h3>ðŸ” ì„ í–‰ìƒí‘œ ê²€ìƒ‰</h3>
-        <p>ì¶œì› ì „ ìœ ì‚¬ ìƒí‘œê°€ ìžˆëŠ”ì§€ ê²€ìƒ‰í•©ë‹ˆë‹¤. <strong>2-Stage AI ê²€ìƒ‰ ì—”ì§„</strong>ì´ ë¬¸ìž+ë„í˜•ì„ ë³‘ë ¬ ë¶„ì„í•©ë‹ˆë‹¤.</p>
+        <h3>🔍 선행상표 검색</h3>
+        <p>출원 전 유사 상표가 있는지 검색합니다. <strong>2-Stage AI 검색 엔진</strong>이 문자+도형을 병렬 분석합니다.</p>
       </div>
       
-      <!-- ì„ íƒëœ ì§€ì •ìƒí’ˆ ìš”ì•½ -->
+      <!-- 선택된 지정상품 요약 -->
       ${classList.length > 0 ? `
         <div class="tm-selected-summary">
           <div class="tm-summary-header">
-            <span class="tm-summary-title">ðŸ“¦ ì„ íƒëœ ì§€ì •ìƒí’ˆ</span>
-            <span class="tm-summary-count">${classList.length}ê°œ ë¥˜, ${similarGroupList.length}ê°œ ìœ ì‚¬êµ°</span>
+            <span class="tm-summary-title">📦 선택된 지정상품</span>
+            <span class="tm-summary-count">${classList.length}개 류, ${similarGroupList.length}개 유사군</span>
           </div>
           <div class="tm-summary-classes">
-            ${classList.map(c => `<span class="tm-class-badge">ì œ${c}ë¥˜</span>`).join('')}
+            ${classList.map(c => `<span class="tm-class-badge">제${c}류</span>`).join('')}
           </div>
           <div class="tm-summary-similar-groups">
-            <span class="tm-similar-label">ìœ ì‚¬êµ°:</span>
+            <span class="tm-similar-label">유사군:</span>
             ${similarGroupList.slice(0, 10).map(sg => `<span class="tm-similar-badge">${sg}</span>`).join('')}
-            ${similarGroupList.length > 10 ? `<span class="tm-similar-more">+${similarGroupList.length - 10}ê°œ</span>` : ''}
+            ${similarGroupList.length > 10 ? `<span class="tm-similar-more">+${similarGroupList.length - 10}개</span>` : ''}
           </div>
         </div>
       ` : `
         <div class="tm-warning-box">
-          âš ï¸ ì§€ì •ìƒí’ˆì„ ë¨¼ì € ì„ íƒí•´ì£¼ì„¸ìš”. ìœ ì‚¬êµ° ì½”ë“œ ê¸°ë°˜ ê²€ìƒ‰ì´ ë” ì •í™•í•©ë‹ˆë‹¤.
+          ⚠️ 지정상품을 먼저 선택해주세요. 유사군 코드 기반 검색이 더 정확합니다.
         </div>
       `}
       
-      <!-- ê²€ìƒ‰ ì»¨íŠ¸ë¡¤ -->
+      <!-- 검색 컨트롤 -->
       <div class="tm-search-section">
         <div class="tm-search-controls">
           <div class="tm-search-type-toggle">
-            <button class="active" data-search-type="text" onclick="TM.setSearchType('text', this)">ë¬¸ìž ê²€ìƒ‰</button>
-            <button data-search-type="figure" onclick="TM.setSearchType('figure', this)">ë„í˜• ê²€ìƒ‰</button>
+            <button class="active" data-search-type="text" onclick="TM.setSearchType('text', this)">문자 검색</button>
+            <button data-search-type="figure" onclick="TM.setSearchType('figure', this)">도형 검색</button>
           </div>
         </div>
         
-        <!-- ë¬¸ìž ê²€ìƒ‰ ì˜µì…˜ -->
+        <!-- 문자 검색 옵션 -->
         <div class="tm-search-options" id="tm-search-options-text">
           <div class="tm-search-form">
-            <!-- 1í–‰: ìƒí‘œëª… + ìƒíƒœ í•„í„° -->
+            <!-- 1행: 상표명 + 상태 필터 -->
             <div class="tm-search-row">
               <div class="input-group" style="flex: 2;">
-                <label>ìƒí‘œëª…</label>
+                <label>상표명</label>
                 <input type="text" class="tm-input" id="tm-search-keyword" 
                        value="${TM.escapeHtml(p.trademarkName)}" 
-                       placeholder="ê²€ìƒ‰í•  ìƒí‘œëª… ìž…ë ¥">
+                       placeholder="검색할 상표명 입력">
               </div>
               <div class="input-group" style="flex: 1;">
-                <label>ìƒíƒœ í•„í„°</label>
+                <label>상태 필터</label>
                 <select class="tm-input" id="tm-search-status">
-                  <option value="all">ì „ì²´</option>
-                  <option value="registered" selected>ë“±ë¡/ì¶œì›</option>
-                  <option value="registered_only">ë“±ë¡ë§Œ</option>
+                  <option value="all">전체</option>
+                  <option value="registered" selected>등록/출원</option>
+                  <option value="registered_only">등록만</option>
                 </select>
               </div>
             </div>
             
-            <!-- 2í–‰: ìƒí’ˆë¥˜ í•„í„° -->
+            <!-- 2행: 상품류 필터 -->
             <div class="tm-search-row">
               <div class="input-group" style="flex: 1;">
-                <label>ìƒí’ˆë¥˜ í•„í„°</label>
+                <label>상품류 필터</label>
                 <div class="tm-class-filter">
                   <select class="tm-input" id="tm-search-class-mode" onchange="TM.toggleClassFilter(this.value)">
-                    <option value="all">ì „ì²´ ìƒí’ˆë¥˜</option>
-                    ${classList.length > 0 ? `<option value="selected" selected>ì„ íƒí•œ ë¥˜ë§Œ</option>` : ''}
-                    <option value="custom">ì§ì ‘ ì„ íƒ</option>
+                    <option value="all">전체 상품류</option>
+                    ${classList.length > 0 ? `<option value="selected" selected>선택한 류만</option>` : ''}
+                    <option value="custom">직접 선택</option>
                   </select>
                 </div>
               </div>
               <div class="input-group tm-custom-class-input" id="tm-custom-class-group" style="flex: 1; ${classList.length > 0 ? 'display: none;' : ''}">
-                <label>ìƒí’ˆë¥˜ ì§ì ‘ ìž…ë ¥</label>
+                <label>상품류 직접 입력</label>
                 <input type="text" class="tm-input" id="tm-search-class-custom" 
-                       placeholder="ì˜ˆ: 09, 35, 42 (ì‰¼í‘œë¡œ êµ¬ë¶„)">
+                       placeholder="예: 09, 35, 42 (쉼표로 구분)">
               </div>
             </div>
             
-            <!-- 3í–‰: ìœ ì‚¬êµ°ì½”ë“œ í•„í„° -->
+            <!-- 3행: 유사군코드 필터 -->
             <div class="tm-search-row">
               <div class="input-group" style="flex: 1;">
-                <label>ìœ ì‚¬êµ°ì½”ë“œ í•„í„° (ì„ íƒ)</label>
+                <label>유사군코드 필터 (선택)</label>
                 <div class="tm-similarity-filter">
                   <select class="tm-input" id="tm-search-similarity-mode" onchange="TM.toggleSimilarityFilter(this.value)">
-                    <option value="none">ì‚¬ìš© ì•ˆ í•¨</option>
-                    ${similarGroupList.length > 0 ? `<option value="selected">ì„ íƒí•œ ìœ ì‚¬êµ°ë§Œ (${similarGroupList.length}ê°œ)</option>` : ''}
-                    <option value="custom">ì§ì ‘ ìž…ë ¥</option>
+                    <option value="none">사용 안 함</option>
+                    ${similarGroupList.length > 0 ? `<option value="selected">선택한 유사군만 (${similarGroupList.length}개)</option>` : ''}
+                    <option value="custom">직접 입력</option>
                   </select>
                 </div>
               </div>
               <div class="input-group tm-custom-similarity-input" id="tm-custom-similarity-group" style="flex: 1; display: none;">
-                <label>ìœ ì‚¬êµ°ì½”ë“œ ì§ì ‘ ìž…ë ¥</label>
+                <label>유사군코드 직접 입력</label>
                 <input type="text" class="tm-input" id="tm-search-similarity-custom" 
-                       placeholder="ì˜ˆ: G390101, S120401 (ì‰¼í‘œë¡œ êµ¬ë¶„)">
+                       placeholder="예: G390101, S120401 (쉼표로 구분)">
               </div>
             </div>
             
-            <!-- ì„ íƒëœ í•„í„° ë¯¸ë¦¬ë³´ê¸° -->
+            <!-- 선택된 필터 미리보기 -->
             <div class="tm-filter-preview" id="tm-filter-preview">
               ${classList.length > 0 ? `
                 <div class="tm-preview-section">
-                  <span class="tm-preview-label">ðŸ“¦ ìƒí’ˆë¥˜:</span>
-                  <span class="tm-preview-values" id="tm-preview-classes">${classList.map(c => 'ì œ'+c+'ë¥˜').join(', ')}</span>
+                  <span class="tm-preview-label">📦 상품류:</span>
+                  <span class="tm-preview-values" id="tm-preview-classes">${classList.map(c => '제'+c+'류').join(', ')}</span>
                 </div>
               ` : ''}
               ${similarGroupList.length > 0 ? `
                 <div class="tm-preview-section">
-                  <span class="tm-preview-label">ðŸ·ï¸ ìœ ì‚¬êµ°:</span>
+                  <span class="tm-preview-label">🏷️ 유사군:</span>
                   <span class="tm-preview-values" id="tm-preview-similarities">
-                    ${similarGroupList.slice(0, 5).join(', ')}${similarGroupList.length > 5 ? ` ì™¸ ${similarGroupList.length - 5}ê°œ` : ''}
+                    ${similarGroupList.slice(0, 5).join(', ')}${similarGroupList.length > 5 ? ` 외 ${similarGroupList.length - 5}개` : ''}
                   </span>
                 </div>
               ` : ''}
@@ -3695,57 +3695,57 @@ TM.closeSettings = function() {
             
             <div class="tm-search-actions">
               <button class="btn btn-primary btn-lg" data-action="tm-search-text">
-                ðŸ” ìƒí‘œ ê²€ìƒ‰
+                🔍 상표 검색
               </button>
             </div>
             
-            <!-- ê²€ìƒ‰ ì§„í–‰ ìƒíƒœ -->
+            <!-- 검색 진행 상태 -->
             <div class="tm-search-progress" id="tm-search-progress" style="display: none;">
               <div class="tm-progress-track">
                 <div class="tm-progress-fill" id="tm-search-progress-fill" style="width: 0%"></div>
               </div>
-              <div class="tm-progress-text" id="tm-search-progress-text">ì¤€ë¹„ ì¤‘...</div>
+              <div class="tm-progress-text" id="tm-search-progress-text">준비 중...</div>
             </div>
           </div>
         </div>
         
-        <!-- ë„í˜• ê²€ìƒ‰ ì˜µì…˜ -->
+        <!-- 도형 검색 옵션 -->
         <div class="tm-search-options" id="tm-search-options-figure" style="display: none;">
           <div class="tm-vienna-section">
-            <h4>ë¹„ì—”ë‚˜ ë„í˜• ë¶„ë¥˜ ì½”ë“œ</h4>
-            <p class="tm-hint">ìƒí‘œ ì´ë¯¸ì§€ë¥¼ ë¶„ì„í•˜ì—¬ ë¹„ì—”ë‚˜ ì½”ë“œë¥¼ ì¶”ì²œë°›ìœ¼ì„¸ìš”.</p>
+            <h4>비엔나 도형 분류 코드</h4>
+            <p class="tm-hint">상표 이미지를 분석하여 비엔나 코드를 추천받으세요.</p>
             <button class="btn btn-secondary" data-action="tm-analyze-vienna">
-              ðŸ¤– AI ë¹„ì—”ë‚˜ ì½”ë“œ ë¶„ì„
+              🤖 AI 비엔나 코드 분석
             </button>
             ${p.aiAnalysis.viennaCodeSuggestion && p.aiAnalysis.viennaCodeSuggestion.length > 0 ? `
               <div class="tm-vienna-suggestions">
-                <strong>ì¶”ì²œ ì½”ë“œ:</strong>
+                <strong>추천 코드:</strong>
                 ${p.aiAnalysis.viennaCodeSuggestion.map(v => `
                   <span class="tm-vienna-badge">${v.code}: ${v.description}</span>
                 `).join('')}
               </div>
             ` : ''}
             <div class="input-group" style="margin-top: 12px;">
-              <label>ë¹„ì—”ë‚˜ ì½”ë“œ ì§ì ‘ ìž…ë ¥</label>
+              <label>비엔나 코드 직접 입력</label>
               <input type="text" class="tm-input" id="tm-vienna-code" 
-                     placeholder="ì˜ˆ: 03.01.01">
+                     placeholder="예: 03.01.01">
             </div>
             <div class="tm-search-actions">
               <button class="btn btn-primary" data-action="tm-search-figure">
-                ðŸ” ë„í˜• ê²€ìƒ‰
+                🔍 도형 검색
               </button>
             </div>
           </div>
         </div>
       </div>
       
-      <!-- ê²€ìƒ‰ ê²°ê³¼ -->
+      <!-- 검색 결과 -->
       <div class="tm-search-results-section">
         <div class="tm-search-results-header">
-          <h4>ê²€ìƒ‰ ê²°ê³¼</h4>
+          <h4>검색 결과</h4>
           ${p.searchResults.searchedAt ? `
             <span class="tm-search-time">
-              ${new Date(p.searchResults.searchedAt).toLocaleString('ko-KR')} ê²€ìƒ‰
+              ${new Date(p.searchResults.searchedAt).toLocaleString('ko-KR')} 검색
             </span>
           ` : ''}
         </div>
@@ -3764,49 +3764,49 @@ TM.closeSettings = function() {
     document.getElementById('tm-search-options-text').style.display = type === 'text' ? 'block' : 'none';
     document.getElementById('tm-search-options-figure').style.display = type === 'figure' ? 'block' : 'none';
     
-    // ë²„íŠ¼ ì•¡ì…˜ ë³€ê²½
+    // 버튼 액션 변경
     const searchBtn = document.querySelector('[data-action^="tm-search-"]');
     if (searchBtn) {
       searchBtn.dataset.action = type === 'text' ? 'tm-search-text' : 'tm-search-figure';
     }
   };
   
-  // ìƒí’ˆë¥˜ í•„í„° í† ê¸€
+  // 상품류 필터 토글
   TM.toggleClassFilter = function(mode) {
     const customGroup = document.getElementById('tm-custom-class-group');
     const previewClasses = document.getElementById('tm-preview-classes');
     
     if (mode === 'custom') {
       if (customGroup) customGroup.style.display = 'block';
-      if (previewClasses) previewClasses.textContent = 'ì§ì ‘ ìž…ë ¥';
+      if (previewClasses) previewClasses.textContent = '직접 입력';
     } else if (mode === 'all') {
       if (customGroup) customGroup.style.display = 'none';
-      if (previewClasses) previewClasses.textContent = 'ì „ì²´';
+      if (previewClasses) previewClasses.textContent = '전체';
     } else {
       if (customGroup) customGroup.style.display = 'none';
-      // ì„ íƒëœ ìƒí’ˆë¥˜ í‘œì‹œ
+      // 선택된 상품류 표시
       const p = TM.currentProject;
       if (p && previewClasses) {
-        const classes = (p.designatedGoods || []).map(g => 'ì œ' + g.classCode + 'ë¥˜');
-        previewClasses.textContent = classes.join(', ') || 'ì—†ìŒ';
+        const classes = (p.designatedGoods || []).map(g => '제' + g.classCode + '류');
+        previewClasses.textContent = classes.join(', ') || '없음';
       }
     }
   };
   
-  // ìœ ì‚¬êµ°ì½”ë“œ í•„í„° í† ê¸€
+  // 유사군코드 필터 토글
   TM.toggleSimilarityFilter = function(mode) {
     const customGroup = document.getElementById('tm-custom-similarity-group');
     const previewSimilarities = document.getElementById('tm-preview-similarities');
     
     if (mode === 'custom') {
       if (customGroup) customGroup.style.display = 'block';
-      if (previewSimilarities) previewSimilarities.textContent = 'ì§ì ‘ ìž…ë ¥';
+      if (previewSimilarities) previewSimilarities.textContent = '직접 입력';
     } else if (mode === 'none') {
       if (customGroup) customGroup.style.display = 'none';
-      if (previewSimilarities) previewSimilarities.textContent = 'ì‚¬ìš© ì•ˆ í•¨';
+      if (previewSimilarities) previewSimilarities.textContent = '사용 안 함';
     } else {
       if (customGroup) customGroup.style.display = 'none';
-      // ì„ íƒëœ ìœ ì‚¬êµ° í‘œì‹œ
+      // 선택된 유사군 표시
       const p = TM.currentProject;
       if (p && previewSimilarities) {
         const groups = [];
@@ -3820,16 +3820,16 @@ TM.closeSettings = function() {
             }
           });
         });
-        previewSimilarities.textContent = groups.slice(0, 5).join(', ') + (groups.length > 5 ? ` ì™¸ ${groups.length - 5}ê°œ` : '') || 'ì—†ìŒ';
+        previewSimilarities.textContent = groups.slice(0, 5).join(', ') + (groups.length > 5 ? ` 외 ${groups.length - 5}개` : '') || '없음';
       }
     }
   };
   
-  // í˜„ìž¬ ì„ íƒëœ í•„í„° ê°’ ê°€ì ¸ì˜¤ê¸°
+  // 현재 선택된 필터 값 가져오기
   TM.getSearchFilters = function() {
     const p = TM.currentProject;
     
-    // ìƒí’ˆë¥˜ í•„í„°
+    // 상품류 필터
     const classMode = document.getElementById('tm-search-class-mode')?.value || 'all';
     let targetClasses = [];
     
@@ -3840,7 +3840,7 @@ TM.closeSettings = function() {
       targetClasses = customInput.split(',').map(c => c.trim().replace(/[^0-9]/g, '')).filter(c => c);
     }
     
-    // ìœ ì‚¬êµ°ì½”ë“œ í•„í„°
+    // 유사군코드 필터
     const similarityMode = document.getElementById('tm-search-similarity-mode')?.value || 'none';
     let targetGroups = [];
     
@@ -3871,129 +3871,129 @@ TM.closeSettings = function() {
     if (allResults.length === 0) {
       return `
         <div class="tm-empty-state" style="padding: 40px;">
-          <div class="icon">ðŸ”</div>
-          <h4>ê²€ìƒ‰ ê²°ê³¼ê°€ ì—†ìŠµë‹ˆë‹¤</h4>
-          <p>ê²€ìƒ‰ì„ ì‹¤í–‰í•˜ì„¸ìš”.</p>
+          <div class="icon">🔍</div>
+          <h4>검색 결과가 없습니다</h4>
+          <p>검색을 실행하세요.</p>
         </div>
       `;
     }
     
-    // â˜… ìœ ì‚¬êµ° ê¸°ë°˜ í†µê³„
+    // ★ 유사군 기반 통계
     const groupOverlapCount = allResults.filter(r => r.hasGroupOverlap).length;
     const noOverlapCount = allResults.filter(r => !r.hasGroupOverlap).length;
     const highRiskCount = allResults.filter(r => r.isHighRisk || r.riskLevel === 'high' || r.riskLevel === 'critical').length;
     const mediumRiskCount = allResults.filter(r => r.riskLevel === 'medium').length;
     
     return `
-      <!-- ê²€ìƒ‰ ê²°ê³¼ ìš”ì•½ (ìœ ì‚¬êµ° ê¸°ì¤€) -->
+      <!-- 검색 결과 요약 (유사군 기준) -->
       <div class="tm-search-summary">
         <div class="tm-summary-stat">
           <span class="tm-stat-num">${allResults.length}</span>
-          <span class="tm-stat-label">ì´ ê²°ê³¼</span>
+          <span class="tm-stat-label">총 결과</span>
         </div>
         <div class="tm-summary-stat risk-overlap">
           <span class="tm-stat-num">${groupOverlapCount}</span>
-          <span class="tm-stat-label">âš ï¸ ìœ ì‚¬êµ° ì¤‘ë³µ</span>
+          <span class="tm-stat-label">⚠️ 유사군 중복</span>
         </div>
         <div class="tm-summary-stat risk-safe">
           <span class="tm-stat-num">${noOverlapCount}</span>
-          <span class="tm-stat-label">âœ… ë“±ë¡ê°€ëŠ¥</span>
+          <span class="tm-stat-label">✅ 등록가능</span>
         </div>
         ${highRiskCount > 0 ? `
           <div class="tm-summary-stat risk-high">
             <span class="tm-stat-num">${highRiskCount}</span>
-            <span class="tm-stat-label">â›” ê³ ìœ„í—˜</span>
+            <span class="tm-stat-label">⛔ 고위험</span>
           </div>
         ` : ''}
       </div>
       
-      <!-- ìœ ì‚¬êµ° ì¤‘ë³µ ì—¬ë¶€ ì„¤ëª… -->
+      <!-- 유사군 중복 여부 설명 -->
       <div class="tm-overlap-explanation">
-        <span class="tm-explanation-icon">ðŸ’¡</span>
+        <span class="tm-explanation-icon">💡</span>
         <span class="tm-explanation-text">
-          <strong>ìœ ì‚¬êµ° ë¹„ì¤‘ë³µ = ë“±ë¡ ê°€ëŠ¥:</strong> ìƒí‘œëª…ì´ ë™ì¼í•˜ë”ë¼ë„ ìœ ì‚¬êµ°ì´ ë‹¤ë¥´ë©´ ì‹¬ì‚¬ ì‹œ ì¶©ëŒí•˜ì§€ ì•ŠìŠµë‹ˆë‹¤.
+          <strong>유사군 비중복 = 등록 가능:</strong> 상표명이 동일하더라도 유사군이 다르면 심사 시 충돌하지 않습니다.
         </span>
       </div>
       
-      <!-- ê²°ê³¼ ëª©ë¡ -->
+      <!-- 결과 목록 -->
       <div class="tm-results-list">
         ${allResults.map((r, idx) => TM.renderSearchResultItem(r, idx + 1)).join('')}
       </div>
     `;
   };
   
-  // ê°œë³„ ê²€ìƒ‰ ê²°ê³¼ ì•„ì´í…œ ë Œë”ë§ (ìœ ì‚¬êµ° ì¤‘ì‹¬)
+  // 개별 검색 결과 아이템 렌더링 (유사군 중심)
   TM.renderSearchResultItem = function(r, rank) {
     const score = r.similarityScore || 0;
     const hasGroupOverlap = r.hasGroupOverlap;
     
-    // â˜… ìœ ì‚¬êµ° ê¸°ë°˜ ë¦¬ìŠ¤í¬ í´ëž˜ìŠ¤ ê²°ì •
+    // ★ 유사군 기반 리스크 클래스 결정
     let riskClass = 'risk-safe';
-    let riskBadge = 'ë“±ë¡ê°€ëŠ¥';
-    let riskIcon = 'âœ…';
+    let riskBadge = '등록가능';
+    let riskIcon = '✅';
     
     if (hasGroupOverlap) {
       const riskLevel = r.riskLevel || 'medium';
       if (riskLevel === 'critical' || riskLevel === 'high') {
         riskClass = 'risk-high';
-        riskBadge = 'ê³ ìœ„í—˜';
-        riskIcon = 'â›”';
+        riskBadge = '고위험';
+        riskIcon = '⛔';
       } else if (riskLevel === 'medium') {
         riskClass = 'risk-medium';
-        riskBadge = 'ì£¼ì˜';
-        riskIcon = 'âš ï¸';
+        riskBadge = '주의';
+        riskIcon = '⚠️';
       } else {
         riskClass = 'risk-low';
-        riskBadge = 'ì €ìœ„í—˜';
-        riskIcon = 'ðŸ”¶';
+        riskBadge = '저위험';
+        riskIcon = '🔶';
       }
     }
     
-    // ì¶œì›ì¼ í¬ë§·íŒ…
+    // 출원일 포맷팅
     const appDate = r.applicationDate || '';
     const formattedDate = appDate.length === 8 ? 
       `${appDate.slice(0,4)}-${appDate.slice(4,6)}-${appDate.slice(6,8)}` : appDate;
     
-    // ìœ ì‚¬êµ° ì½”ë“œ ì¶”ì¶œ
+    // 유사군 코드 추출
     const similarGroups = r.similarGroupCodes || r.overlappingGroups || [];
     
     return `
       <div class="tm-search-result-item ${riskClass} ${hasGroupOverlap ? 'has-overlap' : 'no-overlap'}" data-id="${r.applicationNumber}">
-        <!-- ì¢Œì¸¡: ìˆœìœ„ + ë¦¬ìŠ¤í¬ ë±ƒì§€ -->
+        <!-- 좌측: 순위 + 리스크 뱃지 -->
         <div class="tm-result-left">
           <span class="tm-rank-num">${rank}</span>
           <span class="tm-risk-badge ${riskClass}">${riskIcon} ${riskBadge}</span>
         </div>
         
-        <!-- ìƒí‘œ ì´ë¯¸ì§€ -->
+        <!-- 상표 이미지 -->
         <div class="tm-result-image">
           ${r.drawing || r.drawingUrl ? 
-            `<img src="${r.drawing || r.drawingUrl}" alt="ìƒí‘œ ì´ë¯¸ì§€" onerror="this.outerHTML='<span class=\"tm-img-placeholder\">ðŸ·ï¸</span>'">` : 
-            '<span class="tm-img-placeholder">ðŸ·ï¸</span>'}
+            `<img src="${r.drawing || r.drawingUrl}" alt="상표 이미지" onerror="this.outerHTML='<span class=\"tm-img-placeholder\">🏷️</span>'">` : 
+            '<span class="tm-img-placeholder">🏷️</span>'}
         </div>
         
-        <!-- ìƒí‘œ ì •ë³´ (ë©”ì¸) -->
+        <!-- 상표 정보 (메인) -->
         <div class="tm-result-info">
-          <div class="tm-result-title">${TM.escapeHtml(r.title || r.trademarkName || '(ëª…ì¹­ì—†ìŒ)')}</div>
+          <div class="tm-result-title">${TM.escapeHtml(r.title || r.trademarkName || '(명칭없음)')}</div>
           
           <div class="tm-result-details">
             <div class="tm-detail-row">
-              <span class="tm-detail-item"><strong>ì¶œì›ë²ˆí˜¸</strong> ${r.applicationNumber || '-'}</span>
-              <span class="tm-detail-item"><strong>ì¶œì›ì¼</strong> ${formattedDate || '-'}</span>
+              <span class="tm-detail-item"><strong>출원번호</strong> ${r.applicationNumber || '-'}</span>
+              <span class="tm-detail-item"><strong>출원일</strong> ${formattedDate || '-'}</span>
             </div>
             <div class="tm-detail-row">
-              ${r.applicantName ? `<span class="tm-detail-item"><strong>ì¶œì›ì¸</strong> ${TM.escapeHtml(r.applicantName)}</span>` : ''}
-              ${r.rightHolderName ? `<span class="tm-detail-item"><strong>ê¶Œë¦¬ìž</strong> ${TM.escapeHtml(r.rightHolderName)}</span>` : ''}
+              ${r.applicantName ? `<span class="tm-detail-item"><strong>출원인</strong> ${TM.escapeHtml(r.applicantName)}</span>` : ''}
+              ${r.rightHolderName ? `<span class="tm-detail-item"><strong>권리자</strong> ${TM.escapeHtml(r.rightHolderName)}</span>` : ''}
             </div>
             <div class="tm-detail-row">
-              ${r.classificationCode ? `<span class="tm-detail-item"><strong>ì§€ì •ìƒí’ˆë¥˜</strong> ì œ${r.classificationCode}ë¥˜</span>` : ''}
+              ${r.classificationCode ? `<span class="tm-detail-item"><strong>지정상품류</strong> 제${r.classificationCode}류</span>` : ''}
               ${similarGroups.length > 0 ? `
-                <span class="tm-detail-item"><strong>ìœ ì‚¬êµ°</strong> ${similarGroups.slice(0,3).join(', ')}${similarGroups.length > 3 ? '...' : ''}</span>
+                <span class="tm-detail-item"><strong>유사군</strong> ${similarGroups.slice(0,3).join(', ')}${similarGroups.length > 3 ? '...' : ''}</span>
               ` : ''}
             </div>
             ${r.designatedGoods ? `
               <div class="tm-detail-row tm-goods-row">
-                <span class="tm-detail-item tm-goods-detail"><strong>ì§€ì •ìƒí’ˆ</strong> ${TM.escapeHtml(r.designatedGoods.slice(0, 100))}${r.designatedGoods.length > 100 ? '...' : ''}</span>
+                <span class="tm-detail-item tm-goods-detail"><strong>지정상품</strong> ${TM.escapeHtml(r.designatedGoods.slice(0, 100))}${r.designatedGoods.length > 100 ? '...' : ''}</span>
               </div>
             ` : ''}
           </div>
@@ -4004,41 +4004,41 @@ TM.closeSettings = function() {
             </span>
             ${r.applicationNumber ? `
               <a href="http://kipris.or.kr/khome/main.jsp#702${r.applicationNumber.replace(/-/g, '')}" 
-                 target="_blank" class="tm-kipris-link" title="KIPRISì—ì„œ ë³´ê¸°">
-                ðŸ”— KIPRIS
+                 target="_blank" class="tm-kipris-link" title="KIPRIS에서 보기">
+                🔗 KIPRIS
               </a>
             ` : ''}
           </div>
         </div>
         
-        <!-- ìœ ì‚¬ë„ ì ìˆ˜ -->
+        <!-- 유사도 점수 -->
         <div class="tm-result-score">
           ${hasGroupOverlap ? `
             <div class="tm-score-circle ${riskClass}">
               <span class="tm-score-num">${score}</span>
-              <span class="tm-score-label">ì </span>
+              <span class="tm-score-label">점</span>
             </div>
             <div class="tm-score-breakdown">
-              <div class="tm-score-bar" title="ë¬¸ìž ${r.scoreBreakdown?.text || 0}%">
-                <span class="tm-bar-label">ë¬¸ìž</span>
+              <div class="tm-score-bar" title="문자 ${r.scoreBreakdown?.text || 0}%">
+                <span class="tm-bar-label">문자</span>
                 <div class="tm-bar-track"><div class="tm-bar-fill" style="width: ${r.scoreBreakdown?.text || 0}%"></div></div>
               </div>
-              <div class="tm-score-bar" title="ë„í˜• ${r.scoreBreakdown?.vienna || 0}%">
-                <span class="tm-bar-label">ë„í˜•</span>
+              <div class="tm-score-bar" title="도형 ${r.scoreBreakdown?.vienna || 0}%">
+                <span class="tm-bar-label">도형</span>
                 <div class="tm-bar-track"><div class="tm-bar-fill" style="width: ${r.scoreBreakdown?.vienna || 0}%"></div></div>
               </div>
             </div>
           ` : `
             <div class="tm-safe-indicator">
-              <span class="tm-safe-icon">âœ“</span>
-              <span class="tm-safe-text">ìœ ì‚¬êµ°<br>ë¹„ì¤‘ë³µ</span>
+              <span class="tm-safe-icon">✓</span>
+              <span class="tm-safe-text">유사군<br>비중복</span>
             </div>
           `}
         </div>
         
-        <!-- ìœ„í—˜ ì‚¬ìœ  -->
+        <!-- 위험 사유 -->
         <div class="tm-result-reason ${hasGroupOverlap ? '' : 'safe'}">
-          <span class="tm-reason-text">${TM.escapeHtml(r.riskReason || (hasGroupOverlap ? 'ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œëª… ìœ ì‚¬ (ê±°ì ˆ ê°€ëŠ¥ì„± ë†’ìŒ)' : 'ìœ ì‚¬êµ° ë¹„ì¤‘ë³µ â†’ ë“±ë¡ ê°€ëŠ¥'))}</span>
+          <span class="tm-reason-text">${TM.escapeHtml(r.riskReason || (hasGroupOverlap ? '유사군 중복 + 상표명 유사 (거절 가능성 높음)' : '유사군 비중복 → 등록 가능'))}</span>
         </div>
       </div>
     `;
@@ -4046,53 +4046,53 @@ TM.closeSettings = function() {
   
   TM.getStatusClass = function(status) {
     if (!status) return '';
-    if (status.includes('ë“±ë¡')) return 'registered';
-    if (status.includes('ì¶œì›')) return 'pending';
-    if (status.includes('ê±°ì ˆ') || status.includes('ì†Œë©¸')) return 'refused';
+    if (status.includes('등록')) return 'registered';
+    if (status.includes('출원')) return 'pending';
+    if (status.includes('거절') || status.includes('소멸')) return 'refused';
     return '';
   };
   
   TM.searchByText = async function() {
     const keyword = document.getElementById('tm-search-keyword')?.value?.trim();
     if (!keyword) {
-      App.showToast('ê²€ìƒ‰ì–´ë¥¼ ìž…ë ¥í•˜ì„¸ìš”.', 'warning');
+      App.showToast('검색어를 입력하세요.', 'warning');
       return;
     }
     
     const statusFilter = document.getElementById('tm-search-status')?.value || 'registered';
     const p = TM.currentProject;
     
-    // ìƒˆ í•„í„° ì‹œìŠ¤í…œì—ì„œ ê°’ ê°€ì ¸ì˜¤ê¸°
+    // 새 필터 시스템에서 값 가져오기
     const { targetClasses, targetGroups, classMode, similarityMode } = TM.getSearchFilters();
     
-    // í•„í„° ì •ë³´ ë¡œê¹…
-    console.log('[TM] ê²€ìƒ‰ í•„í„°:', { 
+    // 필터 정보 로깅
+    console.log('[TM] 검색 필터:', { 
       keyword, statusFilter, classMode, similarityMode,
       targetClasses, targetGroups 
     });
     
     try {
-      // ê²€ìƒ‰ ë²„íŠ¼ ë¹„í™œì„±í™” & ë¡œë”© í‘œì‹œ
+      // 검색 버튼 비활성화 & 로딩 표시
       const searchBtn = document.querySelector('[data-action="tm-search-text"]');
       if (searchBtn) {
         searchBtn.disabled = true;
-        searchBtn.innerHTML = 'ðŸ”„ ê²€ìƒ‰ ì¤‘...';
+        searchBtn.innerHTML = '🔄 검색 중...';
       }
       
-      // í”„ë¡œê·¸ë ˆìŠ¤ í‘œì‹œ
+      // 프로그레스 표시
       const progressEl = document.getElementById('tm-search-progress');
       if (progressEl) progressEl.style.display = 'block';
       
-      App.showToast('ì„ í–‰ìƒí‘œ ê²€ìƒ‰ ì¤‘... (ìµœëŒ€ 30ì´ˆ ì†Œìš”)', 'info');
+      App.showToast('선행상표 검색 중... (최대 30초 소요)', 'info');
       
-      // 2-Stage ê²€ìƒ‰ ì—”ì§„ í˜¸ì¶œ
+      // 2-Stage 검색 엔진 호출
       const results = await TM.searchPriorMarks({
         trademark: keyword,
         viennaCodes: p.aiAnalysis.viennaCodeSuggestion?.map(v => v.code) || [],
         targetClasses: targetClasses,
         targetGroups: targetGroups,
-        similarityCode: targetGroups.length > 0 ? targetGroups[0] : null, // KIPRIS APIìš©
-        classification: targetClasses.length > 0 ? targetClasses[0] : null, // KIPRIS APIìš©
+        similarityCode: targetGroups.length > 0 ? targetGroups[0] : null, // KIPRIS API용
+        classification: targetClasses.length > 0 ? targetClasses[0] : null, // KIPRIS API용
         statusFilter: statusFilter,
         topK: 30,
         fetchDetails: true,
@@ -4105,7 +4105,7 @@ TM.closeSettings = function() {
         }
       });
       
-      // ê²°ê³¼ ì €ìž¥
+      // 결과 저장
       TM.currentProject.searchResults.text = results;
       TM.currentProject.searchResults.searchedAt = new Date().toISOString();
       TM.currentProject.searchResults.query = keyword;
@@ -4115,32 +4115,32 @@ TM.closeSettings = function() {
         mediumRisk: results.filter(r => r.riskLevel === 'medium').length
       };
       
-      // UI ì—…ë°ì´íŠ¸
+      // UI 업데이트
       const resultsEl = document.getElementById('tm-search-results');
       if (resultsEl) {
         resultsEl.innerHTML = TM.renderSearchResults(TM.currentProject.searchResults);
       }
       
-      // ê³ ìœ„í—˜ ê²½ê³ 
+      // 고위험 경고
       const highRiskCount = results.filter(r => r.isHighRisk).length;
       if (highRiskCount > 0) {
-        App.showToast(`âš ï¸ ${highRiskCount}ê±´ì˜ ê³ ìœ„í—˜ ìœ ì‚¬ìƒí‘œ ë°œê²¬!`, 'warning');
+        App.showToast(`⚠️ ${highRiskCount}건의 고위험 유사상표 발견!`, 'warning');
       } else {
-        App.showToast(`âœ… ${results.length}ê±´ ê²€ìƒ‰ ì™„ë£Œ (ê³ ìœ„í—˜ ì—†ìŒ)`, 'success');
+        App.showToast(`✅ ${results.length}건 검색 완료 (고위험 없음)`, 'success');
       }
       
     } catch (error) {
-      console.error('[TM] ê²€ìƒ‰ ì‹¤íŒ¨:', error);
-      App.showToast('ê²€ìƒ‰ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 검색 실패:', error);
+      App.showToast('검색 실패: ' + error.message, 'error');
     } finally {
-      // ë²„íŠ¼ ë³µêµ¬
+      // 버튼 복구
       const searchBtn = document.querySelector('[data-action="tm-search-text"]');
       if (searchBtn) {
         searchBtn.disabled = false;
-        searchBtn.innerHTML = 'ðŸ” ìƒí‘œ ê²€ìƒ‰';
+        searchBtn.innerHTML = '🔍 상표 검색';
       }
       
-      // í”„ë¡œê·¸ë ˆìŠ¤ ìˆ¨ê¸°ê¸°
+      // 프로그레스 숨기기
       const progressEl = document.getElementById('tm-search-progress');
       if (progressEl) progressEl.style.display = 'none';
     }
@@ -4149,12 +4149,12 @@ TM.closeSettings = function() {
   TM.searchByFigure = async function() {
     const viennaCode = document.getElementById('tm-vienna-code')?.value?.trim();
     if (!viennaCode) {
-      App.showToast('ë¹„ì—”ë‚˜ ì½”ë“œë¥¼ ìž…ë ¥í•˜ì„¸ìš”.', 'warning');
+      App.showToast('비엔나 코드를 입력하세요.', 'warning');
       return;
     }
     
     try {
-      App.showToast('ë„í˜• ê²€ìƒ‰ ì¤‘...', 'info');
+      App.showToast('도형 검색 중...', 'info');
       
       const results = await TM.callKiprisSearch('figure', {
         viennaCode: viennaCode,
@@ -4171,27 +4171,27 @@ TM.closeSettings = function() {
         resultsEl.innerHTML = TM.renderSearchResults(TM.currentProject.searchResults);
       }
       
-      App.showToast(`${results.length}ê±´ì˜ ë„í˜• ê²€ìƒ‰ ê²°ê³¼ê°€ ìžˆìŠµë‹ˆë‹¤.`, 'success');
+      App.showToast(`${results.length}건의 도형 검색 결과가 있습니다.`, 'success');
       
     } catch (error) {
-      console.error('[TM] ë„í˜• ê²€ìƒ‰ ì‹¤íŒ¨:', error);
-      App.showToast('ê²€ìƒ‰ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 도형 검색 실패:', error);
+      App.showToast('검색 실패: ' + error.message, 'error');
     }
   };
   
   // ============================================================
-  // KIPRIS ì„ í–‰ìƒí‘œ ê²€ìƒ‰ ì—”ì§„ (2-Stage Retrieval + Re-rank)
-  // GPT ì•Œê³ ë¦¬ì¦˜ ê¸°ë°˜ ìµœì í™” êµ¬í˜„
+  // KIPRIS 선행상표 검색 엔진 (2-Stage Retrieval + Re-rank)
+  // GPT 알고리즘 기반 최적화 구현
   // ============================================================
   
-  // ê²€ìƒ‰ ìºì‹œ (24ì‹œê°„ ìœ ì§€)
+  // 검색 캐시 (24시간 유지)
   TM.searchCache = {
     queries: new Map(), // query_hash -> results
     details: new Map(), // applicationNumber -> detail
-    maxAge: 24 * 60 * 60 * 1000 // 24ì‹œê°„
+    maxAge: 24 * 60 * 60 * 1000 // 24시간
   };
   
-  // ìºì‹œ í•´ì‹œ ìƒì„±
+  // 캐시 해시 생성
   TM.getCacheKey = function(type, params) {
     const normalized = JSON.stringify({ type, ...params });
     let hash = 0;
@@ -4202,39 +4202,39 @@ TM.closeSettings = function() {
     return `${type}_${hash}`;
   };
   
-  // ìºì‹œ ì¡°íšŒ
+  // 캐시 조회
   TM.getFromCache = function(key) {
     const cached = TM.searchCache.queries.get(key);
     if (cached && (Date.now() - cached.timestamp < TM.searchCache.maxAge)) {
-      console.log('[KIPRIS] ìºì‹œ ížˆíŠ¸:', key);
+      console.log('[KIPRIS] 캐시 히트:', key);
       return cached.data;
     }
     return null;
   };
   
-  // ìºì‹œ ì €ìž¥
+  // 캐시 저장
   TM.setToCache = function(key, data) {
     TM.searchCache.queries.set(key, { data, timestamp: Date.now() });
   };
   
-  // ====== í…ìŠ¤íŠ¸ ì •ê·œí™” í•¨ìˆ˜ë“¤ ======
+  // ====== 텍스트 정규화 함수들 ======
   
-  // í•œê¸€ ìžëª¨ ë¶„í•´
+  // 한글 자모 분해
   TM.decomposeHangul = function(char) {
     const code = char.charCodeAt(0) - 0xAC00;
     if (code < 0 || code > 11171) return [char];
     const cho = Math.floor(code / 588);
     const jung = Math.floor((code % 588) / 28);
     const jong = code % 28;
-    const CHO = ['ã„±','ã„²','ã„´','ã„·','ã„¸','ã„¹','ã…','ã…‚','ã…ƒ','ã……','ã…†','ã…‡','ã…ˆ','ã…‰','ã…Š','ã…‹','ã…Œ','ã…','ã…Ž'];
-    const JUNG = ['ã…','ã…','ã…‘','ã…’','ã…“','ã…”','ã…•','ã…–','ã…—','ã…˜','ã…™','ã…š','ã…›','ã…œ','ã…','ã…ž','ã…Ÿ','ã… ','ã…¡','ã…¢','ã…£'];
-    const JONG = ['','ã„±','ã„²','ã„³','ã„´','ã„µ','ã„¶','ã„·','ã„¹','ã„º','ã„»','ã„¼','ã„½','ã„¾','ã„¿','ã…€','ã…','ã…‚','ã…„','ã……','ã…†','ã…‡','ã…ˆ','ã…Š','ã…‹','ã…Œ','ã…','ã…Ž'];
+    const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+    const JUNG = ['ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ'];
+    const JONG = ['','ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
     return [CHO[cho], JUNG[jung], JONG[jong]].filter(x => x);
   };
   
-  // ì´ˆì„± ì¶”ì¶œ
+  // 초성 추출
   TM.extractChosung = function(text) {
-    const CHO = ['ã„±','ã„²','ã„´','ã„·','ã„¸','ã„¹','ã…','ã…‚','ã…ƒ','ã……','ã…†','ã…‡','ã…ˆ','ã…‰','ã…Š','ã…‹','ã…Œ','ã…','ã…Ž'];
+    const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
     let result = '';
     for (const char of text) {
       const code = char.charCodeAt(0) - 0xAC00;
@@ -4247,16 +4247,16 @@ TM.closeSettings = function() {
     return result;
   };
   
-  // í…ìŠ¤íŠ¸ ì •ê·œí™” (ê³µë°±/íŠ¹ìˆ˜ë¬¸ìž ì œê±°, ì†Œë¬¸ìž ë³€í™˜)
+  // 텍스트 정규화 (공백/특수문자 제거, 소문자 변환)
   TM.normalizeText = function(text) {
     if (!text) return '';
     return text
       .toLowerCase()
-      .replace(/[\s\-_\.Â·,;:'"!@#$%^&*()+=\[\]{}|\\/<>?~`]/g, '')
+      .replace(/[\s\-_\.·,;:'"!@#$%^&*()+=\[\]{}|\\/<>?~`]/g, '')
       .trim();
   };
   
-  // ë ˆë²¤ìŠˆíƒ€ì¸ íŽ¸ì§‘ ê±°ë¦¬
+  // 레벤슈타인 편집 거리
   TM.levenshteinDistance = function(a, b) {
     if (!a || !b) return Math.max(a?.length || 0, b?.length || 0);
     const matrix = [];
@@ -4282,7 +4282,7 @@ TM.closeSettings = function() {
     return matrix[b.length][a.length];
   };
   
-  // ìžì¹´ë“œ ìœ ì‚¬ë„ (í† í° ê¸°ë°˜)
+  // 자카드 유사도 (토큰 기반)
   TM.jaccardSimilarity = function(a, b) {
     const setA = new Set(a.split(''));
     const setB = new Set(b.split(''));
@@ -4291,7 +4291,7 @@ TM.closeSettings = function() {
     return union.size > 0 ? intersection.size / union.size : 0;
   };
   
-  // ====== ë¬¸ìž ê²€ìƒ‰ ì¿¼ë¦¬ ë¹Œë” (ìµœëŒ€ 4íšŒ) ======
+  // ====== 문자 검색 쿼리 빌더 (최대 4회) ======
   
   TM.buildTextQueries = function(trademark, maxQueries = 4) {
     if (!trademark) return [];
@@ -4299,21 +4299,21 @@ TM.closeSettings = function() {
     const queries = [];
     const added = new Set();
     
-    // Q1: ì›ë¬¸
+    // Q1: 원문
     const q1 = trademark.trim();
     if (q1 && !added.has(q1)) {
       queries.push({ type: 'exact', query: q1 });
       added.add(q1);
     }
     
-    // Q2: ì •ê·œí™” (ê³µë°±/íŠ¹ìˆ˜ë¬¸ìž ì œê±°)
+    // Q2: 정규화 (공백/특수문자 제거)
     const q2 = TM.normalizeText(trademark);
     if (q2 && !added.has(q2) && q2 !== q1) {
       queries.push({ type: 'normalized', query: q2 });
       added.add(q2);
     }
     
-    // Q3: ì ‘ë‘ í™•ìž¥ (2~3ê¸€ìž + ì™€ì¼ë“œì¹´ë“œ)
+    // Q3: 접두 확장 (2~3글자 + 와일드카드)
     if (queries.length < maxQueries && q2.length >= 2) {
       const prefix = q2.slice(0, Math.min(3, q2.length));
       const q3 = prefix + '*';
@@ -4323,10 +4323,10 @@ TM.closeSettings = function() {
       }
     }
     
-    // Q4: í•µì‹¬ í† í° (ë³µí•© ìƒí‘œ ëŒ€ì‘)
+    // Q4: 핵심 토큰 (복합 상표 대응)
     if (queries.length < maxQueries) {
-      // í•œê¸€/ì˜ë¬¸ ë¶„ë¦¬ ì¶”ì¶œ
-      const korean = trademark.replace(/[^ê°€-íž£]/g, '');
+      // 한글/영문 분리 추출
+      const korean = trademark.replace(/[^가-힣]/g, '');
       const english = trademark.replace(/[^a-zA-Z]/g, '').toLowerCase();
       
       if (korean.length >= 2 && !added.has(korean)) {
@@ -4338,11 +4338,11 @@ TM.closeSettings = function() {
       }
     }
     
-    console.log('[KIPRIS] ë¬¸ìž ì¿¼ë¦¬ ìƒì„±:', queries.length, 'ê°œ');
+    console.log('[KIPRIS] 문자 쿼리 생성:', queries.length, '개');
     return queries.slice(0, maxQueries);
   };
   
-  // ====== ë¹„ì—”ë‚˜ ì½”ë“œ ì¿¼ë¦¬ ë¹Œë” (ê³„ì¸µ í™•ìž¥) ======
+  // ====== 비엔나 코드 쿼리 빌더 (계층 확장) ======
   
   TM.buildViennaQueries = function(viennaCodes, maxQueries = 6) {
     if (!viennaCodes || viennaCodes.length === 0) return [];
@@ -4350,7 +4350,7 @@ TM.closeSettings = function() {
     const queries = [];
     const added = new Set();
     
-    // ìž…ë ¥ëœ ì½”ë“œë“¤ì„ ë°°ì—´ë¡œ ì •ê·œí™”
+    // 입력된 코드들을 배열로 정규화
     const codes = Array.isArray(viennaCodes) ? viennaCodes : [viennaCodes];
     
     for (const code of codes) {
@@ -4359,13 +4359,13 @@ TM.closeSettings = function() {
       const cleanCode = code.toString().trim();
       if (!cleanCode) continue;
       
-      // 1. Exact (leaf) ì½”ë“œ ê²€ìƒ‰
+      // 1. Exact (leaf) 코드 검색
       if (!added.has(cleanCode)) {
         queries.push({ type: 'exact', code: cleanCode });
         added.add(cleanCode);
       }
       
-      // 2. ìƒìœ„ (prefix) ì½”ë“œ í™•ëŒ€
+      // 2. 상위 (prefix) 코드 확대
       const parts = cleanCode.split('.');
       if (parts.length >= 2 && queries.length < maxQueries) {
         const parentCode = parts.slice(0, -1).join('.');
@@ -4375,7 +4375,7 @@ TM.closeSettings = function() {
         }
       }
       
-      // 3. ì„¹ì…˜ ì½”ë“œ (ì²« ë²ˆì§¸ ìˆ«ìžë§Œ)
+      // 3. 섹션 코드 (첫 번째 숫자만)
       if (parts.length >= 1 && queries.length < maxQueries) {
         const sectionCode = parts[0];
         if (!added.has(sectionCode) && sectionCode !== cleanCode) {
@@ -4385,20 +4385,20 @@ TM.closeSettings = function() {
       }
     }
     
-    console.log('[KIPRIS] ë¹„ì—”ë‚˜ ì¿¼ë¦¬ ìƒì„±:', queries.length, 'ê°œ');
+    console.log('[KIPRIS] 비엔나 쿼리 생성:', queries.length, '개');
     return queries.slice(0, maxQueries);
   };
   
-  // ====== ë™ì‹œì„± ì œì–´ & ë°±ì˜¤í”„ ======
+  // ====== 동시성 제어 & 백오프 ======
   
   TM.apiQueue = {
     running: 0,
-    maxConcurrent: 3, // ë™ì‹œ ìš”ì²­ 3ê°œ ì œí•œ
+    maxConcurrent: 3, // 동시 요청 3개 제한
     queue: [],
-    retryDelays: [1000, 2000, 4000] // ì§€ìˆ˜ ë°±ì˜¤í”„
+    retryDelays: [1000, 2000, 4000] // 지수 백오프
   };
   
-  // ë™ì‹œì„± ì œí•œëœ API í˜¸ì¶œ
+  // 동시성 제한된 API 호출
   TM.throttledCall = async function(fn) {
     return new Promise((resolve, reject) => {
       const execute = async () => {
@@ -4425,7 +4425,7 @@ TM.closeSettings = function() {
     });
   };
   
-  // ì§€ìˆ˜ ë°±ì˜¤í”„ ìž¬ì‹œë„
+  // 지수 백오프 재시도
   TM.withRetry = async function(fn, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -4433,13 +4433,13 @@ TM.closeSettings = function() {
       } catch (error) {
         if (i === maxRetries - 1) throw error;
         const delay = TM.apiQueue.retryDelays[i] || 4000;
-        console.log(`[KIPRIS] ìž¬ì‹œë„ ${i + 1}/${maxRetries} (${delay}ms í›„)`);
+        console.log(`[KIPRIS] 재시도 ${i + 1}/${maxRetries} (${delay}ms 후)`);
         await new Promise(r => setTimeout(r, delay));
       }
     }
   };
   
-  // ====== ì‹œê°„ì°½ í•„í„° (ìµœê·¼ ì—°ë„ ìš°ì„ ) ======
+  // ====== 시간창 필터 (최근 연도 우선) ======
   
   TM.getYearFilter = function(yearsBack = 5) {
     const now = new Date();
@@ -4450,12 +4450,12 @@ TM.closeSettings = function() {
     };
   };
   
-  // ====== KIPRIS API í˜¸ì¶œ (ë‹¨ì¼) ======
+  // ====== KIPRIS API 호출 (단일) ======
   
   TM.callKiprisAPI = async function(type, params, options = {}) {
     const { useRecent = false, recentYears = 5 } = options;
     
-    // ì‹œê°„ì°½ í•„í„° ì ìš©
+    // 시간창 필터 적용
     if (useRecent) {
       const yearFilter = TM.getYearFilter(recentYears);
       params = { ...params, ...yearFilter };
@@ -4463,64 +4463,64 @@ TM.closeSettings = function() {
     
     const cacheKey = TM.getCacheKey(type, params);
     
-    // ìºì‹œ í™•ì¸
+    // 캐시 확인
     const cached = TM.getFromCache(cacheKey);
     if (cached) return cached;
     
-    console.log('[KIPRIS] API í˜¸ì¶œ ì‹œìž‘:', type, JSON.stringify(params));
+    console.log('[KIPRIS] API 호출 시작:', type, JSON.stringify(params));
     
     try {
-      // App.sb (Supabase) ì¡´ìž¬ ì—¬ë¶€ í™•ì¸
+      // App.sb (Supabase) 존재 여부 확인
       if (!App.sb || !App.sb.functions) {
-        console.warn('[KIPRIS] âš ï¸ Supabase í•¨ìˆ˜ ì—†ìŒ - ì‹œë®¬ë ˆì´ì…˜ ëª¨ë“œ');
-        App.showToast('KIPRIS API ì—°ê²° ì•ˆë¨ (ì‹œë®¬ë ˆì´ì…˜ ëª¨ë“œ)', 'warning');
+        console.warn('[KIPRIS] ⚠️ Supabase 함수 없음 - 시뮬레이션 모드');
+        App.showToast('KIPRIS API 연결 안됨 (시뮬레이션 모드)', 'warning');
         return TM.simulateSearchResults(type, params);
       }
       
-      // Edge Function ì—°ê²° í…ŒìŠ¤íŠ¸ (ì²« í˜¸ì¶œ ì‹œ)
+      // Edge Function 연결 테스트 (첫 호출 시)
       if (!TM._kiprisTestDone) {
         TM._kiprisTestDone = true;
-        console.log('[KIPRIS] Edge Function ì—°ê²° í…ŒìŠ¤íŠ¸...');
+        console.log('[KIPRIS] Edge Function 연결 테스트...');
         try {
           const testResult = await App.sb.functions.invoke('kipris-proxy', {
             body: { type: 'test', params: {}, apiKey: TM.kiprisConfig.apiKey }
           });
-          console.log('[KIPRIS] Edge Function í…ŒìŠ¤íŠ¸ ê²°ê³¼:', testResult);
+          console.log('[KIPRIS] Edge Function 테스트 결과:', testResult);
         } catch (testErr) {
-          console.error('[KIPRIS] âŒ Edge Function ì—°ê²° ì‹¤íŒ¨:', testErr);
+          console.error('[KIPRIS] ❌ Edge Function 연결 실패:', testErr);
         }
       }
       
-      // ë™ì‹œì„± ì œí•œ + ìž¬ì‹œë„ ì ìš©
+      // 동시성 제한 + 재시도 적용
       return await TM.throttledCall(() => TM.withRetry(async () => {
-        const currentKey = TM.kiprisConfig.apiKey || '(ì—†ìŒ)';
+        const currentKey = TM.kiprisConfig.apiKey || '(없음)';
         const defaultKey = 'zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
-        console.log('[KIPRIS] ðŸ“¡ Edge Function í˜¸ì¶œ...');
-        console.log('[KIPRIS] ðŸ”‘ ì‚¬ìš© í‚¤:', currentKey === defaultKey ? 'âš ï¸ ê¸°ë³¸í‚¤' : 'âœ… ì‚¬ìš©ìží‚¤ (' + currentKey.slice(0,8) + '...)');
+        console.log('[KIPRIS] 📡 Edge Function 호출...');
+        console.log('[KIPRIS] 🔑 사용 키:', currentKey === defaultKey ? '⚠️ 기본키' : '✅ 사용자키 (' + currentKey.slice(0,8) + '...)');
         
         const { data, error } = await App.sb.functions.invoke('kipris-proxy', {
           body: { 
             type, 
             params,
-            apiKey: TM.kiprisConfig.apiKey // API í‚¤ ì „ë‹¬
+            apiKey: TM.kiprisConfig.apiKey // API 키 전달
           }
         });
         
-        console.log('[KIPRIS] ì‘ë‹µ:', { data, error });
+        console.log('[KIPRIS] 응답:', { data, error });
         
         if (error) {
-          console.error('[KIPRIS] âŒ Edge Function ì˜¤ë¥˜:', error);
+          console.error('[KIPRIS] ❌ Edge Function 오류:', error);
           throw error;
         }
         
         if (!data) {
-          console.warn('[KIPRIS] âš ï¸ ì‘ë‹µ ë°ì´í„° ì—†ìŒ');
+          console.warn('[KIPRIS] ⚠️ 응답 데이터 없음');
           return TM.simulateSearchResults(type, params);
         }
         
         if (!data.success) {
-          console.warn('[KIPRIS] âš ï¸ API ì‹¤íŒ¨:', data.error || 'Unknown error');
-          // ì—ëŸ¬ ë©”ì‹œì§€ í‘œì‹œ
+          console.warn('[KIPRIS] ⚠️ API 실패:', data.error || 'Unknown error');
+          // 에러 메시지 표시
           if (data.error) {
             App.showToast(`KIPRIS: ${data.error}`, 'warning');
           }
@@ -4529,23 +4529,23 @@ TM.closeSettings = function() {
         
         const results = data.results || [];
         
-        // ìºì‹œ ì €ìž¥
+        // 캐시 저장
         TM.setToCache(cacheKey, results);
         
-        console.log(`[KIPRIS] âœ… ê²€ìƒ‰ ì„±ê³µ: ${results.length}ê±´ (ì´ ${data.totalCount || 0}ê±´)`);
+        console.log(`[KIPRIS] ✅ 검색 성공: ${results.length}건 (총 ${data.totalCount || 0}건)`);
         return results;
       }));
     } catch (error) {
-      console.error('[KIPRIS] âŒ API í˜¸ì¶œ ì‹¤íŒ¨:', error);
-      App.showToast('KIPRIS ê²€ìƒ‰ ì‹¤íŒ¨ - ì‹œë®¬ë ˆì´ì…˜ ê²°ê³¼ í‘œì‹œ', 'warning');
+      console.error('[KIPRIS] ❌ API 호출 실패:', error);
+      App.showToast('KIPRIS 검색 실패 - 시뮬레이션 결과 표시', 'warning');
       return TM.simulateSearchResults(type, params);
     }
   };
   
-  // ====== ìƒì„¸ ì¡°íšŒ (Stage B) ======
+  // ====== 상세 조회 (Stage B) ======
   
   TM.fetchDetailInfo = async function(applicationNumber) {
-    // ìƒì„¸ ìºì‹œ í™•ì¸
+    // 상세 캐시 확인
     const cached = TM.searchCache.details.get(applicationNumber);
     if (cached && (Date.now() - cached.timestamp < 7 * 24 * 60 * 60 * 1000)) {
       return cached.data;
@@ -4556,16 +4556,16 @@ TM.closeSettings = function() {
         body: { 
           type: 'detail', 
           params: { applicationNumber },
-          apiKey: TM.kiprisConfig.apiKey // API í‚¤ ì „ë‹¬
+          apiKey: TM.kiprisConfig.apiKey // API 키 전달
         }
       });
       
       if (error || !data.success) {
-        console.warn('[KIPRIS] ìƒì„¸ ì¡°íšŒ ì‹¤íŒ¨:', applicationNumber);
+        console.warn('[KIPRIS] 상세 조회 실패:', applicationNumber);
         return null;
       }
       
-      // ìƒì„¸ ìºì‹œ ì €ìž¥ (7ì¼)
+      // 상세 캐시 저장 (7일)
       TM.searchCache.details.set(applicationNumber, {
         data: data.result,
         timestamp: Date.now()
@@ -4573,21 +4573,21 @@ TM.closeSettings = function() {
       
       return data.result;
     } catch (error) {
-      console.error('[KIPRIS] ìƒì„¸ ì¡°íšŒ ì˜¤ë¥˜:', error);
+      console.error('[KIPRIS] 상세 조회 오류:', error);
       return null;
     }
   };
   
-  // Top-K ìƒì„¸ ì¡°íšŒ (ë³‘ë ¬, ì œí•œì )
+  // Top-K 상세 조회 (병렬, 제한적)
   TM.fetchDetailsForTopK = async function(results, topK = 30) {
     const top = results.slice(0, topK);
-    console.log(`[KIPRIS] Top ${top.length}ê±´ ìƒì„¸ ì¡°íšŒ ì‹œìž‘`);
+    console.log(`[KIPRIS] Top ${top.length}건 상세 조회 시작`);
     
     const details = await Promise.all(
       top.map(r => TM.fetchDetailInfo(r.applicationNumber))
     );
     
-    // ìƒì„¸ ì •ë³´ ë³‘í•©
+    // 상세 정보 병합
     top.forEach((r, i) => {
       if (details[i]) {
         Object.assign(r, {
@@ -4599,20 +4599,20 @@ TM.closeSettings = function() {
       }
     });
     
-    console.log(`[KIPRIS] ìƒì„¸ ì¡°íšŒ ì™„ë£Œ`);
+    console.log(`[KIPRIS] 상세 조회 완료`);
     return top;
   };
   
-  // ====== Stage A: í›„ë³´ íšŒìˆ˜ (Retrieval) ======
+  // ====== Stage A: 후보 회수 (Retrieval) ======
   
   TM.retrieveCandidates = async function(trademark, viennaCodes, targetClasses, options = {}) {
     const { 
       textBudget = 4, 
       viennaBudget = 6, 
       statusFilter = 'registered',
-      classification = null,     // ìƒí’ˆë¥˜ í•„í„°
-      similarityCode = null,     // ìœ ì‚¬êµ°ì½”ë“œ í•„í„°
-      useRecentFirst = true,  // ìµœê·¼ ì—°ë„ ìš°ì„  ìŠ¤ìº”
+      classification = null,     // 상품류 필터
+      similarityCode = null,     // 유사군코드 필터
+      useRecentFirst = true,  // 최근 연도 우선 스캔
       recentYears = 5
     } = options;
     
@@ -4621,20 +4621,20 @@ TM.closeSettings = function() {
     const SUFFICIENT_THRESHOLD = 50;
     const VIENNA_THRESHOLD = 30;
     
-    // ì§„í–‰ìƒí™© ì½œë°± (UI ì—…ë°ì´íŠ¸ìš©)
+    // 진행상황 콜백 (UI 업데이트용)
     const onProgress = options.onProgress || (() => {});
     let progressStep = 0;
     const totalSteps = textBudget + viennaBudget;
     
-    // ===== A1) ë¬¸ìž ê²€ìƒ‰ (ì ì‘í˜• í™•ìž¥) =====
+    // ===== A1) 문자 검색 (적응형 확장) =====
     if (trademark) {
       const textQueries = TM.buildTextQueries(trademark, textBudget);
       let totalTextHits = 0;
       
-      // 1ë‹¨ê³„: ìµœê·¼ ì—°ë„ ìš°ì„  ìŠ¤ìº”
+      // 1단계: 최근 연도 우선 스캔
       if (useRecentFirst) {
         for (let i = 0; i < Math.min(2, textQueries.length); i++) {
-          onProgress(++progressStep, totalSteps, `ë¬¸ìž ê²€ìƒ‰ (ìµœê·¼ ${recentYears}ë…„)...`);
+          onProgress(++progressStep, totalSteps, `문자 검색 (최근 ${recentYears}년)...`);
           
           const q = textQueries[i];
           const apiParams = {
@@ -4657,7 +4657,7 @@ TM.closeSettings = function() {
             pageNo: 1
           };
           
-          // ìƒí’ˆë¥˜/ìœ ì‚¬êµ°ì½”ë“œ í•„í„° ì¶”ê°€
+          // 상품류/유사군코드 필터 추가
           if (classification) apiParams.classification = classification;
           if (similarityCode) apiParams.similarityCode = similarityCode;
           
@@ -4668,17 +4668,17 @@ TM.closeSettings = function() {
         }
       }
       
-      // 2ë‹¨ê³„: ë¶€ì¡±í•˜ë©´ ì „ì²´ ì—°ë„ í™•ìž¥
+      // 2단계: 부족하면 전체 연도 확장
       if (totalTextHits < SUFFICIENT_THRESHOLD) {
-        console.log('[KIPRIS] ìµœê·¼ ê²°ê³¼ ë¶€ì¡±, ì „ì²´ ì—°ë„ í™•ìž¥');
+        console.log('[KIPRIS] 최근 결과 부족, 전체 연도 확장');
         
         for (let i = 0; i < textQueries.length; i++) {
           if (totalTextHits >= SUFFICIENT_THRESHOLD * 2) {
-            console.log('[KIPRIS] ë¬¸ìž ê²€ìƒ‰ ì¶©ë¶„, ì¶”ê°€ ì¿¼ë¦¬ ìŠ¤í‚µ');
+            console.log('[KIPRIS] 문자 검색 충분, 추가 쿼리 스킵');
             break;
           }
           
-          onProgress(++progressStep, totalSteps, `ë¬¸ìž ê²€ìƒ‰ Q${i + 1}...`);
+          onProgress(++progressStep, totalSteps, `문자 검색 Q${i + 1}...`);
           
           const q = textQueries[i];
           const apiParams = {
@@ -4701,13 +4701,13 @@ TM.closeSettings = function() {
             pageNo: 1
           };
           
-          // ìƒí’ˆë¥˜/ìœ ì‚¬êµ°ì½”ë“œ í•„í„° ì¶”ê°€
+          // 상품류/유사군코드 필터 추가
           if (classification) apiParams.classification = classification;
           if (similarityCode) apiParams.similarityCode = similarityCode;
           
           const results = await TM.callKiprisAPI('text', apiParams);
           
-          // ì¤‘ë³µ ì œê±°í•˜ë©° ì¶”ê°€
+          // 중복 제거하며 추가
           for (const r of results) {
             if (!textResults.find(x => x.applicationNumber === r.applicationNumber)) {
               textResults.push(r);
@@ -4717,10 +4717,10 @@ TM.closeSettings = function() {
         }
       }
       
-      console.log(`[KIPRIS] ë¬¸ìž ê²€ìƒ‰ ì™„ë£Œ: ${textResults.length}ê±´`);
+      console.log(`[KIPRIS] 문자 검색 완료: ${textResults.length}건`);
     }
     
-    // ===== A2) ë¹„ì—”ë‚˜ ê²€ìƒ‰ (ê³„ì¸µí˜• í™•ìž¥) =====
+    // ===== A2) 비엔나 검색 (계층형 확장) =====
     if (viennaCodes && viennaCodes.length > 0) {
       const viennaQueries = TM.buildViennaQueries(viennaCodes, viennaBudget);
       let exactHits = 0;
@@ -4729,13 +4729,13 @@ TM.closeSettings = function() {
       for (let i = 0; i < viennaQueries.length; i++) {
         const q = viennaQueries[i];
         
-        // exact ê²°ê³¼ê°€ ì¶©ë¶„í•˜ë©´ parent/section ìŠ¤í‚µ
+        // exact 결과가 충분하면 parent/section 스킵
         if (q.type !== 'exact' && exactHits >= VIENNA_THRESHOLD) {
-          console.log('[KIPRIS] ë¹„ì—”ë‚˜ exact ì¶©ë¶„, ê³„ì¸µ í™•ìž¥ ìŠ¤í‚µ');
+          console.log('[KIPRIS] 비엔나 exact 충분, 계층 확장 스킵');
           break;
         }
         
-        onProgress(++progressStep, totalSteps, `ë„í˜• ê²€ìƒ‰ (${q.code})...`);
+        onProgress(++progressStep, totalSteps, `도형 검색 (${q.code})...`);
         
         const results = await TM.callKiprisAPI('figure', {
           viennaCode: q.code,
@@ -4744,7 +4744,7 @@ TM.closeSettings = function() {
           numOfRows: 30
         });
         
-        // ì¤‘ë³µ ì œê±°í•˜ë©° ì¶”ê°€
+        // 중복 제거하며 추가
         for (const r of results) {
           if (!viennaResults.find(x => x.applicationNumber === r.applicationNumber)) {
             viennaResults.push(r);
@@ -4754,15 +4754,15 @@ TM.closeSettings = function() {
         }
       }
       
-      console.log(`[KIPRIS] ë¹„ì—”ë‚˜ ê²€ìƒ‰ ì™„ë£Œ: ${viennaResults.length}ê±´`);
+      console.log(`[KIPRIS] 비엔나 검색 완료: ${viennaResults.length}건`);
     }
     
-    // ===== A3) í•©ì¹˜ê¸° & êµì§‘í•© íƒœê¹… =====
+    // ===== A3) 합치기 & 교집합 태깅 =====
     const deduped = new Map();
     const textSet = new Set(textResults.map(r => r.applicationNumber));
     const viennaSet = new Set(viennaResults.map(r => r.applicationNumber));
     
-    // ëª¨ë“  ê²°ê³¼ í•©ì¹˜ê¸°
+    // 모든 결과 합치기
     for (const r of [...textResults, ...viennaResults]) {
       const key = r.applicationNumber;
       if (!deduped.has(key)) {
@@ -4774,23 +4774,23 @@ TM.closeSettings = function() {
       }
     }
     
-    // ì¶œì²˜ íƒœê¹…
+    // 출처 태깅
     for (const [key, r] of deduped) {
       if (textSet.has(key)) r._sources.push('text');
       if (viennaSet.has(key)) r._sources.push('vienna');
       r._isIntersection = r._sources.includes('text') && r._sources.includes('vienna');
     }
     
-    // êµì§‘í•© í†µê³„
+    // 교집합 통계
     const intersectionCount = Array.from(deduped.values()).filter(r => r._isIntersection).length;
-    console.log(`[KIPRIS] Stage A ì™„ë£Œ: ${deduped.size}ê±´ (êµì§‘í•©: ${intersectionCount}ê±´)`);
+    console.log(`[KIPRIS] Stage A 완료: ${deduped.size}건 (교집합: ${intersectionCount}건)`);
     
-    onProgress(totalSteps, totalSteps, 'ê²€ìƒ‰ ì™„ë£Œ');
+    onProgress(totalSteps, totalSteps, '검색 완료');
     
     return Array.from(deduped.values());
   };
   
-  // ====== ìœ ì‚¬ë„ ìŠ¤ì½”ì–´ë§ ======
+  // ====== 유사도 스코어링 ======
   
   TM.calculateTextSimilarity = function(source, target) {
     if (!source || !target) return 0;
@@ -4798,24 +4798,24 @@ TM.closeSettings = function() {
     const normSource = TM.normalizeText(source);
     const normTarget = TM.normalizeText(target);
     
-    // ì™„ì „ ì¼ì¹˜
+    // 완전 일치
     if (normSource === normTarget) return 1.0;
     
-    // íŽ¸ì§‘ ê±°ë¦¬ ê¸°ë°˜
+    // 편집 거리 기반
     const maxLen = Math.max(normSource.length, normTarget.length);
     const editDist = TM.levenshteinDistance(normSource, normTarget);
     const editScore = maxLen > 0 ? 1 - (editDist / maxLen) : 0;
     
-    // ìžì¹´ë“œ ìœ ì‚¬ë„
+    // 자카드 유사도
     const jaccardScore = TM.jaccardSimilarity(normSource, normTarget);
     
-    // ì ‘ë‘/ì ‘ë¯¸ ì¼ì¹˜
+    // 접두/접미 일치
     let prefixScore = 0;
     for (let i = 1; i <= Math.min(normSource.length, normTarget.length); i++) {
       if (normSource.slice(0, i) === normTarget.slice(0, i)) prefixScore = i / maxLen;
     }
     
-    // ì´ˆì„± ìœ ì‚¬ë„ (í•œê¸€)
+    // 초성 유사도 (한글)
     let chosungScore = 0;
     const srcChosung = TM.extractChosung(source);
     const tgtChosung = TM.extractChosung(target);
@@ -4823,7 +4823,7 @@ TM.closeSettings = function() {
       chosungScore = TM.jaccardSimilarity(srcChosung, tgtChosung);
     }
     
-    // ê°€ì¤‘ í‰ê· 
+    // 가중 평균
     return (editScore * 0.4) + (jaccardScore * 0.25) + (prefixScore * 0.2) + (chosungScore * 0.15);
   };
   
@@ -4837,13 +4837,13 @@ TM.closeSettings = function() {
       const srcParts = src.toString().split('.');
       const tgtParts = targetCode.toString().split('.');
       
-      // Exact ì¼ì¹˜
+      // Exact 일치
       if (src === targetCode) {
         maxScore = Math.max(maxScore, 1.0);
         continue;
       }
       
-      // Prefix ì¼ì¹˜ (ìƒìœ„ ì½”ë“œ)
+      // Prefix 일치 (상위 코드)
       let matchDepth = 0;
       for (let i = 0; i < Math.min(srcParts.length, tgtParts.length); i++) {
         if (srcParts[i] === tgtParts[i]) matchDepth++;
@@ -4852,10 +4852,10 @@ TM.closeSettings = function() {
       
       if (matchDepth > 0) {
         const score = matchDepth / Math.max(srcParts.length, tgtParts.length);
-        maxScore = Math.max(maxScore, score * 0.8); // prefixëŠ” 80% ê°€ì¤‘
+        maxScore = Math.max(maxScore, score * 0.8); // prefix는 80% 가중
       }
       
-      // ê°™ì€ ì„¹ì…˜ (ì²« ë²ˆì§¸ ìˆ«ìžë§Œ ì¼ì¹˜)
+      // 같은 섹션 (첫 번째 숫자만 일치)
       if (srcParts[0] === tgtParts[0]) {
         maxScore = Math.max(maxScore, 0.3);
       }
@@ -4868,7 +4868,7 @@ TM.closeSettings = function() {
     let classScore = 0;
     let groupScore = 0;
     
-    // ë‹ˆìŠ¤ë¥˜ êµì§‘í•©
+    // 니스류 교집합
     if (targetClasses && resultClasses) {
       const tgtSet = new Set(targetClasses.map(c => c.toString()));
       const resClasses = resultClasses.toString().split(/[,\s]+/).map(c => c.trim());
@@ -4876,7 +4876,7 @@ TM.closeSettings = function() {
       classScore = intersection.length > 0 ? Math.min(intersection.length / tgtSet.size, 1) : 0;
     }
     
-    // ìœ ì‚¬êµ° ì½”ë“œ êµì§‘í•© (ìžˆìœ¼ë©´ ìµœëŒ€ ê°€ì‚°)
+    // 유사군 코드 교집합 (있으면 최대 가산)
     if (targetGroups && targetGroups.length > 0 && resultGroups) {
       const tgtSet = new Set(targetGroups);
       const resGroups = Array.isArray(resultGroups) ? resultGroups : resultGroups.toString().split(/[,\s]+/);
@@ -4884,24 +4884,24 @@ TM.closeSettings = function() {
       groupScore = intersection.length > 0 ? Math.min(intersection.length / tgtSet.size, 1) : 0;
     }
     
-    // ìœ ì‚¬êµ°ì´ ìžˆìœ¼ë©´ ê°€ì¤‘ì¹˜ ë†’ìž„
+    // 유사군이 있으면 가중치 높임
     return targetGroups && targetGroups.length > 0 
       ? (classScore * 0.3) + (groupScore * 0.7)
       : classScore;
   };
   
   // ============================================================
-  // ìœ ì‚¬êµ° ì¤‘ë³µ ì²´í¬ (ìƒí‘œ ì‹¬ì‚¬ì˜ í•µì‹¬ íŒë‹¨ ê¸°ì¤€)
-  // ìƒí‘œì˜ ìœ ì‚¬ ì—¬ë¶€ëŠ” "ë™ì¼ ìœ ì‚¬êµ° ì½”ë“œ" ë‚´ì—ì„œë§Œ íŒë‹¨ë¨
+  // 유사군 중복 체크 (상표 심사의 핵심 판단 기준)
+  // 상표의 유사 여부는 "동일 유사군 코드" 내에서만 판단됨
   // ============================================================
   
   TM.checkSimilarGroupOverlap = function(targetGroups, resultGroups) {
-    // íƒ€ê²Ÿ ìœ ì‚¬êµ°ì´ ì—†ìœ¼ë©´ ìƒí’ˆë¥˜ ê¸°ì¤€ìœ¼ë¡œë§Œ íŒë‹¨ (ë³´ìˆ˜ì  ì ‘ê·¼)
+    // 타겟 유사군이 없으면 상품류 기준으로만 판단 (보수적 접근)
     if (!targetGroups || targetGroups.length === 0) {
       return { hasOverlap: true, overlapType: 'unknown', overlappingGroups: [] };
     }
     
-    // ê²°ê³¼ ìœ ì‚¬êµ°ì´ ì—†ìœ¼ë©´ (ì•„ì§ ìƒì„¸ ì •ë³´ ë¯¸ì¡°íšŒ)
+    // 결과 유사군이 없으면 (아직 상세 정보 미조회)
     if (!resultGroups) {
       return { hasOverlap: true, overlapType: 'unknown', overlappingGroups: [] };
     }
@@ -4911,13 +4911,13 @@ TM.closeSettings = function() {
       ? resultGroups.map(g => g.trim().toUpperCase())
       : resultGroups.toString().split(/[,\s]+/).map(g => g.trim().toUpperCase()).filter(g => g);
     
-    // ì¤‘ë³µë˜ëŠ” ìœ ì‚¬êµ° ì°¾ê¸°
+    // 중복되는 유사군 찾기
     const overlappingGroups = resGroups.filter(g => tgtSet.has(g));
     
     if (overlappingGroups.length > 0) {
       return { 
         hasOverlap: true, 
-        overlapType: 'exact',  // ì •í™•ížˆ ì¼ì¹˜í•˜ëŠ” ìœ ì‚¬êµ° ìžˆìŒ
+        overlapType: 'exact',  // 정확히 일치하는 유사군 있음
         overlappingGroups,
         overlapCount: overlappingGroups.length,
         totalTargetGroups: tgtSet.size
@@ -4926,145 +4926,145 @@ TM.closeSettings = function() {
     
     return { 
       hasOverlap: false, 
-      overlapType: 'none',  // ìœ ì‚¬êµ° ì¤‘ë³µ ì—†ìŒ = ì¶©ëŒ ì—†ìŒ
+      overlapType: 'none',  // 유사군 중복 없음 = 충돌 없음
       overlappingGroups: [],
       overlapCount: 0,
       totalTargetGroups: tgtSet.size
     };
   };
   
-  // ìœ ì‚¬êµ° ì¤‘ë³µ ì—¬ë¶€ì— ë”°ë¥¸ ë¦¬ìŠ¤í¬ ë ˆë²¨ ê²°ì •
+  // 유사군 중복 여부에 따른 리스크 레벨 결정
   TM.determineRiskLevel = function(hasGroupOverlap, textSimilarity, statusScore) {
-    // â˜… í•µì‹¬ ì›ì¹™: ìœ ì‚¬êµ° ì¤‘ë³µì´ ì—†ìœ¼ë©´ ìƒí‘œëª…ì´ ë™ì¼í•´ë„ ë“±ë¡ ê°€ëŠ¥
+    // ★ 핵심 원칙: 유사군 중복이 없으면 상표명이 동일해도 등록 가능
     if (!hasGroupOverlap) {
       return {
-        level: 'safe',      // ë“±ë¡ ê°€ëŠ¥
+        level: 'safe',      // 등록 가능
         isHighRisk: false,
-        reason: 'ìœ ì‚¬êµ° ë¹„ì¤‘ë³µ (ë“±ë¡ ê°€ëŠ¥)'
+        reason: '유사군 비중복 (등록 가능)'
       };
     }
     
-    // ìœ ì‚¬êµ° ì¤‘ë³µì´ ìžˆëŠ” ê²½ìš°ì—ë§Œ ìƒí‘œëª… ìœ ì‚¬ë„ë¡œ íŒë‹¨
+    // 유사군 중복이 있는 경우에만 상표명 유사도로 판단
     if (textSimilarity >= 0.85) {
       return {
-        level: 'critical',  // ê±°ì ˆ í™•ì‹¤
+        level: 'critical',  // 거절 확실
         isHighRisk: true,
-        reason: 'ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œëª… ë§¤ìš° ìœ ì‚¬ (ê±°ì ˆ ê°€ëŠ¥ì„± ë†’ìŒ)'
+        reason: '유사군 중복 + 상표명 매우 유사 (거절 가능성 높음)'
       };
     }
     
     if (textSimilarity >= 0.70) {
       return {
-        level: 'high',      // ê±°ì ˆ ê°€ëŠ¥ì„± ë†’ìŒ
+        level: 'high',      // 거절 가능성 높음
         isHighRisk: true,
-        reason: 'ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œëª… ìœ ì‚¬ (ì£¼ì˜ í•„ìš”)'
+        reason: '유사군 중복 + 상표명 유사 (주의 필요)'
       };
     }
     
     if (textSimilarity >= 0.50) {
       return {
-        level: 'medium',    // ì‹¬ì‚¬ê´€ íŒë‹¨ì— ë”°ë¼ ë‹¤ë¦„
+        level: 'medium',    // 심사관 판단에 따라 다름
         isHighRisk: false,
-        reason: 'ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œëª… ë‹¤ì†Œ ìœ ì‚¬ (ì‹¬ì‚¬ê´€ íŒë‹¨)'
+        reason: '유사군 중복 + 상표명 다소 유사 (심사관 판단)'
       };
     }
     
-    // ìœ ì‚¬êµ°ì€ ì¤‘ë³µë˜ì§€ë§Œ ìƒí‘œëª…ì´ ë§Žì´ ë‹¤ë¥¸ ê²½ìš°
+    // 유사군은 중복되지만 상표명이 많이 다른 경우
     return {
       level: 'low',
       isHighRisk: false,
-      reason: 'ìœ ì‚¬êµ° ì¤‘ë³µ ìžˆìœ¼ë‚˜ ìƒí‘œëª… ìƒì´'
+      reason: '유사군 중복 있으나 상표명 상이'
     };
   };
   
   TM.calculateStatusScore = function(status) {
     if (!status) return 0.5;
-    if (status.includes('ë“±ë¡')) return 1.0;
-    if (status.includes('ì¶œì›')) return 0.8;
-    if (status.includes('ê³µê³ ')) return 0.7;
-    if (status.includes('ê±°ì ˆ') || status.includes('ì·¨í•˜') || status.includes('ì†Œë©¸')) return 0.2;
+    if (status.includes('등록')) return 1.0;
+    if (status.includes('출원')) return 0.8;
+    if (status.includes('공고')) return 0.7;
+    if (status.includes('거절') || status.includes('취하') || status.includes('소멸')) return 0.2;
     return 0.5;
   };
   
-  // ====== Stage B: ìƒì„¸ ê²€ì¦ & Re-rank ======
+  // ====== Stage B: 상세 검증 & Re-rank ======
   
   TM.rankAndFilter = function(candidates, sourceText, viennaCodes, targetClasses, targetGroups, topK = 200) {
     // ============================================================
-    // ìƒí‘œ ì‹¬ì‚¬ í•µì‹¬ ì›ì¹™: ìœ ì‚¬êµ° êµì§‘í•©ì´ ìžˆì–´ì•¼ë§Œ ìœ ì‚¬ íŒë‹¨
-    // ìœ ì‚¬êµ° êµì§‘í•© ì—†ìŒ â†’ ìƒí‘œëª… ë™ì¼í•´ë„ ë“±ë¡ ê°€ëŠ¥
+    // 상표 심사 핵심 원칙: 유사군 교집합이 있어야만 유사 판단
+    // 유사군 교집합 없음 → 상표명 동일해도 등록 가능
     // ============================================================
     
     for (const r of candidates) {
-      // Step 1: ìœ ì‚¬êµ° êµì§‘í•© ì²´í¬ (ê°€ìž¥ ì¤‘ìš”!)
+      // Step 1: 유사군 교집합 체크 (가장 중요!)
       const groupOverlap = TM.checkSimilarGroupOverlap(targetGroups, r.similarityGroup);
       r._groupOverlap = groupOverlap;
       r._hasGroupOverlap = groupOverlap.hasOverlap;
       r._overlappingGroups = groupOverlap.overlappingGroups || [];
       
-      // Step 2: ë¬¸ìž ìœ ì‚¬ë„ ê³„ì‚° (í•­ìƒ ê³„ì‚° - í‘œì‹œìš©)
+      // Step 2: 문자 유사도 계산 (항상 계산 - 표시용)
       r._scoreText = TM.calculateTextSimilarity(sourceText, r.title || r.trademarkName);
       
-      // Step 3: ë„í˜• ìœ ì‚¬ë„ ê³„ì‚°
+      // Step 3: 도형 유사도 계산
       r._scoreVienna = viennaCodes && r.viennaCode 
         ? TM.calculateViennaSimilarity(viennaCodes, r.viennaCode) 
         : 0;
       
-      // Step 4: ìƒíƒœ ì ìˆ˜ (ë“±ë¡ìƒí‘œê°€ ë” ìœ„í—˜)
+      // Step 4: 상태 점수 (등록상표가 더 위험)
       r._scoreStatus = TM.calculateStatusScore(r.applicationStatus);
       
-      // Step 5: ìµœì¢… ì ìˆ˜ ë° ë¦¬ìŠ¤í¬ ë ˆë²¨ ê²°ì •
+      // Step 5: 최종 점수 및 리스크 레벨 결정
       if (!r._hasGroupOverlap && groupOverlap.overlapType !== 'unknown') {
-        // â˜… ìœ ì‚¬êµ° êµì§‘í•© ì—†ìŒ = ë“±ë¡ ê°€ëŠ¥ (Safe)
+        // ★ 유사군 교집합 없음 = 등록 가능 (Safe)
         r._totalScore = 0;
         r._riskLevel = 'safe';
-        r._riskReason = 'ìœ ì‚¬êµ° ë¹„ì¤‘ë³µ â†’ ë“±ë¡ ê°€ëŠ¥';
+        r._riskReason = '유사군 비중복 → 등록 가능';
         r._isHighRisk = false;
       } else {
-        // â˜… ìœ ì‚¬êµ° êµì§‘í•© ìžˆìŒ = ìƒí‘œëª…/ë„í˜• ìœ ì‚¬ë„ë¡œ íŒë‹¨
-        // ê°€ì¤‘ì¹˜: ë¬¸ìž 45%, ë„í˜• 30%, ìƒíƒœ 25%
+        // ★ 유사군 교집합 있음 = 상표명/도형 유사도로 판단
+        // 가중치: 문자 45%, 도형 30%, 상태 25%
         const combinedScore = (r._scoreText * 0.45) + (r._scoreVienna * 0.30) + (r._scoreStatus * 0.25);
         r._totalScore = combinedScore;
         
-        // êµì§‘í•© + ë¬¸ìž/ë„í˜• ëª¨ë‘ ìœ ì‚¬í•˜ë©´ ì¶”ê°€ ê°€ì¤‘
+        // 교집합 + 문자/도형 모두 유사하면 추가 가중
         if (r._isIntersection) {
           r._totalScore = Math.min(r._totalScore * 1.3, 1.0);
         }
         
-        // ë¦¬ìŠ¤í¬ ë ˆë²¨ ê²°ì • (ìœ ì‚¬êµ° êµì§‘í•©ì´ ìžˆëŠ” ê²½ìš°ì—ë§Œ)
+        // 리스크 레벨 결정 (유사군 교집합이 있는 경우에만)
         const risk = TM.determineRiskLevel(true, r._scoreText, r._scoreStatus);
         r._riskLevel = risk.level;
         r._riskReason = risk.reason;
         r._isHighRisk = risk.isHighRisk;
         
-        // ì¤‘ë³µ ìœ ì‚¬êµ° ì •ë³´ ì¶”ê°€
+        // 중복 유사군 정보 추가
         if (r._overlappingGroups.length > 0) {
-          r._riskReason += ` [ì¤‘ë³µ: ${r._overlappingGroups.join(', ')}]`;
+          r._riskReason += ` [중복: ${r._overlappingGroups.join(', ')}]`;
         }
       }
       
-      // ìƒí’ˆë¥˜ ì¤‘ë³µ ì²´í¬ (ë³´ì¡° ì •ë³´)
+      // 상품류 중복 체크 (보조 정보)
       r._scoreScope = TM.calculateScopeSimilarity(
         targetClasses, targetGroups, 
         r.classificationCode, r.similarityGroup
       );
     }
     
-    // ì •ë ¬: ìœ ì‚¬êµ° ì¤‘ë³µ ìžˆëŠ” ê²ƒ ìš°ì„ , ê·¸ ë‹¤ìŒ ì ìˆ˜ìˆœ
+    // 정렬: 유사군 중복 있는 것 우선, 그 다음 점수순
     candidates.sort((a, b) => {
-      // 1ì°¨: ìœ ì‚¬êµ° ì¤‘ë³µ ì—¬ë¶€ (ì¤‘ë³µ ìžˆëŠ” ê²ƒ ìš°ì„ )
+      // 1차: 유사군 중복 여부 (중복 있는 것 우선)
       if (a._hasGroupOverlap && !b._hasGroupOverlap) return -1;
       if (!a._hasGroupOverlap && b._hasGroupOverlap) return 1;
-      // 2ì°¨: ì ìˆ˜ìˆœ
+      // 2차: 점수순
       return b._totalScore - a._totalScore;
     });
     
-    console.log(`[KIPRIS] ëž­í‚¹ ì™„ë£Œ: Top ${Math.min(topK, candidates.length)}ê±´`);
-    console.log(`[KIPRIS] ìœ ì‚¬êµ° ì¤‘ë³µ: ${candidates.filter(c => c._hasGroupOverlap).length}ê±´`);
+    console.log(`[KIPRIS] 랭킹 완료: Top ${Math.min(topK, candidates.length)}건`);
+    console.log(`[KIPRIS] 유사군 중복: ${candidates.filter(c => c._hasGroupOverlap).length}건`);
     
     return candidates.slice(0, topK);
   };
   
-  // ====== ë©”ì¸ ê²€ìƒ‰ í•¨ìˆ˜ (í†µí•© 2-Stage) ======
+  // ====== 메인 검색 함수 (통합 2-Stage) ======
   
   TM.searchPriorMarks = async function(options = {}) {
     const {
@@ -5072,38 +5072,38 @@ TM.closeSettings = function() {
       viennaCodes = [],
       targetClasses = [],
       targetGroups = [],
-      classification = null,    // KIPRIS APIìš© ìƒí’ˆë¥˜
-      similarityCode = null,    // KIPRIS APIìš© ìœ ì‚¬êµ°ì½”ë“œ
+      classification = null,    // KIPRIS API용 상품류
+      similarityCode = null,    // KIPRIS API용 유사군코드
       statusFilter = 'registered',
       topK = 30,
-      fetchDetails = true,  // Stage B ìƒì„¸ ì¡°íšŒ ì—¬ë¶€
-      onProgress = null     // ì§„í–‰ìƒí™© ì½œë°±
+      fetchDetails = true,  // Stage B 상세 조회 여부
+      onProgress = null     // 진행상황 콜백
     } = options;
     
-    console.log('[KIPRIS] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
-    console.log('[KIPRIS] ì„ í–‰ìƒí‘œ ê²€ìƒ‰ ì‹œìž‘');
-    console.log('[KIPRIS] ìž…ë ¥:', { trademark, viennaCodes, targetClasses: targetClasses.length, targetGroups: targetGroups.length, classification, similarityCode });
-    console.log('[KIPRIS] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
+    console.log('[KIPRIS] ═══════════════════════════════════════');
+    console.log('[KIPRIS] 선행상표 검색 시작');
+    console.log('[KIPRIS] 입력:', { trademark, viennaCodes, targetClasses: targetClasses.length, targetGroups: targetGroups.length, classification, similarityCode });
+    console.log('[KIPRIS] ═══════════════════════════════════════');
     
     try {
-      // ===== Stage A: í›„ë³´ íšŒìˆ˜ =====
+      // ===== Stage A: 후보 회수 =====
       const candidates = await TM.retrieveCandidates(
         trademark, viennaCodes, targetClasses,
         { 
           statusFilter,
-          classification,      // ìƒí’ˆë¥˜ í•„í„° ì „ë‹¬
-          similarityCode,      // ìœ ì‚¬êµ°ì½”ë“œ í•„í„° ì „ë‹¬
+          classification,      // 상품류 필터 전달
+          similarityCode,      // 유사군코드 필터 전달
           onProgress: onProgress ? (step, total, msg) => onProgress(step, total + 2, msg) : null
         }
       );
       
       if (candidates.length === 0) {
-        console.log('[KIPRIS] ê²€ìƒ‰ ê²°ê³¼ ì—†ìŒ');
+        console.log('[KIPRIS] 검색 결과 없음');
         return [];
       }
       
-      // ===== Stage B-1: 1ì°¨ ëž­í‚¹ (K0 = 200) =====
-      onProgress?.(8, 10, 'ìœ ì‚¬ë„ ê³„ì‚° ì¤‘...');
+      // ===== Stage B-1: 1차 랭킹 (K0 = 200) =====
+      onProgress?.(8, 10, '유사도 계산 중...');
       
       const ranked = TM.rankAndFilter(
         candidates, trademark, viennaCodes, 
@@ -5111,40 +5111,40 @@ TM.closeSettings = function() {
         200 // K0
       );
       
-      // êµì§‘í•© í›„ë³´ ìš°ì„  â†’ ìœ ì‚¬êµ° ì¤‘ë³µ ìš°ì„ ìœ¼ë¡œ ë³€ê²½
+      // 교집합 후보 우선 → 유사군 중복 우선으로 변경
       ranked.sort((a, b) => {
-        // 1ì°¨: ìœ ì‚¬êµ° ì¤‘ë³µ ì—¬ë¶€ (ì¤‘ë³µ ìžˆëŠ” ê²ƒ ìš°ì„ )
+        // 1차: 유사군 중복 여부 (중복 있는 것 우선)
         if (a._hasGroupOverlap && !b._hasGroupOverlap) return -1;
         if (!a._hasGroupOverlap && b._hasGroupOverlap) return 1;
-        // 2ì°¨: ì ìˆ˜ìˆœ
+        // 2차: 점수순
         return b._totalScore - a._totalScore;
       });
       
-      // ===== Stage B-2: ìƒì„¸ ì¡°íšŒ (K1 = 30) =====
+      // ===== Stage B-2: 상세 조회 (K1 = 30) =====
       let detailedResults = ranked.slice(0, topK);
       
       if (fetchDetails && detailedResults.length > 0) {
-        onProgress?.(9, 10, 'ìƒì„¸ ì •ë³´ ì¡°íšŒ ì¤‘...');
+        onProgress?.(9, 10, '상세 정보 조회 중...');
         detailedResults = await TM.fetchDetailsForTopK(detailedResults, topK);
         
-        // â˜… ìƒì„¸ ì •ë³´ë¡œ ìœ ì‚¬êµ° êµì§‘í•© ìž¬ê³„ì‚° (í•µì‹¬!)
+        // ★ 상세 정보로 유사군 교집합 재계산 (핵심!)
         for (const r of detailedResults) {
           if (r.similarityGroup) {
-            // ìœ ì‚¬êµ° êµì§‘í•© ìž¬ì²´í¬
+            // 유사군 교집합 재체크
             const groupOverlap = TM.checkSimilarGroupOverlap(targetGroups, r.similarityGroup);
             r._groupOverlap = groupOverlap;
             r._hasGroupOverlap = groupOverlap.hasOverlap;
             r._overlappingGroups = groupOverlap.overlappingGroups || [];
             
-            // ìœ ì‚¬êµ° êµì§‘í•© ì—¬ë¶€ì— ë”°ë¼ ì ìˆ˜ ìž¬ê³„ì‚°
+            // 유사군 교집합 여부에 따라 점수 재계산
             if (!r._hasGroupOverlap && groupOverlap.overlapType !== 'unknown') {
-              // ìœ ì‚¬êµ° ë¹„ì¤‘ë³µ â†’ Safe
+              // 유사군 비중복 → Safe
               r._totalScore = 0;
               r._riskLevel = 'safe';
-              r._riskReason = 'ìœ ì‚¬êµ° ë¹„ì¤‘ë³µ â†’ ë“±ë¡ ê°€ëŠ¥';
+              r._riskReason = '유사군 비중복 → 등록 가능';
               r._isHighRisk = false;
             } else {
-              // ìœ ì‚¬êµ° ì¤‘ë³µ â†’ ìƒí‘œ ìœ ì‚¬ë„ë¡œ íŒë‹¨
+              // 유사군 중복 → 상표 유사도로 판단
               r._totalScore = (r._scoreText * 0.45) + (r._scoreVienna * 0.30) + (r._scoreStatus * 0.25);
               if (r._isIntersection) r._totalScore = Math.min(r._totalScore * 1.3, 1.0);
               
@@ -5154,7 +5154,7 @@ TM.closeSettings = function() {
               r._isHighRisk = risk.isHighRisk;
               
               if (r._overlappingGroups.length > 0) {
-                r._riskReason += ` [ì¤‘ë³µ: ${r._overlappingGroups.join(', ')}]`;
+                r._riskReason += ` [중복: ${r._overlappingGroups.join(', ')}]`;
               }
             }
             
@@ -5165,7 +5165,7 @@ TM.closeSettings = function() {
           }
         }
         
-        // ìµœì¢… ìž¬ì •ë ¬ (ìœ ì‚¬êµ° ì¤‘ë³µ ìš°ì„ )
+        // 최종 재정렬 (유사군 중복 우선)
         detailedResults.sort((a, b) => {
           if (a._hasGroupOverlap && !b._hasGroupOverlap) return -1;
           if (!a._hasGroupOverlap && b._hasGroupOverlap) return 1;
@@ -5173,8 +5173,8 @@ TM.closeSettings = function() {
         });
       }
       
-      // ===== ìµœì¢… ê²°ê³¼ í¬ë§·íŒ… (ìœ ì‚¬êµ° ê¸°ë°˜) =====
-      onProgress?.(10, 10, 'ì™„ë£Œ');
+      // ===== 최종 결과 포맷팅 (유사군 기반) =====
+      onProgress?.(10, 10, '완료');
       
       const results = detailedResults.map((r, idx) => ({
         ...r,
@@ -5186,7 +5186,7 @@ TM.closeSettings = function() {
           scope: Math.round((r._scoreScope || 0) * 100),
           status: Math.round((r._scoreStatus || 0) * 100)
         },
-        // â˜… ìœ ì‚¬êµ° ê¸°ë°˜ ë¦¬ìŠ¤í¬ ì •ë³´
+        // ★ 유사군 기반 리스크 정보
         hasGroupOverlap: r._hasGroupOverlap,
         overlappingGroups: r._overlappingGroups || [],
         isHighRisk: r._isHighRisk || false,
@@ -5194,73 +5194,73 @@ TM.closeSettings = function() {
         riskReason: r._riskReason || TM.generateRiskReason(r, trademark, targetClasses, targetGroups)
       }));
       
-      // í†µê³„ ë¡œê¹…
+      // 통계 로깅
       const groupOverlapCount = results.filter(r => r.hasGroupOverlap).length;
       const highRiskCount = results.filter(r => r.isHighRisk).length;
       
-      console.log('[KIPRIS] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
-      console.log(`[KIPRIS] ìµœì¢… ê²°ê³¼: ${results.length}ê±´`);
-      console.log(`[KIPRIS] ìœ ì‚¬êµ° ì¤‘ë³µ: ${groupOverlapCount}ê±´ (ì‹¤ì§ˆì  ì¶©ëŒ ê°€ëŠ¥)`);
-      console.log(`[KIPRIS] ê³ ìœ„í—˜: ${highRiskCount}ê±´`);
-      console.log(`[KIPRIS] ìœ ì‚¬êµ° ë¹„ì¤‘ë³µ: ${results.length - groupOverlapCount}ê±´ (ë“±ë¡ ê°€ëŠ¥)`);
-      console.log('[KIPRIS] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
+      console.log('[KIPRIS] ═══════════════════════════════════════');
+      console.log(`[KIPRIS] 최종 결과: ${results.length}건`);
+      console.log(`[KIPRIS] 유사군 중복: ${groupOverlapCount}건 (실질적 충돌 가능)`);
+      console.log(`[KIPRIS] 고위험: ${highRiskCount}건`);
+      console.log(`[KIPRIS] 유사군 비중복: ${results.length - groupOverlapCount}건 (등록 가능)`);
+      console.log('[KIPRIS] ═══════════════════════════════════════');
       
       return results;
       
     } catch (error) {
-      console.error('[KIPRIS] ê²€ìƒ‰ ì‹¤íŒ¨:', error);
+      console.error('[KIPRIS] 검색 실패:', error);
       throw error;
     }
   };
   
-  // ìœ„í—˜ ì‚¬ìœ  ìƒì„± (ìœ ì‚¬êµ° ì¤‘ì‹¬ - ìƒí‘œì‹¬ì‚¬ ì›ì¹™ ë°˜ì˜)
+  // 위험 사유 생성 (유사군 중심 - 상표심사 원칙 반영)
   TM.generateRiskReason = function(result, sourceMark, targetClasses, targetGroups) {
-    // â˜… í•µì‹¬: ìœ ì‚¬êµ° ì¤‘ë³µ ì—¬ë¶€ê°€ ê°€ìž¥ ì¤‘ìš”
+    // ★ 핵심: 유사군 중복 여부가 가장 중요
     if (!result._hasGroupOverlap && result._groupOverlap?.overlapType !== 'unknown') {
-      return 'âœ… ìœ ì‚¬êµ° ë¹„ì¤‘ë³µ â†’ ë“±ë¡ ê°€ëŠ¥';
+      return '✅ 유사군 비중복 → 등록 가능';
     }
     
     const reasons = [];
     
-    // ìœ ì‚¬êµ° ì¤‘ë³µ ì •ë³´
+    // 유사군 중복 정보
     if (result._overlappingGroups && result._overlappingGroups.length > 0) {
-      reasons.push(`âš ï¸ ìœ ì‚¬êµ° ì¤‘ë³µ: ${result._overlappingGroups.slice(0, 3).join(', ')}${result._overlappingGroups.length > 3 ? ' ì™¸' : ''}`);
+      reasons.push(`⚠️ 유사군 중복: ${result._overlappingGroups.slice(0, 3).join(', ')}${result._overlappingGroups.length > 3 ? ' 외' : ''}`);
     } else if (result._hasGroupOverlap) {
-      reasons.push('âš ï¸ ìœ ì‚¬êµ° ì¤‘ë³µ');
+      reasons.push('⚠️ 유사군 중복');
     }
     
-    // ë¬¸ìž ìœ ì‚¬ë„ (ìœ ì‚¬êµ° ì¤‘ë³µì´ ìžˆëŠ” ê²½ìš°ì—ë§Œ ì˜ë¯¸ìžˆìŒ)
+    // 문자 유사도 (유사군 중복이 있는 경우에만 의미있음)
     if (result._scoreText >= 0.85) {
-      reasons.push('ìƒí‘œëª… ë§¤ìš° ìœ ì‚¬ (ê±°ì ˆ ê°€ëŠ¥ì„± ë†’ìŒ)');
+      reasons.push('상표명 매우 유사 (거절 가능성 높음)');
     } else if (result._scoreText >= 0.70) {
-      reasons.push('ìƒí‘œëª… ìœ ì‚¬ (ì£¼ì˜ í•„ìš”)');
+      reasons.push('상표명 유사 (주의 필요)');
     } else if (result._scoreText >= 0.50) {
-      reasons.push('ìƒí‘œëª… ë‹¤ì†Œ ìœ ì‚¬');
+      reasons.push('상표명 다소 유사');
     }
     
-    // ë„í˜• ìœ ì‚¬
+    // 도형 유사
     if (result._scoreVienna >= 0.7) {
-      reasons.push('ë„í˜• ìœ ì‚¬');
+      reasons.push('도형 유사');
     }
     
-    // ìƒíƒœ
-    if (result.applicationStatus?.includes('ë“±ë¡')) {
-      reasons.push('ë“±ë¡ìƒí‘œ');
-    } else if (result.applicationStatus?.includes('ì¶œì›')) {
-      reasons.push('ì¶œì›ì¤‘');
+    // 상태
+    if (result.applicationStatus?.includes('등록')) {
+      reasons.push('등록상표');
+    } else if (result.applicationStatus?.includes('출원')) {
+      reasons.push('출원중');
     }
     
     if (reasons.length === 0) {
-      return result._riskLevel === 'safe' ? 'ë“±ë¡ ê°€ëŠ¥' : 'ì‹¬ì‚¬ê´€ íŒë‹¨ í•„ìš”';
+      return result._riskLevel === 'safe' ? '등록 가능' : '심사관 판단 필요';
     }
     
-    return reasons.join(' Â· ');
+    return reasons.join(' · ');
   };
   
-  // ====== ë ˆê±°ì‹œ í˜¸í™˜ í•¨ìˆ˜ ======
+  // ====== 레거시 호환 함수 ======
   
   TM.callKiprisSearch = async function(type, params) {
-    console.log('[KIPRIS] ë ˆê±°ì‹œ í˜¸ì¶œ:', type, params);
+    console.log('[KIPRIS] 레거시 호출:', type, params);
     
     if (type === 'text') {
       const results = await TM.searchPriorMarks({
@@ -5281,24 +5281,24 @@ TM.closeSettings = function() {
       return results;
     }
     
-    // í´ë°±: ì§ì ‘ API í˜¸ì¶œ
+    // 폴백: 직접 API 호출
     return TM.callKiprisAPI(type, params);
   };
   
-  // ì‹œë®¬ë ˆì´ì…˜ ë°ì´í„° (API ì‹¤íŒ¨ ì‹œ)
+  // 시뮬레이션 데이터 (API 실패 시)
   TM.simulateSearchResults = function(type, params) {
-    const keyword = params.trademarkName || params.viennaCode || 'í…ŒìŠ¤íŠ¸';
+    const keyword = params.trademarkName || params.viennaCode || '테스트';
     
     return [
       {
         applicationNumber: '40-2024-0001234',
         applicationDate: '2024-01-15',
         registrationNumber: '40-1234567',
-        title: keyword + ' (ìœ ì‚¬ìƒí‘œ1)',
-        applicationStatus: 'ë“±ë¡',
+        title: keyword + ' (유사상표1)',
+        applicationStatus: '등록',
         classificationCode: '09, 42',
         viennaCode: '26.04.01',
-        applicantName: 'í…ŒìŠ¤íŠ¸íšŒì‚¬',
+        applicantName: '테스트회사',
         drawing: null,
         similarityScore: 85,
         isHighRisk: true
@@ -5307,10 +5307,10 @@ TM.closeSettings = function() {
         applicationNumber: '40-2024-0005678',
         applicationDate: '2024-03-20',
         title: keyword + 'Plus',
-        applicationStatus: 'ì¶œì›',
+        applicationStatus: '출원',
         classificationCode: '09',
         viennaCode: '26.04.02',
-        applicantName: 'ì˜ˆì‹œê¸°ì—…',
+        applicantName: '예시기업',
         drawing: null,
         similarityScore: 72,
         isHighRisk: false
@@ -5319,11 +5319,11 @@ TM.closeSettings = function() {
         applicationNumber: '40-2023-0098765',
         applicationDate: '2023-11-10',
         registrationNumber: '40-9876543',
-        title: 'ìŠˆí¼' + keyword,
-        applicationStatus: 'ë“±ë¡',
+        title: '슈퍼' + keyword,
+        applicationStatus: '등록',
         classificationCode: '35, 42',
         viennaCode: '26.04.01',
-        applicantName: '(ì£¼)ë§ˆì¼€íŒ…',
+        applicantName: '(주)마케팅',
         drawing: null,
         similarityScore: 65,
         isHighRisk: false
@@ -5332,7 +5332,7 @@ TM.closeSettings = function() {
   };
 
   // ============================================================
-  // Step 4: ìœ ì‚¬ë„ í‰ê°€
+  // Step 4: 유사도 평가
   // ============================================================
   
   TM.renderStep4_Similarity = function(container) {
@@ -5340,7 +5340,7 @@ TM.closeSettings = function() {
     const evaluations = p.similarityEvaluations || [];
     const allSearchResults = [...(p.searchResults.text || []), ...(p.searchResults.figure || [])].slice(0, 10);
     
-    // KIPRIS API í‚¤ í™•ì¸
+    // KIPRIS API 키 확인
     const apiKey = TM.kiprisConfig?.apiKey || '';
     const defaultKey = 'zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
     const hasCustomApiKey = apiKey && apiKey !== defaultKey;
@@ -5348,20 +5348,20 @@ TM.closeSettings = function() {
     const apiKeyWarning = !hasCustomApiKey ? `
       <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px;">
         <div style="display: flex; align-items: flex-start; gap: 12px;">
-          <span style="font-size: 24px;">âš ï¸</span>
+          <span style="font-size: 24px;">⚠️</span>
           <div>
-            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #92400e;">KIPRIS API í‚¤ê°€ ì„¤ì •ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤</h4>
+            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #92400e;">KIPRIS API 키가 설정되지 않았습니다</h4>
             <p style="margin: 0 0 10px 0; font-size: 13px; color: #a16207; line-height: 1.5;">
-              ì„ í–‰ìƒí‘œ ê²€ìƒ‰ì„ ìœ„í•´ ê°œì¸ API í‚¤ê°€ í•„ìš”í•©ë‹ˆë‹¤. ê¸°ë³¸ í‚¤ëŠ” í˜¸ì¶œ ì œí•œì— ê±¸ë¦´ ìˆ˜ ìžˆìŠµë‹ˆë‹¤.
+              선행상표 검색을 위해 개인 API 키가 필요합니다. 기본 키는 호출 제한에 걸릴 수 있습니다.
             </p>
             <div style="display: flex; gap: 12px; align-items: center;">
               <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" 
                  style="font-size: 12px; color: #d97706; text-decoration: underline;">
-                ðŸ‘‰ KIPRIS Plusì—ì„œ ë¬´ë£Œ API í‚¤ ë°œê¸‰ë°›ê¸°
+                👉 KIPRIS Plus에서 무료 API 키 발급받기
               </a>
               <button class="btn btn-sm" onclick="openProfileSettings()" 
                       style="padding: 4px 12px; font-size: 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                ì„¤ì •ì—ì„œ ìž…ë ¥
+                설정에서 입력
               </button>
             </div>
           </div>
@@ -5369,35 +5369,35 @@ TM.closeSettings = function() {
       </div>
     ` : `
       <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
-        <span>âœ…</span>
-        <span style="font-size: 13px; color: #166534;">KIPRIS API í‚¤ ì„¤ì •ë¨</span>
+        <span>✅</span>
+        <span style="font-size: 13px; color: #166534;">KIPRIS API 키 설정됨</span>
       </div>
     `;
     
     container.innerHTML = `
       <div class="tm-step-header">
-        <h3>âš–ï¸ ìœ ì‚¬ë„ í‰ê°€</h3>
+        <h3>⚖️ 유사도 평가</h3>
       </div>
       
       ${apiKeyWarning}
       
       ${allSearchResults.length === 0 ? `
         <div class="tm-empty-state" style="padding: 60px;">
-          <div class="icon">ðŸ”</div>
-          <h4>ì„ í–‰ìƒí‘œ ê²€ìƒ‰ì´ í•„ìš”í•©ë‹ˆë‹¤</h4>
-          <p>ë¨¼ì € ì„ í–‰ìƒí‘œ ê²€ìƒ‰ì„ ì‹¤í–‰í•œ í›„ ìœ ì‚¬ë„ë¥¼ í‰ê°€í•˜ì„¸ìš”.</p>
+          <div class="icon">🔍</div>
+          <h4>선행상표 검색이 필요합니다</h4>
+          <p>먼저 선행상표 검색을 실행한 후 유사도를 평가하세요.</p>
           <button class="btn btn-primary" data-action="tm-goto-step" data-step="3">
-            ì„ í–‰ìƒí‘œ ê²€ìƒ‰ â†’
+            선행상표 검색 →
           </button>
         </div>
       ` : `
-        <!-- AI í‰ê°€ ì»¨íŠ¸ë¡¤ -->
+        <!-- AI 평가 컨트롤 -->
         <div class="tm-eval-control-panel">
           <div class="tm-eval-control-left">
             <button class="btn btn-primary btn-lg" id="tm-eval-all-btn" data-action="tm-evaluate-all-similarity">
-              ðŸ¤– ì „ì²´ AI í‰ê°€ ì‹¤í–‰
+              🤖 전체 AI 평가 실행
             </button>
-            <p class="tm-eval-hint">ì„ í–‰ìƒí‘œ ${allSearchResults.length}ê±´ì— ëŒ€í•´ ì™¸ê´€Â·í˜¸ì¹­Â·ê´€ë… ìœ ì‚¬ë„ë¥¼ AIê°€ ì¼ê´„ ë¶„ì„í•©ë‹ˆë‹¤.</p>
+            <p class="tm-eval-hint">선행상표 ${allSearchResults.length}건에 대해 외관·호칭·관념 유사도를 AI가 일괄 분석합니다.</p>
           </div>
           <div class="tm-eval-progress-wrap" id="tm-eval-progress" style="display: none;">
             <div class="tm-progress-bar">
@@ -5407,7 +5407,7 @@ TM.closeSettings = function() {
           </div>
         </div>
         
-        <!-- ì„ í–‰ìƒí‘œ ê·¸ë¦¬ë“œ -->
+        <!-- 선행상표 그리드 -->
         <div class="tm-eval-grid">
           ${allSearchResults.map((r, idx) => {
             const evaluated = evaluations.find(e => e.targetId === r.applicationNumber);
@@ -5415,25 +5415,25 @@ TM.closeSettings = function() {
               <div class="tm-eval-card-mini ${evaluated ? 'evaluated ' + evaluated.overall : ''}">
                 <div class="tm-eval-card-num">${idx + 1}</div>
                 <div class="tm-eval-card-content">
-                  <div class="tm-eval-card-name">${TM.escapeHtml(r.title || r.trademarkName || '(ëª…ì¹­ì—†ìŒ)')}</div>
+                  <div class="tm-eval-card-name">${TM.escapeHtml(r.title || r.trademarkName || '(명칭없음)')}</div>
                   <div class="tm-eval-card-appno">${r.applicationNumber}</div>
                   ${evaluated ? `
                     <div class="tm-eval-scores-mini">
-                      <span class="tm-score-mini ${evaluated.appearance}">ì™¸ê´€</span>
-                      <span class="tm-score-mini ${evaluated.pronunciation}">í˜¸ì¹­</span>
-                      <span class="tm-score-mini ${evaluated.concept}">ê´€ë…</span>
+                      <span class="tm-score-mini ${evaluated.appearance}">외관</span>
+                      <span class="tm-score-mini ${evaluated.pronunciation}">호칭</span>
+                      <span class="tm-score-mini ${evaluated.concept}">관념</span>
                     </div>
                   ` : ''}
                 </div>
                 <div class="tm-eval-card-status">
                   ${evaluated ? `
                     <span class="tm-eval-result-badge ${evaluated.overall}">
-                      ${evaluated.overall === 'high' ? 'ìœ ì‚¬' : evaluated.overall === 'medium' ? 'ì£¼ì˜' : 'ë¹„ìœ ì‚¬'}
+                      ${evaluated.overall === 'high' ? '유사' : evaluated.overall === 'medium' ? '주의' : '비유사'}
                     </span>
                   ` : `
                     <button class="btn btn-sm btn-outline" 
                             data-action="tm-evaluate-similarity" 
-                            data-target-id="${r.applicationNumber}">í‰ê°€</button>
+                            data-target-id="${r.applicationNumber}">평가</button>
                   `}
                 </div>
               </div>
@@ -5441,32 +5441,32 @@ TM.closeSettings = function() {
           }).join('')}
         </div>
         
-        <!-- í‰ê°€ ê²°ê³¼ ìƒì„¸ (ì•„ì½”ë””ì–¸) -->
+        <!-- 평가 결과 상세 (아코디언) -->
         ${evaluations.length > 0 ? `
           <div class="tm-eval-detail-section">
-            <h4>ðŸ“Š í‰ê°€ ê²°ê³¼ ìƒì„¸ <span class="tm-badge">${evaluations.length}ê±´</span></h4>
+            <h4>📊 평가 결과 상세 <span class="tm-badge">${evaluations.length}건</span></h4>
             <div class="tm-eval-details-list">
               ${evaluations.map(e => `
                 <details class="tm-eval-detail-item ${e.overall}">
                   <summary>
                     <span class="tm-eval-detail-name">${TM.escapeHtml(e.targetName || e.targetId)}</span>
                     <span class="tm-eval-detail-badge ${e.overall}">
-                      ${e.overall === 'high' ? 'ë†’ìŒ (ìœ ì‚¬)' : e.overall === 'medium' ? 'ì¤‘ê°„ (ì£¼ì˜)' : 'ë‚®ìŒ (ë¹„ìœ ì‚¬)'}
+                      ${e.overall === 'high' ? '높음 (유사)' : e.overall === 'medium' ? '중간 (주의)' : '낮음 (비유사)'}
                     </span>
                   </summary>
                   <div class="tm-eval-detail-content">
                     <div class="tm-eval-scores-row">
                       <div class="tm-eval-score-box ${e.appearance}">
-                        <div class="score-label">ì™¸ê´€</div>
-                        <div class="score-value">${e.appearance === 'high' ? 'ìœ ì‚¬' : e.appearance === 'medium' ? 'ë³´í†µ' : 'ìƒì´'}</div>
+                        <div class="score-label">외관</div>
+                        <div class="score-value">${e.appearance === 'high' ? '유사' : e.appearance === 'medium' ? '보통' : '상이'}</div>
                       </div>
                       <div class="tm-eval-score-box ${e.pronunciation}">
-                        <div class="score-label">í˜¸ì¹­</div>
-                        <div class="score-value">${e.pronunciation === 'high' ? 'ìœ ì‚¬' : e.pronunciation === 'medium' ? 'ë³´í†µ' : 'ìƒì´'}</div>
+                        <div class="score-label">호칭</div>
+                        <div class="score-value">${e.pronunciation === 'high' ? '유사' : e.pronunciation === 'medium' ? '보통' : '상이'}</div>
                       </div>
                       <div class="tm-eval-score-box ${e.concept}">
-                        <div class="score-label">ê´€ë…</div>
-                        <div class="score-value">${e.concept === 'high' ? 'ìœ ì‚¬' : e.concept === 'medium' ? 'ë³´í†µ' : 'ìƒì´'}</div>
+                        <div class="score-label">관념</div>
+                        <div class="score-value">${e.concept === 'high' ? '유사' : e.concept === 'medium' ? '보통' : '상이'}</div>
                       </div>
                     </div>
                     ${e.notes ? `<div class="tm-eval-notes">${TM.escapeHtml(e.notes)}</div>` : ''}
@@ -5482,9 +5482,9 @@ TM.closeSettings = function() {
   
   TM.getSimilarityLabel = function(level) {
     const labels = {
-      high: 'ë†’ìŒ (ìœ ì‚¬)',
-      medium: 'ì¤‘ê°„ (ì£¼ì˜)',
-      low: 'ë‚®ìŒ (ë¹„ìœ ì‚¬)'
+      high: '높음 (유사)',
+      medium: '중간 (주의)',
+      low: '낮음 (비유사)'
     };
     return labels[level] || level;
   };
@@ -5504,22 +5504,22 @@ TM.closeSettings = function() {
         
         <div class="tm-eval-scores-grid">
           <div class="tm-eval-score-item">
-            <div class="tm-score-label">ì™¸ê´€</div>
+            <div class="tm-score-label">외관</div>
             <div class="tm-score-value ${evaluation.appearance}">${TM.getSimilarityLabel(evaluation.appearance)}</div>
           </div>
           <div class="tm-eval-score-item">
-            <div class="tm-score-label">í˜¸ì¹­</div>
+            <div class="tm-score-label">호칭</div>
             <div class="tm-score-value ${evaluation.pronunciation}">${TM.getSimilarityLabel(evaluation.pronunciation)}</div>
           </div>
           <div class="tm-eval-score-item">
-            <div class="tm-score-label">ê´€ë…</div>
+            <div class="tm-score-label">관념</div>
             <div class="tm-score-value ${evaluation.concept}">${TM.getSimilarityLabel(evaluation.concept)}</div>
           </div>
         </div>
         
         ${evaluation.notes ? `
           <div class="tm-eval-notes-box">
-            <div class="tm-notes-title">ðŸ’¡ í‰ê°€ ê·¼ê±°</div>
+            <div class="tm-notes-title">💡 평가 근거</div>
             <p class="tm-notes-content">${TM.escapeHtml(evaluation.notes)}</p>
           </div>
         ` : ''}
@@ -5533,51 +5533,51 @@ TM.closeSettings = function() {
     const target = allResults.find(r => r.applicationNumber === targetId);
     
     if (!target) {
-      App.showToast('í‰ê°€ ëŒ€ìƒì„ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.', 'error');
+      App.showToast('평가 대상을 찾을 수 없습니다.', 'error');
       return;
     }
     
     try {
-      App.showToast('AI ìœ ì‚¬ë„ í‰ê°€ ì¤‘...', 'info');
+      App.showToast('AI 유사도 평가 중...', 'info');
       
-      const prompt = `ë‹¹ì‹ ì€ ìƒí‘œ ìœ ì‚¬ë„ í‰ê°€ ì „ë¬¸ê°€ìž…ë‹ˆë‹¤. ë‹¤ìŒ ë‘ ìƒí‘œì˜ ìœ ì‚¬ë„ë¥¼ í‰ê°€í•˜ì„¸ìš”.
+      const prompt = `당신은 상표 유사도 평가 전문가입니다. 다음 두 상표의 유사도를 평가하세요.
 
-[ì¶œì› ìƒí‘œ]
-- ëª…ì¹­: ${p.trademarkName}
-- ì˜ë¬¸: ${p.trademarkNameEn || 'ì—†ìŒ'}
-- ìœ í˜•: ${TM.getTypeLabel(p.trademarkType)}
+[출원 상표]
+- 명칭: ${p.trademarkName}
+- 영문: ${p.trademarkNameEn || '없음'}
+- 유형: ${TM.getTypeLabel(p.trademarkType)}
 
-[ì„ í–‰ ìƒí‘œ]
-- ëª…ì¹­: ${target.title || target.trademarkName}
-- ì¶œì›ë²ˆí˜¸: ${target.applicationNumber}
-- ìƒíƒœ: ${target.applicationStatus}
-- ì§€ì •ìƒí’ˆë¥˜: ${target.classificationCode || 'ë¯¸ìƒ'}
+[선행 상표]
+- 명칭: ${target.title || target.trademarkName}
+- 출원번호: ${target.applicationNumber}
+- 상태: ${target.applicationStatus}
+- 지정상품류: ${target.classificationCode || '미상'}
 
-ë‹¤ìŒ í•­ëª©ì„ í‰ê°€í•˜ê³  JSON í˜•ì‹ìœ¼ë¡œ ì‘ë‹µí•˜ì„¸ìš”:
+다음 항목을 평가하고 JSON 형식으로 응답하세요:
 
-1. ì™¸ê´€ ìœ ì‚¬ë„ (appearance): ì‹œê°ì  ìœ ì‚¬ì„±
-2. í˜¸ì¹­ ìœ ì‚¬ë„ (pronunciation): ë°œìŒì˜ ìœ ì‚¬ì„±
-3. ê´€ë… ìœ ì‚¬ë„ (concept): ì˜ë¯¸ì  ìœ ì‚¬ì„±
-4. ì¢…í•© íŒë‹¨ (overall): ì „ì²´ì ì¸ ìœ ì‚¬ ì—¬ë¶€
+1. 외관 유사도 (appearance): 시각적 유사성
+2. 호칭 유사도 (pronunciation): 발음의 유사성
+3. 관념 유사도 (concept): 의미적 유사성
+4. 종합 판단 (overall): 전체적인 유사 여부
 
-ê° í•­ëª©ì€ "high" (ìœ ì‚¬), "medium" (ì£¼ì˜ í•„ìš”), "low" (ë¹„ìœ ì‚¬) ì¤‘ í•˜ë‚˜ë¡œ í‰ê°€í•˜ì„¸ìš”.
-ë˜í•œ í‰ê°€ ê·¼ê±°ë¥¼ ê°„ëžµížˆ ìž‘ì„±í•˜ì„¸ìš”.
+각 항목은 "high" (유사), "medium" (주의 필요), "low" (비유사) 중 하나로 평가하세요.
+또한 평가 근거를 간략히 작성하세요.
 
-ì‘ë‹µ í˜•ì‹:
+응답 형식:
 {
   "appearance": "high|medium|low",
   "pronunciation": "high|medium|low", 
   "concept": "high|medium|low",
   "overall": "high|medium|low",
-  "notes": "í‰ê°€ ê·¼ê±° ì„¤ëª…"
+  "notes": "평가 근거 설명"
 }`;
 
       const response = await App.callClaude(prompt, 1000);
       
-      // JSON íŒŒì‹±
+      // JSON 파싱
       const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('AI ì‘ë‹µì„ íŒŒì‹±í•  ìˆ˜ ì—†ìŠµë‹ˆë‹¤.');
+        throw new Error('AI 응답을 파싱할 수 없습니다.');
       }
       
       const evaluation = JSON.parse(jsonMatch[0]);
@@ -5585,7 +5585,7 @@ TM.closeSettings = function() {
       evaluation.targetName = target.title || target.trademarkName;
       evaluation.evaluatedAt = new Date().toISOString();
       
-      // ê¸°ì¡´ í‰ê°€ ì—…ë°ì´íŠ¸ ë˜ëŠ” ì¶”ê°€
+      // 기존 평가 업데이트 또는 추가
       const existingIndex = p.similarityEvaluations.findIndex(e => e.targetId === targetId);
       if (existingIndex >= 0) {
         p.similarityEvaluations[existingIndex] = evaluation;
@@ -5594,11 +5594,11 @@ TM.closeSettings = function() {
       }
       
       TM.renderCurrentStep();
-      // ê°œë³„ í‰ê°€ ì‹œ í† ìŠ¤íŠ¸ ì œê±° (ì „ì²´ í‰ê°€ì—ì„œ ì¤‘ë³µ ë°©ì§€)
+      // 개별 평가 시 토스트 제거 (전체 평가에서 중복 방지)
       
     } catch (error) {
-      console.error('[TM] ìœ ì‚¬ë„ í‰ê°€ ì‹¤íŒ¨:', error);
-      App.showToast('í‰ê°€ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 유사도 평가 실패:', error);
+      App.showToast('평가 실패: ' + error.message, 'error');
     }
   };
   
@@ -5607,11 +5607,11 @@ TM.closeSettings = function() {
     const allResults = [...(p.searchResults.text || []), ...(p.searchResults.figure || [])].slice(0, 10);
     
     if (allResults.length === 0) {
-      App.showToast('í‰ê°€í•  ì„ í–‰ìƒí‘œê°€ ì—†ìŠµë‹ˆë‹¤.', 'warning');
+      App.showToast('평가할 선행상표가 없습니다.', 'warning');
       return;
     }
     
-    // UI ì—…ë°ì´íŠ¸ - í”„ë¡œê·¸ë ˆìŠ¤ ë°” í‘œì‹œ
+    // UI 업데이트 - 프로그레스 바 표시
     const btn = document.getElementById('tm-eval-all-btn');
     const progressEl = document.getElementById('tm-eval-progress');
     const progressFill = document.getElementById('tm-progress-fill');
@@ -5619,7 +5619,7 @@ TM.closeSettings = function() {
     
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = 'â³ í‰ê°€ ì¤‘...';
+      btn.innerHTML = '⏳ 평가 중...';
     }
     if (progressEl) progressEl.style.display = 'flex';
     
@@ -5631,29 +5631,29 @@ TM.closeSettings = function() {
         await TM.evaluateSimilarityQuiet(target.applicationNumber);
         completed++;
         
-        // í”„ë¡œê·¸ë ˆìŠ¤ ì—…ë°ì´íŠ¸
+        // 프로그레스 업데이트
         if (progressFill) progressFill.style.width = `${(completed / total) * 100}%`;
         if (progressText) progressText.textContent = `${completed} / ${total}`;
         
       } catch (error) {
-        console.error('[TM] ê°œë³„ í‰ê°€ ì‹¤íŒ¨:', error);
+        console.error('[TM] 개별 평가 실패:', error);
       }
-      // Rate limit ë°©ì§€
+      // Rate limit 방지
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
-    // ì™„ë£Œ
+    // 완료
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = 'ðŸ¤– ì „ì²´ AI í‰ê°€ ì‹¤í–‰';
+      btn.innerHTML = '🤖 전체 AI 평가 실행';
     }
     if (progressEl) progressEl.style.display = 'none';
     
     TM.renderCurrentStep();
-    App.showToast(`ì „ì²´ ${completed}ê±´ ìœ ì‚¬ë„ í‰ê°€ ì™„ë£Œ!`, 'success');
+    App.showToast(`전체 ${completed}건 유사도 평가 완료!`, 'success');
   };
   
-  // í† ìŠ¤íŠ¸ ì—†ì´ ì¡°ìš©ížˆ í‰ê°€í•˜ëŠ” ë²„ì „
+  // 토스트 없이 조용히 평가하는 버전
   TM.evaluateSimilarityQuiet = async function(targetId) {
     const p = TM.currentProject;
     const allResults = [...(p.searchResults.text || []), ...(p.searchResults.figure || [])];
@@ -5661,40 +5661,40 @@ TM.closeSettings = function() {
     
     if (!target) return;
     
-    const prompt = `ë‹¹ì‹ ì€ ìƒí‘œ ìœ ì‚¬ë„ í‰ê°€ ì „ë¬¸ê°€ìž…ë‹ˆë‹¤. ë‹¤ìŒ ë‘ ìƒí‘œì˜ ìœ ì‚¬ë„ë¥¼ í‰ê°€í•˜ì„¸ìš”.
+    const prompt = `당신은 상표 유사도 평가 전문가입니다. 다음 두 상표의 유사도를 평가하세요.
 
-[ì¶œì›ìƒí‘œ]
-- ìƒí‘œëª…: ${p.trademarkName}
-- ì˜ë¬¸ëª…: ${p.trademarkNameEn || 'ì—†ìŒ'}
-- ìƒí‘œìœ í˜•: ${TM.getTypeLabel(p.trademarkType)}
+[출원상표]
+- 상표명: ${p.trademarkName}
+- 영문명: ${p.trademarkNameEn || '없음'}
+- 상표유형: ${TM.getTypeLabel(p.trademarkType)}
 
-[ì„ í–‰ìƒí‘œ]
-- ìƒí‘œëª…: ${target.title || target.trademarkName || ''}
-- ì¶œì›ë²ˆí˜¸: ${target.applicationNumber}
-- ìƒíƒœ: ${target.applicationStatus || ''}
+[선행상표]
+- 상표명: ${target.title || target.trademarkName || ''}
+- 출원번호: ${target.applicationNumber}
+- 상태: ${target.applicationStatus || ''}
 
-ë‹¤ìŒ 3ê°€ì§€ ê¸°ì¤€ìœ¼ë¡œ í‰ê°€í•˜ê³  JSON í˜•ì‹ìœ¼ë¡œ ì‘ë‹µí•˜ì„¸ìš”:
+다음 3가지 기준으로 평가하고 JSON 형식으로 응답하세요:
 
-1. appearance (ì™¸ê´€ ìœ ì‚¬ë„): ì‹œê°ì  êµ¬ì„±ìš”ì†Œ ë¹„êµ
-2. pronunciation (í˜¸ì¹­ ìœ ì‚¬ë„): ë°œìŒì˜ ìœ ì‚¬ì„±
-3. concept (ê´€ë… ìœ ì‚¬ë„): ì˜ë¯¸, ê°œë…ì˜ ìœ ì‚¬ì„±
+1. appearance (외관 유사도): 시각적 구성요소 비교
+2. pronunciation (호칭 유사도): 발음의 유사성
+3. concept (관념 유사도): 의미, 개념의 유사성
 
-ê° í•­ëª©ì€ "high" (ìœ ì‚¬), "medium" (ì£¼ì˜), "low" (ë¹„ìœ ì‚¬) ì¤‘ í•˜ë‚˜ë¡œ í‰ê°€.
-overallì€ ì¢…í•© íŒë‹¨ ê²°ê³¼.
-notesëŠ” í‰ê°€ ê·¼ê±°ë¥¼ 3-4ë¬¸ìž¥ìœ¼ë¡œ ì„œìˆ .
+각 항목은 "high" (유사), "medium" (주의), "low" (비유사) 중 하나로 평가.
+overall은 종합 판단 결과.
+notes는 평가 근거를 3-4문장으로 서술.
 
-ì‘ë‹µ í˜•ì‹:
+응답 형식:
 {
   "appearance": "high",
   "pronunciation": "high",
   "concept": "high",
   "overall": "high",
-  "notes": "ì™¸ê´€: ... í˜¸ì¹­: ... ê´€ë…: ... ì¢…í•©íŒë‹¨: ..."
+  "notes": "외관: ... 호칭: ... 관념: ... 종합판단: ..."
 }`;
 
     const response = await App.callClaude(prompt, 1000);
     const jsonMatch = response.text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('AI ì‘ë‹µ íŒŒì‹± ì‹¤íŒ¨');
+    if (!jsonMatch) throw new Error('AI 응답 파싱 실패');
     
     const evaluation = JSON.parse(jsonMatch[0]);
     evaluation.targetId = targetId;
@@ -5711,8 +5711,8 @@ notesëŠ” í‰ê°€ ê·¼ê±°ë¥¼ 3-4ë¬¸ìž¥ìœ¼ë¡œ ì„
 
 })();
 /* ============================================================
-   ìƒí‘œì¶œì› ìš°ì„ ì‹¬ì‚¬ ìžë™í™” ì‹œìŠ¤í…œ - Step ë Œë”ë§ (Part 3)
-   Step 5~8: ë¦¬ìŠ¤í¬í‰ê°€, ë¹„ìš©ì‚°ì¶œ, ìš°ì„ ì‹¬ì‚¬, ë¬¸ì„œì¶œë ¥
+   상표출원 우선심사 자동화 시스템 - Step 렌더링 (Part 3)
+   Step 5~8: 리스크평가, 비용산출, 우선심사, 문서출력
    ============================================================ */
 
 (function() {
@@ -5720,12 +5720,12 @@ notesëŠ” í‰ê°€ ê·¼ê±°ë¥¼ 3-4ë¬¸ìž¥ìœ¼ë¡œ ì„
   
   const TM = window.TM;
   if (!TM) {
-    console.error('[TM Steps 5-8] TM ëª¨ë“ˆì´ ë¡œë“œë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.');
+    console.error('[TM Steps 5-8] TM 모듈이 로드되지 않았습니다.');
     return;
   }
 
   // ============================================================
-  // Step 5: ë¦¬ìŠ¤í¬ í‰ê°€
+  // Step 5: 리스크 평가
   // ============================================================
   
   TM.renderStep5_Risk = function(container) {
@@ -5733,12 +5733,12 @@ notesëŠ” í‰ê°€ ê·¼ê±°ë¥¼ 3-4ë¬¸ìž¥ìœ¼ë¡œ ì„
     const risk = p.riskAssessment || {};
     const fee = p.feeCalculation || {};
     
-    // ë¹„ìš© ìžë™ ê³„ì‚°
+    // 비용 자동 계산
     if (p.designatedGoods?.length > 0 && !fee.totalFee) {
       TM.calculateFee();
     }
     
-    // KIPRIS API í‚¤ í™•ì¸
+    // KIPRIS API 키 확인
     const apiKey = TM.kiprisConfig?.apiKey || '';
     const defaultKey = 'zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
     const hasCustomApiKey = apiKey && apiKey !== defaultKey;
@@ -5746,20 +5746,20 @@ notesëŠ” í‰ê°€ ê·¼ê±°ë¥¼ 3-4ë¬¸ìž¥ìœ¼ë¡œ ì„
     const apiKeyWarning = !hasCustomApiKey ? `
       <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px;">
         <div style="display: flex; align-items: flex-start; gap: 12px;">
-          <span style="font-size: 24px;">âš ï¸</span>
+          <span style="font-size: 24px;">⚠️</span>
           <div>
-            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #92400e;">KIPRIS API í‚¤ê°€ ì„¤ì •ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤</h4>
+            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #92400e;">KIPRIS API 키가 설정되지 않았습니다</h4>
             <p style="margin: 0 0 10px 0; font-size: 13px; color: #a16207; line-height: 1.5;">
-              ì •í™•í•œ ë¦¬ìŠ¤í¬ í‰ê°€ë¥¼ ìœ„í•´ ê°œì¸ API í‚¤ê°€ í•„ìš”í•©ë‹ˆë‹¤. ê¸°ë³¸ í‚¤ëŠ” í˜¸ì¶œ ì œí•œì— ê±¸ë¦´ ìˆ˜ ìžˆìŠµë‹ˆë‹¤.
+              정확한 리스크 평가를 위해 개인 API 키가 필요합니다. 기본 키는 호출 제한에 걸릴 수 있습니다.
             </p>
             <div style="display: flex; gap: 12px; align-items: center;">
               <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" 
                  style="font-size: 12px; color: #d97706; text-decoration: underline;">
-                ðŸ‘‰ KIPRIS Plusì—ì„œ ë¬´ë£Œ API í‚¤ ë°œê¸‰ë°›ê¸°
+                👉 KIPRIS Plus에서 무료 API 키 발급받기
               </a>
-              <button class="btn btn-onclick="openProfileSettings()"s()" 
+              <button class="btn btn-sm" onclick="openProfileSettings()" 
                       style="padding: 4px 12px; font-size: 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                ì„¤ì •ì—ì„œ ìž…ë ¥
+                설정에서 입력
               </button>
             </div>
           </div>
@@ -5767,88 +5767,88 @@ notesëŠ” í‰ê°€ ê·¼ê±°ë¥¼ 3-4ë¬¸ìž¥ìœ¼ë¡œ ì„
       </div>
     ` : `
       <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
-        <span>âœ…</span>
-        <span style="font-size: 13px; color: #166534;">KIPRIS API í‚¤ ì„¤ì •ë¨</span>
+        <span>✅</span>
+        <span style="font-size: 13px; color: #166534;">KIPRIS API 키 설정됨</span>
       </div>
     `;
     
     container.innerHTML = `
       <div class="tm-step-header">
-        <h3>ðŸ“Š ë¦¬ìŠ¤í¬ í‰ê°€</h3>
+        <h3>📊 리스크 평가</h3>
       </div>
       
       ${apiKeyWarning}
       
-      <!-- AI í‰ê°€ ë²„íŠ¼ -->
+      <!-- AI 평가 버튼 -->
       <div class="tm-risk-action-panel">
         <button class="btn btn-primary btn-lg" id="tm-risk-btn" data-action="tm-assess-risk">
-          ðŸ¤– AI ë¦¬ìŠ¤í¬ ì¢…í•© í‰ê°€
+          🤖 AI 리스크 종합 평가
         </button>
         <div class="tm-risk-progress" id="tm-risk-progress" style="display: none;">
           <div class="tm-progress-bar">
             <div class="tm-progress-fill tm-progress-indeterminate"></div>
           </div>
-          <span class="tm-progress-text">AIê°€ ì¢…í•© ë¶„ì„ ì¤‘ìž…ë‹ˆë‹¤...</span>
+          <span class="tm-progress-text">AI가 종합 분석 중입니다...</span>
         </div>
       </div>
       
       ${risk.level ? `
-        <!-- ë¦¬ìŠ¤í¬ ê²°ê³¼ ëŒ€ì‹œë³´ë“œ -->
+        <!-- 리스크 결과 대시보드 -->
         <div class="tm-risk-dashboard ${risk.level}">
-          <!-- ë¦¬ìŠ¤í¬ ìˆ˜ì¤€ í‘œì‹œ -->
+          <!-- 리스크 수준 표시 -->
           <div class="tm-risk-level-display">
             <div class="tm-risk-icon">
-              ${risk.level === 'high' ? 'âš ï¸' : risk.level === 'medium' ? 'âš¡' : 'âœ…'}
+              ${risk.level === 'high' ? '⚠️' : risk.level === 'medium' ? '⚡' : '✅'}
             </div>
             <div class="tm-risk-level-text">
               <div class="tm-risk-main-text">
-                ${risk.level === 'high' ? 'ë†’ì€ ìœ„í—˜' : risk.level === 'medium' ? 'ì£¼ì˜ í•„ìš”' : 'ë‚®ì€ ìœ„í—˜'}
+                ${risk.level === 'high' ? '높은 위험' : risk.level === 'medium' ? '주의 필요' : '낮은 위험'}
               </div>
-              <div class="tm-risk-sub-text">ë“±ë¡ ê°€ëŠ¥ì„± ${TM.getRiskProbability(risk.level)}</div>
+              <div class="tm-risk-sub-text">등록 가능성 ${TM.getRiskProbability(risk.level)}</div>
             </div>
           </div>
           
-          <!-- í•µì‹¬ ì§€í‘œ -->
+          <!-- 핵심 지표 -->
           <div class="tm-risk-metrics">
             <div class="tm-risk-metric">
               <div class="tm-metric-value">${p.similarityEvaluations?.length || 0}</div>
-              <div class="tm-metric-label">ê²€í†  ìƒí‘œ</div>
+              <div class="tm-metric-label">검토 상표</div>
             </div>
             <div class="tm-risk-metric warning">
               <div class="tm-metric-value">${risk.conflictCount || 0}</div>
-              <div class="tm-metric-label">ì¶©ëŒ ìš°ë ¤</div>
+              <div class="tm-metric-label">충돌 우려</div>
             </div>
             <div class="tm-risk-metric">
               <div class="tm-metric-value">${p.designatedGoods?.length || 0}</div>
-              <div class="tm-metric-label">ìƒí’ˆë¥˜</div>
+              <div class="tm-metric-label">상품류</div>
             </div>
             <div class="tm-risk-metric">
               <div class="tm-metric-value">${TM.formatNumber(fee.totalFee || 0)}</div>
-              <div class="tm-metric-label">ì˜ˆìƒ ë¹„ìš©(ì›)</div>
+              <div class="tm-metric-label">예상 비용(원)</div>
             </div>
           </div>
         </div>
         
-        <!-- ìƒì„¸ ë¶„ì„ & ê¶Œê³ ì‚¬í•­ -->
+        <!-- 상세 분석 & 권고사항 -->
         <div class="tm-risk-analysis">
           ${risk.details ? `
             <div class="tm-analysis-section">
-              <h4>ðŸ“‹ ìƒì„¸ ë¶„ì„</h4>
+              <h4>📋 상세 분석</h4>
               <div class="tm-analysis-content">${TM.formatRiskDetails(risk.details)}</div>
             </div>
           ` : ''}
           
           ${risk.recommendation ? `
             <div class="tm-analysis-section recommendation">
-              <h4>ðŸ’¡ ê¶Œê³ ì‚¬í•­</h4>
+              <h4>💡 권고사항</h4>
               <div class="tm-analysis-content">${TM.formatRiskRecommendation(risk.recommendation)}</div>
             </div>
           ` : ''}
         </div>
         
-        <!-- ë¹„ìš© ëª…ì„¸ (ì ‘íž˜) -->
+        <!-- 비용 명세 (접힘) -->
         <details class="tm-fee-accordion" open>
-          <summary>ðŸ’° ë¹„ìš© ëª…ì„¸</summary>
+          <summary>💰 비용 명세</summary>
           <div class="tm-fee-content">
             <div class="tm-fee-list">
               ${TM.renderFeeBreakdown(fee)}
@@ -5857,28 +5857,28 @@ notesëŠ” í‰ê°€ ê·¼ê±°ë¥¼ 3-4ë¬¸ìž¥ìœ¼ë¡œ ì„
         </details>
       ` : `
         <div class="tm-empty-state" style="padding: 60px;">
-          <div class="icon">ðŸ“Š</div>
-          <h4>ë¦¬ìŠ¤í¬ í‰ê°€ë¥¼ ì‹¤í–‰í•˜ì„¸ìš”</h4>
-          <p>ìœ ì‚¬ë„ í‰ê°€ ê²°ê³¼, ì§€ì •ìƒí’ˆ, ìƒí‘œ ìœ í˜• ë“±ì„ AIê°€ ì¢…í•© ë¶„ì„í•©ë‹ˆë‹¤.</p>
+          <div class="icon">📊</div>
+          <h4>리스크 평가를 실행하세요</h4>
+          <p>유사도 평가 결과, 지정상품, 상표 유형 등을 AI가 종합 분석합니다.</p>
         </div>
       `}
       
-      <!-- í‰ê°€ ê¸°ì¤€ -->
+      <!-- 평가 기준 -->
       <details class="tm-accordion">
-        <summary>ðŸ“‹ í‰ê°€ ê¸°ì¤€ ì•ˆë‚´</summary>
+        <summary>📋 평가 기준 안내</summary>
         <div class="tm-accordion-content">
           <div class="tm-criteria-grid">
             <div class="tm-criteria-item high">
-              <div class="tm-criteria-label">â›” ë†’ì€ ìœ„í—˜</div>
-              <div class="tm-criteria-desc">ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œ ìœ ì‚¬ â†’ ê±°ì ˆ ê°€ëŠ¥ì„± ë†’ìŒ</div>
+              <div class="tm-criteria-label">⛔ 높은 위험</div>
+              <div class="tm-criteria-desc">유사군 중복 + 상표 유사 → 거절 가능성 높음</div>
             </div>
             <div class="tm-criteria-item medium">
-              <div class="tm-criteria-label">âš ï¸ ì¤‘ê°„ ìœ„í—˜</div>
-              <div class="tm-criteria-desc">ìœ ì‚¬êµ° ì¤‘ë³µ, ìƒí‘œ ë‹¤ì†Œ ìœ ì‚¬ â†’ ì‹¬ì‚¬ê´€ íŒë‹¨</div>
+              <div class="tm-criteria-label">⚠️ 중간 위험</div>
+              <div class="tm-criteria-desc">유사군 중복, 상표 다소 유사 → 심사관 판단</div>
             </div>
             <div class="tm-criteria-item low">
-              <div class="tm-criteria-label">âœ… ë‚®ì€ ìœ„í—˜</div>
-              <div class="tm-criteria-desc">ìœ ì‚¬êµ° ë¹„ì¤‘ë³µ ë˜ëŠ” ìƒí‘œ ìƒì´ â†’ ë“±ë¡ ê°€ëŠ¥ì„± ë†’ìŒ</div>
+              <div class="tm-criteria-label">✅ 낮은 위험</div>
+              <div class="tm-criteria-desc">유사군 비중복 또는 상표 상이 → 등록 가능성 높음</div>
             </div>
           </div>
         </div>
@@ -5886,20 +5886,20 @@ notesëŠ” í‰ê°€ ê·¼ê±°ë¥¼ 3-4ë¬¸ìž¥ìœ¼ë¡œ ì„
     `;
   };
   
-  // ë¦¬ìŠ¤í¬ ê¶Œê³ ì‚¬í•­ í¬ë§·íŒ…
+  // 리스크 권고사항 포맷팅
   TM.formatRiskRecommendation = function(text) {
     if (!text) return '';
-    // ë²ˆí˜¸ ë§¤ê¸°ê¸°ë‚˜ í•­ëª©ì„ í•˜ì´ë¼ì´íŠ¸
+    // 번호 매기기나 항목을 하이라이트
     return text
-      .replace(/ì²«ì§¸,|ë‘˜ì§¸,|ì…‹ì§¸,|ë„·ì§¸,/g, '<strong>$&</strong>')
+      .replace(/첫째,|둘째,|셋째,|넷째,/g, '<strong>$&</strong>')
       .replace(/\n/g, '<br>');
   };
   
   TM.getRiskProbability = function(level) {
     const probs = {
-      high: '30% ì´í•˜',
+      high: '30% 이하',
       medium: '50~70%',
-      low: '80% ì´ìƒ'
+      low: '80% 이상'
     };
     return probs[level] || '-';
   };
@@ -5913,11 +5913,11 @@ notesëŠ” í‰ê°€ ê·¼ê±°ë¥¼ 3-4ë¬¸ìž¥ìœ¼ë¡œ ì„
     const p = TM.currentProject;
     
     if (!p.trademarkName) {
-      App.showToast('ìƒí‘œëª…ì„ ë¨¼ì € ìž…ë ¥í•˜ì„¸ìš”.', 'warning');
+      App.showToast('상표명을 먼저 입력하세요.', 'warning');
       return;
     }
     
-    // UI ì—…ë°ì´íŠ¸ - í”„ë¡œê·¸ë ˆìŠ¤ í‘œì‹œ
+    // UI 업데이트 - 프로그레스 표시
     const btn = document.getElementById('tm-risk-btn');
     const progress = document.getElementById('tm-risk-progress');
     const hint = document.getElementById('tm-risk-hint');
@@ -5930,20 +5930,20 @@ notesëŠ” í‰ê°€ ê·¼ê±°ë¥¼ 3-4ë¬¸ìž¥ìœ¼ë¡œ ì„
     if (hint) hint.style.display = 'none';
     
     try {
-      // â˜… ìœ ì‚¬êµ° ê¸°ë°˜ í‰ê°€ ë°ì´í„° ìˆ˜ì§‘
+      // ★ 유사군 기반 평가 데이터 수집
       const searchResults = p.searchResults?.text || [];
       const totalSearched = searchResults.length;
       
-      // ìœ ì‚¬êµ° ì¤‘ë³µ ìžˆëŠ” ìƒí‘œë§Œ ì¹´ìš´íŠ¸ (ì‹¤ì§ˆì  ì¶©ëŒ í›„ë³´)
+      // 유사군 중복 있는 상표만 카운트 (실질적 충돌 후보)
       const groupOverlapResults = searchResults.filter(r => r.hasGroupOverlap);
       const noOverlapCount = searchResults.filter(r => !r.hasGroupOverlap).length;
       
-      // ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œ ìœ ì‚¬ë„ ë†’ì€ ê²ƒ = ê³ ìœ„í—˜
+      // 유사군 중복 + 상표 유사도 높은 것 = 고위험
       const criticalResults = groupOverlapResults.filter(r => r.riskLevel === 'critical' || r.riskLevel === 'high');
       const mediumResults = groupOverlapResults.filter(r => r.riskLevel === 'medium');
       const safeResults = groupOverlapResults.filter(r => r.riskLevel === 'low' || r.riskLevel === 'safe');
       
-      // ìœ ì‚¬êµ° ëª©ë¡ ìˆ˜ì§‘
+      // 유사군 목록 수집
       const myGroups = [];
       (p.designatedGoods || []).forEach(classData => {
         (classData.goods || []).forEach(g => {
@@ -5956,54 +5956,54 @@ notesëŠ” í‰ê°€ ê·¼ê±°ë¥¼ 3-4ë¬¸ìž¥ìœ¼ë¡œ ì„
         });
       });
       
-      const prompt = `ë‹¹ì‹ ì€ ìƒí‘œ ë“±ë¡ ë¦¬ìŠ¤í¬ í‰ê°€ ì „ë¬¸ê°€ìž…ë‹ˆë‹¤. 
-â˜… í•µì‹¬ ì›ì¹™: ìƒí‘œì˜ ìœ ì‚¬ ì—¬ë¶€ëŠ” "ë™ì¼ ìœ ì‚¬êµ° ì½”ë“œ" ë‚´ì—ì„œë§Œ íŒë‹¨ë©ë‹ˆë‹¤.
-- ìœ ì‚¬êµ° ì¤‘ë³µ ì—†ìŒ â†’ ìƒí‘œëª…ì´ ë™ì¼í•´ë„ ë“±ë¡ ê°€ëŠ¥
-- ìœ ì‚¬êµ° ì¤‘ë³µ ìžˆìŒ â†’ ìƒí‘œëª…/ë„í˜• ìœ ì‚¬ë„ì— ë”°ë¼ ê±°ì ˆ ê°€ëŠ¥ì„± íŒë‹¨
+      const prompt = `당신은 상표 등록 리스크 평가 전문가입니다. 
+★ 핵심 원칙: 상표의 유사 여부는 "동일 유사군 코드" 내에서만 판단됩니다.
+- 유사군 중복 없음 → 상표명이 동일해도 등록 가능
+- 유사군 중복 있음 → 상표명/도형 유사도에 따라 거절 가능성 판단
 
-[ì¶œì› ìƒí‘œ ì •ë³´]
-- ìƒí‘œëª…: ${p.trademarkName}
-- ì˜ë¬¸ëª…: ${p.trademarkNameEn || 'ì—†ìŒ'}
-- ìƒí‘œ ìœ í˜•: ${TM.getTypeLabel(p.trademarkType)}
-- ì§€ì •ìƒí’ˆë¥˜: ${p.designatedGoods?.map(g => 'ì œ' + g.classCode + 'ë¥˜').join(', ') || 'ë¯¸ì„ íƒ'}
-- ì¶œì›ì¸ ìœ ì‚¬êµ°ì½”ë“œ: ${myGroups.slice(0, 10).join(', ') || 'ë¯¸í™•ì¸'}${myGroups.length > 10 ? ` ì™¸ ${myGroups.length - 10}ê°œ` : ''}
+[출원 상표 정보]
+- 상표명: ${p.trademarkName}
+- 영문명: ${p.trademarkNameEn || '없음'}
+- 상표 유형: ${TM.getTypeLabel(p.trademarkType)}
+- 지정상품류: ${p.designatedGoods?.map(g => '제' + g.classCode + '류').join(', ') || '미선택'}
+- 출원인 유사군코드: ${myGroups.slice(0, 10).join(', ') || '미확인'}${myGroups.length > 10 ? ` 외 ${myGroups.length - 10}개` : ''}
 
-[ê²€ìƒ‰ ê²°ê³¼ ë¶„ì„ - ìœ ì‚¬êµ° ê¸°ì¤€]
-- ì´ ê²€ìƒ‰ ê²°ê³¼: ${totalSearched}ê±´
-- âœ… ìœ ì‚¬êµ° ë¹„ì¤‘ë³µ (ë“±ë¡ ê°€ëŠ¥): ${noOverlapCount}ê±´
-- âš ï¸ ìœ ì‚¬êµ° ì¤‘ë³µ (ì¶©ëŒ ê²€í†  í•„ìš”): ${groupOverlapResults.length}ê±´
-  - â›” ê³ ìœ„í—˜ (ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œ ìœ ì‚¬): ${criticalResults.length}ê±´
-  - âš ï¸ ì¤‘ìœ„í—˜ (ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œ ë‹¤ì†Œ ìœ ì‚¬): ${mediumResults.length}ê±´
-  - ðŸ”¶ ì €ìœ„í—˜ (ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œ ìƒì´): ${safeResults.length}ê±´
+[검색 결과 분석 - 유사군 기준]
+- 총 검색 결과: ${totalSearched}건
+- ✅ 유사군 비중복 (등록 가능): ${noOverlapCount}건
+- ⚠️ 유사군 중복 (충돌 검토 필요): ${groupOverlapResults.length}건
+  - ⛔ 고위험 (유사군 중복 + 상표 유사): ${criticalResults.length}건
+  - ⚠️ 중위험 (유사군 중복 + 상표 다소 유사): ${mediumResults.length}건
+  - 🔶 저위험 (유사군 중복 + 상표 상이): ${safeResults.length}건
 
-[ê³ ìœ„í—˜ ìƒí‘œ ìƒì„¸]
+[고위험 상표 상세]
 ${criticalResults.slice(0, 5).map(r => 
-  `- ${r.title || r.trademarkName}: ${r.applicationStatus || '-'} / ë¬¸ìžìœ ì‚¬ë„ ${r.scoreBreakdown?.text || 0}% / ì¤‘ë³µìœ ì‚¬êµ°: ${(r.overlappingGroups || []).join(', ') || 'ë¯¸í™•ì¸'}`
-).join('\n') || 'ì—†ìŒ'}
+  `- ${r.title || r.trademarkName}: ${r.applicationStatus || '-'} / 문자유사도 ${r.scoreBreakdown?.text || 0}% / 중복유사군: ${(r.overlappingGroups || []).join(', ') || '미확인'}`
+).join('\n') || '없음'}
 
-ë‹¤ìŒ í•­ëª©ì„ ë¶„ì„í•˜ê³  JSON í˜•ì‹ìœ¼ë¡œ ì‘ë‹µí•˜ì„¸ìš”:
+다음 항목을 분석하고 JSON 형식으로 응답하세요:
 
-1. level: ì „ì²´ ë¦¬ìŠ¤í¬ ìˆ˜ì¤€ 
-   - "high": ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œ ìœ ì‚¬í•œ ë“±ë¡ìƒí‘œ ìžˆìŒ â†’ ê±°ì ˆ ê°€ëŠ¥ì„± ë†’ìŒ
-   - "medium": ìœ ì‚¬êµ° ì¤‘ë³µì€ ìžˆìœ¼ë‚˜ ìƒí‘œ ì°¨ë³„ì„± ìžˆìŒ â†’ ì‹¬ì‚¬ê´€ íŒë‹¨ í•„ìš”
-   - "low": ìœ ì‚¬êµ° ì¤‘ë³µ ì—†ìŒ ë˜ëŠ” ìƒí‘œ ëª…í™•ížˆ ìƒì´ â†’ ë“±ë¡ ê°€ëŠ¥ì„± ë†’ìŒ
-2. conflictCount: ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œ ìœ ì‚¬í•œ ì‹¤ì§ˆì  ì¶©ëŒ ìƒí‘œ ìˆ˜
-3. details: ìƒì„¸ ë¶„ì„ (ìœ ì‚¬êµ° ì¤‘ë³µ ì—¬ë¶€ë¥¼ í•µì‹¬ìœ¼ë¡œ ì„¤ëª…)
-4. recommendation: ì¶œì›ì¸ ê¶Œê³ ì‚¬í•­
+1. level: 전체 리스크 수준 
+   - "high": 유사군 중복 + 상표 유사한 등록상표 있음 → 거절 가능성 높음
+   - "medium": 유사군 중복은 있으나 상표 차별성 있음 → 심사관 판단 필요
+   - "low": 유사군 중복 없음 또는 상표 명확히 상이 → 등록 가능성 높음
+2. conflictCount: 유사군 중복 + 상표 유사한 실질적 충돌 상표 수
+3. details: 상세 분석 (유사군 중복 여부를 핵심으로 설명)
+4. recommendation: 출원인 권고사항
 
-ì‘ë‹µ í˜•ì‹:
+응답 형식:
 {
   "level": "high|medium|low",
   "conflictCount": 0,
-  "details": "ìƒì„¸ ë¶„ì„ ë‚´ìš©...",
-  "recommendation": "ê¶Œê³ ì‚¬í•­..."
+  "details": "상세 분석 내용...",
+  "recommendation": "권고사항..."
 }`;
 
       const response = await App.callClaude(prompt, 1500);
       
       const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('AI ì‘ë‹µì„ íŒŒì‹±í•  ìˆ˜ ì—†ìŠµë‹ˆë‹¤.');
+        throw new Error('AI 응답을 파싱할 수 없습니다.');
       }
       
       const assessment = JSON.parse(jsonMatch[0]);
@@ -6011,19 +6011,19 @@ ${criticalResults.slice(0, 5).map(r =>
       
       p.riskAssessment = assessment;
       
-      // í”„ë¡œì íŠ¸ ìƒíƒœ ì—…ë°ì´íŠ¸
+      // 프로젝트 상태 업데이트
       if (assessment.level === 'low') {
         p.status = 'documenting';
       }
       
       TM.renderCurrentStep();
-      App.showToast('ë¦¬ìŠ¤í¬ í‰ê°€ê°€ ì™„ë£Œë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('리스크 평가가 완료되었습니다.', 'success');
       
     } catch (error) {
-      console.error('[TM] ë¦¬ìŠ¤í¬ í‰ê°€ ì‹¤íŒ¨:', error);
-      App.showToast('í‰ê°€ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 리스크 평가 실패:', error);
+      App.showToast('평가 실패: ' + error.message, 'error');
       
-      // UI ë³µêµ¬
+      // UI 복구
       const btn = document.getElementById('tm-risk-btn');
       const progress = document.getElementById('tm-risk-progress');
       const hint = document.getElementById('tm-risk-hint');
@@ -6038,39 +6038,39 @@ ${criticalResults.slice(0, 5).map(r =>
   };
 
   // ============================================================
-  // Step 6: ë¹„ìš© ì‚°ì¶œ
+  // Step 6: 비용 산출
   // ============================================================
   
   TM.renderStep6_Fee = function(container) {
     const p = TM.currentProject;
     const fee = p.feeCalculation || {};
     
-    // ìžë™ ê³„ì‚°
+    // 자동 계산
     if (p.designatedGoods?.length > 0 && !fee.totalFee) {
       TM.calculateFee();
     }
     
     container.innerHTML = `
       <div class="tm-step-header">
-        <h3>ðŸ’° ë¹„ìš© ì‚°ì¶œ</h3>
-        <p>2026ë…„ ê¸°ì¤€ ê´€ë‚©ë£Œ ë° ì˜ˆìƒ ë¹„ìš©ì„ ê³„ì‚°í•©ë‹ˆë‹¤. (ìƒí‘œ ì¶œì›ë£ŒëŠ” ê°ë©´ ì—†ìŒ)</p>
+        <h3>💰 비용 산출</h3>
+        <p>2026년 기준 관납료 및 예상 비용을 계산합니다. (상표 출원료는 감면 없음)</p>
       </div>
       
-      <!-- ìš°ì„ ì‹¬ì‚¬ ì—¬ë¶€ -->
+      <!-- 우선심사 여부 -->
       <div class="tm-form-section">
         <label class="tm-checkbox-label">
           <input type="checkbox" id="tm-priority-exam-enabled" 
                  ${p.priorityExam?.enabled ? 'checked' : ''}
                  onchange="TM.togglePriorityExam(this.checked)">
-          <span>ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ (ë¥˜ë‹¹ 160,000ì› ì¶”ê°€)</span>
+          <span>우선심사 신청 (류당 160,000원 추가)</span>
         </label>
       </div>
       
-      <!-- ë¹„ìš© ëª…ì„¸ -->
+      <!-- 비용 명세 -->
       <div class="tm-fee-section">
         <div class="tm-fee-header">
-          <h4>ë¹„ìš© ëª…ì„¸</h4>
-          <div class="tm-fee-total">${TM.formatNumber(fee.totalFee || 0)}ì›</div>
+          <h4>비용 명세</h4>
+          <div class="tm-fee-total">${TM.formatNumber(fee.totalFee || 0)}원</div>
         </div>
         
         <div class="tm-fee-breakdown">
@@ -6078,22 +6078,22 @@ ${criticalResults.slice(0, 5).map(r =>
         </div>
       </div>
       
-      <!-- ë¹„ìš© í…Œì´ë¸” ì°¸ê³  -->
+      <!-- 비용 테이블 참고 -->
       <details class="tm-accordion">
         <summary>
-          <span>ðŸ“‹ 2026ë…„ ê´€ë‚©ë£Œ ê¸°ì¤€í‘œ</span>
+          <span>📋 2026년 관납료 기준표</span>
         </summary>
         <div class="tm-accordion-content">
           <table class="tm-info-table">
-            <tr><th>í•­ëª©</th><th>ê¸ˆì•¡</th><th>ë¹„ê³ </th></tr>
-            <tr><td>ì¶œì›ë£Œ (ì „ìž+ê³ ì‹œëª…ì¹­)</td><td>46,000ì›/ë¥˜</td><td>ê¸°ë³¸</td></tr>
-            <tr><td>ì¶œì›ë£Œ (ì „ìž+ë¹„ê³ ì‹œëª…ì¹­)</td><td>52,000ì›/ë¥˜</td><td>+6,000ì›</td></tr>
-            <tr><td>ì„œë©´ ì¶œì› ê°€ì‚°</td><td>10,000ì›</td><td>ì „ìžì¶œì› ê¶Œìž¥</td></tr>
-            <tr><td>ì§€ì •ìƒí’ˆ ê°€ì‚°ë£Œ</td><td>2,000ì›/ê°œ</td><td>ë¥˜ë‹¹ 10ê°œ ì´ˆê³¼ì‹œ</td></tr>
-            <tr><td>ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ë£Œ</td><td>160,000ì›/ë¥˜</td><td>-</td></tr>
-            <tr><td>ë“±ë¡ë£Œ (10ë…„)</td><td>211,000ì›/ë¥˜</td><td>ì°¸ê³ </td></tr>
+            <tr><th>항목</th><th>금액</th><th>비고</th></tr>
+            <tr><td>출원료 (전자+고시명칭)</td><td>46,000원/류</td><td>기본</td></tr>
+            <tr><td>출원료 (전자+비고시명칭)</td><td>52,000원/류</td><td>+6,000원</td></tr>
+            <tr><td>서면 출원 가산</td><td>10,000원</td><td>전자출원 권장</td></tr>
+            <tr><td>지정상품 가산료</td><td>2,000원/개</td><td>류당 10개 초과시</td></tr>
+            <tr><td>우선심사 신청료</td><td>160,000원/류</td><td>-</td></tr>
+            <tr><td>등록료 (10년)</td><td>211,000원/류</td><td>참고</td></tr>
           </table>
-          <p style="margin-top: 12px; font-size: 13px; color: #6b7684;">â€» ìƒí‘œ ì¶œì›ë£ŒëŠ” íŠ¹í—ˆì™€ ë‹¬ë¦¬ ê°ë©´ ì œë„ê°€ ì—†ìŠµë‹ˆë‹¤.</p>
+          <p style="margin-top: 12px; font-size: 13px; color: #6b7684;">※ 상표 출원료는 특허와 달리 감면 제도가 없습니다.</p>
         </div>
       </details>
     `;
@@ -6101,13 +6101,13 @@ ${criticalResults.slice(0, 5).map(r =>
   
   TM.renderFeeBreakdown = function(fee) {
     if (!fee || !fee.breakdown || fee.breakdown.length === 0) {
-      return '<div class="tm-hint">ì§€ì •ìƒí’ˆì„ ì„ íƒí•˜ë©´ ë¹„ìš©ì´ ìžë™ ê³„ì‚°ë©ë‹ˆë‹¤.</div>';
+      return '<div class="tm-hint">지정상품을 선택하면 비용이 자동 계산됩니다.</div>';
     }
     
     return fee.breakdown.map(item => `
       <div class="tm-fee-row ${item.type === 'reduction' ? 'reduction' : ''} ${item.type === 'total' ? 'total' : ''}">
         <span class="tm-fee-label">${TM.escapeHtml(item.label)}</span>
-        <span class="tm-fee-amount">${item.type === 'reduction' ? '-' : ''}${TM.formatNumber(Math.abs(item.amount))}ì›</span>
+        <span class="tm-fee-amount">${item.type === 'reduction' ? '-' : ''}${TM.formatNumber(Math.abs(item.amount))}원</span>
       </div>
     `).join('');
   };
@@ -6119,25 +6119,25 @@ ${criticalResults.slice(0, 5).map(r =>
     let breakdown = [];
     let subtotal = 0;
     
-    // ë¥˜ë³„ ì¶œì›ë£Œ ê³„ì‚°
+    // 류별 출원료 계산
     if (p.designatedGoods && p.designatedGoods.length > 0) {
       p.designatedGoods.forEach(classData => {
         const hasNonGazetted = classData.goods.some(g => !g.gazetted);
         const baseFee = hasNonGazetted ? TM.feeTable.applicationNonGazetted : TM.feeTable.applicationGazetted;
         
         breakdown.push({
-          label: `ì œ${classData.classCode}ë¥˜ ì¶œì›ë£Œ ${hasNonGazetted ? '(ë¹„ê³ ì‹œ)' : '(ê³ ì‹œ)'}`,
+          label: `제${classData.classCode}류 출원료 ${hasNonGazetted ? '(비고시)' : '(고시)'}`,
           amount: baseFee,
           type: 'application'
         });
         subtotal += baseFee;
         
-        // ì§€ì •ìƒí’ˆ ê°€ì‚°ë£Œ (10ê°œ ì´ˆê³¼)
+        // 지정상품 가산료 (10개 초과)
         if (classData.goods.length > 10) {
           const excessCount = classData.goods.length - 10;
           const excessFee = excessCount * TM.feeTable.excessGoods;
           breakdown.push({
-            label: `  â”” ì œ${classData.classCode}ë¥˜ ì´ˆê³¼ìƒí’ˆ ${excessCount}ê°œ`,
+            label: `  └ 제${classData.classCode}류 초과상품 ${excessCount}개`,
             amount: excessFee,
             type: 'excess'
           });
@@ -6146,26 +6146,26 @@ ${criticalResults.slice(0, 5).map(r =>
       });
     }
     
-    // ìš°ì„ ì‹¬ì‚¬ ë¹„ìš©
+    // 우선심사 비용
     let priorityExamFee = 0;
     if (p.priorityExam?.enabled && p.designatedGoods) {
       priorityExamFee = p.designatedGoods.length * TM.feeTable.priorityExam;
       breakdown.push({
-        label: `ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ë£Œ (${p.designatedGoods.length}ë¥˜)`,
+        label: `우선심사 신청료 (${p.designatedGoods.length}류)`,
         amount: priorityExamFee,
         type: 'priority'
       });
     }
     
-    // ì´ì•¡ (ìƒí‘œ ì¶œì›ë£ŒëŠ” ê°ë©´ ì—†ìŒ)
+    // 총액 (상표 출원료는 감면 없음)
     const totalFee = subtotal + priorityExamFee;
     breakdown.push({
-      label: 'ì´ ë‚©ë¶€ì•¡',
+      label: '총 납부액',
       amount: totalFee,
       type: 'total'
     });
     
-    // ì €ìž¥
+    // 저장
     p.feeCalculation = {
       applicationFee: TM.feeTable.applicationGazetted,
       classCount: p.designatedGoods?.length || 0,
@@ -6178,7 +6178,7 @@ ${criticalResults.slice(0, 5).map(r =>
       breakdown: breakdown
     };
     
-    // UI ì—…ë°ì´íŠ¸
+    // UI 업데이트
     TM.renderCurrentStep();
   };
   
@@ -6189,7 +6189,7 @@ ${criticalResults.slice(0, 5).map(r =>
   };
 
   // ============================================================
-  // Step 7: ìš°ì„ ì‹¬ì‚¬
+  // Step 7: 우선심사
   // ============================================================
   
   TM.renderStep7_PriorityExam = function(container) {
@@ -6197,7 +6197,7 @@ ${criticalResults.slice(0, 5).map(r =>
     const pe = p.priorityExam || {};
     const isConfirmed = pe.userConfirmed === true;
     
-    // ì§€ì •ìƒí’ˆ ëª©ë¡ (ìœ ì‚¬êµ°ì½”ë“œ í¬í•¨)
+    // 지정상품 목록 (유사군코드 포함)
     const designatedGoodsList = [];
     (p.designatedGoods || []).forEach(classData => {
       (classData.goods || []).forEach(g => {
@@ -6211,15 +6211,15 @@ ${criticalResults.slice(0, 5).map(r =>
     
     container.innerHTML = `
       <div class="tm-step-header">
-        <h3>âš¡ ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ ì—¬ë¶€ ê²°ì •</h3>
-        <p>ìƒí‘œë¥¼ ì‚¬ìš© ì¤‘ì´ê±°ë‚˜ ì‚¬ìš© ì¤€ë¹„ ì¤‘ì¸ ê²½ìš° ìš°ì„ ì‹¬ì‚¬ë¥¼ ì‹ ì²­í•  ìˆ˜ ìžˆìŠµë‹ˆë‹¤.</p>
+        <h3>⚡ 우선심사 신청 여부 결정</h3>
+        <p>상표를 사용 중이거나 사용 준비 중인 경우 우선심사를 신청할 수 있습니다.</p>
       </div>
       
-      <!-- ì¶œì›ì„œ ì—…ë¡œë“œ (ì»´íŒ©íŠ¸) -->
+      <!-- 출원서 업로드 (컴팩트) -->
       <div class="tm-form-section tm-upload-section-compact">
         <div class="tm-upload-header">
-          <span>ðŸ“„ ì¶œì›ì„œ ì—…ë¡œë“œ (ì„ íƒ)</span>
-          <span class="tm-hint-inline">ì¶œì›ì„œ(PDF)ë¥¼ ì—…ë¡œë“œí•˜ë©´ ì •ë³´ë¥¼ ìžë™ ì¶”ì¶œí•©ë‹ˆë‹¤</span>
+          <span>📄 출원서 업로드 (선택)</span>
+          <span class="tm-hint-inline">출원서(PDF)를 업로드하면 정보를 자동 추출합니다</span>
         </div>
         
         <div class="tm-dropzone-compact" id="tm-application-dropzone"
@@ -6229,22 +6229,22 @@ ${criticalResults.slice(0, 5).map(r =>
              onclick="document.getElementById('tm-application-input').click()">
           <input type="file" id="tm-application-input" style="display: none;" 
                  accept=".pdf,image/*" multiple onchange="TM.handleApplicationUpload(this.files)">
-          <span class="tm-dropzone-compact-icon">ðŸ“Ž</span>
-          <span class="tm-dropzone-compact-text">íŒŒì¼ ì„ íƒ ë˜ëŠ” ë“œëž˜ê·¸</span>
-          <span class="tm-dropzone-compact-formats">PDF, ì´ë¯¸ì§€</span>
+          <span class="tm-dropzone-compact-icon">📎</span>
+          <span class="tm-dropzone-compact-text">파일 선택 또는 드래그</span>
+          <span class="tm-dropzone-compact-formats">PDF, 이미지</span>
         </div>
         
         ${pe.extractedFromApplication ? `
           <div class="tm-extracted-info-compact ${pe.editMode ? 'edit-mode' : ''}">
             <div class="tm-extracted-header-compact">
-              <span>${pe.editMode ? 'ðŸ“ ì¶œì› ì •ë³´' : 'âœ… ì¶”ì¶œ ì™„ë£Œ'}</span>
+              <span>${pe.editMode ? '📝 출원 정보' : '✅ 추출 완료'}</span>
               <div class="tm-extracted-actions-compact">
                 ${pe.editMode ? `
-                  <button class="btn btn-xs btn-primary" onclick="TM.confirmExtractedInfo()">í™•ì¸</button>
+                  <button class="btn btn-xs btn-primary" onclick="TM.confirmExtractedInfo()">확인</button>
                 ` : `
-                  <button class="btn btn-xs btn-ghost" onclick="TM.editExtractedInfo()">ìˆ˜ì •</button>
+                  <button class="btn btn-xs btn-ghost" onclick="TM.editExtractedInfo()">수정</button>
                 `}
-                <button class="btn btn-xs btn-ghost" onclick="TM.clearExtractedInfo()">ì´ˆê¸°í™”</button>
+                <button class="btn btn-xs btn-ghost" onclick="TM.clearExtractedInfo()">초기화</button>
               </div>
             </div>
             
@@ -6252,28 +6252,28 @@ ${criticalResults.slice(0, 5).map(r =>
               <div class="tm-extracted-form-compact">
                 <div class="tm-form-grid-compact">
                   <div class="tm-field-compact">
-                    <label>ì¶œì›ë²ˆí˜¸ *</label>
+                    <label>출원번호 *</label>
                     <input type="text" id="tm-extract-applicationNumber" value="${pe.applicationNumber || ''}" placeholder="40-2024-0012345">
                   </div>
                   <div class="tm-field-compact">
-                    <label>ì¶œì›ì¼ *</label>
+                    <label>출원일 *</label>
                     <input type="text" id="tm-extract-applicationDate" value="${pe.applicationDate || ''}" placeholder="2024.03.15">
                   </div>
                   <div class="tm-field-compact">
-                    <label>ì¶œì›ì¸ *</label>
-                    <input type="text" id="tm-extract-applicantName" value="${pe.applicantName || ''}" placeholder="ì£¼ì‹íšŒì‚¬ OOO">
+                    <label>출원인 *</label>
+                    <input type="text" id="tm-extract-applicantName" value="${pe.applicantName || ''}" placeholder="주식회사 OOO">
                   </div>
                   <div class="tm-field-compact">
-                    <label>ìƒí‘œëª…</label>
-                    <input type="text" id="tm-extract-trademarkNameFromApp" value="${pe.trademarkNameFromApp || ''}" placeholder="ìƒí‘œëª…">
+                    <label>상표명</label>
+                    <input type="text" id="tm-extract-trademarkNameFromApp" value="${pe.trademarkNameFromApp || ''}" placeholder="상표명">
                   </div>
                   <div class="tm-field-compact">
-                    <label>ìƒí’ˆë¥˜</label>
+                    <label>상품류</label>
                     <input type="text" id="tm-extract-classCode" value="${pe.classCode || ''}" placeholder="09">
                   </div>
                   <div class="tm-field-compact tm-field-wide">
-                    <label>ì§€ì •ìƒí’ˆ</label>
-                    <input type="text" id="tm-extract-designatedGoodsFromApp" value="${pe.designatedGoodsFromApp || ''}" placeholder="ì§€ì •ìƒí’ˆ ëª©ë¡">
+                    <label>지정상품</label>
+                    <input type="text" id="tm-extract-designatedGoodsFromApp" value="${pe.designatedGoodsFromApp || ''}" placeholder="지정상품 목록">
                   </div>
                 </div>
               </div>
@@ -6286,46 +6286,46 @@ ${criticalResults.slice(0, 5).map(r =>
         ` : ''}
       </div>
       
-      <!-- ìš°ì„ ì‹¬ì‚¬ ì„ íƒ (ì»´íŒ©íŠ¸) -->
+      <!-- 우선심사 선택 (컴팩트) -->
       <div class="tm-priority-choice-compact">
-        <span class="tm-choice-label">ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­</span>
+        <span class="tm-choice-label">우선심사 신청</span>
         <div class="tm-choice-buttons">
           <button class="tm-choice-btn ${pe.enabled ? 'selected' : ''}" data-action="tm-set-priority" data-enabled="true">
-            âš¡ ì‹ ì²­ <small>(2~3ê°œì›”, +160,000ì›/ë¥˜)</small>
+            ⚡ 신청 <small>(2~3개월, +160,000원/류)</small>
           </button>
           <button class="tm-choice-btn ${pe.enabled === false && isConfirmed ? 'selected' : ''}" data-action="tm-set-priority" data-enabled="false">
-            ðŸ“‹ ì¼ë°˜ì‹¬ì‚¬ <small>(12~14ê°œì›”)</small>
+            📋 일반심사 <small>(12~14개월)</small>
           </button>
         </div>
-        ${!isConfirmed ? '<span class="tm-choice-required">â† ì„ íƒ í•„ìš”</span>' : ''}
+        ${!isConfirmed ? '<span class="tm-choice-required">← 선택 필요</span>' : ''}
       </div>
       
       ${pe.enabled ? `
-        <!-- ìš°ì„ ì‹¬ì‚¬ ì‚¬ìœ  (ì»´íŒ©íŠ¸) -->
+        <!-- 우선심사 사유 (컴팩트) -->
         <div class="tm-section-compact">
           <div class="tm-section-header-compact">
-            <span>ðŸ“‹ ì‹ ì²­ ì‚¬ìœ </span>
+            <span>📋 신청 사유</span>
             <select class="tm-select-compact" id="tm-pe-reason" onchange="TM.updatePriorityReason(this.value)">
-              <option value="" ${!pe.reason ? 'selected' : ''}>ì„ íƒ</option>
-              <option value="using" ${pe.reason === 'using' ? 'selected' : ''}>ì‚¬ìš© ì¤‘ (ì‹œí–‰ë ¹ Â§12â‘ )</option>
-              <option value="preparing" ${pe.reason === 'preparing' ? 'selected' : ''}>ì‚¬ìš© ì¤€ë¹„ ì¤‘ (ì‹œí–‰ë ¹ Â§12â‘ )</option>
-              <option value="infringement" ${pe.reason === 'infringement' ? 'selected' : ''}>ì œ3ìž ë¬´ë‹¨ì‚¬ìš© (ì‹œí–‰ë ¹ Â§12â‘¡)</option>
-              <option value="export" ${pe.reason === 'export' ? 'selected' : ''}>ìˆ˜ì¶œ ê¸´ê¸‰ (ì‹œí–‰ë ¹ Â§12â‘¢)</option>
+              <option value="" ${!pe.reason ? 'selected' : ''}>선택</option>
+              <option value="using" ${pe.reason === 'using' ? 'selected' : ''}>사용 중 (시행령 §12①)</option>
+              <option value="preparing" ${pe.reason === 'preparing' ? 'selected' : ''}>사용 준비 중 (시행령 §12①)</option>
+              <option value="infringement" ${pe.reason === 'infringement' ? 'selected' : ''}>제3자 무단사용 (시행령 §12②)</option>
+              <option value="export" ${pe.reason === 'export' ? 'selected' : ''}>수출 긴급 (시행령 §12③)</option>
             </select>
           </div>
           ${pe.reason ? `
             <textarea class="tm-textarea-compact" id="tm-pe-reason-detail" rows="2" 
-                      placeholder="êµ¬ì²´ì ì¸ ì‚¬ìš© í˜„í™© ë˜ëŠ” ì¤€ë¹„ ìƒí™© (ì„ íƒ)"
+                      placeholder="구체적인 사용 현황 또는 준비 상황 (선택)"
                       onchange="TM.updatePriorityReasonDetail(this.value)">${pe.reasonDetail || ''}</textarea>
           ` : ''}
         </div>
         
-        <!-- ì¦ê±°ìžë£Œ (ì»´íŒ©íŠ¸) -->
+        <!-- 증거자료 (컴팩트) -->
         <div class="tm-section-compact">
           <div class="tm-section-header-compact">
-            <span>ðŸ“Ž ì¦ê±°ìžë£Œ</span>
+            <span>📎 증거자료</span>
             <div class="tm-evidence-upload-btn" onclick="document.getElementById('tm-evidence-input').click()">
-              + íŒŒì¼ ì¶”ê°€
+              + 파일 추가
             </div>
             <input type="file" id="tm-evidence-input" style="display: none;" 
                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,image/*" multiple 
@@ -6341,7 +6341,7 @@ ${criticalResults.slice(0, 5).map(r =>
                     <span class="tm-evidence-title-compact">${TM.escapeHtml(ev.title)}</span>
                     <span class="tm-evidence-file-compact">${TM.escapeHtml(ev.fileName || '')}</span>
                   </div>
-                  <button class="tm-evidence-delete" data-action="tm-remove-evidence" data-index="${idx}">âœ•</button>
+                  <button class="tm-evidence-delete" data-action="tm-remove-evidence" data-index="${idx}">✕</button>
                 </div>
               `).join('')}
             </div>
@@ -6351,36 +6351,36 @@ ${criticalResults.slice(0, 5).map(r =>
                  ondragleave="TM.handleDragLeave(event)"
                  ondrop="TM.handleEvidenceDrop(event)"
                  onclick="document.getElementById('tm-evidence-input').click()">
-              <span>ðŸ“ íŒŒì¼ì„ ë“œëž˜ê·¸í•˜ê±°ë‚˜ í´ë¦­í•˜ì—¬ ì—…ë¡œë“œ</span>
-              <small>ì‚¬ì—…ìžë“±ë¡ì¦, ì œì•ˆì„œ, ê³„ì•½ì„œ ë“±</small>
+              <span>📁 파일을 드래그하거나 클릭하여 업로드</span>
+              <small>사업자등록증, 제안서, 계약서 등</small>
             </div>
           `}
           
           <div class="tm-evidence-manual-compact">
-            <input type="text" id="tm-evidence-title" placeholder="ìˆ˜ë™ ì¶”ê°€: ìžë£Œëª… ìž…ë ¥">
+            <input type="text" id="tm-evidence-title" placeholder="수동 추가: 자료명 입력">
             <button class="tm-btn-add" onclick="TM.addEvidenceManual()">+</button>
           </div>
         </div>
         
-        <!-- ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œ ìƒì„± (ì»´íŒ©íŠ¸) -->
+        <!-- 우선심사 설명서 생성 (컴팩트) -->
         <div class="tm-section-compact tm-doc-section">
           <div class="tm-section-header-compact">
-            <span>ðŸ“ ì„¤ëª…ì„œ ìƒì„±</span>
+            <span>📝 설명서 생성</span>
           </div>
           
           ${TM.checkGoodsMismatch() ? `
             <div class="tm-goods-selector">
-              <div class="tm-goods-selector-header">âš ï¸ ì§€ì •ìƒí’ˆ ì •ë³´ ë¶ˆì¼ì¹˜ - ì‚¬ìš©í•  ì •ë³´ ì„ íƒ:</div>
+              <div class="tm-goods-selector-header">⚠️ 지정상품 정보 불일치 - 사용할 정보 선택:</div>
               <div class="tm-goods-selector-options">
                 <label class="tm-goods-option-inline ${!pe.useExtractedGoods ? 'selected' : ''}" onclick="TM.selectGoodsSource(false)">
                   <input type="radio" name="goods-source" ${!pe.useExtractedGoods ? 'checked' : ''}>
-                  <span class="tm-option-label">ðŸ“‹ 2ë‹¨ê³„ ì§€ì •ìƒí’ˆ</span>
-                  <span class="tm-option-value">${(p.designatedGoods || []).map(d => d.classCode).join(',')}ë¥˜</span>
+                  <span class="tm-option-label">📋 2단계 지정상품</span>
+                  <span class="tm-option-value">${(p.designatedGoods || []).map(d => d.classCode).join(',')}류</span>
                 </label>
                 <label class="tm-goods-option-inline ${pe.useExtractedGoods ? 'selected' : ''}" onclick="TM.selectGoodsSource(true)">
                   <input type="radio" name="goods-source" ${pe.useExtractedGoods ? 'checked' : ''}>
-                  <span class="tm-option-label">ðŸ“„ ì¶œì›ì„œ ì¶”ì¶œ</span>
-                  <span class="tm-option-value">${pe.classCode}ë¥˜</span>
+                  <span class="tm-option-label">📄 출원서 추출</span>
+                  <span class="tm-option-value">${pe.classCode}류</span>
                 </label>
               </div>
             </div>
@@ -6388,37 +6388,37 @@ ${criticalResults.slice(0, 5).map(r =>
           
           <div class="tm-doc-actions-compact">
             <button class="tm-btn-generate" data-action="tm-generate-priority-doc">
-              ðŸ“„ Word ìƒì„±
+              📄 Word 생성
             </button>
             <button class="tm-btn-preview" onclick="TM.previewPriorityDoc()">
-              ðŸ‘ï¸ ë¯¸ë¦¬ë³´ê¸°
+              👁️ 미리보기
             </button>
           </div>
           
-          <!-- ë¯¸ë¦¬ë³´ê¸° ì˜ì—­ -->
+          <!-- 미리보기 영역 -->
           <div class="tm-doc-preview" id="tm-priority-doc-preview" style="display: none;">
             <div class="tm-doc-preview-header">
-              <span>ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ ì„¤ëª…ì„œ ë¯¸ë¦¬ë³´ê¸°</span>
-              <button class="btn btn-sm btn-ghost" onclick="document.getElementById('tm-priority-doc-preview').style.display='none'">ë‹«ê¸°</button>
+              <span>우선심사 신청 설명서 미리보기</span>
+              <button class="btn btn-sm btn-ghost" onclick="document.getElementById('tm-priority-doc-preview').style.display='none'">닫기</button>
             </div>
             <div class="tm-doc-preview-content" id="tm-priority-doc-content"></div>
           </div>
         </div>
       ` : `
         <div class="tm-info-box">
-          <h4>ðŸ’¡ ìš°ì„ ì‹¬ì‚¬ëž€?</h4>
-          <p>ìƒí‘œë¥¼ ì´ë¯¸ ì‚¬ìš©í•˜ê³  ìžˆê±°ë‚˜ ì‚¬ìš© ì¤€ë¹„ ì¤‘ì¸ ê²½ìš°, ì¼ë°˜ ì‹¬ì‚¬ë³´ë‹¤ ë¹ ë¥´ê²Œ ì‹¬ì‚¬ë¥¼ ë°›ì„ ìˆ˜ ìžˆëŠ” ì œë„ìž…ë‹ˆë‹¤.</p>
+          <h4>💡 우선심사란?</h4>
+          <p>상표를 이미 사용하고 있거나 사용 준비 중인 경우, 일반 심사보다 빠르게 심사를 받을 수 있는 제도입니다.</p>
           <ul>
-            <li>ì¼ë°˜ ì‹¬ì‚¬: ì•½ 12~14ê°œì›”</li>
-            <li>ìš°ì„ ì‹¬ì‚¬: ì•½ 2~3ê°œì›”</li>
+            <li>일반 심사: 약 12~14개월</li>
+            <li>우선심사: 약 2~3개월</li>
           </ul>
-          <p><strong>ì‹ ì²­ ìš”ê±´ (ìƒí‘œë²• ì œ53ì¡° ì œ2í•­, ì‹œí–‰ë ¹ ì œ12ì¡°)</strong></p>
+          <p><strong>신청 요건 (상표법 제53조 제2항, 시행령 제12조)</strong></p>
           <ol>
-            <li>ìƒí‘œë¥¼ ì§€ì •ìƒí’ˆ ì „ë¶€ì— ì‚¬ìš© ì¤‘ì´ê±°ë‚˜ ì‚¬ìš© ì¤€ë¹„ ì¤‘ì¸ ê²½ìš°</li>
-            <li>ì œ3ìžê°€ ì¶œì›ì¸ì˜ ìƒí‘œë¥¼ ë¬´ë‹¨ ì‚¬ìš© ì¤‘ì¸ ê²½ìš°</li>
-            <li>ì¡°ì•½ì— ë”°ë¥¸ ìš°ì„ ê¶Œ ì£¼ìž¥ì´ ìžˆëŠ” ê²½ìš°</li>
+            <li>상표를 지정상품 전부에 사용 중이거나 사용 준비 중인 경우</li>
+            <li>제3자가 출원인의 상표를 무단 사용 중인 경우</li>
+            <li>조약에 따른 우선권 주장이 있는 경우</li>
           </ol>
-          <p>ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ì‹œ ë¥˜ë‹¹ 160,000ì›ì˜ ì¶”ê°€ ë¹„ìš©ì´ ë°œìƒí•©ë‹ˆë‹¤.</p>
+          <p>우선심사 신청시 류당 160,000원의 추가 비용이 발생합니다.</p>
         </div>
       `}
     `;
@@ -6426,15 +6426,15 @@ ${criticalResults.slice(0, 5).map(r =>
   
   TM.getEvidenceTypeLabel = function(type) {
     const labels = {
-      usage_photo: 'ì‚¬ìš© ì‚¬ì§„',
-      advertisement: 'ê´‘ê³ ë¬¼',
-      contract: 'ê³„ì•½ì„œ',
-      sales_record: 'ë§¤ì¶œ ìžë£Œ',
-      website: 'ì›¹ì‚¬ì´íŠ¸',
-      packaging: 'í¬ìž¥ìž¬',
-      signboard: 'ê°„íŒ',
-      business_card: 'ëª…í•¨',
-      other: 'ê¸°íƒ€'
+      usage_photo: '사용 사진',
+      advertisement: '광고물',
+      contract: '계약서',
+      sales_record: '매출 자료',
+      website: '웹사이트',
+      packaging: '포장재',
+      signboard: '간판',
+      business_card: '명함',
+      other: '기타'
     };
     return labels[type] || type;
   };
@@ -6442,13 +6442,13 @@ ${criticalResults.slice(0, 5).map(r =>
   TM.setPriorityExamEnabled = function(enabled) {
     if (!TM.currentProject) return;
     TM.currentProject.priorityExam.enabled = enabled;
-    TM.currentProject.priorityExam.userConfirmed = true; // ì‚¬ìš©ìžê°€ ëª…ì‹œì ìœ¼ë¡œ ì„ íƒ
+    TM.currentProject.priorityExam.userConfirmed = true; // 사용자가 명시적으로 선택
     TM.hasUnsavedChanges = true;
-    TM.calculateFee(); // ë¹„ìš© ìž¬ê³„ì‚°
+    TM.calculateFee(); // 비용 재계산
     TM.renderCurrentStep();
   };
   
-  // ìš°ì„ ì‹¬ì‚¬ ì„ íƒ ì¹´ë“œ í´ë¦­
+  // 우선심사 선택 카드 클릭
   TM.setPriorityChoice = function(enabled) {
     if (!TM.currentProject) return;
     TM.currentProject.priorityExam.enabled = enabled;
@@ -6456,7 +6456,7 @@ ${criticalResults.slice(0, 5).map(r =>
     TM.hasUnsavedChanges = true;
     TM.calculateFee();
     TM.renderCurrentStep();
-    App.showToast(enabled ? 'ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ìœ¼ë¡œ ì„¤ì •ë˜ì—ˆìŠµë‹ˆë‹¤.' : 'ì¼ë°˜ ì‹¬ì‚¬ë¡œ ì„¤ì •ë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+    App.showToast(enabled ? '우선심사 신청으로 설정되었습니다.' : '일반 심사로 설정되었습니다.', 'success');
   };
   
   TM.updatePriorityReason = function(reason) {
@@ -6465,25 +6465,25 @@ ${criticalResults.slice(0, 5).map(r =>
     TM.hasUnsavedChanges = true;
   };
   
-  // ì¶œì›ì„œ ì—…ë¡œë“œë¡œ ì •ë³´ ì¶”ì¶œ (ì—¬ëŸ¬ íŒŒì¼ ì§€ì›)
+  // 출원서 업로드로 정보 추출 (여러 파일 지원)
   TM.handleApplicationUpload = async function(files) {
     if (!files || files.length === 0) return;
     
     const p = TM.currentProject;
     
-    // ì—…ë¡œë“œ ì˜ì—­ì— ë¡œë”© í‘œì‹œ
+    // 업로드 영역에 로딩 표시
     const dropzone = document.getElementById('tm-application-dropzone');
     if (dropzone) {
       dropzone.innerHTML = `
         <div class="tm-dropzone-loading">
           <div class="tm-spinner"></div>
-          <div>ë¬¸ì„œ ë¶„ì„ ì¤‘... (${files.length}ê°œ íŒŒì¼)</div>
+          <div>문서 분석 중... (${files.length}개 파일)</div>
         </div>
       `;
     }
     
     try {
-      // ê¸°ë³¸ê°’ ì„¤ì • (ì²« ì—…ë¡œë“œ ì‹œì—ë§Œ)
+      // 기본값 설정 (첫 업로드 시에만)
       if (!p.priorityExam) p.priorityExam = {};
       if (!p.priorityExam.extractedFromApplication) {
         p.priorityExam.applicationNumber = '';
@@ -6500,34 +6500,34 @@ ${criticalResults.slice(0, 5).map(r =>
       let totalExtracted = 0;
       const fileNames = [];
       
-      // ì—¬ëŸ¬ íŒŒì¼ ìˆœì°¨ ì²˜ë¦¬
+      // 여러 파일 순차 처리
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        // íŒŒì¼ í¬ê¸° ì²´í¬ (20MB)
+        // 파일 크기 체크 (20MB)
         if (file.size > 20 * 1024 * 1024) {
-          App.showToast(`${file.name}: íŒŒì¼ í¬ê¸° ì´ˆê³¼ (20MB ì´í•˜)`, 'warning');
+          App.showToast(`${file.name}: 파일 크기 초과 (20MB 이하)`, 'warning');
           continue;
         }
         
         fileNames.push(file.name);
         
-        // ì§„í–‰ ìƒíƒœ ì—…ë°ì´íŠ¸
+        // 진행 상태 업데이트
         if (dropzone) {
           dropzone.innerHTML = `
             <div class="tm-dropzone-loading">
               <div class="tm-spinner"></div>
-              <div>ë¶„ì„ ì¤‘... (${i + 1}/${files.length}) ${file.name}</div>
+              <div>분석 중... (${i + 1}/${files.length}) ${file.name}</div>
             </div>
           `;
         }
         
-        // PDFì¸ ê²½ìš° í…ìŠ¤íŠ¸ ì¶”ì¶œ ì‹œë„
+        // PDF인 경우 텍스트 추출 시도
         if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
           try {
             const extracted = await TM.extractFromPDF(file);
             
-            // ì¶”ì¶œëœ í•­ëª© ì ìš© (ë¹ˆ í•­ëª©ë§Œ ì±„ìš°ê¸°)
+            // 추출된 항목 적용 (빈 항목만 채우기)
             if (!p.priorityExam.applicationNumber && extracted.applicationNumber) {
               p.priorityExam.applicationNumber = extracted.applicationNumber;
               totalExtracted++;
@@ -6544,7 +6544,7 @@ ${criticalResults.slice(0, 5).map(r =>
               p.priorityExam.trademarkNameFromApp = extracted.trademarkName;
               totalExtracted++;
             }
-            // ìƒí’ˆë¥˜ì™€ ì§€ì •ìƒí’ˆì€ ì¶œì›ì„œì—ì„œ ì¶”ì¶œëœ ê°’ ìš°ì„  ì ìš©
+            // 상품류와 지정상품은 출원서에서 추출된 값 우선 적용
             if (extracted.classCode) {
               p.priorityExam.classCode = extracted.classCode;
               totalExtracted++;
@@ -6555,14 +6555,14 @@ ${criticalResults.slice(0, 5).map(r =>
             }
             
           } catch (pdfError) {
-            console.error(`[TM] ${file.name} ì¶”ì¶œ ì‹¤íŒ¨:`, pdfError);
+            console.error(`[TM] ${file.name} 추출 실패:`, pdfError);
           }
         }
       }
       
       p.priorityExam.uploadedFileName = fileNames.join(', ');
       
-      // ì¶”ì¶œë˜ì§€ ì•Šì€ í•­ëª©ì€ ê¸°ì¡´ í”„ë¡œì íŠ¸ ì •ë³´ë¡œ ì±„ìš°ê¸°
+      // 추출되지 않은 항목은 기존 프로젝트 정보로 채우기
       if (!p.priorityExam.classCode && p.designatedGoods && p.designatedGoods.length > 0) {
         p.priorityExam.classCode = p.designatedGoods.map(d => d.classCode).join(', ');
       }
@@ -6571,82 +6571,82 @@ ${criticalResults.slice(0, 5).map(r =>
       }
       
       if (totalExtracted > 0) {
-        App.showToast(`${totalExtracted}ê°œ í•­ëª©ì´ ì¶”ì¶œë˜ì—ˆìŠµë‹ˆë‹¤. í™•ì¸ í›„ ìˆ˜ì •í•˜ì„¸ìš”.`, 'success');
+        App.showToast(`${totalExtracted}개 항목이 추출되었습니다. 확인 후 수정하세요.`, 'success');
       } else {
-        App.showToast('ìžë™ ì¶”ì¶œì— ì‹¤íŒ¨í–ˆìŠµë‹ˆë‹¤. ì§ì ‘ ìž…ë ¥í•´ì£¼ì„¸ìš”.', 'warning');
+        App.showToast('자동 추출에 실패했습니다. 직접 입력해주세요.', 'warning');
       }
       
       TM.renderCurrentStep();
       
     } catch (error) {
-      console.error('[TM] ì¶œì›ì„œ ì—…ë¡œë“œ ì‹¤íŒ¨:', error);
-      App.showToast('ì—…ë¡œë“œ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 출원서 업로드 실패:', error);
+      App.showToast('업로드 실패: ' + error.message, 'error');
       TM.renderCurrentStep();
     }
   };
   
-  // PDFì—ì„œ í…ìŠ¤íŠ¸ ì¶”ì¶œ ë° íŒŒì‹±
+  // PDF에서 텍스트 추출 및 파싱
   TM.extractFromPDF = async function(file) {
-    // PDF.js ë¡œë“œ
+    // PDF.js 로드
     if (!window.pdfjsLib) {
-      console.log('[TM] PDF.js ë¡œë“œ ì¤‘...');
+      console.log('[TM] PDF.js 로드 중...');
       await TM.loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      console.log('[TM] PDF.js ë¡œë“œ ì™„ë£Œ');
+      console.log('[TM] PDF.js 로드 완료');
     }
     
     const arrayBuffer = await file.arrayBuffer();
-    console.log('[TM] PDF íŒŒì¼ í¬ê¸°:', arrayBuffer.byteLength);
+    console.log('[TM] PDF 파일 크기:', arrayBuffer.byteLength);
     
     const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    console.log('[TM] PDF íŽ˜ì´ì§€ ìˆ˜:', pdf.numPages);
+    console.log('[TM] PDF 페이지 수:', pdf.numPages);
     
     let fullText = '';
     
-    // ëª¨ë“  íŽ˜ì´ì§€ì—ì„œ í…ìŠ¤íŠ¸ ì¶”ì¶œ
+    // 모든 페이지에서 텍스트 추출
     for (let i = 1; i <= Math.min(pdf.numPages, 3); i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
-      console.log('[TM] íŽ˜ì´ì§€', i, 'í…ìŠ¤íŠ¸ ì•„ì´í…œ ìˆ˜:', textContent.items.length);
+      console.log('[TM] 페이지', i, '텍스트 아이템 수:', textContent.items.length);
       
       const pageText = textContent.items.map(item => item.str).join(' ');
       fullText += pageText + '\n';
     }
     
-    // í…ìŠ¤íŠ¸ê°€ ê±°ì˜ ì—†ìœ¼ë©´ ì´ë¯¸ì§€ ê¸°ë°˜ PDF -> OCR ì‹œë„
+    // 텍스트가 거의 없으면 이미지 기반 PDF -> OCR 시도
     const cleanText = fullText.replace(/\s+/g, '').trim();
-    console.log('[TM] ì¶”ì¶œëœ í…ìŠ¤íŠ¸ ê¸¸ì´:', cleanText.length);
+    console.log('[TM] 추출된 텍스트 길이:', cleanText.length);
     
     if (cleanText.length < 30) {
-      console.log('[TM] ì´ë¯¸ì§€ ê¸°ë°˜ PDF ê°ì§€ - OCR ì‹œë„');
-      App.showToast('ì´ë¯¸ì§€ PDF ê°ì§€. OCR ì²˜ë¦¬ ì¤‘...', 'info');
+      console.log('[TM] 이미지 기반 PDF 감지 - OCR 시도');
+      App.showToast('이미지 PDF 감지. OCR 처리 중...', 'info');
       fullText = await TM.ocrPDF(pdf);
     }
     
-    console.log('[TM] ìµœì¢… í…ìŠ¤íŠ¸:', fullText.substring(0, 500));
+    console.log('[TM] 최종 텍스트:', fullText.substring(0, 500));
     
-    // Claude APIë¡œ ì •ë³´ ì¶”ì¶œ
-    App.showToast('AIê°€ í…ìŠ¤íŠ¸ ë¶„ì„ ì¤‘...', 'info');
+    // Claude API로 정보 추출
+    App.showToast('AI가 텍스트 분석 중...', 'info');
     return await TM.parseApplicationText(fullText);
   };
   
-  // PDFë¥¼ ì´ë¯¸ì§€ë¡œ ë Œë”ë§ í›„ OCR
+  // PDF를 이미지로 렌더링 후 OCR
   TM.ocrPDF = async function(pdf) {
-    // Tesseract.js ë¡œë“œ
+    // Tesseract.js 로드
     if (!window.Tesseract) {
-      console.log('[TM] Tesseract.js ë¡œë“œ ì¤‘...');
+      console.log('[TM] Tesseract.js 로드 중...');
       await TM.loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js');
-      console.log('[TM] Tesseract.js ë¡œë“œ ì™„ë£Œ');
+      console.log('[TM] Tesseract.js 로드 완료');
     }
     
     let fullText = '';
     
-    // ì²« íŽ˜ì´ì§€ë§Œ OCR (ì†ë„ ìœ„í•´)
+    // 첫 페이지만 OCR (속도 위해)
     const page = await pdf.getPage(1);
-    const scale = 2.0; // ê³ í•´ìƒë„ë¡œ ë Œë”ë§
+    const scale = 2.0; // 고해상도로 렌더링
     const viewport = page.getViewport({ scale });
     
-    // Canvasì— ë Œë”ë§
+    // Canvas에 렌더링
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     canvas.width = viewport.width;
@@ -6657,25 +6657,25 @@ ${criticalResults.slice(0, 5).map(r =>
       viewport: viewport
     }).promise;
     
-    console.log('[TM] PDF ì´ë¯¸ì§€ ë Œë”ë§ ì™„ë£Œ:', canvas.width, 'x', canvas.height);
+    console.log('[TM] PDF 이미지 렌더링 완료:', canvas.width, 'x', canvas.height);
     
-    // OCR ì‹¤í–‰ (í•œêµ­ì–´)
+    // OCR 실행 (한국어)
     const result = await Tesseract.recognize(canvas, 'kor', {
       logger: m => {
         if (m.status === 'recognizing text') {
           const pct = Math.round(m.progress * 100);
-          console.log('[TM] OCR ì§„í–‰:', pct + '%');
+          console.log('[TM] OCR 진행:', pct + '%');
         }
       }
     });
     
     fullText = result.data.text;
-    console.log('[TM] OCR ê²°ê³¼:', fullText.substring(0, 500));
+    console.log('[TM] OCR 결과:', fullText.substring(0, 500));
     
     return fullText;
   };
   
-  // í…ìŠ¤íŠ¸ì—ì„œ ì¶œì› ì •ë³´ íŒŒì‹± (Claude API ì‚¬ìš©)
+  // 텍스트에서 출원 정보 파싱 (Claude API 사용)
   TM.parseApplicationText = async function(text) {
     const result = {
       applicationNumber: '',
@@ -6687,37 +6687,37 @@ ${criticalResults.slice(0, 5).map(r =>
     };
     
     if (!text || text.trim().length < 10) {
-      console.log('[TM] í…ìŠ¤íŠ¸ê°€ ë„ˆë¬´ ì§§ìŒ');
+      console.log('[TM] 텍스트가 너무 짧음');
       return result;
     }
     
-    console.log('[TM] Claude APIë¡œ í…ìŠ¤íŠ¸ ë¶„ì„ ì‹œìž‘');
-    console.log('[TM] ì›ë³¸ í…ìŠ¤íŠ¸:', text.substring(0, 800));
+    console.log('[TM] Claude API로 텍스트 분석 시작');
+    console.log('[TM] 원본 텍스트:', text.substring(0, 800));
     
     try {
-      const prompt = `ë‹¤ìŒì€ ìƒí‘œ ì¶œì›ë²ˆí˜¸í†µì§€ì„œ ë˜ëŠ” ì¶œì›ì„œë¥¼ OCRí•œ í…ìŠ¤íŠ¸ìž…ë‹ˆë‹¤. ë„ì–´ì“°ê¸°ê°€ ìž˜ëª»ë˜ì–´ ìžˆê±°ë‚˜ ê¸€ìžê°€ ëˆ„ë½ë˜ì—ˆì„ ìˆ˜ ìžˆìŠµë‹ˆë‹¤.
+      const prompt = `다음은 상표 출원번호통지서 또는 출원서를 OCR한 텍스트입니다. 띄어쓰기가 잘못되어 있거나 글자가 누락되었을 수 있습니다.
 
-ì•„ëž˜ ì •ë³´ë¥¼ ì¶”ì¶œí•´ì£¼ì„¸ìš”:
-1. ì¶œì›ë²ˆí˜¸ (40-XXXX-XXXXXXX í˜•ì‹)
-2. ì¶œì›ì¼ìž (YYYY.MM.DD í˜•ì‹)
-3. ì¶œì›ì¸ ëª…ì¹­ (íšŒì‚¬ëª… ë˜ëŠ” ê°œì¸ëª…)
-4. ìƒí’ˆë¥˜ (ìˆ«ìžë§Œ, ì˜ˆ: 09, 35, 42)
-5. ì§€ì •ìƒí’ˆ (ì½¤ë§ˆë¡œ êµ¬ë¶„ëœ ëª©ë¡)
+아래 정보를 추출해주세요:
+1. 출원번호 (40-XXXX-XXXXXXX 형식)
+2. 출원일자 (YYYY.MM.DD 형식)
+3. 출원인 명칭 (회사명 또는 개인명)
+4. 상품류 (숫자만, 예: 09, 35, 42)
+5. 지정상품 (콤마로 구분된 목록)
 
-ã€OCR í…ìŠ¤íŠ¸ã€‘
+【OCR 텍스트】
 ${text.substring(0, 2000)}
 
-ã€ì‘ë‹µ í˜•ì‹ - JSONë§Œã€‘
-{"applicationNumber": "40-2025-0097799", "applicationDate": "2025.06.09", "applicantName": "ì‚¼ì¸ì‹œìŠ¤í…œ ì£¼ì‹íšŒì‚¬", "classCode": "09", "designatedGoods": "ì†Œí”„íŠ¸ì›¨ì–´, ì»´í“¨í„° í”„ë¡œê·¸ëž¨"}
+【응답 형식 - JSON만】
+{"applicationNumber": "40-2025-0097799", "applicationDate": "2025.06.09", "applicantName": "삼인시스템 주식회사", "classCode": "09", "designatedGoods": "소프트웨어, 컴퓨터 프로그램"}
 
-ì°¾ì„ ìˆ˜ ì—†ëŠ” í•­ëª©ì€ ë¹ˆ ë¬¸ìžì—´("")ë¡œ ì„¤ì •í•˜ì„¸ìš”. JSONë§Œ ì‘ë‹µí•˜ì„¸ìš”.`;
+찾을 수 없는 항목은 빈 문자열("")로 설정하세요. JSON만 응답하세요.`;
 
       const response = await App.callClaude(prompt, 800);
       const responseText = response.text || '';
       
-      console.log('[TM] Claude ì‘ë‹µ:', responseText);
+      console.log('[TM] Claude 응답:', responseText);
       
-      // JSON ì¶”ì¶œ
+      // JSON 추출
       const startIdx = responseText.indexOf('{');
       const endIdx = responseText.lastIndexOf('}');
       
@@ -6732,18 +6732,18 @@ ${text.substring(0, 2000)}
         if (parsed.classCode) result.classCode = parsed.classCode;
         if (parsed.designatedGoods) result.designatedGoods = parsed.designatedGoods;
         
-        console.log('[TM] Claude íŒŒì‹± ê²°ê³¼:', result);
+        console.log('[TM] Claude 파싱 결과:', result);
         return result;
       }
     } catch (error) {
-      console.error('[TM] Claude ë¶„ì„ ì‹¤íŒ¨, ì •ê·œì‹ í´ë°±:', error);
+      console.error('[TM] Claude 분석 실패, 정규식 폴백:', error);
     }
     
-    // ì •ê·œì‹ í´ë°±
+    // 정규식 폴백
     return TM.parseApplicationTextRegex(text);
   };
   
-  // ì •ê·œì‹ ê¸°ë°˜ íŒŒì‹± (í´ë°±ìš©)
+  // 정규식 기반 파싱 (폴백용)
   TM.parseApplicationTextRegex = function(text) {
     const result = {
       applicationNumber: '',
@@ -6756,70 +6756,70 @@ ${text.substring(0, 2000)}
     
     let t = text.replace(/\s+/g, ' ');
     
-    console.log('[TM] ì •ê·œì‹ í´ë°± íŒŒì‹± ì‹œìž‘');
+    console.log('[TM] 정규식 폴백 파싱 시작');
     
-    // ì¶œì›ë²ˆí˜¸: 40-2025-0097799
+    // 출원번호: 40-2025-0097799
     const appNumMatch = t.match(/(40-\d{4}-\d{6,7})/);
     if (appNumMatch) {
       result.applicationNumber = appNumMatch[1];
-      console.log('[TM] ì¶œì›ë²ˆí˜¸:', result.applicationNumber);
+      console.log('[TM] 출원번호:', result.applicationNumber);
     }
     
-    // ì¶œì›ì¼ìž: 2025.06.09 ë˜ëŠ” 202506.09
+    // 출원일자: 2025.06.09 또는 202506.09
     const dateMatch = t.match(/(\d{4})[.\s-]*(\d{2})[.\s-]*(\d{2})/);
     if (dateMatch) {
       result.applicationDate = `${dateMatch[1]}.${dateMatch[2]}.${dateMatch[3]}`;
-      console.log('[TM] ì¶œì›ì¼ìž:', result.applicationDate);
+      console.log('[TM] 출원일자:', result.applicationDate);
     }
     
-    // ì¶œì›ì¸: í•œê¸€ ì‚¬ì´ ê³µë°± ì œê±°í•˜ì—¬ íšŒì‚¬ëª… ì¶”ì¶œ
-    const companyMatch = t.match(/([ê°€-íž£\s]{2,20})\s*ì£¼\s*ì‹\s*íšŒ\s*ì‚¬|ì£¼\s*ì‹\s*íšŒ\s*ì‚¬\s*([ê°€-íž£\s]{2,20})/);
+    // 출원인: 한글 사이 공백 제거하여 회사명 추출
+    const companyMatch = t.match(/([가-힣\s]{2,20})\s*주\s*식\s*회\s*사|주\s*식\s*회\s*사\s*([가-힣\s]{2,20})/);
     if (companyMatch) {
       let name = (companyMatch[1] || companyMatch[2] || '').replace(/\s/g, '');
       if (name && name.length >= 2) {
-        result.applicantName = name + ' ì£¼ì‹íšŒì‚¬';
-        console.log('[TM] ì¶œì›ì¸:', result.applicantName);
+        result.applicantName = name + ' 주식회사';
+        console.log('[TM] 출원인:', result.applicantName);
       }
     }
     
-    // ìƒí’ˆë¥˜: ì œ09ë¥˜, ì œ 09 ë¥˜, 09ë¥˜ ë“±
-    const classMatch = t.match(/ì œ?\s*(\d{1,2})\s*ë¥˜/);
+    // 상품류: 제09류, 제 09 류, 09류 등
+    const classMatch = t.match(/제?\s*(\d{1,2})\s*류/);
     if (classMatch) {
       result.classCode = classMatch[1].padStart(2, '0');
-      console.log('[TM] ìƒí’ˆë¥˜:', result.classCode);
+      console.log('[TM] 상품류:', result.classCode);
     }
     
-    // ì§€ì •ìƒí’ˆ: ã€ì§€ì •ìƒí’ˆã€‘ ë˜ëŠ” ì§€ì •ìƒí’ˆ ë’¤ì˜ í…ìŠ¤íŠ¸
-    const goodsMatch = t.match(/ì§€\s*ì •\s*ìƒ\s*í’ˆ[ã€‘\]\s:]*([\s\S]{10,500}?)(?=ã€|ì¶œì›ì¸|ìƒí‘œ|$)/i);
+    // 지정상품: 【지정상품】 또는 지정상품 뒤의 텍스트
+    const goodsMatch = t.match(/지\s*정\s*상\s*품[】\]\s:]*([\s\S]{10,500}?)(?=【|출원인|상표|$)/i);
     if (goodsMatch) {
       let goods = goodsMatch[1].trim();
-      // í•œê¸€ ì‚¬ì´ ë¶ˆí•„ìš”í•œ ê³µë°± ì œê±°
-      goods = goods.replace(/([ê°€-íž£])\s+([ê°€-íž£])/g, '$1$2');
-      goods = goods.replace(/([ê°€-íž£])\s+([ê°€-íž£])/g, '$1$2');
+      // 한글 사이 불필요한 공백 제거
+      goods = goods.replace(/([가-힣])\s+([가-힣])/g, '$1$2');
+      goods = goods.replace(/([가-힣])\s+([가-힣])/g, '$1$2');
       goods = goods.substring(0, 300).trim();
       if (goods.length > 5) {
         result.designatedGoods = goods;
-        console.log('[TM] ì§€ì •ìƒí’ˆ:', goods.substring(0, 80) + '...');
+        console.log('[TM] 지정상품:', goods.substring(0, 80) + '...');
       }
     }
     
-    console.log('[TM] ì •ê·œì‹ íŒŒì‹± ê²°ê³¼:', result);
+    console.log('[TM] 정규식 파싱 결과:', result);
     return result;
   };
   
-  // ì¶”ì¶œ ì •ë³´ í•„ë“œ ì—…ë°ì´íŠ¸
+  // 추출 정보 필드 업데이트
   TM.updateExtractedField = function(field, value) {
     if (!TM.currentProject?.priorityExam) return;
     TM.currentProject.priorityExam[field] = value;
     TM.hasUnsavedChanges = true;
   };
   
-  // ì¶”ì¶œ ì •ë³´ ì €ìž¥ í™•ì •
+  // 추출 정보 저장 확정
   TM.confirmExtractedInfo = function() {
     const p = TM.currentProject;
     if (!p?.priorityExam) return;
     
-    // ìž…ë ¥ í•„ë“œì—ì„œ ê°’ ì½ê¸°
+    // 입력 필드에서 값 읽기
     const fields = ['applicationNumber', 'applicationDate', 'trademarkNameFromApp', 'applicantName', 'classCode', 'designatedGoodsFromApp'];
     fields.forEach(field => {
       const input = document.getElementById(`tm-extract-${field}`);
@@ -6828,13 +6828,13 @@ ${text.substring(0, 2000)}
       }
     });
     
-    p.priorityExam.editMode = false; // íŽ¸ì§‘ ëª¨ë“œ ì¢…ë£Œ
+    p.priorityExam.editMode = false; // 편집 모드 종료
     TM.hasUnsavedChanges = true;
     TM.renderCurrentStep();
-    App.showToast('ì¶œì› ì •ë³´ê°€ ì €ìž¥ë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+    App.showToast('출원 정보가 저장되었습니다.', 'success');
   };
   
-  // ë“œëž˜ê·¸ ì•¤ ë“œë¡­ í•¸ë“¤ëŸ¬
+  // 드래그 앤 드롭 핸들러
   TM.handleDragOver = function(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -6847,7 +6847,7 @@ ${text.substring(0, 2000)}
     e.currentTarget.classList.remove('dragover');
   };
   
-  // ê²¬ë³¸ ë“œëž˜ê·¸ì•¤ë“œë¡­
+  // 견본 드래그앤드롭
   TM.handleSpecimenDrop = function(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -6857,18 +6857,18 @@ ${text.substring(0, 2000)}
     if (files && files.length > 0) {
       const file = files[0];
       if (file.type.startsWith('image/')) {
-        // íŒŒì¼ inputì— íŒŒì¼ ì„¤ì •í•˜ê³  ì²˜ë¦¬
+        // 파일 input에 파일 설정하고 처리
         const input = document.getElementById('tm-specimen-input');
         if (input) {
-          // DataTransferë¥¼ ì´ìš©í•´ inputì˜ files ì„¤ì •
+          // DataTransfer를 이용해 input의 files 설정
           const dt = new DataTransfer();
           dt.items.add(file);
           input.files = dt.files;
-          // ë³€ê²½ ì´ë²¤íŠ¸ íŠ¸ë¦¬ê±°
+          // 변경 이벤트 트리거
           input.dispatchEvent(new Event('change', { bubbles: true }));
         }
       } else {
-        App.showToast('ì´ë¯¸ì§€ íŒŒì¼ë§Œ ì—…ë¡œë“œ ê°€ëŠ¥í•©ë‹ˆë‹¤.', 'warning');
+        App.showToast('이미지 파일만 업로드 가능합니다.', 'warning');
       }
     }
   };
@@ -6884,7 +6884,7 @@ ${text.substring(0, 2000)}
     }
   };
   
-  // ì¶”ì¶œ ì •ë³´ ì´ˆê¸°í™”
+  // 추출 정보 초기화
   TM.clearExtractedInfo = function() {
     if (!TM.currentProject) return;
     TM.currentProject.priorityExam.extractedFromApplication = false;
@@ -6897,31 +6897,31 @@ ${text.substring(0, 2000)}
     TM.currentProject.priorityExam.classCode = null;
     TM.currentProject.priorityExam.designatedGoodsFromApp = null;
     TM.renderCurrentStep();
-    App.showToast('ì¶”ì¶œ ì •ë³´ê°€ ì´ˆê¸°í™”ë˜ì—ˆìŠµë‹ˆë‹¤.', 'info');
+    App.showToast('추출 정보가 초기화되었습니다.', 'info');
   };
   
-  // íŽ¸ì§‘ ëª¨ë“œ ì „í™˜
+  // 편집 모드 전환
   TM.editExtractedInfo = function() {
     if (!TM.currentProject?.priorityExam) return;
     TM.currentProject.priorityExam.editMode = true;
     TM.renderCurrentStep();
   };
   
-  // ìš°ì„ ì‹¬ì‚¬ ì‚¬ìœ  ìƒì„¸ ì—…ë°ì´íŠ¸
+  // 우선심사 사유 상세 업데이트
   TM.updatePriorityReasonDetail = function(detail) {
     if (!TM.currentProject) return;
     TM.currentProject.priorityExam.reasonDetail = detail;
     TM.hasUnsavedChanges = true;
   };
   
-  // ì¦ê±°ìžë£Œ ìˆ˜ë™ ì¶”ê°€
+  // 증거자료 수동 추가
   TM.addEvidenceManual = function() {
     const titleInput = document.getElementById('tm-evidence-title');
     const descInput = document.getElementById('tm-evidence-desc');
     
     const title = titleInput?.value?.trim();
     if (!title) {
-      App.showToast('ì²¨ë¶€ìžë£Œ ì œëª©ì„ ìž…ë ¥í•˜ì„¸ìš”.', 'warning');
+      App.showToast('첨부자료 제목을 입력하세요.', 'warning');
       return;
     }
     
@@ -6937,10 +6937,10 @@ ${text.substring(0, 2000)}
     
     TM.hasUnsavedChanges = true;
     TM.renderCurrentStep();
-    App.showToast('ì²¨ë¶€ìžë£Œê°€ ì¶”ê°€ë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+    App.showToast('첨부자료가 추가되었습니다.', 'success');
   };
   
-  // ì¦ê±°ìžë£Œ ë“œë¡­ í•¸ë“¤ëŸ¬
+  // 증거자료 드롭 핸들러
   TM.handleEvidenceDrop = function(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -6952,7 +6952,7 @@ ${text.substring(0, 2000)}
     }
   };
   
-  // ì¦ê±°ìžë£Œ íŒŒì¼ ì—…ë¡œë“œ ë° AI ë¶„ì„
+  // 증거자료 파일 업로드 및 AI 분석
   TM.handleEvidenceUpload = async function(files) {
     if (!files || files.length === 0) return;
     
@@ -6965,24 +6965,24 @@ ${text.substring(0, 2000)}
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       
-      // íŒŒì¼ í¬ê¸° ì²´í¬ (10MB)
+      // 파일 크기 체크 (10MB)
       if (file.size > 10 * 1024 * 1024) {
-        App.showToast(`${file.name}: íŒŒì¼ í¬ê¸° ì´ˆê³¼ (10MB ì´í•˜)`, 'warning');
+        App.showToast(`${file.name}: 파일 크기 초과 (10MB 이하)`, 'warning');
         continue;
       }
       
-      // ë¡œë”© í‘œì‹œ
+      // 로딩 표시
       if (dropzone) {
         dropzone.innerHTML = `
           <div class="tm-dropzone-loading">
             <div class="tm-spinner"></div>
-            <div>ì¦ê±°ìžë£Œ ë¶„ì„ ì¤‘... (${i + 1}/${files.length}) ${file.name}</div>
+            <div>증거자료 분석 중... (${i + 1}/${files.length}) ${file.name}</div>
           </div>
         `;
       }
       
       try {
-        // íŒŒì¼ íƒ€ìž…ì— ë”°ë¼ í…ìŠ¤íŠ¸ ì¶”ì¶œ
+        // 파일 타입에 따라 텍스트 추출
         let fileContent = '';
         let fileType = '';
         
@@ -6997,26 +6997,26 @@ ${text.substring(0, 2000)}
             fileContent = await TM.extractTextFromWord(file);
           } else if (ext === 'ppt' || ext === 'pptx') {
             fileType = 'PowerPoint';
-            // pptxëŠ” íŒŒì¼ëª… ê¸°ë°˜ìœ¼ë¡œ ì²˜ë¦¬ (í…ìŠ¤íŠ¸ ì¶”ì¶œ ë³µìž¡)
+            // pptx는 파일명 기반으로 처리 (텍스트 추출 복잡)
             fileContent = file.name;
           } else if (file.type.startsWith('image/')) {
-            fileType = 'ì´ë¯¸ì§€';
+            fileType = '이미지';
             fileContent = await TM.extractTextFromImage(file);
           } else {
-            fileType = 'íŒŒì¼';
+            fileType = '파일';
             fileContent = file.name;
           }
         } catch (extractError) {
-          console.warn('[TM] í…ìŠ¤íŠ¸ ì¶”ì¶œ ì‹¤íŒ¨, íŒŒì¼ëª…ë§Œ ì‚¬ìš©:', extractError.message);
+          console.warn('[TM] 텍스트 추출 실패, 파일명만 사용:', extractError.message);
           fileContent = file.name;
         }
         
-        // AIë¡œ ì¦ë¹™ìžë£Œëª… ìƒì„± (ì‹¤íŒ¨ ì‹œ íŒŒì¼ëª… ê¸°ë°˜ ì¶”ì¸¡)
+        // AI로 증빙자료명 생성 (실패 시 파일명 기반 추측)
         let evidenceTitle;
         try {
           evidenceTitle = await TM.generateEvidenceTitle(file.name, fileContent, fileType);
         } catch (aiError) {
-          console.warn('[TM] AI ë¶„ì„ ì‹¤íŒ¨, íŒŒì¼ëª… ê¸°ë°˜ ì¶”ì¸¡:', aiError.message);
+          console.warn('[TM] AI 분석 실패, 파일명 기반 추측:', aiError.message);
           evidenceTitle = TM.guessEvidenceTitle(file.name);
         }
         
@@ -7024,19 +7024,19 @@ ${text.substring(0, 2000)}
           title: evidenceTitle,
           fileName: file.name,
           fileType: fileType,
-          description: `ì›ë³¸ íŒŒì¼: ${file.name}`,
+          description: `원본 파일: ${file.name}`,
           addedAt: new Date().toISOString()
         });
         
-        console.log('[TM] ì¦ê±°ìžë£Œ ì¶”ê°€:', evidenceTitle);
+        console.log('[TM] 증거자료 추가:', evidenceTitle);
         
       } catch (error) {
-        console.error('[TM] ì¦ê±°ìžë£Œ ë¶„ì„ ì‹¤íŒ¨:', error);
-        // ì‹¤íŒ¨í•´ë„ íŒŒì¼ëª…ìœ¼ë¡œ ì¶”ê°€
+        console.error('[TM] 증거자료 분석 실패:', error);
+        // 실패해도 파일명으로 추가
         p.priorityExam.evidences.push({
           title: TM.guessEvidenceTitle(file.name),
           fileName: file.name,
-          description: `ì›ë³¸ íŒŒì¼: ${file.name}`,
+          description: `원본 파일: ${file.name}`,
           addedAt: new Date().toISOString()
         });
       }
@@ -7044,10 +7044,10 @@ ${text.substring(0, 2000)}
     
     TM.hasUnsavedChanges = true;
     TM.renderCurrentStep();
-    App.showToast(`${files.length}ê°œ ì¦ê±°ìžë£Œê°€ ì¶”ê°€ë˜ì—ˆìŠµë‹ˆë‹¤.`, 'success');
+    App.showToast(`${files.length}개 증거자료가 추가되었습니다.`, 'success');
   };
   
-  // PDFì—ì„œ í…ìŠ¤íŠ¸ ì¶”ì¶œ (ì¦ê±°ìžë£Œìš©)
+  // PDF에서 텍스트 추출 (증거자료용)
   TM.extractTextFromPDF = async function(file) {
     if (!window.pdfjsLib) {
       await TM.loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
@@ -7064,7 +7064,7 @@ ${text.substring(0, 2000)}
       text += content.items.map(item => item.str).join(' ') + '\n';
     }
     
-    // í…ìŠ¤íŠ¸ê°€ ì ìœ¼ë©´ OCR ì‹œë„
+    // 텍스트가 적으면 OCR 시도
     if (text.replace(/\s/g, '').length < 50) {
       const page = await pdf.getPage(1);
       const scale = 1.5;
@@ -7084,9 +7084,9 @@ ${text.substring(0, 2000)}
     return text.substring(0, 2000);
   };
   
-  // Wordì—ì„œ í…ìŠ¤íŠ¸ ì¶”ì¶œ
+  // Word에서 텍스트 추출
   TM.extractTextFromWord = async function(file) {
-    // mammoth.js ë¡œë“œ
+    // mammoth.js 로드
     if (!window.mammoth) {
       await TM.loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
     }
@@ -7096,7 +7096,7 @@ ${text.substring(0, 2000)}
     return result.value.substring(0, 2000);
   };
   
-  // ì´ë¯¸ì§€ì—ì„œ í…ìŠ¤íŠ¸ ì¶”ì¶œ (OCR)
+  // 이미지에서 텍스트 추출 (OCR)
   TM.extractTextFromImage = async function(file) {
     if (!window.Tesseract) {
       await TM.loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js');
@@ -7106,120 +7106,120 @@ ${text.substring(0, 2000)}
     return result.data.text.substring(0, 2000);
   };
   
-  // íŒŒì¼ëª… ì •ë¦¬ í•¨ìˆ˜ (ê³µí†µ)
+  // 파일명 정리 함수 (공통)
   TM.cleanFileName = function(fileName) {
     return fileName
-      .replace(/^\d{3}-\d{4}-[ê°€-íž£a-zA-Z]+_/, '')  // "005-0001-ê¸°íƒ€ì²¨ë¶€ì„œë¥˜_" ì œê±°
-      .replace(/^[A-Z]?\d+-\d+-/, '')               // "A001-0001-" í˜•ì‹ ì œê±°
-      .replace(/_ì²¨ë¶€\.?/g, '')                      // "_ì²¨ë¶€" ì œê±°
-      .replace(/ì²¨ë¶€$/, '')                          // ëì˜ "ì²¨ë¶€" ì œê±°
-      .replace(/\.[^/.]+$/, '')                      // í™•ìž¥ìž ì œê±°
-      .replace(/_/g, ' ')                            // ì–¸ë”ìŠ¤ì½”ì–´ë¥¼ ê³µë°±ìœ¼ë¡œ
+      .replace(/^\d{3}-\d{4}-[가-힣a-zA-Z]+_/, '')  // "005-0001-기타첨부서류_" 제거
+      .replace(/^[A-Z]?\d+-\d+-/, '')               // "A001-0001-" 형식 제거
+      .replace(/_첨부\.?/g, '')                      // "_첨부" 제거
+      .replace(/첨부$/, '')                          // 끝의 "첨부" 제거
+      .replace(/\.[^/.]+$/, '')                      // 확장자 제거
+      .replace(/_/g, ' ')                            // 언더스코어를 공백으로
       .trim();
   };
   
-  // AIë¡œ ì¦ë¹™ìžë£Œëª… ìƒì„±
+  // AI로 증빙자료명 생성
   TM.generateEvidenceTitle = async function(fileName, content, fileType) {
     const p = TM.currentProject;
     const trademarkName = p.trademarkName || '';
     const applicantName = p.applicantName || p.priorityExam?.applicantName || '';
     
-    // íŒŒì¼ëª… ì •ë¦¬
+    // 파일명 정리
     const cleanedFileName = TM.cleanFileName(fileName);
     
     try {
-      const prompt = `ìƒí‘œ ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ìš© ì¦ê±°ìžë£Œì˜ ì¦ë¹™ìžë£Œëª…ì„ ìƒì„±í•˜ì„¸ìš”.
+      const prompt = `상표 우선심사 신청용 증거자료의 증빙자료명을 생성하세요.
 
-ã€ìƒí‘œ ì •ë³´ã€‘
-- ìƒí‘œëª…: ${trademarkName}
-- ì¶œì›ì¸: ${applicantName}
+【상표 정보】
+- 상표명: ${trademarkName}
+- 출원인: ${applicantName}
 
-ã€íŒŒì¼ ì •ë³´ã€‘
-- íŒŒì¼ëª…: ${cleanedFileName}
-- íŒŒì¼íƒ€ìž…: ${fileType}
+【파일 정보】
+- 파일명: ${cleanedFileName}
+- 파일타입: ${fileType}
 
-ã€íŒŒì¼ ë‚´ìš©ã€‘
+【파일 내용】
 ${content.substring(0, 1200)}
 
-ã€ì¢‹ì€ ì¦ë¹™ìžë£Œëª… ì˜ˆì‹œã€‘
-- ì‚¬ì—…ìžë“±ë¡ì¦
-- ê±´ë¬¼ê´€ë¦¬ì‹œìŠ¤í…œ ê¸°ìˆ ì„¤ëª…ì„œ
-- ì¶œì›ì‚¬ì‹¤ì¦ëª…ì›
-- ì†Œí”„íŠ¸ì›¨ì–´ ì œí’ˆ ì†Œê°œì„œ
-- ì‹œìŠ¤í…œ ë‚©í’ˆ ê³„ì•½ì„œ
-- ì„œë¹„ìŠ¤ ì´ìš© ì•½ê´€
-- í™ˆíŽ˜ì´ì§€ ìº¡ì²˜í™”ë©´
+【좋은 증빙자료명 예시】
+- 사업자등록증
+- 건물관리시스템 기술설명서
+- 출원사실증명원
+- 소프트웨어 제품 소개서
+- 시스템 납품 계약서
+- 서비스 이용 약관
+- 홈페이지 캡처화면
 
-íŒŒì¼ ë‚´ìš©ì„ ë¶„ì„í•˜ì—¬ ì ì ˆí•œ ì¦ë¹™ìžë£Œëª…ì„ í•œ ì¤„ë¡œ ì‘ë‹µí•˜ì„¸ìš”.
-íŒŒì¼ë²ˆí˜¸ë‚˜ ì½”ë“œ(ì˜ˆ: 005-0001)ëŠ” ì œì™¸í•˜ê³  ë‚´ìš© ì¤‘ì‹¬ìœ¼ë¡œ ìž‘ì„±í•˜ì„¸ìš”.`;
+파일 내용을 분석하여 적절한 증빙자료명을 한 줄로 응답하세요.
+파일번호나 코드(예: 005-0001)는 제외하고 내용 중심으로 작성하세요.`;
 
       const response = await App.callClaude(prompt, 80);
       let title = (response.text || '').trim();
       
-      // ì‘ë‹µ ì •ë¦¬
+      // 응답 정리
       title = title.replace(/^["']|["']$/g, '').trim();
       title = title.split('\n')[0].trim();
-      // ë¶ˆí•„ìš”í•œ ì ‘ë‘ì‚¬ ë‹¤ì‹œ ì œê±°
-      title = title.replace(/^\d{3}-\d{4}-[ê°€-íž£a-zA-Z_]+/, '').trim();
+      // 불필요한 접두사 다시 제거
+      title = title.replace(/^\d{3}-\d{4}-[가-힣a-zA-Z_]+/, '').trim();
       
       if (title && title.length > 2 && title.length < 50) {
         return title;
       }
     } catch (error) {
-      console.error('[TM] AI ì¦ë¹™ìžë£Œëª… ìƒì„± ì‹¤íŒ¨:', error);
+      console.error('[TM] AI 증빙자료명 생성 실패:', error);
     }
     
-    // AI ì‹¤íŒ¨ ì‹œ íŒŒì¼ëª… ê¸°ë°˜ ì¶”ì¸¡
+    // AI 실패 시 파일명 기반 추측
     return TM.guessEvidenceTitle(fileName);
   };
   
-  // íŒŒì¼ëª…ìœ¼ë¡œ ì¦ë¹™ìžë£Œëª… ì¶”ì¸¡ (ê°œì„ ëœ ë²„ì „)
+  // 파일명으로 증빙자료명 추측 (개선된 버전)
   TM.guessEvidenceTitle = function(fileName) {
-    // íŒŒì¼ëª… ì •ë¦¬ - ë¶ˆí•„ìš”í•œ ì ‘ë‘ì‚¬ ì œê±°
+    // 파일명 정리 - 불필요한 접두사 제거
     let cleanName = TM.cleanFileName(fileName);
     
     const name = cleanName.toLowerCase();
     const nameKor = cleanName;
     
-    // íŠ¹ì • í‚¤ì›Œë“œ ë§¤ì¹­ (ìš°ì„ ìˆœìœ„ ìˆœ)
+    // 특정 키워드 매칭 (우선순위 순)
     const patterns = [
-      // ì‚¬ì—…ìž ê´€ë ¨
-      { keywords: ['ì‚¬ì—…ìžë“±ë¡ì¦', 'ì‚¬ì—…ìž ë“±ë¡ì¦'], title: 'ì‚¬ì—…ìžë“±ë¡ì¦' },
-      { keywords: ['business registration', 'business license'], title: 'ì‚¬ì—…ìžë“±ë¡ì¦' },
+      // 사업자 관련
+      { keywords: ['사업자등록증', '사업자 등록증'], title: '사업자등록증' },
+      { keywords: ['business registration', 'business license'], title: '사업자등록증' },
       
-      // ê¸°ìˆ  ë¬¸ì„œ
-      { keywords: ['ê¸°ìˆ ì„¤ëª…ì„œ', 'ê¸°ìˆ  ì„¤ëª…ì„œ', 'ê¸°ìˆ ì†Œê°œì„œ'], title: 'ê¸°ìˆ ì„¤ëª…ì„œ' },
-      { keywords: ['ë°œëª…ì„¤ëª…ì„œ', 'ë°œëª… ì„¤ëª…ì„œ'], title: 'ë°œëª…ì„¤ëª…ì„œ' },
-      { keywords: ['ì‚¬ìš©ì„¤ëª…ì„œ', 'ì‚¬ìš© ì„¤ëª…ì„œ', 'ë§¤ë‰´ì–¼', 'manual'], title: 'ì‚¬ìš© ì„¤ëª…ì„œ' },
+      // 기술 문서
+      { keywords: ['기술설명서', '기술 설명서', '기술소개서'], title: '기술설명서' },
+      { keywords: ['발명설명서', '발명 설명서'], title: '발명설명서' },
+      { keywords: ['사용설명서', '사용 설명서', '매뉴얼', 'manual'], title: '사용 설명서' },
       
-      // ì¶œì›/ì¦ëª… ê´€ë ¨
-      { keywords: ['ì¶œì›ì‚¬ì‹¤ì¦ëª…ì›', 'ì¶œì›ì‚¬ì‹¤ ì¦ëª…ì›'], title: 'ì¶œì›ì‚¬ì‹¤ì¦ëª…ì›' },
-      { keywords: ['ì¶œì›ì„œ', 'ì¶œì› ì„œë¥˜'], title: 'ì¶œì›ì„œ' },
-      { keywords: ['ë“±ë¡ì¦', 'certificate'], title: 'ë“±ë¡ì¦' },
-      { keywords: ['ì¦ëª…ì›', 'ì¦ëª…ì„œ'], title: 'ì¦ëª…ì›' },
+      // 출원/증명 관련
+      { keywords: ['출원사실증명원', '출원사실 증명원'], title: '출원사실증명원' },
+      { keywords: ['출원서', '출원 서류'], title: '출원서' },
+      { keywords: ['등록증', 'certificate'], title: '등록증' },
+      { keywords: ['증명원', '증명서'], title: '증명원' },
       
-      // ê³„ì•½/ê±°ëž˜ ê´€ë ¨
-      { keywords: ['ì œì•ˆì„œ', 'proposal'], title: 'ì œì•ˆì„œ' },
-      { keywords: ['ê³„ì•½ì„œ', 'contract', 'agreement'], title: 'ê³„ì•½ì„œ' },
-      { keywords: ['ê²¬ì ì„œ', 'quotation', 'estimate'], title: 'ê²¬ì ì„œ' },
-      { keywords: ['ê±°ëž˜ëª…ì„¸', 'invoice', 'ì„¸ê¸ˆê³„ì‚°ì„œ'], title: 'ê±°ëž˜ëª…ì„¸ì„œ' },
-      { keywords: ['ë‚©í’ˆ', 'delivery', 'ì¸ìˆ˜ì¸ê³„'], title: 'ë‚©í’ˆí™•ì¸ì„œ' },
+      // 계약/거래 관련
+      { keywords: ['제안서', 'proposal'], title: '제안서' },
+      { keywords: ['계약서', 'contract', 'agreement'], title: '계약서' },
+      { keywords: ['견적서', 'quotation', 'estimate'], title: '견적서' },
+      { keywords: ['거래명세', 'invoice', '세금계산서'], title: '거래명세서' },
+      { keywords: ['납품', 'delivery', '인수인계'], title: '납품확인서' },
       
-      // í™ë³´/ë§ˆì¼€íŒ…
-      { keywords: ['ì¹´íƒˆë¡œê·¸', 'catalog', 'catalogue', 'ë¸Œë¡œìŠˆì–´', 'brochure'], title: 'ì œí’ˆ ì¹´íƒˆë¡œê·¸' },
-      { keywords: ['í™ˆíŽ˜ì´ì§€', 'website', 'ìº¡ì²˜', 'screenshot'], title: 'í™ˆíŽ˜ì´ì§€ ìº¡ì²˜ í™”ë©´' },
-      { keywords: ['ê´‘ê³ ', 'advertisement', 'ad', 'í™ë³´'], title: 'ê´‘ê³  ìžë£Œ' },
+      // 홍보/마케팅
+      { keywords: ['카탈로그', 'catalog', 'catalogue', '브로슈어', 'brochure'], title: '제품 카탈로그' },
+      { keywords: ['홈페이지', 'website', '캡처', 'screenshot'], title: '홈페이지 캡처 화면' },
+      { keywords: ['광고', 'advertisement', 'ad', '홍보'], title: '광고 자료' },
       
-      // íŠ¹í—ˆ ê´€ë ¨
-      { keywords: ['íŠ¹í—ˆ', 'patent'], title: 'íŠ¹í—ˆ ê´€ë ¨ ì„œë¥˜' },
-      { keywords: ['ìƒí‘œ', 'trademark'], title: 'ìƒí‘œ ê´€ë ¨ ì„œë¥˜' },
+      // 특허 관련
+      { keywords: ['특허', 'patent'], title: '특허 관련 서류' },
+      { keywords: ['상표', 'trademark'], title: '상표 관련 서류' },
       
-      // ê¸°íƒ€
-      { keywords: ['ppt', 'pptx', 'presentation', 'í”„ë ˆì  í…Œì´ì…˜'], title: 'ë°œí‘œìžë£Œ' },
-      { keywords: ['report', 'ë³´ê³ ì„œ', 'ë¦¬í¬íŠ¸'], title: 'ë³´ê³ ì„œ' },
+      // 기타
+      { keywords: ['ppt', 'pptx', 'presentation', '프레젠테이션'], title: '발표자료' },
+      { keywords: ['report', '보고서', '리포트'], title: '보고서' },
     ];
     
-    // íŒ¨í„´ ë§¤ì¹­
+    // 패턴 매칭
     for (const pattern of patterns) {
       for (const keyword of pattern.keywords) {
         if (name.includes(keyword.toLowerCase()) || nameKor.includes(keyword)) {
@@ -7228,25 +7228,25 @@ ${content.substring(0, 1200)}
       }
     }
     
-    // ë§¤ì¹­ ì•ˆë˜ë©´ ì •ë¦¬ëœ íŒŒì¼ëª… ë°˜í™˜ (ë„ˆë¬´ ì§§ìœ¼ë©´ ì›ë³¸ ì‚¬ìš©)
+    // 매칭 안되면 정리된 파일명 반환 (너무 짧으면 원본 사용)
     if (cleanName.length < 3) {
       cleanName = fileName.replace(/\.[^/.]+$/, '');
     }
     
-    // ì–¸ë”ìŠ¤ì½”ì–´ë¥¼ ê³µë°±ìœ¼ë¡œ
+    // 언더스코어를 공백으로
     cleanName = cleanName.replace(/_/g, ' ').trim();
     
-    return cleanName || 'ì²¨ë¶€ìžë£Œ';
+    return cleanName || '첨부자료';
   };
   
-  // ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œ ë¯¸ë¦¬ë³´ê¸°
+  // 우선심사 설명서 미리보기
   TM.previewPriorityDoc = function() {
     const previewEl = document.getElementById('tm-priority-doc-preview');
     const contentEl = document.getElementById('tm-priority-doc-content');
     
     if (!previewEl || !contentEl) return;
     
-    // ì¸ë¼ì¸ ì„ íƒ ê°’ ì‚¬ìš©
+    // 인라인 선택 값 사용
     const pe = TM.currentProject?.priorityExam || {};
     const useExtracted = pe.useExtractedGoods || false;
     
@@ -7255,30 +7255,30 @@ ${content.substring(0, 1200)}
     previewEl.style.display = 'block';
   };
   
-  // ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œ ë‚´ìš© ìƒì„±
+  // 우선심사 설명서 내용 생성
   TM.generatePriorityDocContent = function(useExtracted = false) {
     const p = TM.currentProject;
     const pe = p.priorityExam || {};
     
-    // ì¶œì›ì¸ ì •ë³´
-    const applicantName = pe.applicantName || p.applicantName || '[ì¶œì›ì¸ëª…]';
-    const applicationNumber = pe.applicationNumber || '[ì¶œì›ë²ˆí˜¸]';
-    const applicationDate = pe.applicationDate || '[ì¶œì›ì¼]';
-    const trademarkName = pe.trademarkNameFromApp || p.trademarkName || '[ìƒí‘œëª…]';
+    // 출원인 정보
+    const applicantName = pe.applicantName || p.applicantName || '[출원인명]';
+    const applicationNumber = pe.applicationNumber || '[출원번호]';
+    const applicationDate = pe.applicationDate || '[출원일]';
+    const trademarkName = pe.trademarkNameFromApp || p.trademarkName || '[상표명]';
     
-    // ì¸ë¼ì¸ ì„ íƒ ê°’ ì ìš©
+    // 인라인 선택 값 적용
     const hasExtracted = pe.classCode || pe.designatedGoodsFromApp;
     const finalUseExtracted = useExtracted || pe.useExtractedGoods || false;
     let classCodeStr, designatedGoodsStr, goodsWithGroups;
     
     if (finalUseExtracted && hasExtracted) {
-      // ì¶”ì¶œ ì •ë³´ ì‚¬ìš©
-      classCodeStr = pe.classCode ? `ì œ ${pe.classCode}ë¥˜` : '[ìƒí’ˆë¥˜]';
-      designatedGoodsStr = pe.designatedGoodsFromApp || '[ì§€ì •ìƒí’ˆ]';
+      // 추출 정보 사용
+      classCodeStr = pe.classCode ? `제 ${pe.classCode}류` : '[상품류]';
+      designatedGoodsStr = pe.designatedGoodsFromApp || '[지정상품]';
       goodsWithGroups = pe.designatedGoodsFromApp ? 
-        pe.designatedGoodsFromApp.split(',').map(g => `ã€Ž${g.trim()}ã€`) : [];
+        pe.designatedGoodsFromApp.split(',').map(g => `『${g.trim()}』`) : [];
     } else {
-      // 2ë‹¨ê³„ ì •ë³´ ì‚¬ìš© (ê¸°ë³¸)
+      // 2단계 정보 사용 (기본)
       const classGroups = {};
       (p.designatedGoods || []).forEach(classData => {
         if (!classGroups[classData.classCode]) {
@@ -7293,94 +7293,94 @@ ${content.substring(0, 1200)}
       });
       
       const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
-      classCodeStr = classCodeList.length > 0 ? classCodeList.map(c => 'ì œ ' + c + 'ë¥˜').join(', ') : '[ìƒí’ˆë¥˜]';
+      classCodeStr = classCodeList.length > 0 ? classCodeList.map(c => '제 ' + c + '류').join(', ') : '[상품류]';
       
       const goodsList = [];
       Object.values(classGroups).forEach(goods => {
         goods.forEach(g => goodsList.push(g.name));
       });
-      designatedGoodsStr = goodsList.length > 0 ? goodsList.join(', ') : '[ì§€ì •ìƒí’ˆ]';
+      designatedGoodsStr = goodsList.length > 0 ? goodsList.join(', ') : '[지정상품]';
       
       goodsWithGroups = [];
       Object.entries(classGroups).forEach(([classCode, goods]) => {
         goods.forEach(g => {
           if (g.similarGroup) {
-            goodsWithGroups.push(`ã€Ž${g.similarGroup} ${g.name}ã€`);
+            goodsWithGroups.push(`『${g.similarGroup} ${g.name}』`);
           } else {
-            goodsWithGroups.push(`ã€Ž${g.name}ã€`);
+            goodsWithGroups.push(`『${g.name}』`);
           }
         });
       });
     }
     
-    // ì¦ê±°ìžë£Œ ëª©ë¡
+    // 증거자료 목록
     const evidences = pe.evidences || [];
     
-    // ì²¨ë¶€ìžë£Œ ì°¸ì¡° ë¬¸ìžì—´ ìƒì„±
-    const evidence1Ref = evidences.length > 0 ? `(ì²¨ë¶€ìžë£Œ 1: ${evidences[0].title})` : '';
-    const evidence2Ref = evidences.length > 1 ? `(ì²¨ë¶€ìžë£Œ 2: ${evidences[1].title})` : '';
+    // 첨부자료 참조 문자열 생성
+    const evidence1Ref = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
+    const evidence2Ref = evidences.length > 1 ? `(첨부자료 2: ${evidences[1].title})` : '';
     
-    // ì‹ ì²­ì´ìœ  ì„ íƒì— ë”°ë¥¸ ë²•ì¡°ë¬¸
+    // 신청이유 선택에 따른 법조문
     let reasonText = '';
     if (pe.reason === 'using' || pe.reason === 'preparing') {
-      reasonText = `ë³¸ ìƒí‘œëŠ” ìƒí‘œë²• ì œ53ì¡° ì œ2í•­ ì œ2í˜¸ ë° ìƒí‘œë²• ì‹œí–‰ë ¹ ì œ12ì¡° ì œ1í˜¸ì˜ "ìƒí‘œë“±ë¡ì¶œì›ì¸ì´ ìƒí‘œë“±ë¡ì¶œì›í•œ ìƒí‘œë¥¼ ì§€ì •ìƒí’ˆ ì „ë¶€ì— ëŒ€í•˜ì—¬ ì‚¬ìš©í•˜ê³  ìžˆê±°ë‚˜ ì‚¬ìš©í•  ì¤€ë¹„ë¥¼ í•˜ê³  ìžˆìŒì´ ëª…ë°±í•œ ê²½ìš°"ì— í•´ë‹¹í•˜ëŠ” ìƒí‘œë“±ë¡ì¶œì›ìœ¼ë¡œì„œ, ê·¸ ì§€ì •ìƒí’ˆì— ì‚¬ìš© ì¤€ë¹„í•˜ê³  ìžˆëŠ” ê²ƒì´ ëª…ë°±í•˜ë¯€ë¡œ ìš°ì„ ì‹¬ì‚¬ë¥¼ ì‹ ì²­í•©ë‹ˆë‹¤.`;
+      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로 우선심사를 신청합니다.`;
     } else if (pe.reason === 'infringement') {
-      reasonText = `ë³¸ ìƒí‘œëŠ” ìƒí‘œë²• ì œ53ì¡° ì œ2í•­ ì œ2í˜¸ ë° ìƒí‘œë²• ì‹œí–‰ë ¹ ì œ12ì¡° ì œ2í˜¸ì˜ "ì¶œì›ì¸ì´ ì•„ë‹Œ ìžê°€ ì¶œì›ìƒí‘œì™€ ë™ì¼Â·ìœ ì‚¬í•œ ìƒí‘œë¥¼ ë™ì¼Â·ìœ ì‚¬í•œ ì§€ì •ìƒí’ˆì— ì •ë‹¹í•œ ì‚¬ìœ  ì—†ì´ ì‚¬ìš©í•˜ê³  ìžˆë‹¤ê³  ì¸ì •ë˜ëŠ” ê²½ìš°"ì— í•´ë‹¹í•˜ëŠ” ìƒí‘œë“±ë¡ì¶œì›ìœ¼ë¡œì„œ, ìš°ì„ ì‹¬ì‚¬ë¥¼ ì‹ ì²­í•©ë‹ˆë‹¤.`;
+      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 우선심사를 신청합니다.`;
     } else {
-      reasonText = `ë³¸ ìƒí‘œëŠ” ìƒí‘œë²• ì œ53ì¡° ì œ2í•­ ì œ2í˜¸ ë° ìƒí‘œë²• ì‹œí–‰ë ¹ ì œ12ì¡° ì œ1í˜¸ì˜ ê·œì •ì— ë”°ë¼ ìš°ì„ ì‹¬ì‚¬ë¥¼ ì‹ ì²­í•©ë‹ˆë‹¤.`;
+      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라 우선심사를 신청합니다.`;
     }
     
-    // HTML í˜•ì‹ì˜ ë¯¸ë¦¬ë³´ê¸°
+    // HTML 형식의 미리보기
     return `
       <div class="tm-doc-preview-body">
-        <h2 style="text-align: center; margin-bottom: 24px;">ìƒí‘œ ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ ì„¤ëª…ì„œ</h2>
+        <h2 style="text-align: center; margin-bottom: 24px;">상표 우선심사 신청 설명서</h2>
         
         <div class="tm-doc-section">
-          <h3>ã€ì„œì§€ì‚¬í•­ã€‘</h3>
+          <h3>【서지사항】</h3>
           <table class="tm-doc-table">
-            <tr><td width="150"><strong>ã€ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ì¸ã€‘</strong></td><td>${applicantName}</td></tr>
-            <tr><td><strong>ã€ì¶œì›ë²ˆí˜¸ã€‘</strong></td><td>${applicationNumber}</td></tr>
-            <tr><td><strong>ã€ì¶œì›ì¼ã€‘</strong></td><td>${applicationDate}</td></tr>
+            <tr><td width="150"><strong>【우선심사 신청인】</strong></td><td>${applicantName}</td></tr>
+            <tr><td><strong>【출원번호】</strong></td><td>${applicationNumber}</td></tr>
+            <tr><td><strong>【출원일】</strong></td><td>${applicationDate}</td></tr>
           </table>
         </div>
         
         <div class="tm-doc-section">
-          <h3>ã€ìƒí‘œê²¬ë³¸ã€‘</h3>
+          <h3>【상표견본】</h3>
           <p style="font-size: 18px; font-weight: bold;">${trademarkName}</p>
         </div>
         
         <div class="tm-doc-section">
-          <h3>ã€ìƒí’ˆë¥˜ã€‘</h3>
-          <p>${classCodeStr || '[ìƒí’ˆë¥˜]'}</p>
+          <h3>【상품류】</h3>
+          <p>${classCodeStr || '[상품류]'}</p>
         </div>
         
         <div class="tm-doc-section">
-          <h3>ã€ì§€ì •ìƒí’ˆã€‘</h3>
-          <p>${designatedGoodsStr || '[ì§€ì •ìƒí’ˆ]'}</p>
+          <h3>【지정상품】</h3>
+          <p>${designatedGoodsStr || '[지정상품]'}</p>
         </div>
         
         <div class="tm-doc-section">
-          <h3>ã€ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ì´ìœ ã€‘</h3>
+          <h3>【우선심사 신청이유】</h3>
           <p>${reasonText}</p>
           <p style="margin-top: 12px;">
-            ë³¸ ì¶œì›ì¸ "${applicantName}"ëŠ” ë³¸ ì‹ ì²­ì„œì˜ ì²¨ë¶€ìžë£Œ${evidence1Ref}ì— ê¸°ìž¬ëœ ë°”ì™€ ê°™ì´, 
-            ì´ê±´ ì¶œì›ìƒí‘œê°€ í‘œì‹œëœ ${goodsWithGroups.join(', ')}ì„ 
-            ì‚¬ìš© ë° ì‚¬ìš© ì¤€ë¹„ ì¤‘ìž…ë‹ˆë‹¤.
+            본 출원인 "${applicantName}"는 본 신청서의 첨부자료${evidence1Ref}에 기재된 바와 같이, 
+            이건 출원상표가 표시된 ${goodsWithGroups.join(', ')}을 
+            사용 및 사용 준비 중입니다.
           </p>
           <p style="margin-top: 12px;">
-            ë”°ë¼ì„œ, ì´ê±´ ì¶œì›ìƒí‘œëŠ” ì•žì„œ ì„¤ëª…í•œ ë°”ì™€ ê°™ì´, ê·¸ ì§€ì •ìƒí’ˆ ì „ë¶€ì— ëŒ€í•˜ì—¬ ì‚¬ìš©ì˜ˆì • ì¤‘ì— ìžˆìŠµë‹ˆë‹¤.
+            따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 사용예정 중에 있습니다.
           </p>
           <p style="margin-top: 12px;">
-            ì´ê±´ ì¶œì›ì¸ "${applicantName}"${evidence2Ref}ì€ ì´ê±´ ì¶œì›ìƒí‘œë¥¼ í•´ë‹¹ ì§€ì •ìƒí’ˆì— ì‚¬ìš©í•  ê²ƒì´ ë”ìš± ë¶„ëª…í•©ë‹ˆë‹¤. 
-            ë¶€ë”” ì´ì ì„ ì ê·¹ ê³ ë ¤í•˜ì‹œì–´ ì´ê±´ ì¶œì›ìƒí‘œì— ëŒ€í•˜ì—¬ ìš°ì„ ì‹¬ì‚¬ì‹ ì²­ì„ í—ˆì—¬í•´ ì£¼ì‹œê¸° ë°”ëžë‹ˆë‹¤.
+            이건 출원인 "${applicantName}"${evidence2Ref}은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 
+            부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
           </p>
         </div>
         
         ${evidences.length > 0 ? `
           <div class="tm-doc-section">
-            <h3>ã€ì¦ë¹™ìžë£Œã€‘</h3>
+            <h3>【증빙자료】</h3>
             <ul style="margin: 0; padding-left: 0; list-style: none;">
-              ${evidences.map((ev, idx) => `<li>ì²¨ë¶€ìžë£Œ ${idx + 1} : ${ev.title}</li>`).join('')}
+              ${evidences.map((ev, idx) => `<li>첨부자료 ${idx + 1} : ${ev.title}</li>`).join('')}
             </ul>
           </div>
         ` : ''}
@@ -7388,49 +7388,49 @@ ${content.substring(0, 1200)}
     `;
   };
   
-  // ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œ Word íŒŒì¼ ìƒì„±
+  // 우선심사 설명서 Word 파일 생성
   TM.generatePriorityDoc = async function(useExtracted = null) {
     const p = TM.currentProject;
     const pe = p.priorityExam || {};
     
-    // í•„ìˆ˜ ì •ë³´ ì²´í¬
+    // 필수 정보 체크
     if (!pe.applicationNumber && !p.trademarkName) {
-      App.showToast('ì¶œì›ë²ˆí˜¸ ë˜ëŠ” ìƒí‘œëª…ì´ í•„ìš”í•©ë‹ˆë‹¤.', 'warning');
+      App.showToast('출원번호 또는 상표명이 필요합니다.', 'warning');
       return;
     }
     
-    // 2ë‹¨ê³„ ì§€ì •ìƒí’ˆ ì •ë³´
+    // 2단계 지정상품 정보
     const step2ClassCodes = (p.designatedGoods || []).map(d => d.classCode).sort().join(',');
     const step2GoodsList = (p.designatedGoods || []).flatMap(d => (d.goods || []).map(g => g.name));
     const step2GoodsStr = step2GoodsList.join(', ');
     
-    // 7ë‹¨ê³„ ì¶”ì¶œ ì§€ì •ìƒí’ˆ ì •ë³´
+    // 7단계 추출 지정상품 정보
     const extractedClassCode = pe.classCode || '';
     const extractedGoodsStr = pe.designatedGoodsFromApp || '';
     
-    // ë¶ˆì¼ì¹˜ ì‹œ ì¸ë¼ì¸ ì„ íƒ ê°’ ì‚¬ìš© (useExtracted íŒŒë¼ë¯¸í„°ê°€ nullì´ë©´ pe.useExtractedGoods ì‚¬ìš©)
+    // 불일치 시 인라인 선택 값 사용 (useExtracted 파라미터가 null이면 pe.useExtractedGoods 사용)
     const hasExtracted = extractedClassCode || extractedGoodsStr;
     const finalUseExtracted = useExtracted !== null ? useExtracted : (pe.useExtractedGoods || false);
     
     try {
-      App.showToast('Word ë¬¸ì„œ ìƒì„± ì¤‘...', 'info');
+      App.showToast('Word 문서 생성 중...', 'info');
       
-      // ì¶œì›ì¸ ì •ë³´
-      const applicantName = pe.applicantName || p.applicantName || '[ì¶œì›ì¸ëª…]';
-      const applicationNumber = pe.applicationNumber || '[ì¶œì›ë²ˆí˜¸]';
-      const applicationDate = pe.applicationDate || '[ì¶œì›ì¼]';
-      const trademarkName = pe.trademarkNameFromApp || p.trademarkName || '[ìƒí‘œëª…]';
+      // 출원인 정보
+      const applicantName = pe.applicantName || p.applicantName || '[출원인명]';
+      const applicationNumber = pe.applicationNumber || '[출원번호]';
+      const applicationDate = pe.applicationDate || '[출원일]';
+      const trademarkName = pe.trademarkNameFromApp || p.trademarkName || '[상표명]';
       
-      // ìƒí’ˆë¥˜ ë° ì§€ì •ìƒí’ˆ - ì„ íƒì— ë”°ë¼ ê²°ì •
+      // 상품류 및 지정상품 - 선택에 따라 결정
       let classCodeStr, designatedGoodsStr, goodsWithGroups;
       
       if (finalUseExtracted && hasExtracted) {
-        // 7ë‹¨ê³„ ì¶”ì¶œ ì •ë³´ ì‚¬ìš©
-        classCodeStr = extractedClassCode ? `ì œ ${extractedClassCode}ë¥˜` : '[ìƒí’ˆë¥˜]';
-        designatedGoodsStr = extractedGoodsStr || '[ì§€ì •ìƒí’ˆ]';
-        goodsWithGroups = extractedGoodsStr ? extractedGoodsStr.split(',').map(g => `ã€Ž${g.trim()}ã€`) : [];
+        // 7단계 추출 정보 사용
+        classCodeStr = extractedClassCode ? `제 ${extractedClassCode}류` : '[상품류]';
+        designatedGoodsStr = extractedGoodsStr || '[지정상품]';
+        goodsWithGroups = extractedGoodsStr ? extractedGoodsStr.split(',').map(g => `『${g.trim()}』`) : [];
       } else {
-        // 2ë‹¨ê³„ ì§€ì •ìƒí’ˆ ì •ë³´ ì‚¬ìš© (ê¸°ë³¸ê°’)
+        // 2단계 지정상품 정보 사용 (기본값)
         const classGroups = {};
         (p.designatedGoods || []).forEach(classData => {
           if (!classGroups[classData.classCode]) {
@@ -7445,50 +7445,50 @@ ${content.substring(0, 1200)}
         });
         
         const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
-        classCodeStr = classCodeList.length > 0 ? classCodeList.map(c => 'ì œ ' + c + 'ë¥˜').join(', ') : '[ìƒí’ˆë¥˜]';
+        classCodeStr = classCodeList.length > 0 ? classCodeList.map(c => '제 ' + c + '류').join(', ') : '[상품류]';
         
         const goodsList = [];
         Object.values(classGroups).forEach(goods => {
           goods.forEach(g => goodsList.push(g.name));
         });
-        designatedGoodsStr = goodsList.length > 0 ? goodsList.join(', ') : '[ì§€ì •ìƒí’ˆ]';
+        designatedGoodsStr = goodsList.length > 0 ? goodsList.join(', ') : '[지정상품]';
         
         goodsWithGroups = [];
         Object.entries(classGroups).forEach(([classCode, goods]) => {
           goods.forEach(g => {
             if (g.similarGroup) {
-              goodsWithGroups.push(`ã€Ž${g.similarGroup} ${g.name}ã€`);
+              goodsWithGroups.push(`『${g.similarGroup} ${g.name}』`);
             } else {
-              goodsWithGroups.push(`ã€Ž${g.name}ã€`);
+              goodsWithGroups.push(`『${g.name}』`);
             }
           });
         });
       }
       
-      // ì¦ê±°ìžë£Œ ëª©ë¡
+      // 증거자료 목록
       const evidences = pe.evidences || [];
       
-      // ì‹ ì²­ì´ìœ  ì„ íƒì— ë”°ë¥¸ ë²•ì¡°ë¬¸
+      // 신청이유 선택에 따른 법조문
       let reasonText1 = '';
       if (pe.reason === 'using' || pe.reason === 'preparing') {
-        reasonText1 = 'ë³¸ ìƒí‘œëŠ” ìƒí‘œë²• ì œ53ì¡° ì œ2í•­ ì œ2í˜¸ ë° ìƒí‘œë²• ì‹œí–‰ë ¹ ì œ12ì¡° ì œ1í˜¸ì˜ "ìƒí‘œë“±ë¡ì¶œì›ì¸ì´ ìƒí‘œë“±ë¡ì¶œì›í•œ ìƒí‘œë¥¼ ì§€ì •ìƒí’ˆ ì „ë¶€ì— ëŒ€í•˜ì—¬ ì‚¬ìš©í•˜ê³  ìžˆê±°ë‚˜ ì‚¬ìš©í•  ì¤€ë¹„ë¥¼ í•˜ê³  ìžˆìŒì´ ëª…ë°±í•œ ê²½ìš°"ì— í•´ë‹¹í•˜ëŠ” ìƒí‘œë“±ë¡ì¶œì›ìœ¼ë¡œì„œ, ê·¸ ì§€ì •ìƒí’ˆì— ì‚¬ìš© ì¤€ë¹„í•˜ê³  ìžˆëŠ” ê²ƒì´ ëª…ë°±í•˜ë¯€ë¡œ ìš°ì„ ì‹¬ì‚¬ë¥¼ ì‹ ì²­í•©ë‹ˆë‹¤.';
+        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로 우선심사를 신청합니다.';
       } else if (pe.reason === 'infringement') {
-        reasonText1 = 'ë³¸ ìƒí‘œëŠ” ìƒí‘œë²• ì œ53ì¡° ì œ2í•­ ì œ2í˜¸ ë° ìƒí‘œë²• ì‹œí–‰ë ¹ ì œ12ì¡° ì œ2í˜¸ì˜ "ì¶œì›ì¸ì´ ì•„ë‹Œ ìžê°€ ì¶œì›ìƒí‘œì™€ ë™ì¼Â·ìœ ì‚¬í•œ ìƒí‘œë¥¼ ë™ì¼Â·ìœ ì‚¬í•œ ì§€ì •ìƒí’ˆì— ì •ë‹¹í•œ ì‚¬ìœ  ì—†ì´ ì‚¬ìš©í•˜ê³  ìžˆë‹¤ê³  ì¸ì •ë˜ëŠ” ê²½ìš°"ì— í•´ë‹¹í•˜ëŠ” ìƒí‘œë“±ë¡ì¶œì›ìœ¼ë¡œì„œ, ìš°ì„ ì‹¬ì‚¬ë¥¼ ì‹ ì²­í•©ë‹ˆë‹¤.';
+        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 우선심사를 신청합니다.';
       } else {
-        reasonText1 = 'ë³¸ ìƒí‘œëŠ” ìƒí‘œë²• ì œ53ì¡° ì œ2í•­ ì œ2í˜¸ ë° ìƒí‘œë²• ì‹œí–‰ë ¹ ì œ12ì¡° ì œ1í˜¸ì˜ ê·œì •ì— ë”°ë¼ ìš°ì„ ì‹¬ì‚¬ë¥¼ ì‹ ì²­í•©ë‹ˆë‹¤.';
+        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라 우선심사를 신청합니다.';
       }
       
-      // ì¦ê±°ìžë£Œ ì°¸ì¡° ë¬¸ìžì—´ ìƒì„± (ì²¨ë¶€ìžë£Œ 1, 2 ê°œë³„ ì°¸ì¡°)
-      const evidence1Ref = evidences.length > 0 ? `(ì²¨ë¶€ìžë£Œ 1: ${evidences[0].title})` : '';
-      const evidence2Ref = evidences.length > 1 ? `(ì²¨ë¶€ìžë£Œ 2: ${evidences[1].title})` : '';
+      // 증거자료 참조 문자열 생성 (첨부자료 1, 2 개별 참조)
+      const evidence1Ref = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
+      const evidence2Ref = evidences.length > 1 ? `(첨부자료 2: ${evidences[1].title})` : '';
       
-      const reasonText2 = `ë³¸ ì¶œì›ì¸ "${applicantName}"ëŠ” ë³¸ ì‹ ì²­ì„œì˜ ì²¨ë¶€ìžë£Œ${evidence1Ref}ì— ê¸°ìž¬ëœ ë°”ì™€ ê°™ì´, ì´ê±´ ì¶œì›ìƒí‘œê°€ í‘œì‹œëœ ${goodsWithGroups.join(', ')}ì„ ì‚¬ìš© ë° ì‚¬ìš© ì¤€ë¹„ ì¤‘ìž…ë‹ˆë‹¤.`;
+      const reasonText2 = `본 출원인 "${applicantName}"는 본 신청서의 첨부자료${evidence1Ref}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsWithGroups.join(', ')}을 사용 및 사용 준비 중입니다.`;
       
-      const reasonText3 = 'ë”°ë¼ì„œ, ì´ê±´ ì¶œì›ìƒí‘œëŠ” ì•žì„œ ì„¤ëª…í•œ ë°”ì™€ ê°™ì´, ê·¸ ì§€ì •ìƒí’ˆ ì „ë¶€ì— ëŒ€í•˜ì—¬ ì‚¬ìš©ì˜ˆì • ì¤‘ì— ìžˆìŠµë‹ˆë‹¤.';
+      const reasonText3 = '따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 사용예정 중에 있습니다.';
       
-      const reasonText4 = `ì´ê±´ ì¶œì›ì¸ "${applicantName}"${evidence2Ref}ì€ ì´ê±´ ì¶œì›ìƒí‘œë¥¼ í•´ë‹¹ ì§€ì •ìƒí’ˆì— ì‚¬ìš©í•  ê²ƒì´ ë”ìš± ë¶„ëª…í•©ë‹ˆë‹¤. ë¶€ë”” ì´ì ì„ ì ê·¹ ê³ ë ¤í•˜ì‹œì–´ ì´ê±´ ì¶œì›ìƒí‘œì— ëŒ€í•˜ì—¬ ìš°ì„ ì‹¬ì‚¬ì‹ ì²­ì„ í—ˆì—¬í•´ ì£¼ì‹œê¸° ë°”ëžë‹ˆë‹¤.`;
+      const reasonText4 = `이건 출원인 "${applicantName}"${evidence2Ref}은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`;
       
-      // Edge Functionìœ¼ë¡œ Word ìƒì„± ìš”ì²­
+      // Edge Function으로 Word 생성 요청
       const docData = {
         type: 'priority_exam_doc',
         applicantName,
@@ -7505,30 +7505,30 @@ ${content.substring(0, 1200)}
         reasonText4
       };
       
-      // Supabase Edge Function í˜¸ì¶œ ë˜ëŠ” í´ë¼ì´ì–¸íŠ¸ ì‚¬ì´ë“œ ìƒì„±
+      // Supabase Edge Function 호출 또는 클라이언트 사이드 생성
       const blob = await TM.createPriorityDocBlob(docData);
       
-      // ë‹¤ìš´ë¡œë“œ
+      // 다운로드
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `ìš°ì„ ì‹¬ì‚¬ì‹ ì²­ì„¤ëª…ì„œ_${applicationNumber.replace(/[^0-9]/g, '') || Date.now()}.docx`;
+      a.download = `우선심사신청설명서_${applicationNumber.replace(/[^0-9]/g, '') || Date.now()}.docx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      App.showToast('ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œê°€ ë‹¤ìš´ë¡œë“œë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('우선심사 설명서가 다운로드되었습니다.', 'success');
       
     } catch (error) {
-      console.error('[TM] ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œ ìƒì„± ì‹¤íŒ¨:', error);
-      App.showToast('ë¬¸ì„œ ìƒì„± ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 우선심사 설명서 생성 실패:', error);
+      App.showToast('문서 생성 실패: ' + error.message, 'error');
     }
   };
   
-  // ì§€ì •ìƒí’ˆ ë¶ˆì¼ì¹˜ ëª¨ë‹¬ í‘œì‹œ
+  // 지정상품 불일치 모달 표시
   TM.showGoodsMismatchModal = function(step2Class, step2Goods, extractedClass, extractedGoods) {
-    // ê¸°ì¡´ ëª¨ë‹¬ ì œê±°
+    // 기존 모달 제거
     const existingModal = document.getElementById('tm-goods-mismatch-modal');
     if (existingModal) existingModal.remove();
     
@@ -7538,50 +7538,50 @@ ${content.substring(0, 1200)}
     modal.innerHTML = `
       <div class="tm-modal tm-goods-mismatch-modal">
         <div class="tm-modal-header">
-          <h3>âš ï¸ ì§€ì •ìƒí’ˆ ì •ë³´ ë¶ˆì¼ì¹˜</h3>
-          <button class="tm-modal-close" onclick="TM.closeGoodsMismatchModal()">âœ•</button>
+          <h3>⚠️ 지정상품 정보 불일치</h3>
+          <button class="tm-modal-close" onclick="TM.closeGoodsMismatchModal()">✕</button>
         </div>
         <div class="tm-modal-body">
-          <p class="tm-modal-desc">2ë‹¨ê³„ì—ì„œ ì§€ì •í•œ ìƒí’ˆ ì •ë³´ì™€ ì¶œì›ì„œì—ì„œ ì¶”ì¶œí•œ ì •ë³´ê°€ ë‹¤ë¦…ë‹ˆë‹¤.<br>ì–´ë–¤ ì •ë³´ë¡œ ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ ì„¤ëª…ì„œë¥¼ ìž‘ì„±í•˜ì‹œê² ìŠµë‹ˆê¹Œ?</p>
+          <p class="tm-modal-desc">2단계에서 지정한 상품 정보와 출원서에서 추출한 정보가 다릅니다.<br>어떤 정보로 우선심사 신청 설명서를 작성하시겠습니까?</p>
           
           <div class="tm-goods-compare">
             <div class="tm-goods-option" data-option="step2" onclick="TM.selectGoodsOption('step2')">
               <div class="tm-goods-option-header">
                 <input type="radio" name="goods-option" id="opt-step2" checked>
-                <label for="opt-step2"><strong>ðŸ“‹ 2ë‹¨ê³„ ì§€ì •ìƒí’ˆ</strong> (í”„ë¡œì íŠ¸ì— ì €ìž¥ëœ ì •ë³´)</label>
+                <label for="opt-step2"><strong>📋 2단계 지정상품</strong> (프로젝트에 저장된 정보)</label>
               </div>
               <div class="tm-goods-option-content">
-                <div class="tm-goods-item"><span class="tm-label">ìƒí’ˆë¥˜:</span> <span>${step2Class || '-'}</span></div>
-                <div class="tm-goods-item"><span class="tm-label">ì§€ì •ìƒí’ˆ:</span> <span class="tm-goods-text">${step2Goods.substring(0, 150)}${step2Goods.length > 150 ? '...' : ''}</span></div>
+                <div class="tm-goods-item"><span class="tm-label">상품류:</span> <span>${step2Class || '-'}</span></div>
+                <div class="tm-goods-item"><span class="tm-label">지정상품:</span> <span class="tm-goods-text">${step2Goods.substring(0, 150)}${step2Goods.length > 150 ? '...' : ''}</span></div>
               </div>
             </div>
             
             <div class="tm-goods-option" data-option="extracted" onclick="TM.selectGoodsOption('extracted')">
               <div class="tm-goods-option-header">
                 <input type="radio" name="goods-option" id="opt-extracted">
-                <label for="opt-extracted"><strong>ðŸ“„ ì¶œì›ì„œ ì¶”ì¶œ ì •ë³´</strong> (PDFì—ì„œ ì¶”ì¶œí•œ ì •ë³´)</label>
+                <label for="opt-extracted"><strong>📄 출원서 추출 정보</strong> (PDF에서 추출한 정보)</label>
               </div>
               <div class="tm-goods-option-content">
-                <div class="tm-goods-item"><span class="tm-label">ìƒí’ˆë¥˜:</span> <span>ì œ ${extractedClass || '-'}ë¥˜</span></div>
-                <div class="tm-goods-item"><span class="tm-label">ì§€ì •ìƒí’ˆ:</span> <span class="tm-goods-text">${extractedGoods.substring(0, 150)}${extractedGoods.length > 150 ? '...' : ''}</span></div>
+                <div class="tm-goods-item"><span class="tm-label">상품류:</span> <span>제 ${extractedClass || '-'}류</span></div>
+                <div class="tm-goods-item"><span class="tm-label">지정상품:</span> <span class="tm-goods-text">${extractedGoods.substring(0, 150)}${extractedGoods.length > 150 ? '...' : ''}</span></div>
               </div>
             </div>
           </div>
         </div>
         <div class="tm-modal-footer">
-          <button class="btn btn-secondary" onclick="TM.closeGoodsMismatchModal()">ì·¨ì†Œ</button>
-          <button class="btn btn-primary" onclick="TM.confirmGoodsSelection()">ì„ íƒí•œ ì •ë³´ë¡œ ìƒì„±</button>
+          <button class="btn btn-secondary" onclick="TM.closeGoodsMismatchModal()">취소</button>
+          <button class="btn btn-primary" onclick="TM.confirmGoodsSelection()">선택한 정보로 생성</button>
         </div>
       </div>
     `;
     
     document.body.appendChild(modal);
     
-    // ê¸°ë³¸ ì„ íƒ
+    // 기본 선택
     TM.selectedGoodsOption = 'step2';
   };
   
-  // ì§€ì •ìƒí’ˆ ì˜µì…˜ ì„ íƒ
+  // 지정상품 옵션 선택
   TM.selectGoodsOption = function(option) {
     TM.selectedGoodsOption = option;
     document.querySelectorAll('.tm-goods-option').forEach(el => el.classList.remove('selected'));
@@ -7589,40 +7589,40 @@ ${content.substring(0, 1200)}
     document.getElementById(option === 'step2' ? 'opt-step2' : 'opt-extracted').checked = true;
   };
   
-  // ì§€ì •ìƒí’ˆ ì„ íƒ í™•ì¸
+  // 지정상품 선택 확인
   TM.confirmGoodsSelection = function() {
     TM.closeGoodsMismatchModal();
     const useExtracted = TM.selectedGoodsOption === 'extracted';
     TM.generatePriorityDoc(useExtracted);
   };
   
-  // ëª¨ë‹¬ ë‹«ê¸°
+  // 모달 닫기
   TM.closeGoodsMismatchModal = function() {
     const modal = document.getElementById('tm-goods-mismatch-modal');
     if (modal) modal.remove();
   };
   
-  // ì§€ì •ìƒí’ˆ ë¶ˆì¼ì¹˜ ì²´í¬
+  // 지정상품 불일치 체크
   TM.checkGoodsMismatch = function() {
     const p = TM.currentProject;
     if (!p) return false;
     
     const pe = p.priorityExam || {};
     
-    // 2ë‹¨ê³„ ì§€ì •ìƒí’ˆ ì •ë³´
+    // 2단계 지정상품 정보
     const step2ClassCodes = (p.designatedGoods || []).map(d => d.classCode).sort().join(',');
     
-    // 7ë‹¨ê³„ ì¶”ì¶œ ì§€ì •ìƒí’ˆ ì •ë³´
+    // 7단계 추출 지정상품 정보
     const extractedClassCode = pe.classCode || '';
     
-    // ë¶ˆì¼ì¹˜ ê°ì§€ (ì¶”ì¶œ ì •ë³´ê°€ ìžˆì„ ë•Œë§Œ)
+    // 불일치 감지 (추출 정보가 있을 때만)
     const hasExtracted = extractedClassCode || pe.designatedGoodsFromApp;
     const classCodeMismatch = hasExtracted && extractedClassCode && step2ClassCodes && extractedClassCode !== step2ClassCodes;
     
     return classCodeMismatch;
   };
   
-  // ì§€ì •ìƒí’ˆ ì†ŒìŠ¤ ì„ íƒ
+  // 지정상품 소스 선택
   TM.selectGoodsSource = function(useExtracted) {
     if (!TM.currentProject?.priorityExam) return;
     TM.currentProject.priorityExam.useExtractedGoods = useExtracted;
@@ -7630,14 +7630,14 @@ ${content.substring(0, 1200)}
     TM.renderCurrentStep();
   };
   
-  // ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œ Blob ìƒì„± (í´ë¼ì´ì–¸íŠ¸ ì‚¬ì´ë“œ)
+  // 우선심사 설명서 Blob 생성 (클라이언트 사이드)
   TM.createPriorityDocBlob = async function(data) {
-    // docx ë¼ì´ë¸ŒëŸ¬ë¦¬ ë¡œë“œ (CDN) - UMD ë²„ì „ ì‚¬ìš©
+    // docx 라이브러리 로드 (CDN) - UMD 버전 사용
     if (!window.docx) {
-      console.log('[TM] docx ë¼ì´ë¸ŒëŸ¬ë¦¬ ë¡œë“œ ì¤‘...');
+      console.log('[TM] docx 라이브러리 로드 중...');
       await TM.loadScript('https://unpkg.com/docx@8.2.2/build/index.umd.js');
       
-      // ë¡œë“œ ëŒ€ê¸°
+      // 로드 대기
       let retries = 0;
       while (!window.docx && retries < 20) {
         await new Promise(r => setTimeout(r, 100));
@@ -7645,24 +7645,24 @@ ${content.substring(0, 1200)}
       }
       
       if (!window.docx) {
-        throw new Error('docx ë¼ì´ë¸ŒëŸ¬ë¦¬ ë¡œë“œ ì‹¤íŒ¨');
+        throw new Error('docx 라이브러리 로드 실패');
       }
-      console.log('[TM] docx ë¼ì´ë¸ŒëŸ¬ë¦¬ ë¡œë“œ ì™„ë£Œ');
+      console.log('[TM] docx 라이브러리 로드 완료');
     }
     
     const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, 
             AlignmentType, WidthType, BorderStyle, HeadingLevel } = window.docx;
     
-    // í…Œì´ë¸” ìŠ¤íƒ€ì¼
+    // 테이블 스타일
     const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
     const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
     
-    // ë¬¸ì„œ ìƒì„±
+    // 문서 생성
     const doc = new Document({
       styles: {
         default: {
           document: {
-            run: { font: 'ë§‘ì€ ê³ ë”•', size: 22 }
+            run: { font: '맑은 고딕', size: 22 }
           }
         }
       },
@@ -7674,65 +7674,65 @@ ${content.substring(0, 1200)}
           }
         },
         children: [
-          // ì œëª©
+          // 제목
           new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: { after: 400 },
             children: [
-              new TextRun({ text: 'ìƒí‘œ ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ ì„¤ëª…ì„œ', bold: true, size: 32 })
+              new TextRun({ text: '상표 우선심사 신청 설명서', bold: true, size: 32 })
             ]
           }),
           
-          // ì„œì§€ì‚¬í•­
+          // 서지사항
           new Paragraph({
             spacing: { before: 200, after: 100 },
-            children: [new TextRun({ text: 'ã€ì„œì§€ì‚¬í•­ã€‘', bold: true, size: 24 })]
+            children: [new TextRun({ text: '【서지사항】', bold: true, size: 24 })]
           }),
           new Paragraph({
-            children: [new TextRun({ text: `ã€ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ì¸ã€‘ ${data.applicantName}`, size: 22 })]
+            children: [new TextRun({ text: `【우선심사 신청인】 ${data.applicantName}`, size: 22 })]
           }),
           new Paragraph({
-            children: [new TextRun({ text: `ã€ì¶œì›ë²ˆí˜¸ã€‘ ${data.applicationNumber}`, size: 22 })]
+            children: [new TextRun({ text: `【출원번호】 ${data.applicationNumber}`, size: 22 })]
           }),
           new Paragraph({
             spacing: { after: 200 },
-            children: [new TextRun({ text: `ã€ì¶œì›ì¼ã€‘ ${data.applicationDate}`, size: 22 })]
+            children: [new TextRun({ text: `【출원일】 ${data.applicationDate}`, size: 22 })]
           }),
           
-          // ìƒí‘œê²¬ë³¸
+          // 상표견본
           new Paragraph({
             spacing: { before: 200, after: 100 },
-            children: [new TextRun({ text: 'ã€ìƒí‘œê²¬ë³¸ã€‘', bold: true, size: 24 })]
+            children: [new TextRun({ text: '【상표견본】', bold: true, size: 24 })]
           }),
           new Paragraph({
             spacing: { after: 200 },
             children: [new TextRun({ text: data.trademarkName, bold: true, size: 28 })]
           }),
           
-          // ìƒí’ˆë¥˜
+          // 상품류
           new Paragraph({
             spacing: { before: 200, after: 100 },
-            children: [new TextRun({ text: 'ã€ìƒí’ˆë¥˜ã€‘', bold: true, size: 24 })]
+            children: [new TextRun({ text: '【상품류】', bold: true, size: 24 })]
           }),
           new Paragraph({
             spacing: { after: 200 },
-            children: [new TextRun({ text: data.classCodeStr || '[ìƒí’ˆë¥˜]', size: 22 })]
+            children: [new TextRun({ text: data.classCodeStr || '[상품류]', size: 22 })]
           }),
           
-          // ì§€ì •ìƒí’ˆ
+          // 지정상품
           new Paragraph({
             spacing: { before: 200, after: 100 },
-            children: [new TextRun({ text: 'ã€ì§€ì •ìƒí’ˆã€‘', bold: true, size: 24 })]
+            children: [new TextRun({ text: '【지정상품】', bold: true, size: 24 })]
           }),
           new Paragraph({
             spacing: { after: 200 },
-            children: [new TextRun({ text: data.designatedGoodsStr || '[ì§€ì •ìƒí’ˆ]', size: 22 })]
+            children: [new TextRun({ text: data.designatedGoodsStr || '[지정상품]', size: 22 })]
           }),
           
-          // ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ì´ìœ 
+          // 우선심사 신청이유
           new Paragraph({
             spacing: { before: 200, after: 100 },
-            children: [new TextRun({ text: 'ã€ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ì´ìœ ã€‘', bold: true, size: 24 })]
+            children: [new TextRun({ text: '【우선심사 신청이유】', bold: true, size: 24 })]
           }),
           new Paragraph({
             spacing: { after: 150 },
@@ -7751,15 +7751,15 @@ ${content.substring(0, 1200)}
             children: [new TextRun({ text: data.reasonText4, size: 22 })]
           }),
           
-          // ì¦ë¹™ìžë£Œ
+          // 증빙자료
           ...(data.evidences.length > 0 ? [
             new Paragraph({
               spacing: { before: 200, after: 100 },
-              children: [new TextRun({ text: 'ã€ì¦ë¹™ìžë£Œã€‘', bold: true, size: 24 })]
+              children: [new TextRun({ text: '【증빙자료】', bold: true, size: 24 })]
             }),
             ...data.evidences.map((ev, idx) => 
               new Paragraph({
-                children: [new TextRun({ text: `ì²¨ë¶€ìžë£Œ ${idx + 1} : ${ev.title}`, size: 22 })]
+                children: [new TextRun({ text: `첨부자료 ${idx + 1} : ${ev.title}`, size: 22 })]
               })
             )
           ] : [])
@@ -7767,12 +7767,12 @@ ${content.substring(0, 1200)}
       }]
     });
     
-    // Blobìœ¼ë¡œ ë³€í™˜
+    // Blob으로 변환
     const blob = await Packer.toBlob(doc);
     return blob;
   };
   
-  // ìŠ¤í¬ë¦½íŠ¸ ë™ì  ë¡œë“œ
+  // 스크립트 동적 로드
   TM.loadScript = function(src) {
     return new Promise((resolve, reject) => {
       if (document.querySelector(`script[src="${src}"]`)) {
@@ -7788,24 +7788,24 @@ ${content.substring(0, 1200)}
   };
   
   TM.removeEvidence = async function(index) {
-    if (!confirm('ì´ ì¦ê±°ìžë£Œë¥¼ ì‚­ì œí•˜ì‹œê² ìŠµë‹ˆê¹Œ?')) return;
+    if (!confirm('이 증거자료를 삭제하시겠습니까?')) return;
     
     const evidence = TM.currentProject.priorityExam.evidences[index];
     
-    // Storageì—ì„œ íŒŒì¼ ì‚­ì œ
+    // Storage에서 파일 삭제
     if (evidence.fileName) {
       try {
         await App.sb.storage
           .from('trademark-evidences')
           .remove([evidence.fileName]);
       } catch (e) {
-        console.warn('[TM] íŒŒì¼ ì‚­ì œ ì‹¤íŒ¨:', e);
+        console.warn('[TM] 파일 삭제 실패:', e);
       }
     }
     
     TM.currentProject.priorityExam.evidences.splice(index, 1);
     TM.renderCurrentStep();
-    App.showToast('ì¦ê±°ìžë£Œê°€ ì‚­ì œë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+    App.showToast('증거자료가 삭제되었습니다.', 'success');
   };
   
   TM.generatePriorityDocument = async function() {
@@ -7813,58 +7813,58 @@ ${content.substring(0, 1200)}
     const pe = p.priorityExam;
     
     if (!pe.reason) {
-      App.showToast('ìš°ì„ ì‹¬ì‚¬ ì‚¬ìœ ë¥¼ ì„ íƒí•˜ì„¸ìš”.', 'warning');
+      App.showToast('우선심사 사유를 선택하세요.', 'warning');
       return;
     }
     
     try {
-      App.showToast('ì„¤ëª…ì„œ ìƒì„± ì¤‘...', 'info');
+      App.showToast('설명서 생성 중...', 'info');
       
       const reasonLabels = {
-        using: 'ìƒí‘œë¥¼ ì´ë¯¸ ì‚¬ìš© ì¤‘ì¸ ê²½ìš°',
-        preparing: 'ìƒí‘œ ì‚¬ìš© ì¤€ë¹„ ì¤‘ì¸ ê²½ìš°',
-        infringement: 'ì œ3ìžê°€ ì •ë‹¹í•œ ê¶Œí•œ ì—†ì´ ìƒí‘œë¥¼ ì‚¬ìš©í•˜ê³  ìžˆëŠ” ê²½ìš°',
-        export: 'ìˆ˜ì¶œì„ ìœ„í•´ ê¸´ê¸‰í•˜ê²Œ ìƒí‘œ ë“±ë¡ì´ í•„ìš”í•œ ê²½ìš°',
-        other: 'ê¸°íƒ€ ê¸´ê¸‰í•œ ì‚¬ìœ '
+        using: '상표를 이미 사용 중인 경우',
+        preparing: '상표 사용 준비 중인 경우',
+        infringement: '제3자가 정당한 권한 없이 상표를 사용하고 있는 경우',
+        export: '수출을 위해 긴급하게 상표 등록이 필요한 경우',
+        other: '기타 긴급한 사유'
       };
       
-      const prompt = `ë‹¹ì‹ ì€ ìƒí‘œ ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œ ìž‘ì„± ì „ë¬¸ê°€ìž…ë‹ˆë‹¤. ë‹¤ìŒ ì •ë³´ë¥¼ ë°”íƒ•ìœ¼ë¡œ ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œë¥¼ ìž‘ì„±í•˜ì„¸ìš”.
+      const prompt = `당신은 상표 우선심사 설명서 작성 전문가입니다. 다음 정보를 바탕으로 우선심사 설명서를 작성하세요.
 
-[ìƒí‘œ ì •ë³´]
-- ìƒí‘œëª…: ${p.trademarkName}
-- ìƒí‘œ ìœ í˜•: ${TM.getTypeLabel(p.trademarkType)}
-- ì§€ì •ìƒí’ˆ: ${p.designatedGoods?.map(g => 'ì œ' + g.classCode + 'ë¥˜ (' + g.goods.map(gg => gg.name).join(', ') + ')').join('; ') || 'ë¯¸ì„ íƒ'}
+[상표 정보]
+- 상표명: ${p.trademarkName}
+- 상표 유형: ${TM.getTypeLabel(p.trademarkType)}
+- 지정상품: ${p.designatedGoods?.map(g => '제' + g.classCode + '류 (' + g.goods.map(gg => gg.name).join(', ') + ')').join('; ') || '미선택'}
 
-[ì¶œì›ì¸ ì •ë³´]
-- ì¶œì›ì¸: ${p.applicant?.name || '(ë¯¸ìž…ë ¥)'}
-- ìœ í˜•: ${p.applicant?.type === 'corporation' ? 'ë²•ì¸' : p.applicant?.type === 'sme' ? 'ì¤‘ì†Œê¸°ì—…' : 'ê°œì¸'}
+[출원인 정보]
+- 출원인: ${p.applicant?.name || '(미입력)'}
+- 유형: ${p.applicant?.type === 'corporation' ? '법인' : p.applicant?.type === 'sme' ? '중소기업' : '개인'}
 
-[ìš°ì„ ì‹¬ì‚¬ ì‚¬ìœ ]
-- ì„ íƒëœ ì‚¬ìœ : ${reasonLabels[pe.reason]}
-- ì²¨ë¶€ ì¦ê±°: ${pe.evidences?.length || 0}ê±´
+[우선심사 사유]
+- 선택된 사유: ${reasonLabels[pe.reason]}
+- 첨부 증거: ${pe.evidences?.length || 0}건
 
-[ì¦ê±°ìžë£Œ ëª©ë¡]
-${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTypeLabel(ev.type)})`).join('\n') || 'ì¦ê±°ìžë£Œ ì—†ìŒ'}
+[증거자료 목록]
+${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTypeLabel(ev.type)})`).join('\n') || '증거자료 없음'}
 
-ë‹¤ìŒ êµ¬ì¡°ë¡œ ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œë¥¼ ìž‘ì„±í•˜ì„¸ìš”:
+다음 구조로 우선심사 설명서를 작성하세요:
 
-1. ì¶œì›ìƒí‘œì˜ ê°œìš”
-2. ìš°ì„ ì‹¬ì‚¬ ì‹ ì²­ ì‚¬ìœ 
-3. ìƒí‘œ ì‚¬ìš© í˜„í™© ë° ì¦ê±° ì„¤ëª…
-4. ê²°ë¡  (ìš°ì„ ì‹¬ì‚¬ í—ˆì—¬ ìš”ì²­)
+1. 출원상표의 개요
+2. 우선심사 신청 사유
+3. 상표 사용 현황 및 증거 설명
+4. 결론 (우선심사 허여 요청)
 
-í•œêµ­ íŠ¹í—ˆì²­ í˜•ì‹ì— ë§žê²Œ ê³µì‹ì ì´ê³  ì„¤ë“ë ¥ ìžˆëŠ” ë¬¸ì²´ë¡œ ìž‘ì„±í•˜ì„¸ìš”.`;
+한국 특허청 형식에 맞게 공식적이고 설득력 있는 문체로 작성하세요.`;
 
       const response = await App.callClaude(prompt, 2000);
       
       pe.generatedDocument = response.text;
       TM.renderCurrentStep();
       
-      App.showToast('ì„¤ëª…ì„œê°€ ìƒì„±ë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('설명서가 생성되었습니다.', 'success');
       
     } catch (error) {
-      console.error('[TM] ì„¤ëª…ì„œ ìƒì„± ì‹¤íŒ¨:', error);
-      App.showToast('ìƒì„± ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 설명서 생성 실패:', error);
+      App.showToast('생성 실패: ' + error.message, 'error');
     }
   };
   
@@ -7879,20 +7879,20 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
     
     const text = content.innerText;
     navigator.clipboard.writeText(text).then(() => {
-      App.showToast('í´ë¦½ë³´ë“œì— ë³µì‚¬ë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('클립보드에 복사되었습니다.', 'success');
     });
   };
   
   TM.regeneratePriorityDoc = function() {
-    if (!confirm('ì„¤ëª…ì„œë¥¼ ë‹¤ì‹œ ìƒì„±í•˜ì‹œê² ìŠµë‹ˆê¹Œ? í˜„ìž¬ ë‚´ìš©ì€ ì‚¬ë¼ì§‘ë‹ˆë‹¤.')) return;
+    if (!confirm('설명서를 다시 생성하시겠습니까? 현재 내용은 사라집니다.')) return;
     TM.generatePriorityDocument();
   };
 
   // ============================================================
-  // Step 8: ë¬¸ì„œ ì¶œë ¥
+  // Step 8: 문서 출력
   // ============================================================
   
-  // Step 7: ì¢…í•© ìš”ì•½ (ëŒ€ì‹œë³´ë“œ)
+  // Step 7: 종합 요약 (대시보드)
   // ============================================================
   
   TM.renderStep7_Summary = function(container) {
@@ -7902,109 +7902,109 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
     const evaluations = p.similarityEvaluations || [];
     const allSearchResults = [...(p.searchResults.text || []), ...(p.searchResults.figure || [])];
     
-    // ë¹„ìš© ê³„ì‚°
+    // 비용 계산
     if (p.designatedGoods?.length > 0 && !fee.totalFee) {
       TM.calculateFee();
     }
     
     container.innerHTML = `
       <div class="tm-step-header">
-        <h3>ðŸ“‹ ì¢…í•© ìš”ì•½</h3>
+        <h3>📋 종합 요약</h3>
       </div>
       
-      <!-- ìš”ì•½ ëŒ€ì‹œë³´ë“œ -->
+      <!-- 요약 대시보드 -->
       <div class="tm-summary-dashboard">
-        <!-- ìƒí‘œ ì •ë³´ ì¹´ë“œ -->
+        <!-- 상표 정보 카드 -->
         <div class="tm-summary-card tm-card-trademark">
-          <div class="tm-card-icon">ðŸ·ï¸</div>
+          <div class="tm-card-icon">🏷️</div>
           <div class="tm-card-content">
-            <div class="tm-card-title">ìƒí‘œëª…</div>
+            <div class="tm-card-title">상표명</div>
             <div class="tm-card-value">${TM.escapeHtml(p.trademarkName) || '-'}</div>
             <div class="tm-card-sub">${TM.getTypeLabel(p.trademarkType)}</div>
           </div>
         </div>
         
-        <!-- ì§€ì •ìƒí’ˆ ì¹´ë“œ -->
+        <!-- 지정상품 카드 -->
         <div class="tm-summary-card">
-          <div class="tm-card-icon">ðŸ“¦</div>
+          <div class="tm-card-icon">📦</div>
           <div class="tm-card-content">
-            <div class="tm-card-title">ì§€ì •ìƒí’ˆ</div>
-            <div class="tm-card-value">${p.designatedGoods?.length || 0}ê°œ ë¥˜</div>
-            <div class="tm-card-sub">${p.designatedGoods?.reduce((sum, g) => sum + g.goods.length, 0) || 0}ê°œ ìƒí’ˆ</div>
+            <div class="tm-card-title">지정상품</div>
+            <div class="tm-card-value">${p.designatedGoods?.length || 0}개 류</div>
+            <div class="tm-card-sub">${p.designatedGoods?.reduce((sum, g) => sum + g.goods.length, 0) || 0}개 상품</div>
           </div>
         </div>
         
-        <!-- ë¦¬ìŠ¤í¬ ì¹´ë“œ -->
+        <!-- 리스크 카드 -->
         <div class="tm-summary-card tm-card-risk ${risk.level || ''}">
-          <div class="tm-card-icon">${risk.level === 'high' ? 'âš ï¸' : risk.level === 'medium' ? 'âš¡' : risk.level === 'low' ? 'âœ…' : 'â“'}</div>
+          <div class="tm-card-icon">${risk.level === 'high' ? '⚠️' : risk.level === 'medium' ? '⚡' : risk.level === 'low' ? '✅' : '❓'}</div>
           <div class="tm-card-content">
-            <div class="tm-card-title">ë¦¬ìŠ¤í¬</div>
-            <div class="tm-card-value">${risk.level ? (risk.level === 'high' ? 'ë†’ìŒ' : risk.level === 'medium' ? 'ì£¼ì˜' : 'ë‚®ìŒ') : 'ë¯¸í‰ê°€'}</div>
-            <div class="tm-card-sub">${risk.level ? 'ë“±ë¡ ê°€ëŠ¥ì„± ' + TM.getRiskProbability(risk.level) : '-'}</div>
+            <div class="tm-card-title">리스크</div>
+            <div class="tm-card-value">${risk.level ? (risk.level === 'high' ? '높음' : risk.level === 'medium' ? '주의' : '낮음') : '미평가'}</div>
+            <div class="tm-card-sub">${risk.level ? '등록 가능성 ' + TM.getRiskProbability(risk.level) : '-'}</div>
           </div>
         </div>
         
-        <!-- ë¹„ìš© ì¹´ë“œ -->
+        <!-- 비용 카드 -->
         <div class="tm-summary-card">
-          <div class="tm-card-icon">ðŸ’°</div>
+          <div class="tm-card-icon">💰</div>
           <div class="tm-card-content">
-            <div class="tm-card-title">ì˜ˆìƒ ë¹„ìš©</div>
-            <div class="tm-card-value">${TM.formatNumber(fee.totalFee || 0)}ì›</div>
-            <div class="tm-card-sub">${p.priorityExam?.enabled ? 'ìš°ì„ ì‹¬ì‚¬ í¬í•¨' : 'ì¼ë°˜ì‹¬ì‚¬'}</div>
+            <div class="tm-card-title">예상 비용</div>
+            <div class="tm-card-value">${TM.formatNumber(fee.totalFee || 0)}원</div>
+            <div class="tm-card-sub">${p.priorityExam?.enabled ? '우선심사 포함' : '일반심사'}</div>
           </div>
         </div>
       </div>
       
-      <!-- ì„¸ë¶€ ì •ë³´ ì„¹ì…˜ë“¤ -->
+      <!-- 세부 정보 섹션들 -->
       <div class="tm-summary-sections">
-        <!-- ì¶œì›ì¸ ì •ë³´ -->
+        <!-- 출원인 정보 -->
         ${p.applicant?.name ? `
           <div class="tm-summary-section">
-            <h4>ðŸ‘¤ ì¶œì›ì¸</h4>
+            <h4>👤 출원인</h4>
             <div class="tm-summary-info">
               <span>${TM.escapeHtml(p.applicant.name)}</span>
-              ${p.managementNumber ? `<span class="tm-info-badge">ê´€ë¦¬ë²ˆí˜¸: ${TM.escapeHtml(p.managementNumber)}</span>` : 
-                (TM.currentProject?.title ? `<span class="tm-info-badge">ê´€ë¦¬ë²ˆí˜¸: ${TM.escapeHtml(TM.currentProject.title)}</span>` : '')}
+              ${p.managementNumber ? `<span class="tm-info-badge">관리번호: ${TM.escapeHtml(p.managementNumber)}</span>` : 
+                (TM.currentProject?.title ? `<span class="tm-info-badge">관리번호: ${TM.escapeHtml(TM.currentProject.title)}</span>` : '')}
             </div>
           </div>
         ` : ''}
         
-        <!-- ì§€ì •ìƒí’ˆ ìš”ì•½ -->
+        <!-- 지정상품 요약 -->
         ${p.designatedGoods?.length > 0 ? `
           <div class="tm-summary-section">
-            <h4>ðŸ“¦ ì§€ì •ìƒí’ˆ ìš”ì•½</h4>
+            <h4>📦 지정상품 요약</h4>
             <div class="tm-goods-summary-grid">
               ${p.designatedGoods.map(dg => `
                 <div class="tm-goods-summary-item">
-                  <span class="tm-class-badge">ì œ${dg.classCode}ë¥˜</span>
-                  <span class="tm-goods-count">${dg.goods.length}ê°œ</span>
+                  <span class="tm-class-badge">제${dg.classCode}류</span>
+                  <span class="tm-goods-count">${dg.goods.length}개</span>
                 </div>
               `).join('')}
             </div>
           </div>
         ` : ''}
         
-        <!-- ì„ í–‰ìƒí‘œ ê²€ìƒ‰ ê²°ê³¼ -->
+        <!-- 선행상표 검색 결과 -->
         ${allSearchResults.length > 0 ? `
           <div class="tm-summary-section">
-            <h4>ðŸ” ì„ í–‰ìƒí‘œ ê²€ìƒ‰</h4>
+            <h4>🔍 선행상표 검색</h4>
             <div class="tm-summary-stats">
-              <span>ê²€ìƒ‰ ê²°ê³¼ ${allSearchResults.length}ê±´</span>
-              <span>í‰ê°€ ì™„ë£Œ ${evaluations.length}ê±´</span>
-              <span>ì¶©ëŒ ìš°ë ¤ ${risk.conflictCount || 0}ê±´</span>
+              <span>검색 결과 ${allSearchResults.length}건</span>
+              <span>평가 완료 ${evaluations.length}건</span>
+              <span>충돌 우려 ${risk.conflictCount || 0}건</span>
             </div>
           </div>
         ` : ''}
         
-        <!-- ë¹„ìš© ëª…ì„¸ -->
+        <!-- 비용 명세 -->
         ${fee.breakdown?.length > 0 ? `
           <div class="tm-summary-section">
-            <h4>ðŸ’° ë¹„ìš© ëª…ì„¸</h4>
+            <h4>💰 비용 명세</h4>
             <div class="tm-fee-summary">
               ${fee.breakdown.slice(0, 5).map(item => `
                 <div class="tm-fee-item ${item.type === 'total' ? 'total' : ''}">
                   <span>${TM.escapeHtml(item.label)}</span>
-                  <span>${TM.formatNumber(item.amount)}ì›</span>
+                  <span>${TM.formatNumber(item.amount)}원</span>
                 </div>
               `).join('')}
             </div>
@@ -8012,16 +8012,16 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         ` : ''}
       </div>
       
-      <!-- ë¬¸ì„œ ì¶œë ¥ -->
+      <!-- 문서 출력 -->
       <div class="tm-output-section">
-        <h4>ðŸ“¥ ë¬¸ì„œ ë‹¤ìš´ë¡œë“œ</h4>
+        <h4>📥 문서 다운로드</h4>
         <div class="tm-output-buttons">
           <button class="btn btn-primary" data-action="tm-download-docx">
-            ðŸ“ ê²€í†  ë³´ê³ ì„œ (Word)
+            📝 검토 보고서 (Word)
           </button>
           ${p.priorityExam?.enabled ? `
             <button class="btn btn-secondary" data-action="tm-generate-priority-doc">
-              âš¡ ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œ (Word)
+              ⚡ 우선심사 설명서 (Word)
             </button>
           ` : ''}
         </div>
@@ -8053,29 +8053,29 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
     
     let html = `
       <div class="tm-doc">
-        <h1>ìƒí‘œ ì¶œì› ê²€í†  ë³´ê³ ì„œ</h1>
-        <p class="tm-doc-date">ìž‘ì„±ì¼: ${new Date().toLocaleDateString('ko-KR')}</p>
+        <h1>상표 출원 검토 보고서</h1>
+        <p class="tm-doc-date">작성일: ${new Date().toLocaleDateString('ko-KR')}</p>
     `;
     
     if (includes.summary) {
       html += `
-        <h2>1. í”„ë¡œì íŠ¸ ê°œìš”</h2>
+        <h2>1. 프로젝트 개요</h2>
         <table class="tm-doc-table">
-          <tr><th>ìƒí‘œëª…</th><td>${TM.escapeHtml(p.trademarkName)}</td></tr>
-          <tr><th>ì˜ë¬¸ëª…</th><td>${TM.escapeHtml(p.trademarkNameEn) || '-'}</td></tr>
-          <tr><th>ìƒí‘œ ìœ í˜•</th><td>${TM.getTypeLabel(p.trademarkType)}</td></tr>
-          <tr><th>ì¶œì›ì¸</th><td>${TM.escapeHtml(p.applicant?.name) || '-'}</td></tr>
+          <tr><th>상표명</th><td>${TM.escapeHtml(p.trademarkName)}</td></tr>
+          <tr><th>영문명</th><td>${TM.escapeHtml(p.trademarkNameEn) || '-'}</td></tr>
+          <tr><th>상표 유형</th><td>${TM.getTypeLabel(p.trademarkType)}</td></tr>
+          <tr><th>출원인</th><td>${TM.escapeHtml(p.applicant?.name) || '-'}</td></tr>
         </table>
       `;
     }
     
     if (includes.goods && p.designatedGoods?.length > 0) {
-      html += `<h2>2. ì§€ì •ìƒí’ˆ</h2>`;
+      html += `<h2>2. 지정상품</h2>`;
       p.designatedGoods.forEach(classData => {
         html += `
-          <h3>ì œ${classData.classCode}ë¥˜ - ${TM.escapeHtml(classData.className)}</h3>
+          <h3>제${classData.classCode}류 - ${TM.escapeHtml(classData.className)}</h3>
           <ul>
-            ${classData.goods.map(g => `<li>${TM.escapeHtml(g.name)} ${!g.gazetted ? '(ë¹„ê³ ì‹œ)' : ''}</li>`).join('')}
+            ${classData.goods.map(g => `<li>${TM.escapeHtml(g.name)} ${!g.gazetted ? '(비고시)' : ''}</li>`).join('')}
           </ul>
         `;
       });
@@ -8083,22 +8083,22 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
     
     if (includes.risk && p.riskAssessment?.level) {
       html += `
-        <h2>3. ë¦¬ìŠ¤í¬ í‰ê°€</h2>
-        <p><strong>ìœ„í—˜ ìˆ˜ì¤€:</strong> ${p.riskAssessment.level === 'high' ? 'ë†’ìŒ' : p.riskAssessment.level === 'medium' ? 'ì¤‘ê°„' : 'ë‚®ìŒ'}</p>
-        <p><strong>ë“±ë¡ ê°€ëŠ¥ì„±:</strong> ${TM.getRiskProbability(p.riskAssessment.level)}</p>
+        <h2>3. 리스크 평가</h2>
+        <p><strong>위험 수준:</strong> ${p.riskAssessment.level === 'high' ? '높음' : p.riskAssessment.level === 'medium' ? '중간' : '낮음'}</p>
+        <p><strong>등록 가능성:</strong> ${TM.getRiskProbability(p.riskAssessment.level)}</p>
         ${p.riskAssessment.details ? `<p>${TM.escapeHtml(p.riskAssessment.details)}</p>` : ''}
-        ${p.riskAssessment.recommendation ? `<p><strong>ê¶Œê³ ì‚¬í•­:</strong> ${TM.escapeHtml(p.riskAssessment.recommendation)}</p>` : ''}
+        ${p.riskAssessment.recommendation ? `<p><strong>권고사항:</strong> ${TM.escapeHtml(p.riskAssessment.recommendation)}</p>` : ''}
       `;
     }
     
     if (includes.fee && p.feeCalculation?.totalFee) {
       html += `
-        <h2>4. ë¹„ìš© ëª…ì„¸</h2>
+        <h2>4. 비용 명세</h2>
         <table class="tm-doc-table">
           ${p.feeCalculation.breakdown?.map(item => `
             <tr>
               <td>${TM.escapeHtml(item.label)}</td>
-              <td style="text-align: right;">${item.type === 'reduction' ? '-' : ''}${TM.formatNumber(Math.abs(item.amount))}ì›</td>
+              <td style="text-align: right;">${item.type === 'reduction' ? '-' : ''}${TM.formatNumber(Math.abs(item.amount))}원</td>
             </tr>
           `).join('')}
         </table>
@@ -8107,7 +8107,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
     
     if (includes.priority && p.priorityExam?.enabled && p.priorityExam?.generatedDocument) {
       html += `
-        <h2>5. ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œ</h2>
+        <h2>5. 우선심사 설명서</h2>
         <div class="tm-doc-priority">${TM.formatPriorityDocument(p.priorityExam.generatedDocument)}</div>
       `;
     }
@@ -8119,17 +8119,17 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
   
   TM.downloadDocx = async function() {
     try {
-      App.showToast('ê²€í†  ë³´ê³ ì„œ ìƒì„± ì¤‘...', 'info');
+      App.showToast('검토 보고서 생성 중...', 'info');
       
       const p = TM.currentProject;
       if (!p || !p.trademarkName) {
-        App.showToast('í”„ë¡œì íŠ¸ ì •ë³´ê°€ ì—†ìŠµë‹ˆë‹¤.', 'warning');
+        App.showToast('프로젝트 정보가 없습니다.', 'warning');
         return;
       }
       
-      // docx ë¼ì´ë¸ŒëŸ¬ë¦¬ ë¡œë“œ (CDN)
+      // docx 라이브러리 로드 (CDN)
       if (!window.docx) {
-        console.log('[TM] docx ë¼ì´ë¸ŒëŸ¬ë¦¬ ë¡œë“œ ì¤‘...');
+        console.log('[TM] docx 라이브러리 로드 중...');
         await TM.loadScript('https://unpkg.com/docx@8.2.2/build/index.umd.js');
         let retries = 0;
         while (!window.docx && retries < 20) {
@@ -8137,9 +8137,9 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
           retries++;
         }
         if (!window.docx) {
-          throw new Error('docx ë¼ì´ë¸ŒëŸ¬ë¦¬ ë¡œë“œ ì‹¤íŒ¨. ë„¤íŠ¸ì›Œí¬ë¥¼ í™•ì¸í•˜ì„¸ìš”.');
+          throw new Error('docx 라이브러리 로드 실패. 네트워크를 확인하세요.');
         }
-        console.log('[TM] docx ë¼ì´ë¸ŒëŸ¬ë¦¬ ë¡œë“œ ì™„ë£Œ');
+        console.log('[TM] docx 라이브러리 로드 완료');
       }
       
       const {
@@ -8148,7 +8148,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         ShadingType, VerticalAlign, PageNumber, PageBreak
       } = window.docx;
       
-      // â”€â”€â”€ ìƒ‰ìƒ â”€â”€â”€
+      // ─── 색상 ───
       const C = {
         primary: '1B3A5C', accent: '2563EB', danger: 'DC2626', warning: 'D97706',
         success: '059669', lightBg: 'F0F4F8', headerBg: '1B3A5C', headerText: 'FFFFFF',
@@ -8163,7 +8163,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       const cellM = { top: 60, bottom: 60, left: 100, right: 100 };
       const TABLE_W = 9506; // A4 - margins
       
-      // â”€â”€â”€ ì…€ í—¬í¼ â”€â”€â”€
+      // ─── 셀 헬퍼 ───
       function hCell(text, w, opts = {}) {
         return new TableCell({
           borders, width: { size: w, type: WidthType.DXA },
@@ -8231,13 +8231,13 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         });
       }
       
-      // â”€â”€â”€ ë°ì´í„° ì¤€ë¹„ â”€â”€â”€
+      // ─── 데이터 준비 ───
       const today = new Date();
-      const dateStr = `${today.getFullYear()}ë…„ ${today.getMonth()+1}ì›” ${today.getDate()}ì¼`;
+      const dateStr = `${today.getFullYear()}년 ${today.getMonth()+1}월 ${today.getDate()}일`;
       const refNo = `TM-${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
-      const firmName = TM.settings?.firmName || 'íŠ¹í—ˆë²•ë¥ ì‚¬ë¬´ì†Œ ë””ë”¤';
+      const firmName = TM.settings?.firmName || '특허법률사무소 디딤';
       const firmNameEn = TM.settings?.firmNameEn || 'PATENT GROUP DIDIM';
-      const attorney = TM.settings?.attorneyName || p.applicant?.name || 'ë‹´ë‹¹ ë³€ë¦¬ì‚¬';
+      const attorney = TM.settings?.attorneyName || p.applicant?.name || '담당 변리사';
       
       const risk = p.riskAssessment || {};
       const fee = p.feeCalculation || {};
@@ -8246,7 +8246,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       const designatedGoods = p.designatedGoods || [];
       const totalGoods = designatedGoods.reduce((s, g) => s + (g.goods?.length || 0), 0);
       
-      // ê²€ìƒ‰ê²°ê³¼ ë¶„ì„
+      // 검색결과 분석
       const textResults = searchResults.text || [];
       const groupOverlap = textResults.filter(r => r.hasGroupOverlap);
       const noOverlap = textResults.filter(r => !r.hasGroupOverlap);
@@ -8256,7 +8256,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       
       const children = [];
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• í‘œì§€ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ 표지 ═══════════════
       children.push(gap(1200));
       children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 },
         children: [new TextRun({ text: firmName, font: 'Arial', size: 36, bold: true, color: C.primary })]
@@ -8266,20 +8266,20 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       }));
       children.push(gap(500));
       children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 120 },
-        children: [new TextRun({ text: 'ìƒí‘œ ì¶œì› ê²€í†  ë³´ê³ ì„œ', font: 'Arial', size: 48, bold: true, color: C.primary })]
+        children: [new TextRun({ text: '상표 출원 검토 보고서', font: 'Arial', size: 48, bold: true, color: C.primary })]
       }));
       children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 },
         children: [new TextRun({ text: 'Trademark Application Review Report', font: 'Arial', size: 22, color: C.gray400, italics: true })]
       }));
       children.push(gap(600));
       
-      // í‘œì§€ í•˜ë‹¨ ì •ë³´
+      // 표지 하단 정보
       const coverRows = [
-        ['ë¬¸ì„œë²ˆí˜¸', refNo],
-        ['ìž‘ ì„± ì¼', dateStr],
-        ['ì¶œì›ìƒí‘œ', `${p.trademarkName || '-'}${p.trademarkNameEn ? ' / ' + p.trademarkNameEn : ''}`],
-        ['ì¶œ ì› ì¸', p.applicant?.name || '-'],
-        ['ë‹´ë‹¹ë³€ë¦¬ì‚¬', attorney],
+        ['문서번호', refNo],
+        ['작 성 일', dateStr],
+        ['출원상표', `${p.trademarkName || '-'}${p.trademarkNameEn ? ' / ' + p.trademarkNameEn : ''}`],
+        ['출 원 인', p.applicant?.name || '-'],
+        ['담당변리사', attorney],
       ];
       children.push(new Table({
         width: { size: 5400, type: WidthType.DXA }, columnWidths: [2000, 3400],
@@ -8299,80 +8299,80 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       }));
       children.push(gap(500));
       children.push(new Paragraph({ alignment: AlignmentType.CENTER,
-        children: [new TextRun({ text: 'ë³¸ ë³´ê³ ì„œëŠ” ì˜ë¢°ì¸ì— ëŒ€í•œ ë²•ë¥  ê²€í†  ì˜ê²¬ìœ¼ë¡œì„œ ë¹„ë°€ ìœ ì§€ ëŒ€ìƒìž…ë‹ˆë‹¤.', font: 'Arial', size: 16, color: C.gray400, italics: true })]
+        children: [new TextRun({ text: '본 보고서는 의뢰인에 대한 법률 검토 의견으로서 비밀 유지 대상입니다.', font: 'Arial', size: 16, color: C.gray400, italics: true })]
       }));
       children.push(new Paragraph({ children: [new PageBreak()] }));
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• I. ê²€í†  ìš”ì•½ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-      children.push(secTitle('I', 'ê²€í†  ìš”ì•½ (Executive Summary)'));
+      // ═══════════════ I. 검토 요약 ═══════════════
+      children.push(secTitle('I', '검토 요약 (Executive Summary)'));
       
-      const riskLabel = risk.level === 'high' ? 'ë†’ìŒ (HIGH)' : risk.level === 'medium' ? 'ì¤‘ê°„ (MEDIUM)' : risk.level ? 'ë‚®ìŒ (LOW)' : 'ë¯¸í‰ê°€';
+      const riskLabel = risk.level === 'high' ? '높음 (HIGH)' : risk.level === 'medium' ? '중간 (MEDIUM)' : risk.level ? '낮음 (LOW)' : '미평가';
       const riskColor = risk.level === 'high' ? C.danger : risk.level === 'medium' ? C.warning : C.success;
       
       children.push(new Table({
         width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [2400, 7106],
         rows: [
-          new TableRow({ children: [ lCell('ì¶œì›ìƒí‘œ', 2400), dCell(`${p.trademarkName || '-'}${p.trademarkNameEn ? ' (' + p.trademarkNameEn + ')' : ''}`, 7106, { bold: true }) ] }),
-          new TableRow({ children: [ lCell('ìƒí‘œ ìœ í˜•', 2400), dCell(TM.getTypeLabel(p.trademarkType), 7106) ] }),
-          new TableRow({ children: [ lCell('ì§€ì •ìƒí’ˆë¥˜', 2400), dCell(designatedGoods.map(g => `ì œ${g.classCode}ë¥˜(${g.className || TM.niceClasses?.[g.classCode] || ''})`).join(', ') || 'ë¯¸ì„ íƒ', 7106) ] }),
-          new TableRow({ children: [ lCell('ì´ ì§€ì •ìƒí’ˆ ìˆ˜', 2400), dCell(`${totalGoods}ê°œ (${designatedGoods.length}ê°œ ë¥˜)`, 7106) ] }),
-          new TableRow({ children: [ lCell('ë¦¬ìŠ¤í¬ ìˆ˜ì¤€', 2400), dCell(riskLabel, 7106, { bold: true, color: riskColor }) ] }),
-          new TableRow({ children: [ lCell('ì¶©ëŒ ìš°ë ¤ ìƒí‘œ', 2400), dCell(`${risk.conflictCount || critical.length || 0}ê±´ (ìœ ì‚¬êµ° ì¤‘ë³µ ê¸°ì¤€)`, 7106, { color: C.danger }) ] }),
-          ...(validation.overallScore ? [new TableRow({ children: [ lCell('AI ê²€ì¦ ì •í™•ë„', 2400), dCell(`${validation.overallScore}%${validation.summary ? ' â€” ' + validation.summary : ''}`, 7106) ] })] : []),
-          ...(fee.totalFee ? [new TableRow({ children: [ lCell('ì˜ˆìƒ ì¶œì›ë¹„ìš©', 2400), dCell(`${TM.formatNumber(fee.totalFee)}ì›`, 7106, { bold: true }) ] })] : []),
-          ...(risk.recommendation ? [new TableRow({ children: [ lCell('ì¢…í•© ì˜ê²¬', 2400), dCell(risk.recommendation.slice(0, 300), 7106) ] })] : []),
+          new TableRow({ children: [ lCell('출원상표', 2400), dCell(`${p.trademarkName || '-'}${p.trademarkNameEn ? ' (' + p.trademarkNameEn + ')' : ''}`, 7106, { bold: true }) ] }),
+          new TableRow({ children: [ lCell('상표 유형', 2400), dCell(TM.getTypeLabel(p.trademarkType), 7106) ] }),
+          new TableRow({ children: [ lCell('지정상품류', 2400), dCell(designatedGoods.map(g => `제${g.classCode}류(${g.className || TM.niceClasses?.[g.classCode] || ''})`).join(', ') || '미선택', 7106) ] }),
+          new TableRow({ children: [ lCell('총 지정상품 수', 2400), dCell(`${totalGoods}개 (${designatedGoods.length}개 류)`, 7106) ] }),
+          new TableRow({ children: [ lCell('리스크 수준', 2400), dCell(riskLabel, 7106, { bold: true, color: riskColor }) ] }),
+          new TableRow({ children: [ lCell('충돌 우려 상표', 2400), dCell(`${risk.conflictCount || critical.length || 0}건 (유사군 중복 기준)`, 7106, { color: C.danger }) ] }),
+          ...(validation.overallScore ? [new TableRow({ children: [ lCell('AI 검증 정확도', 2400), dCell(`${validation.overallScore}%${validation.summary ? ' — ' + validation.summary : ''}`, 7106) ] })] : []),
+          ...(fee.totalFee ? [new TableRow({ children: [ lCell('예상 출원비용', 2400), dCell(`${TM.formatNumber(fee.totalFee)}원`, 7106, { bold: true }) ] })] : []),
+          ...(risk.recommendation ? [new TableRow({ children: [ lCell('종합 의견', 2400), dCell(risk.recommendation.slice(0, 300), 7106) ] })] : []),
         ]
       }));
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• II. ì¶œì›ì¸ ì •ë³´ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-      children.push(secTitle('II', 'ì¶œì›ì¸ ì •ë³´'));
+      // ═══════════════ II. 출원인 정보 ═══════════════
+      children.push(secTitle('II', '출원인 정보'));
       children.push(new Table({
         width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [2400, 2353, 2400, 2353],
         rows: [
           new TableRow({ children: [
-            lCell('ì¶œì›ì¸ ëª…ì¹­', 2400), dCell(p.applicant?.name || '-', 2353),
-            lCell('ëŒ€í‘œìž', 2400), dCell(p.applicant?.representative || '-', 2353)
+            lCell('출원인 명칭', 2400), dCell(p.applicant?.name || '-', 2353),
+            lCell('대표자', 2400), dCell(p.applicant?.representative || '-', 2353)
           ] }),
           new TableRow({ children: [
-            lCell('ì‚¬ì—…ìžë²ˆí˜¸', 2400), dCell(p.applicant?.bizNumber || '-', 2353),
-            lCell('ì£¼ì†Œ', 2400), dCell(p.applicant?.address || '-', 2353)
+            lCell('사업자번호', 2400), dCell(p.applicant?.bizNumber || '-', 2353),
+            lCell('주소', 2400), dCell(p.applicant?.address || '-', 2353)
           ] }),
         ]
       }));
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• III. ì‚¬ì—… ë¶„ì„ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ III. 사업 분석 ═══════════════
       if (p.aiAnalysis?.businessAnalysis) {
-        children.push(secTitle('III', 'ì‚¬ì—… ë¶„ì„ ê²°ê³¼'));
-        children.push(bodyP('AI ì‚¬ì—… ë¶„ì„ ì‹œìŠ¤í…œì´ ì¶œì›ì¸ì˜ ì‚¬ì—… ë‚´ìš©ì„ ë¶„ì„í•œ ê²°ê³¼ëŠ” ì•„ëž˜ì™€ ê°™ìŠµë‹ˆë‹¤.'));
+        children.push(secTitle('III', '사업 분석 결과'));
+        children.push(bodyP('AI 사업 분석 시스템이 출원인의 사업 내용을 분석한 결과는 아래와 같습니다.'));
         
         const ana = p.aiAnalysis;
         children.push(new Table({
           width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [2400, 7106],
           rows: [
-            new TableRow({ children: [ lCell('ì‚¬ì—… ë‚´ìš©', 2400), dCell(ana.businessAnalysis || '-', 7106) ] }),
-            ...(ana.coreProducts?.length ? [new TableRow({ children: [ lCell('í•µì‹¬ ìƒí’ˆ', 2400), dCell(ana.coreProducts.join(', '), 7106) ] })] : []),
-            ...(ana.coreServices?.length ? [new TableRow({ children: [ lCell('í•µì‹¬ ì„œë¹„ìŠ¤', 2400), dCell(ana.coreServices.join(', '), 7106) ] })] : []),
-            ...(ana.businessTypes?.length ? [new TableRow({ children: [ lCell('ì‚¬ì—… ìœ í˜•', 2400), dCell(ana.businessTypes.join(', '), 7106) ] })] : []),
-            ...(ana.expansionPotential?.length ? [new TableRow({ children: [ lCell('í™•ìž¥ ê°€ëŠ¥ ë¶„ì•¼', 2400), dCell(ana.expansionPotential.join(', '), 7106) ] })] : []),
+            new TableRow({ children: [ lCell('사업 내용', 2400), dCell(ana.businessAnalysis || '-', 7106) ] }),
+            ...(ana.coreProducts?.length ? [new TableRow({ children: [ lCell('핵심 상품', 2400), dCell(ana.coreProducts.join(', '), 7106) ] })] : []),
+            ...(ana.coreServices?.length ? [new TableRow({ children: [ lCell('핵심 서비스', 2400), dCell(ana.coreServices.join(', '), 7106) ] })] : []),
+            ...(ana.businessTypes?.length ? [new TableRow({ children: [ lCell('사업 유형', 2400), dCell(ana.businessTypes.join(', '), 7106) ] })] : []),
+            ...(ana.expansionPotential?.length ? [new TableRow({ children: [ lCell('확장 가능 분야', 2400), dCell(ana.expansionPotential.join(', '), 7106) ] })] : []),
           ]
         }));
       }
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• IV. ì§€ì •ìƒí’ˆ ìƒì„¸ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ IV. 지정상품 상세 ═══════════════
       if (designatedGoods.length > 0) {
-        children.push(secTitle('IV', 'ì§€ì •ìƒí’ˆ ìƒì„¸'));
-        children.push(bodyP('ê° ìƒí’ˆë¥˜ë³„ ì§€ì •ìƒí’ˆ ë‚´ì—­ìž…ë‹ˆë‹¤. ëª¨ë“  ì§€ì •ìƒí’ˆì€ íŠ¹í—ˆì²­ ê³ ì‹œëª…ì¹­ ê¸°ì¤€ì´ë©°, ë¹„ê³ ì‹œëª…ì¹­ì€ ë³„ë„ í‘œê¸°í•˜ì˜€ìŠµë‹ˆë‹¤.'));
+        children.push(secTitle('IV', '지정상품 상세'));
+        children.push(bodyP('각 상품류별 지정상품 내역입니다. 모든 지정상품은 특허청 고시명칭 기준이며, 비고시명칭은 별도 표기하였습니다.'));
         children.push(gap(40));
         
         for (const classData of designatedGoods) {
           children.push(new Paragraph({ spacing: { before: 200, after: 100 }, children: [
-            new TextRun({ text: `ì œ${classData.classCode}ë¥˜`, font: 'Arial', size: 22, bold: true, color: C.accent }),
-            new TextRun({ text: ` â€” ${classData.className || TM.niceClasses?.[classData.classCode] || ''}`, font: 'Arial', size: 22, color: C.primary }),
-            new TextRun({ text: `  (${classData.goods?.length || 0}ê°œ)`, font: 'Arial', size: 18, color: C.gray400 }),
+            new TextRun({ text: `제${classData.classCode}류`, font: 'Arial', size: 22, bold: true, color: C.accent }),
+            new TextRun({ text: ` — ${classData.className || TM.niceClasses?.[classData.classCode] || ''}`, font: 'Arial', size: 22, color: C.primary }),
+            new TextRun({ text: `  (${classData.goods?.length || 0}개)`, font: 'Arial', size: 18, color: C.gray400 }),
           ] }));
           
           const gRows = [new TableRow({ children: [
-            hCell('No.', 600), hCell('ì§€ì •ìƒí’ˆ(ì„œë¹„ìŠ¤)ëª…', 5506), hCell('ìœ ì‚¬êµ°ì½”ë“œ', 1600), hCell('ê³ ì‹œì—¬ë¶€', 1800)
+            hCell('No.', 600), hCell('지정상품(서비스)명', 5506), hCell('유사군코드', 1600), hCell('고시여부', 1800)
           ] })];
           
           (classData.goods || []).forEach((g, idx) => {
@@ -8382,31 +8382,31 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
               dCell(String(idx + 1), 600, { align: AlignmentType.CENTER, bg }),
               dCell(g.name, 5506, { bg, color: nonG ? C.warning : C.black }),
               dCell(g.similarGroup || '-', 1600, { align: AlignmentType.CENTER, bg }),
-              dCell(nonG ? 'ë¹„ê³ ì‹œ' : 'ê³ ì‹œëª…ì¹­', 1800, { align: AlignmentType.CENTER, bg, color: nonG ? C.danger : C.success }),
+              dCell(nonG ? '비고시' : '고시명칭', 1800, { align: AlignmentType.CENTER, bg, color: nonG ? C.danger : C.success }),
             ] }));
           });
           
           children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [600, 5506, 1600, 1800], rows: gRows }));
         }
         
-        // ë¹„ê³ ì‹œ ê²½ê³ 
-        const nonGazettedGoods = designatedGoods.flatMap(c => (c.goods || []).filter(g => !g.gazetted).map(g => `"${g.name}"(ì œ${c.classCode}ë¥˜)`));
+        // 비고시 경고
+        const nonGazettedGoods = designatedGoods.flatMap(c => (c.goods || []).filter(g => !g.gazetted).map(g => `"${g.name}"(제${c.classCode}류)`));
         if (nonGazettedGoods.length > 0) {
           children.push(gap(60));
           children.push(noteBox(
-            `${nonGazettedGoods.join(', ')}ì€(ëŠ”) ë¹„ê³ ì‹œëª…ì¹­ìž…ë‹ˆë‹¤. ì‹¬ì‚¬ê´€ íŒë‹¨ì— ë”°ë¼ ë³´ì • ìš”êµ¬ê°€ ìžˆì„ ìˆ˜ ìžˆìŠµë‹ˆë‹¤.`,
-            { prefix: 'âš  ìœ ì˜ì‚¬í•­: ' }
+            `${nonGazettedGoods.join(', ')}은(는) 비고시명칭입니다. 심사관 판단에 따라 보정 요구가 있을 수 있습니다.`,
+            { prefix: '⚠ 유의사항: ' }
           ));
         }
       }
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• V. AI 3ë‹¨ê³„ ê²€ì¦ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ V. AI 3단계 검증 ═══════════════
       if (validation.overallScore) {
-        children.push(secTitle('V', 'AI 3ë‹¨ê³„ ê²€ì¦ ê²°ê³¼'));
-        children.push(bodyP('AI ê²€ì¦ ì‹œìŠ¤í…œì´ ì¶”ì²œ ìƒí’ˆë¥˜ ë° ì§€ì •ìƒí’ˆì˜ ì í•©ì„±ì„ 3ë‹¨ê³„ë¡œ ê²€ì¦í•œ ê²°ê³¼ìž…ë‹ˆë‹¤.'));
+        children.push(secTitle('V', 'AI 3단계 검증 결과'));
+        children.push(bodyP('AI 검증 시스템이 추천 상품류 및 지정상품의 적합성을 3단계로 검증한 결과입니다.'));
         children.push(gap(40));
         
-        // ê²€ì¦ ìš”ì•½ í…Œì´ë¸”
+        // 검증 요약 테이블
         const s1 = validation.stages?.classValidation;
         const s2 = validation.stages?.goodsValidation;
         const s3 = validation.stages?.missingReview;
@@ -8414,46 +8414,46 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         children.push(new Table({
           width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [2400, 2369, 2369, 2368],
           rows: [
-            new TableRow({ children: [ hCell('ê²€ì¦ í•­ëª©', 2400), hCell('1ë‹¨ê³„: ë¥˜ ê²€ì¦', 2369), hCell('2ë‹¨ê³„: ìƒí’ˆ ê²€ì¦', 2369), hCell('3ë‹¨ê³„: ëˆ„ë½ ê²€í† ', 2368) ] }),
+            new TableRow({ children: [ hCell('검증 항목', 2400), hCell('1단계: 류 검증', 2369), hCell('2단계: 상품 검증', 2369), hCell('3단계: 누락 검토', 2368) ] }),
             new TableRow({ children: [
-              lCell('ê²€ì¦ ë‚´ìš©', 2400),
-              dCell('ì¶”ì²œ ë¥˜ê°€ ì‚¬ì—… ë‚´ìš©ì— ì í•©í•œì§€', 2369),
-              dCell('ì§€ì •ìƒí’ˆì´ ì •í™•í•œ ê³ ì‹œëª…ì¹­ì¸ì§€', 2369),
-              dCell('ëˆ„ë½ëœ ë¥˜ ë˜ëŠ” ìƒí’ˆì´ ìžˆëŠ”ì§€', 2368),
+              lCell('검증 내용', 2400),
+              dCell('추천 류가 사업 내용에 적합한지', 2369),
+              dCell('지정상품이 정확한 고시명칭인지', 2369),
+              dCell('누락된 류 또는 상품이 있는지', 2368),
             ] }),
             new TableRow({ children: [
-              lCell('ê²°ê³¼', 2400),
-              dCell(validation.invalidClasses?.length ? `${validation.invalidClasses.length}ê±´ ë¶€ì í•©` : 'ì í•©', 2369, { color: validation.invalidClasses?.length ? C.danger : C.success }),
-              dCell(validation.invalidGoods?.length ? `${validation.invalidGoods.length}ê±´ ë³´ì •` : 'ì í•©', 2369, { color: validation.invalidGoods?.length ? C.warning : C.success }),
-              dCell(validation.missingClasses?.length ? `${validation.missingClasses.length}ê±´ ì¶”ê°€ ê¶Œìž¥` : 'ëˆ„ë½ ì—†ìŒ', 2368, { color: validation.missingClasses?.length ? C.accent : C.success }),
+              lCell('결과', 2400),
+              dCell(validation.invalidClasses?.length ? `${validation.invalidClasses.length}건 부적합` : '적합', 2369, { color: validation.invalidClasses?.length ? C.danger : C.success }),
+              dCell(validation.invalidGoods?.length ? `${validation.invalidGoods.length}건 보정` : '적합', 2369, { color: validation.invalidGoods?.length ? C.warning : C.success }),
+              dCell(validation.missingClasses?.length ? `${validation.missingClasses.length}건 추가 권장` : '누락 없음', 2368, { color: validation.missingClasses?.length ? C.accent : C.success }),
             ] }),
           ]
         }));
         
         children.push(gap(60));
         children.push(new Paragraph({ spacing: { before: 40, after: 100 }, children: [
-          new TextRun({ text: 'ì¢…í•© ì •í™•ë„: ', font: 'Arial', size: 20, bold: true, color: C.primary }),
+          new TextRun({ text: '종합 정확도: ', font: 'Arial', size: 20, bold: true, color: C.primary }),
           new TextRun({ text: `${validation.overallScore}%`, font: 'Arial', size: 24, bold: true, color: C.success }),
         ] }));
         
-        // ì œê±°ëœ ë¥˜
+        // 제거된 류
         if (validation.invalidClasses?.length > 0) {
-          children.push(subHead('ì œê±°ëœ ìƒí’ˆë¥˜'));
-          const icRows = [new TableRow({ children: [ hCell('ë¥˜', 1200), hCell('ì‚¬ìœ ', 8306) ] })];
+          children.push(subHead('제거된 상품류'));
+          const icRows = [new TableRow({ children: [ hCell('류', 1200), hCell('사유', 8306) ] })];
           validation.invalidClasses.forEach(c => {
-            icRows.push(new TableRow({ children: [ dCell(`ì œ${c.class}ë¥˜`, 1200, { align: AlignmentType.CENTER, bg: C.lightRed, bold: true }), dCell(c.reason, 8306, { bg: C.lightRed }) ] }));
+            icRows.push(new TableRow({ children: [ dCell(`제${c.class}류`, 1200, { align: AlignmentType.CENTER, bg: C.lightRed, bold: true }), dCell(c.reason, 8306, { bg: C.lightRed }) ] }));
           });
           children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [1200, 8306], rows: icRows }));
         }
         
-        // ë³´ì • ë‚´ì—­
+        // 보정 내역
         if (validation.invalidGoods?.length > 0 || validation.replacementGoods?.length > 0) {
-          children.push(subHead('ë³´ì • ë‚´ì—­'));
-          const igRows = [new TableRow({ children: [ hCell('ë¥˜', 1000), hCell('ì œê±° ìƒí’ˆ', 3203), hCell('ëŒ€ì²´ ìƒí’ˆ', 3203), hCell('ì‚¬ìœ ', 2100) ] })];
+          children.push(subHead('보정 내역'));
+          const igRows = [new TableRow({ children: [ hCell('류', 1000), hCell('제거 상품', 3203), hCell('대체 상품', 3203), hCell('사유', 2100) ] })];
           
           (validation.replacementGoods || []).forEach(r => {
             igRows.push(new TableRow({ children: [
-              dCell(`ì œ${r.classCode}ë¥˜`, 1000, { align: AlignmentType.CENTER }),
+              dCell(`제${r.classCode}류`, 1000, { align: AlignmentType.CENTER }),
               dCell(r.remove || r.goodsName || '-', 3203, { color: C.danger }),
               dCell(r.addInstead || '-', 3203, { color: C.success, bold: true }),
               dCell(r.reason || '-', 2100),
@@ -8461,7 +8461,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
           });
           (validation.invalidGoods || []).filter(g => !(validation.replacementGoods || []).some(r => r.classCode === g.classCode && r.remove === g.goodsName)).forEach(g => {
             igRows.push(new TableRow({ children: [
-              dCell(`ì œ${g.classCode}ë¥˜`, 1000, { align: AlignmentType.CENTER }),
+              dCell(`제${g.classCode}류`, 1000, { align: AlignmentType.CENTER }),
               dCell(g.goodsName, 3203, { color: C.danger }),
               dCell('-', 3203),
               dCell(g.reason || '-', 2100),
@@ -8470,70 +8470,70 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
           children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [1000, 3203, 3203, 2100], rows: igRows }));
         }
         
-        // ì¶”ê°€ ê¶Œìž¥ ë¥˜
+        // 추가 권장 류
         if (validation.missingClasses?.length > 0 || validation.suggestions?.filter(s => s.type === 'add_class')?.length > 0) {
-          children.push(subHead('ì¶”ê°€ ê¶Œìž¥ ë¥˜'));
+          children.push(subHead('추가 권장 류'));
           const suggestions = validation.suggestions?.filter(s => s.type === 'add_class') || validation.missingClasses || [];
-          const mcRows = [new TableRow({ children: [ hCell('ë¥˜', 1200), hCell('ìš°ì„ ìˆœìœ„', 1800), hCell('ì¶”ê°€ ê¶Œìž¥ ì‚¬ìœ ', 6506) ] })];
+          const mcRows = [new TableRow({ children: [ hCell('류', 1200), hCell('우선순위', 1800), hCell('추가 권장 사유', 6506) ] })];
           suggestions.forEach(s => {
             mcRows.push(new TableRow({ children: [
-              dCell(`ì œ${s.class}ë¥˜`, 1200, { align: AlignmentType.CENTER, bold: true }),
-              dCell(s.priority || 'ê¶Œìž¥', 1800, { color: C.warning }),
+              dCell(`제${s.class}류`, 1200, { align: AlignmentType.CENTER, bold: true }),
+              dCell(s.priority || '권장', 1800, { color: C.warning }),
               dCell(s.reason || '-', 6506),
             ] }));
           });
           children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [1200, 1800, 6506], rows: mcRows }));
         }
         
-        // ê²½ê³  ì‚¬í•­
+        // 경고 사항
         if (validation.warnings?.length > 0) {
-          children.push(subHead('í™•ì¸ í•„ìš” ì‚¬í•­'));
+          children.push(subHead('확인 필요 사항'));
           validation.warnings.forEach(w => {
             children.push(noteBox(
-              `ì œ${w.class}ë¥˜: ${w.message}`,
-              { prefix: 'âš  ', bg: C.lightYellow }
+              `제${w.class}류: ${w.message}`,
+              { prefix: '⚠ ', bg: C.lightYellow }
             ));
           });
         }
       }
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• VI. ì„ í–‰ìƒí‘œ ì¡°ì‚¬ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ VI. 선행상표 조사 ═══════════════
       if (searchResults.searchedAt || textResults.length > 0) {
         children.push(new Paragraph({ children: [new PageBreak()] }));
-        children.push(secTitle('VI', 'ì„ í–‰ìƒí‘œ ì¡°ì‚¬ ê²°ê³¼'));
-        children.push(bodyP('KIPRIS(í•œêµ­íŠ¹í—ˆì •ë³´ì›) ë°ì´í„°ë² ì´ìŠ¤ë¥¼ ê¸°ë°˜ìœ¼ë¡œ ì„ í–‰ìƒí‘œë¥¼ ì¡°ì‚¬í•œ ê²°ê³¼ìž…ë‹ˆë‹¤. ìœ ì‚¬êµ° ì½”ë“œ ì¤‘ë³µ ì—¬ë¶€ë¥¼ ê¸°ì¤€ìœ¼ë¡œ ì‹¤ì§ˆì  ì¶©ëŒ ìœ„í—˜ì„ ë¶„ì„í•˜ì˜€ìŠµë‹ˆë‹¤.'));
+        children.push(secTitle('VI', '선행상표 조사 결과'));
+        children.push(bodyP('KIPRIS(한국특허정보원) 데이터베이스를 기반으로 선행상표를 조사한 결과입니다. 유사군 코드 중복 여부를 기준으로 실질적 충돌 위험을 분석하였습니다.'));
         children.push(gap(40));
         
-        // ì¡°ì‚¬ ìš”ì•½
+        // 조사 요약
         children.push(new Table({
           width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [3169, 3169, 3168],
           rows: [
-            new TableRow({ children: [ hCell('êµ¬ë¶„', 3169), hCell('ê±´ìˆ˜', 3169), hCell('ë¹„ê³ ', 3168) ] }),
-            new TableRow({ children: [ lCell('ì´ ê²€ìƒ‰ ê²°ê³¼', 3169), dCell(`${textResults.length}ê±´`, 3169, { align: AlignmentType.CENTER }), dCell('ë¬¸ìž + ë„í˜• ê²€ìƒ‰ í†µí•©', 3168) ] }),
-            new TableRow({ children: [ dCell('ìœ ì‚¬êµ° ë¹„ì¤‘ë³µ (ì•ˆì „)', 3169, { color: C.success }), dCell(`${noOverlap.length}ê±´`, 3169, { align: AlignmentType.CENTER }), dCell('ìƒí‘œëª… ë™ì¼í•´ë„ ë“±ë¡ ê°€ëŠ¥', 3168) ] }),
-            new TableRow({ children: [ dCell('ìœ ì‚¬êµ° ì¤‘ë³µ (ê²€í†  í•„ìš”)', 3169, { color: C.warning, bold: true }), dCell(`${groupOverlap.length}ê±´`, 3169, { align: AlignmentType.CENTER, bold: true }), dCell('ì•„ëž˜ ìƒì„¸ ë¶„ì„ ì°¸ì¡°', 3168) ] }),
+            new TableRow({ children: [ hCell('구분', 3169), hCell('건수', 3169), hCell('비고', 3168) ] }),
+            new TableRow({ children: [ lCell('총 검색 결과', 3169), dCell(`${textResults.length}건`, 3169, { align: AlignmentType.CENTER }), dCell('문자 + 도형 검색 통합', 3168) ] }),
+            new TableRow({ children: [ dCell('유사군 비중복 (안전)', 3169, { color: C.success }), dCell(`${noOverlap.length}건`, 3169, { align: AlignmentType.CENTER }), dCell('상표명 동일해도 등록 가능', 3168) ] }),
+            new TableRow({ children: [ dCell('유사군 중복 (검토 필요)', 3169, { color: C.warning, bold: true }), dCell(`${groupOverlap.length}건`, 3169, { align: AlignmentType.CENTER, bold: true }), dCell('아래 상세 분석 참조', 3168) ] }),
           ]
         }));
         
-        // ìœ„í—˜ë“±ê¸‰ë³„ ë¶„ë¥˜
+        // 위험등급별 분류
         children.push(gap(40));
         children.push(new Table({
           width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [3500, 1506, 4500],
           rows: [
-            new TableRow({ children: [ hCell('ìœ„í—˜ ë“±ê¸‰', 3500), hCell('ê±´ìˆ˜', 1506), hCell('ì˜ë¯¸', 4500) ] }),
-            new TableRow({ children: [ dCell('ê³ ìœ„í—˜ (ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œ ìœ ì‚¬)', 3500, { color: C.danger, bold: true, bg: C.lightRed }), dCell(`${critical.length}ê±´`, 1506, { align: AlignmentType.CENTER, bold: true, color: C.danger, bg: C.lightRed }), dCell('ê±°ì ˆ ê°€ëŠ¥ì„± ë†’ìŒ, ì˜ê²¬ì„œ ì¤€ë¹„ í•„ìš”', 4500, { bg: C.lightRed }) ] }),
-            new TableRow({ children: [ dCell('ì¤‘ìœ„í—˜ (ìœ ì‚¬êµ° ì¤‘ë³µ + ë‹¤ì†Œ ìœ ì‚¬)', 3500, { color: C.warning, bg: C.lightYellow }), dCell(`${medium.length}ê±´`, 1506, { align: AlignmentType.CENTER, color: C.warning, bg: C.lightYellow }), dCell('ì‹¬ì‚¬ê´€ íŒë‹¨ í•„ìš”, ì°¨ë³„ì„± ë…¼ê±° ì¤€ë¹„', 4500, { bg: C.lightYellow }) ] }),
-            new TableRow({ children: [ dCell('ì €ìœ„í—˜ (ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œ ìƒì´)', 3500, { color: C.success, bg: C.lightGreen }), dCell(`${safe.length}ê±´`, 1506, { align: AlignmentType.CENTER, color: C.success, bg: C.lightGreen }), dCell('ë“±ë¡ ê°€ëŠ¥ì„± ë†’ìŒ', 4500, { bg: C.lightGreen }) ] }),
+            new TableRow({ children: [ hCell('위험 등급', 3500), hCell('건수', 1506), hCell('의미', 4500) ] }),
+            new TableRow({ children: [ dCell('고위험 (유사군 중복 + 상표 유사)', 3500, { color: C.danger, bold: true, bg: C.lightRed }), dCell(`${critical.length}건`, 1506, { align: AlignmentType.CENTER, bold: true, color: C.danger, bg: C.lightRed }), dCell('거절 가능성 높음, 의견서 준비 필요', 4500, { bg: C.lightRed }) ] }),
+            new TableRow({ children: [ dCell('중위험 (유사군 중복 + 다소 유사)', 3500, { color: C.warning, bg: C.lightYellow }), dCell(`${medium.length}건`, 1506, { align: AlignmentType.CENTER, color: C.warning, bg: C.lightYellow }), dCell('심사관 판단 필요, 차별성 논거 준비', 4500, { bg: C.lightYellow }) ] }),
+            new TableRow({ children: [ dCell('저위험 (유사군 중복 + 상표 상이)', 3500, { color: C.success, bg: C.lightGreen }), dCell(`${safe.length}건`, 1506, { align: AlignmentType.CENTER, color: C.success, bg: C.lightGreen }), dCell('등록 가능성 높음', 4500, { bg: C.lightGreen }) ] }),
           ]
         }));
         
-        // ì¶©ëŒ ìƒí‘œ ìƒì„¸
+        // 충돌 상표 상세
         const conflictAll = [...critical, ...medium].slice(0, 10);
         if (conflictAll.length > 0) {
-          children.push(subHead('ì£¼ìš” ì¶©ëŒ ìš°ë ¤ ìƒí‘œ ìƒì„¸'));
+          children.push(subHead('주요 충돌 우려 상표 상세'));
           const cfRows = [new TableRow({ children: [
-            hCell('No.', 500), hCell('ìœ„í—˜ë„', 1100), hCell('ìƒí‘œëª…', 2200), hCell('ì¶œì›ë²ˆí˜¸', 1806),
-            hCell('ìƒíƒœ', 900), hCell('ìœ ì‚¬ë„', 1100), hCell('ì¤‘ë³µìœ ì‚¬êµ°', 1900)
+            hCell('No.', 500), hCell('위험도', 1100), hCell('상표명', 2200), hCell('출원번호', 1806),
+            hCell('상태', 900), hCell('유사도', 1100), hCell('중복유사군', 1900)
           ] })];
           
           conflictAll.forEach((r, idx) => {
@@ -8547,7 +8547,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
             
             cfRows.push(new TableRow({ children: [
               dCell(String(idx + 1), 500, { align: AlignmentType.CENTER, bg }),
-              dCell(isCrit ? 'ê³ ìœ„í—˜' : 'ì¤‘ìœ„í—˜', 1100, { align: AlignmentType.CENTER, bg, color: isCrit ? C.danger : C.warning, bold: true }),
+              dCell(isCrit ? '고위험' : '중위험', 1100, { align: AlignmentType.CENTER, bg, color: isCrit ? C.danger : C.warning, bold: true }),
               dCell(tmName, 2200, { bold: true, bg }),
               dCell(appNo, 1806, { bg }),
               dCell(status, 900, { align: AlignmentType.CENTER, bg }),
@@ -8559,15 +8559,15 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         }
       }
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• VII. ë¦¬ìŠ¤í¬ ì¢…í•© í‰ê°€ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ VII. 리스크 종합 평가 ═══════════════
       if (risk.level) {
-        children.push(secTitle('VII', 'ë¦¬ìŠ¤í¬ ì¢…í•© í‰ê°€'));
+        children.push(secTitle('VII', '리스크 종합 평가'));
         
         const rBg = risk.level === 'high' ? C.lightRed : risk.level === 'medium' ? C.lightYellow : C.lightGreen;
-        const rLbl = risk.level === 'high' ? 'ë†’ìŒ (HIGH) â€” ê±°ì ˆ ê°€ëŠ¥ì„± ìƒë‹¹' :
-                     risk.level === 'medium' ? 'ì¤‘ê°„ (MEDIUM) â€” ì‹¬ì‚¬ê´€ íŒë‹¨ì— ë”°ë¼ ë“±ë¡ ê°€ëŠ¥' : 'ë‚®ìŒ (LOW) â€” ë“±ë¡ ê°€ëŠ¥ì„± ë†’ìŒ';
+        const rLbl = risk.level === 'high' ? '높음 (HIGH) — 거절 가능성 상당' :
+                     risk.level === 'medium' ? '중간 (MEDIUM) — 심사관 판단에 따라 등록 가능' : '낮음 (LOW) — 등록 가능성 높음';
         
-        // ë¦¬ìŠ¤í¬ ë°°ë„ˆ
+        // 리스크 배너
         children.push(new Table({
           width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [TABLE_W],
           rows: [new TableRow({ children: [new TableCell({
@@ -8576,7 +8576,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
             margins: { top: 120, bottom: 120, left: 200, right: 200 },
             children: [
               new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 },
-                children: [new TextRun({ text: 'ì¢…í•© ë¦¬ìŠ¤í¬ ë“±ê¸‰', font: 'Arial', size: 20, color: C.gray600 })]
+                children: [new TextRun({ text: '종합 리스크 등급', font: 'Arial', size: 20, color: C.gray600 })]
               }),
               new Paragraph({ alignment: AlignmentType.CENTER,
                 children: [new TextRun({ text: rLbl, font: 'Arial', size: 28, bold: true, color: riskColor })]
@@ -8589,22 +8589,22 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         children.push(new Table({
           width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [2400, 7106],
           rows: [
-            new TableRow({ children: [ lCell('ìƒì„¸ ë¶„ì„', 2400), dCell(risk.details || '-', 7106) ] }),
-            new TableRow({ children: [ lCell('ì¶©ëŒ ìƒí‘œ ìˆ˜', 2400), dCell(`${risk.conflictCount || 0}ê±´ (ìœ ì‚¬êµ° ì¤‘ë³µ + ìƒí‘œ ìœ ì‚¬ ê¸°ì¤€)`, 7106, { bold: true, color: C.danger }) ] }),
+            new TableRow({ children: [ lCell('상세 분석', 2400), dCell(risk.details || '-', 7106) ] }),
+            new TableRow({ children: [ lCell('충돌 상표 수', 2400), dCell(`${risk.conflictCount || 0}건 (유사군 중복 + 상표 유사 기준)`, 7106, { bold: true, color: C.danger }) ] }),
           ]
         }));
       }
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• VIII. ê¶Œê³ ì‚¬í•­ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ VIII. 권고사항 ═══════════════
       if (risk.recommendation) {
-        children.push(secTitle('VIII', 'ê¶Œê³ ì‚¬í•­'));
+        children.push(secTitle('VIII', '권고사항'));
         
-        // ê¶Œê³ ì‚¬í•­ íŒŒì‹± (ë²ˆí˜¸ë³„ ë¶„ë¦¬ ì‹œë„)
+        // 권고사항 파싱 (번호별 분리 시도)
         const recText = risk.recommendation;
         const recParts = recText.split(/\d+[\)\.]\s*/).filter(Boolean);
         
         if (recParts.length > 1) {
-          const recRows = [new TableRow({ children: [ hCell('No.', 600), hCell('ê¶Œê³  ë‚´ìš©', 8906) ] })];
+          const recRows = [new TableRow({ children: [ hCell('No.', 600), hCell('권고 내용', 8906) ] })];
           recParts.forEach((part, idx) => {
             recRows.push(new TableRow({ children: [ dCell(String(idx + 1), 600, { align: AlignmentType.CENTER }), dCell(part.trim(), 8906) ] }));
           });
@@ -8614,31 +8614,31 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         }
       }
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• IX. ë¹„ìš© ëª…ì„¸ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ IX. 비용 명세 ═══════════════
       if (fee.totalFee) {
-        children.push(secTitle('IX', 'ë¹„ìš© ëª…ì„¸'));
-        children.push(subHead('ì¶œì› ë¹„ìš©'));
+        children.push(secTitle('IX', '비용 명세'));
+        children.push(subHead('출원 비용'));
         
-        const fRows = [new TableRow({ children: [ hCell('í•­ëª©', 4700), hCell('ê¸ˆì•¡', 2403), hCell('ë¹„ê³ ', 2403) ] })];
+        const fRows = [new TableRow({ children: [ hCell('항목', 4700), hCell('금액', 2403), hCell('비고', 2403) ] })];
         (fee.breakdown || []).forEach(item => {
           const isRed = item.type === 'reduction';
           fRows.push(new TableRow({ children: [
             dCell(item.label, 4700, { color: isRed ? C.success : C.black }),
-            dCell(`${isRed ? '-' : ''}${TM.formatNumber(Math.abs(item.amount))}ì›`, 2403, { align: AlignmentType.RIGHT, color: isRed ? C.success : C.black, bold: isRed }),
+            dCell(`${isRed ? '-' : ''}${TM.formatNumber(Math.abs(item.amount))}원`, 2403, { align: AlignmentType.RIGHT, color: isRed ? C.success : C.black, bold: isRed }),
             dCell(item.note || '', 2403),
           ] }));
         });
         
-        // í•©ê³„
+        // 합계
         fRows.push(new TableRow({ children: [
           new TableCell({ borders, width: { size: 4700, type: WidthType.DXA }, shading: { fill: C.lightBg, type: ShadingType.CLEAR }, margins: cellM,
-            children: [new Paragraph({ children: [new TextRun({ text: 'ì¶œì› í•©ê³„', font: 'Arial', size: 20, bold: true, color: C.primary })] })]
+            children: [new Paragraph({ children: [new TextRun({ text: '출원 합계', font: 'Arial', size: 20, bold: true, color: C.primary })] })]
           }),
           new TableCell({ borders, width: { size: 2403, type: WidthType.DXA }, shading: { fill: C.lightBg, type: ShadingType.CLEAR }, margins: cellM,
-            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${TM.formatNumber(fee.totalFee)}ì›`, font: 'Arial', size: 22, bold: true, color: C.primary })] })]
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${TM.formatNumber(fee.totalFee)}원`, font: 'Arial', size: 22, bold: true, color: C.primary })] })]
           }),
           new TableCell({ borders, width: { size: 2403, type: WidthType.DXA }, shading: { fill: C.lightBg, type: ShadingType.CLEAR }, margins: cellM,
-            children: [new Paragraph({ children: [new TextRun({ text: 'ê°ë©´ ì ìš© í›„', font: 'Arial', size: 18, color: C.gray600 })] })]
+            children: [new Paragraph({ children: [new TextRun({ text: '감면 적용 후', font: 'Arial', size: 18, color: C.gray600 })] })]
           }),
         ] }));
         
@@ -8646,23 +8646,23 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         
         children.push(gap(40));
         children.push(noteBox(
-          'ìƒê¸° ë¹„ìš©ì€ íŠ¹í—ˆì²­ ê´€ë‚©ë£Œ ê¸°ì¤€ì´ë©°, ëŒ€ë¦¬ì¸ ìˆ˜ìˆ˜ë£ŒëŠ” ë³„ë„ìž…ë‹ˆë‹¤. ë“±ë¡ë£ŒëŠ” ë“±ë¡ ê²°ì • ì‹œ ë‚©ë¶€í•˜ë©°, ë¶„ë‚©(5ë…„ë¶„)ë„ ê°€ëŠ¥í•©ë‹ˆë‹¤.',
-          { prefix: 'â€» ì°¸ê³ : ', bg: C.lightBlue, prefixColor: C.accent }
+          '상기 비용은 특허청 관납료 기준이며, 대리인 수수료는 별도입니다. 등록료는 등록 결정 시 납부하며, 분납(5년분)도 가능합니다.',
+          { prefix: '※ 참고: ', bg: C.lightBlue, prefixColor: C.accent }
         ));
       }
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• X. í–¥í›„ ì ˆì°¨ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ X. 향후 절차 ═══════════════
       children.push(new Paragraph({ children: [new PageBreak()] }));
-      children.push(secTitle('X', 'í–¥í›„ ì ˆì°¨ ë° ì¼ì •'));
+      children.push(secTitle('X', '향후 절차 및 일정'));
       
       const procRows = [
-        new TableRow({ children: [ hCell('ë‹¨ê³„', 600), hCell('ì ˆì°¨', 2400), hCell('ì˜ˆìƒ ì†Œìš” ê¸°ê°„', 3253), hCell('ë¹„ê³ ', 3253) ] }),
-        ['1', 'ì¶œì›ì„œ ì œì¶œ', 'ì˜ë¢°ì¸ ìŠ¹ì¸ í›„ ì¦‰ì‹œ', 'ì „ìžì¶œì› (íŠ¹í—ˆë¡œ)'],
-        ['2', 'ë°©ì‹ì‹¬ì‚¬', 'ì¶œì› í›„ ì•½ 1~2ì£¼', 'ì„œë¥˜ ë³´ì • ìš”êµ¬ ê°€ëŠ¥'],
-        ['3', 'ì‹¤ì²´ì‹¬ì‚¬', 'ì¶œì› í›„ ì•½ 10~14ê°œì›”', 'ìš°ì„ ì‹¬ì‚¬ ì‹œ ì•½ 2~3ê°œì›”'],
-        ['4', 'ê±°ì ˆì´ìœ í†µì§€ (ì˜ˆìƒ)', 'ì‹¬ì‚¬ ì¤‘ ë°œìƒ ì‹œ', 'ì˜ê²¬ì„œ ì œì¶œ ê¸°í•œ: 2ê°œì›”'],
-        ['5', 'ë“±ë¡ê²°ì •', 'ì‹¬ì‚¬ ì™„ë£Œ í›„', 'ë“±ë¡ë£Œ ë‚©ë¶€ ê¸°í•œ: 2ê°œì›”'],
-        ['6', 'ë“±ë¡ê³µê³ ', 'ë“±ë¡ í›„ ì•½ 1ê°œì›”', 'ì´ì˜ì‹ ì²­ ê¸°ê°„: ê³µê³ ì¼ë¡œë¶€í„° 2ê°œì›”'],
+        new TableRow({ children: [ hCell('단계', 600), hCell('절차', 2400), hCell('예상 소요 기간', 3253), hCell('비고', 3253) ] }),
+        ['1', '출원서 제출', '의뢰인 승인 후 즉시', '전자출원 (특허로)'],
+        ['2', '방식심사', '출원 후 약 1~2주', '서류 보정 요구 가능'],
+        ['3', '실체심사', '출원 후 약 10~14개월', '우선심사 시 약 2~3개월'],
+        ['4', '거절이유통지 (예상)', '심사 중 발생 시', '의견서 제출 기한: 2개월'],
+        ['5', '등록결정', '심사 완료 후', '등록료 납부 기한: 2개월'],
+        ['6', '등록공고', '등록 후 약 1개월', '이의신청 기간: 공고일로부터 2개월'],
       ].map(row => {
         if (row instanceof TableRow) return row;
         return new TableRow({ children: [
@@ -8674,29 +8674,29 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       });
       children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [600, 2400, 3253, 3253], rows: procRows }));
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• ìš°ì„ ì‹¬ì‚¬ (ìžˆì„ ê²½ìš°) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ 우선심사 (있을 경우) ═══════════════
       if (p.priorityExam?.enabled && p.priorityExam?.generatedDocument) {
-        children.push(secTitle('XI', 'ìš°ì„ ì‹¬ì‚¬ ì„¤ëª…ì„œ'));
+        children.push(secTitle('XI', '우선심사 설명서'));
         const lines = p.priorityExam.generatedDocument.split('\n').filter(l => l.trim());
         lines.forEach(line => { children.push(bodyP(line)); });
       }
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• ë©´ì±…ì¡°í•­ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ 면책조항 ═══════════════
       children.push(gap(300));
       children.push(new Paragraph({
         border: { top: { style: BorderStyle.SINGLE, size: 2, color: C.tableBorder, space: 12 } },
         spacing: { before: 200, after: 80 },
-        children: [new TextRun({ text: 'ë©´ì±…ì¡°í•­ (Disclaimer)', font: 'Arial', size: 20, bold: true, color: C.primary })]
+        children: [new TextRun({ text: '면책조항 (Disclaimer)', font: 'Arial', size: 20, bold: true, color: C.primary })]
       }));
       
       const disclaimers = [
-        `1. ë³¸ ë³´ê³ ì„œëŠ” ${firmName}(ì´í•˜ "ë³¸ ì‚¬ë¬´ì†Œ")ì´ ì˜ë¢°ì¸ì˜ ìš”ì²­ì— ë”°ë¼ ìž‘ì„±í•œ ìƒí‘œ ì¶œì› ê²€í†  ì˜ê²¬ì„œë¡œì„œ, ìƒí‘œ ë“±ë¡ì˜ ì„±ê³µì„ ë³´ìž¥í•˜ëŠ” ë¬¸ì„œê°€ ì•„ë‹™ë‹ˆë‹¤.`,
-        '2. ë³¸ ë³´ê³ ì„œì— í¬í•¨ëœ ë¦¬ìŠ¤í¬ í‰ê°€ ë° ë“±ë¡ ê°€ëŠ¥ì„± ë¶„ì„ì€ ë³¸ ì‚¬ë¬´ì†Œì˜ ì „ë¬¸ì  íŒë‹¨ê³¼ AI ë¶„ì„ ì‹œìŠ¤í…œì˜ ë³´ì¡°ì  ê²°ê³¼ë¥¼ ì¢…í•©í•œ ê²ƒì´ë©°, ìµœì¢… ì‹¬ì‚¬ ê²°ê³¼ëŠ” íŠ¹í—ˆì²­ ì‹¬ì‚¬ê´€ì˜ íŒë‹¨ì— ë”°ë¼ ë‹¬ë¼ì§ˆ ìˆ˜ ìžˆìŠµë‹ˆë‹¤.',
-        '3. AI ê¸°ë°˜ ë¶„ì„ ê²°ê³¼(ì‚¬ì—… ë¶„ì„, ìƒí’ˆë¥˜ ì¶”ì²œ, ìœ ì‚¬ë„ í‰ê°€ ë“±)ëŠ” ì°¸ê³  ëª©ì ì˜ ë³´ì¡° ìžë£Œì´ë©°, ë³€ë¦¬ì‚¬ì˜ ì „ë¬¸ ê²€í† ë¥¼ ê±°ì³ ìµœì¢… í™•ì •ë©ë‹ˆë‹¤.',
-        '4. ì„ í–‰ìƒí‘œ ì¡°ì‚¬ëŠ” KIPRIS ë°ì´í„°ë² ì´ìŠ¤ë¥¼ ê¸°ë°˜ìœ¼ë¡œ ìˆ˜í–‰ë˜ì—ˆìœ¼ë©°, ì¡°ì‚¬ ì‹œì  ì´í›„ ì¶œì›/ë“±ë¡ëœ ìƒí‘œ ë˜ëŠ” ë¯¸ê³µê°œ ìƒí‘œëŠ” ë°˜ì˜ë˜ì§€ ì•Šì„ ìˆ˜ ìžˆìŠµë‹ˆë‹¤.',
-        '5. ë¹„ìš© ëª…ì„¸ëŠ” ë³´ê³ ì„œ ìž‘ì„±ì¼ ê¸°ì¤€ íŠ¹í—ˆì²­ ê´€ë‚©ë£Œì´ë©°, ë²•ë ¹ ê°œì •ì— ë”°ë¼ ë³€ê²½ë  ìˆ˜ ìžˆìŠµë‹ˆë‹¤. ëŒ€ë¦¬ì¸ ìˆ˜ìˆ˜ë£ŒëŠ” ë³„ë„ ì•ˆë‚´í•©ë‹ˆë‹¤.',
-        '6. ë³¸ ë³´ê³ ì„œëŠ” ì˜ë¢°ì¸ê³¼ ë³¸ ì‚¬ë¬´ì†Œ ê°„ì˜ ë¹„ë°€ìœ ì§€ ëŒ€ìƒ ë¬¸ì„œì´ë©°, ì˜ë¢°ì¸ì˜ ì‚¬ì „ ë™ì˜ ì—†ì´ ì œ3ìžì—ê²Œ ê³µê°œí•˜ê±°ë‚˜ ë°°í¬í•  ìˆ˜ ì—†ìŠµë‹ˆë‹¤.',
-        '7. ë³¸ ë³´ê³ ì„œì˜ ë‚´ìš©ì€ ìž‘ì„±ì¼ ê¸°ì¤€ì˜ ë²•ë ¹, ì‹¬ì‚¬ê¸°ì¤€ ë° íŒë¡€ì— ê¸°ì´ˆí•˜ê³  ìžˆìœ¼ë©°, ì´í›„ ë³€ê²½ëœ ì‚¬í•­ì€ ë°˜ì˜ë˜ì§€ ì•Šì„ ìˆ˜ ìžˆìŠµë‹ˆë‹¤.',
+        `1. 본 보고서는 ${firmName}(이하 "본 사무소")이 의뢰인의 요청에 따라 작성한 상표 출원 검토 의견서로서, 상표 등록의 성공을 보장하는 문서가 아닙니다.`,
+        '2. 본 보고서에 포함된 리스크 평가 및 등록 가능성 분석은 본 사무소의 전문적 판단과 AI 분석 시스템의 보조적 결과를 종합한 것이며, 최종 심사 결과는 특허청 심사관의 판단에 따라 달라질 수 있습니다.',
+        '3. AI 기반 분석 결과(사업 분석, 상품류 추천, 유사도 평가 등)는 참고 목적의 보조 자료이며, 변리사의 전문 검토를 거쳐 최종 확정됩니다.',
+        '4. 선행상표 조사는 KIPRIS 데이터베이스를 기반으로 수행되었으며, 조사 시점 이후 출원/등록된 상표 또는 미공개 상표는 반영되지 않을 수 있습니다.',
+        '5. 비용 명세는 보고서 작성일 기준 특허청 관납료이며, 법령 개정에 따라 변경될 수 있습니다. 대리인 수수료는 별도 안내합니다.',
+        '6. 본 보고서는 의뢰인과 본 사무소 간의 비밀유지 대상 문서이며, 의뢰인의 사전 동의 없이 제3자에게 공개하거나 배포할 수 없습니다.',
+        '7. 본 보고서의 내용은 작성일 기준의 법령, 심사기준 및 판례에 기초하고 있으며, 이후 변경된 사항은 반영되지 않을 수 있습니다.',
       ];
       disclaimers.forEach(text => {
         children.push(new Paragraph({ spacing: { before: 40, after: 40, line: 280 },
@@ -8704,7 +8704,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         }));
       });
       
-      // ì„œëª…ëž€
+      // 서명란
       children.push(gap(200));
       children.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { before: 200, after: 60 },
         children: [new TextRun({ text: dateStr, font: 'Arial', size: 20, color: C.black })]
@@ -8713,13 +8713,13 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
         children: [new TextRun({ text: firmName, font: 'Arial', size: 22, bold: true, color: C.primary })]
       }));
       children.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 20 },
-        children: [new TextRun({ text: `ë‹´ë‹¹ ë³€ë¦¬ì‚¬  ${attorney}`, font: 'Arial', size: 20, color: C.black })]
+        children: [new TextRun({ text: `담당 변리사  ${attorney}`, font: 'Arial', size: 20, color: C.black })]
       }));
       children.push(new Paragraph({ alignment: AlignmentType.RIGHT,
-        children: [new TextRun({ text: '(ì§ì¸ ìƒëžµ)', font: 'Arial', size: 16, color: C.gray400, italics: true })]
+        children: [new TextRun({ text: '(직인 생략)', font: 'Arial', size: 16, color: C.gray400, italics: true })]
       }));
       
-      // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• ë¬¸ì„œ ì¡°ë¦½ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      // ═══════════════ 문서 조립 ═══════════════
       const doc = new Document({
         styles: { default: { document: { run: { font: 'Arial', size: 20 } } } },
         sections: [{
@@ -8732,7 +8732,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
           headers: {
             default: new Header({
               children: [new Paragraph({ alignment: AlignmentType.RIGHT,
-                children: [new TextRun({ text: `${firmName}  |  ìƒí‘œ ì¶œì› ê²€í†  ë³´ê³ ì„œ`, font: 'Arial', size: 14, color: C.gray400, italics: true })]
+                children: [new TextRun({ text: `${firmName}  |  상표 출원 검토 보고서`, font: 'Arial', size: 14, color: C.gray400, italics: true })]
               })]
             })
           },
@@ -8742,7 +8742,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
                 alignment: AlignmentType.CENTER,
                 border: { top: { style: BorderStyle.SINGLE, size: 1, color: C.tableBorder, space: 8 } },
                 children: [
-                  new TextRun({ text: `ë¬¸ì„œë²ˆí˜¸: ${refNo}  |  - `, font: 'Arial', size: 14, color: C.gray400 }),
+                  new TextRun({ text: `문서번호: ${refNo}  |  - `, font: 'Arial', size: 14, color: C.gray400 }),
                   new TextRun({ children: [PageNumber.CURRENT], font: 'Arial', size: 14, color: C.gray400 }),
                   new TextRun({ text: ' -  |  CONFIDENTIAL', font: 'Arial', size: 14, color: C.gray400, italics: true }),
                 ]
@@ -8757,22 +8757,22 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `ìƒí‘œê²€í† ë³´ê³ ì„œ_${p.trademarkName || 'unnamed'}_${new Date().toISOString().slice(0, 10)}.docx`;
+      a.download = `상표검토보고서_${p.trademarkName || 'unnamed'}_${new Date().toISOString().slice(0, 10)}.docx`;
       a.click();
       URL.revokeObjectURL(url);
       
-      App.showToast('ê²€í†  ë³´ê³ ì„œê°€ ë‹¤ìš´ë¡œë“œë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('검토 보고서가 다운로드되었습니다.', 'success');
       
     } catch (error) {
-      console.error('[TM] Word ë³´ê³ ì„œ ìƒì„± ì‹¤íŒ¨:', error);
-      App.showToast('ë³´ê³ ì„œ ìƒì„± ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] Word 보고서 생성 실패:', error);
+      App.showToast('보고서 생성 실패: ' + error.message, 'error');
     }
   };
 
 })();
 /* ============================================================
-   ìƒí‘œì¶œì› ìš°ì„ ì‹¬ì‚¬ ìžë™í™” ì‹œìŠ¤í…œ - AI ë¶„ì„ ê¸°ëŠ¥
-   ë¹„ì¦ˆë‹ˆìŠ¤ ë¶„ì„, ë¹„ì—”ë‚˜ ì½”ë“œ ë¶„ì„, ìœ ì‚¬ë„ í‰ê°€ ë“±
+   상표출원 우선심사 자동화 시스템 - AI 분석 기능
+   비즈니스 분석, 비엔나 코드 분석, 유사도 평가 등
    ============================================================ */
 
 (function() {
@@ -8780,151 +8780,151 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
   
   const TM = window.TM;
   if (!TM) {
-    console.error('[TM AI] TM ëª¨ë“ˆì´ ë¡œë“œë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.');
+    console.error('[TM AI] TM 모듈이 로드되지 않았습니다.');
     return;
   }
 
   // ============================================================
-  // ì‹¤ë¬´ ê°€ì´ë“œë¼ì¸ (LLM í”„ë¡¬í”„íŠ¸ì— í¬í•¨ë  ì°¸ê³  ì •ë³´)
-  // - í•˜ë“œì½”ë”©ëœ ê·œì¹™ì´ ì•„ë‹Œ, LLMì´ ì°¸ê³ í•˜ëŠ” ì‹¤ë¬´ ì§€ì‹
+  // 실무 가이드라인 (LLM 프롬프트에 포함될 참고 정보)
+  // - 하드코딩된 규칙이 아닌, LLM이 참고하는 실무 지식
   // ============================================================
   TM.PRACTICE_GUIDELINES = `
-ã€ìƒí‘œì¶œì› ì§€ì •ìƒí’ˆ ì„ íƒ - ì¼ë°˜í™”ëœ íŒë‹¨ í”„ë ˆìž„ì›Œí¬ã€‘
+【상표출원 지정상품 선택 - 일반화된 판단 프레임워크】
 
-â–  í•µì‹¬ ì›ì¹™
-1. ìƒí’ˆ(1-34ë¥˜)ê³¼ ì„œë¹„ìŠ¤(35-45ë¥˜)ëŠ” ëª…í™•ížˆ ë¶„ë¦¬ëœ ê°œë…
-2. ê°™ì€ ìž¥ì†Œ/ì‚¬ì—…ì²´ë¼ë„ ìƒí’ˆê³¼ ì„œë¹„ìŠ¤ëŠ” ë³„ë„ ë“±ë¡ í•„ìš”
-3. ì‹¬ì‚¬ì™€ ì¹¨í•´íŒë‹¨ì˜ í•µì‹¬ ê¸°ì¤€ì€ "ìœ ì‚¬êµ°ì½”ë“œ"
-4. 3ë…„ ì´ìƒ ë¯¸ì‚¬ìš© ì‹œ ë¶ˆì‚¬ìš©ì·¨ì†Œì‹¬íŒ ê°€ëŠ¥ â†’ ì‹¤ì œ ì‚¬ìš© ê°€ëŠ¥ì„± ê³ ë ¤
+■ 핵심 원칙
+1. 상품(1-34류)과 서비스(35-45류)는 명확히 분리된 개념
+2. 같은 장소/사업체라도 상품과 서비스는 별도 등록 필요
+3. 심사와 침해판단의 핵심 기준은 "유사군코드"
+4. 3년 이상 미사용 시 불사용취소심판 가능 → 실제 사용 가능성 고려
 
-â–  ê° ìƒí’ˆë¥˜ íŒë‹¨ ê¸°ì¤€ (1-45ë¥˜)
+■ 각 상품류 판단 기준 (1-45류)
 
-ã€ìƒí’ˆë¥˜ 1-34ë¥˜ ê³µí†µã€‘
-- í•´ë‹¹ ìƒí’ˆì„ ì§ì ‘ ì œì¡°/ìƒì‚°í•˜ë©´ â†’ í•´ë‹¹ ë¥˜ í•„ìš”
-- í•´ë‹¹ ìƒí’ˆì„ êµ¬ë§¤í•´ì„œ íŒë§¤ë§Œ í•˜ë©´ â†’ í•´ë‹¹ ë¥˜ ë¶ˆí•„ìš”, 35ë¥˜ë§Œ í•„ìš”
-- í•´ë‹¹ ìƒí’ˆì„ ì œì¡°+íŒë§¤í•˜ë©´ â†’ í•´ë‹¹ ë¥˜ + 35ë¥˜ ë‘˜ ë‹¤ í•„ìš”
-- OEM/ODMìœ¼ë¡œ íƒ€ì‚¬ ë¸Œëžœë“œ ì œì¡°ë§Œ â†’ í•´ë‹¹ ë¥˜ë§Œ í•„ìš”, 35ë¥˜ ë¶ˆí•„ìš”
+【상품류 1-34류 공통】
+- 해당 상품을 직접 제조/생산하면 → 해당 류 필요
+- 해당 상품을 구매해서 판매만 하면 → 해당 류 불필요, 35류만 필요
+- 해당 상품을 제조+판매하면 → 해당 류 + 35류 둘 다 필요
+- OEM/ODM으로 타사 브랜드 제조만 → 해당 류만 필요, 35류 불필요
 
-ã€1ë¥˜ - í™”í•™ì œí’ˆã€‘í•„ìš”: í™”í•™ì œí’ˆ ì œì¡°ì—… / ë¶ˆí•„ìš”: í™”í•™ì œí’ˆ ë‹¨ìˆœ ìœ í†µ
-ã€2ë¥˜ - íŽ˜ì¸íŠ¸ã€‘í•„ìš”: ë„ë£Œ ì œì¡°ì—… / ë¶ˆí•„ìš”: íŽ˜ì¸íŠ¸ ì†Œë§¤ì 
-ã€3ë¥˜ - í™”ìž¥í’ˆ/ì„¸ì œã€‘í•„ìš”: í™”ìž¥í’ˆ ì œì¡°, ìžì²´ ë¸Œëžœë“œ í™”ìž¥í’ˆ / ë¶ˆí•„ìš”: í™”ìž¥í’ˆ íŽ¸ì§‘ìƒµ(35ë¥˜ë§Œ)
-ã€4ë¥˜ - ì—°ë£Œ/ìœ¤í™œìœ ã€‘í•„ìš”: ì •ìœ ì—…, ìœ¤í™œìœ  ì œì¡° / ë¶ˆí•„ìš”: ì£¼ìœ ì†Œ(ì„œë¹„ìŠ¤)
-ã€5ë¥˜ - ì˜ì•½í’ˆã€‘í•„ìš”: ì œì•½íšŒì‚¬ / ë¶ˆí•„ìš”: ì•½êµ­(44ë¥˜ ì„œë¹„ìŠ¤)
-ã€6ë¥˜ - ê¸ˆì†ìž¬ë£Œã€‘í•„ìš”: ê¸ˆì† ê°€ê³µì—… / ë¶ˆí•„ìš”: ì² ë¬¼ì (35ë¥˜ë§Œ)
-ã€7ë¥˜ - ê¸°ê³„ã€‘í•„ìš”: ê¸°ê³„ ì œì¡°ì—… / ë¶ˆí•„ìš”: ê¸°ê³„ ìž„ëŒ€(39ë¥˜)
-ã€8ë¥˜ - ìˆ˜ê³µêµ¬ã€‘í•„ìš”: ê³µêµ¬ ì œì¡° / ë¶ˆí•„ìš”: ê³µêµ¬ íŒë§¤ì (35ë¥˜ë§Œ)
-ã€9ë¥˜ - ì „ìžê¸°ê¸°/ì†Œí”„íŠ¸ì›¨ì–´/ì•±ã€‘
-  - í•„ìš”: ì•± ê°œë°œ+íŒë§¤, ì „ìžì œí’ˆ ì œì¡°, ì†Œí”„íŠ¸ì›¨ì–´ íŒ¨í‚¤ì§€ íŒë§¤
-  - ë¶ˆí•„ìš”: ì†Œí”„íŠ¸ì›¨ì–´ ê°œë°œë§Œ(42ë¥˜), ì•± ì„œë¹„ìŠ¤ë§Œ ì œê³µ(42ë¥˜), ì „ìžì œí’ˆ íŒë§¤ì (35ë¥˜ë§Œ)
-ã€10ë¥˜ - ì˜ë£Œê¸°ê¸°ã€‘í•„ìš”: ì˜ë£Œê¸°ê¸° ì œì¡° / ë¶ˆí•„ìš”: ì˜ë£Œê¸°ê¸° íŒë§¤ëŒ€ë¦¬ì (35ë¥˜ë§Œ)
-ã€11ë¥˜ - ì¡°ëª…/ëƒ‰ë‚œë°©ã€‘í•„ìš”: ê°€ì „ì œí’ˆ ì œì¡° / ë¶ˆí•„ìš”: ê°€ì „ íŒë§¤ì (35ë¥˜ë§Œ), ì„¤ì¹˜(37ë¥˜)
-ã€12ë¥˜ - ìš´ì†¡ê¸°ê¸°ã€‘í•„ìš”: ìžë™ì°¨/ìžì „ê±° ì œì¡° / ë¶ˆí•„ìš”: ìžë™ì°¨ ë”œëŸ¬(35ë¥˜), ìš´ì†¡ì—…(39ë¥˜)
-ã€13ë¥˜ - ì´í¬/í™”ì•½ã€‘í•„ìš”: ë¬´ê¸°/í­ì£½ ì œì¡° / ë¶ˆí•„ìš”: íŒë§¤ì (35ë¥˜)
-ã€14ë¥˜ - ê·€ê¸ˆì†/ì‹œê³„ã€‘í•„ìš”: ì¥¬ì–¼ë¦¬ ì œì¡°, ì‹œê³„ ë¸Œëžœë“œ / ë¶ˆí•„ìš”: ê·€ê¸ˆì† íŒë§¤ì (35ë¥˜ë§Œ)
-ã€15ë¥˜ - ì•…ê¸°ã€‘í•„ìš”: ì•…ê¸° ì œì¡° / ë¶ˆí•„ìš”: ì•…ê¸° íŒë§¤ì (35ë¥˜ë§Œ), ìŒì•…êµìœ¡(41ë¥˜)
-ã€16ë¥˜ - ì¸ì‡„ë¬¼/ë¬¸êµ¬ã€‘í•„ìš”: ì¶œíŒì‚¬, ë¬¸êµ¬ ì œì¡° / ë¶ˆí•„ìš”: ì„œì (35ë¥˜ë§Œ), ì¸ì‡„ì„œë¹„ìŠ¤(40ë¥˜)
-ã€17ë¥˜ - ê³ ë¬´/í”Œë¼ìŠ¤í‹±ã€‘í•„ìš”: í”Œë¼ìŠ¤í‹± ì›ë£Œ ì œì¡° / ë¶ˆí•„ìš”: í¬ìž¥ìž¬ íŒë§¤(35ë¥˜)
-ã€18ë¥˜ - ê°€ì£½/ê°€ë°©ã€‘í•„ìš”: ê°€ë°© ì œì¡°, íŒ¨ì…˜ ë¸Œëžœë“œ / ë¶ˆí•„ìš”: ê°€ë°© íŽ¸ì§‘ìƒµ(35ë¥˜ë§Œ)
-ã€19ë¥˜ - ê±´ì¶•ìž¬ë£Œã€‘í•„ìš”: ê±´ìžìž¬ ì œì¡° / ë¶ˆí•„ìš”: ê±´ìžìž¬ ìœ í†µ(35ë¥˜), ê±´ì„¤(37ë¥˜)
-ã€20ë¥˜ - ê°€êµ¬ã€‘í•„ìš”: ê°€êµ¬ ì œì¡° / ë¶ˆí•„ìš”: ê°€êµ¬ íŒë§¤ì (35ë¥˜ë§Œ), ì¸í…Œë¦¬ì–´(37ë¥˜)
-ã€21ë¥˜ - ì£¼ë°©ìš©í’ˆã€‘í•„ìš”: ì£¼ë°©ìš©í’ˆ ì œì¡° / ë¶ˆí•„ìš”: ì£¼ë°©ìš©í’ˆ íŒë§¤(35ë¥˜ë§Œ)
-ã€22ë¥˜ - ë¡œí”„/ì²œë§‰ã€‘í•„ìš”: ë¡œí”„ ì œì¡° / ë¶ˆí•„ìš”: ìº í•‘ìš©í’ˆ íŒë§¤(35ë¥˜ë§Œ)
-ã€23ë¥˜ - ì‹¤ã€‘í•„ìš”: ë°©ì ì—… / ë¶ˆí•„ìš”: ìˆ˜ì˜ˆìš©í’ˆ íŒë§¤(35ë¥˜ë§Œ)
-ã€24ë¥˜ - ì§ë¬¼/ì¹¨êµ¬ã€‘í•„ìš”: ì›ë‹¨ ì œì¡°, ì¹¨êµ¬ ë¸Œëžœë“œ / ë¶ˆí•„ìš”: ì¹¨êµ¬ íŒë§¤ì (35ë¥˜ë§Œ)
-ã€25ë¥˜ - ì˜ë¥˜/ì‹ ë°œ/ëª¨ìžã€‘
-  - í•„ìš”: ì˜ë¥˜ ë¸Œëžœë“œ, ì˜ë¥˜ ì œì¡°, ìžì²´ ë””ìžì¸ ì˜ë¥˜
-  - ë¶ˆí•„ìš”: ì˜ë¥˜ íŽ¸ì§‘ìƒµ(35ë¥˜ë§Œ), ì˜ë¥˜ ìœ í†µì—…(35ë¥˜ë§Œ)
-ã€26ë¥˜ - ë‹¨ì¶”/ë ˆì´ìŠ¤ã€‘í•„ìš”: ë¶€ìžìž¬ ì œì¡° / ë¶ˆí•„ìš”: ë¶€ìžìž¬ íŒë§¤(35ë¥˜ë§Œ)
-ã€27ë¥˜ - ì¹´íŽ«/ë²½ì§€ã€‘í•„ìš”: ì¹´íŽ« ì œì¡° / ë¶ˆí•„ìš”: ì¸í…Œë¦¬ì–´ ìžìž¬ íŒë§¤(35ë¥˜), ì‹œê³µ(37ë¥˜)
-ã€28ë¥˜ - ìž¥ë‚œê°/ê²Œìž„/ìŠ¤í¬ì¸ ìš©í’ˆã€‘í•„ìš”: ì™„êµ¬ ì œì¡°, ìŠ¤í¬ì¸ ìš©í’ˆ ë¸Œëžœë“œ / ë¶ˆí•„ìš”: ì™„êµ¬ì (35ë¥˜ë§Œ)
-ã€29ë¥˜ - ê°€ê³µì‹í’ˆ(ìœ¡ë¥˜/ìœ ì œí’ˆ)ã€‘í•„ìš”: ì‹í’ˆ ì œì¡°, ì •ìœ¡ì—… / ë¶ˆí•„ìš”: ì‹ìžìž¬ ìœ í†µ(35ë¥˜ë§Œ)
-ã€30ë¥˜ - ì»¤í”¼/ë¹µ/ê³¼ìž/ì¡°ë¯¸ë£Œã€‘
-  - í•„ìš”: ì‹í’ˆ ì œì¡°ì—…, ë² ì´ì»¤ë¦¬ ìžì²´ ìƒí’ˆ, ì»¤í”¼ ë¡œìŠ¤íŒ…
-  - ë¶ˆí•„ìš”: ì»¤í”¼ìˆ(43ë¥˜ë§Œ), ë² ì´ì»¤ë¦¬ ë§¤ìž¥ ì˜ì—…ë§Œ(43ë¥˜ë§Œ)
-  - ì£¼ì˜: ì¹´íŽ˜ì—ì„œ ì›ë‘/ë¹µ í¬ìž¥íŒë§¤ ì‹œ â†’ 30ë¥˜+35ë¥˜ ì¶”ê°€ í•„ìš”
-ã€31ë¥˜ - ë†ì‚°ë¬¼/ê½ƒã€‘í•„ìš”: ë†ì—…, í™”í›¼ì—… / ë¶ˆí•„ìš”: ê½ƒ ë°°ë‹¬(39ë¥˜), ê½ƒì§‘ ì†Œë§¤(35ë¥˜)
-ã€32ë¥˜ - ìŒë£Œ/ë§¥ì£¼ã€‘í•„ìš”: ìŒë£Œ ì œì¡° / ë¶ˆí•„ìš”: ìŒë£Œ ìœ í†µ(35ë¥˜ë§Œ), ë°”/íŽ(43ë¥˜)
-ã€33ë¥˜ - ì£¼ë¥˜ã€‘í•„ìš”: ì–‘ì¡°ì—…, ì£¼ë¥˜ ìˆ˜ìž…(ë¸Œëžœë“œ) / ë¶ˆí•„ìš”: ì£¼ë¥˜ ë„ë§¤(35ë¥˜), ë°”(43ë¥˜)
-ã€34ë¥˜ - ë‹´ë°°ã€‘í•„ìš”: ë‹´ë°° ì œì¡° / ë¶ˆí•„ìš”: ë‹´ë°° íŒë§¤(35ë¥˜ë§Œ)
+【1류 - 화학제품】필요: 화학제품 제조업 / 불필요: 화학제품 단순 유통
+【2류 - 페인트】필요: 도료 제조업 / 불필요: 페인트 소매점
+【3류 - 화장품/세제】필요: 화장품 제조, 자체 브랜드 화장품 / 불필요: 화장품 편집샵(35류만)
+【4류 - 연료/윤활유】필요: 정유업, 윤활유 제조 / 불필요: 주유소(서비스)
+【5류 - 의약품】필요: 제약회사 / 불필요: 약국(44류 서비스)
+【6류 - 금속재료】필요: 금속 가공업 / 불필요: 철물점(35류만)
+【7류 - 기계】필요: 기계 제조업 / 불필요: 기계 임대(39류)
+【8류 - 수공구】필요: 공구 제조 / 불필요: 공구 판매점(35류만)
+【9류 - 전자기기/소프트웨어/앱】
+  - 필요: 앱 개발+판매, 전자제품 제조, 소프트웨어 패키지 판매
+  - 불필요: 소프트웨어 개발만(42류), 앱 서비스만 제공(42류), 전자제품 판매점(35류만)
+【10류 - 의료기기】필요: 의료기기 제조 / 불필요: 의료기기 판매대리점(35류만)
+【11류 - 조명/냉난방】필요: 가전제품 제조 / 불필요: 가전 판매점(35류만), 설치(37류)
+【12류 - 운송기기】필요: 자동차/자전거 제조 / 불필요: 자동차 딜러(35류), 운송업(39류)
+【13류 - 총포/화약】필요: 무기/폭죽 제조 / 불필요: 판매점(35류)
+【14류 - 귀금속/시계】필요: 쥬얼리 제조, 시계 브랜드 / 불필요: 귀금속 판매점(35류만)
+【15류 - 악기】필요: 악기 제조 / 불필요: 악기 판매점(35류만), 음악교육(41류)
+【16류 - 인쇄물/문구】필요: 출판사, 문구 제조 / 불필요: 서점(35류만), 인쇄서비스(40류)
+【17류 - 고무/플라스틱】필요: 플라스틱 원료 제조 / 불필요: 포장재 판매(35류)
+【18류 - 가죽/가방】필요: 가방 제조, 패션 브랜드 / 불필요: 가방 편집샵(35류만)
+【19류 - 건축재료】필요: 건자재 제조 / 불필요: 건자재 유통(35류), 건설(37류)
+【20류 - 가구】필요: 가구 제조 / 불필요: 가구 판매점(35류만), 인테리어(37류)
+【21류 - 주방용품】필요: 주방용품 제조 / 불필요: 주방용품 판매(35류만)
+【22류 - 로프/천막】필요: 로프 제조 / 불필요: 캠핑용품 판매(35류만)
+【23류 - 실】필요: 방적업 / 불필요: 수예용품 판매(35류만)
+【24류 - 직물/침구】필요: 원단 제조, 침구 브랜드 / 불필요: 침구 판매점(35류만)
+【25류 - 의류/신발/모자】
+  - 필요: 의류 브랜드, 의류 제조, 자체 디자인 의류
+  - 불필요: 의류 편집샵(35류만), 의류 유통업(35류만)
+【26류 - 단추/레이스】필요: 부자재 제조 / 불필요: 부자재 판매(35류만)
+【27류 - 카펫/벽지】필요: 카펫 제조 / 불필요: 인테리어 자재 판매(35류), 시공(37류)
+【28류 - 장난감/게임/스포츠용품】필요: 완구 제조, 스포츠용품 브랜드 / 불필요: 완구점(35류만)
+【29류 - 가공식품(육류/유제품)】필요: 식품 제조, 정육업 / 불필요: 식자재 유통(35류만)
+【30류 - 커피/빵/과자/조미료】
+  - 필요: 식품 제조업, 베이커리 자체 상품, 커피 로스팅
+  - 불필요: 커피숍(43류만), 베이커리 매장 영업만(43류만)
+  - 주의: 카페에서 원두/빵 포장판매 시 → 30류+35류 추가 필요
+【31류 - 농산물/꽃】필요: 농업, 화훼업 / 불필요: 꽃 배달(39류), 꽃집 소매(35류)
+【32류 - 음료/맥주】필요: 음료 제조 / 불필요: 음료 유통(35류만), 바/펍(43류)
+【33류 - 주류】필요: 양조업, 주류 수입(브랜드) / 불필요: 주류 도매(35류), 바(43류)
+【34류 - 담배】필요: 담배 제조 / 불필요: 담배 판매(35류만)
 
-ã€ì„œë¹„ìŠ¤ë¥˜ 35-45ë¥˜ã€‘
+【서비스류 35-45류】
 
-ã€35ë¥˜ - ê´‘ê³ /ì‚¬ì—…ê´€ë¦¬/ë„ì†Œë§¤ã€‘
-  - í•„ìš”í•œ ê²½ìš°:
-    Â· ì˜¨ë¼ì¸ ì‡¼í•‘ëª° ìš´ì˜ (ìžì‚¬ëª°, ì˜¤í”ˆë§ˆì¼“, ìŠ¤ë§ˆíŠ¸ìŠ¤í† ì–´ ë“±)
-    Â· íƒ€ì‚¬ ë¸Œëžœë“œ ìƒí’ˆ ìœ í†µ/íŽ¸ì§‘ìƒµ
-    Â· í”„ëžœì°¨ì´ì¦ˆ ë³¸ë¶€
-    Â· ê´‘ê³ ëŒ€í–‰ì—…
-    Â· ê²½ì˜ì»¨ì„¤íŒ…
-  - ë¶ˆí•„ìš”í•œ ê²½ìš°:
-    Â· ìžì‚¬ ì œí’ˆë§Œ ì œì¡°í•˜ê³  B2B ë‚©í’ˆ (ìœ í†µ ì—†ìŒ)
-    Â· ì„œë¹„ìŠ¤ë§Œ ì œê³µ (ìƒí’ˆ íŒë§¤ ì—†ìŒ)
-    Â· ìžì‚¬ ë§¤ìž¥ì—ì„œ ìžì‚¬ ì œí’ˆë§Œ íŒë§¤ (ë…¼ìŸ ìžˆìŒ, ë°©ì–´ì  ë“±ë¡ ê¶Œìž¥)
+【35류 - 광고/사업관리/도소매】
+  - 필요한 경우:
+    · 온라인 쇼핑몰 운영 (자사몰, 오픈마켓, 스마트스토어 등)
+    · 타사 브랜드 상품 유통/편집샵
+    · 프랜차이즈 본부
+    · 광고대행업
+    · 경영컨설팅
+  - 불필요한 경우:
+    · 자사 제품만 제조하고 B2B 납품 (유통 없음)
+    · 서비스만 제공 (상품 판매 없음)
+    · 자사 매장에서 자사 제품만 판매 (논쟁 있음, 방어적 등록 권장)
 
-ã€36ë¥˜ - ê¸ˆìœµ/ë³´í—˜/ë¶€ë™ì‚°ã€‘
-  - í•„ìš”: ì€í–‰, ë³´í—˜ì‚¬, ì¦ê¶Œì‚¬, ë¶€ë™ì‚°ì¤‘ê°œ
-  - ë¶ˆí•„ìš”: ë¶€ë™ì‚° ê°œë°œ(37ë¥˜), ìž¬ë¬´ ì»¨ì„¤íŒ…ë§Œ(35ë¥˜)
+【36류 - 금융/보험/부동산】
+  - 필요: 은행, 보험사, 증권사, 부동산중개
+  - 불필요: 부동산 개발(37류), 재무 컨설팅만(35류)
 
-ã€37ë¥˜ - ê±´ì„¤/ìˆ˜ë¦¬/ì„¤ì¹˜ã€‘
-  - í•„ìš”: ê±´ì„¤ì—…, ì¸í…Œë¦¬ì–´, ìˆ˜ë¦¬ì—…, ì„¤ì¹˜ì—…
-  - ë¶ˆí•„ìš”: ê±´ìžìž¬ íŒë§¤(35ë¥˜), ê±´ì¶•ì„¤ê³„(42ë¥˜)
+【37류 - 건설/수리/설치】
+  - 필요: 건설업, 인테리어, 수리업, 설치업
+  - 불필요: 건자재 판매(35류), 건축설계(42류)
 
-ã€38ë¥˜ - í†µì‹ /ë°©ì†¡ã€‘
-  - í•„ìš”: í†µì‹ ì‚¬, ë°©ì†¡ì‚¬, ì¸í„°ë„·ì„œë¹„ìŠ¤ì œê³µ(ISP)
-  - ë¶ˆí•„ìš”: í†µì‹ ê¸°ê¸° íŒë§¤(9ë¥˜+35ë¥˜), ì˜ìƒì œìž‘(41ë¥˜)
+【38류 - 통신/방송】
+  - 필요: 통신사, 방송사, 인터넷서비스제공(ISP)
+  - 불필요: 통신기기 판매(9류+35류), 영상제작(41류)
 
-ã€39ë¥˜ - ìš´ì†¡/ì—¬í–‰/ë¬¼ë¥˜ã€‘
-  - í•„ìš”: íƒë°°, ë¬¼ë¥˜, ì—¬í–‰ì‚¬, ì°½ê³ ì—…
-  - ë¶ˆí•„ìš”: ì—¬í–‰ ì½˜í…ì¸ (41ë¥˜), ìš´ì†¡ê¸°ê¸° íŒë§¤(12ë¥˜+35ë¥˜)
+【39류 - 운송/여행/물류】
+  - 필요: 택배, 물류, 여행사, 창고업
+  - 불필요: 여행 콘텐츠(41류), 운송기기 판매(12류+35류)
 
-ã€40ë¥˜ - ê°€ê³µ/ì²˜ë¦¬ã€‘
-  - í•„ìš”: ì¸ì‡„ì†Œ, ì›ë‹¨ê°€ê³µ, ì‹í’ˆê°€ê³µ ì„œë¹„ìŠ¤
-  - ë¶ˆí•„ìš”: ê°€ê³µëœ ì œí’ˆ íŒë§¤(í•´ë‹¹ ìƒí’ˆë¥˜+35ë¥˜)
+【40류 - 가공/처리】
+  - 필요: 인쇄소, 원단가공, 식품가공 서비스
+  - 불필요: 가공된 제품 판매(해당 상품류+35류)
 
-ã€41ë¥˜ - êµìœ¡/ì—”í„°í…Œì¸ë¨¼íŠ¸/ìŠ¤í¬ì¸ ã€‘
-  - í•„ìš”: í•™ì›, ì˜¨ë¼ì¸ê°•ì˜, ê³µì—°, ê²Œìž„ì„œë¹„ìŠ¤, ìœ íŠœë¸Œì±„ë„, ì¶œíŒ
-  - ë¶ˆí•„ìš”: êµìž¬ íŒë§¤ë§Œ(16ë¥˜+35ë¥˜), ê²Œìž„ íŒë§¤ë§Œ(9ë¥˜+35ë¥˜)
-  - ì£¼ì˜: êµìœ¡+êµìž¬íŒë§¤ ì‹œ â†’ 41ë¥˜+16ë¥˜+35ë¥˜ ëª¨ë‘ í•„ìš”
+【41류 - 교육/엔터테인먼트/스포츠】
+  - 필요: 학원, 온라인강의, 공연, 게임서비스, 유튜브채널, 출판
+  - 불필요: 교재 판매만(16류+35류), 게임 판매만(9류+35류)
+  - 주의: 교육+교재판매 시 → 41류+16류+35류 모두 필요
 
-ã€42ë¥˜ - ITì„œë¹„ìŠ¤/ì—°êµ¬ê°œë°œ/ë””ìžì¸ã€‘
-  - í•„ìš”: ì†Œí”„íŠ¸ì›¨ì–´ê°œë°œ ì„œë¹„ìŠ¤, ì›¹í˜¸ìŠ¤íŒ…, í´ë¼ìš°ë“œ, ë””ìžì¸ ì„œë¹„ìŠ¤, R&D
-  - ë¶ˆí•„ìš”: ì†Œí”„íŠ¸ì›¨ì–´ íŒ¨í‚¤ì§€ íŒë§¤(9ë¥˜+35ë¥˜), ë””ìžì¸ ìƒí’ˆ íŒë§¤(í•´ë‹¹ ìƒí’ˆë¥˜)
-  - ì£¼ì˜: SaaSëŠ” 42ë¥˜, íŒ¨í‚¤ì§€SW íŒë§¤ëŠ” 9ë¥˜
+【42류 - IT서비스/연구개발/디자인】
+  - 필요: 소프트웨어개발 서비스, 웹호스팅, 클라우드, 디자인 서비스, R&D
+  - 불필요: 소프트웨어 패키지 판매(9류+35류), 디자인 상품 판매(해당 상품류)
+  - 주의: SaaS는 42류, 패키지SW 판매는 9류
 
-ã€43ë¥˜ - ìŒì‹ì /ìˆ™ë°•ã€‘
-  - í•„ìš”: ë ˆìŠ¤í† ëž‘, ì¹´íŽ˜, í˜¸í…”, íŽœì…˜
-  - ë¶ˆí•„ìš”: ì‹í’ˆ ì œì¡°íŒë§¤(29/30ë¥˜+35ë¥˜), ìŒì‹ ë°°ë‹¬ì„œë¹„ìŠ¤ë§Œ(39ë¥˜)
-  - ì£¼ì˜: ì¹´íŽ˜+ì›ë‘íŒë§¤ ì‹œ â†’ 43ë¥˜+30ë¥˜+35ë¥˜
+【43류 - 음식점/숙박】
+  - 필요: 레스토랑, 카페, 호텔, 펜션
+  - 불필요: 식품 제조판매(29/30류+35류), 음식 배달서비스만(39류)
+  - 주의: 카페+원두판매 시 → 43류+30류+35류
 
-ã€44ë¥˜ - ì˜ë£Œ/ë¯¸ìš©/ë†ì—…ã€‘
-  - í•„ìš”: ë³‘ì›, ë¯¸ìš©ì‹¤, ë„¤ì¼ìƒµ, ë™ë¬¼ë³‘ì›, ë†ì—…ì„œë¹„ìŠ¤
-  - ë¶ˆí•„ìš”: ì˜ì•½í’ˆ íŒë§¤(5ë¥˜+35ë¥˜), í™”ìž¥í’ˆ íŒë§¤(3ë¥˜+35ë¥˜)
+【44류 - 의료/미용/농업】
+  - 필요: 병원, 미용실, 네일샵, 동물병원, 농업서비스
+  - 불필요: 의약품 판매(5류+35류), 화장품 판매(3류+35류)
 
-ã€45ë¥˜ - ë²•ë¥ /ë³´ì•ˆ/ê°œì¸ì„œë¹„ìŠ¤ã€‘
-  - í•„ìš”: ë²•ë¥ ì‚¬ë¬´ì†Œ, ë³€ë¦¬ì‚¬, ê²½ë¹„ì—…, ê²°í˜¼ì¤‘ê°œ, ìž¥ë¡€ì„œë¹„ìŠ¤
-  - ë¶ˆí•„ìš”: ë³´ì•ˆìž¥ë¹„ íŒë§¤(9ë¥˜+35ë¥˜)
+【45류 - 법률/보안/개인서비스】
+  - 필요: 법률사무소, 변리사, 경비업, 결혼중개, 장례서비스
+  - 불필요: 보안장비 판매(9류+35류)
 
-â–  ë³µí•© ì‚¬ì—… íŒë‹¨ ì˜ˆì‹œ
-1. "ì»¤í”¼ ë¡œìŠ¤í„°ë¦¬ ì¹´íŽ˜" â†’ 30ë¥˜(ì»¤í”¼ì›ë‘)+35ë¥˜(íŒë§¤)+43ë¥˜(ì¹´íŽ˜)
-2. "ì˜¨ë¼ì¸ ì˜ë¥˜ ì‡¼í•‘ëª° + ìžì²´ ë¸Œëžœë“œ" â†’ 25ë¥˜(ì˜ë¥˜)+35ë¥˜(ì‡¼í•‘ëª°)
-3. "ì•± ê°œë°œ + ì•± íŒë§¤" â†’ 9ë¥˜(ì•± ìƒí’ˆ)+42ë¥˜(ê°œë°œì„œë¹„ìŠ¤)+35ë¥˜(íŒë§¤)
-4. "íŠ¹í—ˆ ì‚¬ë¬´ì†Œ" â†’ 45ë¥˜(ë²•ë¥ ì„œë¹„ìŠ¤), 35ë¥˜ëŠ” ë¶ˆí•„ìš”
-5. "í•™ì› + ìžì²´ êµìž¬" â†’ 41ë¥˜(êµìœ¡)+16ë¥˜(êµìž¬)+35ë¥˜(êµìž¬íŒë§¤)
-6. "ê°€êµ¬ ê³µë°© + íŒë§¤" â†’ 20ë¥˜(ê°€êµ¬)+35ë¥˜(íŒë§¤)
-7. "ì˜ë¥˜ íŽ¸ì§‘ìƒµ (íƒ€ë¸Œëžœë“œë§Œ)" â†’ 35ë¥˜ë§Œ
-8. "í™”ìž¥í’ˆ ë¸Œëžœë“œ + ì˜¨ë¼ì¸ëª°" â†’ 3ë¥˜(í™”ìž¥í’ˆ)+35ë¥˜(íŒë§¤)
-9. "ìš”ì‹ì—… í”„ëžœì°¨ì´ì¦ˆ" â†’ 43ë¥˜(ìŒì‹ì )+35ë¥˜(í”„ëžœì°¨ì´ì¦ˆ)
-10. "ê²Œìž„ ê°œë°œì‚¬ + ì•± ì¶œì‹œ" â†’ 9ë¥˜(ê²Œìž„ì•±)+41ë¥˜(ê²Œìž„ì„œë¹„ìŠ¤)+42ë¥˜(ê°œë°œ)
+■ 복합 사업 판단 예시
+1. "커피 로스터리 카페" → 30류(커피원두)+35류(판매)+43류(카페)
+2. "온라인 의류 쇼핑몰 + 자체 브랜드" → 25류(의류)+35류(쇼핑몰)
+3. "앱 개발 + 앱 판매" → 9류(앱 상품)+42류(개발서비스)+35류(판매)
+4. "특허 사무소" → 45류(법률서비스), 35류는 불필요
+5. "학원 + 자체 교재" → 41류(교육)+16류(교재)+35류(교재판매)
+6. "가구 공방 + 판매" → 20류(가구)+35류(판매)
+7. "의류 편집샵 (타브랜드만)" → 35류만
+8. "화장품 브랜드 + 온라인몰" → 3류(화장품)+35류(판매)
+9. "요식업 프랜차이즈" → 43류(음식점)+35류(프랜차이즈)
+10. "게임 개발사 + 앱 출시" → 9류(게임앱)+41류(게임서비스)+42류(개발)
 `;
 
   // ============================================================
-  // 1. ë¹„ì¦ˆë‹ˆìŠ¤ ë¶„ì„ - ì „ë©´ ìž¬ì„¤ê³„ v4
+  // 1. 비즈니스 분석 - 전면 재설계 v4
   // ============================================================
-  // í•µì‹¬ ì›ì¹™:
-  // 1. ì‚¬ì—… ìœ í˜• ë¶„ë¥˜ â†’ í•„ìˆ˜ ìƒí’ˆë¥˜ ë„ì¶œ
-  // 2. ìƒí’ˆë¥˜ ê°„ ì—°ê´€ ê´€ê³„ë¡œ í™•ìž¥
-  // 3. ì‚¬ì—… í™•ìž¥ì„± ê³ ë ¤
-  // 4. ê³ ì‹œëª…ì¹­ DBì—ì„œë§Œ ì¶”ì²œ
+  // 핵심 원칙:
+  // 1. 사업 유형 분류 → 필수 상품류 도출
+  // 2. 상품류 간 연관 관계로 확장
+  // 3. 사업 확장성 고려
+  // 4. 고시명칭 DB에서만 추천
   // ============================================================
   
   TM.analyzeBusiness = async function() {
@@ -8932,7 +8932,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
     const businessInput = document.getElementById('tm-business-url')?.value?.trim();
     
     if (!businessInput && !p.trademarkName) {
-      App.showToast('ìƒí‘œëª… ë˜ëŠ” ì‚¬ì—… ë‚´ìš©ì„ ìž…ë ¥í•˜ì„¸ìš”.', 'warning');
+      App.showToast('상표명 또는 사업 내용을 입력하세요.', 'warning');
       return;
     }
     
@@ -8940,76 +8940,76 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       const btn = document.querySelector('[data-action="tm-analyze-business"]');
       if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span class="tossface">â³</span> AI ë¶„ì„ ì¤‘...';
+        btn.innerHTML = '<span class="tossface">⏳</span> AI 분석 중...';
       }
       
-      // â˜…â˜…â˜… ìƒˆ ë¶„ì„ ì‹œ ê¸°ì¡´ ì„ íƒ ì™„ì „ ì´ˆê¸°í™” â˜…â˜…â˜…
+      // ★★★ 새 분석 시 기존 선택 완전 초기화 ★★★
       p.classes = [];
       p.designatedGoods = [];
       p.aiAnalysis = null;
-      console.log('[TM] ê¸°ì¡´ ì„ íƒ ì´ˆê¸°í™” ì™„ë£Œ');
+      console.log('[TM] 기존 선택 초기화 완료');
       
       // ================================================================
-      // LLM ê¸°ë°˜ ì‚¬ì—… ë¶„ì„ (ì‹¤ë¬´ ê°€ì´ë“œë¼ì¸ í¬í•¨)
-      // - í•˜ë“œì½”ë”©ëœ ê·œì¹™ ëŒ€ì‹  LLMì´ ì‚¬ì—… íŠ¹ì„±ì„ ë¶„ì„í•˜ì—¬ íŒë‹¨
-      // - ì‹¤ë¬´ ì§€ì‹ì„ í”„ë¡¬í”„íŠ¸ì— í¬í•¨í•˜ì—¬ ì •í™•ë„ í–¥ìƒ
+      // LLM 기반 사업 분석 (실무 가이드라인 포함)
+      // - 하드코딩된 규칙 대신 LLM이 사업 특성을 분석하여 판단
+      // - 실무 지식을 프롬프트에 포함하여 정확도 향상
       // ================================================================
-      const analysisPrompt = `ë‹¹ì‹ ì€ 10ë…„ ì´ìƒ ê²½ë ¥ì˜ ìƒí‘œ ì¶œì› ì „ë¬¸ ë³€ë¦¬ì‚¬ìž…ë‹ˆë‹¤.
-ê³ ê°ì˜ ì‚¬ì—…ì„ ì‹¬ì¸µ ë¶„ì„í•˜ì—¬ ìµœì ì˜ ìƒí’ˆë¥˜ë¥¼ ì¶”ì²œí•˜ì„¸ìš”.
+      const analysisPrompt = `당신은 10년 이상 경력의 상표 출원 전문 변리사입니다.
+고객의 사업을 심층 분석하여 최적의 상품류를 추천하세요.
 
-ã€ê³ ê° ì •ë³´ã€‘
-- ìƒí‘œëª…: ${p.trademarkName || 'ë¯¸ì •'}
-- ì‚¬ì—… ë‚´ìš©: ${businessInput || 'ë¯¸ìž…ë ¥'}
+【고객 정보】
+- 상표명: ${p.trademarkName || '미정'}
+- 사업 내용: ${businessInput || '미입력'}
 
 ${TM.PRACTICE_GUIDELINES}
 
-ã€ë¶„ì„ ì‹œ í•µì‹¬ ì›ì¹™ã€‘
-â˜…â˜…â˜… ìœ„ ê°€ì´ë“œë¼ì¸ì˜ ê° ë¥˜ë³„ íŒë‹¨ ê¸°ì¤€ì„ ë°˜ë“œì‹œ ì°¸ê³ í•˜ì—¬ íŒë‹¨í•˜ì„¸ìš” â˜…â˜…â˜…
+【분석 시 핵심 원칙】
+★★★ 위 가이드라인의 각 류별 판단 기준을 반드시 참고하여 판단하세요 ★★★
 
-1. ìƒí’ˆ(1-34ë¥˜)ê³¼ ì„œë¹„ìŠ¤(35-45ë¥˜)ëŠ” ë³„ê°œ ê°œë…
-   - ê°™ì€ ì‚¬ì—…ìž¥ì´ë¼ë„ ìƒí’ˆê³¼ ì„œë¹„ìŠ¤ëŠ” ë³„ë„ ë“±ë¡ í•„ìš”
-   - ì˜ˆ: ì¹´íŽ˜ ìš´ì˜(43ë¥˜) + ì›ë‘ íŒë§¤(30ë¥˜+35ë¥˜) = 3ê°œ ë¥˜
+1. 상품(1-34류)과 서비스(35-45류)는 별개 개념
+   - 같은 사업장이라도 상품과 서비스는 별도 등록 필요
+   - 예: 카페 운영(43류) + 원두 판매(30류+35류) = 3개 류
 
-2. ê° ë¥˜ë³„ "í•„ìš”/ë¶ˆí•„ìš”" íŒë‹¨
-   - í•´ë‹¹ ìƒí’ˆì„ ì§ì ‘ ì œì¡°í•˜ëŠ”ê°€? â†’ í•´ë‹¹ ìƒí’ˆë¥˜ í•„ìš”
-   - í•´ë‹¹ ìƒí’ˆì„ êµ¬ë§¤í•´ì„œ íŒë§¤ë§Œ í•˜ëŠ”ê°€? â†’ í•´ë‹¹ ìƒí’ˆë¥˜ ë¶ˆí•„ìš”, 35ë¥˜ë§Œ
-   - í•´ë‹¹ ì„œë¹„ìŠ¤ë¥¼ ì§ì ‘ ì œê³µí•˜ëŠ”ê°€? â†’ í•´ë‹¹ ì„œë¹„ìŠ¤ë¥˜ í•„ìš”
+2. 각 류별 "필요/불필요" 판단
+   - 해당 상품을 직접 제조하는가? → 해당 상품류 필요
+   - 해당 상품을 구매해서 판매만 하는가? → 해당 상품류 불필요, 35류만
+   - 해당 서비스를 직접 제공하는가? → 해당 서비스류 필요
 
-3. 35ë¥˜ëŠ” "íŒë§¤ ì±„ë„"ì— ë”°ë¼ íŒë‹¨ (ë¬´ì¡°ê±´ ì¶”ê°€ ê¸ˆì§€)
-   - ì˜¨ë¼ì¸ ì‡¼í•‘ëª°/ì˜¤í”ˆë§ˆì¼“ íŒë§¤ â†’ í•„ìš”
-   - B2B ë‚©í’ˆë§Œ â†’ ë¶ˆí•„ìš”í•  ìˆ˜ ìžˆìŒ
-   - ì„œë¹„ìŠ¤ë§Œ ì œê³µ (ìƒí’ˆ íŒë§¤ ì—†ìŒ) â†’ ë¶ˆí•„ìš”
+3. 35류는 "판매 채널"에 따라 판단 (무조건 추가 금지)
+   - 온라인 쇼핑몰/오픈마켓 판매 → 필요
+   - B2B 납품만 → 불필요할 수 있음
+   - 서비스만 제공 (상품 판매 없음) → 불필요
 
-4. 3ë…„ ì´ìƒ ë¯¸ì‚¬ìš© ì‹œ ë¶ˆì‚¬ìš©ì·¨ì†Œ ê°€ëŠ¥ â†’ ì‹¤ì œ ì‚¬ìš© ê°€ëŠ¥ì„± ê³ ë ¤
+4. 3년 이상 미사용 시 불사용취소 가능 → 실제 사용 가능성 고려
 
-ã€ë¶„ì„ í•­ëª©ã€‘
-1. ì‚¬ì—… ìœ í˜• ë¶„ë¥˜
-2. í•µì‹¬ ìƒí’ˆ/ì„œë¹„ìŠ¤ ì‹ë³„
-3. íŒë§¤/ìœ í†µ ì±„ë„ ë¶„ì„
-4. ì‚¬ì—… í™•ìž¥ ê°€ëŠ¥ì„±
-5. ìƒí’ˆë¥˜ ì¶”ì²œ (3ë‹¨ê³„ë¡œ êµ¬ë¶„)
+【분석 항목】
+1. 사업 유형 분류
+2. 핵심 상품/서비스 식별
+3. 판매/유통 채널 분석
+4. 사업 확장 가능성
+5. 상품류 추천 (3단계로 구분)
 
-ã€ìƒí’ˆë¥˜ ì¶”ì²œ 3ë‹¨ê³„ ê¸°ì¤€ã€‘
-â–  í•µì‹¬ (core): í˜„ìž¬ ì‚¬ì—…ì— ë°˜ë“œì‹œ í•„ìš”, ì—†ìœ¼ë©´ ê¶Œë¦¬ ë³´í˜¸ ë¶ˆê°€
-  - ì‹¤ì œë¡œ ì œì¡°/ì œê³µí•˜ëŠ” ìƒí’ˆ/ì„œë¹„ìŠ¤ì˜ ë¥˜
-  - í˜„ìž¬ ì§„í–‰ ì¤‘ì¸ ì‚¬ì—…ì— ì§ì ‘ í•´ë‹¹
+【상품류 추천 3단계 기준】
+■ 핵심 (core): 현재 사업에 반드시 필요, 없으면 권리 보호 불가
+  - 실제로 제조/제공하는 상품/서비스의 류
+  - 현재 진행 중인 사업에 직접 해당
 
-â–  ê¶Œìž¥ (recommended): ê¶Œë¦¬ ë³´í˜¸ë¥¼ ìœ„í•´ ê°•ë ¥ížˆ ê¶Œìž¥
-  - íŒë§¤ ì±„ë„ ë³´í˜¸ (ì˜¨ë¼ì¸ íŒë§¤ â†’ 35ë¥˜ ë“±)
-  - ê´€ë ¨ ì„œë¹„ìŠ¤ ë³´í˜¸ (ì œí’ˆ+A/S â†’ 37ë¥˜ ë“±)
-  - ë¸Œëžœë“œ í™•ìž¥ì— í”ížˆ ì‚¬ìš©ë˜ëŠ” ë¥˜
-  - ê²½ìŸì‚¬ê°€ ì¼ë°˜ì ìœ¼ë¡œ ë“±ë¡í•˜ëŠ” ë¥˜
+■ 권장 (recommended): 권리 보호를 위해 강력히 권장
+  - 판매 채널 보호 (온라인 판매 → 35류 등)
+  - 관련 서비스 보호 (제품+A/S → 37류 등)
+  - 브랜드 확장에 흔히 사용되는 류
+  - 경쟁사가 일반적으로 등록하는 류
 
-â–  í™•ìž¥ (expansion): ì‚¬ì—… í™•ìž¥ ì‹œ ê³ ë ¤í•  ë¥˜
-  - ìžì—°ìŠ¤ëŸ¬ìš´ ì‚¬ì—… í™•ìž¥ ë°©í–¥
-  - ì‹œë„ˆì§€ ìžˆëŠ” ê´€ë ¨ ë¶„ì•¼
-  - ë°©ì–´ì  ë“±ë¡ ê³ ë ¤ ëŒ€ìƒ
+■ 확장 (expansion): 사업 확장 시 고려할 류
+  - 자연스러운 사업 확장 방향
+  - 시너지 있는 관련 분야
+  - 방어적 등록 고려 대상
 
-ã€ì‘ë‹µ í˜•ì‹ - JSONë§Œã€‘
+【응답 형식 - JSON만】
 {
-  "businessSummary": "ì´ ì‚¬ì—…ì€ ... (2-3ë¬¸ìž¥ìœ¼ë¡œ êµ¬ì²´ì ìœ¼ë¡œ)",
+  "businessSummary": "이 사업은 ... (2-3문장으로 구체적으로)",
   "businessTypes": ["PRODUCT", "RETAIL"],
-  "coreProducts": ["ë°œë ˆ ì˜ë¥˜", "ëŒ„ìŠ¤ë³µ"],
+  "coreProducts": ["발레 의류", "댄스복"],
   "coreServices": [],
   "salesChannels": {
     "online": true,
@@ -9017,36 +9017,36 @@ ${TM.PRACTICE_GUIDELINES}
     "b2b": false,
     "b2c": true,
     "franchise": false,
-    "details": "ì˜¨ë¼ì¸ ìžì‚¬ëª° ìš´ì˜"
+    "details": "온라인 자사몰 운영"
   },
-  "expansionPotential": ["ëŒ„ìŠ¤ ìš©í’ˆ", "ìŠ¤í¬ì¸  ì˜ë¥˜", "ëŒ„ìŠ¤ êµìœ¡"],
+  "expansionPotential": ["댄스 용품", "스포츠 의류", "댄스 교육"],
   "classRecommendations": {
     "core": [
-      {"class": "25", "reason": "ë°œë ˆ ì˜ë¥˜, ëŒ„ìŠ¤ë³µ - í•µì‹¬ ìƒí’ˆ", "priority": 1}
+      {"class": "25", "reason": "발레 의류, 댄스복 - 핵심 상품", "priority": 1}
     ],
     "recommended": [
-      {"class": "35", "reason": "ì˜¨ë¼ì¸ ì‡¼í•‘ëª° ìš´ì˜ - ì†Œë§¤ì—… ë³´í˜¸ í•„ìˆ˜", "priority": 1},
-      {"class": "18", "reason": "ê°€ë°©, íŒŒìš°ì¹˜ - ì˜ë¥˜ ë¸Œëžœë“œ í•„ìˆ˜ í™•ìž¥", "priority": 2}
+      {"class": "35", "reason": "온라인 쇼핑몰 운영 - 소매업 보호 필수", "priority": 1},
+      {"class": "18", "reason": "가방, 파우치 - 의류 브랜드 필수 확장", "priority": 2}
     ],
     "expansion": [
-      {"class": "28", "reason": "ëŒ„ìŠ¤ ìš©í’ˆ, ìŠ¤í¬ì¸  ìž¥ë¹„ - ìžì—°ìŠ¤ëŸ¬ìš´ í™•ìž¥", "priority": 1},
-      {"class": "41", "reason": "ëŒ„ìŠ¤ êµìœ¡ ì„œë¹„ìŠ¤ - ì‹œë„ˆì§€ ì‚¬ì—…", "priority": 2},
-      {"class": "9", "reason": "ëŒ„ìŠ¤ êµìœ¡ ì•±/ì˜ìƒ - ë””ì§€í„¸ í™•ìž¥", "priority": 3}
+      {"class": "28", "reason": "댄스 용품, 스포츠 장비 - 자연스러운 확장", "priority": 1},
+      {"class": "41", "reason": "댄스 교육 서비스 - 시너지 사업", "priority": 2},
+      {"class": "9", "reason": "댄스 교육 앱/영상 - 디지털 확장", "priority": 3}
     ]
   },
-  "searchKeywords": ["ë°œë ˆ", "ëŒ„ìŠ¤", "ì˜ë¥˜", "ë ˆì˜¤íƒ€ë“œ", "íŒë§¤"]
+  "searchKeywords": ["발레", "댄스", "의류", "레오타드", "판매"]
 }`;
 
-      if (btn) btn.innerHTML = '<span class="tossface">â³</span> ì‚¬ì—… ë¶„ì„ ì¤‘...';
+      if (btn) btn.innerHTML = '<span class="tossface">⏳</span> 사업 분석 중...';
       
-      console.log('[TM] LLM ê¸°ë°˜ ì‚¬ì—… ë¶„ì„ ì‹œìž‘');
+      console.log('[TM] LLM 기반 사업 분석 시작');
       const analysisResponse = await App.callClaude(analysisPrompt, 4000);
       const text = analysisResponse.text || '';
       const startIdx = text.indexOf('{');
       const endIdx = text.lastIndexOf('}');
       
       if (startIdx === -1 || endIdx <= startIdx) {
-        throw new Error('AI ì‘ë‹µ íŒŒì‹± ì‹¤íŒ¨');
+        throw new Error('AI 응답 파싱 실패');
       }
       
       const jsonStr = text.substring(startIdx, endIdx + 1)
@@ -9057,35 +9057,35 @@ ${TM.PRACTICE_GUIDELINES}
       const analysis = JSON.parse(jsonStr);
       
       // ================================================================
-      // 3ë‹¨ê³„ ì¶”ì²œ êµ¬ì¡° ì²˜ë¦¬ (í•µì‹¬/ê¶Œìž¥/í™•ìž¥)
+      // 3단계 추천 구조 처리 (핵심/권장/확장)
       // ================================================================
       const classRec = analysis.classRecommendations || {};
       const coreClasses = (classRec.core || []).sort((a, b) => (a.priority || 99) - (b.priority || 99));
       const recommendedClasses = (classRec.recommended || []).sort((a, b) => (a.priority || 99) - (b.priority || 99));
       const expansionClasses = (classRec.expansion || []).sort((a, b) => (a.priority || 99) - (b.priority || 99));
       
-      console.log('[TM] â˜… ì‚¬ì—… ë¶„ì„ ì™„ë£Œ (3ë‹¨ê³„ ì¶”ì²œ)');
-      console.log('[TM] - ì‚¬ì—… ìš”ì•½:', analysis.businessSummary);
-      console.log('[TM] - í•µì‹¬ ë¥˜ (core):', coreClasses);
-      console.log('[TM] - ê¶Œìž¥ ë¥˜ (recommended):', recommendedClasses);
-      console.log('[TM] - í™•ìž¥ ë¥˜ (expansion):', expansionClasses);
+      console.log('[TM] ★ 사업 분석 완료 (3단계 추천)');
+      console.log('[TM] - 사업 요약:', analysis.businessSummary);
+      console.log('[TM] - 핵심 류 (core):', coreClasses);
+      console.log('[TM] - 권장 류 (recommended):', recommendedClasses);
+      console.log('[TM] - 확장 류 (expansion):', expansionClasses);
       
-      // ì „ì²´ ì¶”ì²œ ë¥˜ ëª©ë¡ (ì¤‘ë³µ ì œê±°)
+      // 전체 추천 류 목록 (중복 제거)
       const allClassCodes = [...new Set([
         ...coreClasses.map(c => c.class),
         ...recommendedClasses.map(c => c.class),
         ...expansionClasses.map(c => c.class)
       ])];
       
-      // classReasons êµ¬ì„± (í˜¸í™˜ì„± ìœ ì§€)
+      // classReasons 구성 (호환성 유지)
       const classReasons = {};
-      coreClasses.forEach(c => { classReasons[c.class] = `ðŸ”´ í•µì‹¬: ${c.reason}`; });
-      recommendedClasses.forEach(c => { classReasons[c.class] = `ðŸŸ  ê¶Œìž¥: ${c.reason}`; });
-      expansionClasses.forEach(c => { classReasons[c.class] = `ðŸŸ¢ í™•ìž¥: ${c.reason}`; });
+      coreClasses.forEach(c => { classReasons[c.class] = `🔴 핵심: ${c.reason}`; });
+      recommendedClasses.forEach(c => { classReasons[c.class] = `🟠 권장: ${c.reason}`; });
+      expansionClasses.forEach(c => { classReasons[c.class] = `🟢 확장: ${c.reason}`; });
       
-      console.log('[TM] ì „ì²´ ì¶”ì²œ ë¥˜:', allClassCodes);
+      console.log('[TM] 전체 추천 류:', allClassCodes);
       
-      // ì‚¬ìš©ìž ìž…ë ¥ì—ì„œ í‚¤ì›Œë“œ ì¶”ì¶œ
+      // 사용자 입력에서 키워드 추출
       const userKeywords = TM.extractKeywordsFromInput(businessInput);
       const allKeywords = [...new Set([
         ...userKeywords,
@@ -9094,7 +9094,7 @@ ${TM.PRACTICE_GUIDELINES}
         ...(analysis.coreServices || [])
       ])];
       
-      console.log('[TM] ê²€ìƒ‰ í‚¤ì›Œë“œ:', allKeywords);
+      console.log('[TM] 검색 키워드:', allKeywords);
       
       p.aiAnalysis = {
         businessAnalysis: analysis.businessSummary || '',
@@ -9104,23 +9104,23 @@ ${TM.PRACTICE_GUIDELINES}
         salesChannels: analysis.salesChannels || {},
         expansionPotential: analysis.expansionPotential || [],
         coreActivity: (analysis.coreProducts?.[0] || '') + ' ' + (analysis.coreServices?.[0] || ''),
-        // â˜… 3ë‹¨ê³„ ì¶”ì²œ êµ¬ì¡°
+        // ★ 3단계 추천 구조
         classRecommendations: {
           core: coreClasses,
           recommended: recommendedClasses,
           expansion: expansionClasses
         },
-        // â˜… í˜¸í™˜ì„±ì„ ìœ„í•œ ê¸°ì¡´ í•„ë“œ ìœ ì§€
+        // ★ 호환성을 위한 기존 필드 유지
         recommendedClasses: allClassCodes,
         classReasons: classReasons,
         searchKeywords: allKeywords,
         recommendedGoods: {},
-        // â˜… í˜„ìž¬ ì„ íƒëœ ë¥˜ (ê¸°ë³¸: í•µì‹¬+ê¶Œìž¥ë§Œ ìžë™ ì„ íƒ)
+        // ★ 현재 선택된 류 (기본: 핵심+권장만 자동 선택)
         selectedCategories: ['core', 'recommended']
       };
       
       // ================================================================
-      // â˜… ëª¨ë“  ì¶”ì²œ ë¥˜(í•µì‹¬+ê¶Œìž¥+í™•ìž¥)ì— ëŒ€í•´ ì§€ì •ìƒí’ˆ 10ê°œ ì„ íƒ
+      // ★ 모든 추천 류(핵심+권장+확장)에 대해 지정상품 10개 선택
       // ================================================================
       const initialClasses = [
         ...coreClasses.map(c => c.class),
@@ -9132,20 +9132,20 @@ ${TM.PRACTICE_GUIDELINES}
         const paddedCode = classCode.padStart(2, '0');
         
         try {
-          if (btn) btn.innerHTML = `<span class="tossface">â³</span> ì œ${classCode}ë¥˜ ë¶„ì„ ì¤‘...`;
+          if (btn) btn.innerHTML = `<span class="tossface">⏳</span> 제${classCode}류 분석 중...`;
           
-          // 3-1. DBì—ì„œ ê³ ì‹œëª…ì¹­ ì¡°íšŒ
+          // 3-1. DB에서 고시명칭 조회
           const candidates = await TM.fetchOptimalCandidates(
             paddedCode,
             allKeywords,
             analysis
           );
           
-          console.log(`[TM] ì œ${classCode}ë¥˜ í›„ë³´: ${candidates.length}ê±´`);
+          console.log(`[TM] 제${classCode}류 후보: ${candidates.length}건`);
           
           if (candidates.length === 0) {
-            // â˜… í›„ë³´ê°€ 0ê±´ì´ë©´ í•´ë‹¹ ë¥˜ ì „ì²´ì—ì„œ ì§ì ‘ ì¡°íšŒ ì‹œë„
-            console.log(`[TM] ì œ${classCode}ë¥˜ í›„ë³´ 0ê±´ â†’ ë¥˜ ì „ì²´ ì¡°íšŒ`);
+            // ★ 후보가 0건이면 해당 류 전체에서 직접 조회 시도
+            console.log(`[TM] 제${classCode}류 후보 0건 → 류 전체 조회`);
             try {
               const { data } = await App.sb
                 .from('gazetted_goods_cache')
@@ -9162,30 +9162,30 @@ ${TM.PRACTICE_GUIDELINES}
                     priority: 3
                   });
                 });
-                console.log(`[TM] ì œ${classCode}ë¥˜ ì „ì²´ ì¡°íšŒ â†’ ${candidates.length}ê±´`);
+                console.log(`[TM] 제${classCode}류 전체 조회 → ${candidates.length}건`);
               }
             } catch (e) {
-              console.warn(`[TM] ì œ${classCode}ë¥˜ ì „ì²´ ì¡°íšŒ ì‹¤íŒ¨:`, e.message);
+              console.warn(`[TM] 제${classCode}류 전체 조회 실패:`, e.message);
             }
           }
           
           if (candidates.length === 0) {
-            // â˜… DBì—ë„ ì—†ìœ¼ë©´ LLMìœ¼ë¡œ ê³ ì‹œëª…ì¹­ 10ê°œ ì§ì ‘ ìƒì„±
-            console.log(`[TM] ì œ${classCode}ë¥˜ DB í›„ë³´ ì—†ìŒ â†’ LLM ìƒì„±`);
+            // ★ DB에도 없으면 LLM으로 고시명칭 10개 직접 생성
+            console.log(`[TM] 제${classCode}류 DB 후보 없음 → LLM 생성`);
             let llmGoods = [];
             try {
-              const genPrompt = `ë‹¹ì‹ ì€ ìƒí‘œ ì¶œì› ì „ë¬¸ ë³€ë¦¬ì‚¬ìž…ë‹ˆë‹¤.
-ì œ${classCode}ë¥˜ì˜ ê³ ì‹œëª…ì¹­(ì§€ì •ìƒí’ˆ/ì„œë¹„ìŠ¤) ì¤‘ì—ì„œ ì•„ëž˜ ì‚¬ì—…ê³¼ ê´€ë ¨ëœ ê²ƒì„ ì •í™•ížˆ 10ê°œ ì¶”ì²œí•˜ì„¸ìš”.
+              const genPrompt = `당신은 상표 출원 전문 변리사입니다.
+제${classCode}류의 고시명칭(지정상품/서비스) 중에서 아래 사업과 관련된 것을 정확히 10개 추천하세요.
 
-ã€ì‚¬ì—… ë‚´ìš©ã€‘
+【사업 내용】
 "${businessInput}"
 
-ã€ê·œì¹™ã€‘
-- ë°˜ë“œì‹œ íŠ¹í—ˆì²­ ê³ ì‹œëª…ì¹­ì— í•´ë‹¹í•˜ëŠ” ì •í™•í•œ ëª…ì¹­ë§Œ ì‚¬ìš©
-- í•´ë‹¹ ë¥˜ì— ì‹¤ì œ ì¡´ìž¬í•˜ëŠ” ì§€ì •ìƒí’ˆ/ì„œë¹„ìŠ¤ë§Œ ê¸°ìž¬
-- JSON ë°°ì—´ë¡œë§Œ ì‘ë‹µ
+【규칙】
+- 반드시 특허청 고시명칭에 해당하는 정확한 명칭만 사용
+- 해당 류에 실제 존재하는 지정상품/서비스만 기재
+- JSON 배열로만 응답
 
-["ìƒí’ˆëª…1", "ìƒí’ˆëª…2", ..., "ìƒí’ˆëª…10"]`;
+["상품명1", "상품명2", ..., "상품명10"]`;
               const genResponse = await App.callClaude(genPrompt, 500);
               const genText = (genResponse.text || '').trim();
               const nameArray = JSON.parse(genText.match(/\[[\s\S]*\]/)?.[0] || '[]');
@@ -9196,17 +9196,17 @@ ${TM.PRACTICE_GUIDELINES}
                 isCore: false,
                 isLlmGenerated: true
               }));
-              console.log(`[TM] ì œ${classCode}ë¥˜ LLM ìƒì„±: ${llmGoods.length}ê°œ`);
+              console.log(`[TM] 제${classCode}류 LLM 생성: ${llmGoods.length}개`);
             } catch (genErr) {
-              console.warn(`[TM] ì œ${classCode}ë¥˜ LLM ìƒì„± ì‹¤íŒ¨:`, genErr.message);
+              console.warn(`[TM] 제${classCode}류 LLM 생성 실패:`, genErr.message);
             }
             
-            // â˜… LLM ê²°ê³¼ë„ 10ê°œ ë¯¸ë§Œì´ë©´ ensureMinGoodsë¡œ ë³´ì¶©
+            // ★ LLM 결과도 10개 미만이면 ensureMinGoods로 보충
             p.aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(classCode, llmGoods, businessInput);
             continue;
           }
           
-          // 3-2. LLMì´ ìµœì  ìƒí’ˆ ì„ íƒ
+          // 3-2. LLM이 최적 상품 선택
           const selectedGoods = await TM.selectOptimalGoods(
             classCode,
             candidates,
@@ -9216,23 +9216,23 @@ ${TM.PRACTICE_GUIDELINES}
           
           p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
           
-          // â˜… 10ê°œ ë³´ìž¥
+          // ★ 10개 보장
           p.aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(
             classCode, p.aiAnalysis.recommendedGoods[classCode], businessInput
           );
           
           const finalCount = p.aiAnalysis.recommendedGoods[classCode].length;
-          console.log(`[TM] ì œ${classCode}ë¥˜ ìµœì¢…: ${finalCount}ê±´`);
+          console.log(`[TM] 제${classCode}류 최종: ${finalCount}건`);
           if (finalCount > 0) {
-            console.log(`[TM]   â†’ ${p.aiAnalysis.recommendedGoods[classCode].slice(0, 3).map(s => s.name).join(', ')}...`);
+            console.log(`[TM]   → ${p.aiAnalysis.recommendedGoods[classCode].slice(0, 3).map(s => s.name).join(', ')}...`);
           }
           
         } catch (classError) {
-          console.error(`[TM] ì œ${classCode}ë¥˜ ì²˜ë¦¬ ì‹¤íŒ¨:`, classError);
-          // â˜… ì—ëŸ¬ ì‹œì—ë„ ensureMinGoodsë¡œ ìµœì†Œ 10ê°œ ì±„ìš°ê¸°
+          console.error(`[TM] 제${classCode}류 처리 실패:`, classError);
+          // ★ 에러 시에도 ensureMinGoods로 최소 10개 채우기
           try {
             p.aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(classCode, [], businessInput);
-            console.log(`[TM] ì œ${classCode}ë¥˜ ì—ëŸ¬ ë³µêµ¬: ${p.aiAnalysis.recommendedGoods[classCode].length}ê°œ`);
+            console.log(`[TM] 제${classCode}류 에러 복구: ${p.aiAnalysis.recommendedGoods[classCode].length}개`);
           } catch (e) {
             p.aiAnalysis.recommendedGoods[classCode] = [];
           }
@@ -9240,63 +9240,63 @@ ${TM.PRACTICE_GUIDELINES}
       }
       
       // ================================================================
-      // 4ë‹¨ê³„: ì¶”ì²œ ê²°ê³¼ 3ë‹¨ê³„ ê²€ì¦ (Validation)
+      // 4단계: 추천 결과 3단계 검증 (Validation)
       // ================================================================
-      if (btn) btn.innerHTML = '<span class="tossface">ðŸ”</span> 1/3 ë¥˜ ê²€ì¦ ì¤‘...';
+      if (btn) btn.innerHTML = '<span class="tossface">🔍</span> 1/3 류 검증 중...';
       
       const validationResult = await TM.validateRecommendations(businessInput, p.aiAnalysis);
       
       if (validationResult) {
         p.aiAnalysis.validation = validationResult;
         
-        // ê²€ì¦ ê²°ê³¼ ì ìš© (ìž˜ëª»ëœ í•­ëª© ì œê±° + ëŒ€ì²´ ì¶”ì²œ)
+        // 검증 결과 적용 (잘못된 항목 제거 + 대체 추천)
         if (validationResult.hasIssues) {
-          if (btn) btn.innerHTML = '<span class="tossface">ðŸ”§</span> ê²€ì¦ ê²°ê³¼ ì ìš© ì¤‘...';
+          if (btn) btn.innerHTML = '<span class="tossface">🔧</span> 검증 결과 적용 중...';
           await TM.applyValidationResult(p.aiAnalysis, validationResult);
         }
         
-        console.log('[TM] âœ… ê²€ì¦ ì™„ë£Œ');
+        console.log('[TM] ✅ 검증 완료');
       }
       
       TM.renderCurrentStep();
-      App.showToast('ì‚¬ì—… ë¶„ì„ ì™„ë£Œ!', 'success');
+      App.showToast('사업 분석 완료!', 'success');
       
     } catch (error) {
-      console.error('[TM] ì‚¬ì—… ë¶„ì„ ì‹¤íŒ¨:', error);
-      App.showToast('ë¶„ì„ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 사업 분석 실패:', error);
+      App.showToast('분석 실패: ' + error.message, 'error');
     } finally {
       const btn = document.querySelector('[data-action="tm-analyze-business"]');
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = 'AI ë¶„ì„ ðŸ”';
+        btn.innerHTML = 'AI 분석 🔍';
       }
     }
   };
   
   // ================================================================
-  // DBì—ì„œ ìµœì  í›„ë³´ ì¡°íšŒ (ì‚¬ì—… ë§¥ë½ ê³ ë ¤)
+  // DB에서 최적 후보 조회 (사업 맥락 고려)
   // ================================================================
   TM.fetchOptimalCandidates = async function(classCode, keywords, analysis) {
     const results = [];
     const seen = new Set();
     
-    console.log(`[TM] â•â•â•â• DB ê²€ìƒ‰: ì œ${classCode}ë¥˜ â•â•â•â•`);
+    console.log(`[TM] ════ DB 검색: 제${classCode}류 ════`);
     
-    // ì‚¬ì—… ë§¥ë½ ì¶”ì¶œ (í•„í„°ë§ìš©)
+    // 사업 맥락 추출 (필터링용)
     const businessContext = [
       ...(analysis.coreProducts || []),
       ...(analysis.coreServices || []),
       ...(analysis.expansionPotential || [])
     ].join(' ').toLowerCase();
     
-    // í˜¼ë™ ë°©ì§€ìš© í•„í„° (ë™ìŒì´ì˜ì–´/ìœ ì‚¬ì–´ ì²˜ë¦¬)
+    // 혼동 방지용 필터 (동음이의어/유사어 처리)
     const confusionFilters = {
-      'ìƒí™”': ['ìƒí™”í•™', 'ìƒí™”í•™ì '],  // ìƒí™”(ê½ƒ) vs ìƒí™”í•™
-      'ê°€êµ¬': ['ê°€êµ¬ì›', 'í•œê°€êµ¬'],     // ê°€êµ¬(furniture) vs ê°€êµ¬(å®¶å£)
-      'í™”ë¶„': ['í™”ë¶„ì¦'],               // í™”ë¶„(pot) vs í™”ë¶„(èŠ±ç²‰)
+      '생화': ['생화학', '생화학적'],  // 생화(꽃) vs 생화학
+      '가구': ['가구원', '한가구'],     // 가구(furniture) vs 가구(家口)
+      '화분': ['화분증'],               // 화분(pot) vs 화분(花粉)
     };
     
-    // í˜„ìž¬ ì‚¬ì—…ê³¼ ê´€ë ¨ ì—†ëŠ” í‚¤ì›Œë“œ ê°ì§€
+    // 현재 사업과 관련 없는 키워드 감지
     const getExcludePatterns = (keyword) => {
       const patterns = [];
       for (const [key, excludes] of Object.entries(confusionFilters)) {
@@ -9307,7 +9307,7 @@ ${TM.PRACTICE_GUIDELINES}
       return patterns;
     };
     
-    // 1. í•µì‹¬ ìƒí’ˆ/ì„œë¹„ìŠ¤ í‚¤ì›Œë“œë¡œ ê²€ìƒ‰ (ìµœìš°ì„ )
+    // 1. 핵심 상품/서비스 키워드로 검색 (최우선)
     const coreTerms = [
       ...(analysis.coreProducts || []),
       ...(analysis.coreServices || [])
@@ -9325,15 +9325,15 @@ ${TM.PRACTICE_GUIDELINES}
           .limit(30);
         
         if (data?.length > 0) {
-          console.log(`[TM] í•µì‹¬ í‚¤ì›Œë“œ "${term}" â†’ ${data.length}ê±´`);
+          console.log(`[TM] 핵심 키워드 "${term}" → ${data.length}건`);
           data.forEach(item => {
             if (!seen.has(item.goods_name)) {
-              // í˜¼ë™ í•„í„° ì ìš©
+              // 혼동 필터 적용
               const nameLower = item.goods_name.toLowerCase();
               const shouldExclude = excludePatterns.some(p => nameLower.includes(p));
               
               if (shouldExclude) {
-                console.log(`[TM] ì œì™¸ (í˜¼ë™ë°©ì§€): ${item.goods_name}`);
+                console.log(`[TM] 제외 (혼동방지): ${item.goods_name}`);
                 return;
               }
               
@@ -9349,11 +9349,11 @@ ${TM.PRACTICE_GUIDELINES}
           });
         }
       } catch (e) {
-        console.warn(`[TM] ê²€ìƒ‰ ì‹¤íŒ¨ (${term}):`, e.message);
+        console.warn(`[TM] 검색 실패 (${term}):`, e.message);
       }
     }
     
-    // 2. ì¼ë°˜ í‚¤ì›Œë“œë¡œ ê²€ìƒ‰
+    // 2. 일반 키워드로 검색
     for (const keyword of keywords.slice(0, 15)) {
       if (coreTerms.includes(keyword)) continue;
       
@@ -9368,25 +9368,25 @@ ${TM.PRACTICE_GUIDELINES}
           .limit(20);
         
         if (data?.length > 0) {
-          console.log(`[TM] í‚¤ì›Œë“œ "${keyword}" â†’ ${data.length}ê±´`);
+          console.log(`[TM] 키워드 "${keyword}" → ${data.length}건`);
           data.forEach(item => {
             if (!seen.has(item.goods_name)) {
-              // í˜¼ë™ í•„í„° ì ìš©
+              // 혼동 필터 적용
               const nameLower = item.goods_name.toLowerCase();
               const shouldExclude = excludePatterns.some(p => nameLower.includes(p));
               
               if (shouldExclude) {
-                console.log(`[TM] ì œì™¸ (í˜¼ë™ë°©ì§€): ${item.goods_name}`);
+                console.log(`[TM] 제외 (혼동방지): ${item.goods_name}`);
                 return;
               }
               
               seen.add(item.goods_name);
               
-              // ìš°ì„ ìˆœìœ„ ê³„ì‚°
+              // 우선순위 계산
               const kwLower = keyword.toLowerCase();
               let priority = 2;
               
-              if (nameLower === kwLower || nameLower === kwLower + 'ì—…') {
+              if (nameLower === kwLower || nameLower === kwLower + '업') {
                 priority = 0;
               } else if (nameLower.startsWith(kwLower)) {
                 priority = 1;
@@ -9403,14 +9403,14 @@ ${TM.PRACTICE_GUIDELINES}
           });
         }
       } catch (e) {
-        // ë¬´ì‹œ
+        // 무시
       }
     }
     
-    // 3. í›„ë³´ê°€ ë¶€ì¡±í•˜ë©´ í•´ë‹¹ ë¥˜ì—ì„œ ì¶”ê°€ ì¡°íšŒ
+    // 3. 후보가 부족하면 해당 류에서 추가 조회
     if (results.length < 30) {
       try {
-        console.log(`[TM] í›„ë³´ ë¶€ì¡± (${results.length}ê±´), ì¶”ê°€ ì¡°íšŒ...`);
+        console.log(`[TM] 후보 부족 (${results.length}건), 추가 조회...`);
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
@@ -9431,31 +9431,31 @@ ${TM.PRACTICE_GUIDELINES}
           });
         }
       } catch (e) {
-        // ë¬´ì‹œ
+        // 무시
       }
     }
     
-    // ìš°ì„ ìˆœìœ„ìˆœ ì •ë ¬
+    // 우선순위순 정렬
     results.sort((a, b) => a.priority - b.priority);
     
-    console.log(`[TM] ì´ í›„ë³´: ${results.length}ê±´`);
+    console.log(`[TM] 총 후보: ${results.length}건`);
     if (results.length > 0) {
-      console.log(`[TM] ìƒìœ„: ${results.slice(0, 5).map(r => r.name).join(', ')}`);
+      console.log(`[TM] 상위: ${results.slice(0, 5).map(r => r.name).join(', ')}`);
     }
     
     return results;
   };
   
   // ================================================================
-  // ìµœì  ì§€ì •ìƒí’ˆ ì„ íƒ (ì‚¬ì—… ë§¥ë½ + í™•ìž¥ì„± ê³ ë ¤)
+  // 최적 지정상품 선택 (사업 맥락 + 확장성 고려)
   // ================================================================
   TM.selectOptimalGoods = async function(classCode, candidates, businessText, analysis) {
     const MIN_GOODS = 10;
-    const MAX_CORE_MATCH = 5;  // í•µì‹¬ í‚¤ì›Œë“œë‹¹ ìµœëŒ€ ë§¤ì¹­ ìˆ˜
+    const MAX_CORE_MATCH = 5;  // 핵심 키워드당 최대 매칭 수
     const selected = [];
     const usedNames = new Set();
     
-    // 1. í•µì‹¬ í‚¤ì›Œë“œì™€ ì§ì ‘ ë§¤ì¹­ë˜ëŠ” ìƒí’ˆ ìžë™ í¬í•¨
+    // 1. 핵심 키워드와 직접 매칭되는 상품 자동 포함
     const coreTerms = [
       ...(analysis.coreProducts || []),
       ...(analysis.coreServices || [])
@@ -9467,22 +9467,22 @@ ${TM.PRACTICE_GUIDELINES}
       
       for (const c of candidates) {
         if (usedNames.has(c.name)) continue;
-        if (termMatchCount >= MAX_CORE_MATCH) break;  // í‚¤ì›Œë“œë‹¹ ìµœëŒ€ 5ê°œ
+        if (termMatchCount >= MAX_CORE_MATCH) break;  // 키워드당 최대 5개
         
         const nameLower = c.name.toLowerCase();
         
-        // ì§ì ‘ ë§¤ì¹­
+        // 직접 매칭
         if (nameLower.includes(termLower) || 
-            nameLower === termLower + 'ì—…' ||
-            nameLower === termLower + 'ì„œë¹„ìŠ¤ì—…') {
+            nameLower === termLower + '업' ||
+            nameLower === termLower + '서비스업') {
           
-          console.log(`[TM] â˜… ì§ì ‘ ë§¤ì¹­: "${term}" â†’ "${c.name}"`);
+          console.log(`[TM] ★ 직접 매칭: "${term}" → "${c.name}"`);
           usedNames.add(c.name);
           selected.push({
             name: c.name,
             similarGroup: c.similarGroup,
             isCore: true,
-            reason: `í•µì‹¬: "${term}"`
+            reason: `핵심: "${term}"`
           });
           
           termMatchCount++;
@@ -9490,9 +9490,9 @@ ${TM.PRACTICE_GUIDELINES}
       }
     }
     
-    console.log(`[TM] ì§ì ‘ ë§¤ì¹­ ê²°ê³¼: ${selected.length}ê°œ`);
+    console.log(`[TM] 직접 매칭 결과: ${selected.length}개`);
     
-    // 2. LLMì´ ë‚˜ë¨¸ì§€ ì„ íƒ (ê´€ë ¨ì„± ê²€ì¦ ê°•í™”)
+    // 2. LLM이 나머지 선택 (관련성 검증 강화)
     if (selected.length < MIN_GOODS && candidates.length > selected.length) {
       const remainingCandidates = candidates.filter(c => !usedNames.has(c.name));
       
@@ -9506,46 +9506,46 @@ ${TM.PRACTICE_GUIDELINES}
         const coreProducts = analysis.coreProducts?.join(', ') || '';
         const coreServices = analysis.coreServices?.join(', ') || '';
         
-        const selectPrompt = `ã€ì‚¬ì—… ì •ë³´ã€‘
-- ì‚¬ì—… ë‚´ìš©: ${businessText}
-- í•µì‹¬ ìƒí’ˆ: ${coreProducts || 'ì—†ìŒ'}
-- í•µì‹¬ ì„œë¹„ìŠ¤: ${coreServices || 'ì—†ìŒ'}
-- ì‚¬ì—… ìœ í˜•: ${businessTypes || 'ë¯¸ì •'}
-- í™•ìž¥ ê°€ëŠ¥: ${expansion || 'ë¯¸ì •'}
+        const selectPrompt = `【사업 정보】
+- 사업 내용: ${businessText}
+- 핵심 상품: ${coreProducts || '없음'}
+- 핵심 서비스: ${coreServices || '없음'}
+- 사업 유형: ${businessTypes || '미정'}
+- 확장 가능: ${expansion || '미정'}
 
-ã€ì œ${classCode}ë¥˜ ê³ ì‹œëª…ì¹­ í›„ë³´ã€‘
+【제${classCode}류 고시명칭 후보】
 ${numberedList}
 
-ã€ì„ íƒ ê¸°ì¤€ - ë§¤ìš° ì¤‘ìš”ã€‘
-â˜…â˜…â˜… ë°˜ë“œì‹œ ì‚¬ì—… ë‚´ìš©ê³¼ ì§ì ‘ì ìœ¼ë¡œ ê´€ë ¨ ìžˆëŠ” ê²ƒë§Œ ì„ íƒí•˜ì„¸ìš” â˜…â˜…â˜…
+【선택 기준 - 매우 중요】
+★★★ 반드시 사업 내용과 직접적으로 관련 있는 것만 선택하세요 ★★★
 
-1. "${businessText}"ì™€ ê´€ë ¨ëœ ìƒí’ˆ/ì„œë¹„ìŠ¤ë§Œ ì„ íƒ
-2. ìœ ì‚¬í•œ ë°œìŒì´ë‚˜ ê¸€ìžê°€ í¬í•¨ë˜ì–´ë„ ì˜ë¯¸ê°€ ë‹¤ë¥´ë©´ ì œì™¸
-   - ì˜ˆ: "ê½ƒ/ìƒí™”(èŠ±)" ì‚¬ì—…ì¸ë° "ìƒí™”í•™(åŒ–å­¸)" ê´€ë ¨ ìƒí’ˆì€ ì œì™¸
-   - ì˜ˆ: "ê°€êµ¬" ì‚¬ì—…ì¸ë° "ê°€êµ¬(å®¶å£=ê°€ì¡±)" ê´€ë ¨ ìƒí’ˆì€ ì œì™¸
-3. í•´ë‹¹ ì‚¬ì—…ì˜ ì‹¤ì œ íŒë§¤/ì œê³µ ëŒ€ìƒê³¼ ë§žëŠ” ê²ƒë§Œ ì„ íƒ
+1. "${businessText}"와 관련된 상품/서비스만 선택
+2. 유사한 발음이나 글자가 포함되어도 의미가 다르면 제외
+   - 예: "꽃/생화(花)" 사업인데 "생화학(化學)" 관련 상품은 제외
+   - 예: "가구" 사업인데 "가구(家口=가족)" 관련 상품은 제외
+3. 해당 사업의 실제 판매/제공 대상과 맞는 것만 선택
 
-ì„ íƒí•  ê°œìˆ˜: ì •í™•ížˆ ${MIN_GOODS - selected.length}ê°œë¥¼ ì„ íƒí•˜ì„¸ìš”. ê´€ë ¨ì„±ì´ ë†’ì€ ìˆœìœ¼ë¡œ ì„ íƒí•˜ë˜, ë°˜ë“œì‹œ ${MIN_GOODS - selected.length}ê°œë¥¼ ì±„ìš°ì„¸ìš”.
+선택할 개수: 정확히 ${MIN_GOODS - selected.length}개를 선택하세요. 관련성이 높은 순으로 선택하되, 반드시 ${MIN_GOODS - selected.length}개를 채우세요.
 
-ì‘ë‹µ: ìˆ«ìžë§Œ ì‰¼í‘œë¡œ (ì˜ˆ: 1,2,3)
-ì„ íƒ:`;
+응답: 숫자만 쉼표로 (예: 1,2,3)
+선택:`;
 
         try {
           const response = await App.callClaude(selectPrompt, 200);
           const responseText = (response.text || '').trim();
           
-          console.log(`[TM] LLM ì‘ë‹µ: "${responseText.substring(0, 80)}..."`);
+          console.log(`[TM] LLM 응답: "${responseText.substring(0, 80)}..."`);
           
-          // ë²ˆí˜¸ íŒŒì‹± ("ì—†ìŒ" ì‘ë‹µë„ ë¬´ì‹œí•˜ê³  ë²ˆí˜¸ë§Œ ì¶”ì¶œ)
+          // 번호 파싱 ("없음" 응답도 무시하고 번호만 추출)
           const numbers = responseText
             .replace(/[^\d,\s]/g, '')
             .split(/[,\s]+/)
             .map(n => parseInt(n.trim()))
             .filter(n => !isNaN(n) && n >= 1 && n <= remainingCandidates.length);
           
-          console.log(`[TM] íŒŒì‹±ëœ ë²ˆí˜¸: ${numbers.length}ê°œ`);
+          console.log(`[TM] 파싱된 번호: ${numbers.length}개`);
           
-          // ë²ˆí˜¸ë¡œ ìƒí’ˆ ì¶”ê°€
+          // 번호로 상품 추가
           const usedIndices = new Set();
           for (const num of numbers) {
             if (selected.length >= MIN_GOODS) break;
@@ -9563,16 +9563,16 @@ ${numberedList}
             }
           }
         } catch (err) {
-          console.warn('[TM] LLM ì„ íƒ ì‹¤íŒ¨:', err.message);
+          console.warn('[TM] LLM 선택 실패:', err.message);
         }
       }
     }
     
-    // 3. ë¶€ì¡±í•˜ë©´ core/keyword ë§¤ì¹­ëœ ê²ƒë§Œ ë³´ì¶© (class ë§¤ì¹­ì€ ì œì™¸)
+    // 3. 부족하면 core/keyword 매칭된 것만 보충 (class 매칭은 제외)
     if (selected.length < MIN_GOODS) {
-      console.log(`[TM] ${MIN_GOODS - selected.length}ê°œ ë³´ì¶© í•„ìš” (ê´€ë ¨ í•­ëª©ë§Œ)`);
+      console.log(`[TM] ${MIN_GOODS - selected.length}개 보충 필요 (관련 항목만)`);
       
-      // core ë˜ëŠ” keyword ë§¤ì¹­ëœ ê²ƒë§Œ ë³´ì¶© (class ì „ì²´ ì¡°íšŒ ê²°ê³¼ëŠ” ì œì™¸)
+      // core 또는 keyword 매칭된 것만 보충 (class 전체 조회 결과는 제외)
       const relatedCandidates = candidates.filter(c => 
         c.matchType === 'core' || c.matchType === 'keyword'
       );
@@ -9589,9 +9589,9 @@ ${numberedList}
         });
       }
       
-      // â˜… 10ê°œ ë³´ìž¥: ê´€ë ¨ í›„ë³´ê°€ ë¶€ì¡±í•˜ë©´ í•´ë‹¹ ë¥˜ì˜ ì „ì²´ í›„ë³´ì—ì„œ ì±„ì›€
+      // ★ 10개 보장: 관련 후보가 부족하면 해당 류의 전체 후보에서 채움
       if (selected.length < MIN_GOODS) {
-        console.log(`[TM] ê´€ë ¨ í›„ë³´ ë¶€ì¡± (${selected.length}ê°œ), ${MIN_GOODS}ê°œê¹Œì§€ ì „ì²´ í›„ë³´ì—ì„œ ë³´ì¶©`);
+        console.log(`[TM] 관련 후보 부족 (${selected.length}개), ${MIN_GOODS}개까지 전체 후보에서 보충`);
         for (const c of candidates) {
           if (selected.length >= MIN_GOODS) break;
           if (usedNames.has(c.name)) continue;
@@ -9603,17 +9603,17 @@ ${numberedList}
             isCore: false
           });
         }
-        console.log(`[TM] ë³´ì¶© í›„: ${selected.length}ê°œ`);
+        console.log(`[TM] 보충 후: ${selected.length}개`);
       }
     }
     
-    console.log(`[TM] ì œ${classCode}ë¥˜ ìµœì¢…: ${selected.length}ê°œ`);
+    console.log(`[TM] 제${classCode}류 최종: ${selected.length}개`);
     
     return selected.slice(0, MIN_GOODS);
   };
   
   // ================================================================
-  // â˜… ê³µí†µ: ì§€ì •ìƒí’ˆ 10ê°œ ë³´ìž¥ í•¨ìˆ˜ (DB ì¡°íšŒ + LLM ìƒì„± í´ë°±)
+  // ★ 공통: 지정상품 10개 보장 함수 (DB 조회 + LLM 생성 폴백)
   // ================================================================
   TM.ensureMinGoods = async function(classCode, currentGoods, businessText) {
     const MIN = 10;
@@ -9623,9 +9623,9 @@ ${numberedList}
     const existingNames = new Set(currentGoods.map(g => typeof g === 'string' ? g : g.name));
     const paddedCode = classCode.padStart(2, '0');
     
-    console.log(`[TM] ensureMinGoods ì œ${classCode}ë¥˜: ${currentGoods.length}ê°œ â†’ ${deficit}ê°œ ë³´ì¶© í•„ìš”`);
+    console.log(`[TM] ensureMinGoods 제${classCode}류: ${currentGoods.length}개 → ${deficit}개 보충 필요`);
     
-    // 1ì°¨: DBì—ì„œ ë³´ì¶©
+    // 1차: DB에서 보충
     try {
       const { data } = await App.sb
         .from('gazetted_goods_cache')
@@ -9648,19 +9648,19 @@ ${numberedList}
         }
       }
     } catch (e) {
-      console.warn(`[TM] ensureMinGoods DB ë³´ì¶© ì‹¤íŒ¨:`, e.message);
+      console.warn(`[TM] ensureMinGoods DB 보충 실패:`, e.message);
     }
     
-    // 2ì°¨: DBë¡œë„ ë¶€ì¡±í•˜ë©´ LLM ìƒì„±
+    // 2차: DB로도 부족하면 LLM 생성
     if (currentGoods.length < MIN) {
       try {
         const still = MIN - currentGoods.length;
         const existingList = currentGoods.map(g => typeof g === 'string' ? g : g.name).join(', ');
-        const genPrompt = `ì œ${classCode}ë¥˜ ê³ ì‹œëª…ì¹­ ì¤‘ ì•„ëž˜ ì‚¬ì—…ê³¼ ê´€ë ¨ëœ ì§€ì •ìƒí’ˆ/ì„œë¹„ìŠ¤ë¥¼ ì •í™•ížˆ ${still}ê°œë§Œ ì¶”ì²œí•˜ì„¸ìš”.
-ì‚¬ì—…: "${businessText}"
-ì´ë¯¸ ì„ íƒë¨: ${existingList}
-ìœ„ ëª©ë¡ê³¼ ì¤‘ë³µë˜ì§€ ì•ŠëŠ” ê²ƒë§Œ ì¶”ì²œ.
-JSON ë°°ì—´ë¡œë§Œ ì‘ë‹µ: ["ìƒí’ˆëª…1", "ìƒí’ˆëª…2"]`;
+        const genPrompt = `제${classCode}류 고시명칭 중 아래 사업과 관련된 지정상품/서비스를 정확히 ${still}개만 추천하세요.
+사업: "${businessText}"
+이미 선택됨: ${existingList}
+위 목록과 중복되지 않는 것만 추천.
+JSON 배열로만 응답: ["상품명1", "상품명2"]`;
         const resp = await App.callClaude(genPrompt, 300);
         const arr = JSON.parse((resp.text || '').match(/\[[\s\S]*\]/)?.[0] || '[]');
         for (const name of arr) {
@@ -9670,26 +9670,26 @@ JSON ë°°ì—´ë¡œë§Œ ì‘ë‹µ: ["ìƒí’ˆëª…1", "ìƒ
           currentGoods.push({ name, similarGroup: '', isCore: false, isLlmGenerated: true });
         }
       } catch (e) {
-        console.warn(`[TM] ensureMinGoods LLM ë³´ì¶© ì‹¤íŒ¨:`, e.message);
+        console.warn(`[TM] ensureMinGoods LLM 보충 실패:`, e.message);
       }
     }
     
-    console.log(`[TM] ensureMinGoods ì œ${classCode}ë¥˜ ìµœì¢…: ${currentGoods.length}ê°œ`);
+    console.log(`[TM] ensureMinGoods 제${classCode}류 최종: ${currentGoods.length}개`);
     return currentGoods.slice(0, MIN);
   };
   
   // ================================================================
-  // ì¶”ì²œ ê²°ê³¼ ê²€ì¦ (Validation) - ê³ ë„í™” ë²„ì „
-  // 3ë‹¨ê³„ ê²€ì¦: ë¥˜ ê²€ì¦ â†’ ì§€ì •ìƒí’ˆ ê²€ì¦ â†’ ëˆ„ë½ ê²€í† 
+  // 추천 결과 검증 (Validation) - 고도화 버전
+  // 3단계 검증: 류 검증 → 지정상품 검증 → 누락 검토
   // ================================================================
   TM.validateRecommendations = async function(businessInput, aiAnalysis) {
     if (!aiAnalysis || !aiAnalysis.recommendedClasses?.length) {
       return null;
     }
     
-    console.log('[TM] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
-    console.log('[TM] ì¶”ì²œ ê²°ê³¼ 3ë‹¨ê³„ ê²€ì¦ ì‹œìž‘');
-    console.log('[TM] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
+    console.log('[TM] ════════════════════════════════════');
+    console.log('[TM] 추천 결과 3단계 검증 시작');
+    console.log('[TM] ════════════════════════════════════');
     
     const validationResult = {
       hasIssues: false,
@@ -9702,14 +9702,14 @@ JSON ë°°ì—´ë¡œë§Œ ì‘ë‹µ: ["ìƒí’ˆëª…1", "ìƒ
       },
       invalidClasses: [],
       invalidGoods: [],
-      replacementGoods: [],  // ëŒ€ì²´ ì¶”ì²œëœ ìƒí’ˆ
+      replacementGoods: [],  // 대체 추천된 상품
       warnings: [],
       suggestions: [],
-      missingClasses: [],    // ëˆ„ë½ëœ ë¥˜
-      missingGoods: []       // ëˆ„ë½ëœ ìƒí’ˆ
+      missingClasses: [],    // 누락된 류
+      missingGoods: []       // 누락된 상품
     };
     
-    // ê²€ì¦ ë°ì´í„° ì¤€ë¹„
+    // 검증 데이터 준비
     const classRec = aiAnalysis.classRecommendations || {};
     const allClasses = [
       ...(classRec.core || []),
@@ -9718,45 +9718,45 @@ JSON ë°°ì—´ë¡œë§Œ ì‘ë‹µ: ["ìƒí’ˆëª…1", "ìƒ
     ];
     
     // ==============================================
-    // 1ë‹¨ê³„: ë¥˜ ì í•©ì„± ê²€ì¦
+    // 1단계: 류 적합성 검증
     // ==============================================
-    console.log('[TM] â–¶ 1ë‹¨ê³„: ë¥˜ ì í•©ì„± ê²€ì¦');
+    console.log('[TM] ▶ 1단계: 류 적합성 검증');
     
     try {
-      const classValidationPrompt = `ë‹¹ì‹ ì€ ìƒí‘œ ì¶œì› ì „ë¬¸ ë³€ë¦¬ì‚¬ìž…ë‹ˆë‹¤.
+      const classValidationPrompt = `당신은 상표 출원 전문 변리사입니다.
 
-ã€ì‚¬ì—… ë‚´ìš©ã€‘
+【사업 내용】
 "${businessInput}"
 
-ã€ì¶”ì²œëœ ìƒí’ˆë¥˜ã€‘
-${allClasses.map(c => `- ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
+【추천된 상품류】
+${allClasses.map(c => `- 제${c.class}류: ${c.reason}`).join('\n')}
 
-ã€ê²€ì¦ ê³¼ì œã€‘
-ê° ì¶”ì²œ ë¥˜ê°€ ìœ„ ì‚¬ì—…ê³¼ ì§ì ‘ì ìœ¼ë¡œ ê´€ë ¨ ìžˆëŠ”ì§€ ê²€ì¦í•˜ì„¸ìš”.
+【검증 과제】
+각 추천 류가 위 사업과 직접적으로 관련 있는지 검증하세요.
 
-ê²€ì¦ ê¸°ì¤€:
-1. í•´ë‹¹ ì‚¬ì—…ì—ì„œ ì‹¤ì œë¡œ íŒë§¤í•˜ê±°ë‚˜ ì œê³µí•˜ëŠ” ìƒí’ˆ/ì„œë¹„ìŠ¤ê°€ í¬í•¨ëœ ë¥˜ì¸ê°€?
-2. í•´ë‹¹ ë¥˜ ì—†ì´ ì‚¬ì—…ì„ ì˜ìœ„í•  ìˆ˜ ì—†ëŠ”ê°€? (í•„ìˆ˜ì„±)
-3. ì¶”ì²œ ì´ìœ ê°€ ì‚¬ì—… ë‚´ìš©ê³¼ ë…¼ë¦¬ì ìœ¼ë¡œ ì—°ê²°ë˜ëŠ”ê°€?
+검증 기준:
+1. 해당 사업에서 실제로 판매하거나 제공하는 상품/서비스가 포함된 류인가?
+2. 해당 류 없이 사업을 영위할 수 없는가? (필수성)
+3. 추천 이유가 사업 내용과 논리적으로 연결되는가?
 
-ã€JSONìœ¼ë¡œë§Œ ì‘ë‹µ â€” comment/reasonì€ 15ìž ì´ë‚´ë¡œ ê°„ê²°í•˜ê²Œã€‘
+【JSON으로만 응답 — comment/reason은 15자 이내로 간결하게】
 {
   "validClasses": [
-    {"class": "31", "score": 95, "comment": "ê½ƒ ìž¬ë°° í•µì‹¬ ì‚¬ì—…"}
+    {"class": "31", "score": 95, "comment": "꽃 재배 핵심 사업"}
   ],
   "invalidClasses": [
-    {"class": "42", "score": 20, "reason": "ITì„œë¹„ìŠ¤ ë¬´ê´€"}
+    {"class": "42", "score": 20, "reason": "IT서비스 무관"}
   ],
   "classScoreAvg": 85
 }`;
 
       const classResponse = await App.callClaude(classValidationPrompt, 2000);
       
-      // max_tokens ì´ˆê³¼ ì‹œ ìž¬ì‹œë„ (ë” í° í† í°ìœ¼ë¡œ)
+      // max_tokens 초과 시 재시도 (더 큰 토큰으로)
       let classText = classResponse.text;
       if (classResponse.stopReason === 'max_tokens') {
-        console.warn('[TM] 1ë‹¨ê³„ ê²€ì¦ ì‘ë‹µ ìž˜ë¦¼, ìž¬ì‹œë„...');
-        const retryResponse = await App.callClaude(classValidationPrompt + '\n\nâ˜… ë°˜ë“œì‹œ comment/reasonì„ 10ìž ì´ë‚´ë¡œ ê·¹ë„ë¡œ ê°„ê²°í•˜ê²Œ ìž‘ì„±í•˜ì„¸ìš”.', 3000);
+        console.warn('[TM] 1단계 검증 응답 잘림, 재시도...');
+        const retryResponse = await App.callClaude(classValidationPrompt + '\n\n★ 반드시 comment/reason을 10자 이내로 극도로 간결하게 작성하세요.', 3000);
         classText = retryResponse.text;
       }
       
@@ -9767,21 +9767,21 @@ ${allClasses.map(c => `- ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
       if (classResult.invalidClasses?.length > 0) {
         validationResult.hasIssues = true;
         validationResult.invalidClasses = classResult.invalidClasses;
-        console.log(`[TM] ë¶€ì í•© ë¥˜ ë°œê²¬: ${classResult.invalidClasses.map(c => c.class).join(', ')}`);
+        console.log(`[TM] 부적합 류 발견: ${classResult.invalidClasses.map(c => c.class).join(', ')}`);
       }
       
-      console.log(`[TM] ë¥˜ ê²€ì¦ í‰ê·  ì ìˆ˜: ${classResult.classScoreAvg || 'N/A'}`);
+      console.log(`[TM] 류 검증 평균 점수: ${classResult.classScoreAvg || 'N/A'}`);
       
     } catch (e) {
-      console.warn('[TM] 1ë‹¨ê³„ ê²€ì¦ ì‹¤íŒ¨:', e.message);
+      console.warn('[TM] 1단계 검증 실패:', e.message);
     }
     
     // ==============================================
-    // 2ë‹¨ê³„: ì§€ì •ìƒí’ˆë³„ ìƒì„¸ ê²€ì¦
+    // 2단계: 지정상품별 상세 검증
     // ==============================================
-    console.log('[TM] â–¶ 2ë‹¨ê³„: ì§€ì •ìƒí’ˆë³„ ìƒì„¸ ê²€ì¦');
+    console.log('[TM] ▶ 2단계: 지정상품별 상세 검증');
     
-    // ìœ íš¨í•œ ë¥˜ë§Œ ê²€ì¦ (1ë‹¨ê³„ì—ì„œ ë¬´íš¨ íŒì •ëœ ë¥˜ ì œì™¸)
+    // 유효한 류만 검증 (1단계에서 무효 판정된 류 제외)
     const invalidClassCodes = validationResult.invalidClasses.map(c => c.class);
     const validClassCodes = aiAnalysis.recommendedClasses.filter(c => !invalidClassCodes.includes(c));
     
@@ -9790,47 +9790,47 @@ ${allClasses.map(c => `- ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
       const goods = aiAnalysis.recommendedGoods?.[classCode] || [];
       if (goods.length === 0) continue;
       
-      // API rate limit ë°©ì§€ (ë¥˜ ê°„ 500ms ë”œë ˆì´)
+      // API rate limit 방지 (류 간 500ms 딜레이)
       if (ci > 0) await new Promise(r => setTimeout(r, 500));
       
       try {
-        const goodsValidationPrompt = `ë‹¹ì‹ ì€ ìƒí‘œ ì¶œì› ì „ë¬¸ ë³€ë¦¬ì‚¬ìž…ë‹ˆë‹¤.
+        const goodsValidationPrompt = `당신은 상표 출원 전문 변리사입니다.
 
-ã€ì‚¬ì—… ë‚´ìš©ã€‘
+【사업 내용】
 "${businessInput}"
 
-ã€ì œ${classCode}ë¥˜ ì¶”ì²œ ì§€ì •ìƒí’ˆã€‘
+【제${classCode}류 추천 지정상품】
 ${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
 
-ã€ê²€ì¦ ê³¼ì œã€‘
-ê° ì§€ì •ìƒí’ˆì´ ìœ„ ì‚¬ì—…ê³¼ ê´€ë ¨ ìžˆëŠ”ì§€ ê²€ì¦í•˜ì„¸ìš”.
+【검증 과제】
+각 지정상품이 위 사업과 관련 있는지 검증하세요.
 
-â˜…â˜…â˜… íŠ¹ížˆ ì£¼ì˜í•  ì˜¤ë¥˜ ìœ í˜• â˜…â˜…â˜…
-1. ë™ìŒì´ì˜ì–´: "ìƒí™”(ê½ƒ)"ì™€ "ìƒí™”í•™(í™”í•™)", "ê°€êµ¬(furniture)"ì™€ "ê°€êµ¬(å®¶å£)"
-2. ë¶€ë¶„ ë¬¸ìžì—´ ë§¤ì¹­ ì˜¤ë¥˜: "ê½ƒ" ê²€ìƒ‰ ì‹œ "ê½ƒê²Œ", "ë¶ˆê½ƒ" ë“± ë¬´ê´€í•œ ìƒí’ˆ í¬í•¨
-3. ì—…ì¢… ë¶ˆì¼ì¹˜: ì‚¬ì—… ë‚´ìš©ê³¼ ì „í˜€ ë‹¤ë¥¸ ë¶„ì•¼ì˜ ìƒí’ˆ
-4. í™•ëŒ€ í•´ì„: ì‚¬ì—…ì—ì„œ ì‹¤ì œë¡œ ì·¨ê¸‰í•˜ì§€ ì•ŠëŠ” ìƒí’ˆ
+★★★ 특히 주의할 오류 유형 ★★★
+1. 동음이의어: "생화(꽃)"와 "생화학(화학)", "가구(furniture)"와 "가구(家口)"
+2. 부분 문자열 매칭 오류: "꽃" 검색 시 "꽃게", "불꽃" 등 무관한 상품 포함
+3. 업종 불일치: 사업 내용과 전혀 다른 분야의 상품
+4. 확대 해석: 사업에서 실제로 취급하지 않는 상품
 
-ã€JSONìœ¼ë¡œë§Œ ì‘ë‹µ â€” comment/reasonì€ 15ìž ì´ë‚´ë¡œ ê°„ê²°í•˜ê²Œã€‘
+【JSON으로만 응답 — comment/reason은 15자 이내로 간결하게】
 {
   "validGoods": [
-    {"name": "ìƒí™” ì†Œë§¤ì—…", "score": 95, "comment": "ê½ƒ íŒë§¤ ì§ì ‘ ê´€ë ¨"}
+    {"name": "생화 소매업", "score": 95, "comment": "꽃 판매 직접 관련"}
   ],
   "invalidGoods": [
-    {"name": "ìƒí™”í•™ì  ì´‰ë§¤ ë„ë§¤ì—…", "score": 5, "reason": "ë™ìŒì´ì˜ì–´ ì˜¤ë¥˜", "errorType": "homonym"}
+    {"name": "생화학적 촉매 도매업", "score": 5, "reason": "동음이의어 오류", "errorType": "homonym"}
   ],
   "suggestedReplacements": [
-    {"remove": "ìƒí™”í•™ì  ì´‰ë§¤ ë„ë§¤ì—…", "addInstead": "ì ˆí™” ì†Œë§¤ì—…", "reason": "ê½ƒ íŒë§¤ ì í•©"}
+    {"remove": "생화학적 촉매 도매업", "addInstead": "절화 소매업", "reason": "꽃 판매 적합"}
   ]
 }`;
 
         const goodsResponse = await App.callClaude(goodsValidationPrompt, 2000);
         
-        // max_tokens ì´ˆê³¼ ì‹œ ìž¬ì‹œë„
+        // max_tokens 초과 시 재시도
         let goodsText = goodsResponse.text;
         if (goodsResponse.stopReason === 'max_tokens') {
-          console.warn(`[TM] ì œ${classCode}ë¥˜ ê²€ì¦ ì‘ë‹µ ìž˜ë¦¼, ìž¬ì‹œë„...`);
-          const retryResponse = await App.callClaude(goodsValidationPrompt + '\n\nâ˜… ë°˜ë“œì‹œ comment/reasonì„ 10ìž ì´ë‚´ë¡œ ê·¹ë„ë¡œ ê°„ê²°í•˜ê²Œ ìž‘ì„±í•˜ì„¸ìš”. suggestedReplacementsëŠ” ìƒëžµ ê°€ëŠ¥.', 3000);
+          console.warn(`[TM] 제${classCode}류 검증 응답 잘림, 재시도...`);
+          const retryResponse = await App.callClaude(goodsValidationPrompt + '\n\n★ 반드시 comment/reason을 10자 이내로 극도로 간결하게 작성하세요. suggestedReplacements는 생략 가능.', 3000);
           goodsText = retryResponse.text;
         }
         
@@ -9847,10 +9847,10 @@ ${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
               score: g.score
             });
           });
-          console.log(`[TM] ì œ${classCode}ë¥˜ ë¶€ì í•© ìƒí’ˆ: ${goodsResult.invalidGoods.map(g => g.name).join(', ')}`);
+          console.log(`[TM] 제${classCode}류 부적합 상품: ${goodsResult.invalidGoods.map(g => g.name).join(', ')}`);
         }
         
-        // ëŒ€ì²´ ì¶”ì²œ ì €ìž¥
+        // 대체 추천 저장
         if (goodsResult.suggestedReplacements?.length > 0) {
           goodsResult.suggestedReplacements.forEach(r => {
             validationResult.replacementGoods.push({
@@ -9863,55 +9863,55 @@ ${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
         }
         
       } catch (e) {
-        console.warn(`[TM] ì œ${classCode}ë¥˜ ê²€ì¦ ì‹¤íŒ¨:`, e.message);
+        console.warn(`[TM] 제${classCode}류 검증 실패:`, e.message);
       }
     }
     
     // ==============================================
-    // 3ë‹¨ê³„: ëˆ„ë½ ê²€í†  (ë¹ ì§„ ë¥˜/ìƒí’ˆ í™•ì¸)
+    // 3단계: 누락 검토 (빠진 류/상품 확인)
     // ==============================================
-    console.log('[TM] â–¶ 3ë‹¨ê³„: ëˆ„ë½ ê²€í† ');
+    console.log('[TM] ▶ 3단계: 누락 검토');
     
     try {
-      const missingReviewPrompt = `ë‹¹ì‹ ì€ ìƒí‘œ ì¶œì› ì „ë¬¸ ë³€ë¦¬ì‚¬ìž…ë‹ˆë‹¤.
+      const missingReviewPrompt = `당신은 상표 출원 전문 변리사입니다.
 
-ã€ì‚¬ì—… ë‚´ìš©ã€‘
+【사업 내용】
 "${businessInput}"
 
-ã€í˜„ìž¬ ì¶”ì²œëœ ë¥˜ã€‘
-${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
+【현재 추천된 류】
+${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
 
-ã€ê²€í†  ê³¼ì œã€‘
-ìœ„ ì‚¬ì—…ì„ ì˜ìœ„í•˜ëŠ”ë° ë°˜ë“œì‹œ í•„ìš”í•˜ì§€ë§Œ ëˆ„ë½ëœ ìƒí’ˆë¥˜ê°€ ìžˆëŠ”ì§€ ê²€í† í•˜ì„¸ìš”.
+【검토 과제】
+위 사업을 영위하는데 반드시 필요하지만 누락된 상품류가 있는지 검토하세요.
 
-ê²€í†  ê¸°ì¤€:
-1. ì‚¬ì—…ì˜ í•µì‹¬ í™œë™ì„ ë³´í˜¸í•˜ê¸° ìœ„í•´ í•„ìˆ˜ì ì¸ ë¥˜ê°€ ë¹ ì¡ŒëŠ”ê°€?
-2. íŒë§¤ ì±„ë„(ì˜¨ë¼ì¸/ì˜¤í”„ë¼ì¸)ì— ë”°ë¥¸ í•„ìˆ˜ ë¥˜ê°€ ìžˆëŠ”ê°€?
-3. ê´€ë ¨ ì„œë¹„ìŠ¤(ìœ ì§€ë³´ìˆ˜, ì»¨ì„¤íŒ… ë“±)ì— í•„ìš”í•œ ë¥˜ê°€ ìžˆëŠ”ê°€?
-4. ê²½ìŸì‚¬ê°€ ì¼ë°˜ì ìœ¼ë¡œ ë“±ë¡í•˜ëŠ” ë¥˜ ì¤‘ ë¹ ì§„ ê²ƒì´ ìžˆëŠ”ê°€?
+검토 기준:
+1. 사업의 핵심 활동을 보호하기 위해 필수적인 류가 빠졌는가?
+2. 판매 채널(온라인/오프라인)에 따른 필수 류가 있는가?
+3. 관련 서비스(유지보수, 컨설팅 등)에 필요한 류가 있는가?
+4. 경쟁사가 일반적으로 등록하는 류 중 빠진 것이 있는가?
 
-ã€JSONìœ¼ë¡œë§Œ ì‘ë‹µã€‘
+【JSON으로만 응답】
 {
   "isSufficient": true/false,
   "missingClasses": [
-    {"class": "44", "reason": "ê½ƒ ìž¥ì‹/ê½ƒê½‚ì´ ì„œë¹„ìŠ¤ëŠ” 44ë¥˜ì— í•´ë‹¹", "priority": "ê¶Œìž¥"}
+    {"class": "44", "reason": "꽃 장식/꽃꽂이 서비스는 44류에 해당", "priority": "권장"}
   ],
   "missingGoods": [
-    {"classCode": "31", "goodsName": "ë¶„ìž¬", "reason": "ì‹ë¬¼ íŒë§¤ ì‹œ ë¶„ìž¬ë„ í¬í•¨ ê¶Œìž¥"}
+    {"classCode": "31", "goodsName": "분재", "reason": "식물 판매 시 분재도 포함 권장"}
   ],
-  "overallComment": "ì „ë°˜ì ì¸ ê²€í†  ì˜ê²¬"
+  "overallComment": "전반적인 검토 의견"
 }
 
-ëˆ„ë½ì´ ì—†ìœ¼ë©´ isSufficient: true, missingClasses: [], missingGoods: []ë¡œ ì‘ë‹µí•˜ì„¸ìš”.
-â˜… reason/commentëŠ” 15ìž ì´ë‚´ë¡œ ê°„ê²°í•˜ê²Œ ìž‘ì„±í•˜ì„¸ìš”.`;
+누락이 없으면 isSufficient: true, missingClasses: [], missingGoods: []로 응답하세요.
+★ reason/comment는 15자 이내로 간결하게 작성하세요.`;
 
       const missingResponse = await App.callClaude(missingReviewPrompt, 1500);
       
-      // max_tokens ì´ˆê³¼ ì‹œ ìž¬ì‹œë„
+      // max_tokens 초과 시 재시도
       let missingText = missingResponse.text;
       if (missingResponse.stopReason === 'max_tokens') {
-        console.warn('[TM] 3ë‹¨ê³„ ê²€ì¦ ì‘ë‹µ ìž˜ë¦¼, ìž¬ì‹œë„...');
-        const retryResponse = await App.callClaude(missingReviewPrompt + '\n\nâ˜… ê·¹ë„ë¡œ ê°„ê²°í•˜ê²Œ ì‘ë‹µ. reason 10ìž ì´ë‚´.', 2500);
+        console.warn('[TM] 3단계 검증 응답 잘림, 재시도...');
+        const retryResponse = await App.callClaude(missingReviewPrompt + '\n\n★ 극도로 간결하게 응답. reason 10자 이내.', 2500);
         missingText = retryResponse.text;
       }
       
@@ -9927,9 +9927,9 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
           reason: c.reason,
           priority: c.priority
         })));
-        console.log(`[TM] ëˆ„ë½ëœ ë¥˜ ë°œê²¬: ${missingResult.missingClasses.map(c => c.class).join(', ')}`);
+        console.log(`[TM] 누락된 류 발견: ${missingResult.missingClasses.map(c => c.class).join(', ')}`);
         
-        // â˜… ëˆ„ë½ëœ ë¥˜ì— ëŒ€í•´ ì§€ì •ìƒí’ˆ 10ê°œ ë¯¸ë¦¬ ì¶”ì²œ
+        // ★ 누락된 류에 대해 지정상품 10개 미리 추천
         const allKeywords = aiAnalysis.searchKeywords || [];
         const analysisCtx = {
           businessSummary: aiAnalysis.businessAnalysis,
@@ -9943,7 +9943,7 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
         
         for (const mc of missingResult.missingClasses) {
           const classCode = mc.class;
-          if (aiAnalysis.recommendedGoods?.[classCode]?.length > 0) continue; // ì´ë¯¸ ìžˆìœ¼ë©´ ìŠ¤í‚µ
+          if (aiAnalysis.recommendedGoods?.[classCode]?.length > 0) continue; // 이미 있으면 스킵
           
           try {
             const paddedCode = classCode.padStart(2, '0');
@@ -9952,12 +9952,12 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
             if (candidates.length > 0) {
               selectedGoods = await TM.selectOptimalGoods(classCode, candidates, aiAnalysis.businessAnalysis || '', analysisCtx);
             }
-            // â˜… 10ê°œ ë³´ìž¥
+            // ★ 10개 보장
             selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods, aiAnalysis.businessAnalysis || '');
             aiAnalysis.recommendedGoods[classCode] = selectedGoods;
-            console.log(`[TM] ëˆ„ë½ ë¥˜ ì œ${classCode}ë¥˜ ì§€ì •ìƒí’ˆ ${selectedGoods.length}ê°œ ì¶”ì²œ ì™„ë£Œ`);
+            console.log(`[TM] 누락 류 제${classCode}류 지정상품 ${selectedGoods.length}개 추천 완료`);
           } catch (goodsErr) {
-            console.warn(`[TM] ëˆ„ë½ ë¥˜ ì œ${classCode}ë¥˜ ì§€ì •ìƒí’ˆ ì¶”ì²œ ì‹¤íŒ¨:`, goodsErr);
+            console.warn(`[TM] 누락 류 제${classCode}류 지정상품 추천 실패:`, goodsErr);
             try {
               aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(classCode, [], '');
             } catch (e) {
@@ -9969,15 +9969,15 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
       
       if (missingResult.missingGoods?.length > 0) {
         validationResult.missingGoods = missingResult.missingGoods;
-        console.log(`[TM] ëˆ„ë½ëœ ìƒí’ˆ ë°œê²¬: ${missingResult.missingGoods.map(g => g.goodsName).join(', ')}`);
+        console.log(`[TM] 누락된 상품 발견: ${missingResult.missingGoods.map(g => g.goodsName).join(', ')}`);
       }
       
     } catch (e) {
-      console.warn('[TM] 3ë‹¨ê³„ ê²€ì¦ ì‹¤íŒ¨:', e.message);
+      console.warn('[TM] 3단계 검증 실패:', e.message);
     }
     
     // ==============================================
-    // ìµœì¢… ì ìˆ˜ ê³„ì‚° ë° ìš”ì•½
+    // 최종 점수 계산 및 요약
     // ==============================================
     const totalIssues = validationResult.invalidClasses.length + validationResult.invalidGoods.length;
     const totalItems = allClasses.length + aiAnalysis.recommendedClasses.reduce((sum, c) => 
@@ -9985,51 +9985,51 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
     
     validationResult.overallScore = Math.max(0, Math.round(100 - (totalIssues / Math.max(totalItems, 1)) * 100));
     
-    // ìš”ì•½ ìƒì„±
+    // 요약 생성
     if (totalIssues === 0 && validationResult.missingClasses.length === 0) {
-      validationResult.summary = 'âœ… ëª¨ë“  ì¶”ì²œì´ ì‚¬ì—… ë‚´ìš©ê³¼ ì í•©í•©ë‹ˆë‹¤.';
+      validationResult.summary = '✅ 모든 추천이 사업 내용과 적합합니다.';
     } else {
       const parts = [];
       if (validationResult.invalidClasses.length > 0) {
-        parts.push(`ë¶€ì í•© ë¥˜ ${validationResult.invalidClasses.length}ê°œ ì œê±°ë¨`);
+        parts.push(`부적합 류 ${validationResult.invalidClasses.length}개 제거됨`);
       }
       if (validationResult.invalidGoods.length > 0) {
-        parts.push(`ë¶€ì í•© ìƒí’ˆ ${validationResult.invalidGoods.length}ê°œ ì œê±°ë¨`);
+        parts.push(`부적합 상품 ${validationResult.invalidGoods.length}개 제거됨`);
       }
       if (validationResult.missingClasses.length > 0) {
-        parts.push(`ì¶”ê°€ ê¶Œìž¥ ë¥˜ ${validationResult.missingClasses.length}ê°œ`);
+        parts.push(`추가 권장 류 ${validationResult.missingClasses.length}개`);
       }
       validationResult.summary = parts.join(', ');
     }
     
-    console.log('[TM] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
-    console.log(`[TM] ê²€ì¦ ì™„ë£Œ - ì ìˆ˜: ${validationResult.overallScore}ì `);
-    console.log(`[TM] ìš”ì•½: ${validationResult.summary}`);
-    console.log('[TM] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
+    console.log('[TM] ════════════════════════════════════');
+    console.log(`[TM] 검증 완료 - 점수: ${validationResult.overallScore}점`);
+    console.log(`[TM] 요약: ${validationResult.summary}`);
+    console.log('[TM] ════════════════════════════════════');
     
     return validationResult;
   };
   
   // ================================================================
-  // ê²€ì¦ ê²°ê³¼ ì ìš© (ìž˜ëª»ëœ í•­ëª© ì œê±° + ëŒ€ì²´ ì¶”ì²œ)
+  // 검증 결과 적용 (잘못된 항목 제거 + 대체 추천)
   // ================================================================
   TM.applyValidationResult = async function(aiAnalysis, validationResult) {
     if (!validationResult || !validationResult.hasIssues) return;
     
-    console.log('[TM] ê²€ì¦ ê²°ê³¼ ì ìš© ì‹œìž‘');
+    console.log('[TM] 검증 결과 적용 시작');
     
-    // 1. ìž˜ëª»ëœ ë¥˜ ì œê±°
+    // 1. 잘못된 류 제거
     if (validationResult.invalidClasses?.length > 0) {
       for (const invalidClass of validationResult.invalidClasses) {
         const classCode = invalidClass.class;
         
-        // recommendedClassesì—ì„œ ì œê±°
+        // recommendedClasses에서 제거
         const idx = aiAnalysis.recommendedClasses.indexOf(classCode);
         if (idx > -1) {
           aiAnalysis.recommendedClasses.splice(idx, 1);
         }
         
-        // classRecommendationsì—ì„œ ì œê±°
+        // classRecommendations에서 제거
         ['core', 'recommended', 'expansion'].forEach(cat => {
           if (aiAnalysis.classRecommendations?.[cat]) {
             aiAnalysis.classRecommendations[cat] = 
@@ -10037,15 +10037,15 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
           }
         });
         
-        // ê´€ë ¨ ë°ì´í„° ì œê±°
+        // 관련 데이터 제거
         delete aiAnalysis.classReasons?.[classCode];
         delete aiAnalysis.recommendedGoods?.[classCode];
         
-        console.log(`[TM] âœ— ì œ${classCode}ë¥˜ ì œê±°: ${invalidClass.reason}`);
+        console.log(`[TM] ✗ 제${classCode}류 제거: ${invalidClass.reason}`);
       }
     }
     
-    // 2. ìž˜ëª»ëœ ì§€ì •ìƒí’ˆ ì œê±°
+    // 2. 잘못된 지정상품 제거
     if (validationResult.invalidGoods?.length > 0) {
       for (const invalidGood of validationResult.invalidGoods) {
         const { classCode, goodsName } = invalidGood;
@@ -10057,23 +10057,23 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
           const after = aiAnalysis.recommendedGoods[classCode].length;
           
           if (before !== after) {
-            console.log(`[TM] âœ— ì œ${classCode}ë¥˜ "${goodsName}" ì œê±°: ${invalidGood.reason}`);
+            console.log(`[TM] ✗ 제${classCode}류 "${goodsName}" 제거: ${invalidGood.reason}`);
           }
         }
       }
     }
     
-    // 3. ëŒ€ì²´ ìƒí’ˆ ì¶”ê°€ (DBì—ì„œ ì¡°íšŒ)
+    // 3. 대체 상품 추가 (DB에서 조회)
     if (validationResult.replacementGoods?.length > 0) {
       for (const replacement of validationResult.replacementGoods) {
         const { classCode, addInstead, reason } = replacement;
         
-        // ì´ë¯¸ ìžˆëŠ”ì§€ í™•ì¸
+        // 이미 있는지 확인
         const existingGoods = aiAnalysis.recommendedGoods?.[classCode] || [];
         const alreadyExists = existingGoods.some(g => g.name === addInstead);
         
         if (!alreadyExists) {
-          // DBì—ì„œ í•´ë‹¹ ìƒí’ˆ ì¡°íšŒ
+          // DB에서 해당 상품 조회
           try {
             const { data } = await App.sb
               .from('gazetted_goods_cache')
@@ -10092,18 +10092,18 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
                 isReplacement: true,
                 reason: reason
               });
-              console.log(`[TM] âœ“ ì œ${classCode}ë¥˜ "${data[0].goods_name}" ëŒ€ì²´ ì¶”ê°€`);
+              console.log(`[TM] ✓ 제${classCode}류 "${data[0].goods_name}" 대체 추가`);
             }
           } catch (e) {
-            console.warn(`[TM] ëŒ€ì²´ ìƒí’ˆ ì¡°íšŒ ì‹¤íŒ¨: ${addInstead}`);
+            console.warn(`[TM] 대체 상품 조회 실패: ${addInstead}`);
           }
         }
       }
     }
     
-    console.log('[TM] ê²€ì¦ ê²°ê³¼ ì ìš© ì™„ë£Œ');
+    console.log('[TM] 검증 결과 적용 완료');
     
-    // 4. â˜…â˜…â˜… ì œê±° í›„ 10ê°œ ë¯¸ë§Œì¸ ë¥˜ì— ëŒ€í•´ ë³´ì¶© â˜…â˜…â˜…
+    // 4. ★★★ 제거 후 10개 미만인 류에 대해 보충 ★★★
     const allKeywords = aiAnalysis.searchKeywords || [];
     const analysisCtx = {
       businessSummary: aiAnalysis.businessAnalysis,
@@ -10120,13 +10120,13 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
       if (currentGoods.length >= 10) continue;
       
       const deficit = 10 - currentGoods.length;
-      console.log(`[TM] ì œ${classCode}ë¥˜ ê²€ì¦ í›„ ${currentGoods.length}ê°œ â†’ ${deficit}ê°œ ë³´ì¶© í•„ìš”`);
+      console.log(`[TM] 제${classCode}류 검증 후 ${currentGoods.length}개 → ${deficit}개 보충 필요`);
       
       try {
         const paddedCode = classCode.padStart(2, '0');
         const existingNames = new Set(currentGoods.map(g => g.name));
         
-        // DBì—ì„œ ì¶”ê°€ í›„ë³´ ì¡°íšŒ
+        // DB에서 추가 후보 조회
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
@@ -10148,16 +10148,16 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
             });
             added++;
           }
-          console.log(`[TM] ì œ${classCode}ë¥˜ ${added}ê°œ ë³´ì¶© â†’ ì´ ${aiAnalysis.recommendedGoods[classCode].length}ê°œ`);
+          console.log(`[TM] 제${classCode}류 ${added}개 보충 → 총 ${aiAnalysis.recommendedGoods[classCode].length}개`);
         }
       } catch (e) {
-        console.warn(`[TM] ì œ${classCode}ë¥˜ ë³´ì¶© ì‹¤íŒ¨:`, e.message);
+        console.warn(`[TM] 제${classCode}류 보충 실패:`, e.message);
       }
     }
   };
   
   // ================================================================
-  // ì‚¬ìš©ìž ìž…ë ¥ì—ì„œ í‚¤ì›Œë“œ ì¶”ì¶œ
+  // 사용자 입력에서 키워드 추출
   // ================================================================
   TM.extractKeywordsFromInput = function(input) {
     if (!input) return [];
@@ -10171,8 +10171,8 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
       seen.add(trimmed.toLowerCase());
     }
     
-    const words = input.replace(/[^\wê°€-íž£]/g, ' ').split(/\s+/).filter(w => w.length >= 2);
-    const suffixes = ['ì‚¬ì—…', 'ì—…', 'ì‚¬', 'ì„œë¹„ìŠ¤', 'íšŒì‚¬', 'ì—…ì²´'];
+    const words = input.replace(/[^\w가-힣]/g, ' ').split(/\s+/).filter(w => w.length >= 2);
+    const suffixes = ['사업', '업', '사', '서비스', '회사', '업체'];
     
     words.forEach(word => {
       if (!seen.has(word.toLowerCase())) {
@@ -10195,16 +10195,16 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
   };
   
   // ================================================================
-  // DBì—ì„œ ê³ ì‹œëª…ì¹­ ì¡°íšŒ (ì§ì ‘ ë§¤ì¹­ ìš°ì„ )
+  // DB에서 고시명칭 조회 (직접 매칭 우선)
   // ================================================================
   TM.fetchCandidatesWithSimilarGroups = async function(classCode, coreSimilarGroups, keywords) {
     const results = [];
     const seen = new Set();
     
-    console.log(`[TM] â•â•â•â• DB ê²€ìƒ‰: ì œ${classCode}ë¥˜ â•â•â•â•`);
-    console.log(`[TM] ê²€ìƒ‰ í‚¤ì›Œë“œ:`, keywords.slice(0, 5));
+    console.log(`[TM] ════ DB 검색: 제${classCode}류 ════`);
+    console.log(`[TM] 검색 키워드:`, keywords.slice(0, 5));
     
-    // 1. í‚¤ì›Œë“œ ê¸°ë°˜ ê²€ìƒ‰
+    // 1. 키워드 기반 검색
     for (const keyword of keywords.slice(0, 15)) {
       try {
         const { data, error } = await App.sb
@@ -10215,12 +10215,12 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
           .limit(50);
         
         if (error) {
-          console.warn(`[TM] í‚¤ì›Œë“œ ê²€ìƒ‰ ì˜¤ë¥˜ (${keyword}):`, error.message);
+          console.warn(`[TM] 키워드 검색 오류 (${keyword}):`, error.message);
           continue;
         }
         
         if (data && data.length > 0) {
-          console.log(`[TM] í‚¤ì›Œë“œ "${keyword}" â†’ ${data.length}ê±´`);
+          console.log(`[TM] 키워드 "${keyword}" → ${data.length}건`);
           
           data.forEach(item => {
             if (!seen.has(item.goods_name)) {
@@ -10229,17 +10229,17 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
               const nameLower = item.goods_name.toLowerCase();
               const kwLower = keyword.toLowerCase();
               
-              // ìš°ì„ ìˆœìœ„ ê³„ì‚°: ì§ì ‘ ë§¤ì¹­ > ì‹œìž‘ ë§¤ì¹­ > í¬í•¨ ë§¤ì¹­
+              // 우선순위 계산: 직접 매칭 > 시작 매칭 > 포함 매칭
               let priority = 3;
-              if (nameLower === kwLower || nameLower === kwLower + 'ì—…') {
-                priority = 0; // ìµœìš°ì„  (ë³€ë¦¬ â†’ ë³€ë¦¬ì—…)
+              if (nameLower === kwLower || nameLower === kwLower + '업') {
+                priority = 0; // 최우선 (변리 → 변리업)
               } else if (nameLower.startsWith(kwLower)) {
-                priority = 1; // ì‹œìž‘ ë§¤ì¹­
+                priority = 1; // 시작 매칭
               } else if (nameLower.includes(kwLower)) {
-                priority = 2; // í¬í•¨ ë§¤ì¹­
+                priority = 2; // 포함 매칭
               }
               
-              // í•µì‹¬ ìœ ì‚¬êµ° ì—¬ë¶€
+              // 핵심 유사군 여부
               const isCoreSG = coreSimilarGroups?.some(sg => 
                 item.similar_group_code?.includes(sg) || sg?.includes(item.similar_group_code)
               );
@@ -10256,13 +10256,13 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
           });
         }
       } catch (err) {
-        console.warn(`[TM] í‚¤ì›Œë“œ ê²€ìƒ‰ ì‹¤íŒ¨ (${keyword}):`, err.message);
+        console.warn(`[TM] 키워드 검색 실패 (${keyword}):`, err.message);
       }
     }
     
-    console.log(`[TM] í‚¤ì›Œë“œ ê²€ìƒ‰ ê²°ê³¼: ${results.length}ê±´`);
+    console.log(`[TM] 키워드 검색 결과: ${results.length}건`);
     
-    // 2. í•µì‹¬ ìœ ì‚¬êµ°ì½”ë“œë¡œ ì¶”ê°€ ê²€ìƒ‰
+    // 2. 핵심 유사군코드로 추가 검색
     if (coreSimilarGroups && coreSimilarGroups.length > 0) {
       for (const sgCode of coreSimilarGroups) {
         try {
@@ -10274,7 +10274,7 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
             .limit(30);
           
           if (data && data.length > 0) {
-            console.log(`[TM] ìœ ì‚¬êµ° "${sgCode}" â†’ ${data.length}ê±´`);
+            console.log(`[TM] 유사군 "${sgCode}" → ${data.length}건`);
             
             data.forEach(item => {
               if (!seen.has(item.goods_name)) {
@@ -10289,15 +10289,15 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
             });
           }
         } catch (err) {
-          // ë¬´ì‹œ
+          // 무시
         }
       }
     }
     
-    // 3. í›„ë³´ê°€ ë¶€ì¡±í•˜ë©´ í•´ë‹¹ ë¥˜ ì „ì²´ì—ì„œ ì¶”ê°€
+    // 3. 후보가 부족하면 해당 류 전체에서 추가
     if (results.length < 50) {
       try {
-        console.log(`[TM] í›„ë³´ ë¶€ì¡± (${results.length}ê±´), ì¶”ê°€ ì¡°íšŒ...`);
+        console.log(`[TM] 후보 부족 (${results.length}건), 추가 조회...`);
         
         const { data } = await App.sb
           .from('gazetted_goods_cache')
@@ -10319,32 +10319,32 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
           });
         }
       } catch (err) {
-        // ë¬´ì‹œ
+        // 무시
       }
     }
     
-    // â˜… ìš°ì„ ìˆœìœ„ìˆœ ì •ë ¬ (ì§ì ‘ ë§¤ì¹­ â†’ ì‹œìž‘ ë§¤ì¹­ â†’ í¬í•¨ ë§¤ì¹­ â†’ ê¸°íƒ€)
+    // ★ 우선순위순 정렬 (직접 매칭 → 시작 매칭 → 포함 매칭 → 기타)
     results.sort((a, b) => a.priority - b.priority);
     
-    console.log(`[TM] ì´ í›„ë³´: ${results.length}ê±´`);
+    console.log(`[TM] 총 후보: ${results.length}건`);
     if (results.length > 0) {
-      console.log(`[TM] ìƒìœ„ 5ê°œ: ${results.slice(0, 5).map(r => r.name).join(', ')}`);
+      console.log(`[TM] 상위 5개: ${results.slice(0, 5).map(r => r.name).join(', ')}`);
     }
     
     return results;
   };
   
   // ================================================================
-  // LLMì—ê²Œ ë²ˆí˜¸ë¡œë§Œ ì„ íƒí•˜ë„ë¡ ìš”ì²­ + ì§ì ‘ ë§¤ì¹­ ìƒí’ˆ ìžë™ í¬í•¨
+  // LLM에게 번호로만 선택하도록 요청 + 직접 매칭 상품 자동 포함
   // ================================================================
   TM.selectGoodsWithLLM = async function(classCode, candidates, businessText, coreActivity) {
     const MIN_GOODS = 10;
     const selected = [];
     const usedNames = new Set();
     
-    // â˜…â˜…â˜… 1. ì‚¬ìš©ìž ìž…ë ¥ê³¼ ì§ì ‘ ë§¤ì¹­ë˜ëŠ” ìƒí’ˆ ìžë™ í¬í•¨ (ìµœìš°ì„ ) â˜…â˜…â˜…
+    // ★★★ 1. 사용자 입력과 직접 매칭되는 상품 자동 포함 (최우선) ★★★
     const inputKeywords = TM.extractKeywordsFromInput(businessText);
-    console.log(`[TM] ì§ì ‘ ë§¤ì¹­ ê²€ìƒ‰ í‚¤ì›Œë“œ:`, inputKeywords);
+    console.log(`[TM] 직접 매칭 검색 키워드:`, inputKeywords);
     
     for (const keyword of inputKeywords) {
       const kwLower = keyword.toLowerCase();
@@ -10354,69 +10354,69 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
         
         const nameLower = c.name.toLowerCase();
         
-        // ì™„ì „ ì¼ì¹˜ ë˜ëŠ” "í‚¤ì›Œë“œ+ì—…" íŒ¨í„´ (ë³€ë¦¬ â†’ ë³€ë¦¬ì—…)
+        // 완전 일치 또는 "키워드+업" 패턴 (변리 → 변리업)
         if (nameLower === kwLower || 
-            nameLower === kwLower + 'ì—…' ||
-            nameLower === kwLower + 'ì‚¬ì—…' ||
+            nameLower === kwLower + '업' ||
+            nameLower === kwLower + '사업' ||
             nameLower.startsWith(kwLower + ' ') ||
-            nameLower.startsWith(kwLower + 'ì—…') ||
+            nameLower.startsWith(kwLower + '업') ||
             (nameLower.includes(kwLower) && nameLower.length <= kwLower.length + 5)) {
           
-          console.log(`[TM] â˜… ì§ì ‘ ë§¤ì¹­: "${keyword}" â†’ "${c.name}"`);
+          console.log(`[TM] ★ 직접 매칭: "${keyword}" → "${c.name}"`);
           usedNames.add(c.name);
           selected.push({
             name: c.name,
             similarGroup: c.similarGroup,
             isCore: true,
-            reason: `"${keyword}" ì§ì ‘ ë§¤ì¹­`
+            reason: `"${keyword}" 직접 매칭`
           });
-          break; // í‚¤ì›Œë“œë‹¹ 1ê°œë§Œ
+          break; // 키워드당 1개만
         }
       }
     }
     
-    console.log(`[TM] ì§ì ‘ ë§¤ì¹­ ê²°ê³¼: ${selected.length}ê°œ`);
+    console.log(`[TM] 직접 매칭 결과: ${selected.length}개`);
     
-    // ì´ë¯¸ 10ê°œë©´ ë°˜í™˜
+    // 이미 10개면 반환
     if (selected.length >= MIN_GOODS) {
       return selected.slice(0, MIN_GOODS);
     }
     
-    // â˜…â˜…â˜… 2. LLM ì„ íƒ (ë²ˆí˜¸ë¡œë§Œ ì‘ë‹µ) â˜…â˜…â˜…
+    // ★★★ 2. LLM 선택 (번호로만 응답) ★★★
     const remainingCandidates = candidates.filter(c => !usedNames.has(c.name));
     
     if (remainingCandidates.length > 0) {
       const numberedList = remainingCandidates.slice(0, 50).map((c, i) => 
-        `[${i + 1}] ${c.name} (${c.similarGroup || '?'})${c.fromCoreSG ? ' â˜…' : ''}`
+        `[${i + 1}] ${c.name} (${c.similarGroup || '?'})${c.fromCoreSG ? ' ★' : ''}`
       ).join('\n');
       
-      const selectPrompt = `ì‚¬ì—…: ${businessText}
+      const selectPrompt = `사업: ${businessText}
 
-ã€ì œ${classCode}ë¥˜ ê³ ì‹œëª…ì¹­ã€‘
+【제${classCode}류 고시명칭】
 ${numberedList}
 
-ìœ„ ëª©ë¡ì—ì„œ ì‚¬ì—…ê³¼ ê´€ë ¨ëœ ${MIN_GOODS - selected.length}ê°œë¥¼ ì„ íƒí•˜ì„¸ìš”.
-â˜… í‘œì‹œëŠ” í•µì‹¬ ìœ ì‚¬êµ°ìž…ë‹ˆë‹¤.
+위 목록에서 사업과 관련된 ${MIN_GOODS - selected.length}개를 선택하세요.
+★ 표시는 핵심 유사군입니다.
 
-ì‘ë‹µ: ìˆ«ìžë§Œ ì‰¼í‘œë¡œ (ì˜ˆ: 1,2,3,4,5)
-ì„ íƒ:`;
+응답: 숫자만 쉼표로 (예: 1,2,3,4,5)
+선택:`;
 
       try {
         const response = await App.callClaude(selectPrompt, 200);
         const responseText = (response.text || '').trim();
         
-        console.log(`[TM] LLM ì‘ë‹µ: "${responseText.substring(0, 80)}..."`);
+        console.log(`[TM] LLM 응답: "${responseText.substring(0, 80)}..."`);
         
-        // ë²ˆí˜¸ íŒŒì‹±
+        // 번호 파싱
         const numbers = responseText
           .replace(/[^\d,\s]/g, '')
           .split(/[,\s]+/)
           .map(n => parseInt(n.trim()))
           .filter(n => !isNaN(n) && n >= 1 && n <= remainingCandidates.length);
         
-        console.log(`[TM] íŒŒì‹±ëœ ë²ˆí˜¸: ${numbers.length}ê°œ`);
+        console.log(`[TM] 파싱된 번호: ${numbers.length}개`);
         
-        // ë²ˆí˜¸ë¡œ ìƒí’ˆ ì¶”ê°€
+        // 번호로 상품 추가
         const usedIndices = new Set();
         for (const num of numbers) {
           if (selected.length >= MIN_GOODS) break;
@@ -10434,13 +10434,13 @@ ${numberedList}
           }
         }
       } catch (err) {
-        console.warn('[TM] LLM ì„ íƒ ì‹¤íŒ¨:', err.message);
+        console.warn('[TM] LLM 선택 실패:', err.message);
       }
     }
     
-    // â˜…â˜…â˜… 3. ë¶€ì¡±í•˜ë©´ ìš°ì„ ìˆœìœ„ìˆœ ë³´ì¶© â˜…â˜…â˜…
+    // ★★★ 3. 부족하면 우선순위순 보충 ★★★
     if (selected.length < MIN_GOODS) {
-      console.log(`[TM] ${MIN_GOODS - selected.length}ê°œ ë³´ì¶© í•„ìš”`);
+      console.log(`[TM] ${MIN_GOODS - selected.length}개 보충 필요`);
       
       for (const c of candidates) {
         if (selected.length >= MIN_GOODS) break;
@@ -10455,19 +10455,19 @@ ${numberedList}
       }
     }
     
-    console.log(`[TM] ì œ${classCode}ë¥˜ ìµœì¢…: ${selected.length}ê°œ`);
+    console.log(`[TM] 제${classCode}류 최종: ${selected.length}개`);
     if (selected.length > 0) {
-      console.log(`[TM]   â†’ ${selected.slice(0, 3).map(s => s.name).join(', ')}...`);
+      console.log(`[TM]   → ${selected.slice(0, 3).map(s => s.name).join(', ')}...`);
     }
     
     return selected.slice(0, MIN_GOODS);
   };
   
-  // ìœ ì‚¬êµ°ì½”ë“œ ì»¤ë²„ë¦¬ì§€ ìµœì í™” ì„ íƒ
+  // 유사군코드 커버리지 최적화 선택
   TM.optimizeSimilarCodeCoverage = function(candidates, targetCount = 10, options = {}) {
     const { minPerCode = 1, maxPerCode = 2, priorityCodes = [] } = options;
     
-    // 1. ìœ ì‚¬êµ°ì½”ë“œë³„ ê·¸ë£¹í•‘
+    // 1. 유사군코드별 그룹핑
     const groupedByCode = {};
     candidates.forEach(c => {
       const code = c.similar_group_code || 'UNKNOWN';
@@ -10475,7 +10475,7 @@ ${numberedList}
       groupedByCode[code].push(c);
     });
     
-    // 2. ìœ ì‚¬êµ°ì½”ë“œ ì •ë ¬ (ìš°ì„ ìˆœìœ„ ì½”ë“œ ë¨¼ì €, ê·¸ ë‹¤ìŒ ìµœê³ ì ìˆ˜ ìˆœ)
+    // 2. 유사군코드 정렬 (우선순위 코드 먼저, 그 다음 최고점수 순)
     const codeList = Object.keys(groupedByCode).sort((a, b) => {
       const aPriority = priorityCodes.includes(a) ? 1 : 0;
       const bPriority = priorityCodes.includes(b) ? 1 : 0;
@@ -10489,7 +10489,7 @@ ${numberedList}
     const selectedGoods = [];
     const usedCodes = new Map(); // code -> count
     
-    // 3. ë¼ìš´ë“œ 1: ê° ìœ ì‚¬êµ°ì½”ë“œì—ì„œ ìµœì†Œ minPerCodeê°œ ì„ íƒ
+    // 3. 라운드 1: 각 유사군코드에서 최소 minPerCode개 선택
     for (const code of codeList) {
       if (selectedGoods.length >= targetCount) break;
       
@@ -10503,13 +10503,13 @@ ${numberedList}
           score: sorted[i].score,
           fitScore: sorted[i].fitScore,
           isCore: priorityCodes.includes(code) || sorted[i].score > 2,
-          source: 'gazetted' // ê³ ì‹œëª…ì¹­
+          source: 'gazetted' // 고시명칭
         });
         usedCodes.set(code, (usedCodes.get(code) || 0) + 1);
       }
     }
     
-    // 4. ë¼ìš´ë“œ 2: ê³ ë“ì  í•­ëª© ì¶”ê°€ (targetCountê¹Œì§€)
+    // 4. 라운드 2: 고득점 항목 추가 (targetCount까지)
     if (selectedGoods.length < targetCount) {
       const remaining = candidates
         .filter(c => !selectedGoods.some(s => s.name === c.goods_name))
@@ -10521,7 +10521,7 @@ ${numberedList}
         const code = c.similar_group_code || 'UNKNOWN';
         const codeCount = usedCodes.get(code) || 0;
         
-        // ê°™ì€ ì½”ë“œì—ì„œ maxPerCode ì´ˆê³¼ ì‹œ ìŠ¤í‚µ (ë‹¤ì–‘ì„± í™•ë³´)
+        // 같은 코드에서 maxPerCode 초과 시 스킵 (다양성 확보)
         if (codeCount >= maxPerCode) continue;
         
         selectedGoods.push({
@@ -10536,63 +10536,63 @@ ${numberedList}
       }
     }
     
-    // 5. ì»¤ë²„ë¦¬ì§€ í†µê³„ ìƒì„±
+    // 5. 커버리지 통계 생성
     const coverageStats = {
       totalSelected: selectedGoods.length,
       uniqueCodes: usedCodes.size,
       codeDistribution: Object.fromEntries(usedCodes)
     };
     
-    console.log(`[TM] ì»¤ë²„ë¦¬ì§€ ìµœì í™”: ${selectedGoods.length}ê°œ ì„ íƒ, ${usedCodes.size}ê°œ ìœ ì‚¬êµ° ì»¤ë²„`);
+    console.log(`[TM] 커버리지 최적화: ${selectedGoods.length}개 선택, ${usedCodes.size}개 유사군 커버`);
     
     return { selectedGoods, coverageStats };
   };
   
   // ============================================================
-  // ë¹„ê³ ì‹œëª…ì¹­ ì²˜ë¦¬ (ì‚¬ìš©ìž ì§ì ‘ ìž…ë ¥)
-  // - í‘œì¤€ëª…ì¹­ ë§¤í•‘
-  // - ìœ ì‚¬êµ°ì½”ë“œ ì¶”ì •
-  // - ë¦¬ìŠ¤í¬ ê²½ê³ 
+  // 비고시명칭 처리 (사용자 직접 입력)
+  // - 표준명칭 매핑
+  // - 유사군코드 추정
+  // - 리스크 경고
   // ============================================================
   
   TM.processCustomTerm = async function(rawTerm, classCode) {
     if (!rawTerm || rawTerm.trim().length < 2) {
-      return { error: 'ì§€ì •ìƒí’ˆëª…ì„ 2ìž ì´ìƒ ìž…ë ¥í•´ì£¼ì„¸ìš”.' };
+      return { error: '지정상품명을 2자 이상 입력해주세요.' };
     }
     
     const normalizedTerm = TM.normalizeCustomTerm(rawTerm);
-    console.log(`[TM] ë¹„ê³ ì‹œëª…ì¹­ ì²˜ë¦¬: "${rawTerm}" â†’ "${normalizedTerm}"`);
+    console.log(`[TM] 비고시명칭 처리: "${rawTerm}" → "${normalizedTerm}"`);
     
-    // 1. í‘œì¤€ëª…ì¹­(ê³ ì‹œëª…ì¹­) ë§¤í•‘ ê²€ìƒ‰
+    // 1. 표준명칭(고시명칭) 매핑 검색
     const mappingResults = await TM.findSimilarGazettedTerms(normalizedTerm, classCode);
     
-    // 2. ì‹ ë¢°ë„ ê³„ì‚°
+    // 2. 신뢰도 계산
     const confidence = mappingResults.length > 0 ? mappingResults[0].similarity : 0;
     
-    // 3. ìœ ì‚¬êµ°ì½”ë“œ ì¶”ì •
+    // 3. 유사군코드 추정
     let estimatedSimilarGroup = null;
     if (mappingResults.length > 0 && mappingResults[0].similarity >= 0.5) {
       estimatedSimilarGroup = mappingResults[0].similar_group_code;
     }
     
-    // 4. ë¦¬ìŠ¤í¬ ë¶„ì„
+    // 4. 리스크 분석
     const riskAnalysis = TM.analyzeCustomTermRisk(normalizedTerm, confidence);
     
-    // 5. ì²˜ë¦¬ ê¶Œìž¥ì‚¬í•­ ê²°ì •
+    // 5. 처리 권장사항 결정
     let recommendation = '';
     let status = 'warning';
     
     if (confidence >= 0.80) {
-      recommendation = `í‘œì¤€ëª…ì¹­ "${mappingResults[0].goods_name}"ìœ¼ë¡œ ëŒ€ì²´ë¥¼ ê°•ë ¥ ê¶Œìž¥í•©ë‹ˆë‹¤.`;
+      recommendation = `표준명칭 "${mappingResults[0].goods_name}"으로 대체를 강력 권장합니다.`;
       status = 'replace_recommended';
     } else if (confidence >= 0.60) {
-      recommendation = 'ë¹„ê³ ì‹œëª…ì¹­ ìœ ì§€ ê°€ëŠ¥í•˜ë‚˜, ë³´ì • ìš”ì²­ ê°€ëŠ¥ì„±ì´ ìžˆìŠµë‹ˆë‹¤. í‘œì¤€ëª…ì¹­ ë³‘ê¸°ë¥¼ ê¶Œìž¥í•©ë‹ˆë‹¤.';
+      recommendation = '비고시명칭 유지 가능하나, 보정 요청 가능성이 있습니다. 표준명칭 병기를 권장합니다.';
       status = 'usable_with_warning';
     } else if (confidence >= 0.40) {
-      recommendation = 'í‘œì¤€ëª…ì¹­ê³¼ ë§¤ì¹­ì´ ë‚®ìŠµë‹ˆë‹¤. ì‹¬ì‚¬ ì‹œ ê±°ì ˆ ë˜ëŠ” ë³´ì • ê°€ëŠ¥ì„±ì´ ë†’ìŠµë‹ˆë‹¤.';
+      recommendation = '표준명칭과 매칭이 낮습니다. 심사 시 거절 또는 보정 가능성이 높습니다.';
       status = 'high_risk';
     } else {
-      recommendation = 'ë§¤ì¹­ë˜ëŠ” í‘œì¤€ëª…ì¹­ì„ ì°¾ê¸° ì–´ë µìŠµë‹ˆë‹¤. ëª…ì¹­ ìž¬ê²€í† ë¥¼ ê¶Œìž¥í•©ë‹ˆë‹¤.';
+      recommendation = '매칭되는 표준명칭을 찾기 어렵습니다. 명칭 재검토를 권장합니다.';
       status = 'very_high_risk';
     }
     
@@ -10601,30 +10601,30 @@ ${numberedList}
       normalizedTerm: normalizedTerm,
       confidence: confidence,
       estimatedSimilarGroup: estimatedSimilarGroup,
-      mappingCandidates: mappingResults.slice(0, 3), // ìƒìœ„ 3ê°œ
+      mappingCandidates: mappingResults.slice(0, 3), // 상위 3개
       riskAnalysis: riskAnalysis,
       recommendation: recommendation,
       status: status,
-      isGazetted: false, // ë¹„ê³ ì‹œëª…ì¹­
-      feeNote: 'ë¹„ê³ ì‹œëª…ì¹­ ì‚¬ìš© ì‹œ ë¥˜ë‹¹ +6,000ì› (52,000ì›/ë¥˜)'
+      isGazetted: false, // 비고시명칭
+      feeNote: '비고시명칭 사용 시 류당 +6,000원 (52,000원/류)'
     };
   };
   
-  // ë¹„ê³ ì‹œëª…ì¹­ ì •ê·œí™”
+  // 비고시명칭 정규화
   TM.normalizeCustomTerm = function(rawTerm) {
     let term = rawTerm.trim();
     
-    // 1. ë¶ˆí•„ìš”í•œ ë¬¸ìž ì œê±°
+    // 1. 불필요한 문자 제거
     term = term.replace(/[""'']/g, '');
     term = term.replace(/\s+/g, ' ');
     
-    // 2. ì„œë¹„ìŠ¤ì—… í‘œê¸° í†µì¼
-    if (!term.endsWith('ì—…') && !term.endsWith('í’ˆ') && !term.endsWith('ê¸°') && !term.endsWith('ê¸°ê¸°')) {
-      // í–‰ìœ„ì„± ëª…ì‚¬ë¡œ ëë‚˜ë©´ 'ì—…' ì¶”ê°€ ê¶Œìž¥
-      const serviceEndings = ['ì„œë¹„ìŠ¤', 'ì œê³µ', 'ì¤‘ê°œ', 'ëŒ€í–‰', 'ì»¨ì„¤íŒ…', 'êµìœ¡', 'íŒë§¤', 'ê°œë°œ'];
+    // 2. 서비스업 표기 통일
+    if (!term.endsWith('업') && !term.endsWith('품') && !term.endsWith('기') && !term.endsWith('기기')) {
+      // 행위성 명사로 끝나면 '업' 추가 권장
+      const serviceEndings = ['서비스', '제공', '중개', '대행', '컨설팅', '교육', '판매', '개발'];
       for (const ending of serviceEndings) {
         if (term.endsWith(ending)) {
-          term = term + 'ì—…';
+          term = term + '업';
           break;
         }
       }
@@ -10633,14 +10633,14 @@ ${numberedList}
     return term;
   };
   
-  // ìœ ì‚¬ ê³ ì‹œëª…ì¹­ ê²€ìƒ‰ (í…ìŠ¤íŠ¸ ìœ ì‚¬ë„ ê¸°ë°˜)
+  // 유사 고시명칭 검색 (텍스트 유사도 기반)
   TM.findSimilarGazettedTerms = async function(term, classCode) {
     const results = [];
     const termLower = term.toLowerCase();
     const termWords = termLower.split(/[\s,/]+/).filter(w => w.length > 1);
     
     try {
-      // 1. ë¶€ë¶„ ì¼ì¹˜ ê²€ìƒ‰
+      // 1. 부분 일치 검색
       const searchPromises = termWords.slice(0, 5).map(word =>
         App.sb
           .from('gazetted_goods_cache')
@@ -10659,23 +10659,23 @@ ${numberedList}
             if (!seen.has(item.goods_name)) {
               seen.add(item.goods_name);
               
-              // ìœ ì‚¬ë„ ê³„ì‚° (ë‹¨ìˆœ ë‹¨ì–´ ê²¹ì¹¨ ê¸°ë°˜)
+              // 유사도 계산 (단순 단어 겹침 기반)
               const gazettedLower = item.goods_name.toLowerCase();
               const gazettedWords = gazettedLower.split(/[\s,/]+/).filter(w => w.length > 1);
               
-              // Jaccard ìœ ì‚¬ë„ + ë¶€ë¶„ ì¼ì¹˜ ë³´ë„ˆìŠ¤
+              // Jaccard 유사도 + 부분 일치 보너스
               const intersection = termWords.filter(w => 
                 gazettedWords.some(gw => gw.includes(w) || w.includes(gw))
               ).length;
               const union = new Set([...termWords, ...gazettedWords]).size;
               let similarity = union > 0 ? intersection / union : 0;
               
-              // ì™„ì „ í¬í•¨ ë³´ë„ˆìŠ¤
+              // 완전 포함 보너스
               if (gazettedLower.includes(termLower) || termLower.includes(gazettedLower)) {
                 similarity += 0.3;
               }
               
-              // ì‹œìž‘ ì¼ì¹˜ ë³´ë„ˆìŠ¤
+              // 시작 일치 보너스
               if (gazettedLower.startsWith(termLower.substring(0, 3))) {
                 similarity += 0.1;
               }
@@ -10692,58 +10692,58 @@ ${numberedList}
         }
       });
       
-      // 2. ìœ ì‚¬ë„ ìˆœ ì •ë ¬
+      // 2. 유사도 순 정렬
       results.sort((a, b) => b.similarity - a.similarity);
       
     } catch (err) {
-      console.error('[TM] ìœ ì‚¬ ëª…ì¹­ ê²€ìƒ‰ ì‹¤íŒ¨:', err);
+      console.error('[TM] 유사 명칭 검색 실패:', err);
     }
     
     return results.slice(0, 10);
   };
   
-  // ë¹„ê³ ì‹œëª…ì¹­ ë¦¬ìŠ¤í¬ ë¶„ì„
+  // 비고시명칭 리스크 분석
   TM.analyzeCustomTermRisk = function(term, confidence) {
     const risks = [];
     const warnings = [];
     
-    // 1. ê³¼í¬ê´„ ìš©ì–´ ì²´í¬
-    const broadTerms = ['ì¼ë°˜', 'ì¢…í•©', 'ì „ë°˜', 'ëª¨ë“ ', 'ê°ì¢…', 'ê¸°íƒ€'];
+    // 1. 과포괄 용어 체크
+    const broadTerms = ['일반', '종합', '전반', '모든', '각종', '기타'];
     broadTerms.forEach(bt => {
       if (term.includes(bt)) {
-        risks.push(`"${bt}" - ê³¼í¬ê´„ ìš©ì–´ë¡œ ë³´ì • ìš”ì²­ ê°€ëŠ¥ì„±`);
+        risks.push(`"${bt}" - 과포괄 용어로 보정 요청 가능성`);
       }
     });
     
-    // 2. ë¶ˆëª…í™• í‘œí˜„ ì²´í¬
-    const vagueTerms = ['ë“±', 'ë°', 'ê´€ë ¨', 'ê¸°ë°˜'];
+    // 2. 불명확 표현 체크
+    const vagueTerms = ['등', '및', '관련', '기반'];
     vagueTerms.forEach(vt => {
       if (term.includes(vt) && term.split(vt).length > 2) {
-        warnings.push(`"${vt}" ë‹¤ìˆ˜ ì‚¬ìš© - ëª…í™•ì„± ê²€í†  í•„ìš”`);
+        warnings.push(`"${vt}" 다수 사용 - 명확성 검토 필요`);
       }
     });
     
-    // 3. ì„œë¹„ìŠ¤/ìƒí’ˆ êµ¬ë¶„ ì²´í¬
-    const isService = term.endsWith('ì—…') || term.endsWith('ì„œë¹„ìŠ¤');
-    const isGoods = term.endsWith('í’ˆ') || term.endsWith('ê¸°') || term.endsWith('ê¸°ê¸°') || term.endsWith('ìž¥ì¹˜');
+    // 3. 서비스/상품 구분 체크
+    const isService = term.endsWith('업') || term.endsWith('서비스');
+    const isGoods = term.endsWith('품') || term.endsWith('기') || term.endsWith('기기') || term.endsWith('장치');
     
     if (!isService && !isGoods) {
-      warnings.push('ì„œë¹„ìŠ¤ì—…(~ì—…)ì¸ì§€ ìƒí’ˆ(~í’ˆ, ~ê¸°)ì¸ì§€ ëª…í™•ížˆ í‘œê¸° ê¶Œìž¥');
+      warnings.push('서비스업(~업)인지 상품(~품, ~기)인지 명확히 표기 권장');
     }
     
-    // 4. ì˜ë¬¸ í˜¼ìš© ì²´í¬
-    if (/[a-zA-Z]/.test(term) && /[ê°€-íž£]/.test(term)) {
-      warnings.push('í•œê¸€/ì˜ë¬¸ í˜¼ìš© - ì‹¬ì‚¬ ì‹œ ëª…í™•ì„± ì´ìŠˆ ê°€ëŠ¥');
+    // 4. 영문 혼용 체크
+    if (/[a-zA-Z]/.test(term) && /[가-힣]/.test(term)) {
+      warnings.push('한글/영문 혼용 - 심사 시 명확성 이슈 가능');
     }
     
-    // 5. ê¸¸ì´ ì²´í¬
+    // 5. 길이 체크
     if (term.length > 30) {
-      warnings.push('ëª…ì¹­ì´ ê¸¸ì–´ ì‹¬ì‚¬ ì‹œ ì¶•ì•½ ìš”ì²­ ê°€ëŠ¥ì„±');
+      warnings.push('명칭이 길어 심사 시 축약 요청 가능성');
     }
     
-    // 6. ì‹ ë¢°ë„ ê¸°ë°˜ ì¶”ê°€ ë¦¬ìŠ¤í¬
+    // 6. 신뢰도 기반 추가 리스크
     if (confidence < 0.40) {
-      risks.push('í‘œì¤€ëª…ì¹­ê³¼ ë§¤ì¹­ë„ ë‚®ìŒ - ê±°ì ˆ ê°€ëŠ¥ì„± ë†’ìŒ');
+      risks.push('표준명칭과 매칭도 낮음 - 거절 가능성 높음');
     }
     
     return {
@@ -10753,15 +10753,15 @@ ${numberedList}
     };
   };
   
-  // ë¹„ê³ ì‹œëª…ì¹­ì„ í”„ë¡œì íŠ¸ì— ì¶”ê°€
+  // 비고시명칭을 프로젝트에 추가
   TM.addCustomTermToProject = async function(classCode, customTermResult) {
     const p = TM.currentProject;
     
-    // í•´ë‹¹ ë¥˜ì˜ ì§€ì •ìƒí’ˆ ë°°ì—´ ì°¾ê¸°
+    // 해당 류의 지정상품 배열 찾기
     let classData = p.designatedGoods.find(g => g.classCode === classCode);
     
     if (!classData) {
-      // í•´ë‹¹ ë¥˜ê°€ ì—†ìœ¼ë©´ ì¶”ê°€
+      // 해당 류가 없으면 추가
       classData = {
         classCode: classCode,
         goods: [],
@@ -10770,18 +10770,18 @@ ${numberedList}
       p.designatedGoods.push(classData);
     }
     
-    // ì¤‘ë³µ ì²´í¬
+    // 중복 체크
     if (classData.goods.some(g => g.name === customTermResult.normalizedTerm)) {
-      App.showToast('ì´ë¯¸ ì¶”ê°€ëœ ì§€ì •ìƒí’ˆìž…ë‹ˆë‹¤.', 'warning');
+      App.showToast('이미 추가된 지정상품입니다.', 'warning');
       return false;
     }
     
-    // ë¹„ê³ ì‹œëª…ì¹­ ì¶”ê°€
+    // 비고시명칭 추가
     classData.goods.push({
       name: customTermResult.normalizedTerm,
-      similarGroup: customTermResult.estimatedSimilarGroup || '(ì¶”ì •í•„ìš”)',
+      similarGroup: customTermResult.estimatedSimilarGroup || '(추정필요)',
       isGazetted: false,
-      isCustom: true, // ì‚¬ìš©ìž ì§ì ‘ ìž…ë ¥ í‘œì‹œ
+      isCustom: true, // 사용자 직접 입력 표시
       confidence: customTermResult.confidence,
       mappingCandidates: customTermResult.mappingCandidates,
       riskLevel: customTermResult.riskAnalysis.riskLevel
@@ -10789,10 +10789,10 @@ ${numberedList}
     
     classData.goodsCount = classData.goods.length;
     
-    // ë¹„ê³ ì‹œëª…ì¹­ ì‚¬ìš© ì‹œ gazettedOnly í•´ì œ
+    // 비고시명칭 사용 시 gazettedOnly 해제
     if (p.gazettedOnly) {
       p.gazettedOnly = false;
-      App.showToast('ë¹„ê³ ì‹œëª…ì¹­ ì¶”ê°€ë¡œ "ë¹„ê³ ì‹œ í—ˆìš©" ëª¨ë“œë¡œ ë³€ê²½ë˜ì—ˆìŠµë‹ˆë‹¤.', 'info');
+      App.showToast('비고시명칭 추가로 "비고시 허용" 모드로 변경되었습니다.', 'info');
     }
     
     TM.hasUnsavedChanges = true;
@@ -10800,7 +10800,7 @@ ${numberedList}
     return true;
   };
   
-  // ë¹„ê³ ì‹œëª…ì¹­ ì‚­ì œ
+  // 비고시명칭 삭제
   TM.removeCustomTerm = function(classCode, termName) {
     const p = TM.currentProject;
     const classData = p.designatedGoods.find(g => g.classCode === classCode);
@@ -10813,29 +10813,29 @@ ${numberedList}
       classData.goodsCount = classData.goods.length;
       TM.hasUnsavedChanges = true;
       
-      App.showToast(`ë¹„ê³ ì‹œëª…ì¹­ "${termName}" ì‚­ì œë¨`, 'info');
+      App.showToast(`비고시명칭 "${termName}" 삭제됨`, 'info');
       TM.renderCurrentStep();
     }
   };
   
-  // ë¹„ê³ ì‹œëª…ì¹­ì„ í‘œì¤€ëª…ì¹­ìœ¼ë¡œ ëŒ€ì²´
+  // 비고시명칭을 표준명칭으로 대체
   TM.replaceCustomTerm = async function(classCode, oldTerm, newTerm) {
     const p = TM.currentProject;
     const classData = p.designatedGoods.find(g => g.classCode === classCode);
     
     if (!classData) return;
     
-    // ê¸°ì¡´ ë¹„ê³ ì‹œëª…ì¹­ ì°¾ê¸°
+    // 기존 비고시명칭 찾기
     const idx = classData.goods.findIndex(g => g.name === oldTerm && g.isCustom);
     if (idx === -1) return;
     
-    // ìƒˆ í‘œì¤€ëª…ì¹­ì´ ì´ë¯¸ ìžˆëŠ”ì§€ í™•ì¸
+    // 새 표준명칭이 이미 있는지 확인
     if (classData.goods.some(g => g.name === newTerm)) {
-      // ê¸°ì¡´ ë¹„ê³ ì‹œëª…ì¹­ë§Œ ì‚­ì œ
+      // 기존 비고시명칭만 삭제
       classData.goods.splice(idx, 1);
-      App.showToast(`"${oldTerm}" ì‚­ì œë¨ (í‘œì¤€ëª…ì¹­ "${newTerm}"ì´ ì´ë¯¸ ìžˆìŒ)`, 'info');
+      App.showToast(`"${oldTerm}" 삭제됨 (표준명칭 "${newTerm}"이 이미 있음)`, 'info');
     } else {
-      // DBì—ì„œ í‘œì¤€ëª…ì¹­ ì •ë³´ ì¡°íšŒ
+      // DB에서 표준명칭 정보 조회
       try {
         const { data } = await App.sb
           .from('gazetted_goods_cache')
@@ -10845,22 +10845,22 @@ ${numberedList}
           .limit(1);
         
         if (data && data.length > 0) {
-          // í‘œì¤€ëª…ì¹­ìœ¼ë¡œ ëŒ€ì²´
+          // 표준명칭으로 대체
           classData.goods[idx] = {
             name: data[0].goods_name,
             similarGroup: data[0].similar_group_code,
             isGazetted: true,
             isCustom: false
           };
-          App.showToast(`"${oldTerm}" â†’ "${newTerm}" ëŒ€ì²´ë¨ (í‘œì¤€ëª…ì¹­)`, 'success');
+          App.showToast(`"${oldTerm}" → "${newTerm}" 대체됨 (표준명칭)`, 'success');
         } else {
-          // DBì— ì—†ìœ¼ë©´ ê·¸ëƒ¥ ì´ë¦„ë§Œ ë³€ê²½
+          // DB에 없으면 그냥 이름만 변경
           classData.goods[idx].name = newTerm;
           classData.goods[idx].isCustom = false;
-          App.showToast(`"${oldTerm}" â†’ "${newTerm}" ë³€ê²½ë¨`, 'info');
+          App.showToast(`"${oldTerm}" → "${newTerm}" 변경됨`, 'info');
         }
       } catch (err) {
-        console.error('[TM] í‘œì¤€ëª…ì¹­ ì¡°íšŒ ì‹¤íŒ¨:', err);
+        console.error('[TM] 표준명칭 조회 실패:', err);
         classData.goods[idx].name = newTerm;
       }
     }
@@ -10871,78 +10871,78 @@ ${numberedList}
   };
 
   // ============================================================
-  // 2. ë¹„ì—”ë‚˜ ì½”ë“œ ë¶„ì„ (ë„í˜• ìƒí‘œìš©)
+  // 2. 비엔나 코드 분석 (도형 상표용)
   // ============================================================
   
   TM.analyzeViennaCode = async function() {
     const p = TM.currentProject;
     
     if (!p.specimenUrl && p.trademarkType !== 'figure' && p.trademarkType !== 'combined') {
-      App.showToast('ë„í˜• ìƒí‘œ ì´ë¯¸ì§€ë¥¼ ë¨¼ì € ì—…ë¡œë“œí•˜ì„¸ìš”.', 'warning');
+      App.showToast('도형 상표 이미지를 먼저 업로드하세요.', 'warning');
       return;
     }
     
     try {
-      App.showToast('ë¹„ì—”ë‚˜ ì½”ë“œ ë¶„ì„ ì¤‘...', 'info');
+      App.showToast('비엔나 코드 분석 중...', 'info');
       
-      // ì´ë¯¸ì§€ê°€ ìžˆìœ¼ë©´ ì´ë¯¸ì§€ ê¸°ë°˜ ë¶„ì„, ì—†ìœ¼ë©´ ìƒí‘œëª… ê¸°ë°˜
+      // 이미지가 있으면 이미지 기반 분석, 없으면 상표명 기반
       let prompt;
       
       if (p.specimenUrl) {
-        prompt = `ë‹¹ì‹ ì€ ìƒí‘œ ë„í˜• ë¶„ë¥˜ ì „ë¬¸ê°€ìž…ë‹ˆë‹¤. 
-ì´ ìƒí‘œ ì´ë¯¸ì§€ë¥¼ ë¶„ì„í•˜ì—¬ ì ì ˆí•œ ë¹„ì—”ë‚˜ ë„í˜• ë¶„ë¥˜ ì½”ë“œë¥¼ ì¶”ì²œí•˜ì„¸ìš”.
+        prompt = `당신은 상표 도형 분류 전문가입니다. 
+이 상표 이미지를 분석하여 적절한 비엔나 도형 분류 코드를 추천하세요.
 
-[ìƒí‘œ ì •ë³´]
-- ìƒí‘œëª…: ${p.trademarkName || '(ë¯¸ìž…ë ¥)'}
-- ìƒí‘œ ìœ í˜•: ${TM.getTypeLabel(p.trademarkType)}
-- ì´ë¯¸ì§€ URL: ${p.specimenUrl}
+[상표 정보]
+- 상표명: ${p.trademarkName || '(미입력)'}
+- 상표 유형: ${TM.getTypeLabel(p.trademarkType)}
+- 이미지 URL: ${p.specimenUrl}
 
-ë¹„ì—”ë‚˜ ë¶„ë¥˜ ì²´ê³„ì˜ ì£¼ìš” ëŒ€ë¶„ë¥˜:
-- 01: ì²œì²´, ìžì—°í˜„ìƒ, ì§€ë„
-- 02: ì¸ì²´
-- 03: ë™ë¬¼
-- 04: ì´ˆìžì—°ì  ì¡´ìž¬, í™˜ìƒì  ì¡´ìž¬
-- 05: ì‹ë¬¼
-- 06: í’ê²½
-- 07: ê±´ì¶•ë¬¼, ê´‘ê³  êµ¬ì¶•ë¬¼
-- 08: ì‹í’ˆ
-- 09: ì„¬ìœ , ì˜ë³µ, ë°”ëŠì§ˆ ìš©í’ˆ
-- 10: ë‹´ë°°, í¡ì—° ìš©êµ¬
-- 11: ê°€ì •ìš©í’ˆ
-- 12: ê°€êµ¬, ìœ„ìƒì„¤ë¹„
-- 13: ì¡°ëª…ê¸°êµ¬, ë¼ë””ì˜¤, ì»´í“¨í„°
-- 14: ë³´ì„ë¥˜, ì‹œê³„
-- 15: ê¸°ê³„, ëª¨í„°, ì—”ì§„
-- 16: ì „ê¸°í†µì‹ , ìŒí–¥
-- 17: ì‚¬ë¬´ìš©í’ˆ, ë¬¸ë°©êµ¬
-- 18: ìŠ¤í¬ì¸ , ê²Œìž„, ìž¥ë‚œê°
-- 19: ì—¬í–‰ìš©í’ˆ, ìš©ê¸°
-- 20: ë¬¸ìž, ìˆ«ìž
-- 21: ë¹„ë¬¸ìžì  ê¸°í˜¸
-- 22: í™”ì‚´í‘œ, í™”ì‚´ì´‰, ì‹­ìží˜•
-- 23: ë‹¤ì–‘í•œ ëª¨ì–‘ì˜ ë¬¼ê±´
-- 24: ë¬¸ìž¥(ç´‹ç« ), ë™ì „, íœ˜ìž¥
-- 25: ìž¥ì‹ì  íŒ¨í„´, ìž¥ì‹ì  í‘œë©´, ë°°ê²½
-- 26: ê¸°í•˜í•™ì  ë„í˜•
-- 27: ê¸€ì”¨ì²´, ìˆ«ìž
-- 28: ìƒ‰ì±„
+비엔나 분류 체계의 주요 대분류:
+- 01: 천체, 자연현상, 지도
+- 02: 인체
+- 03: 동물
+- 04: 초자연적 존재, 환상적 존재
+- 05: 식물
+- 06: 풍경
+- 07: 건축물, 광고 구축물
+- 08: 식품
+- 09: 섬유, 의복, 바느질 용품
+- 10: 담배, 흡연 용구
+- 11: 가정용품
+- 12: 가구, 위생설비
+- 13: 조명기구, 라디오, 컴퓨터
+- 14: 보석류, 시계
+- 15: 기계, 모터, 엔진
+- 16: 전기통신, 음향
+- 17: 사무용품, 문방구
+- 18: 스포츠, 게임, 장난감
+- 19: 여행용품, 용기
+- 20: 문자, 숫자
+- 21: 비문자적 기호
+- 22: 화살표, 화살촉, 십자형
+- 23: 다양한 모양의 물건
+- 24: 문장(紋章), 동전, 휘장
+- 25: 장식적 패턴, 장식적 표면, 배경
+- 26: 기하학적 도형
+- 27: 글씨체, 숫자
+- 28: 색채
 
-JSON í˜•ì‹ìœ¼ë¡œ ì‘ë‹µí•˜ì„¸ìš”:
+JSON 형식으로 응답하세요:
 {
   "viennaCodeSuggestion": [
-    {"code": "26.01.01", "description": "ì›, íƒ€ì›", "confidence": "high"},
-    {"code": "27.05.01", "description": "ë¼í‹´ë¬¸ìž ë‹¨ì–´", "confidence": "medium"}
+    {"code": "26.01.01", "description": "원, 타원", "confidence": "high"},
+    {"code": "27.05.01", "description": "라틴문자 단어", "confidence": "medium"}
   ],
-  "analysisNotes": "ë¶„ì„ ì„¤ëª…..."
+  "analysisNotes": "분석 설명..."
 }`;
       } else {
-        prompt = `ìƒí‘œëª… "${p.trademarkName}"ì„ ë„í˜• ìƒí‘œë¡œ ë””ìžì¸í•  ê²½ìš° ì í•©í•œ ë¹„ì—”ë‚˜ ì½”ë“œë¥¼ ì¶”ì²œí•˜ì„¸ìš”.
-ì¼ë°˜ì ì¸ ë¡œê³  ë””ìžì¸ íŒ¨í„´ì„ ê³ ë ¤í•˜ì—¬ JSON í˜•ì‹ìœ¼ë¡œ ì‘ë‹µ:
+        prompt = `상표명 "${p.trademarkName}"을 도형 상표로 디자인할 경우 적합한 비엔나 코드를 추천하세요.
+일반적인 로고 디자인 패턴을 고려하여 JSON 형식으로 응답:
 {
   "viennaCodeSuggestion": [
-    {"code": "27.05.01", "description": "ë¼í‹´ë¬¸ìž ë‹¨ì–´", "confidence": "high"}
+    {"code": "27.05.01", "description": "라틴문자 단어", "confidence": "high"}
   ],
-  "analysisNotes": "ìƒí‘œëª… ê¸°ë°˜ ì¶”ì²œ..."
+  "analysisNotes": "상표명 기반 추천..."
 }`;
       }
       
@@ -10950,7 +10950,7 @@ JSON í˜•ì‹ìœ¼ë¡œ ì‘ë‹µí•˜ì„¸ìš”:
       
       const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('AI ì‘ë‹µì„ íŒŒì‹±í•  ìˆ˜ ì—†ìŠµë‹ˆë‹¤.');
+        throw new Error('AI 응답을 파싱할 수 없습니다.');
       }
       
       const analysis = JSON.parse(jsonMatch[0]);
@@ -10959,42 +10959,42 @@ JSON í˜•ì‹ìœ¼ë¡œ ì‘ë‹µí•˜ì„¸ìš”:
       p.aiAnalysis.viennaAnalysisNotes = analysis.analysisNotes;
       
       TM.renderCurrentStep();
-      App.showToast('ë¹„ì—”ë‚˜ ì½”ë“œ ë¶„ì„ì´ ì™„ë£Œë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('비엔나 코드 분석이 완료되었습니다.', 'success');
       
     } catch (error) {
-      console.error('[TM] ë¹„ì—”ë‚˜ ì½”ë“œ ë¶„ì„ ì‹¤íŒ¨:', error);
-      App.showToast('ë¶„ì„ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 비엔나 코드 분석 실패:', error);
+      App.showToast('분석 실패: ' + error.message, 'error');
     }
   };
 
   // ============================================================
-  // 3. ì§€ì •ìƒí’ˆ ì¶”ì²œ (ë¥˜ë³„)
+  // 3. 지정상품 추천 (류별)
   // ============================================================
   
   TM.recommendGoods = async function(classCode) {
     const p = TM.currentProject;
     
     try {
-      App.showToast('ì§€ì •ìƒí’ˆ ì¶”ì²œ ì¤‘...', 'info');
+      App.showToast('지정상품 추천 중...', 'info');
       
-      const prompt = `ë‹¹ì‹ ì€ ìƒí‘œ ì¶œì› ì „ë¬¸ê°€ìž…ë‹ˆë‹¤.
-ë‹¤ìŒ ìƒí‘œì— ëŒ€í•´ ì œ${classCode}ë¥˜ì—ì„œ ì í•©í•œ ì§€ì •ìƒí’ˆì„ ì¶”ì²œí•˜ì„¸ìš”.
+      const prompt = `당신은 상표 출원 전문가입니다.
+다음 상표에 대해 제${classCode}류에서 적합한 지정상품을 추천하세요.
 
-[ìƒí‘œ ì •ë³´]
-- ìƒí‘œëª…: ${p.trademarkName}
-- ì‚¬ì—… ë¶„ì„: ${p.aiAnalysis.businessAnalysis || '(ë¯¸ë¶„ì„)'}
+[상표 정보]
+- 상표명: ${p.trademarkName}
+- 사업 분석: ${p.aiAnalysis.businessAnalysis || '(미분석)'}
 
-ì œ${classCode}ë¥˜: ${TM.niceClasses[classCode]}
+제${classCode}류: ${TM.niceClasses[classCode]}
 
-ë‹¤ìŒ ì¡°ê±´ì„ ì¤€ìˆ˜í•˜ì„¸ìš”:
-1. í•œêµ­ íŠ¹í—ˆì²­ ê³ ì‹œëª…ì¹­ ì‚¬ìš©
-2. ì‹¤ì œ ì‚¬ì—…ê³¼ ê´€ë ¨ëœ ìƒí’ˆ ìœ„ì£¼
-3. 5~10ê°œ ì¶”ì²œ
+다음 조건을 준수하세요:
+1. 한국 특허청 고시명칭 사용
+2. 실제 사업과 관련된 상품 위주
+3. 5~10개 추천
 
-JSON í˜•ì‹:
+JSON 형식:
 {
   "recommendedGoods": [
-    {"name": "ì»´í“¨í„°ì†Œí”„íŠ¸ì›¨ì–´", "nameEn": "computer software", "reason": "ì¶”ì²œ ì´ìœ "},
+    {"name": "컴퓨터소프트웨어", "nameEn": "computer software", "reason": "추천 이유"},
     ...
   ]
 }`;
@@ -11010,148 +11010,148 @@ JSON í˜•ì‹:
       return [];
       
     } catch (error) {
-      console.error('[TM] ì§€ì •ìƒí’ˆ ì¶”ì²œ ì‹¤íŒ¨:', error);
-      App.showToast('ì¶”ì²œ ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 지정상품 추천 실패:', error);
+      App.showToast('추천 실패: ' + error.message, 'error');
       return [];
     }
   };
 
   // ============================================================
-  // 4. ìƒí‘œ ì„¤ëª… ìžë™ ìƒì„±
+  // 4. 상표 설명 자동 생성
   // ============================================================
   
   TM.generateTrademarkDescription = async function() {
     const p = TM.currentProject;
     
     if (!p.trademarkName) {
-      App.showToast('ìƒí‘œëª…ì„ ìž…ë ¥í•˜ì„¸ìš”.', 'warning');
+      App.showToast('상표명을 입력하세요.', 'warning');
       return null;
     }
     
     try {
-      const prompt = `ë‹¤ìŒ ìƒí‘œì— ëŒ€í•œ ìƒí‘œ ì„¤ëª…ì„ ìž‘ì„±í•˜ì„¸ìš”.
+      const prompt = `다음 상표에 대한 상표 설명을 작성하세요.
 
-[ìƒí‘œ ì •ë³´]
-- ìƒí‘œëª…: ${p.trademarkName}
-- ì˜ë¬¸ëª…: ${p.trademarkNameEn || 'ì—†ìŒ'}
-- ìƒí‘œ ìœ í˜•: ${TM.getTypeLabel(p.trademarkType)}
+[상표 정보]
+- 상표명: ${p.trademarkName}
+- 영문명: ${p.trademarkNameEn || '없음'}
+- 상표 유형: ${TM.getTypeLabel(p.trademarkType)}
 
-ìƒí‘œ ì„¤ëª… ìž‘ì„± ê·œì¹™:
-1. ë¬¸ìž ìƒí‘œ: í•œê¸€/ì˜ë¬¸ í‘œê¸°, ë°œìŒ, ì˜ë¯¸ ì„¤ëª…
-2. ë„í˜• ìƒí‘œ: ë„í˜•ì˜ êµ¬ì„± ìš”ì†Œ ì„¤ëª…
-3. ê²°í•© ìƒí‘œ: ë¬¸ìžì™€ ë„í˜•ì˜ ê²°í•© ê´€ê³„ ì„¤ëª…
-4. ê°„ê²°í•˜ê³  ê°ê´€ì ì¸ ë¬¸ì²´
-5. 2~3ë¬¸ìž¥ìœ¼ë¡œ ìž‘ì„±
+상표 설명 작성 규칙:
+1. 문자 상표: 한글/영문 표기, 발음, 의미 설명
+2. 도형 상표: 도형의 구성 요소 설명
+3. 결합 상표: 문자와 도형의 결합 관계 설명
+4. 간결하고 객관적인 문체
+5. 2~3문장으로 작성
 
-í…ìŠ¤íŠ¸ë¡œë§Œ ì‘ë‹µí•˜ì„¸ìš” (JSON í˜•ì‹ ë¶ˆí•„ìš”).`;
+텍스트로만 응답하세요 (JSON 형식 불필요).`;
 
       const response = await App.callClaude(prompt, 300);
       return response.text.trim();
       
     } catch (error) {
-      console.error('[TM] ìƒí‘œ ì„¤ëª… ìƒì„± ì‹¤íŒ¨:', error);
+      console.error('[TM] 상표 설명 생성 실패:', error);
       return null;
     }
   };
 
   // ============================================================
-  // 5. ì¶œì›ì„œ ì´ˆì•ˆ ìƒì„±
+  // 5. 출원서 초안 생성
   // ============================================================
   
   TM.generateApplicationDraft = async function() {
     const p = TM.currentProject;
     
     if (!p.trademarkName || !p.designatedGoods || p.designatedGoods.length === 0) {
-      App.showToast('ìƒí‘œëª…ê³¼ ì§€ì •ìƒí’ˆì„ ìž…ë ¥í•˜ì„¸ìš”.', 'warning');
+      App.showToast('상표명과 지정상품을 입력하세요.', 'warning');
       return null;
     }
     
     try {
-      App.showToast('ì¶œì›ì„œ ì´ˆì•ˆ ìƒì„± ì¤‘...', 'info');
+      App.showToast('출원서 초안 생성 중...', 'info');
       
       const goodsList = p.designatedGoods.map(c => 
-        `ì œ${c.classCode}ë¥˜: ${c.goods.map(g => g.name).join(', ')}`
+        `제${c.classCode}류: ${c.goods.map(g => g.name).join(', ')}`
       ).join('\n');
       
-      const prompt = `ë‹¤ìŒ ì •ë³´ë¥¼ ë°”íƒ•ìœ¼ë¡œ ìƒí‘œì¶œì›ì„œ ì´ˆì•ˆì„ ìž‘ì„±í•˜ì„¸ìš”.
+      const prompt = `다음 정보를 바탕으로 상표출원서 초안을 작성하세요.
 
-[ìƒí‘œ ì •ë³´]
-- ìƒí‘œëª…: ${p.trademarkName}
-- ì˜ë¬¸ëª…: ${p.trademarkNameEn || 'ì—†ìŒ'}
-- ìƒí‘œ ìœ í˜•: ${TM.getTypeLabel(p.trademarkType)}
+[상표 정보]
+- 상표명: ${p.trademarkName}
+- 영문명: ${p.trademarkNameEn || '없음'}
+- 상표 유형: ${TM.getTypeLabel(p.trademarkType)}
 
-[ì¶œì›ì¸]
-- ì„±ëª…/ìƒí˜¸: ${p.applicant?.name || '(ë¯¸ìž…ë ¥)'}
-- ì£¼ì†Œ: ${p.applicant?.address || '(ë¯¸ìž…ë ¥)'}
+[출원인]
+- 성명/상호: ${p.applicant?.name || '(미입력)'}
+- 주소: ${p.applicant?.address || '(미입력)'}
 
-[ì§€ì •ìƒí’ˆ]
+[지정상품]
 ${goodsList}
 
-í•œêµ­ íŠ¹í—ˆì²­ ì¶œì›ì„œ ì–‘ì‹ì— ë§žì¶° ë‹¤ìŒ í•­ëª©ì„ ìž‘ì„±í•˜ì„¸ìš”:
-1. ìƒí‘œì˜ ì„¤ëª…
-2. ì§€ì •ìƒí’ˆ(ì„œë¹„ìŠ¤ì—…) ëª©ë¡ (ë¥˜ë³„ ì •ë¦¬)
-3. ì¶œì›ì¸ ì •ë³´ ìš”ì•½
+한국 특허청 출원서 양식에 맞춰 다음 항목을 작성하세요:
+1. 상표의 설명
+2. 지정상품(서비스업) 목록 (류별 정리)
+3. 출원인 정보 요약
 
-ê³µì‹ì ì´ê³  ì •í™•í•œ ë¬¸ì²´ë¡œ ìž‘ì„±í•˜ì„¸ìš”.`;
+공식적이고 정확한 문체로 작성하세요.`;
 
       const response = await App.callClaude(prompt, 1500);
       return response;
       
     } catch (error) {
-      console.error('[TM] ì¶œì›ì„œ ì´ˆì•ˆ ìƒì„± ì‹¤íŒ¨:', error);
-      App.showToast('ìƒì„± ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 출원서 초안 생성 실패:', error);
+      App.showToast('생성 실패: ' + error.message, 'error');
       return null;
     }
   };
 
   // ============================================================
-  // 6. ì¢…í•© ë³´ê³ ì„œ ìƒì„±
+  // 6. 종합 보고서 생성
   // ============================================================
   
   TM.generateFullReport = async function() {
     const p = TM.currentProject;
     
     try {
-      App.showToast('ì¢…í•© ë³´ê³ ì„œ ìƒì„± ì¤‘...', 'info');
+      App.showToast('종합 보고서 생성 중...', 'info');
       
-      const prompt = `ë‹¤ìŒ ìƒí‘œ ì¶œì› í”„ë¡œì íŠ¸ì— ëŒ€í•œ ì¢…í•© ê²€í†  ë³´ê³ ì„œë¥¼ ìž‘ì„±í•˜ì„¸ìš”.
+      const prompt = `다음 상표 출원 프로젝트에 대한 종합 검토 보고서를 작성하세요.
 
-[ìƒí‘œ ì •ë³´]
-- ìƒí‘œëª…: ${p.trademarkName}
-- ì˜ë¬¸ëª…: ${p.trademarkNameEn || 'ì—†ìŒ'}
-- ìƒí‘œ ìœ í˜•: ${TM.getTypeLabel(p.trademarkType)}
+[상표 정보]
+- 상표명: ${p.trademarkName}
+- 영문명: ${p.trademarkNameEn || '없음'}
+- 상표 유형: ${TM.getTypeLabel(p.trademarkType)}
 
-[ì§€ì •ìƒí’ˆ]
-${p.designatedGoods?.map(c => `ì œ${c.classCode}ë¥˜: ${c.goods.length}ê°œ ìƒí’ˆ`).join(', ') || 'ë¯¸ì„ íƒ'}
+[지정상품]
+${p.designatedGoods?.map(c => `제${c.classCode}류: ${c.goods.length}개 상품`).join(', ') || '미선택'}
 
-[ë¦¬ìŠ¤í¬ í‰ê°€]
-- ìœ„í—˜ ìˆ˜ì¤€: ${p.riskAssessment?.level || 'ë¯¸í‰ê°€'}
-- ì¶©ëŒ ìš°ë ¤ ìƒí‘œ: ${p.riskAssessment?.conflictCount || 0}ê±´
-- í‰ê°€ ë‚´ìš©: ${p.riskAssessment?.details?.slice(0, 200) || 'ì—†ìŒ'}
+[리스크 평가]
+- 위험 수준: ${p.riskAssessment?.level || '미평가'}
+- 충돌 우려 상표: ${p.riskAssessment?.conflictCount || 0}건
+- 평가 내용: ${p.riskAssessment?.details?.slice(0, 200) || '없음'}
 
-[ë¹„ìš©]
-- ì´ ì˜ˆìƒ ë¹„ìš©: ${TM.formatNumber(p.feeCalculation?.totalFee || 0)}ì›
-- ìš°ì„ ì‹¬ì‚¬: ${p.priorityExam?.enabled ? 'ì‹ ì²­' : 'ë¯¸ì‹ ì²­'}
+[비용]
+- 총 예상 비용: ${TM.formatNumber(p.feeCalculation?.totalFee || 0)}원
+- 우선심사: ${p.priorityExam?.enabled ? '신청' : '미신청'}
 
-ë‹¤ìŒ êµ¬ì¡°ë¡œ ë³´ê³ ì„œë¥¼ ìž‘ì„±í•˜ì„¸ìš”:
-1. ìš”ì•½ (Executive Summary)
-2. ìƒí‘œ ë¶„ì„
-3. ë¦¬ìŠ¤í¬ í‰ê°€ ê²°ê³¼
-4. ê¶Œê³ ì‚¬í•­
-5. ë‹¤ìŒ ë‹¨ê³„
+다음 구조로 보고서를 작성하세요:
+1. 요약 (Executive Summary)
+2. 상표 분석
+3. 리스크 평가 결과
+4. 권고사항
+5. 다음 단계
 
-ì „ë¬¸ì ì´ê³  ëª…í™•í•œ ë¬¸ì²´ë¡œ ìž‘ì„±í•˜ì„¸ìš”.`;
+전문적이고 명확한 문체로 작성하세요.`;
 
       const response = await App.callClaude(prompt, 2000);
       
       p.aiAnalysis.fullReport = response.text;
-      App.showToast('ë³´ê³ ì„œê°€ ìƒì„±ë˜ì—ˆìŠµë‹ˆë‹¤.', 'success');
+      App.showToast('보고서가 생성되었습니다.', 'success');
       
       return response;
       
     } catch (error) {
-      console.error('[TM] ë³´ê³ ì„œ ìƒì„± ì‹¤íŒ¨:', error);
-      App.showToast('ìƒì„± ì‹¤íŒ¨: ' + error.message, 'error');
+      console.error('[TM] 보고서 생성 실패:', error);
+      App.showToast('생성 실패: ' + error.message, 'error');
       return null;
     }
   };

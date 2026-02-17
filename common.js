@@ -236,7 +236,7 @@ async function saveProfileSettings(){
   _lsSet('api_provider',selectedProvider);
   if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
   closeProfileSettings();updateModelToggle();updateProviderLabel();
-  showToast(API_PROVIDERS[selectedProvider].short+' 적용됨 · '+getModelConfig().label);
+  showToast(API_PROVIDERS[selectedProvider].short+' 적용됨 — '+getModelConfig().label);
 }
 
 // ═══ Project Rename (v5.2) ═══

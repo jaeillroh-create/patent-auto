@@ -1,29 +1,29 @@
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   íŠ¹í—ˆëª…ì„¸ì„œ ìžë™ ìƒì„± v5.4 â€” Patent Pipeline (19-Step)
-   íŒ¨ì¹˜: ë°©ë²• ë„ë©´ ì¤‘ì•™ì„  ì§ì„ í™”ì‚´í‘œ + ë„ 1 L1 í™”ì‚´í‘œ í•­ìƒí‘œì‹œ
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/* ═══════════════════════════════════════════════════════════
+   특허명세서 자동 생성 v5.4 — Patent Pipeline (19-Step)
+   패치: 방법 도면 중앙선 직선화살표 + 도 1 L1 화살표 항상표시
+   ═══════════════════════════════════════════════════════════ */
 
-// â•â•â• Anchor Themes (v4.7) â•â•â•
+// ═══ Anchor Themes (v4.7) ═══
 const ANCHOR_THEMES = [
-  {key:'reliability_weighting', label:'ì‹ ë¢°ë„ ê°€ì¤‘ì¹˜', desc:'ìž…ë ¥ ì‹ ë¢°ë„/í’ˆì§ˆì— ë”°ë¼ ê°€ì¤‘ì¹˜Â·ê¸°ì¤€ê°’ ì¡°ì •'},
-  {key:'threshold_adaptation', label:'ìž„ê³„ê°’ ì ì‘', desc:'ê¸°ì¤€ê°’/ìž„ê³„ê°’ì˜ ë™ì  ì¡°ì •, ì¡°ê±´ë¶€ ë¶„ê¸°'},
-  {key:'cross_validation', label:'êµì°¨ê²€ì¦', desc:'ë‹¤ì¤‘ ì¶œì²˜/ë‹¤ì¤‘ ëª¨ë¸ êµì°¨ê²€ì¦ ë° ë¶ˆì¼ì¹˜ ë³´ì •'},
-  {key:'fallback_retry', label:'ìž¥ì• ë³µêµ¬/ìž¬ì‹œë„', desc:'ì™¸ë¶€ì—°ë™ ì‹¤íŒ¨/ì˜¤ë¥˜ ì‹œ ìž¬ì‹œë„Â·íìž‰Â·ëŒ€ì²´ê²½ë¡œ'},
-  {key:'explainability_trace', label:'ì„¤ëª…ê°€ëŠ¥ì„± ì¶”ì ', desc:'ê²°ê³¼ì™€ í•¨ê»˜ ê·¼ê±°/ê¸°ì—¬ë„/ì¶”ì ì •ë³´ ìƒì„±Â·ì €ìž¥'},
-  {key:'bias_normalization', label:'íŽ¸í–¥ ì •ê·œí™”', desc:'ì •ê·œí™”+íŽ¸í–¥ ë³´ì •+í´ë¦¬í•‘ ë“± ë‹¤ë‹¨ê³„ ì „ì²˜ë¦¬'},
-  {key:'feedback_reweighting', label:'í”¼ë“œë°± ìž¬ê°€ì¤‘ì¹˜', desc:'í”¼ë“œë°± ëˆ„ì  í›„ ê°€ì¤‘ì¹˜ ìž¬ì¶”ì •'},
-  {key:'privacy_audit', label:'í”„ë¼ì´ë²„ì‹œ ê°ì‚¬', desc:'ê¶Œí•œ/ë§ˆìŠ¤í‚¹/ê°ì‚¬ë¡œê·¸ ê¸°ë°˜ ì œì–´'}
+  {key:'reliability_weighting', label:'신뢰도 가중치', desc:'입력 신뢰도/품질에 따라 가중치·기준값 조정'},
+  {key:'threshold_adaptation', label:'임계값 적응', desc:'기준값/임계값의 동적 조정, 조건부 분기'},
+  {key:'cross_validation', label:'교차검증', desc:'다중 출처/다중 모델 교차검증 및 불일치 보정'},
+  {key:'fallback_retry', label:'장애복구/재시도', desc:'외부연동 실패/오류 시 재시도·큐잉·대체경로'},
+  {key:'explainability_trace', label:'설명가능성 추적', desc:'결과와 함께 근거/기여도/추적정보 생성·저장'},
+  {key:'bias_normalization', label:'편향 정규화', desc:'정규화+편향 보정+클리핑 등 다단계 전처리'},
+  {key:'feedback_reweighting', label:'피드백 재가중치', desc:'피드백 누적 후 가중치 재추정'},
+  {key:'privacy_audit', label:'프라이버시 감사', desc:'권한/마스킹/감사로그 기반 제어'}
 ];
 const CATEGORY_ENDINGS = {
-  server:'~ì„ íŠ¹ì§•ìœ¼ë¡œ í•˜ëŠ” â€¦ì„œë²„.', system:'~ì„ íŠ¹ì§•ìœ¼ë¡œ í•˜ëŠ” â€¦ì‹œìŠ¤í…œ.',
-  apparatus:'~ì„ íŠ¹ì§•ìœ¼ë¡œ í•˜ëŠ” â€¦ìž¥ì¹˜.', electronic_device:'~ì„ íŠ¹ì§•ìœ¼ë¡œ í•˜ëŠ” â€¦ì „ìžë‹¨ë§.',
-  method:'~ì„ íŠ¹ì§•ìœ¼ë¡œ í•˜ëŠ” â€¦ë°©ë²•.',
-  recording_medium:'ì»´í“¨í„°ê°€ â€¦ì„ ìˆ˜í–‰í•˜ë„ë¡ í•˜ëŠ” í”„ë¡œê·¸ëž¨ì„ ê¸°ë¡í•œ ì»´í“¨í„° íŒë…ê°€ëŠ¥ ê¸°ë¡ë§¤ì²´.',
-  computer_program:'ì»´í“¨í„°ê°€ â€¦ì„ ìˆ˜í–‰í•˜ë„ë¡ í•˜ëŠ” í”„ë¡œê·¸ëž¨.',
-  computer_program_product:'ì»´í“¨í„°ê°€ â€¦ì„ ìˆ˜í–‰í•˜ë„ë¡ í•˜ëŠ” í”„ë¡œê·¸ëž¨.'
+  server:'~을 특징으로 하는 …서버.', system:'~을 특징으로 하는 …시스템.',
+  apparatus:'~을 특징으로 하는 …장치.', electronic_device:'~을 특징으로 하는 …전자단말.',
+  method:'~을 특징으로 하는 …방법.',
+  recording_medium:'컴퓨터가 …을 수행하도록 하는 프로그램을 기록한 컴퓨터 판독가능 기록매체.',
+  computer_program:'컴퓨터가 …을 수행하도록 하는 프로그램.',
+  computer_program_product:'컴퓨터가 …을 수행하도록 하는 프로그램.'
 };
 
-// â•â•â• Patent State â•â•â•
+// ═══ Patent State ═══
 let outputs={},selectedTitle='',selectedTitleEn='',selectedTitleType='',includeMethodClaims=true;
 let usage={calls:0,inputTokens:0,outputTokens:0,cost:0},loadingState={};
 let detailLevel='standard';
@@ -40,24 +40,24 @@ let beforeReviewText = '';
 let uploadedFiles = [];
 let diagramData = {};
 
-// â•â•â• Step 8 ì •í˜•ë¬¸ â•â•â•
-const STEP8_PREFIX = `ì´í•˜, ë³¸ ë°œëª…ì˜ ì‹¤ì‹œì˜ˆë¥¼ ì²¨ë¶€ëœ ë„ë©´ì„ ì°¸ì¡°í•˜ì—¬ ìƒì„¸í•˜ê²Œ ì„¤ëª…í•œë‹¤.
-ì‹¤ì‹œì˜ˆë¥¼ ì„¤ëª…í•¨ì— ìžˆì–´ì„œ ë³¸ ë°œëª…ì´ ì†í•˜ëŠ” ê¸°ìˆ  ë¶„ì•¼ì— ìµížˆ ì•Œë ¤ì ¸ ìžˆê³  ë³¸ ë°œëª…ê³¼ ì§ì ‘ì ìœ¼ë¡œ ê´€ë ¨ì´ ì—†ëŠ” ê¸°ìˆ  ë‚´ìš©ì— ëŒ€í•´ì„œëŠ” ì„¤ëª…ì„ ìƒëžµí•œë‹¤. ì´ëŠ” ë¶ˆí•„ìš”í•œ ì„¤ëª…ì„ ìƒëžµí•¨ìœ¼ë¡œì¨ ë³¸ ë°œëª…ì˜ ìš”ì§€ë¥¼ íë¦¬ì§€ ì•Šê³  ë”ìš± ëª…í™•ížˆ ì „ë‹¬í•˜ê¸° ìœ„í•¨ì´ë‹¤.
-ë§ˆì°¬ê°€ì§€ ì´ìœ ë¡œ ì²¨ë¶€ ë„ë©´ì— ìžˆì–´ì„œ ì¼ë¶€ êµ¬ì„±ìš”ì†ŒëŠ” ê³¼ìž¥ë˜ê±°ë‚˜ ìƒëžµë˜ê±°ë‚˜ ê°œëžµì ìœ¼ë¡œ ë„ì‹œë˜ì—ˆë‹¤. ë˜í•œ, ê° êµ¬ì„±ìš”ì†Œì˜ í¬ê¸°ëŠ” ì‹¤ì œ í¬ê¸°ë¥¼ ì „ì ìœ¼ë¡œ ë°˜ì˜í•˜ëŠ” ê²ƒì´ ì•„ë‹ˆë‹¤. ê° ë„ë©´ì—ì„œ ë™ì¼í•œ ë˜ëŠ” ëŒ€ì‘í•˜ëŠ” êµ¬ì„±ìš”ì†Œì—ëŠ” ë™ì¼í•œ ì°¸ì¡° ë²ˆí˜¸ë¥¼ ë¶€ì—¬í•˜ì˜€ë‹¤.
-ë³¸ ë°œëª…ì˜ ì´ì  ë° íŠ¹ì§•, ê·¸ë¦¬ê³  ê·¸ê²ƒë“¤ì„ ë‹¬ì„±í•˜ëŠ” ë°©ë²•ì€ ì²¨ë¶€ë˜ëŠ” ë„ë©´ê³¼ í•¨ê»˜ ìƒì„¸í•˜ê²Œ í›„ìˆ ë˜ì–´ ìžˆëŠ” ì‹¤ì‹œ ì˜ˆë“¤ì„ ì°¸ì¡°í•˜ë©´ ëª…í™•í•´ì§ˆ ê²ƒì´ë‹¤. ê·¸ëŸ¬ë‚˜ ë³¸ ë°œëª…ì€ ì´í•˜ì—ì„œ ê°œì‹œë˜ëŠ” ì‹¤ì‹œ ì˜ˆë“¤ì— í•œì •ë˜ëŠ” ê²ƒì´ ì•„ë‹ˆë¼ ì„œë¡œ ë‹¤ë¥¸ ë‹¤ì–‘í•œ í˜•íƒœë¡œ êµ¬í˜„ë  ìˆ˜ ìžˆìœ¼ë©°, ë‹¨ì§€ ë³¸ ì‹¤ì‹œ ì˜ˆë“¤ì€ ë³¸ ë°œëª…ì˜ ê°œì‹œê°€ ì™„ì „í•˜ë„ë¡ í•˜ê³ , ë³¸ ë°œëª…ì´ ì†í•˜ëŠ” ê¸°ìˆ ë¶„ì•¼ì—ì„œ í†µìƒì˜ ì§€ì‹ì„ ê°€ì§„ ìžì—ê²Œ ë°œëª…ì˜ ë²”ì£¼ë¥¼ ì™„ì „í•˜ê²Œ ì•Œë ¤ì£¼ê¸° ìœ„í•´ ì œê³µë˜ëŠ” ê²ƒì´ë©°, ë³¸ ë°œëª…ì€ ì²­êµ¬í•­ì˜ ë²”ì£¼ì— ì˜í•´ ì •ì˜ë  ë¿ì´ë‹¤. ëª…ì„¸ì„œ ì „ì²´ì— ê±¸ì³ ë™ì¼ ì°¸ì¡° ë¶€í˜¸ëŠ” ë™ì¼ êµ¬ì„± ìš”ì†Œë¥¼ ì§€ì¹­í•œë‹¤.
-ì´ë•Œ, ì²˜ë¦¬ íë¦„ë„ ë„ë©´ë“¤ì˜ ê° ë¸”ë¡ê³¼ íë¦„ë„ ë„ë©´ë“¤ì˜ ì¡°í•©ë“¤ì€ ì»´í“¨í„° í”„ë¡œê·¸ëž¨ ì¸ìŠ¤íŠ¸ëŸ­ì…˜ë“¤ì— ì˜í•´ ìˆ˜í–‰ë  ìˆ˜ ìžˆìŒì„ ì´í•´í•  ìˆ˜ ìžˆì„ ê²ƒì´ë‹¤. ì´ë“¤ ì»´í“¨í„° í”„ë¡œê·¸ëž¨ ì¸ìŠ¤íŠ¸ëŸ­ì…˜ë“¤ì€ ë²”ìš© ì»´í“¨í„°, íŠ¹ìˆ˜ìš© ì»´í“¨í„° ë˜ëŠ” ê¸°íƒ€ í”„ë¡œê·¸ëž¨ ê°€ëŠ¥í•œ ë°ì´í„° í”„ë¡œì„¸ì‹± ìž¥ë¹„ì˜ í”„ë¡œì„¸ì„œì— íƒ‘ìž¬ë  ìˆ˜ ìžˆìœ¼ë¯€ë¡œ, ì»´í“¨í„° ë˜ëŠ” ê¸°íƒ€ í”„ë¡œê·¸ëž¨ ê°€ëŠ¥í•œ ë°ì´í„° í”„ë¡œì„¸ì‹± ìž¥ë¹„ì˜ í”„ë¡œì„¸ì„œë¥¼ í†µí•´ ìˆ˜í–‰ë˜ëŠ” ê·¸ ì¸ìŠ¤íŠ¸ëŸ­ì…˜ë“¤ì´ íë¦„ë„ ë¸”ë¡(ë“¤)ì—ì„œ ì„¤ëª…ëœ ê¸°ëŠ¥ë“¤ì„ ìˆ˜í–‰í•˜ëŠ” ìˆ˜ë‹¨ì„ ìƒì„±í•˜ê²Œ ëœë‹¤. ì´ë“¤ ì»´í“¨í„° í”„ë¡œê·¸ëž¨ ì¸ìŠ¤íŠ¸ëŸ­ì…˜ë“¤ì€ íŠ¹ì • ë°©ì‹ìœ¼ë¡œ ê¸°ëŠ¥ì„ êµ¬í˜„í•˜ê¸° ìœ„í•´ ì»´í“¨í„° ë˜ëŠ” ê¸°íƒ€ í”„ë¡œê·¸ëž¨ ê°€ëŠ¥í•œ ë°ì´í„° í”„ë¡œì„¸ì‹± ìž¥ë¹„ë¥¼ ì§€í–¥í•  ìˆ˜ ìžˆëŠ” ì»´í“¨í„° ì´ìš© ê°€ëŠ¥ ë˜ëŠ” ì»´í“¨í„° íŒë… ê°€ëŠ¥ ë©”ëª¨ë¦¬ì— ì €ìž¥ë˜ëŠ” ê²ƒë„ ê°€ëŠ¥í•˜ë¯€ë¡œ, ê·¸ ì»´í“¨í„° ì´ìš©ê°€ëŠ¥ ë˜ëŠ” ì»´í“¨í„° íŒë… ê°€ëŠ¥ ë©”ëª¨ë¦¬ì— ì €ìž¥ëœ ì¸ìŠ¤íŠ¸ëŸ­ì…˜ë“¤ì€ íë¦„ë„ ë¸”ë¡(ë“¤)ì—ì„œ ì„¤ëª…ëœ ê¸°ëŠ¥ì„ ìˆ˜í–‰í•˜ëŠ” ì¸ìŠ¤íŠ¸ëŸ­ì…˜ ìˆ˜ë‹¨ì„ ë‚´í¬í•˜ëŠ” ì œì¡° í’ˆëª©ì„ ìƒì‚°í•˜ëŠ” ê²ƒë„ ê°€ëŠ¥í•˜ë‹¤. ì»´í“¨í„° í”„ë¡œê·¸ëž¨ ì¸ìŠ¤íŠ¸ëŸ­ì…˜ë“¤ì€ ì»´í“¨í„° ë˜ëŠ” ê¸°íƒ€ í”„ë¡œê·¸ëž¨ ê°€ëŠ¥í•œ ë°ì´í„° í”„ë¡œì„¸ì‹± ìž¥ë¹„ ìƒì— íƒ‘ìž¬ë˜ëŠ” ê²ƒë„ ê°€ëŠ¥í•˜ë¯€ë¡œ, ì»´í“¨í„° ë˜ëŠ” ê¸°íƒ€ í”„ë¡œê·¸ëž¨ ê°€ëŠ¥í•œ ë°ì´í„° í”„ë¡œì„¸ì‹± ìž¥ë¹„ ìƒì—ì„œ ì¼ë ¨ì˜ ë™ìž‘ ë‹¨ê³„ë“¤ì´ ìˆ˜í–‰ë˜ì–´ ì»´í“¨í„°ë¡œ ì‹¤í–‰ë˜ëŠ” í”„ë¡œì„¸ìŠ¤ë¥¼ ìƒì„±í•´ì„œ ì»´í“¨í„° ë˜ëŠ” ê¸°íƒ€ í”„ë¡œê·¸ëž¨ ê°€ëŠ¥í•œ ë°ì´í„° í”„ë¡œì„¸ì‹± ìž¥ë¹„ë¥¼ ìˆ˜í–‰í•˜ëŠ” ì¸ìŠ¤íŠ¸ëŸ­ì…˜ë“¤ì€ íë¦„ë„ ë¸”ë¡(ë“¤)ì—ì„œ ì„¤ëª…ëœ ê¸°ëŠ¥ë“¤ì„ ì‹¤í–‰í•˜ê¸° ìœ„í•œ ë‹¨ê³„ë“¤ì„ ì œê³µí•˜ëŠ” ê²ƒë„ ê°€ëŠ¥í•˜ë‹¤.
-ë˜í•œ, ê° ë¸”ë¡ì€ íŠ¹ì •ëœ ë…¼ë¦¬ì  ê¸°ëŠ¥(ë“¤)ì„ ì‹¤í–‰í•˜ê¸° ìœ„í•œ í•˜ë‚˜ ì´ìƒì˜ ì‹¤í–‰ ê°€ëŠ¥í•œ ì¸ìŠ¤íŠ¸ëŸ­ì…˜ë“¤ì„ í¬í•¨í•˜ëŠ” ëª¨ë“ˆ, ì„¸ê·¸ë¨¼íŠ¸ ë˜ëŠ” ì½”ë“œì˜ ì¼ë¶€ë¥¼ ë‚˜íƒ€ë‚¼ ìˆ˜ ìžˆë‹¤. ë˜, ëª‡ ê°€ì§€ ëŒ€ì²´ ì‹¤í–‰ ì˜ˆë“¤ì—ì„œëŠ” ë¸”ë¡ë“¤ì—ì„œ ì–¸ê¸‰ëœ ê¸°ëŠ¥ë“¤ì´ ìˆœì„œë¥¼ ë²—ì–´ë‚˜ì„œ ë°œìƒí•˜ëŠ” ê²ƒë„ ê°€ëŠ¥í•¨ì„ ì£¼ëª©í•´ì•¼ í•œë‹¤. ì˜ˆì»¨ëŒ€, ìž‡ë‹¬ì•„ ë„ì‹œë˜ì–´ ìžˆëŠ” ë‘ ê°œì˜ ë¸”ë¡ë“¤ì€ ì‚¬ì‹¤ ì‹¤ì§ˆì ìœ¼ë¡œ ë™ì‹œì— ìˆ˜í–‰ë˜ëŠ” ê²ƒë„ ê°€ëŠ¥í•˜ê³  ë˜ëŠ” ê·¸ ë¸”ë¡ë“¤ì´ ë•Œë•Œë¡œ í•´ë‹¹í•˜ëŠ” ê¸°ëŠ¥ì— ë”°ë¼ ì—­ìˆœìœ¼ë¡œ ìˆ˜í–‰ë˜ëŠ” ê²ƒë„ ê°€ëŠ¥í•˜ë‹¤.
-ì´ ë•Œ, ë³¸ ì‹¤ì‹œ ì˜ˆì—ì„œ ì‚¬ìš©ë˜ëŠ” '~ë¶€'ë¼ëŠ” ìš©ì–´ëŠ” ì†Œí”„íŠ¸ì›¨ì–´ ë˜ëŠ” FPGA(field-Programmable Gate Array) ë˜ëŠ” ASIC(Application Specific Integrated Circuit)ê³¼ ê°™ì€ í•˜ë“œì›¨ì–´ êµ¬ì„±ìš”ì†Œë¥¼ ì˜ë¯¸í•˜ë©°, '~ë¶€'ëŠ” ì–´ë–¤ ì—­í• ë“¤ì„ ìˆ˜í–‰í•œë‹¤. ê·¸ë ‡ì§€ë§Œ '~ë¶€'ëŠ” ì†Œí”„íŠ¸ì›¨ì–´ ë˜ëŠ” í•˜ë“œì›¨ì–´ì— í•œì •ë˜ëŠ” ì˜ë¯¸ëŠ” ì•„ë‹ˆë‹¤. '~ë¶€'ëŠ” ì–´ë“œë ˆì‹±í•  ìˆ˜ ìžˆëŠ” ì €ìž¥ ë§¤ì²´ì— ìžˆë„ë¡ êµ¬ì„±ë  ìˆ˜ë„ ìžˆê³  í•˜ë‚˜ ë˜ëŠ” ê·¸ ì´ìƒì˜ í”„ë¡œì„¸ì„œë“¤ì„ ìž¬ìƒì‹œí‚¤ë„ë¡ êµ¬ì„±ë  ìˆ˜ë„ ìžˆë‹¤. ë”°ë¼ì„œ, ì¼ ì˜ˆë¡œì„œ '~ë¶€'ëŠ” ì†Œí”„íŠ¸ì›¨ì–´ êµ¬ì„±ìš”ì†Œë“¤, ê°ì²´ì§€í–¥ ì†Œí”„íŠ¸ì›¨ì–´ êµ¬ì„±ìš”ì†Œë“¤, í´ëž˜ìŠ¤ êµ¬ì„±ìš”ì†Œë“¤ ë° íƒœìŠ¤í¬ êµ¬ì„±ìš”ì†Œë“¤ê³¼ ê°™ì€ êµ¬ì„±ìš”ì†Œë“¤ê³¼, í”„ë¡œì„¸ìŠ¤ë“¤, í•¨ìˆ˜ë“¤, ì†ì„±ë“¤, í”„ë¡œì‹œì €ë“¤, ì„œë¸Œë£¨í‹´ë“¤, í”„ë¡œê·¸ëž¨ ì½”ë“œì˜ ì„¸ê·¸ë¨¼íŠ¸ë“¤, ë“œë¼ì´ë²„ë“¤, íŽŒì›¨ì–´, ë§ˆì´í¬ë¡œì½”ë“œ, íšŒë¡œ, ë°ì´í„°, ë°ì´í„°ë² ì´ìŠ¤, ë°ì´í„° êµ¬ì¡°ë“¤, í…Œì´ë¸”ë“¤, ì–´ë ˆì´ë“¤, ë° ë³€ìˆ˜ë“¤ì„ í¬í•¨í•œë‹¤. êµ¬ì„±ìš”ì†Œë“¤ê³¼ '~ë¶€'ë“¤ ì•ˆì—ì„œ ì œê³µë˜ëŠ” ê¸°ëŠ¥ì€ ë” ìž‘ì€ ìˆ˜ì˜ êµ¬ì„±ìš”ì†Œë“¤ ë° '~ë¶€'ë“¤ë¡œ ê²°í•©ë˜ê±°ë‚˜ ì¶”ê°€ì ì¸ êµ¬ì„±ìš”ì†Œë“¤ê³¼ '~ë¶€'ë“¤ë¡œ ë” ë¶„ë¦¬ë  ìˆ˜ ìžˆë‹¤. ë¿ë§Œ ì•„ë‹ˆë¼, êµ¬ì„±ìš”ì†Œë“¤ ë° '~ë¶€'ë“¤ì€ ë””ë°”ì´ìŠ¤ ë˜ëŠ” ë³´ì•ˆ ë©€í‹°ë¯¸ë””ì–´ì¹´ë“œ ë‚´ì˜ í•˜ë‚˜ ë˜ëŠ” ê·¸ ì´ìƒì˜ CPUë“¤ì„ ìž¬ìƒì‹œí‚¤ë„ë¡ êµ¬í˜„ë  ìˆ˜ë„ ìžˆë‹¤.
-ë³¸ ë°œëª…ì˜ ì‹¤ì‹œì˜ˆë“¤ì„ êµ¬ì²´ì ìœ¼ë¡œ ì„¤ëª…í•¨ì— ìžˆì–´ì„œ, íŠ¹ì • ì‹œìŠ¤í…œì˜ ì˜ˆë¥¼ ì£¼ëœ ëŒ€ìƒìœ¼ë¡œ í•  ê²ƒì´ì§€ë§Œ, ë³¸ ëª…ì„¸ì„œì—ì„œ ì²­êµ¬í•˜ê³ ìž í•˜ëŠ” ì£¼ìš”í•œ ìš”ì§€ëŠ” ìœ ì‚¬í•œ ê¸°ìˆ ì  ë°°ê²½ì„ ê°€ì§€ëŠ” ì—¬íƒ€ì˜ í†µì‹  ì‹œìŠ¤í…œ ë° ì„œë¹„ìŠ¤ì—ë„ ë³¸ ëª…ì„¸ì„œì— ê°œì‹œëœ ë²”ìœ„ë¥¼ í¬ê²Œ ë²—ì–´ë‚˜ì§€ ì•„ë‹ˆí•˜ëŠ” ë²”ìœ„ì—ì„œ ì ìš© ê°€ëŠ¥í•˜ë©°, ì´ëŠ” ë‹¹í•´ ê¸°ìˆ ë¶„ì•¼ì—ì„œ ìˆ™ë ¨ëœ ê¸°ìˆ ì  ì§€ì‹ì„ ê°€ì§„ ìžì˜ íŒë‹¨ìœ¼ë¡œ ê°€ëŠ¥í•  ê²ƒì´ë‹¤.`;
+// ═══ Step 8 정형문 ═══
+const STEP8_PREFIX = `이하, 본 발명의 실시예를 첨부된 도면을 참조하여 상세하게 설명한다.
+실시예를 설명함에 있어서 본 발명이 속하는 기술 분야에 익히 알려져 있고 본 발명과 직접적으로 관련이 없는 기술 내용에 대해서는 설명을 생략한다. 이는 불필요한 설명을 생략함으로써 본 발명의 요지를 흐리지 않고 더욱 명확히 전달하기 위함이다.
+마찬가지 이유로 첨부 도면에 있어서 일부 구성요소는 과장되거나 생략되거나 개략적으로 도시되었다. 또한, 각 구성요소의 크기는 실제 크기를 전적으로 반영하는 것이 아니다. 각 도면에서 동일한 또는 대응하는 구성요소에는 동일한 참조 번호를 부여하였다.
+본 발명의 이점 및 특징, 그리고 그것들을 달성하는 방법은 첨부되는 도면과 함께 상세하게 후술되어 있는 실시 예들을 참조하면 명확해질 것이다. 그러나 본 발명은 이하에서 개시되는 실시 예들에 한정되는 것이 아니라 서로 다른 다양한 형태로 구현될 수 있으며, 단지 본 실시 예들은 본 발명의 개시가 완전하도록 하고, 본 발명이 속하는 기술분야에서 통상의 지식을 가진 자에게 발명의 범주를 완전하게 알려주기 위해 제공되는 것이며, 본 발명은 청구항의 범주에 의해 정의될 뿐이다. 명세서 전체에 걸쳐 동일 참조 부호는 동일 구성 요소를 지칭한다.
+이때, 처리 흐름도 도면들의 각 블록과 흐름도 도면들의 조합들은 컴퓨터 프로그램 인스트럭션들에 의해 수행될 수 있음을 이해할 수 있을 것이다. 이들 컴퓨터 프로그램 인스트럭션들은 범용 컴퓨터, 특수용 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비의 프로세서에 탑재될 수 있으므로, 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비의 프로세서를 통해 수행되는 그 인스트럭션들이 흐름도 블록(들)에서 설명된 기능들을 수행하는 수단을 생성하게 된다. 이들 컴퓨터 프로그램 인스트럭션들은 특정 방식으로 기능을 구현하기 위해 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비를 지향할 수 있는 컴퓨터 이용 가능 또는 컴퓨터 판독 가능 메모리에 저장되는 것도 가능하므로, 그 컴퓨터 이용가능 또는 컴퓨터 판독 가능 메모리에 저장된 인스트럭션들은 흐름도 블록(들)에서 설명된 기능을 수행하는 인스트럭션 수단을 내포하는 제조 품목을 생산하는 것도 가능하다. 컴퓨터 프로그램 인스트럭션들은 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비 상에 탑재되는 것도 가능하므로, 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비 상에서 일련의 동작 단계들이 수행되어 컴퓨터로 실행되는 프로세스를 생성해서 컴퓨터 또는 기타 프로그램 가능한 데이터 프로세싱 장비를 수행하는 인스트럭션들은 흐름도 블록(들)에서 설명된 기능들을 실행하기 위한 단계들을 제공하는 것도 가능하다.
+또한, 각 블록은 특정된 논리적 기능(들)을 실행하기 위한 하나 이상의 실행 가능한 인스트럭션들을 포함하는 모듈, 세그먼트 또는 코드의 일부를 나타낼 수 있다. 또, 몇 가지 대체 실행 예들에서는 블록들에서 언급된 기능들이 순서를 벗어나서 발생하는 것도 가능함을 주목해야 한다. 예컨대, 잇달아 도시되어 있는 두 개의 블록들은 사실 실질적으로 동시에 수행되는 것도 가능하고 또는 그 블록들이 때때로 해당하는 기능에 따라 역순으로 수행되는 것도 가능하다.
+이 때, 본 실시 예에서 사용되는 '~부'라는 용어는 소프트웨어 또는 FPGA(field-Programmable Gate Array) 또는 ASIC(Application Specific Integrated Circuit)과 같은 하드웨어 구성요소를 의미하며, '~부'는 어떤 역할들을 수행한다. 그렇지만 '~부'는 소프트웨어 또는 하드웨어에 한정되는 의미는 아니다. '~부'는 어드레싱할 수 있는 저장 매체에 있도록 구성될 수도 있고 하나 또는 그 이상의 프로세서들을 재생시키도록 구성될 수도 있다. 따라서, 일 예로서 '~부'는 소프트웨어 구성요소들, 객체지향 소프트웨어 구성요소들, 클래스 구성요소들 및 태스크 구성요소들과 같은 구성요소들과, 프로세스들, 함수들, 속성들, 프로시저들, 서브루틴들, 프로그램 코드의 세그먼트들, 드라이버들, 펌웨어, 마이크로코드, 회로, 데이터, 데이터베이스, 데이터 구조들, 테이블들, 어레이들, 및 변수들을 포함한다. 구성요소들과 '~부'들 안에서 제공되는 기능은 더 작은 수의 구성요소들 및 '~부'들로 결합되거나 추가적인 구성요소들과 '~부'들로 더 분리될 수 있다. 뿐만 아니라, 구성요소들 및 '~부'들은 디바이스 또는 보안 멀티미디어카드 내의 하나 또는 그 이상의 CPU들을 재생시키도록 구현될 수도 있다.
+본 발명의 실시예들을 구체적으로 설명함에 있어서, 특정 시스템의 예를 주된 대상으로 할 것이지만, 본 명세서에서 청구하고자 하는 주요한 요지는 유사한 기술적 배경을 가지는 여타의 통신 시스템 및 서비스에도 본 명세서에 개시된 범위를 크게 벗어나지 아니하는 범위에서 적용 가능하며, 이는 당해 기술분야에서 숙련된 기술적 지식을 가진 자의 판단으로 가능할 것이다.`;
 
-const STEP8_SUFFIX = `ë³¸ ë°œëª…ì— ë”°ë¥¸ ë°©ë²•ë“¤ì€ ë‹¤ì–‘í•œ ì»´í“¨í„° ìˆ˜ë‹¨ì„ í†µí•´ ìˆ˜í–‰ë  ìˆ˜ ìžˆëŠ” í”„ë¡œê·¸ëž¨ ëª…ë ¹ í˜•íƒœë¡œ êµ¬í˜„ë˜ì–´ ì»´í“¨í„° íŒë… ê°€ëŠ¥ ë§¤ì²´ì— ê¸°ë¡ë  ìˆ˜ ìžˆë‹¤. ì»´í“¨í„° íŒë… ê°€ëŠ¥ ë§¤ì²´ëŠ” í”„ë¡œê·¸ëž¨ ëª…ë ¹, ë°ì´í„° íŒŒì¼, ë°ì´í„° êµ¬ì¡° ë“±ì„ ë‹¨ë…ìœ¼ë¡œ ë˜ëŠ” ì¡°í•©í•˜ì—¬ í¬í•¨í•  ìˆ˜ ìžˆë‹¤. ì»´í“¨í„° íŒë… ê°€ëŠ¥ ë§¤ì²´ì— ê¸°ë¡ë˜ëŠ” í”„ë¡œê·¸ëž¨ ëª…ë ¹ì€ ë³¸ ë°œëª…ì„ ìœ„í•´ íŠ¹ë³„ížˆ ì„¤ê³„ë˜ê³  êµ¬ì„±ëœ ê²ƒë“¤ì´ê±°ë‚˜ ì»´í“¨í„° ì†Œí”„íŠ¸ì›¨ì–´ ë‹¹ì—…ìžì—ê²Œ ê³µì§€ë˜ì–´ ì‚¬ìš© ê°€ëŠ¥í•œ ê²ƒì¼ ìˆ˜ë„ ìžˆë‹¤.
-ì»´í“¨í„° íŒë… ê°€ëŠ¥ ë§¤ì²´ì˜ ì˜ˆì—ëŠ” ë¡¬(ROM), ëž¨(RAM), í”Œëž˜ì‹œ ë©”ëª¨ë¦¬(flash memory) ë“±ê³¼ ê°™ì´ í”„ë¡œê·¸ëž¨ ëª…ë ¹ì„ ì €ìž¥í•˜ê³  ìˆ˜í–‰í•˜ë„ë¡ íŠ¹ë³„ížˆ êµ¬ì„±ëœ í•˜ë“œì›¨ì–´ ìž¥ì¹˜ê°€ í¬í•¨ë  ìˆ˜ ìžˆë‹¤. í”„ë¡œê·¸ëž¨ ëª…ë ¹ì˜ ì˜ˆì—ëŠ” ì»´íŒŒì¼ëŸ¬(compiler)ì— ì˜í•´ ë§Œë“¤ì–´ì§€ëŠ” ê²ƒê³¼ ê°™ì€ ê¸°ê³„ì–´ ì½”ë“œë¿ë§Œ ì•„ë‹ˆë¼ ì¸í„°í”„ë¦¬í„°(interpreter) ë“±ì„ ì‚¬ìš©í•´ì„œ ì»´í“¨í„°ì— ì˜í•´ ì‹¤í–‰ë  ìˆ˜ ìžˆëŠ” ê³ ê¸‰ ì–¸ì–´ ì½”ë“œë¥¼ í¬í•¨í•  ìˆ˜ ìžˆë‹¤. ìƒìˆ í•œ í•˜ë“œì›¨ì–´ ìž¥ì¹˜ëŠ” ë³¸ ë°œëª…ì˜ ë™ìž‘ì„ ìˆ˜í–‰í•˜ê¸° ìœ„í•´ ì ì–´ë„ í•˜ë‚˜ì˜ ì†Œí”„íŠ¸ì›¨ì–´ ëª¨ë“ˆë¡œ ìž‘ë™í•˜ë„ë¡ êµ¬ì„±ë  ìˆ˜ ìžˆìœ¼ë©°, ê·¸ ì—­ë„ ë§ˆì°¬ê°€ì§€ì´ë‹¤.
-ë˜í•œ, ìƒìˆ í•œ ë°©ë²• ë˜ëŠ” ìž¥ì¹˜ëŠ” ê·¸ êµ¬ì„±ì´ë‚˜ ê¸°ëŠ¥ì˜ ì „ë¶€ ë˜ëŠ” ì¼ë¶€ê°€ ê²°í•©ë˜ì–´ êµ¬í˜„ë˜ê±°ë‚˜, ë¶„ë¦¬ë˜ì–´ êµ¬í˜„ë  ìˆ˜ ìžˆë‹¤.
-ìƒê¸°ì—ì„œëŠ” ë³¸ ë°œëª…ì˜ ë°”ëžŒì§í•œ ì‹¤ì‹œì˜ˆë¥¼ ì°¸ì¡°í•˜ì—¬ ì„¤ëª…í•˜ì˜€ì§€ë§Œ, í•´ë‹¹ ê¸°ìˆ  ë¶„ì•¼ì˜ ìˆ™ë ¨ëœ ë‹¹ì—…ìžëŠ” í•˜ê¸°ì˜ íŠ¹í—ˆ ì²­êµ¬ì˜ ë²”ìœ„ì— ê¸°ìž¬ëœ ë³¸ ë°œëª…ì˜ ì‚¬ìƒ ë° í•„ë“œë¡œë¶€í„° ë²—ì–´ë‚˜ì§€ ì•ŠëŠ” ë²”ìœ„ ë‚´ì—ì„œ ë³¸ ë°œëª…ì„ ë‹¤ì–‘í•˜ê²Œ ìˆ˜ì • ë° ë³€ê²½ì‹œí‚¬ ìˆ˜ ìžˆìŒì„ ì´í•´í•  ìˆ˜ ìžˆì„ ê²ƒì´ë‹¤.`;
-const STEP_NAMES={step_01:'ë°œëª…ì˜ ëª…ì¹­',step_02:'ê¸°ìˆ ë¶„ì•¼',step_03:'ë°°ê²½ê¸°ìˆ ',step_04:'ì„ í–‰ê¸°ìˆ ë¬¸í—Œ',step_05:'í•´ê²°í•˜ê³ ìž í•˜ëŠ” ê³¼ì œ',step_06:'ìž¥ì¹˜ ì²­êµ¬í•­',step_07:'ë„ë©´ ì„¤ê³„',step_08:'ìž¥ì¹˜ ìƒì„¸ì„¤ëª…',step_09:'ìˆ˜í•™ì‹',step_10:'ë°©ë²• ì²­êµ¬í•­',step_11:'ë°©ë²• ë„ë©´',step_12:'ë°©ë²• ìƒì„¸ì„¤ëª…',step_13:'ê²€í† ',step_14:'ëŒ€ì•ˆ ì²­êµ¬í•­',step_15:'íŠ¹í—ˆì„± ê²€í† ',step_16:'ë°œëª…ì˜ íš¨ê³¼',step_17:'ê³¼ì œì˜ í•´ê²° ìˆ˜ë‹¨',step_18:'ë¶€í˜¸ì˜ ì„¤ëª…',step_19:'ìš”ì•½ì„œ'};
+const STEP8_SUFFIX = `본 발명에 따른 방법들은 다양한 컴퓨터 수단을 통해 수행될 수 있는 프로그램 명령 형태로 구현되어 컴퓨터 판독 가능 매체에 기록될 수 있다. 컴퓨터 판독 가능 매체는 프로그램 명령, 데이터 파일, 데이터 구조 등을 단독으로 또는 조합하여 포함할 수 있다. 컴퓨터 판독 가능 매체에 기록되는 프로그램 명령은 본 발명을 위해 특별히 설계되고 구성된 것들이거나 컴퓨터 소프트웨어 당업자에게 공지되어 사용 가능한 것일 수도 있다.
+컴퓨터 판독 가능 매체의 예에는 롬(ROM), 램(RAM), 플래시 메모리(flash memory) 등과 같이 프로그램 명령을 저장하고 수행하도록 특별히 구성된 하드웨어 장치가 포함될 수 있다. 프로그램 명령의 예에는 컴파일러(compiler)에 의해 만들어지는 것과 같은 기계어 코드뿐만 아니라 인터프리터(interpreter) 등을 사용해서 컴퓨터에 의해 실행될 수 있는 고급 언어 코드를 포함할 수 있다. 상술한 하드웨어 장치는 본 발명의 동작을 수행하기 위해 적어도 하나의 소프트웨어 모듈로 작동하도록 구성될 수 있으며, 그 역도 마찬가지이다.
+또한, 상술한 방법 또는 장치는 그 구성이나 기능의 전부 또는 일부가 결합되어 구현되거나, 분리되어 구현될 수 있다.
+상기에서는 본 발명의 바람직한 실시예를 참조하여 설명하였지만, 해당 기술 분야의 숙련된 당업자는 하기의 특허 청구의 범위에 기재된 본 발명의 사상 및 필드로부터 벗어나지 않는 범위 내에서 본 발명을 다양하게 수정 및 변경시킬 수 있음을 이해할 수 있을 것이다.`;
+const STEP_NAMES={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술문헌',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'도면 설계',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서'};
 
 
-// â•â•â•â•â•â•â•â•â•â•â• STATE MANAGEMENT â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
   currentProjectId=null;outputs={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
   usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};beforeReviewText='';uploadedFiles=[];diagramData={};
@@ -81,23 +81,23 @@ function clearAllState(){
   updateStats();
 }
 
-// â•â•â•â•â•â•â•â•â•â•â• DASHBOARD â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ DASHBOARD ═══════════
 async function loadDashboardProjects(){
   const{data}=await App.sb.from('projects').select('id,title,project_number,invention_content,current_state_json,created_at,updated_at').eq('owner_user_id',currentUser.id).order('updated_at',{ascending:false});
   const el=document.getElementById('dashProjectList'),cnt=document.getElementById('dashProjectCount');
   const provEl=document.getElementById('dashProvisionalList');
   if(!data?.length){
-    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="tossface">ðŸ“­</span></div><p style="font-size:13px">ì•„ì§ ìƒì„±ëœ ì‚¬ê±´ì´ ì—†ì–´ìš”.</p></td></tr>';
-    cnt.textContent='ì´ 0ê±´';
-    if(provEl)provEl.innerHTML='<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--color-text-tertiary);font-size:12px">ê°€ì¶œì› ë‚´ì—­ì´ ì—†ì–´ìš”.</td></tr>';
+    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="tossface">📭</span></div><p style="font-size:13px">아직 생성된 사건이 없어요.</p></td></tr>';
+    cnt.textContent='총 0건';
+    if(provEl)provEl.innerHTML='<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--color-text-tertiary);font-size:12px">가출원 내역이 없어요.</td></tr>';
     return;
   }
   const regular=data.filter(p=>!p.current_state_json?.type||p.current_state_json.type!=='provisional');
   const provisional=data.filter(p=>p.current_state_json?.type==='provisional');
-  cnt.textContent=`ì´ ${regular.length}ê±´`;
+  cnt.textContent=`총 ${regular.length}건`;
   
   if(!regular.length){
-    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="tossface">ðŸ“­</span></div><p style="font-size:13px">ì•„ì§ ìƒì„±ëœ ì‚¬ê±´ì´ ì—†ì–´ìš”.</p></td></tr>';
+    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="tossface">📭</span></div><p style="font-size:13px">아직 생성된 사건이 없어요.</p></td></tr>';
   } else {
     el.innerHTML=regular.map(p=>{
       const s=p.current_state_json||{},o=s.outputs||{};
@@ -105,16 +105,16 @@ async function loadDashboardProjects(){
       const pct=Math.round(c/19*100);
       const caseNum=p.project_number||'-';
       const statusBadge=pct===100?'badge-success':pct>0?'badge-warning':'badge-neutral';
-      const statusText=pct===100?'ì™„ë£Œ':pct>0?'ìž‘ì„± ì¤‘':'ëŒ€ê¸°';
+      const statusText=pct===100?'완료':pct>0?'작성 중':'대기';
       return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-bg-tertiary)'" onmouseout="this.style.background=''" onclick="openProject('${p.id}')">
-        <td style="padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tossface">ðŸ“</span><span style="color:var(--color-primary);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
+        <td style="padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tossface">📁</span><span style="color:var(--color-primary);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
         <td style="padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(p.title)}</span></td>
         <td style="padding:10px 12px;text-align:center"><span class="badge ${statusBadge}" style="font-size:11px">${statusText}</span></td>
         <td style="padding:10px 12px;text-align:center;color:var(--color-text-tertiary);font-size:11px;white-space:nowrap">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</td>
         <td style="padding:6px 8px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
-          <button class="btn btn-primary btn-sm" onclick="openProject('${p.id}')" style="padding:4px 10px;font-size:11px">ì—´ê¸°</button>
-          <button class="btn btn-outline btn-sm" onclick="renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:4px 8px;font-size:11px">íŽ¸ì§‘</button>
-          <span style="color:var(--color-error);cursor:pointer;font-size:11px;margin-left:4px" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">ì‚­ì œ</span>
+          <button class="btn btn-primary btn-sm" onclick="openProject('${p.id}')" style="padding:4px 10px;font-size:11px">열기</button>
+          <button class="btn btn-outline btn-sm" onclick="renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:4px 8px;font-size:11px">편집</button>
+          <span style="color:var(--color-error);cursor:pointer;font-size:11px;margin-left:4px" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</span>
         </td>
       </tr>`;
     }).join('');
@@ -122,18 +122,18 @@ async function loadDashboardProjects(){
   
   if(provEl){
     if(!provisional.length){
-      provEl.innerHTML='<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--color-text-tertiary);font-size:12px">ê°€ì¶œì› ë‚´ì—­ì´ ì—†ì–´ìš”.</td></tr>';
+      provEl.innerHTML='<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--color-text-tertiary);font-size:12px">가출원 내역이 없어요.</td></tr>';
     } else {
       provEl.innerHTML=provisional.map(p=>{
         const pd=p.current_state_json?.provisionalData||{};
         const caseNum=p.project_number||'-';
         return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-warning-light)'" onmouseout="this.style.background=''" onclick="openProvisionalViewer('${p.id}')">
-          <td style="padding:8px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tossface">âš¡</span><span style="color:var(--color-warning);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
+          <td style="padding:8px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tossface">⚡</span><span style="color:var(--color-warning);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
           <td style="padding:8px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(pd.title||p.title)}</span></td>
           <td style="padding:8px 12px;text-align:center;color:var(--color-text-tertiary);font-size:11px;white-space:nowrap">${new Date(p.created_at).toLocaleDateString('ko-KR')}</td>
           <td style="padding:6px 8px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
-            <button class="btn btn-outline btn-sm" onclick="openProvisionalViewer('${p.id}')" style="padding:4px 10px;font-size:11px">ë³´ê¸°</button>
-            <span style="color:var(--color-error);cursor:pointer;font-size:11px;margin-left:4px" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">ì‚­ì œ</span>
+            <button class="btn btn-outline btn-sm" onclick="openProvisionalViewer('${p.id}')" style="padding:4px 10px;font-size:11px">보기</button>
+            <span style="color:var(--color-error);cursor:pointer;font-size:11px;margin-left:4px" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</span>
           </td>
         </tr>`;
       }).join('');
@@ -141,52 +141,52 @@ async function loadDashboardProjects(){
   }
 }
 
-// â•â•â• Global Reference Document (Dashboard level) â•â•â•
+// ═══ Global Reference Document (Dashboard level) ═══
 function loadGlobalRefFromStorage(){
   try{globalRefStyleText=App._lsGet('patent_global_ref')||'';}catch(e){globalRefStyleText='';}
   const st=document.getElementById('globalRefStatus');
   if(st){
-    if(globalRefStyleText)st.innerHTML=`<span class="tossface">âœ…</span> ë“±ë¡ë¨ (${globalRefStyleText.length.toLocaleString()}ìž) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px">âœ•</button>`;
-    else st.textContent='ì—…ë¡œë“œëœ ë¬¸ì„œ ì—†ìŒ';
+    if(globalRefStyleText)st.innerHTML=`<span class="tossface">✅</span> 등록됨 (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px">✕</button>`;
+    else st.textContent='업로드된 문서 없음';
   }
 }
 async function handleGlobalRefUpload(event){
   const file=event.target.files[0];if(!file)return;
   const st=document.getElementById('globalRefStatus');
-  st.textContent='ì¶”ì¶œ ì¤‘...';st.style.color='var(--color-primary)';
+  st.textContent='추출 중...';st.style.color='var(--color-primary)';
   try{
     const text=await App.extractTextFromFile(file);
     if(text&&text.trim()&&!text.startsWith('[')){
       globalRefStyleText=text.trim().slice(0,5000);
       try{App._lsSet('patent_global_ref',globalRefStyleText);}catch(e){}
-      st.innerHTML=`<span class="tossface">âœ…</span> ${App.escapeHtml(file.name)} (${globalRefStyleText.length.toLocaleString()}ìž) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px">âœ•</button>`;
+      st.innerHTML=`<span class="tossface">✅</span> ${App.escapeHtml(file.name)} (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px">✕</button>`;
       st.style.color='var(--color-success)';
-      App.showToast('ê³µí†µ ì°¸ê³  ë¬¸ì„œ ë“±ë¡ ì™„ë£Œ â€” ëª¨ë“  í”„ë¡œì íŠ¸ì— ì ìš©');
-    }else{st.textContent='í…ìŠ¤íŠ¸ ì¶”ì¶œ ë¶ˆê°€';st.style.color='var(--color-error)';}
-  }catch(e){st.textContent='ì˜¤ë¥˜ ë°œìƒ';st.style.color='var(--color-error)';App.showToast(e.message,'error');}
+      App.showToast('공통 참고 문서 등록 완료 — 모든 프로젝트에 적용');
+    }else{st.textContent='텍스트 추출 불가';st.style.color='var(--color-error)';}
+  }catch(e){st.textContent='오류 발생';st.style.color='var(--color-error)';App.showToast(e.message,'error');}
   event.target.value='';
 }
-function clearGlobalRef(){globalRefStyleText='';try{App._lsRemove('patent_global_ref');}catch(e){}const st=document.getElementById('globalRefStatus');if(st){st.textContent='ì—…ë¡œë“œëœ ë¬¸ì„œ ì—†ìŒ';st.style.color='var(--color-text-tertiary)';}App.showToast('ê³µí†µ ì°¸ê³  ë¬¸ì„œ ì œê±°ë¨');}
+function clearGlobalRef(){globalRefStyleText='';try{App._lsRemove('patent_global_ref');}catch(e){}const st=document.getElementById('globalRefStatus');if(st){st.textContent='업로드된 문서 없음';st.style.color='var(--color-text-tertiary)';}App.showToast('공통 참고 문서 제거됨');}
 
-// â•â•â• Provisional Viewer â•â•â•
+// ═══ Provisional Viewer ═══
 async function openProvisionalViewer(pid){
   const{data}=await App.sb.from('projects').select('*').eq('id',pid).single();
-  if(!data||!data.current_state_json?.provisionalData){App.showToast('ë°ì´í„°ë¥¼ ì°¾ì„ ìˆ˜ ì—†ì–´ìš”','error');return;}
+  if(!data||!data.current_state_json?.provisionalData){App.showToast('데이터를 찾을 수 없어요','error');return;}
   currentProvisionalId=pid;
   const pd=data.current_state_json.provisionalData;
-  document.getElementById('provisionalViewerTitle').textContent=pd.title||'ê°€ì¶œì› ëª…ì„¸ì„œ';
+  document.getElementById('provisionalViewerTitle').textContent=pd.title||'가출원 명세서';
   const titleLine=pd.titleEn?`${pd.title}{${pd.titleEn}}`:(pd.title||'');
-  document.getElementById('provisionalViewerMeta').textContent=`ìƒì„±: ${new Date(data.created_at).toLocaleDateString('ko-KR')} Â· ë°œëª… ë‚´ìš©: ${(data.invention_content||'').length.toLocaleString()}ìž`;
+  document.getElementById('provisionalViewerMeta').textContent=`생성: ${new Date(data.created_at).toLocaleDateString('ko-KR')} · 발명 내용: ${(data.invention_content||'').length.toLocaleString()}자`;
   const content=[
-    `ã€ë°œëª…ì˜ ëª…ì¹­ã€‘\n${titleLine}`,
-    `ã€ê¸°ìˆ ë¶„ì•¼ã€‘\n${pd.techField||''}`,
-    `ã€í•´ê²°í•˜ê³ ìž í•˜ëŠ” ê³¼ì œã€‘\n${pd.problem||''}`,
-    `ã€ê³¼ì œì˜ í•´ê²° ìˆ˜ë‹¨ã€‘\n${pd.solution||''}`,
-    `ã€ë°œëª…ì˜ íš¨ê³¼ã€‘\n${pd.effect||''}`,
-    `ã€ë„ë©´ì˜ ê°„ë‹¨í•œ ì„¤ëª…ã€‘\në„ 1ì€ ${pd.title||''}ì˜ êµ¬ì„±ì„ ë‚˜íƒ€ë‚´ëŠ” ë¸”ë¡ë„ì´ë‹¤.`,
-    `ã€ë°œëª…ì„ ì‹¤ì‹œí•˜ê¸° ìœ„í•œ êµ¬ì²´ì ì¸ ë‚´ìš©ã€‘\n${pd.desc||''}`,
-    `ã€ì²­êµ¬ë²”ìœ„ã€‘\n${pd.claim||''}`,
-    `ã€ìš”ì•½ì„œã€‘\n${pd.abstract||''}`
+    `【발명의 명칭】\n${titleLine}`,
+    `【기술분야】\n${pd.techField||''}`,
+    `【해결하고자 하는 과제】\n${pd.problem||''}`,
+    `【과제의 해결 수단】\n${pd.solution||''}`,
+    `【발명의 효과】\n${pd.effect||''}`,
+    `【도면의 간단한 설명】\n도 1은 ${pd.title||''}의 구성을 나타내는 블록도이다.`,
+    `【발명을 실시하기 위한 구체적인 내용】\n${pd.desc||''}`,
+    `【청구범위】\n${pd.claim||''}`,
+    `【요약서】\n${pd.abstract||''}`
   ].join('\n\n');
   document.getElementById('provisionalViewerContent').textContent=content;
   document.getElementById('provisionalViewerModal').style.display='flex';
@@ -195,43 +195,43 @@ function closeProvisionalViewer(){document.getElementById('provisionalViewerModa
 async function redownloadProvisionalWord(){
   if(!currentProvisionalId)return;
   const{data}=await App.sb.from('projects').select('current_state_json').eq('id',currentProvisionalId).single();
-  if(!data?.current_state_json?.provisionalData){App.showToast('ë°ì´í„° ì—†ìŒ','error');return;}
+  if(!data?.current_state_json?.provisionalData){App.showToast('데이터 없음','error');return;}
   const pd=data.current_state_json.provisionalData;
   const titleLine=pd.titleEn?`${pd.title}{${pd.titleEn}}`:(pd.title||'');
   const secs=[
-    {h:'ë°œëª…ì˜ ì„¤ëª…'},{h:'ë°œëª…ì˜ ëª…ì¹­',b:titleLine},{h:'ê¸°ìˆ ë¶„ì•¼',b:pd.techField},
-    {h:'ë°œëª…ì˜ ë‚´ìš©'},{h:'í•´ê²°í•˜ê³ ìž í•˜ëŠ” ê³¼ì œ',b:pd.problem},
-    {h:'ê³¼ì œì˜ í•´ê²° ìˆ˜ë‹¨',b:pd.solution},{h:'ë°œëª…ì˜ íš¨ê³¼',b:pd.effect},
-    {h:'ë„ë©´ì˜ ê°„ë‹¨í•œ ì„¤ëª…',b:`ë„ 1ì€ ${pd.title||''}ì˜ êµ¬ì„±ì„ ë‚˜íƒ€ë‚´ëŠ” ë¸”ë¡ë„ì´ë‹¤.`},
-    {h:'ë°œëª…ì„ ì‹¤ì‹œí•˜ê¸° ìœ„í•œ êµ¬ì²´ì ì¸ ë‚´ìš©',b:pd.desc},
-    {h:'ì²­êµ¬ë²”ìœ„',b:pd.claim},
-    {h:'ìš”ì•½ì„œ',b:pd.abstract?`ã€ìš”ì•½ã€‘\n${pd.abstract}\n\nã€ëŒ€í‘œë„ã€‘\në„ 1`:''},
+    {h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:pd.techField},
+    {h:'발명의 내용'},{h:'해결하고자 하는 과제',b:pd.problem},
+    {h:'과제의 해결 수단',b:pd.solution},{h:'발명의 효과',b:pd.effect},
+    {h:'도면의 간단한 설명',b:`도 1은 ${pd.title||''}의 구성을 나타내는 블록도이다.`},
+    {h:'발명을 실시하기 위한 구체적인 내용',b:pd.desc},
+    {h:'청구범위',b:pd.claim},
+    {h:'요약서',b:pd.abstract?`【요약】\n${pd.abstract}\n\n【대표도】\n도 1`:''},
   ];
   const html=secs.map(s=>{
-    const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'ë°”íƒ•ì²´',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">ã€${App.escapeHtml(s.h)}ã€‘</h2>`;
+    const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;
     if(!s.b)return hd;
-    return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'ë°”íƒ•ì²´',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
+    return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
   }).join('');
-  const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'ë°”íƒ•ì²´',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
+  const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));
-  a.download=`ê°€ì¶œì›_${pd.title||'ì´ˆì•ˆ'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();
-  App.showToast('Word ìž¬ë‹¤ìš´ë¡œë“œ ì™„ë£Œ');
+  a.download=`가출원_${pd.title||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();
+  App.showToast('Word 재다운로드 완료');
 }
 function copyProvisionalToClipboard(){
   const t=document.getElementById('provisionalViewerContent')?.textContent;
-  if(!t){App.showToast('ë‚´ìš© ì—†ìŒ','error');return;}
-  navigator.clipboard.writeText(t).then(()=>App.showToast('ë³µì‚¬ ì™„ë£Œ')).catch(()=>App.showToast('í´ë¦½ë³´ë“œ ì ‘ê·¼ ë¶ˆê°€','error'));
+  if(!t){App.showToast('내용 없음','error');return;}
+  navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));
 }
 async function confirmDeleteProvisional(){
   if(!currentProvisionalId)return;
-  if(!confirm('ì´ ê°€ì¶œì› ëª…ì„¸ì„œë¥¼ ì‚­ì œí•˜ì‹œê² ì–´ìš”?'))return;
+  if(!confirm('이 가출원 명세서를 삭제하시겠어요?'))return;
   await App.sb.from('projects').delete().eq('id',currentProvisionalId);
-  closeProvisionalViewer();App.showToast('ì‚­ì œë¨');loadDashboardProjects();
+  closeProvisionalViewer();App.showToast('삭제됨');loadDashboardProjects();
 }
 
 async function openNewProjectModal(){
   document.getElementById('newProjectTitle').value='';
-  // ë‹¤ìŒ ì‚¬ê±´ë²ˆí˜¸ ìžë™ ìƒì„±
+  // 다음 사건번호 자동 생성
   const numInput=document.getElementById('newProjectNumber');
   if(numInput){
     try{
@@ -257,15 +257,15 @@ async function createAndOpenProject(){
   const numInput=document.getElementById('newProjectNumber');
   const numVal=numInput?numInput.value.trim():'';
   
-  if(!t){App.showToast('ì‚¬ê±´ëª…ì„ ìž…ë ¥í•´ ì£¼ì„¸ìš”','error');return;}
-  if(numInput && (!numVal||!/^\d{4}$/.test(numVal))){App.showToast('ì‚¬ê±´ë²ˆí˜¸ 4ìžë¦¬ë¥¼ ìž…ë ¥í•´ ì£¼ì„¸ìš”','error');return;}
+  if(!t){App.showToast('사건명을 입력해 주세요','error');return;}
+  if(numInput && (!numVal||!/^\d{4}$/.test(numVal))){App.showToast('사건번호 4자리를 입력해 주세요','error');return;}
   
   const projectNumber=numVal?'26P'+numVal:null;
   
-  // ì¤‘ë³µ ì²´í¬
+  // 중복 체크
   if(projectNumber){
     const{data:existing}=await App.sb.from('projects').select('id').eq('project_number',projectNumber).eq('owner_user_id',currentUser.id).maybeSingle();
-    if(existing){App.showToast('ì´ë¯¸ ì‚¬ìš©ì¤‘ì¸ ì‚¬ê±´ë²ˆí˜¸ìž…ë‹ˆë‹¤','error');return;}
+    if(existing){App.showToast('이미 사용중인 사건번호입니다','error');return;}
   }
   
   const{data,error}=await App.sb.from('projects').insert({
@@ -276,13 +276,13 @@ async function createAndOpenProject(){
     current_state_json:{outputs:{},selectedTitle:'',selectedTitleType:'',includeMethodClaims:true,usage:{calls:0,inputTokens:0,outputTokens:0,cost:0}}
   }).select('id').single();
   
-  if(error){App.showToast('ìƒì„± ì‹¤íŒ¨: '+error.message,'error');return;}
+  if(error){App.showToast('생성 실패: '+error.message,'error');return;}
   closeNewProjectModal();
   await openProject(data.id);
 }
 
 async function openProject(pid){
-  clearAllState();const{data}=await App.sb.from('projects').select('*').eq('id',pid).single();if(!data){App.showToast('ë¶ˆëŸ¬ì˜¬ ìˆ˜ ì—†ì–´ìš”','error');return;}
+  clearAllState();const{data}=await App.sb.from('projects').select('*').eq('id',pid).single();if(!data){App.showToast('불러올 수 없어요','error');return;}
   currentProjectId=data.id;document.getElementById('projectInput').value=data.invention_content||'';
   const s=data.current_state_json||{};outputs=s.outputs||{};selectedTitle=s.selectedTitle||'';selectedTitleEn=s.selectedTitleEn||'';selectedTitleType=s.selectedTitleType||'';includeMethodClaims=s.includeMethodClaims!==false;usage=s.usage||{calls:0,inputTokens:0,outputTokens:0,cost:0};
   // Fix: ensure cost field exists even from old saves
@@ -311,7 +311,7 @@ async function openProject(pid){
   document.getElementById('headerProjectName').textContent=data.title;document.getElementById('headerUserName').textContent=currentProfile?.display_name||currentUser?.email||'';
   if(currentProfile?.role==='admin')document.getElementById('btnAdmin').style.display='inline-flex';
   updateStats();
-  App.showScreen('main');App.updateModelToggle();App.updateProviderLabel();App.showToast(`"${data.title}" ì—´ë¦¼`);
+  App.showScreen('main');App.updateModelToggle();App.updateProviderLabel();App.showToast(`"${data.title}" 열림`);
 }
 function restoreClaimUI(){
   const dc=document.getElementById('selDeviceCategory');if(dc)dc.value=deviceCategory;
@@ -333,14 +333,14 @@ function restoreClaimUI(){
   if(detailLevel==='custom'){const inp=document.getElementById('customDetailChars');if(inp)inp.value=customDetailChars;}
   // Restore project ref
   const prs=document.getElementById('projectRefStatus');
-  if(prs&&projectRefStyleText)prs.innerHTML=`<span class="tossface">âœ…</span> ë“±ë¡ë¨ (${projectRefStyleText.length.toLocaleString()}ìž) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px">âœ•</button>`;
+  if(prs&&projectRefStyleText)prs.innerHTML=`<span class="tossface">✅</span> 등록됨 (${projectRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px">✕</button>`;
 }
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
-async function confirmDeleteProject(id,t){if(!confirm(`"${t}" ì‚¬ê±´ì„ ì‚­ì œí•˜ì‹œê² ì–´ìš”?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('ì‚­ì œë¨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'ìƒˆ ì‚¬ê±´';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData}}).eq('id',currentProjectId);if(!silent)App.showToast('ì €ìž¥ë¨');}
+async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData}}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 
-// â•â•â•â•â•â•â•â•â•â•â• TAB & TOGGLES & CLAIM UI (v4.7) â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===4)renderPreview();}
 function toggleMethod(){
   includeMethodClaims=document.getElementById('methodToggle').checked;
@@ -357,7 +357,7 @@ function selectDetailLevel(el,level){
   document.querySelectorAll('#detailLevelCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');detailLevel=level;
   const ci=document.getElementById('customDetailInput');
   if(ci) ci.style.display = level==='custom' ? 'block' : 'none';
-  // ì‚¬ìš©ìž ì§€ì • ëª¨ë“œì¼ ë•Œ ìž…ë ¥ê°’ ë™ê¸°í™”
+  // 사용자 지정 모드일 때 입력값 동기화
   if(level==='custom'){
     const inp=document.getElementById('customDetailChars');
     if(inp) inp.onchange=function(){customDetailChars=parseInt(this.value)||2000;};
@@ -383,15 +383,15 @@ function updateDeviceClaimTotal(){
   const expectedAnchorStart=genEnd+1;
   let warn='';
   if(deviceAnchorDep>0 && deviceAnchorStart!==expectedAnchorStart){
-    warn=` âš ï¸ ì•µì»¤ ì‹œìž‘ë²ˆí˜¸ ë³´ì •: ${deviceAnchorStart}â†’${expectedAnchorStart}`;
+    warn=` ⚠️ 앵커 시작번호 보정: ${deviceAnchorStart}→${expectedAnchorStart}`;
     deviceAnchorStart=expectedAnchorStart;
     const das=document.getElementById('inpDeviceAnchorStart');if(das)das.value=deviceAnchorStart;
   }
   if(el){
-    let txt=`ë…ë¦½í•­ 1 (ì²­êµ¬í•­ 1)`;
-    if(deviceGeneralDep>0) txt+=` + ì¼ë°˜ ${deviceGeneralDep} (ì²­êµ¬í•­ ${genStart}~${genEnd})`;
-    if(deviceAnchorDep>0) txt+=` + ì•µì»¤ ${deviceAnchorDep} (ì²­êµ¬í•­ ${deviceAnchorStart}~${deviceAnchorStart+deviceAnchorDep-1})`;
-    txt+=` = ì´ ${total}ê°œ${warn}`;
+    let txt=`독립항 1 (청구항 1)`;
+    if(deviceGeneralDep>0) txt+=` + 일반 ${deviceGeneralDep} (청구항 ${genStart}~${genEnd})`;
+    if(deviceAnchorDep>0) txt+=` + 앵커 ${deviceAnchorDep} (청구항 ${deviceAnchorStart}~${deviceAnchorStart+deviceAnchorDep-1})`;
+    txt+=` = 총 ${total}개${warn}`;
     el.textContent=txt;
   }
 }
@@ -424,10 +424,10 @@ function updateMethodClaimTotal(){
   const total=1+methodGeneralDep+methodAnchorDep;
   const el=document.getElementById('methodClaimTotal');
   if(el){
-    let txt=`ë…ë¦½í•­ 1 (ì²­êµ¬í•­ ${methodIndep})`;
-    if(methodGeneralDep>0) txt+=` + ì¼ë°˜ ${methodGeneralDep} (ì²­êµ¬í•­ ${genStart}~${genEnd})`;
-    if(methodAnchorDep>0) txt+=` + ì•µì»¤ ${methodAnchorDep} (ì²­êµ¬í•­ ${methodAnchorStart}~${anchorEnd})`;
-    txt+=` = ì´ ${total}ê°œ`;
+    let txt=`독립항 1 (청구항 ${methodIndep})`;
+    if(methodGeneralDep>0) txt+=` + 일반 ${methodGeneralDep} (청구항 ${genStart}~${genEnd})`;
+    if(methodAnchorDep>0) txt+=` + 앵커 ${methodAnchorDep} (청구항 ${methodAnchorStart}~${anchorEnd})`;
+    txt+=` = 총 ${total}개`;
     el.textContent=txt;
   }
 }
@@ -441,14 +441,14 @@ function toggleMethodTheme(key,checked){
   else selectedMethodAnchorThemes=selectedMethodAnchorThemes.filter(k=>k!==key);
 }
 
-// â•â•â• Required Figures â•â•â•
+// ═══ Required Figures ═══
 function addRequiredFigure(){
   const numEl=document.getElementById('inpRequiredFigNum'),descEl=document.getElementById('inpRequiredFigDesc');
   const fileEl=document.getElementById('inpRequiredFigFile');
   const num=parseInt(numEl?.value);const desc=descEl?.value?.trim();
-  if(!num||num<1){App.showToast('ë„ë©´ ë²ˆí˜¸ë¥¼ ìž…ë ¥í•˜ì„¸ìš”','error');return;}
-  if(!desc){App.showToast('ë„ë©´ ì„¤ëª…ì„ ìž…ë ¥í•˜ì„¸ìš”','error');return;}
-  if(requiredFigures.find(f=>f.num===num)){App.showToast(`ë„ ${num}ì€ ì´ë¯¸ ë“±ë¡ë¨`,'error');return;}
+  if(!num||num<1){App.showToast('도면 번호를 입력하세요','error');return;}
+  if(!desc){App.showToast('도면 설명을 입력하세요','error');return;}
+  if(requiredFigures.find(f=>f.num===num)){App.showToast(`도 ${num}은 이미 등록됨`,'error');return;}
   const figData={num,description:desc};
   // Handle file upload if present
   if(fileEl&&fileEl.files&&fileEl.files[0]){
@@ -464,7 +464,7 @@ function addRequiredFigure(){
   requiredFigures.sort((a,b)=>a.num-b.num);
   if(numEl)numEl.value='';if(descEl)descEl.value='';if(fileEl)fileEl.value='';
   renderRequiredFiguresList();
-  App.showToast(`ë„ ${num} í•„ìˆ˜ ë„ë©´ ë“±ë¡${figData.fileName?' (íŒŒì¼: '+figData.fileName+')':''}`);
+  App.showToast(`도 ${num} 필수 도면 등록${figData.fileName?' (파일: '+figData.fileName+')':''}`);
 }
 function removeRequiredFigure(num){
   requiredFigures=requiredFigures.filter(f=>f.num!==num);
@@ -473,37 +473,37 @@ function removeRequiredFigure(num){
 function renderRequiredFiguresList(){
   const el=document.getElementById('requiredFiguresList');if(!el)return;
   if(!requiredFigures.length){el.innerHTML='';return;}
-  el.innerHTML=requiredFigures.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:4px;font-size:13px"><span class="badge badge-primary">ë„ ${f.num}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(f.description)}</span>${f.fileName?`<span class="badge badge-success" title="${App.escapeHtml(f.fileName)}">ðŸ“Ž íŒŒì¼</span>`:''}<button class="btn btn-ghost btn-sm" onclick="removeRequiredFigure(${f.num})">âœ•</button></div>`).join('');
+  el.innerHTML=requiredFigures.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:4px;font-size:13px"><span class="badge badge-primary">도 ${f.num}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(f.description)}</span>${f.fileName?`<span class="badge badge-success" title="${App.escapeHtml(f.fileName)}">📎 파일</span>`:''}<button class="btn btn-ghost btn-sm" onclick="removeRequiredFigure(${f.num})">✕</button></div>`).join('');
 }
 
-// â•â•â• Project Reference Document â•â•â•
+// ═══ Project Reference Document ═══
 async function handleProjectRefUpload(event){
   const file=event.target.files[0];if(!file)return;
   const st=document.getElementById('projectRefStatus');
-  st.textContent='ì¶”ì¶œ ì¤‘...';st.style.color='var(--color-primary)';
+  st.textContent='추출 중...';st.style.color='var(--color-primary)';
   try{
     const text=await App.extractTextFromFile(file);
     if(text&&text.trim()&&!text.startsWith('[')){
       projectRefStyleText=text.trim().slice(0,5000);
-      st.innerHTML=`<span class="tossface">âœ…</span> ${App.escapeHtml(file.name)} (${projectRefStyleText.length.toLocaleString()}ìž) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px">âœ•</button>`;
+      st.innerHTML=`<span class="tossface">✅</span> ${App.escapeHtml(file.name)} (${projectRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px">✕</button>`;
       st.style.color='var(--color-success)';
-      App.showToast('ì´ í”„ë¡œì íŠ¸ ì „ìš© ì°¸ê³  ë¬¸ì„œ ë“±ë¡ (ê³µí†µ ì°¸ê³  ë¬¸ì„œ ëŒ€ì‹  ì‚¬ìš©)');
-    }else{st.textContent='ì¶”ì¶œ ë¶ˆê°€';st.style.color='var(--color-error)';}
-  }catch(e){st.textContent='ì˜¤ë¥˜';st.style.color='var(--color-error)';}
+      App.showToast('이 프로젝트 전용 참고 문서 등록 (공통 참고 문서 대신 사용)');
+    }else{st.textContent='추출 불가';st.style.color='var(--color-error)';}
+  }catch(e){st.textContent='오류';st.style.color='var(--color-error)';}
   event.target.value='';
 }
-function clearProjectRef(){projectRefStyleText='';const st=document.getElementById('projectRefStatus');if(st){st.textContent='ì—†ìŒ (ê³µí†µ ì°¸ê³  ë¬¸ì„œ ì‚¬ìš©)';st.style.color='var(--color-text-tertiary)';}App.showToast('í”„ë¡œì íŠ¸ ì°¸ê³  ë¬¸ì„œ ì œê±°ë¨');}
+function clearProjectRef(){projectRefStyleText='';const st=document.getElementById('projectRefStatus');if(st){st.textContent='없음 (공통 참고 문서 사용)';st.style.color='var(--color-text-tertiary)';}App.showToast('프로젝트 참고 문서 제거됨');}
 
-function selectTitleType(el,type){document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitleType=type;const ci=document.getElementById('customTitleType');if(ci)ci.value=type;document.getElementById('btnStep01').disabled=false;autoSetDeviceCategoryFromType(type);App.showToast(`ë°œëª… ìœ í˜•: ~${type}`);}
+function selectTitleType(el,type){document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');selectedTitleType=type;const ci=document.getElementById('customTitleType');if(ci)ci.value=type;document.getElementById('btnStep01').disabled=false;autoSetDeviceCategoryFromType(type);App.showToast(`발명 유형: ~${type}`);}
 function onCustomTitleType(val){const v=val.trim();if(v){selectedTitleType=v;document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));document.getElementById('btnStep01').disabled=false;autoSetDeviceCategoryFromType(v);}else{selectedTitleType='';document.getElementById('btnStep01').disabled=true;}}
 function selectTitle(el,kr,en){
-  // ëª¨ë“  í›„ë³´ì˜ ì„ íƒ í•´ì œ
+  // 모든 후보의 선택 해제
   document.querySelectorAll('#resultStep01 .title-candidate-row').forEach(c=>{
     c.classList.remove('selected');
     c.style.borderColor='var(--color-border)';
     c.style.background='#fff';
   });
-  // ì„ íƒëœ í•­ëª© ê°•ì¡°
+  // 선택된 항목 강조
   el.classList.add('selected');
   el.style.borderColor='var(--color-primary)';
   el.style.background='var(--color-primary-light)';
@@ -521,50 +521,50 @@ function selectTitle(el,kr,en){
 function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';if(v)autoSetDeviceCategoryFromTitle(v);}
 function onTitleEnInput(){selectedTitleEn=document.getElementById('titleInputEn')?.value?.trim()||'';}
 
-// â•â•â• Auto Device Category from Title/Type (v5.2) â•â•â•
+// ═══ Auto Device Category from Title/Type (v5.2) ═══
 function autoSetDeviceCategoryFromType(type){
   if(!type)return;
   let devCat='server';
-  if(/ì„œë²„/.test(type))devCat='server';
-  else if(/ì‹œìŠ¤í…œ/.test(type))devCat='system';
-  else if(/ìž¥ì¹˜/.test(type))devCat='apparatus';
-  else if(/ë‹¨ë§|ì „ìž/.test(type))devCat='electronic_device';
+  if(/서버/.test(type))devCat='server';
+  else if(/시스템/.test(type))devCat='system';
+  else if(/장치/.test(type))devCat='apparatus';
+  else if(/단말|전자/.test(type))devCat='electronic_device';
   deviceCategory=devCat;
   const sel=document.getElementById('selDeviceCategory');if(sel)sel.value=devCat;
   // Also set method category
-  if(/ë°©ë²•/.test(type)){methodCategory='method';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='method';}
-  if(/ê¸°ë¡ë§¤ì²´/.test(type)){methodCategory='recording_medium';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='recording_medium';}
-  if(/ì»´í“¨í„°\s*í”„ë¡œê·¸ëž¨/.test(type)){methodCategory='computer_program_product';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='computer_program_product';}
+  if(/방법/.test(type)){methodCategory='method';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='method';}
+  if(/기록매체/.test(type)){methodCategory='recording_medium';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='recording_medium';}
+  if(/컴퓨터\s*프로그램/.test(type)){methodCategory='computer_program_product';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='computer_program_product';}
 }
 function autoSetDeviceCategoryFromTitle(title){
   if(!title)return;
   // Extract category from title ending
-  if(/ì„œë²„\s*$/.test(title))autoSetDeviceCategoryFromType('ì„œë²„');
-  else if(/ì‹œìŠ¤í…œ\s*$/.test(title))autoSetDeviceCategoryFromType('ì‹œìŠ¤í…œ');
-  else if(/ìž¥ì¹˜\s*$/.test(title))autoSetDeviceCategoryFromType('ìž¥ì¹˜');
-  else if(/(ë‹¨ë§|ë‹¨ë§ê¸°)\s*$/.test(title))autoSetDeviceCategoryFromType('ì „ìžë‹¨ë§');
-  else if(/ë°©ë²•\s*$/.test(title))autoSetDeviceCategoryFromType('ë°©ë²•');
-  // Compound: "ì„œë²„ ë° ë°©ë²•"
-  if(/ì„œë²„\s*(ë°|ì™€|,)\s*ë°©ë²•/.test(title)){autoSetDeviceCategoryFromType('ì„œë²„ ë° ë°©ë²•');}
+  if(/서버\s*$/.test(title))autoSetDeviceCategoryFromType('서버');
+  else if(/시스템\s*$/.test(title))autoSetDeviceCategoryFromType('시스템');
+  else if(/장치\s*$/.test(title))autoSetDeviceCategoryFromType('장치');
+  else if(/(단말|단말기)\s*$/.test(title))autoSetDeviceCategoryFromType('전자단말');
+  else if(/방법\s*$/.test(title))autoSetDeviceCategoryFromType('방법');
+  // Compound: "서버 및 방법"
+  if(/서버\s*(및|와|,)\s*방법/.test(title)){autoSetDeviceCategoryFromType('서버 및 방법');}
 }
 
-// â•â•â•â•â•â•â•â•â•â•â• HELPERS â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ HELPERS ═══════════
 function getLatestDescription(){return outputs.step_13_applied||outputs.step_09||outputs.step_08||'';}
-// ì •í˜•ë¬¸ ìˆ˜ë™ ì‚½ìž…: í˜„ìž¬ Step 8 ê²°ê³¼ì— ì •í˜•ë¬¸ì„ ì „í›„ì— ì‚½ìž…
+// 정형문 수동 삽입: 현재 Step 8 결과에 정형문을 전후에 삽입
 function insertBoilerplate(){
   const cur=outputs.step_08||'';
-  if(!cur){App.showToast('ìƒì„¸ì„¤ëª…ì´ ì—†ìŠµë‹ˆë‹¤. ë¨¼ì € Step 8ì„ ìƒì„±í•˜ì„¸ìš”.','error');return;}
+  if(!cur){App.showToast('상세설명이 없습니다. 먼저 Step 8을 생성하세요.','error');return;}
   // Check if already has boilerplate
-  if(hasBoilerplate(cur)){App.showToast('ì´ë¯¸ ì •í˜•ë¬¸ì´ ì‚½ìž…ë˜ì–´ ìžˆìŠµë‹ˆë‹¤.','info');return;}
+  if(hasBoilerplate(cur)){App.showToast('이미 정형문이 삽입되어 있습니다.','info');return;}
   outputs.step_08=STEP8_PREFIX+'\n\n'+cur+'\n\n'+STEP8_SUFFIX;
   renderOutput('step_08',outputs.step_08);
   // Also update step_09 and step_13_applied if they exist
   if(outputs.step_09&&!hasBoilerplate(outputs.step_09)){outputs.step_09=STEP8_PREFIX+'\n\n'+outputs.step_09+'\n\n'+STEP8_SUFFIX;}
   if(outputs.step_13_applied&&!hasBoilerplate(outputs.step_13_applied)){outputs.step_13_applied=STEP8_PREFIX+'\n\n'+outputs.step_13_applied+'\n\n'+STEP8_SUFFIX;}
-  App.showToast('ì •í˜•ë¬¸ ì‚½ìž… ì™„ë£Œ (ë³¸ë¬¸ ì „í›„ì— ìžë™ ì‚½ìž…ë¨)');
+  App.showToast('정형문 삽입 완료 (본문 전후에 자동 삽입됨)');
 }
 function hasBoilerplate(text){
-  return text&&text.includes('ì´í•˜, ë³¸ ë°œëª…ì˜ ì‹¤ì‹œì˜ˆë¥¼ ì²¨ë¶€ëœ ë„ë©´ì„');
+  return text&&text.includes('이하, 본 발명의 실시예를 첨부된 도면을');
 }
 function getFullDescription(){
   const body=getLatestDescription();
@@ -573,99 +573,99 @@ function getFullDescription(){
   if(hasBoilerplate(body))return body;
   return STEP8_PREFIX+'\n'+body+'\n'+STEP8_SUFFIX;
 }
-function getLastClaimNumber(t){const m=t.match(/ã€ì²­êµ¬í•­\s*(\d+)ã€‘/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
-function getLastFigureNumber(t){const m=t.match(/ë„\s*(\d+)/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
+function getLastClaimNumber(t){const m=t.match(/【청구항\s*(\d+)】/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
+function getLastFigureNumber(t){const m=t.match(/도\s*(\d+)/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
 function extractBriefDescriptions(s07,s11){
   const d=[],seen=new Set();
-  // 1. AI ì¶œë ¥ì—ì„œ ê°„ë‹¨í•œ ì„¤ëª… ì¶”ì¶œ
+  // 1. AI 출력에서 간단한 설명 추출
   [s07,s11].forEach(t=>{if(!t)return;const i=t.indexOf('---BRIEF_DESCRIPTIONS---');
     if(i>=0){
-      // ë§ˆì»¤ ì´í›„: ë„ Nìœ¼ë¡œ ì‹œìž‘í•˜ëŠ” ì¤„ ì¶”ì¶œ
-      t.slice(i+24).trim().split('\n').filter(l=>/^ë„\s*\d+\s*[ì€ëŠ”]\s/.test(l.trim())).forEach(l=>{const m=l.trim().match(/^ë„\s*(\d+)/);if(m&&!seen.has(m[1])){seen.add(m[1]);d.push(l.trim());}});
+      // 마커 이후: 도 N으로 시작하는 줄 추출
+      t.slice(i+24).trim().split('\n').filter(l=>/^도\s*\d+\s*[은는]\s/.test(l.trim())).forEach(l=>{const m=l.trim().match(/^도\s*(\d+)/);if(m&&!seen.has(m[1])){seen.add(m[1]);d.push(l.trim());}});
     }else{
-      // ë§ˆì»¤ ì—†ì„ ë•Œ: "ë„ Nì€/ëŠ” ~ì´ë‹¤." í˜•ì‹ë§Œ ì¶”ì¶œ (íŒŒíŠ¸1 ë””ìžì¸ ì¤„ ì œì™¸)
-      t.split('\n').filter(l=>/^ë„\s*\d+\s*[ì€ëŠ”]\s/.test(l.trim())&&/ì´ë‹¤\.\s*$/.test(l.trim())).forEach(l=>{const m=l.trim().match(/^ë„\s*(\d+)/);if(m&&!seen.has(m[1])){seen.add(m[1]);d.push(l.trim());}});
+      // 마커 없을 때: "도 N은/는 ~이다." 형식만 추출 (파트1 디자인 줄 제외)
+      t.split('\n').filter(l=>/^도\s*\d+\s*[은는]\s/.test(l.trim())&&/이다\.\s*$/.test(l.trim())).forEach(l=>{const m=l.trim().match(/^도\s*(\d+)/);if(m&&!seen.has(m[1])){seen.add(m[1]);d.push(l.trim());}});
     }
   });
-  // 2. ëˆ„ë½ ë„ë©´ ë³´ì™„: diagramData ê¸°ë°˜ í´ë°± ìƒì„±
-  const title=selectedTitle||'ë³¸ ë°œëª…';
+  // 2. 누락 도면 보완: diagramData 기반 폴백 생성
+  const title=selectedTitle||'본 발명';
   const devSubject=getDeviceSubject();
   const devData=diagramData.step_07||[];
   const methodData=diagramData.step_11||[];
   const devFigCount=devData.length;
-  // 2a. ìž¥ì¹˜ ë„ë©´ í´ë°±
+  // 2a. 장치 도면 폴백
   devData.forEach((dd,i)=>{const fn=String(i+1);if(seen.has(fn))return;
     function exRef(lab){const m=lab.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);return m?m[1]:'';}
     const allL1=dd.nodes.every(n=>{const r=exRef(n.label);if(!r)return false;const num=parseInt(r);return(num>0&&num<10)||(num>=100&&num<1000&&num%100===0);});
-    if(i===0||allL1){d.push(`ë„ ${fn}ì€ ${title}ì˜ ì „ì²´ êµ¬ì„±ì„ ë‚˜íƒ€ë‚´ëŠ” ë¸”ë¡ë„ì´ë‹¤.`);}
+    if(i===0||allL1){d.push(`도 ${fn}은 ${title}의 전체 구성을 나타내는 블록도이다.`);}
     else{const refs=dd.nodes.map(n=>exRef(n.label)).filter(Boolean).map(Number).filter(n=>n>=100&&n<1000&&n%100===0);
       const pRef=refs.length?refs[0]:100;const pNode=dd.nodes.find(n=>{const r=exRef(n.label);return r&&parseInt(r)===pRef;});
       const pName=pNode?pNode.label.replace(/[(\s]?\d+[)\s]?$/i,'').trim():devSubject;
-      d.push(`ë„ ${fn}ì€ ${pName}(${pRef})ì˜ ë‚´ë¶€ êµ¬ì„±ì„ ë‚˜íƒ€ë‚´ëŠ” ë¸”ë¡ë„ì´ë‹¤.`);}
+      d.push(`도 ${fn}은 ${pName}(${pRef})의 내부 구성을 나타내는 블록도이다.`);}
     seen.add(fn);});
-  // 2b. ë°©ë²• ë„ë©´ í´ë°±
+  // 2b. 방법 도면 폴백
   methodData.forEach((md,i)=>{const fn=String(devFigCount+i+1);if(seen.has(fn))return;
-    d.push(`ë„ ${fn}ì€ ${title}ì— ì˜í•´ ìˆ˜í–‰ë˜ëŠ” ë°©ë²•ì„ ë‚˜íƒ€ë‚´ëŠ” ìˆœì„œë„ì´ë‹¤.`);seen.add(fn);});
-  // 2c. diagramData ì—†ì„ ë•Œ í…ìŠ¤íŠ¸ ê¸°ë°˜ í´ë°±
-  if(!devData.length&&s07){const figs=s07.match(/ë„\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];
-    if(fn==='1'){d.push(`ë„ 1ì€ ${title}ì˜ ì „ì²´ êµ¬ì„±ì„ ë‚˜íƒ€ë‚´ëŠ” ë¸”ë¡ë„ì´ë‹¤.`);}
-    else{d.push(`ë„ ${fn}ì€ ${title}ì˜ ì„¸ë¶€ êµ¬ì„±ì„ ë‚˜íƒ€ë‚´ëŠ” ë¸”ë¡ë„ì´ë‹¤.`);}seen.add(fn);});}
-  if(!methodData.length&&s11){const figs=s11.match(/ë„\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];
-    d.push(`ë„ ${fn}ì€ ${title}ì— ì˜í•´ ìˆ˜í–‰ë˜ëŠ” ë°©ë²•ì„ ë‚˜íƒ€ë‚´ëŠ” ìˆœì„œë„ì´ë‹¤.`);seen.add(fn);});}
-  // 3. ì •ë ¬
-  d.sort((a,b)=>{const na=parseInt(a.match(/ë„\s*(\d+)/)?.[1]||0),nb=parseInt(b.match(/ë„\s*(\d+)/)?.[1]||0);return na-nb;});
+    d.push(`도 ${fn}은 ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});
+  // 2c. diagramData 없을 때 텍스트 기반 폴백
+  if(!devData.length&&s07){const figs=s07.match(/도\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];
+    if(fn==='1'){d.push(`도 1은 ${title}의 전체 구성을 나타내는 블록도이다.`);}
+    else{d.push(`도 ${fn}은 ${title}의 세부 구성을 나타내는 블록도이다.`);}seen.add(fn);});}
+  if(!methodData.length&&s11){const figs=s11.match(/도\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];
+    d.push(`도 ${fn}은 ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});}
+  // 3. 정렬
+  d.sort((a,b)=>{const na=parseInt(a.match(/도\s*(\d+)/)?.[1]||0),nb=parseInt(b.match(/도\s*(\d+)/)?.[1]||0);return na-nb;});
   return d.join('\n');
 }
-function stripKoreanParticles(w){if(!w||w.length<2)return w;const ps=['ì—ì„œëŠ”','ìœ¼ë¡œì¨','ì—ì„œ','ìœ¼ë¡œ','ì—ê²Œ','ë¶€í„°','ê¹Œì§€','ì—ëŠ”','í•˜ëŠ”','ë˜ëŠ”','ëœ','í•˜ì—¬','ìžˆëŠ”','ì—†ëŠ”','ê°™ì€','í†µí•˜ì—¬','ìœ„í•œ','ëŒ€í•œ','ì˜í•œ','ë¥¼','ì„','ì´','ê°€','ì€','ëŠ”','ì—','ì˜','ì™€','ê³¼','ë¡œ','ë„','ë“ ','ì¸','ì ','ë¡œì„œ'];for(const p of ps){if(w.endsWith(p)&&w.length>p.length+1)return w.slice(0,-p.length);}return w;}
+function stripKoreanParticles(w){if(!w||w.length<2)return w;const ps=['에서는','으로써','에서','으로','에게','부터','까지','에는','하는','되는','된','하여','있는','없는','같은','통하여','위한','대한','의한','를','을','이','가','은','는','에','의','와','과','로','도','든','인','적','로서'];for(const p of ps){if(w.endsWith(p)&&w.length>p.length+1)return w.slice(0,-p.length);}return w;}
 
-// â•â•â•â•â•â•â•â•â•â•â• FILE UPLOAD â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ FILE UPLOAD ═══════════
 async function handleFileUpload(event) {
   const files = Array.from(event.target.files);if (!files.length) return;
   const listEl = document.getElementById('fileList');
   for (const file of files) {
-    if (uploadedFiles.find(f => f.name === file.name)) {App.showToast(`"${file.name}" ì´ë¯¸ ì¶”ê°€ë¨`, 'info');continue;}
+    if (uploadedFiles.find(f => f.name === file.name)) {App.showToast(`"${file.name}" 이미 추가됨`, 'info');continue;}
     const item = document.createElement('div');item.className = 'file-upload-item';item.id = `file_${uploadedFiles.length}`;
     item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:6px;font-size:13px';
-    item.innerHTML = `<span class="tossface">ðŸ“„</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">ì¶”ì¶œ ì¤‘...</span>`;
+    item.innerHTML = `<span class="tossface">📄</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">추출 중...</span>`;
     listEl.appendChild(item);
     try {
       const text = await App.extractTextFromFile(file);
       if (text && text.trim()) {
         uploadedFiles.push({ name: file.name, text: text.trim(), size: file.size });
         const ta = document.getElementById('projectInput');const separator = ta.value.trim() ? '\n\n' : '';
-        ta.value += `${separator}[ì²¨ë¶€: ${file.name}]\n${text.trim()}`;
-        item.innerHTML = `<span class="tossface">âœ…</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} Â· ${text.trim().length.toLocaleString()}ìž</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length - 1},'${App.escapeHtml(file.name).replace(/'/g, "\\'")}')">âœ•</button>`;
-        App.showToast(`"${file.name}" ì¶”ì¶œ ì™„ë£Œ`);
+        ta.value += `${separator}[첨부: ${file.name}]\n${text.trim()}`;
+        item.innerHTML = `<span class="tossface">✅</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} · ${text.trim().length.toLocaleString()}자</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length - 1},'${App.escapeHtml(file.name).replace(/'/g, "\\'")}')">✕</button>`;
+        App.showToast(`"${file.name}" 추출 완료`);
       } else {
-        item.innerHTML = `<span class="tossface">âš ï¸</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">ì¶”ì¶œ ë¶ˆê°€</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">âœ•</button>`;
+        item.innerHTML = `<span class="tossface">⚠️</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">추출 불가</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">✕</button>`;
       }
     } catch (e) {
-      item.innerHTML = `<span class="tossface">âŒ</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">ì˜¤ë¥˜</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">âœ•</button>`;
+      item.innerHTML = `<span class="tossface">❌</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">✕</button>`;
     }
   }
   event.target.value = '';
-  // íŒŒì¼ ì—…ë¡œë“œ í›„ ìžë™ ìš”ì•½ ìƒì„±
+  // 파일 업로드 후 자동 요약 생성
   if(uploadedFiles.length>0)await generateInventionSummary();
 }
 function removeUploadedFile(idx, name) {
   const f = uploadedFiles[idx];if (!f) return;
-  const ta = document.getElementById('projectInput');const marker = `[ì²¨ë¶€: ${f.name}]`;const mIdx = ta.value.indexOf(marker);
-  if (mIdx >= 0) {const nextMarker = ta.value.indexOf('\n\n[ì²¨ë¶€:', mIdx + marker.length);const endIdx = nextMarker >= 0 ? nextMarker : ta.value.length;ta.value = (ta.value.slice(0, mIdx) + ta.value.slice(endIdx)).trim();}
-  uploadedFiles.splice(idx, 1);const el = document.getElementById(`file_${idx}`);if (el) el.remove();App.showToast(`"${name}" ì œê±°ë¨`);
+  const ta = document.getElementById('projectInput');const marker = `[첨부: ${f.name}]`;const mIdx = ta.value.indexOf(marker);
+  if (mIdx >= 0) {const nextMarker = ta.value.indexOf('\n\n[첨부:', mIdx + marker.length);const endIdx = nextMarker >= 0 ? nextMarker : ta.value.length;ta.value = (ta.value.slice(0, mIdx) + ta.value.slice(endIdx)).trim();}
+  uploadedFiles.splice(idx, 1);const el = document.getElementById(`file_${idx}`);if (el) el.remove();App.showToast(`"${name}" 제거됨`);
 }
-// (File extraction functions are in common.js â€” App.extractTextFromFile, App.formatFileSize)
+// (File extraction functions are in common.js — App.extractTextFromFile, App.formatFileSize)
 
-// â•â•â• Drag & Drop íŒŒì¼ ì—…ë¡œë“œ ì§€ì› â•â•â•
+// ═══ Drag & Drop 파일 업로드 지원 ═══
 function setupDragDrop(){
   const projectArea=document.getElementById('projectInput');
   if(!projectArea)return;
   const wrapper=projectArea.closest('.card')||projectArea.parentElement;
   if(!wrapper)return;
-  // ë“œëž˜ê·¸ì¸ë“œë¡­ ì˜ì—­ ìŠ¤íƒ€ì¼ë§
+  // 드래그인드롭 영역 스타일링
   const overlay=document.createElement('div');
   overlay.id='dragOverlay';
   overlay.style.cssText='display:none;position:absolute;inset:0;background:rgba(79,70,229,0.08);border:2px dashed var(--color-primary);border-radius:12px;z-index:10;pointer-events:none;align-items:center;justify-content:center';
-  overlay.innerHTML='<div style="text-align:center;color:var(--color-primary);font-weight:600"><span class="tossface" style="font-size:32px">ðŸ“Ž</span><br>íŒŒì¼ì„ ì—¬ê¸°ì— ë†“ìœ¼ì„¸ìš”<br><span style="font-size:12px;font-weight:normal;color:var(--color-text-secondary)">Word, PDF, PPT, ì´ë¯¸ì§€ ë“±</span></div>';
+  overlay.innerHTML='<div style="text-align:center;color:var(--color-primary);font-weight:600"><span class="tossface" style="font-size:32px">📎</span><br>파일을 여기에 놓으세요<br><span style="font-size:12px;font-weight:normal;color:var(--color-text-secondary)">Word, PDF, PPT, 이미지 등</span></div>';
   wrapper.style.position='relative';
   wrapper.appendChild(overlay);
   let dragCounter=0;
@@ -674,10 +674,10 @@ function setupDragDrop(){
   wrapper.addEventListener('dragleave',e=>{e.preventDefault();e.stopPropagation();dragCounter--;if(dragCounter<=0){dragCounter=0;overlay.style.display='none';}});
   wrapper.addEventListener('drop',async e=>{e.preventDefault();e.stopPropagation();dragCounter=0;overlay.style.display='none';
     const files=Array.from(e.dataTransfer.files);if(!files.length)return;
-    // íŒŒì¼ ìž…ë ¥ í•¸ë“¤ëŸ¬ ìž¬ì‚¬ìš©
+    // 파일 입력 핸들러 재사용
     await handleDroppedFiles(files);
   });
-  // íŒŒì¼ input accept ì†ì„± ì„¤ì •
+  // 파일 input accept 속성 설정
   const fileInput=document.querySelector('input[type="file"][onchange*="handleFileUpload"]')||document.querySelector('#fileUploadInput');
   if(fileInput){
     fileInput.setAttribute('accept','.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.hwp,.hwpx,.jpg,.jpeg,.png,.gif,.bmp,.webp,.csv');
@@ -687,31 +687,31 @@ function setupDragDrop(){
 async function handleDroppedFiles(files){
   const listEl=document.getElementById('fileList');
   for(const file of files){
-    if(uploadedFiles.find(f=>f.name===file.name)){App.showToast(`"${file.name}" ì´ë¯¸ ì¶”ê°€ë¨`,'info');continue;}
+    if(uploadedFiles.find(f=>f.name===file.name)){App.showToast(`"${file.name}" 이미 추가됨`,'info');continue;}
     const item=document.createElement('div');item.className='file-upload-item';item.id=`file_${uploadedFiles.length}`;
     item.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:6px;font-size:13px';
-    item.innerHTML=`<span class="tossface">ðŸ“„</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">ì¶”ì¶œ ì¤‘...</span>`;
+    item.innerHTML=`<span class="tossface">📄</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">추출 중...</span>`;
     if(listEl)listEl.appendChild(item);
     try{
       const text=await App.extractTextFromFile(file);
       if(text&&text.trim()){
         uploadedFiles.push({name:file.name,text:text.trim(),size:file.size});
         const ta=document.getElementById('projectInput');const separator=ta.value.trim()?'\n\n':'';
-        ta.value+=`${separator}[ì²¨ë¶€: ${file.name}]\n${text.trim()}`;
-        item.innerHTML=`<span class="tossface">âœ…</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} Â· ${text.trim().length.toLocaleString()}ìž</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length-1},'${App.escapeHtml(file.name).replace(/'/g,"\\\\'")}')">\u2715</button>`;
-        App.showToast(`"${file.name}" ì¶”ì¶œ ì™„ë£Œ`);
+        ta.value+=`${separator}[첨부: ${file.name}]\n${text.trim()}`;
+        item.innerHTML=`<span class="tossface">✅</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} · ${text.trim().length.toLocaleString()}자</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length-1},'${App.escapeHtml(file.name).replace(/'/g,"\\\\'")}')">\u2715</button>`;
+        App.showToast(`"${file.name}" 추출 완료`);
       }else{
-        item.innerHTML=`<span class="tossface">âš ï¸</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">ì¶”ì¶œ ë¶ˆê°€</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
+        item.innerHTML=`<span class="tossface">⚠️</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">추출 불가</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
       }
     }catch(e){
-      item.innerHTML=`<span class="tossface">âŒ</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">ì˜¤ë¥˜</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
+      item.innerHTML=`<span class="tossface">❌</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
     }
   }
-  // íŒŒì¼ ì—…ë¡œë“œ í›„ ìžë™ ìš”ì•½ ìƒì„±
+  // 파일 업로드 후 자동 요약 생성
   if(uploadedFiles.length>0)await generateInventionSummary();
 }
 
-// â•â•â• Task 2: ì—…ë¡œë“œ íŒŒì¼ ìžë™ ìš”ì•½ (ë°œëª… ë‚´ìš© ìš”ì•½ í‘œì‹œ) â•â•â•
+// ═══ Task 2: 업로드 파일 자동 요약 (발명 내용 요약 표시) ═══
 async function generateInventionSummary(){
   const inv=document.getElementById('projectInput').value.trim();
   if(!inv||inv.length<100)return;
@@ -722,96 +722,96 @@ async function generateInventionSummary(){
     summaryEl=document.createElement('div');
     summaryEl.id='inventionSummary';
     summaryEl.style.cssText='margin-top:8px;padding:12px 16px;background:var(--color-bg-secondary);border-radius:10px;border-left:3px solid var(--color-primary);font-size:13px;line-height:1.6;color:var(--color-text-secondary)';
-    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)">ðŸ“‹ ë°œëª… ë‚´ìš© ìš”ì•½</span><br><span style="color:var(--color-primary)">ìš”ì•½ ìƒì„± ì¤‘...</span>';
+    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
     ta.parentElement.insertBefore(summaryEl,ta.nextSibling);
   }else{
-    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)">ðŸ“‹ ë°œëª… ë‚´ìš© ìš”ì•½</span><br><span style="color:var(--color-primary)">ìš”ì•½ ìƒì„± ì¤‘...</span>';
+    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
   }
   try{
-    const r=await App.callClaude(`ì•„ëž˜ ë°œëª… ë‚´ìš©ì„ 300ìž ì´ë‚´ë¡œ í•µì‹¬ë§Œ ìš”ì•½í•˜ë¼. ê¸°ìˆ ë¶„ì•¼, í•µì‹¬ êµ¬ì„±ìš”ì†Œ, ì£¼ìš” ê¸°ëŠ¥ì„ í¬í•¨. ë§ˆí¬ë‹¤ìš´/ê¸€ë¨¸ë¦¬ ì—†ì´ ìžì—°ìŠ¤ëŸ¬ìš´ ë¬¸ìž¥ìœ¼ë¡œ.\n\n${inv.slice(0,5000)}`);
-    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)">ðŸ“‹ ë°œëª… ë‚´ìš© ìš”ì•½</span><br>${App.escapeHtml(r.text)}`;
+    const r=await App.callClaude(`아래 발명 내용을 300자 이내로 핵심만 요약하라. 기술분야, 핵심 구성요소, 주요 기능을 포함. 마크다운/글머리 없이 자연스러운 문장으로.\n\n${inv.slice(0,5000)}`);
+    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br>${App.escapeHtml(r.text)}`;
   }catch(e){
-    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)">ðŸ“‹ ë°œëª… ë‚´ìš© ìš”ì•½</span><br><span style="color:var(--color-text-tertiary)">ìš”ì•½ ìƒì„± ì‹¤íŒ¨</span>`;
+    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-text-tertiary)">요약 생성 실패</span>`;
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â• PROMPTS (v4.7 â€” Claim System Redesign) â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ PROMPTS (v4.7 — Claim System Redesign) ═══════════
 // Style reference: project-level overrides global-level
 function getStyleRef(){
   const ref=projectRefStyleText||globalRefStyleText;
   if(!ref)return '';
-  return '\n\n[ì°¸ê³  ë¬¸ì²´ â€” ì•„ëž˜ ë¬¸ì„œì˜ ë¬¸ìž¥ í˜•íƒœ, ë‹¨ë½ êµ¬ì¡°, ìž‘ì„± ë°©ì‹ë§Œ ì°¸ê³ í•˜ë¼. ë‚´ìš©ì€ ì ˆëŒ€ ì°¸ì¡°í•˜ì§€ ë§ˆë¼. ë°œëª…ì˜ ë‚´ìš©ê³¼ ë¬´ê´€í•˜ë‹¤.]\n'+ref.slice(0,3000);
+  return '\n\n[참고 문체 — 아래 문서의 문장 형태, 단락 구조, 작성 방식만 참고하라. 내용은 절대 참조하지 마라. 발명의 내용과 무관하다.]\n'+ref.slice(0,3000);
 }
 function getFullInvention(){
   const inv=document.getElementById('projectInput').value;
-  return '\n\nâ˜…â˜…â˜… [ë°œëª… ë‚´ìš© â€” ì•„ëž˜ ë‚´ìš©ì„ ë‹¨ í•˜ë‚˜ë„ ëˆ„ë½ ì—†ì´ ëª¨ë‘ ë°˜ì˜í•˜ë¼. ëˆ„ë½ ì‹œ íŠ¹í—ˆ ê±°ì ˆ ì‚¬ìœ ê°€ ëœë‹¤.] â˜…â˜…â˜…\n'+inv;
+  return '\n\n★★★ [발명 내용 — 아래 내용을 단 하나도 누락 없이 모두 반영하라. 누락 시 특허 거절 사유가 된다.] ★★★\n'+inv;
 }
 function getRequiredFiguresInstruction(){
   if(!requiredFigures.length)return '';
-  const list=requiredFigures.map(f=>`- ë„ ${f.num}: ${f.description}`).join('\n');
-  return `\n\n[í•„ìˆ˜ ë„ë©´ â€” ì•„ëž˜ ë„ë©´ì€ ì‚¬ìš©ìžê°€ ì´ë¯¸ ë³´ìœ í•˜ê³  ìžˆë‹¤. ì´ ë²ˆí˜¸ë“¤ì€ ê±´ë„ˆë›°ê³  ë‚˜ë¨¸ì§€ ë„ë©´ë§Œ ìƒˆë¡œ ìƒì„±í•˜ë¼. ë‹¨, ë„ë©´ì˜ ê°„ë‹¨í•œ ì„¤ëª…ì—ëŠ” í•„ìˆ˜ ë„ë©´ë„ ëª¨ë‘ í¬í•¨í•˜ë¼.]\n${list}`;
+  const list=requiredFigures.map(f=>`- 도 ${f.num}: ${f.description}`).join('\n');
+  return `\n\n[필수 도면 — 아래 도면은 사용자가 이미 보유하고 있다. 이 번호들은 건너뛰고 나머지 도면만 새로 생성하라. 단, 도면의 간단한 설명에는 필수 도면도 모두 포함하라.]\n${list}`;
 }
 function buildAnchorThemeInstruction(mode,themes,count){
   if(mode==='fixed'&&themes.length){
     const labels=themes.map(k=>{const t=ANCHOR_THEMES.find(a=>a.key===k);return t?`${t.label}(${t.key})`:k;});
-    return `ì§€ì •ëœ ì•µì»¤ í…Œë§ˆ: ${labels.join(', ')} ìˆœì„œëŒ€ë¡œ ë°°ì •í•˜ë¼.`;
+    return `지정된 앵커 테마: ${labels.join(', ')} 순서대로 배정하라.`;
   }
-  return `ë°œëª… ë‚´ìš©ì—ì„œ í‚¤ì›Œë“œë¥¼ ì¶”ì¶œí•˜ê³  ì•„ëž˜ ë§¤í•‘ì— ë”°ë¼ ${count}ê°œ í…Œë§ˆë¥¼ ì„ íƒí•˜ë¼ (ì¤‘ë³µ ìµœì†Œí™”):
-- OCR/ë¬¸ì„œì¶”ì¶œ/íŒŒì‹±/ë°ì´í„° í’ˆì§ˆ â†’ reliability_weighting ë˜ëŠ” cross_validation
-- ìž„ê³„ê°’/ìŠ¤ì½”ì–´/ë“±ê¸‰/ëž­í‚¹/ì¶”ì²œ â†’ threshold_adaptation ë˜ëŠ” explainability_trace
-- ì™¸ë¶€ API/ì—°ë™/ì‹¤íŒ¨/ì˜¤ë¥˜/ìž¬ì‹œë„ â†’ fallback_retry
-- ê·¼ê±°/ì„¤ëª…/ê¸°ì—¬ë„/ì¶”ì /ë¡œê·¸ â†’ explainability_trace
-- ì •ê·œí™”/ì „ì²˜ë¦¬/ìŠ¤ì¼€ì¼/íŽ¸í–¥ â†’ bias_normalization
-- í”¼ë“œë°±/ìž¬í•™ìŠµ/ê°€ì¤‘ì¹˜ ìž¬ì¡°ì • â†’ feedback_reweighting
-- ê¶Œí•œ/ë§ˆìŠ¤í‚¹/ì•”í˜¸í™”/ê°ì‚¬ â†’ privacy_audit`;
+  return `발명 내용에서 키워드를 추출하고 아래 매핑에 따라 ${count}개 테마를 선택하라 (중복 최소화):
+- OCR/문서추출/파싱/데이터 품질 → reliability_weighting 또는 cross_validation
+- 임계값/스코어/등급/랭킹/추천 → threshold_adaptation 또는 explainability_trace
+- 외부 API/연동/실패/오류/재시도 → fallback_retry
+- 근거/설명/기여도/추적/로그 → explainability_trace
+- 정규화/전처리/스케일/편향 → bias_normalization
+- 피드백/재학습/가중치 재조정 → feedback_reweighting
+- 권한/마스킹/암호화/감사 → privacy_audit`;
 }
 function getCategoryEnding(cat){return CATEGORY_ENDINGS[cat]||CATEGORY_ENDINGS.server;}
 function autoDetectCategoryFromTitle(){
   const t=selectedTitle||'';const ty=selectedTitleType||'';
-  if(/ì„œë²„/.test(ty)||/ì„œë²„/.test(t))return 'server';
-  if(/ì‹œìŠ¤í…œ/.test(ty)||/ì‹œìŠ¤í…œ/.test(t))return 'system';
-  if(/ìž¥ì¹˜/.test(ty)||/ìž¥ì¹˜/.test(t))return 'apparatus';
-  if(/ë‹¨ë§|ì „ìž/.test(ty)||/ë‹¨ë§|ì „ìž/.test(t))return 'electronic_device';
+  if(/서버/.test(ty)||/서버/.test(t))return 'server';
+  if(/시스템/.test(ty)||/시스템/.test(t))return 'system';
+  if(/장치/.test(ty)||/장치/.test(t))return 'apparatus';
+  if(/단말|전자/.test(ty)||/단말|전자/.test(t))return 'electronic_device';
   return 'server';
 }
-// â˜… ë°œëª… ëª…ì¹­ì—ì„œ ìž¥ì¹˜ ì£¼ì²´ëª… ì¶”ì¶œ (ì„œë²„/ì‹œìŠ¤í…œ/ìž¥ì¹˜/ë‹¨ë§ ë“±) â˜…
+// ★ 발명 명칭에서 장치 주체명 추출 (서버/시스템/장치/단말 등) ★
 function getDeviceSubject(){
   const ty=selectedTitleType||'';
-  if(/ì„œë²„/.test(ty))return 'ì„œë²„';
-  if(/ì‹œìŠ¤í…œ/.test(ty))return 'ì‹œìŠ¤í…œ';
-  if(/ìž¥ì¹˜/.test(ty))return 'ìž¥ì¹˜';
-  if(/ë‹¨ë§/.test(ty))return 'ë‹¨ë§';
+  if(/서버/.test(ty))return '서버';
+  if(/시스템/.test(ty))return '시스템';
+  if(/장치/.test(ty))return '장치';
+  if(/단말/.test(ty))return '단말';
   const t=selectedTitle||'';
-  const m=t.match(/(ì„œë²„|ì‹œìŠ¤í…œ|ìž¥ì¹˜|ë‹¨ë§)\s*$/);
+  const m=t.match(/(서버|시스템|장치|단말)\s*$/);
   if(m)return m[1];
-  return 'ì„œë²„';
+  return '서버';
 }
 
-// â•â•â• ì ­ìŠ¨(Jepson) ì²­êµ¬í•­ ì§€ì› (v5.4) â•â•â•
-// ë°œëª… ëª…ì¹­ ë§ë¯¸ë¥¼ ë¶„ì„í•˜ì—¬ ë…ë¦½í•­ì˜ Jepson í”„ë¦¬ì•°ë¸”ì„ ìƒì„±
+// ═══ 젭슨(Jepson) 청구항 지원 (v5.4) ═══
+// 발명 명칭 말미를 분석하여 독립항의 Jepson 프리앰블을 생성
 function parseJepsonSubjects(){
   const title=selectedTitle||'';
   const ty=selectedTitleType||'';
-  // "ë°" ë˜ëŠ” "ê³¼" ë¡œ ë¶„ë¦¬ëœ ë³µìˆ˜ ì¹´í…Œê³ ë¦¬ ê°ì§€ (ì˜ˆ: "Z ì„œë²„ ë° ë°©ë²•", "X ìž¥ì¹˜ ë° ë°©ë²•")
-  const conjMatch=title.match(/^(.+?)\s*(ì„œë²„|ì‹œìŠ¤í…œ|ìž¥ì¹˜|ë‹¨ë§|ì „ìž\s*ìž¥ì¹˜)\s*(ë°|ê³¼|,)\s*(ë°©ë²•)\s*$/);
+  // "및" 또는 "과" 로 분리된 복수 카테고리 감지 (예: "Z 서버 및 방법", "X 장치 및 방법")
+  const conjMatch=title.match(/^(.+?)\s*(서버|시스템|장치|단말|전자\s*장치)\s*(및|과|,)\s*(방법)\s*$/);
   if(conjMatch){
     const core=conjMatch[1].trim();
     const devWord=conjMatch[2].trim();
     return {
-      device:`${core} ${devWord}`,  // "Z ì„œë²„"
-      method:`${core} ë°©ë²•`,         // "Z ë°©ë²•"
+      device:`${core} ${devWord}`,  // "Z 서버"
+      method:`${core} 방법`,         // "Z 방법"
       hasDevice:true, hasMethod:true
     };
   }
-  // ë‹¨ì¼ ì¹´í…Œê³ ë¦¬
-  const devMatch=title.match(/(ì„œë²„|ì‹œìŠ¤í…œ|ìž¥ì¹˜|ë‹¨ë§|ì „ìž\s*ìž¥ì¹˜)\s*$/);
-  const methMatch=title.match(/ë°©ë²•\s*$/);
+  // 단일 카테고리
+  const devMatch=title.match(/(서버|시스템|장치|단말|전자\s*장치)\s*$/);
+  const methMatch=title.match(/방법\s*$/);
   if(devMatch&&!methMatch) return {device:title,method:'',hasDevice:true,hasMethod:false};
   if(methMatch&&!devMatch) return {device:'',method:title,hasDevice:false,hasMethod:true};
-  // íƒ€ìž… ì •ë³´ë¡œ íŒë‹¨
-  if(/ì„œë²„|ì‹œìŠ¤í…œ|ìž¥ì¹˜|ë‹¨ë§/.test(ty))return {device:title,method:'',hasDevice:true,hasMethod:false};
-  if(/ë°©ë²•/.test(ty))return {device:'',method:title,hasDevice:false,hasMethod:true};
-  // ê¸°ë³¸: ìž¥ì¹˜ë¡œ ê°„ì£¼
+  // 타입 정보로 판단
+  if(/서버|시스템|장치|단말/.test(ty))return {device:title,method:'',hasDevice:true,hasMethod:false};
+  if(/방법/.test(ty))return {device:'',method:title,hasDevice:false,hasMethod:true};
+  // 기본: 장치로 간주
   return {device:title,method:'',hasDevice:true,hasMethod:false};
 }
 
@@ -820,51 +820,51 @@ function getJepsonInstruction(claimType){
   const target=claimType==='method'?subj.method:subj.device;
   if(!target)return '';
   return `
-â˜…â˜…â˜… ì ­ìŠ¨(Jepson) ì²­êµ¬í•­ í˜•ì‹ â€” ë…ë¦½í•­ í•„ìˆ˜ ì ìš© â˜…â˜…â˜…
-ë…ë¦½í•­ì€ ë°˜ë“œì‹œ ì•„ëž˜ ì ­ìŠ¨(Jepson Claim) êµ¬ì¡°ë¥¼ ë”°ë¥´ë¼:
+★★★ 젭슨(Jepson) 청구항 형식 — 독립항 필수 적용 ★★★
+독립항은 반드시 아래 젭슨(Jepson Claim) 구조를 따르라:
 
-[êµ¬ì¡°]
-(1) ì „í™˜ë¶€(Transition): "${target}ì— ìžˆì–´ì„œ," â† ë…ë¦½í•­ì˜ ì²« ì¤„ì— ë°˜ë“œì‹œ ì´ ë¬¸êµ¬ê°€ ì˜¨ë‹¤
-(2) ì „ì œë¶€(Preamble): ê³µì§€ êµ¬ì„±ìš”ì†Œ ë˜ëŠ” ì¢…ëž˜ ê¸°ìˆ  ìš”ì†Œë¥¼ ë‚˜ì—´ (êµ¬ì„± ê°„ ì„¸ë¯¸ì½œë¡ (;)ìœ¼ë¡œ êµ¬ë¶„, êµ¬ì„±ë§ˆë‹¤ ì¤„ë°”ê¿ˆ)
-(3) íŠ¹ì§•ë¶€(Body): ë³¸ ë°œëª…ì˜ ì‹ ê·œí•˜ê³  íŠ¹ì§•ì ì¸ êµ¬ì„±ìš”ì†Œë¥¼ ê¸°ìˆ  (êµ¬ì„± ê°„ ì„¸ë¯¸ì½œë¡ (;)ìœ¼ë¡œ êµ¬ë¶„, êµ¬ì„±ë§ˆë‹¤ ì¤„ë°”ê¿ˆ)
-(4) ì¢…ê²°ë¶€(Closing): "~ì„ íŠ¹ì§•ìœ¼ë¡œ í•˜ëŠ” ${target}."
+[구조]
+(1) 전환부(Transition): "${target}에 있어서," ← 독립항의 첫 줄에 반드시 이 문구가 온다
+(2) 전제부(Preamble): 공지 구성요소 또는 종래 기술 요소를 나열 (구성 간 세미콜론(;)으로 구분, 구성마다 줄바꿈)
+(3) 특징부(Body): 본 발명의 신규하고 특징적인 구성요소를 기술 (구성 간 세미콜론(;)으로 구분, 구성마다 줄바꿈)
+(4) 종결부(Closing): "~을 특징으로 하는 ${target}."
 
-â˜… ì„œì‹ í•µì‹¬ ê·œì¹™ â˜…
-- "~ì— ìžˆì–´ì„œ,"ê°€ ë…ë¦½í•­ì˜ ê°€ìž¥ ì²« ë¬¸ìž¥ì´ë‹¤. ê·¸ ì•žì— êµ¬ì„±ìš”ì†Œë¥¼ ê¸°ìž¬í•˜ì§€ ë§ˆë¼.
-- êµ¬ì„±ìš”ì†Œ ë˜ëŠ” ë‹¨ê³„ê°€ ë‹¬ë¼ì§ˆ ë•Œë§ˆë‹¤ ì„¸ë¯¸ì½œë¡ (;)ìœ¼ë¡œ êµ¬ë¶„í•˜ê³  ì¤„ë°”ê¿ˆí•œë‹¤.
-- ë§ˆì§€ë§‰ êµ¬ì„±ìš”ì†Œ ì§ì „ì—ëŠ” "; ë°"ì„ ì‚¬ìš©í•˜ê³  ì¤„ë°”ê¿ˆí•œë‹¤.
-- ë§ˆì§€ë§‰ êµ¬ì„±ìš”ì†Œ ë’¤ì—ë„ ì„¸ë¯¸ì½œë¡ (;)ì„ ë¶™ì´ê³ , ì¤„ë°”ê¿ˆ ì—†ì´ ë°”ë¡œ ì¢…ê²°ë¶€("ë¥¼ í¬í•¨í•˜ëŠ” ê²ƒì„ íŠ¹ì§•ìœ¼ë¡œ í•˜ëŠ”")ë¥¼ ì´ì–´ ì“´ë‹¤.
-- ì „ì œë¶€ì™€ íŠ¹ì§•ë¶€ ì‚¬ì´ëŠ” "ë¥¼ í¬í•¨í•˜ê³ ," ë˜ëŠ” "ë¥¼ í¬í•¨í•˜ë©°,"ë¡œ ì—°ê²°í•œë‹¤.
+★ 서식 핵심 규칙 ★
+- "~에 있어서,"가 독립항의 가장 첫 문장이다. 그 앞에 구성요소를 기재하지 마라.
+- 구성요소 또는 단계가 달라질 때마다 세미콜론(;)으로 구분하고 줄바꿈한다.
+- 마지막 구성요소 직전에는 "; 및"을 사용하고 줄바꿈한다.
+- 마지막 구성요소 뒤에도 세미콜론(;)을 붙이고, 줄바꿈 없이 바로 종결부("를 포함하는 것을 특징으로 하는")를 이어 쓴다.
+- 전제부와 특징부 사이는 "를 포함하고," 또는 "를 포함하며,"로 연결한다.
 
-[ìž‘ì„± ì˜ˆì‹œ â€” ${claimType==='method'?'ë°©ë²•':'ìž¥ì¹˜'} ë…ë¦½í•­]
-ã€ì²­êµ¬í•­ Nã€‘
+[작성 예시 — ${claimType==='method'?'방법':'장치'} 독립항]
+【청구항 N】
 ${claimType==='method'
-?`${target}ì— ìžˆì–´ì„œ,
-ìƒê¸° ë°©ë²•ì€,
-ë°ì´í„°ë¥¼ ìˆ˜ì§‘í•˜ëŠ” ë‹¨ê³„;
-ìƒê¸° ìˆ˜ì§‘ëœ ë°ì´í„°ë¥¼ ë¶„ì„í•˜ëŠ” ë‹¨ê³„; ë°
-ìƒê¸° ë§¤ì¹­ ê²°ê³¼ë¥¼ ì œê³µí•˜ëŠ” ë‹¨ê³„;ë¥¼ í¬í•¨í•˜ëŠ” ê²ƒì„ íŠ¹ì§•ìœ¼ë¡œ í•˜ëŠ” ${target}.`
-:`${target}ì— ìžˆì–´ì„œ,
-í”„ë¡œì„¸ì„œ; ë°
-ë©”ëª¨ë¦¬;ë¥¼ í¬í•¨í•˜ê³ ,
-ìƒê¸° í”„ë¡œì„¸ì„œëŠ”,
-ë°ì´í„°ë¥¼ ìˆ˜ì§‘í•˜ë„ë¡ êµ¬ì„±ë˜ëŠ” ìˆ˜ì§‘ë¶€;
-ìƒê¸° ìˆ˜ì§‘ëœ ë°ì´í„°ë¥¼ ë¶„ì„í•˜ë„ë¡ êµ¬ì„±ë˜ëŠ” ë¶„ì„ë¶€; ë°
-ë¶„ì„ ê²°ê³¼ì— ê¸°ì´ˆí•˜ì—¬ ë§¤ì¹­ì„ ìˆ˜í–‰í•˜ë„ë¡ êµ¬ì„±ë˜ëŠ” ë§¤ì¹­ë¶€;ë¥¼ í¬í•¨í•˜ëŠ” ê²ƒì„ íŠ¹ì§•ìœ¼ë¡œ í•˜ëŠ” ${target}.`}
+?`${target}에 있어서,
+상기 방법은,
+데이터를 수집하는 단계;
+상기 수집된 데이터를 분석하는 단계; 및
+상기 매칭 결과를 제공하는 단계;를 포함하는 것을 특징으로 하는 ${target}.`
+:`${target}에 있어서,
+프로세서; 및
+메모리;를 포함하고,
+상기 프로세서는,
+데이터를 수집하도록 구성되는 수집부;
+상기 수집된 데이터를 분석하도록 구성되는 분석부; 및
+분석 결과에 기초하여 매칭을 수행하도록 구성되는 매칭부;를 포함하는 것을 특징으로 하는 ${target}.`}
 
-â›” "í”„ë¡œì„¸ì„œ; ë° ë©”ëª¨ë¦¬ë¥¼ í¬í•¨í•˜ëŠ” ${target}ì— ìžˆì–´ì„œ," â† ì´ë ‡ê²Œ ì“°ë©´ ì•ˆ ëœë‹¤! "~ì— ìžˆì–´ì„œ,"ê°€ ë¨¼ì € ì™€ì•¼ í•œë‹¤.
-â›” ë…ë¦½í•­ì—ì„œ "~ì— ìžˆì–´ì„œ," ì „í™˜ë¶€ë¥¼ ë¹ ëœ¨ë¦¬ë©´ ì ­ìŠ¨ í˜•ì‹ ìœ„ë°˜ì´ë‹¤.
-â›” ì¢…ì†í•­ì€ ê¸°ì¡´ í˜•ì‹ ìœ ì§€: "ì œNí•­ì— ìžˆì–´ì„œ, ~" (ì ­ìŠ¨ ì ìš© ì•ˆ í•¨)
+⛔ "프로세서; 및 메모리를 포함하는 ${target}에 있어서," ← 이렇게 쓰면 안 된다! "~에 있어서,"가 먼저 와야 한다.
+⛔ 독립항에서 "~에 있어서," 전환부를 빠뜨리면 젭슨 형식 위반이다.
+⛔ 종속항은 기존 형식 유지: "제N항에 있어서, ~" (젭슨 적용 안 함)
 `;
 }
 
-// â•â•â• KIPRIS ì„ í–‰ê¸°ìˆ  ê²€ìƒ‰ â•â•â•
-// Edge Functionì´ KIPRIS Plus API (plus.kipris.or.kr) í˜¸ì¶œ
-// KIPRIS Plus API í‚¤ (localStorageì—ì„œ ì‚¬ìš©ìž ì„¤ì • ê°€ëŠ¥)
+// ═══ KIPRIS 선행기술 검색 ═══
+// Edge Function이 KIPRIS Plus API (plus.kipris.or.kr) 호출
+// KIPRIS Plus API 키 (localStorage에서 사용자 설정 가능)
 const DEFAULT_KIPRIS_KEY='zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
 function getKiprisKey(){return App.apiKeys.kipris||DEFAULT_KIPRIS_KEY;}
 
-// ë“±ë¡ë²ˆí˜¸ í¬ë§·: 1020XXXXXXX â†’ 10-20XXXXX
+// 등록번호 포맷: 1020XXXXXXX → 10-20XXXXX
 function formatRegNumber(regNum){
   if(!regNum)return regNum;
   const cleaned=regNum.replace(/[^0-9]/g,'');
@@ -878,10 +878,10 @@ function formatRegNumber(regNum){
   return regNum;
 }
 
-// í•œêµ­ì–´ ì¡°ì‚¬ ì œê±° â†’ í•µì‹¬ í‚¤ì›Œë“œ ì¶”ì¶œ
+// 한국어 조사 제거 → 핵심 키워드 추출
 function extractPatentKeywords(title){
   return title
-    .replace(/[ì„ë¥¼ì´ê°€ì˜ì—ì„œë¡œë¶€í„°ë°ê³¼ì™€ì€ëŠ”ì—ê²Œìœ¼ë¡œ]/g,' ')
+    .replace(/[을를이가의에서로부터및과와은는에게으로]/g,' ')
     .replace(/\s+/g,' ').trim()
     .split(' ')
     .filter(w=>w.length>=2)
@@ -889,11 +889,11 @@ function extractPatentKeywords(title){
     .join(' ');
 }
 
-// KIPRIS ê²€ìƒ‰ (Supabase Edge Function â†’ ê³µê³µë°ì´í„°í¬í„¸ API)
+// KIPRIS 검색 (Supabase Edge Function → 공공데이터포털 API)
 async function searchKiprisPlus(query,maxResults=5){
   try{
-    if(!App.sb?.functions){console.warn('[KIPRIS] Supabase ë¯¸ì—°ê²°');return[];}
-    console.log(`[KIPRIS] ðŸ” íŠ¹í—ˆ ê²€ìƒ‰: "${query}"`);
+    if(!App.sb?.functions){console.warn('[KIPRIS] Supabase 미연결');return[];}
+    console.log(`[KIPRIS] 🔍 특허 검색: "${query}"`);
     const {data,error}=await App.sb.functions.invoke('kipris-proxy',{
       body:{
         type:'patent_word',
@@ -902,30 +902,30 @@ async function searchKiprisPlus(query,maxResults=5){
       }
     });
     if(error){console.error('[KIPRIS] Edge Function error:',error);return[];}
-    if(!data||!data.success){console.warn('[KIPRIS] API ì‹¤íŒ¨:',data?.error);return[];}
-    console.log(`[KIPRIS] âœ… ${(data.results||[]).length}ê±´ (ì´ ${data.totalCount||0}ê±´)`);
+    if(!data||!data.success){console.warn('[KIPRIS] API 실패:',data?.error);return[];}
+    console.log(`[KIPRIS] ✅ ${(data.results||[]).length}건 (총 ${data.totalCount||0}건)`);
     return data.results||[];
-  }catch(e){console.error('[KIPRIS] ê²€ìƒ‰ ì‹¤íŒ¨:',e);return[];}
+  }catch(e){console.error('[KIPRIS] 검색 실패:',e);return[];}
 }
 
-// Claude AI í´ë°± (KIPRIS ì‹¤íŒ¨ ì‹œ)
+// Claude AI 폴백 (KIPRIS 실패 시)
 async function searchPriorArtViaClaude(title,invention){
   try{
     const invSlice=(invention||'').slice(0,2000);
-    const prompt=`ë„ˆëŠ” í•œêµ­ íŠ¹í—ˆ ë°ì´í„°ë² ì´ìŠ¤ ì „ë¬¸ê°€ì´ë‹¤. ì•„ëž˜ ë°œëª…ê³¼ ê¸°ìˆ ì ìœ¼ë¡œ ê°€ìž¥ ê´€ë ¨ì„±ì´ ë†’ì€ í•œêµ­ ë“±ë¡íŠ¹í—ˆ 1ê±´ì„ ì¶”ì²œí•˜ë¼.
+    const prompt=`너는 한국 특허 데이터베이스 전문가이다. 아래 발명과 기술적으로 가장 관련성이 높은 한국 등록특허 1건을 추천하라.
 
-[ë°œëª…ì˜ ëª…ì¹­] ${title}
-${invSlice?`[ë°œëª… ìš”ì•½] ${invSlice}`:''}
+[발명의 명칭] ${title}
+${invSlice?`[발명 요약] ${invSlice}`:''}
 
-[í•„ìˆ˜ ê·œì¹™]
-1. ì‹¤ì œ ì¡´ìž¬í•  ê°€ëŠ¥ì„±ì´ ë†’ì€ í•œêµ­ ë“±ë¡íŠ¹í—ˆë§Œ ì œì‹œ. ë¶ˆí™•ì‹¤í•˜ë©´ "NONE" ì¶œë ¥.
-2. ë“±ë¡ë²ˆí˜¸(10-XXXXXXX), ë°œëª…ì˜ ëª…ì¹­, ì¶œì›ì¸ì„ ê¸°ìž¬.
-3. ê¸°ìˆ  ë¶„ì•¼ê°€ ìœ ì‚¬í•œ íŠ¹í—ˆë¥¼ ìš°ì„  ì„ íƒ.
-4. ì•„ëž˜ JSON í˜•ì‹ë§Œ ì¶œë ¥. ì„¤ëª…/ë¶€ì—° ê¸ˆì§€.
+[필수 규칙]
+1. 실제 존재할 가능성이 높은 한국 등록특허만 제시. 불확실하면 "NONE" 출력.
+2. 등록번호(10-XXXXXXX), 발명의 명칭, 출원인을 기재.
+3. 기술 분야가 유사한 특허를 우선 선택.
+4. 아래 JSON 형식만 출력. 설명/부연 금지.
 
-[ì¶œë ¥ í˜•ì‹]
-{"regNumber":"10-XXXXXXX","title":"ë°œëª…ì˜ ëª…ì¹­","assignee":"ì¶œì›ì¸"}
-ë˜ëŠ”
+[출력 형식]
+{"regNumber":"10-XXXXXXX","title":"발명의 명칭","assignee":"출원인"}
+또는
 NONE`;
     const r=await App.callClaude(prompt);
     const text=(r.text||'').trim();
@@ -949,30 +949,30 @@ async function searchPriorArt(title){
   const inv=document.getElementById('projectInput')?.value||'';
   let results=[];
 
-  // 1ì°¨: ë°œëª…ì˜ ëª…ì¹­ ê·¸ëŒ€ë¡œ ê²€ìƒ‰
+  // 1차: 발명의 명칭 그대로 검색
   results=await searchKiprisPlus(title,5);
 
-  // 2ì°¨: í‚¤ì›Œë“œ ì¶”ì¶œí•˜ì—¬ ìž¬ê²€ìƒ‰
+  // 2차: 키워드 추출하여 재검색
   if(!results.length){
     const kw=extractPatentKeywords(title);
     if(kw&&kw!==title)results=await searchKiprisPlus(kw,5);
   }
 
-  // 3ì°¨: Claude AI í´ë°±
+  // 3차: Claude AI 폴백
   if(!results.length){
     results=await searchPriorArtViaClaude(title,inv);
   }
 
   if(!results.length)return null;
 
-  // ìµœìƒìœ„ ê²°ê³¼ 1ê±´ ë°˜í™˜ (ë“±ë¡ë²ˆí˜¸ ìžˆëŠ” ê±´ ìš°ì„ )
+  // 최상위 결과 1건 반환 (등록번호 있는 건 우선)
   const sorted=results.sort((a,b)=>(b.registerNumber?1:0)-(a.registerNumber?1:0));
   const best=sorted[0];
   const fmtNum=formatRegNumber(best.registerNumber);
-  const sourceNote=best.source==='claude'?' (AI ì¶”ì²œ â€” KIPRIS ê²€ì¦ í•„ìš”)':'';
+  const sourceNote=best.source==='claude'?' (AI 추천 — KIPRIS 검증 필요)':'';
   const src=best.source==='claude'?'AI':'KIPRIS';
   return{
-    formatted:`ã€íŠ¹í—ˆë¬¸í—Œã€‘\n(íŠ¹í—ˆë¬¸í—Œ 1) í•œêµ­ë“±ë¡íŠ¹í—ˆ ì œ${fmtNum}í˜¸`,
+    formatted:`【특허문헌】\n(특허문헌 1) 한국등록특허 제${fmtNum}호`,
     patent:{
       publicationNumber:best.registerNumber,
       title:best.inventionTitle,
@@ -991,13 +991,13 @@ function buildPrompt(stepId){
   const inv=document.getElementById('projectInput').value,T=selectedTitle;
   const styleRef=getStyleRef();
   switch(stepId){
-    case 'step_01':return `í”„ë¡œì íŠ¸ë¥¼ ë¶„ì„í•˜ì—¬ íŠ¹í—ˆ ë°œëª…ì˜ ëª…ì¹­ í›„ë³´ë¥¼ 5ê°€ì§€ ìƒì„±í•˜ë¼.\ní˜•íƒœ: \"~${selectedTitleType}\"\nê° í›„ë³´ì— êµ­ë¬¸+ì˜ë¬¸.\n\nì¶œë ¥í˜•ì‹:\n[1] êµ­ë¬¸: (ëª…ì¹­) / ì˜ë¬¸: (ëª…ì¹­)\n[2] êµ­ë¬¸: (ëª…ì¹­) / ì˜ë¬¸: (ëª…ì¹­)\n[3] êµ­ë¬¸: (ëª…ì¹­) / ì˜ë¬¸: (ëª…ì¹­)\n[4] êµ­ë¬¸: (ëª…ì¹­) / ì˜ë¬¸: (ëª…ì¹­)\n[5] êµ­ë¬¸: (ëª…ì¹­) / ì˜ë¬¸: (ëª…ì¹­)\n\n[í”„ë¡œì íŠ¸]\n${inv}`;
-    case 'step_02':return `ã€ê¸°ìˆ ë¶„ì•¼ã€‘ë¥¼ ìž‘ì„±. \"ë³¸ ë°œëª…ì€ ~ì— ê´€í•œ ê²ƒì´ë‹¤.\" í•œ ë¬¸ìž¥ë§Œ. 20ë‹¨ì–´. ë‹¤ë¥¸ í•­ëª© í¬í•¨ ê¸ˆì§€. í—¤ë” ê¸ˆì§€.\n\në°œëª…ì˜ ëª…ì¹­: ${T}${styleRef}`;
-    case 'step_03':return `ã€ë°œëª…ì˜ ë°°ê²½ì´ ë˜ëŠ” ê¸°ìˆ ã€‘ì„ ìž‘ì„±. 3ë¬¸ë‹¨(ê¸°ì¡´ë¬¸ì œ/ìµœê·¼ë™í–¥/í•„ìš”ì„±), ê° 150ë‹¨ì–´. ë²ˆí˜¸ ì—†ì´. ë‹¤ë¥¸ í•­ëª© í¬í•¨ ê¸ˆì§€. í—¤ë” ê¸ˆì§€.\n\në°œëª…ì˜ ëª…ì¹­: ${T}\n[í”„ë¡œì íŠ¸] ${inv}${styleRef}`;
-    case 'step_04':return null; // KIPRIS API ì‹¤ì‹œê°„ ê²€ìƒ‰ìœ¼ë¡œ ëŒ€ì²´
-    case 'step_05':return `ã€í•´ê²°í•˜ê³ ìž í•˜ëŠ” ê³¼ì œã€‘ìž‘ì„±. \"ë³¸ ë°œëª…ì€ ~ì„ ì œê³µí•˜ëŠ” ê²ƒì„ ëª©ì ìœ¼ë¡œ í•œë‹¤.\" 50ë‹¨ì–´ ì´í•˜. ë§ˆì§€ë§‰: \"ë³¸ ë°œëª…ì˜ ê¸°ìˆ ì  ê³¼ì œëŠ” ì´ìƒì—ì„œ ì–¸ê¸‰í•œ ê¸°ìˆ ì  ê³¼ì œë¡œ ì œí•œë˜ì§€ ì•Šìœ¼ë©°, ì–¸ê¸‰ë˜ì§€ ì•Šì€ ë˜ ë‹¤ë¥¸ ê¸°ìˆ ì  ê³¼ì œë“¤ì€ ì•„ëž˜ì˜ ê¸°ìž¬ë¡œë¶€í„° ë‹¹ì—…ìžì—ê²Œ ëª…í™•í•˜ê²Œ ì´í•´ë  ìˆ˜ ìžˆì„ ê²ƒì´ë‹¤.\" í—¤ë” ê¸ˆì§€.\n\në°œëª…ì˜ ëª…ì¹­: ${T}\n[ë°°ê²½ê¸°ìˆ ] ${outputs.step_03||''}${styleRef}`;
+    case 'step_01':return `프로젝트를 분석하여 특허 발명의 명칭 후보를 5가지 생성하라.\n형태: \"~${selectedTitleType}\"\n각 후보에 국문+영문.\n\n출력형식:\n[1] 국문: (명칭) / 영문: (명칭)\n[2] 국문: (명칭) / 영문: (명칭)\n[3] 국문: (명칭) / 영문: (명칭)\n[4] 국문: (명칭) / 영문: (명칭)\n[5] 국문: (명칭) / 영문: (명칭)\n\n[프로젝트]\n${inv}`;
+    case 'step_02':return `【기술분야】를 작성. \"본 발명은 ~에 관한 것이다.\" 한 문장만. 20단어. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}${styleRef}`;
+    case 'step_03':return `【발명의 배경이 되는 기술】을 작성. 3문단(기존문제/최근동향/필요성), 각 150단어. 번호 없이. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}${styleRef}`;
+    case 'step_04':return null; // KIPRIS API 실시간 검색으로 대체
+    case 'step_05':return `【해결하고자 하는 과제】작성. \"본 발명은 ~을 제공하는 것을 목적으로 한다.\" 50단어 이하. 마지막: \"본 발명의 기술적 과제는 이상에서 언급한 기술적 과제로 제한되지 않으며, 언급되지 않은 또 다른 기술적 과제들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\" 헤더 금지.\n\n발명의 명칭: ${T}\n[배경기술] ${outputs.step_03||''}${styleRef}`;
 
-    // â•â•â• Step 6: ìž¥ì¹˜ ì²­êµ¬í•­ (v4.7 ì™„ì „ ìž¬ìž‘ì„±) â•â•â•
+    // ═══ Step 6: 장치 청구항 (v4.7 완전 재작성) ═══
     case 'step_06':{
       // v4.9: Auto-select category from title type if set to 'auto'
       const effectiveCat=(deviceCategory==='auto')?autoDetectCategoryFromTitle():deviceCategory;
@@ -1005,466 +1005,466 @@ function buildPrompt(stepId){
       const totalDep=deviceGeneralDep+deviceAnchorDep;
       const anchorEnd=deviceAnchorStart+deviceAnchorDep-1;
       const themeInst=buildAnchorThemeInstruction(anchorThemeMode,selectedAnchorThemes,deviceAnchorDep);
-      return `ìž¥ì¹˜ ì²­êµ¬ë²”ìœ„ë¥¼ ìž‘ì„±í•˜ë¼.
+      return `장치 청구범위를 작성하라.
 
-[ì²­êµ¬í•­ êµ¬ì„±]
-- ë…ë¦½í•­ ì¹´í…Œê³ ë¦¬: ${catLabel}
-- ë…ë¦½í•­: 1ê°œ (ì²­êµ¬í•­ 1)
-- ì¼ë°˜ ì¢…ì†í•­: ${deviceGeneralDep}ê°œ (ì²­êµ¬í•­ 2~${deviceGeneralDep+1})
-- ë“±ë¡ ì•µì»¤ ì¢…ì†í•­: ${deviceAnchorDep}ê°œ (ì²­êµ¬í•­ ${deviceAnchorStart}~${anchorEnd})
-- ì¢…ê²°ì–´: ${getCategoryEnding(deviceCategory==='auto'?'server':deviceCategory)}
+[청구항 구성]
+- 독립항 카테고리: ${catLabel}
+- 독립항: 1개 (청구항 1)
+- 일반 종속항: ${deviceGeneralDep}개 (청구항 2~${deviceGeneralDep+1})
+- 등록 앵커 종속항: ${deviceAnchorDep}개 (청구항 ${deviceAnchorStart}~${anchorEnd})
+- 종결어: ${getCategoryEnding(deviceCategory==='auto'?'server':deviceCategory)}
 
-[í•„ìˆ˜ ìž‘ì„± ê·œì¹™]
-(R1) ë…ë¦½í•­ ìµœì†Œí™” + ìƒìœ„ê°œë…í™”
-- ë°œëª… ì„±ë¦½ì— í•„ìš”í•œ ìµœì†Œ í•„ìˆ˜ êµ¬ì„±ìš”ì†Œë§Œ í¬í•¨
-- UI/íŠ¹ì • ì†”ë£¨ì…˜ëª…/êµ¬ì²´ ìˆ˜ì¹˜/êµ¬ì²´ ìˆ˜ì‹ì€ ë…ë¦½í•­ì—ì„œ ë°°ì œ
-- êµ¬ì„±ìš”ì†Œ ê°„ ìž…ë ¥â†’ì²˜ë¦¬â†’ì¶œë ¥ íë¦„ì˜ ìœ ê¸°ì  ê²°í•© ë°˜ë“œì‹œ í¬í•¨ (ë‹¨ìˆœ ë‚˜ì—´ ê¸ˆì§€)
+[필수 작성 규칙]
+(R1) 독립항 최소화 + 상위개념화
+- 발명 성립에 필요한 최소 필수 구성요소만 포함
+- UI/특정 솔루션명/구체 수치/구체 수식은 독립항에서 배제
+- 구성요소 간 입력→처리→출력 흐름의 유기적 결합 반드시 포함 (단순 나열 금지)
 
-(R2) ìš©ì–´ ì¼ê´€ì„±: ë™ì¼ ê°œì²´ëŠ” ë™ì¼ ëª…ì¹­ ë°˜ë³µ. \"ìƒê¸°\"ëŠ” í˜¼ë™ ë°©ì§€ì— í•„ìš”í•œ ë²”ìœ„ì—ì„œë§Œ.
+(R2) 용어 일관성: 동일 개체는 동일 명칭 반복. \"상기\"는 혼동 방지에 필요한 범위에서만.
 
-(R3) Killer Words ê¸ˆì§€: \"ë°˜ë“œì‹œ/ë¬´ì¡°ê±´/ì˜¤ì§/í•„ìˆ˜ì ìœ¼ë¡œ/ë§Œ\" ì ˆëŒ€ ê¸ˆì§€. \"~í•˜ë„ë¡ êµ¬ì„±ë˜ëŠ”\", \"~í•˜ëŠ”\", \"~ì„ í¬í•¨í•˜ëŠ”\" ì‚¬ìš©.
+(R3) Killer Words 금지: \"반드시/무조건/오직/필수적으로/만\" 절대 금지. \"~하도록 구성되는\", \"~하는\", \"~을 포함하는\" 사용.
 
-(R4) ì¼ë°˜ ì¢…ì†í•­: ìƒìœ„í•­ ì¸ìš©í•˜ì—¬ êµ¬ì²´í™”Â·í™•ìž¥. ìˆ˜ì¹˜/ìˆ˜ì‹ ê³¼ë„í•˜ê²Œ ê³ ì •í•˜ì§€ ì•Šê³ , í›„ì† Step 8/9/13ì—ì„œ ìƒì„¸í™” ê°€ëŠ¥í•˜ë„ë¡ ë¬¸ìž¥ êµ¬ì„±.
+(R4) 일반 종속항: 상위항 인용하여 구체화·확장. 수치/수식 과도하게 고정하지 않고, 후속 Step 8/9/13에서 상세화 가능하도록 문장 구성.
 
-â˜…â˜… ì¢…ì†í•­ ìž‘ì„± ê·œì¹™ (ëŒ€í†µë ¹ë ¹ â€” ìœ„ë°˜ ì‹œ ê¸°ìž¬ë¶ˆë¹„) â˜…â˜…
-â‘  ì¢…ì†í•­ì€ ë…ë¦½í•­ ë˜ëŠ” ë‹¤ë¥¸ ì¢…ì†í•­ ì¤‘ 1 ë˜ëŠ” 2 ì´ìƒì˜ í•­ì„ ì¸ìš©í•˜ë˜, ì¸ìš© í•­ì˜ ë²ˆí˜¸ë¥¼ ê¸°ìž¬
-â‘¡ 2 ì´ìƒì˜ í•­ì„ ì¸ìš©í•˜ëŠ” ì¢…ì†í•­(ë‹¤ì¤‘ì¸ìš©)ì€ ì¸ìš© í•­ ë²ˆí˜¸ë¥¼ íƒì¼ì ìœ¼ë¡œ ê¸°ìž¬ ("ì œNí•­ ë˜ëŠ” ì œMí•­ì— ìžˆì–´ì„œ")
-â‘¢ ë‹¤ì¤‘ì¸ìš© ì¢…ì†í•­ì€ ë‹¤ë¥¸ ë‹¤ì¤‘ì¸ìš© ì¢…ì†í•­ì„ ì¸ìš© ë¶ˆê°€ (ë‹¤ì¤‘ì¸ìš©ì˜ ë‹¤ì¤‘ì¸ìš© ê¸ˆì§€)
-â‘£ ì¢…ì†í•­ì€ ì¸ìš©í•˜ëŠ” ë…ë¦½í•­ ë˜ëŠ” ì¢…ì†í•­ë³´ë‹¤ ë’¤ì— ê¸°ìž¬ (ë²ˆí˜¸ ì—­ì „ ê¸ˆì§€)
+★★ 종속항 작성 규칙 (대통령령 — 위반 시 기재불비) ★★
+① 종속항은 독립항 또는 다른 종속항 중 1 또는 2 이상의 항을 인용하되, 인용 항의 번호를 기재
+② 2 이상의 항을 인용하는 종속항(다중인용)은 인용 항 번호를 택일적으로 기재 ("제N항 또는 제M항에 있어서")
+③ 다중인용 종속항은 다른 다중인용 종속항을 인용 불가 (다중인용의 다중인용 금지)
+④ 종속항은 인용하는 독립항 또는 종속항보다 뒤에 기재 (번호 역전 금지)
 
-(R5) ë“±ë¡ ì•µì»¤ ì¢…ì†í•­ (ì²­êµ¬í•­ ${deviceAnchorStart}ë¶€í„°):
-- ì‹ ê·œì„±/ì§„ë³´ì„± ë°©ì–´ìš© \"ì°½ì˜ì Â·êµ¬ì²´ì  ê¸°ìˆ ìˆ˜ë‹¨\" í¬í•¨
-- ìˆ˜ì¹˜Â·ìˆ˜ì‹Â·ê¸°í˜¸ ê³¼ë‹¤ ê¸°ìž¬ ê¸ˆì§€ (í›„ì† ë‹¨ê³„ì—ì„œ ì •ëŸ‰í™”)
-- ì•„ëž˜ A~C ì¤‘ ìµœì†Œ 2ê°œ í¬í•¨:
-  A) ë‹¤ë‹¨ê³„ ì²˜ë¦¬(2ë‹¨ê³„ ì´ìƒ): ì „ì²˜ë¦¬â†’ì‚°ì¶œâ†’ë³´ì • ë“±
-  B) ì¡°ì • ê°€ëŠ¥í•œ ê¸°ì¤€ê°’/ê°€ì¤‘ì¹˜/ì‹ ë¢°ë„/í’ˆì§ˆì§€í‘œ ì‚¬ìš©
-  C) ê²€ì¦/ë³´ì •/í”¼ë“œë°±/í´ë°±/ìž¬ì‹œë„ ì¤‘ í•˜ë‚˜ ì´ìƒì˜ ë£¨í”„ ë˜ëŠ” ì¡°ê±´ë¶€ ë¶„ê¸°
-- ë°œëª… ë‚´ìš©ì— ê·¼ê±°ê°€ ìžˆëŠ” ìš”ì†Œ/ì²˜ë¦¬/íš¨ê³¼ë§Œìœ¼ë¡œ êµ¬ì„±
+(R5) 등록 앵커 종속항 (청구항 ${deviceAnchorStart}부터):
+- 신규성/진보성 방어용 \"창의적·구체적 기술수단\" 포함
+- 수치·수식·기호 과다 기재 금지 (후속 단계에서 정량화)
+- 아래 A~C 중 최소 2개 포함:
+  A) 다단계 처리(2단계 이상): 전처리→산출→보정 등
+  B) 조정 가능한 기준값/가중치/신뢰도/품질지표 사용
+  C) 검증/보정/피드백/폴백/재시도 중 하나 이상의 루프 또는 조건부 분기
+- 발명 내용에 근거가 있는 요소/처리/효과만으로 구성
 
-â›” (R6) ìž¥ì¹˜/ë°©ë²• êµ¬ë¶„ â€” ì ˆëŒ€ ì¤€ìˆ˜
-- ì´ê²ƒì€ "ìž¥ì¹˜" ì²­êµ¬í•­ì´ë‹¤. "ë°©ë²•"ì´ ì•„ë‹ˆë‹¤.
-- "~í•˜ëŠ” ë‹¨ê³„", "S100", "S200" ë“± ë°©ë²• í‘œí˜„ ì ˆëŒ€ ê¸ˆì§€
-- "~ë¶€" í˜•íƒœì˜ ìž¥ì¹˜ êµ¬ì„±ìš”ì†Œ ëª…ì¹­ë§Œ ì‚¬ìš© ("~ëª¨ë“ˆ", "~ìœ ë‹›" ì ˆëŒ€ ê¸ˆì§€)
-- ë™ìž‘ì€ "~í•˜ë„ë¡ êµ¬ì„±ë˜ëŠ”", "~ì„ ìˆ˜í–‰í•˜ëŠ”" í˜•íƒœë¡œ í‘œí˜„
+⛔ (R6) 장치/방법 구분 — 절대 준수
+- 이것은 "장치" 청구항이다. "방법"이 아니다.
+- "~하는 단계", "S100", "S200" 등 방법 표현 절대 금지
+- "~부" 형태의 장치 구성요소 명칭만 사용 ("~모듈", "~유닛" 절대 금지)
+- 동작은 "~하도록 구성되는", "~을 수행하는" 형태로 표현
 
-[ì•µì»¤ í…Œë§ˆ ë°°ì • â€” ë‚´ë¶€ ì§€ì¹¨, ì¶œë ¥ ê¸ˆì§€]
+[앵커 테마 배정 — 내부 지침, 출력 금지]
 ${themeInst}
 
-[ì¶œë ¥ í˜•ì‹]
-ã€ì²­êµ¬í•­ 1ã€‘í˜•ì‹. ì²­êµ¬í•­ë§Œ ì¶œë ¥. í…Œë§ˆ/í‚¤ì›Œë“œ/ì ê²€ ë‚´ìš© ì¶œë ¥ ê¸ˆì§€.
-ì¢…ì†í•­ì€ \"ì²­êµ¬í•­ Nì— ìžˆì–´ì„œ,\" ì‹œìž‘. SWëª… ê¸ˆì§€. ì œí•œì„± í‘œí˜„ ê¸ˆì§€.
+[출력 형식]
+【청구항 1】형식. 청구항만 출력. 테마/키워드/점검 내용 출력 금지.
+종속항은 \"청구항 N에 있어서,\" 시작. SW명 금지. 제한성 표현 금지.
 ${getJepsonInstruction('device')}
-â˜…â˜…â˜… ë°œëª… ë‚´ìš©ì„ ë‹¨ í•˜ë‚˜ë„ ëˆ„ë½ ì—†ì´ ëª¨ë‘ ë°˜ì˜í•˜ë¼. â˜…â˜…â˜…
+★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
 ${T}${getFullInvention()}${styleRef}`;}
 
-    // â•â•â• Step 7: ë„ë©´ ì„¤ê³„ (ë„ë©´ ê·œì¹™ v4.0) â•â•â•
+    // ═══ Step 7: 도면 설계 (도면 규칙 v4.0) ═══
     case 'step_07':{
       const f=document.getElementById('optDeviceFigures').value;
       const reqInst=getRequiredFiguresInstruction();
       const skipNums=requiredFigures.map(rf=>rf.num);
       const genCount=parseInt(f)-(requiredFigures.length);
-      return `ã€ìž¥ì¹˜ ì²­êµ¬ë²”ìœ„ã€‘ì— ëŒ€í•œ ë„ë©´ì„ ì„¤ê³„í•˜ë¼. ì´ ë„ë©´ ìˆ˜: ${f}ê°œ.
-${reqInst?`\nì‚¬ìš©ìžê°€ ë³´ìœ í•œ í•„ìˆ˜ ë„ë©´: ${requiredFigures.length}ê°œ (${skipNums.map(n=>'ë„ '+n).join(', ')}).\nìƒˆë¡œ ìƒì„±í•  ë„ë©´: ${genCount>0?genCount:0}ê°œ.\ní•„ìˆ˜ ë„ë©´ ë²ˆí˜¸ëŠ” ê±´ë„ˆë›°ê³  ë‚˜ë¨¸ì§€ ë²ˆí˜¸ë¡œ ìƒì„±í•˜ë¼.`:''}
+      return `【장치 청구범위】에 대한 도면을 설계하라. 총 도면 수: ${f}개.
+${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 (${skipNums.map(n=>'도 '+n).join(', ')}).\n새로 생성할 도면: ${genCount>0?genCount:0}개.\n필수 도면 번호는 건너뛰고 나머지 번호로 생성하라.`:''}
 
-â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-â˜…â˜…â˜… íŠ¹í—ˆ ë„ë©´ ìƒì„± ê·œì¹™ v4.0 â˜…â˜…â˜…
-â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+════════════════════════════════════════════════════════════════
+★★★ 특허 도면 생성 규칙 v4.0 ★★★
+════════════════════════════════════════════════════════════════
 
-â›”â›”â›” ì ˆëŒ€ ê¸ˆì§€ ì‚¬í•­ â›”â›”â›”
-- "~ë‹¨ê³„", "S100", "S200" ë“± ë°©ë²• í‘œí˜„ ê¸ˆì§€
-- "~ëª¨ë“ˆ" í‘œí˜„ ê¸ˆì§€ â†’ ë°˜ë“œì‹œ "~ë¶€"ë¡œ í†µì¼ (ì˜ˆ: ì†¡ì‹ ë¶€, ìˆ˜ì‹ ë¶€, ì œì–´ë¶€)
-- ì´ ë„ë©´ì€ ì˜¤ì§ "ìž¥ì¹˜ì˜ êµ¬ì„±ìš”ì†Œ"ë§Œ í‘œí˜„
+⛔⛔⛔ 절대 금지 사항 ⛔⛔⛔
+- "~단계", "S100", "S200" 등 방법 표현 금지
+- "~모듈" 표현 금지 → 반드시 "~부"로 통일 (예: 송신부, 수신부, 제어부)
+- 이 도면은 오직 "장치의 구성요소"만 표현
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-[R1] ë„ë©´ë¶€í˜¸ ê³„ì¸µ ì²´ê³„ (ë ˆë²¨ë³„ ë²ˆí˜¸ ë‹¨ìœ„ ê³ ì •)
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[R1] 도면부호 계층 체계 (레벨별 번호 단위 고정)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-â–  L1 (ìµœìƒìœ„ ìž¥ì¹˜): X00 í˜•ì‹ â€” 100 ë‹¨ìœ„
-  ${getDeviceSubject()}(100), ì‚¬ìš©ìž ë‹¨ë§(200), ì™¸ë¶€ ì‹œìŠ¤í…œ(300), ë°ì´í„°ë² ì´ìŠ¤(400), ë„¤íŠ¸ì›Œí¬(500)
+■ L1 (최상위 장치): X00 형식 — 100 단위
+  ${getDeviceSubject()}(100), 사용자 단말(200), 외부 시스템(300), 데이터베이스(400), 네트워크(500)
 
-â–  L2 (L1 í•˜ìœ„ êµ¬ì„±): XY0 í˜•ì‹ â€” 10 ë‹¨ìœ„
-  ${getDeviceSubject()}(100) í•˜ìœ„: í†µì‹ ë¶€(110), í”„ë¡œì„¸ì„œ(120), ë©”ëª¨ë¦¬(130), ì €ìž¥ë¶€(140)
-  ì‚¬ìš©ìž ë‹¨ë§(200) í•˜ìœ„: ìž…ë ¥ë¶€(210), ì¶œë ¥ë¶€(220), ì œì–´ë¶€(230)
+■ L2 (L1 하위 구성): XY0 형식 — 10 단위
+  ${getDeviceSubject()}(100) 하위: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)
+  사용자 단말(200) 하위: 입력부(210), 출력부(220), 제어부(230)
 
-â–  L3 (L2 í•˜ìœ„ ìš”ì†Œ): XYZ í˜•ì‹ â€” 1 ë‹¨ìœ„
-  í†µì‹ ë¶€(110) í•˜ìœ„: ì†¡ì‹ ë¶€(111), ìˆ˜ì‹ ë¶€(112), ì•”í˜¸í™”ë¶€(113)
-  í”„ë¡œì„¸ì„œ(120) í•˜ìœ„: ì—°ì‚°ë¶€(121), ìºì‹œë¶€(122)
+■ L3 (L2 하위 요소): XYZ 형식 — 1 단위
+  통신부(110) 하위: 송신부(111), 수신부(112), 암호화부(113)
+  프로세서(120) 하위: 연산부(121), 캐시부(122)
 
-â–  í•µì‹¬ ì›ì¹™
-  - ë¶€ëª¨ ì ‘ë‘(prefix) ìœ ì§€: 130ì˜ í•˜ìœ„ëŠ” 131, 132...
-  - ë™ì¼ ë„ë©´ì„¸íŠ¸ ë‚´ ë²ˆí˜¸ ì¤‘ë³µ ê¸ˆì§€
-  - ë ˆë²¨ í˜¼í•© ê¸ˆì§€: L2ì— 111 ê°™ì€ ë²ˆí˜¸ ì‚¬ìš© ê¸ˆì§€
+■ 핵심 원칙
+  - 부모 접두(prefix) 유지: 130의 하위는 131, 132...
+  - 동일 도면세트 내 번호 중복 금지
+  - 레벨 혼합 금지: L2에 111 같은 번호 사용 금지
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-[R2] ë°•ìŠ¤ ì†Œì†(Ownership) ê·œì¹™
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[R2] 박스 소속(Ownership) 규칙
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-â–  ë°•ìŠ¤ = í•´ë‹¹ ìž¥ì¹˜ì˜ "êµ¬ë¹„/ë³´ìœ " ë²”ìœ„
-  "Aê°€ Xë¥¼ êµ¬ë¹„í•œë‹¤" â†’ XëŠ” ë°˜ë“œì‹œ A ë°•ìŠ¤ ë‚´ë¶€ì— ë°°ì¹˜
+■ 박스 = 해당 장치의 "구비/보유" 범위
+  "A가 X를 구비한다" → X는 반드시 A 박스 내부에 배치
 
-â–  ì†Œì† ìœ„ë°˜ ê¸ˆì§€
-  ${getDeviceSubject()}(100)ê°€ í”„ë¡œì„¸ì„œ(110)ë¥¼ êµ¬ë¹„ â†’ 110ì€ 100 ë°•ìŠ¤ ë‚´ë¶€ì—ë§Œ ì¡´ìž¬
-  110ì´ 200 ë°•ìŠ¤ ì•ˆì— ë“¤ì–´ê°€ë©´ ì˜¤ë¥˜
+■ 소속 위반 금지
+  ${getDeviceSubject()}(100)가 프로세서(110)를 구비 → 110은 100 박스 내부에만 존재
+  110이 200 박스 안에 들어가면 오류
 
-â–  ê³µí†µ êµ¬ì„± í‘œí˜„
-  ${getDeviceSubject()}ì™€ ë‹¨ë§ ëª¨ë‘ í”„ë¡œì„¸ì„œ ë³´ìœ  ì‹œ:
-  - ${getDeviceSubject()} í”„ë¡œì„¸ì„œ: í”„ë¡œì„¸ì„œ(110)
-  - ë‹¨ë§ í”„ë¡œì„¸ì„œ: í”„ë¡œì„¸ì„œ(210)
-  ê°ìž ìžê¸° ë°•ìŠ¤ ë‚´ë¶€ì— ë°°ì¹˜ (ë²ˆí˜¸ ë¶„ë¦¬)
+■ 공통 구성 표현
+  ${getDeviceSubject()}와 단말 모두 프로세서 보유 시:
+  - ${getDeviceSubject()} 프로세서: 프로세서(110)
+  - 단말 프로세서: 프로세서(210)
+  각자 자기 박스 내부에 배치 (번호 분리)
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-[R3] ë„ë©´ë³„ í‘œí˜„ ë ˆë²¨ â˜…í•µì‹¬â˜…
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[R3] 도면별 표현 레벨 ★핵심★
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-â–  ë„ 1: ì „ì²´ ì‹œìŠ¤í…œ êµ¬ì„±ë„ (System Overview)
-  âœ… í—ˆìš©: L1 ìž¥ì¹˜ ë°•ìŠ¤ë§Œ â€” 100, 200, 300, 400...
-  âœ… í—ˆìš©: L1 ìž¥ì¹˜ ë°•ìŠ¤ë“¤ ê°„ì˜ ì—°ê²°ì„ ë§Œ
-  â›” ê¸ˆì§€: L2/L3 í•˜ìœ„ êµ¬ì„±ìš”ì†Œ(110, 120, 111...) í‘œì‹œ ê¸ˆì§€
-  â›” ê¸ˆì§€: í•˜ìœ„ ìš”ì†Œ ê°„ ì—°ê²°ì„  ê¸ˆì§€
-  â›” ê¸ˆì§€: ìµœì™¸ê³½ ë°•ìŠ¤ ìƒì„± ê¸ˆì§€ (L1ë§Œ ìžˆìœ¼ë¯€ë¡œ ì™¸ê³½ ë¶ˆí•„ìš”)
+■ 도 1: 전체 시스템 구성도 (System Overview)
+  ✅ 허용: L1 장치 박스만 — 100, 200, 300, 400...
+  ✅ 허용: L1 장치 박스들 간의 연결선만
+  ⛔ 금지: L2/L3 하위 구성요소(110, 120, 111...) 표시 금지
+  ⛔ 금지: 하위 요소 간 연결선 금지
+  ⛔ 금지: 최외곽 박스 생성 금지 (L1만 있으므로 외곽 불필요)
   
-  ë„ 1 ì˜ˆì‹œ:
-  [${getDeviceSubject()}(100)] â†â†’ [ì‚¬ìš©ìž ë‹¨ë§(200)] â†â†’ [ë°ì´í„°ë² ì´ìŠ¤(400)]
+  도 1 예시:
+  [${getDeviceSubject()}(100)] ←→ [사용자 단말(200)] ←→ [데이터베이스(400)]
 
-â–  ë„ 2 ì´í›„: ì„¸ë¶€ ë¸”ë¡ë„ (Detailed Block Diagram)
-  â›”â›” í•µì‹¬: í•œ ë„ë©´ì—ëŠ” ë°˜ë“œì‹œ "í•œ ë ˆë²¨"ë§Œ í‘œì‹œ â›”â›”
-  ìµœì™¸ê³½ ë°•ìŠ¤ = ìƒìœ„ ìž¥ì¹˜
-  ë‚´ë¶€ ë°•ìŠ¤ = ê·¸ ìƒìœ„ ìž¥ì¹˜ì˜ ì§ê³„ ìžì‹ ë ˆë²¨ë§Œ
+■ 도 2 이후: 세부 블록도 (Detailed Block Diagram)
+  ⛔⛔ 핵심: 한 도면에는 반드시 "한 레벨"만 표시 ⛔⛔
+  최외곽 박스 = 상위 장치
+  내부 박스 = 그 상위 장치의 직계 자식 레벨만
   
-  âœ… ì˜¬ë°”ë¥¸ ì˜ˆ (ë„ 2: ${getDeviceSubject()} ìƒì„¸):
-  ìµœì™¸ê³½=${getDeviceSubject()}(100), ë‚´ë¶€=L2ë§Œ: í†µì‹ ë¶€(110), í”„ë¡œì„¸ì„œ(120), ë©”ëª¨ë¦¬(130)
+  ✅ 올바른 예 (도 2: ${getDeviceSubject()} 상세):
+  최외곽=${getDeviceSubject()}(100), 내부=L2만: 통신부(110), 프로세서(120), 메모리(130)
   
-  âœ… ì˜¬ë°”ë¥¸ ì˜ˆ (ë„ 3: í”„ë¡œì„¸ì„œ ìƒì„¸):
-  ìµœì™¸ê³½=í”„ë¡œì„¸ì„œ(120), ë‚´ë¶€=L3ë§Œ: ì—°ì‚°ë¶€(121), ìºì‹œë¶€(122)
+  ✅ 올바른 예 (도 3: 프로세서 상세):
+  최외곽=프로세서(120), 내부=L3만: 연산부(121), 캐시부(122)
   
-  â›” ìž˜ëª»ëœ ì˜ˆ (L2+L3 í˜¼í•©):
-  ìµœì™¸ê³½=${getDeviceSubject()}(100), ë‚´ë¶€=í”„ë¡œì„¸ì„œ(110)+ì—°ì‚°ë¶€(111)+ìºì‹œë¶€(112)+ë©”ëª¨ë¦¬(120)
-  â†’ 110ì€ L2, 111/112ëŠ” L3 â†’ ë ˆë²¨ í˜¼í•© ì˜¤ë¥˜!
-  â†’ ì˜¬ë°”ë¥¸ ë°©ë²•: ë„ 2ì— L2ë§Œ, ë„ 3ì— L3ë§Œ ë¶„ë¦¬
+  ⛔ 잘못된 예 (L2+L3 혼합):
+  최외곽=${getDeviceSubject()}(100), 내부=프로세서(110)+연산부(111)+캐시부(112)+메모리(120)
+  → 110은 L2, 111/112는 L3 → 레벨 혼합 오류!
+  → 올바른 방법: 도 2에 L2만, 도 3에 L3만 분리
   
-  ë„ 2 ì˜ˆì‹œ (${getDeviceSubject()}(100) ìƒì„¸):
-  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-  â”‚        ${getDeviceSubject()}(100)                 â”‚ â† ìµœì™¸ê³½
-  â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”â”‚
-  â”‚  â”‚í†µì‹ ë¶€ â”‚  â”‚í”„ë¡œì„¸ì„œâ”‚  â”‚ë©”ëª¨ë¦¬ â”‚â”‚
-  â”‚  â”‚ (110) â”‚  â”‚ (120) â”‚  â”‚ (130) â”‚â”‚
-  â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”€â”€â”˜â”‚
-  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+  도 2 예시 (${getDeviceSubject()}(100) 상세):
+  ┌─────────────────────────────────┐
+  │        ${getDeviceSubject()}(100)                 │ ← 최외곽
+  │  ┌───────┐  ┌───────┐  ┌───────┐│
+  │  │통신부 │  │프로세서│  │메모리 ││
+  │  │ (110) │  │ (120) │  │ (130) ││
+  │  └───────┘  └───────┘  └───────┘│
+  └─────────────────────────────────┘
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-[R4] ì—°ê²°(ì—°ë™) í‘œí˜„ ê·œì¹™
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[R4] 연결(연동) 표현 규칙
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-â–  ë„ 1: L1 ë°•ìŠ¤ â†” L1 ë°•ìŠ¤ ì—°ê²°ë§Œ
-  ${getDeviceSubject()}(100) â†” ì‚¬ìš©ìž ë‹¨ë§(200) ì—°ê²°ì„  í—ˆìš©
-  í•˜ìœ„ ìš”ì†Œ(110, 210) ê°„ ì—°ê²°ì„  ê¸ˆì§€
+■ 도 1: L1 박스 ↔ L1 박스 연결만
+  ${getDeviceSubject()}(100) ↔ 사용자 단말(200) 연결선 허용
+  하위 요소(110, 210) 간 연결선 금지
 
-â˜…â˜…â˜… ë„ 1 ì—°ê²°ê´€ê³„ ì„¤ê³„ ê·œì¹™ (ë…¼ë¦¬ì  ê²°í•©) â˜…â˜…â˜…
-  - ë‹¨ìˆœížˆ ëª¨ë“  L1 ë°•ìŠ¤ë¥¼ ì¼ë ¬ ì—°ê²°í•˜ì§€ ë§ˆë¼
-  - ê° L1 êµ¬ì„±ìš”ì†Œì˜ ì—­í• ê³¼ ê¸°ëŠ¥ì„ ë¶„ì„í•˜ì—¬ ë…¼ë¦¬ì  ê²°í•© ê´€ê³„ë¥¼ ê²°ì •í•˜ë¼
-  - ì˜ˆì‹œ 1 (ì¤‘ì•™ í—ˆë¸Œí˜•): ì„œë²„(100)ê°€ ì¤‘ì‹¬ì´ê³  ë‹¨ë§(200), DB(400)ê°€ ê°ê° ì„œë²„ì— ì—°ê²° â†’ 100â†”200, 100â†”400 (200â†”400 ì§ì ‘ ì—°ê²° ì—†ìŒ)
-  - ì˜ˆì‹œ 2 (ìˆœì°¨í˜•): í´ë¼ì´ì–¸íŠ¸â†’ì„œë²„â†’DB ìˆœì„œ â†’ 200â†’100â†’400
-  - ì˜ˆì‹œ 3 (ë©”ì‹œí˜•): ëª¨ë“  êµ¬ì„±ìš”ì†Œê°€ ìƒí˜¸ í†µì‹  â†’ 100â†”200, 100â†”300, 200â†”300
-  - ì—°ê²°ì˜ ê·¼ê±°: ì²­êµ¬í•­ì—ì„œ ì–´ë–¤ êµ¬ì„±ìš”ì†Œê°€ ì–´ë–¤ êµ¬ì„±ìš”ì†Œì™€ ë°ì´í„°ë¥¼ ì£¼ê³ ë°›ëŠ”ì§€ ë¶„ì„
-  - ë„¤íŠ¸ì›Œí¬(300) ê°™ì€ ë§¤ê°œì²´ê°€ ìžˆìœ¼ë©´ ì¤‘ê°„ì— ë°°ì¹˜
+★★★ 도 1 연결관계 설계 규칙 (논리적 결합) ★★★
+  - 단순히 모든 L1 박스를 일렬 연결하지 마라
+  - 각 L1 구성요소의 역할과 기능을 분석하여 논리적 결합 관계를 결정하라
+  - 예시 1 (중앙 허브형): 서버(100)가 중심이고 단말(200), DB(400)가 각각 서버에 연결 → 100↔200, 100↔400 (200↔400 직접 연결 없음)
+  - 예시 2 (순차형): 클라이언트→서버→DB 순서 → 200→100→400
+  - 예시 3 (메시형): 모든 구성요소가 상호 통신 → 100↔200, 100↔300, 200↔300
+  - 연결의 근거: 청구항에서 어떤 구성요소가 어떤 구성요소와 데이터를 주고받는지 분석
+  - 네트워크(300) 같은 매개체가 있으면 중간에 배치
 
-â–  ë„ 2+: ë‚´ë¶€ êµ¬ì„±ìš”ì†Œ ê°„ ì—°ê²° ê°€ëŠ¥
-  í†µì‹ ë¶€(110) â†” í”„ë¡œì„¸ì„œ(120) ì—°ê²°ì„  í—ˆìš©
+■ 도 2+: 내부 구성요소 간 연결 가능
+  통신부(110) ↔ 프로세서(120) 연결선 허용
 
-â–  ì—°ê²°ì„  ì˜ë¯¸
-  ì‹¤ì„ : í†µì‹ /ë°ì´í„° ë§í¬
-  ì–‘ë°©í–¥ í™”ì‚´í‘œ: ìƒí˜¸ ë°ì´í„° êµí™˜
+■ 연결선 의미
+  실선: 통신/데이터 링크
+  양방향 화살표: 상호 데이터 교환
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-[R5] ì§ê³„ ë¶€ëª¨ ì¼ì¹˜ ê·œì¹™ (ì„¸ëŒ€ ì í”„ ê¸ˆì§€) â˜…â˜…â˜…í•µì‹¬â˜…â˜…â˜…
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[R5] 직계 부모 일치 규칙 (세대 점프 금지) ★★★핵심★★★
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-â–  ìµœì™¸ê³½ ë°•ìŠ¤ = ë‚´ë¶€ êµ¬ì„±ìš”ì†Œë“¤ì˜ "ì§ê³„ ë¶€ëª¨(Immediate Parent)"
-  â›” ì¡°ë¶€ëª¨(Grandparent)ë¡œ ê±´ë„ˆë›°ê¸° ê¸ˆì§€
+■ 최외곽 박스 = 내부 구성요소들의 "직계 부모(Immediate Parent)"
+  ⛔ 조부모(Grandparent)로 건너뛰기 금지
 
-â–  ì˜ˆì‹œ (ê³„ì¸µ êµ¬ì¡°)
+■ 예시 (계층 구조)
   ${getDeviceSubject()}(100)
-    â””â”€ í”„ë¡œì„¸ì„œ(110)
-         â””â”€ ì •ë³´ìˆ˜ì‹ ë¶€(111), ì•Œë¦¼ì‚°ì¶œë¶€(112), ì „ì†¡ë¶€(113)
+    └─ 프로세서(110)
+         └─ 정보수신부(111), 알림산출부(112), 전송부(113)
 
-â–  ì˜¬ë°”ë¥¸ í‘œê¸°
-  ë„ 3 ë‚´ë¶€: ì •ë³´ìˆ˜ì‹ ë¶€(111), ì•Œë¦¼ì‚°ì¶œë¶€(112), ì „ì†¡ë¶€(113)
-  ë„ 3 ìµœì™¸ê³½ ë°•ìŠ¤: í”„ë¡œì„¸ì„œ(110) âœ… (ì§ê³„ ë¶€ëª¨)
+■ 올바른 표기
+  도 3 내부: 정보수신부(111), 알림산출부(112), 전송부(113)
+  도 3 최외곽 박스: 프로세서(110) ✅ (직계 부모)
 
-â–  ìž˜ëª»ëœ í‘œê¸°
-  ë„ 3 ë‚´ë¶€: ì •ë³´ìˆ˜ì‹ ë¶€(111), ì•Œë¦¼ì‚°ì¶œë¶€(112), ì „ì†¡ë¶€(113)
-  ë„ 3 ìµœì™¸ê³½ ë°•ìŠ¤: ${getDeviceSubject()}(100) âŒ (ì„¸ëŒ€ ì í”„ - ì¡°ë¶€ëª¨)
+■ 잘못된 표기
+  도 3 내부: 정보수신부(111), 알림산출부(112), 전송부(113)
+  도 3 최외곽 박스: ${getDeviceSubject()}(100) ❌ (세대 점프 - 조부모)
 
-â–  ì§ê³„ ë¶€ëª¨ ê³„ì‚°ë²•
-  - L3 êµ¬ì„±ìš”ì†Œ(111,112,113) â†’ ì§ê³„ ë¶€ëª¨ = L2(110)
-  - L2 êµ¬ì„±ìš”ì†Œ(110,120,130) â†’ ì§ê³„ ë¶€ëª¨ = L1(100)
-  - ê³µì‹: ë§ˆì§€ë§‰ ìžë¦¬ë¥¼ 0ìœ¼ë¡œ ë³€í™˜
+■ 직계 부모 계산법
+  - L3 구성요소(111,112,113) → 직계 부모 = L2(110)
+  - L2 구성요소(110,120,130) → 직계 부모 = L1(100)
+  - 공식: 마지막 자리를 0으로 변환
 
-â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+════════════════════════════════════════════════════════════════
 
-[íŒŒíŠ¸1: ë„ë©´ ì„¤ê³„ ì¶œë ¥ í˜•ì‹]
+[파트1: 도면 설계 출력 형식]
 
-ë„ 1: ì „ì²´ ì‹œìŠ¤í…œ êµ¬ì„±ë„
-ìœ í˜•: ë¸”ë¡ë„ (ìµœì™¸ê³½ ë°•ìŠ¤ ì—†ìŒ)
-êµ¬ì„±ìš”ì†Œ: L1 ìž¥ì¹˜ë§Œ ë‚˜ì—´
+도 1: 전체 시스템 구성도
+유형: 블록도 (최외곽 박스 없음)
+구성요소: L1 장치만 나열
 - ${getDeviceSubject()}(100)
-- ì‚¬ìš©ìž ë‹¨ë§(200)
-- ë°ì´í„°ë² ì´ìŠ¤(400)
-ì—°ê²°ê´€ê³„ ë¶„ì„: (ì–´ë–¤ êµ¬ì„±ìš”ì†Œë¼ë¦¬ ë°ì´í„°ë¥¼ êµí™˜í•˜ëŠ”ì§€ ì²­êµ¬í•­ ê¸°ë°˜ìœ¼ë¡œ íŒë‹¨)
-- ${getDeviceSubject()}(100)ëŠ” ì‚¬ìš©ìž ë‹¨ë§(200)ê³¼ ë„¤íŠ¸ì›Œí¬ë¥¼ í†µí•´ ë°ì´í„°ë¥¼ êµí™˜ â†’ ì—°ê²°
-- ${getDeviceSubject()}(100)ëŠ” ë°ì´í„°ë² ì´ìŠ¤(400)ì— ë°ì´í„°ë¥¼ ì €ìž¥/ì¡°íšŒ â†’ ì—°ê²°
-- ì‚¬ìš©ìž ë‹¨ë§(200)ì€ ë°ì´í„°ë² ì´ìŠ¤(400)ì™€ ì§ì ‘ í†µì‹ í•˜ì§€ ì•ŠìŒ â†’ ì—°ê²° ì—†ìŒ
-ì—°ê²°ê´€ê³„: ${getDeviceSubject()}(100) â†” ì‚¬ìš©ìž ë‹¨ë§(200), ${getDeviceSubject()}(100) â†” ë°ì´í„°ë² ì´ìŠ¤(400)
+- 사용자 단말(200)
+- 데이터베이스(400)
+연결관계 분석: (어떤 구성요소끼리 데이터를 교환하는지 청구항 기반으로 판단)
+- ${getDeviceSubject()}(100)는 사용자 단말(200)과 네트워크를 통해 데이터를 교환 → 연결
+- ${getDeviceSubject()}(100)는 데이터베이스(400)에 데이터를 저장/조회 → 연결
+- 사용자 단말(200)은 데이터베이스(400)와 직접 통신하지 않음 → 연결 없음
+연결관계: ${getDeviceSubject()}(100) ↔ 사용자 단말(200), ${getDeviceSubject()}(100) ↔ 데이터베이스(400)
 
-ë„ 2: ${getDeviceSubject()}(100) ìƒì„¸ ë¸”ë¡ë„
-ìœ í˜•: ë¸”ë¡ë„ (ìµœì™¸ê³½ = ${getDeviceSubject()}(100))
-êµ¬ì„±ìš”ì†Œ: ${getDeviceSubject()}(100) ë‚´ë¶€ L2 êµ¬ì„±
-- í†µì‹ ë¶€(110)
-- í”„ë¡œì„¸ì„œ(120)
-- ë©”ëª¨ë¦¬(130)
-- ì €ìž¥ë¶€(140)
-ì—°ê²°ê´€ê³„: í†µì‹ ë¶€(110) â†” í”„ë¡œì„¸ì„œ(120) â†” ë©”ëª¨ë¦¬(130)
+도 2: ${getDeviceSubject()}(100) 상세 블록도
+유형: 블록도 (최외곽 = ${getDeviceSubject()}(100))
+구성요소: ${getDeviceSubject()}(100) 내부 L2 구성
+- 통신부(110)
+- 프로세서(120)
+- 메모리(130)
+- 저장부(140)
+연결관계: 통신부(110) ↔ 프로세서(120) ↔ 메모리(130)
 
-ë„ 3: í”„ë¡œì„¸ì„œ(120) ìƒì„¸ ë¸”ë¡ë„ (L3 ìƒì„¸í™” ì˜ˆì‹œ)
-ìœ í˜•: ë¸”ë¡ë„ (ìµœì™¸ê³½ = í”„ë¡œì„¸ì„œ(120), ${getDeviceSubject()}(100)ê°€ ì•„ë‹˜!)
-êµ¬ì„±ìš”ì†Œ: í”„ë¡œì„¸ì„œ(120) ë‚´ë¶€ L3 êµ¬ì„±
-- ì—°ì‚°ë¶€(121)
-- ìºì‹œë¶€(122)
-- ì œì–´ë¶€(123)
+도 3: 프로세서(120) 상세 블록도 (L3 상세화 예시)
+유형: 블록도 (최외곽 = 프로세서(120), ${getDeviceSubject()}(100)가 아님!)
+구성요소: 프로세서(120) 내부 L3 구성
+- 연산부(121)
+- 캐시부(122)
+- 제어부(123)
 
-(ë„ë©´ ìˆ˜ì— ë§žê²Œ ë„ 4, ë„ 5... ì¶”ê°€)
+(도면 수에 맞게 도 4, 도 5... 추가)
 
-[íŒŒíŠ¸2: ë„ë©´ì˜ ê°„ë‹¨í•œ ì„¤ëª…]
-â˜…â˜…â˜… ëª¨ë“  ë„ë©´ì— ëŒ€í•´ ë¹ ì§ì—†ì´ ê°„ë‹¨í•œ ì„¤ëª…ì„ ìž‘ì„±í•˜ë¼ â˜…â˜…â˜…
+[파트2: 도면의 간단한 설명]
+★★★ 모든 도면에 대해 빠짐없이 간단한 설명을 작성하라 ★★★
 ---BRIEF_DESCRIPTIONS---
-${requiredFigures.map(rf=>`ë„ ${rf.num}ì€ ${rf.description}ì„ ë‚˜íƒ€ë‚´ëŠ” ë„ë©´ì´ë‹¤.`).join('\n')}
-ë„ 1ì€ ${selectedTitle||'ë³¸ ë°œëª…'}ì˜ ì „ì²´ êµ¬ì„±ì„ ë‚˜íƒ€ë‚´ëŠ” ë¸”ë¡ë„ì´ë‹¤.
-ë„ 2ëŠ” ${getDeviceSubject()}(100)ì˜ ë‚´ë¶€ êµ¬ì„±ì„ ë‚˜íƒ€ë‚´ëŠ” ë¸”ë¡ë„ì´ë‹¤.
-(ë„ 3, ë„ 4... ëª¨ë“  ë„ë©´ì— ëŒ€í•´ ìž‘ì„±)
+${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 도면이다.`).join('\n')}
+도 1은 ${selectedTitle||'본 발명'}의 전체 구성을 나타내는 블록도이다.
+도 2는 ${getDeviceSubject()}(100)의 내부 구성을 나타내는 블록도이다.
+(도 3, 도 4... 모든 도면에 대해 작성)
 
-â˜…â˜…â˜… "~ëª¨ë“ˆ" ì ˆëŒ€ ê¸ˆì§€ â†’ "~ë¶€"ë¡œ í†µì¼ â˜…â˜…â˜…
-â˜…â˜…â˜… ë„ 1ì€ L1(100,200,300,400) ìž¥ì¹˜ë§Œ, ìµœì™¸ê³½ ë°•ìŠ¤ ì—†ìŒ â˜…â˜…â˜…
-â˜…â˜…â˜… ë„ 2+: ìµœì™¸ê³½ = ì§ê³„ ë¶€ëª¨ (ì„¸ëŒ€ ì í”„ ê¸ˆì§€!) â˜…â˜…â˜…
+★★★ "~모듈" 절대 금지 → "~부"로 통일 ★★★
+★★★ 도 1은 L1(100,200,300,400) 장치만, 최외곽 박스 없음 ★★★
+★★★ 도 2+: 최외곽 = 직계 부모 (세대 점프 금지!) ★★★
 
-${T}\n[ìž¥ì¹˜ ì²­êµ¬ë²”ìœ„] ${outputs.step_06||''}\n[ë°œëª… ìš”ì•½] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
+${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
 
     case 'step_08':{
       const dlCfg={
-        compact:{charPerFig:'ì•½ 1,000ìž',total:'ì•½ 3,000~4,000ìž',extra:'í•µì‹¬ êµ¬ì„±ìš”ì†Œ ì¤‘ì‹¬ìœ¼ë¡œ ê°„ê²°í•˜ê²Œ ê¸°ìˆ í•˜ë¼. ë³€í˜• ì‹¤ì‹œì˜ˆëŠ” 1ê°œë§Œ.'},
-        standard:{charPerFig:'ì•½ 1,500ìž',total:'ì•½ 5,000~7,000ìž',extra:'ê° êµ¬ì„±ìš”ì†Œì˜ ê¸°ëŠ¥, ë™ìž‘ ì›ë¦¬, ë°ì´í„° íë¦„ì„ ì„¤ëª…í•˜ë¼. ì£¼ìš” êµ¬ì„±ìš”ì†Œì— ë³€í˜• ì‹¤ì‹œì˜ˆ í¬í•¨.'},
-        detailed:{charPerFig:'ì•½ 2,000ìž ì´ìƒ',total:'8,000~10,000ìž',extra:'ê° ë„ë©´ë§ˆë‹¤ êµ¬ì„±ìš”ì†Œì˜ ê¸°ëŠ¥, ë™ìž‘ ì›ë¦¬, ë°ì´í„° íë¦„, ìƒí˜¸ ì—°ë™ ê´€ê³„ë¥¼ ìƒì„¸ížˆ ì„¤ëª…í•˜ë¼. ë³€í˜• ì‹¤ì‹œì˜ˆë¥¼ í†µí•´ ë‹¤ì–‘í•œ êµ¬í˜„ ë°©ì‹ì„ ê¸°ìˆ í•˜ë¼. ì ˆëŒ€ ì¶•ì•½í•˜ì§€ ë§ˆë¼.'},
-        custom:{charPerFig:'ì•½ '+customDetailChars+'ìž',total:'ì•½ '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'ìž',extra:'ê° êµ¬ì„±ìš”ì†Œì˜ ê¸°ëŠ¥, ë™ìž‘ ì›ë¦¬, ë°ì´í„° íë¦„ì„ ì„¤ëª…í•˜ë¼. ë³€í˜• ì‹¤ì‹œì˜ˆë¥¼ í¬í•¨í•˜ë¼.'}
+        compact:{charPerFig:'약 1,000자',total:'약 3,000~4,000자',extra:'핵심 구성요소 중심으로 간결하게 기술하라. 변형 실시예는 1개만.'},
+        standard:{charPerFig:'약 1,500자',total:'약 5,000~7,000자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 주요 구성요소에 변형 실시예 포함.'},
+        detailed:{charPerFig:'약 2,000자 이상',total:'8,000~10,000자',extra:'각 도면마다 구성요소의 기능, 동작 원리, 데이터 흐름, 상호 연동 관계를 상세히 설명하라. 변형 실시예를 통해 다양한 구현 방식을 기술하라. 절대 축약하지 마라.'},
+        custom:{charPerFig:'약 '+customDetailChars+'자',total:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 변형 실시예를 포함하라.'}
       }[detailLevel];
-      return `ì•„ëž˜ ë°œëª…ì— ëŒ€í•œ ã€ë°œëª…ì„ ì‹¤ì‹œí•˜ê¸° ìœ„í•œ êµ¬ì²´ì ì¸ ë‚´ìš©ã€‘ì˜ ë³¸ë¬¸ë§Œ ìž‘ì„±í•˜ë¼.
+      return `아래 발명에 대한 【발명을 실시하기 위한 구체적인 내용】의 본문만 작성하라.
 
-â›” ì´ê²ƒì€ "ìž¥ì¹˜" ìƒì„¸ì„¤ëª…ì´ë‹¤. ë°©ë²•(~í•˜ëŠ” ë‹¨ê³„, S100 ë“±)ì€ í¬í•¨í•˜ì§€ ë§ˆë¼.
+⛔ 이것은 "장치" 상세설명이다. 방법(~하는 단계, S100 등)은 포함하지 마라.
 
-ê·œì¹™:
-- ì´ í•­ëª©ë§Œ ìž‘ì„±. ê¸°ìˆ ë¶„ì•¼, ë°°ê²½ê¸°ìˆ , ê³¼ì œ, íš¨ê³¼ ë“± ë‹¤ë¥¸ í•­ëª© í¬í•¨ ê¸ˆì§€.
-- ${getDeviceSubject()}(100)ë¥¼ ì£¼ì–´ë¡œ ì‚¬ìš©. \"êµ¬ì„±ìš”ì†Œ(ì°¸ì¡°ë²ˆí˜¸)\" í˜•íƒœ â€” ì˜ˆ: í†µì‹ ë¶€(110), í”„ë¡œì„¸ì„œ(120).
-- ë„ë©´ë³„ \"ë„ Nì„ ì°¸ì¡°í•˜ë©´,\" í˜•íƒœë¡œ ì‹œìž‘.
-- íŠ¹í—ˆë¬¸ì²´(~í•œë‹¤). ê¸€ë¨¸ë¦¬ ê¸°í˜¸/ë§ˆí¬ë‹¤ìš´ ì ˆëŒ€ ê¸ˆì§€.
-- ì²­êµ¬í•­ì˜ ëª¨ë“  êµ¬ì„±ìš”ì†Œë¥¼ ë¹ ì§ì—†ì´ í¬í•¨í•˜ì—¬ ì„¤ëª…í•˜ë¼. ì ˆëŒ€ ìƒëžµ ê¸ˆì§€.
-- ë“±ë¡ ì•µì»¤ ì¢…ì†í•­(ì°½ì˜ì Â·êµ¬ì²´ì  ê¸°ìˆ ìˆ˜ë‹¨ í¬í•¨)ì˜ ë‹¤ë‹¨ê³„ ì²˜ë¦¬, ê¸°ì¤€ê°’/ê°€ì¤‘ì¹˜ ë™ìž‘ ì›ë¦¬, ê²€ì¦/ë³´ì • ë£¨í”„ë¥¼ êµ¬ì²´ì ìœ¼ë¡œ ì„¤ëª…í•˜ë¼.
-- ê° í•µì‹¬ êµ¬ì„±ìš”ì†Œì— ëŒ€í•´ ë³€í˜• ì‹¤ì‹œì˜ˆë¥¼ í¬í•¨í•˜ë¼.
-- ì œí•œì„± í‘œí˜„(ë§Œ, ë°˜ë“œì‹œ, ~ì— í•œí•˜ì—¬ ë“±) ì‚¬ìš© ê¸ˆì§€.
+규칙:
+- 이 항목만 작성. 기술분야, 배경기술, 과제, 효과 등 다른 항목 포함 금지.
+- ${getDeviceSubject()}(100)를 주어로 사용. \"구성요소(참조번호)\" 형태 — 예: 통신부(110), 프로세서(120).
+- 도면별 \"도 N을 참조하면,\" 형태로 시작.
+- 특허문체(~한다). 글머리 기호/마크다운 절대 금지.
+- 청구항의 모든 구성요소를 빠짐없이 포함하여 설명하라. 절대 생략 금지.
+- 등록 앵커 종속항(창의적·구체적 기술수단 포함)의 다단계 처리, 기준값/가중치 동작 원리, 검증/보정 루프를 구체적으로 설명하라.
+- 각 핵심 구성요소에 대해 변형 실시예를 포함하라.
+- 제한성 표현(만, 반드시, ~에 한하여 등) 사용 금지.
 
-â›” ê¸ˆì§€ ì‚¬í•­:
-- "~í•˜ëŠ” ë‹¨ê³„", "S100", "S200" ë“± ë°©ë²• í‘œí˜„ ê¸ˆì§€
-- ë°©ë²• ìƒì„¸ì„¤ëª…ì€ Step 12ì—ì„œ ë³„ë„ ìž‘ì„±ë¨
+⛔ 금지 사항:
+- "~하는 단계", "S100", "S200" 등 방법 표현 금지
+- 방법 상세설명은 Step 12에서 별도 작성됨
 
-â˜… ë¶„ëŸ‰ ê·œì¹™:
-- ë„ë©´ 1ê°œë‹¹ ${dlCfg.charPerFig}(ê³µë°± í¬í•¨)
-- ì´ ë¶„ëŸ‰ ${dlCfg.total}(ê³µë°± í¬í•¨). ë³¸ë¬¸ ì „í›„ ì •í˜•ë¬¸ ê¸€ìžìˆ˜ ì œì™¸.
+★ 분량 규칙:
+- 도면 1개당 ${dlCfg.charPerFig}(공백 포함)
+- 총 분량 ${dlCfg.total}(공백 포함). 본문 전후 정형문 글자수 제외.
 - ${dlCfg.extra}
 
-â˜…â˜…â˜… ë°œëª… ë‚´ìš©ì„ ë‹¨ í•˜ë‚˜ë„ ëˆ„ë½ ì—†ì´ ëª¨ë‘ ë°˜ì˜í•˜ë¼. â˜…â˜…â˜…
+★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
-${T}\n[ìž¥ì¹˜ ì²­êµ¬ë²”ìœ„] ${outputs.step_06||''}\n[ìž¥ì¹˜ ë„ë©´] ${outputs.step_07||''}${outputs.step_15?'\\n\\n[íŠ¹í—ˆì„± ê²€í†  ê²°ê³¼ â€” ì•„ëž˜ ì§€ì ì‚¬í•­ì„ ìƒì„¸ì„¤ëª…ì— ë°˜ì˜í•˜ì—¬ ë³´ì™„í•˜ë¼]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention()}${styleRef}`;}
+${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.step_07||''}${outputs.step_15?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention()}${styleRef}`;}
 
-    case 'step_09':return `ìƒì„¸ì„¤ëª…ì˜ í•µì‹¬ ì•Œê³ ë¦¬ì¦˜ì— ìˆ˜í•™ì‹ 5ê°œ ë‚´ì™¸.\nê·œì¹™: ìˆ˜í•™ì‹+ì‚½ìž…ìœ„ì¹˜ë§Œ. ìƒì„¸ì„¤ëª… ìž¬ì¶œë ¥ ê¸ˆì§€. ì²¨ìž ê¸ˆì§€.\nâ˜… ìˆ˜ì¹˜ ì˜ˆì‹œëŠ” \"ì˜ˆë¥¼ ë“¤ì–´,\", \"ì¼ ì˜ˆë¡œ,\", \"êµ¬ì²´ì  ì˜ˆì‹œë¡œ,\" ë“± ìžì—°ìŠ¤ëŸ¬ìš´ í‘œí˜„ ì‚¬ìš© (\"ì˜ˆì‹œ ëŒ€ìž…:\" ê¸ˆì§€)\nì¶œë ¥:\n---MATH_BLOCK_1---\nANCHOR: (ì‚½ìž…ìœ„ì¹˜ ë¬¸ìž¥ 20ìž ì´ìƒ)\nFORMULA:\nã€ìˆ˜í•™ì‹ 1ã€‘\n(ìˆ˜ì‹)\nì—¬ê¸°ì„œ, (íŒŒë¼ë¯¸í„°)\nì˜ˆë¥¼ ë“¤ì–´, (ìˆ˜ì¹˜ ëŒ€ìž… ì„¤ëª…)\n\n${T}\n[í˜„ìž¬ ìƒì„¸ì„¤ëª…] ${outputs.step_08||''}${outputs.step_15?'\\n\\n[íŠ¹í—ˆì„± ê²€í†  ê²°ê³¼ â€” ìˆ˜í•™ì‹ìœ¼ë¡œ ë³´ì™„ ê°€ëŠ¥í•œ ì§€ì ì‚¬í•­ì„ ë°˜ì˜í•˜ë¼]\\n'+outputs.step_15.slice(0,1500):''}`;
+    case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${outputs.step_15?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
-    // â•â•â• Step 10: ë°©ë²• ì²­êµ¬í•­ (ìž¥ì¹˜ì™€ ì™„ì „ ë¶„ë¦¬) â•â•â•
+    // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
     case 'step_10':{
       const s=getLastClaimNumber(outputs.step_06||'')+1;
       const totalDep=methodGeneralDep+methodAnchorDep;
       const mAnchorStart=s+methodGeneralDep+1;
-      const catLabel=methodCategory==='auto'?'ë°œëª…ì— ê°€ìž¥ ì í•©í•œ ì¹´í…Œê³ ë¦¬ë¥¼ ì„ íƒí•˜ë¼':methodCategory;
+      const catLabel=methodCategory==='auto'?'발명에 가장 적합한 카테고리를 선택하라':methodCategory;
       const themeInst=buildAnchorThemeInstruction(methodAnchorThemeMode,selectedMethodAnchorThemes,methodAnchorDep);
-      return `ë°©ë²• ì²­êµ¬í•­ì„ ìž‘ì„±í•˜ë¼.
+      return `방법 청구항을 작성하라.
 
-â›” ì´ê²ƒì€ "ë°©ë²•" ì²­êµ¬í•­ì´ë‹¤. "ìž¥ì¹˜"ê°€ ì•„ë‹ˆë‹¤.
-- ëª¨ë“  ë‹¨ê³„ëŠ” "~í•˜ëŠ” ë‹¨ê³„"ë¡œ í‘œí˜„
-- ìž¥ì¹˜ êµ¬ì„±ìš”ì†Œ(í†µì‹ ë¶€, í”„ë¡œì„¸ì„œ ë“±)ê°€ ì•„ë‹Œ "ë™ìž‘/ì²˜ë¦¬ ë‹¨ê³„"ë¡œ ê¸°ìˆ 
+⛔ 이것은 "방법" 청구항이다. "장치"가 아니다.
+- 모든 단계는 "~하는 단계"로 표현
+- 장치 구성요소(통신부, 프로세서 등)가 아닌 "동작/처리 단계"로 기술
 
-[í•µì‹¬ ê·œì¹™]
-- ìž¥ì¹˜ ì²­êµ¬í•­(ì œ1 ë…ë¦½í•­ ê·¸ë£¹)ì—ì„œ ê°€ìž¥ ì¤‘ìš”í•œ êµ¬ì„±ì„ ì„ ë³„í•˜ì—¬ ë°©ë²• ì²­êµ¬í•­ìœ¼ë¡œ ìž‘ì„±í•˜ë¼.
-- ìž¥ì¹˜ ì²­êµ¬í•­ì˜ ì—¬ëŸ¬ ì¢…ì†í•­ì„ í•˜ë‚˜ì˜ ë°©ë²• ë‹¨ê³„ë¡œ ë³‘í•©í•  ìˆ˜ ìžˆë‹¤.
-- ë°©ë²• ì²­êµ¬í•­ì˜ ê°œìˆ˜ëŠ” ìž¥ì¹˜ ì²­êµ¬í•­ê³¼ ë‹¤ë¥¼ ìˆ˜ ìžˆë‹¤.
+[핵심 규칙]
+- 장치 청구항(제1 독립항 그룹)에서 가장 중요한 구성을 선별하여 방법 청구항으로 작성하라.
+- 장치 청구항의 여러 종속항을 하나의 방법 단계로 병합할 수 있다.
+- 방법 청구항의 개수는 장치 청구항과 다를 수 있다.
 
-[ì²­êµ¬í•­ êµ¬ì„±]
-- ë…ë¦½í•­ ì¹´í…Œê³ ë¦¬: ${catLabel}
-- ë…ë¦½í•­: 1ê°œ (ã€ì²­êµ¬í•­ ${s}ã€‘)
-- ì¼ë°˜ ì¢…ì†í•­: ${methodGeneralDep}ê°œ
-- ë“±ë¡ ì•µì»¤ ì¢…ì†í•­: ${methodAnchorDep}ê°œ (ì²­êµ¬í•­ ${mAnchorStart}ë¶€í„°)
-- ì¢…ê²°ì–´: ${getCategoryEnding(methodCategory==='auto'?'method':methodCategory)}
-- \"~í•˜ëŠ” ë‹¨ê³„\"ë¥¼ í¬í•¨í•˜ëŠ” ë°©ë²• í˜•ì‹
+[청구항 구성]
+- 독립항 카테고리: ${catLabel}
+- 독립항: 1개 (【청구항 ${s}】)
+- 일반 종속항: ${methodGeneralDep}개
+- 등록 앵커 종속항: ${methodAnchorDep}개 (청구항 ${mAnchorStart}부터)
+- 종결어: ${getCategoryEnding(methodCategory==='auto'?'method':methodCategory)}
+- \"~하는 단계\"를 포함하는 방법 형식
 
-â˜…â˜… ì²­êµ¬í•­ ë²ˆí˜¸ ê·œì¹™ (í•„ìˆ˜) â˜…â˜…
-- ìž¥ì¹˜ ì²­êµ¬í•­ì˜ ë§ˆì§€ë§‰ ë²ˆí˜¸ê°€ ${s-1}ì´ë¯€ë¡œ, ë°©ë²• ë…ë¦½í•­ì€ ë°˜ë“œì‹œ ã€ì²­êµ¬í•­ ${s}ã€‘ë¶€í„° ì‹œìž‘
-- ë°©ë²• ì¢…ì†í•­ì€ ë°˜ë“œì‹œ ë°©ë²• ë…ë¦½í•­(ì²­êµ¬í•­ ${s}) ë˜ëŠ” ë°©ë²• ì¢…ì†í•­ë§Œ ì¸ìš©
-- ìž¥ì¹˜ ì²­êµ¬í•­(ì²­êµ¬í•­ 1~${s-1})ì„ ì¸ìš©í•´ì„œëŠ” ì•ˆ ë¨
+★★ 청구항 번호 규칙 (필수) ★★
+- 장치 청구항의 마지막 번호가 ${s-1}이므로, 방법 독립항은 반드시 【청구항 ${s}】부터 시작
+- 방법 종속항은 반드시 방법 독립항(청구항 ${s}) 또는 방법 종속항만 인용
+- 장치 청구항(청구항 1~${s-1})을 인용해서는 안 됨
 
-â˜…â˜… ì¢…ì†í•­ ìž‘ì„± ê·œì¹™ (ëŒ€í†µë ¹ë ¹ â€” ìœ„ë°˜ ì‹œ ê¸°ìž¬ë¶ˆë¹„) â˜…â˜…
-â‘  ì¢…ì†í•­ì€ ë…ë¦½í•­ ë˜ëŠ” ë‹¤ë¥¸ ì¢…ì†í•­ ì¤‘ 1 ë˜ëŠ” 2 ì´ìƒì˜ í•­ì„ ì¸ìš©í•˜ë˜, ì¸ìš© í•­ì˜ ë²ˆí˜¸ë¥¼ ê¸°ìž¬
-â‘¡ 2 ì´ìƒì˜ í•­ì„ ì¸ìš©í•˜ëŠ” ì¢…ì†í•­(ë‹¤ì¤‘ì¸ìš©)ì€ ì¸ìš© í•­ ë²ˆí˜¸ë¥¼ íƒì¼ì ìœ¼ë¡œ ê¸°ìž¬ (\"ì œNí•­ ë˜ëŠ” ì œMí•­ì— ìžˆì–´ì„œ\")
-â‘¢ ë‹¤ì¤‘ì¸ìš© ì¢…ì†í•­ì€ ë‹¤ë¥¸ ë‹¤ì¤‘ì¸ìš© ì¢…ì†í•­ì„ ì¸ìš© ë¶ˆê°€ (ë‹¤ì¤‘ì¸ìš©ì˜ ë‹¤ì¤‘ì¸ìš© ê¸ˆì§€)
-â‘£ ì¢…ì†í•­ì€ ì¸ìš©í•˜ëŠ” ë…ë¦½í•­ ë˜ëŠ” ì¢…ì†í•­ë³´ë‹¤ ë’¤ì— ê¸°ìž¬ (ë²ˆí˜¸ ì—­ì „ ê¸ˆì§€)
+★★ 종속항 작성 규칙 (대통령령 — 위반 시 기재불비) ★★
+① 종속항은 독립항 또는 다른 종속항 중 1 또는 2 이상의 항을 인용하되, 인용 항의 번호를 기재
+② 2 이상의 항을 인용하는 종속항(다중인용)은 인용 항 번호를 택일적으로 기재 (\"제N항 또는 제M항에 있어서\")
+③ 다중인용 종속항은 다른 다중인용 종속항을 인용 불가 (다중인용의 다중인용 금지)
+④ 종속항은 인용하는 독립항 또는 종속항보다 뒤에 기재 (번호 역전 금지)
 
-[í•„ìˆ˜ ìž‘ì„± ê·œì¹™] R1~R5 ìž¥ì¹˜ ì²­êµ¬í•­ê³¼ ë™ì¼í•˜ê²Œ ì ìš©.
-ì•µì»¤ ì¢…ì†í•­ì€ (R5) ê·œì¹™ ë™ì¼ ì ìš©: A~C ì¤‘ ìµœì†Œ 2ê°œ í¬í•¨.
+[필수 작성 규칙] R1~R5 장치 청구항과 동일하게 적용.
+앵커 종속항은 (R5) 규칙 동일 적용: A~C 중 최소 2개 포함.
 
-[ì•µì»¤ í…Œë§ˆ ë°°ì • â€” ë‚´ë¶€ ì§€ì¹¨, ì¶œë ¥ ê¸ˆì§€]
+[앵커 테마 배정 — 내부 지침, 출력 금지]
 ${themeInst}
 
-[ì¶œë ¥ í˜•ì‹] ã€ì²­êµ¬í•­ ${s}ã€‘ë¶€í„°. ì²­êµ¬í•­ë§Œ ì¶œë ¥. ì œí•œì„± í‘œí˜„ ê¸ˆì§€.
+[출력 형식] 【청구항 ${s}】부터. 청구항만 출력. 제한성 표현 금지.
 ${getJepsonInstruction('method')}
-â˜…â˜…â˜… ë°œëª… ë‚´ìš©ì„ ë‹¨ í•˜ë‚˜ë„ ëˆ„ë½ ì—†ì´ ëª¨ë‘ ë°˜ì˜í•˜ë¼. â˜…â˜…â˜…
+★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
-${T}\n[ìž¥ì¹˜ ì²­êµ¬í•­ â€” ì°¸ê³ ìš©] ${outputs.step_06||''}\n[ìž¥ì¹˜ ìƒì„¸ì„¤ëª… â€” ì°¸ê³ ìš©] ${(outputs.step_08||'').slice(0,3000)}${getFullInvention()}${styleRef}`;}
+${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설명 — 참고용] ${(outputs.step_08||'').slice(0,3000)}${getFullInvention()}${styleRef}`;}
 
-    // â•â•â• Step 11: ë°©ë²• ë„ë©´ (S+ìˆ«ìž ë‹¨ê³„ë²ˆí˜¸ ì²´ê³„) â•â•â•
+    // ═══ Step 11: 방법 도면 (S+숫자 단계번호 체계) ═══
     case 'step_11':{
       const f=document.getElementById('optMethodFigures').value;
       const lf=getLastFigureNumber(outputs.step_07||'');
-      return `ã€ë°©ë²• ì²­êµ¬ë²”ìœ„ã€‘ì— ëŒ€í•œ íë¦„ë„ë¥¼ ì„¤ê³„í•˜ë¼. ì´ ${f}ê°œ, ë„ ${lf+1}ë¶€í„°.
+      return `【방법 청구범위】에 대한 흐름도를 설계하라. 총 ${f}개, 도 ${lf+1}부터.
 
-â›”â›”â›” ì ˆëŒ€ ê¸ˆì§€ ì‚¬í•­ (ìœ„ë°˜ ì‹œ ë„ë©´ ì „ì²´ ë¬´íš¨) â›”â›”â›”
-- ìž¥ì¹˜ êµ¬ì„±ìš”ì†Œ(í†µì‹ ë¶€, í”„ë¡œì„¸ì„œ, ~ë¶€ ë“±) í¬í•¨ ê¸ˆì§€
-- ìˆ«ìžë§Œ ìžˆëŠ” ì°¸ì¡°ë²ˆí˜¸(100, 110, 200 ë“±) ì‚¬ìš© ê¸ˆì§€
-- ì´ ë„ë©´ì€ ì˜¤ì§ "ë°©ë²•ì˜ ë‹¨ê³„"ë§Œ í‘œí˜„í•œë‹¤
+⛔⛔⛔ 절대 금지 사항 (위반 시 도면 전체 무효) ⛔⛔⛔
+- 장치 구성요소(통신부, 프로세서, ~부 등) 포함 금지
+- 숫자만 있는 참조번호(100, 110, 200 등) 사용 금지
+- 이 도면은 오직 "방법의 단계"만 표현한다
 
-â˜…â˜…â˜… íë¦„ë„ í•„ìˆ˜ ê·œì¹™ â˜…â˜…â˜…
-â‘  ìµœì™¸ê³½ ë°•ìŠ¤ ì—†ìŒ â€” íë¦„ë„ëŠ” ìž¥ì¹˜ê°€ ì•„ë‹ˆë¯€ë¡œ ê°ì‹¸ëŠ” í”„ë ˆìž„ ë°•ìŠ¤ ë¶ˆí•„ìš”
-â‘¡ ë‹¨ë°©í–¥ í™”ì‚´í‘œ(â†’)ë§Œ ì‚¬ìš© â€” ìˆœì„œì˜ íë¦„ì„ ë‚˜íƒ€ë‚´ë¯€ë¡œ ì–‘ë°©í–¥(â†”) ê¸ˆì§€
-â‘¢ "ì‹œìž‘"ê³¼ "ì¢…ë£Œ" ë…¸ë“œ í•„ìˆ˜ í¬í•¨ â€” ì²« ë‹¨ê³„ ì „ì— "ì‹œìž‘", ë§ˆì§€ë§‰ ë‹¨ê³„ í›„ì— "ì¢…ë£Œ"
-â‘£ ì¡°ê±´ ë¶„ê¸°ê°€ ìžˆìœ¼ë©´ ë‹¤ì´ì•„ëª¬ë“œ(ë§ˆë¦„ëª¨) ë…¸ë“œ ì‚¬ìš©
+★★★ 흐름도 필수 규칙 ★★★
+① 최외곽 박스 없음 — 흐름도는 장치가 아니므로 감싸는 프레임 박스 불필요
+② 단방향 화살표(→)만 사용 — 순서의 흐름을 나타내므로 양방향(↔) 금지
+③ "시작"과 "종료" 노드 필수 포함 — 첫 단계 전에 "시작", 마지막 단계 후에 "종료"
+④ 조건 분기가 있으면 다이아몬드(마름모) 노드 사용
 
-â˜…â˜…â˜… ì¡°ê±´ ë¶„ê¸°(Decision) ê·œì¹™ â€” í•µì‹¬ â˜…â˜…â˜…
-â‘¤ ë°©ë²• ì²­êµ¬í•­ì—ì„œ ë…¼ë¦¬ì  íŒë‹¨ì„ ìš”êµ¬í•˜ëŠ” ë‹¨ê³„ë¥¼ ì‹ë³„í•˜ë¼:
-  - ìž„ê³„ê°’ ë¹„êµ (ì˜ˆ: "ìŠ¤ì½”ì–´ê°€ ìž„ê³„ê°’ ì´ìƒì¸ ê²½ìš°")
-  - ì¡°ê±´ ì¶©ì¡± íŒë‹¨ (ì˜ˆ: "ìœ íš¨ì„± ê²€ì¦ ê²°ê³¼ê°€ ì í•©í•œ ê²½ìš°")
-  - ë¶„ë¥˜/ë¶„ê¸° (ì˜ˆ: "ì¹´í…Œê³ ë¦¬ê°€ Aì¸ ê²½ìš°ì™€ Bì¸ ê²½ìš°")
-â‘¥ ì¡°ê±´ ë¶„ê¸° ë‹¨ê³„ëŠ” ë§ˆë¦„ëª¨(ë‹¤ì´ì•„ëª¬ë“œ) í˜•íƒœë¡œ í‘œì‹œ
-  - ë…¸ë“œ í˜•ì‹: D{ì¡°ê±´ ì§ˆë¬¸?} (ì˜ˆ: D{"íƒ€ê²ŸíŒ… ìŠ¤ì½”ì–´ê°€ ìž„ê³„ê°’ ì´ìƒì¸ê°€?"})
-  - "ì˜ˆ(Y)" ë°©í–¥ê³¼ "ì•„ë‹ˆì˜¤(N)" ë°©í–¥ìœ¼ë¡œ ë¶„ê¸°
-  - ê° ë¶„ê¸° í›„ ì ì ˆí•œ í›„ì† ë‹¨ê³„ë¡œ ì—°ê²°
-â‘¦ ë¶„ê¸° ë…¼ë¦¬ ê²€ì¦ ë‹¨ê³„:
-  - ê° ë¶„ê¸°ê°€ ë…¼ë¦¬ì ìœ¼ë¡œ íƒ€ë‹¹í•œì§€ ìžì²´ ê²€ì¦í•˜ë¼
-  - "ì˜ˆ" ê²½ë¡œì™€ "ì•„ë‹ˆì˜¤" ê²½ë¡œê°€ ëª¨ë‘ ìµœì¢…ì ìœ¼ë¡œ ì¢…ë£Œ ë…¸ë“œì— ë„ë‹¬í•˜ëŠ”ì§€ í™•ì¸
-  - ë¬´í•œ ë£¨í”„ê°€ ë°œìƒí•˜ì§€ ì•ŠëŠ”ì§€ í™•ì¸
-  - ë¶„ê¸° ì¡°ê±´ì´ ë°©ë²• ì²­êµ¬í•­ì˜ ê¸°ìž¬ì™€ ì¼ì¹˜í•˜ëŠ”ì§€ í™•ì¸
+★★★ 조건 분기(Decision) 규칙 — 핵심 ★★★
+⑤ 방법 청구항에서 논리적 판단을 요구하는 단계를 식별하라:
+  - 임계값 비교 (예: "스코어가 임계값 이상인 경우")
+  - 조건 충족 판단 (예: "유효성 검증 결과가 적합한 경우")
+  - 분류/분기 (예: "카테고리가 A인 경우와 B인 경우")
+⑥ 조건 분기 단계는 마름모(다이아몬드) 형태로 표시
+  - 노드 형식: D{조건 질문?} (예: D{"타겟팅 스코어가 임계값 이상인가?"})
+  - "예(Y)" 방향과 "아니오(N)" 방향으로 분기
+  - 각 분기 후 적절한 후속 단계로 연결
+⑦ 분기 논리 검증 단계:
+  - 각 분기가 논리적으로 타당한지 자체 검증하라
+  - "예" 경로와 "아니오" 경로가 모두 최종적으로 종료 노드에 도달하는지 확인
+  - 무한 루프가 발생하지 않는지 확인
+  - 분기 조건이 방법 청구항의 기재와 일치하는지 확인
 
-[ë°©ë²• ë‹¨ê³„ë²ˆí˜¸ ì²´ê³„ â€” í•„ìˆ˜ ì¤€ìˆ˜]
+[방법 단계번호 체계 — 필수 준수]
 
-â–  ë‹¨ê³„ë²ˆí˜¸ í˜•ì‹: S + ìˆ«ìž
-- ë„ë©´ ë²ˆí˜¸ ê¸°ë°˜: S${lf+1}01, S${lf+1}02, S${lf+1}03...
-- ì˜ˆì‹œ (ë„ ${lf+1}): S${lf+1}01(ì²« ë²ˆì§¸ ë‹¨ê³„), S${lf+1}02(ë‘ ë²ˆì§¸ ë‹¨ê³„)...
+■ 단계번호 형식: S + 숫자
+- 도면 번호 기반: S${lf+1}01, S${lf+1}02, S${lf+1}03...
+- 예시 (도 ${lf+1}): S${lf+1}01(첫 번째 단계), S${lf+1}02(두 번째 단계)...
 
-â–  ë‹¨ê³„ëª… í˜•ì‹
-- ë°˜ë“œì‹œ "~ë‹¨ê³„" ë˜ëŠ” "~í•˜ëŠ” ë‹¨ê³„"ë¡œ ëë‚˜ì•¼ í•¨
-- ì˜ˆ: "ë°ì´í„° ìˆ˜ì‹  ë‹¨ê³„(S${lf+1}01)", "íŒ¨í„´ ë¶„ì„ ë‹¨ê³„(S${lf+1}02)"
+■ 단계명 형식
+- 반드시 "~단계" 또는 "~하는 단계"로 끝나야 함
+- 예: "데이터 수신 단계(S${lf+1}01)", "패턴 분석 단계(S${lf+1}02)"
 
-â–  í•µì‹¬ ê·œì¹™
-- ê° ë‹¨ê³„ëª…ì— ë‹¨ê³„ë²ˆí˜¸ë¥¼ ë°˜ë“œì‹œ í¬í•¨: "ì‚¬ìš©ìž ì¸ì¦ ë‹¨ê³„(S${lf+1}01)"
-- ìž¥ì¹˜ ë„ë©´(Step 7)ì˜ êµ¬ì„±ìš”ì†ŒëŠ” ì°¸ì¡°í•˜ë˜, ë„ë©´ì— ì§ì ‘ í¬í•¨í•˜ì§€ ë§ˆë¼
-- ë°©ë²• ì²­êµ¬í•­ì˜ ëª¨ë“  ë‹¨ê³„ë¥¼ ë¹ ì§ì—†ì´ ë°˜ì˜
+■ 핵심 규칙
+- 각 단계명에 단계번호를 반드시 포함: "사용자 인증 단계(S${lf+1}01)"
+- 장치 도면(Step 7)의 구성요소는 참조하되, 도면에 직접 포함하지 마라
+- 방법 청구항의 모든 단계를 빠짐없이 반영
 
-[íŒŒíŠ¸1: ë„ë©´ ì„¤ê³„]
-ê° ë„ë©´ë³„ë¡œ ì•„ëž˜ í˜•ì‹ ì¶œë ¥:
+[파트1: 도면 설계]
+각 도면별로 아래 형식 출력:
 ---
-ë„ ${lf+1}: (ë°©ë²• ì´ë¦„) íë¦„ë„
-ìœ í˜•: ìˆœì„œë„ (ìµœì™¸ê³½ ë°•ìŠ¤ ì—†ìŒ)
-ë‹¨ê³„ ëª©ë¡:
-- ì‹œìž‘
-- (ë‹¨ê³„ëª…)(S${lf+1}01)
-- (ë‹¨ê³„ëª…)(S${lf+1}02)
-- [íŒë‹¨] (ì¡°ê±´ ì§ˆë¬¸?)(S${lf+1}03) â†’ ì˜ˆ: (ë‹¤ìŒ ë‹¨ê³„), ì•„ë‹ˆì˜¤: (ëŒ€ì•ˆ ë‹¨ê³„)
+도 ${lf+1}: (방법 이름) 흐름도
+유형: 순서도 (최외곽 박스 없음)
+단계 목록:
+- 시작
+- (단계명)(S${lf+1}01)
+- (단계명)(S${lf+1}02)
+- [판단] (조건 질문?)(S${lf+1}03) → 예: (다음 단계), 아니오: (대안 단계)
 - ...
-- ì¢…ë£Œ
-íë¦„: ì‹œìž‘ â†’ S${lf+1}01 â†’ S${lf+1}02 â†’ S${lf+1}03{íŒë‹¨} â†’(ì˜ˆ) S${lf+1}04, (ì•„ë‹ˆì˜¤) S${lf+1}05 â†’ ... â†’ ì¢…ë£Œ (ë‹¨ë°©í–¥)
+- 종료
+흐름: 시작 → S${lf+1}01 → S${lf+1}02 → S${lf+1}03{판단} →(예) S${lf+1}04, (아니오) S${lf+1}05 → ... → 종료 (단방향)
 ---
 
-[ë¶„ê¸° ë…¼ë¦¬ ê²€ì¦]
-ê° ë¶„ê¸°ì— ëŒ€í•´ ë‹¤ìŒì„ í™•ì¸í•˜ê³  ì¶œë ¥:
-- ë¶„ê¸° ì¡°ê±´: (ì¡°ê±´ ì„¤ëª…)
-- "ì˜ˆ" ê²½ë¡œ: (ì–´ë–¤ ë‹¨ê³„ë¡œ ì§„í–‰)
-- "ì•„ë‹ˆì˜¤" ê²½ë¡œ: (ì–´ë–¤ ë‹¨ê³„ë¡œ ì§„í–‰)
-- ë…¼ë¦¬ì  íƒ€ë‹¹ì„±: (ë°©ë²• ì²­êµ¬í•­ê³¼ ì¼ì¹˜í•˜ëŠ”ì§€, ë¬´í•œ ë£¨í”„ ì—†ëŠ”ì§€ í™•ì¸)
+[분기 논리 검증]
+각 분기에 대해 다음을 확인하고 출력:
+- 분기 조건: (조건 설명)
+- "예" 경로: (어떤 단계로 진행)
+- "아니오" 경로: (어떤 단계로 진행)
+- 논리적 타당성: (방법 청구항과 일치하는지, 무한 루프 없는지 확인)
 
-[íŒŒíŠ¸2: ë„ë©´ì˜ ê°„ë‹¨í•œ ì„¤ëª…]
-â˜…â˜…â˜… ëª¨ë“  ë°©ë²• ë„ë©´ì— ëŒ€í•´ ë¹ ì§ì—†ì´ ê°„ë‹¨í•œ ì„¤ëª…ì„ ìž‘ì„±í•˜ë¼ â˜…â˜…â˜…
+[파트2: 도면의 간단한 설명]
+★★★ 모든 방법 도면에 대해 빠짐없이 간단한 설명을 작성하라 ★★★
 ---BRIEF_DESCRIPTIONS---
-ë„ ${lf+1}ì€ ${selectedTitle||'ë³¸ ë°œëª…'}ì˜ (ë°©ë²• ì´ë¦„)ì„ ë‚˜íƒ€ë‚´ëŠ” ìˆœì„œë„ì´ë‹¤.
-(ë°©ë²• ë„ë©´ì´ ì—¬ëŸ¬ ê°œì´ë©´ ëª¨ë‘ ìž‘ì„±)
+도 ${lf+1}은 ${selectedTitle||'본 발명'}의 (방법 이름)을 나타내는 순서도이다.
+(방법 도면이 여러 개이면 모두 작성)
 
-â˜…â˜…â˜… ë°©ë²• ì²­êµ¬í•­ì˜ ëª¨ë“  ë‹¨ê³„ë¥¼ ë¹ ì§ì—†ì´ íë¦„ë„ì— ë°˜ì˜í•˜ë¼ â˜…â˜…â˜…
-â˜…â˜…â˜… ìµœì™¸ê³½ í”„ë ˆìž„ ë°•ìŠ¤ ì ˆëŒ€ ê¸ˆì§€ â€” íë¦„ë„ëŠ” í”„ë ˆìž„ ì—†ì´ ë‹¨ê³„ë§Œ ë‚˜ì—´ â˜…â˜…â˜…
-â˜…â˜…â˜… ìž¥ì¹˜ êµ¬ì„±ìš”ì†Œ(100, 110 ë“±)ëŠ” ì ˆëŒ€ í¬í•¨ ê¸ˆì§€ â€” Së¡œ ì‹œìž‘í•˜ëŠ” ë‹¨ê³„ë²ˆí˜¸ë§Œ ì‚¬ìš© â˜…â˜…â˜…
+★★★ 방법 청구항의 모든 단계를 빠짐없이 흐름도에 반영하라 ★★★
+★★★ 최외곽 프레임 박스 절대 금지 — 흐름도는 프레임 없이 단계만 나열 ★★★
+★★★ 장치 구성요소(100, 110 등)는 절대 포함 금지 — S로 시작하는 단계번호만 사용 ★★★
 
-${T}\n[ë°©ë²• ì²­êµ¬ë²”ìœ„] ${outputs.step_10||''}\n[ë°œëª… ìš”ì•½] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
+${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
 
-    case 'step_12':return `ë°©ë²• ìƒì„¸ì„¤ëª…. ë‹¨ê³„ìˆœì„œì— ë”°ë¼ ìž¥ì¹˜ ë™ìž‘ì„ ì°¸ì¡°í•˜ì—¬ ì„¤ëª…í•˜ë¼. íŠ¹í—ˆë¬¸ì²´. ê¸€ë¨¸ë¦¬ ê¸ˆì§€. ì‹œìž‘: \"ì´í•˜ì—ì„œëŠ” ì•žì„œ ì„¤ëª…í•œ ${getDeviceSubject()}ì˜ êµ¬ì„± ë° ë™ìž‘ì„ ì°¸ì¡°í•˜ì—¬ ${getDeviceSubject()}ì— ì˜í•´ ìˆ˜í–‰ë˜ëŠ” ë°©ë²•ì„ ì„¤ëª…í•œë‹¤.\" ìƒëžµ ê¸ˆì§€. ì œí•œì„± í‘œí˜„ ê¸ˆì§€.\n\nâ˜… ë°©ë²•ì˜ ìˆ˜í–‰ ì£¼ì²´: \"${getDeviceSubject()}\"ë¡œ ì¼ê´€ë˜ê²Œ ì„œìˆ í•˜ë¼.\nâ˜…â˜…â˜… ë°œëª… ë‚´ìš©ì„ ë‹¨ í•˜ë‚˜ë„ ëˆ„ë½ ì—†ì´ ëª¨ë‘ ë°˜ì˜í•˜ë¼. â˜…â˜…â˜…\n\n${T}\n[ë°©ë²• ì²­êµ¬í•­] ${outputs.step_10||''}\n[ë°©ë²• ë„ë©´] ${outputs.step_11||''}\n[ìž¥ì¹˜ ìƒì„¸ì„¤ëª…] ${(outputs.step_08||'').slice(0,3000)}${outputs.step_15?'\\n\\n[íŠ¹í—ˆì„± ê²€í†  ê²°ê³¼ â€” ì•„ëž˜ ì§€ì ì‚¬í•­ì„ ë°©ë²• ìƒì„¸ì„¤ëª…ì— ë°˜ì˜í•˜ì—¬ ë³´ì™„í•˜ë¼]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention()}${styleRef}`;
-    case 'step_13':return `ì²­êµ¬ë²”ìœ„ì™€ ìƒì„¸ì„¤ëª… ê²€í† :\n1.ì²­êµ¬í•­ë’·ë°›ì¹¨ 2.ê¸°ìˆ ì ë¹„ì•½ 3.ìˆ˜í•™ì‹ì •í•©ì„± 4.ë°˜ë³µì‹¤ì‹œê°€ëŠ¥ì„± 5.ë³´ì™„/ìˆ˜ì • êµ¬ì²´ì  ë¬¸ìž¥\n${T}\n[ì²­êµ¬ë²”ìœ„] ${outputs.step_06||''}\n${outputs.step_10||''}\n[ìƒì„¸ì„¤ëª…] ${(getLatestDescription()||'').slice(0,6000)}`;
-    case 'step_14':return `ëŒ€ì•ˆ ì²­êµ¬í•­. í•µì‹¬ìœ ì§€ í‘œí˜„ë‹¬ë¦¬. ë…ë¦½í•­ì€ ë°˜ë“œì‹œ ì ­ìŠ¨(Jepson) í˜•ì‹ ìœ ì§€: "~ì— ìžˆì–´ì„œ," ì „í™˜ë¶€ + "~ì„ íŠ¹ì§•ìœ¼ë¡œ í•˜ëŠ”" ì¢…ê²°ë¶€. ã€ì²­êµ¬í•­ Nã€‘.\n${T}\n[ìž¥ì¹˜] ${outputs.step_06||''}\n[ë°©ë²•] ${outputs.step_10||'(ì—†ìŒ)'}`;
-    case 'step_15':return `íŠ¹í—ˆì„± ê²€í† : ì•„ëž˜ ì²­êµ¬ë²”ìœ„ì™€ ìƒì„¸ì„¤ëª…ì— ëŒ€í•´ ë‹¤ìŒ í•­ëª©ì„ ê²€í† í•˜ë¼.
+    case 'step_12':return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: \"이하에서는 앞서 설명한 ${getDeviceSubject()}의 구성 및 동작을 참조하여 ${getDeviceSubject()}에 의해 수행되는 방법을 설명한다.\" 생략 금지. 제한성 표현 금지.\n\n★ 방법의 수행 주체: \"${getDeviceSubject()}\"로 일관되게 서술하라.\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${outputs.step_15?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 방법 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention()}${styleRef}`;
+    case 'step_13':return `청구범위와 상세설명 검토:\n1.청구항뒷받침 2.기술적비약 3.수학식정합성 4.반복실시가능성 5.보완/수정 구체적 문장\n${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}`;
+    case 'step_14':return `대안 청구항. 핵심유지 표현달리. 독립항은 반드시 젭슨(Jepson) 형식 유지: "~에 있어서," 전환부 + "~을 특징으로 하는" 종결부. 【청구항 N】.\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}`;
+    case 'step_15':return `특허성 검토: 아래 청구범위와 상세설명에 대해 다음 항목을 검토하라.
 
-(1) ì‹ ê·œì„±: ì²­êµ¬í•­ì˜ êµ¬ì„±ìš”ì†Œ ì¡°í•©ì´ ì„ í–‰ê¸°ìˆ ê³¼ êµ¬ë³„ë˜ëŠ”ì§€
-(2) ì§„ë³´ì„±: ê¸°ìˆ ì  íŠ¹ì§•ì´ ë‹¹ì—…ìžì—ê²Œ ìžëª…í•˜ì§€ ì•Šì€ ìˆ˜ì¤€ì¸ì§€, íŠ¹ížˆ ì•µì»¤ ì¢…ì†í•­ì˜ ì°½ì˜ì„±
-(3) ëª…í™•ì„±: ì²­êµ¬í•­ í‘œí˜„ì´ ëª…í™•í•˜ê³  ë’·ë°›ì¹¨ë˜ëŠ”ì§€
-(4) ì‚°ì—…ìƒ ì´ìš©ê°€ëŠ¥ì„±: ì‹¤ì œ êµ¬í˜„ ê°€ëŠ¥í•œ ê¸°ìˆ ì¸ì§€
-(5) ë³´í˜¸ë²”ìœ„ ìµœì í™”: ë…ë¦½í•­ì´ ê³¼ë„í•˜ê²Œ ì¢ê±°ë‚˜ ë„“ì§€ ì•Šì€ì§€, ê°œì„  ì œì•ˆ
+(1) 신규성: 청구항의 구성요소 조합이 선행기술과 구별되는지
+(2) 진보성: 기술적 특징이 당업자에게 자명하지 않은 수준인지, 특히 앵커 종속항의 창의성
+(3) 명확성: 청구항 표현이 명확하고 뒷받침되는지
+(4) 산업상 이용가능성: 실제 구현 가능한 기술인지
+(5) 보호범위 최적화: 독립항이 과도하게 좁거나 넓지 않은지, 개선 제안
 
-ê° í•­ëª©ë³„ë¡œ í‰ê°€ ê²°ê³¼ì™€ ê°œì„  ì œì•ˆì„ ìž‘ì„±í•˜ë¼.
+각 항목별로 평가 결과와 개선 제안을 작성하라.
 
-${T}\n[ì „ì²´ ì²­êµ¬ë²”ìœ„] ${outputs.step_06||''}\n${outputs.step_10||''}\n[ìƒì„¸ì„¤ëª… ìš”ì•½] ${(getLatestDescription()||'').slice(0,3000)}\n[ë°œëª… ë‚´ìš©] ${inv.slice(0,2000)}`;
-    case 'step_16':return `ë°œëª…ì˜ íš¨ê³¼. \"ë³¸ ë°œëª…ì— ë”°ë¥´ë©´,\"ì‹œìž‘. 50ë‹¨ì–´ ì´ë‚´. ë§ˆì§€ë§‰: \"ë³¸ ë°œëª…ì˜ íš¨ê³¼ëŠ” ì´ìƒì—ì„œ ì–¸ê¸‰í•œ íš¨ê³¼ë¡œ ì œí•œë˜ì§€ ì•Šìœ¼ë©°, ì–¸ê¸‰ë˜ì§€ ì•Šì€ ë˜ ë‹¤ë¥¸ íš¨ê³¼ë“¤ì€ ì•„ëž˜ì˜ ê¸°ìž¬ë¡œë¶€í„° ë‹¹ì—…ìžì—ê²Œ ëª…í™•í•˜ê²Œ ì´í•´ë  ìˆ˜ ìžˆì„ ê²ƒì´ë‹¤.\"\n${T}\n[ê³¼ì œ] ${outputs.step_05||''}\n[ìƒì„¸ì„¤ëª…] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
-    case 'step_17':return `ê³¼ì œì˜ í•´ê²° ìˆ˜ë‹¨. \"ë³¸ ë°œëª…ì˜ ì¼ ì‹¤ì‹œì˜ˆì— ë”°ë¥¸\"ì‹œìž‘. ë§ˆì§€ë§‰: \"ë³¸ ë°œëª…ì˜ ê¸°íƒ€ êµ¬ì²´ì ì¸ ì‚¬í•­ë“¤ì€ ìƒì„¸í•œ ì„¤ëª… ë° ë„ë©´ë“¤ì— í¬í•¨ë˜ì–´ ìžˆë‹¤.\"\n${T}\n[ìž¥ì¹˜] ${outputs.step_06||''}\n[ë°©ë²•] ${outputs.step_10||'(ì—†ìŒ)'}${styleRef}`;
+${T}\n[전체 청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명 요약] ${(getLatestDescription()||'').slice(0,3000)}\n[발명 내용] ${inv.slice(0,2000)}`;
+    case 'step_16':return `발명의 효과. \"본 발명에 따르면,\"시작. 50단어 이내. 마지막: \"본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며, 언급되지 않은 또 다른 효과들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\"\n${T}\n[과제] ${outputs.step_05||''}\n[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
+    case 'step_17':return `과제의 해결 수단. \"본 발명의 일 실시예에 따른\"시작. 마지막: \"본 발명의 기타 구체적인 사항들은 상세한 설명 및 도면들에 포함되어 있다.\"\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}${styleRef}`;
     case 'step_18':{
       const hasMethod=includeMethodClaims&&outputs.step_11;
-      return `ã€ë¶€í˜¸ì˜ ì„¤ëª…ã€‘ì„ ìž‘ì„±í•˜ë¼.
+      return `【부호의 설명】을 작성하라.
 
-í˜•ì‹: "êµ¬ì„±ìš”ì†Œ : ì°¸ì¡°ë²ˆí˜¸" (ì½œë¡  ì‚¬ìš©)
-ì •ë ¬: ì°¸ì¡°ë²ˆí˜¸ ì˜¤ë¦„ì°¨ìˆœ
+형식: "구성요소 : 참조번호" (콜론 사용)
+정렬: 참조번호 오름차순
 
-[ìž¥ì¹˜ êµ¬ì„±ìš”ì†Œ â€” ìˆ«ìžë§Œ ì‚¬ìš©]
-- í˜•ì‹: 100, 110, 111, 200, 210...
-- ê³„ì¸µì  ì²´ê³„: L1(X00) â†’ L2(XY0) â†’ L3(XYZ)
-- ì˜ˆì‹œ:
+[장치 구성요소 — 숫자만 사용]
+- 형식: 100, 110, 111, 200, 210...
+- 계층적 체계: L1(X00) → L2(XY0) → L3(XYZ)
+- 예시:
   ${getDeviceSubject()} : 100
-  í†µì‹ ë¶€ : 110
-  ìˆ˜ì‹ ë¶€ : 111
-  ì†¡ì‹ ë¶€ : 112
-  í”„ë¡œì„¸ì„œ : 120
-  ì‚¬ìš©ìž ë‹¨ë§ : 200
+  통신부 : 110
+  수신부 : 111
+  송신부 : 112
+  프로세서 : 120
+  사용자 단말 : 200
 
-${hasMethod?`[ë°©ë²• ë‹¨ê³„ â€” S+ìˆ«ìž ì‚¬ìš©]
-- í˜•ì‹: S401, S402, S403...
-- ì˜ˆì‹œ:
-  ë°ì´í„° ìˆ˜ì‹  ë‹¨ê³„ : S401
-  íŒ¨í„´ ë¶„ì„ ë‹¨ê³„ : S402
-  ê²°ê³¼ ì „ì†¡ ë‹¨ê³„ : S403
+${hasMethod?`[방법 단계 — S+숫자 사용]
+- 형식: S401, S402, S403...
+- 예시:
+  데이터 수신 단계 : S401
+  패턴 분석 단계 : S402
+  결과 전송 단계 : S403
 
-âš ï¸ ìž¥ì¹˜ êµ¬ì„±ìš”ì†Œ(ìˆ«ìž)ì™€ ë°©ë²• ë‹¨ê³„(Sìˆ«ìž)ë¥¼ ë°˜ë“œì‹œ êµ¬ë¶„í•˜ì—¬ ë³„ë„ ì„¹ì…˜ìœ¼ë¡œ ìž‘ì„±í•˜ë¼.`:`âš ï¸ ìž¥ì¹˜ êµ¬ì„±ìš”ì†Œë§Œ ìž‘ì„±í•˜ë¼. ë°©ë²• ë‹¨ê³„(S100 ë“±)ëŠ” í¬í•¨í•˜ì§€ ë§ˆë¼.`}
+⚠️ 장치 구성요소(숫자)와 방법 단계(S숫자)를 반드시 구분하여 별도 섹션으로 작성하라.`:`⚠️ 장치 구성요소만 작성하라. 방법 단계(S100 등)는 포함하지 마라.`}
 
-${T}\n[ìž¥ì¹˜ ë„ë©´] ${outputs.step_07||''}${hasMethod?`\n[ë°©ë²• ë„ë©´] ${outputs.step_11||''}`:''}`}
-    case 'step_19':return `ìš”ì•½ì„œ. ì²­êµ¬í•­1 ê¸°ì¤€ 150ë‹¨ì–´. \"ë³¸ ë°œëª…ì€\"ì‹œìž‘.\nì¶œë ¥:\nã€ìš”ì•½ã€‘\n(ë³¸ë¬¸)\n\nã€ëŒ€í‘œë„ã€‘\në„ 1\n\nìœ„ í˜•ì‹ë§Œ.\n${T}\n[ì²­êµ¬í•­1] ${(outputs.step_06||'').slice(0,1500)}${styleRef}`;
+${T}\n[장치 도면] ${outputs.step_07||''}${hasMethod?`\n[방법 도면] ${outputs.step_11||''}`:''}`}
+    case 'step_19':return `요약서. 청구항1 기준 150단어. \"본 발명은\"시작.\n출력:\n【요약】\n(본문)\n\n【대표도】\n도 1\n\n위 형식만.\n${T}\n[청구항1] ${(outputs.step_06||'').slice(0,1500)}${styleRef}`;
     default:return '';
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â• STEP EXECUTION â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ STEP EXECUTION ═══════════
 let globalProcessing = false;
 function setGlobalProcessing(on){
   globalProcessing=on;
@@ -1474,21 +1474,21 @@ function setGlobalProcessing(on){
   // Also disable validation button and tab switches during processing
   document.querySelectorAll('.tab-item').forEach(t=>{if(on){t.style.pointerEvents='none';t.style.opacity='0.7';}else{t.style.pointerEvents='';t.style.opacity='';}});
 }
-function checkDependency(s){const inv=document.getElementById('projectInput').value.trim();const d={step_01:()=>inv?null:'ë°œëª… ë‚´ìš©ì„ ë¨¼ì € ìž…ë ¥',step_06:()=>selectedTitle?null:'ëª…ì¹­ì„ ë¨¼ì € í™•ì •',step_07:()=>outputs.step_06?null:'ìž¥ì¹˜ ì²­êµ¬í•­ ë¨¼ì €',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'ë„ë©´ ì„¤ê³„ ë¨¼ì €',step_09:()=>outputs.step_08?null:'ìƒì„¸ì„¤ëª… ë¨¼ì €',step_10:()=>outputs.step_06?null:'ìž¥ì¹˜ ì²­êµ¬í•­ ë¨¼ì €',step_11:()=>outputs.step_10?null:'ë°©ë²• ì²­êµ¬í•­ ë¨¼ì €',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'ë°©ë²• ë„ë©´ ë¨¼ì €',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'ì²­êµ¬í•­+ìƒì„¸ì„¤ëª… ë¨¼ì €',step_14:()=>outputs.step_06?null:'ìž¥ì¹˜ ì²­êµ¬í•­ ë¨¼ì €',step_15:()=>outputs.step_06?null:'ìž¥ì¹˜ ì²­êµ¬í•­ ë¨¼ì €'};return d[s]?d[s]():null;}
+function checkDependency(s){const inv=document.getElementById('projectInput').value.trim();const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저'};return d[s]?d[s]():null;}
 async function runStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13',step_14:'btnStep14',step_15:'btnStep15'},bid=bm[sid];setGlobalProcessing(true);loadingState[sid]=true;if(bid)App.setButtonLoading(bid,true);
   try{
-    // Step 04: KIPRIS API ì‹¤ì‹œê°„ ê²€ìƒ‰
+    // Step 04: KIPRIS API 실시간 검색
     if(sid==='step_04'){
       const sr=await searchPriorArt(selectedTitle);
       if(sr){outputs.step_04=sr.formatted;renderOutput('step_04',sr.formatted);}
-      else{outputs.step_04='ã€íŠ¹í—ˆë¬¸í—Œã€‘\n(ê´€ë ¨ ì„ í–‰íŠ¹í—ˆë¥¼ ê²€ìƒ‰í•˜ì§€ ëª»í•˜ì˜€ìŠµë‹ˆë‹¤)';renderOutput('step_04',outputs.step_04);}
-      saveProject(true);App.showToast('ì„ í–‰ê¸°ìˆ ë¬¸í—Œ ê²€ìƒ‰ ì™„ë£Œ');
+      else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderOutput('step_04',outputs.step_04);}
+      saveProject(true);App.showToast('선행기술문헌 검색 완료');
       return;
     }
     // Step 13: use continuation for long review
     let r;
     if(sid==='step_13'){
-      App.showProgress('progressStep13','AI ê²€í†  ìƒì„± ì¤‘...',0,1);
+      App.showProgress('progressStep13','AI 검토 생성 중...',0,1);
       const text=await App.callClaudeWithContinuation(buildPrompt(sid),'progressStep13');
       r={text};outputs[sid]=text;
     } else {
@@ -1500,80 +1500,80 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
       let corrected=outputs[sid];
       let correctionRound=0;const maxRounds=3;
       for(correctionRound=0;correctionRound<maxRounds;correctionRound++){
-        App.showProgress('progressStep06',`ê¸°ìž¬ë¶ˆë¹„ ê²€ì¦ ì¤‘... (${correctionRound+1}/${maxRounds})`,correctionRound*2+1,maxRounds*2+1);
+        App.showProgress('progressStep06',`기재불비 검증 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+1,maxRounds*2+1);
         const issues=validateClaims(corrected);
         if(issues.length===0)break;
-        App.showProgress('progressStep06',`ê¸°ìž¬ë¶ˆë¹„ ìˆ˜ì • ì¤‘... (${correctionRound+1}/${maxRounds})`,correctionRound*2+2,maxRounds*2+1);
+        App.showProgress('progressStep06',`기재불비 수정 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+2,maxRounds*2+1);
         const issueText=issues.map(i=>i.message).join('\n');
-        const fixPrompt=`ì•„ëž˜ ì²­êµ¬ë²”ìœ„ì—ì„œ ê¸°ìž¬ë¶ˆë¹„ê°€ ë°œê²¬ë˜ì—ˆë‹¤. ëª¨ë“  ì§€ì ì‚¬í•­ì„ ìˆ˜ì •í•˜ì—¬ ì™„ì „í•œ ì²­êµ¬ë²”ìœ„ ì „ì²´ë¥¼ ë‹¤ì‹œ ì¶œë ¥í•˜ë¼.\n\nìˆ˜ì • ê·œì¹™:\n- ã€ì²­êµ¬í•­ Nã€‘í˜•ì‹ ìœ ì§€\n- \"ìƒê¸°\" ì„ í–‰ê¸°ìž¬ ëˆ„ë½: ì°¸ì¡°í•˜ëŠ” ìƒìœ„í•­(ë…ë¦½í•­ í¬í•¨)ì— í•´ë‹¹ êµ¬ì„±ìš”ì†Œë¥¼ ì¶”ê°€í•˜ê±°ë‚˜, ì¢…ì†í•­ì˜ í‘œí˜„ì„ ìˆ˜ì •\n- ì¢…ì†í•­ì—ì„œ ìƒˆë¡œìš´ ìš©ì–´ë¥¼ \"ìƒê¸°\"ë¡œ ì°¸ì¡°í•˜ë ¤ë©´, ë°˜ë“œì‹œ í•´ë‹¹ ìš©ì–´ê°€ ìƒìœ„í•­ì— ë¨¼ì € ê¸°ìž¬ë˜ì–´ì•¼ í•œë‹¤\n- ìƒìœ„í•­ì— ì¶”ê°€í•  ë•ŒëŠ” ë…ë¦½í•­ì˜ ë²”ìœ„ê°€ ê³¼ë„í•˜ê²Œ ì¢ì•„ì§€ì§€ ì•Šë„ë¡ ì£¼ì˜\n- ì œí•œì  í‘œí˜„: ì‚­ì œ ë˜ëŠ” ë¹„ì œí•œì  í‘œí˜„ìœ¼ë¡œ êµì²´\n- ì²­êµ¬í•­ ì°¸ì¡° ì˜¤ë¥˜: ì˜¬ë°”ë¥¸ ì²­êµ¬í•­ ë²ˆí˜¸ë¡œ ìˆ˜ì •\n- ì¢…ì†í•­ ëŒ€í†µë ¹ë ¹: â‘ ì¸ìš©í•­ ë²ˆí˜¸ ê¸°ìž¬ â‘¡ë‹¤ì¤‘ì¸ìš©ì‹œ íƒì¼ì  ê¸°ìž¬ â‘¢ë‹¤ì¤‘ì¸ìš©ì˜ ë‹¤ì¤‘ì¸ìš© ê¸ˆì§€ â‘£ë²ˆí˜¸ ì—­ì „ ê¸ˆì§€\n\n[ì§€ì ì‚¬í•­]\n${issueText}\n\n[ì›ë³¸ ì²­êµ¬ë²”ìœ„]\n${corrected}`;
+        const fixPrompt=`아래 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 상위항(독립항 포함)에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 상위항에 추가할 때는 독립항의 범위가 과도하게 좁아지지 않도록 주의\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${corrected}`;
         const fixR=await App.callClaude(fixPrompt);corrected=fixR.text;
       }
       outputs[sid]=corrected;renderOutput(sid,corrected);
       const finalIssues=validateClaims(corrected);
-      App.showProgress('progressStep06',`ì™„ë£Œ (ìˆ˜ì • ${correctionRound}íšŒ)`,maxRounds*2+1,maxRounds*2+1);
+      App.showProgress('progressStep06',`완료 (수정 ${correctionRound}회)`,maxRounds*2+1,maxRounds*2+1);
       setTimeout(()=>App.clearProgress('progressStep06'),2000);
-      if(finalIssues.length===0)App.showToast(`ìž¥ì¹˜ ì²­êµ¬í•­ ì™„ë£Œ (ê¸°ìž¬ë¶ˆë¹„ ì—†ìŒ, ${correctionRound}íšŒ ìˆ˜ì •)`);
-      else App.showToast(`ìž¥ì¹˜ ì²­êµ¬í•­ ì™„ë£Œ (${correctionRound}íšŒ ìˆ˜ì •, ${finalIssues.length}ê±´ ìž”ì—¬ â€” ê²½ë¯¸í•œ ì‚¬í•­)`, 'info');
+      if(finalIssues.length===0)App.showToast(`장치 청구항 완료 (기재불비 없음, ${correctionRound}회 수정)`);
+      else App.showToast(`장치 청구항 완료 (${correctionRound}회 수정, ${finalIssues.length}건 잔여 — 경미한 사항)`, 'info');
     }
     // Step 10: auto-validation + multi-round correction (v5.2)
     else if(sid==='step_10'){
       let corrected=outputs[sid];
       let correctionRound=0;const maxRounds=3;
-      // â˜… ë°©ë²• ì²­êµ¬í•­ ê²€ì¦ ì‹œ ìž¥ì¹˜ ì²­êµ¬í•­ë„ ì°¸ì¡° ì»¨í…ìŠ¤íŠ¸ë¡œ ì œê³µ â˜…
+      // ★ 방법 청구항 검증 시 장치 청구항도 참조 컨텍스트로 제공 ★
       const deviceClaimsCtx=outputs.step_06||'';
       for(correctionRound=0;correctionRound<maxRounds;correctionRound++){
-        App.showProgress('progressStep10',`ê¸°ìž¬ë¶ˆë¹„ ê²€ì¦ ì¤‘... (${correctionRound+1}/${maxRounds})`,correctionRound*2+1,maxRounds*2+1);
-        // ë°©ë²• ì²­êµ¬í•­ë§Œ ê²€ì¦ (ë…ë¦½í•­ ìžë™ ê°ì§€)
+        App.showProgress('progressStep10',`기재불비 검증 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+1,maxRounds*2+1);
+        // 방법 청구항만 검증 (독립항 자동 감지)
         const issues=validateClaims(corrected);
         if(issues.length===0)break;
-        App.showProgress('progressStep10',`ê¸°ìž¬ë¶ˆë¹„ ìˆ˜ì • ì¤‘... (${correctionRound+1}/${maxRounds})`,correctionRound*2+2,maxRounds*2+1);
+        App.showProgress('progressStep10',`기재불비 수정 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+2,maxRounds*2+1);
         const issueText=issues.map(i=>i.message).join('\n');
-        const firstClaimNum=corrected.match(/ã€ì²­êµ¬í•­\s*(\d+)ã€‘/)?.[1]||'?';
-        const fixPrompt=`ì•„ëž˜ ë°©ë²• ì²­êµ¬ë²”ìœ„ì—ì„œ ê¸°ìž¬ë¶ˆë¹„ê°€ ë°œê²¬ë˜ì—ˆë‹¤. ëª¨ë“  ì§€ì ì‚¬í•­ì„ ìˆ˜ì •í•˜ì—¬ ì™„ì „í•œ ì²­êµ¬ë²”ìœ„ ì „ì²´ë¥¼ ë‹¤ì‹œ ì¶œë ¥í•˜ë¼.\n\nâ›”â›” ì ˆëŒ€ ê¸ˆì§€: ì²­êµ¬í•­ ë²ˆí˜¸ë¥¼ ë³€ê²½í•˜ì§€ ë§ˆë¼! ë°©ë²• ë…ë¦½í•­ì€ ë°˜ë“œì‹œ ã€ì²­êµ¬í•­ ${firstClaimNum}ã€‘ì„ ìœ ì§€í•´ì•¼ í•œë‹¤. ì ˆëŒ€ë¡œ ã€ì²­êµ¬í•­ 1ã€‘ë¡œ ë³€ê²½ ê¸ˆì§€! â›”â›”\n\nìˆ˜ì • ê·œì¹™:\n- ã€ì²­êµ¬í•­ Nã€‘í˜•ì‹ ìœ ì§€ â€” ë²ˆí˜¸ ë³€ê²½ ê¸ˆì§€\n- \"ìƒê¸°\" ì„ í–‰ê¸°ìž¬ ëˆ„ë½: ë°©ë²• ë…ë¦½í•­(ì²­êµ¬í•­ ${firstClaimNum}) ë‚´ì— í•´ë‹¹ êµ¬ì„±ìš”ì†Œë¥¼ ì¶”ê°€í•˜ê±°ë‚˜, ì¢…ì†í•­ì˜ í‘œí˜„ì„ ìˆ˜ì •\n- ì¢…ì†í•­ì—ì„œ ìƒˆë¡œìš´ ìš©ì–´ë¥¼ \"ìƒê¸°\"ë¡œ ì°¸ì¡°í•˜ë ¤ë©´, ë°˜ë“œì‹œ í•´ë‹¹ ìš©ì–´ê°€ ìƒìœ„í•­ì— ë¨¼ì € ê¸°ìž¬ë˜ì–´ì•¼ í•œë‹¤\n- ì œí•œì  í‘œí˜„: ì‚­ì œ ë˜ëŠ” ë¹„ì œí•œì  í‘œí˜„ìœ¼ë¡œ êµì²´\n- ì²­êµ¬í•­ ì°¸ì¡° ì˜¤ë¥˜: ì˜¬ë°”ë¥¸ ì²­êµ¬í•­ ë²ˆí˜¸ë¡œ ìˆ˜ì •\n- ì¢…ì†í•­ ëŒ€í†µë ¹ë ¹: â‘ ì¸ìš©í•­ ë²ˆí˜¸ ê¸°ìž¬ â‘¡ë‹¤ì¤‘ì¸ìš©ì‹œ íƒì¼ì  ê¸°ìž¬ â‘¢ë‹¤ì¤‘ì¸ìš©ì˜ ë‹¤ì¤‘ì¸ìš© ê¸ˆì§€ â‘£ë²ˆí˜¸ ì—­ì „ ê¸ˆì§€\n\n[ì§€ì ì‚¬í•­]\n${issueText}\n\n[ì›ë³¸ ì²­êµ¬ë²”ìœ„ â€” ë²ˆí˜¸ ìœ ì§€!]\n${corrected}`;
+        const firstClaimNum=corrected.match(/【청구항\s*(\d+)】/)?.[1]||'?';
+        const fixPrompt=`아래 방법 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n⛔⛔ 절대 금지: 청구항 번호를 변경하지 마라! 방법 독립항은 반드시 【청구항 ${firstClaimNum}】을 유지해야 한다. 절대로 【청구항 1】로 변경 금지! ⛔⛔\n\n수정 규칙:\n- 【청구항 N】형식 유지 — 번호 변경 금지\n- \"상기\" 선행기재 누락: 방법 독립항(청구항 ${firstClaimNum}) 내에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위 — 번호 유지!]\n${corrected}`;
         const fixR=await App.callClaude(fixPrompt);corrected=fixR.text;
       }
       outputs[sid]=corrected;renderOutput(sid,corrected);
       const finalIssues=validateClaims(corrected);
-      App.showProgress('progressStep10',`ì™„ë£Œ (ìˆ˜ì • ${correctionRound}íšŒ)`,maxRounds*2+1,maxRounds*2+1);
+      App.showProgress('progressStep10',`완료 (수정 ${correctionRound}회)`,maxRounds*2+1,maxRounds*2+1);
       setTimeout(()=>App.clearProgress('progressStep10'),2000);
-      if(finalIssues.length===0)App.showToast(`ë°©ë²• ì²­êµ¬í•­ ì™„ë£Œ (ê¸°ìž¬ë¶ˆë¹„ ì—†ìŒ, ${correctionRound}íšŒ ìˆ˜ì •)`);
-      else App.showToast(`ë°©ë²• ì²­êµ¬í•­ ì™„ë£Œ (${correctionRound}íšŒ ìˆ˜ì •, ${finalIssues.length}ê±´ ìž”ì—¬ â€” ê²½ë¯¸í•œ ì‚¬í•­)`, 'info');
+      if(finalIssues.length===0)App.showToast(`방법 청구항 완료 (기재불비 없음, ${correctionRound}회 수정)`);
+      else App.showToast(`방법 청구항 완료 (${correctionRound}회 수정, ${finalIssues.length}건 잔여 — 경미한 사항)`, 'info');
     }
     else{
       if(sid==='step_13')document.getElementById('btnApplyReview').style.display='block';
-      App.showToast(`${STEP_NAMES[sid]} ì™„ë£Œ [${App.getModelConfig().label}]`);
+      App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
     }
     saveProject(true);
   }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
-async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);App.showProgress(pid,`${STEP_NAMES[sid]} ìƒì„± ì¤‘...`,0,1);try{const t=await App.callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} ì™„ë£Œ [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
-async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);renderOutput('step_09',outputs.step_09);saveProject(true);App.showToast('ìˆ˜í•™ì‹ ì‚½ìž… ì™„ë£Œ');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
+async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);App.showProgress(pid,`${STEP_NAMES[sid]} 생성 중...`,0,1);try{const t=await App.callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
+async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);renderOutput('step_09',outputs.step_09);saveProject(true);App.showToast('수학식 삽입 완료');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
 
 async function applyReview(){
-  if(globalProcessing)return;if(!outputs.step_13){App.showToast('ê²€í†  ê²°ê³¼ ì—†ìŒ','error');return;}
-  const cur=getLatestDescription();if(!cur){App.showToast('ìƒì„¸ì„¤ëª… ì—†ìŒ','error');return;}
+  if(globalProcessing)return;if(!outputs.step_13){App.showToast('검토 결과 없음','error');return;}
+  const cur=getLatestDescription();if(!cur){App.showToast('상세설명 없음','error');return;}
   beforeReviewText=cur;setGlobalProcessing(true);loadingState.applyReview=true;App.setButtonLoading('btnApplyReview',true);
   try{
-    App.showProgress('progressApplyReview','[1/3] ê²€í†  ë°˜ì˜ ë³´ì™„ ì¤‘...',1,3);
-    const dlCfg={compact:{c:'ì•½ 1,000ìž',t:'ì•½ 3,000~4,000ìž'},standard:{c:'ì•½ 1,500ìž',t:'ì•½ 5,000~7,000ìž'},detailed:{c:'ì•½ 2,000ìž ì´ìƒ',t:'8,000~10,000ìž'},custom:{c:'ì•½ '+customDetailChars+'ìž',t:'ì•½ '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'ìž'}}[detailLevel];
-    const improvedDesc=await App.callClaudeWithContinuation(`[ê²€í†  ê²°ê³¼]ë¥¼ ë°˜ì˜í•˜ì—¬ ã€ë°œëª…ì„ ì‹¤ì‹œí•˜ê¸° ìœ„í•œ êµ¬ì²´ì ì¸ ë‚´ìš©ã€‘ì˜ ë³¸ë¬¸ë§Œ ì™„ì „ížˆ ìƒˆë¡œ ìž‘ì„±í•˜ë¼.\n\nê·œì¹™:\n- ê¸°ì¡´ ìƒì„¸ì„¤ëª…ì„ ê¸°ë°˜ìœ¼ë¡œ ê²€í†  ì§€ì ì‚¬í•­ì„ ëª¨ë‘ ë³´ì™„í•˜ë¼.\n- ì´ í•­ëª©ë§Œ ìž‘ì„±. ë‹¤ë¥¸ í•­ëª© í¬í•¨ ê¸ˆì§€.\n- ${getDeviceSubject()}(100)ë¥¼ ì£¼ì–´. \"êµ¬ì„±ìš”ì†Œ(ì°¸ì¡°ë²ˆí˜¸)\" í˜•íƒœ.\n- ë„ë©´ë³„ \"ë„ Nì„ ì°¸ì¡°í•˜ë©´,\" í˜•íƒœ.\n- íŠ¹í—ˆë¬¸ì²´(~í•œë‹¤). ê¸€ë¨¸ë¦¬ ê¸ˆì§€. ìƒëžµ ê¸ˆì§€.\n- ë„ë©´ 1ê°œë‹¹ ${dlCfg.c}, ì´ ${dlCfg.t}. (ì •í˜•ë¬¸ ì œì™¸)\n- ë“±ë¡ ì•µì»¤ ì¢…ì†í•­ì˜ ë‹¤ë‹¨ê³„ ì²˜ë¦¬, ê¸°ì¤€ê°’/ê°€ì¤‘ì¹˜ ë™ìž‘, ê²€ì¦/ë³´ì • ë£¨í”„ë¥¼ êµ¬ì²´ì ìœ¼ë¡œ ì„¤ëª…í•˜ë¼.\n- ì œí•œì„± í‘œí˜„ ê¸ˆì§€.\n- ìˆ˜í•™ì‹ì€ í¬í•¨í•˜ì§€ ë§ˆë¼ (ë³„ë„ ì‚½ìž… ì˜ˆì •).\n\nâ˜…â˜…â˜… ë°œëª… ë‚´ìš©ì„ ë‹¨ í•˜ë‚˜ë„ ëˆ„ë½ ì—†ì´ ëª¨ë‘ ë°˜ì˜í•˜ë¼. â˜…â˜…â˜…\n\n[ë°œëª…ì˜ ëª…ì¹­] ${selectedTitle}\n[ê²€í†  ê²°ê³¼] ${outputs.step_13}\n[ì²­êµ¬ë²”ìœ„] ${outputs.step_06||''}\n[ë„ë©´] ${outputs.step_07||''}\n[í˜„ìž¬ ìƒì„¸ì„¤ëª…] ${stripMathBlocks(cur)}${getFullInvention()}${getStyleRef()}`,'progressApplyReview');
+    App.showProgress('progressApplyReview','[1/3] 검토 반영 보완 중...',1,3);
+    const dlCfg={compact:{c:'약 1,000자',t:'약 3,000~4,000자'},standard:{c:'약 1,500자',t:'약 5,000~7,000자'},detailed:{c:'약 2,000자 이상',t:'8,000~10,000자'},custom:{c:'약 '+customDetailChars+'자',t:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자'}}[detailLevel];
+    const improvedDesc=await App.callClaudeWithContinuation(`[검토 결과]를 반영하여 【발명을 실시하기 위한 구체적인 내용】의 본문만 완전히 새로 작성하라.\n\n규칙:\n- 기존 상세설명을 기반으로 검토 지적사항을 모두 보완하라.\n- 이 항목만 작성. 다른 항목 포함 금지.\n- ${getDeviceSubject()}(100)를 주어. \"구성요소(참조번호)\" 형태.\n- 도면별 \"도 N을 참조하면,\" 형태.\n- 특허문체(~한다). 글머리 금지. 생략 금지.\n- 도면 1개당 ${dlCfg.c}, 총 ${dlCfg.t}. (정형문 제외)\n- 등록 앵커 종속항의 다단계 처리, 기준값/가중치 동작, 검증/보정 루프를 구체적으로 설명하라.\n- 제한성 표현 금지.\n- 수학식은 포함하지 마라 (별도 삽입 예정).\n\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n[발명의 명칭] ${selectedTitle}\n[검토 결과] ${outputs.step_13}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}\n[현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention()}${getStyleRef()}`,'progressApplyReview');
     outputs.step_08=improvedDesc;
-    App.showProgress('progressApplyReview','[2/3] ìˆ˜í•™ì‹ ì‚½ìž… ì¤‘...',2,3);
-    const mathR=await App.callClaude(`ìƒì„¸ì„¤ëª…ì˜ í•µì‹¬ ì•Œê³ ë¦¬ì¦˜ì— ìˆ˜í•™ì‹ 5ê°œ ë‚´ì™¸.\nê·œì¹™: ìˆ˜í•™ì‹+ì‚½ìž…ìœ„ì¹˜ë§Œ. ìƒì„¸ì„¤ëª… ìž¬ì¶œë ¥ ê¸ˆì§€. ì²¨ìž ê¸ˆì§€.\nâ˜… ìˆ˜ì¹˜ ì˜ˆì‹œëŠ” \"ì˜ˆë¥¼ ë“¤ì–´,\", \"ì¼ ì˜ˆë¡œ,\", \"êµ¬ì²´ì  ì˜ˆì‹œë¡œ,\" ë“± ìžì—°ìŠ¤ëŸ¬ìš´ í‘œí˜„ ì‚¬ìš© (\"ì˜ˆì‹œ ëŒ€ìž…:\" ê¸ˆì§€)\nì¶œë ¥:\n---MATH_BLOCK_1---\nANCHOR: (ì‚½ìž…ìœ„ì¹˜ ë¬¸ìž¥ 20ìž ì´ìƒ)\nFORMULA:\nã€ìˆ˜í•™ì‹ 1ã€‘\n(ìˆ˜ì‹)\nì—¬ê¸°ì„œ, (íŒŒë¼ë¯¸í„°)\nì˜ˆë¥¼ ë“¤ì–´, (ìˆ˜ì¹˜ ëŒ€ìž… ì„¤ëª…)\n\n${selectedTitle}\n[í˜„ìž¬ ìƒì„¸ì„¤ëª…] ${improvedDesc}`);
+    App.showProgress('progressApplyReview','[2/3] 수학식 삽입 중...',2,3);
+    const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${improvedDesc}`);
     const finalDesc=insertMathBlocks(improvedDesc,mathR.text);
     outputs.step_09=finalDesc;outputs.step_13_applied=finalDesc;
-    App.showProgress('progressApplyReview','[3/3] ì™„ë£Œ',3,3);
+    App.showProgress('progressApplyReview','[3/3] 완료',3,3);
     renderOutput('step_08',improvedDesc);renderOutput('step_09',finalDesc);
     const resultArea=document.getElementById('reviewApplyResult');
     if(resultArea){resultArea.style.display='block';showReviewDiff('after');}
     setTimeout(()=>App.clearProgress('progressApplyReview'),2000);
     saveProject(true);
-    App.showToast('ê²€í†  ë°˜ì˜ ì™„ë£Œ');
+    App.showToast('검토 반영 완료');
   }catch(e){App.showToast(e.message,'error');}finally{loadingState.applyReview=false;App.setButtonLoading('btnApplyReview',false);setGlobalProcessing(false);}
 }
 function showReviewDiff(mode){
   const area=document.getElementById('reviewDiffArea'),bb=document.getElementById('btnDiffBefore'),ba=document.getElementById('btnDiffAfter');if(!area)return;
-  if(mode==='before'){area.value=beforeReviewText||'(ì—†ìŒ)';if(bb)bb.className='btn btn-primary btn-sm';if(ba)ba.className='btn btn-outline btn-sm';}
-  else{area.value=outputs.step_13_applied||'(ì—†ìŒ)';if(bb)bb.className='btn btn-outline btn-sm';if(ba)ba.className='btn btn-primary btn-sm';}
+  if(mode==='before'){area.value=beforeReviewText||'(없음)';if(bb)bb.className='btn btn-primary btn-sm';if(ba)ba.className='btn btn-outline btn-sm';}
+  else{area.value=outputs.step_13_applied||'(없음)';if(bb)bb.className='btn btn-outline btn-sm';if(ba)ba.className='btn btn-primary btn-sm';}
 }
 async function runDiagramStep(sid){
   if(globalProcessing)return;
@@ -1586,47 +1586,47 @@ async function runDiagramStep(sid){
   App.setButtonLoading(bid,true);
   
   try{
-    // 1. ë„ë©´ ì„¤ê³„ ìƒì„±
+    // 1. 도면 설계 생성
     let r=await App.callClaude(buildPrompt(sid));
     let designText=r.text;
     
-    // 2. ë„ë©´ ì„¤ê³„ í…ìŠ¤íŠ¸ ì‚¬ì „ ê²€ì¦ (ìž¥ì¹˜ ë„ë©´ë§Œ)
+    // 2. 도면 설계 텍스트 사전 검증 (장치 도면만)
     if(sid==='step_07'){
       const preIssues=validateDiagramDesignText(designText);
       const hasPreErrors=preIssues.some(iss=>iss.severity==='ERROR');
       
-      // ì—ëŸ¬ ë°œê²¬ ì‹œ ìžë™ ìž¬ìƒì„± ì‹œë„ (ìµœëŒ€ 2íšŒ)
+      // 에러 발견 시 자동 재생성 시도 (최대 2회)
       if(hasPreErrors){
-        console.log('ë„ë©´ ì„¤ê³„ ê·œì¹™ ìœ„ë°˜ ë°œê²¬, ìž¬ìƒì„± ì‹œë„...',preIssues);
+        console.log('도면 설계 규칙 위반 발견, 재생성 시도...',preIssues);
         
-        const feedbackPrompt=`ì´ì „ ë„ë©´ ì„¤ê³„ì— ê·œì¹™ ìœ„ë°˜ì´ ìžˆìŠµë‹ˆë‹¤. ì•„ëž˜ ì˜¤ë¥˜ë¥¼ ìˆ˜ì •í•˜ì—¬ ë‹¤ì‹œ ìƒì„±í•˜ì„¸ìš”.
+        const feedbackPrompt=`이전 도면 설계에 규칙 위반이 있습니다. 아래 오류를 수정하여 다시 생성하세요.
 
-â•â•â• ë°œê²¬ëœ ì˜¤ë¥˜ â•â•â•
+═══ 발견된 오류 ═══
 ${preIssues.map(i=>i.message).join('\n')}
 
-â•â•â• í•µì‹¬ ê·œì¹™ â•â•â•
-[R3] ë„ 1: L1 ìž¥ì¹˜ë§Œ í—ˆìš© (100, 200, 300...). L2/L3(110, 111...) ì ˆëŒ€ ê¸ˆì§€!
-     ë„ 1ì˜ êµ¬ì„±ìš”ì†Œì—ëŠ” 100, 200, 300, 400... ë§Œ í¬í•¨í•´ì•¼ í•©ë‹ˆë‹¤.
-[R5] ë„ 2+: ë‚´ë¶€ê°€ L2(110,120)ë©´ ìµœì™¸ê³½=L1(100), ë‚´ë¶€ê°€ L3(111,112)ë©´ ìµœì™¸ê³½=L2(110)
+═══ 핵심 규칙 ═══
+[R3] 도 1: L1 장치만 허용 (100, 200, 300...). L2/L3(110, 111...) 절대 금지!
+     도 1의 구성요소에는 100, 200, 300, 400... 만 포함해야 합니다.
+[R5] 도 2+: 내부가 L2(110,120)면 최외곽=L1(100), 내부가 L3(111,112)면 최외곽=L2(110)
 
-ì›ëž˜ ìš”ì²­: ${buildPrompt(sid).slice(0,1500)}
+원래 요청: ${buildPrompt(sid).slice(0,1500)}
 
-ìœ„ ì˜¤ë¥˜ë¥¼ ìˆ˜ì •í•˜ì—¬ ë„ë©´ ì„¤ê³„ë¥¼ ë‹¤ì‹œ ì¶œë ¥í•˜ì„¸ìš”.`;
+위 오류를 수정하여 도면 설계를 다시 출력하세요.`;
 
         r=await App.callClaude(feedbackPrompt);
         designText=r.text;
-        App.showToast('ë„ë©´ ê·œì¹™ ìœ„ë°˜ ê°ì§€, ìžë™ ìž¬ìƒì„±ë¨','warning');
+        App.showToast('도면 규칙 위반 감지, 자동 재생성됨','warning');
       }
     }
     
     outputs[sid]=designText;
     renderOutput(sid,designText);
     
-    // 3. Mermaid ë³€í™˜
+    // 3. Mermaid 변환
     const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
     outputs[sid+'_mermaid']=mr.text;
     
-    // 4. ë Œë”ë§ + ìµœì¢… ê²€ì¦
+    // 4. 렌더링 + 최종 검증
     renderDiagrams(sid,mr.text);
     
     const dlId=sid==='step_07'?'diagramDownload07':'diagramDownload11';
@@ -1634,7 +1634,7 @@ ${preIssues.map(i=>i.message).join('\n')}
     if(dlEl)dlEl.style.display='block';
     
     saveProject(true);
-    App.showToast(`${STEP_NAMES[sid]} ì™„ë£Œ [${App.getModelConfig().label}]`);
+    App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
   }catch(e){
     App.showToast(e.message,'error');
   }finally{
@@ -1643,13 +1643,13 @@ ${preIssues.map(i=>i.message).join('\n')}
     setGlobalProcessing(false);
   }
 }
-async function runBatch25(){if(globalProcessing)return;if(!selectedTitle){App.showToast('ëª…ì¹­ ë¨¼ì € í™•ì •','error');return;}setGlobalProcessing(true);loadingState.batch25=true;App.setButtonLoading('btnBatch25',true);document.getElementById('resultsBatch25').innerHTML='';const steps=['step_02','step_03','step_04','step_05'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatch',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);if(steps[i]==='step_04'){const sr=await searchPriorArt(selectedTitle);if(sr){outputs.step_04=sr.formatted;renderBatchResult('resultsBatch25','step_04',sr.formatted);}else{outputs.step_04='ã€íŠ¹í—ˆë¬¸í—Œã€‘\n(ê´€ë ¨ ì„ í–‰íŠ¹í—ˆë¥¼ ê²€ìƒ‰í•˜ì§€ ëª»í•˜ì˜€ìŠµë‹ˆë‹¤)';renderBatchResult('resultsBatch25','step_04',outputs.step_04);}continue;}const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatch25',steps[i],r.text);}App.clearProgress('progressBatch');saveProject(true);App.showToast('ê¸°ë³¸ í•­ëª© ì™„ë£Œ');}catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}}
-async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('ì²­êµ¬í•­+ìƒì„¸ì„¤ëª… ë¨¼ì €','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('ë§ˆë¬´ë¦¬ ì™„ë£Œ');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
+async function runBatch25(){if(globalProcessing)return;if(!selectedTitle){App.showToast('명칭 먼저 확정','error');return;}setGlobalProcessing(true);loadingState.batch25=true;App.setButtonLoading('btnBatch25',true);document.getElementById('resultsBatch25').innerHTML='';const steps=['step_02','step_03','step_04','step_05'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatch',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);if(steps[i]==='step_04'){const sr=await searchPriorArt(selectedTitle);if(sr){outputs.step_04=sr.formatted;renderBatchResult('resultsBatch25','step_04',sr.formatted);}else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderBatchResult('resultsBatch25','step_04',outputs.step_04);}continue;}const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatch25',steps[i],r.text);}App.clearProgress('progressBatch');saveProject(true);App.showToast('기본 항목 완료');}catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}}
+async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
 
-// â•â•â•â•â•â•â•â•â•â•â• PROVISIONAL APPLICATION (ê°€ì¶œì›) â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ PROVISIONAL APPLICATION (가출원) ═══════════
 async function openProvisionalModal(){
   document.getElementById('provisionalInput').value='';
-  // ë‹¤ìŒ ì‚¬ê±´ë²ˆí˜¸ ìžë™ ìƒì„± (ê°€ì¶œì›)
+  // 다음 사건번호 자동 생성 (가출원)
   const numInput=document.getElementById('provisionalProjectNumber');
   if(numInput){
     try{
@@ -1671,86 +1671,86 @@ async function openProvisionalModal(){
 function closeProvisionalModal(){document.getElementById('provisionalModal').style.display='none';}
 async function runProvisionalApplication(){
   const inv=document.getElementById('provisionalInput').value.trim();
-  if(!inv){App.showToast('ë°œëª… ë‚´ìš©ì„ ìž…ë ¥í•´ ì£¼ì„¸ìš”','error');return;}
+  if(!inv){App.showToast('발명 내용을 입력해 주세요','error');return;}
   if(!App.ensureApiKey()){App.openProfileSettings();return;}
   if(globalProcessing)return;
   setGlobalProcessing(true);App.setButtonLoading('btnProvisionalGen',true);
   try{
-    App.showProgress('progressProvisional','ê°€ì¶œì› ëª…ì„¸ì„œ ìƒì„± ì¤‘... (1/3)',1,3);
-    const r1=await App.callClaudeSonnet(`ê°€ì¶œì› ëª…ì„¸ì„œë¥¼ ìž‘ì„±í•˜ë¼. ì „ì²´ ë¬¸ì„œê°€ 4000ë‹¨ì–´ë¥¼ ë„˜ì§€ ì•Šë„ë¡ ê°„ê²°í•˜ê²Œ ìž‘ì„±í•˜ë¼.
+    App.showProgress('progressProvisional','가출원 명세서 생성 중... (1/3)',1,3);
+    const r1=await App.callClaudeSonnet(`가출원 명세서를 작성하라. 전체 문서가 4000단어를 넘지 않도록 간결하게 작성하라.
 
-[êµ¬ì„±]
-1. ë°œëª…ì˜ ëª…ì¹­: êµ­ë¬¸ 1ê°œ + ì˜ë¬¸ 1ê°œ ("~${getDeviceSubject()}" í˜•íƒœ)
-2. ê¸°ìˆ ë¶„ì•¼: 1ë¬¸ìž¥
-3. í•´ê²°í•˜ê³ ìž í•˜ëŠ” ê³¼ì œ: 2~3ë¬¸ìž¥
-4. ê³¼ì œì˜ í•´ê²° ìˆ˜ë‹¨: 3~5ë¬¸ìž¥
-5. ë…ë¦½í•­ 1ê°œ: í•µì‹¬ êµ¬ì„±ìš”ì†Œë§Œ í¬í•¨í•œ ${getDeviceSubject()} ì²­êµ¬í•­
-6. ë„ë©´ 1ê°œ: ì‹œìŠ¤í…œ ë¸”ë¡ë„ (êµ¬ì„±ìš”ì†Œ+ì°¸ì¡°ë²ˆí˜¸+ì—°ê²°ê´€ê³„)
-7. ìƒì„¸ì„¤ëª…: ë„ë©´ ì°¸ì¡°í•˜ì—¬ ê° êµ¬ì„±ìš”ì†Œ ê¸°ëŠ¥ ì„¤ëª… (2000ìž ì´ë‚´)
-8. ë°œëª…ì˜ íš¨ê³¼: 2~3ë¬¸ìž¥
-9. ìš”ì•½ì„œ: 100ë‹¨ì–´
+[구성]
+1. 발명의 명칭: 국문 1개 + 영문 1개 ("~${getDeviceSubject()}" 형태)
+2. 기술분야: 1문장
+3. 해결하고자 하는 과제: 2~3문장
+4. 과제의 해결 수단: 3~5문장
+5. 독립항 1개: 핵심 구성요소만 포함한 ${getDeviceSubject()} 청구항
+6. 도면 1개: 시스템 블록도 (구성요소+참조번호+연결관계)
+7. 상세설명: 도면 참조하여 각 구성요소 기능 설명 (2000자 이내)
+8. 발명의 효과: 2~3문장
+9. 요약서: 100단어
 
-[ê·œì¹™]
-- í‘œì¤€ë¬¸ì²´(~í•œë‹¤), ê¸€ë¨¸ë¦¬/ë§ˆí¬ë‹¤ìš´ ê¸ˆì§€
-- êµ¬ì„±ìš”ì†Œ(ì°¸ì¡°ë²ˆí˜¸) í˜•íƒœ
-- SWëª… ëŒ€ì‹  ì•Œê³ ë¦¬ì¦˜
-- ì œí•œì„± í‘œí˜„ ê¸ˆì§€
-- ì´ 4000ë‹¨ì–´ ì´ë‚´ë¡œ ê°„ê²°í•˜ê²Œ
+[규칙]
+- 표준문체(~한다), 글머리/마크다운 금지
+- 구성요소(참조번호) 형태
+- SW명 대신 알고리즘
+- 제한성 표현 금지
+- 총 4000단어 이내로 간결하게
 
-[ë„ë©´ ì°¸ì¡°ë²ˆí˜¸ ê·œì¹™ â€” í•„ìˆ˜ ì¤€ìˆ˜]
-- L1 (ìµœìƒìœ„): X00 í˜•ì‹ â€” ${getDeviceSubject()}(100), ì‚¬ìš©ìž ë‹¨ë§(200), ì™¸ë¶€ ì‹œìŠ¤í…œ(300), ë°ì´í„°ë² ì´ìŠ¤(400)
-- L2 (í•˜ìœ„ êµ¬ì„±): XY0 í˜•ì‹ â€” í†µì‹ ë¶€(110), í”„ë¡œì„¸ì„œ(120), ë©”ëª¨ë¦¬(130)...
-- L3 (í•˜ìœ„ ìš”ì†Œ): XYZ í˜•ì‹ â€” ìˆ˜ì‹ ë¶€(111), ì†¡ì‹ ë¶€(112)...
-- ë¶€ëª¨ ì ‘ë‘(prefix) ìœ ì§€: ìžì‹ì€ ë¶€ëª¨ì˜ ì•žìžë¦¬ë¥¼ ë°˜ë“œì‹œ ìœ ì§€
-- "~ë‹¨ê³„", "Sìˆ«ìž" ë“± ë°©ë²• í‘œí˜„ì€ ë„ë©´ì— í¬í•¨ ê¸ˆì§€ (ì´ê²ƒì€ ìž¥ì¹˜ ë„ë©´)
+[도면 참조번호 규칙 — 필수 준수]
+- L1 (최상위): X00 형식 — ${getDeviceSubject()}(100), 사용자 단말(200), 외부 시스템(300), 데이터베이스(400)
+- L2 (하위 구성): XY0 형식 — 통신부(110), 프로세서(120), 메모리(130)...
+- L3 (하위 요소): XYZ 형식 — 수신부(111), 송신부(112)...
+- 부모 접두(prefix) 유지: 자식은 부모의 앞자리를 반드시 유지
+- "~단계", "S숫자" 등 방법 표현은 도면에 포함 금지 (이것은 장치 도면)
 
-[ì¶œë ¥ í˜•ì‹]
-===ëª…ì¹­===
-(êµ­ë¬¸ ëª…ì¹­)
-===ì˜ë¬¸ëª…ì¹­===
-(ì˜ë¬¸ ëª…ì¹­)
-===ê¸°ìˆ ë¶„ì•¼===
-(ë‚´ìš©)
-===ê³¼ì œ===
-(ë‚´ìš©)
-===í•´ê²°ìˆ˜ë‹¨===
-(ë‚´ìš©)
-===ì²­êµ¬í•­===
-ã€ì²­êµ¬í•­ 1ã€‘
-(ë‚´ìš©)
-===ë„ë©´ì„¤ê³„===
-(ë„ë©´ ì„¤ëª…: êµ¬ì„±ìš”ì†Œ, ì°¸ì¡°ë²ˆí˜¸, ì—°ê²° ê´€ê³„ í¬í•¨)
-===ìƒì„¸ì„¤ëª…===
-(ë‚´ìš©)
-===íš¨ê³¼===
-(ë‚´ìš©)
-===ìš”ì•½===
-(ë‚´ìš©)
+[출력 형식]
+===명칭===
+(국문 명칭)
+===영문명칭===
+(영문 명칭)
+===기술분야===
+(내용)
+===과제===
+(내용)
+===해결수단===
+(내용)
+===청구항===
+【청구항 1】
+(내용)
+===도면설계===
+(도면 설명: 구성요소, 참조번호, 연결 관계 포함)
+===상세설명===
+(내용)
+===효과===
+(내용)
+===요약===
+(내용)
 
-[ë°œëª… ë‚´ìš©]
+[발명 내용]
 ${inv}`,8192);
 
-    App.showProgress('progressProvisional','ë„ë©´ Mermaid ë³€í™˜ ì¤‘... (2/3)',2,3);
+    App.showProgress('progressProvisional','도면 Mermaid 변환 중... (2/3)',2,3);
     const text=r1.text;
     const getSection=(key)=>{const re=new RegExp('==='+key+'===\\s*\\n([\\s\\S]*?)(?====|$)');const m=text.match(re);return m?m[1].trim():'';};
-    const title=getSection('ëª…ì¹­');const titleEn=getSection('ì˜ë¬¸ëª…ì¹­');
-    const techField=getSection('ê¸°ìˆ ë¶„ì•¼');
-    const problem=getSection('ê³¼ì œ');const solution=getSection('í•´ê²°ìˆ˜ë‹¨');
-    const claim=getSection('ì²­êµ¬í•­');const diagram=getSection('ë„ë©´ì„¤ê³„');
-    const desc=getSection('ìƒì„¸ì„¤ëª…');const effect=getSection('íš¨ê³¼');
-    const abstract=getSection('ìš”ì•½');
+    const title=getSection('명칭');const titleEn=getSection('영문명칭');
+    const techField=getSection('기술분야');
+    const problem=getSection('과제');const solution=getSection('해결수단');
+    const claim=getSection('청구항');const diagram=getSection('도면설계');
+    const desc=getSection('상세설명');const effect=getSection('효과');
+    const abstract=getSection('요약');
 
     // Generate Mermaid code for PPTX diagram
     let provisionalDiagramData=null;
     try{
-      const mermaidR=await App.callClaudeSonnet(`ì•„ëž˜ ë„ë©´ ì„¤ê³„ë¥¼ Mermaid flowchart ì½”ë“œë¡œ ë³€í™˜í•˜ë¼. \`\`\`mermaid ë¸”ë¡ 1ê°œ.
-ê·œì¹™: graph TD, í•œê¸€ ë¼ë²¨, ë…¸ë“œID ì˜ë¬¸. ì„œë¸Œê·¸ëž˜í”„ ì‚¬ìš© ê°€ëŠ¥. style/linkStyle ê¸ˆì§€.
+      const mermaidR=await App.callClaudeSonnet(`아래 도면 설계를 Mermaid flowchart 코드로 변환하라. \`\`\`mermaid 블록 1개.
+규칙: graph TD, 한글 라벨, 노드ID 영문. 서브그래프 사용 가능. style/linkStyle 금지.
 
-â›” ìž¥ì¹˜ ë„ë©´ ê·œì¹™:
-- ë…¸ë“œ ë¼ë²¨ì— ë°˜ë“œì‹œ ì°¸ì¡°ë²ˆí˜¸ í¬í•¨: "í†µì‹ ë¶€(110)", "í”„ë¡œì„¸ì„œ(120)"
-- ì°¸ì¡°ë²ˆí˜¸ëŠ” ìˆ«ìžë§Œ ì‚¬ìš© (100, 110, 120...)
-- "~ë‹¨ê³„", "Sìˆ«ìž" í‘œí˜„ ì ˆëŒ€ ê¸ˆì§€
-- êµ¬ì„±ìš”ì†Œëª…ì€ ë°˜ë“œì‹œ "~ë¶€" í˜•íƒœë§Œ ì‚¬ìš© ("~ëª¨ë“ˆ", "~ìœ ë‹›" ì ˆëŒ€ ê¸ˆì§€)
+⛔ 장치 도면 규칙:
+- 노드 라벨에 반드시 참조번호 포함: "통신부(110)", "프로세서(120)"
+- 참조번호는 숫자만 사용 (100, 110, 120...)
+- "~단계", "S숫자" 표현 절대 금지
+- 구성요소명은 반드시 "~부" 형태만 사용 ("~모듈", "~유닛" 절대 금지)
 
 ${diagram}`,4096);
       const blocks=extractMermaidBlocks(mermaidR.text);
@@ -1759,7 +1759,7 @@ ${diagram}`,4096);
       }
     }catch(e){/* PPTX generation is optional */}
 
-    App.showProgress('progressProvisional','Word + PPTX ìƒì„± ë° ì €ìž¥ ì¤‘... (3/3)',3,3);
+    App.showProgress('progressProvisional','Word + PPTX 생성 및 저장 중... (3/3)',3,3);
 
     // v4.9: Save provisional to DB with project_number
     const numInput=document.getElementById('provisionalProjectNumber');
@@ -1770,7 +1770,7 @@ ${diagram}`,4096);
     try{
       await App.sb.from('projects').insert({
         owner_user_id:currentUser.id,
-        title:`[ê°€ì¶œì›] ${title||'ì´ˆì•ˆ'}`,
+        title:`[가출원] ${title||'초안'}`,
         project_number:projectNumber,
         invention_content:inv,
         current_state_json:{type:'provisional',provisionalData,usage:{calls:usage.calls,inputTokens:usage.inputTokens,outputTokens:usage.outputTokens,cost:usage.cost}}
@@ -1780,24 +1780,24 @@ ${diagram}`,4096);
     // Generate Word with English title
     const titleLine=titleEn?`${title}{${titleEn}}`:(title||'');
     const secs=[
-      {h:'ë°œëª…ì˜ ì„¤ëª…'},{h:'ë°œëª…ì˜ ëª…ì¹­',b:titleLine},{h:'ê¸°ìˆ ë¶„ì•¼',b:techField},
-      {h:'ë°œëª…ì˜ ë‚´ìš©'},{h:'í•´ê²°í•˜ê³ ìž í•˜ëŠ” ê³¼ì œ',b:problem},
-      {h:'ê³¼ì œì˜ í•´ê²° ìˆ˜ë‹¨',b:solution},{h:'ë°œëª…ì˜ íš¨ê³¼',b:effect},
-      {h:'ë„ë©´ì˜ ê°„ë‹¨í•œ ì„¤ëª…',b:diagram?`ë„ 1ì€ ${title}ì˜ êµ¬ì„±ì„ ë‚˜íƒ€ë‚´ëŠ” ë¸”ë¡ë„ì´ë‹¤.`:''},
-      {h:'ë°œëª…ì„ ì‹¤ì‹œí•˜ê¸° ìœ„í•œ êµ¬ì²´ì ì¸ ë‚´ìš©',b:desc},
-      {h:'ì²­êµ¬ë²”ìœ„',b:claim},
-      {h:'ìš”ì•½ì„œ',b:abstract?`ã€ìš”ì•½ã€‘\n${abstract}\n\nã€ëŒ€í‘œë„ã€‘\në„ 1`:''},
+      {h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:techField},
+      {h:'발명의 내용'},{h:'해결하고자 하는 과제',b:problem},
+      {h:'과제의 해결 수단',b:solution},{h:'발명의 효과',b:effect},
+      {h:'도면의 간단한 설명',b:diagram?`도 1은 ${title}의 구성을 나타내는 블록도이다.`:''},
+      {h:'발명을 실시하기 위한 구체적인 내용',b:desc},
+      {h:'청구범위',b:claim},
+      {h:'요약서',b:abstract?`【요약】\n${abstract}\n\n【대표도】\n도 1`:''},
     ];
     const html=secs.map(s=>{
-      const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'ë°”íƒ•ì²´',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">ã€${App.escapeHtml(s.h)}ã€‘</h2>`;
+      const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;
       if(!s.b)return hd;
-      return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'ë°”íƒ•ì²´',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
+      return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
     }).join('');
-    const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'ë°”íƒ•ì²´',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
+    const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));
-    a.download=`ê°€ì¶œì›_${title||'ì´ˆì•ˆ'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();
+    a.download=`가출원_${title||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();
 
-    // Generate PPTX diagram â€” KIPO ê·œì¹™ v2.1 - íŽ˜ì´ì§€ ë‚´ ë§žì¶¤
+    // Generate PPTX diagram — KIPO 규칙 v2.1 - 페이지 내 맞춤
     let pptxGenerated=false;
     if(provisionalDiagramData&&provisionalDiagramData.length){
       try{
@@ -1805,7 +1805,7 @@ ${diagram}`,4096);
         pptx.defineLayout({name:'A4_PORTRAIT',width:8.27,height:11.69});
         pptx.layout='A4_PORTRAIT';
         
-        // ì„  êµµê¸° ìƒìˆ˜ (KIPO ê¸°ì¤€)
+        // 선 굵기 상수 (KIPO 기준)
         const LINE_FRAME=2.0, LINE_BOX=1.5, LINE_ARROW=1.0, SHADOW_OFFSET=0.04;
         const PAGE_MARGIN=0.6;
         const PAGE_W=8.27-PAGE_MARGIN*2;
@@ -1817,11 +1817,11 @@ ${diagram}`,4096);
           const slide=pptx.addSlide({bkgd:'FFFFFF'});
           const figNum=idx+1;
           
-          // ë„ë©´ ë²ˆí˜¸
-          slide.addText(`ë„ ${figNum}`,{x:PAGE_MARGIN,y:PAGE_MARGIN,w:2,h:TITLE_H,fontSize:14,bold:true,fontFace:'ë§‘ì€ ê³ ë”•',color:'000000'});
+          // 도면 번호
+          slide.addText(`도 ${figNum}`,{x:PAGE_MARGIN,y:PAGE_MARGIN,w:2,h:TITLE_H,fontSize:14,bold:true,fontFace:'맑은 고딕',color:'000000'});
           if(!nodes.length)return;
           
-          // ë…¸ë“œ ìˆ˜ì— ë”°ë¼ ë™ì  ìŠ¤ì¼€ì¼ë§
+          // 노드 수에 따라 동적 스케일링
           const nodeCount=nodes.length;
           const frameX=PAGE_MARGIN;
           const frameY=PAGE_MARGIN+TITLE_H;
@@ -1829,13 +1829,13 @@ ${diagram}`,4096);
           const maxFrameH=Math.min(AVAILABLE_H, nodeCount*1.0+0.6);
           const frameH=maxFrameH;
           
-          // ì°¸ì¡°ë²ˆí˜¸ ì¶”ì¶œ í•¨ìˆ˜
+          // 참조번호 추출 함수
           function extractRefNum(label,fallback){
             const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
             return match?match[1]:fallback;
           }
           
-          // ì™¸ê³½ í”„ë ˆìž„ ì°¸ì¡°ë²ˆí˜¸ ì¶”ì¶œ
+          // 외곽 프레임 참조번호 추출
           let frameRefNum=figNum*100;
           if(nodes.length>0){
             const firstRef=extractRefNum(nodes[0].label,'');
@@ -1845,7 +1845,7 @@ ${diagram}`,4096);
             }
           }
           
-          // ë°•ìŠ¤ í¬ê¸° ë™ì  ê³„ì‚°
+          // 박스 크기 동적 계산
           const framePadY=0.3;
           const innerH=frameH-framePadY*2;
           const boxH=Math.min(0.55, (innerH-0.15*(nodeCount-1))/nodeCount);
@@ -1855,32 +1855,32 @@ ${diagram}`,4096);
           const boxStartY=frameY+framePadY;
           const refLabelX=frameX+frameW+0.1;
           
-          // ê·¸ë¦¼ìž
+          // 그림자
           slide.addShape(pptx.shapes.RECTANGLE,{x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,fill:{color:'000000'},line:{width:0}});
-          // ì™¸ê³½ ë³¸ì²´
+          // 외곽 본체
           slide.addShape(pptx.shapes.RECTANGLE,{x:frameX,y:frameY,w:frameW,h:frameH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
-          // ì™¸ê³½ ë¶€í˜¸
+          // 외곽 부호
           slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameY+frameH/2,w:0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
-          slide.addText(String(frameRefNum),{x:refLabelX+0.25,y:frameY+frameH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'ë§‘ì€ ê³ ë”•',color:'000000',align:'left',valign:'middle'});
+          slide.addText(String(frameRefNum),{x:refLabelX+0.25,y:frameY+frameH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
-          // ë‚´ë¶€ êµ¬ì„±ìš”ì†Œ ë°•ìŠ¤ë“¤
+          // 내부 구성요소 박스들
           nodes.forEach((n,i)=>{
             const bx=boxStartX, by=boxStartY+i*(boxH+boxGap);
-            // ì°¸ì¡°ë²ˆí˜¸ ì¶”ì¶œ
+            // 참조번호 추출
             const fallbackRef=frameRefNum+10*(i+1);
             const refNum=extractRefNum(n.label,String(fallbackRef));
             const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-            // ê·¸ë¦¼ìž
+            // 그림자
             slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
-            // ë°•ìŠ¤ ë³¸ì²´
+            // 박스 본체
             slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
-            // ë°•ìŠ¤ í…ìŠ¤íŠ¸ (ì°¸ì¡°ë²ˆí˜¸ ì œì™¸)
-            slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),fontFace:'ë§‘ì€ ê³ ë”•',color:'000000',align:'center',valign:'middle'});
-            // ë¦¬ë”ë¼ì¸
+            // 박스 텍스트 (참조번호 제외)
+            slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+            // 리더라인
             slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
-            // ë¶€í˜¸ ë¼ë²¨ (ì¶”ì¶œëœ ì°¸ì¡°ë²ˆí˜¸)
-            slide.addText(String(refNum),{x:refLabelX+0.25,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'ë§‘ì€ ê³ ë”•',color:'000000',align:'left',valign:'middle'});
-            // ì–‘ë°©í–¥ í™”ì‚´í‘œ
+            // 부호 라벨 (추출된 참조번호)
+            slide.addText(String(refNum),{x:refLabelX+0.25,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+            // 양방향 화살표
             if(i<nodes.length-1){
               const arrowY1=by+boxH;
               const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
@@ -1891,36 +1891,36 @@ ${diagram}`,4096);
             }
           });
         });
-        const caseNum=selectedTitle||title||'ê°€ì¶œì›';
-        await pptx.writeFile({fileName:`${caseNum}_ë„ë©´_${new Date().toISOString().slice(0,10)}.pptx`});
+        const caseNum=selectedTitle||title||'가출원';
+        await pptx.writeFile({fileName:`${caseNum}_도면_${new Date().toISOString().slice(0,10)}.pptx`});
         pptxGenerated=true;
       }catch(e){console.error('PPTX generation error:',e);}
     }
 
     App.clearProgress('progressProvisional');
     closeProvisionalModal();
-    App.showToast(`ê°€ì¶œì› ëª…ì„¸ì„œ ì €ìž¥ + Word ë‹¤ìš´ë¡œë“œ ì™„ë£Œ${pptxGenerated?' + ë„ë©´ PPTX':''}: ${title}`);
+    App.showToast(`가출원 명세서 저장 + Word 다운로드 완료${pptxGenerated?' + 도면 PPTX':''}: ${title}`);
     loadDashboardProjects(); // Refresh list to show new provisional
   }catch(e){App.clearProgress('progressProvisional');App.showToast(e.message,'error');}
   finally{App.setButtonLoading('btnProvisionalGen',false);setGlobalProcessing(false);}
 }
 
-// â•â•â•â•â•â•â•â•â•â•â• PARSERS â•â•â•â•â•â•â•â•â•â•â•
-function parseTitleCandidates(t){const c=[];let m;const re=/\[(\d+)\]\s*êµ­ë¬¸:\s*(.+?)\s*[/ï¼]\s*ì˜ë¬¸:\s*(.+)/g;while((m=re.exec(t))!==null)c.push({num:m[1],korean:m[2].trim(),english:m[3].trim()});return c;}
-function parseClaimStats(t){const cp=/ã€ì²­êµ¬í•­\s*(\d+)ã€‘\s*([\s\S]*?)(?=ã€ì²­êµ¬í•­\s*\d+ã€‘|$)/g,c={};let m;while((m=cp.exec(t))!==null)c[parseInt(m[1])]=m[2].trim();const tot=Object.keys(c).length;let dep=0;Object.values(c).forEach(x=>{if(/ìžˆì–´ì„œ|ë”°ë¥¸/.test(x))dep++;});return{total:tot,independent:tot-dep,dependent:dep,claims:c};}
+// ═══════════ PARSERS ═══════════
+function parseTitleCandidates(t){const c=[];let m;const re=/\[(\d+)\]\s*국문:\s*(.+?)\s*[/／]\s*영문:\s*(.+)/g;while((m=re.exec(t))!==null)c.push({num:m[1],korean:m[2].trim(),english:m[3].trim()});return c;}
+function parseClaimStats(t){const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,c={};let m;while((m=cp.exec(t))!==null)c[parseInt(m[1])]=m[2].trim();const tot=Object.keys(c).length;let dep=0;Object.values(c).forEach(x=>{if(/있어서|따른/.test(x))dep++;});return{total:tot,independent:tot-dep,dependent:dep,claims:c};}
 function extractMermaidBlocks(t){return(t.match(/```mermaid\n([\s\S]*?)```/g)||[]).map(b=>b.replace(/```mermaid\n/,'').replace(/```/,'').trim());}
 function parseMathBlocks(t){const b=[];let m;const re=/---MATH_BLOCK_\d+---\s*\nANCHOR:\s*(.+)\s*\nFORMULA:\s*\n([\s\S]*?)(?=---MATH_BLOCK_|\s*$)/g;while((m=re.exec(t))!==null)b.push({anchor:m[1].trim(),formula:m[2].trim()});return b;}
 function stripMathBlocks(text){
   if(!text)return '';
-  // Remove existing math blocks (ã€ìˆ˜í•™ì‹ Nã€‘ blocks) more thoroughly to prevent duplication
+  // Remove existing math blocks (【수학식 N】 blocks) more thoroughly to prevent duplication
   // Pattern 1: Full math blocks with parameters
-  let r=text.replace(/\n*ã€ìˆ˜í•™ì‹\s*\d+ã€‘[\s\S]*?(?=\n(?:ë„\s|ì´ë•Œ|ë˜í•œ|í•œíŽ¸|ë‹¤ìŒ|ì—¬ê¸°ì„œ|êµ¬ì²´ì |ìƒê¸°|ë³¸ ë°œëª…|ì´ìƒ|ë”°ë¼ì„œ|ê²°ê³¼|ì´ë¥¼|ì•„ìš¸|ì´ì™€|ìƒìˆ |ì „ìˆ |[ê°€-íž£]{2,}ë¶€[(\s]|[ê°€-íž£]{2,}(?:ì„œë²„|ì‹œìŠ¤í…œ|ìž¥ì¹˜|ë‹¨ë§)|\n|$))/g,'');
+  let r=text.replace(/\n*【수학식\s*\d+】[\s\S]*?(?=\n(?:도\s|이때|또한|한편|다음|여기서|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}(?:서버|시스템|장치|단말)|\n|$))/g,'');
   // Pattern 2: Standalone math block headers that might remain
-  r=r.replace(/\n*ã€ìˆ˜í•™ì‹\s*\d+ã€‘[^\n]*\n/g,'\n');
-  // Pattern 3: Remove "ì—¬ê¸°ì„œ," blocks that follow math formulas
-  r=r.replace(/\nì—¬ê¸°ì„œ,[\s\S]*?(?=\n\n)/g,'');
+  r=r.replace(/\n*【수학식\s*\d+】[^\n]*\n/g,'\n');
+  // Pattern 3: Remove "여기서," blocks that follow math formulas
+  r=r.replace(/\n여기서,[\s\S]*?(?=\n\n)/g,'');
   // Pattern 4: Remove math example blocks (old and new format)
-  r=r.replace(/\n(?:ì˜ˆì‹œ ëŒ€ìž…:|ì˜ˆë¥¼ ë“¤ì–´,|ì¼ ì˜ˆë¡œ,|êµ¬ì²´ì  ì˜ˆì‹œë¡œ,)[\s\S]*?(?=\n\n)/g,'');
+  r=r.replace(/\n(?:예시 대입:|예를 들어,|일 예로,|구체적 예시로,)[\s\S]*?(?=\n\n)/g,'');
   // Clean up multiple newlines
   r=r.replace(/\n{3,}/g,'\n\n');
   return r.trim();
@@ -1949,157 +1949,157 @@ function buildMermaidPrompt(sid){
   const isMethod=sid==='step_11';
   
   let rules=`
-â•â•â• Mermaid ë¬¸ë²• ê·œì¹™ (í•„ìˆ˜!) â•â•â•
-graph TD ì‚¬ìš©
-ë…¸ë“œIDëŠ” ì˜ë¬¸ (A, B, C ë˜ëŠ” server, client ë“±)
-ë…¸ë“œ ë¼ë²¨ì€ ëŒ€ê´„í˜¸ ì•ˆì—: A["${getDeviceSubject()}(100)"]
+═══ Mermaid 문법 규칙 (필수!) ═══
+graph TD 사용
+노드ID는 영문 (A, B, C 또는 server, client 등)
+노드 라벨은 대괄호 안에: A["${getDeviceSubject()}(100)"]
 
-â˜…â˜…â˜… ì˜¬ë°”ë¥¸ Mermaid ë¬¸ë²• ì˜ˆì‹œ â˜…â˜…â˜…
+★★★ 올바른 Mermaid 문법 예시 ★★★
 \`\`\`mermaid
 graph TD
     A["${getDeviceSubject()}(100)"]
-    B["ì‚¬ìš©ìž ë‹¨ë§(200)"]
-    C["ë„¤íŠ¸ì›Œí¬(300)"]
-    D["ë°ì´í„°ë² ì´ìŠ¤(400)"]
+    B["사용자 단말(200)"]
+    C["네트워크(300)"]
+    D["데이터베이스(400)"]
     A --> B
     B --> C
     A --> D
 \`\`\`
 
-â›” ìž˜ëª»ëœ ë¬¸ë²• (ì ˆëŒ€ ê¸ˆì§€):
-- A["${getDeviceSubject()}(100)"] <--> B["ì‚¬ìš©ìž ë‹¨ë§(200)"]  â† <--> ì‚¬ìš© ê¸ˆì§€!
-- í•œ ì¤„ì— ë…¸ë“œ ì •ì˜ì™€ ì—°ê²°ì„ í•¨ê»˜ ì“°ì§€ ë§ ê²ƒ
+⛔ 잘못된 문법 (절대 금지):
+- A["${getDeviceSubject()}(100)"] <--> B["사용자 단말(200)"]  ← <--> 사용 금지!
+- 한 줄에 노드 정의와 연결을 함께 쓰지 말 것
 
-âœ… ì˜¬ë°”ë¥¸ ë¬¸ë²•:
-- ë…¸ë“œ ì •ì˜ë¥¼ ë¨¼ì €, ì—°ê²°ì€ ë‚˜ì¤‘ì—
-- ì—°ê²°ì€ --> ë§Œ ì‚¬ìš© (ì–‘ë°©í–¥ì€ A --> Bì™€ B --> A ë‘ ì¤„ë¡œ)
+✅ 올바른 문법:
+- 노드 정의를 먼저, 연결은 나중에
+- 연결은 --> 만 사용 (양방향은 A --> B와 B --> A 두 줄로)
 `;
   
   if(isDevice){
     rules+=`
-â•â•â• ìž¥ì¹˜ ë„ë©´ ê·œì¹™ â•â•â•
-- ë…¸ë“œ ë¼ë²¨ì— ë°˜ë“œì‹œ ì°¸ì¡°ë²ˆí˜¸ í¬í•¨: A["í†µì‹ ë¶€(110)"]
-- ì°¸ì¡°ë²ˆí˜¸ëŠ” ìˆ«ìžë§Œ (100, 110, 120...)
-- "~ë‹¨ê³„", "Sìˆ«ìž" í‘œí˜„ ê¸ˆì§€
-- "~ëª¨ë“ˆ" ê¸ˆì§€ â†’ "~ë¶€"ë¡œ í†µì¼
+═══ 장치 도면 규칙 ═══
+- 노드 라벨에 반드시 참조번호 포함: A["통신부(110)"]
+- 참조번호는 숫자만 (100, 110, 120...)
+- "~단계", "S숫자" 표현 금지
+- "~모듈" 금지 → "~부"로 통일
 
-â˜…â˜… ë„ë©´ë³„ ê³„ì¸µ ê·œì¹™ â˜…â˜…
-- ë„ 1: L1(100, 200, 300...) ìž¥ì¹˜ë§Œ
-- ë„ 2 (L1 ìƒì„¸í™”): L1(100)ê³¼ ê·¸ L2 í•˜ìœ„(110,120,130) í¬í•¨
-  â†’ ë Œë”ë§: ìµœì™¸ê³½ í”„ë ˆìž„=100, ë‚´ë¶€ ë°•ìŠ¤=110,120,130 (100ì€ í”„ë ˆìž„ìœ¼ë¡œë§Œ)
-- ë„ 3+ (L2 ìƒì„¸í™”): L2(110)ì™€ ê·¸ L3 í•˜ìœ„(111,112,113) í¬í•¨
-  â†’ ë Œë”ë§: ìµœì™¸ê³½ í”„ë ˆìž„=110, ë‚´ë¶€ ë°•ìŠ¤=111,112,113 (110ì€ í”„ë ˆìž„ìœ¼ë¡œë§Œ)
-- L4 (L3 ìƒì„¸í™”): L3(121)ê³¼ ê·¸ L4 í•˜ìœ„(1211,1212) í¬í•¨
-  â†’ ë Œë”ë§: ìµœì™¸ê³½ í”„ë ˆìž„=121, ë‚´ë¶€ ë°•ìŠ¤=1211,1212 (121ì€ í”„ë ˆìž„ìœ¼ë¡œë§Œ)
+★★ 도면별 계층 규칙 ★★
+- 도 1: L1(100, 200, 300...) 장치만
+- 도 2 (L1 상세화): L1(100)과 그 L2 하위(110,120,130) 포함
+  → 렌더링: 최외곽 프레임=100, 내부 박스=110,120,130 (100은 프레임으로만)
+- 도 3+ (L2 상세화): L2(110)와 그 L3 하위(111,112,113) 포함
+  → 렌더링: 최외곽 프레임=110, 내부 박스=111,112,113 (110은 프레임으로만)
+- L4 (L3 상세화): L3(121)과 그 L4 하위(1211,1212) 포함
+  → 렌더링: 최외곽 프레임=121, 내부 박스=1211,1212 (121은 프레임으로만)
 
-â˜…â˜… ì—°ê²°ê´€ê³„ ê·œì¹™ â˜…â˜…
-- ë°ì´í„°/ì •ë³´ ë„ë©´(~ì •ë³´, ~ë°ì´í„°): ì •ë³´ í•­ëª©ì€ ${getDeviceSubject()} ìž…ë ¥ ë°ì´í„° â†’ ìƒí˜¸ í™”ì‚´í‘œ ì—°ê²° ë¶€ì ì ˆ â†’ ì—°ê²°ì„  ì—†ì´ ë³‘ë ¬ ë°°ì¹˜ (ë…¸ë“œ ì •ì˜ë§Œ, A --> B ê¸ˆì§€)
-- ìž¥ì¹˜ ë¸”ë¡ë„: ë°ì´í„° íë¦„ì´ ìžˆëŠ” êµ¬ì„±ìš”ì†Œë§Œ --> ì—°ê²°
-- ìƒìœ„ êµ¬ì„±(110)ê³¼ í•˜ìœ„ êµ¬ì„±(111,112,113)ì„ ê°™ì€ ë ˆë²¨ì— í‘œí˜„ ê¸ˆì§€
+★★ 연결관계 규칙 ★★
+- 데이터/정보 도면(~정보, ~데이터): 정보 항목은 ${getDeviceSubject()} 입력 데이터 → 상호 화살표 연결 부적절 → 연결선 없이 병렬 배치 (노드 정의만, A --> B 금지)
+- 장치 블록도: 데이터 흐름이 있는 구성요소만 --> 연결
+- 상위 구성(110)과 하위 구성(111,112,113)을 같은 레벨에 표현 금지
 
-â˜… ëª¨ë“  êµ¬ì„±ìš”ì†Œë¥¼ ë¹ ì§ì—†ì´ ë…¸ë“œë¡œ í¬í•¨! â˜…`;
+★ 모든 구성요소를 빠짐없이 노드로 포함! ★`;
   } else if(isMethod){
     rules+=`
-â•â•â• ë°©ë²• ë„ë©´ ê·œì¹™ (íë¦„ë„) â•â•â•
-â˜…â˜… í•µì‹¬ ê·œì¹™ â˜…â˜…
-â‘  ìµœì™¸ê³½ í”„ë ˆìž„ ë°•ìŠ¤ ì ˆëŒ€ ì—†ìŒ â€” íë¦„ë„ëŠ” ë‹¨ê³„ ë‚˜ì—´ì´ë¯€ë¡œ ê°ì‹¸ëŠ” ë°•ìŠ¤ ë¶ˆí•„ìš”
-â‘¡ ë‹¨ë°©í–¥ í™”ì‚´í‘œ(-->)ë§Œ ì‚¬ìš© â€” ì–‘ë°©í–¥(<-->) ì ˆëŒ€ ê¸ˆì§€
-â‘¢ "ì‹œìž‘"ê³¼ "ì¢…ë£Œ" ë…¸ë“œ í•„ìˆ˜ â€” ì²« ë‹¨ê³„ ì•žì— START, ë§ˆì§€ë§‰ ë‹¨ê³„ ë’¤ì— END
-â‘£ ìˆ«ìžë§Œ ìžˆëŠ” ì°¸ì¡°ë²ˆí˜¸(100, 110) ì ˆëŒ€ ì‚¬ìš© ê¸ˆì§€
+═══ 방법 도면 규칙 (흐름도) ═══
+★★ 핵심 규칙 ★★
+① 최외곽 프레임 박스 절대 없음 — 흐름도는 단계 나열이므로 감싸는 박스 불필요
+② 단방향 화살표(-->)만 사용 — 양방향(<-->) 절대 금지
+③ "시작"과 "종료" 노드 필수 — 첫 단계 앞에 START, 마지막 단계 뒤에 END
+④ 숫자만 있는 참조번호(100, 110) 절대 사용 금지
 
-â˜…â˜… ë…¸ë“œ í˜•ì‹ â˜…â˜…
-- ì‹œìž‘/ì¢…ë£Œ: START(["ì‹œìž‘"]), END(["ì¢…ë£Œ"]) â€” ë‘¥ê·¼ ì‚¬ê°í˜•
-- ë‹¨ê³„ ë…¸ë“œ: A["ë‹¨ê³„ëª…(Së²ˆí˜¸)"] â€” ì˜ˆ: A["ë°ì´í„° ìˆ˜ì‹  ë‹¨ê³„(S901)"]
-- ì¡°ê±´ ë¶„ê¸°: D{"ì¡°ê±´?"} â€” ë‹¤ì´ì•„ëª¬ë“œ(ë§ˆë¦„ëª¨)
+★★ 노드 형식 ★★
+- 시작/종료: START(["시작"]), END(["종료"]) — 둥근 사각형
+- 단계 노드: A["단계명(S번호)"] — 예: A["데이터 수신 단계(S901)"]
+- 조건 분기: D{"조건?"} — 다이아몬드(마름모)
 
-â˜…â˜… ì¡°ê±´ ë¶„ê¸°(Decision) í‘œí˜„ ê·œì¹™ â˜…â˜…
-- íŒë‹¨ì´ í•„ìš”í•œ ë‹¨ê³„ëŠ” ë°˜ë“œì‹œ ë‹¤ì´ì•„ëª¬ë“œ ë…¸ë“œë¡œ í‘œí˜„
-  ì˜ˆ: D{"íƒ€ê²ŸíŒ… ìŠ¤ì½”ì–´ê°€ ìž„ê³„ê°’ ì´ìƒì¸ê°€?"}
-- "ì˜ˆ" ë¶„ê¸°: D -->|ì˜ˆ| E["í›„ì† ë‹¨ê³„(Së²ˆí˜¸)"]
-- "ì•„ë‹ˆì˜¤" ë¶„ê¸°: D -->|ì•„ë‹ˆì˜¤| F["ëŒ€ì•ˆ ë‹¨ê³„(Së²ˆí˜¸)"]
-- ê° ë¶„ê¸°ëŠ” ìµœì¢…ì ìœ¼ë¡œ ENDì— ë„ë‹¬í•´ì•¼ í•¨
-- ë¶„ê¸° ë…¸ë“œì˜ IDëŠ” DEC1, DEC2... ì‚¬ìš© ê¶Œìž¥
+★★ 조건 분기(Decision) 표현 규칙 ★★
+- 판단이 필요한 단계는 반드시 다이아몬드 노드로 표현
+  예: D{"타겟팅 스코어가 임계값 이상인가?"}
+- "예" 분기: D -->|예| E["후속 단계(S번호)"]
+- "아니오" 분기: D -->|아니오| F["대안 단계(S번호)"]
+- 각 분기는 최종적으로 END에 도달해야 함
+- 분기 노드의 ID는 DEC1, DEC2... 사용 권장
 
-â˜…â˜… ì—°ê²° í˜•ì‹ â˜…â˜…
-- START --> A (ì‹œìž‘ì—ì„œ ì²« ë‹¨ê³„)
-- A --> B --> C (ë‹¨ê³„ ìˆœì„œ)
-- D -->|ì˜ˆ| E (ì¡°ê±´ ë¶„ê¸° â€” ì˜ˆ)
-- D -->|ì•„ë‹ˆì˜¤| F (ì¡°ê±´ ë¶„ê¸° â€” ì•„ë‹ˆì˜¤)
-- Z --> END (ë§ˆì§€ë§‰ ë‹¨ê³„ì—ì„œ ì¢…ë£Œ)
-- ëª¨ë“  í™”ì‚´í‘œëŠ” --> (ë‹¨ë°©í–¥ë§Œ)`;
+★★ 연결 형식 ★★
+- START --> A (시작에서 첫 단계)
+- A --> B --> C (단계 순서)
+- D -->|예| E (조건 분기 — 예)
+- D -->|아니오| F (조건 분기 — 아니오)
+- Z --> END (마지막 단계에서 종료)
+- 모든 화살표는 --> (단방향만)`;
   }
   
-  return `ì•„ëž˜ ë„ë©´ ì„¤ê³„ë¥¼ Mermaid flowchart ì½”ë“œë¡œ ë³€í™˜í•˜ë¼. ê° ë„ë©´ë‹¹ \`\`\`mermaid ë¸”ë¡ 1ê°œ.
+  return `아래 도면 설계를 Mermaid flowchart 코드로 변환하라. 각 도면당 \`\`\`mermaid 블록 1개.
 
 ${rules}
 
-â•â•â• ì¶œë ¥ í˜•ì‹ â•â•â•
-ê° ë„ë©´ë§ˆë‹¤:
+═══ 출력 형식 ═══
+각 도면마다:
 \`\`\`mermaid
 graph TD
-    ë…¸ë“œì •ì˜ë“¤...
-    ì—°ê²°ë“¤...
+    노드정의들...
+    연결들...
 \`\`\`
 
 ${src}`;
 }
 
-// â•â•â• ì „ì—­ ë„ë©´ í—¬í¼ í•¨ìˆ˜ â•â•â•
+// ═══ 전역 도면 헬퍼 함수 ═══
 function _extractRefNum(label,fallback){
   const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
   return match?match[1]:(fallback||'');
 }
 
-// â•â•â• ë„ë©´ ê·œì¹™ ìœ„ë°˜ ì‹œ ìžë™ ìž¬ìƒì„± â•â•â•
+// ═══ 도면 규칙 위반 시 자동 재생성 ═══
 async function regenerateDiagramWithFeedback(sid){
-  if(globalProcessing){App.showToast('ë‹¤ë¥¸ ìž‘ì—… ì§„í–‰ ì¤‘...','error');return;}
+  if(globalProcessing){App.showToast('다른 작업 진행 중...','error');return;}
   const stepId=sid==='step_07'?'step_07':'step_11';
   const btnId=sid==='step_07'?'btnStep07':'btnStep11';
   
-  // ê¸°ì¡´ ë„ë©´ ì„¤ê³„ ê°€ì ¸ì˜¤ê¸°
+  // 기존 도면 설계 가져오기
   const prevDesign=outputs[stepId]||'';
   if(!prevDesign){
-    App.showToast('ìž¬ìƒì„±í•  ë„ë©´ ì„¤ê³„ê°€ ì—†ìŠµë‹ˆë‹¤.','error');
+    App.showToast('재생성할 도면 설계가 없습니다.','error');
     return;
   }
   
-  // ì—ëŸ¬ ì •ë³´ (ìžˆìœ¼ë©´ ì‚¬ìš©, ì—†ìœ¼ë©´ ì¼ë°˜ ìž¬ìƒì„±)
-  const errors=window._diagramErrors&&window._diagramErrors.sid===sid?window._diagramErrors.errors:'ì‚¬ìš©ìž ìš”ì²­ì— ì˜í•œ ìž¬ìƒì„±';
+  // 에러 정보 (있으면 사용, 없으면 일반 재생성)
+  const errors=window._diagramErrors&&window._diagramErrors.sid===sid?window._diagramErrors.errors:'사용자 요청에 의한 재생성';
   const aiReview=window._aiDiagramReview&&window._aiDiagramReview.sid===sid?window._aiDiagramReview.review:'';
   
-  // ë°©ë²•/ìž¥ì¹˜ ë¶„ê¸°
+  // 방법/장치 분기
   const isMethod=stepId==='step_11';
   
-  // í”¼ë“œë°± í”„ë¡¬í”„íŠ¸ ìƒì„±
-  const feedbackPrompt=`ì´ì „ì— ìƒì„±í•œ ${isMethod?'ë°©ë²•':'ìž¥ì¹˜'} ë„ë©´ ì„¤ê³„ì— ê·œì¹™ ìœ„ë°˜ì´ ë°œê²¬ë˜ì—ˆìŠµë‹ˆë‹¤. ì•„ëž˜ ì˜¤ë¥˜ë¥¼ ìˆ˜ì •í•˜ì—¬ ë‹¤ì‹œ ìƒì„±í•˜ì„¸ìš”.
+  // 피드백 프롬프트 생성
+  const feedbackPrompt=`이전에 생성한 ${isMethod?'방법':'장치'} 도면 설계에 규칙 위반이 발견되었습니다. 아래 오류를 수정하여 다시 생성하세요.
 
-â•â•â• ë°œê²¬ëœ ì˜¤ë¥˜ â•â•â•
+═══ 발견된 오류 ═══
 ${errors}
-${aiReview?`\nâ•â•â• AI ì—°ê²°ê´€ê³„ ê²€ì¦ ê²°ê³¼ â•â•â•\n${aiReview}\n`:''}
-â•â•â• í•µì‹¬ ê·œì¹™ ë¦¬ë§ˆì¸ë” â•â•â•
-${isMethod?`[ë°©ë²• ë„ë©´ ê·œì¹™]
-- íë¦„ë„ í˜•ì‹: ì‹œìž‘ â†’ ë‹¨ê³„ë“¤ â†’ ì¢…ë£Œ
-- ì°¸ì¡°ë²ˆí˜¸: S301, S302... (S+ìˆ«ìž)
-- ë‹¨ë°©í–¥ í™”ì‚´í‘œë§Œ ì‚¬ìš©
-- ìµœì™¸ê³½ ë°•ìŠ¤ ì—†ìŒ
-- ì‹œìž‘/ì¢…ë£Œ ë…¸ë“œ í•„ìˆ˜`:`[ìž¥ì¹˜ ë„ë©´ ê·œì¹™]
-[R1] ë„ë©´ë¶€í˜¸ ê³„ì¸µ: L1(X00), L2(XY0), L3(XYZ), L4(XYZW)
-[R5] ë„ 1: L1 ìž¥ì¹˜ë§Œ í—ˆìš© (100, 200, 300...). L2/L3(110, 111...) ì ˆëŒ€ ê¸ˆì§€
-[R6] ë„ 2+: í•˜ë‚˜ì˜ ìƒìœ„ ìž¥ì¹˜ë§Œ ìƒì„¸í™”
-     - ë‚´ë¶€ê°€ L2(110,120,130)ì´ë©´ ìµœì™¸ê³½ì€ L1(100)
-     - ë‚´ë¶€ê°€ L3(111,112,113)ì´ë©´ ìµœì™¸ê³½ì€ L2(110)
-     - ë‚´ë¶€ê°€ L4(1211,1212)ì´ë©´ ìµœì™¸ê³½ì€ L3(121)`}
+${aiReview?`\n═══ AI 연결관계 검증 결과 ═══\n${aiReview}\n`:''}
+═══ 핵심 규칙 리마인더 ═══
+${isMethod?`[방법 도면 규칙]
+- 흐름도 형식: 시작 → 단계들 → 종료
+- 참조번호: S301, S302... (S+숫자)
+- 단방향 화살표만 사용
+- 최외곽 박스 없음
+- 시작/종료 노드 필수`:`[장치 도면 규칙]
+[R1] 도면부호 계층: L1(X00), L2(XY0), L3(XYZ), L4(XYZW)
+[R5] 도 1: L1 장치만 허용 (100, 200, 300...). L2/L3(110, 111...) 절대 금지
+[R6] 도 2+: 하나의 상위 장치만 상세화
+     - 내부가 L2(110,120,130)이면 최외곽은 L1(100)
+     - 내부가 L3(111,112,113)이면 최외곽은 L2(110)
+     - 내부가 L4(1211,1212)이면 최외곽은 L3(121)`}
      
-â˜…â˜… ì—°ê²°ê´€ê³„ ê·œì¹™ â˜…â˜…
-- ë°ì´í„°/ì •ë³´ ë„ë©´: ì •ë³´ í•­ëª©ì€ ${getDeviceSubject()} ìž…ë ¥ìš©ì´ë¯€ë¡œ ìƒí˜¸ ê°„ í™”ì‚´í‘œ ì—°ê²° ë¶€ì ì ˆ â†’ ë³‘ë ¬ ë°°ì¹˜
-- ìž¥ì¹˜ ë¸”ë¡ë„: ê¸°ìˆ ì  ë°ì´í„° íë¦„ì´ ìžˆìœ¼ë©´ í™”ì‚´í‘œ ì—°ê²°
-- ìƒìœ„+í•˜ìœ„ êµ¬ì„±ì´ ê°™ì€ ë ˆë²¨ì— í‘œí˜„ ê¸ˆì§€ â†’ í•˜ìœ„ëŠ” ìƒìœ„ ë‚´ë¶€ì— í¬í•¨
+★★ 연결관계 규칙 ★★
+- 데이터/정보 도면: 정보 항목은 ${getDeviceSubject()} 입력용이므로 상호 간 화살표 연결 부적절 → 병렬 배치
+- 장치 블록도: 기술적 데이터 흐름이 있으면 화살표 연결
+- 상위+하위 구성이 같은 레벨에 표현 금지 → 하위는 상위 내부에 포함
 
-â•â•â• ì´ì „ ë„ë©´ ì„¤ê³„ (ì˜¤ë¥˜ í¬í•¨) â•â•â•
+═══ 이전 도면 설계 (오류 포함) ═══
 ${prevDesign.slice(0,2000)}
 
-ìœ„ ì˜¤ë¥˜ë¥¼ ëª¨ë‘ ìˆ˜ì •í•˜ì—¬ ë„ë©´ ì„¤ê³„ë¥¼ ë‹¤ì‹œ ì¶œë ¥í•˜ì„¸ìš”.
-${isMethod?'ë°©ë²• íë¦„ë„ëŠ” ì‹œìž‘/ì¢…ë£Œ ë…¸ë“œë¥¼ ë°˜ë“œì‹œ í¬í•¨!':'ë„ 1ì—ëŠ” ë°˜ë“œì‹œ L1 ìž¥ì¹˜ë§Œ í¬í•¨í•´ì•¼ í•©ë‹ˆë‹¤!'}`;
+위 오류를 모두 수정하여 도면 설계를 다시 출력하세요.
+${isMethod?'방법 흐름도는 시작/종료 노드를 반드시 포함!':'도 1에는 반드시 L1 장치만 포함해야 합니다!'}`;
 
   setGlobalProcessing(true);
   const btnEl=document.getElementById(btnId);
@@ -2112,52 +2112,52 @@ ${isMethod?'ë°©ë²• íë¦„ë„ëŠ” ì‹œìž‘/ì¢…ë£
     if(resEl)resEl.value=r1.text;
     saveProject(true);
     
-    // Mermaid ë³€í™˜
+    // Mermaid 변환
     const mermaidPrompt=buildMermaidPrompt(stepId,r1.text);
     const r2=await App.callClaude(mermaidPrompt);
     outputs[stepId+'_mermaid']=r2.text;
     renderDiagrams(stepId,r2.text);
     
-    App.showToast('ë„ë©´ì´ ê·œì¹™ì— ë§žê²Œ ìž¬ìƒì„±ë˜ì—ˆìŠµë‹ˆë‹¤.');
+    App.showToast('도면이 규칙에 맞게 재생성되었습니다.');
   }catch(e){
-    App.showToast('ìž¬ìƒì„± ì‹¤íŒ¨: '+e.message,'error');
+    App.showToast('재생성 실패: '+e.message,'error');
   }finally{
     if(btnEl)App.setButtonLoading(btnId,false);
     setGlobalProcessing(false);
   }
 }
 
-// â•â•â• ë„ë©´ ì„¤ê³„ í…ìŠ¤íŠ¸ ì‚¬ì „ ê²€ì¦ â•â•â•
+// ═══ 도면 설계 텍스트 사전 검증 ═══
 function validateDiagramDesignText(text){
   const issues=[];
   
-  // ë„ë©´ë³„ë¡œ ë¶„ë¦¬
-  const figPattern=/ë„\s*(\d+)[:\s]*(.*?)(?=ë„\s*\d+[:\s]|---BRIEF|$)/gs;
+  // 도면별로 분리
+  const figPattern=/도\s*(\d+)[:\s]*(.*?)(?=도\s*\d+[:\s]|---BRIEF|$)/gs;
   let match;
   
   while((match=figPattern.exec(text))!==null){
     const figNum=parseInt(match[1]);
     const content=match[2];
     
-    // ì°¸ì¡°ë²ˆí˜¸ ì¶”ì¶œ
+    // 참조번호 추출
     const refs=(content.match(/\((\d+)\)/g)||[]).map(r=>parseInt(r.replace(/[()]/g,'')));
     
     if(figNum===1){
-      // ë„ 1 ê²€ì¦: L1ë§Œ í—ˆìš©
+      // 도 1 검증: L1만 허용
       const nonL1=refs.filter(r=>r%100!==0);
       if(nonL1.length>0){
         issues.push({
           severity:'ERROR',
-          message:`ë„ 1 ì„¤ê³„ì— L2/L3 ì°¸ì¡°ë²ˆí˜¸ í¬í•¨: ${nonL1.join(', ')}. ë„ 1ì€ L1(X00)ë§Œ í—ˆìš©.`
+          message:`도 1 설계에 L2/L3 참조번호 포함: ${nonL1.join(', ')}. 도 1은 L1(X00)만 허용.`
         });
       }
     }
     
-    // ~ëª¨ë“ˆ ì‚¬ìš© ê²€ì¦
-    if(content.includes('ëª¨ë“ˆ')){
+    // ~모듈 사용 검증
+    if(content.includes('모듈')){
       issues.push({
         severity:'WARNING',
-        message:`ë„ ${figNum} ì„¤ê³„ì— "~ëª¨ë“ˆ" ì‚¬ìš©. "~ë¶€"ë¡œ ë³€ê²½ í•„ìš”.`
+        message:`도 ${figNum} 설계에 "~모듈" 사용. "~부"로 변경 필요.`
       });
     }
   }
@@ -2165,24 +2165,24 @@ function validateDiagramDesignText(text){
   return issues;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â• UNIFIED DIAGRAM ENGINE â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ UNIFIED DIAGRAM ENGINE ═══════════
 function parseMermaidGraph(code){
   const nodes={},edges=[];
   
-  // â˜… ë‹¤ì–‘í•œ Mermaid ë…¸ë“œ í˜•íƒœ ì§€ì› â˜…
-  // 1. A["label"] - ì‚¬ê°í˜• (rect)
-  // 2. A(["label"]) - ìŠ¤íƒ€ë””ì›€ (stadium) - ì‹œìž‘/ì¢…ë£Œ
-  // 3. A("label") - ë‘¥ê·¼ ì‚¬ê°í˜• (round)
-  // 4. A{"label"} - ë‹¤ì´ì•„ëª¬ë“œ (diamond) - ì¡°ê±´ ë¶„ê¸°
-  // 5. A[/"label"/] - í‰í–‰ì‚¬ë³€í˜•
-  // 6. A(("label")) - ì›í˜•
+  // ★ 다양한 Mermaid 노드 형태 지원 ★
+  // 1. A["label"] - 사각형 (rect)
+  // 2. A(["label"]) - 스타디움 (stadium) - 시작/종료
+  // 3. A("label") - 둥근 사각형 (round)
+  // 4. A{"label"} - 다이아몬드 (diamond) - 조건 분기
+  // 5. A[/"label"/] - 평행사변형
+  // 6. A(("label")) - 원형
   
-  // ë¨¼ì € ì¤„ ë‹¨ìœ„ë¡œ ë…¸ë“œ ì •ì˜ ì¶”ì¶œ
+  // 먼저 줄 단위로 노드 정의 추출
   code.split('\n').forEach(line=>{
     const l=line.trim();
     if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef'))return;
     
-    // ë…¸ë“œ ì •ì˜ íŒ¨í„´ë“¤ (ìˆœì„œ ì¤‘ìš”: ë” ë³µìž¡í•œ íŒ¨í„´ ë¨¼ì €)
+    // 노드 정의 패턴들 (순서 중요: 더 복잡한 패턴 먼저)
     const patterns=[
       {re:/(\w+)\s*\(\[\s*["']?([^\]"']+?)["']?\s*\]\)/g, shape:'stadium'},
       {re:/(\w+)\s*\(\(\s*["']?([^)"']+?)["']?\s*\)\)/g, shape:'circle'},
@@ -2202,12 +2202,12 @@ function parseMermaidGraph(code){
     });
   });
   
-  // ì—°ê²°ì„  ì¶”ì¶œ
+  // 연결선 추출
   code.split('\n').forEach(line=>{
     const l=line.trim();
     if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef')||l.startsWith('subgraph'))return;
     
-    // ì—°ê²° íŒ¨í„´: A --> B, A <--> B, A --- B, A -->|text| B
+    // 연결 패턴: A --> B, A <--> B, A --- B, A -->|text| B
     const connections=l.match(/(\w+)\s*(?:-->|<-->|---)\s*(?:\|[^|]*\|\s*)?(\w+)/g);
     if(connections){
       connections.forEach(conn=>{
@@ -2247,35 +2247,35 @@ function computeEdgeRoutes(edges,positions){
 }
 
 function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
-  // â•â•â• KIPO íŠ¹í—ˆ ë„ë©´ ê·œì¹™ v4.1 (ì§ê³„ ë¶€ëª¨ ì¼ì¹˜) â•â•â•
+  // ═══ KIPO 특허 도면 규칙 v4.1 (직계 부모 일치) ═══
   const PX=72;
   const SHADOW_OFFSET=4;
   
-  // ë…¸ë“œ ë¼ë²¨ì—ì„œ ì°¸ì¡°ë²ˆí˜¸ ì¶”ì¶œ í•¨ìˆ˜
+  // 노드 라벨에서 참조번호 추출 함수
   function extractRefNum(label,fallback){
     const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
     return match?match[1]:fallback;
   }
   
-  // L1 ì—¬ë¶€ íŒë³„ (X00 í˜•ì‹ì¸ì§€)
+  // L1 여부 판별 (X00 형식인지)
   function isL1RefNum(ref){
     if(!ref||String(ref).startsWith('S'))return false;
     const s=String(ref);
-    // Dì ‘ë‘ì‚¬: D2â†’ìµœìƒìœ„, D21â†’í•˜ìœ„
+    // D접두사: D2→최상위, D21→하위
     if(s.startsWith('D')){const n=parseInt(s.slice(1));return !isNaN(n)&&n<10;}
     const num=parseInt(s);
     if(isNaN(num))return false;
-    // ì†Œìˆ˜(1~9): ìµœìƒìœ„
+    // 소수(1~9): 최상위
     if(num<10)return true;
-    // 2ìžë¦¬(10~99): í•˜ìœ„
+    // 2자리(10~99): 하위
     if(num<100)return false;
-    // 3ìžë¦¬: L1=X00
+    // 3자리: L1=X00
     if(num<1000)return num%100===0;
-    // 4ìžë¦¬: L4ì´ë¯€ë¡œ ì•„ë‹˜
+    // 4자리: L4이므로 아님
     return false;
   }
   
-  // â˜… ì§ê³„ ë¶€ëª¨ ì°¾ê¸° í•¨ìˆ˜ v6.0 (L4 + ì†Œìˆ˜ ì§€ì›) â˜…
+  // ★ 직계 부모 찾기 함수 v6.0 (L4 + 소수 지원) ★
   function findImmediateParent(refNums){
     const nums=refNums.filter(r=>r&&!String(r).startsWith('S')).map(r=>{const s=String(r);return s.startsWith('D')?parseInt(s.slice(1)):parseInt(s);}).filter(n=>!isNaN(n)&&n>0);
     if(!nums.length)return null;
@@ -2288,7 +2288,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     
     console.log('findImmediateParent v6:', {nums,l1s,l2s,l3s,l4s,smalls});
     
-    // â”€â”€ L4 í¬í•¨ â”€â”€
+    // ── L4 포함 ──
     if(l4s.length>0){
       if(l3s.length===1&&l2s.length===0&&l1s.length===0){
         const theL3=l3s[0];
@@ -2300,7 +2300,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       }
       return null;
     }
-    // â”€â”€ L1 í¬í•¨ â”€â”€
+    // ── L1 포함 ──
     if(l1s.length>0){
       if(l1s.length===1&&(l2s.length>0||l3s.length>0)){
         const t=l1s[0];
@@ -2308,25 +2308,25 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       }
       return null;
     }
-    // â”€â”€ L2ë§Œ â”€â”€
+    // ── L2만 ──
     if(l2s.length>0&&l3s.length===0){
       const p=[...new Set(l2s.map(n=>Math.floor(n/100)*100))];
       return p.length===1?p[0]:null;
     }
-    // â”€â”€ L2+L3 â”€â”€
+    // ── L2+L3 ──
     if(l2s.length>0&&l3s.length>0){
       if(l2s.length===1&&l3s.every(n=>Math.floor(n/10)*10===l2s[0]))return l2s[0];
       const p=[...new Set([...l2s,...l3s].map(n=>Math.floor(n/100)*100))];
       return p.length===1?p[0]:null;
     }
-    // â”€â”€ L3ë§Œ â”€â”€
+    // ── L3만 ──
     if(l3s.length>0){
       const l2p=[...new Set(l3s.map(n=>Math.floor(n/10)*10))];
       if(l2p.length===1)return l2p[0];
       const l1p=[...new Set(l2p.map(p=>Math.floor(p/100)*100))];
       return l1p.length===1?l1p[0]:null;
     }
-    // â”€â”€ ì†Œìˆ˜ (<100): ë°ì´í„°/ì •ë³´ ì°¸ì¡°ë²ˆí˜¸ â”€â”€
+    // ── 소수 (<100): 데이터/정보 참조번호 ──
     if(smalls.length>0){
       const singles=smalls.filter(n=>n<10);
       const doubles=smalls.filter(n=>n>=10);
@@ -2341,36 +2341,36 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     return null;
   }
   
-  // í™”ì‚´í‘œ í‘œì‹œ ì—¬ë¶€ (edgesê°€ ì—†ìœ¼ë©´ ë³‘ë ¬ ë°°ì¹˜)
+  // 화살표 표시 여부 (edges가 없으면 병렬 배치)
   const hasEdges=edges&&edges.length>0;
   
-  // â˜… ë°©ë²• ë„ë©´ íŒë³„: Sì ‘ë‘ì‚¬ ì°¸ì¡°ë²ˆí˜¸ ë˜ëŠ” "ì‹œìž‘"/"ì¢…ë£Œ" ë…¸ë“œ ì¡´ìž¬ â˜…
+  // ★ 방법 도면 판별: S접두사 참조번호 또는 "시작"/"종료" 노드 존재 ★
   const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
   const isMethodDiagram=allRefs.some(r=>String(r).startsWith('S'))||
-    nodes.some(n=>/ì‹œìž‘|ì¢…ë£Œ|START|END/i.test(n.label));
+    nodes.some(n=>/시작|종료|START|END/i.test(n.label));
   
   if(isMethodDiagram){
-    // â•â•â• ë°©ë²• ë„ë©´: íë¦„ë„ v6.0 (ë‹¤ì´ì•„ëª¬ë“œ ë¶„ê¸° ì§€ì›) â•â•â•
+    // ═══ 방법 도면: 흐름도 v6.0 (다이아몬드 분기 지원) ═══
     const boxH=0.7*PX, boxGap=0.8*PX, diamondH=1.0*PX;
     const normalBoxW=5.0*PX;
     const startEndBoxW=2.0*PX;
     const diamondW=5.5*PX;
     const boxStartY=0.5*PX;
-    // ë¶„ê¸° ì—¬ë¶€ íŒë‹¨
+    // 분기 여부 판단
     const hasBranching=edges.some(e=>e.label);
     const branchOffset=hasBranching?2.8*PX:0;
     const centerX=0.5*PX+normalBoxW/2+branchOffset/2;
     const svgW=normalBoxW+2.5*PX+branchOffset;
     
-    // ë…¸ë“œ ìœ„ì¹˜ ê³„ì‚° (í† í´ë¡œì§€ ê¸°ë°˜)
+    // 노드 위치 계산 (토폴로지 기반)
     const nodeMap={};nodes.forEach(n=>nodeMap[n.id]=n);
     const adj={};edges.forEach(e=>{if(!adj[e.from])adj[e.from]=[];adj[e.from].push(e);});
-    // ê°„ë‹¨í•œ ìˆœì„œ: nodes ë°°ì—´ ìˆœì„œ ì‚¬ìš© (ì´ë¯¸ íŒŒì‹± ìˆœì„œ)
+    // 간단한 순서: nodes 배열 순서 사용 (이미 파싱 순서)
     const nodePositions={};
     let curY=boxStartY;
     nodes.forEach((n,i)=>{
       const isDiamond=n.shape==='diamond';
-      const isStartEnd=/ì‹œìž‘|ì¢…ë£Œ|START|END/i.test(n.label);
+      const isStartEnd=/시작|종료|START|END/i.test(n.label);
       const h=isDiamond?diamondH:boxH;
       nodePositions[n.id]={x:centerX,y:curY,h,idx:i,isDiamond,isStartEnd};
       curY+=h+boxGap;
@@ -2386,7 +2386,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       </marker>
     </defs>`;
     
-    // ë…¸ë“œ ë Œë”ë§
+    // 노드 렌더링
     nodes.forEach((n,i)=>{
       const pos=nodePositions[n.id];
       const refNum=extractRefNum(n.label,'');
@@ -2396,49 +2396,49 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const SO=3;
       
       if(isDiamond){
-        // â˜… ë‹¤ì´ì•„ëª¬ë“œ(ë§ˆë¦„ëª¨) ë Œë”ë§ â˜…
+        // ★ 다이아몬드(마름모) 렌더링 ★
         const cx=centerX, cy=pos.y+diamondH/2;
         const dw=diamondW/2, dh=diamondH/2;
-        // ê·¸ë¦¼ìž
+        // 그림자
         svg+=`<polygon points="${cx+SO},${cy-dh+SO} ${cx+dw+SO},${cy+SO} ${cx+SO},${cy+dh+SO} ${cx-dw+SO},${cy+SO}" fill="#000"/>`;
-        // ë³¸ì²´
+        // 본체
         svg+=`<polygon points="${cx},${cy-dh} ${cx+dw},${cy} ${cx},${cy+dh} ${cx-dw},${cy}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
-        // í…ìŠ¤íŠ¸ (ì—¬ëŸ¬ ì¤„ ì§€ì›)
+        // 텍스트 (여러 줄 지원)
         const maxChars=16;
         if(displayLabel.length>maxChars){
           const mid=Math.ceil(displayLabel.length/2);
           const sp=displayLabel.lastIndexOf(' ',mid);
           const bp=sp>0?sp:mid;
-          svg+=`<text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="11" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel.slice(0,bp))}</text>`;
-          svg+=`<text x="${cx}" y="${cy+10}" text-anchor="middle" font-size="11" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel.slice(bp).trim())}</text>`;
+          svg+=`<text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel.slice(0,bp))}</text>`;
+          svg+=`<text x="${cx}" y="${cy+10}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel.slice(bp).trim())}</text>`;
         }else{
-          svg+=`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="11" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+          svg+=`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
         }
-        // ë¦¬ë”ë¼ì¸ + ë¶€í˜¸
+        // 리더라인 + 부호
         if(refNum){
           const leaderEndX=centerX+normalBoxW/2+0.3*PX+branchOffset/2;
           svg+=`<line x1="${cx+dw}" y1="${cy}" x2="${leaderEndX}" y2="${cy}" stroke="#000" stroke-width="1"/>`;
-          svg+=`<text x="${leaderEndX+8}" y="${cy+4}" font-size="11" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${refNum}</text>`;
+          svg+=`<text x="${leaderEndX+8}" y="${cy+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
         }
       }else{
-        // ì‚¬ê°í˜•/ìŠ¤íƒ€ë””ì›€ ë Œë”ë§ (ê¸°ì¡´ ì½”ë“œ)
+        // 사각형/스타디움 렌더링 (기존 코드)
         const boxW=isStartEnd?startEndBoxW:normalBoxW;
         const bx=centerX-boxW/2;
         const by=pos.y;
         const rx=isStartEnd?boxH/2:0;
         svg+=`<rect x="${bx+SO}" y="${by+SO}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#000"/>`;
         svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" rx="${rx}" fill="#fff" stroke="#000" stroke-width="${isStartEnd?2:1.5}"/>`;
-        svg+=`<text x="${centerX}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+        svg+=`<text x="${centerX}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
         if(refNum&&!isStartEnd){
           const leaderEndX=centerX+normalBoxW/2+0.3*PX+branchOffset/2;
           const leaderY=by+boxH/2;
           svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
-          svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${refNum}</text>`;
+          svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
         }
       }
     });
     
-    // í™”ì‚´í‘œ ë Œë”ë§ (ì—ì§€ ê¸°ë°˜)
+    // 화살표 렌더링 (에지 기반)
     if(edges.length>0){
       const drawnEdges=new Set();
       edges.forEach(e=>{
@@ -2448,34 +2448,34 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
         if(drawnEdges.has(key))return;
         drawnEdges.add(key);
         const fromDiamond=nodeMap[e.from]?.shape==='diamond';
-        const isNoLabel=e.label&&/ì•„ë‹ˆì˜¤|ì•„ë‹ˆì˜¤|No|N|ì•„ë‹ˆìš”/i.test(e.label);
-        const isYesLabel=e.label&&/ì˜ˆ|Yes|Y/i.test(e.label);
+        const isNoLabel=e.label&&/아니오|아니오|No|N|아니요/i.test(e.label);
+        const isYesLabel=e.label&&/예|Yes|Y/i.test(e.label);
         
         if(fromDiamond&&isNoLabel){
-          // "ì•„ë‹ˆì˜¤" ë¶„ê¸°: ì˜¤ë¥¸ìª½ìœ¼ë¡œ êº¾ì–´ì„œ ì—°ê²°
+          // "아니오" 분기: 오른쪽으로 꺾어서 연결
           const fromCy=fp.y+fp.h/2;
           const toCy=tp.y+(tp.isDiamond?tp.h/2:boxH/2);
           const branchX=centerX+normalBoxW/2+0.5*PX;
-          // ë‹¤ì´ì•„ëª¬ë“œ ìš°ì¸¡ì—ì„œ ì¶œë°œ
+          // 다이아몬드 우측에서 출발
           svg+=`<line x1="${centerX+diamondW/2}" y1="${fromCy}" x2="${branchX}" y2="${fromCy}" stroke="#000" stroke-width="1"/>`;
           svg+=`<line x1="${branchX}" y1="${fromCy}" x2="${branchX}" y2="${tp.y-2}" stroke="#000" stroke-width="1"/>`;
           svg+=`<line x1="${branchX}" y1="${tp.y-2}" x2="${centerX}" y2="${tp.y-2}" stroke="#000" stroke-width="1" marker-end="url(#${mkId})"/>`;
-          // ë¼ë²¨
-          svg+=`<text x="${centerX+diamondW/2+8}" y="${fromCy-5}" font-size="10" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${App.escapeHtml(e.label)}</text>`;
+          // 라벨
+          svg+=`<text x="${centerX+diamondW/2+8}" y="${fromCy-5}" font-size="10" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(e.label)}</text>`;
         }else{
-          // ì§ì„  ì—°ê²° (ì˜ˆ ë¶„ê¸° ë˜ëŠ” ì¼ë°˜)
+          // 직선 연결 (예 분기 또는 일반)
           const sy=fp.y+fp.h+2;
           const ty=tp.y-2;
           svg+=`<line x1="${centerX}" y1="${sy}" x2="${centerX}" y2="${ty}" stroke="#000" stroke-width="1" marker-end="url(#${mkId})"/>`;
           if(e.label&&isYesLabel){
-            svg+=`<text x="${centerX+8}" y="${(sy+ty)/2+4}" font-size="10" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${App.escapeHtml(e.label)}</text>`;
+            svg+=`<text x="${centerX+8}" y="${(sy+ty)/2+4}" font-size="10" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(e.label)}</text>`;
           }else if(e.label){
-            svg+=`<text x="${centerX+8}" y="${(sy+ty)/2+4}" font-size="10" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${App.escapeHtml(e.label)}</text>`;
+            svg+=`<text x="${centerX+8}" y="${(sy+ty)/2+4}" font-size="10" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(e.label)}</text>`;
           }
         }
       });
     }else{
-      // ì—ì§€ ì •ë³´ ì—†ìœ¼ë©´ ìˆœì°¨ ì—°ê²° (í´ë°±)
+      // 에지 정보 없으면 순차 연결 (폴백)
       nodes.forEach((n,i)=>{
         if(i<nodes.length-1){
           const fp=nodePositions[n.id],tp=nodePositions[nodes[i+1].id];
@@ -2492,29 +2492,29 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     return;
   }
   
-  // ëª¨ë“  ë…¸ë“œê°€ L1ì¸ì§€ í™•ì¸ (ë„ 1 íŒë³„)
+  // 모든 노드가 L1인지 확인 (도 1 판별)
   const allL1=nodes.every(n=>{
     const ref=extractRefNum(n.label,'');
     return isL1RefNum(ref);
   });
   
-  // ë„ 1ì¸ ê²½ìš° (figNum===1 ë˜ëŠ” ëª¨ë“  ë…¸ë“œê°€ L1)
+  // 도 1인 경우 (figNum===1 또는 모든 노드가 L1)
   const isFig1=figNum===1||allL1;
   
-  // â˜… ìµœì™¸ê³½ ë°•ìŠ¤ ì°¸ì¡°ë²ˆí˜¸ = ì§ê³„ ë¶€ëª¨ â˜…
+  // ★ 최외곽 박스 참조번호 = 직계 부모 ★
   const allRefsForFrame=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
   let frameRefNum=findImmediateParent(allRefsForFrame);
   if(!frameRefNum&&allRefsForFrame.length>0){
-    // í´ë°± ê°œì„ : ì²« ë²ˆì§¸ ì°¸ì¡°ë²ˆí˜¸ì˜ L1 ë¶€ëª¨ ì‚¬ìš©
+    // 폴백 개선: 첫 번째 참조번호의 L1 부모 사용
     const firstRef=parseInt(allRefs[0])||100;
     frameRefNum=Math.floor(firstRef/100)*100;
   }
-  if(!frameRefNum)frameRefNum=100; // ìµœì¢… í´ë°±
+  if(!frameRefNum)frameRefNum=100; // 최종 폴백
   
   const boxW=5.0*PX, boxH=0.7*PX, boxGap=0.8*PX;
   
   if(isFig1){
-    // â•â•â• ë„ 1: ìˆ˜ì§ ë¸”ë¡ë„ v8.0 (ë„ 2/3ê³¼ ë™ì¼ ìŠ¤íƒ€ì¼, ìµœì™¸ê³½ í”„ë ˆìž„ ì—†ìŒ) â•â•â•
+    // ═══ 도 1: 수직 블록도 v8.0 (도 2/3과 동일 스타일, 최외곽 프레임 없음) ═══
     const nn=nodes.length;
     const boxStartX=0.5*PX, boxStartY=0.5*PX;
     const frameW=6.2*PX;
@@ -2535,22 +2535,22 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const by=boxStartY+i*(boxH+boxGap);
       const refNum=extractRefNum(nd.label,String((i+1)*100));
       const cleanLabel=nd.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-      const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'â€¦':cleanLabel;
+      const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
       
-      // ê·¸ë¦¼ìž
+      // 그림자
       svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" fill="#000"/>`;
-      // ë°•ìŠ¤ ë³¸ì²´
+      // 박스 본체
       svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#fff" stroke="#000" stroke-width="2"/>`;
-      // ë°•ìŠ¤ í…ìŠ¤íŠ¸
-      svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      // 박스 텍스트
+      svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       
-      // ë¦¬ë”ë¼ì¸ + ë¶€í˜¸
+      // 리더라인 + 부호
       const leaderEndX=bx+boxW+0.3*PX;
       const leaderY=by+boxH/2;
       svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
-      svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       
-      // ì–‘ë°©í–¥ í™”ì‚´í‘œ
+      // 양방향 화살표
       if(i<nn-1){
         const arrowX=bx+boxW/2;
         const arrowY1=by+boxH+2;
@@ -2563,24 +2563,24 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const c=document.getElementById(containerId);
     if(c)c.innerHTML=svg;
   } else {
-    // â•â•â• ë„ 2+: í•˜ìœ„ êµ¬ì„± ìžˆëŠ” ê²½ìš° - ìµœì™¸ê³½ ë°•ìŠ¤ ìžˆìŒ â•â•â•
+    // ═══ 도 2+: 하위 구성 있는 경우 - 최외곽 박스 있음 ═══
     
-    // â˜… í•µì‹¬ ìˆ˜ì •: ìµœì™¸ê³½ í”„ë ˆìž„ê³¼ ë™ì¼í•œ ì°¸ì¡°ë²ˆí˜¸ë¥¼ ê°€ì§„ ë…¸ë“œ ì œì™¸ â˜…
+    // ★ 핵심 수정: 최외곽 프레임과 동일한 참조번호를 가진 노드 제외 ★
     const innerNodes=nodes.filter(n=>{
       const ref=extractRefNum(n.label,'');
-      if(!ref)return true; // ì°¸ì¡°ë²ˆí˜¸ ì—†ìœ¼ë©´ í¬í•¨
+      if(!ref)return true; // 참조번호 없으면 포함
       const refNum=parseInt(ref);
-      return refNum!==frameRefNum; // ìµœì™¸ê³½ê³¼ ë™ì¼í•˜ë©´ ì œì™¸
+      return refNum!==frameRefNum; // 최외곽과 동일하면 제외
     });
     
-    // ìµœì™¸ê³½ í”„ë ˆìž„ ë¼ë²¨ (ì œì™¸ëœ ë…¸ë“œì—ì„œ ê°€ì ¸ì˜¤ê¸°)
+    // 최외곽 프레임 라벨 (제외된 노드에서 가져오기)
     const frameNode=nodes.find(n=>{
       const ref=extractRefNum(n.label,'');
       return ref&&parseInt(ref)===frameRefNum;
     });
     const frameLabel=frameNode?frameNode.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim():'';
     
-    const displayNodes=innerNodes.length>0?innerNodes:nodes; // ì•ˆì „ìž¥ì¹˜
+    const displayNodes=innerNodes.length>0?innerNodes:nodes; // 안전장치
     
     const frameX=0.5*PX, frameY=0.5*PX;
     const boxStartX=frameX+0.6*PX, boxStartY=frameY+0.4*PX;
@@ -2589,7 +2589,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:600px;background:white;border-radius:8px">`;
     
-    // í™”ì‚´í‘œ ë§ˆì»¤
+    // 화살표 마커
     const mkId=`ah_${containerId}`;
     svg+=`<defs>
       <marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -2597,39 +2597,39 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       </marker>
     </defs>`;
     
-    // 1. ìµœì™¸ê³½ í”„ë ˆìž„ (ê·¸ë¦¼ìž + ë³¸ì²´)
+    // 1. 최외곽 프레임 (그림자 + 본체)
     svg+=`<rect x="${frameX+SHADOW_OFFSET}" y="${frameY+SHADOW_OFFSET}" width="${frameW}" height="${frameH}" fill="#000"/>`;
     svg+=`<rect x="${frameX}" y="${frameY}" width="${frameW}" height="${frameH}" fill="#fff" stroke="#000" stroke-width="2.25"/>`;
     
-    // ìµœì™¸ê³½ ë¶€í˜¸ (L1 ë²ˆí˜¸)
+    // 최외곽 부호 (L1 번호)
     const frameRefX=frameX+frameW+0.3*PX;
     const frameRefY=frameY+frameH/2;
     svg+=`<line x1="${frameX+frameW}" y1="${frameRefY}" x2="${frameRefX}" y2="${frameRefY}" stroke="#000" stroke-width="1"/>`;
-    svg+=`<text x="${frameRefX+8}" y="${frameRefY+4}" font-size="11" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
+    svg+=`<text x="${frameRefX+8}" y="${frameRefY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
     
-    // 2. ë‚´ë¶€ êµ¬ì„±ìš”ì†Œ ë°•ìŠ¤ë“¤ (ìµœì™¸ê³½ ë…¸ë“œ ì œì™¸ë¨)
+    // 2. 내부 구성요소 박스들 (최외곽 노드 제외됨)
     displayNodes.forEach((n,i)=>{
       const bx=boxStartX;
       const by=boxStartY+i*(boxH+boxGap);
       const fallbackRef=frameRefNum+10*(i+1);
       const refNum=extractRefNum(n.label,String(fallbackRef));
       
-      // ê·¸ë¦¼ìž
+      // 그림자
       svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" fill="#000"/>`;
-      // ë°•ìŠ¤ ë³¸ì²´
+      // 박스 본체
       svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
-      // ë°•ìŠ¤ í…ìŠ¤íŠ¸
+      // 박스 텍스트
       const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-      const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'â€¦':cleanLabel;
-      svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="12" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
+      svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="12" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       
-      // ë¦¬ë”ë¼ì¸ + ë¶€í˜¸
+      // 리더라인 + 부호
       const leaderEndX=frameX+frameW+0.3*PX;
       const leaderY=by+boxH/2;
       svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
-      svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="ë§‘ì€ ê³ ë”•,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       
-      // ì–‘ë°©í–¥ í™”ì‚´í‘œ - edgesê°€ ìžˆì„ ë•Œë§Œ
+      // 양방향 화살표 - edges가 있을 때만
       if(hasEdges&&i<displayNodes.length-1){
         const arrowX=bx+boxW/2;
         const arrowY1=by+boxH+2;
@@ -2644,7 +2644,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   }
 }
 
-// â•â•â• ë„ë©´ ê·œì¹™ ê²€ì¦ í•¨ìˆ˜ (v5.0 - í†µí•© ê²€ì¦) â•â•â•
+// ═══ 도면 규칙 검증 함수 (v5.0 - 통합 검증) ═══
 function validateDiagramRules(nodes,figNum,designText){
   const issues=[];
   
@@ -2656,44 +2656,44 @@ function validateDiagramRules(nodes,figNum,designText){
   function isL2(ref){return ref&&!ref.startsWith('S')&&parseInt(ref)>=100&&parseInt(ref)%100!==0&&parseInt(ref)%10===0;}
   function isL3(ref){return ref&&!ref.startsWith('S')&&parseInt(ref)>=100&&parseInt(ref)%10!==0;}
   
-  // â•â•â• R0. íŒŒì‹± ì‹¤íŒ¨ â•â•â•
+  // ═══ R0. 파싱 실패 ═══
   if(!nodes||nodes.length===0){
-    issues.push({severity:'ERROR',rule:'R0',message:`ë„ ${figNum}: Mermaid íŒŒì‹± ì‹¤íŒ¨ - ë…¸ë“œ ì—†ìŒ`});
+    issues.push({severity:'ERROR',rule:'R0',message:`도 ${figNum}: Mermaid 파싱 실패 - 노드 없음`});
     return issues;
   }
   
-  // â•â•â• R1. ë¼ë²¨ ì˜¤ë¥˜ (Mermaid ì½”ë“œ ìž”ìž¬) â•â•â•
-  const isFlowchartNode=lb=>/^(ì‹œìž‘|ì¢…ë£Œ|START|END|S|E)$/i.test(lb.trim());
+  // ═══ R1. 라벨 오류 (Mermaid 코드 잔재) ═══
+  const isFlowchartNode=lb=>/^(시작|종료|START|END|S|E)$/i.test(lb.trim());
   nodes.forEach(n=>{
     const lb=n.label||'';
     if(lb.includes('"]')||lb.includes('<-->')||lb.includes('-->')){
-      issues.push({severity:'ERROR',rule:'R1',message:`ë„ ${figNum}: íŒŒì‹± ì˜¤ë¥˜ - "${lb.slice(0,30)}..."`});
+      issues.push({severity:'ERROR',rule:'R1',message:`도 ${figNum}: 파싱 오류 - "${lb.slice(0,30)}..."`});
     }
     if(lb===n.id&&!/^\d+$/.test(lb)&&!isFlowchartNode(lb)){
-      issues.push({severity:'WARNING',rule:'R1',message:`ë„ ${figNum}: ë…¸ë“œ "${n.id}" ë¼ë²¨ ì¶”ì¶œ ì‹¤íŒ¨`});
+      issues.push({severity:'WARNING',rule:'R1',message:`도 ${figNum}: 노드 "${n.id}" 라벨 추출 실패`});
     }
   });
   
-  // â•â•â• R2. ~ëª¨ë“ˆ ê¸ˆì§€ â•â•â•
+  // ═══ R2. ~모듈 금지 ═══
   nodes.forEach(n=>{
-    if(n.label.includes('ëª¨ë“ˆ')){
-      issues.push({severity:'WARNING',rule:'R2',message:`"${n.label}" â†’ "~ë¶€"ë¡œ ë³€ê²½ í•„ìš”`});
+    if(n.label.includes('모듈')){
+      issues.push({severity:'WARNING',rule:'R2',message:`"${n.label}" → "~부"로 변경 필요`});
     }
   });
   
-  // â•â•â• R3. ì°¸ì¡°ë²ˆí˜¸ ì¡´ìž¬ ì—¬ë¶€ (ì‹œìž‘/ì¢…ë£Œ ë…¸ë“œ ì œì™¸) â•â•â•
+  // ═══ R3. 참조번호 존재 여부 (시작/종료 노드 제외) ═══
   nodes.forEach(n=>{
-    if(isFlowchartNode(n.label))return; // ì‹œìž‘/ì¢…ë£Œ ë…¸ë“œëŠ” ì°¸ì¡°ë²ˆí˜¸ ë¶ˆí•„ìš”
+    if(isFlowchartNode(n.label))return; // 시작/종료 노드는 참조번호 불필요
     if(!extractRef(n.label)){
-      issues.push({severity:'WARNING',rule:'R3',message:`"${n.label}" - ì°¸ì¡°ë²ˆí˜¸ ì—†ìŒ`});
+      issues.push({severity:'WARNING',rule:'R3',message:`"${n.label}" - 참조번호 없음`});
     }
   });
   
-  // â•â•â• R4. ì°¸ì¡°ë²ˆí˜¸ ì¤‘ë³µ â•â•â•
+  // ═══ R4. 참조번호 중복 ═══
   const allRefs=nodes.map(n=>extractRef(n.label)).filter(Boolean);
   const dupRefs=allRefs.filter((r,i)=>allRefs.indexOf(r)!==i);
   if(dupRefs.length){
-    issues.push({severity:'ERROR',rule:'R4',message:`ì°¸ì¡°ë²ˆí˜¸ ì¤‘ë³µ: ${[...new Set(dupRefs)].join(', ')}`});
+    issues.push({severity:'ERROR',rule:'R4',message:`참조번호 중복: ${[...new Set(dupRefs)].join(', ')}`});
   }
   
   const numRefs=allRefs.filter(r=>!r.startsWith('S')&&!r.startsWith('D')).map(r=>parseInt(r)).filter(n=>!isNaN(n));
@@ -2704,148 +2704,148 @@ function validateDiagramRules(nodes,figNum,designText){
   const l4Refs=numRefs.filter(n=>n>=1000&&n<10000);
   const smallRefs=numRefs.filter(n=>n<100);
   
-  // â˜… ë°©ë²• ë„ë©´ íŒë³„: Sì°¸ì¡°ë²ˆí˜¸ ë˜ëŠ” ì‹œìž‘/ì¢…ë£Œ ë…¸ë“œ â˜…
+  // ★ 방법 도면 판별: S참조번호 또는 시작/종료 노드 ★
   const sRefCount=allRefs.filter(r=>String(r).startsWith('S')).length;
-  const hasFlowchartNodes=nodes.some(n=>/^(ì‹œìž‘|ì¢…ë£Œ|START|END)$/i.test(n.label.trim()));
+  const hasFlowchartNodes=nodes.some(n=>/^(시작|종료|START|END)$/i.test(n.label.trim()));
   const isMethodFig=sRefCount>0||hasFlowchartNodes;
   
-  // â•â•â• R5~R7: ìž¥ì¹˜ ë„ë©´ ì „ìš© ê·œì¹™ (ë°©ë²• ë„ë©´ì€ ê±´ë„ˆëœ€) â•â•â•
+  // ═══ R5~R7: 장치 도면 전용 규칙 (방법 도면은 건너뜀) ═══
   if(!isMethodFig){
   
-  // â•â•â• R5. ë„ 1 ê·œì¹™: L1ë§Œ í—ˆìš© â•â•â•
+  // ═══ R5. 도 1 규칙: L1만 허용 ═══
   if(figNum===1){
     nodes.forEach(n=>{
       const ref=extractRef(n.label);
       if(ref&&!isL1(ref)&&!ref.startsWith('S')){
-        issues.push({severity:'ERROR',rule:'R5',message:`ë„ 1ì— í•˜ìœ„ "${n.label}" ë¶ˆê°€. L1(X00)ë§Œ í—ˆìš©.`});
+        issues.push({severity:'ERROR',rule:'R5',message:`도 1에 하위 "${n.label}" 불가. L1(X00)만 허용.`});
       }
     });
   }
   
-  // â•â•â• R6. ë„ 2+ ê³„ì¸µ ê·œì¹™ â•â•â•
+  // ═══ R6. 도 2+ 계층 규칙 ═══
   if(figNum>1){
-    // R6a. ì—¬ëŸ¬ L1 í˜¼í•© ê¸ˆì§€
+    // R6a. 여러 L1 혼합 금지
     if(l1Refs.length>1){
-      issues.push({severity:'ERROR',rule:'R6a',message:`ë„ ${figNum}: ì—¬ëŸ¬ L1(${l1Refs.join(',')}) í˜¼í•© ë¶ˆê°€`});
+      issues.push({severity:'ERROR',rule:'R6a',message:`도 ${figNum}: 여러 L1(${l1Refs.join(',')}) 혼합 불가`});
     }
     
-    // R6b. L1+í•˜ìœ„ í˜¼í•© ì‹œ ê³„ì¸µ ê²€ì¦
+    // R6b. L1+하위 혼합 시 계층 검증
     if(l1Refs.length===1){
       const theL1=l1Refs[0];
       const badL2=l2Refs.filter(n=>Math.floor(n/100)*100!==theL1);
       const badL3=l3Refs.filter(n=>Math.floor(n/100)*100!==theL1);
-      if(badL2.length) issues.push({severity:'ERROR',rule:'R6b',message:`ë„ ${figNum}: L2(${badL2.join(',')})ê°€ L1(${theL1})ì˜ í•˜ìœ„ ì•„ë‹˜`});
-      if(badL3.length) issues.push({severity:'ERROR',rule:'R6b',message:`ë„ ${figNum}: L3(${badL3.join(',')})ê°€ L1(${theL1})ì˜ í•˜ìœ„ ì•„ë‹˜`});
+      if(badL2.length) issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L2(${badL2.join(',')})가 L1(${theL1})의 하위 아님`});
+      if(badL3.length) issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L3(${badL3.join(',')})가 L1(${theL1})의 하위 아님`});
       
-      // â˜… ë ˆë²¨ í˜¼í•© ê²€ì¶œ: L1 í”„ë ˆìž„ ì•ˆì— L2+L3 ë™ì‹œ ì¡´ìž¬ â˜…
+      // ★ 레벨 혼합 검출: L1 프레임 안에 L2+L3 동시 존재 ★
       if(l2Refs.length>0&&l3Refs.length>0){
-        issues.push({severity:'ERROR',rule:'R6b',message:`ë„ ${figNum}: L2(${l2Refs.join(',')})ì™€ L3(${l3Refs.join(',')})ê°€ í•œ ë„ë©´ì— í˜¼í•©ë¨. í•œ ë„ë©´ì—ëŠ” í•œ ë ˆë²¨ë§Œ! L2 ë„ë©´ê³¼ L3 ë„ë©´ì„ ë¶„ë¦¬í•´ì•¼ í•¨.`});
+        issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L2(${l2Refs.join(',')})와 L3(${l3Refs.join(',')})가 한 도면에 혼합됨. 한 도면에는 한 레벨만! L2 도면과 L3 도면을 분리해야 함.`});
       }else if(!badL2.length&&!badL3.length&&(l2Refs.length>0||l3Refs.length>0)){
-        issues.push({severity:'INFO',rule:'R6b',message:`ë„ ${figNum} ìµœì™¸ê³½: ${theL1} (L1 ìžì²´ê°€ í”„ë ˆìž„)`});
+        issues.push({severity:'INFO',rule:'R6b',message:`도 ${figNum} 최외곽: ${theL1} (L1 자체가 프레임)`});
       }
     }
     
-    // R6c. L2ë§Œ ìžˆëŠ” ê²½ìš° ì§ê³„ ë¶€ëª¨ INFO
+    // R6c. L2만 있는 경우 직계 부모 INFO
     if(l1Refs.length===0&&l2Refs.length>0&&l3Refs.length===0){
       const parents=[...new Set(l2Refs.map(n=>Math.floor(n/100)*100))];
       if(parents.length===1){
-        issues.push({severity:'INFO',rule:'R6c',message:`ë„ ${figNum} ìµœì™¸ê³½: ${parents[0]} (ì§ê³„ ë¶€ëª¨)`});
+        issues.push({severity:'INFO',rule:'R6c',message:`도 ${figNum} 최외곽: ${parents[0]} (직계 부모)`});
       }
     }
     
-    // R6d. L3ë§Œ ìžˆëŠ” ê²½ìš° ì§ê³„ ë¶€ëª¨ INFO
+    // R6d. L3만 있는 경우 직계 부모 INFO
     if(l1Refs.length===0&&l2Refs.length===0&&l3Refs.length>0){
       const l2Parents=[...new Set(l3Refs.map(n=>Math.floor(n/10)*10))];
       if(l2Parents.length===1){
-        issues.push({severity:'INFO',rule:'R6d',message:`ë„ ${figNum} ìµœì™¸ê³½: ${l2Parents[0]} (ì§ê³„ ë¶€ëª¨)`});
+        issues.push({severity:'INFO',rule:'R6d',message:`도 ${figNum} 최외곽: ${l2Parents[0]} (직계 부모)`});
       }
     }
     
-    // R6e. L2+L3 í˜¼í•©: L2ê°€ L3ì˜ ì§ê³„ ë¶€ëª¨ì¸ì§€ ê²€ì¦ â˜…ì‹ ê·œâ˜…
+    // R6e. L2+L3 혼합: L2가 L3의 직계 부모인지 검증 ★신규★
     if(l1Refs.length===0&&l2Refs.length>0&&l3Refs.length>0){
       if(l2Refs.length===1){
         const theL2=l2Refs[0];
         const allL3BelongToL2=l3Refs.every(n=>Math.floor(n/10)*10===theL2);
         if(allL3BelongToL2){
-          issues.push({severity:'INFO',rule:'R6e',message:`ë„ ${figNum} ìµœì™¸ê³½: ${theL2} (L2 ìžì²´ê°€ í”„ë ˆìž„, ë‚´ë¶€ L3: ${l3Refs.join(',')})`});
+          issues.push({severity:'INFO',rule:'R6e',message:`도 ${figNum} 최외곽: ${theL2} (L2 자체가 프레임, 내부 L3: ${l3Refs.join(',')})`});
         }else{
           const badL3=l3Refs.filter(n=>Math.floor(n/10)*10!==theL2);
-          issues.push({severity:'ERROR',rule:'R6e',message:`ë„ ${figNum}: L3(${badL3.join(',')})ê°€ L2(${theL2})ì˜ í•˜ìœ„ê°€ ì•„ë‹˜`});
+          issues.push({severity:'ERROR',rule:'R6e',message:`도 ${figNum}: L3(${badL3.join(',')})가 L2(${theL2})의 하위가 아님`});
         }
       }else{
-        // ì—¬ëŸ¬ L2ê°€ ìžˆìœ¼ë©´ ê²½ê³ 
-        issues.push({severity:'WARNING',rule:'R6e',message:`ë„ ${figNum}: L2(${l2Refs.join(',')})ì™€ L3(${l3Refs.join(',')}) í˜¼í•© - ê³„ì¸µ í™•ì¸ í•„ìš”`});
+        // 여러 L2가 있으면 경고
+        issues.push({severity:'WARNING',rule:'R6e',message:`도 ${figNum}: L2(${l2Refs.join(',')})와 L3(${l3Refs.join(',')}) 혼합 - 계층 확인 필요`});
       }
     }
     
-    // R6f. L4 í¬í•¨ ì‹œ: L3ê°€ ì§ê³„ ë¶€ëª¨ì¸ì§€ ê²€ì¦
+    // R6f. L4 포함 시: L3가 직계 부모인지 검증
     if(l4Refs.length>0){
       if(l3Refs.length===1){
         const theL3=l3Refs[0];
         const allL4Belong=l4Refs.every(n=>Math.floor(n/10)===theL3);
         if(allL4Belong){
-          issues.push({severity:'INFO',rule:'R6f',message:`ë„ ${figNum} ìµœì™¸ê³½: ${theL3} (L3 í”„ë ˆìž„, ë‚´ë¶€ L4: ${l4Refs.join(',')})`});
+          issues.push({severity:'INFO',rule:'R6f',message:`도 ${figNum} 최외곽: ${theL3} (L3 프레임, 내부 L4: ${l4Refs.join(',')})`});
         }else{
           const bad=l4Refs.filter(n=>Math.floor(n/10)!==theL3);
-          issues.push({severity:'ERROR',rule:'R6f',message:`ë„ ${figNum}: L4(${bad.join(',')})ê°€ L3(${theL3})ì˜ í•˜ìœ„ê°€ ì•„ë‹˜`});
+          issues.push({severity:'ERROR',rule:'R6f',message:`도 ${figNum}: L4(${bad.join(',')})가 L3(${theL3})의 하위가 아님`});
         }
       }else if(l3Refs.length===0){
         const parents=[...new Set(l4Refs.map(n=>Math.floor(n/10)))];
         if(parents.length===1){
-          issues.push({severity:'INFO',rule:'R6f',message:`ë„ ${figNum} ìµœì™¸ê³½: ${parents[0]} (L4 ì§ê³„ë¶€ëª¨)`});
+          issues.push({severity:'INFO',rule:'R6f',message:`도 ${figNum} 최외곽: ${parents[0]} (L4 직계부모)`});
         }
       }
     }
     
-    // R6g. ë°ì´í„° ì°¸ì¡°ë²ˆí˜¸ (Dì ‘ë‘ì‚¬ ë˜ëŠ” ì†Œìˆ˜)
+    // R6g. 데이터 참조번호 (D접두사 또는 소수)
     if(dRefs.length>0||smallRefs.length>0){
       const topD=dRefs.filter(d=>d.num<10);
       const subD=dRefs.filter(d=>d.num>=10);
       if(topD.length===1&&subD.length>0){
-        issues.push({severity:'INFO',rule:'R6g',message:`ë„ ${figNum} ìµœì™¸ê³½: ${topD[0].full} (ë°ì´í„° í”„ë ˆìž„)`});
+        issues.push({severity:'INFO',rule:'R6g',message:`도 ${figNum} 최외곽: ${topD[0].full} (데이터 프레임)`});
       }
     }
   }
   
-  // â•â•â• R7. ë„ë©´ ì„¤ê³„ í…ìŠ¤íŠ¸ì™€ ë…¸ë“œ ìˆ˜ ë¹„êµ â•â•â•
+  // ═══ R7. 도면 설계 텍스트와 노드 수 비교 ═══
   if(designText){
-    // ë„ë©´ ì„¤ê³„ì—ì„œ í•´ë‹¹ ë„ë©´ì˜ êµ¬ì„±ìš”ì†Œ ê°œìˆ˜ ì¶”ì¶œ
-    const figPattern=new RegExp(`ë„\\s*${figNum}[^]*?êµ¬ì„±ìš”ì†Œ[^:ï¼š]*[ï¼š:]\\s*([^\\n]+)`,'i');
+    // 도면 설계에서 해당 도면의 구성요소 개수 추출
+    const figPattern=new RegExp(`도\\s*${figNum}[^]*?구성요소[^:：]*[：:]\\s*([^\\n]+)`,'i');
     const figMatch=designText.match(figPattern);
     if(figMatch){
       const designRefs=(figMatch[1].match(/\((\d+)\)/g)||[]).map(r=>r.replace(/[()]/g,''));
-      // L1 í¬í•¨ ì¼€ì´ìŠ¤: ì„¤ê³„ì— L1ì´ ìžˆìœ¼ë©´ ë Œë”ë§ì—ì„œ ì œì™¸ë˜ë¯€ë¡œ ë³´ì •
+      // L1 포함 케이스: 설계에 L1이 있으면 렌더링에서 제외되므로 보정
       const hasDesignL1=designRefs.some(r=>parseInt(r)%100===0);
       const expectedCount=hasDesignL1?designRefs.length-1:designRefs.length;
       const actualInnerCount=l1Refs.length>0?nodes.length-l1Refs.length:nodes.length;
       
       if(expectedCount>0&&actualInnerCount<expectedCount){
-        issues.push({severity:'WARNING',rule:'R7',message:`ë„ ${figNum}: ì„¤ê³„ìƒ ë‚´ë¶€ êµ¬ì„±ìš”ì†Œ ${expectedCount}ê°œì¸ë° ${actualInnerCount}ê°œë§Œ íŒŒì‹±ë¨ (ë…¸ë“œ ëˆ„ë½ ê°€ëŠ¥)`});
+        issues.push({severity:'WARNING',rule:'R7',message:`도 ${figNum}: 설계상 내부 구성요소 ${expectedCount}개인데 ${actualInnerCount}개만 파싱됨 (노드 누락 가능)`});
       }
     }
   }
   
-  } // end if(!isMethodFig) â€” ìž¥ì¹˜ ë„ë©´ ì „ìš© ê·œì¹™ ë
+  } // end if(!isMethodFig) — 장치 도면 전용 규칙 끝
   
-  // â•â•â• R8. ë°©ë²• ë„ë©´ ê²€ì¦ â•â•â•
+  // ═══ R8. 방법 도면 검증 ═══
   const sRefs=allRefs.filter(r=>String(r).startsWith('S'));
   if(sRefs.length>0){
-    // R8a. ë°©ë²• ë„ë©´ì— ìˆ«ìž ì°¸ì¡°ë²ˆí˜¸ í˜¼ìž…
+    // R8a. 방법 도면에 숫자 참조번호 혼입
     const numericInMethod=allRefs.filter(r=>!String(r).startsWith('S')&&!String(r).startsWith('D'));
     if(numericInMethod.length>0){
-      issues.push({severity:'ERROR',rule:'R8a',message:`ë„ ${figNum}: ë°©ë²• ë„ë©´ì— ìž¥ì¹˜ ì°¸ì¡°ë²ˆí˜¸(${numericInMethod.join(',')}) í˜¼ìž…`});
+      issues.push({severity:'ERROR',rule:'R8a',message:`도 ${figNum}: 방법 도면에 장치 참조번호(${numericInMethod.join(',')}) 혼입`});
     }
-    // R8b. ì‹œìž‘/ì¢…ë£Œ ë…¸ë“œ í™•ì¸
-    const hasStart=nodes.some(n=>/ì‹œìž‘|START/i.test(n.label));
-    const hasEnd=nodes.some(n=>/ì¢…ë£Œ|END/i.test(n.label));
-    if(!hasStart)issues.push({severity:'WARNING',rule:'R8b',message:`ë„ ${figNum}: íë¦„ë„ì— "ì‹œìž‘" ë…¸ë“œ ì—†ìŒ`});
-    if(!hasEnd)issues.push({severity:'WARNING',rule:'R8b',message:`ë„ ${figNum}: íë¦„ë„ì— "ì¢…ë£Œ" ë…¸ë“œ ì—†ìŒ`});
+    // R8b. 시작/종료 노드 확인
+    const hasStart=nodes.some(n=>/시작|START/i.test(n.label));
+    const hasEnd=nodes.some(n=>/종료|END/i.test(n.label));
+    if(!hasStart)issues.push({severity:'WARNING',rule:'R8b',message:`도 ${figNum}: 흐름도에 "시작" 노드 없음`});
+    if(!hasEnd)issues.push({severity:'WARNING',rule:'R8b',message:`도 ${figNum}: 흐름도에 "종료" 노드 없음`});
   }
   
   return issues;
 }
 
-// â•â•â• ë Œë”ë§ í›„ ì‹œê° ê²€ì¦ (ìƒˆ ê¸°ëŠ¥) â•â•â•
+// ═══ 렌더링 후 시각 검증 (새 기능) ═══
 function postRenderValidation(sid){
   const data=diagramData[sid];
   if(!data||!data.length)return[];
@@ -2863,20 +2863,20 @@ function postRenderValidation(sid){
     const l1s=numRefs.filter(n=>n%100===0);
     const nonL1=numRefs.filter(n=>n%100!==0);
     
-    // ê²€ì¦ V1: L1ì´ ìµœì™¸ê³½ì´ ë˜ëŠ” ê²½ìš°, ë‚´ë¶€ì— L1ì´ ì¤‘ë³µ í‘œì‹œë˜ë©´ ì•ˆ ë¨
+    // 검증 V1: L1이 최외곽이 되는 경우, 내부에 L1이 중복 표시되면 안 됨
     if(figNum>1&&l1s.length===1&&nonL1.length>0){
-      // ë Œë”ëŸ¬ê°€ L1ì„ ì œì™¸í•˜ëŠ”ì§€ í™•ì¸ (ì½”ë“œ ë ˆë²¨ ê²€ì¦)
+      // 렌더러가 L1을 제외하는지 확인 (코드 레벨 검증)
       allIssues.push({
         figNum,severity:'CHECK',
-        message:`ë„ ${figNum}: ìµœì™¸ê³½=${l1s[0]}, ë‚´ë¶€ ë°•ìŠ¤=${nonL1.length}ê°œ (L1 ì œì™¸ í™•ì¸)`
+        message:`도 ${figNum}: 최외곽=${l1s[0]}, 내부 박스=${nonL1.length}개 (L1 제외 확인)`
       });
     }
     
-    // ê²€ì¦ V2: ë„ 1ì— L2/L3ê°€ ìžˆìœ¼ë©´ ì•ˆ ë¨
+    // 검증 V2: 도 1에 L2/L3가 있으면 안 됨
     if(figNum===1&&nonL1.length>0){
       allIssues.push({
         figNum,severity:'ERROR',
-        message:`ë„ 1ì— L2/L3 ì°¸ì¡°ë²ˆí˜¸(${nonL1.join(',')}) í¬í•¨`
+        message:`도 1에 L2/L3 참조번호(${nonL1.join(',')}) 포함`
       });
     }
   });
@@ -2895,7 +2895,7 @@ function renderDiagrams(sid,mt){
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
   diagramData[sid]=[];
   
-  // ë„ë©´ ì„¤ê³„ í…ìŠ¤íŠ¸ (R7 ê²€ì¦ìš©)
+  // 도면 설계 텍스트 (R7 검증용)
   const designText=outputs[sid]||'';
   
   let html='';
@@ -2908,12 +2908,12 @@ function renderDiagrams(sid,mt){
     const positions=layoutGraph(nodes,edges);
     diagramData[sid].push({nodes,edges,positions});
     
-    // ê²€ì¦ ì‹¤í–‰ (ì„¤ê³„ í…ìŠ¤íŠ¸ í¬í•¨)
+    // 검증 실행 (설계 텍스트 포함)
     const issues=validateDiagramRules(nodes,figNum,designText);
     allIssues.push({figNum,issues});
     if(issues.some(iss=>iss.severity==='ERROR'))hasErrors=true;
     
-    // ê²€ì¦ ê²°ê³¼ HTML
+    // 검증 결과 HTML
     let issuesHtml='';
     const visibleIssues=issues.filter(iss=>iss.severity!=='CHECK');
     if(visibleIssues.length){
@@ -2927,49 +2927,49 @@ function renderDiagrams(sid,mt){
     }
     
     html+=`<div class="diagram-container">
-      <div class="diagram-label">ë„ ${figNum}</div>
+      <div class="diagram-label">도 ${figNum}</div>
       ${issuesHtml}
       <div id="diagram_${sid}_${i}" style="background:#fff;border:1px solid #eee;border-radius:8px;padding:12px;overflow-x:auto"></div>
-      <details style="margin-top:8px"><summary style="font-size:11px;color:var(--color-text-tertiary);cursor:pointer">Mermaid ì½”ë“œ ë³´ê¸°</summary><pre style="font-size:11px;margin-top:4px;padding:8px;background:var(--color-bg-tertiary);border-radius:8px;overflow-x:auto">${App.escapeHtml(code)}</pre></details>
+      <details style="margin-top:8px"><summary style="font-size:11px;color:var(--color-text-tertiary);cursor:pointer">Mermaid 코드 보기</summary><pre style="font-size:11px;margin-top:4px;padding:8px;background:var(--color-bg-tertiary);border-radius:8px;overflow-x:auto">${App.escapeHtml(code)}</pre></details>
     </div>`;
   });
   
-  // ì—ëŸ¬ ë°œê²¬ ì‹œ ìž¬ìƒì„± ë²„íŠ¼
+  // 에러 발견 시 재생성 버튼
   if(hasErrors){
     const errorSummary=allIssues.filter(ai=>ai.issues.some(iss=>iss.severity==='ERROR'))
-      .map(ai=>`ë„ ${ai.figNum}: ${ai.issues.filter(iss=>iss.severity==='ERROR').map(iss=>`[${iss.rule}] ${iss.message}`).join('; ')}`)
+      .map(ai=>`도 ${ai.figNum}: ${ai.issues.filter(iss=>iss.severity==='ERROR').map(iss=>`[${iss.rule}] ${iss.message}`).join('; ')}`)
       .join('\n');
     window._diagramErrors={sid,errors:errorSummary};
     html=`<div style="background:#ffebee;border:1px solid #ef5350;border-radius:8px;padding:12px;margin-bottom:16px">
-      <div style="color:#c62828;font-weight:600;margin-bottom:8px">âš ï¸ ë„ë©´ ê·œì¹™ ìœ„ë°˜ ë°œê²¬</div>
+      <div style="color:#c62828;font-weight:600;margin-bottom:8px">⚠️ 도면 규칙 위반 발견</div>
       <div style="font-size:12px;color:#b71c1c;margin-bottom:12px;white-space:pre-line">${App.escapeHtml(errorSummary)}</div>
-      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1976d2;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">ðŸ”„ ê·œì¹™ì— ë§žê²Œ ìž¬ìƒì„±</button>
+      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1976d2;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">🔄 규칙에 맞게 재생성</button>
     </div>`+html;
   }
   
-  // ë„ë©´ ê²€ì¦ ë²„íŠ¼ í•­ìƒ ì¶”ê°€
+  // 도면 검증 버튼 항상 추가
   html+=`<div style="margin-top:12px;padding:12px;background:var(--color-bg-secondary);border-radius:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <button onclick="runDiagramValidation('${sid}')" style="background:#43a047;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">âœ… ë„ë©´ ê²€ì¦</button>
-    <button onclick="runAIDiagramReview('${sid}')" style="background:#7b1fa2;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">ðŸ¤– AI ì—°ê²°ê´€ê³„ ê²€ì¦</button>
-    <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1565c0;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">ðŸ”„ ìž¬ìƒì„±</button>
+    <button onclick="runDiagramValidation('${sid}')" style="background:#43a047;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">✅ 도면 검증</button>
+    <button onclick="runAIDiagramReview('${sid}')" style="background:#7b1fa2;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">🤖 AI 연결관계 검증</button>
+    <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1565c0;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">🔄 재생성</button>
     <span id="validationResult_${sid}" style="font-size:12px;color:var(--color-text-secondary)"></span>
   </div>
   <div id="aiReviewResult_${sid}" style="margin-top:8px"></div>`;
   
   el.innerHTML=html;
   
-  // SVG ë Œë”ë§
+  // SVG 렌더링
   blocks.forEach((code,i)=>{
     const{nodes,edges,positions}=diagramData[sid][i];
     renderDiagramSvg(`diagram_${sid}_${i}`,nodes,edges,positions,figOffset+i+1);
   });
 }
 
-// â•â•â• ë„ë©´ ê²€ì¦ ì‹¤í–‰ í•¨ìˆ˜ â•â•â•
+// ═══ 도면 검증 실행 함수 ═══
 function runDiagramValidation(sid){
   const data=diagramData[sid];
   if(!data||!data.length){
-    App.showToast('ê²€ì¦í•  ë„ë©´ì´ ì—†ìŠµë‹ˆë‹¤.','error');
+    App.showToast('검증할 도면이 없습니다.','error');
     return;
   }
   
@@ -2988,52 +2988,52 @@ function runDiagramValidation(sid){
     totalWarnings+=warnings.length;
     
     if(errors.length||warnings.length){
-      reportHtml+=`<div style="margin:4px 0"><b>ë„ ${figNum}:</b> `;
-      errors.forEach(e=>reportHtml+=`<span style="color:#c62828;font-size:11px">âŒ [${e.rule}] ${e.message} </span>`);
-      warnings.forEach(w=>reportHtml+=`<span style="color:#f57c00;font-size:11px">âš ï¸ [${w.rule}] ${w.message} </span>`);
+      reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> `;
+      errors.forEach(e=>reportHtml+=`<span style="color:#c62828;font-size:11px">❌ [${e.rule}] ${e.message} </span>`);
+      warnings.forEach(w=>reportHtml+=`<span style="color:#f57c00;font-size:11px">⚠️ [${w.rule}] ${w.message} </span>`);
       reportHtml+='</div>';
     }else{
-      reportHtml+=`<div style="margin:4px 0;color:#2e7d32"><b>ë„ ${figNum}:</b> âœ… í†µê³¼ ${infos.map(i=>`(${i.message})`).join(' ')}</div>`;
+      reportHtml+=`<div style="margin:4px 0;color:#2e7d32"><b>도 ${figNum}:</b> ✅ 통과 ${infos.map(i=>`(${i.message})`).join(' ')}</div>`;
     }
   });
   
   const resultEl=document.getElementById(`validationResult_${sid}`);
   if(resultEl){
     if(totalErrors===0&&totalWarnings===0){
-      resultEl.innerHTML=`<span style="color:#2e7d32;font-weight:600">âœ… ì „ì²´ ê²€ì¦ í†µê³¼ (${data.length}ê°œ ë„ë©´)</span>`;
+      resultEl.innerHTML=`<span style="color:#2e7d32;font-weight:600">✅ 전체 검증 통과 (${data.length}개 도면)</span>`;
     }else{
       resultEl.innerHTML=`<div>
-        <span style="color:#c62828;font-weight:600">âŒ ì˜¤ë¥˜ ${totalErrors}ê±´</span>, 
-        <span style="color:#f57c00">âš ï¸ ê²½ê³  ${totalWarnings}ê±´</span>
+        <span style="color:#c62828;font-weight:600">❌ 오류 ${totalErrors}건</span>, 
+        <span style="color:#f57c00">⚠️ 경고 ${totalWarnings}건</span>
         <div style="margin-top:6px;font-size:11px">${reportHtml}</div>
       </div>`;
     }
   }
   
   if(totalErrors>0){
-    App.showToast(`ë„ë©´ ê²€ì¦: ì˜¤ë¥˜ ${totalErrors}ê±´ ë°œê²¬. ìž¬ìƒì„± ê¶Œìž¥.`,'error');
+    App.showToast(`도면 검증: 오류 ${totalErrors}건 발견. 재생성 권장.`,'error');
   }else if(totalWarnings>0){
-    App.showToast(`ë„ë©´ ê²€ì¦: ê²½ê³  ${totalWarnings}ê±´ (ìˆ˜ì • ê¶Œìž¥)`);
+    App.showToast(`도면 검증: 경고 ${totalWarnings}건 (수정 권장)`);
   }else{
-    App.showToast(`ë„ë©´ ê²€ì¦ í†µê³¼ âœ… (${data.length}ê°œ ë„ë©´)`);
+    App.showToast(`도면 검증 통과 ✅ (${data.length}개 도면)`);
   }
 }
 
-// â•â•â• AI ì •ì„±ì  ë„ë©´ ê²€ì¦ (ì—°ê²°ê´€ê³„ ì ì ˆì„± í‰ê°€) â•â•â•
+// ═══ AI 정성적 도면 검증 (연결관계 적절성 평가) ═══
 async function runAIDiagramReview(sid){
   const data=diagramData[sid];
   if(!data||!data.length){
-    App.showToast('ê²€ì¦í•  ë„ë©´ì´ ì—†ìŠµë‹ˆë‹¤.','error');
+    App.showToast('검증할 도면이 없습니다.','error');
     return;
   }
   
   const resultEl=document.getElementById(`aiReviewResult_${sid}`);
-  if(resultEl)resultEl.innerHTML='<div style="padding:12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a">ðŸ¤– AI ì—°ê²°ê´€ê³„ ê²€ì¦ ì¤‘...</div>';
+  if(resultEl)resultEl.innerHTML='<div style="padding:12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a">🤖 AI 연결관계 검증 중...</div>';
   
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
   const designText=outputs[sid]||'';
   
-  // ê° ë„ë©´ì˜ êµ¬ì¡° ì •ë³´ ìˆ˜ì§‘
+  // 각 도면의 구조 정보 수집
   let diagramSummary='';
   data.forEach(({nodes,edges},idx)=>{
     const figNum=figOffset+idx+1;
@@ -3045,31 +3045,31 @@ async function runAIDiagramReview(sid){
     const edgeList=(edges||[]).map(e=>{
       const fromLabel=nodes.find(n=>n.id===e.from)?.label||e.from;
       const toLabel=nodes.find(n=>n.id===e.to)?.label||e.to;
-      return `${fromLabel} â†’ ${toLabel}`;
+      return `${fromLabel} → ${toLabel}`;
     }).join(', ');
-    diagramSummary+=`\në„ ${figNum}:\n  êµ¬ì„±ìš”ì†Œ: ${nodeList}\n  ì—°ê²°ê´€ê³„: ${edgeList||'ì—†ìŒ (ë³‘ë ¬ ë°°ì¹˜)'}\n`;
+    diagramSummary+=`\n도 ${figNum}:\n  구성요소: ${nodeList}\n  연결관계: ${edgeList||'없음 (병렬 배치)'}\n`;
   });
   
-  const prompt=`ë‹¹ì‹ ì€ íŠ¹í—ˆ ë„ë©´ ì „ë¬¸ê°€ìž…ë‹ˆë‹¤. ì•„ëž˜ ë„ë©´ì˜ ì—°ê²°ê´€ê³„ê°€ ê¸°ìˆ ì ìœ¼ë¡œ ì ì ˆí•œì§€ ì •ì„±ì ìœ¼ë¡œ í‰ê°€í•˜ì„¸ìš”.
+  const prompt=`당신은 특허 도면 전문가입니다. 아래 도면의 연결관계가 기술적으로 적절한지 정성적으로 평가하세요.
 
-â•â•â• í‰ê°€ ê¸°ì¤€ â•â•â•
-1. **ë°ì´í„°/ì •ë³´ ë„ë©´**: ì •ë³´ í•­ëª©(~ì •ë³´, ~ë°ì´í„°)ì€ ${getDeviceSubject()}ë¡œ ìž…ë ¥ë˜ëŠ” ê²ƒì´ë¯€ë¡œ ìƒí˜¸ ê°„ í™”ì‚´í‘œ ì—°ê²°ì´ ë¶€ì ì ˆí•¨. ë³‘ë ¬ ë°°ì¹˜ê°€ ì ì ˆ.
-2. **ìž¥ì¹˜ ë¸”ë¡ë„**: í•˜ë“œì›¨ì–´ êµ¬ì„±ìš”ì†Œ ê°„ ë°ì´í„° íë¦„ì´ ìžˆìœ¼ë©´ í™”ì‚´í‘œ ì—°ê²° ì ì ˆ. ë‹¨, ë©”ëª¨ë¦¬/ì €ìž¥ë¶€ì²˜ëŸ¼ ìˆ˜ë™ì  êµ¬ì„±ì€ ë‹¤ë¥¸ êµ¬ì„±ì—ì„œ ì ‘ê·¼í•˜ëŠ” ë°©í–¥ë§Œ ì ì ˆ.
-3. **ê³„ì¸µ ì¼ê´€ì„±**: ìƒìœ„ êµ¬ì„±ê³¼ í•˜ìœ„ êµ¬ì„±ì´ ê°™ì€ ë ˆë²¨ì— í‘œí˜„ë˜ë©´ ì•ˆ ë¨. í•˜ìœ„ëŠ” ìƒìœ„ ë‚´ë¶€ì— í¬í•¨ë˜ì–´ì•¼ í•¨.
-4. **ë°©ë²• íë¦„ë„**: ë‹¨ê³„ ê°„ ìˆœì„œê°€ ë…¼ë¦¬ì ì´ì–´ì•¼ í•¨.
+═══ 평가 기준 ═══
+1. **데이터/정보 도면**: 정보 항목(~정보, ~데이터)은 ${getDeviceSubject()}로 입력되는 것이므로 상호 간 화살표 연결이 부적절함. 병렬 배치가 적절.
+2. **장치 블록도**: 하드웨어 구성요소 간 데이터 흐름이 있으면 화살표 연결 적절. 단, 메모리/저장부처럼 수동적 구성은 다른 구성에서 접근하는 방향만 적절.
+3. **계층 일관성**: 상위 구성과 하위 구성이 같은 레벨에 표현되면 안 됨. 하위는 상위 내부에 포함되어야 함.
+4. **방법 흐름도**: 단계 간 순서가 논리적이어야 함.
 
-â•â•â• ë„ë©´ ì„¤ê³„ â•â•â•
+═══ 도면 설계 ═══
 ${designText.slice(0,2000)}
 
-â•â•â• ì‹¤ì œ ë„ë©´ êµ¬ì¡° â•â•â•
+═══ 실제 도면 구조 ═══
 ${diagramSummary}
 
-â•â•â• ì¶œë ¥ í˜•ì‹ â•â•â•
-ê° ë„ë©´ì— ëŒ€í•´:
-ë„ N: âœ… ì ì ˆ / âš ï¸ ë¶€ì ì ˆ
-- (ì´ìœ  í•œ ì¤„)
+═══ 출력 형식 ═══
+각 도면에 대해:
+도 N: ✅ 적절 / ⚠️ 부적절
+- (이유 한 줄)
 
-ë§ˆì§€ë§‰ì— ì „ì²´ ìš”ì•½ í•œ ì¤„.`;
+마지막에 전체 요약 한 줄.`;
 
   try{
     const r=await App.callClaude(prompt);
@@ -3077,28 +3077,28 @@ ${diagramSummary}
     
     if(resultEl){
       resultEl.innerHTML=`<div style="padding:12px;background:#f3e5f5;border:1px solid #ce93d8;border-radius:8px;margin-top:8px">
-        <div style="font-weight:600;color:#6a1b9a;margin-bottom:8px">ðŸ¤– AI ì—°ê²°ê´€ê³„ ê²€ì¦ ê²°ê³¼</div>
+        <div style="font-weight:600;color:#6a1b9a;margin-bottom:8px">🤖 AI 연결관계 검증 결과</div>
         <pre style="font-size:12px;white-space:pre-wrap;margin:0;color:#4a148c;line-height:1.6">${App.escapeHtml(reviewText)}</pre>
       </div>`;
     }
     
-    // ë¶€ì ì ˆ í•­ëª©ì´ ìžˆìœ¼ë©´ window._diagramErrorsì— ì¶”ê°€
-    if(reviewText.includes('ë¶€ì ì ˆ')||reviewText.includes('âš ï¸')){
+    // 부적절 항목이 있으면 window._diagramErrors에 추가
+    if(reviewText.includes('부적절')||reviewText.includes('⚠️')){
       window._aiDiagramReview={sid,review:reviewText};
-      App.showToast('AI ê²€ì¦: ì¼ë¶€ ë„ë©´ ì—°ê²°ê´€ê³„ ìˆ˜ì • ê¶Œìž¥','warning');
+      App.showToast('AI 검증: 일부 도면 연결관계 수정 권장','warning');
     }else{
-      App.showToast('AI ê²€ì¦: ëª¨ë“  ë„ë©´ ì—°ê²°ê´€ê³„ ì ì ˆ âœ…');
+      App.showToast('AI 검증: 모든 도면 연결관계 적절 ✅');
     }
   }catch(e){
-    if(resultEl)resultEl.innerHTML=`<div style="padding:8px;background:#ffebee;border-radius:8px;font-size:12px;color:#c62828">AI ê²€ì¦ ì‹¤íŒ¨: ${e.message}</div>`;
-    App.showToast('AI ê²€ì¦ ì‹¤íŒ¨: '+e.message,'error');
+    if(resultEl)resultEl.innerHTML=`<div style="padding:8px;background:#ffebee;border-radius:8px;font-size:12px;color:#c62828">AI 검증 실패: ${e.message}</div>`;
+    App.showToast('AI 검증 실패: '+e.message,'error');
   }
 }
 
 function downloadPptx(sid){
-  // ë¼ì´ë¸ŒëŸ¬ë¦¬ ì²´í¬
+  // 라이브러리 체크
   if(typeof PptxGenJS==='undefined'){
-    App.showToast('PPTX ë¼ì´ë¸ŒëŸ¬ë¦¬ ë¡œë“œ ì•ˆë¨. íŽ˜ì´ì§€ ìƒˆë¡œê³ ì¹¨ í›„ ë‹¤ì‹œ ì‹œë„í•´ì£¼ì„¸ìš”.','error');
+    App.showToast('PPTX 라이브러리 로드 안됨. 페이지 새로고침 후 다시 시도해주세요.','error');
     console.error('PptxGenJS not loaded');
     return;
   }
@@ -3106,9 +3106,9 @@ function downloadPptx(sid){
   const data=diagramData[sid];
   if(!data||!data.length){
     const mt=outputs[sid+'_mermaid'];
-    if(!mt){App.showToast('ë„ë©´ ì—†ìŒ','error');return;}
+    if(!mt){App.showToast('도면 없음','error');return;}
     const blocks=extractMermaidBlocks(mt);
-    if(!blocks.length){App.showToast('Mermaid ì½”ë“œ ì—†ìŒ','error');return;}
+    if(!blocks.length){App.showToast('Mermaid 코드 없음','error');return;}
     diagramData[sid]=blocks.map(code=>{
       const{nodes,edges}=parseMermaidGraph(code);
       return{nodes,edges,positions:layoutGraph(nodes,edges)};
@@ -3116,10 +3116,10 @@ function downloadPptx(sid){
     return downloadPptx(sid);
   }
   
-  App.showToast('PPTX ìƒì„± ì¤‘...');
+  App.showToast('PPTX 생성 중...');
   
   try{
-    // â•â•â• KIPO íŠ¹í—ˆ ë„ë©´ ê·œì¹™ v4.1 â•â•â•
+    // ═══ KIPO 특허 도면 규칙 v4.1 ═══
     const pptx=new PptxGenJS();
     pptx.defineLayout({name:'A4_PORTRAIT',width:8.27,height:11.69});
     pptx.layout='A4_PORTRAIT';
@@ -3183,23 +3183,23 @@ function downloadPptx(sid){
       const figNum=figOffset+idx+1;
       const hasEdges=edges&&edges.length>0;
       
-      slide.addText(`ë„ ${figNum}`,{
+      slide.addText(`도 ${figNum}`,{
         x:PAGE_MARGIN,y:PAGE_MARGIN,w:2,h:TITLE_H,
-        fontSize:14,bold:true,fontFace:'ë§‘ì€ ê³ ë”•',color:'000000'
+        fontSize:14,bold:true,fontFace:'맑은 고딕',color:'000000'
       });
       
       if(!nodes.length)return;
       
       const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
       const isMethodDiagram=allRefs.some(r=>String(r).startsWith('S'))||
-        nodes.some(n=>/ì‹œìž‘|ì¢…ë£Œ|START|END/i.test(n.label));
+        nodes.some(n=>/시작|종료|START|END/i.test(n.label));
       
       if(isMethodDiagram){
-        // â•â•â• ë°©ë²• ë„ë©´ PPTX v5.4: ì¤‘ì•™ì„  ì •ë ¬ + ì§ì„  í™”ì‚´í‘œ â•â•â•
+        // ═══ 방법 도면 PPTX v5.4: 중앙선 정렬 + 직선 화살표 ═══
         const boxStartY=PAGE_MARGIN+TITLE_H+0.2;
         const normalBoxW=PAGE_W-1.2;
         const startEndBoxW=normalBoxW*0.35;
-        const centerX=PAGE_MARGIN+0.3+normalBoxW/2;  // ì¤‘ì•™ì„ 
+        const centerX=PAGE_MARGIN+0.3+normalBoxW/2;  // 중앙선
         const nodeCount=nodes.length;
         const boxH=Math.min(0.55,AVAILABLE_H/nodeCount-0.15);
         const boxGap=Math.min(0.4,(AVAILABLE_H-boxH*nodeCount)/(nodeCount>1?nodeCount-1:1));
@@ -3207,29 +3207,29 @@ function downloadPptx(sid){
         nodes.forEach((n,i)=>{
           const refNum=extractRefNum(n.label,'');
           const cleanLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
-          const isStartEnd=/ì‹œìž‘|ì¢…ë£Œ|START|END/i.test(n.label);
+          const isStartEnd=/시작|종료|START|END/i.test(n.label);
           
           const boxW=isStartEnd?startEndBoxW:normalBoxW;
-          const bx=centerX-boxW/2;  // ì¤‘ì•™ì„  ê¸°ì¤€ ë°°ì¹˜
+          const bx=centerX-boxW/2;  // 중앙선 기준 배치
           const by=boxStartY+i*(boxH+boxGap);
           
-          // ê·¸ë¦¼ìž
+          // 그림자
           slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
           
-          // ë°•ìŠ¤ (ì™„ì „ í‘ë°±)
+          // 박스 (완전 흑백)
           const opts={x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:isStartEnd?LINE_FRAME:LINE_BOX}};
           if(isStartEnd)opts.rectRadius=boxH*0.5*72;
           slide.addShape(pptx.shapes.ROUNDED_RECTANGLE||pptx.shapes.RECTANGLE,opts);
-          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:isStartEnd?10:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'ë§‘ì€ ê³ ë”•',color:'000000',align:'center',valign:'middle'});
+          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:isStartEnd?10:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
-          // ë¦¬ë”ë¼ì¸ (ì‹œìž‘/ì¢…ë£Œ ì œì™¸)
+          // 리더라인 (시작/종료 제외)
           if(refNum&&!isStartEnd){
             const leaderEndX=PAGE_MARGIN+0.3+normalBoxW;
             slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:leaderEndX-(bx+boxW)+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(refNum),{x:leaderEndX+0.35,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'ë§‘ì€ ê³ ë”•',color:'000000',align:'left',valign:'middle'});
+            slide.addText(String(refNum),{x:leaderEndX+0.35,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           }
           
-          // â˜… í™”ì‚´í‘œ: ì¤‘ì•™ì„  ì§ì„  â˜…
+          // ★ 화살표: 중앙선 직선 ★
           if(i<nodes.length-1){
             const arrowY1=by+boxH;
             const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
@@ -3252,7 +3252,7 @@ function downloadPptx(sid){
       const nodeCount=nodes.length;
       
       if(isFig1){
-        // â•â•â• ë„ 1: ë¸”ë¡ë„ v8.0 (ìµœì™¸ê³½ í”„ë ˆìž„ ì—†ì´ ë°•ìŠ¤ ë‚˜ì—´) â•â•â•
+        // ═══ 도 1: 블록도 v8.0 (최외곽 프레임 없이 박스 나열) ═══
         const boxStartX=PAGE_MARGIN+0.5,boxStartY=PAGE_MARGIN+TITLE_H+0.2;
         const boxW=PAGE_W-1.6;
         const boxH=Math.min(0.55,(AVAILABLE_H-0.15*(nodeCount-1))/nodeCount);
@@ -3266,9 +3266,9 @@ function downloadPptx(sid){
           
           slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
           slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
-          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'ë§‘ì€ ê³ ë”•',color:'000000',align:'center',valign:'middle'});
+          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-          slide.addText(String(refNum),{x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'ë§‘ì€ ê³ ë”•',color:'000000',align:'left',valign:'middle'});
+          slide.addText(String(refNum),{x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
           if(i<nodes.length-1){
             const arrowY1=by+boxH+0.04;
@@ -3280,9 +3280,9 @@ function downloadPptx(sid){
           }
         });
       }else{
-        // ë„ 2+: ìµœì™¸ê³½ ë°•ìŠ¤ ìžˆìŒ
+        // 도 2+: 최외곽 박스 있음
         
-        // â˜… ìµœì™¸ê³½ í”„ë ˆìž„ê³¼ ë™ì¼í•œ ì°¸ì¡°ë²ˆí˜¸ ë…¸ë“œ ì œì™¸ â˜…
+        // ★ 최외곽 프레임과 동일한 참조번호 노드 제외 ★
         const innerNodes=nodes.filter(n=>{
           const ref=extractRefNum(n.label,'');
           if(!ref)return true;
@@ -3302,7 +3302,7 @@ function downloadPptx(sid){
         slide.addShape(pptx.shapes.RECTANGLE,{x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,fill:{color:'000000'},line:{width:0}});
         slide.addShape(pptx.shapes.RECTANGLE,{x:frameX,y:frameY,w:frameW,h:frameH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
         slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameY+frameH/2,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-        slide.addText(String(frameRefNum),{x:refLabelX+0.3,y:frameY+frameH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'ë§‘ì€ ê³ ë”•',color:'000000',align:'left',valign:'middle'});
+        slide.addText(String(frameRefNum),{x:refLabelX+0.3,y:frameY+frameH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
         
         displayNodes.forEach((n,i)=>{
           const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
@@ -3312,9 +3312,9 @@ function downloadPptx(sid){
           
           slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
           slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
-          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-dCount*0.3)),fontFace:'ë§‘ì€ ê³ ë”•',color:'000000',align:'center',valign:'middle'});
+          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-dCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-          slide.addText(String(refNum),{x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'ë§‘ì€ ê³ ë”•',color:'000000',align:'left',valign:'middle'});
+          slide.addText(String(refNum),{x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
           if(hasEdges&&i<displayNodes.length-1){
             const arrowY1=by+boxH,arrowY2=boxStartY+(i+1)*(boxH+boxGap),arrowX=bx+boxW/2;
@@ -3326,29 +3326,29 @@ function downloadPptx(sid){
       }
     });
     
-    const fileName=selectedTitle||selectedTitle||'ë„ë©´';
-    pptx.writeFile({fileName:`${fileName}_ë„ë©´_${new Date().toISOString().slice(0,10)}.pptx`})
-      .then(()=>App.showToast('PPTX ë‹¤ìš´ë¡œë“œ ì™„ë£Œ'))
+    const fileName=selectedTitle||selectedTitle||'도면';
+    pptx.writeFile({fileName:`${fileName}_도면_${new Date().toISOString().slice(0,10)}.pptx`})
+      .then(()=>App.showToast('PPTX 다운로드 완료'))
       .catch(err=>{
-        console.error('PPTX ì €ìž¥ ì‹¤íŒ¨:',err);
-        App.showToast('PPTX ì €ìž¥ ì‹¤íŒ¨: '+err.message,'error');
+        console.error('PPTX 저장 실패:',err);
+        App.showToast('PPTX 저장 실패: '+err.message,'error');
       });
   }catch(e){
-    console.error('PPTX ìƒì„± ì‹¤íŒ¨:',e);
-    App.showToast('PPTX ìƒì„± ì‹¤íŒ¨: '+e.message,'error');
+    console.error('PPTX 생성 실패:',e);
+    App.showToast('PPTX 생성 실패: '+e.message,'error');
   }
 }
 
-// â•â•â• ì´ë¯¸ì§€ ë‹¤ìš´ë¡œë“œ (KIPO ê·œê²© JPEG/TIF) â•â•â•
+// ═══ 이미지 다운로드 (KIPO 규격 JPEG/TIF) ═══
 function downloadDiagramImages(sid, format='jpeg'){
   console.log('downloadDiagramImages called:', sid, format);
   
   let data=diagramData[sid];
   if(!data||!data.length){
     const mt=outputs[sid+'_mermaid'];
-    if(!mt){App.showToast('ë„ë©´ ì—†ìŒ','error');return;}
+    if(!mt){App.showToast('도면 없음','error');return;}
     const blocks=extractMermaidBlocks(mt);
-    if(!blocks.length){App.showToast('Mermaid ì½”ë“œ ì—†ìŒ','error');return;}
+    if(!blocks.length){App.showToast('Mermaid 코드 없음','error');return;}
     diagramData[sid]=blocks.map(code=>{
       const{nodes,edges}=parseMermaidGraph(code);
       return{nodes,edges,positions:layoutGraph(nodes,edges)};
@@ -3357,7 +3357,7 @@ function downloadDiagramImages(sid, format='jpeg'){
   }
   
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
-  const caseNum=selectedTitle||'ë„ë©´';
+  const caseNum=selectedTitle||'도면';
   
   function extractRefNum(label,fallback){
     const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
@@ -3367,17 +3367,17 @@ function downloadDiagramImages(sid, format='jpeg'){
   function isL1RefNum(ref){
     if(!ref||String(ref).startsWith('S'))return false;
     const s=String(ref);
-    // Dì ‘ë‘ì‚¬: D2â†’ìµœìƒìœ„, D21â†’í•˜ìœ„
+    // D접두사: D2→최상위, D21→하위
     if(s.startsWith('D')){const n=parseInt(s.slice(1));return !isNaN(n)&&n<10;}
     const num=parseInt(s);
     if(isNaN(num))return false;
-    // ì†Œìˆ˜(1~9): ìµœìƒìœ„
+    // 소수(1~9): 최상위
     if(num<10)return true;
-    // 2ìžë¦¬(10~99): í•˜ìœ„
+    // 2자리(10~99): 하위
     if(num<100)return false;
-    // 3ìžë¦¬: L1=X00
+    // 3자리: L1=X00
     if(num<1000)return num%100===0;
-    // 4ìžë¦¬: L4ì´ë¯€ë¡œ ì•„ë‹˜
+    // 4자리: L4이므로 아님
     return false;
   }
   
@@ -3412,34 +3412,34 @@ function downloadDiagramImages(sid, format='jpeg'){
     return null;
   }
   
-  App.showToast(`ë„ë©´ ì´ë¯¸ì§€ ìƒì„± ì¤‘... (${data.length}ê°œ)`);
+  App.showToast(`도면 이미지 생성 중... (${data.length}개)`);
   
-  // â˜… ZIP ì¼ê´„ ë‹¤ìš´ë¡œë“œ â˜…
+  // ★ ZIP 일괄 다운로드 ★
   const zip=typeof JSZip!=='undefined'?new JSZip():null;
   const imageFiles=[];
   let currentIdx=0;
   
   function processNext(){
     if(currentIdx>=data.length){
-      // ëª¨ë“  ì´ë¯¸ì§€ ìƒì„± ì™„ë£Œ â†’ ZIP ë‹¤ìš´ë¡œë“œ
+      // 모든 이미지 생성 완료 → ZIP 다운로드
       if(zip&&imageFiles.length>0){
         imageFiles.forEach(f=>zip.file(f.name,f.blob));
         zip.generateAsync({type:'blob'}).then(blob=>{
           const link=document.createElement('a');
-          link.download=`${caseNum}_ë„ë©´_${format==='tif'?'png':format}.zip`;
+          link.download=`${caseNum}_도면_${format==='tif'?'png':format}.zip`;
           link.href=URL.createObjectURL(blob);
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
           URL.revokeObjectURL(link.href);
-          App.showToast(`ë„ë©´ ${imageFiles.length}ê°œ ZIP ë‹¤ìš´ë¡œë“œ ì™„ë£Œ`);
+          App.showToast(`도면 ${imageFiles.length}개 ZIP 다운로드 완료`);
         }).catch(e=>{
-          App.showToast('ZIP ìƒì„± ì‹¤íŒ¨: '+e.message,'error');
-          // í´ë°±: ê°œë³„ ë‹¤ìš´ë¡œë“œ
+          App.showToast('ZIP 생성 실패: '+e.message,'error');
+          // 폴백: 개별 다운로드
           fallbackIndividualDownload();
         });
       }else{
-        // JSZip ì—†ìœ¼ë©´ ê°œë³„ ë‹¤ìš´ë¡œë“œ
+        // JSZip 없으면 개별 다운로드
         fallbackIndividualDownload();
       }
       return;
@@ -3449,29 +3449,29 @@ function downloadDiagramImages(sid, format='jpeg'){
     const figNum=figOffset+currentIdx+1;
     const hasEdges=edges&&edges.length>0;
     
-    // ìº”ë²„ìŠ¤ ìƒì„± (ìŠ¤ì¼€ì¼ ì—†ì´ ì§ì ‘ í¬ê¸° ì„¤ì •)
+    // 캔버스 생성 (스케일 없이 직접 크기 설정)
     const canvas=document.createElement('canvas');
     const W=800,H=1000;
     canvas.width=W;
     canvas.height=H;
     const ctx=canvas.getContext('2d');
     
-    // ë°°ê²½ í°ìƒ‰
+    // 배경 흰색
     ctx.fillStyle='#FFFFFF';
     ctx.fillRect(0,0,W,H);
     
-    // ë„ë©´ ë²ˆí˜¸
+    // 도면 번호
     ctx.fillStyle='#000000';
-    ctx.font='bold 16px "ë§‘ì€ ê³ ë”•", sans-serif';
-    ctx.fillText(`ë„ ${figNum}`,30,35);
+    ctx.font='bold 16px "맑은 고딕", sans-serif';
+    ctx.fillText(`도 ${figNum}`,30,35);
     
     if(nodes.length){
       const allRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
       const isMethodDiagram=allRefs.some(r=>String(r).startsWith('S'))||
-        nodes.some(n=>/ì‹œìž‘|ì¢…ë£Œ|START|END/i.test(n.label));
+        nodes.some(n=>/시작|종료|START|END/i.test(n.label));
       
       if(isMethodDiagram){
-        // â•â•â• ë°©ë²• ë„ë©´: íë¦„ë„ (SVGì™€ ë™ì¼ ìŠ¤íƒ€ì¼) â•â•â•
+        // ═══ 방법 도면: 흐름도 (SVG와 동일 스타일) ═══
         const nodeCount=nodes.length;
         const normalBoxW=620;
         const startEndBoxW=248; // 620*0.4, matching SVG ratio 2.0/5.0
@@ -3484,14 +3484,14 @@ function downloadDiagramImages(sid, format='jpeg'){
         nodes.forEach((n,i)=>{
           const refNum=extractRefNum(n.label,'');
           const cleanLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
-          const isStartEnd=/ì‹œìž‘|ì¢…ë£Œ|START|END/i.test(n.label);
+          const isStartEnd=/시작|종료|START|END/i.test(n.label);
           
-          // â˜… ì‹œìž‘/ì¢…ë£ŒëŠ” ì¶•ì†Œ í­, ëª¨ë“  ë°•ìŠ¤ ì¤‘ì•™ ì •ë ¬ â˜…
+          // ★ 시작/종료는 축소 폭, 모든 박스 중앙 정렬 ★
           const curBoxW=isStartEnd?startEndBoxW:normalBoxW;
           const bx=centerX-curBoxW/2;
           const by=boxStartY+i*(boxH+boxGap);
           
-          // ê·¸ë¦¼ìž (ì‹œìž‘/ì¢…ë£ŒëŠ” ë‘¥ê·¼ ê·¸ë¦¼ìž)
+          // 그림자 (시작/종료는 둥근 그림자)
           ctx.fillStyle='#000000';
           if(isStartEnd){
             const r=boxH/2;
@@ -3505,7 +3505,7 @@ function downloadDiagramImages(sid, format='jpeg'){
             ctx.fillRect(bx+SHADOW,by+SHADOW,curBoxW,boxH);
           }
           
-          // â˜… ì‹œìž‘/ì¢…ë£Œë„ í°ìƒ‰ ë°°ê²½ (SVGì™€ ì¼ì¹˜) â˜…
+          // ★ 시작/종료도 흰색 배경 (SVG와 일치) ★
           ctx.fillStyle='#FFFFFF';
           if(isStartEnd){
             const r=boxH/2;
@@ -3521,32 +3521,32 @@ function downloadDiagramImages(sid, format='jpeg'){
           }
           
           ctx.fillStyle='#000000';
-          ctx.font='13px "ë§‘ì€ ê³ ë”•", sans-serif';
+          ctx.font='13px "맑은 고딕", sans-serif';
           ctx.textAlign='center';
           ctx.fillText(cleanLabel,centerX,by+boxH/2+4);
           
-          // ë¦¬ë”ë¼ì¸ + ë¶€í˜¸ (ì‹œìž‘/ì¢…ë£Œ ì œì™¸)
+          // 리더라인 + 부호 (시작/종료 제외)
           if(refNum&&!isStartEnd){
             const leaderEndX=boxStartX+normalBoxW+20;
             ctx.textAlign='left';
             ctx.lineWidth=1;
             ctx.beginPath();ctx.moveTo(bx+curBoxW,by+boxH/2);ctx.lineTo(leaderEndX,by+boxH/2);ctx.stroke();
-            ctx.font='11px "ë§‘ì€ ê³ ë”•", sans-serif';
+            ctx.font='11px "맑은 고딕", sans-serif';
             ctx.fillText(String(refNum),leaderEndX+10,by+boxH/2+4);
           }
           
-          // â˜… ë‹¨ë°©í–¥ í™”ì‚´í‘œ: í•­ìƒ ì¤‘ì•™ì„  ì§ì„  â˜…
+          // ★ 단방향 화살표: 항상 중앙선 직선 ★
           if(i<nodes.length-1){
             const arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
             if(arrowY2>arrowY1){
               ctx.beginPath();ctx.moveTo(centerX,arrowY1);ctx.lineTo(centerX,arrowY2);ctx.lineWidth=1;ctx.stroke();
-              // ì•„ëž˜ìª½ í™”ì‚´ì´‰ë§Œ (ë‹¨ë°©í–¥)
+              // 아래쪽 화살촉만 (단방향)
               ctx.beginPath();ctx.moveTo(centerX-4,arrowY2-8);ctx.lineTo(centerX,arrowY2);ctx.lineTo(centerX+4,arrowY2-8);ctx.stroke();
             }
           }
         });
       }else{
-      // ê¸°ì¡´ ìž¥ì¹˜ ë„ë©´ ë¡œì§
+      // 기존 장치 도면 로직
       const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
       const isFig1=figNum===1||allL1;
       let frameRefNum=findImmediateParent(allRefs);
@@ -3556,10 +3556,10 @@ function downloadDiagramImages(sid, format='jpeg'){
       }
       if(!frameRefNum)frameRefNum=100;
       const nodeCount=nodes.length;
-      const SHADOW=4; // SVGì™€ ì¼ì¹˜
+      const SHADOW=4; // SVG와 일치
       
       if(isFig1){
-        // ë„ 1: ìµœì™¸ê³½ ë°•ìŠ¤ ì—†ìŒ
+        // 도 1: 최외곽 박스 없음
         const boxStartX=30,boxStartY=50;
         const boxW=620;
         const boxH=Math.min(55,(850-10*(nodeCount-1))/nodeCount);
@@ -3578,9 +3578,9 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.lineWidth=2;
           ctx.strokeRect(bx,by,boxW,boxH);
           
-          const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'â€¦':cleanLabel;
+          const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
           ctx.fillStyle='#000000';
-          ctx.font='13px "ë§‘ì€ ê³ ë”•", sans-serif';
+          ctx.font='13px "맑은 고딕", sans-serif';
           ctx.textAlign='center';
           ctx.textBaseline='middle';
           ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
@@ -3593,10 +3593,10 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.lineWidth=1;
           ctx.stroke();
           
-          ctx.font='11px "ë§‘ì€ ê³ ë”•", sans-serif';
+          ctx.font='11px "맑은 고딕", sans-serif';
           ctx.fillText(String(refNum),bx+boxW+30,by+boxH/2+4);
           
-          // â˜… ì–‘ë°©í–¥ í™”ì‚´í‘œ â€” í•­ìƒ ê·¸ë¦¬ê¸° (SVGì™€ ì¼ì¹˜) â˜…
+          // ★ 양방향 화살표 — 항상 그리기 (SVG와 일치) ★
           if(i<nodes.length-1){
             const arrowX=bx+boxW/2,arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
             if(arrowY2>arrowY1){
@@ -3619,9 +3619,9 @@ function downloadDiagramImages(sid, format='jpeg'){
           }
         });
       }else{
-        // ë„ 2+: ìµœì™¸ê³½ ë°•ìŠ¤ ìžˆìŒ
+        // 도 2+: 최외곽 박스 있음
         
-        // â˜… ìµœì™¸ê³½ í”„ë ˆìž„ê³¼ ë™ì¼í•œ ì°¸ì¡°ë²ˆí˜¸ ë…¸ë“œ ì œì™¸ â˜…
+        // ★ 최외곽 프레임과 동일한 참조번호 노드 제외 ★
         const innerNodes=nodes.filter(n=>{
           const ref=extractRefNum(n.label,'');
           if(!ref)return true;
@@ -3647,7 +3647,7 @@ function downloadDiagramImages(sid, format='jpeg'){
         ctx.lineWidth=1;
         ctx.stroke();
         
-        ctx.font='11px "ë§‘ì€ ê³ ë”•", sans-serif';
+        ctx.font='11px "맑은 고딕", sans-serif';
         ctx.fillStyle='#000000';
         ctx.fillText(String(frameRefNum),frameX+frameW+30,frameY+frameH/2+4);
         
@@ -3670,10 +3670,10 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.strokeRect(bx,by,boxW,boxH);
           
           ctx.fillStyle='#000000';
-          ctx.font='12px "ë§‘ì€ ê³ ë”•", sans-serif';
+          ctx.font='12px "맑은 고딕", sans-serif';
           ctx.textAlign='center';
           ctx.textBaseline='middle';
-          const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'â€¦':cleanLabel;
+          const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
           ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
           ctx.textAlign='left';
           ctx.textBaseline='alphabetic';
@@ -3684,7 +3684,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.lineWidth=1;
           ctx.stroke();
           
-          ctx.font='11px "ë§‘ì€ ê³ ë”•", sans-serif';
+          ctx.font='11px "맑은 고딕", sans-serif';
           ctx.fillText(String(refNum),frameX+frameW+30,by+boxH/2+4);
           
           if(hasEdges&&i<displayNodes.length-1){
@@ -3708,15 +3708,15 @@ function downloadDiagramImages(sid, format='jpeg'){
           }
         });
       }
-    } // end else (ìž¥ì¹˜ ë„ë©´)
+    } // end else (장치 도면)
     } // end if(nodes.length)
     
-    // ì´ë¯¸ì§€ë¥¼ ZIPì— ì¶”ê°€
+    // 이미지를 ZIP에 추가
     try{
       const ext=(format==='tif'||format==='tiff')?'png':(format==='jpeg'?'jpg':format);
       const mimeType=(format==='tif'||format==='tiff')?'image/png':`image/${format==='jpeg'?'jpeg':'png'}`;
       const quality=format==='jpeg'?0.95:undefined;
-      const fileName=`${caseNum}_ë„${figNum}.${ext}`;
+      const fileName=`${caseNum}_도${figNum}.${ext}`;
       
       canvas.toBlob(blob=>{
         if(blob){
@@ -3726,13 +3726,13 @@ function downloadDiagramImages(sid, format='jpeg'){
         setTimeout(processNext,50);
       },mimeType,quality);
     }catch(e){
-      console.error('ì´ë¯¸ì§€ ìƒì„± ì‹¤íŒ¨:',e);
+      console.error('이미지 생성 실패:',e);
       currentIdx++;
       setTimeout(processNext,50);
     }
   }
   
-  // í´ë°±: JSZip ì—†ì„ ë•Œ ê°œë³„ ë‹¤ìš´ë¡œë“œ
+  // 폴백: JSZip 없을 때 개별 다운로드
   function fallbackIndividualDownload(){
     imageFiles.forEach((f,i)=>{
       setTimeout(()=>{
@@ -3745,13 +3745,13 @@ function downloadDiagramImages(sid, format='jpeg'){
         URL.revokeObjectURL(link.href);
       },i*500);
     });
-    App.showToast(`ë„ë©´ ${imageFiles.length}ê°œ ê°œë³„ ë‹¤ìš´ë¡œë“œ`);
+    App.showToast(`도면 ${imageFiles.length}개 개별 다운로드`);
   }
   
   processNext();
 }
 
-// íŠ¹í—ˆ ë„ë©´ìš© ë ˆì´ì•„ì›ƒ ê³„ì‚° (A4 ì„¸ë¡œ)
+// 특허 도면용 레이아웃 계산 (A4 세로)
 function layoutGraphForPatent(nodes,edges){
   const positions={};
   const boxW=5.0, boxH=0.7, boxGap=1.0;
@@ -3769,9 +3769,9 @@ function layoutGraphForPatent(nodes,edges){
   });
   return positions;
 }
-function downloadPptxAll(){if(diagramData.step_07||outputs.step_07_mermaid)downloadPptx('step_07');else App.showToast('ë„ë©´ ì—†ìŒ','error');}
+function downloadPptxAll(){if(diagramData.step_07||outputs.step_07_mermaid)downloadPptx('step_07');else App.showToast('도면 없음','error');}
 
-// â•â•â•â•â•â•â•â•â•â•â• RENDERERS â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ RENDERERS ═══════════
 function renderOutput(sid,text){const cid=`result${sid.charAt(0).toUpperCase()+sid.slice(1).replace('_','')}`;const el=document.getElementById(cid);if(!el)return;if(sid==='step_01')renderTitleCards(el,text);else if(sid==='step_06'||sid==='step_10')renderClaimResult(el,sid,text);else renderEditableResult(el,sid,text);
 }
 function renderTitleCards(c,text){
@@ -3781,112 +3781,112 @@ function renderTitleCards(c,text){
     document.getElementById('titleConfirmArea').style.display='block';
     return;
   }
-  // ì„¸ë¡œ ë¦¬ìŠ¤íŠ¸ í˜•íƒœë¡œ í‘œì‹œ
+  // 세로 리스트 형태로 표시
   c.innerHTML='<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'+cs.map(x=>`<div class="title-candidate-row" onclick="selectTitle(this,\`${x.korean.replace(/\`/g,'')}\`,\`${x.english.replace(/\`/g,'')}\`)" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:2px solid var(--color-border);border-radius:10px;cursor:pointer;transition:all 0.15s;background:#fff" onmouseover="this.style.borderColor='var(--color-primary)';this.style.background='var(--color-primary-light)'" onmouseout="if(!this.classList.contains('selected')){this.style.borderColor='var(--color-border)';this.style.background='#fff'}"><div style="width:28px;height:28px;border-radius:50%;background:var(--color-primary-light);color:var(--color-primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${x.num}</div><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--color-text-primary)">${App.escapeHtml(x.korean)}</div><div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">${App.escapeHtml(x.english)}</div></div></div>`).join('')+'</div>';
   document.getElementById('titleConfirmArea').style.display='block';
 }
-function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">ì´ ì²­êµ¬í•­</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">ë…ë¦½í•­</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">ì¢…ì†í•­</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tossface">${i.severity==='CRITICAL'?'ðŸ”´':'ðŸŸ '}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tossface">âœ…</span>ëª¨ë“  ê²€ì¦ í†µê³¼</div>';h+=`<textarea class="result-textarea" rows="14" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
-function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral">${text.length.toLocaleString()}ìž</span></div><textarea class="result-textarea" rows="10" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
-function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tossface">âœ…</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}ìž</span></span><span class="arrow">â–¶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
+function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tossface">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tossface">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
+function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
+function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tossface">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
 function toggleAccordion(h){h.classList.toggle('open');const b=h.nextElementSibling;if(b)b.classList.toggle('open');}
 
-// â•â•â•â•â•â•â•â•â•â•â• VALIDATION (v4.9 â€” full claim chain + relaxed matching) â•â•â•â•â•â•â•â•â•â•â•
-const KILLER_WORDS=[{pattern:/ë°˜ë“œì‹œ/,msg:'"ë°˜ë“œì‹œ" â€” ì œí•œì  í‘œí˜„'},{pattern:/ì— í•œí•˜ì—¬/,msg:'"~ì— í•œí•˜ì—¬" â€” ì œí•œì  í‘œí˜„'},{pattern:/ì— í•œì •/,msg:'"~ì— í•œì •" â€” ì œí•œì  í‘œí˜„'},{pattern:/ì— ì œí•œ/,msg:'"~ì— ì œí•œ" â€” ì œí•œì  í‘œí˜„'},{pattern:/í•„ìˆ˜ì ìœ¼ë¡œ/,msg:'"í•„ìˆ˜ì ìœ¼ë¡œ" â€” ì œí•œì  í‘œí˜„'},{pattern:/ë¬´ì¡°ê±´/,msg:'"ë¬´ì¡°ê±´" â€” ì œí•œì  í‘œí˜„'},{pattern:/ì˜¤ì§/,msg:'"ì˜¤ì§" â€” ì œí•œì  í‘œí˜„'}];
-// v4.9: Get full text of claim chain (claim N â†’ references â†’ parent â†’ ... â†’ independent)
-// v5.1: Get ONLY cited claim chain text (follows "ì²­êµ¬í•­ Nì— ìžˆì–´ì„œ" references upward)
-// Does NOT include unrelated claims â€” only the direct citation path
+// ═══════════ VALIDATION (v4.9 — full claim chain + relaxed matching) ═══════════
+const KILLER_WORDS=[{pattern:/반드시/,msg:'"반드시" — 제한적 표현'},{pattern:/에 한하여/,msg:'"~에 한하여" — 제한적 표현'},{pattern:/에 한정/,msg:'"~에 한정" — 제한적 표현'},{pattern:/에 제한/,msg:'"~에 제한" — 제한적 표현'},{pattern:/필수적으로/,msg:'"필수적으로" — 제한적 표현'},{pattern:/무조건/,msg:'"무조건" — 제한적 표현'},{pattern:/오직/,msg:'"오직" — 제한적 표현'}];
+// v4.9: Get full text of claim chain (claim N → references → parent → ... → independent)
+// v5.1: Get ONLY cited claim chain text (follows "청구항 N에 있어서" references upward)
+// Does NOT include unrelated claims — only the direct citation path
 function getCitedChainText(claimNum, claims){
-  const rm=claims[claimNum]?.match(/ì²­êµ¬í•­\s*(\d+)ì—\s*ìžˆì–´ì„œ/);
+  const rm=claims[claimNum]?.match(/청구항\s*(\d+)에\s*있어서/);
   if(!rm)return '';
   let text='',current=parseInt(rm[1]);const visited=new Set();
   while(current&&!visited.has(current)){
     visited.add(current);
     if(claims[current])text+=' '+claims[current];
-    const rm2=claims[current]?.match(/ì²­êµ¬í•­\s*(\d+)ì—\s*ìžˆì–´ì„œ/);
+    const rm2=claims[current]?.match(/청구항\s*(\d+)에\s*있어서/);
     current=rm2?parseInt(rm2[1]):null;
   }
   return text;
 }
 function validateClaims(text){
-  const iss=[];if(!text)return iss;const cp=/ã€ì²­êµ¬í•­\s*(\d+)ã€‘\s*([\s\S]*?)(?=ã€ì²­êµ¬í•­\s*\d+ã€‘|$)/g,claims={};let m;
+  const iss=[];if(!text)return iss;const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,claims={};let m;
   while((m=cp.exec(text))!==null)claims[parseInt(m[1])]=m[2].trim();
-  if(!Object.keys(claims).length){iss.push({severity:'HIGH',message:'ì²­êµ¬í•­ íŒŒì‹± ì‹¤íŒ¨'});return iss;}
+  if(!Object.keys(claims).length){iss.push({severity:'HIGH',message:'청구항 파싱 실패'});return iss;}
   
-  // â˜… ë™ì  ë…ë¦½í•­ ê°ì§€: ê°€ìž¥ ìž‘ì€ ë²ˆí˜¸ê°€ ë…ë¦½í•­ â˜…
+  // ★ 동적 독립항 감지: 가장 작은 번호가 독립항 ★
   const claimNums=Object.keys(claims).map(Number).sort((a,b)=>a-b);
   const firstClaimNum=claimNums[0];
   
-  // ë…ë¦½í•­ íŒë³„: "Ní•­ì— ìžˆì–´ì„œ"ê°€ ì—†ëŠ” ì²­êµ¬í•­ = ë…ë¦½í•­
+  // 독립항 판별: "N항에 있어서"가 없는 청구항 = 독립항
   const independentClaims=claimNums.filter(n=>{
     const ct=claims[n];
-    return !/ì²­êµ¬í•­\s*\d+ì—\s*ìžˆì–´ì„œ/.test(ct)&&!/ì œ\s*\d+\s*í•­ì—\s*ìžˆì–´ì„œ/.test(ct);
+    return !/청구항\s*\d+에\s*있어서/.test(ct)&&!/제\s*\d+\s*항에\s*있어서/.test(ct);
   });
   
   if(independentClaims.length===0){
-    iss.push({severity:'CRITICAL',message:'ë…ë¦½í•­ ì—†ìŒ (ëª¨ë“  ì²­êµ¬í•­ì´ ì¢…ì†í•­)'});
+    iss.push({severity:'CRITICAL',message:'독립항 없음 (모든 청구항이 종속항)'});
   }
   
-  // ê° ì²­êµ¬í•­ì˜ ì¸ìš© ì •ë³´ ìˆ˜ì§‘ (ë‹¤ì¤‘ì¸ìš© ê²€ì¦ìš©)
+  // 각 청구항의 인용 정보 수집 (다중인용 검증용)
   const claimRefs={};
   Object.entries(claims).forEach(([num,ct])=>{
     const n=parseInt(num);
     const allCites=[];
-    // "ì²­êµ¬í•­ Nì— ìžˆì–´ì„œ" ë˜ëŠ” "ì œNí•­ ë˜ëŠ” ì œMí•­ì— ìžˆì–´ì„œ" ë“±
-    const citeMatches=ct.match(/(?:ì²­êµ¬í•­|ì œ)\s*(\d+)\s*(?:í•­)?/g)||[];
+    // "청구항 N에 있어서" 또는 "제N항 또는 제M항에 있어서" 등
+    const citeMatches=ct.match(/(?:청구항|제)\s*(\d+)\s*(?:항)?/g)||[];
     citeMatches.forEach(cm=>{const nm=cm.match(/(\d+)/);if(nm)allCites.push(parseInt(nm[1]));});
     claimRefs[n]={cites:[...new Set(allCites)].filter(c=>c!==n),isMultiCite:false};
-    // ë‹¤ì¤‘ì¸ìš© ê°ì§€: "ì œNí•­ ë˜ëŠ” ì œMí•­" ë˜ëŠ” "ì²­êµ¬í•­ N ë˜ëŠ” ì²­êµ¬í•­ M"
-    if(/(?:ì œ\s*\d+\s*í•­|ì²­êµ¬í•­\s*\d+)\s*(?:ë˜ëŠ”|ë‚´ì§€)\s*(?:ì œ\s*\d+\s*í•­|ì²­êµ¬í•­\s*\d+)/.test(ct)){
+    // 다중인용 감지: "제N항 또는 제M항" 또는 "청구항 N 또는 청구항 M"
+    if(/(?:제\s*\d+\s*항|청구항\s*\d+)\s*(?:또는|내지)\s*(?:제\s*\d+\s*항|청구항\s*\d+)/.test(ct)){
       claimRefs[n].isMultiCite=true;
     }
   });
   
   Object.entries(claims).forEach(([num,ct])=>{const n=parseInt(num);
-    // ì¢…ì†í•­ íŒë³„: "Ní•­ì— ìžˆì–´ì„œ" ì¡´ìž¬ ì—¬ë¶€
-    const isDependent=/ì²­êµ¬í•­\s*\d+ì—\s*ìžˆì–´ì„œ/.test(ct)||/ì œ\s*\d+\s*í•­ì—\s*ìžˆì–´ì„œ/.test(ct);
-    if(isDependent){const rm=ct.match(/ì²­êµ¬í•­\s*(\d+)ì—\s*ìžˆì–´ì„œ/)||ct.match(/ì œ\s*(\d+)\s*í•­ì—\s*ìžˆì–´ì„œ/),rn=rm?parseInt(rm[1]):firstClaimNum;
-      if(rm){if(!claims[rn])iss.push({severity:'HIGH',message:`ì²­êµ¬í•­ ${num}: ì°¸ì¡° ì²­êµ¬í•­ ${rn} ì—†ìŒ`});if(rn>=n)iss.push({severity:'HIGH',message:`ì²­êµ¬í•­ ${num}: ìžê¸°/í›„í–‰ ì²­êµ¬í•­ ì°¸ì¡°`});}
+    // 종속항 판별: "N항에 있어서" 존재 여부
+    const isDependent=/청구항\s*\d+에\s*있어서/.test(ct)||/제\s*\d+\s*항에\s*있어서/.test(ct);
+    if(isDependent){const rm=ct.match(/청구항\s*(\d+)에\s*있어서/)||ct.match(/제\s*(\d+)\s*항에\s*있어서/),rn=rm?parseInt(rm[1]):firstClaimNum;
+      if(rm){if(!claims[rn])iss.push({severity:'HIGH',message:`청구항 ${num}: 참조 청구항 ${rn} 없음`});if(rn>=n)iss.push({severity:'HIGH',message:`청구항 ${num}: 자기/후행 청구항 참조`});}
       
-      // â˜… ëŒ€í†µë ¹ë ¹ ì¢…ì†í•­ ê·œì¹™ ê²€ì¦ â˜…
+      // ★ 대통령령 종속항 규칙 검증 ★
       const refs=claimRefs[n];
       if(refs){
-        // â‘£ ë²ˆí˜¸ ì—­ì „ ê¸ˆì§€: ì¸ìš© í•­ì€ ìžì‹ ë³´ë‹¤ ì•žë²ˆí˜¸ì—¬ì•¼ í•¨
+        // ④ 번호 역전 금지: 인용 항은 자신보다 앞번호여야 함
         refs.cites.forEach(c=>{
-          if(c>=n)iss.push({severity:'HIGH',message:`ì²­êµ¬í•­ ${num}: ì²­êµ¬í•­ ${c}ë¥¼ ì¸ìš©í•˜ë‚˜ ë’¤ì— ìœ„ì¹˜ (ë²ˆí˜¸ ì—­ì „ ê¸ˆì§€)`});
+          if(c>=n)iss.push({severity:'HIGH',message:`청구항 ${num}: 청구항 ${c}를 인용하나 뒤에 위치 (번호 역전 금지)`});
         });
-        // â‘¢ ë‹¤ì¤‘ì¸ìš©ì˜ ë‹¤ì¤‘ì¸ìš© ê¸ˆì§€
+        // ③ 다중인용의 다중인용 금지
         if(refs.isMultiCite){
           refs.cites.forEach(c=>{
             if(claimRefs[c]&&claimRefs[c].isMultiCite){
-              iss.push({severity:'HIGH',message:`ì²­êµ¬í•­ ${num}: ë‹¤ì¤‘ì¸ìš© ì¢…ì†í•­(ì²­êµ¬í•­ ${c})ì„ ë‹¤ì‹œ ë‹¤ì¤‘ì¸ìš© â€” ëŒ€í†µë ¹ë ¹ ìœ„ë°˜`});
+              iss.push({severity:'HIGH',message:`청구항 ${num}: 다중인용 종속항(청구항 ${c})을 다시 다중인용 — 대통령령 위반`});
             }
           });
         }
       }
       
-      // v5.1: 2-step validation â€” "ì¸ìš©í•˜ëŠ” ì²­êµ¬í•­ë§Œ ê²€í† "
+      // v5.1: 2-step validation — "인용하는 청구항만 검토"
       const citedText=getCitedChainText(n, claims);
-      // selfClean: í˜„ìž¬ ì²­êµ¬í•­ì—ì„œ "ìƒê¸° ..." êµ¬ë¬¸ì„ í†µì§¸ë¡œ ì œê±° â†’ ë…ë¦½ ì •ì˜ ìš©ì–´ë§Œ ë‚¨ê¹€
-      const selfClean=ct.replace(/ìƒê¸°\s+[ê°€-íž£]+(?:\s[ê°€-íž£]+){0,3}/g,' ');
-      const srefs=ct.match(/ìƒê¸°\s+([ê°€-íž£]+(?:\s[ê°€-íž£]+){0,3})/g)||[];
-      srefs.forEach(ref=>{const raw=ref.replace(/^ìƒê¸°\s+/,''),cw=raw.split(/\s+/).slice(0,2).map(stripKoreanParticles).filter(w=>w.length>=2&&w!=='ìƒê¸°');if(!cw.length)return;
-        // Step 1: ì¸ìš© ì²­êµ¬í•­ ì²´ì¸ì—ì„œ í‚¤ì›Œë“œ ê²€ìƒ‰
+      // selfClean: 현재 청구항에서 "상기 ..." 구문을 통째로 제거 → 독립 정의 용어만 남김
+      const selfClean=ct.replace(/상기\s+[가-힣]+(?:\s[가-힣]+){0,3}/g,' ');
+      const srefs=ct.match(/상기\s+([가-힣]+(?:\s[가-힣]+){0,3})/g)||[];
+      srefs.forEach(ref=>{const raw=ref.replace(/^상기\s+/,''),cw=raw.split(/\s+/).slice(0,2).map(stripKoreanParticles).filter(w=>w.length>=2&&w!=='상기');if(!cw.length)return;
+        // Step 1: 인용 청구항 체인에서 키워드 검색
         const inCited=cw.filter(w=>citedText.includes(w)).length;
         if(inCited>0)return;
-        // Step 2: í˜„ìž¬ ì²­êµ¬í•­ ë‚´ ë…ë¦½ ì •ì˜ í™•ì¸ (ìƒê¸° êµ¬ë¬¸ ì œê±° í›„)
+        // Step 2: 현재 청구항 내 독립 정의 확인 (상기 구문 제거 후)
         const inSelf=cw.filter(w=>selfClean.includes(w)).length;
         if(inSelf>0)return;
-        // ì–‘ìª½ ëª¨ë‘ ì—†ìŒ â†’ ê¸°ìž¬ë¶ˆë¹„
-        iss.push({severity:'HIGH',message:`ì²­êµ¬í•­ ${num}: "ìƒê¸° ${raw}" â€” ì¸ìš© ì²­êµ¬í•­ ì²´ì¸ì— "${cw.join(', ')}" ì„ í–‰ê¸°ìž¬ ì—†ìŒ`});
+        // 양쪽 모두 없음 → 기재불비
+        iss.push({severity:'HIGH',message:`청구항 ${num}: "상기 ${raw}" — 인용 청구항 체인에 "${cw.join(', ')}" 선행기재 없음`});
       });}
-    KILLER_WORDS.forEach(kw=>{if(kw.pattern.test(ct))iss.push({severity:'HIGH',message:`ì²­êµ¬í•­ ${num}: ${kw.msg}`});});
+    KILLER_WORDS.forEach(kw=>{if(kw.pattern.test(ct))iss.push({severity:'HIGH',message:`청구항 ${num}: ${kw.msg}`});});
   });return iss;
 }
-function runValidation(){const all=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n');if(!all){App.showToast('ê²€ì¦í•  ì²­êµ¬í•­ì´ ì—†ì–´ìš”','error');return;}const iss=validateClaims(all),el=document.getElementById('validationResults');if(!iss.length){el.innerHTML='<div class="issue-item issue-pass"><span class="tossface">ðŸŽ‰</span>ëª¨ë“  ê²€ì¦ í†µê³¼</div>';return;}el.innerHTML=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tossface">${i.severity==='CRITICAL'?'ðŸ”´':'ðŸŸ '}</span>${App.escapeHtml(i.message)}</div>`).join('');}
+function runValidation(){const all=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n');if(!all){App.showToast('검증할 청구항이 없어요','error');return;}const iss=validateClaims(all),el=document.getElementById('validationResults');if(!iss.length){el.innerHTML='<div class="issue-item issue-pass"><span class="tossface">🎉</span>모든 검증 통과</div>';return;}el.innerHTML=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tossface">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');}
 
-// â•â•â•â•â•â•â•â•â•â•â• OUTPUT â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ OUTPUT ═══════════
 function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;document.getElementById('statCompleted').textContent=`${c}/19`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
-function renderPreview(){const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">ìƒì„±ëœ í•­ëª©ì´ ì—†ì–´ìš”</p>';return;}el.innerHTML=spec.split(/(?=ã€)/).map(s=>{const h=s.match(/ã€(.+?)ã€‘/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>ã€${App.escapeHtml(h[1])}ã€‘</span><span class="arrow">â–¶</span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('');}
+function renderPreview(){const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow">▶</span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('');}
 function buildSpecification(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
@@ -3897,29 +3897,29 @@ function buildSpecification(){
   const allClaims=[deviceClaims,methodClaims].filter(Boolean).join('\n\n');
   // Include step_14 (alternative claims) if available
   let extras='';
-  if(outputs.step_14)extras+='\n\n[ì°¸ê³ : ëŒ€ì•ˆ ì²­êµ¬í•­]\n'+outputs.step_14;
-  if(outputs.step_15)extras+='\n\n[ì°¸ê³ : íŠ¹í—ˆì„± ê²€í† ]\n'+outputs.step_15;
-  return['ã€ë°œëª…ì˜ ì„¤ëª…ã€‘',`ã€ë°œëª…ì˜ ëª…ì¹­ã€‘\n${titleLine}`,`ã€ê¸°ìˆ ë¶„ì•¼ã€‘\n${outputs.step_02||''}`,`ã€ë°œëª…ì˜ ë°°ê²½ì´ ë˜ëŠ” ê¸°ìˆ ã€‘\n${outputs.step_03||''}`,`ã€ì„ í–‰ê¸°ìˆ ë¬¸í—Œã€‘\n${outputs.step_04||''}`,'ã€ë°œëª…ì˜ ë‚´ìš©ã€‘',`ã€í•´ê²°í•˜ê³ ìž í•˜ëŠ” ê³¼ì œã€‘\n${outputs.step_05||''}`,`ã€ê³¼ì œì˜ í•´ê²° ìˆ˜ë‹¨ã€‘\n${outputs.step_17||''}`,`ã€ë°œëª…ì˜ íš¨ê³¼ã€‘\n${outputs.step_16||''}`,`ã€ë„ë©´ì˜ ê°„ë‹¨í•œ ì„¤ëª…ã€‘\n${brief||''}`,`ã€ë°œëª…ì„ ì‹¤ì‹œí•˜ê¸° ìœ„í•œ êµ¬ì²´ì ì¸ ë‚´ìš©ã€‘\n${desc}${outputs.step_12?'\n\n'+outputs.step_12:''}`,`ã€ë¶€í˜¸ì˜ ì„¤ëª…ã€‘\n${outputs.step_18||''}`,`ã€ì²­êµ¬ë²”ìœ„ã€‘\n${allClaims}`,`ã€ìš”ì•½ì„œã€‘\n${outputs.step_19||''}`].filter(Boolean).join('\n\n')+extras;
+  if(outputs.step_14)extras+='\n\n[참고: 대안 청구항]\n'+outputs.step_14;
+  if(outputs.step_15)extras+='\n\n[참고: 특허성 검토]\n'+outputs.step_15;
+  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${outputs.step_12?'\n\n'+outputs.step_12:''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${allClaims}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n')+extras;
 }
-function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('ë‚´ìš© ì—†ìŒ','error');return;}navigator.clipboard.writeText(t).then(()=>App.showToast('ë³µì‚¬ ì™„ë£Œ')).catch(()=>App.showToast('í´ë¦½ë³´ë“œ ì ‘ê·¼ ë¶ˆê°€','error'));}
-function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('ë‚´ìš© ì—†ìŒ','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`íŠ¹í—ˆëª…ì„¸ì„œ_${selectedTitle||'ì´ˆì•ˆ'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();}
+function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
+function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();}
 
 function downloadAsWord(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
   const allClaims=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n\n');
-  const secs=[{h:'ë°œëª…ì˜ ì„¤ëª…'},{h:'ë°œëª…ì˜ ëª…ì¹­',b:titleLine},{h:'ê¸°ìˆ ë¶„ì•¼',b:outputs.step_02},{h:'ë°œëª…ì˜ ë°°ê²½ì´ ë˜ëŠ” ê¸°ìˆ ',b:outputs.step_03},{h:'ì„ í–‰ê¸°ìˆ ë¬¸í—Œ',b:outputs.step_04},{h:'ë°œëª…ì˜ ë‚´ìš©'},{h:'í•´ê²°í•˜ê³ ìž í•˜ëŠ” ê³¼ì œ',b:outputs.step_05},{h:'ê³¼ì œì˜ í•´ê²° ìˆ˜ë‹¨',b:outputs.step_17},{h:'ë°œëª…ì˜ íš¨ê³¼',b:outputs.step_16},{h:'ë„ë©´ì˜ ê°„ë‹¨í•œ ì„¤ëª…',b:brief},{h:'ë°œëª…ì„ ì‹¤ì‹œí•˜ê¸° ìœ„í•œ êµ¬ì²´ì ì¸ ë‚´ìš©',b:[desc,outputs.step_12].filter(Boolean).join('\n\n')},{h:'ë¶€í˜¸ì˜ ì„¤ëª…',b:outputs.step_18},{h:'ì²­êµ¬ë²”ìœ„',b:allClaims},{h:'ìš”ì•½ì„œ',b:outputs.step_19}];
-  const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'ë°”íƒ•ì²´',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">ã€${App.escapeHtml(s.h)}ã€‘</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/ã€ìˆ˜í•™ì‹\s*\d+ã€‘/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'ë°”íƒ•ì²´',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
-  const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'ë°”íƒ•ì²´',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`íŠ¹í—ˆëª…ì„¸ì„œ_${selectedTitle||'ì´ˆì•ˆ'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();App.showToast('Word ë‹¤ìš´ë¡œë“œ ì™„ë£Œ');
+  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,outputs.step_12].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
+  const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
+  const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();App.showToast('Word 다운로드 완료');
 }
 
 
 // ★ KIPRIS 키 설정은 common.js saveProfileSettings()에서 통합 관리 (v5.4)
 
 
-// â•â•â•â•â•â•â•â•â•â•â• DASHBOARD HOOK + INIT â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════ DASHBOARD HOOK + INIT ═══════════
 App._onDashboard = function(){ loadDashboardProjects(); loadGlobalRefFromStorage(); };
 
 async function init(){
@@ -3927,7 +3927,7 @@ async function init(){
   const{data:{session}}=await App.sb.auth.getSession();
   if(session?.user)await onAuthSuccess(session.user);else App.showScreen('auth');
   App.sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT')App.showScreen('auth');});
-  // ë“œëž˜ê·¸ì¸ë“œë¡­ ì´ˆê¸°í™” (DOM ì¤€ë¹„ í›„)
+  // 드래그인드롭 초기화 (DOM 준비 후)
   setTimeout(setupDragDrop,500);
 }
 init();
