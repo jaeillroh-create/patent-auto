@@ -861,10 +861,10 @@
     const typeLabels = {
       text: '문자',
       figure: '도형',
-      combined: 'ê²°í•©',
+      combined: '결합',
       sound: '소리',
       color: '색채',
-      '3d': 'ìž…ì²´'
+      '3d': '입체'
     };
     
     const updatedAt = new Date(project.updated_at).toLocaleDateString('ko-KR');
@@ -1186,7 +1186,7 @@
           console.warn('[TM] 주기적 자동 저장 실패:', e);
         }
       }
-    }, 15000); // 15ì´ˆ
+    }, 15000); // 15초
   };
   
   TM.stopAutoSave = function() {
@@ -1214,7 +1214,7 @@
           console.warn('[TM] 디바운스 자동 저장 실패:', e);
         }
       }
-    }, 3000); // 3ì´ˆ
+    }, 3000); // 3초
   };
   
   // 변경 감지 및 자동 저장 트리거
@@ -1725,10 +1725,10 @@
                   ${[
                     {type: 'text', label: '문자'},
                     {type: 'figure', label: '도형'},
-                    {type: 'combined', label: 'ê²°í•©'},
+                    {type: 'combined', label: '결합'},
                     {type: 'sound', label: '소리'},
                     {type: 'color', label: '색채'},
-                    {type: '3d', label: 'ìž…ì²´'}
+                    {type: '3d', label: '입체'}
                   ].map(t => `
                     <label class="tm-chip ${p.trademarkType === t.type ? 'active' : ''}">
                       <input type="radio" name="trademarkType" value="${t.type}" 
@@ -1940,10 +1940,10 @@
     const labels = {
       text: '문자',
       figure: '도형',
-      combined: 'ê²°í•©',
+      combined: '결합',
       sound: '소리',
       color: '색채',
-      '3d': 'ìž…ì²´'
+      '3d': '입체'
     };
     return labels[type] || type;
   };
@@ -3752,7 +3752,7 @@
               <div class="input-group" style="flex: 1;">
                 <label>상태 필터</label>
                 <select class="tm-input" id="tm-search-status">
-                  <option value="all">ì "ì²´</option>
+                  <option value="all">전체</option>
                   <option value="registered" selected>등록/출원</option>
                   <option value="registered_only">등록만</option>
                 </select>
@@ -3903,7 +3903,7 @@
       if (previewClasses) previewClasses.textContent = '직접 입력';
     } else if (mode === 'all') {
       if (customGroup) customGroup.style.display = 'none';
-      if (previewClasses) previewClasses.textContent = 'ì "ì²´';
+      if (previewClasses) previewClasses.textContent = '전체';
     } else {
       if (customGroup) customGroup.style.display = 'none';
       // 선택된 상품류 표시
@@ -4059,7 +4059,7 @@
       if (riskLevel === 'critical' || riskLevel === 'high') {
         riskClass = 'risk-high';
         riskBadge = '고위험';
-        riskIcon = 'â›"';
+        riskIcon = '⛔';
       } else if (riskLevel === 'medium') {
         riskClass = 'risk-medium';
         riskBadge = '주의';
@@ -4213,8 +4213,8 @@
         viennaCodes: p.aiAnalysis.viennaCodeSuggestion?.map(v => v.code) || [],
         targetClasses: targetClasses,
         targetGroups: targetGroups,
-        similarityCode: targetGroups.length > 0 ? targetGroups[0] : null, // KIPRIS APIìš©
-        classification: targetClasses.length > 0 ? targetClasses[0] : null, // KIPRIS APIìš©
+        similarityCode: targetGroups.length > 0 ? targetGroups[0] : null, // KIPRIS API용
+        classification: targetClasses.length > 0 ? targetClasses[0] : null, // KIPRIS API용
         statusFilter: statusFilter,
         topK: 30,
         fetchDetails: true,
@@ -5204,7 +5204,7 @@
     
     console.log('[KIPRIS] ═══════════════════════════════════════');
     console.log('[KIPRIS] 선행상표 검색 시작');
-    console.log('[KIPRIS] ìž…ë ¥:', { trademark, viennaCodes, targetClasses: targetClasses.length, targetGroups: targetGroups.length, classification, similarityCode });
+    console.log('[KIPRIS] 입력:', { trademark, viennaCodes, targetClasses: targetClasses.length, targetGroups: targetGroups.length, classification, similarityCode });
     console.log('[KIPRIS] ═══════════════════════════════════════');
     
     try {
@@ -6803,13 +6803,13 @@ ${criticalResults.slice(0, 5).map(r =>
       logger: m => {
         if (m.status === 'recognizing text') {
           const pct = Math.round(m.progress * 100);
-          console.log('[TM] OCR ì§"í–‰:', pct + '%');
+          console.log('[TM] OCR 진행:', pct + '%');
         }
       }
     });
     
     fullText = result.data.text;
-    console.log('[TM] OCR ê²°ê³¼:', fullText.substring(0, 500));
+    console.log('[TM] OCR 결과:', fullText.substring(0, 500));
     
     return fullText;
   };
@@ -8561,7 +8561,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
               dCell('누락된 류 또는 상품이 있는지', 2368),
             ] }),
             new TableRow({ children: [
-              lCell('ê²°ê³¼', 2400),
+              lCell('결과', 2400),
               dCell(validation.invalidClasses?.length ? `${validation.invalidClasses.length}건 부적합` : '적합', 2369, { color: validation.invalidClasses?.length ? C.danger : C.success }),
               dCell(validation.invalidGoods?.length ? `${validation.invalidGoods.length}건 보정` : '적합', 2369, { color: validation.invalidGoods?.length ? C.warning : C.success }),
               dCell(validation.missingClasses?.length ? `${validation.missingClasses.length}건 추가 권장` : '누락 없음', 2368, { color: validation.missingClasses?.length ? C.accent : C.success }),
@@ -8585,9 +8585,9 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
           children.push(new Table({ width: { size: TABLE_W, type: WidthType.DXA }, columnWidths: [1200, 8306], rows: icRows }));
         }
         
-        // ë³´ì • ë'´ì—­
+        // 보정 내역
         if (validation.invalidGoods?.length > 0 || validation.replacementGoods?.length > 0) {
-          children.push(subHead('ë³´ì • ë'´ì—­'));
+          children.push(subHead('보정 내역'));
           const igRows = [new TableRow({ children: [ hCell('류', 1000), hCell('제거 상품', 3203), hCell('대체 상품', 3203), hCell('사유', 2100) ] })];
           
           (validation.replacementGoods || []).forEach(r => {
@@ -8630,7 +8630,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
           validation.warnings.forEach(w => {
             children.push(noteBox(
               `제${w.class}류: ${w.message}`,
-              { prefix: 'âš  ', bg: C.lightYellow }
+              { prefix: '⚠ ', bg: C.lightYellow }
             ));
           });
         }
@@ -8825,7 +8825,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       children.push(new Paragraph({
         border: { top: { style: BorderStyle.SINGLE, size: 2, color: C.tableBorder, space: 12 } },
         spacing: { before: 200, after: 80 },
-        children: [new TextRun({ text: 'ë©´ì±…ì¡°í•­ (Disclaimer)', font: 'Arial', size: 20, bold: true, color: C.primary })]
+        children: [new TextRun({ text: '면책조항 (Disclaimer)', font: 'Arial', size: 20, bold: true, color: C.primary })]
       }));
       
       const disclaimers = [
@@ -9517,7 +9517,7 @@ ${TM.PRACTICE_GUIDELINES}
               const kwLower = keyword.toLowerCase();
               let priority = 2;
               
-              if (nameLower === kwLower || nameLower === kwLower + 'ì—…') {
+              if (nameLower === kwLower || nameLower === kwLower + '업') {
                 priority = 0;
               } else if (nameLower.startsWith(kwLower)) {
                 priority = 1;
@@ -9604,7 +9604,7 @@ ${TM.PRACTICE_GUIDELINES}
         
         // 직접 매칭
         if (nameLower.includes(termLower) || 
-            nameLower === termLower + 'ì—…' ||
+            nameLower === termLower + '업' ||
             nameLower === termLower + '서비스업') {
           
           console.log(`[TM] ★ 직접 매칭: "${term}" → "${c.name}"`);
@@ -10960,7 +10960,7 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
               
               // 우선순위 계산: 직접 매칭 > 시작 매칭 > 포함 매칭
               let priority = 3;
-              if (nameLower === kwLower || nameLower === kwLower + 'ì—…') {
+              if (nameLower === kwLower || nameLower === kwLower + '업') {
                 priority = 0; // 최우선 (변리 → 변리업)
               } else if (nameLower.startsWith(kwLower)) {
                 priority = 1; // 시작 매칭
@@ -11085,10 +11085,10 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
         
         // 완전 일치 또는 "키워드+업" 패턴 (변리 → 변리업)
         if (nameLower === kwLower || 
-            nameLower === kwLower + 'ì—…' ||
+            nameLower === kwLower + '업' ||
             nameLower === kwLower + '사업' ||
             nameLower.startsWith(kwLower + ' ') ||
-            nameLower.startsWith(kwLower + 'ì—…') ||
+            nameLower.startsWith(kwLower + '업') ||
             (nameLower.includes(kwLower) && nameLower.length <= kwLower.length + 5)) {
           
           console.log(`[TM] ★ 직접 매칭: "${keyword}" → "${c.name}"`);
@@ -11353,7 +11353,7 @@ ${numberedList}
       const serviceEndings = ['서비스', '제공', '중개', '대행', '컨설팅', '교육', '판매', '개발'];
       for (const ending of serviceEndings) {
         if (term.endsWith(ending)) {
-          term = term + 'ì—…';
+          term = term + '업';
           break;
         }
       }
