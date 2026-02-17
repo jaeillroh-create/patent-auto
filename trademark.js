@@ -3239,7 +3239,7 @@
   ]
 }`;
 
-      const response = await App.callClaude(additionalPrompt, 2000);
+      const response = await App.callClaudeSonnet(additionalPrompt, 2000);
       const text = response.text || '';
       const startIdx = text.indexOf('{');
       const endIdx = text.lastIndexOf('}');
@@ -5694,7 +5694,7 @@
   "notes": "평가 근거 설명"
 }`;
 
-      const response = await App.callClaude(prompt, 1000);
+      const response = await App.callClaudeSonnet(prompt, 1000);
       
       // JSON 파싱
       const jsonMatch = response.text.match(/\{[\s\S]*\}/);
@@ -5831,7 +5831,7 @@ notes는 평가 근거를 3-4문장으로 서술.
   "notes": "외관: ... 호칭: ... 관념: ... 종합판단: ..."
 }`;
 
-    const response = await App.callClaude(prompt, 1000);
+    const response = await App.callClaudeSonnet(prompt, 1000);
     const jsonMatch = response.text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('AI 응답 파싱 실패');
     
@@ -6138,7 +6138,7 @@ ${criticalResults.slice(0, 5).map(r =>
   "recommendation": "권고사항..."
 }`;
 
-      const response = await App.callClaude(prompt, 1500);
+      const response = await App.callClaudeSonnet(prompt, 1500);
       
       const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -6851,7 +6851,7 @@ ${text.substring(0, 2000)}
 
 찾을 수 없는 항목은 빈 문자열("")로 설정하세요. JSON만 응답하세요.`;
 
-      const response = await App.callClaude(prompt, 800);
+      const response = await App.callClaudeSonnet(prompt, 800);
       const responseText = response.text || '';
       
       console.log('[TM] Claude 응답:', responseText);
@@ -7292,7 +7292,7 @@ ${content.substring(0, 1200)}
 파일 내용을 분석하여 적절한 증빙자료명을 한 줄로 응답하세요.
 파일번호나 코드(예: 005-0001)는 제외하고 내용 중심으로 작성하세요.`;
 
-      const response = await App.callClaude(prompt, 80);
+      const response = await App.callClaudeSonnet(prompt, 80);
       let title = (response.text || '').trim();
       
       // 응답 정리
@@ -7994,7 +7994,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
 
 한국 특허청 형식에 맞게 공식적이고 설득력 있는 문체로 작성하세요.`;
 
-      const response = await App.callClaude(prompt, 2000);
+      const response = await App.callClaudeSonnet(prompt, 2000);
       
       pe.generatedDocument = response.text;
       TM.renderCurrentStep();
@@ -9189,7 +9189,8 @@ ${TM.PRACTICE_GUIDELINES}
       if (btn) btn.innerHTML = '<span class="tossface">⏳</span> 사업 분석 중...';
       
       console.log('[TM] LLM 기반 사업 분석 시작');
-      const analysisResponse = await App.callClaude(analysisPrompt, 4000);
+      // ★ Sonnet 직접 호출 (WithFallback은 Opus→Sonnet 이중 호출로 529 악화)
+      const analysisResponse = await App.callClaudeSonnet(analysisPrompt, 4000);
       const text = analysisResponse.text || '';
       const startIdx = text.indexOf('{');
       const endIdx = text.lastIndexOf('}');
@@ -9279,16 +9280,17 @@ ${TM.PRACTICE_GUIDELINES}
       
       for (const classCode of initialClasses) {
         if (!p.aiAnalysis) { console.error('[TM] aiAnalysis가 null — 루프 중단'); break; }
-        // ★ 류 간 1초 딜레이 (API 부하 분산)
+        // ★ 류 간 1.5초 딜레이 (API 부하 분산)
         if (initialClasses.indexOf(classCode) > 0) {
-          await new Promise(r => setTimeout(r, 1000));
+          await new Promise(r => setTimeout(r, 1500));
         }
         const paddedCode = classCode.padStart(2, '0');
         
         try {
           if (btn) btn.innerHTML = `<span class="tossface">⏳</span> 제${classCode}류 분석 중...`;
           
-          // ★ 개선: 원샷 방식 (DB 전체 조회 → LLM 1회 선택)
+          // ★★★ 핵심 개선: 류당 API 1회만 호출 ★★★
+          // 1. DB에서 후보 조회 (API 호출 X)
           const businessCtx = {
             summary: businessInput || analysis.businessSummary || '',
             coreProducts: analysis.coreProducts || [],
@@ -9299,114 +9301,67 @@ ${TM.PRACTICE_GUIDELINES}
           };
           
           const fetchResult = await TM.fetchAllCandidates(classCode, businessCtx);
-          let selectedGoods = null;
+          let selectedGoods = [];
           
           if (fetchResult && fetchResult.candidates.length > 0) {
             console.log(`[TM] 제${classCode}류 후보: ${fetchResult.candidates.length}건 (${fetchResult.strategy})`);
-            selectedGoods = await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessCtx);
-          }
-          
-          // ★ 원샷 실패 시 → 기존 방식 fallback
-          if (!selectedGoods || selectedGoods.length < 10) {
-            console.log(`[TM] 제${classCode}류 원샷 ${selectedGoods ? selectedGoods.length + '개' : '실패'} → fallback`);
             
-            const candidates = await TM.fetchOptimalCandidates(paddedCode, allKeywords, analysis);
-            console.log(`[TM] 제${classCode}류 fallback 후보: ${candidates.length}건`);
-            
-            if (candidates.length === 0) {
-              // DB에도 없으면 LLM 직접 생성
-              console.log(`[TM] 제${classCode}류 DB 후보 없음 → LLM 생성`);
-              let llmGoods = [];
-              try {
-                const genPrompt = `당신은 상표 출원 전문 변리사입니다.
-제${classCode}류의 고시명칭(지정상품/서비스) 중에서 아래 사업과 관련된 것을 정확히 10개 추천하세요.
-
-【사업 내용】
-"${businessInput}"
-
-【규칙】
-- 반드시 특허청 고시명칭에 해당하는 정확한 명칭만 사용
-- 해당 류에 실제 존재하는 지정상품/서비스만 기재
-- JSON 배열로만 응답
-
-["상품명1", "상품명2", ..., "상품명10"]`;
-                const genResponse = await App.callClaude(genPrompt, 500);
-                const genText = (genResponse.text || '').trim();
-                const nameArray = JSON.parse(genText.match(/\[[\s\S]*\]/)?.[0] || '[]');
-                llmGoods = nameArray.slice(0, 10).map(name => ({
-                  name, similarGroup: '', isCore: false, isLlmGenerated: true
-                }));
-              } catch (genErr) {
-                console.warn(`[TM] 제${classCode}류 LLM 생성 실패:`, genErr.message);
+            // 2. LLM으로 최적 10개 선택 (API 1회 - 유일한 호출)
+            try {
+              const oneshotResult = await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessCtx);
+              if (oneshotResult && oneshotResult.length > 0) {
+                selectedGoods = oneshotResult;
               }
-              p.aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(classCode, llmGoods, businessInput);
-              continue;
+            } catch (oneshotErr) {
+              console.warn(`[TM] 제${classCode}류 LLM 선택 실패:`, oneshotErr.message);
             }
             
-            const fbGoods = await TM.selectOptimalGoods(classCode, candidates, businessInput, analysis);
-            // 원샷 결과가 있으면 합치고, 없으면 fallback만 사용
-            if (selectedGoods && selectedGoods.length > 0) {
-              const merged = [...selectedGoods];
-              const mergedNames = new Set(merged.map(g => g.name));
-              for (const g of fbGoods) {
-                if (merged.length >= 10) break;
-                if (!mergedNames.has(g.name)) {
-                  mergedNames.add(g.name);
-                  merged.push(g);
-                }
+            // 3. 부족분은 DB 후보로 패딩 (API 호출 X)
+            if (selectedGoods.length < 10) {
+              console.log(`[TM] 제${classCode}류 ${selectedGoods.length}개 → DB 패딩으로 보충`);
+              const usedNames = new Set(selectedGoods.map(g => g.name));
+              for (const c of fetchResult.candidates) {
+                if (selectedGoods.length >= 10) break;
+                if (usedNames.has(c.name)) continue;
+                usedNames.add(c.name);
+                selectedGoods.push({
+                  name: c.name,
+                  similarGroup: c.similarGroup || '',
+                  isCore: false
+                });
               }
-              selectedGoods = merged;
-            } else {
-              selectedGoods = fbGoods;
+            }
+          } else {
+            // DB 후보가 아예 없는 경우만 LLM 생성 (드문 케이스)
+            console.log(`[TM] 제${classCode}류 DB 후보 없음 → LLM 생성`);
+            try {
+              const genPrompt = `제${classCode}류의 고시명칭(지정상품/서비스) 중 아래 사업 관련 10개를 JSON 배열로만 응답.\n사업: "${businessInput}"\n["상품명1", "상품명2", ..., "상품명10"]`;
+              const genResponse = await App.callClaudeSonnet(genPrompt, 500);
+              const nameArray = JSON.parse((genResponse.text || '').match(/\[[\s\S]*\]/)?.[0] || '[]');
+              selectedGoods = nameArray.slice(0, 10).map(name => ({
+                name, similarGroup: '', isCore: false, isLlmGenerated: true
+              }));
+            } catch (genErr) {
+              console.warn(`[TM] 제${classCode}류 LLM 생성 실패:`, genErr.message);
             }
           }
           
           p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
-          
-          // ★ 10개 보장
-          p.aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(
-            classCode, p.aiAnalysis.recommendedGoods[classCode], businessInput
-          );
-          
-          const finalCount = p.aiAnalysis.recommendedGoods[classCode].length;
-          console.log(`[TM] 제${classCode}류 최종: ${finalCount}건`);
-          if (finalCount > 0) {
-            console.log(`[TM]   → ${p.aiAnalysis.recommendedGoods[classCode].slice(0, 3).map(s => s.name).join(', ')}...`);
+          console.log(`[TM] 제${classCode}류 최종: ${selectedGoods.length}건`);
+          if (selectedGoods.length > 0) {
+            console.log(`[TM]   → ${selectedGoods.slice(0, 3).map(s => s.name).join(', ')}...`);
           }
           
         } catch (classError) {
           console.error(`[TM] 제${classCode}류 처리 실패:`, classError);
-          try {
-            p.aiAnalysis.recommendedGoods[classCode] = await TM.ensureMinGoods(classCode, [], businessInput);
-            console.log(`[TM] 제${classCode}류 에러 복구: ${p.aiAnalysis.recommendedGoods[classCode].length}개`);
-          } catch (e) {
-            p.aiAnalysis.recommendedGoods[classCode] = [];
-          }
+          p.aiAnalysis.recommendedGoods[classCode] = [];
         }
       }
-      
       // ================================================================
-      // 4단계: 추천 결과 2단계 통합 검증 (V2)
+      // ★ 검증은 자동 실행하지 않음 (API 호출 절약)
+      // → 사용자가 Step 2에서 "검증" 버튼으로 수동 실행
       // ================================================================
-      if (btn) btn.innerHTML = '<span class="tossface">🔍</span> 검증 중...';
-      
-      if (!p.aiAnalysis) {
-        console.warn('[TM] aiAnalysis가 null — 검증 건너뜀');
-      } else {
-        const validationResult = await TM.validateRecommendationsV2(businessInput, p.aiAnalysis);
-      
-        if (validationResult && p.aiAnalysis) {
-          p.aiAnalysis.validation = validationResult;
-        
-          // 검증 결과 적용 (잘못된 항목 제거 + 대체 추천)
-          if (validationResult.hasIssues) {
-            if (btn) btn.innerHTML = '<span class="tossface">🔧</span> 검증 결과 적용 중...';
-            await TM.applyValidationResult(p.aiAnalysis, validationResult);
-          }
-        
-          console.log('[TM] ✅ 검증 완료');
-        }
-      }
+      console.log('[TM] ✅ 분석 완료 (검증은 Step 2에서 수동 실행)');
       
       TM.renderCurrentStep();
       App.showToast('사업 분석 완료!', 'success');
@@ -9687,7 +9642,7 @@ ${numberedList}
 선택:`;
 
         try {
-          const response = await App.callClaude(selectPrompt, 200);
+          const response = await App.callClaudeSonnet(selectPrompt, 200);
           const responseText = (response.text || '').trim();
           
           console.log(`[TM] LLM 응답: "${responseText.substring(0, 80)}..."`);
@@ -9817,7 +9772,7 @@ ${numberedList}
 이미 선택됨: ${existingList}
 위 목록과 중복되지 않는 것만 추천.
 JSON 배열로만 응답: ["상품명1", "상품명2"]`;
-        const resp = await App.callClaude(genPrompt, 300);
+        const resp = await App.callClaudeSonnet(genPrompt, 300);
         const arr = JSON.parse((resp.text || '').match(/\[[\s\S]*\]/)?.[0] || '[]');
         for (const name of arr) {
           if (currentGoods.length >= MIN) break;
@@ -10134,7 +10089,7 @@ ${allClasses.map(c => `- 제${c.class}류: ${c.reason}`).join('\n')}
 }
 누락이 없으면 missingClasses: []로 응답.`;
 
-      const classResponse = await App.callClaude(classPrompt, 3000);
+      const classResponse = await App.callClaudeSonnet(classPrompt, 3000);
       const classResult = TM.safeJsonParse(classResponse.text);
       
       validationResult.stages.classValidation = classResult;
@@ -10228,7 +10183,7 @@ ${allGoodsList}
 }
 모두 적합하면 invalidGoods: [], suggestedReplacements: []로 응답.`;
 
-        const goodsResponse = await App.callClaude(goodsPrompt, 4000);
+        const goodsResponse = await App.callClaudeSonnet(goodsPrompt, 4000);
         const goodsResult = TM.safeJsonParse(goodsResponse.text);
         
         validationResult.stages.goodsValidation = goodsResult;
@@ -10283,7 +10238,7 @@ ${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
 【JSON으로만 응답 — 15자 이내】
 {"validGoods":[{"name":"...","score":95,"comment":"..."}],"invalidGoods":[{"name":"...","score":5,"reason":"...","errorType":"homonym"}],"suggestedReplacements":[]}`;
             
-            const resp = await App.callClaude(indivPrompt, 2000);
+            const resp = await App.callClaudeSonnet(indivPrompt, 2000);
             const result = TM.safeJsonParse(resp.text);
             if (result.invalidGoods?.length > 0) {
               validationResult.hasIssues = true;
@@ -10415,7 +10370,7 @@ ${targetList}
   ...
 ]`;
 
-    const response = await App.callClaude(prompt, 3000);
+    const response = await App.callClaudeSonnet(prompt, 3000);
     const text = (response.text || '').trim();
     
     const arrayMatch = text.match(/\[[\s\S]*\]/);
@@ -10531,13 +10486,13 @@ ${allClasses.map(c => `- 제${c.class}류: ${c.reason}`).join('\n')}
   "classScoreAvg": 85
 }`;
 
-      const classResponse = await App.callClaude(classValidationPrompt, 2000);
+      const classResponse = await App.callClaudeSonnet(classValidationPrompt, 2000);
       
       // max_tokens 초과 시 재시도 (더 큰 토큰으로)
       let classText = classResponse.text;
       if (classResponse.stopReason === 'max_tokens') {
         console.warn('[TM] 1단계 검증 응답 잘림, 재시도...');
-        const retryResponse = await App.callClaude(classValidationPrompt + '\n\n★ 반드시 comment/reason을 10자 이내로 극도로 간결하게 작성하세요.', 3000);
+        const retryResponse = await App.callClaudeSonnet(classValidationPrompt + '\n\n★ 반드시 comment/reason을 10자 이내로 극도로 간결하게 작성하세요.', 3000);
         classText = retryResponse.text;
       }
       
@@ -10605,13 +10560,13 @@ ${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
   ]
 }`;
 
-        const goodsResponse = await App.callClaude(goodsValidationPrompt, 2000);
+        const goodsResponse = await App.callClaudeSonnet(goodsValidationPrompt, 2000);
         
         // max_tokens 초과 시 재시도
         let goodsText = goodsResponse.text;
         if (goodsResponse.stopReason === 'max_tokens') {
           console.warn(`[TM] 제${classCode}류 검증 응답 잘림, 재시도...`);
-          const retryResponse = await App.callClaude(goodsValidationPrompt + '\n\n★ 반드시 comment/reason을 10자 이내로 극도로 간결하게 작성하세요. suggestedReplacements는 생략 가능.', 3000);
+          const retryResponse = await App.callClaudeSonnet(goodsValidationPrompt + '\n\n★ 반드시 comment/reason을 10자 이내로 극도로 간결하게 작성하세요. suggestedReplacements는 생략 가능.', 3000);
           goodsText = retryResponse.text;
         }
         
@@ -10686,13 +10641,13 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
 누락이 없으면 isSufficient: true, missingClasses: [], missingGoods: []로 응답하세요.
 ★ reason/comment는 15자 이내로 간결하게 작성하세요.`;
 
-      const missingResponse = await App.callClaude(missingReviewPrompt, 1500);
+      const missingResponse = await App.callClaudeSonnet(missingReviewPrompt, 1500);
       
       // max_tokens 초과 시 재시도
       let missingText = missingResponse.text;
       if (missingResponse.stopReason === 'max_tokens') {
         console.warn('[TM] 3단계 검증 응답 잘림, 재시도...');
-        const retryResponse = await App.callClaude(missingReviewPrompt + '\n\n★ 극도로 간결하게 응답. reason 10자 이내.', 2500);
+        const retryResponse = await App.callClaudeSonnet(missingReviewPrompt + '\n\n★ 극도로 간결하게 응답. reason 10자 이내.', 2500);
         missingText = retryResponse.text;
       }
       
@@ -11183,7 +11138,7 @@ ${numberedList}
 선택:`;
 
       try {
-        const response = await App.callClaude(selectPrompt, 200);
+        const response = await App.callClaudeSonnet(selectPrompt, 200);
         const responseText = (response.text || '').trim();
         
         console.log(`[TM] LLM 응답: "${responseText.substring(0, 80)}..."`);
@@ -11727,7 +11682,7 @@ JSON 형식으로 응답하세요:
 }`;
       }
       
-      const response = await App.callClaude(prompt, 800);
+      const response = await App.callClaudeSonnet(prompt, 800);
       
       const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -11780,7 +11735,7 @@ JSON 형식:
   ]
 }`;
 
-      const response = await App.callClaude(prompt, 800);
+      const response = await App.callClaudeSonnet(prompt, 800);
       
       const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -11826,7 +11781,7 @@ JSON 형식:
 
 텍스트로만 응답하세요 (JSON 형식 불필요).`;
 
-      const response = await App.callClaude(prompt, 300);
+      const response = await App.callClaudeSonnet(prompt, 300);
       return response.text.trim();
       
     } catch (error) {
@@ -11875,7 +11830,7 @@ ${goodsList}
 
 공식적이고 정확한 문체로 작성하세요.`;
 
-      const response = await App.callClaude(prompt, 1500);
+      const response = await App.callClaudeSonnet(prompt, 1500);
       return response;
       
     } catch (error) {
@@ -11923,7 +11878,7 @@ ${p.designatedGoods?.map(c => `제${c.classCode}류: ${c.goods.length}개 상품
 
 전문적이고 명확한 문체로 작성하세요.`;
 
-      const response = await App.callClaude(prompt, 2000);
+      const response = await App.callClaudeSonnet(prompt, 2000);
       
       p.aiAnalysis.fullReport = response.text;
       App.showToast('보고서가 생성되었습니다.', 'success');

@@ -239,6 +239,19 @@ function isCircuitOpen() {
 function recordApiSuccess() { apiCircuit.failures = 0; }
 function recordApiFailure() { apiCircuit.failures++; apiCircuit.lastFailTime = Date.now(); }
 
+// ═══ Opus → Sonnet Auto-Fallback ═══
+async function callClaudeWithFallback(prompt, maxTokens=8192) {
+  try {
+    return await callClaude(prompt, maxTokens);
+  } catch (e) {
+    if (/과부하|529|서버 오류|overload|API 과부하 감지/i.test(e.message)) {
+      console.warn('[API] Opus 실패 → Sonnet 자동 전환:', e.message);
+      return await callClaudeSonnet(prompt, maxTokens);
+    }
+    throw e; // 인증 오류 등은 그대로 throw
+  }
+}
+
 async function callClaude(prompt,maxTokens=8192){
   if(!ensureApiKey()){openProfileSettings();throw new Error('API Key를 먼저 입력해 주세요');}
   if(isCircuitOpen()){throw new Error('API 과부하 감지 — '+Math.ceil((apiCircuit.COOLDOWN-(Date.now()-apiCircuit.lastFailTime))/1000)+'초 후 재시도');}
@@ -256,7 +269,7 @@ async function callClaude(prompt,maxTokens=8192){
       if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
       usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
       if(typeof updateStats==='function')updateStats();
-      return{text:parsed.text,stopReason:parsed.stopReason};
+      recordApiSuccess();return{text:parsed.text,stopReason:parsed.stopReason};
     }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃(3분)');if(attempt>=MAX_RETRIES)throw e;if(/과부하|529|서버 오류/.test(e.message)){await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw e;}
   }
 }
@@ -274,7 +287,7 @@ async function callClaudeSonnet(prompt,maxTokens=8192){
       const d=await res.json(),parsed=parseAPIResponse(prov,d);
       if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
       usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
-      return{text:parsed.text,stopReason:parsed.stopReason};
+      recordApiSuccess();return{text:parsed.text,stopReason:parsed.stopReason};
     }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃');if(attempt>=MAX_RETRIES)throw e;if(/과부하|529|서버/.test(e.message)){await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw e;}
   }
 }
@@ -304,7 +317,7 @@ Object.assign(App, {
   getProvider, getModelConfig, getModel, selectModel, selectProvider,
   updateModelToggle, updateProviderLabel, buildAPIRequest, parseAPIResponse,
   escapeHtml, showToast, showProgress, clearProgress, setButtonLoading,
-  showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation, isCircuitOpen, apiCircuit,
+  showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithFallback, callClaudeWithContinuation, isCircuitOpen, apiCircuit,
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
   openProfileSettings, closeProfileSettings,
   currentService: 'patent',
