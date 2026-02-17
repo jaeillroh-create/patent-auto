@@ -4448,7 +4448,7 @@
     // Q4: í•µì‹¬ í† í° (ë³µí•© ìƒí‘œ ëŒ€ì‘)
     if (queries.length < maxQueries) {
       // í•œê¸€/ì˜ë¬¸ ë¶„ë¦¬ ì¶”ì¶œ
-      const korean = trademark.replace(/[^ê°€-íž£]/g, '');
+      const korean = trademark.replace(/[^가-힣]/g, '');
       const english = trademark.replace(/[^a-zA-Z]/g, '').toLowerCase();
       
       if (korean.length >= 2 && !added.has(korean)) {
@@ -6912,7 +6912,7 @@ ${text.substring(0, 2000)}
     }
     
     // ì¶œì›ì¸: í•œê¸€ ì‚¬ì´ ê³µë°± ì œê±°í•˜ì—¬ íšŒì‚¬ëª… ì¶”ì¶œ
-    const companyMatch = t.match(/([ê°€-íž£\s]{2,20})\s*ì£¼\s*ì‹\s*íšŒ\s*ì‚¬|ì£¼\s*ì‹\s*íšŒ\s*ì‚¬\s*([ê°€-íž£\s]{2,20})/);
+    const companyMatch = t.match(/([가-힣\s]{2,20})\s*ì£¼\s*ì‹\s*íšŒ\s*ì‚¬|ì£¼\s*ì‹\s*íšŒ\s*ì‚¬\s*([가-힣\s]{2,20})/);
     if (companyMatch) {
       let name = (companyMatch[1] || companyMatch[2] || '').replace(/\s/g, '');
       if (name && name.length >= 2) {
@@ -6933,8 +6933,8 @@ ${text.substring(0, 2000)}
     if (goodsMatch) {
       let goods = goodsMatch[1].trim();
       // í•œê¸€ ì‚¬ì´ ë¶ˆí•„ìš”í•œ ê³µë°± ì œê±°
-      goods = goods.replace(/([ê°€-íž£])\s+([ê°€-íž£])/g, '$1$2');
-      goods = goods.replace(/([ê°€-íž£])\s+([ê°€-íž£])/g, '$1$2');
+      goods = goods.replace(/([가-힣])\s+([가-힣])/g, '$1$2');
+      goods = goods.replace(/([가-힣])\s+([가-힣])/g, '$1$2');
       goods = goods.substring(0, 300).trim();
       if (goods.length > 5) {
         result.designatedGoods = goods;
@@ -7248,7 +7248,7 @@ ${text.substring(0, 2000)}
   // íŒŒì¼ëª… ì •ë¦¬ í•¨ìˆ˜ (ê³µí†µ)
   TM.cleanFileName = function(fileName) {
     return fileName
-      .replace(/^\d{3}-\d{4}-[ê°€-íž£a-zA-Z]+_/, '')  // "005-0001-ê¸°íƒ€ì²¨ë¶€ì„œë¥˜_" ì œê±°
+      .replace(/^\d{3}-\d{4}-[가-힣a-zA-Z]+_/, '')  // "005-0001-ê¸°íƒ€ì²¨ë¶€ì„œë¥˜_" ì œê±°
       .replace(/^[A-Z]?\d+-\d+-/, '')               // "A001-0001-" í˜•ì‹ ì œê±°
       .replace(/_ì²¨ë¶€\.?/g, '')                      // "_ì²¨ë¶€" ì œê±°
       .replace(/ì²¨ë¶€$/, '')                          // ëì˜ "ì²¨ë¶€" ì œê±°
@@ -7299,7 +7299,7 @@ ${content.substring(0, 1200)}
       title = title.replace(/^["']|["']$/g, '').trim();
       title = title.split('\n')[0].trim();
       // ë¶ˆí•„ìš”í•œ ì ‘ë‘ì‚¬ ë‹¤ì‹œ ì œê±°
-      title = title.replace(/^\d{3}-\d{4}-[ê°€-íž£a-zA-Z_]+/, '').trim();
+      title = title.replace(/^\d{3}-\d{4}-[가-힣a-zA-Z_]+/, '').trim();
       
       if (title && title.length > 2 && title.length < 50) {
         return title;
@@ -9831,15 +9831,22 @@ JSON ë°°ì—´ë¡œë§Œ ì‘ë‹µ: ["ìƒí’ˆëª…1", "ìƒ
       
       if (count <= ONESHOT_LIMIT) {
         console.log(`[TM] Tier A: 전체 조회 (${count}건)`);
-        const { data, error } = await App.sb
-          .from('gazetted_goods_cache')
-          .select('goods_name, similar_group_code, similar_group_name')
-          .eq('class_code', paddedCode)
-          .order('similar_group_code');
-        
-        if (error) throw error;
-        console.log(`[TM] 전체 조회 완료: ${data.length}건`);
-        return { candidates: data || [], totalInClass: count, strategy: 'full' };
+        // ★ BUG-1 FIX: Supabase 1000행 기본 제한 → 페이지네이션
+        let allData = [];
+        const PAGE_SIZE = 1000;
+        for (let offset = 0; offset < count; offset += PAGE_SIZE) {
+          const { data: page, error: pageErr } = await App.sb
+            .from('gazetted_goods_cache')
+            .select('goods_name, similar_group_code, similar_group_name')
+            .eq('class_code', paddedCode)
+            .order('similar_group_code')
+            .range(offset, Math.min(offset + PAGE_SIZE - 1, count - 1));
+          
+          if (pageErr) throw pageErr;
+          if (page) allData.push(...page);
+        }
+        console.log(`[TM] 전체 조회 완료: ${allData.length}건 (페이지: ${Math.ceil(count / PAGE_SIZE)})`);
+        return { candidates: allData, totalInClass: count, strategy: 'full' };
       } else {
         console.log(`[TM] Tier B: 필터링 필요 (${count}건 > ${ONESHOT_LIMIT})`);
         return await TM.fetchFilteredCandidates(paddedCode, businessContext);
@@ -9871,6 +9878,7 @@ JSON ë°°ì—´ë¡œë§Œ ì‘ë‹µ: ["ìƒí’ˆëª…1", "ìƒ
     ];
     
     for (const term of coreTerms.slice(0, 10)) {
+      if (results.length >= MAX_CANDIDATES) break;  // BUG-7 FIX
       try {
         const { data } = await App.sb
           .from('gazetted_goods_cache')
@@ -9982,7 +9990,7 @@ ${numberedList}
 {"selected":[{"no":1,"name":"볶은 커피","group":"G290301","reason":"커피 판매 핵심"}]}`;
     
     try {
-      const response = await App.callClaudeSonnet(prompt, 1500);
+      const response = await App.callClaudeSonnet(prompt, 2000);  // BUG-6 FIX: 잘림 방지
       const text = (response.text || '').trim();
       console.log(`[TM] 원샷 LLM 응답: ${text.substring(0, 100)}...`);
       
@@ -10009,11 +10017,8 @@ ${numberedList}
           matched = allCandidates[item.no - 1];
         }
         if (!matched && item.name) {
-          matched = allCandidates.find(c =>
-            c.goods_name === item.name ||
-            c.goods_name.includes(item.name) ||
-            item.name.includes(c.goods_name)
-          );
+          // ★ BUG-3 FIX: 엄격 매칭 (includes 오매칭 방지)
+          matched = allCandidates.find(c => c.goods_name === item.name);
         }
         
         if (matched && !usedNames.has(matched.goods_name)) {
@@ -10133,6 +10138,11 @@ ${allClasses.map(c => `- 제${c.class}류: ${c.reason}`).join('\n')}
         return fallbackResult;
       } catch (fe) {
         console.warn('[TM] fallback도 실패:', fe.message);
+        // ★ BUG-2 FIX: 류 검증 완전 실패 시 경고 추가
+        validationResult.warnings.push({
+          class: 'ALL', message: '류 적합성 자동 검증 실패. 수동 확인 권장.'
+        });
+        validationResult.summary = '류 적합성 검증 실패 — 수동 확인 필요';
       }
     }
     
@@ -10292,6 +10302,8 @@ ${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
             selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods || [], aiAnalysis.businessAnalysis || '');
           }
           
+          // ★ BUG-5 FIX: undefined 방어
+          if (!aiAnalysis.recommendedGoods) aiAnalysis.recommendedGoods = {};
           aiAnalysis.recommendedGoods[classCode] = selectedGoods;
           console.log(`[TM] 누락 류 제${classCode}류 지정상품 ${selectedGoods.length}개 완료`);
         } catch (goodsErr) {
@@ -10368,7 +10380,9 @@ ${targetList}
     
     for (let i = 0; i < Math.min(evaluations.length, targets.length); i++) {
       const ev = evaluations[i];
-      const target = targets[i];
+      // ★ BUG-4 FIX: no 필드로 매핑 (순서 의존 제거)
+      const targetIdx = (ev.no && ev.no >= 1 && ev.no <= targets.length) ? ev.no - 1 : i;
+      const target = targets[targetIdx];
       
       const evaluation = {
         appearance: ev.appearance || 'low',
@@ -10886,7 +10900,7 @@ ${allClasses.map(c => `ì œ${c.class}ë¥˜: ${c.reason}`).join('\n')}
       seen.add(trimmed.toLowerCase());
     }
     
-    const words = input.replace(/[^\wê°€-íž£]/g, ' ').split(/\s+/).filter(w => w.length >= 2);
+    const words = input.replace(/[^\w가-힣]/g, ' ').split(/\s+/).filter(w => w.length >= 2);
     const suffixes = ['ì‚¬ì—…', 'ì—…', 'ì‚¬', 'ì„œë¹„ìŠ¤', 'íšŒì‚¬', 'ì—…ì²´'];
     
     words.forEach(word => {
@@ -11447,7 +11461,7 @@ ${numberedList}
     }
     
     // 4. ì˜ë¬¸ í˜¼ìš© ì²´í¬
-    if (/[a-zA-Z]/.test(term) && /[ê°€-íž£]/.test(term)) {
+    if (/[a-zA-Z]/.test(term) && /[가-힣]/.test(term)) {
       warnings.push('í•œê¸€/ì˜ë¬¸ í˜¼ìš© - ì‹¬ì‚¬ ì‹œ ëª…í™•ì„± ì´ìŠˆ ê°€ëŠ¥');
     }
     
