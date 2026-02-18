@@ -978,7 +978,11 @@ ${claimType==='method'
 // ═══ KIPRIS 선행기술 검색 ═══
 // Edge Function이 KIPRIS Plus API (plus.kipris.or.kr) 호출
 // KIPRIS Plus API 키 (localStorage에서 사용자 설정 가능)
-function getKiprisKey(){return App.apiKeys.kipris||App.DEFAULT_KIPRIS_KEY;}
+function getKiprisKey(){
+  if(App.apiKeys?.kipris)return App.apiKeys.kipris;
+  try{const p=JSON.parse(App.currentProfile?.api_key_encrypted||'{}');if(p.kipris){if(App.apiKeys)App.apiKeys.kipris=p.kipris;return p.kipris;}}catch(e){}
+  return '';// Edge Function이 자체 DEFAULT_API_KEY 사용
+}
 
 // 등록번호 포맷: 1020XXXXXXX → 10-20XXXXX
 function formatRegNumber(regNum){
