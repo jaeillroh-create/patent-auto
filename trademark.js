@@ -215,8 +215,19 @@
     }
   };
   
-  // ★ 계정별 KIPRIS API 키 로드 (profile → localStorage 캐시 → 기본값)
+  // ★ 계정별 KIPRIS API 키 로드 (common.js 통합 관리와 동기화)
   TM.loadKiprisKeyFromProfile = function() {
+    // common.js의 중앙 KIPRIS 키를 우선 참조
+    if (typeof App.getKiprisKey === 'function') {
+      var centralKey = App.getKiprisKey();
+      if (centralKey) {
+        TM.kiprisConfig.apiKey = centralKey;
+        console.log('[TM] KIPRIS API 키: common.js 중앙 관리에서 동기화됨');
+        return;
+      }
+    }
+    
+    // common.js 미로드 시 자체 로드 (폴백)
     const DEFAULT_KEY = 'zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
     const userId = App.currentUser?.id;
     
@@ -227,21 +238,21 @@
       if (pk.kipris) {
         TM.kiprisConfig.apiKey = pk.kipris;
         console.log('[TM] KIPRIS API 키: 프로필에서 로드됨');
-        // userId-scoped localStorage에 캐시
         if (userId) {
+          try { localStorage.setItem('kipris_api_key_' + userId, pk.kipris); } catch(e) {}
           try { localStorage.setItem('tm_kipris_api_key_' + userId, pk.kipris); } catch(e) {}
         }
         return;
       }
     } catch(e) {}
     
-    // 2순위: 계정별 localStorage 캐시
+    // 2순위: 계정별 localStorage 캐시 (통합 키 → tm_ 레거시 순)
     if (userId) {
       try {
-        const cached = localStorage.getItem('tm_kipris_api_key_' + userId);
+        var cached = localStorage.getItem('kipris_api_key_' + userId) || localStorage.getItem('tm_kipris_api_key_' + userId);
         if (cached) {
           TM.kiprisConfig.apiKey = cached;
-          console.log('[TM] KIPRIS API 키: localStorage 캐시에서 로드됨 (user: ' + userId.slice(0,8) + ')');
+          console.log('[TM] KIPRIS API 키: localStorage 캐시에서 로드됨');
           return;
         }
       } catch(e) {}
@@ -253,7 +264,6 @@
       if (legacyKey && legacyKey !== DEFAULT_KEY) {
         TM.kiprisConfig.apiKey = legacyKey;
         console.log('[TM] KIPRIS API 키: 레거시 localStorage에서 마이그레이션');
-        // 프로필에 저장하고 레거시 키 제거 (비동기)
         TM.saveKiprisKeyToProfile(legacyKey).then(() => {
           try { localStorage.removeItem('tm_kipris_api_key'); } catch(e) {}
         });
@@ -266,31 +276,40 @@
     console.log('[TM] KIPRIS API 키: 기본값 사용');
   };
   
-  // ★ KIPRIS API 키를 프로필(Supabase)에 저장
+  // ★ KIPRIS API 키를 프로필(Supabase)에 저장 + common.js 동기화
   TM.saveKiprisKeyToProfile = async function(kiprisKey) {
+    // common.js 중앙 관리에 동기화
+    if (typeof App.saveKiprisKey === 'function') {
+      await App.saveKiprisKey(kiprisKey);
+      console.log('[TM] KIPRIS API 키: common.js 중앙 관리에 동기화 저장됨');
+      return;
+    }
+    
+    // common.js 미로드 시 자체 저장 (폴백)
     const userId = App.currentUser?.id;
     if (!userId) return;
     
     try {
-      // 기존 프로필 JSON 읽기
       let existing = {};
       try { existing = JSON.parse(App.currentProfile?.api_key_encrypted || '{}'); } catch(e) {}
-      
-      // kipris 필드 추가/업데이트
       existing.kipris = kiprisKey;
       
-      // Supabase 저장
       await App.sb.from('profiles').update({
         api_key_encrypted: JSON.stringify(existing)
       }).eq('id', userId);
       
-      // 로컬 프로필 캐시 업데이트
       if (App.currentProfile) {
         App.currentProfile.api_key_encrypted = JSON.stringify(existing);
       }
       
-      // userId-scoped localStorage 캐시
-      try { localStorage.setItem('tm_kipris_api_key_' + userId, kiprisKey); } catch(e) {}
+      // localStorage 캐시 (통합 + TM 호환)
+      if (kiprisKey) {
+        try { localStorage.setItem('kipris_api_key_' + userId, kiprisKey); } catch(e) {}
+        try { localStorage.setItem('tm_kipris_api_key_' + userId, kiprisKey); } catch(e) {}
+      } else {
+        try { localStorage.removeItem('kipris_api_key_' + userId); } catch(e) {}
+        try { localStorage.removeItem('tm_kipris_api_key_' + userId); } catch(e) {}
+      }
       
       console.log('[TM] KIPRIS API 키: 프로필에 저장 완료');
     } catch(error) {
@@ -753,21 +772,15 @@
       TM.kiprisConfig.apiKey = newApiKey;
       console.log('[TM] KIPRIS 키 저장:', newApiKey.slice(0,8) + '... → TM.kiprisConfig에 반영됨');
       
-      // ★ 프로필(Supabase)에 계정별 저장
+      // ★ 프로필(Supabase)에 계정별 저장 + common.js 동기화
       TM.saveKiprisKeyToProfile(newApiKey);
       
       App.showToast('KIPRIS API 키가 저장되었습니다.', 'success');
     } else {
       TM.kiprisConfig.apiKey = DEFAULT_KEY;
       
-      // ★ 프로필에서도 삭제
+      // ★ 프로필에서도 삭제 + common.js 동기화
       TM.saveKiprisKeyToProfile('');
-      
-      // userId-scoped localStorage 캐시도 제거
-      const userId = App.currentUser?.id;
-      if (userId) {
-        try { localStorage.removeItem('tm_kipris_api_key_' + userId); } catch(e) {}
-      }
       
       App.showToast('기본 API 키로 복원되었습니다.', 'info');
     }

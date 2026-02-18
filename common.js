@@ -46,6 +46,82 @@ let apiKeys={claude:'',gpt:'',gemini:''};
 let profileTempProvider='claude';
 let API_KEY='',currentUser=null,currentProfile=null,currentProjectId=null;
 
+// ═══ KIPRIS API Key (특허·상표 공통) ═══
+const DEFAULT_KIPRIS_KEY='zDPwGhIGXYhevC9hTQrPTXyNGdxECXt0UGAa37v15wY=';
+let kiprisKey='';
+
+function getKiprisKey(){return kiprisKey||DEFAULT_KIPRIS_KEY;}
+
+function loadKiprisKey(){
+  var userId=currentUser?.id;
+  // 1순위: 프로필 JSON
+  try{
+    var raw=currentProfile?.api_key_encrypted||'';
+    var pk=JSON.parse(raw);
+    if(pk.kipris){
+      kiprisKey=pk.kipris;
+      console.log('[KIPRIS] API 키: 프로필에서 로드됨');
+      if(userId){try{localStorage.setItem('kipris_api_key_'+userId,pk.kipris);}catch(e){}}
+      return;
+    }
+  }catch(e){}
+  // 2순위: userId별 localStorage (통합 키)
+  if(userId){
+    try{
+      var cached=localStorage.getItem('kipris_api_key_'+userId);
+      if(cached){kiprisKey=cached;console.log('[KIPRIS] API 키: localStorage 캐시에서 로드됨');return;}
+    }catch(e){}
+    // 2-1: 레거시 tm_ 접두사 localStorage (상표 모듈 기존 키 마이그레이션)
+    try{
+      var tmCached=localStorage.getItem('tm_kipris_api_key_'+userId);
+      if(tmCached){
+        kiprisKey=tmCached;
+        console.log('[KIPRIS] API 키: 레거시 tm_캐시에서 마이그레이션');
+        try{localStorage.setItem('kipris_api_key_'+userId,tmCached);}catch(e){}
+        return;
+      }
+    }catch(e){}
+  }
+  // 3순위: 레거시 localStorage (계정 구분 없던 키)
+  try{
+    var legacy=localStorage.getItem('tm_kipris_api_key');
+    if(legacy&&legacy!==DEFAULT_KIPRIS_KEY){
+      kiprisKey=legacy;
+      console.log('[KIPRIS] API 키: 레거시 키에서 마이그레이션');
+      saveKiprisKey(legacy);
+      try{localStorage.removeItem('tm_kipris_api_key');}catch(e){}
+      return;
+    }
+  }catch(e){}
+  // 4순위: 기본값
+  kiprisKey=DEFAULT_KIPRIS_KEY;
+  console.log('[KIPRIS] API 키: 기본값 사용');
+}
+
+async function saveKiprisKey(newKey){
+  var userId=currentUser?.id;
+  kiprisKey=newKey||DEFAULT_KIPRIS_KEY;
+  if(!userId)return;
+  try{
+    var existing={};
+    try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
+    existing.kipris=newKey||'';
+    await sb.from('profiles').update({api_key_encrypted:JSON.stringify(existing)}).eq('id',userId);
+    if(currentProfile)currentProfile.api_key_encrypted=JSON.stringify(existing);
+    // userId-scoped localStorage 캐시
+    if(newKey){
+      try{localStorage.setItem('kipris_api_key_'+userId,newKey);}catch(e){}
+      try{localStorage.setItem('tm_kipris_api_key_'+userId,newKey);}catch(e){} // TM 호환
+    }else{
+      try{localStorage.removeItem('kipris_api_key_'+userId);}catch(e){}
+      try{localStorage.removeItem('tm_kipris_api_key_'+userId);}catch(e){}
+    }
+    console.log('[KIPRIS] API 키: 프로필에 저장 완료');
+  }catch(error){
+    console.error('[KIPRIS] API 키 저장 실패:',error);
+  }
+}
+
 const SYSTEM_PROMPT = '너는 대한민국 특허청(KIPO) 심사 실무와 등록 가능성(신규성/진보성/명확성/지원요건)을 완벽히 이해한 15년 차 수석 변리사이다. 원칙: 1.표준문체(~한다) 2.글머리/마크다운 절대금지 3.SW명 대신 알고리즘 4.구성요소명(참조번호) 형태 5.명세서에 바로 붙여넣을 순수텍스트 6.제한성 표현(만, 반드시, ~에 한하여 등) 사용 금지';
 
 // ═══ Provider functions ═══
@@ -127,13 +203,13 @@ async function onAuthSuccess(user){
   if(!API_KEY){
     const rawKey=profile.api_key_encrypted||'';
     try{const pk=JSON.parse(rawKey);apiKeys={claude:pk.claude||'',gpt:pk.gpt||'',gemini:pk.gemini||''};if(pk.provider&&API_PROVIDERS[pk.provider])selectedProvider=pk.provider;
-      // KIPRIS 키를 계정별 localStorage에 캐시
-      if(pk.kipris){try{localStorage.setItem('tm_kipris_api_key_'+user.id,pk.kipris);}catch(e){}}
     }catch(e){apiKeys={claude:rawKey,gpt:'',gemini:''};}
     try{const sp=localStorage.getItem('patent_api_provider');if(sp&&API_PROVIDERS[sp])selectedProvider=sp;}catch(e){}
     selectedModel=API_PROVIDERS[selectedProvider].defaultModel;API_KEY=apiKeys[selectedProvider]||'';
     if(!API_KEY){try{API_KEY=localStorage.getItem('patent_api_key')||'';}catch(e){}}
   }
+  // ★ KIPRIS API 키 로드 (특허·상표 공통)
+  loadKiprisKey();
   if(typeof clearAllState==='function')clearAllState();showScreen('dashboard');
 }
 async function handleTosAccept(){if(!document.getElementById('tosCheck1').checked||!document.getElementById('tosCheck2').checked){showToast('모든 항목에 동의해 주세요','error');return;}await sb.from('profiles').update({tos_accepted:true,tos_accepted_at:new Date().toISOString()}).eq('id',currentUser.id);currentProfile.tos_accepted=true;if(currentProfile.status==='pending')showScreen('pending');else await onAuthSuccess(currentUser);}
@@ -176,6 +252,12 @@ function renderProfileModal(){
     '<div style="display:flex;justify-content:space-between;align-items:center"><span>서비스</span><strong>'+curProv.label+'</strong></div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span>모델</span><strong>'+getModelConfig().label+'</strong></div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span>API Key</span><strong style="color:'+(apiKeys[selectedProvider]?'var(--color-success)':'var(--color-error)')+'">'+(apiKeys[selectedProvider]?'설정됨 ✅':'미설정 ❌')+'</strong></div>';
+  // ★ KIPRIS API 키 입력란 채우기
+  var kiprisInput=document.getElementById('kiprisApiKeyInput');
+  if(kiprisInput){
+    var curKipris=getKiprisKey();
+    kiprisInput.value=(curKipris&&curKipris!==DEFAULT_KIPRIS_KEY)?curKipris:'';
+  }
 }
 function profileSelectProvider(p){
   const curKey=document.getElementById('profileApiKeyInput').value.trim();
@@ -186,11 +268,35 @@ async function saveProfileSettings(){
   const key=document.getElementById('profileApiKeyInput').value.trim();
   if(key)apiKeys[profileTempProvider]=key;
   selectProvider(profileTempProvider);
+  // ★ KIPRIS API 키 저장
+  var kiprisInput=document.getElementById('kiprisApiKeyInput');
+  var newKiprisKey=kiprisInput?kiprisInput.value.trim():'';
   // 기존 프로필의 추가 필드(kipris 등) 보존
   let existing={};
   try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
+  // KIPRIS 키 업데이트
+  if(newKiprisKey){
+    existing.kipris=newKiprisKey;
+    kiprisKey=newKiprisKey;
+  }else if(kiprisInput){
+    // 입력란이 비어있으면 기본값으로 복원 (기존 kipris 필드 제거)
+    delete existing.kipris;
+    kiprisKey=DEFAULT_KIPRIS_KEY;
+  }
   const data={...existing,...apiKeys,provider:selectedProvider};
+  // kipris는 apiKeys에 없으므로 existing에서 가져온 것이 유지됨
+  if(newKiprisKey)data.kipris=newKiprisKey;
   try{Object.entries(apiKeys).forEach(([p,k])=>{if(k)localStorage.setItem('patent_api_key_'+p,k);});localStorage.setItem('patent_api_provider',selectedProvider);}catch(e){}
+  // KIPRIS localStorage 캐시
+  if(currentUser?.id){
+    if(newKiprisKey){
+      try{localStorage.setItem('kipris_api_key_'+currentUser.id,newKiprisKey);}catch(e){}
+      try{localStorage.setItem('tm_kipris_api_key_'+currentUser.id,newKiprisKey);}catch(e){} // TM 호환
+    }else if(kiprisInput){
+      try{localStorage.removeItem('kipris_api_key_'+currentUser.id);}catch(e){}
+      try{localStorage.removeItem('tm_kipris_api_key_'+currentUser.id);}catch(e){}
+    }
+  }
   if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
   closeProfileSettings();updateModelToggle();updateProviderLabel();
   showToast(API_PROVIDERS[selectedProvider].short+' 적용됨 · '+getModelConfig().label);
@@ -314,12 +420,14 @@ function formatFileSize(bytes) {if (bytes < 1024) return bytes + 'B';if (bytes <
 // ═══ Expose to App namespace ═══
 Object.assign(App, {
   sb, SUPABASE_URL, SUPABASE_ANON_KEY, API_PROVIDERS, SYSTEM_PROMPT,
+  DEFAULT_KIPRIS_KEY,
   getProvider, getModelConfig, getModel, selectModel, selectProvider,
   updateModelToggle, updateProviderLabel, buildAPIRequest, parseAPIResponse,
   escapeHtml, showToast, showProgress, clearProgress, setButtonLoading,
   showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithFallback, callClaudeWithContinuation, isCircuitOpen, apiCircuit,
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
   openProfileSettings, closeProfileSettings,
+  getKiprisKey, loadKiprisKey, saveKiprisKey,
   currentService: 'patent',
   _onDashboard: null  // Hook for patent.js to register dashboard load callback
 });
