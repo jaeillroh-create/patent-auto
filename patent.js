@@ -1281,39 +1281,31 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
   ✅ 허용: L1 장치 박스만 — 100, 200, 300, 400...
   ✅ 허용: L1 장치 박스들 간의 연결선만
   ⛔ 금지: L2/L3 하위 구성요소(110, 120, 111...) 표시 금지
-  ⛔ 금지: 하위 요소 간 연결선 금지
   ⛔ 금지: 최외곽 박스 생성 금지 (L1만 있으므로 외곽 불필요)
-  
-  도 1 예시:
-  [${getDeviceSubject()}(100)] ←→ [사용자 단말(200)] ←→ [데이터베이스(400)]
+  ★ 최소 L1 구성요소: 2개 이상 (1개만 있으면 도 1 불필요)
 
 ■ 도 2 이후: 세부 블록도 (Detailed Block Diagram)
   ⛔⛔ 핵심: 한 도면에는 반드시 "한 레벨"만 표시 ⛔⛔
   최외곽 박스 = 상위 장치
   내부 박스 = 그 상위 장치의 직계 자식 레벨만
+  ★★ 최소 내부 구성요소: 3개 이상 (2개만으로는 도면이 빈약) ★★
+  → 청구항에서 하위 구성요소가 2개뿐이라면, 기능적으로 분리하여 3~5개로 확장하라
+  → 예: 프로세서(110), 메모리(120)뿐이라면 → 통신부(130), 저장부(140), 제어부(150) 등 추가
   
   ✅ 올바른 예 (도 2: ${getDeviceSubject()} 상세):
-  최외곽=${getDeviceSubject()}(100), 내부=L2만: 통신부(110), 프로세서(120), 메모리(130)
+  최외곽=${getDeviceSubject()}(100), 내부=L2 4개: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)
+  → 4개 구성요소가 프레임 안에 2행 배치, 참조번호가 겹치지 않음
   
-  ✅ 올바른 예 (도 3: 프로세서 상세):
-  최외곽=프로세서(120), 내부=L3만: 연산부(121), 캐시부(122)
+  ⛔ 잘못된 예 (내부 구성 2개만):
+  최외곽=${getDeviceSubject()}(100), 내부=프로세서(110), 메모리(120)
+  → 2개만으로 도면이 빈약하고, 참조번호 100과 120이 겹칠 위험
   
   ⛔ 잘못된 예 (L2+L3 혼합):
   최외곽=${getDeviceSubject()}(100), 내부=프로세서(110)+연산부(111)+캐시부(112)+메모리(120)
   → 110은 L2, 111/112는 L3 → 레벨 혼합 오류!
-  → 올바른 방법: 도 2에 L2만, 도 3에 L3만 분리
-  
-  도 2 예시 (${getDeviceSubject()}(100) 상세):
-  ┌─────────────────────────────────┐
-  │        ${getDeviceSubject()}(100)                 │ ← 최외곽
-  │  ┌───────┐  ┌───────┐  ┌───────┐│
-  │  │통신부 │  │프로세서│  │메모리 ││
-  │  │ (110) │  │ (120) │  │ (130) ││
-  │  └───────┘  └───────┘  └───────┘│
-  └─────────────────────────────────┘
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[R4] 연결(연동) 표현 규칙
+[R4] 연결(연동) 및 배치 규칙
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ■ 도 1: L1 박스 ↔ L1 박스 연결만
@@ -1329,8 +1321,17 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
   - 연결의 근거: 청구항에서 어떤 구성요소가 어떤 구성요소와 데이터를 주고받는지 분석
   - 네트워크(300) 같은 매개체가 있으면 중간에 배치
 
-■ 도 2+: 내부 구성요소 간 연결 가능
-  통신부(110) ↔ 프로세서(120) 연결선 허용
+■ 도 2+: 내부 구성요소 간 연결 — 반드시 포함
+  ★ 모든 내부 구성요소에 최소 1개 이상 연결이 있어야 함
+  ★ "허브" 구성요소(가장 많은 연결)를 반드시 식별
+  예: 통신부(110) ↔ 프로세서(120) ↔ 메모리(130), 프로세서(120) ↔ 저장부(140)
+  → 프로세서(120)가 허브 (3개 연결)
+
+★★★ 배치 품질 규칙 (렌더링 겹침 방지) ★★★
+  ⛔ 한 행에 3개 초과 금지 → 한 행에는 최대 3개까지 배치
+  ⛔ 연결된 노드끼리 같은 행 금지 → 연결이 있으면 다른 행에 배치
+  ✅ 허브는 중간 행에 배치 (위아래로 연결 대상이 분산)
+  ✅ 같은 행 노드는 서로 직접 연결 없는 것만
 
 ■ 연결선 의미
   실선: 통신/데이터 링크
@@ -1365,6 +1366,8 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 
 [파트1: 도면 설계 출력 형식]
 
+★★★ 반드시 아래 형식을 정확히 따르라. 공간배치를 반드시 명시하라 ★★★
+
 도 1: 전체 시스템 구성도
 유형: 블록도 (최외곽 박스 없음)
 구성요소: L1 장치만 나열
@@ -1376,6 +1379,10 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 - ${getDeviceSubject()}(100)는 데이터베이스(400)에 데이터를 저장/조회 → 연결
 - 사용자 단말(200)은 데이터베이스(400)와 직접 통신하지 않음 → 연결 없음
 연결관계: ${getDeviceSubject()}(100) ↔ 사용자 단말(200), ${getDeviceSubject()}(100) ↔ 데이터베이스(400)
+공간배치:
+  허브: ${getDeviceSubject()}(100) — 가장 많은 연결을 가진 중심 노드
+  행1: ${getDeviceSubject()}(100)
+  행2: 사용자 단말(200), 데이터베이스(400)
 
 도 2: ${getDeviceSubject()}(100) 상세 블록도
 유형: 블록도 (최외곽 = ${getDeviceSubject()}(100))
@@ -1384,7 +1391,12 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 - 프로세서(120)
 - 메모리(130)
 - 저장부(140)
-연결관계: 통신부(110) ↔ 프로세서(120) ↔ 메모리(130)
+연결관계: 통신부(110) ↔ 프로세서(120) ↔ 메모리(130), 프로세서(120) ↔ 저장부(140)
+공간배치:
+  허브: 프로세서(120)
+  행1: 통신부(110)
+  행2: 프로세서(120)
+  행3: 메모리(130), 저장부(140)
 
 도 3: 프로세서(120) 상세 블록도 (L3 상세화 예시)
 유형: 블록도 (최외곽 = 프로세서(120), ${getDeviceSubject()}(100)가 아님!)
@@ -1392,8 +1404,20 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 - 연산부(121)
 - 캐시부(122)
 - 제어부(123)
+연결관계: 연산부(121) ↔ 제어부(123), 캐시부(122) ↔ 제어부(123)
+공간배치:
+  허브: 제어부(123)
+  행1: 연산부(121), 캐시부(122)
+  행2: 제어부(123)
 
 (도면 수에 맞게 도 4, 도 5... 추가)
+
+★★★ 공간배치 규칙 ★★★
+1. "허브" = 가장 많은 연결을 가진 노드 (반드시 1개 지정)
+2. "행N" = 위에서 아래로 배치할 행 (같은 행에 2~3개까지 가능)
+3. 허브는 연결 대상들 사이 행에 위치해야 함
+4. 같은 행의 노드들은 서로 직접 연결이 없어야 함 (있으면 다른 행으로)
+5. 연결된 노드는 인접 행에 배치 (2행 이상 떨어지지 않게)
 
 [파트2: 도면의 간단한 설명]
 ★★★ 모든 도면에 대해 빠짐없이 간단한 설명을 작성하라 ★★★
@@ -2261,11 +2285,10 @@ ${diagram}`,4096);
           const boxStartY=frameY+framePadY;
           const refLabelX=frameX+frameW+0.1;
           
-          // 그림자 + 외곽 본체 + 외곽 부호
+          // 그림자 + 외곽 본체
           slide.addShape(pptx.shapes.RECTANGLE,{x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,fill:{color:'000000'},line:{width:0}});
           slide.addShape(pptx.shapes.RECTANGLE,{x:frameX,y:frameY,w:frameW,h:frameH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
-          slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameY+frameH/2,w:0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
-          slide.addText(String(frameRefNum),{x:refLabelX+0.25,y:frameY+frameH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+          // 프레임 리더라인은 내부 노드와 함께 겹침 보정 후 렌더링
           
           // 내부 구성요소 박스들 (2D 배치)
           const batchNodeBoxes={};
@@ -2365,9 +2388,15 @@ ${diagram}`,4096);
             batchNodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
           });
           
-          // ★ 리더라인 Y겹침 보정 ★
-          staggerLeaderYPositions(batchLeaderEntries,0.22);
+          // ★ 프레임 참조번호도 겹침 보정에 포함 ★
+          batchLeaderEntries.push({id:'__frame__',refNum:String(frameRefNum),sx:frameX,sw:frameW,sh:frameH,origY:frameY+frameH/2,y:frameY+frameH/2,isFrame:true});
+          staggerLeaderYPositions(batchLeaderEntries,0.28);
           batchLeaderEntries.forEach(le=>{
+            if(le.isFrame){
+              slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:le.y,w:0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
+              slide.addText(String(le.refNum),{x:refLabelX+0.25,y:le.y-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+              return;
+            }
             const startX=le.sx+le.sw;
             const endX=frameX+frameW+0.25;
             if(Math.abs(le.y-le.origY)>0.02){
@@ -2520,7 +2549,7 @@ graph TD
     C["네트워크(300)"]
     D["데이터베이스(400)"]
     A --> B
-    B --> C
+    A --> C
     A --> D
 \`\`\`
 
@@ -2531,6 +2560,12 @@ graph TD
 ✅ 올바른 문법:
 - 노드 정의를 먼저, 연결은 나중에
 - 연결은 --> 만 사용 (양방향은 A --> B와 B --> A 두 줄로)
+
+★★★ 노드 정의 순서 = 렌더링 배치에 직접 영향 ★★★
+- 도면 설계의 "공간배치"를 반드시 따르라
+- 허브 노드를 가장 먼저 정의하라 (BFS 시작점이 됨)
+- 같은 행의 노드는 연속 정의하라
+- 연결 방향: 허브 → 자식 방향으로 정의 (A --> B, A --> C)
 `;
   
   if(isDevice){
@@ -2554,6 +2589,23 @@ graph TD
 - 데이터/정보 도면(~정보, ~데이터): 정보 항목은 ${getDeviceSubject()} 입력 데이터 → 상호 화살표 연결 부적절 → 연결선 없이 병렬 배치 (노드 정의만, A --> B 금지)
 - 장치 블록도: 데이터 흐름이 있는 구성요소만 --> 연결
 - 상위 구성(110)과 하위 구성(111,112,113)을 같은 레벨에 표현 금지
+
+★★★ 공간배치 → Mermaid 변환 규칙 ★★★
+도면 설계에 "공간배치" 섹션이 있으면:
+1. "허브"로 지정된 노드의 ID를 가장 먼저 정의하라
+2. "행1" 노드를 먼저, "행2" 노드를 그 다음에 정의하라
+3. 허브에서 다른 노드로의 연결을 먼저 작성하라 (허브가 BFS 루트가 됨)
+4. 같은 행 노드 간 연결이 있으면 반드시 별도 행으로 분리 (겹침 방지)
+
+예시 (허브=서버(100), 행1=서버, 행2=단말+DB):
+\`\`\`mermaid
+graph TD
+    A["서버(100)"]
+    B["단말(200)"]
+    C["DB(300)"]
+    A --> B
+    A --> C
+\`\`\`
 
 ★ 모든 구성요소를 빠짐없이 노드로 포함! ★`;
   } else if(isMethod){
@@ -3238,10 +3290,44 @@ function svgOrthogonalEdge(route,mkId){
 }
 
 // Stagger leader line Y-positions to prevent reference number overlap
+// Enhanced v2: same-row aware + bidirectional spread + minimum gap enforcement
 function staggerLeaderYPositions(leaderEntries,minGap){
   if(!leaderEntries.length)return;
   minGap=minGap||18;
-  // Sort by Y
+  
+  // Phase 1: 같은 Y 그룹 감지 → 열 기반 사전 오프셋
+  const yGroups={};
+  leaderEntries.forEach(le=>{
+    const roundedY=Math.round(le.y*10)/10; // 소수점 1자리 반올림
+    let matched=false;
+    Object.keys(yGroups).forEach(gy=>{
+      if(Math.abs(parseFloat(gy)-roundedY)<minGap*0.8){
+        yGroups[gy].push(le);
+        matched=true;
+      }
+    });
+    if(!matched)yGroups[roundedY]=[le];
+  });
+  
+  // 같은 Y 그룹 내에서 중앙 기준 양방향 분산
+  Object.values(yGroups).forEach(group=>{
+    if(group.length<=1)return;
+    const centerY=group.reduce((s,le)=>s+le.y,0)/group.length;
+    const spread=minGap*1.2; // 각 항목 간 간격
+    const totalSpread=(group.length-1)*spread;
+    const startY=centerY-totalSpread/2;
+    // 참조번호 순서로 정렬 (작은 번호 위)
+    group.sort((a,b)=>{
+      const na=parseInt(String(a.refNum).replace(/\D/g,''))||0;
+      const nb=parseInt(String(b.refNum).replace(/\D/g,''))||0;
+      return na-nb;
+    });
+    group.forEach((le,i)=>{
+      le.y=startY+i*spread;
+    });
+  });
+  
+  // Phase 2: 전체 정렬 후 최소 간격 강제
   leaderEntries.sort((a,b)=>a.y-b.y);
   for(let i=1;i<leaderEntries.length;i++){
     if(leaderEntries[i].y-leaderEntries[i-1].y<minGap){
@@ -3582,7 +3668,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     });
     
     // ★ 리더라인 Y겹침 보정 후 렌더링 ★
-    staggerLeaderYPositions(leaderEntries,20);
+    staggerLeaderYPositions(leaderEntries,24);
     const leaderEndX=marginX+maxNodeAreaW+0.3*PX;
     leaderEntries.forEach(le=>{
       const leaderStartX=_shapeLeaderX(le.shapeType,le.sx,le.sw);
@@ -3706,7 +3792,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     // ★ 리더라인 Y겹침 보정 + 렌더링 (프레임 포함) ★
     // 프레임 리더도 겹침 보정에 포함
     innerLeaderEntries.push({id:'__frame__',refNum:String(frameRefNum),sx:frameX,sy:frameY,sw:frameW,sh:frameH,shapeType:'box',y:frameY+frameH/2,isFrame:true});
-    staggerLeaderYPositions(innerLeaderEntries,20);
+    staggerLeaderYPositions(innerLeaderEntries,24);
     const innerLeaderEndX=frameX+frameW+0.3*PX;
     innerLeaderEntries.forEach(le=>{
       if(le.isFrame){
@@ -3982,6 +4068,29 @@ function validateDiagramRules(nodes,figNum,designText,edges){
       const maxDeg=Math.max(...Object.values(adj2));
       if(maxDeg<=2){
         issues.push({severity:'INFO',rule:'R9d',message:`도 ${figNum}: 순차 연결 토폴로지 → 세로 배치 적용 (적절)`});
+      }
+    }
+    
+    // R10. 도면 품질 검증
+    // R10a. 도 2+ 내부 구성요소 수 검증 (최소 3개 권장)
+    if(figNum>1){
+      const allRefs=nodes.map(n=>{const m=n.label.match(/[(\s]?(\d+)[)\s]?$/);return m?parseInt(m[1]):0;}).filter(r=>r>0);
+      const l1Refs=allRefs.filter(r=>r%100===0);
+      const innerCount=allRefs.length-l1Refs.length;
+      if(innerCount>0&&innerCount<3){
+        issues.push({severity:'WARNING',rule:'R10a',message:`도 ${figNum}: 내부 구성요소 ${innerCount}개 — 최소 3개 이상 권장 (도면이 빈약함)`});
+      }
+    }
+    
+    // R10b. 같은 행에 4개 이상 노드 검증
+    if(edgeList.length>0){
+      const layout=computeDeviceLayout2D(nodes,edgeList);
+      if(layout.layers){
+        layout.layers.forEach((layer,rowIdx)=>{
+          if(layer.length>3){
+            issues.push({severity:'WARNING',rule:'R10b',message:`도 ${figNum}: 행${rowIdx+1}에 ${layer.length}개 노드 — 최대 3개 권장 (겹침 위험)`});
+          }
+        });
       }
     }
   }
@@ -4532,7 +4641,7 @@ function downloadPptx(sid){
         });
         
         // Phase 2: 리더라인 Y겹침 보정
-        staggerLeaderYPositions(pptxLeaderEntries,0.22);
+        staggerLeaderYPositions(pptxLeaderEntries,0.28);
         pptxLeaderEntries.forEach(le=>{
           const startX=le.sx+le.sw;
           if(Math.abs(le.y-le.origY)>0.02){
@@ -4618,8 +4727,7 @@ function downloadPptx(sid){
         
         slide.addShape(pptx.shapes.RECTANGLE,{x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,fill:{color:'000000'},line:{width:0}});
         slide.addShape(pptx.shapes.RECTANGLE,{x:frameX,y:frameY,w:frameW,h:frameH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
-        slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameY+frameH/2,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-        slide.addText(String(frameRefNum),{x:refLabelX+0.3,y:frameY+frameH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+        // 프레임 리더라인은 내부 노드와 함께 겹침 보정 후 렌더링 (아래에서 처리)
         
         const innerNodeBoxes={};
         const innerLeaderEntries=[];
@@ -4645,9 +4753,16 @@ function downloadPptx(sid){
           innerNodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
         });
         
-        // ★ 리더라인 Y겹침 보정 ★
-        staggerLeaderYPositions(innerLeaderEntries,0.22);
+        // ★ 프레임 참조번호도 겹침 보정에 포함 ★
+        innerLeaderEntries.push({id:'__frame__',refNum:String(frameRefNum),sx:frameX,sw:frameW,sh:frameH,origY:frameY+frameH/2,y:frameY+frameH/2,isFrame:true});
+        staggerLeaderYPositions(innerLeaderEntries,0.28);
         innerLeaderEntries.forEach(le=>{
+          if(le.isFrame){
+            // 프레임 리더라인
+            slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:le.y,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
+            slide.addText(String(le.refNum),{x:refLabelX+0.3,y:le.y-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+            return;
+          }
           const startX=le.sx+le.sw;
           const endX=frameX+frameW+0.3;
           if(Math.abs(le.y-le.origY)>0.02){
@@ -5124,7 +5239,7 @@ function downloadDiagramImages(sid, format='jpeg'){
         });
         
         // Phase 2: 리더라인 Y겹침 보정 후 렌더링
-        staggerLeaderYPositions(leaderEntries,18);
+        staggerLeaderYPositions(leaderEntries,22);
         const leaderEndX=marginX+nodeAreaW+30;
         ctx.strokeStyle='#000000';ctx.fillStyle='#000000';ctx.lineWidth=1;
         leaderEntries.forEach(le=>{
@@ -5226,9 +5341,7 @@ function downloadDiagramImages(sid, format='jpeg'){
         ctx.fillStyle='#000000';ctx.fillRect(frameX+SHADOW,frameY+SHADOW,frameW,frameH);
         ctx.fillStyle='#FFFFFF';ctx.fillRect(frameX,frameY,frameW,frameH);
         ctx.strokeStyle='#000000';ctx.lineWidth=2.25;ctx.strokeRect(frameX,frameY,frameW,frameH);
-        ctx.beginPath();ctx.moveTo(frameX+frameW,frameY+frameH/2);ctx.lineTo(frameX+frameW+25,frameY+frameH/2);ctx.lineWidth=1;ctx.stroke();
-        ctx.font='11px "맑은 고딕", sans-serif';ctx.fillStyle='#000000';
-        ctx.fillText(String(frameRefNum),frameX+frameW+30,frameY+frameH/2+4);
+        // 프레임 리더라인은 내부 노드와 함께 겹침 보정 후 렌더링 (아래에서 처리)
         
         const boxStartX=frameX+framePadX,boxStartY=frameY+framePadY;
         const innerNodeBoxes={};
@@ -5260,11 +5373,22 @@ function downloadDiagramImages(sid, format='jpeg'){
           innerNodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
         });
         
-        // ★ 리더라인 Y겹침 보정 후 렌더링 ★
-        staggerLeaderYPositions(innerLeaderEntries,16);
+        // ★ 프레임 참조번호도 겹침 보정에 포함 ★
+        innerLeaderEntries.push({id:'__frame__',refNum:String(frameRefNum),sx:frameX,sy:frameY,sw:frameW,sh:frameH,shapeType:'box',y:frameY+frameH/2,isFrame:true});
+        staggerLeaderYPositions(innerLeaderEntries,20);
         const innerLeaderEndX=frameX+frameW+25;
         ctx.strokeStyle='#000000';ctx.fillStyle='#000000';ctx.lineWidth=1;
         innerLeaderEntries.forEach(le=>{
+          if(le.isFrame){
+            // 프레임 리더라인
+            ctx.beginPath();
+            ctx.moveTo(frameX+frameW,le.y);
+            ctx.lineTo(innerLeaderEndX,le.y);
+            ctx.stroke();
+            ctx.font='11px "맑은 고딕", sans-serif';
+            ctx.fillText(String(le.refNum),innerLeaderEndX+6,le.y+4);
+            return;
+          }
           const leaderStartX=le.sx+le.sw;
           const origY=le.sy+le.sh/2;
           ctx.beginPath();
