@@ -294,9 +294,9 @@ async function openProject(pid){
   // Fix: ensure cost field exists even from old saves
   if(typeof usage.cost==='undefined')usage.cost=0;
   // Restore v4.7 claim config
-  deviceCategory=s.deviceCategory||'server';deviceGeneralDep=s.deviceGeneralDep||5;deviceAnchorDep=s.deviceAnchorDep||4;deviceAnchorStart=s.deviceAnchorStart||7;
+  deviceCategory=s.deviceCategory||'server';deviceGeneralDep=typeof s.deviceGeneralDep==='number'?s.deviceGeneralDep:5;deviceAnchorDep=typeof s.deviceAnchorDep==='number'?s.deviceAnchorDep:4;deviceAnchorStart=typeof s.deviceAnchorStart==='number'?s.deviceAnchorStart:7;
   anchorThemeMode=s.anchorThemeMode||'auto';selectedAnchorThemes=s.selectedAnchorThemes||[];
-  methodCategory=s.methodCategory||'method';methodGeneralDep=s.methodGeneralDep||3;methodAnchorDep=s.methodAnchorDep||2;methodAnchorStart=s.methodAnchorStart||0;
+  methodCategory=s.methodCategory||'method';methodGeneralDep=typeof s.methodGeneralDep==='number'?s.methodGeneralDep:3;methodAnchorDep=typeof s.methodAnchorDep==='number'?s.methodAnchorDep:2;methodAnchorStart=typeof s.methodAnchorStart==='number'?s.methodAnchorStart:0;
   methodAnchorThemeMode=s.methodAnchorThemeMode||'auto';selectedMethodAnchorThemes=s.selectedMethodAnchorThemes||[];
   projectRefStyleText=s.projectRefStyleText||'';requiredFigures=s.requiredFigures||[];
   // Restore detail level
@@ -1131,8 +1131,8 @@ function _buildPromptCore(stepId,inv,T,styleRef){
 [청구항 구성]
 - 독립항 카테고리: ${catLabel}
 - 독립항: 1개 (청구항 1)
-- 일반 종속항: ${deviceGeneralDep}개 (청구항 2~${deviceGeneralDep+1})
-- 등록 앵커 종속항: ${deviceAnchorDep}개 (청구항 ${deviceAnchorStart}~${anchorEnd})
+- 일반 종속항: ${deviceGeneralDep}개${deviceGeneralDep>0?' (청구항 2~'+(deviceGeneralDep+1)+')':''}
+- 등록 앵커 종속항: ${deviceAnchorDep}개${deviceAnchorDep>0?' (청구항 '+deviceAnchorStart+'~'+anchorEnd+')':''}
 - 종결어: ${getCategoryEnding(deviceCategory==='auto'?'server':deviceCategory)}
 
 [필수 작성 규칙]
@@ -1153,25 +1153,24 @@ function _buildPromptCore(stepId,inv,T,styleRef){
 ③ 다중인용 종속항은 다른 다중인용 종속항을 인용 불가 (다중인용의 다중인용 금지)
 ④ 종속항은 인용하는 독립항 또는 종속항보다 뒤에 기재 (번호 역전 금지)
 
-(R5) 등록 앵커 종속항 (청구항 ${deviceAnchorStart}부터):
-- 신규성/진보성 방어용 \"창의적·구체적 기술수단\" 포함
+${deviceAnchorDep>0?`(R5) 등록 앵커 종속항 (청구항 ${deviceAnchorStart}부터):
+- 신규성/진보성 방어용 "창의적·구체적 기술수단" 포함
 - 수치·수식·기호 과다 기재 금지 (후속 단계에서 정량화)
 - 아래 A~C 중 최소 2개 포함:
   A) 다단계 처리(2단계 이상): 전처리→산출→보정 등
   B) 조정 가능한 기준값/가중치/신뢰도/품질지표 사용
   C) 검증/보정/피드백/폴백/재시도 중 하나 이상의 루프 또는 조건부 분기
 - 발명 내용에 근거가 있는 요소/처리/효과만으로 구성
-
+`:''}
 ⛔ (R6) 장치/방법 구분 — 절대 준수
 - 이것은 "장치" 청구항이다. "방법"이 아니다.
 - "~하는 단계", "S100", "S200" 등 방법 표현 절대 금지
 - "~부" 형태의 장치 구성요소 명칭만 사용 ("~모듈", "~유닛" 절대 금지)
 - 동작은 "~하도록 구성되는", "~을 수행하는" 형태로 표현
 
-[앵커 테마 배정 — 내부 지침, 출력 금지]
+${deviceAnchorDep>0?`[앵커 테마 배정 — 내부 지침, 출력 금지]
 ${themeInst}
-
-[출력 형식]
+`:''}[출력 형식]
 【청구항 1】형식. 청구항만 출력. 테마/키워드/점검 내용 출력 금지.
 종속항은 \"청구항 N에 있어서,\" 시작. SW명 금지. 제한성 표현 금지.
 ${getJepsonInstruction('device')}
@@ -1400,7 +1399,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
 - 총 분량 ${dlCfg.total}(공백 포함). 본문 전후 정형문 글자수 제외.
 - ${dlCfg.extra}
 
-★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 — 42조 4항) ★★
+${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 — 42조 4항) ★★
 - 앵커 종속항(청구항 ${deviceAnchorStart}~${deviceAnchorStart+deviceAnchorDep-1})은 진보성 방어의 핵심이므로, 일반 종속항보다 2배 이상 상세하게 기술하라.
 - 각 앵커 종속항의 기술적 구성에 대해:
   (1) 동작 원리를 단계별(입력→처리→출력)로 설명하라
@@ -1408,7 +1407,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
   (3) 기준값/임계값/가중치가 있으면, 그 값의 기술적 의의와 조정 시 영향을 설명하라
   (4) 다단계 처리가 있으면, 각 단계의 입력·처리·출력을 명시하라
   (5) 조건 분기가 있으면, 각 분기의 판단 기준과 분기 후 처리를 설명하라
-
+`:''}
 ★ 변형 실시예 규칙:
 - 독립항의 상위 개념 용어마다: "한편, 다른 실시예에서 상기 [용어]는 [구체적 대안]일 수 있다" 형태로 기술
 - 앵커 종속항의 핵심 처리에 대해 1개 이상의 대안적 구현을 기술
@@ -1446,8 +1445,8 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.st
 [청구항 구성]
 - 독립항 카테고리: ${catLabel}
 - 독립항: 1개 (【청구항 ${s}】)
-- 일반 종속항: ${methodGeneralDep}개 (청구항 ${s+1}~${s+methodGeneralDep})
-- 등록 앵커 종속항: ${methodAnchorDep}개 (청구항 ${mAnchorStart}~${mAnchorStart+methodAnchorDep-1})
+- 일반 종속항: ${methodGeneralDep}개${methodGeneralDep>0?' (청구항 '+(s+1)+'~'+(s+methodGeneralDep)+')':''}
+- 등록 앵커 종속항: ${methodAnchorDep}개${methodAnchorDep>0?' (청구항 '+mAnchorStart+'~'+(mAnchorStart+methodAnchorDep-1)+')':''}
 - 종결어: ${getCategoryEnding(methodCategory==='auto'?'method':methodCategory)}
 - \"~하는 단계\"를 포함하는 방법 형식
 
@@ -1462,13 +1461,12 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.st
 ③ 다중인용 종속항은 다른 다중인용 종속항을 인용 불가 (다중인용의 다중인용 금지)
 ④ 종속항은 인용하는 독립항 또는 종속항보다 뒤에 기재 (번호 역전 금지)
 
-[필수 작성 규칙] R1~R5 장치 청구항과 동일하게 적용.
-앵커 종속항은 (R5) 규칙 동일 적용: A~C 중 최소 2개 포함.
+[필수 작성 규칙] R1~R4 장치 청구항과 동일하게 적용.
+${methodAnchorDep>0?`앵커 종속항은 (R5) 규칙 동일 적용: A~C 중 최소 2개 포함.
 
 [앵커 테마 배정 — 내부 지침, 출력 금지]
 ${themeInst}
-
-[출력 형식] 【청구항 ${s}】부터. 청구항만 출력. 제한성 표현 금지.
+`:''}[출력 형식] 【청구항 ${s}】부터. 청구항만 출력. 제한성 표현 금지.
 ${getJepsonInstruction('method')}
 ★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
@@ -1566,13 +1564,13 @@ ${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${inv.slice(
 ★ 분량 지침: ${methodDetailGuide} 작성하라.
 ★ 방법의 수행 주체: "${getDeviceSubject()}"로 일관되게 서술하라.
 
-★★ 방법 앵커 종속항 뒷받침 규칙 (등록 핵심) ★★
+${methodAnchorDep>0?`★★ 방법 앵커 종속항 뒷받침 규칙 (등록 핵심) ★★
 - 방법 앵커 종속항의 각 기술적 구성(다단계 처리, 조건 분기, 기준값 등)을:
   (1) 단계별 처리 흐름으로 설명하라
   (2) "이러한 단계에 의하면, ~한 기술적 효과를 얻을 수 있다" 문장을 반드시 포함하라
   (3) 조건 분기의 판단 기준과 각 분기의 후속 처리를 명시하라
 - 일반 종속항보다 앵커 종속항 설명을 2배 이상 상세하게 기술하라
-
+`:''}
 ★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
 ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${step15Ref}${getFullInvention()}${styleRef}`;}
@@ -1605,14 +1603,15 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
 - 위 1~4에서 발견된 문제에 대한 구체적 수정 문장을 제시하라
 - 형식: [위치] 현재 문장 → 수정 문장
 
-[6] 앵커 종속항 뒷받침 집중 검토 (등록 핵심)
-- 장치 앵커 종속항(청구항 ${deviceAnchorStart}~)의 각 기술적 구성이 상세설명에서:
+${(deviceAnchorDep>0||methodAnchorDep>0)?`[6] 앵커 종속항 뒷받침 집중 검토 (등록 핵심)
+${deviceAnchorDep>0?`- 장치 앵커 종속항(청구항 ${deviceAnchorStart}~)의 각 기술적 구성이 상세설명에서:
   ① 동작 원리가 단계별(입력→처리→출력)로 설명되어 있는가?
   ② "이러한 구성에 의하면, ~" 형태의 기술적 효과가 명시되어 있는가?
   ③ 기준값/임계값/가중치의 의의가 설명되어 있는가?
   ④ 변형 실시예가 최소 1개 존재하는가?
-- 미흡한 앵커가 있으면 해당 청구항 번호와 함께 구체적 보완 문장을 제시하라
-${includeMethodClaims?`\n- 방법 앵커 종속항도 동일 기준으로 검토하라. 장치 앵커와 대응되는 방법 앵커의 뒷받침이 방법 상세설명에 충분한지 확인하라.`:''}
+- 미흡한 앵커가 있으면 해당 청구항 번호와 함께 구체적 보완 문장을 제시하라`:''}
+${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동일 기준으로 검토하라. 장치 앵커와 대응되는 방법 앵커의 뒷받침이 방법 상세설명에 충분한지 확인하라.`:''}
+`:''}
 
 [7] 발명 내용 반영 완전성
 - 원본 발명 내용의 핵심 기술 요소가 청구항과 상세설명에 모두 포함되어 있는지 확인
@@ -1996,7 +1995,7 @@ async function runBatch25(){
   }catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}
   finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}
 }
-async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
+async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;markOutputTimestamp(steps[i]);renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
 
 // ═══════════ PROVISIONAL APPLICATION (가출원) ═══════════
 async function openProvisionalModal(){
