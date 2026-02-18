@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════
-   특허명세서 자동 생성 v5.4 — Patent Pipeline (19-Step)
-   패치: 방법 도면 중앙선 직선화살표 + 도 1 L1 화살표 항상표시
+   특허명세서 자동 생성 v5.5 — Patent Pipeline (20-Step)
+   패치: 등록가능성 강화 + 사용자 명령어 + 앵커 뒷받침
    ═══════════════════════════════════════════════════════════ */
 
 // ═══ Anchor Themes (v4.7) ═══
@@ -12,7 +12,10 @@ const ANCHOR_THEMES = [
   {key:'explainability_trace', label:'설명가능성 추적', desc:'결과와 함께 근거/기여도/추적정보 생성·저장'},
   {key:'bias_normalization', label:'편향 정규화', desc:'정규화+편향 보정+클리핑 등 다단계 전처리'},
   {key:'feedback_reweighting', label:'피드백 재가중치', desc:'피드백 누적 후 가중치 재추정'},
-  {key:'privacy_audit', label:'프라이버시 감사', desc:'권한/마스킹/감사로그 기반 제어'}
+  {key:'privacy_audit', label:'프라이버시 감사', desc:'권한/마스킹/감사로그 기반 제어'},
+  {key:'temporal_windowing', label:'시계열 윈도우', desc:'시간 구간별 슬라이딩 윈도우·감쇠 계수·시점 가중 집계'},
+  {key:'caching_indexing', label:'캐싱/인덱싱', desc:'중간 결과 캐싱·해시 인덱스·유효기간 기반 갱신 판단'},
+  {key:'ensemble_arbitration', label:'앙상블 중재', desc:'복수 모델/알고리즘 출력의 투표·가중 평균·신뢰도 기반 선택'}
 ];
 const CATEGORY_ENDINGS = {
   server:'~을 특징으로 하는 …서버.', system:'~을 특징으로 하는 …시스템.',
@@ -39,6 +42,7 @@ let projectRefStyleText='';
 let beforeReviewText = '';
 let uploadedFiles = [];
 let diagramData = {};
+let stepUserCommands = {}; // v5.5: 각 스텝별 사용자 명령어
 
 // ═══ Step 8 정형문 ═══
 const STEP8_PREFIX = `이하, 본 발명의 실시예를 첨부된 도면을 참조하여 상세하게 설명한다.
@@ -54,14 +58,14 @@ const STEP8_SUFFIX = `본 발명에 따른 방법들은 다양한 컴퓨터 수�
 컴퓨터 판독 가능 매체의 예에는 롬(ROM), 램(RAM), 플래시 메모리(flash memory) 등과 같이 프로그램 명령을 저장하고 수행하도록 특별히 구성된 하드웨어 장치가 포함될 수 있다. 프로그램 명령의 예에는 컴파일러(compiler)에 의해 만들어지는 것과 같은 기계어 코드뿐만 아니라 인터프리터(interpreter) 등을 사용해서 컴퓨터에 의해 실행될 수 있는 고급 언어 코드를 포함할 수 있다. 상술한 하드웨어 장치는 본 발명의 동작을 수행하기 위해 적어도 하나의 소프트웨어 모듈로 작동하도록 구성될 수 있으며, 그 역도 마찬가지이다.
 또한, 상술한 방법 또는 장치는 그 구성이나 기능의 전부 또는 일부가 결합되어 구현되거나, 분리되어 구현될 수 있다.
 상기에서는 본 발명의 바람직한 실시예를 참조하여 설명하였지만, 해당 기술 분야의 숙련된 당업자는 하기의 특허 청구의 범위에 기재된 본 발명의 사상 및 필드로부터 벗어나지 않는 범위 내에서 본 발명을 다양하게 수정 및 변경시킬 수 있음을 이해할 수 있을 것이다.`;
-const STEP_NAMES={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술문헌',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'도면 설계',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서'};
+const STEP_NAMES={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술문헌',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'도면 설계',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서',step_20:'기록매체/프로그램 청구항'};
 
 
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
   currentProjectId=null;outputs={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
   usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};beforeReviewText='';uploadedFiles=[];diagramData={};
-  projectRefStyleText='';requiredFigures=[];
+  projectRefStyleText='';requiredFigures=[];outputTimestamps={};stepUserCommands={};
   // Claim defaults
   deviceCategory='server';deviceGeneralDep=5;deviceAnchorDep=4;deviceAnchorStart=7;
   anchorThemeMode='auto';selectedAnchorThemes=[];
@@ -71,7 +75,9 @@ function clearAllState(){
   const ids=['projectInput','titleInput'];ids.forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   ['titleConfirmArea','titleConfirmMsg','batchArea'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   for(let i=1;i<=19;i++){const e=document.getElementById(`resultStep${String(i).padStart(2,'0')}`);if(e)e.innerHTML='';}
-  ['resultsBatch25','resultsBatchFinish','validationResults','previewArea','diagramsStep07','diagramsStep11','fileList','requiredFiguresList'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
+  // v5.5: Clear step user command inputs
+  document.querySelectorAll('[id^="userCmd_"]').forEach(el=>{el.value='';});
+  ['resultsBatch25','resultsBatchFinish','validationResults','previewArea','diagramsStep07','diagramsStep11','fileList','requiredFiguresList','resultStep20'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
   ['btnApplyReview','diagramDownload07','diagramDownload11','reviewApplyResult'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   document.querySelectorAll('.tab-item').forEach((t,i)=>{t.classList.toggle('active',i===0);t.setAttribute('aria-selected',i===0);});
   document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('active',i===0));
@@ -296,6 +302,8 @@ async function openProject(pid){
   // Restore detail level
   detailLevel=s.detailLevel||'standard';customDetailChars=s.customDetailChars||2000;
   diagramData=s.diagramData||{};
+  outputTimestamps=s.outputTimestamps||{};
+  stepUserCommands=s.stepUserCommands||{};
   // FIX: Ensure API_KEY is loaded (use ensureApiKey instead of raw assignment)
   if(!API_KEY){App.ensureApiKey();}
   // Restore UI
@@ -305,6 +313,8 @@ async function openProject(pid){
   if(selectedTitleType){const ci=document.getElementById('customTitleType');if(ci)ci.value=selectedTitleType;document.getElementById('btnStep01').disabled=false;}
   if(selectedTitle){document.getElementById('titleInput').value=selectedTitle;const enInp=document.getElementById('titleInputEn');if(enInp)enInp.value=selectedTitleEn||'';document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';}
   Object.keys(outputs).forEach(k=>{if(outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied'))renderOutput(k,outputs[k]);});
+  // v5.5: 스텝별 사용자 명령어 UI 주입
+  injectAllUserCommandUIs();
   // Restore diagrams and show download buttons
   if(outputs.step_07_mermaid){renderDiagrams('step_07',outputs.step_07_mermaid);const dl07=document.getElementById('diagramDownload07');if(dl07)dl07.style.display='block';}
   if(outputs.step_11_mermaid){renderDiagrams('step_11',outputs.step_11_mermaid);const dl11=document.getElementById('diagramDownload11');if(dl11)dl11.style.display='block';}
@@ -338,7 +348,7 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData}}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands}}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===4)renderPreview();}
@@ -549,7 +559,104 @@ function autoSetDeviceCategoryFromTitle(title){
 }
 
 // ═══════════ HELPERS ═══════════
-function getLatestDescription(){return outputs.step_13_applied||outputs.step_09||outputs.step_08||'';}
+
+// ═══ v5.5: 스텝별 사용자 명령어 시스템 ═══
+function getStepUserCommand(sid){
+  // DOM 입력 필드에서 실시간 읽기 (있으면), 없으면 저장된 값
+  const el=document.getElementById(`userCmd_${sid}`);
+  const cmd=el?el.value.trim():(stepUserCommands[sid]||'');
+  if(cmd)stepUserCommands[sid]=cmd;
+  return cmd;
+}
+function setStepUserCommand(sid,val){
+  stepUserCommands[sid]=(val||'').trim();
+  const el=document.getElementById(`userCmd_${sid}`);
+  if(el)el.value=stepUserCommands[sid];
+}
+function buildUserCommandSuffix(sid){
+  const cmd=getStepUserCommand(sid);
+  if(!cmd)return '';
+  return `\n\n═══ 사용자 추가 지시사항 ═══\n아래 지시사항을 위의 기본 지침 범위 내에서 최우선으로 반영하라. 단, "지침 무시"라는 표현이 포함된 경우에는 기본 지침보다 아래 지시사항을 우선한다.\n${cmd}`;
+}
+// 스텝별 명령어 입력 UI를 동적으로 삽입하는 함수
+function injectUserCommandUI(sid,containerSelector){
+  const container=typeof containerSelector==='string'?document.querySelector(containerSelector):containerSelector;
+  if(!container)return;
+  // BUG-A fix: 이미 존재하면 값만 갱신
+  const existing=container.querySelector('.user-cmd-area');
+  if(existing){
+    const ta=existing.querySelector(`#userCmd_${sid}`);
+    if(ta)ta.value=stepUserCommands[sid]||'';
+    return;
+  }
+  const area=document.createElement('div');
+  area.className='user-cmd-area';
+  area.style.cssText='margin:8px 0';
+  area.innerHTML=`<details style="margin:0"><summary style="font-size:11px;color:var(--color-text-secondary);cursor:pointer;user-select:none;padding:4px 0">📝 추가 지시사항 (선택)</summary><textarea id="userCmd_${sid}" class="result-textarea" rows="2" placeholder="예: 독립항을 더 넓게 작성해 주세요 / 앵커에 캐싱 로직을 반드시 포함해 주세요" style="margin-top:6px;font-size:12px;min-height:48px;resize:vertical" oninput="stepUserCommands['${sid}']=this.value.trim()">${App.escapeHtml(stepUserCommands[sid]||'')}</textarea></details>`;
+  // 버튼 바로 앞에 삽입
+  const btn=container.querySelector('button[id^="btn"]');
+  if(btn)container.insertBefore(area,btn);
+  else container.appendChild(area);
+}
+function injectAllUserCommandUIs(){
+  // 주요 생성 스텝에 사용자 명령어 UI 삽입
+  const stepMap={
+    step_06:'btnStep06',step_07:'btnStep07',step_08:'btnStep08',
+    step_09:'btnStep09',step_10:'btnStep10',step_11:'btnStep11',
+    step_12:'btnStep12',step_13:'btnStep13',step_14:'btnStep14',
+    step_15:'btnStep15',step_20:'btnStep20'
+  };
+  Object.entries(stepMap).forEach(([sid,bid])=>{
+    const btn=document.getElementById(bid);
+    if(btn&&btn.parentElement)injectUserCommandUI(sid,btn.parentElement);
+  });
+}
+
+// ═══ A4 fix: Step 의존성 무효화 시스템 (v5.5) ═══
+const STEP_DEPENDENCIES={
+  step_06:['step_07','step_08','step_09','step_10','step_11','step_12','step_13','step_13_applied','step_15','step_17','step_18'],
+  step_07:['step_08','step_18'],
+  step_08:['step_09','step_13','step_13_applied'],
+  step_10:['step_11','step_12','step_17','step_20'],
+  step_11:['step_12','step_18'],
+};
+function invalidateDownstream(changedStep){
+  const deps=STEP_DEPENDENCIES[changedStep];
+  if(!deps||!deps.length)return;
+  const invalidated=deps.filter(d=>outputs[d]);
+  if(!invalidated.length)return;
+  invalidated.forEach(d=>{
+    // 실제 삭제는 하지 않고 경고만 (사용자가 재생성 결정)
+    const el=document.getElementById(`result${d.charAt(0).toUpperCase()+d.slice(1).replace('_','')}`);
+    if(el){
+      const warn=el.querySelector('.stale-warning');
+      if(!warn){
+        const w=document.createElement('div');
+        w.className='stale-warning';
+        w.style.cssText='background:#fff3e0;border:1px solid #ffb74d;border-radius:6px;padding:6px 10px;margin-bottom:6px;font-size:11px;color:#e65100;display:flex;align-items:center;gap:6px';
+        w.innerHTML=`<span class="tossface">⚠️</span> ${STEP_NAMES[changedStep]||changedStep} 변경으로 재생성 필요`;
+        el.prepend(w);
+      }
+    }
+  });
+  const names=invalidated.map(d=>STEP_NAMES[d]||d).slice(0,4);
+  App.showToast(`${STEP_NAMES[changedStep]} 변경 → ${names.join(', ')}${invalidated.length>4?' 등':''} 재생성 권장`,'warning');
+}
+
+// ═══ A1 fix: getLatestDescription — 타임스탬프 기반 최신본 (v5.5) ═══
+let outputTimestamps={};
+function markOutputTimestamp(sid){outputTimestamps[sid]=Date.now();}
+function getLatestDescription(){
+  // step_13_applied > step_09 > step_08 순이지만, step_08이 더 최신이면 step_08 우선
+  const candidates=['step_13_applied','step_09','step_08'];
+  const ts08=outputTimestamps.step_08||0;
+  const ts09=outputTimestamps.step_09||0;
+  const ts13a=outputTimestamps.step_13_applied||0;
+  // step_08이 step_09/step_13_applied보다 나중이면 step_08이 최신본
+  if(outputs.step_08&&ts08>ts09&&ts08>ts13a)return outputs.step_08;
+  // 기존 우선순위
+  return outputs.step_13_applied||outputs.step_09||outputs.step_08||'';
+}
 // 정형문 수동 삽입: 현재 Step 8 결과에 정형문을 전후에 삽입
 function insertBoilerplate(){
   const cur=outputs.step_08||'';
@@ -644,8 +751,8 @@ async function handleFileUpload(event) {
     }
   }
   event.target.value = '';
-  // 파일 업로드 후 자동 요약 생성
-  if(uploadedFiles.length>0)await generateInventionSummary();
+  // ═══ C5 fix: 디바운스 적용 (v5.5) — 연속 업로드 시 마지막만 API 호출 ═══
+  if(uploadedFiles.length>0)debouncedGenerateInventionSummary();
 }
 function removeUploadedFile(idx, name) {
   const f = uploadedFiles[idx];if (!f) return;
@@ -707,8 +814,15 @@ async function handleDroppedFiles(files){
       item.innerHTML=`<span class="tossface">❌</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
     }
   }
-  // 파일 업로드 후 자동 요약 생성
-  if(uploadedFiles.length>0)await generateInventionSummary();
+  // ═══ C5 fix: 디바운스 적용 (v5.5) — 연속 업로드 시 마지막만 API 호출 ═══
+  if(uploadedFiles.length>0)debouncedGenerateInventionSummary();
+}
+
+// ═══ C5: 파일 업로드 자동 요약 디바운스 (v5.5) ═══
+let _summaryDebounceTimer=null;
+function debouncedGenerateInventionSummary(){
+  if(_summaryDebounceTimer)clearTimeout(_summaryDebounceTimer);
+  _summaryDebounceTimer=setTimeout(()=>{generateInventionSummary();},1500);
 }
 
 // ═══ Task 2: 업로드 파일 자동 요약 (발명 내용 요약 표시) ═══
@@ -763,7 +877,10 @@ function buildAnchorThemeInstruction(mode,themes,count){
 - 근거/설명/기여도/추적/로그 → explainability_trace
 - 정규화/전처리/스케일/편향 → bias_normalization
 - 피드백/재학습/가중치 재조정 → feedback_reweighting
-- 권한/마스킹/암호화/감사 → privacy_audit`;
+- 권한/마스킹/암호화/감사 → privacy_audit
+- 시계열/시간/윈도우/감쇠/이력 → temporal_windowing
+- 캐싱/인덱싱/중간결과/조회속도 → caching_indexing
+- 앙상블/다중모델/투표/합의/비교 → ensemble_arbitration`;
 }
 function getCategoryEnding(cat){return CATEGORY_ENDINGS[cat]||CATEGORY_ENDINGS.server;}
 function autoDetectCategoryFromTitle(){
@@ -860,8 +977,8 @@ ${claimType==='method'
 
 // ═══ KIPRIS 선행기술 검색 ═══
 // Edge Function이 KIPRIS Plus API (plus.kipris.or.kr) 호출
-// KIPRIS Plus API 키 (common.js 통합 관리)
-function getKiprisKey(){return App.getKiprisKey();}
+// KIPRIS Plus API 키 (localStorage에서 사용자 설정 가능)
+function getKiprisKey(){return App.apiKeys.kipris||App.DEFAULT_KIPRIS_KEY;}
 
 // 등록번호 포맷: 1020XXXXXXX → 10-20XXXXX
 function formatRegNumber(regNum){
@@ -989,19 +1106,24 @@ async function searchPriorArt(title){
 function buildPrompt(stepId){
   const inv=document.getElementById('projectInput').value,T=selectedTitle;
   const styleRef=getStyleRef();
+  const prompt=_buildPromptCore(stepId,inv,T,styleRef);
+  if(!prompt)return prompt;
+  // v5.5: 사용자 추가 지시사항 자동 주입
+  return prompt+buildUserCommandSuffix(stepId);
+}
+function _buildPromptCore(stepId,inv,T,styleRef){
   switch(stepId){
     case 'step_01':return `프로젝트를 분석하여 특허 발명의 명칭 후보를 5가지 생성하라.\n형태: \"~${selectedTitleType}\"\n각 후보에 국문+영문.\n\n출력형식:\n[1] 국문: (명칭) / 영문: (명칭)\n[2] 국문: (명칭) / 영문: (명칭)\n[3] 국문: (명칭) / 영문: (명칭)\n[4] 국문: (명칭) / 영문: (명칭)\n[5] 국문: (명칭) / 영문: (명칭)\n\n[프로젝트]\n${inv}`;
-    case 'step_02':return `【기술분야】를 작성. \"본 발명은 ~에 관한 것이다.\" 한 문장만. 20단어. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}${styleRef}`;
-    case 'step_03':return `【발명의 배경이 되는 기술】을 작성. 3문단(기존문제/최근동향/필요성), 각 150단어. 번호 없이. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}${styleRef}`;
+    case 'step_02':return `【기술분야】를 작성. \"본 발명은 ~에 관한 것이다.\" 한 문장만. 50자 이내. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}${styleRef}`;
+    case 'step_03':return `【발명의 배경이 되는 기술】을 작성. 3문단(기존문제/최근동향/필요성), 각 450자. 번호 없이. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}${styleRef}`;
     case 'step_04':return null; // KIPRIS API 실시간 검색으로 대체
-    case 'step_05':return `【해결하고자 하는 과제】작성. \"본 발명은 ~을 제공하는 것을 목적으로 한다.\" 50단어 이하. 마지막: \"본 발명의 기술적 과제는 이상에서 언급한 기술적 과제로 제한되지 않으며, 언급되지 않은 또 다른 기술적 과제들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\" 헤더 금지.\n\n발명의 명칭: ${T}\n[배경기술] ${outputs.step_03||''}${styleRef}`;
+    case 'step_05':return `【해결하고자 하는 과제】작성. \"본 발명은 ~을 제공하는 것을 목적으로 한다.\" 150자 이내. 마지막: \"본 발명의 기술적 과제는 이상에서 언급한 기술적 과제로 제한되지 않으며, 언급되지 않은 또 다른 기술적 과제들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\" 헤더 금지.\n\n발명의 명칭: ${T}\n[배경기술] ${outputs.step_03||''}${styleRef}`;
 
     // ═══ Step 6: 장치 청구항 (v4.7 완전 재작성) ═══
     case 'step_06':{
       // v4.9: Auto-select category from title type if set to 'auto'
       const effectiveCat=(deviceCategory==='auto')?autoDetectCategoryFromTitle():deviceCategory;
       const catLabel=effectiveCat;
-      const totalDep=deviceGeneralDep+deviceAnchorDep;
       const anchorEnd=deviceAnchorStart+deviceAnchorDep-1;
       const themeInst=buildAnchorThemeInstruction(anchorThemeMode,selectedAnchorThemes,deviceAnchorDep);
       return `장치 청구범위를 작성하라.
@@ -1246,7 +1368,7 @@ ${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 �
 ★★★ 도 1은 L1(100,200,300,400) 장치만, 최외곽 박스 없음 ★★★
 ★★★ 도 2+: 최외곽 = 직계 부모 (세대 점프 금지!) ★★★
 
-${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
+${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(0,1500)}`;}
 
     case 'step_08':{
       const dlCfg={
@@ -1278,16 +1400,29 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${document.g
 - 총 분량 ${dlCfg.total}(공백 포함). 본문 전후 정형문 글자수 제외.
 - ${dlCfg.extra}
 
+★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 — 42조 4항) ★★
+- 앵커 종속항(청구항 ${deviceAnchorStart}~${deviceAnchorStart+deviceAnchorDep-1})은 진보성 방어의 핵심이므로, 일반 종속항보다 2배 이상 상세하게 기술하라.
+- 각 앵커 종속항의 기술적 구성에 대해:
+  (1) 동작 원리를 단계별(입력→처리→출력)로 설명하라
+  (2) "이러한 구성에 의하면, ~한 기술적 효과를 얻을 수 있다" 문장을 반드시 포함하라
+  (3) 기준값/임계값/가중치가 있으면, 그 값의 기술적 의의와 조정 시 영향을 설명하라
+  (4) 다단계 처리가 있으면, 각 단계의 입력·처리·출력을 명시하라
+  (5) 조건 분기가 있으면, 각 분기의 판단 기준과 분기 후 처리를 설명하라
+
+★ 변형 실시예 규칙:
+- 독립항의 상위 개념 용어마다: "한편, 다른 실시예에서 상기 [용어]는 [구체적 대안]일 수 있다" 형태로 기술
+- 앵커 종속항의 핵심 처리에 대해 1개 이상의 대안적 구현을 기술
+- 변형 실시예는 독립항의 보호범위를 뒷받침하는 방향이어야 한다
+
 ★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
-${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.step_07||''}${outputs.step_15?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention()}${styleRef}`;}
+${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention()}${styleRef}`;}
 
-    case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${outputs.step_15?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
+    case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
     // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
     case 'step_10':{
       const s=getLastClaimNumber(outputs.step_06||'')+1;
-      const totalDep=methodGeneralDep+methodAnchorDep;
       const mAnchorStart=s+methodGeneralDep+1;
       const catLabel=methodCategory==='auto'?'발명에 가장 적합한 카테고리를 선택하라':methodCategory;
       const themeInst=buildAnchorThemeInstruction(methodAnchorThemeMode,selectedMethodAnchorThemes,methodAnchorDep);
@@ -1302,11 +1437,17 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.st
 - 장치 청구항의 여러 종속항을 하나의 방법 단계로 병합할 수 있다.
 - 방법 청구항의 개수는 장치 청구항과 다를 수 있다.
 
+★★ 장치 청구항과의 차별화 규칙 ★★
+- 장치 청구항의 "~부"를 단순히 "~하는 단계"로 치환하지 마라.
+- 방법 청구항은 시간적 순서와 조건 분기를 명시하라: "~한 후", "~하는 경우", "~에 응답하여"
+- 장치에 없는 전처리/후처리/판단 단계를 추가하여 방법만의 기술적 특징을 확보하라.
+- 방법 독립항은 장치 독립항과 다른 관점(프로세스 관점)에서 발명을 기술하라.
+
 [청구항 구성]
 - 독립항 카테고리: ${catLabel}
 - 독립항: 1개 (【청구항 ${s}】)
-- 일반 종속항: ${methodGeneralDep}개
-- 등록 앵커 종속항: ${methodAnchorDep}개 (청구항 ${mAnchorStart}부터)
+- 일반 종속항: ${methodGeneralDep}개 (청구항 ${s+1}~${s+methodGeneralDep})
+- 등록 앵커 종속항: ${methodAnchorDep}개 (청구항 ${mAnchorStart}~${mAnchorStart+methodAnchorDep-1})
 - 종결어: ${getCategoryEnding(methodCategory==='auto'?'method':methodCategory)}
 - \"~하는 단계\"를 포함하는 방법 형식
 
@@ -1412,11 +1553,90 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
 ★★★ 최외곽 프레임 박스 절대 금지 — 흐름도는 프레임 없이 단계만 나열 ★★★
 ★★★ 장치 구성요소(100, 110 등)는 절대 포함 금지 — S로 시작하는 단계번호만 사용 ★★★
 
-${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${document.getElementById('projectInput').value.slice(0,1500)}`;}
+${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${inv.slice(0,1500)}`;}
 
-    case 'step_12':return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: \"이하에서는 앞서 설명한 ${getDeviceSubject()}의 구성 및 동작을 참조하여 ${getDeviceSubject()}에 의해 수행되는 방법을 설명한다.\" 생략 금지. 제한성 표현 금지.\n\n★ 방법의 수행 주체: \"${getDeviceSubject()}\"로 일관되게 서술하라.\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${outputs.step_15?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 방법 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention()}${styleRef}`;
-    case 'step_13':return `청구범위와 상세설명 검토:\n1.청구항뒷받침 2.기술적비약 3.수학식정합성 4.반복실시가능성 5.보완/수정 구체적 문장\n${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}`;
-    case 'step_14':return `대안 청구항. 핵심유지 표현달리. 독립항은 반드시 젭슨(Jepson) 형식 유지: "~에 있어서," 전환부 + "~을 특징으로 하는" 종결부. 【청구항 N】.\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}`;
+    case 'step_12':{
+      // ═══ B1 fix: 분량 제어 추가 (v5.5) ═══
+      const dl=detailLevel;
+      const methodDetailGuide=dl==='compact'?'약 800자(공백 포함) 이내로 핵심만 간결하게':dl==='standard'?'약 1,200자(공백 포함) 내외로 균형 있게':dl==='detailed'?'약 2,000자(공백 포함) 이상으로 상세하게':dl==='custom'?`약 ${Math.round((customDetailChars||1200)*0.7)}자(공백 포함) 내외로`:'약 1,200자(공백 포함) 내외로';
+      // ═══ B3 fix: step_15 순환참조 — 타임스탬프 비교 (v5.5 BUG-4 수정) ═══
+      const step15Ref=(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_12||0))?`\n\n[특허성 검토 결과 — 아래 지적사항을 방법 상세설명에 반영하여 보완하라]\n${outputs.step_15.slice(0,2000)}`:'';
+      return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: "이하에서는 앞서 설명한 ${getDeviceSubject()}의 구성 및 동작을 참조하여 ${getDeviceSubject()}에 의해 수행되는 방법을 설명한다." 생략 금지. 제한성 표현 금지.
+
+★ 분량 지침: ${methodDetailGuide} 작성하라.
+★ 방법의 수행 주체: "${getDeviceSubject()}"로 일관되게 서술하라.
+
+★★ 방법 앵커 종속항 뒷받침 규칙 (등록 핵심) ★★
+- 방법 앵커 종속항의 각 기술적 구성(다단계 처리, 조건 분기, 기준값 등)을:
+  (1) 단계별 처리 흐름으로 설명하라
+  (2) "이러한 단계에 의하면, ~한 기술적 효과를 얻을 수 있다" 문장을 반드시 포함하라
+  (3) 조건 분기의 판단 기준과 각 분기의 후속 처리를 명시하라
+- 일반 종속항보다 앵커 종속항 설명을 2배 이상 상세하게 기술하라
+
+★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
+
+${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${step15Ref}${getFullInvention()}${styleRef}`;}
+    case 'step_13':{
+      return `아래 청구범위와 상세설명을 전문적으로 검토하라.
+
+═══ 검토 항목 및 기준 ═══
+
+[1] 청구항 뒷받침 검토 (특허법 제42조 제4항 제1호)
+- 각 독립항의 모든 구성요소가 상세설명에서 충분히 설명되어 있는지 확인
+- 종속항의 추가 한정 사항이 상세설명에 뒷받침되는지 확인
+- 미흡한 경우: 보완이 필요한 구체적 문장을 제시하라
+
+[2] 기술적 비약 검토
+- 상세설명에서 청구항의 기술적 효과로 직접 연결되지 않는 논리적 비약이 있는지 확인
+- "~할 수 있다"로 끝나는 모호한 효과 서술이 없는지 확인
+- 미흡한 경우: 구체적 보완 문장을 제시하라
+
+[3] 수학식 정합성 검토
+- 수학식의 변수가 상세설명에서 모두 정의되어 있는지 확인
+- 수학식이 청구항의 기술적 구성과 대응되는지 확인
+- 수학식이 없는 경우 이 항목은 "해당 없음"으로 표기
+
+[4] 반복실시 가능성 (특허법 제42조 제3항 제1호)
+- 당업자가 상세설명만으로 발명을 실시할 수 있을 만큼 구체적인지 확인
+- 핵심 알고리즘/처리 로직의 단계별 설명이 충분한지 확인
+- 입력/출력 데이터의 구조와 형식이 명확한지 확인
+
+[5] 보완/수정 제안
+- 위 1~4에서 발견된 문제에 대한 구체적 수정 문장을 제시하라
+- 형식: [위치] 현재 문장 → 수정 문장
+
+[6] 앵커 종속항 뒷받침 집중 검토 (등록 핵심)
+- 장치 앵커 종속항(청구항 ${deviceAnchorStart}~)의 각 기술적 구성이 상세설명에서:
+  ① 동작 원리가 단계별(입력→처리→출력)로 설명되어 있는가?
+  ② "이러한 구성에 의하면, ~" 형태의 기술적 효과가 명시되어 있는가?
+  ③ 기준값/임계값/가중치의 의의가 설명되어 있는가?
+  ④ 변형 실시예가 최소 1개 존재하는가?
+- 미흡한 앵커가 있으면 해당 청구항 번호와 함께 구체적 보완 문장을 제시하라
+${includeMethodClaims?`\n- 방법 앵커 종속항도 동일 기준으로 검토하라. 장치 앵커와 대응되는 방법 앵커의 뒷받침이 방법 상세설명에 충분한지 확인하라.`:''}
+
+[7] 발명 내용 반영 완전성
+- 원본 발명 내용의 핵심 기술 요소가 청구항과 상세설명에 모두 포함되어 있는지 확인
+- 누락된 기술 요소가 있으면 구체적으로 지적하라
+
+═══ 출력 형식 ═══
+각 항목별로:
+✅ 적합 또는 ⚠️ 보완 필요
+- (구체적 지적사항 및 수정 제안)
+
+마지막에 전체 요약 (보완 우선순위 포함)
+
+${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}${outputs.step_12?'\n[방법 상세설명] '+outputs.step_12.slice(0,3000):''}\n[원본 발명 내용] ${inv.slice(0,3000)}`;}
+
+    case 'step_14':return `대안 청구항을 작성하라. 원본 청구항의 핵심 기술적 구성은 그대로 유지하되, 표현을 달리하라.
+
+★ 작성 규칙:
+- 독립항은 반드시 젭슨(Jepson) 형식 유지: "~에 있어서," 전환부 + "~을 특징으로 하는" 종결부
+- 표현 변경의 목적: 심사관의 거절 시 대응용 대안 확보
+- 구성요소 명칭, 동작 서술 방식, 문장 구조를 변경하되 기술적 의미는 동일하게 유지
+- 상세설명과 발명 내용을 참고하여, 표현 변경 시 기술적 정확성을 확보하라
+- 【청구항 N】 형식
+
+\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}\n[상세설명 — 참고용] ${(getLatestDescription()||'').slice(0,2000)}${getFullInvention()}${styleRef}`;
     case 'step_15':return `특허성 검토: 아래 청구범위와 상세설명에 대해 다음 항목을 검토하라.
 
 (1) 신규성: 청구항의 구성요소 조합이 선행기술과 구별되는지
@@ -1428,8 +1648,14 @@ ${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${document.g
 각 항목별로 평가 결과와 개선 제안을 작성하라.
 
 ${T}\n[전체 청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명 요약] ${(getLatestDescription()||'').slice(0,3000)}\n[발명 내용] ${inv.slice(0,2000)}`;
-    case 'step_16':return `발명의 효과. \"본 발명에 따르면,\"시작. 50단어 이내. 마지막: \"본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며, 언급되지 않은 또 다른 효과들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\"\n${T}\n[과제] ${outputs.step_05||''}\n[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
-    case 'step_17':return `과제의 해결 수단. \"본 발명의 일 실시예에 따른\"시작. 마지막: \"본 발명의 기타 구체적인 사항들은 상세한 설명 및 도면들에 포함되어 있다.\"\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}${styleRef}`;
+    case 'step_16':return `발명의 효과. \"본 발명에 따르면,\"시작. 150자 이내. 마지막: \"본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며, 언급되지 않은 또 다른 효과들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\"\n${T}\n[독립항] ${(outputs.step_06||'').match(/【청구항 1】[\s\S]*?(?=【청구항 2】|$)/)?.[0]||''}\n[과제] ${outputs.step_05||''}\n[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
+    case 'step_17':return `과제의 해결 수단. 각 독립항 카테고리별로 요약하라.
+형식:
+"본 발명의 일 실시예에 따른 ${getDeviceSubject()}는, ..." (장치 독립항 요약)
+${includeMethodClaims?'"본 발명의 일 실시예에 따른 방법은, ..." (방법 독립항 요약)':''}
+${outputs.step_20?'"본 발명의 일 실시예에 따른 컴퓨터 판독 가능 기록매체는, ..." (기록매체 독립항 요약)\n"본 발명의 일 실시예에 따른 컴퓨터 프로그램은, ..." (프로그램 독립항 요약)':''}
+마지막: "본 발명의 기타 구체적인 사항들은 상세한 설명 및 도면들에 포함되어 있다."
+\n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}${outputs.step_20?'\n[기록매체/프로그램] '+outputs.step_20:''}${styleRef}`;
     case 'step_18':{
       const hasMethod=includeMethodClaims&&outputs.step_11;
       return `【부호의 설명】을 작성하라.
@@ -1458,7 +1684,36 @@ ${hasMethod?`[방법 단계 — S+숫자 사용]
 ⚠️ 장치 구성요소(숫자)와 방법 단계(S숫자)를 반드시 구분하여 별도 섹션으로 작성하라.`:`⚠️ 장치 구성요소만 작성하라. 방법 단계(S100 등)는 포함하지 마라.`}
 
 ${T}\n[장치 도면] ${outputs.step_07||''}${hasMethod?`\n[방법 도면] ${outputs.step_11||''}`:''}`}
-    case 'step_19':return `요약서. 청구항1 기준 150단어. \"본 발명은\"시작.\n출력:\n【요약】\n(본문)\n\n【대표도】\n도 1\n\n위 형식만.\n${T}\n[청구항1] ${(outputs.step_06||'').slice(0,1500)}${styleRef}`;
+    case 'step_19':return `요약서. 청구항1 기준 450자. \"본 발명은\"시작.\n출력:\n【요약】\n(본문)\n\n【대표도】\n도 1\n\n위 형식만.\n${T}\n[청구항1] ${(outputs.step_06||'').slice(0,1500)}${styleRef}`;
+
+    // ═══ Step 20: 기록매체 / 컴퓨터 프로그램 독립항 (v5.5 신규) ═══
+    case 'step_20':{
+      const lastNum=getLastClaimNumber([outputs.step_06||'',outputs.step_10||''].join('\n'));
+      const mediaStart=lastNum+1;
+      const progStart=lastNum+2;
+      return `아래 방법 청구항을 기반으로 기록매체 독립항 1개와 컴퓨터 프로그램 독립항 1개를 작성하라.
+
+═══ 작성 규칙 ═══
+
+[1] 컴퓨터 판독 가능 기록매체 독립항 (【청구항 ${mediaStart}】)
+- 형식: "프로세서에 의해 실행되면, ~방법을 수행하는 프로그램이 기록된 컴퓨터 판독 가능 기록매체."
+- 방법 독립항의 모든 단계를 빠짐없이 포함
+- "~하는 단계;" 형태로 단계를 나열
+- 마지막: "을 수행하는 프로그램이 기록된 컴퓨터 판독 가능 기록매체."
+
+[2] 컴퓨터 프로그램 독립항 (【청구항 ${progStart}】)
+- 형식: "하드웨어인 컴퓨터와 결합되어, ~방법을 수행시키기 위해 컴퓨터 판독 가능 기록매체에 저장된 컴퓨터 프로그램."
+- 방법 독립항의 모든 단계를 빠짐없이 포함
+- 마지막: "을 수행시키기 위해 컴퓨터 판독 가능 기록매체에 저장된 컴퓨터 프로그램."
+
+═══ 핵심 주의사항 ═══
+- 방법 독립항의 단계를 그대로 인용하되, "프로세서가" 또는 "컴퓨터가" 수행하는 형태로 서술
+- 장치 구성요소(~부, 참조번호)는 포함하지 마라 — 방법의 단계만 기술
+- 젭슨(Jepson) 형식 불필요 — 기록매체/프로그램은 전체가 신규 구성이므로
+- 【청구항 N】 형식 준수, 번호는 ${mediaStart}부터
+
+${T}\n[방법 청구항] ${outputs.step_10||''}\n[장치 독립항 — 참고용] ${(outputs.step_06||'').slice(0,2000)}`;}
+
     default:return '';
   }
 }
@@ -1468,19 +1723,20 @@ let globalProcessing = false;
 function setGlobalProcessing(on){
   globalProcessing=on;
   // Disable/enable ALL generation buttons when any task is running
-  const allBtns=['btnStep01','btnBatch25','btnStep06','btnStep10','btnStep14','btnStep15','btnStep07','btnStep08','btnStep09','btnStep11','btnStep12','btnStep13','btnApplyReview','btnBatchFinish','btnProvisionalGen','btnInsertBoilerplate'];
+  const allBtns=['btnStep01','btnBatch25','btnStep06','btnStep10','btnStep14','btnStep15','btnStep07','btnStep08','btnStep09','btnStep11','btnStep12','btnStep13','btnStep20','btnApplyReview','btnBatchFinish','btnProvisionalGen','btnInsertBoilerplate'];
   allBtns.forEach(bid=>{const b=document.getElementById(bid);if(b){if(on){b.dataset.prevDisabled=b.disabled;b.disabled=true;b.style.opacity='0.5';}else{b.disabled=b.dataset.prevDisabled==='true';b.style.opacity='';delete b.dataset.prevDisabled;}}});
   // Also disable validation button and tab switches during processing
   document.querySelectorAll('.tab-item').forEach(t=>{if(on){t.style.pointerEvents='none';t.style.opacity='0.7';}else{t.style.pointerEvents='';t.style.opacity='';}});
 }
-function checkDependency(s){const inv=document.getElementById('projectInput').value.trim();const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저'};return d[s]?d[s]():null;}
-async function runStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13',step_14:'btnStep14',step_15:'btnStep15'},bid=bm[sid];setGlobalProcessing(true);loadingState[sid]=true;if(bid)App.setButtonLoading(bid,true);
+function checkDependency(s){const inv=document.getElementById('projectInput').value.trim();const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저',step_20:()=>outputs.step_10?null:'방법 청구항 먼저'};return d[s]?d[s]():null;}
+async function runStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13',step_14:'btnStep14',step_15:'btnStep15',step_20:'btnStep20'},bid=bm[sid];setGlobalProcessing(true);loadingState[sid]=true;if(bid)App.setButtonLoading(bid,true);
   try{
     // Step 04: KIPRIS API 실시간 검색
     if(sid==='step_04'){
       const sr=await searchPriorArt(selectedTitle);
       if(sr){outputs.step_04=sr.formatted;renderOutput('step_04',sr.formatted);}
       else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderOutput('step_04',outputs.step_04);}
+      markOutputTimestamp('step_04');
       saveProject(true);App.showToast('선행기술문헌 검색 완료');
       return;
     }
@@ -1489,11 +1745,14 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     if(sid==='step_13'){
       App.showProgress('progressStep13','AI 검토 생성 중...',0,1);
       const text=await App.callClaudeWithContinuation(buildPrompt(sid),'progressStep13');
-      r={text};outputs[sid]=text;
+      r={text};outputs[sid]=text;markOutputTimestamp(sid);
     } else {
-      r=await App.callClaude(buildPrompt(sid));outputs[sid]=r.text;
+      r=await App.callClaude(buildPrompt(sid));outputs[sid]=r.text;markOutputTimestamp(sid);
     }
     renderOutput(sid,r.text||outputs[sid]);
+    // ★ A4 fix: 후속 스텝 무효화 경고 (v5.5) ★
+    // step_06/step_10은 교정 완료 후 자체 호출하므로 여기서 제외
+    if(sid !== 'step_06' && sid !== 'step_10') invalidateDownstream(sid);
     // Step 6: auto-validation + multi-round correction (v5.2)
     if(sid==='step_06'){
       let corrected=outputs[sid];
@@ -1507,7 +1766,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
         const fixPrompt=`아래 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 상위항(독립항 포함)에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 상위항에 추가할 때는 독립항의 범위가 과도하게 좁아지지 않도록 주의\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${corrected}`;
         const fixR=await App.callClaude(fixPrompt);corrected=fixR.text;
       }
-      outputs[sid]=corrected;renderOutput(sid,corrected);
+      outputs[sid]=corrected;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,corrected);
       const finalIssues=validateClaims(corrected);
       App.showProgress('progressStep06',`완료 (수정 ${correctionRound}회)`,maxRounds*2+1,maxRounds*2+1);
       setTimeout(()=>App.clearProgress('progressStep06'),2000);
@@ -1531,7 +1790,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
         const fixPrompt=`아래 방법 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n⛔⛔ 절대 금지: 청구항 번호를 변경하지 마라! 방법 독립항은 반드시 【청구항 ${firstClaimNum}】을 유지해야 한다. 절대로 【청구항 1】로 변경 금지! ⛔⛔\n\n수정 규칙:\n- 【청구항 N】형식 유지 — 번호 변경 금지\n- \"상기\" 선행기재 누락: 방법 독립항(청구항 ${firstClaimNum}) 내에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위 — 번호 유지!]\n${corrected}`;
         const fixR=await App.callClaude(fixPrompt);corrected=fixR.text;
       }
-      outputs[sid]=corrected;renderOutput(sid,corrected);
+      outputs[sid]=corrected;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,corrected);
       const finalIssues=validateClaims(corrected);
       App.showProgress('progressStep10',`완료 (수정 ${correctionRound}회)`,maxRounds*2+1,maxRounds*2+1);
       setTimeout(()=>App.clearProgress('progressStep10'),2000);
@@ -1544,29 +1803,87 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     }
     saveProject(true);
   }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
-async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);App.showProgress(pid,`${STEP_NAMES[sid]} 생성 중...`,0,1);try{const t=await App.callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
-async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);renderOutput('step_09',outputs.step_09);saveProject(true);App.showToast('수학식 삽입 완료');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
+async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);App.showProgress(pid,`${STEP_NAMES[sid]} 생성 중...`,0,1);try{const t=await App.callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
+async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);markOutputTimestamp('step_09');renderOutput('step_09',outputs.step_09);saveProject(true);App.showToast('수학식 삽입 완료');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
 
 async function applyReview(){
   if(globalProcessing)return;if(!outputs.step_13){App.showToast('검토 결과 없음','error');return;}
   const cur=getLatestDescription();if(!cur){App.showToast('상세설명 없음','error');return;}
+  const hasMethodDesc=!!(outputs.step_12&&includeMethodClaims);
+  const totalSteps=hasMethodDesc?4:3;
   beforeReviewText=cur;setGlobalProcessing(true);loadingState.applyReview=true;App.setButtonLoading('btnApplyReview',true);
   try{
-    App.showProgress('progressApplyReview','[1/3] 검토 반영 보완 중...',1,3);
-    const dlCfg={compact:{c:'약 1,000자',t:'약 3,000~4,000자'},standard:{c:'약 1,500자',t:'약 5,000~7,000자'},detailed:{c:'약 2,000자 이상',t:'8,000~10,000자'},custom:{c:'약 '+customDetailChars+'자',t:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자'}}[detailLevel];
-    const improvedDesc=await App.callClaudeWithContinuation(`[검토 결과]를 반영하여 【발명을 실시하기 위한 구체적인 내용】의 본문만 완전히 새로 작성하라.\n\n규칙:\n- 기존 상세설명을 기반으로 검토 지적사항을 모두 보완하라.\n- 이 항목만 작성. 다른 항목 포함 금지.\n- ${getDeviceSubject()}(100)를 주어. \"구성요소(참조번호)\" 형태.\n- 도면별 \"도 N을 참조하면,\" 형태.\n- 특허문체(~한다). 글머리 금지. 생략 금지.\n- 도면 1개당 ${dlCfg.c}, 총 ${dlCfg.t}. (정형문 제외)\n- 등록 앵커 종속항의 다단계 처리, 기준값/가중치 동작, 검증/보정 루프를 구체적으로 설명하라.\n- 제한성 표현 금지.\n- 수학식은 포함하지 마라 (별도 삽입 예정).\n\n★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★\n\n[발명의 명칭] ${selectedTitle}\n[검토 결과] ${outputs.step_13}\n[청구범위] ${outputs.step_06||''}\n[도면] ${outputs.step_07||''}\n[현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention()}${getStyleRef()}`,'progressApplyReview');
-    outputs.step_08=improvedDesc;
-    App.showProgress('progressApplyReview','[2/3] 수학식 삽입 중...',2,3);
+    // ═══ [1] 장치 상세설명 보완 (원문 유지 + 지적사항만 보완) ═══
+    App.showProgress('progressApplyReview',`[1/${totalSteps}] 장치 상세설명 보완 중...`,1,totalSteps);
+    const improvedDesc=await App.callClaudeWithContinuation(`[검토 결과]의 지적사항을 반영하여 아래 [현재 상세설명]을 보완하라.
+
+★★★ 최우선 원칙: 원문 최대 유지 ★★★
+- 검토에서 지적된 부분만 수정·보완하라. 지적 없는 부분은 원문을 그대로 유지하라.
+- 기존 구성요소 설명의 문체·분량·표현·순서를 임의로 변경하지 마라.
+- 새로운 문장을 추가할 때는 기존 문맥에 자연스럽게 삽입하라.
+
+★★ 앵커 종속항 보완 집중 ★★
+- 검토 항목 [6]의 앵커 관련 지적사항은 반드시 보완하라.
+- 앵커 종속항의 기술적 구성에 대해:
+  (1) 동작 원리를 단계별(입력→처리→출력)로 보완
+  (2) "이러한 구성에 의하면, ~한 기술적 효과를 얻을 수 있다" 문장 추가
+  (3) 기준값/임계값의 의의 설명 추가
+
+규칙:
+- 이 항목만 작성. 다른 항목 포함 금지.
+- ${getDeviceSubject()}(100)를 주어. "구성요소(참조번호)" 형태.
+- 도면별 "도 N을 참조하면," 형태 유지.
+- 특허문체(~한다). 글머리 금지. 생략 금지.
+- 제한성 표현 금지.
+- 수학식은 포함하지 마라 (별도 삽입 예정).
+
+[발명의 명칭] ${selectedTitle}
+[검토 결과] ${outputs.step_13}
+[청구범위] ${outputs.step_06||''}
+[도면] ${outputs.step_07||''}
+[현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention()}${getStyleRef()}${buildUserCommandSuffix('step_08')}`,'progressApplyReview');
+    outputs.step_08=improvedDesc;markOutputTimestamp('step_08');
+
+    // ═══ [2] 수학식 재삽입 ═══
+    App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 삽입 중...`,2,totalSteps);
     const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${improvedDesc}`);
     const finalDesc=insertMathBlocks(improvedDesc,mathR.text);
-    outputs.step_09=finalDesc;outputs.step_13_applied=finalDesc;
-    App.showProgress('progressApplyReview','[3/3] 완료',3,3);
+    outputs.step_09=finalDesc; // BUG-B fix: step_09도 갱신하여 저장/리로드 시 UI 일관성 유지
+    outputs.step_13_applied=finalDesc;
+    markOutputTimestamp('step_09');markOutputTimestamp('step_13_applied');
     renderOutput('step_08',improvedDesc);renderOutput('step_09',finalDesc);
+
+    // ═══ [3] 방법 상세설명 보완 (있는 경우만) ═══
+    if(hasMethodDesc){
+      App.showProgress('progressApplyReview',`[3/${totalSteps}] 방법 상세설명 보완 중...`,3,totalSteps);
+      const improvedMethod=await App.callClaudeWithContinuation(`[검토 결과]의 방법 관련 지적사항을 반영하여 아래 [현재 방법 상세설명]을 보완하라.
+
+★★★ 최우선 원칙: 원문 최대 유지 ★★★
+- 검토에서 지적된 부분만 수정·보완하라. 지적 없는 부분은 원문을 그대로 유지하라.
+
+★★ 방법 앵커 종속항 보완 집중 ★★
+- 앵커 종속항의 기술적 구성에 대해 동작 원리와 기술적 효과를 보완하라.
+
+규칙:
+- 방법 상세설명만 작성. 장치 상세설명 포함 금지.
+- 특허문체(~한다). 글머리 금지. 생략 금지. 제한성 표현 금지.
+- 수행 주체: "${getDeviceSubject()}"로 일관되게 서술.
+
+[발명의 명칭] ${selectedTitle}
+[검토 결과] ${outputs.step_13}
+[방법 청구항] ${outputs.step_10||''}
+[현재 방법 상세설명] ${outputs.step_12}${getStyleRef()}${buildUserCommandSuffix('step_12')}`,'progressApplyReview');
+      outputs.step_12=improvedMethod;markOutputTimestamp('step_12');
+      renderOutput('step_12',improvedMethod);
+    }
+
+    // ═══ 완료 ═══
+    App.showProgress('progressApplyReview',`[${totalSteps}/${totalSteps}] 완료`,totalSteps,totalSteps);
     const resultArea=document.getElementById('reviewApplyResult');
     if(resultArea){resultArea.style.display='block';showReviewDiff('after');}
     setTimeout(()=>App.clearProgress('progressApplyReview'),2000);
     saveProject(true);
-    App.showToast('검토 반영 완료');
+    App.showToast(`검토 반영 완료${hasMethodDesc?' (장치+방법)':''}`);
   }catch(e){App.showToast(e.message,'error');}finally{loadingState.applyReview=false;App.setButtonLoading('btnApplyReview',false);setGlobalProcessing(false);}
 }
 function showReviewDiff(mode){
@@ -1618,7 +1935,7 @@ ${preIssues.map(i=>i.message).join('\n')}
       }
     }
     
-    outputs[sid]=designText;
+    outputs[sid]=designText;markOutputTimestamp(sid);invalidateDownstream(sid);
     renderOutput(sid,designText);
     
     // 3. Mermaid 변환
@@ -1642,7 +1959,43 @@ ${preIssues.map(i=>i.message).join('\n')}
     setGlobalProcessing(false);
   }
 }
-async function runBatch25(){if(globalProcessing)return;if(!selectedTitle){App.showToast('명칭 먼저 확정','error');return;}setGlobalProcessing(true);loadingState.batch25=true;App.setButtonLoading('btnBatch25',true);document.getElementById('resultsBatch25').innerHTML='';const steps=['step_02','step_03','step_04','step_05'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatch',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);if(steps[i]==='step_04'){const sr=await searchPriorArt(selectedTitle);if(sr){outputs.step_04=sr.formatted;renderBatchResult('resultsBatch25','step_04',sr.formatted);}else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderBatchResult('resultsBatch25','step_04',outputs.step_04);}continue;}const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatch25',steps[i],r.text);}App.clearProgress('progressBatch');saveProject(true);App.showToast('기본 항목 완료');}catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}}
+async function runBatch25(){
+  if(globalProcessing)return;
+  if(!selectedTitle){App.showToast('명칭 먼저 확정','error');return;}
+  setGlobalProcessing(true);loadingState.batch25=true;App.setButtonLoading('btnBatch25',true);
+  document.getElementById('resultsBatch25').innerHTML='';
+  
+  try{
+    // ═══ API 효율화: step_02/03/04 병렬 실행 (v5.5) ═══
+    App.showProgress('progressBatch','기본 항목 병렬 생성 중 (1/2)',1,2);
+    
+    const [r02,r03,r04]=await Promise.all([
+      App.callClaude(buildPrompt('step_02')),
+      App.callClaude(buildPrompt('step_03')),
+      searchPriorArt(selectedTitle)
+    ]);
+    
+    outputs.step_02=r02.text;markOutputTimestamp('step_02');
+    renderBatchResult('resultsBatch25','step_02',r02.text);
+    
+    outputs.step_03=r03.text;markOutputTimestamp('step_03');
+    renderBatchResult('resultsBatch25','step_03',r03.text);
+    
+    if(r04){outputs.step_04=r04.formatted;renderBatchResult('resultsBatch25','step_04',r04.formatted);}
+    else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderBatchResult('resultsBatch25','step_04',outputs.step_04);}
+    markOutputTimestamp('step_04');
+    
+    // step_05는 step_03에 의존하므로 순차 실행
+    App.showProgress('progressBatch','해결하고자 하는 과제 (2/2)',2,2);
+    const r05=await App.callClaude(buildPrompt('step_05'));
+    outputs.step_05=r05.text;markOutputTimestamp('step_05');
+    renderBatchResult('resultsBatch25','step_05',r05.text);
+    
+    App.clearProgress('progressBatch');
+    saveProject(true);App.showToast('기본 항목 완료 (병렬 처리)');
+  }catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}
+  finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}
+}
 async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
 
 // ═══════════ PROVISIONAL APPLICATION (가출원) ═══════════
@@ -1928,16 +2281,64 @@ function insertMathBlocks(s08,s09){
   // First strip any existing math blocks from base text to prevent duplication
   let r=stripMathBlocks(s08);
   const b=parseMathBlocks(s09);
+  if(!b.length)return r;
   // Track inserted positions to avoid double-insertion
   const inserted=new Set();
+  let successCount=0,failCount=0;
+  
+  // ═══ A3 fix: 유사도 기반 매칭 (v5.5) ═══
+  function fuzzyFind(text,anchor){
+    // 1차: 정확 매칭
+    const exact=text.indexOf(anchor);
+    if(exact>=0)return exact;
+    // 2차: 공백/구두점 정규화 후 매칭
+    const normalize=s=>s.replace(/\s+/g,' ').replace(/[.,;:!?·…]/g,'').trim();
+    const normText=normalize(text);
+    const normAnchor=normalize(anchor);
+    const normIdx=normText.indexOf(normAnchor);
+    if(normIdx>=0){
+      // 원본 텍스트에서 대략적 위치 찾기
+      const ratio=normIdx/normText.length;
+      return Math.floor(ratio*text.length);
+    }
+    // 3차: 앵커의 핵심 키워드(3단어 이상) 연속 매칭
+    const words=anchor.replace(/[.,;:!?·…]/g,'').split(/\s+/).filter(w=>w.length>=2);
+    if(words.length>=3){
+      const escaped=words.slice(0,Math.min(5,words.length)).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+      const keyPhrase=escaped.join('\\s*');
+      try{
+        const re=new RegExp(keyPhrase);
+        const km=text.match(re);
+        if(km)return text.indexOf(km[0]);
+      }catch(e){/* regex 실패 시 4차로 진행 */}
+    }
+    // 4차: 앵커 앞 15자로 부분 매칭
+    if(anchor.length>=15){
+      const partial=anchor.slice(0,15);
+      const pi=text.indexOf(partial);
+      if(pi>=0)return pi;
+    }
+    return -1;
+  }
+  
   for(const x of b.reverse()){
-    const i=r.indexOf(x.anchor);
+    const i=fuzzyFind(r,x.anchor);
     if(i>=0 && !inserted.has(x.anchor)){
       inserted.add(x.anchor);
       const s=i+x.anchor.length,p=r.indexOf('.',s);
       const ip=(p>=0&&p-s<100)?p+1:s;
       r=r.slice(0,ip)+'\n\n'+x.formula+'\n\n'+r.slice(ip);
+      successCount++;
+    }else{
+      failCount++;
+      console.warn(`수학식 삽입 실패 — ANCHOR 매칭 불가: "${x.anchor.slice(0,50)}..."`);
     }
+  }
+  // ★ A3 fix: 삽입 결과 알림 (v5.5) ★
+  if(failCount>0){
+    App.showToast(`수학식 삽입: ${successCount}개 성공, ${failCount}개 실패 (ANCHOR 매칭 불가)`,'warning');
+  }else if(successCount>0){
+    App.showToast(`수학식 ${successCount}개 삽입 완료`);
   }
   return r;
 }
@@ -2043,10 +2444,51 @@ graph TD
 ${src}`;
 }
 
-// ═══ 전역 도면 헬퍼 함수 ═══
+// ═══ 전역 도면 헬퍼 함수 (v5.5 — 3중 복제 제거, 단일 정의) ═══
 function _extractRefNum(label,fallback){
   const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
   return match?match[1]:(fallback||'');
+}
+function _isL1RefNum(ref){
+  if(!ref||String(ref).startsWith('S'))return false;
+  const s=String(ref);
+  if(s.startsWith('D')){const n=parseInt(s.slice(1));return !isNaN(n)&&n<10;}
+  const num=parseInt(s);
+  if(isNaN(num))return false;
+  if(num<10)return true;
+  if(num<100)return false;
+  if(num<1000)return num%100===0;
+  return false;
+}
+function _findImmediateParent(refNums){
+  const nums=refNums.filter(r=>r&&!String(r).startsWith('S')).map(r=>{const s=String(r);return s.startsWith('D')?parseInt(s.slice(1)):parseInt(s);}).filter(n=>!isNaN(n)&&n>0);
+  if(!nums.length)return null;
+  const l1s=nums.filter(n=>n>=100&&n<1000&&n%100===0);
+  const l2s=nums.filter(n=>n>=100&&n<1000&&n%10===0&&n%100!==0);
+  const l3s=nums.filter(n=>n>=100&&n<1000&&n%10!==0);
+  const l4s=nums.filter(n=>n>=1000&&n<10000);
+  const smalls=nums.filter(n=>n<100);
+  if(l4s.length>0){
+    if(l3s.length===1&&l2s.length===0&&l1s.length===0){if(l4s.every(n=>Math.floor(n/10)===l3s[0]))return l3s[0];}
+    if(l3s.length===0&&l2s.length===0&&l1s.length===0&&smalls.length===0){const p=[...new Set(l4s.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
+    return null;
+  }
+  if(l1s.length>0){
+    if(l1s.length===1&&(l2s.length>0||l3s.length>0)){const t=l1s[0];if(l2s.every(n=>Math.floor(n/100)*100===t)&&l3s.every(n=>Math.floor(n/100)*100===t))return t;}
+    return null;
+  }
+  if(l2s.length>0&&l3s.length===0){const p=[...new Set(l2s.map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;}
+  if(l2s.length>0&&l3s.length>0){
+    if(l2s.length===1&&l3s.every(n=>Math.floor(n/10)*10===l2s[0]))return l2s[0];
+    const p=[...new Set([...l2s,...l3s].map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;
+  }
+  if(l3s.length>0){const l2p=[...new Set(l3s.map(n=>Math.floor(n/10)*10))];if(l2p.length===1)return l2p[0];const l1p=[...new Set(l2p.map(p=>Math.floor(p/100)*100))];return l1p.length===1?l1p[0]:null;}
+  if(smalls.length>0){
+    const singles=smalls.filter(n=>n<10),doubles=smalls.filter(n=>n>=10);
+    if(singles.length===1&&doubles.length>0&&doubles.every(n=>Math.floor(n/10)===singles[0]))return singles[0];
+    if(singles.length===0&&doubles.length>0){const p=[...new Set(doubles.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
+  }
+  return null;
 }
 
 // ═══ 도면 규칙 위반 시 자동 재생성 ═══
@@ -3771,7 +4213,7 @@ function layoutGraphForPatent(nodes,edges){
 function downloadPptxAll(){if(diagramData.step_07||outputs.step_07_mermaid)downloadPptx('step_07');else App.showToast('도면 없음','error');}
 
 // ═══════════ RENDERERS ═══════════
-function renderOutput(sid,text){const cid=`result${sid.charAt(0).toUpperCase()+sid.slice(1).replace('_','')}`;const el=document.getElementById(cid);if(!el)return;if(sid==='step_01')renderTitleCards(el,text);else if(sid==='step_06'||sid==='step_10')renderClaimResult(el,sid,text);else renderEditableResult(el,sid,text);
+function renderOutput(sid,text){const cid=`result${sid.charAt(0).toUpperCase()+sid.slice(1).replace('_','')}`;const el=document.getElementById(cid);if(!el)return;if(sid==='step_01')renderTitleCards(el,text);else if(sid==='step_06'||sid==='step_10'||sid==='step_20')renderClaimResult(el,sid,text);else renderEditableResult(el,sid,text);
 }
 function renderTitleCards(c,text){
   const cs=parseTitleCandidates(text);
@@ -3884,7 +4326,7 @@ function validateClaims(text){
 function runValidation(){const all=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n');if(!all){App.showToast('검증할 청구항이 없어요','error');return;}const iss=validateClaims(all),el=document.getElementById('validationResults');if(!iss.length){el.innerHTML='<div class="issue-item issue-pass"><span class="tossface">🎉</span>모든 검증 통과</div>';return;}el.innerHTML=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tossface">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');}
 
 // ═══════════ OUTPUT ═══════════
-function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;document.getElementById('statCompleted').textContent=`${c}/19`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
+function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;document.getElementById('statCompleted').textContent=`${c}/20`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
 function renderPreview(){const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow">▶</span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('');}
 function buildSpecification(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
@@ -3893,7 +4335,18 @@ function buildSpecification(){
   // Claims: use the latest version (after auto-correction from validation)
   const deviceClaims=outputs.step_06||'';
   const methodClaims=outputs.step_10||'';
-  const allClaims=[deviceClaims,methodClaims].filter(Boolean).join('\n\n');
+  const mediaClaims=outputs.step_20||''; // v5.5: 기록매체/프로그램 청구항
+  const allClaims=[deviceClaims,methodClaims,mediaClaims].filter(Boolean).join('\n\n');
+  // ═══ D-1 fix: 청구항 번호 연속성 최종 검증 (v5.5) ═══
+  const claimNums=[...allClaims.matchAll(/【청구항\s*(\d+)】/g)].map(m=>parseInt(m[1]));
+  if(claimNums.length>0){
+    const sorted=[...claimNums].sort((a,b)=>a-b);
+    for(let i=0;i<sorted.length;i++){
+      if(sorted[i]!==i+1){App.showToast(`⚠️ 청구항 번호 불연속: 청구항 ${i+1} 누락`,'warning');break;}
+    }
+    const dupes=claimNums.filter((n,i)=>claimNums.indexOf(n)!==i);
+    if(dupes.length>0)App.showToast(`⚠️ 청구항 번호 중복: ${[...new Set(dupes)].join(', ')}`,'warning');
+  }
   // Include step_14 (alternative claims) if available
   let extras='';
   if(outputs.step_14)extras+='\n\n[참고: 대안 청구항]\n'+outputs.step_14;
@@ -3907,7 +4360,7 @@ function downloadAsWord(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
-  const allClaims=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n\n');
+  const allClaims=[outputs.step_06,outputs.step_10,outputs.step_20].filter(Boolean).join('\n\n');
   const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,outputs.step_12].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
