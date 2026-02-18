@@ -154,7 +154,7 @@
 }
 
 .result-area:empty::before {
-  content: "ê²°ê³¼ê°€ ì—¬ê¸°ì— í‘œì‹œë©ë‹ˆë‹¤";
+  content: "결과가 여기에 표시됩니다";
   color: var(--pt-gray-400);
   font-style: italic;
   display: block;
@@ -922,7 +922,7 @@ textarea.input-field,
 }
 
 #previewArea:empty::before {
-  content: "ìƒì„±ëœ ê²°ê³¼ê°€ ì—¬ê¸°ì— í‘œì‹œë©ë‹ˆë‹¤.";
+  content: "생성된 결과가 여기에 표시됩니다.";
   color: var(--pt-gray-400);
   font-style: italic;
 }

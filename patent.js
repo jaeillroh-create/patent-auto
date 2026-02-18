@@ -994,8 +994,9 @@ function getKiprisKey(){
 
 // 등록번호 포맷: 1020XXXXXXX → 10-20XXXXX
 function formatRegNumber(regNum){
-  if(!regNum)return regNum;
-  const cleaned=regNum.replace(/[^0-9]/g,'');
+  if(!regNum)return '';
+  const cleaned=String(regNum).replace(/[^0-9]/g,'');
+  if(!cleaned)return regNum;
   if(cleaned.length>=10){
     let core=cleaned;
     if(core.length===13&&core.endsWith('0000'))core=core.slice(0,-4);
@@ -1032,6 +1033,7 @@ async function searchKiprisPlus(query,maxResults=5){
     if(error){console.error('[KIPRIS] Edge Function error:',error);return[];}
     if(!data||!data.success){console.warn('[KIPRIS] API 실패:',data?.error);return[];}
     console.log(`[KIPRIS] ✅ ${(data.results||[]).length}건 (총 ${data.totalCount||0}건)`);
+    if(data.results?.length){console.log('[KIPRIS] 첫 결과 필드:', Object.keys(data.results[0]).join(', '));}
     return data.results||[];
   }catch(e){console.error('[KIPRIS] 검색 실패:',e);return[];}
 }
@@ -1093,21 +1095,46 @@ async function searchPriorArt(title){
 
   if(!results.length)return null;
 
-  // 최상위 결과 1건 반환 (등록번호 있는 건 우선)
-  const sorted=results.sort((a,b)=>(b.registerNumber?1:0)-(a.registerNumber?1:0));
+  // 필드명 정규화 (KIPRIS API 버전에 따라 필드명이 다를 수 있음)
+  results=results.map(r=>({
+    ...r,
+    _regNum: r.registerNumber || r.registrationNumber || r.registerNum || '',
+    _title: r.inventionTitle || r.title || '',
+    _appNum: r.applicationNumber || '',
+    _applicant: r.applicantName || r.assignee || ''
+  }));
+
+  console.log('[KIPRIS] 정규화 결과:', results.map(r=>({reg:r._regNum, title:r._title?.slice(0,30), app:r._appNum})));
+
+  // 등록번호 있는 건 우선 → 출원번호 있는 건 차선
+  const sorted=results.sort((a,b)=>{
+    const aReg=a._regNum?2:(a._appNum?1:0);
+    const bReg=b._regNum?2:(b._appNum?1:0);
+    return bReg-aReg;
+  });
   const best=sorted[0];
-  const fmtNum=formatRegNumber(best.registerNumber);
+
+  // 번호 결정: 등록번호 > 출원번호
+  const hasRegNum=!!best._regNum;
+  const numToUse=best._regNum||best._appNum;
+  if(!numToUse&&!best._title){
+    console.warn('[KIPRIS] 선별 실패: 유효한 번호/명칭 없음',best);
+    return null;
+  }
+
+  const fmtNum=hasRegNum?formatRegNumber(best._regNum):formatRegNumber(best._appNum);
+  const docType=hasRegNum?'한국등록특허':'한국공개특허';
   const sourceNote=best.source==='claude'?' (AI 추천 — KIPRIS 검증 필요)':'';
   const src=best.source==='claude'?'AI':'KIPRIS';
   return{
-    formatted:`【특허문헌】\n(특허문헌 1) 한국등록특허 제${fmtNum}호`,
+    formatted:`【특허문헌】\n(특허문헌 1) ${docType} 제${fmtNum||'미확인'}호${best._title?` (${best._title})`:''}`+sourceNote,
     patent:{
-      publicationNumber:best.registerNumber,
-      title:best.inventionTitle,
-      assignee:best.applicantName,
-      applicationNumber:best.applicationNumber,
-      registerDate:best.registerDate,
-      ipcNumber:best.ipcNumber,
+      publicationNumber:best._regNum||best._appNum,
+      title:best._title,
+      assignee:best._applicant,
+      applicationNumber:best._appNum,
+      registerDate:best.registerDate||best.registrationDate||'',
+      ipcNumber:best.ipcNumber||'',
       source:best.source||'kipris'
     },
     sourceNote,
