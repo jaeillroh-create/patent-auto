@@ -4138,7 +4138,7 @@
               ${r.applicationStatus || '-'}
             </span>
             ${r.applicationNumber ? `
-              <a href="http://kipris.or.kr/khome/main.jsp#702${r.applicationNumber.replace(/-/g, '')}" 
+              <a href="https://kipris.or.kr/khome/main.jsp#702${r.applicationNumber.replace(/-/g, '')}" 
                  target="_blank" class="tm-kipris-link" title="KIPRIS에서 보기">
                 🔗 KIPRIS
               </a>

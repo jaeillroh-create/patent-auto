@@ -251,7 +251,8 @@ function renderProfileModal(){
   document.getElementById('profileCurrentStatus').innerHTML=
     '<div style="display:flex;justify-content:space-between;align-items:center"><span>서비스</span><strong>'+curProv.label+'</strong></div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span>모델</span><strong>'+getModelConfig().label+'</strong></div>'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span>API Key</span><strong style="color:'+(apiKeys[selectedProvider]?'var(--color-success)':'var(--color-error)')+'">'+(apiKeys[selectedProvider]?'설정됨 ✅':'미설정 ❌')+'</strong></div>';
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span>API Key</span><strong style="color:'+(apiKeys[selectedProvider]?'var(--color-success)':'var(--color-error)')+'">'+(apiKeys[selectedProvider]?'설정됨 ✅':'미설정 ❌')+'</strong></div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span>KIPRIS Key</span><strong style="color:'+((kiprisKey&&kiprisKey!==DEFAULT_KIPRIS_KEY)?'var(--color-success)':'var(--color-text-tertiary)')+'">'+((kiprisKey&&kiprisKey!==DEFAULT_KIPRIS_KEY)?'설정됨 ✅':'기본키 사용')+'</strong></div>';
   // ★ KIPRIS API 키 입력란 채우기
   var kiprisInput=document.getElementById('kiprisApiKeyInput');
   if(kiprisInput){
@@ -299,7 +300,12 @@ async function saveProfileSettings(){
   }
   if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
   closeProfileSettings();updateModelToggle();updateProviderLabel();
-  showToast(API_PROVIDERS[selectedProvider].short+' 적용됨 · '+getModelConfig().label);
+  // ★ 저장 내용에 따라 적절한 토스트 표시
+  var toastParts=[];
+  if(key)toastParts.push(API_PROVIDERS[selectedProvider].short+' API Key 저장됨');
+  if(newKiprisKey)toastParts.push('KIPRIS API 키 저장됨');
+  if(toastParts.length===0)toastParts.push(API_PROVIDERS[selectedProvider].short+' 적용됨 · '+getModelConfig().label);
+  showToast(toastParts.join(' · '));
 }
 
 // ═══ Project Rename (v5.2) ═══
