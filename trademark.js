@@ -1855,9 +1855,9 @@
               </div>
               <div class="tm-panel-body">
                 <div class="tm-summary">${TM.escapeHtml(p.aiAnalysis.businessAnalysis)}</div>
-                ${p.aiAnalysis.coreKeywords?.length > 0 ? `
+                ${p.aiAnalysis.searchKeywords?.length > 0 ? `
                   <div class="tm-keywords">
-                    ${p.aiAnalysis.coreKeywords.slice(0, 6).map(k => `<span class="tm-kw">${k}</span>`).join('')}
+                    ${p.aiAnalysis.searchKeywords.slice(0, 6).map(k => `<span class="tm-kw">${k}</span>`).join('')}
                   </div>
                 ` : ''}
               </div>
@@ -2840,7 +2840,7 @@
     try {
       App.showToast(`제${classCode}류 지정상품 추천 중...`, 'info');
       
-      const paddedCode = classCode.padStart(2, '0');
+      const paddedCode = String(classCode).padStart(2, '0');
       const allKeywords = p.aiAnalysis?.searchKeywords || [];
       const analysis = {
         businessSummary: p.aiAnalysis?.businessAnalysis || '',
@@ -2862,25 +2862,25 @@
         searchKeywords: allKeywords
       };
       
-      let selectedGoods = null;
+      let selectedGoods = [];
       const fetchResult = await TM.fetchAllCandidates(classCode, businessCtx);
       if (fetchResult && fetchResult.candidates.length > 0) {
-        selectedGoods = await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessCtx);
-      }
-      
-      // fallback: 기존 방식
-      if (!selectedGoods || selectedGoods.length < 10) {
-        const candidates = await TM.fetchOptimalCandidates(paddedCode, allKeywords, analysis);
-        if (candidates.length > 0) {
-          selectedGoods = await TM.selectOptimalGoods(
-            classCode, candidates, p.aiAnalysis?.businessAnalysis || '', analysis
-          );
+        try {
+          const oneshotResult = await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessCtx);
+          if (oneshotResult && oneshotResult.length > 0) selectedGoods = oneshotResult;
+        } catch (e) { console.warn(`[TM] addClass oneshot 실패:`, e.message); }
+        
+        // 부족분 DB 패딩 (API 호출 X)
+        if (selectedGoods.length < 10) {
+          const usedNames = new Set(selectedGoods.map(g => g.name));
+          for (const c of fetchResult.candidates) {
+            if (selectedGoods.length >= 10) break;
+            if (usedNames.has(c.goods_name)) continue;
+            usedNames.add(c.goods_name);
+            selectedGoods.push({ name: c.goods_name, similarGroup: c.similar_group_code || '', isCore: false });
+          }
         }
-        if (!selectedGoods) selectedGoods = [];
       }
-      
-      // ★ 10개 보장
-      selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods, p.aiAnalysis?.businessAnalysis || '');
       
       // 추천 결과 저장
       if (p.aiAnalysis) {
@@ -3112,7 +3112,7 @@
           const { data } = await App.sb
             .from('gazetted_goods_cache')
             .select('goods_name, similar_group_code')
-            .eq('class_code', classCode)
+            .eq('class_code', String(classCode).padStart(2, '0'))
             .ilike('goods_name', `%${keyword}%`)
             .limit(5);
           
@@ -3136,7 +3136,7 @@
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
-          .eq('class_code', classCode)
+          .eq('class_code', String(classCode).padStart(2, '0'))
           .limit(10);
         
         if (data) {
@@ -3296,7 +3296,7 @@
         };
         
         for (const classCode of newClassCodes) {
-          const paddedCode = classCode.padStart(2, '0');
+          const paddedCode = String(classCode).padStart(2, '0');
           try {
             App.showToast(`제${classCode}류 지정상품 추천 중...`, 'info');
             
@@ -3426,7 +3426,7 @@
       const { data, error } = await App.sb
         .from('gazetted_goods_cache')
         .select('goods_name, similar_group_code')
-        .eq('class_code', classCode.padStart(2, '0'))
+        .eq('class_code', String(classCode).padStart(2, '0'))
         .ilike('similar_group_code', `%${similarCode}%`)
         .limit(50);
       
@@ -3589,7 +3589,7 @@
         const { data, error } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, goods_name_en, similar_group_code')
-          .eq('class_code', classCode)
+          .eq('class_code', String(classCode).padStart(2, '0'))
           .ilike('goods_name', `%${query}%`)
           .limit(10);
         
@@ -9220,11 +9220,11 @@ ${TM.PRACTICE_GUIDELINES}
       console.log('[TM] - 권장 류 (recommended):', recommendedClasses);
       console.log('[TM] - 확장 류 (expansion):', expansionClasses);
       
-      // 전체 추천 류 목록 (중복 제거)
+      // 전체 추천 류 목록 (중복 제거, String 보장)
       const allClassCodes = [...new Set([
-        ...coreClasses.map(c => c.class),
-        ...recommendedClasses.map(c => c.class),
-        ...expansionClasses.map(c => c.class)
+        ...coreClasses.map(c => String(c.class)),
+        ...recommendedClasses.map(c => String(c.class)),
+        ...expansionClasses.map(c => String(c.class))
       ])];
       
       // classReasons 구성 (호환성 유지)
@@ -9272,11 +9272,11 @@ ${TM.PRACTICE_GUIDELINES}
       // ================================================================
       // ★ 모든 추천 류(핵심+권장+확장)에 대해 지정상품 10개 선택
       // ================================================================
-      const initialClasses = [
-        ...coreClasses.map(c => c.class),
-        ...recommendedClasses.map(c => c.class),
-        ...expansionClasses.map(c => c.class)
-      ];
+      const initialClasses = [...new Set([
+        ...coreClasses.map(c => String(c.class)),
+        ...recommendedClasses.map(c => String(c.class)),
+        ...expansionClasses.map(c => String(c.class))
+      ])];
       
       for (const classCode of initialClasses) {
         if (!p.aiAnalysis) { console.error('[TM] aiAnalysis가 null — 루프 중단'); break; }
@@ -9284,7 +9284,7 @@ ${TM.PRACTICE_GUIDELINES}
         if (initialClasses.indexOf(classCode) > 0) {
           await new Promise(r => setTimeout(r, 1500));
         }
-        const paddedCode = classCode.padStart(2, '0');
+        const paddedCode = String(classCode).padStart(2, '0');
         
         try {
           if (btn) btn.innerHTML = `<span class="tossface">⏳</span> 제${classCode}류 분석 중...`;
@@ -9431,7 +9431,7 @@ ${TM.PRACTICE_GUIDELINES}
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
-          .eq('class_code', classCode)
+          .eq('class_code', String(classCode).padStart(2, '0'))
           .ilike('goods_name', `%${term}%`)
           .limit(30);
         
@@ -9474,7 +9474,7 @@ ${TM.PRACTICE_GUIDELINES}
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
-          .eq('class_code', classCode)
+          .eq('class_code', String(classCode).padStart(2, '0'))
           .ilike('goods_name', `%${keyword}%`)
           .limit(20);
         
@@ -9525,7 +9525,7 @@ ${TM.PRACTICE_GUIDELINES}
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
-          .eq('class_code', classCode)
+          .eq('class_code', String(classCode).padStart(2, '0'))
           .limit(100);
         
         if (data) {
@@ -9732,7 +9732,7 @@ ${numberedList}
     
     const deficit = MIN - currentGoods.length;
     const existingNames = new Set(currentGoods.map(g => typeof g === 'string' ? g : g.name));
-    const paddedCode = classCode.padStart(2, '0');
+    const paddedCode = String(classCode).padStart(2, '0');
     
     console.log(`[TM] ensureMinGoods 제${classCode}류: ${currentGoods.length}개 → ${deficit}개 보충 필요`);
     
@@ -9796,7 +9796,7 @@ JSON 배열로만 응답: ["상품명1", "상품명2"]`;
   // DB에서 후보 전체 조회 또는 필터링 조회
   TM.fetchAllCandidates = async function(classCode, businessContext) {
     const ONESHOT_LIMIT = 3500;
-    const paddedCode = classCode.padStart(2, '0');
+    const paddedCode = String(classCode).padStart(2, '0');
     
     console.log(`[TM] ════ 원샷 DB 조회: 제${classCode}류 ════`);
     
@@ -10294,8 +10294,8 @@ ${allClasses.map(c => `- 제${c.class}류: ${c.reason}`).join('\n')}
     } else {
     console.log('[TM] ▶ B단계: 전 류 상품 통합 검증');
     
-    const invalidClassCodes = validationResult.invalidClasses.map(c => c.class);
-    const validClassCodes = aiAnalysis.recommendedClasses.filter(c => !invalidClassCodes.includes(c));
+    const invalidClassCodes = validationResult.invalidClasses.map(c => String(c.class));
+    const validClassCodes = aiAnalysis.recommendedClasses.filter(c => !invalidClassCodes.includes(String(c)));
     
     const allGoodsList = validClassCodes.map(cc => {
       const goods = aiAnalysis.recommendedGoods?.[cc] || [];
@@ -10465,7 +10465,7 @@ ${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
           }
           
           if (!selectedGoods || selectedGoods.length < 10) {
-            const paddedCode = classCode.padStart(2, '0');
+            const paddedCode = String(classCode).padStart(2, '0');
             const analysisCtx = {
               businessSummary: aiAnalysis.businessAnalysis,
               businessTypes: aiAnalysis.businessTypes,
@@ -10691,8 +10691,8 @@ ${allClasses.map(c => `- 제${c.class}류: ${c.reason}`).join('\n')}
     console.log('[TM] ▶ 2단계: 지정상품별 상세 검증');
     
     // 유효한 류만 검증 (1단계에서 무효 판정된 류 제외)
-    const invalidClassCodes = validationResult.invalidClasses.map(c => c.class);
-    const validClassCodes = aiAnalysis.recommendedClasses.filter(c => !invalidClassCodes.includes(c));
+    const invalidClassCodes = validationResult.invalidClasses.map(c => String(c.class));
+    const validClassCodes = aiAnalysis.recommendedClasses.filter(c => !invalidClassCodes.includes(String(c)));
     
     for (let ci = 0; ci < validClassCodes.length; ci++) {
       const classCode = validClassCodes[ci];
@@ -10855,7 +10855,7 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
           if (aiAnalysis.recommendedGoods?.[classCode]?.length > 0) continue; // 이미 있으면 스킵
           
           try {
-            const paddedCode = classCode.padStart(2, '0');
+            const paddedCode = String(classCode).padStart(2, '0');
             const candidates = await TM.fetchOptimalCandidates(paddedCode, allKeywords, analysisCtx);
             let selectedGoods = [];
             if (candidates.length > 0) {
@@ -10930,7 +10930,7 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
     // 1. 잘못된 류 제거
     if (validationResult.invalidClasses?.length > 0) {
       for (const invalidClass of validationResult.invalidClasses) {
-        const classCode = invalidClass.class;
+        const classCode = String(invalidClass.class);
         
         // recommendedClasses에서 제거
         const idx = aiAnalysis.recommendedClasses.indexOf(classCode);
@@ -10942,7 +10942,7 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
         ['core', 'recommended', 'expansion'].forEach(cat => {
           if (aiAnalysis.classRecommendations?.[cat]) {
             aiAnalysis.classRecommendations[cat] = 
-              aiAnalysis.classRecommendations[cat].filter(c => c.class !== classCode);
+              aiAnalysis.classRecommendations[cat].filter(c => String(c.class) !== classCode);
           }
         });
         
@@ -10987,7 +10987,7 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
             const { data } = await App.sb
               .from('gazetted_goods_cache')
               .select('goods_name, similar_group_code')
-              .eq('class_code', classCode)
+              .eq('class_code', String(classCode).padStart(2, '0'))
               .ilike('goods_name', `%${addInstead}%`)
               .limit(1);
             
@@ -11032,7 +11032,7 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
       console.log(`[TM] 제${classCode}류 검증 후 ${currentGoods.length}개 → ${deficit}개 보충 필요`);
       
       try {
-        const paddedCode = classCode.padStart(2, '0');
+        const paddedCode = String(classCode).padStart(2, '0');
         const existingNames = new Set(currentGoods.map(g => g.name));
         
         // DB에서 추가 후보 조회
@@ -11119,7 +11119,7 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
         const { data, error } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
-          .eq('class_code', classCode)
+          .eq('class_code', String(classCode).padStart(2, '0'))
           .ilike('goods_name', `%${keyword}%`)
           .limit(50);
         
@@ -11178,7 +11178,7 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
           const { data } = await App.sb
             .from('gazetted_goods_cache')
             .select('goods_name, similar_group_code')
-            .eq('class_code', classCode)
+            .eq('class_code', String(classCode).padStart(2, '0'))
             .ilike('similar_group_code', `%${sgCode}%`)
             .limit(30);
           
@@ -11211,7 +11211,7 @@ ${allClasses.map(c => `제${c.class}류: ${c.reason}`).join('\n')}
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
-          .eq('class_code', classCode)
+          .eq('class_code', String(classCode).padStart(2, '0'))
           .limit(100);
         
         if (data) {
@@ -11554,7 +11554,7 @@ ${numberedList}
         App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
-          .eq('class_code', classCode.padStart(2, '0'))
+          .eq('class_code', String(classCode).padStart(2, '0'))
           .ilike('goods_name', `%${word}%`)
           .limit(20)
       );
@@ -11749,7 +11749,7 @@ ${numberedList}
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code')
-          .eq('class_code', classCode.padStart(2, '0'))
+          .eq('class_code', String(classCode).padStart(2, '0'))
           .eq('goods_name', newTerm)
           .limit(1);
         
