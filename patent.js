@@ -2271,19 +2271,92 @@ ${diagram}`,4096);
             const fallbackRef=frameRefNum+10*(i+1);
             const refNum=extractRefNum(n.label,String(fallbackRef));
             const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-            // 그림자
-            slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
-            // 박스 본체
-            slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+            const shapeType=matchIconShape(n.label);
+            const sm=_shapeMetrics(shapeType,boxW,boxH);
+            const SO=SHADOW_OFFSET;
+            const sx=bx+sm.dx;
+            // Shape-aware 렌더링 (natural proportions)
+            switch(shapeType){
+              case 'database':{
+                const shp=pptx.shapes.CAN||pptx.shapes.RECTANGLE;
+                slide.addShape(shp,{x:sx+SO,y:by+SO,w:sm.sw,h:sm.sh,fill:{color:'000000'},line:{width:0}});
+                slide.addShape(shp,{x:sx,y:by,w:sm.sw,h:sm.sh,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+                break;
+              }
+              case 'cloud':{
+                const shp=pptx.shapes.CLOUD||pptx.shapes.OVAL;
+                slide.addShape(shp,{x:sx+SO,y:by+SO,w:sm.sw,h:sm.sh,fill:{color:'000000'},line:{width:0}});
+                slide.addShape(shp,{x:sx,y:by,w:sm.sw,h:sm.sh,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+                break;
+              }
+              case 'server':{
+                slide.addShape(pptx.shapes.RECTANGLE,{x:sx+SO,y:by+SO,w:sm.sw,h:sm.sh,fill:{color:'000000'},line:{width:0}});
+                slide.addShape(pptx.shapes.RECTANGLE,{x:sx,y:by,w:sm.sw,h:sm.sh,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+                const h3=sm.sh/3;
+                slide.addShape(pptx.shapes.LINE,{x:sx,y:by+h3,w:sm.sw,h:0,line:{color:'000000',width:LINE_BOX*0.5}});
+                slide.addShape(pptx.shapes.LINE,{x:sx,y:by+2*h3,w:sm.sw,h:0,line:{color:'000000',width:LINE_BOX*0.5}});
+                break;
+              }
+              case 'monitor':{
+                const msh=sm.sh*0.75;
+                slide.addShape(pptx.shapes.RECTANGLE,{x:sx+SO,y:by+SO,w:sm.sw,h:msh,fill:{color:'000000'},line:{width:0}});
+                slide.addShape(pptx.shapes.RECTANGLE,{x:sx,y:by,w:sm.sw,h:msh,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX},rectRadius:2});
+                slide.addShape(pptx.shapes.RECTANGLE,{x:sx+sm.sw/2-sm.sw*0.06,y:by+msh,w:sm.sw*0.12,h:sm.sh*0.15,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX*0.5}});
+                slide.addShape(pptx.shapes.RECTANGLE,{x:sx+sm.sw/2-sm.sw*0.13,y:by+msh+sm.sh*0.15,w:sm.sw*0.26,h:sm.sh*0.05,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX*0.5}});
+                break;
+              }
+              case 'sensor':{
+                const scr=Math.min(sm.sw*0.28,sm.sh*0.38);
+                const scx=sx+sm.sw*0.32-scr, scy=by+sm.sh*0.50-scr;
+                slide.addShape(pptx.shapes.OVAL,{x:scx+SO,y:scy+SO,w:scr*2,h:scr*2,fill:{color:'000000'},line:{width:0}});
+                slide.addShape(pptx.shapes.OVAL,{x:scx,y:scy,w:scr*2,h:scr*2,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+                const sdr=scr*0.25;
+                slide.addShape(pptx.shapes.OVAL,{x:sx+sm.sw*0.32-sdr,y:by+sm.sh*0.50-sdr,w:sdr*2,h:sdr*2,fill:{color:'000000'},line:{width:0}});
+                break;
+              }
+              case 'antenna':{
+                const apoleX=sx+sm.sw*0.38;
+                const abw=sm.sw*0.22, abh=sm.sh*0.10;
+                slide.addShape(pptx.shapes.RECTANGLE,{x:apoleX-abw/2,y:by+sm.sh*0.82,w:abw,h:abh,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+                slide.addShape(pptx.shapes.LINE,{x:apoleX,y:by+sm.sh*0.18,w:0,h:sm.sh*0.64,line:{color:'000000',width:LINE_BOX*1.2}});
+                const abr=Math.min(sm.sw*0.04,sm.sh*0.04);
+                slide.addShape(pptx.shapes.OVAL,{x:apoleX-abr,y:by+sm.sh*0.18-abr,w:abr*2,h:abr*2,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+                break;
+              }
+              case 'document':{
+                slide.addShape(pptx.shapes.RECTANGLE,{x:sx+SO,y:by+SO,w:sm.sw,h:sm.sh,fill:{color:'000000'},line:{width:0}});
+                slide.addShape(pptx.shapes.RECTANGLE,{x:sx,y:by,w:sm.sw,h:sm.sh,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+                break;
+              }
+              case 'camera':{
+                const ccbx=sx+sm.sw*0.05,ccby=by+sm.sh*0.18,ccbw=sm.sw*0.80,ccbh=sm.sh*0.65;
+                slide.addShape(pptx.shapes.RECTANGLE,{x:ccbx+SO,y:ccby+SO,w:ccbw,h:ccbh,fill:{color:'000000'},line:{width:0}});
+                slide.addShape(pptx.shapes.RECTANGLE,{x:ccbx,y:ccby,w:ccbw,h:ccbh,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+                slide.addShape(pptx.shapes.RECTANGLE,{x:ccbx+ccbw*0.30,y:ccby-sm.sh*0.10,w:ccbw*0.25,h:sm.sh*0.12,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX*0.6}});
+                const clr=Math.min(ccbw,ccbh)*0.30;
+                slide.addShape(pptx.shapes.OVAL,{x:ccbx+ccbw*0.50-clr,y:ccby+ccbh*0.52-clr,w:clr*2,h:clr*2,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+                break;
+              }
+              case 'speaker':{
+                const bspw=sm.sw*0.18,bsph=sm.sh*0.40;
+                slide.addShape(pptx.shapes.RECTANGLE,{x:sx+sm.sw*0.10,y:by+sm.sh*0.30,w:bspw,h:bsph,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+                slide.addShape(pptx.shapes.RECTANGLE,{x:sx+sm.sw*0.28,y:by+sm.sh*0.12,w:sm.sw*0.28,h:sm.sh*0.76,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+                break;
+              }
+              default:
+                slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SO,y:by+SO,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
+                slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
+            }
             // 박스 텍스트 (참조번호 제외)
-            slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+            const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
+            slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize:Math.min(11,Math.max(8,12-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
             // 리더라인
-            slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
+            slide.addShape(pptx.shapes.LINE,{x:sx+sm.sw,y:by+sm.sh/2,w:frameX+frameW-sx-sm.sw+0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
             // 부호 라벨 (추출된 참조번호)
-            slide.addText(String(refNum),{x:refLabelX+0.25,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+            slide.addText(String(refNum),{x:refLabelX+0.25,y:by+sm.sh/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
             // 양방향 화살표
             if(i<nodes.length-1){
-              const arrowY1=by+boxH;
+              const arrowY1=by+sm.sh;
               const arrowY2=boxStartY+(i+1)*(boxH+boxGap);
               const arrowX=bx+boxW/2;
               if(arrowY2>arrowY1+0.05){
@@ -2538,6 +2611,270 @@ function _findImmediateParent(refNums){
     if(singles.length===0&&doubles.length>0){const p=[...new Set(doubles.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
   }
   return null;
+}
+
+// ═══ Diagram Icon Shape System v3.0 ═══
+const DIAGRAM_ICON_REGISTRY=[
+  {type:'database',keywords:['데이터베이스','데이터 베이스','db','저장소','스토리지','레포지토리']},
+  {type:'cloud',keywords:['네트워크','통신망','인터넷','클라우드','통신 네트워크','네트워크 망']},
+  {type:'monitor',keywords:['사용자 단말','단말기','단말 장치','클라이언트 단말','모바일 단말','스마트폰','디바이스','디스플레이 장치','휴대 단말']},
+  {type:'server',keywords:['서버','서버 장치','처리 서버','컴퓨팅 장치','컴퓨팅 서버']},
+  {type:'sensor',keywords:['센서','감지부','감지 장치','측정부','센싱','감지 모듈','센서부','감지 센서','측정 장치','센서 모듈']},
+  {type:'antenna',keywords:['안테나','통신 모듈','무선 모듈','송수신부','송수신 모듈','rf 모듈','무선부','송신부','수신부','무선 통신부']},
+  {type:'document',keywords:['정보','데이터 수집','정보 수집','수집부','문서','리포트','로그','기록부','수집 모듈','정보 처리','데이터 처리']},
+  {type:'camera',keywords:['카메라','촬영부','촬영 장치','영상 촬영','이미지 센서','촬영 모듈','비전','영상 획득','렌즈']},
+  {type:'speaker',keywords:['스피커','음향 출력','오디오 출력','출력부','사운드','음성 출력','알림부','경보부','부저']},
+];
+function matchIconShape(label){
+  const c=label.replace(/[(\s]?\d+[)\s]?$/,'').trim().toLowerCase();
+  for(const s of DIAGRAM_ICON_REGISTRY){for(const k of s.keywords){if(c.includes(k))return s.type;}}
+  return 'box';
+}
+
+// ── Cloud SVG path generator ──
+function _cloudPathD(x,y,w,h){
+  return `M${x+w*0.2},${y+h*0.82} `+
+    `C${x+w*0.02},${y+h*0.84} ${x},${y+h*0.44} ${x+w*0.18},${y+h*0.36} `+
+    `C${x+w*0.1},${y+h*0.08} ${x+w*0.35},${y} ${x+w*0.48},${y+h*0.16} `+
+    `C${x+w*0.58},${y-h*0.01} ${x+w*0.82},${y+h*0.06} ${x+w*0.8},${y+h*0.34} `+
+    `C${x+w*0.98},${y+h*0.32} ${x+w},${y+h*0.82} ${x+w*0.8},${y+h*0.82} Z`;
+}
+
+// ── Shape shadow SVG ──
+function _drawShapeShadow(type,x,y,w,h){
+  switch(type){
+    case 'database':{
+      const ry=Math.min(h*0.18,w*0.15,22);
+      return `<ellipse cx="${x+w/2}" cy="${y+ry}" rx="${w/2}" ry="${ry}" fill="#000"/>`+
+        `<rect x="${x}" y="${y+ry}" width="${w}" height="${h-2*ry}" fill="#000"/>`+
+        `<ellipse cx="${x+w/2}" cy="${y+h-ry}" rx="${w/2}" ry="${ry}" fill="#000"/>`;
+    }
+    case 'cloud':return `<path d="${_cloudPathD(x,y,w,h)}" fill="#000"/>`;
+    case 'server':return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#000"/>`;
+    case 'monitor':{
+      const sh=h*0.72;
+      return `<rect x="${x}" y="${y}" width="${w}" height="${sh}" rx="2" fill="#000"/>`+
+        `<rect x="${x+w/2-w*0.06}" y="${y+sh}" width="${w*0.12}" height="${h*0.16}" fill="#000"/>`;
+    }
+    case 'sensor':{
+      const cr=Math.min(w*0.28,h*0.38);
+      return `<circle cx="${x+w*0.32}" cy="${y+h*0.50}" r="${cr}" fill="#000"/>`;
+    }
+    case 'antenna':{
+      const bw=w*0.20,bh=h*0.12;
+      return `<rect x="${x+w/2-bw/2}" y="${y+h-bh}" width="${bw}" height="${bh}" fill="#000"/>`+
+        `<line x1="${x+w*0.50}" y1="${y+h*0.18}" x2="${x+w*0.50}" y2="${y+h-bh}" stroke="#000" stroke-width="4"/>`;
+    }
+    case 'document':{
+      const fold=w*0.22;
+      return `<path d="M${x},${y} L${x+w-fold},${y} L${x+w},${y+fold} L${x+w},${y+h} L${x},${y+h} Z" fill="#000"/>`;
+    }
+    case 'camera':{
+      return `<rect x="${x}" y="${y+h*0.15}" width="${w*0.85}" height="${h*0.70}" rx="4" fill="#000"/>`;
+    }
+    case 'speaker':{
+      return `<path d="M${x+w*0.10},${y+h*0.30} L${x+w*0.30},${y+h*0.30} L${x+w*0.60},${y+h*0.08} L${x+w*0.60},${y+h*0.92} L${x+w*0.30},${y+h*0.70} L${x+w*0.10},${y+h*0.70} Z" fill="#000"/>`;
+    }
+    default:return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#000"/>`;
+  }
+}
+
+// ── Shape body SVG ──
+function _drawShapeBody(type,x,y,w,h,sw){
+  sw=sw||1.5;
+  switch(type){
+    case 'database':{
+      const ry=Math.min(h*0.18,w*0.15,22);
+      return `<ellipse cx="${x+w/2}" cy="${y+h-ry}" rx="${w/2}" ry="${ry}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`+
+        `<rect x="${x}" y="${y+ry}" width="${w}" height="${h-2*ry}" fill="#fff" stroke="none"/>`+
+        `<line x1="${x}" y1="${y+ry}" x2="${x}" y2="${y+h-ry}" stroke="#000" stroke-width="${sw}"/>`+
+        `<line x1="${x+w}" y1="${y+ry}" x2="${x+w}" y2="${y+h-ry}" stroke="#000" stroke-width="${sw}"/>`+
+        `<ellipse cx="${x+w/2}" cy="${y+ry}" rx="${w/2}" ry="${ry}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
+    }
+    case 'cloud':return `<path d="${_cloudPathD(x,y,w,h)}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
+    case 'server':{
+      const h3=h/3,dotR=Math.min(3,h*0.07);
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`+
+        `<line x1="${x}" y1="${y+h3}" x2="${x+w}" y2="${y+h3}" stroke="#000" stroke-width="${sw*0.55}"/>`+
+        `<line x1="${x}" y1="${y+2*h3}" x2="${x+w}" y2="${y+2*h3}" stroke="#000" stroke-width="${sw*0.55}"/>`+
+        [0.5,1.5,2.5].map(m=>`<circle cx="${x+w-dotR*4}" cy="${y+h3*m}" r="${dotR}" fill="#000"/>`).join('');
+    }
+    case 'monitor':{
+      const sh=h*0.72,standW=w*0.12,standH=h*0.14,baseW=w*0.25,baseH=h*0.05;
+      const sTop=y+sh+h*0.02,bTop=sTop+standH;
+      return `<rect x="${x}" y="${y}" width="${w}" height="${sh}" rx="3" fill="#fff" stroke="#000" stroke-width="${sw}"/>`+
+        `<rect x="${x+w/2-standW/2}" y="${sTop}" width="${standW}" height="${standH}" fill="#fff" stroke="#000" stroke-width="${sw*0.6}"/>`+
+        `<rect x="${x+w/2-baseW/2}" y="${bTop}" width="${baseW}" height="${baseH}" rx="1" fill="#fff" stroke="#000" stroke-width="${sw*0.6}"/>`;
+    }
+    case 'sensor':{
+      // Circle body (left) + wave arcs (right)
+      const cr=Math.min(w*0.28,h*0.38);
+      const cx=x+w*0.32, cy=y+h*0.50;
+      let s=`<circle cx="${cx}" cy="${cy}" r="${cr}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
+      // Inner dot
+      s+=`<circle cx="${cx}" cy="${cy}" r="${cr*0.25}" fill="#000"/>`;
+      // Wave arcs emanating right
+      const arcR=[cr*1.55,cr*2.10,cr*2.65];
+      arcR.forEach(r=>{
+        const a1=-Math.PI*0.35, a2=Math.PI*0.35;
+        const x1=cx+r*Math.cos(a1), y1=cy+r*Math.sin(a1);
+        const x2=cx+r*Math.cos(a2), y2=cy+r*Math.sin(a2);
+        s+=`<path d="M${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2}" fill="none" stroke="#000" stroke-width="${sw*0.7}"/>`;
+      });
+      return s;
+    }
+    case 'antenna':{
+      // Vertical pole + top ball + wave arcs + base
+      const poleX=x+w*0.38, topY=y+h*0.18, baseY=y+h*0.82;
+      const bw=w*0.22, bh=h*0.10;
+      const ballR=Math.min(w*0.04,h*0.04);
+      let s='';
+      // Base
+      s+=`<rect x="${poleX-bw/2}" y="${baseY}" width="${bw}" height="${bh}" rx="2" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
+      // Pole
+      s+=`<line x1="${poleX}" y1="${topY+ballR}" x2="${poleX}" y2="${baseY}" stroke="#000" stroke-width="${sw*1.2}"/>`;
+      // Top ball
+      s+=`<circle cx="${poleX}" cy="${topY}" r="${ballR}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
+      // Wave arcs (emanating upper-right)
+      const arcR=[h*0.16,h*0.26,h*0.36];
+      arcR.forEach(r=>{
+        const a1=-Math.PI*0.55, a2=-Math.PI*0.05;
+        const x1=poleX+r*Math.cos(a1), y1=topY+r*Math.sin(a1);
+        const x2=poleX+r*Math.cos(a2), y2=topY+r*Math.sin(a2);
+        s+=`<path d="M${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2}" fill="none" stroke="#000" stroke-width="${sw*0.7}"/>`;
+      });
+      return s;
+    }
+    case 'document':{
+      // Page with folded top-right corner
+      const fold=w*0.22;
+      let s=`<path d="M${x},${y} L${x+w-fold},${y} L${x+w},${y+fold} L${x+w},${y+h} L${x},${y+h} Z" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
+      // Fold triangle
+      s+=`<path d="M${x+w-fold},${y} L${x+w-fold},${y+fold} L${x+w},${y+fold}" fill="#eee" stroke="#000" stroke-width="${sw*0.6}"/>`;
+      // Text lines (decorative)
+      const lx1=x+w*0.15, lx2=x+w*0.75, ly0=y+h*0.30, gap=h*0.12;
+      for(let i=0;i<3;i++){
+        s+=`<line x1="${lx1}" y1="${ly0+gap*i}" x2="${lx2-(i===2?w*0.20:0)}" y2="${ly0+gap*i}" stroke="#bbb" stroke-width="${sw*0.4}"/>`;
+      }
+      return s;
+    }
+    case 'camera':{
+      // Camera body + lens + viewfinder
+      const bx=x+w*0.05, by2=y+h*0.18, bw=w*0.80, bh=h*0.65;
+      const lensR=Math.min(bw,bh)*0.32;
+      const lcx=bx+bw*0.50, lcy=by2+bh*0.52;
+      let s=`<rect x="${bx}" y="${by2}" width="${bw}" height="${bh}" rx="4" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
+      // Viewfinder bump
+      s+=`<rect x="${bx+bw*0.30}" y="${by2-h*0.10}" width="${bw*0.25}" height="${h*0.12}" rx="2" fill="#fff" stroke="#000" stroke-width="${sw*0.7}"/>`;
+      // Lens outer
+      s+=`<circle cx="${lcx}" cy="${lcy}" r="${lensR}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
+      // Lens inner
+      s+=`<circle cx="${lcx}" cy="${lcy}" r="${lensR*0.55}" fill="#fff" stroke="#000" stroke-width="${sw*0.6}"/>`;
+      // Lens center dot
+      s+=`<circle cx="${lcx}" cy="${lcy}" r="${lensR*0.15}" fill="#000"/>`;
+      return s;
+    }
+    case 'speaker':{
+      // Speaker cone + sound wave arcs
+      const sw2=sw;
+      // Speaker body (trapezoid)
+      let s=`<path d="M${x+w*0.10},${y+h*0.30} L${x+w*0.28},${y+h*0.30} L${x+w*0.55},${y+h*0.08} L${x+w*0.55},${y+h*0.92} L${x+w*0.28},${y+h*0.70} L${x+w*0.10},${y+h*0.70} Z" fill="#fff" stroke="#000" stroke-width="${sw2}"/>`;
+      // Divider between driver and cone
+      s+=`<line x1="${x+w*0.28}" y1="${y+h*0.30}" x2="${x+w*0.28}" y2="${y+h*0.70}" stroke="#000" stroke-width="${sw2*0.6}"/>`;
+      // Sound wave arcs
+      const waveCx=x+w*0.55, waveCy=y+h*0.50;
+      [h*0.22,h*0.34,h*0.46].forEach(r=>{
+        const a1=-Math.PI*0.30, a2=Math.PI*0.30;
+        const x1=waveCx+r*Math.cos(a1), y1=waveCy+r*Math.sin(a1);
+        const x2=waveCx+r*Math.cos(a2), y2=waveCy+r*Math.sin(a2);
+        s+=`<path d="M${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2}" fill="none" stroke="#000" stroke-width="${sw2*0.7}"/>`;
+      });
+      return s;
+    }
+    default:return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
+  }
+}
+
+function _shapeTextCy(type,y,h){
+  switch(type){
+    case 'database':return y+h*0.55;
+    case 'cloud':return y+h*0.50;
+    case 'monitor':return y+h*0.72*0.45;
+    case 'sensor':return y+h*0.50;
+    case 'antenna':return y+h*0.65;
+    case 'document':return y+h*0.62;
+    case 'camera':return y+h*0.52;
+    case 'speaker':return y+h*0.50;
+    default:return y+h/2;
+  }
+}
+
+// ── Shape right edge X for leader line ──
+function _shapeLeaderX(type,x,w){
+  switch(type){
+    case 'cloud':return x+w*0.93;
+    case 'sensor':return x+w*0.92;
+    case 'antenna':return x+w*0.88;
+    case 'speaker':return x+w*0.95;
+    case 'monitor':return x+w;
+    default:return x+w;
+  }
+}
+
+// ── Shape natural proportion metrics ──
+// Computes natural shape dimensions fitted within a box slot.
+// Uses absolute aspect ratios so shapes look correct regardless of boxW/boxH.
+function _shapeMetrics(type,boxW,boxH){
+  // Natural desired pixel aspect ratios (width : height)
+  // These produce visually correct shapes at any scale
+  switch(type){
+    case 'database':{
+      // Cylinder: moderately wide, taller than box
+      const sh=boxH*1.80, sw=sh*1.40;
+      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
+    }
+    case 'cloud':{
+      // Cloud: wide and puffy
+      const sh=boxH*1.50, sw=sh*2.60;
+      return{sw:Math.min(sw,boxW*0.75),sh,dx:(boxW-Math.min(sw,boxW*0.75))/2};
+    }
+    case 'server':{
+      // Server rack: narrow and tall
+      const sh=boxH*1.80, sw=sh*1.10;
+      return{sw:Math.min(sw,boxW*0.50),sh,dx:(boxW-Math.min(sw,boxW*0.50))/2};
+    }
+    case 'monitor':{
+      // Monitor + stand: moderately wide, taller
+      const sh=boxH*1.80, sw=sh*1.50;
+      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
+    }
+    case 'sensor':{
+      // Sensor: circle body + wave arcs on right side
+      const sh=boxH*1.70, sw=sh*1.80;
+      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
+    }
+    case 'antenna':{
+      // Antenna: pole + signal waves
+      const sh=boxH*1.80, sw=sh*1.60;
+      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
+    }
+    case 'document':{
+      // Document: page with folded corner
+      const sh=boxH*1.80, sw=sh*0.78;
+      return{sw:Math.min(sw,boxW*0.45),sh,dx:(boxW-Math.min(sw,boxW*0.45))/2};
+    }
+    case 'camera':{
+      // Camera: body + lens circle
+      const sh=boxH*1.60, sw=sh*1.50;
+      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
+    }
+    case 'speaker':{
+      // Speaker: cone shape
+      const sh=boxH*1.70, sw=sh*1.50;
+      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
+    }
+    default:return{sw:boxW,sh:boxH,dx:0};
+  }
 }
 
 // ═══ 도면 규칙 위반 시 자동 재생성 ═══
@@ -3008,7 +3345,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const nn=nodes.length;
     const boxStartX=0.5*PX, boxStartY=0.5*PX;
     const frameW=6.2*PX;
-    const svgH=nn*(boxH+boxGap)+0.8*PX;
+    const maxShapeExtra=boxH*0.85; // icon shapes can be up to 1.8x taller
+    const svgH=nn*(boxH+boxGap)+maxShapeExtra+0.5*PX;
     const svgW=frameW+2.5*PX;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:600px;background:white;border-radius:8px">`;
@@ -3026,24 +3364,28 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const refNum=extractRefNum(nd.label,String((i+1)*100));
       const cleanLabel=nd.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
       const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
+      const shapeType=matchIconShape(nd.label);
+      const sm=_shapeMetrics(shapeType,boxW,boxH);
+      const sx=bx+sm.dx, sy=by;
       
-      // 그림자
-      svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" fill="#000"/>`;
-      // 박스 본체
-      svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#fff" stroke="#000" stroke-width="2"/>`;
-      // 박스 텍스트
-      svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      // 그림자 + 본체 (Shape-aware with natural proportions)
+      svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sm.sw,sm.sh);
+      svg+=_drawShapeBody(shapeType,sx,sy,sm.sw,sm.sh,2);
+      // 텍스트
+      const textCy=_shapeTextCy(shapeType,sy,sm.sh);
+      svg+=`<text x="${sx+sm.sw/2}" y="${textCy+4}" text-anchor="middle" font-size="13" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       
       // 리더라인 + 부호
+      const leaderStartX=_shapeLeaderX(shapeType,sx,sm.sw);
       const leaderEndX=bx+boxW+0.3*PX;
-      const leaderY=by+boxH/2;
-      svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
+      const leaderY=sy+sm.sh/2;
+      svg+=`<line x1="${leaderStartX}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
       svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       
       // 양방향 화살표
       if(i<nn-1){
         const arrowX=bx+boxW/2;
-        const arrowY1=by+boxH+2;
+        const arrowY1=by+sm.sh+2;
         const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
         svg+=`<line x1="${arrowX}" y1="${arrowY1}" x2="${arrowX}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
       }
@@ -3074,7 +3416,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     
     const frameX=0.5*PX, frameY=0.5*PX;
     const boxStartX=frameX+0.6*PX, boxStartY=frameY+0.4*PX;
-    const frameW=6.2*PX, frameH=(displayNodes.length*(boxH+boxGap)+0.3*PX);
+    const maxShapeExtra=boxH*0.85;
+    const frameW=6.2*PX, frameH=(displayNodes.length*(boxH+boxGap)+maxShapeExtra+0.1*PX);
     const svgW=frameW+2.5*PX, svgH=frameH+1.5*PX;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:600px;background:white;border-radius:8px">`;
@@ -3103,26 +3446,30 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const by=boxStartY+i*(boxH+boxGap);
       const fallbackRef=frameRefNum+10*(i+1);
       const refNum=extractRefNum(n.label,String(fallbackRef));
+      const shapeType=matchIconShape(n.label);
+      const sm=_shapeMetrics(shapeType,boxW,boxH);
+      const sx=bx+sm.dx, sy=by;
       
-      // 그림자
-      svg+=`<rect x="${bx+SHADOW_OFFSET}" y="${by+SHADOW_OFFSET}" width="${boxW}" height="${boxH}" fill="#000"/>`;
-      // 박스 본체
-      svg+=`<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
-      // 박스 텍스트
+      // 그림자 + 본체 (Shape-aware with natural proportions)
+      svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sm.sw,sm.sh);
+      svg+=_drawShapeBody(shapeType,sx,sy,sm.sw,sm.sh,1.5);
+      // 텍스트
       const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
       const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
-      svg+=`<text x="${bx+boxW/2}" y="${by+boxH/2+4}" text-anchor="middle" font-size="12" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      const textCy=_shapeTextCy(shapeType,sy,sm.sh);
+      svg+=`<text x="${sx+sm.sw/2}" y="${textCy+4}" text-anchor="middle" font-size="12" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       
       // 리더라인 + 부호
+      const leaderStartX=_shapeLeaderX(shapeType,sx,sm.sw);
       const leaderEndX=frameX+frameW+0.3*PX;
-      const leaderY=by+boxH/2;
-      svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
+      const leaderY=sy+sm.sh/2;
+      svg+=`<line x1="${leaderStartX}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
       svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       
       // 양방향 화살표 - edges가 있을 때만
       if(hasEdges&&i<displayNodes.length-1){
         const arrowX=bx+boxW/2;
-        const arrowY1=by+boxH+2;
+        const arrowY1=by+sm.sh+2;
         const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
         svg+=`<line x1="${arrowX}" y1="${arrowY1}" x2="${arrowX}" y2="${arrowY2}" stroke="#000" stroke-width="1" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
       }
@@ -3668,6 +4015,105 @@ function downloadPptx(sid){
       return null;
     }
     
+    // ═══ PPTX Icon Shape Helper ═══
+    function addPptxIconShape(slide,type,x,y,w,h,lineW){
+      const SO=SHADOW_OFFSET;
+      switch(type){
+        case 'database':{
+          const shp=pptx.shapes.CAN||pptx.shapes.RECTANGLE;
+          slide.addShape(shp,{x:x+SO,y:y+SO,w,h,fill:{color:'000000'},line:{width:0}});
+          slide.addShape(shp,{x,y,w,h,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW}});
+          break;
+        }
+        case 'cloud':{
+          const shp=pptx.shapes.CLOUD||pptx.shapes.OVAL;
+          slide.addShape(shp,{x:x+SO,y:y+SO,w,h,fill:{color:'000000'},line:{width:0}});
+          slide.addShape(shp,{x,y,w,h,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW}});
+          break;
+        }
+        case 'server':{
+          slide.addShape(pptx.shapes.RECTANGLE,{x:x+SO,y:y+SO,w,h,fill:{color:'000000'},line:{width:0}});
+          slide.addShape(pptx.shapes.RECTANGLE,{x,y,w,h,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW}});
+          const h3=h/3;
+          slide.addShape(pptx.shapes.LINE,{x,y:y+h3,w,h:0,line:{color:'000000',width:lineW*0.5}});
+          slide.addShape(pptx.shapes.LINE,{x,y:y+2*h3,w,h:0,line:{color:'000000',width:lineW*0.5}});
+          [0.5,1.5,2.5].forEach(m=>{
+            slide.addShape(pptx.shapes.OVAL,{x:x+w-0.15,y:y+h3*m-0.04,w:0.08,h:0.08,fill:{color:'000000'},line:{width:0}});
+          });
+          break;
+        }
+        case 'monitor':{
+          const sh=h*0.75;
+          slide.addShape(pptx.shapes.RECTANGLE,{x:x+SO,y:y+SO,w,h:sh,fill:{color:'000000'},line:{width:0}});
+          slide.addShape(pptx.shapes.RECTANGLE,{x,y,w,h:sh,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW},rectRadius:2});
+          slide.addShape(pptx.shapes.RECTANGLE,{x:x+w/2-w*0.06,y:y+sh,w:w*0.12,h:h*0.15,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW*0.5}});
+          slide.addShape(pptx.shapes.RECTANGLE,{x:x+w/2-w*0.13,y:y+sh+h*0.15,w:w*0.26,h:h*0.05,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW*0.5}});
+          break;
+        }
+        case 'sensor':{
+          // Circle body + simplified arc representation
+          const cr=Math.min(w*0.28,h*0.38);
+          const cx=x+w*0.32-cr, cy=y+h*0.50-cr;
+          slide.addShape(pptx.shapes.OVAL,{x:cx+SO,y:cy+SO,w:cr*2,h:cr*2,fill:{color:'000000'},line:{width:0}});
+          slide.addShape(pptx.shapes.OVAL,{x:cx,y:cy,w:cr*2,h:cr*2,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW}});
+          // Inner dot
+          const dr=cr*0.25;
+          slide.addShape(pptx.shapes.OVAL,{x:x+w*0.32-dr,y:y+h*0.50-dr,w:dr*2,h:dr*2,fill:{color:'000000'},line:{width:0}});
+          // Wave arcs (approximate with thin ovals)
+          [1.55,2.10,2.65].forEach(m=>{
+            const ar=cr*m;
+            slide.addShape(pptx.shapes.ARC||pptx.shapes.OVAL,{x:x+w*0.32-ar,y:y+h*0.50-ar,w:ar*2,h:ar*2,fill:{type:'none'},line:{color:'000000',width:lineW*0.5}});
+          });
+          break;
+        }
+        case 'antenna':{
+          // Pole + base + top ball (simplified)
+          const poleX=x+w*0.38;
+          const bw=w*0.22,bh=h*0.10;
+          // Base
+          slide.addShape(pptx.shapes.RECTANGLE,{x:poleX-bw/2,y:y+h*0.82,w:bw,h:bh,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW}});
+          // Pole
+          slide.addShape(pptx.shapes.LINE,{x:poleX,y:y+h*0.18,w:0,h:h*0.64,line:{color:'000000',width:lineW*1.2}});
+          // Top ball
+          const br=Math.min(w*0.04,h*0.04);
+          slide.addShape(pptx.shapes.OVAL,{x:poleX-br,y:y+h*0.18-br,w:br*2,h:br*2,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW}});
+          break;
+        }
+        case 'document':{
+          // Page with folded corner (simplified as rectangle)
+          slide.addShape(pptx.shapes.RECTANGLE,{x:x+SO,y:y+SO,w,h,fill:{color:'000000'},line:{width:0}});
+          slide.addShape(pptx.shapes.RECTANGLE,{x,y,w,h,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW}});
+          // Fold triangle (approximate with small rectangle at corner)
+          const fold=w*0.22;
+          slide.addShape(pptx.shapes.RIGHT_TRIANGLE||pptx.shapes.RECTANGLE,{x:x+w-fold,y:y,w:fold,h:fold,fill:{color:'EEEEEE'},line:{color:'000000',width:lineW*0.5},rotate:90});
+          break;
+        }
+        case 'camera':{
+          // Camera body + lens (simplified)
+          const cbx=x+w*0.05,cby=y+h*0.18,cbw=w*0.80,cbh=h*0.65;
+          slide.addShape(pptx.shapes.RECTANGLE,{x:cbx+SO,y:cby+SO,w:cbw,h:cbh,fill:{color:'000000'},line:{width:0}});
+          slide.addShape(pptx.shapes.RECTANGLE,{x:cbx,y:cby,w:cbw,h:cbh,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW},rectRadius:3});
+          // Viewfinder
+          slide.addShape(pptx.shapes.RECTANGLE,{x:cbx+cbw*0.30,y:cby-h*0.10,w:cbw*0.25,h:h*0.12,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW*0.6}});
+          // Lens
+          const lr=Math.min(cbw,cbh)*0.30;
+          slide.addShape(pptx.shapes.OVAL,{x:cbx+cbw*0.50-lr,y:cby+cbh*0.52-lr,w:lr*2,h:lr*2,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW}});
+          break;
+        }
+        case 'speaker':{
+          // Speaker (simplified as rectangles + small driver)
+          const sph=h*0.40, spw=w*0.18;
+          slide.addShape(pptx.shapes.RECTANGLE,{x:x+w*0.10,y:y+h*0.30,w:spw,h:sph,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW}});
+          // Cone (larger rect)
+          slide.addShape(pptx.shapes.RECTANGLE,{x:x+w*0.28,y:y+h*0.12,w:w*0.28,h:h*0.76,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW}});
+          break;
+        }
+        default:
+          slide.addShape(pptx.shapes.RECTANGLE,{x:x+SO,y:y+SO,w,h,fill:{color:'000000'},line:{width:0}});
+          slide.addShape(pptx.shapes.RECTANGLE,{x,y,w,h,fill:{color:'FFFFFF'},line:{color:'000000',width:lineW}});
+      }
+    }
+    
     data.forEach(({nodes,edges},idx)=>{
       const slide=pptx.addSlide({bkgd:'FFFFFF'});
       const figNum=figOffset+idx+1;
@@ -3753,15 +4199,18 @@ function downloadPptx(sid){
           const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
           const refNum=extractRefNum(n.label,String((i+1)*100));
           const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          const shapeType=matchIconShape(n.label);
+          const sm=_shapeMetrics(shapeType,boxW,boxH);
+          const sx=bx+sm.dx;
           
-          slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
-          slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
-          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
-          slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-          slide.addText(String(refNum),{x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+          addPptxIconShape(slide,shapeType,sx,by,sm.sw,sm.sh,LINE_FRAME);
+          const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
+          slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          slide.addShape(pptx.shapes.LINE,{x:sx+sm.sw,y:by+sm.sh/2,w:refLabelX-(sx+sm.sw)+0.2,h:0,line:{color:'000000',width:LINE_ARROW}});
+          slide.addText(String(refNum),{x:refLabelX+0.3,y:by+sm.sh/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
           if(i<nodes.length-1){
-            const arrowY1=by+boxH+0.04;
+            const arrowY1=by+sm.sh+0.04;
             const arrowY2=boxStartY+(i+1)*(boxH+boxGap)-0.04;
             const arrowX=bx+boxW/2;
             if(arrowY2>arrowY1+0.05){
@@ -3799,15 +4248,18 @@ function downloadPptx(sid){
           const fallbackRef=frameRefNum+10*(i+1);
           const refNum=extractRefNum(n.label,String(fallbackRef));
           const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          const shapeType=matchIconShape(n.label);
+          const sm=_shapeMetrics(shapeType,boxW,boxH);
+          const sx=bx+sm.dx;
           
-          slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SHADOW_OFFSET,y:by+SHADOW_OFFSET,w:boxW,h:boxH,fill:{color:'000000'},line:{width:0}});
-          slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
-          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:Math.min(11,Math.max(8,12-dCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
-          slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:frameX+frameW-bx-boxW+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-          slide.addText(String(refNum),{x:refLabelX+0.3,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+          addPptxIconShape(slide,shapeType,sx,by,sm.sw,sm.sh,LINE_BOX);
+          const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
+          slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize:Math.min(11,Math.max(8,12-dCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          slide.addShape(pptx.shapes.LINE,{x:sx+sm.sw,y:by+sm.sh/2,w:frameX+frameW-sx-sm.sw+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
+          slide.addText(String(refNum),{x:refLabelX+0.3,y:by+sm.sh/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
           if(hasEdges&&i<displayNodes.length-1){
-            const arrowY1=by+boxH,arrowY2=boxStartY+(i+1)*(boxH+boxGap),arrowX=bx+boxW/2;
+            const arrowY1=by+sm.sh,arrowY2=boxStartY+(i+1)*(boxH+boxGap),arrowX=bx+boxW/2;
             if(arrowY2>arrowY1+0.05){
               slide.addShape(pptx.shapes.LINE,{x:arrowX,y:arrowY1,w:0,h:arrowY2-arrowY1,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
             }
@@ -4048,6 +4500,163 @@ function downloadDiagramImages(sid, format='jpeg'){
       const nodeCount=nodes.length;
       const SHADOW=4; // SVG와 일치
       
+      // ── Canvas Shape Drawing Helper ──
+      function drawCanvasShape(ctx,type,x,y,w,h,shadowOff,strokeW){
+        ctx.strokeStyle='#000000';
+        switch(type){
+          case 'database':{
+            const ry=Math.min(h*0.18,w*0.15,22);
+            // Shadow
+            ctx.fillStyle='#000000';
+            ctx.beginPath();ctx.ellipse(x+w/2+shadowOff,y+ry+shadowOff,w/2,ry,0,0,Math.PI*2);ctx.fill();
+            ctx.fillRect(x+shadowOff,y+ry+shadowOff,w,h-2*ry);
+            ctx.beginPath();ctx.ellipse(x+w/2+shadowOff,y+h-ry+shadowOff,w/2,ry,0,0,Math.PI*2);ctx.fill();
+            // Body
+            ctx.fillStyle='#FFFFFF';
+            ctx.beginPath();ctx.ellipse(x+w/2,y+h-ry,w/2,ry,0,0,Math.PI*2);ctx.fill();ctx.lineWidth=strokeW;ctx.stroke();
+            ctx.fillRect(x,y+ry,w,h-2*ry);
+            ctx.beginPath();ctx.moveTo(x,y+ry);ctx.lineTo(x,y+h-ry);ctx.lineWidth=strokeW;ctx.stroke();
+            ctx.beginPath();ctx.moveTo(x+w,y+ry);ctx.lineTo(x+w,y+h-ry);ctx.lineWidth=strokeW;ctx.stroke();
+            ctx.beginPath();ctx.ellipse(x+w/2,y+ry,w/2,ry,0,0,Math.PI*2);ctx.fillStyle='#FFFFFF';ctx.fill();ctx.stroke();
+            break;
+          }
+          case 'cloud':{
+            function cloudPath(cx,cy,ox,oy){
+              ctx.beginPath();
+              ctx.moveTo(ox+w*0.2,oy+h*0.82);
+              ctx.bezierCurveTo(ox+w*0.02,oy+h*0.84,ox,oy+h*0.44,ox+w*0.18,oy+h*0.36);
+              ctx.bezierCurveTo(ox+w*0.1,oy+h*0.08,ox+w*0.35,oy,ox+w*0.48,oy+h*0.16);
+              ctx.bezierCurveTo(ox+w*0.58,oy-h*0.01,ox+w*0.82,oy+h*0.06,ox+w*0.8,oy+h*0.34);
+              ctx.bezierCurveTo(ox+w*0.98,oy+h*0.32,ox+w,oy+h*0.82,ox+w*0.8,oy+h*0.82);
+              ctx.closePath();
+            }
+            // Shadow
+            cloudPath(ctx,null,x+shadowOff,y+shadowOff);
+            ctx.fillStyle='#000000';ctx.fill();
+            // Body
+            cloudPath(ctx,null,x,y);
+            ctx.fillStyle='#FFFFFF';ctx.fill();ctx.lineWidth=strokeW;ctx.stroke();
+            break;
+          }
+          case 'server':{
+            const h3=h/3,dotR=Math.min(3,h*0.07);
+            // Shadow
+            ctx.fillStyle='#000000';ctx.fillRect(x+shadowOff,y+shadowOff,w,h);
+            // Body
+            ctx.fillStyle='#FFFFFF';ctx.fillRect(x,y,w,h);ctx.lineWidth=strokeW;ctx.strokeRect(x,y,w,h);
+            ctx.lineWidth=strokeW*0.55;
+            ctx.beginPath();ctx.moveTo(x,y+h3);ctx.lineTo(x+w,y+h3);ctx.stroke();
+            ctx.beginPath();ctx.moveTo(x,y+2*h3);ctx.lineTo(x+w,y+2*h3);ctx.stroke();
+            [0.5,1.5,2.5].forEach(m=>{
+              ctx.beginPath();ctx.arc(x+w-dotR*4,y+h3*m,dotR,0,Math.PI*2);ctx.fillStyle='#000000';ctx.fill();
+            });
+            break;
+          }
+          case 'monitor':{
+            const sh=h*0.72,standW=w*0.12,standH=h*0.14,baseW=w*0.25,baseH=h*0.05;
+            const sTop=y+sh+h*0.02,bTop=sTop+standH;
+            // Shadow
+            ctx.fillStyle='#000000';ctx.fillRect(x+shadowOff,y+shadowOff,w,sh);
+            // Screen
+            ctx.fillStyle='#FFFFFF';ctx.fillRect(x,y,w,sh);ctx.lineWidth=strokeW;ctx.strokeRect(x,y,w,sh);
+            // Stand
+            ctx.fillRect(x+w/2-standW/2,sTop,standW,standH);ctx.lineWidth=strokeW*0.6;ctx.strokeRect(x+w/2-standW/2,sTop,standW,standH);
+            ctx.fillRect(x+w/2-baseW/2,bTop,baseW,baseH);ctx.strokeRect(x+w/2-baseW/2,bTop,baseW,baseH);
+            break;
+          }
+          case 'sensor':{
+            const cr=Math.min(w*0.28,h*0.38);
+            const scx=x+w*0.32, scy=y+h*0.50;
+            // Shadow
+            ctx.fillStyle='#000000';ctx.beginPath();ctx.arc(scx+shadowOff,scy+shadowOff,cr,0,Math.PI*2);ctx.fill();
+            // Circle body
+            ctx.fillStyle='#FFFFFF';ctx.beginPath();ctx.arc(scx,scy,cr,0,Math.PI*2);ctx.fill();ctx.lineWidth=strokeW;ctx.stroke();
+            // Inner dot
+            ctx.fillStyle='#000000';ctx.beginPath();ctx.arc(scx,scy,cr*0.25,0,Math.PI*2);ctx.fill();
+            // Wave arcs
+            ctx.lineWidth=strokeW*0.7;
+            [1.55,2.10,2.65].forEach(m=>{
+              const ar=cr*m;
+              ctx.beginPath();ctx.arc(scx,scy,ar,-Math.PI*0.35,Math.PI*0.35);ctx.stroke();
+            });
+            break;
+          }
+          case 'antenna':{
+            const poleX=x+w*0.38, topY=y+h*0.18, baseY=y+h*0.82;
+            const baw=w*0.22, bah=h*0.10;
+            const ballR=Math.min(w*0.04,h*0.04);
+            // Base
+            ctx.fillStyle='#FFFFFF';ctx.fillRect(poleX-baw/2,baseY,baw,bah);ctx.lineWidth=strokeW;ctx.strokeRect(poleX-baw/2,baseY,baw,bah);
+            // Pole
+            ctx.lineWidth=strokeW*1.2;ctx.beginPath();ctx.moveTo(poleX,topY+ballR);ctx.lineTo(poleX,baseY);ctx.stroke();
+            // Top ball
+            ctx.fillStyle='#FFFFFF';ctx.beginPath();ctx.arc(poleX,topY,ballR,0,Math.PI*2);ctx.fill();ctx.lineWidth=strokeW;ctx.stroke();
+            // Wave arcs
+            ctx.lineWidth=strokeW*0.7;
+            [0.16,0.26,0.36].forEach(m=>{
+              const ar=h*m;
+              ctx.beginPath();ctx.arc(poleX,topY,ar,-Math.PI*0.55,-Math.PI*0.05);ctx.stroke();
+            });
+            break;
+          }
+          case 'document':{
+            const fold=w*0.22;
+            // Shadow
+            ctx.fillStyle='#000000';ctx.beginPath();
+            ctx.moveTo(x+shadowOff,y+shadowOff);ctx.lineTo(x+w-fold+shadowOff,y+shadowOff);ctx.lineTo(x+w+shadowOff,y+fold+shadowOff);ctx.lineTo(x+w+shadowOff,y+h+shadowOff);ctx.lineTo(x+shadowOff,y+h+shadowOff);ctx.closePath();ctx.fill();
+            // Body
+            ctx.fillStyle='#FFFFFF';ctx.beginPath();
+            ctx.moveTo(x,y);ctx.lineTo(x+w-fold,y);ctx.lineTo(x+w,y+fold);ctx.lineTo(x+w,y+h);ctx.lineTo(x,y+h);ctx.closePath();ctx.fill();ctx.lineWidth=strokeW;ctx.stroke();
+            // Fold triangle
+            ctx.fillStyle='#EEEEEE';ctx.beginPath();
+            ctx.moveTo(x+w-fold,y);ctx.lineTo(x+w-fold,y+fold);ctx.lineTo(x+w,y+fold);ctx.closePath();ctx.fill();ctx.lineWidth=strokeW*0.6;ctx.stroke();
+            // Text lines
+            ctx.strokeStyle='#BBBBBB';ctx.lineWidth=strokeW*0.4;
+            const lx1=x+w*0.15,lx2=x+w*0.75,ly0=y+h*0.30,gap=h*0.12;
+            for(let j=0;j<3;j++){ctx.beginPath();ctx.moveTo(lx1,ly0+gap*j);ctx.lineTo(lx2-(j===2?w*0.20:0),ly0+gap*j);ctx.stroke();}
+            ctx.strokeStyle='#000000';
+            break;
+          }
+          case 'camera':{
+            const cbx=x+w*0.05,cby=y+h*0.18,cbw=w*0.80,cbh=h*0.65;
+            const lensR=Math.min(cbw,cbh)*0.32;
+            const lcx=cbx+cbw*0.50,lcy=cby+cbh*0.52;
+            // Shadow
+            ctx.fillStyle='#000000';ctx.fillRect(cbx+shadowOff,cby+shadowOff,cbw,cbh);
+            // Body
+            ctx.fillStyle='#FFFFFF';
+            ctx.beginPath();ctx.roundRect(cbx,cby,cbw,cbh,[4]);ctx.fill();ctx.lineWidth=strokeW;ctx.stroke();
+            // Viewfinder
+            ctx.fillRect(cbx+cbw*0.30,cby-h*0.10,cbw*0.25,h*0.12);ctx.lineWidth=strokeW*0.7;ctx.strokeRect(cbx+cbw*0.30,cby-h*0.10,cbw*0.25,h*0.12);
+            // Lens outer
+            ctx.beginPath();ctx.arc(lcx,lcy,lensR,0,Math.PI*2);ctx.fill();ctx.lineWidth=strokeW;ctx.stroke();
+            // Lens inner
+            ctx.beginPath();ctx.arc(lcx,lcy,lensR*0.55,0,Math.PI*2);ctx.lineWidth=strokeW*0.6;ctx.stroke();
+            // Center dot
+            ctx.fillStyle='#000000';ctx.beginPath();ctx.arc(lcx,lcy,lensR*0.15,0,Math.PI*2);ctx.fill();
+            break;
+          }
+          case 'speaker':{
+            // Speaker body
+            ctx.fillStyle='#000000';ctx.beginPath();
+            ctx.moveTo(x+w*0.10+shadowOff,y+h*0.30+shadowOff);ctx.lineTo(x+w*0.28+shadowOff,y+h*0.30+shadowOff);ctx.lineTo(x+w*0.55+shadowOff,y+h*0.08+shadowOff);ctx.lineTo(x+w*0.55+shadowOff,y+h*0.92+shadowOff);ctx.lineTo(x+w*0.28+shadowOff,y+h*0.70+shadowOff);ctx.lineTo(x+w*0.10+shadowOff,y+h*0.70+shadowOff);ctx.closePath();ctx.fill();
+            // Body
+            ctx.fillStyle='#FFFFFF';ctx.beginPath();
+            ctx.moveTo(x+w*0.10,y+h*0.30);ctx.lineTo(x+w*0.28,y+h*0.30);ctx.lineTo(x+w*0.55,y+h*0.08);ctx.lineTo(x+w*0.55,y+h*0.92);ctx.lineTo(x+w*0.28,y+h*0.70);ctx.lineTo(x+w*0.10,y+h*0.70);ctx.closePath();ctx.fill();ctx.lineWidth=strokeW;ctx.stroke();
+            // Divider
+            ctx.beginPath();ctx.moveTo(x+w*0.28,y+h*0.30);ctx.lineTo(x+w*0.28,y+h*0.70);ctx.lineWidth=strokeW*0.6;ctx.stroke();
+            // Wave arcs
+            const wcx=x+w*0.55,wcy=y+h*0.50;
+            ctx.lineWidth=strokeW*0.7;
+            [0.22,0.34,0.46].forEach(m=>{const ar=h*m;ctx.beginPath();ctx.arc(wcx,wcy,ar,-Math.PI*0.30,Math.PI*0.30);ctx.stroke();});
+            break;
+          }
+          default:
+            ctx.fillStyle='#000000';ctx.fillRect(x+shadowOff,y+shadowOff,w,h);
+            ctx.fillStyle='#FFFFFF';ctx.fillRect(x,y,w,h);ctx.lineWidth=strokeW;ctx.strokeRect(x,y,w,h);
+        }
+      }
+      
       if(isFig1){
         // 도 1: 최외곽 박스 없음
         const boxStartX=30,boxStartY=50;
@@ -4059,36 +4668,34 @@ function downloadDiagramImages(sid, format='jpeg'){
           const bx=boxStartX,by=boxStartY+i*(boxH+boxGap);
           const refNum=extractRefNum(n.label,String((i+1)*100));
           const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          const shapeType=matchIconShape(n.label);
+          const sm=_shapeMetrics(shapeType,boxW,boxH);
+          const sx=bx+sm.dx;
           
-          ctx.fillStyle='#000000';
-          ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
-          ctx.fillStyle='#FFFFFF';
-          ctx.fillRect(bx,by,boxW,boxH);
-          ctx.strokeStyle='#000000';
-          ctx.lineWidth=2;
-          ctx.strokeRect(bx,by,boxW,boxH);
+          drawCanvasShape(ctx,shapeType,sx,by,sm.sw,sm.sh,SHADOW,2);
           
           const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
           ctx.fillStyle='#000000';
           ctx.font='13px "맑은 고딕", sans-serif';
           ctx.textAlign='center';
           ctx.textBaseline='middle';
-          ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
+          const textCy=_shapeTextCy(shapeType,by,sm.sh);
+          ctx.fillText(displayLabel,sx+sm.sw/2,textCy);
           ctx.textAlign='left';
           ctx.textBaseline='alphabetic';
           
           ctx.beginPath();
-          ctx.moveTo(bx+boxW,by+boxH/2);
-          ctx.lineTo(bx+boxW+25,by+boxH/2);
+          ctx.moveTo(sx+sm.sw,by+sm.sh/2);
+          ctx.lineTo(bx+boxW+25,by+sm.sh/2);
           ctx.lineWidth=1;
           ctx.stroke();
           
           ctx.font='11px "맑은 고딕", sans-serif';
-          ctx.fillText(String(refNum),bx+boxW+30,by+boxH/2+4);
+          ctx.fillText(String(refNum),bx+boxW+30,by+sm.sh/2+4);
           
           // ★ 양방향 화살표 — 항상 그리기 (SVG와 일치) ★
           if(i<nodes.length-1){
-            const arrowX=bx+boxW/2,arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+            const arrowX=bx+boxW/2,arrowY1=by+sm.sh+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
             if(arrowY2>arrowY1){
               ctx.beginPath();
               ctx.moveTo(arrowX,arrowY1);
@@ -4151,34 +4758,33 @@ function downloadDiagramImages(sid, format='jpeg'){
           const fallbackRef=frameRefNum+10*(i+1);
           const refNum=extractRefNum(n.label,String(fallbackRef));
           const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          const shapeType=matchIconShape(n.label);
+          const sm=_shapeMetrics(shapeType,boxW,boxH);
+          const sx=bx+sm.dx;
           
-          ctx.fillStyle='#000000';
-          ctx.fillRect(bx+SHADOW,by+SHADOW,boxW,boxH);
-          ctx.fillStyle='#FFFFFF';
-          ctx.fillRect(bx,by,boxW,boxH);
-          ctx.lineWidth=1.5;
-          ctx.strokeRect(bx,by,boxW,boxH);
+          drawCanvasShape(ctx,shapeType,sx,by,sm.sw,sm.sh,SHADOW,1.5);
           
           ctx.fillStyle='#000000';
           ctx.font='12px "맑은 고딕", sans-serif';
           ctx.textAlign='center';
           ctx.textBaseline='middle';
           const displayLabel=cleanLabel.length>18?cleanLabel.slice(0,16)+'…':cleanLabel;
-          ctx.fillText(displayLabel,bx+boxW/2,by+boxH/2);
+          const textCy=_shapeTextCy(shapeType,by,sm.sh);
+          ctx.fillText(displayLabel,sx+sm.sw/2,textCy);
           ctx.textAlign='left';
           ctx.textBaseline='alphabetic';
           
           ctx.beginPath();
-          ctx.moveTo(bx+boxW,by+boxH/2);
-          ctx.lineTo(frameX+frameW+25,by+boxH/2);
+          ctx.moveTo(sx+sm.sw,by+sm.sh/2);
+          ctx.lineTo(frameX+frameW+25,by+sm.sh/2);
           ctx.lineWidth=1;
           ctx.stroke();
           
           ctx.font='11px "맑은 고딕", sans-serif';
-          ctx.fillText(String(refNum),frameX+frameW+30,by+boxH/2+4);
+          ctx.fillText(String(refNum),frameX+frameW+30,by+sm.sh/2+4);
           
           if(hasEdges&&i<displayNodes.length-1){
-            const arrowX=bx+boxW/2,arrowY1=by+boxH+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
+            const arrowX=bx+boxW/2,arrowY1=by+sm.sh+2,arrowY2=boxStartY+(i+1)*(boxH+boxGap)-2;
             if(arrowY2>arrowY1){
               ctx.beginPath();
               ctx.moveTo(arrowX,arrowY1);
