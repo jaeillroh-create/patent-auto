@@ -856,9 +856,17 @@ function getStyleRef(){
   if(!ref)return '';
   return '\n\n[참고 문체 — 아래 문서의 문장 형태, 단락 구조, 작성 방식만 참고하라. 내용은 절대 참조하지 마라. 발명의 내용과 무관하다.]\n'+ref.slice(0,3000);
 }
-function getFullInvention(){
+function getFullInvention(opts){
   const inv=document.getElementById('projectInput').value;
-  return '\n\n★★★ [발명 내용 — 아래 내용을 단 하나도 누락 없이 모두 반영하라. 누락 시 특허 거절 사유가 된다.] ★★★\n'+inv;
+  let text=inv;
+  // opts.stripMeta: 청구범위/작성요청 등 메타 섹션 제거 (step_08, step_12 등 상세설명용)
+  if(opts&&opts.stripMeta){
+    text=text.replace(/\[청구범위\][\s\S]*?(?=\[(?!청구범위)|$)/gi,'')
+             .replace(/\[작성\s*요청\][\s\S]*?(?=\[(?!작성)|$)/gi,'')
+             .replace(/\[청구항\s*구성\][\s\S]*?(?=\[(?!청구항)|$)/gi,'')
+             .trim();
+  }
+  return '\n\n★★★ [발명 내용 — 아래 내용의 기술적 요소를 빠짐없이 반영하라] ★★★\n'+text;
 }
 function getRequiredFiguresInstruction(){
   if(!requiredFigures.length)return '';
@@ -1171,6 +1179,7 @@ ${deviceAnchorDep>0?`(R5) 등록 앵커 종속항 (청구항 ${deviceAnchorStart
 - "~하는 단계", "S100", "S200" 등 방법 표현 절대 금지
 - "~부" 형태의 장치 구성요소 명칭만 사용 ("~모듈", "~유닛" 절대 금지)
 - 동작은 "~하도록 구성되는", "~을 수행하는" 형태로 표현
+- 발명 내용이 "방법" 형태로 기재되어 있더라도, 장치(~부) 관점으로 재구성하여 작성하라
 
 ${deviceAnchorDep>0?`[앵커 테마 배정 — 내부 지침, 출력 금지]
 ${themeInst}
@@ -1178,7 +1187,7 @@ ${themeInst}
 【청구항 1】형식. 청구항만 출력. 테마/키워드/점검 내용 출력 금지.
 종속항은 \"청구항 N에 있어서,\" 시작. SW명 금지. 제한성 표현 금지.
 ${getJepsonInstruction('device')}
-★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
+★★★ 발명 내용의 모든 기술적 요소를 장치 구성요소(~부)로 변환하여 빠짐없이 반영하라. 방법/단계 표현은 장치 동작으로 재구성. ★★★
 
 ${T}${getFullInvention()}${styleRef}`;}
 
@@ -1394,9 +1403,18 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
 - 각 핵심 구성요소에 대해 변형 실시예를 포함하라.
 - 제한성 표현(만, 반드시, ~에 한하여 등) 사용 금지.
 
-⛔ 금지 사항:
-- "~하는 단계", "S100", "S200" 등 방법 표현 금지
-- 방법 상세설명은 Step 12에서 별도 작성됨
+⛔⛔⛔ 방법 표현 절대 금지 (위반 시 전체 무효) ⛔⛔⛔
+- \"~하는 단계\", \"~하는 단계이다\" 표현 절대 금지
+- \"S100\", \"S200\", \"S401\", \"S810\" 등 S+숫자 형태의 단계번호 절대 금지
+- \"단계(S숫자)\" 형태 절대 금지
+- 방법/흐름도/순서도/프로세스 설명 포함 금지
+- 발명 내용에 방법 관련 기재가 있더라도, 이 상세설명에서는 장치 구성요소(~부)의 기능과 동작만 서술하라
+- 방법 상세설명은 Step 12에서 별도 작성됨 — 여기서 선취하지 마라
+
+⛔ 출력 금지 항목:
+- [청구범위], [작성 요청], [청구항 구성] 등 메타 섹션을 출력에 포함하지 마라
+- 청구항 원문을 그대로 출력하지 마라 — 상세설명 본문만 작성하라
+- 발명 내용 원문을 에코하지 마라
 
 ★ 분량 규칙:
 - 도면 1개당 ${dlCfg.charPerFig}(공백 포함)
@@ -1417,9 +1435,9 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 앵커 종속항의 핵심 처리에 대해 1개 이상의 대안적 구현을 기술
 - 변형 실시예는 독립항의 보호범위를 뒷받침하는 방향이어야 한다
 
-★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
+★★★ 발명 내용의 모든 기술적 요소를 장치 구성요소(~부)의 동작으로 변환하여 빠짐없이 반영하라. 방법/단계 표현은 제외. ★★★
 
-${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention()}${styleRef}`;}
+${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true})}${styleRef}`;}
 
     case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
@@ -1577,7 +1595,7 @@ ${methodAnchorDep>0?`★★ 방법 앵커 종속항 뒷받침 규칙 (등록 핵
 `:''}
 ★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
-${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${step15Ref}${getFullInvention()}${styleRef}`;}
+${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${step15Ref}${getFullInvention({stripMeta:true})}${styleRef}`;}
     case 'step_13':{
       return `아래 청구범위와 상세설명을 전문적으로 검토하라.
 
@@ -1839,12 +1857,13 @@ async function applyReview(){
 - 특허문체(~한다). 글머리 금지. 생략 금지.
 - 제한성 표현 금지.
 - 수학식은 포함하지 마라 (별도 삽입 예정).
+- ⛔ "~하는 단계", "S100", "S401" 등 방법 표현/단계번호 절대 금지. 장치 구성요소(~부)의 동작만 서술.
 
 [발명의 명칭] ${selectedTitle}
 [검토 결과] ${outputs.step_13}
 [청구범위] ${outputs.step_06||''}
 [도면] ${outputs.step_07||''}
-[현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention()}${getStyleRef()}${buildUserCommandSuffix('step_08')}`,'progressApplyReview');
+[현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention({stripMeta:true})}${getStyleRef()}${buildUserCommandSuffix('step_08')}`,'progressApplyReview');
     outputs.step_08=improvedDesc;markOutputTimestamp('step_08');
 
     // ═══ [2] 수학식 재삽입 ═══
