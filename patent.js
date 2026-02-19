@@ -3793,16 +3793,29 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const maxNodeAreaW=maxCols*boxW2D+(maxCols-1)*colGap;
     const marginX=0.5*PX;
     const marginY=0.5*PX;
-    // ★ 실제 Shape 높이 초과분 계산 ★
-    let maxShapeExtra=0;
-    nodes.forEach(n=>{
-      const st=matchIconShape(n.label);
-      const sm=_shapeMetrics(st,boxW2D,boxH);
-      if(sm.sh>boxH)maxShapeExtra=Math.max(maxShapeExtra,sm.sh-boxH);
-    });
     const refNumH=24; // 참조번호 + 수직선 공간
-    const totalH=numRows*boxH+(numRows>1?(numRows-1)*boxGap:0)+maxShapeExtra+refNumH+marginY*2;
-    const leaderMargin=0.5*PX; // 참조번호가 Shape 아래라 여백 최소
+    const rowGapBase=0.4*PX;
+    
+    // ★ 행별 실제 최대 Shape 높이 계산 (겹침 방지 핵심) ★
+    const rowMaxH={};
+    nodes.forEach(nd=>{
+      const gp=grid[nd.id]; if(!gp)return;
+      const st=matchIconShape(nd.label);
+      const sm=_shapeMetrics(st,boxW2D,boxH);
+      const h=sm.sh+refNumH; // Shape + 참조번호 공간
+      if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;
+    });
+    
+    // 행별 Y시작 좌표 (누적)
+    const rowY={};
+    let accY=marginY;
+    for(let r=0;r<numRows;r++){
+      rowY[r]=accY;
+      accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase;
+    }
+    const totalH=accY-rowGapBase+marginY;
+    
+    const leaderMargin=0.5*PX;
     const svgW=marginX+maxNodeAreaW+leaderMargin;
     const svgH=totalH;
     const maxW=maxCols<=1?600:maxCols===2?750:900;
@@ -3813,14 +3826,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     
     // ── Phase 1: 위치 계산 (렌더링 전) ──
     const nodeBoxes={};
-    const nodeData=[]; // 렌더용 데이터 보관
+    const nodeData=[];
     nodes.forEach(nd=>{
       const gp=grid[nd.id];
       if(!gp)return;
       const rowW=gp.layerSize*boxW2D+(gp.layerSize-1)*colGap;
       const rowStartX=marginX+(maxNodeAreaW-rowW)/2;
       const bx=rowStartX+gp.col*(boxW2D+colGap);
-      const by=marginY+gp.row*(boxH+boxGap);
+      const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 사용 ★
       const refNum=extractRefNum(nd.label,String(100));
       const cleanLabel=nd.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
       const displayLabel=cleanLabel.length>(maxCols>1?10:16)?cleanLabel.slice(0,maxCols>1?8:14)+'…':cleanLabel;
@@ -3829,8 +3842,49 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const sx=bx+sm.dx, sy=by;
       
       nodeBoxes[nd.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2};
-      nodeData.push({id:nd.id,sx,sy,sw:sm.sw,sh:sm.sh,shapeType,displayLabel,refNum,bx,boxW2D});
+      nodeData.push({id:nd.id,sx,sy,sw:sm.sw,sh:sm.sh,shapeType,displayLabel,refNum,bx,boxW2D,row:grid[nd.id].row});
     });
+    
+    // ── Phase 1.5: 겹침 검증 & 자동 보정 ──
+    // 모든 노드 쌍을 검사하여 Shape+참조번호 영역이 겹치면 하단 노드를 아래로 이동
+    const REF_PADDING=refNumH+4; // Shape 아래 참조번호+여유
+    const MIN_GAP=8; // 최소 간격(px)
+    let correctionApplied=true;
+    let correctionRounds=0;
+    while(correctionApplied&&correctionRounds<10){
+      correctionApplied=false;
+      correctionRounds++;
+      for(let i=0;i<nodeData.length;i++){
+        const a=nodeData[i];
+        const aBottom=a.sy+a.sh+REF_PADDING; // Shape 하단 + 참조번호
+        for(let j=0;j<nodeData.length;j++){
+          if(i===j)continue;
+          const b=nodeData[j];
+          // 수직 겹침: a의 하단이 b의 상단을 넘고, 수평으로도 겹침
+          const hOverlap=!(a.sx+a.sw<b.sx||b.sx+b.sw<a.sx); // X축 겹침
+          if(hOverlap&&b.sy<aBottom+MIN_GAP&&b.sy>=a.sy){
+            // b가 a 아래에 있어야 하는데 겹침 → b를 아래로 이동
+            const pushDown=aBottom+MIN_GAP-b.sy;
+            if(pushDown>0){
+              b.sy+=pushDown;
+              nodeBoxes[b.id].y=b.sy;
+              nodeBoxes[b.id].cy=b.sy+b.sh/2;
+              correctionApplied=true;
+            }
+          }
+        }
+      }
+    }
+    
+    // 보정 후 SVG 높이 재계산
+    let maxBottom=0;
+    nodeData.forEach(nd=>{
+      const bottom=nd.sy+nd.sh+REF_PADDING+10;
+      if(bottom>maxBottom)maxBottom=bottom;
+    });
+    const correctedSvgH=Math.max(svgH,maxBottom+marginY);
+    // viewBox 업데이트
+    svg=svg.replace(/viewBox="0 0 [^"]*"/,`viewBox="0 0 ${svgW} ${correctedSvgH}"`);
     
     // ── Phase 2: 연결선 (가장 먼저 렌더 → Shape 아래에 깔림) ──
     const svgEdgesToDraw=uniqueEdges.length>0?uniqueEdges:(nodes.length>1?nodes.slice(0,-1).map((nd,i)=>({from:nd.id,to:nodes[i+1].id})):[]);
@@ -4763,7 +4817,7 @@ function downloadPptx(sid){
       const nodeCount=nodes.length;
       
       if(isFig1){
-        // ═══ 도 1: 2D 토폴로지 블록도 v12.0 ═══
+        // ═══ 도 1: 2D 토폴로지 블록도 v13.0 (행별 높이 기반 겹침 방지) ═══
         const layout=computeDeviceLayout2D(nodes,edges);
         const{grid,maxCols,numRows,uniqueEdges}=layout;
         const colGap=0.35;
@@ -4772,9 +4826,15 @@ function downloadPptx(sid){
         const marginX=PAGE_MARGIN+0.3;
         const boxStartY=PAGE_MARGIN+TITLE_H+0.2;
         const boxH=Math.min(0.55,(AVAILABLE_H-0.15*(numRows-1))/numRows);
-        const boxGap=Math.min(0.6,(AVAILABLE_H-boxH*numRows)/(numRows>1?numRows-1:1));
+        const refNumH=0.25;
+        const rowGapBase=0.25;
         
-        // Phase 1: 위치 계산 + 노드 렌더링 + 참조번호 (Shape 아래)
+        // ★ 행별 최대 Shape 높이 → 누적 Y좌표 ★
+        const rowMaxH={};
+        nodes.forEach(n=>{const gp=grid[n.id];if(!gp)return;const sm=_shapeMetrics(matchIconShape(n.label),boxW2D,boxH);const h=sm.sh+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
+        const rowY={};let accY=boxStartY;
+        for(let r=0;r<numRows;r++){rowY[r]=accY;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase;}
+        
         const nodeBoxes={};
         nodes.forEach(n=>{
           const gp=grid[n.id];
@@ -4782,7 +4842,7 @@ function downloadPptx(sid){
           const rowW=gp.layerSize*boxW2D+(gp.layerSize-1)*colGap;
           const rowStartX=marginX+(nodeAreaW-rowW)/2;
           const bx=rowStartX+gp.col*(boxW2D+colGap);
-          const by=boxStartY+gp.row*(boxH+boxGap);
+          const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 ★
           const refNum=extractRefNum(n.label,String((parseInt(n.id.replace(/\D/g,''))||1)*100));
           const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
           const shapeType=matchIconShape(n.label);
@@ -5322,7 +5382,7 @@ function downloadDiagramImages(sid, format='jpeg'){
       }
       
       if(isFig1){
-        // ═══ 도 1: 2D 토폴로지 v12.0 (Edge→Shape→참조번호 순서) ═══
+        // ═══ 도 1: 2D 토폴로지 v13.0 (행별 높이 기반 겹침 방지) ═══
         const layout=computeDeviceLayout2D(nodes,edges);
         const{grid,maxCols,numRows,uniqueEdges}=layout;
         const colGap=25;
@@ -5331,18 +5391,24 @@ function downloadDiagramImages(sid, format='jpeg'){
         const marginX=30;
         const boxStartY=50;
         const boxH=Math.min(55,(850-10*(numRows-1))/numRows);
-        const boxGap2=Math.min(50,(900-boxH*numRows)/(numRows>1?numRows-1:1));
+        const refNumH=22;
+        const rowGapBase=25;
         
-        // Phase 1: 위치 계산만 (렌더링 안 함)
+        // ★ 행별 최대 Shape 높이 → 누적 Y좌표 ★
+        const rowMaxH={};
+        nodes.forEach(nd=>{const gp=grid[nd.id];if(!gp)return;const sm=_shapeMetrics(matchIconShape(nd.label),boxW2D,boxH);const h=sm.sh+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
+        const rowY={};let accY=boxStartY;
+        for(let r=0;r<numRows;r++){rowY[r]=accY;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase;}
+        
+        // Phase 1: 위치 계산만
         const nodeBoxes={};
         const nodeData=[];
         nodes.forEach(nd=>{
-          const gp=grid[nd.id];
-          if(!gp)return;
+          const gp=grid[nd.id];if(!gp)return;
           const rowW=gp.layerSize*boxW2D+(gp.layerSize-1)*colGap;
           const rowStartX=marginX+(nodeAreaW-rowW)/2;
           const bx=rowStartX+gp.col*(boxW2D+colGap);
-          const by=boxStartY+gp.row*(boxH+boxGap2);
+          const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 ★
           const refNum=extractRefNum(nd.label,String((parseInt(nd.id.replace(/\D/g,''))||1)*100));
           const cleanLabel=nd.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
           const shapeType=matchIconShape(nd.label);
@@ -5351,6 +5417,17 @@ function downloadDiagramImages(sid, format='jpeg'){
           nodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
           nodeData.push({id:nd.id,sx,sy:by,sw:sm.sw,sh:sm.sh,shapeType,cleanLabel,refNum});
         });
+        
+        // ★ Phase 1.5: 겹침 검증 & 자동 보정 ★
+        const REF_PAD=refNumH+4,MIN_GAP=6;
+        let fixApplied=true,fixRounds=0;
+        while(fixApplied&&fixRounds<10){fixApplied=false;fixRounds++;
+          for(let i=0;i<nodeData.length;i++){const a=nodeData[i];const aBot=a.sy+a.sh+REF_PAD;
+            for(let j=0;j<nodeData.length;j++){if(i===j)continue;const b=nodeData[j];
+              const hOvl=!(a.sx+a.sw<b.sx||b.sx+b.sw<a.sx);
+              if(hOvl&&b.sy<aBot+MIN_GAP&&b.sy>=a.sy){const push=aBot+MIN_GAP-b.sy;
+                if(push>0){b.sy+=push;nodeBoxes[b.id].y=b.sy;nodeBoxes[b.id].cy=b.sy+b.sh/2;fixApplied=true;}}
+        }}}
         
         // Phase 2: 연결선 먼저 (Shape 아래에 깔림)
         function drawCanvasOrthogonalEdge(ctx,fb,tb,aLen,allBoxArr){
