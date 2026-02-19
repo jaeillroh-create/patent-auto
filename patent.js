@@ -527,8 +527,10 @@ function selectTitle(el,kr,en){
   document.getElementById('titleConfirmMsg').style.display='block';
   document.getElementById('batchArea').style.display='block';
   autoSetDeviceCategoryFromTitle(kr);
+  // v7.0: 명칭 변경 시 하류 무효화
+  invalidateDownstream('step_01');
 }
-function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';if(v)autoSetDeviceCategoryFromTitle(v);}
+function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));const prev=selectedTitle;selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';if(v)autoSetDeviceCategoryFromTitle(v);if(prev&&prev!==v)invalidateDownstream('step_01');}
 function onTitleEnInput(){selectedTitleEn=document.getElementById('titleInputEn')?.value?.trim()||'';}
 
 // ═══ Auto Device Category from Title/Type (v5.2) ═══
@@ -613,34 +615,301 @@ function injectAllUserCommandUIs(){
 }
 
 // ═══ A4 fix: Step 의존성 무효화 시스템 (v5.5) ═══
+// ═══ v7.0: 완전 의존성 맵 (MUST=필수/SHOULD=권장) ═══
 const STEP_DEPENDENCIES={
-  step_06:['step_07','step_08','step_09','step_10','step_11','step_12','step_13','step_13_applied','step_15','step_17','step_18'],
-  step_07:['step_08','step_18'],
-  step_08:['step_09','step_13','step_13_applied'],
-  step_10:['step_11','step_12','step_17','step_20'],
-  step_11:['step_12','step_18'],
+  step_01:{MUST:['step_02','step_05','step_16','step_17','step_19'],SHOULD:['step_03','step_04']},
+  step_03:{MUST:['step_05'],SHOULD:[]},
+  step_05:{MUST:['step_16'],SHOULD:[]},
+  step_06:{MUST:['step_07','step_08','step_10','step_13','step_14','step_15','step_16','step_17','step_19'],SHOULD:['step_09','step_11','step_12','step_18','step_20']},
+  step_07:{MUST:['step_08','step_18'],SHOULD:['step_11','step_09','step_13']},
+  step_08:{MUST:['step_09','step_13'],SHOULD:['step_12','step_14','step_15','step_16']},
+  step_09:{MUST:[],SHOULD:['step_13']},
+  step_10:{MUST:['step_11','step_12','step_13','step_17','step_20'],SHOULD:['step_14','step_15','step_18']},
+  step_11:{MUST:['step_12','step_18'],SHOULD:['step_13']},
+  step_12:{MUST:['step_13'],SHOULD:[]},
+  step_15:{MUST:[],SHOULD:['step_08','step_09','step_12']},
+  step_20:{MUST:['step_17'],SHOULD:[]},
 };
+
+// 각 step의 실행 함수 매핑 (연쇄 재생성용)
+const STEP_RUNNERS={
+  step_01:'runStep',step_02:'runStep',step_03:'runStep',step_04:'runStep',step_05:'runStep',
+  step_06:'runStep',step_07:'runDiagramStep',step_08:'runLongStep',step_09:'runMathInsertion',
+  step_10:'runStep',step_11:'runDiagramStep',step_12:'runLongStep',step_13:'runStep',
+  step_14:'runStep',step_15:'runStep',step_16:'runStep',step_17:'runStep',
+  step_18:'runStep',step_19:'runStep',step_20:'runStep',
+};
+
 function invalidateDownstream(changedStep){
-  const deps=STEP_DEPENDENCIES[changedStep];
-  if(!deps||!deps.length)return;
-  const invalidated=deps.filter(d=>outputs[d]);
-  if(!invalidated.length)return;
-  invalidated.forEach(d=>{
-    // 실제 삭제는 하지 않고 경고만 (사용자가 재생성 결정)
-    const el=document.getElementById(`result${d.charAt(0).toUpperCase()+d.slice(1).replace('_','')}`);
+  const depObj=STEP_DEPENDENCIES[changedStep];
+  if(!depObj)return;
+  const mustDeps=(depObj.MUST||[]).filter(d=>d!=='step_13_applied'&&outputs[d]);
+  const shouldDeps=(depObj.SHOULD||[]).filter(d=>d!=='step_13_applied'&&outputs[d]);
+  if(!mustDeps.length&&!shouldDeps.length)return;
+
+  // 기존 stale-warning 제거
+  document.querySelectorAll('.stale-warning').forEach(w=>w.remove());
+
+  // v7.0: step→실제 element ID 매핑 (배치 렌더링 step 포함)
+  const STEP_RESULT_EL={
+    step_02:'resultsBatch25',step_03:'resultsBatch25',step_04:'resultsBatch25',step_05:'resultsBatch25',
+    step_16:'resultsBatchFinish',step_17:'resultsBatchFinish',step_18:'resultsBatchFinish',step_19:'resultsBatchFinish',
+  };
+
+  // 각 영향받는 step에 경고 배지 표시
+  [...mustDeps,...shouldDeps].forEach(d=>{
+    const isMust=mustDeps.includes(d);
+    const elId=STEP_RESULT_EL[d]||`result${d.charAt(0).toUpperCase()+d.slice(1).replace('_','')}`;
+    const el=document.getElementById(elId);
     if(el){
-      const warn=el.querySelector('.stale-warning');
-      if(!warn){
-        const w=document.createElement('div');
-        w.className='stale-warning';
-        w.style.cssText='background:#fff3e0;border:1px solid #ffb74d;border-radius:6px;padding:6px 10px;margin-bottom:6px;font-size:11px;color:#e65100;display:flex;align-items:center;gap:6px';
-        w.innerHTML=`<span class="tossface">⚠️</span> ${STEP_NAMES[changedStep]||changedStep} 변경으로 재생성 필요`;
-        el.prepend(w);
-      }
+      // 같은 step에 대한 기존 경고가 있으면 skip
+      if(el.querySelector(`.stale-warning[data-step="${d}"]`))return;
+      const w=document.createElement('div');
+      w.className='stale-warning';
+      w.dataset.step=d;
+      w.dataset.staleLevel=isMust?'must':'should';
+      w.style.cssText=isMust
+        ?'background:#ffebee;border:1px solid #ef5350;border-radius:6px;padding:6px 10px;margin-bottom:6px;font-size:11px;color:#c62828;display:flex;align-items:center;gap:6px'
+        :'background:#fff3e0;border:1px solid #ffb74d;border-radius:6px;padding:6px 10px;margin-bottom:6px;font-size:11px;color:#e65100;display:flex;align-items:center;gap:6px';
+      w.innerHTML=`<span class="tossface">${isMust?'🔴':'🟡'}</span> ${STEP_NAMES[d]} — ${STEP_NAMES[changedStep]} 변경으로 ${isMust?'재생성 필수':'재생성 권장'}`;
+      el.prepend(w);
     }
   });
-  const names=invalidated.map(d=>STEP_NAMES[d]||d).slice(0,4);
-  App.showToast(`${STEP_NAMES[changedStep]} 변경 → ${names.join(', ')}${invalidated.length>4?' 등':''} 재생성 권장`,'warning');
+
+  // ★ 연쇄 수정 패널 표시 ★
+  showCascadePanel(changedStep,mustDeps,shouldDeps);
+}
+
+// ═══ 연쇄 수정 패널 UI ═══
+function showCascadePanel(changedStep,mustDeps,shouldDeps){
+  // 기존 패널 제거
+  const old=document.getElementById('cascadePanel');
+  if(old)old.remove();
+
+  const panel=document.createElement('div');
+  panel.id='cascadePanel';
+  panel.style.cssText='position:fixed;bottom:20px;right:20px;width:380px;max-height:70vh;overflow-y:auto;background:#fff;border:2px solid #1976d2;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:9999;font-family:"맑은 고딕",sans-serif';
+
+  let html=`<div style="background:#1976d2;color:#fff;padding:12px 16px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:13px;font-weight:600">🔄 ${STEP_NAMES[changedStep]} 변경 — 연쇄 수정</span>
+    <button onclick="document.getElementById('cascadePanel').remove()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px">✕</button>
+  </div>
+  <div style="padding:12px 16px">`;
+
+  // MUST 항목
+  if(mustDeps.length){
+    html+=`<div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:#c62828;margin-bottom:6px">🔴 필수 재생성 (${mustDeps.length}건)</div>`;
+    mustDeps.forEach(d=>{
+      html+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer">
+        <input type="checkbox" class="cascade-cb" data-step="${d}" data-level="must" checked style="accent-color:#c62828">
+        <span>${STEP_NAMES[d]||d}</span>
+      </label>`;
+    });
+    html+=`</div>`;
+  }
+
+  // SHOULD 항목
+  if(shouldDeps.length){
+    html+=`<details style="margin-bottom:10px"${mustDeps.length?'':' open'}>
+      <summary style="font-size:11px;font-weight:700;color:#e65100;cursor:pointer;padding:4px 0">🟡 권장 재생성 (${shouldDeps.length}건)</summary>`;
+    shouldDeps.forEach(d=>{
+      html+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer;margin-left:4px">
+        <input type="checkbox" class="cascade-cb" data-step="${d}" data-level="should" style="accent-color:#ff9800">
+        <span>${STEP_NAMES[d]||d}</span>
+      </label>`;
+    });
+    html+=`</details>`;
+  }
+
+  // 전체선택/해제 + 실행 버튼
+  html+=`<div style="display:flex;gap:8px;margin-top:10px">
+    <button onclick="document.querySelectorAll('.cascade-cb').forEach(c=>c.checked=true)" style="flex:1;padding:6px;font-size:11px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer">전체 선택</button>
+    <button onclick="document.querySelectorAll('.cascade-cb').forEach(c=>c.checked=false)" style="flex:1;padding:6px;font-size:11px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer">전체 해제</button>
+  </div>
+  <button id="btnCascadeRun" onclick="runCascadeRegeneration('${changedStep}')" style="width:100%;margin-top:10px;padding:10px;font-size:13px;font-weight:600;color:#fff;background:#1976d2;border:none;border-radius:8px;cursor:pointer">
+    ✨ 선택 항목 자동 재생성
+  </button>
+  <div id="cascadeProgress" style="margin-top:8px;font-size:11px;color:#666"></div>
+  </div>`;
+
+  panel.innerHTML=html;
+  document.body.appendChild(panel);
+}
+
+// ═══ 위상정렬: 의존성 순서 보장 (step_20→step_17 등) ═══
+function topologicalSort(steps,sourceStep){
+  // 선택된 steps 내에서의 의존 그래프 구축
+  const stepSet=new Set(steps);
+  const inDeg={};const adj={};
+  steps.forEach(s=>{inDeg[s]=0;adj[s]=[];});
+  // sourceStep의 하류 + 각 step 간 의존 관계 반영
+  steps.forEach(s=>{
+    const deps=STEP_DEPENDENCIES[s];
+    if(!deps)return;
+    [...deps.MUST,...deps.SHOULD].forEach(tgt=>{
+      if(stepSet.has(tgt)&&tgt!==s){
+        // s가 변경되면 tgt 재생성 필요 → s가 tgt보다 먼저
+        adj[s]=adj[s]||[];adj[s].push(tgt);
+        inDeg[tgt]=(inDeg[tgt]||0)+1;
+      }
+    });
+  });
+  // 또한 sourceStep → 모든 직접 하류가 먼저 실행되게
+  // (sourceStep 자체는 이미 실행 완료된 상태)
+  
+  // Kahn's algorithm
+  const queue=steps.filter(s=>inDeg[s]===0);
+  const result=[];
+  while(queue.length){
+    // 같은 inDeg=0 중에서는 기본 순서 유지
+    queue.sort((a,b)=>{
+      const ai=parseInt(a.replace('step_',''));
+      const bi=parseInt(b.replace('step_',''));
+      return ai-bi;
+    });
+    const cur=queue.shift();
+    result.push(cur);
+    (adj[cur]||[]).forEach(nxt=>{
+      inDeg[nxt]--;
+      if(inDeg[nxt]===0)queue.push(nxt);
+    });
+  }
+  // 순환 감지 — 순환 시 나머지를 번호 순으로 추가
+  if(result.length<steps.length){
+    const missing=steps.filter(s=>!result.includes(s));
+    missing.sort((a,b)=>parseInt(a.replace('step_',''))-parseInt(b.replace('step_','')));
+    result.push(...missing);
+  }
+  return result;
+}
+
+// ═══ 연쇄 재생성 실행 ═══
+async function runCascadeRegeneration(sourceStep){
+  const checkboxes=[...document.querySelectorAll('.cascade-cb:checked')];
+  if(!checkboxes.length){App.showToast('재생성할 항목을 선택하세요','error');return;}
+  if(globalProcessing){App.showToast('이미 처리 중입니다','error');return;}
+
+  const steps=checkboxes.map(cb=>cb.dataset.step);
+  // step_13_applied는 건너뛰기 (applyReview 전용)
+  const validSteps=steps.filter(s=>s!=='step_13_applied'&&STEP_NAMES[s]);
+
+  // ★ v7.0: 위상정렬 (step_20→step_17 등 역방향 의존 해결)
+  const sorted=topologicalSort(validSteps,sourceStep);
+  if(!sorted.length){App.showToast('정렬 실패','error');return;}
+
+  // BUG-3 fix: globalProcessing 설정
+  setGlobalProcessing(true);
+
+  const btn=document.getElementById('btnCascadeRun');
+  const prog=document.getElementById('cascadeProgress');
+  if(btn){btn.disabled=true;btn.textContent='⏳ 재생성 진행 중...';}
+
+  let completed=0;
+  const total=sorted.length;
+
+  for(const sid of sorted){
+    if(prog)prog.innerHTML=`<div style="margin-bottom:4px">진행: ${completed+1}/${total} — <b>${STEP_NAMES[sid]}</b> 재생성 중...</div>
+      <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:#1976d2;border-radius:4px;height:6px;width:${Math.round(completed/total*100)}%;transition:width .3s"></div></div>`;
+
+    try{
+      // step별 적절한 runner 호출
+      const runner=STEP_RUNNERS[sid];
+      if(runner==='runLongStep')await _cascadeRunLong(sid);
+      else if(runner==='runDiagramStep')await _cascadeRunDiagram(sid);
+      else if(runner==='runMathInsertion')await _cascadeRunMath();
+      else await _cascadeRunShort(sid);
+
+      completed++;
+      // stale-warning 제거 (해당 step의 배지만 제거)
+      document.querySelectorAll(`.stale-warning[data-step="${sid}"]`).forEach(w=>w.remove());
+    }catch(e){
+      console.error(`Cascade ${sid} 실패:`,e);
+      if(prog)prog.innerHTML+=`<div style="color:#c62828;font-size:11px">❌ ${STEP_NAMES[sid]} 실패: ${e.message}</div>`;
+    }
+  }
+
+  if(prog)prog.innerHTML=`<div style="color:#2e7d32;font-weight:600">✅ ${completed}/${total} 완료</div>
+    <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:#4caf50;border-radius:4px;height:6px;width:100%"></div></div>`;
+  if(btn){btn.textContent='✅ 완료';btn.style.background='#4caf50';}
+  // BUG-3 fix: globalProcessing 해제
+  setGlobalProcessing(false);
+  setTimeout(()=>{const p=document.getElementById('cascadePanel');if(p)p.remove();},3000);
+  saveProject(true);
+  App.showToast(`연쇄 재생성 완료: ${completed}/${total}건 성공`);
+}
+
+// v7.0: 배치 step 여부 판별 + 적절한 렌더링
+const BATCH_STEPS={step_02:'resultsBatch25',step_03:'resultsBatch25',step_04:'resultsBatch25',step_05:'resultsBatch25',step_16:'resultsBatchFinish',step_17:'resultsBatchFinish',step_18:'resultsBatchFinish',step_19:'resultsBatchFinish'};
+function _cascadeRender(sid,text){
+  if(BATCH_STEPS[sid]){
+    renderBatchResult(BATCH_STEPS[sid],sid,text);
+  }else{
+    renderOutput(sid,text);
+  }
+}
+
+// ═══ 연쇄용 내부 실행 함수 ═══
+async function _cascadeRunShort(sid){
+  // step_04는 KIPRIS API 검색 (buildPrompt 없음)
+  if(sid==='step_04'){
+    const sr=await searchPriorArt(selectedTitle);
+    outputs.step_04=sr?sr.formatted:'【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';
+    markOutputTimestamp('step_04');_cascadeRender('step_04',outputs.step_04);
+    return;
+  }
+  const prompt=buildPrompt(sid);
+  if(!prompt)return;
+  if(sid==='step_13'){
+    const text=await App.callClaudeWithContinuation(prompt);
+    outputs[sid]=text;
+  }else{
+    const r=await App.callClaude(prompt);
+    outputs[sid]=r.text;
+  }
+  markOutputTimestamp(sid);_cascadeRender(sid,outputs[sid]);
+  // step_06, step_10: 기재불비 자동 교정 (최대 2회)
+  if(sid==='step_06'||sid==='step_10'){
+    let corrected=outputs[sid];
+    for(let round=0;round<2;round++){
+      const issues=validateClaims(corrected);
+      if(!issues.length)break;
+      const issueText=issues.map(i=>i.message).join('\n');
+      const fixR=await App.callClaude(`청구범위 기재불비를 수정하라.\n[지적사항]\n${issueText}\n[원본]\n${corrected}`);
+      corrected=fixR.text;
+    }
+    outputs[sid]=corrected;markOutputTimestamp(sid);_cascadeRender(sid,corrected);
+  }
+}
+async function _cascadeRunLong(sid){
+  const prompt=buildPrompt(sid);
+  if(!prompt)return;
+  const t=await App.callClaudeWithContinuation(prompt);
+  outputs[sid]=t;markOutputTimestamp(sid);_cascadeRender(sid,t);
+}
+async function _cascadeRunDiagram(sid){
+  const prompt=buildPrompt(sid);
+  if(!prompt)return;
+  let r=await App.callClaude(prompt);
+  let designText=r.text;
+  // BUG-4 fix: 도면 검증 (장치 도면만, 최대 1회 재생성)
+  if(sid==='step_07'&&typeof validateDiagramDesignText==='function'){
+    const preIssues=validateDiagramDesignText(designText);
+    if(preIssues.some(i=>i.severity==='ERROR')){
+      const fb=`이전 도면 설계에 규칙 위반이 있습니다. 수정하여 다시 생성하세요.\n${preIssues.map(i=>i.message).join('\n')}\n원래 요청: ${prompt.slice(0,1500)}`;
+      r=await App.callClaude(fb);designText=r.text;
+    }
+  }
+  outputs[sid]=designText;markOutputTimestamp(sid);_cascadeRender(sid,designText);
+  const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
+  outputs[sid+'_mermaid']=mr.text;
+  renderDiagrams(sid,mr.text);
+}
+async function _cascadeRunMath(){
+  const r=await App.callClaude(buildPrompt('step_09'));
+  const baseDesc=outputs.step_08||'';
+  outputs.step_09=insertMathBlocks(baseDesc,r.text);
+  markOutputTimestamp('step_09');_cascadeRender('step_09',outputs.step_09);
 }
 
 // ═══ A1 fix: getLatestDescription — 타임스탬프 기반 최신본 (v5.5) ═══
