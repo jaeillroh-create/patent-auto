@@ -3256,19 +3256,37 @@ function computeDeviceLayout2D(nodes,edges){
     // 2이웃: 허브 양옆에 배치 → 모두 수평 직선
     layers=[[hubNbrs[0],hubId,hubNbrs[1]]];
   }else if(nN===3){
-    // 3이웃: 십자형 — 1개 위, 2개 양옆
-    // 최적화: 서로 연결된 쌍은 같은 행에 (수평 직선 확보)
-    let topChild=null,sideA=null,sideB=null;
+    // 3이웃: 연결된 쌍은 같은 열(수직 정렬)에 배치 → 꺾임 최소화
+    // 연결된 쌍 찾기
+    let connPair=null;
     for(let i=0;i<3;i++){
-      const ci=hubNbrs[i];
-      const otherTwo=hubNbrs.filter((_,j)=>j!==i);
-      // 이 노드가 다른 2개와 연결 없으면 → 위에 배치 (고립 위치)
-      if(!adj[ci].has(otherTwo[0])&&!adj[ci].has(otherTwo[1])){
-        topChild=ci;sideA=otherTwo[0];sideB=otherTwo[1];break;
+      for(let j=i+1;j<3;j++){
+        if(adj[hubNbrs[i]].has(hubNbrs[j])){connPair=[hubNbrs[i],hubNbrs[j]];break;}
       }
+      if(connPair)break;
     }
-    if(!topChild){topChild=hubNbrs[0];sideA=hubNbrs[1];sideB=hubNbrs[2];}
-    layers=[[topChild],[sideA,hubId,sideB]];
+    if(connPair){
+      // 연결된 쌍(pA, pB): pA는 허브와 같은 행, pB는 아래 같은 열 → 수직 직선
+      const[pA,pB]=connPair;
+      const other=hubNbrs.find(n=>n!==pA&&n!==pB);
+      // Row 0: [other, hub, pA] (3cols)
+      // Row 1: [pB] at col 2 (layerSize=3으로 정렬)
+      layers=[[other,hubId,pA],[pB]];
+      // pB를 pA와 같은 열에 정렬 (layerSize 오버라이드)
+      layers._alignCol={[pB]:{col:2,layerSize:3}};
+    }else{
+      // 연결된 쌍 없음: 고립 노드를 위에, 나머지 허브 양옆
+      let topChild=null,sideA=null,sideB=null;
+      for(let i=0;i<3;i++){
+        const ci=hubNbrs[i];
+        const otherTwo=hubNbrs.filter((_,j)=>j!==i);
+        if(!adj[ci].has(otherTwo[0])&&!adj[ci].has(otherTwo[1])){
+          topChild=ci;sideA=otherTwo[0];sideB=otherTwo[1];break;
+        }
+      }
+      if(!topChild){topChild=hubNbrs[0];sideA=hubNbrs[1];sideB=hubNbrs[2];}
+      layers=[[topChild],[sideA,hubId,sideB]];
+    }
   }else if(nN===4){
     // 4이웃: 완전 십자형 — 위1, 양옆2, 아래1 → 4개 모두 직선!
     let top=null,left=null,right=null,bottom=null;
@@ -3301,76 +3319,132 @@ function computeDeviceLayout2D(nodes,edges){
     if(!added)layers.push([id]);
   });
   
-  // Grid 생성
+  // Grid 생성 (열 정렬 오버라이드 지원)
   const grid={};let maxCols=1;
+  const alignCol=layers._alignCol||{};
   layers.forEach((layer,rowIdx)=>{
     maxCols=Math.max(maxCols,layer.length);
-    layer.forEach((id,colIdx)=>{grid[id]={row:rowIdx,col:colIdx,layerSize:layer.length};});
+    layer.forEach((id,colIdx)=>{
+      if(alignCol[id]){
+        grid[id]={row:rowIdx,col:alignCol[id].col,layerSize:alignCol[id].layerSize};
+        maxCols=Math.max(maxCols,alignCol[id].layerSize);
+      }else{
+        grid[id]={row:rowIdx,col:colIdx,layerSize:layer.length};
+      }
+    });
   });
   
   return{grid,maxCols:Math.min(maxCols,MAX_COLS),numRows:layers.length,uniqueEdges,layers};
 }
 
-// ── Orthogonal (직각) Connection Router for 2D layout ──
-function getOrthogonalRoute(fromBox,toBox){
+// ── Strict Orthogonal Router v3.0 ──
+// 모든 세그먼트가 수평(H) 또는 수직(V)만 허용. 사선 절대 불가.
+// allBoxes 전달 시 다른 박스 관통 회피.
+function getOrthogonalRoute(fromBox,toBox,allBoxes){
   const dx=toBox.cx-fromBox.cx, dy=toBox.cy-fromBox.cy;
   if(Math.abs(dx)<1&&Math.abs(dy)<1)return null;
-  const GAP=10;
-  const MARGIN=5;
+  const GAP=12;
   
-  // Same column → straight vertical
-  if(Math.abs(dx)<Math.min(fromBox.w,toBox.w)*0.4){
-    if(dy>0)return[{x:fromBox.cx,y:fromBox.y+fromBox.h},{x:toBox.cx,y:toBox.y}];
-    return[{x:fromBox.cx,y:fromBox.y},{x:toBox.cx,y:toBox.y+toBox.h}];
-  }
-  // Same row → straight horizontal
-  if(Math.abs(dy)<Math.min(fromBox.h,toBox.h)*0.4){
-    if(dx>0)return[{x:fromBox.x+fromBox.w,y:fromBox.cy},{x:toBox.x,y:toBox.cy}];
-    return[{x:fromBox.x,y:fromBox.cy},{x:toBox.x+toBox.w,y:toBox.cy}];
+  // ★ 핵심: exit/entry 지점을 결정하고 H/V 세그먼트로만 연결 ★
+  
+  // 1) 같은 열 (수직 정렬) → 수직 직선
+  if(Math.abs(dx)<Math.max(fromBox.w,toBox.w)*0.4){
+    const midX=(fromBox.cx+toBox.cx)/2; // 정확히 같은 X 보장
+    if(dy>0)return[{x:midX,y:fromBox.y+fromBox.h},{x:midX,y:toBox.y}];
+    return[{x:midX,y:fromBox.y},{x:midX,y:toBox.y+toBox.h}];
   }
   
-  // ═══ Diagonal: L-shape routing with fanned exit points ═══
-  // Exit point on source edge is clamped toward target position
-  // Horizontal segment is in the GAP between rows (never crosses siblings)
+  // 2) 같은 행 (수평 정렬) → 수평 직선
+  if(Math.abs(dy)<Math.max(fromBox.h,toBox.h)*0.4){
+    const midY=(fromBox.cy+toBox.cy)/2; // 정확히 같은 Y 보장
+    if(dx>0)return[{x:fromBox.x+fromBox.w,y:midY},{x:toBox.x,y:midY}];
+    return[{x:fromBox.x,y:midY},{x:toBox.x+toBox.w,y:midY}];
+  }
   
-  if(Math.abs(dy)>=Math.abs(dx)){
-    // Vertical-dominant (hub→child): exit from bottom/top edge
-    const exitX=Math.max(fromBox.x+MARGIN,Math.min(fromBox.x+fromBox.w-MARGIN,toBox.cx));
-    if(dy>0){
-      const gapY=fromBox.y+fromBox.h+GAP;
-      if(Math.abs(exitX-toBox.cx)<3){
-        return[{x:exitX,y:fromBox.y+fromBox.h},{x:toBox.cx,y:toBox.y}];
-      }
-      return[{x:exitX,y:fromBox.y+fromBox.h},{x:exitX,y:gapY},{x:toBox.cx,y:gapY},{x:toBox.cx,y:toBox.y}];
-    }else{
-      const gapY=fromBox.y-GAP;
-      if(Math.abs(exitX-toBox.cx)<3){
-        return[{x:exitX,y:fromBox.y},{x:toBox.cx,y:toBox.y+toBox.h}];
-      }
-      return[{x:exitX,y:fromBox.y},{x:exitX,y:gapY},{x:toBox.cx,y:gapY},{x:toBox.cx,y:toBox.y+toBox.h}];
-    }
+  // 3) 대각선 위치 → L-shape (2 세그먼트) 또는 Z-shape (3 세그먼트)
+  // 두 가지 L-shape 후보를 생성, 장애물 적은 쪽 선택
+  
+  // L-shape 후보 A: 수직 먼저 → 수평
+  const routeA=_buildLRoute_VH(fromBox,toBox,dy,dx);
+  // L-shape 후보 B: 수평 먼저 → 수직
+  const routeB=_buildLRoute_HV(fromBox,toBox,dy,dx);
+  
+  if(!allBoxes||allBoxes.length===0)return routeA;
+  
+  // 장애물 충돌 검사
+  const excludeIds=new Set([fromBox.id,toBox.id].filter(Boolean));
+  const hitsA=_countRouteCollisions(routeA,allBoxes,excludeIds);
+  const hitsB=_countRouteCollisions(routeB,allBoxes,excludeIds);
+  
+  if(hitsA<=hitsB)return routeA;
+  return routeB;
+}
+
+// L-shape: 수직(V) 먼저 → 수평(H)
+function _buildLRoute_VH(from,to,dy,dx){
+  const exitX=from.cx;
+  const exitY=dy>0?from.y+from.h:from.y;
+  const entryY=to.cy;
+  const entryX=dx>0?to.x:to.x+to.w;
+  // V segment: (exitX, exitY) → (exitX, entryY)
+  // H segment: (exitX, entryY) → (entryX, entryY)
+  return[{x:exitX,y:exitY},{x:exitX,y:entryY},{x:entryX,y:entryY}];
+}
+
+// L-shape: 수평(H) 먼저 → 수직(V)
+function _buildLRoute_HV(from,to,dy,dx){
+  const exitY=from.cy;
+  const exitX=dx>0?from.x+from.w:from.x;
+  const entryX=to.cx;
+  const entryY=dy>0?to.y:to.y+to.h;
+  // H segment: (exitX, exitY) → (entryX, exitY)
+  // V segment: (entryX, exitY) → (entryX, entryY)
+  return[{x:exitX,y:exitY},{x:entryX,y:exitY},{x:entryX,y:entryY}];
+}
+
+// 경로가 박스를 관통하는지 검사
+function _countRouteCollisions(route,allBoxes,excludeIds){
+  let hits=0;
+  for(let i=0;i<route.length-1;i++){
+    const p1=route[i],p2=route[i+1];
+    allBoxes.forEach(box=>{
+      if(excludeIds.has(box.id))return;
+      if(_segmentIntersectsBox(p1,p2,box))hits++;
+    });
+  }
+  return hits;
+}
+
+// H/V 세그먼트가 박스와 교차하는지
+function _segmentIntersectsBox(p1,p2,box){
+  const pad=2;
+  const bx1=box.x-pad,by1=box.y-pad,bx2=box.x+box.w+pad,by2=box.y+box.h+pad;
+  if(Math.abs(p1.y-p2.y)<1){
+    // 수평 세그먼트
+    const y=p1.y;
+    if(y<by1||y>by2)return false;
+    const minX=Math.min(p1.x,p2.x),maxX=Math.max(p1.x,p2.x);
+    return maxX>bx1&&minX<bx2;
   }else{
-    // Horizontal-dominant: exit from left/right side
-    const exitY=Math.max(fromBox.y+MARGIN,Math.min(fromBox.y+fromBox.h-MARGIN,toBox.cy));
-    if(dx>0){
-      const gapX=fromBox.x+fromBox.w+GAP;
-      if(Math.abs(exitY-toBox.cy)<3){
-        return[{x:fromBox.x+fromBox.w,y:exitY},{x:toBox.x,y:toBox.cy}];
-      }
-      return[{x:fromBox.x+fromBox.w,y:exitY},{x:gapX,y:exitY},{x:gapX,y:toBox.cy},{x:toBox.x,y:toBox.cy}];
-    }else{
-      const gapX=fromBox.x-GAP;
-      if(Math.abs(exitY-toBox.cy)<3){
-        return[{x:fromBox.x,y:exitY},{x:toBox.x+toBox.w,y:toBox.cy}];
-      }
-      return[{x:fromBox.x,y:exitY},{x:gapX,y:exitY},{x:gapX,y:toBox.cy},{x:toBox.x+toBox.w,y:toBox.cy}];
-    }
+    // 수직 세그먼트
+    const x=p1.x;
+    if(x<bx1||x>bx2)return false;
+    const minY=Math.min(p1.y,p2.y),maxY=Math.max(p1.y,p2.y);
+    return maxY>by1&&minY<by2;
   }
 }
 
-// SVG orthogonal path renderer
+// SVG orthogonal path renderer (H/V 세그먼트만 허용)
 function svgOrthogonalEdge(route,mkId){
   if(!route||route.length<2)return'';
+  // ★ 안전 검증: 2점 경로에서 X,Y 모두 다르면 L-shape로 변환 ★
+  if(route.length===2){
+    const p0=route[0],p1=route[1];
+    if(Math.abs(p0.x-p1.x)>1&&Math.abs(p0.y-p1.y)>1){
+      // 사선 방지: L-shape로 변환 (수평→수직)
+      route=[p0,{x:p1.x,y:p0.y},p1];
+    }
+  }
   if(route.length===2){
     return`<line x1="${route[0].x}" y1="${route[0].y}" x2="${route[1].x}" y2="${route[1].y}" stroke="#000" stroke-width="1" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
   }
@@ -3795,9 +3869,10 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const iF=svgEdgeOff[key]?.fromIdx||0, iT=svgEdgeOff[key]?.toIdx||0;
       const offF=fanF>1?(iF-((fanF-1)/2))*8:0;
       const offT=fanT>1?(iT-((fanT-1)/2))*8:0;
-      const fbA={...fb,cx:fb.cx+offF};
-      const tbA={...tb,cx:tb.cx+offT};
-      const route=getOrthogonalRoute(fbA,tbA);
+      const fbA={...fb,id:e.from,cx:fb.cx+offF};
+      const tbA={...tb,id:e.to,cx:tb.cx+offT};
+      const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
+      const route=getOrthogonalRoute(fbA,tbA,allBoxArr);
       if(route)svg+=svgOrthogonalEdge(route,mkId);
     });
     
@@ -3900,8 +3975,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const iF=svg2EdgeOff[key]?.fromIdx||0,iT=svg2EdgeOff[key]?.toIdx||0;
       const offF=fanF>1?(iF-((fanF-1)/2))*8:0;
       const offT=fanT>1?(iT-((fanT-1)/2))*8:0;
-      const fbA={...fb,cx:fb.cx+offF};const tbA={...tb,cx:tb.cx+offT};
-      const route=getOrthogonalRoute(fbA,tbA);
+      const fbA={...fb,id:e.from,cx:fb.cx+offF};const tbA={...tb,id:e.to,cx:tb.cx+offT};
+      const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
+      const route=getOrthogonalRoute(fbA,tbA,allBoxArr);
       if(route)svg+=svgOrthogonalEdge(route,mkId);
     });
     
@@ -5319,8 +5395,8 @@ function downloadDiagramImages(sid, format='jpeg'){
         });
         
         // Phase 3: 직각 라우팅 Edge 연결선 (겹침 방지 오프셋)
-        function drawCanvasOrthogonalEdge(ctx,fb,tb,aLen){
-          const route=getOrthogonalRoute(fb,tb);
+        function drawCanvasOrthogonalEdge(ctx,fb,tb,aLen,allBoxArr){
+          const route=getOrthogonalRoute(fb,tb,allBoxArr);
           if(!route||route.length<2)return;
           ctx.lineWidth=1;ctx.strokeStyle='#000000';
           ctx.beginPath();ctx.moveTo(route[0].x,route[0].y);
@@ -5364,9 +5440,10 @@ function downloadDiagramImages(sid, format='jpeg'){
           const offsetTo=fanTo>1?(idxTo-((fanTo-1)/2))*8:0;
           
           // 오프셋 적용된 가상 박스
-          const fbAdj={...fb,cx:fb.cx+offsetFrom,cy:fb.cy};
-          const tbAdj={...tb,cx:tb.cx+offsetTo,cy:tb.cy};
-          drawCanvasOrthogonalEdge(ctx,fbAdj,tbAdj,6);
+          const fbAdj={...fb,id:e.from,cx:fb.cx+offsetFrom,cy:fb.cy};
+          const tbAdj={...tb,id:e.to,cx:tb.cx+offsetTo,cy:tb.cy};
+          const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
+          drawCanvasOrthogonalEdge(ctx,fbAdj,tbAdj,6,allBoxArr);
         });
       }else{
         // 도 2+: 최외곽 박스 있음
@@ -5450,8 +5527,9 @@ function downloadDiagramImages(sid, format='jpeg'){
           const iF=cInnerOff[key]?.fromIdx||0,iT=cInnerOff[key]?.toIdx||0;
           const offF=fanF>1?(iF-((fanF-1)/2))*7:0;
           const offT=fanT>1?(iT-((fanT-1)/2))*7:0;
-          const fbA={...fb,cx:fb.cx+offF};const tbA={...tb,cx:tb.cx+offT};
-          const route=getOrthogonalRoute(fbA,tbA);
+          const fbA={...fb,id:e.from,cx:fb.cx+offF};const tbA={...tb,id:e.to,cx:tb.cx+offT};
+          const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
+          const route=getOrthogonalRoute(fbA,tbA,allBoxArr);
           if(!route||route.length<2)return;
           ctx.lineWidth=1;ctx.strokeStyle='#000000';
           ctx.beginPath();ctx.moveTo(route[0].x,route[0].y);
