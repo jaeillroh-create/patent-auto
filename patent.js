@@ -398,8 +398,8 @@ function restoreClaimUI(){
   const mgd=document.getElementById('inpMethodGeneralDep');if(mgd)mgd.value=methodGeneralDep;
   const mad=document.getElementById('inpMethodAnchorDep');if(mad)mad.value=methodAnchorDep;
   updateDeviceClaimTotal();updateMethodClaimTotal();
-  // Restore required figures
-  renderRequiredFiguresList();
+  // Restore required figures — v10.0: 사용자 도면 UI 초기화
+  initUserFiguresUI();
   // Restore detail level UI
   const dlCards=document.querySelectorAll('#detailLevelCards .selection-card');
   const dlLevels=['compact','standard','detailed','custom'];
@@ -517,39 +517,92 @@ function toggleMethodTheme(key,checked){
   else selectedMethodAnchorThemes=selectedMethodAnchorThemes.filter(k=>k!==key);
 }
 
-// ═══ Required Figures ═══
+// ═══ 사용자 도면 (v10.0) ═══
+function initUserFiguresUI(){
+  // 카드 제목 업데이트
+  const card=document.getElementById('requiredFiguresList')?.closest('.card');
+  if(!card)return;
+  const hdr=card.querySelector('.card-title');
+  if(hdr)hdr.innerHTML='<span class="tossface">🖼️</span> 사용자 도면 추가';
+  // 기존 입력폼 교체 (파일 업로드 추가)
+  const formArea=card.querySelector('div[style*="display:flex"]');
+  if(formArea){
+    formArea.outerHTML=`<div id="userFigFormArea">
+      <div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px">
+        <div><label style="font-size:11px;color:var(--color-text-tertiary)">도면 번호</label>
+          <input type="number" class="input-field" id="inpRequiredFigNum" min="1" max="30" placeholder="3" style="width:60px;margin-top:2px" /></div>
+        <div style="flex:1"><label style="font-size:11px;color:var(--color-text-tertiary)">도면 설명 <span style="color:#e53935">*필수</span></label>
+          <input type="text" class="input-field" id="inpRequiredFigDesc" placeholder="예: 본 발명의 실험 결과를 나타내는 그래프" style="margin-top:2px" /></div>
+        <button class="btn btn-primary btn-sm" onclick="addRequiredFigure()" title="도면 추가">＋ 추가</button>
+      </div>
+      <div style="margin-bottom:8px">
+        <label style="font-size:11px;color:var(--color-text-tertiary)">도면 파일 (선택)</label>
+        <input type="file" id="inpRequiredFigFile" accept="image/*,.pdf" style="font-size:12px;margin-top:2px" />
+      </div>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px;padding:6px 8px;background:var(--color-bg-secondary);border-radius:6px">
+        💡 사용자 도면의 번호는 자동 생성 도면과 충돌하지 않도록 번호가 밀립니다. 예: 도 3을 추가하면, 자동 도면은 도 1, 2, 4, 5... 순으로 생성됩니다.
+      </div>
+    </div>`;
+  }
+  // 기존 등록 도면 복원
+  renderRequiredFiguresList();
+}
 function addRequiredFigure(){
   const numEl=document.getElementById('inpRequiredFigNum'),descEl=document.getElementById('inpRequiredFigDesc');
   const fileEl=document.getElementById('inpRequiredFigFile');
   const num=parseInt(numEl?.value);const desc=descEl?.value?.trim();
   if(!num||num<1){App.showToast('도면 번호를 입력하세요','error');return;}
-  if(!desc){App.showToast('도면 설명을 입력하세요','error');return;}
+  if(!desc){App.showToast('도면 설명을 입력하세요 (필수)','error');descEl?.focus();return;}
   if(requiredFigures.find(f=>f.num===num)){App.showToast(`도 ${num}은 이미 등록됨`,'error');return;}
   const figData={num,description:desc};
   // Handle file upload if present
-  if(fileEl&&fileEl.files&&fileEl.files[0]){
+  const addAndRender=()=>{
+    requiredFigures.push(figData);
+    requiredFigures.sort((a,b)=>a.num-b.num);
+    if(numEl){numEl.value='';}if(descEl)descEl.value='';if(fileEl)fileEl.value='';
+    renderRequiredFiguresList();
+    saveProject(true);
+    App.showToast(`도 ${num} 사용자 도면 등록${figData.fileName?' (📎 '+figData.fileName+')':''}`);
+    // 다음 빈 번호 자동 제안
+    suggestNextFigNum();
+  };
+  if(fileEl?.files?.[0]){
     const file=fileEl.files[0];
     figData.fileName=file.name;
     figData.fileSize=file.size;
-    // Store as data URL for preview (optional)
-    const reader=new FileReader();
-    reader.onload=function(e){figData.fileDataUrl=e.target.result;renderRequiredFiguresList();};
-    reader.readAsDataURL(file);
+    if(file.type.startsWith('image/')){
+      const reader=new FileReader();
+      reader.onload=e=>{figData.fileDataUrl=e.target.result;addAndRender();};
+      reader.readAsDataURL(file);
+      return;
+    }
   }
-  requiredFigures.push(figData);
-  requiredFigures.sort((a,b)=>a.num-b.num);
-  if(numEl)numEl.value='';if(descEl)descEl.value='';if(fileEl)fileEl.value='';
-  renderRequiredFiguresList();
-  App.showToast(`도 ${num} 필수 도면 등록${figData.fileName?' (파일: '+figData.fileName+')':''}`);
+  addAndRender();
+}
+function suggestNextFigNum(){
+  const numEl=document.getElementById('inpRequiredFigNum');
+  if(!numEl)return;
+  const used=new Set(requiredFigures.map(f=>f.num));
+  for(let i=1;i<=30;i++){if(!used.has(i)){numEl.value=i;break;}}
 }
 function removeRequiredFigure(num){
   requiredFigures=requiredFigures.filter(f=>f.num!==num);
   renderRequiredFiguresList();
+  saveProject(true);
 }
 function renderRequiredFiguresList(){
   const el=document.getElementById('requiredFiguresList');if(!el)return;
-  if(!requiredFigures.length){el.innerHTML='';return;}
-  el.innerHTML=requiredFigures.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:4px;font-size:13px"><span class="badge badge-primary">도 ${f.num}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(f.description)}</span>${f.fileName?`<span class="badge badge-success" title="${App.escapeHtml(f.fileName)}">📎 파일</span>`:''}<button class="btn btn-ghost btn-sm" onclick="removeRequiredFigure(${f.num})">✕</button></div>`).join('');
+  if(!requiredFigures.length){el.innerHTML='<div style="font-size:12px;color:var(--color-text-tertiary);text-align:center;padding:12px">등록된 사용자 도면이 없습니다</div>';return;}
+  el.innerHTML=requiredFigures.map(f=>{
+    const preview=f.fileDataUrl?`<img src="${f.fileDataUrl}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--color-border)" title="${App.escapeHtml(f.fileName||'')}" />`:'';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:4px;font-size:13px">
+      ${preview}
+      <span class="badge badge-primary" style="min-width:40px;text-align:center">도 ${f.num}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${App.escapeHtml(f.description)}">${App.escapeHtml(f.description)}</span>
+      ${f.fileName?`<span class="badge badge-success" title="${App.escapeHtml(f.fileName)}">📎</span>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="removeRequiredFigure(${f.num})" title="삭제">✕</button>
+    </div>`;
+  }).join('');
 }
 
 // ═══ Project Reference Document ═══
@@ -709,12 +762,33 @@ const STEP_RUNNERS={
 function invalidateDownstream(changedStep){
   const depObj=STEP_DEPENDENCIES[changedStep];
   if(!depObj)return;
-  const mustDeps=(depObj.MUST||[]).filter(d=>d!=='step_13_applied'&&outputs[d]);
-  const shouldDeps=(depObj.SHOULD||[]).filter(d=>d!=='step_13_applied'&&outputs[d]);
+  const mustDeps=(depObj.MUST||[]).filter(d=>d!=='step_13_applied'&&d!=='step_13_applied_method'&&outputs[d]);
+  const shouldDeps=(depObj.SHOULD||[]).filter(d=>d!=='step_13_applied'&&d!=='step_13_applied_method'&&outputs[d]);
+  
+  // ★ v9.1: 원본 step 재생성 시 검토 반영본 무효화 ★
+  // step_08 또는 step_09 변경 → 장치 검토 반영본 무효화
+  if(changedStep==='step_08'||changedStep==='step_09'){
+    if(outputs.step_13_applied){
+      delete outputs.step_13_applied;
+      delete outputTimestamps.step_13_applied;
+      console.log(`[v9.1] ${changedStep} 재생성 → step_13_applied 무효화`);
+    }
+  }
+  // step_12 변경 → 방법 검토 반영본 무효화
+  if(changedStep==='step_12'){
+    if(outputs.step_13_applied_method){
+      delete outputs.step_13_applied_method;
+      delete outputTimestamps.step_13_applied_method;
+      console.log(`[v9.1] step_12 재생성 → step_13_applied_method 무효화`);
+    }
+  }
+  
   if(!mustDeps.length&&!shouldDeps.length)return;
 
-  // 기존 stale-warning 제거
-  document.querySelectorAll('.stale-warning').forEach(w=>w.remove());
+  // ★ v10.0 fix: changedStep의 하류 배지만 제거 (다른 step의 배지 보존) ★
+  [...mustDeps,...shouldDeps].forEach(d=>{
+    document.querySelectorAll(`.stale-warning[data-step="${d}"]`).forEach(w=>w.remove());
+  });
 
   // v7.0: step→실제 element ID 매핑 (배치 렌더링 step 포함)
   const STEP_RESULT_EL={
@@ -746,12 +820,51 @@ function invalidateDownstream(changedStep){
   showCascadePanel(changedStep,mustDeps,shouldDeps);
 }
 
-// ═══ 연쇄 수정 패널 UI ═══
-function showCascadePanel(changedStep,mustDeps,shouldDeps){
-  // 기존 패널 제거
-  const old=document.getElementById('cascadePanel');
-  if(old)old.remove();
+// ═══ v10.1: Step 완료 시 stale 배지 + cascade 패널 갱신 ═══
+function onStepCompleted(sid){
+  // 1. 해당 step의 stale-warning 배지 제거
+  document.querySelectorAll(`.stale-warning[data-step="${sid}"]`).forEach(w=>w.remove());
+  // 2. cascade 패널 업데이트
+  _updateCascadePanelItem(sid,'done');
+}
+function _updateCascadePanelItem(sid,status){
+  const panel=document.getElementById('cascadePanel');
+  if(!panel)return;
+  const cb=panel.querySelector(`.cascade-cb[data-step="${sid}"]`);
+  if(!cb)return;
+  cb.checked=false;cb.disabled=true;
+  const label=cb.closest('label');
+  if(label){
+    if(status==='done'){
+      label.style.cssText='display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;opacity:0.5;text-decoration:line-through;pointer-events:none';
+      const span=label.querySelector('span');
+      if(span)span.textContent=`✅ ${STEP_NAMES[sid]||sid}`;
+    }else if(status==='fail'){
+      label.style.opacity='0.7';
+      const span=label.querySelector('span');
+      if(span)span.textContent=`❌ ${STEP_NAMES[sid]||sid}`;
+    }
+  }
+  // 모든 항목 완료 시 패널 자동 닫기
+  const remaining=panel.querySelectorAll('.cascade-cb:not(:disabled)');
+  if(remaining.length===0){
+    const btn=panel.querySelector('#btnCascadeRun');
+    if(btn){btn.textContent='✅ 모두 완료';btn.style.background='#4caf50';btn.disabled=true;}
+    setTimeout(()=>{const p=document.getElementById('cascadePanel');if(p)p.remove();},3000);
+  }
+}
 
+// ═══ 연쇄 수정 패널 UI (v10.1: merge 지원) ═══
+function showCascadePanel(changedStep,mustDeps,shouldDeps){
+  const existing=document.getElementById('cascadePanel');
+  
+  // 기존 패널이 있으면 새 항목만 병합
+  if(existing){
+    _mergeCascadeItems(existing,changedStep,mustDeps,shouldDeps);
+    return;
+  }
+
+  // 새 패널 생성
   const panel=document.createElement('div');
   panel.id='cascadePanel';
   panel.style.cssText='position:fixed;bottom:20px;right:20px;width:380px;max-height:70vh;overflow-y:auto;background:#fff;border:2px solid #1976d2;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:9999;font-family:"맑은 고딕",sans-serif';
@@ -801,6 +914,45 @@ function showCascadePanel(changedStep,mustDeps,shouldDeps){
 
   panel.innerHTML=html;
   document.body.appendChild(panel);
+}
+// ═══ v10.1: 기존 패널에 새 항목 병합 ═══
+function _mergeCascadeItems(panel,changedStep,mustDeps,shouldDeps){
+  const existingSteps=new Set([...panel.querySelectorAll('.cascade-cb')].map(cb=>cb.dataset.step));
+  let added=0;
+  // 필수 항목 영역 찾기/생성
+  const mustContainer=panel.querySelector('[data-cascade-must]');
+  const shouldContainer=panel.querySelector('[data-cascade-should]');
+  
+  mustDeps.forEach(d=>{
+    if(existingSteps.has(d))return;
+    // 기존 MUST 영역에 추가하거나, 없으면 새로 만들기
+    const target=mustContainer||panel.querySelector('.cascade-cb[data-level="must"]')?.closest('div');
+    if(target){
+      const lbl=document.createElement('label');
+      lbl.style.cssText='display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer';
+      lbl.innerHTML=`<input type="checkbox" class="cascade-cb" data-step="${d}" data-level="must" checked style="accent-color:#c62828"><span>${STEP_NAMES[d]||d}</span>`;
+      target.appendChild(lbl);
+      added++;
+    }
+  });
+  shouldDeps.forEach(d=>{
+    if(existingSteps.has(d))return;
+    const target=shouldContainer||panel.querySelector('.cascade-cb[data-level="should"]')?.closest('details');
+    if(target){
+      const lbl=document.createElement('label');
+      lbl.style.cssText='display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer;margin-left:4px';
+      lbl.innerHTML=`<input type="checkbox" class="cascade-cb" data-step="${d}" data-level="should" style="accent-color:#ff9800"><span>${STEP_NAMES[d]||d}</span>`;
+      target.appendChild(lbl);
+      added++;
+    }
+  });
+  // 헤더 텍스트에 변경 원인 추가
+  if(added>0){
+    const hdr=panel.querySelector('span[style*="font-weight:600"]');
+    if(hdr&&!hdr.textContent.includes(STEP_NAMES[changedStep])){
+      hdr.textContent+=` + ${STEP_NAMES[changedStep]}`;
+    }
+  }
 }
 
 // ═══ 위상정렬: 의존성 순서 보장 (step_20→step_17 등) ═══
@@ -857,8 +1009,8 @@ async function runCascadeRegeneration(sourceStep){
   if(globalProcessing){App.showToast('이미 처리 중입니다','error');return;}
 
   const steps=checkboxes.map(cb=>cb.dataset.step);
-  // step_13_applied는 건너뛰기 (applyReview 전용)
-  const validSteps=steps.filter(s=>s!=='step_13_applied'&&STEP_NAMES[s]);
+  // step_13_applied, step_13_applied_method는 건너뛰기 (applyReview 전용)
+  const validSteps=steps.filter(s=>s!=='step_13_applied'&&s!=='step_13_applied_method'&&STEP_NAMES[s]);
 
   // ★ v7.0: 위상정렬 (step_20→step_17 등 역방향 의존 해결)
   const sorted=topologicalSort(validSteps,sourceStep);
@@ -887,8 +1039,8 @@ async function runCascadeRegeneration(sourceStep){
       else await _cascadeRunShort(sid);
 
       completed++;
-      // stale-warning 제거 (해당 step의 배지만 제거)
-      document.querySelectorAll(`.stale-warning[data-step="${sid}"]`).forEach(w=>w.remove());
+      // v10.1: 통합 완료 처리 (배지 + 패널 갱신)
+      onStepCompleted(sid);
     }catch(e){
       console.error(`Cascade ${sid} 실패:`,e);
       if(prog)prog.innerHTML+=`<div style="color:#c62828;font-size:11px">❌ ${STEP_NAMES[sid]} 실패: ${e.message}</div>`;
@@ -985,15 +1137,26 @@ async function _cascadeRunMath(){
 let outputTimestamps={};
 function markOutputTimestamp(sid){outputTimestamps[sid]=Date.now();}
 function getLatestDescription(){
-  // step_13_applied > step_09 > step_08 순이지만, step_08이 더 최신이면 step_08 우선
-  const candidates=['step_13_applied','step_09','step_08'];
+  // v9.1: 장치 상세설명 우선순위: step_13_applied > step_09 > step_08
+  // 단, 하위 step이 더 최신이면(사용자가 재생성) 하위 step 우선
   const ts08=outputTimestamps.step_08||0;
   const ts09=outputTimestamps.step_09||0;
   const ts13a=outputTimestamps.step_13_applied||0;
-  // step_08이 step_09/step_13_applied보다 나중이면 step_08이 최신본
+  // step_08이 step_09/step_13_applied보다 나중이면 step_08이 최신본 (사용자가 Step 8 재생성)
   if(outputs.step_08&&ts08>ts09&&ts08>ts13a)return outputs.step_08;
+  // step_09가 step_13_applied보다 나중이면 step_09 우선 (사용자가 Step 9 재생성)
+  if(outputs.step_09&&ts09>ts13a)return outputs.step_09;
   // 기존 우선순위
   return outputs.step_13_applied||outputs.step_09||outputs.step_08||'';
+}
+// v9.1: 방법 상세설명 최신본 반환
+function getLatestMethodDescription(){
+  // 우선순위: step_13_applied_method > step_12
+  // 단, step_12가 더 최신이면(사용자가 Step 12 재생성) step_12 우선
+  const ts12=outputTimestamps.step_12||0;
+  const ts13m=outputTimestamps.step_13_applied_method||0;
+  if(outputs.step_12&&ts12>ts13m)return outputs.step_12;
+  return outputs.step_13_applied_method||outputs.step_12||'';
 }
 // 정형문 수동 삽입: 현재 Step 8 결과에 정형문을 전후에 삽입
 function insertBoilerplate(){
@@ -1006,6 +1169,7 @@ function insertBoilerplate(){
   // Also update step_09 and step_13_applied if they exist
   if(outputs.step_09&&!hasBoilerplate(outputs.step_09)){outputs.step_09=STEP8_PREFIX+'\n\n'+outputs.step_09+'\n\n'+STEP8_SUFFIX;}
   if(outputs.step_13_applied&&!hasBoilerplate(outputs.step_13_applied)){outputs.step_13_applied=STEP8_PREFIX+'\n\n'+outputs.step_13_applied+'\n\n'+STEP8_SUFFIX;}
+  // v9.1: 방법 검토 반영본은 정형문 대상 아님 (방법 상세설명은 별도 구조)
   App.showToast('정형문 삽입 완료 (본문 전후에 자동 삽입됨)');
 }
 function hasBoilerplate(text){
@@ -1154,14 +1318,23 @@ function extractBriefDescriptions(s07,s11){
       t.split('\n').filter(l=>/^도\s*\d+\s*[은는]\s/.test(l.trim())&&/이다\.\s*$/.test(l.trim())).forEach(l=>{const m=l.trim().match(/^도\s*(\d+)/);if(m&&!seen.has(m[1])){seen.add(m[1]);d.push(l.trim());}});
     }
   });
-  // 2. 누락 도면 보완: diagramData 기반 폴백 생성
+  // 1b. v10.0: 사용자 도면 간단한 설명 추가
+  requiredFigures.forEach(rf=>{
+    const fn=String(rf.num);
+    if(!seen.has(fn)){
+      d.push(`도 ${fn}은 ${rf.description}을 나타내는 도면이다.`);
+      seen.add(fn);
+    }
+  });
+  // 2. 누락 도면 보완: diagramData 기반 폴백 생성 (v10.0: getAutoFigNums 사용)
   const title=selectedTitle||'본 발명';
   const devSubject=getDeviceSubject();
   const devData=diagramData.step_07||[];
   const methodData=diagramData.step_11||[];
-  const devFigCount=devData.length;
+  const devAutoNums=getAutoFigNums('step_07');
+  const methAutoNums=getAutoFigNums('step_11');
   // 2a. 장치 도면 폴백
-  devData.forEach((dd,i)=>{const fn=String(i+1);if(seen.has(fn))return;
+  devData.forEach((dd,i)=>{const fn=String(devAutoNums[i]||(i+1));if(seen.has(fn))return;
     function exRef(lab){const m=lab.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);return m?m[1]:'';}
     const allL1=dd.nodes.every(n=>{const r=exRef(n.label);if(!r)return false;const num=parseInt(r);return(num>0&&num<10)||(num>=100&&num<1000&&num%100===0);});
     if(i===0||allL1){d.push(`도 ${fn}은 ${title}의 전체 구성을 나타내는 블록도이다.`);}
@@ -1171,7 +1344,7 @@ function extractBriefDescriptions(s07,s11){
       d.push(`도 ${fn}은 ${pName}(${pRef})의 내부 구성을 나타내는 블록도이다.`);}
     seen.add(fn);});
   // 2b. 방법 도면 폴백
-  methodData.forEach((md,i)=>{const fn=String(devFigCount+i+1);if(seen.has(fn))return;
+  methodData.forEach((md,i)=>{const fn=String(methAutoNums[i]||(devData.length+i+1));if(seen.has(fn))return;
     d.push(`도 ${fn}은 ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});
   // 2c. diagramData 없을 때 텍스트 기반 폴백
   if(!devData.length&&s07){const figs=s07.match(/도\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];
@@ -1354,7 +1527,31 @@ function getFullInvention(opts){
 function getRequiredFiguresInstruction(){
   if(!requiredFigures.length)return '';
   const list=requiredFigures.map(f=>`- 도 ${f.num}: ${f.description}`).join('\n');
-  return `\n\n[필수 도면 — 아래 도면은 사용자가 이미 보유하고 있다. 이 번호들은 건너뛰고 나머지 도면만 새로 생성하라. 단, 도면의 간단한 설명에는 필수 도면도 모두 포함하라.]\n${list}`;
+  return `\n\n[사용자 도면 — 아래 도면은 사용자가 이미 보유하고 있다. 이 번호들은 건너뛰고 나머지 도면만 새로 생성하라. 단, 도면의 간단한 설명에는 사용자 도면도 모두 포함하라.]\n${list}`;
+}
+// ═══ v10.0: 사용자 도면 번호 스킵 — 자동 도면 번호 산출 ═══
+// devCount/methCount: 자동 생성할 장치/방법 도면 수
+function computeFigNums(devCount,methCount){
+  const userNums=new Set(requiredFigures.map(f=>f.num));
+  const devNums=[],methNums=[];
+  let c=1;
+  for(let i=0;i<devCount;i++){while(userNums.has(c))c++;devNums.push(c);c++;}
+  const lastDeviceFig=devNums.length?devNums[devNums.length-1]:0;
+  for(let i=0;i<methCount;i++){while(userNums.has(c))c++;methNums.push(c);c++;}
+  return{device:devNums,method:methNums,lastDeviceFig,lastFig:c-1};
+}
+// 렌더링용: diagramData 기반 자동 도면 번호
+function getAutoFigNums(sid){
+  const devCount=diagramData.step_07?.length||0;
+  const methCount=diagramData.step_11?.length||0;
+  const r=computeFigNums(devCount,methCount);
+  return sid==='step_07'?r.device:r.method;
+}
+// 사용자 도면 설명을 Step 8/12 프롬프트에 삽입하는 헬퍼
+function getUserFiguresPromptBlock(){
+  if(!requiredFigures.length)return '';
+  return '\n\n[사용자 도면 — 아래 도면은 사용자가 제공한 것이며, 상세설명에서 해당 도면 번호를 참조하여 설명을 포함하라. 발명 내용과 정합되도록 기술하라.]\n'+
+    requiredFigures.map(f=>`도 ${f.num}: ${f.description}`).join('\n');
 }
 function buildAnchorThemeInstruction(mode,themes,count){
   if(mode==='fixed'&&themes.length){
@@ -1722,11 +1919,13 @@ ${T}${getFullInvention()}${styleRef}`;}
     // ═══ Step 7: 도면 설계 (도면 규칙 v4.0) ═══
     case 'step_07':{
       const f=document.getElementById('optDeviceFigures').value;
+      const totalFig=parseInt(f);
       const reqInst=getRequiredFiguresInstruction();
-      const skipNums=requiredFigures.map(rf=>rf.num);
-      const genCount=parseInt(f)-(requiredFigures.length);
-      return `【장치 청구범위】에 대한 도면을 설계하라. 총 도면 수: ${f}개.
-${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 (${skipNums.map(n=>'도 '+n).join(', ')}).\n새로 생성할 도면: ${genCount>0?genCount:0}개.\n필수 도면 번호는 건너뛰고 나머지 번호로 생성하라.`:''}
+      const genCount=totalFig-requiredFigures.length;
+      const figNums=computeFigNums(Math.max(genCount,0),0);
+      const autoNums=figNums.device;
+      return `【장치 청구범위】에 대한 도면을 설계하라. 총 도면 수: ${totalFig}개 (자동 생성 ${genCount}개${requiredFigures.length?', 사용자 도면 '+requiredFigures.length+'개':''}).
+${reqInst?`\n사용자 도면: ${requiredFigures.map(rf=>'도 '+rf.num).join(', ')} (사용자가 이미 보유).\n★ 자동 생성할 도면 번호: ${autoNums.map(n=>'도 '+n).join(', ')}.\n위 번호만 사용하여 도면을 생성하라. 사용자 도면 번호(${requiredFigures.map(rf=>'도 '+rf.num).join(', ')})는 절대 생성하지 마라.`:''}
 
 ════════════════════════════════════════════════════════════════
 ★★★ 특허 도면 생성 규칙 v4.0 ★★★
@@ -1955,8 +2154,17 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
         custom:{charPerFig:'약 '+customDetailChars+'자',total:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 변형 실시예를 포함하라.'}
       }[detailLevel];
       const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
-      const lastDeviceFig=getLastFigureNumber(outputs.step_07||'')||deviceFigCount;
+      // v10.0: 사용자 도면 포함한 정확한 마지막 장치 도면 번호
+      const autoDevCount=deviceFigCount-requiredFigures.length;
+      const _figNums=computeFigNums(Math.max(autoDevCount,0),0);
+      const lastDeviceFig=Math.max(
+        getLastFigureNumber(outputs.step_07||'')||0,
+        _figNums.lastDeviceFig,
+        ...requiredFigures.map(f=>f.num).filter(n=>n<=(_figNums.lastDeviceFig||deviceFigCount)),
+        deviceFigCount
+      );
       const hasMethodClaims=!!outputs.step_10;
+      const _userFigBlock=getUserFiguresPromptBlock();
       return `아래 발명에 대한 【발명을 실시하기 위한 구체적인 내용】의 본문만 작성하라.
 
 ⛔ 이것은 "장치" 상세설명이다. 방법(~하는 단계, S100 등)은 포함하지 마라.
@@ -2021,6 +2229,7 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 변형 실시예는 독립항의 보호범위를 뒷받침하는 방향이어야 한다
 
 ★★★ 장치 도면(도 1~도 ${lastDeviceFig})에 포함된 구성요소만 설명하라. 도면에 없는 내용을 임의로 추가하지 마라. ★★★
+${_userFigBlock?`\n${_userFigBlock}\n★ 사용자 도면도 "도 N을 참조하면," 형태로 도면 번호 순서에 맞게 설명을 포함하라.\n★ 사용자 도면의 설명은 발명 내용 및 청구범위와 정합되도록, 위 도면 설명을 기초로 기술적 의미를 보완하여 작성하라.`:''}
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
 
@@ -2082,8 +2291,15 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
     // ═══ Step 11: 방법 도면 (S+숫자 단계번호 체계) ═══
     case 'step_11':{
       const f=document.getElementById('optMethodFigures').value;
-      const lf=getLastFigureNumber(outputs.step_07||'');
-      return `【방법 청구범위】에 대한 흐름도를 설계하라. 총 ${f}개, 도 ${lf+1}부터.
+      const methCount=parseInt(f);
+      // v10.0: 사용자 도면 스킵 반영한 방법 도면 번호 계산
+      const devAutoCount=Math.max((parseInt(document.getElementById('optDeviceFigures')?.value||4))-requiredFigures.length,0);
+      const _mfn=computeFigNums(devAutoCount,methCount);
+      const lf=_mfn.lastDeviceFig||getLastFigureNumber(outputs.step_07||'');
+      const methAutoNums=_mfn.method;
+      const firstMeth=methAutoNums[0]||(lf+1);
+      return `【방법 청구범위】에 대한 흐름도를 설계하라. 총 ${f}개, 도 ${firstMeth}부터.
+${requiredFigures.length?`\n★ 사용자 도면(${requiredFigures.map(rf=>'도 '+rf.num).join(', ')})은 이미 사용 중이므로 건너뛰라.\n★ 생성할 방법 도면 번호: ${methAutoNums.map(n=>'도 '+n).join(', ')}`:''}
 
 ⛔⛔⛔ 절대 금지 사항 (위반 시 도면 전체 무효) ⛔⛔⛔
 - 장치 구성요소(통신부, 프로세서, ~부 등) 포함 금지
@@ -2114,31 +2330,31 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
 [방법 단계번호 체계 — 필수 준수]
 
 ■ 단계번호 형식: S + 숫자
-- 도면 번호 기반: S${lf+1}01, S${lf+1}02, S${lf+1}03...
-- 예시 (도 ${lf+1}): S${lf+1}01(첫 번째 단계), S${lf+1}02(두 번째 단계)...
+- 도면 번호 기반: S${firstMeth}01, S${firstMeth}02, S${firstMeth}03...
+- 예시 (도 ${firstMeth}): S${firstMeth}01(첫 번째 단계), S${firstMeth}02(두 번째 단계)...
 
 ■ 단계명 형식
 - 반드시 "~단계" 또는 "~하는 단계"로 끝나야 함
-- 예: "데이터 수신 단계(S${lf+1}01)", "패턴 분석 단계(S${lf+1}02)"
+- 예: "데이터 수신 단계(S${firstMeth}01)", "패턴 분석 단계(S${firstMeth}02)"
 
 ■ 핵심 규칙
-- 각 단계명에 단계번호를 반드시 포함: "사용자 인증 단계(S${lf+1}01)"
+- 각 단계명에 단계번호를 반드시 포함: "사용자 인증 단계(S${firstMeth}01)"
 - 장치 도면(Step 7)의 구성요소는 참조하되, 도면에 직접 포함하지 마라
 - 방법 청구항의 모든 단계를 빠짐없이 반영
 
 [파트1: 도면 설계]
 각 도면별로 아래 형식 출력:
 ---
-도 ${lf+1}: (방법 이름) 흐름도
+도 ${firstMeth}: (방법 이름) 흐름도
 유형: 순서도 (최외곽 박스 없음)
 단계 목록:
 - 시작
-- (단계명)(S${lf+1}01)
-- (단계명)(S${lf+1}02)
-- [판단] (조건 질문?)(S${lf+1}03) → 예: (다음 단계), 아니오: (대안 단계)
+- (단계명)(S${firstMeth}01)
+- (단계명)(S${firstMeth}02)
+- [판단] (조건 질문?)(S${firstMeth}03) → 예: (다음 단계), 아니오: (대안 단계)
 - ...
 - 종료
-흐름: 시작 → S${lf+1}01 → S${lf+1}02 → S${lf+1}03{판단} →(예) S${lf+1}04, (아니오) S${lf+1}05 → ... → 종료 (단방향)
+흐름: 시작 → S${firstMeth}01 → S${firstMeth}02 → S${firstMeth}03{판단} →(예) S${firstMeth}04, (아니오) S${firstMeth}05 → ... → 종료 (단방향)
 ---
 
 [분기 논리 검증]
@@ -2151,7 +2367,7 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
 [파트2: 도면의 간단한 설명]
 ★★★ 모든 방법 도면에 대해 빠짐없이 간단한 설명을 작성하라 ★★★
 ---BRIEF_DESCRIPTIONS---
-도 ${lf+1}은 ${selectedTitle||'본 발명'}의 (방법 이름)을 나타내는 순서도이다.
+도 ${firstMeth}은 ${selectedTitle||'본 발명'}의 (방법 이름)을 나타내는 순서도이다.
 (방법 도면이 여러 개이면 모두 작성)
 
 ★★★ 방법 청구항의 모든 단계를 빠짐없이 흐름도에 반영하라 ★★★
@@ -2231,7 +2447,7 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
 
 마지막에 전체 요약 (보완 우선순위 포함)
 
-${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}${outputs.step_12?'\n[방법 상세설명] '+outputs.step_12.slice(0,3000):''}\n[원본 발명 내용] ${inv.slice(0,3000)}`;}
+${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}${getLatestMethodDescription()?'\n[방법 상세설명] '+getLatestMethodDescription().slice(0,3000):''}\n[원본 발명 내용] ${inv.slice(0,3000)}`;}
 
     case 'step_14':return `대안 청구항을 작성하라. 원본 청구항의 핵심 기술적 구성은 그대로 유지하되, 표현을 달리하라.
 
@@ -2348,7 +2564,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
       if(sr){outputs.step_04=sr.formatted;renderOutput('step_04',sr.formatted);}
       else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderOutput('step_04',outputs.step_04);}
       markOutputTimestamp('step_04');
-      saveProject(true);App.showToast('선행기술문헌 검색 완료');
+      onStepCompleted('step_04');saveProject(true);App.showToast('선행기술문헌 검색 완료');
       return;
     }
     // Step 13: use continuation for long review
@@ -2412,7 +2628,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
       if(sid==='step_13')document.getElementById('btnApplyReview').style.display='block';
       App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
     }
-    saveProject(true);
+    onStepCompleted(sid);saveProject(true);
   }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
 async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);
   // v6.0: 부분 수정 모드 표시
@@ -2423,8 +2639,8 @@ async function runLongStep(sid){if(globalProcessing)return;const dep=checkDepend
     // v8.1: step_08 도면 범위 초과 자동 교정
     if(sid==='step_08')t=sanitizeDescFigureRefs(t,'device');
     if(sid==='step_12')t=sanitizeDescFigureRefs(t,'method');
-    outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
-async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);markOutputTimestamp('step_09');renderOutput('step_09',outputs.step_09);saveProject(true);App.showToast('수학식 삽입 완료');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
+    outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
+async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);markOutputTimestamp('step_09');invalidateDownstream('step_09');renderOutput('step_09',outputs.step_09);onStepCompleted('step_09');saveProject(true);App.showToast('수학식 삽입 완료');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
 
 async function applyReview(){
   if(globalProcessing)return;if(!outputs.step_13){App.showToast('검토 결과 없음','error');return;}
@@ -2465,16 +2681,15 @@ async function applyReview(){
 [현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention({stripMeta:true,deviceOnly:true})}${getStyleRef()}${buildUserCommandSuffix('step_08')}`,'progressApplyReview');
     // v8.1: 도면 범위 초과 자동 교정
     const sanitizedDesc=sanitizeDescFigureRefs(improvedDesc,'device');
-    outputs.step_08=sanitizedDesc;markOutputTimestamp('step_08');
+    // ★ v9.1: step_08 원본은 보존. 검토 반영본은 step_13_applied에만 저장 ★
 
     // ═══ [2] 수학식 재삽입 ═══
     App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 삽입 중...`,2,totalSteps);
     const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${sanitizedDesc}`);
     const finalDesc=insertMathBlocks(sanitizedDesc,mathR.text);
-    outputs.step_09=finalDesc; // BUG-B fix: step_09도 갱신하여 저장/리로드 시 UI 일관성 유지
+    // ★ v9.1: step_13_applied에만 저장 — step_08, step_09 원본 보존 ★
     outputs.step_13_applied=finalDesc;
-    markOutputTimestamp('step_09');markOutputTimestamp('step_13_applied');
-    renderOutput('step_08',sanitizedDesc);renderOutput('step_09',finalDesc);
+    markOutputTimestamp('step_13_applied');
 
     // ═══ [3] 방법 상세설명 보완 (있는 경우만) ═══
     if(hasMethodDesc){
@@ -2495,9 +2710,10 @@ async function applyReview(){
 [발명의 명칭] ${selectedTitle}
 [검토 결과] ${outputs.step_13}
 [방법 청구항] ${outputs.step_10||''}
-[현재 방법 상세설명] ${outputs.step_12}${getStyleRef()}${buildUserCommandSuffix('step_12')}`,'progressApplyReview');
-      outputs.step_12=improvedMethod;markOutputTimestamp('step_12');
-      renderOutput('step_12',improvedMethod);
+[현재 방법 상세설명] ${getLatestMethodDescription()}${getStyleRef()}${buildUserCommandSuffix('step_12')}`,'progressApplyReview');
+      // ★ v9.1: step_12 원본 보존 — 검토 반영본은 step_13_applied_method에만 저장 ★
+      outputs.step_13_applied_method=improvedMethod;
+      markOutputTimestamp('step_13_applied_method');
     }
 
     // ═══ 완료 ═══
@@ -2506,13 +2722,21 @@ async function applyReview(){
     if(resultArea){resultArea.style.display='block';showReviewDiff('after');}
     setTimeout(()=>App.clearProgress('progressApplyReview'),2000);
     saveProject(true);
-    App.showToast(`검토 반영 완료${hasMethodDesc?' (장치+방법)':''}`);
+    App.showToast(`검토 반영 완료${hasMethodDesc?' (장치+방법)':''} — 최종 명세서에 자동 반영됩니다`);
   }catch(e){App.showToast(e.message,'error');}finally{loadingState.applyReview=false;App.setButtonLoading('btnApplyReview',false);setGlobalProcessing(false);}
 }
 function showReviewDiff(mode){
   const area=document.getElementById('reviewDiffArea'),bb=document.getElementById('btnDiffBefore'),ba=document.getElementById('btnDiffAfter');if(!area)return;
   if(mode==='before'){area.value=beforeReviewText||'(없음)';if(bb)bb.className='btn btn-primary btn-sm';if(ba)ba.className='btn btn-outline btn-sm';}
-  else{area.value=outputs.step_13_applied||'(없음)';if(bb)bb.className='btn btn-outline btn-sm';if(ba)ba.className='btn btn-primary btn-sm';}
+  else{
+    // v9.1: 장치 + 방법 검토 반영본 모두 표시
+    let afterText=outputs.step_13_applied||'(없음)';
+    if(outputs.step_13_applied_method){
+      afterText+='\n\n═══ [방법 상세설명 검토 반영본] ═══\n\n'+outputs.step_13_applied_method;
+    }
+    area.value=afterText;
+    if(bb)bb.className='btn btn-outline btn-sm';if(ba)ba.className='btn btn-primary btn-sm';
+  }
 }
 async function runDiagramStep(sid){
   if(globalProcessing)return;
@@ -2558,7 +2782,7 @@ ${preIssues.map(i=>i.message).join('\n')}
       }
     }
     
-    outputs[sid]=designText;markOutputTimestamp(sid);invalidateDownstream(sid);
+    outputs[sid]=designText;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);
     renderOutput(sid,designText);
     
     // 3. Mermaid 변환
@@ -3524,57 +3748,86 @@ function _shapeLeaderX(type,x,w){
   }
 }
 
+// ── v9.1: Shape 시각적 경계 (bounding box ≠ visual bounds) ──
+// 연결선 앵커, leader line 시작점에 사용
+function _shapeVisualBounds(type,x,y,w,h){
+  switch(type){
+    case 'cloud':
+      return{top:y+h*0.06, bottom:y+h*0.82, left:x+w*0.02, right:x+w*0.98, cx:x+w/2, cy:y+h*0.45};
+    case 'database':{
+      const ry=Math.min(h*0.18,w*0.15,22);
+      return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
+    }
+    case 'monitor':{
+      const sh=h*0.72; // 화면부 높이
+      const baseBottom=y+h*0.93; // 받침대 하단
+      return{top:y, bottom:baseBottom, left:x, right:x+w, cx:x+w/2, cy:y+sh/2};
+    }
+    case 'server':
+      return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
+    case 'sensor':{
+      const cr=Math.min(w*0.28,h*0.38);
+      return{top:y+h*0.12, bottom:y+h*0.88, left:x+w*0.04, right:x+w*0.92, cx:x+w*0.32, cy:y+h*0.50};
+    }
+    case 'antenna':{
+      return{top:y+h*0.18, bottom:y+h*0.92, left:x+w*0.16, right:x+w*0.62, cx:x+w*0.38, cy:y+h*0.55};
+    }
+    case 'document':{
+      return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
+    }
+    case 'camera':{
+      return{top:y+h*0.08, bottom:y+h*0.83, left:x+w*0.05, right:x+w*0.85, cx:x+w*0.45, cy:y+h*0.50};
+    }
+    case 'speaker':{
+      return{top:y+h*0.08, bottom:y+h*0.92, left:x+w*0.10, right:x+w*0.55, cx:x+w*0.35, cy:y+h*0.50};
+    }
+    default:
+      return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
+  }
+}
+
 // ── Shape natural proportion metrics ──
 // Computes natural shape dimensions fitted within a box slot.
 // Uses absolute aspect ratios so shapes look correct regardless of boxW/boxH.
 function _shapeMetrics(type,boxW,boxH){
   // Natural desired pixel aspect ratios (width : height)
-  // These produce visually correct shapes at any scale
+  // v9.1: 축소된 비율 — 도 1에서 행 내 겹침 방지
   switch(type){
     case 'database':{
-      // Cylinder: moderately wide, taller than box
-      const sh=boxH*1.80, sw=sh*1.40;
-      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
+      const sh=boxH*1.45, sw=sh*1.30;
+      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
     }
     case 'cloud':{
-      // Cloud: wide and puffy
-      const sh=boxH*1.50, sw=sh*2.60;
-      return{sw:Math.min(sw,boxW*0.75),sh,dx:(boxW-Math.min(sw,boxW*0.75))/2};
+      const sh=boxH*1.20, sw=sh*2.40;
+      return{sw:Math.min(sw,boxW*0.70),sh,dx:(boxW-Math.min(sw,boxW*0.70))/2};
     }
     case 'server':{
-      // Server rack: narrow and tall
-      const sh=boxH*1.80, sw=sh*1.10;
-      return{sw:Math.min(sw,boxW*0.50),sh,dx:(boxW-Math.min(sw,boxW*0.50))/2};
-    }
-    case 'monitor':{
-      // Monitor + stand: moderately wide, taller
-      const sh=boxH*1.80, sw=sh*1.50;
-      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
-    }
-    case 'sensor':{
-      // Sensor: circle body + wave arcs on right side
-      const sh=boxH*1.70, sw=sh*1.80;
-      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
-    }
-    case 'antenna':{
-      // Antenna: pole + signal waves
-      const sh=boxH*1.80, sw=sh*1.60;
-      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
-    }
-    case 'document':{
-      // Document: page with folded corner
-      const sh=boxH*1.80, sw=sh*0.78;
+      const sh=boxH*1.45, sw=sh*1.05;
       return{sw:Math.min(sw,boxW*0.45),sh,dx:(boxW-Math.min(sw,boxW*0.45))/2};
     }
-    case 'camera':{
-      // Camera: body + lens circle
-      const sh=boxH*1.60, sw=sh*1.50;
+    case 'monitor':{
+      const sh=boxH*1.45, sw=sh*1.40;
+      return{sw:Math.min(sw,boxW*0.55),sh,dx:(boxW-Math.min(sw,boxW*0.55))/2};
+    }
+    case 'sensor':{
+      const sh=boxH*1.35, sw=sh*1.70;
       return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
     }
+    case 'antenna':{
+      const sh=boxH*1.45, sw=sh*1.50;
+      return{sw:Math.min(sw,boxW*0.55),sh,dx:(boxW-Math.min(sw,boxW*0.55))/2};
+    }
+    case 'document':{
+      const sh=boxH*1.45, sw=sh*0.75;
+      return{sw:Math.min(sw,boxW*0.42),sh,dx:(boxW-Math.min(sw,boxW*0.42))/2};
+    }
+    case 'camera':{
+      const sh=boxH*1.30, sw=sh*1.40;
+      return{sw:Math.min(sw,boxW*0.55),sh,dx:(boxW-Math.min(sw,boxW*0.55))/2};
+    }
     case 'speaker':{
-      // Speaker: cone shape
-      const sh=boxH*1.70, sw=sh*1.50;
-      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
+      const sh=boxH*1.35, sw=sh*1.40;
+      return{sw:Math.min(sw,boxW*0.55),sh,dx:(boxW-Math.min(sw,boxW*0.55))/2};
     }
     default:return{sw:boxW,sh:boxH,dx:0};
   }
@@ -4586,7 +4839,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const gp=grid[nd.id]; if(!gp)return;
       const st=matchIconShape(nd.label);
       const sm=_shapeMetrics(st,boxW2D,boxH);
-      const h=sm.sh+refNumH; // Shape + 참조번호 공간
+      // v9.1: visual bounds 기준 높이 사용
+      const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);
+      const h=vb.bottom+refNumH; // 시각적 하단 + 참조번호 공간
       if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;
     });
     
@@ -4625,12 +4880,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const sm=_shapeMetrics(shapeType,boxW2D,boxH);
       const sx=bx+sm.dx, sy=by;
       
-      nodeBoxes[nd.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2};
+      // v9.1: nodeBox는 시각적 경계 기반 (연결선 라우팅에 사용)
+      const vb=_shapeVisualBounds(shapeType,sx,sy,sm.sw,sm.sh);
+      nodeBoxes[nd.id]={x:vb.left,y:vb.top,w:vb.right-vb.left,h:vb.bottom-vb.top,cx:sx+sm.sw/2,cy:(vb.top+vb.bottom)/2};
       nodeData.push({id:nd.id,sx,sy,sw:sm.sw,sh:sm.sh,shapeType,displayLabel,refNum,bx,boxW2D,row:grid[nd.id].row});
     });
     
     // ── Phase 1.5: 겹침 검증 & 자동 보정 ──
-    // 모든 노드 쌍을 검사하여 Shape+참조번호 영역이 겹치면 하단 노드를 아래로 이동
+    // v9.1: 시각적 경계 기준 겹침 검사
     const REF_PADDING=refNumH+4; // Shape 아래 참조번호+여유
     const MIN_GAP=8; // 최소 간격(px)
     let correctionApplied=true;
@@ -4640,19 +4897,21 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       correctionRounds++;
       for(let i=0;i<nodeData.length;i++){
         const a=nodeData[i];
-        const aBottom=a.sy+a.sh+REF_PADDING; // Shape 하단 + 참조번호
+        const aVb=_shapeVisualBounds(a.shapeType,a.sx,a.sy,a.sw,a.sh);
+        const aBottom=aVb.bottom+REF_PADDING; // 시각적 하단 + 참조번호
         for(let j=0;j<nodeData.length;j++){
           if(i===j)continue;
           const b=nodeData[j];
+          const bVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);
           // 수직 겹침: a의 하단이 b의 상단을 넘고, 수평으로도 겹침
-          const hOverlap=!(a.sx+a.sw<b.sx||b.sx+b.sw<a.sx); // X축 겹침
-          if(hOverlap&&b.sy<aBottom+MIN_GAP&&b.sy>=a.sy){
-            // b가 a 아래에 있어야 하는데 겹침 → b를 아래로 이동
+          const hOverlap=!(a.sx+a.sw+8<b.sx||b.sx+b.sw+8<a.sx); // X축 겹침 (8px 여유)
+          if(hOverlap&&bVb.top<aBottom+MIN_GAP&&b.sy>=a.sy){
             const pushDown=aBottom+MIN_GAP-b.sy;
             if(pushDown>0){
               b.sy+=pushDown;
-              nodeBoxes[b.id].y=b.sy;
-              nodeBoxes[b.id].cy=b.sy+b.sh/2;
+              // nodeBoxes도 업데이트
+              const newVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);
+              nodeBoxes[b.id]={x:newVb.left,y:newVb.top,w:newVb.right-newVb.left,h:newVb.bottom-newVb.top,cx:b.sx+b.sw/2,cy:(newVb.top+newVb.bottom)/2};
               correctionApplied=true;
             }
           }
@@ -4663,7 +4922,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     // 보정 후 SVG 높이 재계산
     let maxBottom=0;
     nodeData.forEach(nd=>{
-      const bottom=nd.sy+nd.sh+REF_PADDING+10;
+      const vb=_shapeVisualBounds(nd.shapeType,nd.sx,nd.sy,nd.sw,nd.sh);
+      const bottom=vb.bottom+REF_PADDING+10;
       if(bottom>maxBottom)maxBottom=bottom;
     });
     const correctedSvgH=Math.max(svgH,maxBottom+marginY);
@@ -4732,22 +4992,24 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       svg+=`<text x="${sx+sw/2}" y="${labelY}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       
       // ★ 참조번호: 연결이 없는 쪽에 배치 (우선순위: 하단→우측→좌측→내부) ★
+      // v9.1: 시각적 경계 기준 leader line (bounding box ≠ visual bounds)
+      const vb=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
       let refSvg='';
       if(!dir.bottom){
-        // 하단: 수직선 + 번호
-        const ly=sy+sh, ly2=ly+8;
+        // 하단: 수직선 + 번호 — shape 시각적 하단에서 시작
+        const ly=vb.bottom, ly2=ly+8;
         refSvg=`<line x1="${sx+sw/2}" y1="${ly}" x2="${sx+sw/2}" y2="${ly2}" stroke="#000" stroke-width="1"/>`;
         refSvg+=`<text x="${sx+sw/2}" y="${ly2+11}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }else if(!dir.right){
-        // 우측: 수평선 + 번호
-        const lx=sx+sw, lx2=lx+12;
-        const ly=sy+sh/2;
+        // 우측: 수평선 + 번호 — shape 시각적 우측에서 시작
+        const lx=vb.right, lx2=lx+12;
+        const ly=(vb.top+vb.bottom)/2;
         refSvg=`<line x1="${lx}" y1="${ly}" x2="${lx2}" y2="${ly}" stroke="#000" stroke-width="1"/>`;
         refSvg+=`<text x="${lx2+4}" y="${ly+4}" text-anchor="start" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }else if(!dir.left){
-        // 좌측: 수평선 + 번호
-        const lx=sx, lx2=lx-12;
-        const ly=sy+sh/2;
+        // 좌측: 수평선 + 번호 — shape 시각적 좌측에서 시작
+        const lx=vb.left, lx2=lx-12;
+        const ly=(vb.top+vb.bottom)/2;
         refSvg=`<line x1="${lx}" y1="${ly}" x2="${lx2}" y2="${ly}" stroke="#000" stroke-width="1"/>`;
         refSvg+=`<text x="${lx2-4}" y="${ly+4}" text-anchor="end" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }else{
@@ -5136,11 +5398,11 @@ function postRenderValidation(sid){
   const data=diagramData[sid];
   if(!data||!data.length)return[];
   
-  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+  const autoFigNums=getAutoFigNums(sid);
   const allIssues=[];
   
   data.forEach(({nodes,edges},idx)=>{
-    const figNum=figOffset+idx+1;
+    const figNum=autoFigNums[idx]||(idx+1);
     const numRefs=nodes.map(n=>{
       const m=(n.label||'').match(/[(\s]?(S?\d+)[)\s]?$/i);
       return m?parseInt(m[1]):null;
@@ -5203,6 +5465,12 @@ function renderDiagrams(sid,mt){
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
   diagramData[sid]=[];
   
+  // v10.0: 사용자 도면 스킵 반영 — 블록 수 기반 도면 번호 미리 계산
+  const _devC=sid==='step_07'?blocks.length:(diagramData.step_07?.length||0);
+  const _methC=sid==='step_11'?blocks.length:0;
+  const _cfn=computeFigNums(_devC,_methC);
+  const autoFigNums=sid==='step_07'?_cfn.device:_cfn.method;
+  
   // 도면 설계 텍스트 (R7 검증용)
   const designText=outputs[sid]||'';
   
@@ -5211,7 +5479,7 @@ function renderDiagrams(sid,mt){
   let hasErrors=false;
   
   blocks.forEach((code,i)=>{
-    const figNum=figOffset+i+1;
+    const figNum=autoFigNums[i]||(figOffset+i+1);
     const{nodes,edges}=parseMermaidGraph(code);
     const positions=layoutGraph(nodes,edges);
     diagramData[sid].push({nodes,edges,positions});
@@ -5269,7 +5537,7 @@ function renderDiagrams(sid,mt){
   // SVG 렌더링
   blocks.forEach((code,i)=>{
     const{nodes,edges,positions}=diagramData[sid][i];
-    renderDiagramSvg(`diagram_${sid}_${i}`,nodes,edges,positions,figOffset+i+1);
+    renderDiagramSvg(`diagram_${sid}_${i}`,nodes,edges,positions,autoFigNums[i]||(figOffset+i+1));
   });
 }
 
@@ -5281,13 +5549,13 @@ function runDiagramValidation(sid){
     return;
   }
   
-  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+  const autoFigNums=getAutoFigNums(sid);
   const designText=outputs[sid]||'';
   let totalErrors=0,totalWarnings=0;
   let reportHtml='';
   
   data.forEach(({nodes,edges},idx)=>{
-    const figNum=figOffset+idx+1;
+    const figNum=autoFigNums[idx]||(idx+1);
     const issues=validateDiagramRules(nodes,figNum,designText,edges);
     const errors=issues.filter(i=>i.severity==='ERROR');
     const warnings=issues.filter(i=>i.severity==='WARNING');
@@ -5338,13 +5606,13 @@ async function runAIDiagramReview(sid){
   const resultEl=document.getElementById(`aiReviewResult_${sid}`);
   if(resultEl)resultEl.innerHTML='<div style="padding:12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a">🤖 AI 연결관계 검증 중...</div>';
   
-  const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
+  const autoFigNums=getAutoFigNums(sid);
   const designText=outputs[sid]||'';
   
   // 각 도면의 구조 정보 수집
   let diagramSummary='';
   data.forEach(({nodes,edges},idx)=>{
-    const figNum=figOffset+idx+1;
+    const figNum=autoFigNums[idx]||(idx+1);
     const nodeList=nodes.map(n=>{
       const ref=_extractRefNum(n.label,'?');
       const clean=_safeCleanLabel(n.label);
@@ -5432,6 +5700,7 @@ function downloadPptx(sid){
     pptx.defineLayout({name:'A4_PORTRAIT',width:8.27,height:11.69});
     pptx.layout='A4_PORTRAIT';
     
+    const autoFigNums=getAutoFigNums(sid);
     const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
     
     const LINE_FRAME=2.0,LINE_BOX=1.5,LINE_ARROW=1.0,SHADOW_OFFSET=0.04;
@@ -5587,7 +5856,7 @@ function downloadPptx(sid){
     
     data.forEach(({nodes,edges},idx)=>{
       const slide=pptx.addSlide({bkgd:'FFFFFF'});
-      const figNum=figOffset+idx+1;
+      const figNum=autoFigNums[idx]||(figOffset+idx+1);
       const hasEdges=edges&&edges.length>0;
       
       slide.addText(`도 ${figNum}`,{
@@ -5673,7 +5942,7 @@ function downloadPptx(sid){
         
         // ★ 행별 최대 Shape 높이 → 누적 Y좌표 ★
         const rowMaxH={};
-        nodes.forEach(n=>{const gp=grid[n.id];if(!gp)return;const sm=_shapeMetrics(matchIconShape(n.label),boxW2D,boxH);const h=sm.sh+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
+        nodes.forEach(n=>{const gp=grid[n.id];if(!gp)return;const st=matchIconShape(n.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=vb.bottom+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
         const rowY={};let accY=boxStartY;
         for(let r=0;r<numRows;r++){rowY[r]=accY;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase;}
         
@@ -5697,6 +5966,9 @@ function downloadPptx(sid){
           slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
           nodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
+          // v9.1: visual bounds 저장 (leader line에 사용)
+          const _vb=_shapeVisualBounds(shapeType,sx,by,sm.sw,sm.sh);
+          nodeBoxes[n.id]={x:_vb.left,y:_vb.top,w:_vb.right-_vb.left,h:_vb.bottom-_vb.top,cx:sx+sm.sw/2,cy:(_vb.top+_vb.bottom)/2,_sx:sx,_sy:by,_sw:sm.sw,_sh:sm.sh,_shapeType:shapeType};
         });
         
         // refNum 데이터 수집 (edge 분석 후 배치)
@@ -5765,15 +6037,21 @@ function downloadPptx(sid){
         });
         (pptxRefData||[]).forEach(r=>{
           const dir=pNodeConnDir[r.id]||{};
+          const nb=nodeBoxes[r.id];
+          // v9.1: visual bounds 기준 leader line
+          const vBottom=nb?nb.y+nb.h:r.by+r.sh;
+          const vRight=nb?nb.x+nb.w:r.sx+r.sw;
+          const vLeft=nb?nb.x:r.sx;
+          const vMidY=nb?nb.cy:r.by+r.sh/2;
           if(!dir.bottom){
-            slide.addShape(pptx.shapes.LINE,{x:r.sx+r.sw/2,y:r.by+r.sh,w:0,h:0.1,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(r.refNum),{x:r.sx,y:r.by+r.sh+0.1,w:r.sw,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'top'});
+            slide.addShape(pptx.shapes.LINE,{x:r.sx+r.sw/2,y:vBottom,w:0,h:0.1,line:{color:'000000',width:LINE_ARROW}});
+            slide.addText(String(r.refNum),{x:r.sx,y:vBottom+0.1,w:r.sw,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'top'});
           }else if(!dir.right){
-            slide.addShape(pptx.shapes.LINE,{x:r.sx+r.sw,y:r.by+r.sh/2,w:0.12,h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(r.refNum),{x:r.sx+r.sw+0.12,y:r.by+r.sh/2-0.1,w:0.5,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+            slide.addShape(pptx.shapes.LINE,{x:vRight,y:vMidY,w:0.12,h:0,line:{color:'000000',width:LINE_ARROW}});
+            slide.addText(String(r.refNum),{x:vRight+0.12,y:vMidY-0.1,w:0.5,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           }else if(!dir.left){
-            slide.addShape(pptx.shapes.LINE,{x:r.sx-0.12,y:r.by+r.sh/2,w:0.12,h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(r.refNum),{x:r.sx-0.62,y:r.by+r.sh/2-0.1,w:0.5,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'right',valign:'middle'});
+            slide.addShape(pptx.shapes.LINE,{x:vLeft-0.12,y:vMidY,w:0.12,h:0,line:{color:'000000',width:LINE_ARROW}});
+            slide.addText(String(r.refNum),{x:vLeft-0.62,y:vMidY-0.1,w:0.5,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'right',valign:'middle'});
           }else{
             // 모든 방향 사용 중 → 내부 표시는 slide.addText로 2줄
             slide.addText('('+r.refNum+')',{x:r.sx,y:r.by+r.sh*0.55,w:r.sw,h:0.2,fontSize:9,fontFace:'맑은 고딕',color:'444444',align:'center',valign:'top'});
@@ -5895,6 +6173,7 @@ function downloadDiagramImages(sid, format='jpeg'){
     data=diagramData[sid];
   }
   
+  const autoFigNums=getAutoFigNums(sid);
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
   const caseNum=selectedTitle||'도면';
   
@@ -5985,7 +6264,7 @@ function downloadDiagramImages(sid, format='jpeg'){
     }
     
     const{nodes,edges}=data[currentIdx];
-    const figNum=figOffset+currentIdx+1;
+    const figNum=autoFigNums[currentIdx]||(figOffset+currentIdx+1);
     const hasEdges=edges&&edges.length>0;
     
     // 캔버스 생성 (스케일 없이 직접 크기 설정)
@@ -6269,7 +6548,7 @@ function downloadDiagramImages(sid, format='jpeg'){
         
         // ★ 행별 최대 Shape 높이 → 누적 Y좌표 ★
         const rowMaxH={};
-        nodes.forEach(nd=>{const gp=grid[nd.id];if(!gp)return;const sm=_shapeMetrics(matchIconShape(nd.label),boxW2D,boxH);const h=sm.sh+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
+        nodes.forEach(nd=>{const gp=grid[nd.id];if(!gp)return;const st=matchIconShape(nd.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=vb.bottom+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
         const rowY={};let accY=boxStartY;
         for(let r=0;r<numRows;r++){rowY[r]=accY;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase;}
         
@@ -6287,19 +6566,22 @@ function downloadDiagramImages(sid, format='jpeg'){
           const shapeType=matchIconShape(nd.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
           const sx=bx+sm.dx;
-          nodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
+          // v9.1: visual bounds 기준 nodeBox
+          const vb=_shapeVisualBounds(shapeType,sx,by,sm.sw,sm.sh);
+          nodeBoxes[nd.id]={x:vb.left,y:vb.top,w:vb.right-vb.left,h:vb.bottom-vb.top,cx:sx+sm.sw/2,cy:(vb.top+vb.bottom)/2};
           nodeData.push({id:nd.id,sx,sy:by,sw:sm.sw,sh:sm.sh,shapeType,cleanLabel,refNum});
         });
         
-        // ★ Phase 1.5: 겹침 검증 & 자동 보정 ★
+        // ★ Phase 1.5: 겹침 검증 & 자동 보정 (v9.1: visual bounds) ★
         const REF_PAD=refNumH+4,MIN_GAP=6;
         let fixApplied=true,fixRounds=0;
         while(fixApplied&&fixRounds<10){fixApplied=false;fixRounds++;
-          for(let i=0;i<nodeData.length;i++){const a=nodeData[i];const aBot=a.sy+a.sh+REF_PAD;
+          for(let i=0;i<nodeData.length;i++){const a=nodeData[i];const aVb=_shapeVisualBounds(a.shapeType,a.sx,a.sy,a.sw,a.sh);const aBot=aVb.bottom+REF_PAD;
             for(let j=0;j<nodeData.length;j++){if(i===j)continue;const b=nodeData[j];
-              const hOvl=!(a.sx+a.sw<b.sx||b.sx+b.sw<a.sx);
-              if(hOvl&&b.sy<aBot+MIN_GAP&&b.sy>=a.sy){const push=aBot+MIN_GAP-b.sy;
-                if(push>0){b.sy+=push;nodeBoxes[b.id].y=b.sy;nodeBoxes[b.id].cy=b.sy+b.sh/2;fixApplied=true;}}
+              const bVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);
+              const hOvl=!(a.sx+a.sw+6<b.sx||b.sx+b.sw+6<a.sx);
+              if(hOvl&&bVb.top<aBot+MIN_GAP&&b.sy>=a.sy){const push=aBot+MIN_GAP-b.sy;
+                if(push>0){b.sy+=push;const newVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);nodeBoxes[b.id]={x:newVb.left,y:newVb.top,w:newVb.right-newVb.left,h:newVb.bottom-newVb.top,cx:b.sx+b.sw/2,cy:(newVb.top+newVb.bottom)/2};fixApplied=true;}}
         }}}
         
         // Phase 2: 연결선 먼저 (Shape 아래에 깔림)
@@ -6366,18 +6648,19 @@ function downloadDiagramImages(sid, format='jpeg'){
           const cDir=nodeConnDir[id]||{};
           const cRefInside=cDir.top&&cDir.bottom&&cDir.left&&cDir.right;
           ctx.fillText(displayLabel,sx+sw/2,cRefInside?_shapeTextCy(shapeType,sy,sh)-4:_shapeTextCy(shapeType,sy,sh));
-          // ★ 참조번호: 연결 없는 쪽에 배치 ★
+          // ★ 참조번호: 연결 없는 쪽에 배치 (v9.1: visual bounds 기준) ★
           const dir=nodeConnDir[id]||{};
+          const vb=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
           ctx.strokeStyle='#000000';ctx.lineWidth=1;ctx.font='11px "맑은 고딕", sans-serif';
           if(!dir.bottom){
-            ctx.beginPath();ctx.moveTo(sx+sw/2,sy+sh);ctx.lineTo(sx+sw/2,sy+sh+8);ctx.stroke();
-            ctx.fillText(String(refNum),sx+sw/2,sy+sh+20);
+            ctx.beginPath();ctx.moveTo(sx+sw/2,vb.bottom);ctx.lineTo(sx+sw/2,vb.bottom+8);ctx.stroke();
+            ctx.fillText(String(refNum),sx+sw/2,vb.bottom+20);
           }else if(!dir.right){
-            ctx.beginPath();ctx.moveTo(sx+sw,sy+sh/2);ctx.lineTo(sx+sw+12,sy+sh/2);ctx.stroke();
-            ctx.textAlign='left';ctx.fillText(String(refNum),sx+sw+14,sy+sh/2+1);
+            ctx.beginPath();ctx.moveTo(vb.right,vb.cy);ctx.lineTo(vb.right+12,vb.cy);ctx.stroke();
+            ctx.textAlign='left';ctx.fillText(String(refNum),vb.right+14,vb.cy+1);
           }else if(!dir.left){
-            ctx.beginPath();ctx.moveTo(sx,sy+sh/2);ctx.lineTo(sx-12,sy+sh/2);ctx.stroke();
-            ctx.textAlign='right';ctx.fillText(String(refNum),sx-14,sy+sh/2+1);
+            ctx.beginPath();ctx.moveTo(vb.left,vb.cy);ctx.lineTo(vb.left-12,vb.cy);ctx.stroke();
+            ctx.textAlign='right';ctx.fillText(String(refNum),vb.left-14,vb.cy+1);
           }else{
             // 모든 방향 사용 중 → Shape 내부에 (참조번호) 표시
             ctx.fillStyle='#444444';ctx.font=`${Math.max(fontSize-1,8)}px "맑은 고딕", sans-serif`;
@@ -6696,7 +6979,7 @@ function buildSpecification(){
   let extras='';
   if(outputs.step_14)extras+='\n\n[참고: 대안 청구항]\n'+outputs.step_14;
   if(outputs.step_15)extras+='\n\n[참고: 특허성 검토]\n'+outputs.step_15;
-  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${outputs.step_12?'\n\n'+outputs.step_12:''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${allClaims}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n')+extras;
+  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${getLatestMethodDescription()?'\n\n'+getLatestMethodDescription():''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${allClaims}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n')+extras;
 }
 function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
 function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();}
@@ -6706,7 +6989,7 @@ function downloadAsWord(){
   // v4.9: Include English title
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
   const allClaims=[outputs.step_06,outputs.step_10,outputs.step_20].filter(Boolean).join('\n\n');
-  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,outputs.step_12].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
+  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,getLatestMethodDescription()].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();App.showToast('Word 다운로드 완료');
