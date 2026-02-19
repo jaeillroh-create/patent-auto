@@ -3539,13 +3539,6 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     return match?match[1]:fallback;
   }
   
-  // ★ 안전한 라벨 정리: 참조번호 제거 후 빈 문자열/1글자 방지 ★
-  function safeCleanLabel(label){
-    const cleaned=label.replace(/[\s(](?:S|D)?\d+[)\s]*$/i,'').trim();
-    // 빈 문자열이거나 1글자(노드 ID일 가능성) → 원본 라벨 유지
-    if(cleaned.length<=1&&label.length>1)return label.replace(/[()]/g,'').trim();
-    return cleaned||label;
-  }
   
   // L1 여부 판별 (X00 형식인지)
   function isL1RefNum(ref){
@@ -3858,7 +3851,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const bx=rowStartX+gp.col*(boxW2D+colGap);
       const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 사용 ★
       const refNum=extractRefNum(nd.label,String((parseInt(nd.id.replace(/\D/g,''))||1)*100));
-      const cleanLabel=safeCleanLabel(nd.label);
+      const cleanLabel=_safeCleanLabel(nd.label);
       const displayLabel=cleanLabel.length>(maxCols>1?10:16)?cleanLabel.slice(0,maxCols>1?8:14)+'…':cleanLabel;
       const shapeType=matchIconShape(nd.label);
       const sm=_shapeMetrics(shapeType,boxW2D,boxH);
@@ -4073,7 +4066,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sm.sw,sm.sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sm.sw,sm.sh,1.5);
-      const cleanLabel=safeCleanLabel(n.label);
+      const cleanLabel=_safeCleanLabel(n.label);
       const displayLabel=cleanLabel.length>(innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>1?8:14)+'…':cleanLabel;
       const textCy=_shapeTextCy(shapeType,sy,sm.sh);
       const fontSize=innerMaxCols>2?9:innerMaxCols>1?10:11;
@@ -4331,7 +4324,7 @@ function validateDiagramRules(nodes,figNum,designText,edges){
       edgeList.forEach(e=>{if(adj[e.from]!==undefined)adj[e.from]++;if(adj[e.to]!==undefined)adj[e.to]++;});
       const hubNodes=Object.entries(adj).filter(([,deg])=>deg>=3);
       if(hubNodes.length>0&&figNum===1){
-        const hubLabels=hubNodes.map(([id])=>{const nd=nodes.find(n=>n.id===id);return nd?safeCleanLabel(nd.label):id;});
+        const hubLabels=hubNodes.map(([id])=>{const nd=nodes.find(n=>n.id===id);return nd?_safeCleanLabel(nd.label):id;});
         issues.push({severity:'INFO',rule:'R9b',message:`도 ${figNum}: 허브 노드(${hubLabels.join(',')}) 감지 → BFS 기반 2D 배치 적용`});
       }
     }
@@ -4595,7 +4588,7 @@ async function runAIDiagramReview(sid){
     const figNum=figOffset+idx+1;
     const nodeList=nodes.map(n=>{
       const ref=_extractRefNum(n.label,'?');
-      const clean=safeCleanLabel(n.label);
+      const clean=_safeCleanLabel(n.label);
       return `${clean}(${ref})`;
     }).join(', ');
     const edgeList=(edges||[]).map(e=>{
