@@ -2274,7 +2274,7 @@ ${diagram}`,4096);
           const batchLayout=computeDeviceLayout2D(nodes,edges);
           const{grid:batchGrid,maxCols:batchMaxCols,numRows:batchNumRows,uniqueEdges:batchUniqueEdges}=batchLayout;
           const batchColGap=0.30;
-          const batchBoxW=batchMaxCols<=1?(frameW-1.0):batchMaxCols===2?(frameW-1.0-batchColGap)/2:(frameW-1.0-batchColGap*2)/3;
+          const batchBoxW=batchMaxCols<=1?(frameW-1.3):batchMaxCols===2?(frameW-1.3-batchColGap)/2:(frameW-1.3-batchColGap*2)/3; // 1.3 = padding + ref space
           const batchNodeAreaW=batchMaxCols*batchBoxW+(batchMaxCols-1)*batchColGap;
           const framePadY=0.3;
           const innerH=frameH-framePadY*2;
@@ -2292,7 +2292,7 @@ ${diagram}`,4096);
           
           // 내부 구성요소 박스들 (2D 배치)
           const batchNodeBoxes={};
-          const batchLeaderEntries=[];          nodes.forEach((n,i)=>{
+          nodes.forEach((n,i)=>{
             const gp=batchGrid[n.id];
             if(!gp)return;
             const rowW=gp.layerSize*batchBoxW+(gp.layerSize-1)*batchColGap;
@@ -2379,36 +2379,20 @@ ${diagram}`,4096);
                 slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SO,y:by+SO,w:batchBoxW,h:boxH,fill:{color:'000000'},line:{width:0}});
                 slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:batchBoxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
             }
-            // 박스 텍스트 (참조번호 제외)
+            // 박스 텍스트
             const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
             slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize:Math.min(batchMaxCols>1?9:11,Math.max(8,12-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
             
-            // 리더라인 정보 수집 (나중에 Y겹침 보정)
-            batchLeaderEntries.push({id:n.id,refNum,sx,sw:sm.sw,sh:sm.sh,origY:by+sm.sh/2,y:by+sm.sh/2});
+            // ★ 참조번호를 박스 오른쪽에 프레임 내부에서 표시 ★
+            slide.addText(String(refNum),{x:sx+sm.sw+0.02,y:by,w:0.4,h:sm.sh,fontSize:9,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+            
             batchNodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
           });
           
-          // ★ 프레임 참조번호도 겹침 보정에 포함 ★
-          batchLeaderEntries.push({id:'__frame__',refNum:String(frameRefNum),sx:frameX,sw:frameW,sh:frameH,origY:frameY+frameH/2,y:frameY+frameH/2,isFrame:true});
-          staggerLeaderYPositions(batchLeaderEntries,0.28);
-          batchLeaderEntries.forEach(le=>{
-            if(le.isFrame){
-              slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:le.y,w:0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
-              slide.addText(String(le.refNum),{x:refLabelX+0.25,y:le.y-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
-              return;
-            }
-            const startX=le.sx+le.sw;
-            const endX=frameX+frameW+0.25;
-            if(Math.abs(le.y-le.origY)>0.02){
-              const bendX=endX-0.10;
-              slide.addShape(pptx.shapes.LINE,{x:startX,y:le.origY,w:bendX-startX,h:0,line:{color:'000000',width:LINE_ARROW}});
-              slide.addShape(pptx.shapes.LINE,{x:bendX,y:Math.min(le.origY,le.y),w:0,h:Math.abs(le.y-le.origY),line:{color:'000000',width:LINE_ARROW}});
-              slide.addShape(pptx.shapes.LINE,{x:bendX,y:le.y,w:endX-bendX,h:0,line:{color:'000000',width:LINE_ARROW}});
-            }else{
-              slide.addShape(pptx.shapes.LINE,{x:startX,y:le.y,w:endX-startX,h:0,line:{color:'000000',width:LINE_ARROW}});
-            }
-            slide.addText(String(le.refNum),{x:refLabelX+0.25,y:le.y-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
-          });
+          // ★ 프레임 참조번호만 외부 리더라인으로 표시 ★
+          const batchFrameLeaderY=frameY+frameH/2;
+          slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:batchFrameLeaderY,w:0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
+          slide.addText(String(frameRefNum),{x:refLabelX+0.25,y:batchFrameLeaderY-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
           // ★ Edge 기반 연결선 ★
           const batchEdges=batchUniqueEdges.length>0?batchUniqueEdges:nodes.slice(0,-1).map((n,i)=>({from:n.id,to:nodes[i+1].id}));
@@ -2720,7 +2704,7 @@ const DIAGRAM_ICON_REGISTRY=[
 // 2. document shape → "정보 그 자체"일 때만 (수집된 정보, 데이터 항목 등)
 //    예: "위치 정보(D1)", "사용자 데이터", "환경 정보" → document
 //    반례: "정보수집부(110)", "데이터 처리부", "수집부" → box (구성요소)
-const COMPONENT_SUFFIXES=['부','장치','모듈','유닛','기','체'];
+const COMPONENT_SUFFIXES=['부','장치','모듈','유닛','기','체','센터','서버','시스템','플랫폼','허브','노드','게이트웨이','컨트롤러','엔진','프로세서','메모리','터미널','스위치'];
 const DATA_KEYWORDS=['정보','데이터','로그','리포트','문서','기록','메시지','신호','이력','통계','프로파일','인덱스','맵','테이블','목록','리스트'];
 
 function _shapeKeywordMatch(text,keyword){
@@ -3810,20 +3794,17 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     
     // 열 수에 따른 치수
     const innerColGap=0.4*PX;
-    const innerBoxW=innerMaxCols<=1?5.0*PX:innerMaxCols===2?3.0*PX:2.2*PX;
+    const innerBoxW=innerMaxCols<=1?4.5*PX:innerMaxCols===2?2.7*PX:1.9*PX; // 참조번호 내부 표시 공간 확보
     const innerNodeAreaW=innerMaxCols*innerBoxW+(innerMaxCols-1)*innerColGap;
     const maxShapeExtra=boxH*0.85;
     
     const frameX=0.5*PX, frameY=0.5*PX;
     const framePadX=0.5*PX, framePadY=0.4*PX;
-    const frameW=Math.max(6.2*PX,innerNodeAreaW+framePadX*2+0.4*PX);
+    const frameW=Math.max(6.2*PX,innerNodeAreaW+framePadX*2+0.7*PX); // 0.7 = 내부 참조번호 공간
     const frameH=innerNumRows*(boxH+boxGap)+maxShapeExtra+framePadY*2;
-    const leaderMargin=2.0*PX;
-    // 리더 개수 기반 최소 높이 (내부노드 + 프레임)
-    const leaderCount=displayNodes.length+1;
-    const leaderMinH=leaderCount*24+frameY+0.5*PX;
-    const svgH=Math.max(frameH+1.5*PX,leaderMinH);
+    const leaderMargin=0.8*PX; // 프레임 참조번호만 외부 표시
     const svgW=frameX+frameW+leaderMargin;
+    const svgH=frameH+1.5*PX;
     const maxW=innerMaxCols<=1?600:innerMaxCols===2?750:900;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
@@ -3835,11 +3816,10 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     svg+=`<rect x="${frameX}" y="${frameY}" width="${frameW}" height="${frameH}" fill="#fff" stroke="#000" stroke-width="2.25"/>`;
     // 프레임 리더라인은 내부 노드와 함께 겹침 보정 후 렌더링 (아래에서 처리)
     
-    // 2. 내부 노드 렌더링 (2D 그리드)
+    // 2. 내부 노드 렌더링 (2D 그리드) — 참조번호는 프레임 내부에 표시
     const boxStartX=frameX+framePadX;
     const boxStartY=frameY+framePadY;
     const innerNodeBoxes={};
-    const innerLeaderEntries=[];
     displayNodes.forEach(n=>{
       const gp=innerGrid[n.id];
       if(!gp)return;
@@ -3861,32 +3841,19 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const fontSize=innerMaxCols>2?10:innerMaxCols>1?11:12;
       svg+=`<text x="${sx+sm.sw/2}" y="${textCy+4}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       
-      // 리더라인 기록 (Y겹침 보정용)
-      innerLeaderEntries.push({id:n.id,refNum,sx,sy,sw:sm.sw,sh:sm.sh,shapeType,y:sy+sm.sh/2});
+      // ★ 참조번호를 박스 오른쪽에 프레임 내부에서 표시 ★
+      const refX=sx+sm.sw+4;
+      const refY=sy+sm.sh/2+4;
+      svg+=`<text x="${refX}" y="${refY}" font-size="10" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      
       innerNodeBoxes[n.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2};
     });
     
-    // ★ 리더라인 Y겹침 보정 + 렌더링 (프레임 포함) ★
-    // 프레임 리더도 겹침 보정에 포함
-    innerLeaderEntries.push({id:'__frame__',refNum:String(frameRefNum),sx:frameX,sy:frameY,sw:frameW,sh:frameH,shapeType:'box',y:frameY+frameH/2,isFrame:true});
-    staggerLeaderYPositions(innerLeaderEntries,24);
-    const innerLeaderEndX=frameX+frameW+0.3*PX;
-    innerLeaderEntries.forEach(le=>{
-      if(le.isFrame){
-        // 프레임 리더라인
-        svg+=`<line x1="${frameX+frameW}" y1="${le.y}" x2="${innerLeaderEndX}" y2="${le.y}" stroke="#000" stroke-width="1"/>`;
-        svg+=`<text x="${innerLeaderEndX+8}" y="${le.y+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${le.refNum}</text>`;
-      }else{
-        const leaderStartX=_shapeLeaderX(le.shapeType,le.sx,le.sw);
-        const origY=le.sy+le.sh/2;
-        if(Math.abs(le.y-origY)>1){
-          svg+=`<path d="M${leaderStartX},${origY} L${innerLeaderEndX-15},${origY} L${innerLeaderEndX-15},${le.y} L${innerLeaderEndX},${le.y}" fill="none" stroke="#000" stroke-width="1"/>`;
-        }else{
-          svg+=`<line x1="${leaderStartX}" y1="${le.y}" x2="${innerLeaderEndX}" y2="${le.y}" stroke="#000" stroke-width="1"/>`;
-        }
-        svg+=`<text x="${innerLeaderEndX+8}" y="${le.y+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${le.refNum}</text>`;
-      }
-    });
+    // ★ 프레임 참조번호만 외부 리더라인으로 표시 ★
+    const frameLeaderEndX=frameX+frameW+0.3*PX;
+    const frameLeaderY=frameY+frameH/2;
+    svg+=`<line x1="${frameX+frameW}" y1="${frameLeaderY}" x2="${frameLeaderEndX}" y2="${frameLeaderY}" stroke="#000" stroke-width="1"/>`;
+    svg+=`<text x="${frameLeaderEndX+8}" y="${frameLeaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
     
     // 3. ★ 직각 라우팅 edge 기반 연결선 (fan 오프셋 겹침 방지) ★
     const innerEdgesToDraw2=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
@@ -4789,12 +4756,12 @@ function downloadPptx(sid){
         const innerLayout=computeDeviceLayout2D(displayNodes,edges);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
         const innerColGap=0.30;
-        const innerBoxW=innerMaxCols<=1?(PAGE_W-1.8):innerMaxCols===2?(PAGE_W-1.8-innerColGap)/2:(PAGE_W-1.8-innerColGap*2)/3;
+        const innerBoxW=innerMaxCols<=1?(PAGE_W-2.1):innerMaxCols===2?(PAGE_W-2.1-innerColGap)/2:(PAGE_W-2.1-innerColGap*2)/3; // ref 공간 확보
         const innerNodeAreaW=innerMaxCols*innerBoxW+(innerMaxCols-1)*innerColGap;
         
         const frameX=PAGE_MARGIN,frameY=PAGE_MARGIN+TITLE_H;
         const framePadX=0.4,framePadY=0.3;
-        const frameW=Math.max(PAGE_W-0.8,innerNodeAreaW+framePadX*2+0.3);
+        const frameW=Math.max(PAGE_W-0.8,innerNodeAreaW+framePadX*2+0.5); // 0.5 = 내부 참조번호 공간
         const boxH=Math.min(0.55,(AVAILABLE_H-framePadY*2-0.15*(innerNumRows-1))/innerNumRows);
         const boxGap2=Math.min(0.5,(AVAILABLE_H-framePadY*2-boxH*innerNumRows)/(innerNumRows>1?innerNumRows-1:1));
         const frameH=innerNumRows*(boxH+boxGap2)-boxGap2+framePadY*2+boxH*0.5;
@@ -4804,10 +4771,8 @@ function downloadPptx(sid){
         
         slide.addShape(pptx.shapes.RECTANGLE,{x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,fill:{color:'000000'},line:{width:0}});
         slide.addShape(pptx.shapes.RECTANGLE,{x:frameX,y:frameY,w:frameW,h:frameH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
-        // 프레임 리더라인은 내부 노드와 함께 겹침 보정 후 렌더링 (아래에서 처리)
         
         const innerNodeBoxes={};
-        const innerLeaderEntries=[];
         displayNodes.forEach(n=>{
           const gp=innerGrid[n.id];
           if(!gp)return;
@@ -4826,32 +4791,16 @@ function downloadPptx(sid){
           const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
           slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize:Math.min(innerMaxCols>1?9:11,Math.max(8,12-dCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
-          innerLeaderEntries.push({id:n.id,refNum,sx,sw:sm.sw,sh:sm.sh,shapeType,origY:by+sm.sh/2,y:by+sm.sh/2});
+          // ★ 참조번호를 박스 오른쪽에 프레임 내부에서 표시 ★
+          slide.addText(String(refNum),{x:sx+sm.sw+0.02,y:by,w:0.4,h:sm.sh,fontSize:9,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+          
           innerNodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
         });
         
-        // ★ 프레임 참조번호도 겹침 보정에 포함 ★
-        innerLeaderEntries.push({id:'__frame__',refNum:String(frameRefNum),sx:frameX,sw:frameW,sh:frameH,origY:frameY+frameH/2,y:frameY+frameH/2,isFrame:true});
-        staggerLeaderYPositions(innerLeaderEntries,0.28);
-        innerLeaderEntries.forEach(le=>{
-          if(le.isFrame){
-            // 프레임 리더라인
-            slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:le.y,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(le.refNum),{x:refLabelX+0.3,y:le.y-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
-            return;
-          }
-          const startX=le.sx+le.sw;
-          const endX=frameX+frameW+0.3;
-          if(Math.abs(le.y-le.origY)>0.02){
-            const bendX=endX-0.12;
-            slide.addShape(pptx.shapes.LINE,{x:startX,y:le.origY,w:bendX-startX,h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addShape(pptx.shapes.LINE,{x:bendX,y:Math.min(le.origY,le.y),w:0,h:Math.abs(le.y-le.origY),line:{color:'000000',width:LINE_ARROW}});
-            slide.addShape(pptx.shapes.LINE,{x:bendX,y:le.y,w:endX-bendX,h:0,line:{color:'000000',width:LINE_ARROW}});
-          }else{
-            slide.addShape(pptx.shapes.LINE,{x:startX,y:le.y,w:endX-startX,h:0,line:{color:'000000',width:LINE_ARROW}});
-          }
-          slide.addText(String(le.refNum),{x:refLabelX+0.3,y:le.y-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
-        });
+        // ★ 프레임 참조번호만 외부 리더라인으로 표시 ★
+        const frameLeaderY=frameY+frameH/2;
+        slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameLeaderY,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
+        slide.addText(String(frameRefNum),{x:refLabelX+0.3,y:frameLeaderY-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
         
         // ★ Edge 기반 연결선 (fan 오프셋 겹침 방지) ★
         const innerEdgesToDraw=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
@@ -5405,12 +5354,12 @@ function downloadDiagramImages(sid, format='jpeg'){
         const innerLayout=computeDeviceLayout2D(displayNodes,edges);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
         const innerColGap=20;
-        const innerBoxW=innerMaxCols<=1?560:innerMaxCols===2?260:170;
+        const innerBoxW=innerMaxCols<=1?500:innerMaxCols===2?230:150; // ref 공간 확보
         const innerNodeAreaW=innerMaxCols*innerBoxW+(innerMaxCols-1)*innerColGap;
         
         const frameX=30,frameY=50;
         const framePadX=30,framePadY=20;
-        const frameW=Math.max(680,innerNodeAreaW+framePadX*2+30);
+        const frameW=Math.max(680,innerNodeAreaW+framePadX*2+50); // 50px = 내부 참조번호 공간
         const boxH=Math.min(45,(850-framePadY*2-10*(innerNumRows-1))/innerNumRows);
         const boxGap2=Math.min(45,(850-framePadY*2-boxH*innerNumRows)/(innerNumRows>1?innerNumRows-1:1));
         const frameH=innerNumRows*(boxH+boxGap2)-boxGap2+framePadY*2+boxH*0.5;
@@ -5418,11 +5367,9 @@ function downloadDiagramImages(sid, format='jpeg'){
         ctx.fillStyle='#000000';ctx.fillRect(frameX+SHADOW,frameY+SHADOW,frameW,frameH);
         ctx.fillStyle='#FFFFFF';ctx.fillRect(frameX,frameY,frameW,frameH);
         ctx.strokeStyle='#000000';ctx.lineWidth=2.25;ctx.strokeRect(frameX,frameY,frameW,frameH);
-        // 프레임 리더라인은 내부 노드와 함께 겹침 보정 후 렌더링 (아래에서 처리)
         
         const boxStartX=frameX+framePadX,boxStartY=frameY+framePadY;
         const innerNodeBoxes={};
-        const innerLeaderEntries=[];
         displayNodes.forEach(nd=>{
           const gp=innerGrid[nd.id];
           if(!gp)return;
@@ -5443,46 +5390,23 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.textAlign='center';ctx.textBaseline='middle';
           const textCy=_shapeTextCy(shapeType,by,sm.sh);
           ctx.fillText(displayLabel,sx+sm.sw/2,textCy);
-          ctx.textAlign='left';ctx.textBaseline='alphabetic';
           
-          // 리더라인 정보 수집 (나중에 Y겹침 보정)
-          innerLeaderEntries.push({id:nd.id,refNum,sx,sy:by,sw:sm.sw,sh:sm.sh,shapeType,y:by+sm.sh/2});
+          // ★ 참조번호를 박스 오른쪽에 프레임 내부에서 표시 ★
+          ctx.textAlign='left';ctx.textBaseline='middle';
+          ctx.font='10px "맑은 고딕", sans-serif';
+          ctx.fillText(String(refNum),sx+sm.sw+4,by+sm.sh/2);
+          ctx.textBaseline='alphabetic';
+          
           innerNodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
         });
         
-        // ★ 프레임 참조번호도 겹침 보정에 포함 ★
-        innerLeaderEntries.push({id:'__frame__',refNum:String(frameRefNum),sx:frameX,sy:frameY,sw:frameW,sh:frameH,shapeType:'box',y:frameY+frameH/2,isFrame:true});
-        staggerLeaderYPositions(innerLeaderEntries,20);
-        const innerLeaderEndX=frameX+frameW+25;
-        ctx.strokeStyle='#000000';ctx.fillStyle='#000000';ctx.lineWidth=1;
-        innerLeaderEntries.forEach(le=>{
-          if(le.isFrame){
-            // 프레임 리더라인
-            ctx.beginPath();
-            ctx.moveTo(frameX+frameW,le.y);
-            ctx.lineTo(innerLeaderEndX,le.y);
-            ctx.stroke();
-            ctx.font='11px "맑은 고딕", sans-serif';
-            ctx.fillText(String(le.refNum),innerLeaderEndX+6,le.y+4);
-            return;
-          }
-          const leaderStartX=le.sx+le.sw;
-          const origY=le.sy+le.sh/2;
-          ctx.beginPath();
-          if(Math.abs(le.y-origY)>2){
-            const bendX=innerLeaderEndX-15;
-            ctx.moveTo(leaderStartX,origY);
-            ctx.lineTo(bendX,origY);
-            ctx.lineTo(bendX,le.y);
-            ctx.lineTo(innerLeaderEndX,le.y);
-          }else{
-            ctx.moveTo(leaderStartX,le.y);
-            ctx.lineTo(innerLeaderEndX,le.y);
-          }
-          ctx.stroke();
-          ctx.font='11px "맑은 고딕", sans-serif';
-          ctx.fillText(String(le.refNum),innerLeaderEndX+6,le.y+4);
-        });
+        // ★ 프레임 참조번호만 외부 리더라인으로 표시 ★
+        const frameLeaderEndX=frameX+frameW+25;
+        const frameLeaderY=frameY+frameH/2;
+        ctx.strokeStyle='#000000';ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(frameX+frameW,frameLeaderY);ctx.lineTo(frameLeaderEndX,frameLeaderY);ctx.stroke();
+        ctx.fillStyle='#000000';ctx.font='11px "맑은 고딕", sans-serif';ctx.textAlign='left';
+        ctx.fillText(String(frameRefNum),frameLeaderEndX+6,frameLeaderY+4);
         
         // ★ 직각 라우팅 Edge 연결선 (fan 오프셋 겹침 방지) ★
         const innerEdges=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
