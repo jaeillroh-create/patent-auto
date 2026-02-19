@@ -3793,9 +3793,15 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const maxNodeAreaW=maxCols*boxW2D+(maxCols-1)*colGap;
     const marginX=0.5*PX;
     const marginY=0.5*PX;
-    const maxShapeExtra=boxH*0.85;
-    const refNumH=0.3*PX; // 참조번호 표시 공간
-    const totalH=numRows*(boxH+boxGap)+maxShapeExtra+refNumH+0.5*PX;
+    // ★ 실제 Shape 높이 초과분 계산 ★
+    let maxShapeExtra=0;
+    nodes.forEach(n=>{
+      const st=matchIconShape(n.label);
+      const sm=_shapeMetrics(st,boxW2D,boxH);
+      if(sm.sh>boxH)maxShapeExtra=Math.max(maxShapeExtra,sm.sh-boxH);
+    });
+    const refNumH=24; // 참조번호 + 수직선 공간
+    const totalH=numRows*boxH+(numRows>1?(numRows-1)*boxGap:0)+maxShapeExtra+refNumH+marginY*2;
     const leaderMargin=0.5*PX; // 참조번호가 Shape 아래라 여백 최소
     const svgW=marginX+maxNodeAreaW+leaderMargin;
     const svgH=totalH;
@@ -3855,19 +3861,19 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       if(route)svg+=svgOrthogonalEdge(route,mkId);
     });
     
-    // ── Phase 3: Shape (연결선 위에 렌더 → 관통 가려짐) + 참조번호 ──
+    // ── Phase 3: Shape (연결선 위에 렌더) + 직선 참조번호 표기 ──
     nodeData.forEach(nd=>{
       const{sx,sy,sw,sh,shapeType,displayLabel,refNum}=nd;
-      // 그림자 + 본체 (연결선 위에 덮음)
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sw,sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sw,sh,2);
-      // 라벨
       const textCy=_shapeTextCy(shapeType,sy,sh);
       const fontSize=maxCols>2?10:maxCols>1?11:12;
       svg+=`<text x="${sx+sw/2}" y="${textCy+4}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
-      // ★ 참조번호: Shape 바로 아래 중앙에 표시 (리더라인 없이) ★
-      const refY=sy+sh+12;
-      svg+=`<text x="${sx+sw/2}" y="${refY}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      // ★ 직선 표기: Shape 하단에서 짧은 수직선 + 참조번호 ★
+      const lineStartY=sy+sh;
+      const lineEndY=lineStartY+10;
+      svg+=`<line x1="${sx+sw/2}" y1="${lineStartY}" x2="${sx+sw/2}" y2="${lineEndY}" stroke="#000" stroke-width="1"/>`;
+      svg+=`<text x="${sx+sw/2}" y="${lineEndY+12}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
     });
     
     svg+='</svg>';
@@ -3898,12 +3904,20 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const innerColGap=0.4*PX;
     const innerBoxW=innerMaxCols<=1?5.0*PX:innerMaxCols===2?3.0*PX:2.2*PX;
     const innerNodeAreaW=innerMaxCols*innerBoxW+(innerMaxCols-1)*innerColGap;
-    const maxShapeExtra=boxH2*0.85;
+    // ★ 실제 Shape 높이 초과분 계산 (일반 박스=0, 아이콘 Shape만 초과) ★
+    let maxShapeExtra=0;
+    displayNodes.forEach(n=>{
+      const st=matchIconShape(n.label);
+      const sm=_shapeMetrics(st,innerBoxW,boxH2);
+      if(sm.sh>boxH2)maxShapeExtra=Math.max(maxShapeExtra,sm.sh-boxH2);
+    });
     
     const frameX=0.5*PX, frameY=0.5*PX;
-    const framePadX=0.5*PX, framePadY=0.4*PX;
+    const framePadX=0.5*PX, framePadY=0.5*PX;
     const frameW=Math.max(6.2*PX,innerNodeAreaW+framePadX*2+0.3*PX);
-    const frameH=innerNumRows*(boxH2+boxGap)+maxShapeExtra+framePadY*2;
+    // ★ 상하 여백 균등: contentH = 행×박스 + (행-1)×간격 + Shape초과분 ★
+    const contentH=innerNumRows*boxH2+(innerNumRows>1?(innerNumRows-1)*boxGap:0)+maxShapeExtra;
+    const frameH=contentH+framePadY*2;
     const leaderMargin=0.8*PX; // 프레임 참조번호만 외부 표시
     const svgW=frameX+frameW+leaderMargin;
     const svgH=frameH+1.5*PX;
@@ -4777,10 +4791,12 @@ function downloadPptx(sid){
           
           addPptxIconShape(slide,shapeType,sx,by,sm.sw,sm.sh,LINE_FRAME);
           const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
-          slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize:Math.min(maxCols>1?10:12,Math.max(8,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
-          
-          // ★ 참조번호: Shape 바로 아래 중앙 ★
-          slide.addText(String(refNum),{x:sx,y:by+sm.sh+0.02,w:sm.sw,h:0.22,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'top'});
+          // ★ 라벨만 Shape 내부 ★
+          const fontSize=Math.min(maxCols>1?10:12,Math.max(8,13-nodeCount*0.3));
+          slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          // ★ 직선 표기: Shape 하단 수직선 + 참조번호 ★
+          slide.addShape(pptx.shapes.LINE,{x:sx+sm.sw/2,y:by+sm.sh,w:0,h:0.1,line:{color:'000000',width:LINE_ARROW}});
+          slide.addText(String(refNum),{x:sx,y:by+sm.sh+0.1,w:sm.sw,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'top'});
           
           nodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
         });
@@ -4849,7 +4865,7 @@ function downloadPptx(sid){
         const frameW=Math.max(PAGE_W-0.8,innerNodeAreaW+framePadX*2+0.3);
         const boxH=Math.min(0.65,(AVAILABLE_H-framePadY*2-0.15*(innerNumRows-1))/innerNumRows); // 0.65 for 2-line
         const boxGap2=Math.min(0.5,(AVAILABLE_H-framePadY*2-boxH*innerNumRows)/(innerNumRows>1?innerNumRows-1:1));
-        const frameH=innerNumRows*(boxH+boxGap2)-boxGap2+framePadY*2+boxH*0.5;
+        const frameH=innerNumRows*boxH+(innerNumRows>1?(innerNumRows-1)*boxGap2:0)+framePadY*2;
         const boxStartX=frameX+framePadX;
         const boxStartY=frameY+framePadY;
         const refLabelX=frameX+frameW+0.1;
@@ -5374,19 +5390,22 @@ function downloadDiagramImages(sid, format='jpeg'){
           drawCanvasOrthogonalEdge(ctx,fbAdj,tbAdj,6,allBoxArr);
         });
         
-        // Phase 3: Shape (연결선 위에 덮음) + 참조번호
+        // Phase 3: Shape (연결선 위에 덮음) + 직선 참조번호 표기
         nodeData.forEach(nd=>{
           const{sx,sy,sw,sh,shapeType,cleanLabel,refNum}=nd;
           drawCanvasShape(ctx,shapeType,sx,sy,sw,sh,SHADOW,2);
           const displayLabel=cleanLabel.length>(maxCols>1?10:16)?cleanLabel.slice(0,maxCols>1?8:14)+'…':cleanLabel;
+          const fontSize=maxCols>2?10:maxCols>1?11:12;
           ctx.fillStyle='#000000';
-          ctx.font=`${maxCols>2?10:maxCols>1?11:12}px "맑은 고딕", sans-serif`;
+          ctx.font=`${fontSize}px "맑은 고딕", sans-serif`;
           ctx.textAlign='center';ctx.textBaseline='middle';
           const textCy=_shapeTextCy(shapeType,sy,sh);
           ctx.fillText(displayLabel,sx+sw/2,textCy);
-          // ★ 참조번호: Shape 바로 아래 ★
+          // ★ 직선 표기: Shape 하단에서 짧은 수직선 + 참조번호 ★
+          ctx.strokeStyle='#000000';ctx.lineWidth=1;
+          ctx.beginPath();ctx.moveTo(sx+sw/2,sy+sh);ctx.lineTo(sx+sw/2,sy+sh+8);ctx.stroke();
           ctx.font='11px "맑은 고딕", sans-serif';
-          ctx.fillText(String(refNum),sx+sw/2,sy+sh+12);
+          ctx.fillText(String(refNum),sx+sw/2,sy+sh+20);
           ctx.textAlign='left';ctx.textBaseline='alphabetic';
         });
       }else{
@@ -5413,7 +5432,7 @@ function downloadDiagramImages(sid, format='jpeg'){
         const frameW=Math.max(680,innerNodeAreaW+framePadX*2+30);
         const boxH=Math.min(55,(850-framePadY*2-10*(innerNumRows-1))/innerNumRows); // 55px for 2-line text
         const boxGap2=Math.min(45,(850-framePadY*2-boxH*innerNumRows)/(innerNumRows>1?innerNumRows-1:1));
-        const frameH=innerNumRows*(boxH+boxGap2)-boxGap2+framePadY*2+boxH*0.5;
+        const frameH=innerNumRows*boxH+(innerNumRows>1?(innerNumRows-1)*boxGap2:0)+framePadY*2;
         
         ctx.fillStyle='#000000';ctx.fillRect(frameX+SHADOW,frameY+SHADOW,frameW,frameH);
         ctx.fillStyle='#FFFFFF';ctx.fillRect(frameX,frameY,frameW,frameH);
