@@ -60,6 +60,72 @@ const STEP8_SUFFIX = `본 발명에 따른 방법들은 다양한 컴퓨터 수�
 상기에서는 본 발명의 바람직한 실시예를 참조하여 설명하였지만, 해당 기술 분야의 숙련된 당업자는 하기의 특허 청구의 범위에 기재된 본 발명의 사상 및 필드로부터 벗어나지 않는 범위 내에서 본 발명을 다양하게 수정 및 변경시킬 수 있음을 이해할 수 있을 것이다.`;
 const STEP_NAMES={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술문헌',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'도면 설계',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서',step_20:'기록매체/프로그램 청구항'};
 
+// ═══ v9.0: callClaudeWithContinuation 오버라이드 ═══
+// 근본 원인: common.js의 이어쓰기 프롬프트가 원본 규칙을 전부 소실시킴
+// → LLM이 "특허명세서 전체"를 완성하려고 시도 → 중복 출력/구조 재시작 발생
+// 수정: 이어쓰기 시 원본 프롬프트 규칙 + 현재 진행 상황을 전달
+(function(){
+  const _origContinuation = App.callClaudeWithContinuation;
+  App.callClaudeWithContinuation = async function(prompt, pid){
+    let full = '', r = await App.callClaude(prompt), a = 0;
+    full = r.text;
+    
+    while(a < 6 && r.stopReason === 'max_tokens'){
+      a++;
+      App.showProgress(pid, `이어서 작성 중... (${a}/6)`, a, 6);
+      
+      // ★ 원본 프롬프트에서 핵심 규칙 추출 (첫 800자 = 역할/형식/금지사항) ★
+      const rulesCtx = prompt.slice(0, 800);
+      
+      // 현재까지 작성된 도면/단계 진행 상황 추적
+      const figRefs = [...full.matchAll(/도\s+(\d+)[을를]\s*참조하면/g)];
+      const stepRefs = [...full.matchAll(/단계\s*\(?(S\d+)\)?/g)];
+      let progressInfo = '';
+      if(figRefs.length > 0){
+        progressInfo = `\n※ 현재까지 작성 완료: ${figRefs.map(m=>'도 '+m[1]).join(', ')} 설명`;
+      }
+      if(stepRefs.length > 0){
+        const lastStep = stepRefs[stepRefs.length-1][1];
+        progressInfo += `\n※ 마지막 단계: ${lastStep}`;
+      }
+      
+      const contPrompt = `[원본 작성 규칙 — 이어쓰기에서도 동일하게 적용]
+${rulesCtx}
+
+[이어쓰기 지시]
+아래 [마지막 부분]에서 잘린 곳의 다음 문장부터 자연스럽게 이어서 작성하라.
+${progressInfo}
+
+⛔ 이어쓰기 금지사항:
+- 이미 작성된 도면/단계를 다시 설명하지 마라
+- "도면의 간단한 설명" (도 N은 ~블록도이다) 절대 포함 금지
+- 새로운 섹션/항목(기술분야, 배경기술, 요약 등) 추가 금지
+- 현재 작성 중인 항목의 나머지만 이어서 작성하라
+
+[마지막 부분]
+${full.slice(-2000)}`;
+      
+      r = await App.callClaude(contPrompt);
+      
+      // 이어쓰기 결과에서 중복 시작점 감지 & 제거
+      const newText = r.text;
+      // "도 1을 참조하면"이 이미 full에 있는데 다시 나타나면 → 해당 위치 이전 제거
+      if(full.includes('도 1') && /도\s+1[을를]\s*참조하면/.test(newText)){
+        const dupIdx = newText.search(/도\s+1[을를]\s*참조하면/);
+        if(dupIdx > 50){ // 50자 이상의 프리앰블 후 중복 시작 → 프리앰블만 사용
+          full += '\n' + newText.substring(0, dupIdx).trim();
+          console.warn(`[v9.0] 이어쓰기 중복 감지: "도 1을 참조하면" 재시작 차단 (${newText.length - dupIdx}자 제거)`);
+          break; // 중복 시작이면 이어쓰기 중단
+        }
+      }
+      
+      full += '\n' + newText;
+    }
+    App.clearProgress(pid);
+    return full;
+  };
+})();
+
 
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
@@ -955,10 +1021,50 @@ function getFullDescription(){
 function getLastClaimNumber(t){const m=t.match(/【청구항\s*(\d+)】/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
 function getLastFigureNumber(t){const m=t.match(/도\s*(\d+)/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
 
-// ═══ v8.1: 상세설명 도면 참조 범위 검증 + 자동 교정 ═══
+// ═══ v9.0: 상세설명 후처리 (safety net — 근본 수정은 callClaudeWithContinuation 오버라이드) ═══
 // type: 'device' → step_08 (장치), 'method' → step_12 (방법)
 function sanitizeDescFigureRefs(text,type){
   if(!text)return text;
+  
+  // ★ Safety net A: "도면의 간단한 설명" 스타일 문장 제거 ★
+  // 근본 원인(이어쓰기)이 수정되어도, 1차 호출에서 포함될 가능성 대비
+  if(type==='device'||type==='method'){
+    const briefPattern=/^\s*도\s+\d+\s*[은는]\s+[^.]*(?:블록도|흐름도|구성도|개념도|순서도|도면|도시한 것|나타내는 도|나타낸 것)(?:이다|를 나타낸다)?[.。]?\s*$/;
+    const lines=text.split('\n');
+    let hasBrief=false;
+    const cleanedLines=lines.filter(line=>{
+      if(briefPattern.test(line.trim())){
+        hasBrief=true;
+        return false; // 제거
+      }
+      return true;
+    });
+    if(hasBrief){
+      text=cleanedLines.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+      console.warn(`[v9.0] ${type} 상세설명: "도면의 간단한 설명" 스타일 문장 자동 제거`);
+    }
+    
+    // ★ Safety net B: 중복 출력 감지 & 제거 ★
+    // 근본 원인(이어쓰기)이 수정되어도, 예외적으로 발생할 수 있는 중복 대비
+    const fig1Refs=[...text.matchAll(/도\s+1[을를]\s*참조하면/g)];
+    if(fig1Refs.length>=2){
+      // "도 1을 참조하면"의 마지막 출현 위치부터 사용 (나중 것이 더 완성도 높음)
+      const lastIdx=fig1Refs[fig1Refs.length-1].index;
+      const removed=text.substring(0,lastIdx).trim();
+      text=text.substring(lastIdx).trim();
+      console.warn(`[v9.0] ${type} 상세설명: 중복 출력 감지 — "도 1을 참조하면" ${fig1Refs.length}회 발견, 마지막 본 사용 (${removed.length}자 제거)`);
+    } else {
+      // "도 1을 참조하면"이 1회인데 그 앞에 긴 내용(참조번호 포함)이 있으면 → 프리앰블 개요
+      const firstRefIdx=text.search(/도\s+1[을를]\s*참조하면/);
+      if(firstRefIdx>0){
+        const preamble=text.substring(0,firstRefIdx).trim();
+        if(preamble.length>150 && /\(\d{3,}\)/.test(preamble)){
+          text=text.substring(firstRefIdx).trim();
+          console.warn(`[v9.0] ${type} 상세설명: 프리앰블 개요 제거 (${preamble.length}자)`);
+        }
+      }
+    }
+  }
   // 허용 도면 범위 결정
   let maxAllowed;
   if(type==='device'){
@@ -1728,6 +1834,12 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
   ✅ 허브는 중간 행에 배치 (위아래로 연결 대상이 분산)
   ✅ 같은 행 노드는 서로 직접 연결 없는 것만
 
+⛔⛔⛔ 참조번호 고유성 규칙 (절대 위반 금지) ⛔⛔⛔
+  - 모든 참조번호는 전체 도면세트 내에서 고유해야 한다. 동일 번호 재사용 불가.
+  - "외부", "외부 서버", "외부 장치", "네트워크" 등은 도 2 이후의 내부 블록도에 포함하지 마라.
+  - 도 2 이후의 세부 블록도에는 해당 장치의 하위 구성요소(~부)만 배치한다.
+  - 외부 연결 대상이 필요하면 도 1에서만 L1 레벨(200, 300)로 표현한다.
+
 ■ 연결선 의미
   실선: 통신/데이터 링크
   양방향 화살표: 상호 데이터 교환
@@ -1884,6 +1996,11 @@ ${!hasMethodClaims?`- 방법 청구항이 생성되지 않았으므로, 방법 �
 - [청구범위], [작성 요청], [청구항 구성] 등 메타 섹션을 출력에 포함하지 마라
 - 청구항 원문을 그대로 출력하지 마라 — 상세설명 본문만 작성하라
 - 발명 내용 원문을 에코하지 마라
+
+⛔⛔⛔ 도면의 간단한 설명 포함 금지 ⛔⛔⛔
+- "도 1은 ~을 나타내는 블록도이다" 형태의 문장은 별도 항목(Step 18)에서 작성된다.
+- 본 항목에서는 "도 N을 참조하면," 형태의 상세설명만 작성하라.
+- 출력은 "도 1을 참조하면," 으로 시작하라.
 
 ★ 분량 규칙:
 - 도면 1개당 ${dlCfg.charPerFig}(공백 포함)
@@ -3007,6 +3124,13 @@ graph TD
 - "~단계", "S숫자" 표현 금지
 - "~모듈" 금지 → "~부"로 통일
 
+⛔⛔ 참조번호 중복 절대 금지 ⛔⛔
+- 서로 다른 노드가 동일한 참조번호를 가지면 안 된다
+- 예: 통신부(110)와 외부(110) → 110 중복! → 오류
+- "외부", "외부 서버", "외부 장치" 등 외부 엔티티는 도면 내부에 포함하지 마라
+- 도 2 이후의 내부 블록도에서는 해당 장치의 하위 구성요소만 표현
+- 외부 연결 대상은 노드로 생성하지 말고, 연결선의 끝점으로만 표현하라
+
 ★★ 도면별 계층 규칙 ★★
 - 도 1: L1(100, 200, 300...) 장치만
 - 도 2 (L1 상세화): L1(100)과 그 L2 하위(110,120,130) 포함
@@ -3628,7 +3752,58 @@ function parseMermaidGraph(code){
     }
   });
   
-  const result={nodes:Object.values(nodes),edges};
+  // ═══ v9.0: 참조번호 중복 노드 정리 (외부/중복 노드 제거) ═══
+  const refMap={}; // refNum → [nodeId, ...]
+  Object.values(nodes).forEach(nd=>{
+    const ref=_extractRefNum(nd.label,'');
+    if(ref&&!/^S/i.test(ref)){
+      if(!refMap[ref])refMap[ref]=[];
+      refMap[ref].push(nd.id);
+    }
+  });
+  
+  // 중복 참조번호가 있는 경우 처리
+  Object.entries(refMap).forEach(([ref,ids])=>{
+    if(ids.length<=1)return;
+    // "외부" 또는 연결 대상이 아닌 노드를 제거 대상으로
+    const toRemove=[];
+    ids.forEach(id=>{
+      const nd=nodes[id];
+      const label=nd.label.replace(/[\s(]\d+[)\s]*$/,'').trim();
+      // "외부", "외부 서버", "외부 시스템", "외부 장치" 등
+      if(/^외부/.test(label)){
+        toRemove.push(id);
+      }
+    });
+    // 모두 제거 대상이면 첫 번째만 남김
+    if(toRemove.length===ids.length)toRemove.shift();
+    toRemove.forEach(id=>{
+      // 이 노드에 연결된 엣지를 원본 노드로 리다이렉트
+      const origId=ids.find(i=>!toRemove.includes(i));
+      if(origId){
+        edges.forEach(e=>{
+          if(e.from===id)e.from=origId;
+          if(e.to===id)e.to=origId;
+        });
+      }
+      delete nodes[id];
+      console.warn(`[v9.0] 중복 참조번호(${ref}) 노드 제거: "${nodes[id]?.label||id}" → 원본 "${nodes[origId]?.label||origId}"로 리다이렉트`);
+    });
+  });
+  
+  // 자기 자신을 참조하는 엣지 제거 (리다이렉트 후 발생 가능)
+  const cleanEdges=edges.filter(e=>e.from!==e.to);
+  // 중복 엣지 제거
+  const edgeSet=new Set();
+  const uniqueEdges=cleanEdges.filter(e=>{
+    const key=e.from+'→'+e.to;
+    const keyRev=e.to+'→'+e.from;
+    if(edgeSet.has(key)||edgeSet.has(keyRev))return false;
+    edgeSet.add(key);
+    return true;
+  });
+  
+  const result={nodes:Object.values(nodes),edges:uniqueEdges};
   console.log('Parsed Mermaid:',result);
   return result;
 }
@@ -3793,47 +3968,62 @@ function computeDeviceLayout2D(nodes,edges){
   return{grid,maxCols:Math.min(maxCols,MAX_COLS),numRows:layers.length,uniqueEdges,layers};
 }
 
-// ── Strict Orthogonal Router v3.0 ──
+// ── Strict Orthogonal Router v4.0 ──
 // 모든 세그먼트가 수평(H) 또는 수직(V)만 허용. 사선 절대 불가.
-// allBoxes 전달 시 다른 박스 관통 회피.
+// ★ 핵심 변경: 모든 경로(직선 포함)에 충돌 검사 적용 + Z-shape 우회 ★
+const ROUTE_PAD=15; // 연결선↔박스 최소 간격 (px)
+
 function getOrthogonalRoute(fromBox,toBox,allBoxes){
   const dx=toBox.cx-fromBox.cx, dy=toBox.cy-fromBox.cy;
   if(Math.abs(dx)<1&&Math.abs(dy)<1)return null;
-  const GAP=12;
   
-  // ★ 핵심: exit/entry 지점을 결정하고 H/V 세그먼트로만 연결 ★
+  const excludeIds=new Set([fromBox.id,toBox.id].filter(Boolean));
+  const obstacles=(allBoxes||[]).filter(b=>!excludeIds.has(b.id));
+  
+  // ── 후보 경로 생성 ──
+  const candidates=[];
   
   // 1) 같은 열 (수직 정렬) → 수직 직선
   if(Math.abs(dx)<Math.max(fromBox.w,toBox.w)*0.4){
-    const midX=(fromBox.cx+toBox.cx)/2; // 정확히 같은 X 보장
-    if(dy>0)return[{x:midX,y:fromBox.y+fromBox.h},{x:midX,y:toBox.y}];
-    return[{x:midX,y:fromBox.y},{x:midX,y:toBox.y+toBox.h}];
+    const midX=(fromBox.cx+toBox.cx)/2;
+    if(dy>0)candidates.push({route:[{x:midX,y:fromBox.y+fromBox.h},{x:midX,y:toBox.y}],type:'straight-v'});
+    else candidates.push({route:[{x:midX,y:fromBox.y},{x:midX,y:toBox.y+toBox.h}],type:'straight-v'});
   }
   
   // 2) 같은 행 (수평 정렬) → 수평 직선
   if(Math.abs(dy)<Math.max(fromBox.h,toBox.h)*0.4){
-    const midY=(fromBox.cy+toBox.cy)/2; // 정확히 같은 Y 보장
-    if(dx>0)return[{x:fromBox.x+fromBox.w,y:midY},{x:toBox.x,y:midY}];
-    return[{x:fromBox.x,y:midY},{x:toBox.x+toBox.w,y:midY}];
+    const midY=(fromBox.cy+toBox.cy)/2;
+    if(dx>0)candidates.push({route:[{x:fromBox.x+fromBox.w,y:midY},{x:toBox.x,y:midY}],type:'straight-h'});
+    else candidates.push({route:[{x:fromBox.x,y:midY},{x:toBox.x+toBox.w,y:midY}],type:'straight-h'});
   }
   
-  // 3) 대각선 위치 → L-shape (2 세그먼트) 또는 Z-shape (3 세그먼트)
-  // 두 가지 L-shape 후보를 생성, 장애물 적은 쪽 선택
+  // 3) L-shape 후보 2개
+  candidates.push({route:_buildLRoute_VH(fromBox,toBox,dy,dx),type:'L-vh'});
+  candidates.push({route:_buildLRoute_HV(fromBox,toBox,dy,dx),type:'L-hv'});
   
-  // L-shape 후보 A: 수직 먼저 → 수평
-  const routeA=_buildLRoute_VH(fromBox,toBox,dy,dx);
-  // L-shape 후보 B: 수평 먼저 → 수직
-  const routeB=_buildLRoute_HV(fromBox,toBox,dy,dx);
+  // ── 충돌 검사 & 최적 경로 선택 ──
+  if(!obstacles.length){
+    return candidates[0].route; // 장애물 없으면 첫 번째 후보
+  }
   
-  if(!allBoxes||allBoxes.length===0)return routeA;
+  let bestRoute=null, bestHits=Infinity;
+  candidates.forEach(c=>{
+    const hits=_countRouteCollisions(c.route,obstacles,excludeIds);
+    if(hits<bestHits){bestHits=hits;bestRoute=c.route;}
+  });
   
-  // 장애물 충돌 검사
-  const excludeIds=new Set([fromBox.id,toBox.id].filter(Boolean));
-  const hitsA=_countRouteCollisions(routeA,allBoxes,excludeIds);
-  const hitsB=_countRouteCollisions(routeB,allBoxes,excludeIds);
+  // 충돌 0이면 바로 반환
+  if(bestHits===0)return bestRoute;
   
-  if(hitsA<=hitsB)return routeA;
-  return routeB;
+  // ── Z-shape 우회 경로 시도 ──
+  // 충돌하는 박스를 피해 바깥으로 우회
+  const zRoutes=_buildZRoutes(fromBox,toBox,obstacles,dx,dy);
+  zRoutes.forEach(zr=>{
+    const hits=_countRouteCollisions(zr,obstacles,excludeIds);
+    if(hits<bestHits){bestHits=hits;bestRoute=zr;}
+  });
+  
+  return bestRoute;
 }
 
 // L-shape: 수직(V) 먼저 → 수평(H)
@@ -3842,8 +4032,6 @@ function _buildLRoute_VH(from,to,dy,dx){
   const exitY=dy>0?from.y+from.h:from.y;
   const entryY=to.cy;
   const entryX=dx>0?to.x:to.x+to.w;
-  // V segment: (exitX, exitY) → (exitX, entryY)
-  // H segment: (exitX, entryY) → (entryX, entryY)
   return[{x:exitX,y:exitY},{x:exitX,y:entryY},{x:entryX,y:entryY}];
 }
 
@@ -3853,9 +4041,61 @@ function _buildLRoute_HV(from,to,dy,dx){
   const exitX=dx>0?from.x+from.w:from.x;
   const entryX=to.cx;
   const entryY=dy>0?to.y:to.y+to.h;
-  // H segment: (exitX, exitY) → (entryX, exitY)
-  // V segment: (entryX, exitY) → (entryX, entryY)
   return[{x:exitX,y:exitY},{x:entryX,y:exitY},{x:entryX,y:entryY}];
+}
+
+// ★ Z-shape 우회 경로 생성 (장애물 회피의 핵심) ★
+// 4방향으로 우회하는 5점 경로를 생성
+function _buildZRoutes(from,to,obstacles,dx,dy){
+  const routes=[];
+  const PAD=ROUTE_PAD+8;
+  
+  // 모든 장애물의 바운딩 박스 경계 수집
+  let globalMinX=Infinity,globalMinY=Infinity,globalMaxX=-Infinity,globalMaxY=-Infinity;
+  [from,to,...obstacles].forEach(b=>{
+    globalMinX=Math.min(globalMinX,b.x);
+    globalMinY=Math.min(globalMinY,b.y);
+    globalMaxX=Math.max(globalMaxX,b.x+b.w);
+    globalMaxY=Math.max(globalMaxY,b.y+b.h);
+  });
+  
+  // Z-route 1: 위쪽 우회 (from 위→수평→to 위)
+  const topY=globalMinY-PAD;
+  routes.push([
+    {x:from.cx, y:dy>0?from.y:from.y},
+    {x:from.cx, y:topY},
+    {x:to.cx, y:topY},
+    {x:to.cx, y:dy>0?to.y:to.y}
+  ]);
+  
+  // Z-route 2: 아래쪽 우회
+  const bottomY=globalMaxY+PAD;
+  routes.push([
+    {x:from.cx, y:from.y+from.h},
+    {x:from.cx, y:bottomY},
+    {x:to.cx, y:bottomY},
+    {x:to.cx, y:to.y+to.h}
+  ]);
+  
+  // Z-route 3: 왼쪽 우회
+  const leftX=globalMinX-PAD;
+  routes.push([
+    {x:from.x, y:from.cy},
+    {x:leftX, y:from.cy},
+    {x:leftX, y:to.cy},
+    {x:to.x, y:to.cy}
+  ]);
+  
+  // Z-route 4: 오른쪽 우회
+  const rightX=globalMaxX+PAD;
+  routes.push([
+    {x:from.x+from.w, y:from.cy},
+    {x:rightX, y:from.cy},
+    {x:rightX, y:to.cy},
+    {x:to.x+to.w, y:to.cy}
+  ]);
+  
+  return routes;
 }
 
 // 경로가 박스를 관통하는지 검사
@@ -3864,16 +4104,16 @@ function _countRouteCollisions(route,allBoxes,excludeIds){
   for(let i=0;i<route.length-1;i++){
     const p1=route[i],p2=route[i+1];
     allBoxes.forEach(box=>{
-      if(excludeIds.has(box.id))return;
+      if(excludeIds&&excludeIds.has(box.id))return;
       if(_segmentIntersectsBox(p1,p2,box))hits++;
     });
   }
   return hits;
 }
 
-// H/V 세그먼트가 박스와 교차하는지
+// H/V 세그먼트가 박스와 교차하는지 (★ pad=ROUTE_PAD로 충분한 여백 확보 ★)
 function _segmentIntersectsBox(p1,p2,box){
-  const pad=2;
+  const pad=ROUTE_PAD;
   const bx1=box.x-pad,by1=box.y-pad,bx2=box.x+box.w+pad,by2=box.y+box.h+pad;
   if(Math.abs(p1.y-p2.y)<1){
     // 수평 세그먼트
@@ -3996,8 +4236,8 @@ function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNu
   });
   
   // Phase 2: 충돌 감지 & 자동 보정 (최대 20라운드)
-  // v8.1: 그림자 크기를 포함한 충돌 영역 (shadow + 여유 패딩)
-  const MIN_SEP=Math.max(colGap*0.3, shadowSize*4+4); // 그림자(×4) + 여유
+  // v9.0: 연결선 라우팅 공간을 확보하기 위해 MIN_SEP 대폭 증가
+  const MIN_SEP=Math.max(colGap*0.5, rowGap*0.4, shadowSize*4+ROUTE_PAD);
   for(let round=0;round<20;round++){
     let anyFixed=false;
     for(let i=0;i<objects.length;i++){
@@ -4332,13 +4572,13 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const{grid,maxCols,numRows,uniqueEdges}=layout;
     
     // 열 수에 따른 박스 크기 조정
-    const colGap=0.55*PX; // v8.1: 증가 (0.4→0.55)
+    const colGap=0.7*PX; // v9.0: 연결선 공간 확보 (0.55→0.7)
     const boxW2D=maxCols<=1?5.0*PX:maxCols===2?3.2*PX:2.4*PX;
     const maxNodeAreaW=maxCols*boxW2D+(maxCols-1)*colGap;
-    const marginX=0.6*PX; // v8.1: 증가 (0.5→0.6)
-    const marginY=0.6*PX; // v8.1: 증가 (0.5→0.6)
-    const refNumH=26; // v8.1: 증가 (24→26)
-    const rowGapBase=0.55*PX; // v8.1: 증가 (0.4→0.55)
+    const marginX=0.7*PX; // v9.0: (0.6→0.7)
+    const marginY=0.7*PX; // v9.0: (0.6→0.7)
+    const refNumH=28; // v9.0: (26→28)
+    const rowGapBase=0.7*PX; // v9.0: 연결선 통과 공간 (0.55→0.7)
     
     // ★ 행별 실제 최대 Shape 높이 계산 (겹침 방지 핵심) ★
     const rowMaxH={};
@@ -4543,14 +4783,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const innerLayout=computeDeviceLayout2D(displayNodes,edges);
     const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
     
-    // ═══ v8.1: 공통 레이아웃 엔진 호출 (여백 확대) ═══
+    // ═══ v9.0: 공통 레이아웃 엔진 호출 (연결선 우회 공간 확보) ═══
     const innerBoxW=innerMaxCols<=1?4.5*PX:innerMaxCols===2?2.8*PX:2.0*PX;
     const boxH2=0.9*PX;
     const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
       boxBaseW:innerBoxW, boxBaseH:boxH2,
-      colGap:0.75*PX,   // v8.1: 증가 (0.55→0.75) — 구성요소 간 수평 간격
-      rowGap:0.9*PX,    // v8.1: 증가 (0.7→0.9) — 구성요소 간 수직 간격
-      framePad:0.85*PX,  // v8.1: 증가 (0.65→0.85) — 프레임↔구성요소 여백
+      colGap:1.0*PX,    // v9.0: 연결선 우회 공간 확보 (0.75→1.0)
+      rowGap:1.1*PX,    // v9.0: (0.9→1.1)
+      framePad:0.9*PX,   // v9.0: (0.85→0.9)
       shadowSize:SHADOW_OFFSET,
       scale:PX
     });
@@ -5559,7 +5799,7 @@ function downloadPptx(sid){
         
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:innerBoxW, boxBaseH:pBoxH,
-          colGap:0.45, rowGap:0.40, framePad:0.50,
+          colGap:0.55, rowGap:0.50, framePad:0.55,
           shadowSize:SHADOW_OFFSET, scale:1
         });
         
@@ -6167,7 +6407,7 @@ function downloadDiagramImages(sid, format='jpeg'){
         
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:cInnerBoxW, boxBaseH:cBoxH,
-          colGap:50, rowGap:50, framePad:55,
+          colGap:60, rowGap:60, framePad:60,
           shadowSize:SHADOW_PX, scale:1
         });
         
