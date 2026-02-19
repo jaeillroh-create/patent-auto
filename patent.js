@@ -2274,11 +2274,11 @@ ${diagram}`,4096);
           const batchLayout=computeDeviceLayout2D(nodes,edges);
           const{grid:batchGrid,maxCols:batchMaxCols,numRows:batchNumRows,uniqueEdges:batchUniqueEdges}=batchLayout;
           const batchColGap=0.30;
-          const batchBoxW=batchMaxCols<=1?(frameW-1.3):batchMaxCols===2?(frameW-1.3-batchColGap)/2:(frameW-1.3-batchColGap*2)/3; // 1.3 = padding + ref space
+          const batchBoxW=batchMaxCols<=1?(frameW-1.0):batchMaxCols===2?(frameW-1.0-batchColGap)/2:(frameW-1.0-batchColGap*2)/3;
           const batchNodeAreaW=batchMaxCols*batchBoxW+(batchMaxCols-1)*batchColGap;
           const framePadY=0.3;
           const innerH=frameH-framePadY*2;
-          const boxH=Math.min(0.55,(innerH-0.15*(batchNumRows-1))/batchNumRows);
+          const boxH=Math.min(0.65,(innerH-0.15*(batchNumRows-1))/batchNumRows); // 0.65 for 2-line
           const boxGap=Math.min(0.5,(innerH-boxH*batchNumRows)/(batchNumRows>1?batchNumRows-1:1));
           const boxW=frameW-1.0;
           const boxStartX=frameX+0.5;
@@ -2379,12 +2379,10 @@ ${diagram}`,4096);
                 slide.addShape(pptx.shapes.RECTANGLE,{x:bx+SO,y:by+SO,w:batchBoxW,h:boxH,fill:{color:'000000'},line:{width:0}});
                 slide.addShape(pptx.shapes.RECTANGLE,{x:bx,y:by,w:batchBoxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_BOX}});
             }
-            // 박스 텍스트
+            // 박스 텍스트 + 참조번호 (내부 2줄)
             const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
-            slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize:Math.min(batchMaxCols>1?9:11,Math.max(8,12-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
-            
-            // ★ 참조번호를 박스 오른쪽에 프레임 내부에서 표시 ★
-            slide.addText(String(refNum),{x:sx+sm.sw+0.02,y:by,w:0.4,h:sm.sh,fontSize:9,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+            const bFontSize=Math.min(batchMaxCols>1?9:11,Math.max(8,12-nodeCount*0.3));
+            slide.addText([{text:cleanLabel,options:{fontSize:bFontSize,breakType:'none'}},{text:'\n('+refNum+')',options:{fontSize:Math.max(bFontSize-1,7),color:'444444'}}],{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
             
             batchNodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
           });
@@ -3198,12 +3196,13 @@ function computeEdgeRoutes(edges,positions){
   }).filter(Boolean);
 }
 
-// ═══ 2D Layout Engine for Device Diagrams v2.0 ═══
-// v2: max 3 cols per row enforcement, auto-split wide layers
+// ═══ 2D Layout Engine v3.0: Hub-Spoke (꺾임 최소화) ═══
+// 핵심: 허브를 중앙에, 이웃 노드를 상하좌우에 배치 → 직선 연결 극대화
+// 같은 행/열의 노드끼리는 직선 연결, 다른 행+열이면 꺾임 발생
 function computeDeviceLayout2D(nodes,edges){
   const n=nodes.length;
   if(n===0)return{grid:{},maxCols:1,numRows:0,uniqueEdges:[]};
-  const MAX_COLS=3; // ★ 한 행 최대 3개
+  const MAX_COLS=3;
   
   // Build bidirectional adjacency
   const adj={};
@@ -3217,63 +3216,96 @@ function computeDeviceLayout2D(nodes,edges){
   });
   const uniqueEdges=[...edgeSet].map(k=>{const[f,t]=k.split('|');return{from:f,to:t};});
   
-  // No edges → single column layout (max MAX_COLS per row)
+  // No edges → grid layout
   if(edges.length===0){
-    const grid={};
-    const rows=[];
-    for(let i=0;i<n;i+=MAX_COLS){
-      rows.push(nodes.slice(i,Math.min(i+MAX_COLS,n)).map(nd=>nd.id));
-    }
-    rows.forEach((row,ri)=>{
-      row.forEach((id,ci)=>{grid[id]={row:ri,col:ci,layerSize:row.length};});
-    });
+    const grid={};const rows=[];
+    for(let i=0;i<n;i+=MAX_COLS){rows.push(nodes.slice(i,Math.min(i+MAX_COLS,n)).map(nd=>nd.id));}
+    rows.forEach((row,ri)=>{row.forEach((id,ci)=>{grid[id]={row:ri,col:ci,layerSize:row.length};});});
     return{grid,maxCols:Math.min(n,MAX_COLS),numRows:rows.length,uniqueEdges:[],layers:rows};
   }
   
-  // Find hub node (highest degree)
+  // Find hub (highest degree)
   let hubId=nodes[0].id, maxDeg=0;
-  nodes.forEach(nd=>{
-    const deg=(adj[nd.id]||new Set()).size;
-    if(deg>maxDeg){maxDeg=deg;hubId=nd.id;}
-  });
+  nodes.forEach(nd=>{const deg=(adj[nd.id]||new Set()).size;if(deg>maxDeg){maxDeg=deg;hubId=nd.id;}});
   
-  // BFS layers from hub
+  // Ensure all nodes reachable
   const visited=new Set([hubId]);
-  const rawLayers=[[hubId]];
   let frontier=[hubId];
   while(frontier.length){
     const next=[];
-    frontier.forEach(id=>{
-      (adj[id]||new Set()).forEach(nid=>{
-        if(!visited.has(nid)){visited.add(nid);next.push(nid);}
-      });
-    });
-    if(next.length)rawLayers.push(next);
+    frontier.forEach(id=>{(adj[id]||new Set()).forEach(nid=>{if(!visited.has(nid)){visited.add(nid);next.push(nid);}});});
     frontier=next;
   }
-  nodes.forEach(nd=>{if(!visited.has(nd.id)){rawLayers[rawLayers.length-1].push(nd.id);visited.add(nd.id);}});
+  nodes.forEach(nd=>{visited.add(nd.id);});
   
-  // ★ 핵심: 한 행 MAX_COLS 초과 시 분할 ★
-  const layers=[];
-  rawLayers.forEach(layer=>{
-    if(layer.length<=MAX_COLS){
-      layers.push(layer);
-    }else{
-      // MAX_COLS씩 나누어 여러 행으로
-      for(let i=0;i<layer.length;i+=MAX_COLS){
-        layers.push(layer.slice(i,Math.min(i+MAX_COLS,layer.length)));
+  const hubNbrs=[...(adj[hubId]||new Set())];
+  const others=nodes.filter(nd=>nd.id!==hubId&&!hubNbrs.includes(nd.id)).map(nd=>nd.id);
+  
+  // ★ Hub-Spoke 배치: 허브와 같은 행 또는 같은 열에 이웃 배치 → 직선 연결 ★
+  // 같은 행 = 수평 직선, 같은 열 = 수직 직선
+  // 허브 위치: 중간 행 중앙 열 (row=R, col=1)
+  // 직선 위치 4곳: 위(R-1,1), 왼쪽(R,0), 오른쪽(R,2), 아래(R+1,1)
+  let layers=[];
+  const nN=hubNbrs.length;
+  
+  if(nN===0){
+    layers=[[hubId]];
+  }else if(nN===1){
+    layers=[[hubId,hubNbrs[0]]];
+  }else if(nN===2){
+    // 2이웃: 허브 양옆에 배치 → 모두 수평 직선
+    layers=[[hubNbrs[0],hubId,hubNbrs[1]]];
+  }else if(nN===3){
+    // 3이웃: 십자형 — 1개 위, 2개 양옆
+    // 최적화: 서로 연결된 쌍은 같은 행에 (수평 직선 확보)
+    let topChild=null,sideA=null,sideB=null;
+    for(let i=0;i<3;i++){
+      const ci=hubNbrs[i];
+      const otherTwo=hubNbrs.filter((_,j)=>j!==i);
+      // 이 노드가 다른 2개와 연결 없으면 → 위에 배치 (고립 위치)
+      if(!adj[ci].has(otherTwo[0])&&!adj[ci].has(otherTwo[1])){
+        topChild=ci;sideA=otherTwo[0];sideB=otherTwo[1];break;
       }
     }
+    if(!topChild){topChild=hubNbrs[0];sideA=hubNbrs[1];sideB=hubNbrs[2];}
+    layers=[[topChild],[sideA,hubId,sideB]];
+  }else if(nN===4){
+    // 4이웃: 완전 십자형 — 위1, 양옆2, 아래1 → 4개 모두 직선!
+    let top=null,left=null,right=null,bottom=null;
+    // 서로 연결된 쌍을 같은 행에
+    const pairs=[];
+    for(let i=0;i<4;i++)for(let j=i+1;j<4;j++){if(adj[hubNbrs[i]].has(hubNbrs[j]))pairs.push([i,j]);}
+    if(pairs.length>0){
+      const[pi,pj]=pairs[0];
+      left=hubNbrs[pi];right=hubNbrs[pj];
+      const rest=hubNbrs.filter((_,k)=>k!==pi&&k!==pj);
+      top=rest[0];bottom=rest[1];
+    }else{
+      top=hubNbrs[0];left=hubNbrs[1];right=hubNbrs[2];bottom=hubNbrs[3];
+    }
+    layers=[[top],[left,hubId,right],[bottom]];
+  }else if(nN===5){
+    // 5이웃: 위1, 양옆2, 아래2
+    layers=[[hubNbrs[0]],[hubNbrs[1],hubId,hubNbrs[2]],[hubNbrs[3],hubNbrs[4]]];
+  }else{
+    // 6+이웃: 위2, 허브+양옆, 나머지 아래
+    layers=[[hubNbrs[0],hubNbrs[1]],[hubNbrs[2],hubId,hubNbrs[3]]];
+    const rest=hubNbrs.slice(4);
+    for(let i=0;i<rest.length;i+=MAX_COLS){layers.push(rest.slice(i,Math.min(i+MAX_COLS,rest.length)));}
+  }
+  
+  // 비이웃 노드 추가 (빈 자리 또는 새 행)
+  others.forEach(id=>{
+    let added=false;
+    for(let li=0;li<layers.length;li++){if(layers[li].length<MAX_COLS){layers[li].push(id);added=true;break;}}
+    if(!added)layers.push([id]);
   });
   
-  // Assign grid positions
-  const grid={};
-  let maxCols=1;
+  // Grid 생성
+  const grid={};let maxCols=1;
   layers.forEach((layer,rowIdx)=>{
     maxCols=Math.max(maxCols,layer.length);
-    layer.forEach((id,colIdx)=>{
-      grid[id]={row:rowIdx,col:colIdx,layerSize:layer.length};
-    });
+    layer.forEach((id,colIdx)=>{grid[id]={row:rowIdx,col:colIdx,layerSize:layer.length};});
   });
   
   return{grid,maxCols:Math.min(maxCols,MAX_COLS),numRows:layers.length,uniqueEdges,layers};
@@ -3673,6 +3705,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   if(!frameRefNum)frameRefNum=100; // 최종 폴백
   
   const boxW=5.0*PX, boxH=0.7*PX, boxGap=0.8*PX;
+  const boxH2=0.9*PX; // 도 2+ 내부 박스: 2줄(라벨+참조번호) 수용
   
   if(isFig1){
     // ═══ 도 1: 2D 토폴로지 블록도 v9.0 (실제 edge 기반 연결) ═══
@@ -3794,14 +3827,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     
     // 열 수에 따른 치수
     const innerColGap=0.4*PX;
-    const innerBoxW=innerMaxCols<=1?4.5*PX:innerMaxCols===2?2.7*PX:1.9*PX; // 참조번호 내부 표시 공간 확보
+    const innerBoxW=innerMaxCols<=1?5.0*PX:innerMaxCols===2?3.0*PX:2.2*PX;
     const innerNodeAreaW=innerMaxCols*innerBoxW+(innerMaxCols-1)*innerColGap;
-    const maxShapeExtra=boxH*0.85;
+    const maxShapeExtra=boxH2*0.85;
     
     const frameX=0.5*PX, frameY=0.5*PX;
     const framePadX=0.5*PX, framePadY=0.4*PX;
-    const frameW=Math.max(6.2*PX,innerNodeAreaW+framePadX*2+0.7*PX); // 0.7 = 내부 참조번호 공간
-    const frameH=innerNumRows*(boxH+boxGap)+maxShapeExtra+framePadY*2;
+    const frameW=Math.max(6.2*PX,innerNodeAreaW+framePadX*2+0.3*PX);
+    const frameH=innerNumRows*(boxH2+boxGap)+maxShapeExtra+framePadY*2;
     const leaderMargin=0.8*PX; // 프레임 참조번호만 외부 표시
     const svgW=frameX+frameW+leaderMargin;
     const svgH=frameH+1.5*PX;
@@ -3816,7 +3849,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     svg+=`<rect x="${frameX}" y="${frameY}" width="${frameW}" height="${frameH}" fill="#fff" stroke="#000" stroke-width="2.25"/>`;
     // 프레임 리더라인은 내부 노드와 함께 겹침 보정 후 렌더링 (아래에서 처리)
     
-    // 2. 내부 노드 렌더링 (2D 그리드) — 참조번호는 프레임 내부에 표시
+    // 2. 내부 노드 렌더링 (2D 그리드) — 참조번호는 박스 내부에 표시
     const boxStartX=frameX+framePadX;
     const boxStartY=frameY+framePadY;
     const innerNodeBoxes={};
@@ -3826,25 +3859,23 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const rowW=gp.layerSize*innerBoxW+(gp.layerSize-1)*innerColGap;
       const rowStartX=boxStartX+(innerNodeAreaW-rowW)/2;
       const bx=rowStartX+gp.col*(innerBoxW+innerColGap);
-      const by=boxStartY+gp.row*(boxH+boxGap);
+      const by=boxStartY+gp.row*(boxH2+boxGap);
       const fallbackRef=frameRefNum+10*(parseInt(n.id.replace(/\D/g,''))||1);
       const refNum=extractRefNum(n.label,String(fallbackRef));
       const shapeType=matchIconShape(n.label);
-      const sm=_shapeMetrics(shapeType,innerBoxW,boxH);
+      const sm=_shapeMetrics(shapeType,innerBoxW,boxH2);
       const sx=bx+sm.dx, sy=by;
       
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sm.sw,sm.sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sm.sw,sm.sh,1.5);
       const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-      const displayLabel=cleanLabel.length>(innerMaxCols>1?12:18)?cleanLabel.slice(0,innerMaxCols>1?10:16)+'…':cleanLabel;
+      const displayLabel=cleanLabel.length>(innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>1?8:14)+'…':cleanLabel;
       const textCy=_shapeTextCy(shapeType,sy,sm.sh);
-      const fontSize=innerMaxCols>2?10:innerMaxCols>1?11:12;
-      svg+=`<text x="${sx+sm.sw/2}" y="${textCy+4}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      const fontSize=innerMaxCols>2?9:innerMaxCols>1?10:11;
       
-      // ★ 참조번호를 박스 오른쪽에 프레임 내부에서 표시 ★
-      const refX=sx+sm.sw+4;
-      const refY=sy+sm.sh/2+4;
-      svg+=`<text x="${refX}" y="${refY}" font-size="10" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      // ★ 박스 내부 2줄: 라벨 + (참조번호) ★
+      svg+=`<text x="${sx+sm.sw/2}" y="${textCy-2}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      svg+=`<text x="${sx+sm.sw/2}" y="${textCy+fontSize+2}" text-anchor="middle" font-size="${Math.max(fontSize-1,8)}" font-family="맑은 고딕,Arial,sans-serif" fill="#444">(${refNum})</text>`;
       
       innerNodeBoxes[n.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2};
     });
@@ -4756,13 +4787,13 @@ function downloadPptx(sid){
         const innerLayout=computeDeviceLayout2D(displayNodes,edges);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
         const innerColGap=0.30;
-        const innerBoxW=innerMaxCols<=1?(PAGE_W-2.1):innerMaxCols===2?(PAGE_W-2.1-innerColGap)/2:(PAGE_W-2.1-innerColGap*2)/3; // ref 공간 확보
+        const innerBoxW=innerMaxCols<=1?(PAGE_W-1.6):innerMaxCols===2?(PAGE_W-1.6-innerColGap)/2:(PAGE_W-1.6-innerColGap*2)/3;
         const innerNodeAreaW=innerMaxCols*innerBoxW+(innerMaxCols-1)*innerColGap;
         
         const frameX=PAGE_MARGIN,frameY=PAGE_MARGIN+TITLE_H;
         const framePadX=0.4,framePadY=0.3;
-        const frameW=Math.max(PAGE_W-0.8,innerNodeAreaW+framePadX*2+0.5); // 0.5 = 내부 참조번호 공간
-        const boxH=Math.min(0.55,(AVAILABLE_H-framePadY*2-0.15*(innerNumRows-1))/innerNumRows);
+        const frameW=Math.max(PAGE_W-0.8,innerNodeAreaW+framePadX*2+0.3);
+        const boxH=Math.min(0.65,(AVAILABLE_H-framePadY*2-0.15*(innerNumRows-1))/innerNumRows); // 0.65 for 2-line
         const boxGap2=Math.min(0.5,(AVAILABLE_H-framePadY*2-boxH*innerNumRows)/(innerNumRows>1?innerNumRows-1:1));
         const frameH=innerNumRows*(boxH+boxGap2)-boxGap2+framePadY*2+boxH*0.5;
         const boxStartX=frameX+framePadX;
@@ -4789,10 +4820,9 @@ function downloadPptx(sid){
           
           addPptxIconShape(slide,shapeType,sx,by,sm.sw,sm.sh,LINE_BOX);
           const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
-          slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize:Math.min(innerMaxCols>1?9:11,Math.max(8,12-dCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
-          
-          // ★ 참조번호를 박스 오른쪽에 프레임 내부에서 표시 ★
-          slide.addText(String(refNum),{x:sx+sm.sw+0.02,y:by,w:0.4,h:sm.sh,fontSize:9,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+          // ★ 박스 내부 2줄: 라벨 + (참조번호) ★
+          const fontSize=Math.min(innerMaxCols>1?9:11,Math.max(8,12-dCount*0.3));
+          slide.addText([{text:cleanLabel,options:{fontSize,breakType:'none'}},{text:'\n('+refNum+')',options:{fontSize:Math.max(fontSize-1,7),color:'444444'}}],{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
           innerNodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
         });
@@ -5354,13 +5384,13 @@ function downloadDiagramImages(sid, format='jpeg'){
         const innerLayout=computeDeviceLayout2D(displayNodes,edges);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
         const innerColGap=20;
-        const innerBoxW=innerMaxCols<=1?500:innerMaxCols===2?230:150; // ref 공간 확보
+        const innerBoxW=innerMaxCols<=1?560:innerMaxCols===2?260:170;
         const innerNodeAreaW=innerMaxCols*innerBoxW+(innerMaxCols-1)*innerColGap;
         
         const frameX=30,frameY=50;
         const framePadX=30,framePadY=20;
-        const frameW=Math.max(680,innerNodeAreaW+framePadX*2+50); // 50px = 내부 참조번호 공간
-        const boxH=Math.min(45,(850-framePadY*2-10*(innerNumRows-1))/innerNumRows);
+        const frameW=Math.max(680,innerNodeAreaW+framePadX*2+30);
+        const boxH=Math.min(55,(850-framePadY*2-10*(innerNumRows-1))/innerNumRows); // 55px for 2-line text
         const boxGap2=Math.min(45,(850-framePadY*2-boxH*innerNumRows)/(innerNumRows>1?innerNumRows-1:1));
         const frameH=innerNumRows*(boxH+boxGap2)-boxGap2+framePadY*2+boxH*0.5;
         
@@ -5385,17 +5415,17 @@ function downloadDiagramImages(sid, format='jpeg'){
           const sx=bx+sm.dx;
           
           drawCanvasShape(ctx,shapeType,sx,by,sm.sw,sm.sh,SHADOW,1.5);
-          const displayLabel=cleanLabel.length>(innerMaxCols>1?12:18)?cleanLabel.slice(0,innerMaxCols>1?10:16)+'…':cleanLabel;
-          ctx.fillStyle='#000000';ctx.font=`${innerMaxCols>2?10:innerMaxCols>1?11:12}px "맑은 고딕", sans-serif`;
+          const displayLabel=cleanLabel.length>(innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>1?8:14)+'…':cleanLabel;
+          const fontSize=innerMaxCols>2?9:innerMaxCols>1?10:11;
+          
+          // ★ 박스 내부 2줄: 라벨 + (참조번호) ★
+          ctx.fillStyle='#000000';ctx.font=`${fontSize}px "맑은 고딕", sans-serif`;
           ctx.textAlign='center';ctx.textBaseline='middle';
           const textCy=_shapeTextCy(shapeType,by,sm.sh);
-          ctx.fillText(displayLabel,sx+sm.sw/2,textCy);
-          
-          // ★ 참조번호를 박스 오른쪽에 프레임 내부에서 표시 ★
-          ctx.textAlign='left';ctx.textBaseline='middle';
-          ctx.font='10px "맑은 고딕", sans-serif';
-          ctx.fillText(String(refNum),sx+sm.sw+4,by+sm.sh/2);
-          ctx.textBaseline='alphabetic';
+          ctx.fillText(displayLabel,sx+sm.sw/2,textCy-6);
+          ctx.fillStyle='#444444';ctx.font=`${Math.max(fontSize-1,8)}px "맑은 고딕", sans-serif`;
+          ctx.fillText('('+refNum+')',sx+sm.sw/2,textCy+8);
+          ctx.textAlign='left';ctx.textBaseline='alphabetic';
           
           innerNodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
         });
