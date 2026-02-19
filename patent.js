@@ -1147,7 +1147,25 @@ function buildPrompt(stepId){
   const styleRef=getStyleRef();
   const prompt=_buildPromptCore(stepId,inv,T,styleRef);
   if(!prompt)return prompt;
-  // v5.5: 사용자 추가 지시사항 자동 주입
+  
+  // v6.0: 기존 내용 존재 시 부분 수정 모드
+  const userCmd=getStepUserCommand(stepId);
+  if(userCmd&&outputs[stepId]){
+    // 기존 내용 + 추가 지시 → 부분 수정 프롬프트
+    return `아래 [기존 작성 내용]을 바탕으로, [수정 지시사항]에 해당하는 부분만 수정하고 나머지는 그대로 유지하여 전체 내용을 출력하라.
+수정 지시와 무관한 부분은 원문 그대로 유지해야 한다. 전체 재작성 금지.
+
+[수정 지시사항]
+${userCmd}
+
+[기존 작성 내용]
+${outputs[stepId]}
+
+[참고: 원래 작성 기준]
+${prompt}`;
+  }
+  
+  // 기존 내용 없음 → 전체 신규 작성 + 추가 지시사항
   return prompt+buildUserCommandSuffix(stepId);
 }
 function _buildPromptCore(stepId,inv,T,styleRef){
@@ -1803,6 +1821,11 @@ function setGlobalProcessing(on){
 function checkDependency(s){const inv=document.getElementById('projectInput').value.trim();const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저',step_20:()=>outputs.step_10?null:'방법 청구항 먼저'};return d[s]?d[s]():null;}
 async function runStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13',step_14:'btnStep14',step_15:'btnStep15',step_20:'btnStep20'},bid=bm[sid];setGlobalProcessing(true);loadingState[sid]=true;if(bid)App.setButtonLoading(bid,true);
   try{
+    // v6.0: 부분 수정 모드 표시
+    const _hasCmd=!!getStepUserCommand(sid);
+    const _hasOut=!!outputs[sid];
+    if(_hasCmd&&_hasOut)App.showToast('📝 기존 내용 부분 수정 모드','info');
+    
     // Step 04: KIPRIS API 실시간 검색
     if(sid==='step_04'){
       const sr=await searchPriorArt(selectedTitle);
@@ -1875,7 +1898,12 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     }
     saveProject(true);
   }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
-async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);App.showProgress(pid,`${STEP_NAMES[sid]} 생성 중...`,0,1);try{const t=await App.callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
+async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);
+  // v6.0: 부분 수정 모드 표시
+  const _hasCmd=!!getStepUserCommand(sid),_hasOut=!!outputs[sid];
+  const _modeLabel=(_hasCmd&&_hasOut)?'부분 수정':'생성';
+  App.showProgress(pid,`${STEP_NAMES[sid]} ${_modeLabel} 중...`,0,1);
+  try{const t=await App.callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
 async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);markOutputTimestamp('step_09');renderOutput('step_09',outputs.step_09);saveProject(true);App.showToast('수학식 삽입 완료');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
 
 async function applyReview(){
