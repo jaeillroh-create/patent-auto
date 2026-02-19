@@ -3782,7 +3782,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   const boxH2=0.9*PX; // 도 2+ 내부 박스: 2줄(라벨+참조번호) 수용
   
   if(isFig1){
-    // ═══ 도 1: 2D 토폴로지 블록도 v9.0 (실제 edge 기반 연결) ═══
+    // ═══ 도 1: 2D 토폴로지 블록도 v10.0 ═══
+    // 렌더 순서: ①연결선 → ②Shape(위에 덮음) → ③참조번호(Shape 아래)
     const layout=computeDeviceLayout2D(nodes,edges);
     const{grid,maxCols,numRows,uniqueEdges}=layout;
     
@@ -3793,8 +3794,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const marginX=0.5*PX;
     const marginY=0.5*PX;
     const maxShapeExtra=boxH*0.85;
-    const totalH=numRows*(boxH+boxGap)+maxShapeExtra+0.5*PX;
-    const leaderMargin=2.0*PX; // right side for leader lines + ref numbers
+    const refNumH=0.3*PX; // 참조번호 표시 공간
+    const totalH=numRows*(boxH+boxGap)+maxShapeExtra+refNumH+0.5*PX;
+    const leaderMargin=0.5*PX; // 참조번호가 Shape 아래라 여백 최소
     const svgW=marginX+maxNodeAreaW+leaderMargin;
     const svgH=totalH;
     const maxW=maxCols<=1?600:maxCols===2?750:900;
@@ -3803,9 +3805,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const mkId=`ah_${containerId}`;
     svg+=`<defs><marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#000"/></marker></defs>`;
     
-    // 각 노드 렌더링 + 위치 저장
+    // ── Phase 1: 위치 계산 (렌더링 전) ──
     const nodeBoxes={};
-    const leaderEntries=[];
+    const nodeData=[]; // 렌더용 데이터 보관
     nodes.forEach(nd=>{
       const gp=grid[nd.id];
       if(!gp)return;
@@ -3815,39 +3817,16 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const by=marginY+gp.row*(boxH+boxGap);
       const refNum=extractRefNum(nd.label,String(100));
       const cleanLabel=nd.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
-      const displayLabel=cleanLabel.length>(maxCols>1?12:18)?cleanLabel.slice(0,maxCols>1?10:16)+'…':cleanLabel;
+      const displayLabel=cleanLabel.length>(maxCols>1?10:16)?cleanLabel.slice(0,maxCols>1?8:14)+'…':cleanLabel;
       const shapeType=matchIconShape(nd.label);
       const sm=_shapeMetrics(shapeType,boxW2D,boxH);
       const sx=bx+sm.dx, sy=by;
       
-      // 그림자 + 본체
-      svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sm.sw,sm.sh);
-      svg+=_drawShapeBody(shapeType,sx,sy,sm.sw,sm.sh,2);
-      const textCy=_shapeTextCy(shapeType,sy,sm.sh);
-      const fontSize=maxCols>2?11:maxCols>1?12:13;
-      svg+=`<text x="${sx+sm.sw/2}" y="${textCy+4}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
-      
-      // 리더라인 위치 기록 (나중에 Y겹침 보정)
-      leaderEntries.push({id:nd.id,refNum,sx,sy,sw:sm.sw,sh:sm.sh,shapeType,y:sy+sm.sh/2});
       nodeBoxes[nd.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2};
+      nodeData.push({id:nd.id,sx,sy,sw:sm.sw,sh:sm.sh,shapeType,displayLabel,refNum,bx,boxW2D});
     });
     
-    // ★ 리더라인 Y겹침 보정 후 렌더링 ★
-    staggerLeaderYPositions(leaderEntries,24);
-    const leaderEndX=marginX+maxNodeAreaW+0.3*PX;
-    leaderEntries.forEach(le=>{
-      const leaderStartX=_shapeLeaderX(le.shapeType,le.sx,le.sw);
-      const origY=le.sy+le.sh/2;
-      if(Math.abs(le.y-origY)>1){
-        // 보정됨: 꺾인 리더라인
-        svg+=`<path d="M${leaderStartX},${origY} L${leaderEndX-15},${origY} L${leaderEndX-15},${le.y} L${leaderEndX},${le.y}" fill="none" stroke="#000" stroke-width="1"/>`;
-      }else{
-        svg+=`<line x1="${leaderStartX}" y1="${le.y}" x2="${leaderEndX}" y2="${le.y}" stroke="#000" stroke-width="1"/>`;
-      }
-      svg+=`<text x="${leaderEndX+8}" y="${le.y+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${le.refNum}</text>`;
-    });
-    
-    // ★ 직각 라우팅 edge 기반 연결선 (fan 오프셋으로 겹침 방지) ★
+    // ── Phase 2: 연결선 (가장 먼저 렌더 → Shape 아래에 깔림) ──
     const svgEdgesToDraw=uniqueEdges.length>0?uniqueEdges:(nodes.length>1?nodes.slice(0,-1).map((nd,i)=>({from:nd.id,to:nodes[i+1].id})):[]);
     const svgFanCount={};
     const svgEdgeOff={};
@@ -3874,6 +3853,21 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
       const route=getOrthogonalRoute(fbA,tbA,allBoxArr);
       if(route)svg+=svgOrthogonalEdge(route,mkId);
+    });
+    
+    // ── Phase 3: Shape (연결선 위에 렌더 → 관통 가려짐) + 참조번호 ──
+    nodeData.forEach(nd=>{
+      const{sx,sy,sw,sh,shapeType,displayLabel,refNum}=nd;
+      // 그림자 + 본체 (연결선 위에 덮음)
+      svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sw,sh);
+      svg+=_drawShapeBody(shapeType,sx,sy,sw,sh,2);
+      // 라벨
+      const textCy=_shapeTextCy(shapeType,sy,sh);
+      const fontSize=maxCols>2?10:maxCols>1?11:12;
+      svg+=`<text x="${sx+sw/2}" y="${textCy+4}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      // ★ 참조번호: Shape 바로 아래 중앙에 표시 (리더라인 없이) ★
+      const refY=sy+sh+12;
+      svg+=`<text x="${sx+sw/2}" y="${refY}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
     });
     
     svg+='</svg>';
@@ -4755,7 +4749,7 @@ function downloadPptx(sid){
       const nodeCount=nodes.length;
       
       if(isFig1){
-        // ═══ 도 1: 2D 토폴로지 블록도 v11.0 (리더라인 겹침방지 + 직각 라우팅) ═══
+        // ═══ 도 1: 2D 토폴로지 블록도 v12.0 ═══
         const layout=computeDeviceLayout2D(nodes,edges);
         const{grid,maxCols,numRows,uniqueEdges}=layout;
         const colGap=0.35;
@@ -4765,11 +4759,9 @@ function downloadPptx(sid){
         const boxStartY=PAGE_MARGIN+TITLE_H+0.2;
         const boxH=Math.min(0.55,(AVAILABLE_H-0.15*(numRows-1))/numRows);
         const boxGap=Math.min(0.6,(AVAILABLE_H-boxH*numRows)/(numRows>1?numRows-1:1));
-        const refLabelX=marginX+nodeAreaW+0.2;
         
-        // Phase 1: 노드 렌더링 + 위치 저장
+        // Phase 1: 위치 계산 + 노드 렌더링 + 참조번호 (Shape 아래)
         const nodeBoxes={};
-        const pptxLeaderEntries=[];
         nodes.forEach(n=>{
           const gp=grid[n.id];
           if(!gp)return;
@@ -4787,27 +4779,13 @@ function downloadPptx(sid){
           const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
           slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize:Math.min(maxCols>1?10:12,Math.max(8,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
-          pptxLeaderEntries.push({id:n.id,refNum,sx,sw:sm.sw,sh:sm.sh,shapeType,origY:by+sm.sh/2,y:by+sm.sh/2});
+          // ★ 참조번호: Shape 바로 아래 중앙 ★
+          slide.addText(String(refNum),{x:sx,y:by+sm.sh+0.02,w:sm.sw,h:0.22,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'top'});
+          
           nodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
         });
         
-        // Phase 2: 리더라인 Y겹침 보정
-        staggerLeaderYPositions(pptxLeaderEntries,0.28);
-        pptxLeaderEntries.forEach(le=>{
-          const startX=le.sx+le.sw;
-          if(Math.abs(le.y-le.origY)>0.02){
-            // 꺾인 리더라인: 수평→수직→수평
-            const bendX=refLabelX-0.12;
-            slide.addShape(pptx.shapes.LINE,{x:startX,y:le.origY,w:bendX-startX,h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addShape(pptx.shapes.LINE,{x:bendX,y:Math.min(le.origY,le.y),w:0,h:Math.abs(le.y-le.origY),line:{color:'000000',width:LINE_ARROW}});
-            slide.addShape(pptx.shapes.LINE,{x:bendX,y:le.y,w:refLabelX+0.15-bendX,h:0,line:{color:'000000',width:LINE_ARROW}});
-          }else{
-            slide.addShape(pptx.shapes.LINE,{x:startX,y:le.y,w:refLabelX+0.15-startX,h:0,line:{color:'000000',width:LINE_ARROW}});
-          }
-          slide.addText(String(le.refNum),{x:refLabelX+0.2,y:le.y-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
-        });
-        
-        // Phase 3: Edge 연결선 (직각 라우팅 + fan 오프셋)
+        // Phase 2: Edge 연결선 (직각 라우팅 + fan 오프셋)
         const edgesToDraw=uniqueEdges.length>0?uniqueEdges:nodes.slice(0,-1).map((n,i)=>({from:n.id,to:nodes[i+1].id}));
         const pptxFanCount={};
         const pptxEdgeOffsets={};
@@ -5328,7 +5306,7 @@ function downloadDiagramImages(sid, format='jpeg'){
       }
       
       if(isFig1){
-        // ═══ 도 1: 2D 토폴로지 v11.0 (리더라인 겹침방지 + 직각 라우팅) ═══
+        // ═══ 도 1: 2D 토폴로지 v12.0 (Edge→Shape→참조번호 순서) ═══
         const layout=computeDeviceLayout2D(nodes,edges);
         const{grid,maxCols,numRows,uniqueEdges}=layout;
         const colGap=25;
@@ -5339,9 +5317,9 @@ function downloadDiagramImages(sid, format='jpeg'){
         const boxH=Math.min(55,(850-10*(numRows-1))/numRows);
         const boxGap2=Math.min(50,(900-boxH*numRows)/(numRows>1?numRows-1:1));
         
-        // Phase 1: 노드 그리기 + 위치 저장 (리더라인은 나중에)
+        // Phase 1: 위치 계산만 (렌더링 안 함)
         const nodeBoxes={};
-        const leaderEntries=[];
+        const nodeData=[];
         nodes.forEach(nd=>{
           const gp=grid[nd.id];
           if(!gp)return;
@@ -5354,47 +5332,11 @@ function downloadDiagramImages(sid, format='jpeg'){
           const shapeType=matchIconShape(nd.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
           const sx=bx+sm.dx;
-          
-          drawCanvasShape(ctx,shapeType,sx,by,sm.sw,sm.sh,SHADOW,2);
-          
-          const displayLabel=cleanLabel.length>(maxCols>1?12:18)?cleanLabel.slice(0,maxCols>1?10:16)+'…':cleanLabel;
-          ctx.fillStyle='#000000';
-          ctx.font=`${maxCols>2?11:maxCols>1?12:13}px "맑은 고딕", sans-serif`;
-          ctx.textAlign='center';ctx.textBaseline='middle';
-          const textCy=_shapeTextCy(shapeType,by,sm.sh);
-          ctx.fillText(displayLabel,sx+sm.sw/2,textCy);
-          ctx.textAlign='left';ctx.textBaseline='alphabetic';
-          
-          // 리더라인 정보 수집 (나중에 Y겹침 보정 후 그림)
-          leaderEntries.push({id:nd.id,refNum,sx,sy:by,sw:sm.sw,sh:sm.sh,shapeType,y:by+sm.sh/2});
           nodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
+          nodeData.push({id:nd.id,sx,sy:by,sw:sm.sw,sh:sm.sh,shapeType,cleanLabel,refNum});
         });
         
-        // Phase 2: 리더라인 Y겹침 보정 후 렌더링
-        staggerLeaderYPositions(leaderEntries,22);
-        const leaderEndX=marginX+nodeAreaW+30;
-        ctx.strokeStyle='#000000';ctx.fillStyle='#000000';ctx.lineWidth=1;
-        leaderEntries.forEach(le=>{
-          const leaderStartX=le.sx+le.sw;
-          const origY=le.sy+le.sh/2;
-          ctx.beginPath();
-          if(Math.abs(le.y-origY)>2){
-            // 보정됨: 꺾인 L자형 리더라인
-            const bendX=leaderEndX-18;
-            ctx.moveTo(leaderStartX,origY);
-            ctx.lineTo(bendX,origY);
-            ctx.lineTo(bendX,le.y);
-            ctx.lineTo(leaderEndX,le.y);
-          }else{
-            ctx.moveTo(leaderStartX,le.y);
-            ctx.lineTo(leaderEndX,le.y);
-          }
-          ctx.stroke();
-          ctx.font='11px "맑은 고딕", sans-serif';
-          ctx.fillText(String(le.refNum),leaderEndX+6,le.y+4);
-        });
-        
-        // Phase 3: 직각 라우팅 Edge 연결선 (겹침 방지 오프셋)
+        // Phase 2: 연결선 먼저 (Shape 아래에 깔림)
         function drawCanvasOrthogonalEdge(ctx,fb,tb,aLen,allBoxArr){
           const route=getOrthogonalRoute(fb,tb,allBoxArr);
           if(!route||route.length<2)return;
@@ -5402,7 +5344,6 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.beginPath();ctx.moveTo(route[0].x,route[0].y);
           for(let i=1;i<route.length;i++)ctx.lineTo(route[i].x,route[i].y);
           ctx.stroke();
-          // Arrowheads at both ends
           const al=aLen||6;
           [[route[route.length-1],route[route.length-2]],[route[0],route[1]]].forEach(([tip,prev])=>{
             const a=Math.atan2(tip.y-prev.y,tip.x-prev.x);
@@ -5413,37 +5354,40 @@ function downloadDiagramImages(sid, format='jpeg'){
           });
         }
         
-        // Edge 겹침 방지: 공유 꼭짓점에서 나가는 edge에 오프셋 적용
         const edgesToDraw=uniqueEdges.length>0?uniqueEdges:nodes.slice(0,-1).map((n,i)=>({from:n.id,to:nodes[i+1].id}));
-        // 각 노드별 edge 수 카운트 → 오프셋 계산
-        const edgeOffsets={};
-        const nodeFanCount={};
+        const edgeOffsets={};const nodeFanCount={};
+        edgesToDraw.forEach(e=>{['from','to'].forEach(k=>{
+          const nid=e[k];if(!nodeFanCount[nid])nodeFanCount[nid]=0;
+          if(!edgeOffsets[e.from+'_'+e.to])edgeOffsets[e.from+'_'+e.to]={};
+          edgeOffsets[e.from+'_'+e.to][k+'Idx']=nodeFanCount[nid];nodeFanCount[nid]++;
+        });});
         edgesToDraw.forEach(e=>{
-          ['from','to'].forEach(k=>{
-            const nid=e[k];
-            if(!nodeFanCount[nid])nodeFanCount[nid]=0;
-            if(!edgeOffsets[e.from+'_'+e.to])edgeOffsets[e.from+'_'+e.to]={};
-            edgeOffsets[e.from+'_'+e.to][k+'Idx']=nodeFanCount[nid];
-            nodeFanCount[nid]++;
-          });
-        });
-        
-        edgesToDraw.forEach(e=>{
-          const fb=nodeBoxes[e.from],tb=nodeBoxes[e.to];
-          if(!fb||!tb)return;
-          const fanFrom=nodeFanCount[e.from]||1;
-          const fanTo=nodeFanCount[e.to]||1;
+          const fb=nodeBoxes[e.from],tb=nodeBoxes[e.to];if(!fb||!tb)return;
+          const fanFrom=nodeFanCount[e.from]||1,fanTo=nodeFanCount[e.to]||1;
           const idxFrom=edgeOffsets[e.from+'_'+e.to]?.fromIdx||0;
           const idxTo=edgeOffsets[e.from+'_'+e.to]?.toIdx||0;
-          // Fan offset: 각 edge를 약간씩 분산
           const offsetFrom=fanFrom>1?(idxFrom-((fanFrom-1)/2))*8:0;
           const offsetTo=fanTo>1?(idxTo-((fanTo-1)/2))*8:0;
-          
-          // 오프셋 적용된 가상 박스
-          const fbAdj={...fb,id:e.from,cx:fb.cx+offsetFrom,cy:fb.cy};
-          const tbAdj={...tb,id:e.to,cx:tb.cx+offsetTo,cy:tb.cy};
+          const fbAdj={...fb,id:e.from,cx:fb.cx+offsetFrom};
+          const tbAdj={...tb,id:e.to,cx:tb.cx+offsetTo};
           const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
           drawCanvasOrthogonalEdge(ctx,fbAdj,tbAdj,6,allBoxArr);
+        });
+        
+        // Phase 3: Shape (연결선 위에 덮음) + 참조번호
+        nodeData.forEach(nd=>{
+          const{sx,sy,sw,sh,shapeType,cleanLabel,refNum}=nd;
+          drawCanvasShape(ctx,shapeType,sx,sy,sw,sh,SHADOW,2);
+          const displayLabel=cleanLabel.length>(maxCols>1?10:16)?cleanLabel.slice(0,maxCols>1?8:14)+'…':cleanLabel;
+          ctx.fillStyle='#000000';
+          ctx.font=`${maxCols>2?10:maxCols>1?11:12}px "맑은 고딕", sans-serif`;
+          ctx.textAlign='center';ctx.textBaseline='middle';
+          const textCy=_shapeTextCy(shapeType,sy,sh);
+          ctx.fillText(displayLabel,sx+sw/2,textCy);
+          // ★ 참조번호: Shape 바로 아래 ★
+          ctx.font='11px "맑은 고딕", sans-serif';
+          ctx.fillText(String(refNum),sx+sw/2,sy+sh+12);
+          ctx.textAlign='left';ctx.textBaseline='alphabetic';
         });
       }else{
         // 도 2+: 최외곽 박스 있음
