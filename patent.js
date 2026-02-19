@@ -2707,15 +2707,68 @@ const DIAGRAM_ICON_REGISTRY=[
   {type:'cloud',keywords:['네트워크','통신망','인터넷','클라우드','통신 네트워크','네트워크 망']},
   {type:'monitor',keywords:['사용자 단말','단말기','단말 장치','클라이언트 단말','모바일 단말','스마트폰','디바이스','디스플레이 장치','휴대 단말']},
   {type:'server',keywords:['서버','서버 장치','처리 서버','컴퓨팅 장치','컴퓨팅 서버']},
-  {type:'sensor',keywords:['센서','감지부','감지 장치','측정부','센싱','감지 모듈','센서부','감지 센서','측정 장치','센서 모듈']},
-  {type:'antenna',keywords:['안테나','통신 모듈','무선 모듈','송수신부','송수신 모듈','rf 모듈','무선부','송신부','수신부','무선 통신부']},
-  {type:'document',keywords:['정보','데이터 수집','정보 수집','수집부','문서','리포트','로그','기록부','수집 모듈','정보 처리','데이터 처리']},
-  {type:'camera',keywords:['카메라','촬영부','촬영 장치','영상 촬영','이미지 센서','촬영 모듈','비전','영상 획득','렌즈']},
-  {type:'speaker',keywords:['스피커','음향 출력','오디오 출력','출력부','사운드','음성 출력','알림부','경보부','부저']},
+  {type:'sensor',keywords:['센서','감지 장치','센싱','감지 센서','측정 장치','센서 모듈']},
+  {type:'antenna',keywords:['안테나','rf 모듈']},
+  {type:'document',keywords:[]}, // document는 별도 로직으로 판별 (아래 matchIconShape 참고)
+  {type:'camera',keywords:['카메라','촬영 장치','영상 촬영','이미지 센서','촬영 모듈','비전','영상 획득','렌즈']},
+  {type:'speaker',keywords:['스피커','음향 출력','오디오 출력','사운드','음성 출력','부저']},
 ];
+
+// ═══ Shape 매칭 v2.0: 구성요소 vs 정보 분리 ═══
+// 핵심 규칙:
+// 1. "~부/~장치/~모듈/~유닛" 접미사 → 항상 구성요소 → box (server/sensor 등 예외 있음)
+// 2. document shape → "정보 그 자체"일 때만 (수집된 정보, 데이터 항목 등)
+//    예: "위치 정보(D1)", "사용자 데이터", "환경 정보" → document
+//    반례: "정보수집부(110)", "데이터 처리부", "수집부" → box (구성요소)
+const COMPONENT_SUFFIXES=['부','장치','모듈','유닛','기','체'];
+const DATA_KEYWORDS=['정보','데이터','로그','리포트','문서','기록','메시지','신호','이력','통계','프로파일','인덱스','맵','테이블','목록','리스트'];
+
+function _shapeKeywordMatch(text,keyword){
+  // 2글자 이하 키워드는 단어 경계 체크 (부분 문자열 오매칭 방지)
+  // 예: "비전" in "소비전력" → false (경계 체크)
+  // 예: "서버" in "GPU 서버" → true
+  if(keyword.length<=2){
+    const idx=text.indexOf(keyword);
+    if(idx<0)return false;
+    // 키워드 앞: 시작이거나 공백/특수문자
+    const before=idx===0||/[\s\(\)\[\]\/,·]/.test(text[idx-1]);
+    // 키워드 뒤: 끝이거나 공백/특수문자/숫자/접미사
+    const afterIdx=idx+keyword.length;
+    const after=afterIdx>=text.length||/[\s\(\)\[\]\/,·0-9]/.test(text[afterIdx])||COMPONENT_SUFFIXES.some(s=>text.slice(afterIdx).startsWith(s));
+    return before&&after;
+  }
+  return text.includes(keyword);
+}
+
 function matchIconShape(label){
-  const c=label.replace(/[(\s]?\d+[)\s]?$/,'').trim().toLowerCase();
-  for(const s of DIAGRAM_ICON_REGISTRY){for(const k of s.keywords){if(c.includes(k))return s.type;}}
+  const c=label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
+  const cl=c.toLowerCase();
+  
+  // Step 1: 구성요소 접미사 체크 ("~부", "~장치", "~모듈" 등)
+  const isComponent=COMPONENT_SUFFIXES.some(sfx=>c.endsWith(sfx));
+  
+  // Step 2: 구성요소라도 특정 shape이 명확한 것은 허용
+  if(isComponent){
+    // 서버, 단말, 카메라 등은 접미사가 있어도 shape 적용 (document 제외)
+    for(const s of DIAGRAM_ICON_REGISTRY){
+      if(s.type==='document')continue;
+      for(const k of s.keywords){if(_shapeKeywordMatch(cl,k))return s.type;}
+    }
+    return 'box'; // 구성요소는 기본 box
+  }
+  
+  // Step 3: 구성요소가 아닌 경우 → 일반 shape 매칭
+  for(const s of DIAGRAM_ICON_REGISTRY){
+    if(s.type==='document')continue;
+    for(const k of s.keywords){if(_shapeKeywordMatch(cl,k))return s.type;}
+  }
+  
+  // Step 4: document shape 판별 — "정보 그 자체"인 경우에만
+  // 조건: 데이터/정보 키워드 포함 + 구성요소 접미사 없음
+  if(DATA_KEYWORDS.some(dk=>cl.includes(dk))){
+    return 'document';
+  }
+  
   return 'box';
 }
 
@@ -3161,10 +3214,12 @@ function computeEdgeRoutes(edges,positions){
   }).filter(Boolean);
 }
 
-// ═══ 2D Layout Engine for Device Diagrams ═══
+// ═══ 2D Layout Engine for Device Diagrams v2.0 ═══
+// v2: max 3 cols per row enforcement, auto-split wide layers
 function computeDeviceLayout2D(nodes,edges){
   const n=nodes.length;
   if(n===0)return{grid:{},maxCols:1,numRows:0,uniqueEdges:[]};
+  const MAX_COLS=3; // ★ 한 행 최대 3개
   
   // Build bidirectional adjacency
   const adj={};
@@ -3178,11 +3233,17 @@ function computeDeviceLayout2D(nodes,edges){
   });
   const uniqueEdges=[...edgeSet].map(k=>{const[f,t]=k.split('|');return{from:f,to:t};});
   
-  // No edges → single column, no connections
+  // No edges → single column layout (max MAX_COLS per row)
   if(edges.length===0){
     const grid={};
-    nodes.forEach((nd,i)=>{grid[nd.id]={row:i,col:0,layerSize:1};});
-    return{grid,maxCols:1,numRows:n,uniqueEdges:[]};
+    const rows=[];
+    for(let i=0;i<n;i+=MAX_COLS){
+      rows.push(nodes.slice(i,Math.min(i+MAX_COLS,n)).map(nd=>nd.id));
+    }
+    rows.forEach((row,ri)=>{
+      row.forEach((id,ci)=>{grid[id]={row:ri,col:ci,layerSize:row.length};});
+    });
+    return{grid,maxCols:Math.min(n,MAX_COLS),numRows:rows.length,uniqueEdges:[],layers:rows};
   }
   
   // Find hub node (highest degree)
@@ -3194,7 +3255,7 @@ function computeDeviceLayout2D(nodes,edges){
   
   // BFS layers from hub
   const visited=new Set([hubId]);
-  const layers=[[hubId]];
+  const rawLayers=[[hubId]];
   let frontier=[hubId];
   while(frontier.length){
     const next=[];
@@ -3203,10 +3264,23 @@ function computeDeviceLayout2D(nodes,edges){
         if(!visited.has(nid)){visited.add(nid);next.push(nid);}
       });
     });
-    if(next.length)layers.push(next);
+    if(next.length)rawLayers.push(next);
     frontier=next;
   }
-  nodes.forEach(nd=>{if(!visited.has(nd.id)){layers[layers.length-1].push(nd.id);visited.add(nd.id);}});
+  nodes.forEach(nd=>{if(!visited.has(nd.id)){rawLayers[rawLayers.length-1].push(nd.id);visited.add(nd.id);}});
+  
+  // ★ 핵심: 한 행 MAX_COLS 초과 시 분할 ★
+  const layers=[];
+  rawLayers.forEach(layer=>{
+    if(layer.length<=MAX_COLS){
+      layers.push(layer);
+    }else{
+      // MAX_COLS씩 나누어 여러 행으로
+      for(let i=0;i<layer.length;i+=MAX_COLS){
+        layers.push(layer.slice(i,Math.min(i+MAX_COLS,layer.length)));
+      }
+    }
+  });
   
   // Assign grid positions
   const grid={};
@@ -3218,7 +3292,7 @@ function computeDeviceLayout2D(nodes,edges){
     });
   });
   
-  return{grid,maxCols,numRows:layers.length,uniqueEdges,layers};
+  return{grid,maxCols:Math.min(maxCols,MAX_COLS),numRows:layers.length,uniqueEdges,layers};
 }
 
 // ── Orthogonal (직각) Connection Router for 2D layout ──
@@ -3745,8 +3819,11 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const frameW=Math.max(6.2*PX,innerNodeAreaW+framePadX*2+0.4*PX);
     const frameH=innerNumRows*(boxH+boxGap)+maxShapeExtra+framePadY*2;
     const leaderMargin=2.0*PX;
+    // 리더 개수 기반 최소 높이 (내부노드 + 프레임)
+    const leaderCount=displayNodes.length+1;
+    const leaderMinH=leaderCount*24+frameY+0.5*PX;
+    const svgH=Math.max(frameH+1.5*PX,leaderMinH);
     const svgW=frameX+frameW+leaderMargin;
-    const svgH=frameH+1.5*PX;
     const maxW=innerMaxCols<=1?600:innerMaxCols===2?750:900;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
