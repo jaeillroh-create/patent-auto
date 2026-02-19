@@ -707,7 +707,7 @@ function extractBriefDescriptions(s07,s11){
     if(i===0||allL1){d.push(`도 ${fn}은 ${title}의 전체 구성을 나타내는 블록도이다.`);}
     else{const refs=dd.nodes.map(n=>exRef(n.label)).filter(Boolean).map(Number).filter(n=>n>=100&&n<1000&&n%100===0);
       const pRef=refs.length?refs[0]:100;const pNode=dd.nodes.find(n=>{const r=exRef(n.label);return r&&parseInt(r)===pRef;});
-      const pName=pNode?pNode.label.replace(/[(\s]?\d+[)\s]?$/i,'').trim():devSubject;
+      const pName=pNode?pNode.label.replace(/[\s(](?:S|D)?\d+[)\s]*$/i,'').trim():devSubject;
       d.push(`도 ${fn}은 ${pName}(${pRef})의 내부 구성을 나타내는 블록도이다.`);}
     seen.add(fn);});
   // 2b. 방법 도면 폴백
@@ -2270,8 +2270,16 @@ ${diagram}`,4096);
             }
           }
           
-          // ★ 2D 레이아웃 적용 ★
-          const batchLayout=computeDeviceLayout2D(nodes,edges);
+          // ★ 2D 레이아웃 적용 (L1 노드 제외) ★
+          const batchInnerNodes=nodes.filter(n=>{
+            const ref=extractRefNum(n.label,'');
+            if(!ref)return true;
+            if(parseInt(ref)===frameRefNum)return false;
+            if(_isL1RefNum(ref))return false;
+            return true;
+          });
+          const batchDisplayNodes=batchInnerNodes.length>0?batchInnerNodes:nodes;
+          const batchLayout=computeDeviceLayout2D(batchDisplayNodes,edges);
           const{grid:batchGrid,maxCols:batchMaxCols,numRows:batchNumRows,uniqueEdges:batchUniqueEdges}=batchLayout;
           const batchColGap=0.30;
           const batchBoxW=batchMaxCols<=1?(frameW-1.0):batchMaxCols===2?(frameW-1.0-batchColGap)/2:(frameW-1.0-batchColGap*2)/3;
@@ -2292,7 +2300,7 @@ ${diagram}`,4096);
           
           // 내부 구성요소 박스들 (2D 배치)
           const batchNodeBoxes={};
-          nodes.forEach((n,i)=>{
+          batchDisplayNodes.forEach((n,i)=>{
             const gp=batchGrid[n.id];
             if(!gp)return;
             const rowW=gp.layerSize*batchBoxW+(gp.layerSize-1)*batchColGap;
@@ -2302,7 +2310,7 @@ ${diagram}`,4096);
             // 참조번호 추출
             const fallbackRef=frameRefNum+10*(i+1);
             const refNum=extractRefNum(n.label,String(fallbackRef));
-            const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+            const cleanLabel=n.label.replace(/[\s(](?:S|D)?\d+[)\s]*$/i,'').trim();
             const shapeType=matchIconShape(n.label);
             const sm=_shapeMetrics(shapeType,batchBoxW,boxH);
             const SO=SHADOW_OFFSET;
@@ -2641,6 +2649,13 @@ function _extractRefNum(label,fallback){
   const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
   return match?match[1]:(fallback||'');
 }
+// ★ 안전한 라벨 정리: 참조번호 제거 후 빈 문자열/1글자 방지 ★
+function _safeCleanLabel(label){
+  if(!label)return '';
+  const cleaned=label.replace(/[\s(](?:S|D)?\d+[)\s]*$/i,'').trim();
+  if(cleaned.length<=1&&label.length>1)return label.replace(/[()]/g,'').trim();
+  return cleaned||label;
+}
 function _isL1RefNum(ref){
   if(!ref||String(ref).startsWith('S'))return false;
   const s=String(ref);
@@ -2723,7 +2738,7 @@ function _shapeKeywordMatch(text,keyword){
 }
 
 function matchIconShape(label){
-  const c=label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
+  const c=label.replace(/[\s(](?:S|D)?\d+[)\s]*$/i,'').trim();
   const cl=c.toLowerCase();
   
   // Step 1: 구성요소 접미사 체크 ("~부", "~장치", "~모듈" 등)
@@ -3524,6 +3539,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     return match?match[1]:fallback;
   }
   
+  // ★ 안전한 라벨 정리: 참조번호 제거 후 빈 문자열/1글자 방지 ★
+  function safeCleanLabel(label){
+    const cleaned=label.replace(/[\s(](?:S|D)?\d+[)\s]*$/i,'').trim();
+    // 빈 문자열이거나 1글자(노드 ID일 가능성) → 원본 라벨 유지
+    if(cleaned.length<=1&&label.length>1)return label.replace(/[()]/g,'').trim();
+    return cleaned||label;
+  }
+  
   // L1 여부 판별 (X00 형식인지)
   function isL1RefNum(ref){
     if(!ref||String(ref).startsWith('S'))return false;
@@ -3657,7 +3680,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     nodes.forEach((n,i)=>{
       const pos=nodePositions[n.id];
       const refNum=extractRefNum(n.label,'');
-      const displayLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').replace(/\?$/, '').trim();
+      const displayLabel=n.label.replace(/[\s(](?:S|D)?\d+[)\s]*$/i,'').replace(/\?$/, '').trim();
       const isDiamond=n.shape==='diamond';
       const isStartEnd=pos.isStartEnd;
       const SO=3;
@@ -3834,8 +3857,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const rowStartX=marginX+(maxNodeAreaW-rowW)/2;
       const bx=rowStartX+gp.col*(boxW2D+colGap);
       const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 사용 ★
-      const refNum=extractRefNum(nd.label,String(100));
-      const cleanLabel=nd.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+      const refNum=extractRefNum(nd.label,String((parseInt(nd.id.replace(/\D/g,''))||1)*100));
+      const cleanLabel=safeCleanLabel(nd.label);
       const displayLabel=cleanLabel.length>(maxCols>1?10:16)?cleanLabel.slice(0,maxCols>1?8:14)+'…':cleanLabel;
       const shapeType=matchIconShape(nd.label);
       const sm=_shapeMetrics(shapeType,boxW2D,boxH);
@@ -3979,18 +4002,20 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   } else {
     // ═══ 도 2+: 그리드 레이아웃 v9.0 (최외곽 박스 + 2D 배치 + edge 기반 연결) ═══
     
-    // ★ 최외곽 프레임과 동일한 참조번호를 가진 노드 제외 ★
+    // ★ 프레임 자신 + 다른 L1 노드 모두 제외 (L1끼리 프레임 안에 포함 방지) ★
     const innerNodes=nodes.filter(n=>{
       const ref=extractRefNum(n.label,'');
       if(!ref)return true;
       const refNum=parseInt(ref);
-      return refNum!==frameRefNum;
+      if(refNum===frameRefNum)return false; // 프레임 자신
+      if(isL1RefNum(ref))return false; // 다른 L1 노드 (200, 300 등)
+      return true;
     });
     const frameNode=nodes.find(n=>{
       const ref=extractRefNum(n.label,'');
       return ref&&parseInt(ref)===frameRefNum;
     });
-    const frameLabel=frameNode?frameNode.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim():'';
+    const frameLabel=frameNode?frameNode.label.replace(/[\s(](?:S|D)?\d+[)\s]*$/i,'').trim():'';
     const displayNodes=innerNodes.length>0?innerNodes:nodes;
     
     // 내부 노드 2D 레이아웃 계산
@@ -4048,7 +4073,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sm.sw,sm.sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sm.sw,sm.sh,1.5);
-      const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+      const cleanLabel=safeCleanLabel(n.label);
       const displayLabel=cleanLabel.length>(innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>1?8:14)+'…':cleanLabel;
       const textCy=_shapeTextCy(shapeType,sy,sm.sh);
       const fontSize=innerMaxCols>2?9:innerMaxCols>1?10:11;
@@ -4306,7 +4331,7 @@ function validateDiagramRules(nodes,figNum,designText,edges){
       edgeList.forEach(e=>{if(adj[e.from]!==undefined)adj[e.from]++;if(adj[e.to]!==undefined)adj[e.to]++;});
       const hubNodes=Object.entries(adj).filter(([,deg])=>deg>=3);
       if(hubNodes.length>0&&figNum===1){
-        const hubLabels=hubNodes.map(([id])=>{const nd=nodes.find(n=>n.id===id);return nd?nd.label.replace(/[(\s]?\d+[)\s]?$/,'').trim():id;});
+        const hubLabels=hubNodes.map(([id])=>{const nd=nodes.find(n=>n.id===id);return nd?safeCleanLabel(nd.label):id;});
         issues.push({severity:'INFO',rule:'R9b',message:`도 ${figNum}: 허브 노드(${hubLabels.join(',')}) 감지 → BFS 기반 2D 배치 적용`});
       }
     }
@@ -4362,7 +4387,7 @@ function postRenderValidation(sid){
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
   const allIssues=[];
   
-  data.forEach(({nodes},idx)=>{
+  data.forEach(({nodes,edges},idx)=>{
     const figNum=figOffset+idx+1;
     const numRefs=nodes.map(n=>{
       const m=(n.label||'').match(/[(\s]?(S?\d+)[)\s]?$/i);
@@ -4373,11 +4398,10 @@ function postRenderValidation(sid){
     const nonL1=numRefs.filter(n=>n%100!==0);
     
     // 검증 V1: L1이 최외곽이 되는 경우, 내부에 L1이 중복 표시되면 안 됨
-    if(figNum>1&&l1s.length===1&&nonL1.length>0){
-      // 렌더러가 L1을 제외하는지 확인 (코드 레벨 검증)
+    if(figNum>1&&l1s.length>1){
       allIssues.push({
-        figNum,severity:'CHECK',
-        message:`도 ${figNum}: 최외곽=${l1s[0]}, 내부 박스=${nonL1.length}개 (L1 제외 확인)`
+        figNum,severity:'WARN',
+        message:`도 ${figNum}: L1 노드 ${l1s.length}개 감지(${l1s.join(',')}). 프레임 1개만 사용, 나머지 L1은 내부 표시에서 제외됨`
       });
     }
     
@@ -4388,6 +4412,29 @@ function postRenderValidation(sid){
         message:`도 1에 L2/L3 참조번호(${nonL1.join(',')}) 포함`
       });
     }
+    
+    // 검증 V3: 너무 짧은 라벨 (노드 ID일 가능성)
+    nodes.forEach(n=>{
+      const cleaned=_safeCleanLabel(n.label||'');
+      if(cleaned.length<=2&&!/\d/.test(cleaned)){
+        allIssues.push({
+          figNum,severity:'WARN',
+          message:`도 ${figNum}: 노드 "${n.id}" 라벨이 너무 짧음 ("${cleaned}") — 노드 ID가 라벨로 사용되었을 수 있음`
+        });
+      }
+    });
+    
+    // 검증 V4: 중복 참조번호
+    const refCounts={};
+    numRefs.forEach(r=>{refCounts[r]=(refCounts[r]||0)+1;});
+    Object.entries(refCounts).forEach(([ref,cnt])=>{
+      if(cnt>1){
+        allIssues.push({
+          figNum,severity:'WARN',
+          message:`도 ${figNum}: 참조번호 ${ref}이(가) ${cnt}개 노드에 중복 사용됨`
+        });
+      }
+    });
   });
   
   return allIssues;
@@ -4548,7 +4595,7 @@ async function runAIDiagramReview(sid){
     const figNum=figOffset+idx+1;
     const nodeList=nodes.map(n=>{
       const ref=_extractRefNum(n.label,'?');
-      const clean=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
+      const clean=safeCleanLabel(n.label);
       return `${clean}(${ref})`;
     }).join(', ');
     const edgeList=(edges||[]).map(e=>{
@@ -4814,7 +4861,7 @@ function downloadPptx(sid){
         
         nodes.forEach((n,i)=>{
           const refNum=extractRefNum(n.label,'');
-          const cleanLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
+          const cleanLabel=_safeCleanLabel(n.label);
           const isStartEnd=/시작|종료|START|END/i.test(n.label);
           
           const boxW=isStartEnd?startEndBoxW:normalBoxW;
@@ -4887,7 +4934,7 @@ function downloadPptx(sid){
           const bx=rowStartX+gp.col*(boxW2D+colGap);
           const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 ★
           const refNum=extractRefNum(n.label,String((parseInt(n.id.replace(/\D/g,''))||1)*100));
-          const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          const cleanLabel=_safeCleanLabel(n.label);
           const shapeType=matchIconShape(n.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
           const sx=bx+sm.dx;
@@ -4983,11 +5030,13 @@ function downloadPptx(sid){
       }else{
         // 도 2+: 최외곽 박스 있음
         
-        // ★ 최외곽 프레임과 동일한 참조번호 노드 제외 ★
+        // ★ 프레임 자신 + 다른 L1 노드 모두 제외 ★
         const innerNodes=nodes.filter(n=>{
           const ref=extractRefNum(n.label,'');
           if(!ref)return true;
-          return parseInt(ref)!==frameRefNum;
+          if(parseInt(ref)===frameRefNum)return false;
+          if(isL1RefNum(ref))return false;
+          return true;
         });
         const displayNodes=innerNodes.length>0?innerNodes:nodes;
         const dCount=displayNodes.length;
@@ -5022,7 +5071,7 @@ function downloadPptx(sid){
           const by=boxStartY+gp.row*(boxH+boxGap2);
           const fallbackRef=frameRefNum+10*(parseInt(n.id.replace(/\D/g,''))||1);
           const refNum=extractRefNum(n.label,String(fallbackRef));
-          const cleanLabel=n.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          const cleanLabel=_safeCleanLabel(n.label);
           const shapeType=matchIconShape(n.label);
           const sm=_shapeMetrics(shapeType,innerBoxW,boxH);
           const sx=bx+sm.dx;
@@ -5228,7 +5277,7 @@ function downloadDiagramImages(sid, format='jpeg'){
         
         nodes.forEach((n,i)=>{
           const refNum=extractRefNum(n.label,'');
-          const cleanLabel=n.label.replace(/[(\s]?(?:S|D)?\d+[)\s]?$/i,'').trim();
+          const cleanLabel=_safeCleanLabel(n.label);
           const isStartEnd=/시작|종료|START|END/i.test(n.label);
           
           // ★ 시작/종료는 축소 폭, 모든 박스 중앙 정렬 ★
@@ -5489,7 +5538,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           const bx=rowStartX+gp.col*(boxW2D+colGap);
           const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 ★
           const refNum=extractRefNum(nd.label,String((parseInt(nd.id.replace(/\D/g,''))||1)*100));
-          const cleanLabel=nd.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          const cleanLabel=_safeCleanLabel(nd.label);
           const shapeType=matchIconShape(nd.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
           const sx=bx+sm.dx;
@@ -5594,11 +5643,13 @@ function downloadDiagramImages(sid, format='jpeg'){
       }else{
         // 도 2+: 최외곽 박스 있음
         
-        // ★ 최외곽 프레임과 동일한 참조번호 노드 제외 ★
+        // ★ 프레임 자신 + 다른 L1 노드 모두 제외 ★
         const innerNodes=nodes.filter(n=>{
           const ref=extractRefNum(n.label,'');
           if(!ref)return true;
-          return parseInt(ref)!==frameRefNum;
+          if(parseInt(ref)===frameRefNum)return false;
+          if(isL1RefNum(ref))return false;
+          return true;
         });
         const displayNodes=innerNodes.length>0?innerNodes:nodes;
         const dCount=displayNodes.length;
@@ -5632,7 +5683,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           const by=boxStartY+gp.row*(boxH+boxGap2);
           const fallbackRef=frameRefNum+10*(parseInt(nd.id.replace(/\D/g,''))||1);
           const refNum=extractRefNum(nd.label,String(fallbackRef));
-          const cleanLabel=nd.label.replace(/[(\s]?S?\d+[)\s]?$/i,'').trim();
+          const cleanLabel=_safeCleanLabel(nd.label);
           const shapeType=matchIconShape(nd.label);
           const sm=_shapeMetrics(shapeType,innerBoxW,boxH);
           const sx=bx+sm.dx;
