@@ -1706,6 +1706,13 @@ ${reqInst?`\n사용자가 보유한 필수 도면: ${requiredFigures.length}개 
 4. 같은 행의 노드들은 서로 직접 연결이 없어야 함 (있으면 다른 행으로)
 5. 연결된 노드는 인접 행에 배치 (2행 이상 떨어지지 않게)
 
+★★★ 참조번호 순서 규칙 (도면 설계 + 상세설명 연계) ★★★
+- 구성요소 나열 시 참조번호 오름차순으로 정렬하라: 110→120→130→140
+- 도면 내 행 배치도 가능한 한 번호 순서를 존중하라 (작은 번호가 위쪽/왼쪽)
+- 예: 행1: 통신부(110), 행2: 프로세서(120), 행3: 메모리(130), 저장부(140)
+- 하위 구성요소(L3)도 오름차순: 121→122→123
+- 이 순서는 상세설명(Step 8)에서 "도 N을 참조하면" 설명 순서의 기준이 된다
+
 [파트2: 도면의 간단한 설명]
 ★★★ 모든 도면에 대해 빠짐없이 간단한 설명을 작성하라 ★★★
 ---BRIEF_DESCRIPTIONS---
@@ -1727,6 +1734,9 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
         detailed:{charPerFig:'약 2,000자 이상',total:'8,000~10,000자',extra:'각 도면마다 구성요소의 기능, 동작 원리, 데이터 흐름, 상호 연동 관계를 상세히 설명하라. 변형 실시예를 통해 다양한 구현 방식을 기술하라. 절대 축약하지 마라.'},
         custom:{charPerFig:'약 '+customDetailChars+'자',total:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 변형 실시예를 포함하라.'}
       }[detailLevel];
+      const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
+      const lastDeviceFig=getLastFigureNumber(outputs.step_07||'')||deviceFigCount;
+      const hasMethodClaims=!!outputs.step_10;
       return `아래 발명에 대한 【발명을 실시하기 위한 구체적인 내용】의 본문만 작성하라.
 
 ⛔ 이것은 "장치" 상세설명이다. 방법(~하는 단계, S100 등)은 포함하지 마라.
@@ -1740,6 +1750,19 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
 - 등록 앵커 종속항(창의적·구체적 기술수단 포함)의 다단계 처리, 기준값/가중치 동작 원리, 검증/보정 루프를 구체적으로 설명하라.
 - 각 핵심 구성요소에 대해 변형 실시예를 포함하라.
 - 제한성 표현(만, 반드시, ~에 한하여 등) 사용 금지.
+
+⛔⛔⛔ 도면 범위 제한 (위반 시 전체 무효) ⛔⛔⛔
+- 이 발명의 장치 도면은 도 1 ~ 도 ${lastDeviceFig}까지만 존재한다.
+- 도 ${lastDeviceFig+1} 이후의 도면을 참조하거나 "도 ${lastDeviceFig+1}을 참조하면" 등의 표현을 절대 사용하지 마라.
+- [장치 도면]에 기재된 도면 번호만 참조하라. 기재되지 않은 도면 번호를 임의로 생성하지 마라.
+${!hasMethodClaims?`- 방법 청구항이 생성되지 않았으므로, 방법 도면(흐름도) 및 방법 설명이 존재하지 않는다.
+- 방법 관련 내용(S+숫자, ~하는 단계, 흐름도 참조)을 절대 포함하지 마라.`:''}
+
+★★★ 설명 순서 규칙 (참조번호 순서 준수) ★★★
+- 도면 부호의 번호가 작은 것부터 큰 것 순서로 설명하라.
+- 도 1 → 도 2 → 도 3 → ... 순서로 진행하라.
+- 각 도면 내에서도 참조번호 오름차순으로 설명하라: 예) 110→120→130→140 순서.
+- 같은 L2 구성요소 내의 L3 하위 요소도 오름차순: 예) 121→122→123 순서.
 
 ⛔⛔⛔ 방법 표현 절대 금지 (위반 시 전체 무효) ⛔⛔⛔
 - \"~하는 단계\", \"~하는 단계이다\" 표현 절대 금지
@@ -1767,8 +1790,7 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
   (3) 기준값/임계값/가중치가 있으면, 그 값의 기술적 의의와 조정 시 영향을 설명하라
   (4) 다단계 처리가 있으면, 각 단계의 입력·처리·출력을 명시하라
   (5) 조건 분기가 있으면, 각 분기의 판단 기준과 분기 후 처리를 설명하라
-`:''}
-★ 변형 실시예 규칙:
+`:''}★ 변형 실시예 규칙:
 - 독립항의 상위 개념 용어마다: "한편, 다른 실시예에서 상기 [용어]는 [구체적 대안]일 수 있다" 형태로 기술
 - 앵커 종속항의 핵심 처리에 대해 1개 이상의 대안적 구현을 기술
 - 변형 실시예는 독립항의 보호범위를 뒷받침하는 방향이어야 한다
@@ -2528,7 +2550,7 @@ ${diagram}`,4096);
         pptx.layout='A4_PORTRAIT';
         
         // 선 굵기 상수 (KIPO 기준)
-        const LINE_FRAME=2.0, LINE_BOX=1.5, LINE_ARROW=1.0, SHADOW_OFFSET=0.04;
+        const LINE_FRAME=2.0, LINE_BOX=1.5, LINE_ARROW=1.0, SHADOW_OFFSET=0.025;
         const PAGE_MARGIN=0.6;
         const PAGE_W=8.27-PAGE_MARGIN*2;
         const PAGE_H=11.69-PAGE_MARGIN*2;
@@ -2549,7 +2571,8 @@ ${diagram}`,4096);
           const frameY=PAGE_MARGIN+TITLE_H;
           const frameW=PAGE_W-0.8;
           const maxFrameH=Math.min(AVAILABLE_H, nodeCount*1.0+0.6);
-          const frameH=maxFrameH;
+          // v8.0: tight-fit frame height
+          const frameH=batchNumRows*boxH+(batchNumRows>1?(batchNumRows-1)*PPTX_BOX_GAP_Y:0)+PPTX_FRAME_PAD_Y*2;
           
           // 참조번호 추출 함수
           function extractRefNum(label,fallback){
@@ -2578,16 +2601,23 @@ ${diagram}`,4096);
           const batchDisplayNodes=batchInnerNodes.length>0?batchInnerNodes:nodes;
           const batchLayout=computeDeviceLayout2D(batchDisplayNodes,edges);
           const{grid:batchGrid,maxCols:batchMaxCols,numRows:batchNumRows,uniqueEdges:batchUniqueEdges}=batchLayout;
-          const batchColGap=0.30;
-          const batchBoxW=batchMaxCols<=1?(frameW-1.0):batchMaxCols===2?(frameW-1.0-batchColGap)/2:(frameW-1.0-batchColGap*2)/3;
-          const batchNodeAreaW=batchMaxCols*batchBoxW+(batchMaxCols-1)*batchColGap;
-          const framePadY=0.3;
-          const innerH=frameH-framePadY*2;
-          const boxH=Math.min(0.65,(innerH-0.15*(batchNumRows-1))/batchNumRows); // 0.65 for 2-line
-          const boxGap=Math.min(0.5,(innerH-boxH*batchNumRows)/(batchNumRows>1?batchNumRows-1:1));
-          const boxW=frameW-1.0;
-          const boxStartX=frameX+0.5;
-          const boxStartY=frameY+framePadY;
+          
+          // ═══ v8.0: 충돌 방지 기반 레이아웃 상수 ═══
+          const PPTX_FRAME_PAD_X=0.45; // 인치: 프레임↔박스 여백
+          const PPTX_FRAME_PAD_Y=0.35;
+          const PPTX_BOX_GAP_X=0.35;   // 박스 간 수평 간격
+          const PPTX_BOX_GAP_Y=0.30;   // 박스 간 수직 간격
+          const PPTX_LEADER_W=0.35;    // 리더라인 공간
+          
+          const pptxContentW=frameW-PPTX_FRAME_PAD_X*2;
+          const batchBoxW=batchMaxCols<=1?Math.min(pptxContentW,4.0):
+            batchMaxCols===2?(pptxContentW-PPTX_BOX_GAP_X)/2:
+            (pptxContentW-PPTX_BOX_GAP_X*2)/3;
+          const batchNodeAreaW=batchMaxCols*batchBoxW+(batchMaxCols-1)*PPTX_BOX_GAP_X;
+          const boxH=Math.min(0.65,(AVAILABLE_H-PPTX_FRAME_PAD_Y*2-PPTX_BOX_GAP_Y*(batchNumRows-1))/batchNumRows);
+          const boxStartX=frameX+PPTX_FRAME_PAD_X;
+          const boxStartY=frameY+PPTX_FRAME_PAD_Y;
+          const batchColGap=PPTX_BOX_GAP_X;
           const refLabelX=frameX+frameW+0.1;
           
           // 그림자 + 외곽 본체
@@ -2603,7 +2633,7 @@ ${diagram}`,4096);
             const rowW=gp.layerSize*batchBoxW+(gp.layerSize-1)*batchColGap;
             const rowStartX=boxStartX+(batchNodeAreaW-rowW)/2;
             const bx=rowStartX+gp.col*(batchBoxW+batchColGap);
-            const by=boxStartY+gp.row*(boxH+boxGap);
+            const by=boxStartY+gp.row*(boxH+PPTX_BOX_GAP_Y);
             // 참조번호 추출
             const fallbackRef=frameRefNum+10*(i+1);
             const refNum=extractRefNum(n.label,String(fallbackRef));
@@ -3825,10 +3855,97 @@ function getConnectionPoints(fromBox,toBox){
   }
 }
 
+// ═══ v8.0: 객체 기반 충돌 방지 레이아웃 엔진 (공통) ═══
+// 모든 렌더러(SVG, Canvas, PPTX)가 공유하는 레이아웃 계산기
+function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNumRows, innerUniqueEdges, frameRefNum, opts){
+  const{boxBaseW, boxBaseH, colGap, rowGap, framePad, shadowSize, scale}=opts;
+  // scale: SVG=72(PX), Canvas=1(px), PPTX=1(inch)
+  
+  // Phase 1: 각 노드를 객체(Rect)로 변환
+  const objects=[];
+  displayNodes.forEach(nd=>{
+    const gp=innerGrid[nd.id];
+    if(!gp)return;
+    // 행 내 노드 수에 따른 중앙 정렬
+    const rowNodeAreaW=gp.layerSize*boxBaseW+(gp.layerSize-1)*colGap;
+    const totalAreaW=innerMaxCols*boxBaseW+(innerMaxCols-1)*colGap;
+    const rowOffsetX=(totalAreaW-rowNodeAreaW)/2;
+    const localX=rowOffsetX+gp.col*(boxBaseW+colGap);
+    const localY=gp.row*(boxBaseH+rowGap);
+    const fallbackRef=frameRefNum+10*(parseInt(nd.id.replace(/\D/g,''))||1);
+    objects.push({
+      id:nd.id, type:'box',
+      x:localX, y:localY,
+      w:boxBaseW, h:boxBaseH,
+      label:nd.label, fallbackRef
+    });
+  });
+  
+  // Phase 2: 충돌 감지 & 자동 보정 (최대 20라운드)
+  // v8.1: 그림자 크기를 포함한 충돌 영역 (shadow + 여유 패딩)
+  const MIN_SEP=Math.max(colGap*0.3, shadowSize*4+4); // 그림자(×4) + 여유
+  for(let round=0;round<20;round++){
+    let anyFixed=false;
+    for(let i=0;i<objects.length;i++){
+      for(let j=i+1;j<objects.length;j++){
+        const a=objects[i], b=objects[j];
+        const gapX=(a.x<b.x)?(b.x-(a.x+a.w)):(a.x-(b.x+b.w));
+        const gapY=(a.y<b.y)?(b.y-(a.y+a.h)):(a.y-(b.y+b.h));
+        // 둘 다 음수면 겹침
+        if(gapX<MIN_SEP && gapY<MIN_SEP){
+          const pushX=MIN_SEP-gapX;
+          const pushY=MIN_SEP-gapY;
+          // 더 적은 이동으로 해결되는 방향 선택
+          if(pushX<=pushY && pushX>0){
+            if(b.x>=a.x){b.x+=pushX;}else{a.x+=pushX;}
+            anyFixed=true;
+          }else if(pushY>0){
+            if(b.y>=a.y){b.y+=pushY;}else{a.y+=pushY;}
+            anyFixed=true;
+          }
+        }
+      }
+    }
+    if(!anyFixed)break;
+  }
+  
+  // Phase 3: 바운딩 박스 계산 (v8.1: 그림자 공간 포함)
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  objects.forEach(o=>{
+    minX=Math.min(minX,o.x);
+    minY=Math.min(minY,o.y);
+    maxX=Math.max(maxX,o.x+o.w+shadowSize+2);
+    maxY=Math.max(maxY,o.y+o.h+shadowSize+2);
+  });
+  if(!objects.length){minX=0;minY=0;maxX=boxBaseW;maxY=boxBaseH;}
+  const contentW=maxX-minX;
+  const contentH=maxY-minY;
+  
+  // Phase 4: 프레임 좌표 (content + padding)
+  const frameW=contentW+framePad*2;
+  const frameH=contentH+framePad*2;
+  
+  // Phase 5: 객체 좌표를 프레임 내부 좌표로 재배치 (원점 보정)
+  const offsetX=framePad-minX;
+  const offsetY=framePad-minY;
+  objects.forEach(o=>{o.x+=offsetX;o.y+=offsetY;});
+  
+  // Phase 6: 프레임 경계 침범 최종 검증 (v8.1: 그림자 공간 확보)
+  const shadowPad=shadowSize+2;
+  objects.forEach(o=>{
+    if(o.x<framePad)o.x=framePad;
+    if(o.y<framePad)o.y=framePad;
+    if(o.x+o.w+shadowPad>frameW-framePad)o.x=frameW-framePad-o.w-shadowPad;
+    if(o.y+o.h+shadowPad>frameH-framePad)o.y=frameH-framePad-o.h-shadowPad;
+  });
+  
+  return{objects, frameW, frameH, contentW, contentH};
+}
+
 function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   // ═══ KIPO 특허 도면 규칙 v4.1 (직계 부모 일치) ═══
   const PX=72;
-  const SHADOW_OFFSET=4;
+  const SHADOW_OFFSET=2.5; // v8.0: 축소 (4→2.5)
   
   // 노드 라벨에서 참조번호 추출 함수
   function extractRefNum(label,fallback){
@@ -4101,13 +4218,13 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const{grid,maxCols,numRows,uniqueEdges}=layout;
     
     // 열 수에 따른 박스 크기 조정
-    const colGap=0.4*PX;
+    const colGap=0.55*PX; // v8.1: 증가 (0.4→0.55)
     const boxW2D=maxCols<=1?5.0*PX:maxCols===2?3.2*PX:2.4*PX;
     const maxNodeAreaW=maxCols*boxW2D+(maxCols-1)*colGap;
-    const marginX=0.5*PX;
-    const marginY=0.5*PX;
-    const refNumH=24; // 참조번호 + 수직선 공간
-    const rowGapBase=0.4*PX;
+    const marginX=0.6*PX; // v8.1: 증가 (0.5→0.6)
+    const marginY=0.6*PX; // v8.1: 증가 (0.5→0.6)
+    const refNumH=26; // v8.1: 증가 (24→26)
+    const rowGapBase=0.55*PX; // v8.1: 증가 (0.4→0.55)
     
     // ★ 행별 실제 최대 Shape 높이 계산 (겹침 방지 핵심) ★
     const rowMaxH={};
@@ -4290,7 +4407,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const c=document.getElementById(containerId);
     if(c)c.innerHTML=svg;
   } else {
-    // ═══ 도 2+: 그리드 레이아웃 v9.0 (최외곽 박스 + 2D 배치 + edge 기반 연결) ═══
+    // ═══ 도 2+: 객체 기반 충돌 방지 레이아웃 v8.0 ═══
     
     // ★ 프레임 자신 + 다른 L1 노드 모두 제외 (L1끼리 프레임 안에 포함 방지) ★
     const innerNodes=nodes.filter(n=>{
@@ -4312,27 +4429,24 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const innerLayout=computeDeviceLayout2D(displayNodes,edges);
     const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
     
-    // 열 수에 따른 치수
-    const innerColGap=0.4*PX;
-    const innerBoxW=innerMaxCols<=1?5.0*PX:innerMaxCols===2?3.0*PX:2.2*PX;
-    const innerNodeAreaW=innerMaxCols*innerBoxW+(innerMaxCols-1)*innerColGap;
-    // ★ 실제 Shape 높이 초과분 계산 (일반 박스=0, 아이콘 Shape만 초과) ★
-    let maxShapeExtra=0;
-    displayNodes.forEach(n=>{
-      const st=matchIconShape(n.label);
-      const sm=_shapeMetrics(st,innerBoxW,boxH2);
-      if(sm.sh>boxH2)maxShapeExtra=Math.max(maxShapeExtra,sm.sh-boxH2);
+    // ═══ v8.1: 공통 레이아웃 엔진 호출 (여백 확대) ═══
+    const innerBoxW=innerMaxCols<=1?4.5*PX:innerMaxCols===2?2.8*PX:2.0*PX;
+    const boxH2=0.9*PX;
+    const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
+      boxBaseW:innerBoxW, boxBaseH:boxH2,
+      colGap:0.75*PX,   // v8.1: 증가 (0.55→0.75) — 구성요소 간 수평 간격
+      rowGap:0.9*PX,    // v8.1: 증가 (0.7→0.9) — 구성요소 간 수직 간격
+      framePad:0.85*PX,  // v8.1: 증가 (0.65→0.85) — 프레임↔구성요소 여백
+      shadowSize:SHADOW_OFFSET,
+      scale:PX
     });
     
     const frameX=0.5*PX, frameY=0.5*PX;
-    const framePadX=0.5*PX, framePadY=0.5*PX;
-    const frameW=Math.max(6.2*PX,innerNodeAreaW+framePadX*2+0.3*PX);
-    // ★ 상하 여백 균등: contentH = 행×박스 + (행-1)×간격 + Shape초과분 ★
-    const contentH=innerNumRows*boxH2+(innerNumRows>1?(innerNumRows-1)*boxGap:0)+maxShapeExtra;
-    const frameH=contentH+framePadY*2;
-    const leaderMargin=0.8*PX; // 프레임 참조번호만 외부 표시
+    const frameW=fig2Layout.frameW;
+    const frameH=fig2Layout.frameH;
+    const leaderMargin=0.8*PX;
     const svgW=frameX+frameW+leaderMargin;
-    const svgH=frameH+1.5*PX;
+    const svgH=frameY+frameH+0.5*PX;
     const maxW=innerMaxCols<=1?600:innerMaxCols===2?750:900;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
@@ -4340,48 +4454,42 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     svg+=`<defs><marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#000"/></marker></defs>`;
     
     // 1. 최외곽 프레임 (그림자 + 본체)
-    svg+=`<rect x="${frameX+SHADOW_OFFSET}" y="${frameY+SHADOW_OFFSET}" width="${frameW}" height="${frameH}" fill="#000"/>`;
+    svg+=`<rect x="${frameX+SHADOW_OFFSET}" y="${frameY+SHADOW_OFFSET}" width="${frameW}" height="${frameH}" fill="#000" opacity="0.15"/>`;
     svg+=`<rect x="${frameX}" y="${frameY}" width="${frameW}" height="${frameH}" fill="#fff" stroke="#000" stroke-width="2.25"/>`;
-    // 프레임 리더라인은 내부 노드와 함께 겹침 보정 후 렌더링 (아래에서 처리)
     
-    // 2. 내부 노드 렌더링 (2D 그리드) — 참조번호는 박스 내부에 표시
-    const boxStartX=frameX+framePadX;
-    const boxStartY=frameY+framePadY;
+    // 2. 내부 노드 렌더링 — 레이아웃 엔진에서 계산된 좌표 사용
     const innerNodeBoxes={};
-    displayNodes.forEach(n=>{
-      const gp=innerGrid[n.id];
-      if(!gp)return;
-      const rowW=gp.layerSize*innerBoxW+(gp.layerSize-1)*innerColGap;
-      const rowStartX=boxStartX+(innerNodeAreaW-rowW)/2;
-      const bx=rowStartX+gp.col*(innerBoxW+innerColGap);
-      const by=boxStartY+gp.row*(boxH2+boxGap);
-      const fallbackRef=frameRefNum+10*(parseInt(n.id.replace(/\D/g,''))||1);
-      const refNum=extractRefNum(n.label,String(fallbackRef));
-      const shapeType=matchIconShape(n.label);
-      const sm=_shapeMetrics(shapeType,innerBoxW,boxH2);
-      const sx=bx+sm.dx, sy=by;
+    fig2Layout.objects.forEach(obj=>{
+      const bx=frameX+obj.x;
+      const by=frameY+obj.y;
+      const nd=displayNodes.find(n=>n.id===obj.id);
+      if(!nd)return;
+      const refNum=extractRefNum(nd.label,String(obj.fallbackRef));
+      const shapeType=matchIconShape(nd.label);
+      const sm=_shapeMetrics(shapeType,obj.w,obj.h);
+      const sx=bx+(obj.w-sm.sw)/2, sy=by;
       
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sm.sw,sm.sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sm.sw,sm.sh,1.5);
-      const cleanLabel=_safeCleanLabel(n.label);
+      const cleanLabel=_safeCleanLabel(nd.label);
       const displayLabel=cleanLabel.length>(innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>1?8:14)+'…':cleanLabel;
       const textCy=_shapeTextCy(shapeType,sy,sm.sh);
       const fontSize=innerMaxCols>2?9:innerMaxCols>1?10:11;
       
-      // ★ 박스 내부 2줄: 라벨 + (참조번호) ★
+      // 박스 내부 2줄: 라벨 + (참조번호)
       svg+=`<text x="${sx+sm.sw/2}" y="${textCy-2}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       svg+=`<text x="${sx+sm.sw/2}" y="${textCy+fontSize+2}" text-anchor="middle" font-size="${Math.max(fontSize-1,8)}" font-family="맑은 고딕,Arial,sans-serif" fill="#444">(${refNum})</text>`;
       
-      innerNodeBoxes[n.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2};
+      innerNodeBoxes[nd.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2};
     });
     
-    // ★ 프레임 참조번호만 외부 리더라인으로 표시 ★
+    // 3. 프레임 참조번호 외부 리더라인
     const frameLeaderEndX=frameX+frameW+0.3*PX;
     const frameLeaderY=frameY+frameH/2;
     svg+=`<line x1="${frameX+frameW}" y1="${frameLeaderY}" x2="${frameLeaderEndX}" y2="${frameLeaderY}" stroke="#000" stroke-width="1"/>`;
     svg+=`<text x="${frameLeaderEndX+8}" y="${frameLeaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
     
-    // 3. ★ 직각 라우팅 edge 기반 연결선 (fan 오프셋 겹침 방지) ★
+    // 4. 직각 라우팅 edge 기반 연결선
     const innerEdgesToDraw2=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
     const svg2FanCount={};const svg2EdgeOff={};
     innerEdgesToDraw2.forEach(e=>{
@@ -5318,9 +5426,8 @@ function downloadPptx(sid){
           }
         });
       }else{
-        // 도 2+: 최외곽 박스 있음
+        // 도 2+: 공통 레이아웃 엔진 사용 (v8.0)
         
-        // ★ 프레임 자신 + 다른 L1 노드 모두 제외 ★
         const innerNodes=nodes.filter(n=>{
           const ref=extractRefNum(n.label,'');
           if(!ref)return true;
@@ -5331,51 +5438,45 @@ function downloadPptx(sid){
         const displayNodes=innerNodes.length>0?innerNodes:nodes;
         const dCount=displayNodes.length;
         
-        // ★ 2D 레이아웃 (SVG와 동일) ★
         const innerLayout=computeDeviceLayout2D(displayNodes,edges);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
-        const innerColGap=0.30;
-        const innerBoxW=innerMaxCols<=1?(PAGE_W-1.6):innerMaxCols===2?(PAGE_W-1.6-innerColGap)/2:(PAGE_W-1.6-innerColGap*2)/3;
-        const innerNodeAreaW=innerMaxCols*innerBoxW+(innerMaxCols-1)*innerColGap;
+        const innerBoxW=innerMaxCols<=1?(PAGE_W-1.6):innerMaxCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
+        const pBoxH=Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
+        
+        const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
+          boxBaseW:innerBoxW, boxBaseH:pBoxH,
+          colGap:0.45, rowGap:0.40, framePad:0.50,
+          shadowSize:SHADOW_OFFSET, scale:1
+        });
         
         const frameX=PAGE_MARGIN,frameY=PAGE_MARGIN+TITLE_H;
-        const framePadX=0.4,framePadY=0.3;
-        const frameW=Math.max(PAGE_W-0.8,innerNodeAreaW+framePadX*2+0.3);
-        const boxH=Math.min(0.65,(AVAILABLE_H-framePadY*2-0.15*(innerNumRows-1))/innerNumRows); // 0.65 for 2-line
-        const boxGap2=Math.min(0.5,(AVAILABLE_H-framePadY*2-boxH*innerNumRows)/(innerNumRows>1?innerNumRows-1:1));
-        const frameH=innerNumRows*boxH+(innerNumRows>1?(innerNumRows-1)*boxGap2:0)+framePadY*2;
-        const boxStartX=frameX+framePadX;
-        const boxStartY=frameY+framePadY;
+        const frameW=fig2L.frameW;
+        const frameH=fig2L.frameH;
         const refLabelX=frameX+frameW+0.1;
         
         slide.addShape(pptx.shapes.RECTANGLE,{x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,fill:{color:'000000'},line:{width:0}});
         slide.addShape(pptx.shapes.RECTANGLE,{x:frameX,y:frameY,w:frameW,h:frameH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
         
         const innerNodeBoxes={};
-        displayNodes.forEach(n=>{
-          const gp=innerGrid[n.id];
-          if(!gp)return;
-          const rowW=gp.layerSize*innerBoxW+(gp.layerSize-1)*innerColGap;
-          const rowStartX=boxStartX+(innerNodeAreaW-rowW)/2;
-          const bx=rowStartX+gp.col*(innerBoxW+innerColGap);
-          const by=boxStartY+gp.row*(boxH+boxGap2);
-          const fallbackRef=frameRefNum+10*(parseInt(n.id.replace(/\D/g,''))||1);
-          const refNum=extractRefNum(n.label,String(fallbackRef));
-          const cleanLabel=_safeCleanLabel(n.label);
-          const shapeType=matchIconShape(n.label);
-          const sm=_shapeMetrics(shapeType,innerBoxW,boxH);
-          const sx=bx+sm.dx;
+        fig2L.objects.forEach(obj=>{
+          const bx=frameX+obj.x;
+          const by=frameY+obj.y;
+          const nd=displayNodes.find(n=>n.id===obj.id);
+          if(!nd)return;
+          const refNum=extractRefNum(nd.label,String(obj.fallbackRef));
+          const cleanLabel=_safeCleanLabel(nd.label);
+          const shapeType=matchIconShape(nd.label);
+          const sm=_shapeMetrics(shapeType,obj.w,obj.h);
+          const sx=bx+(obj.w-sm.sw)/2;
           
           addPptxIconShape(slide,shapeType,sx,by,sm.sw,sm.sh,LINE_BOX);
           const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
-          // ★ 박스 내부 2줄: 라벨 + (참조번호) ★
           const fontSize=Math.min(innerMaxCols>1?9:11,Math.max(8,12-dCount*0.3));
           slide.addText([{text:cleanLabel,options:{fontSize,breakType:'none'}},{text:'\n('+refNum+')',options:{fontSize:Math.max(fontSize-1,7),color:'444444'}}],{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
-          innerNodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
+          innerNodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
         });
         
-        // ★ 프레임 참조번호만 외부 리더라인으로 표시 ★
         const frameLeaderY=frameY+frameH/2;
         slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameLeaderY,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
         slide.addText(String(frameRefNum),{x:refLabelX+0.3,y:frameLeaderY-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
@@ -5931,9 +6032,8 @@ function downloadDiagramImages(sid, format='jpeg'){
           ctx.textAlign='left';ctx.textBaseline='alphabetic';
         });
       }else{
-        // 도 2+: 최외곽 박스 있음
+        // ═══ 도 2+: 공통 레이아웃 엔진 사용 (v8.0) ═══
         
-        // ★ 프레임 자신 + 다른 L1 노드 모두 제외 ★
         const innerNodes=nodes.filter(n=>{
           const ref=extractRefNum(n.label,'');
           if(!ref)return true;
@@ -5942,67 +6042,44 @@ function downloadDiagramImages(sid, format='jpeg'){
           return true;
         });
         const displayNodes=innerNodes.length>0?innerNodes:nodes;
-        const dCount=displayNodes.length;
         
-        // ★ 2D 레이아웃 ★
         const innerLayout=computeDeviceLayout2D(displayNodes,edges);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
-        const innerColGap=20;
-        const innerBoxW=innerMaxCols<=1?560:innerMaxCols===2?260:170;
-        const innerNodeAreaW=innerMaxCols*innerBoxW+(innerMaxCols-1)*innerColGap;
+
+        const SHADOW_PX=2;
+        const LEADER_W=35, REF_LABEL_W=50;
+        const cInnerBoxW=innerMaxCols<=1?350:innerMaxCols===2?210:155;
+        const cBoxH=Math.min(55,Math.max(40,(750-60)/Math.max(innerNumRows,1)));
         
-        const frameX=30,frameY=50;
-        const framePadX=30,framePadY=20;
-        const frameW=Math.max(680,innerNodeAreaW+framePadX*2+30);
-        const boxH=Math.min(55,(850-framePadY*2-10*(innerNumRows-1))/innerNumRows); // 55px for 2-line text
-        const boxGap2=Math.min(45,(850-framePadY*2-boxH*innerNumRows)/(innerNumRows>1?innerNumRows-1:1));
-        const frameH=innerNumRows*boxH+(innerNumRows>1?(innerNumRows-1)*boxGap2:0)+framePadY*2;
+        const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
+          boxBaseW:cInnerBoxW, boxBaseH:cBoxH,
+          colGap:50, rowGap:50, framePad:55,
+          shadowSize:SHADOW_PX, scale:1
+        });
         
-        ctx.fillStyle='#000000';ctx.fillRect(frameX+SHADOW,frameY+SHADOW,frameW,frameH);
+        const frameX=30, frameY=50;
+        const frameW=fig2L.frameW;
+        const frameH=fig2L.frameH;
+
+        // 프레임 렌더링
+        ctx.fillStyle='#000000';ctx.fillRect(frameX+SHADOW_PX,frameY+SHADOW_PX,frameW,frameH);
         ctx.fillStyle='#FFFFFF';ctx.fillRect(frameX,frameY,frameW,frameH);
         ctx.strokeStyle='#000000';ctx.lineWidth=2.25;ctx.strokeRect(frameX,frameY,frameW,frameH);
         
-        const boxStartX=frameX+framePadX,boxStartY=frameY+framePadY;
+        // 연결선 (박스 아래 레이어)
         const innerNodeBoxes={};
-        displayNodes.forEach(nd=>{
-          const gp=innerGrid[nd.id];
-          if(!gp)return;
-          const rowW=gp.layerSize*innerBoxW+(gp.layerSize-1)*innerColGap;
-          const rowStartX=boxStartX+(innerNodeAreaW-rowW)/2;
-          const bx=rowStartX+gp.col*(innerBoxW+innerColGap);
-          const by=boxStartY+gp.row*(boxH+boxGap2);
-          const fallbackRef=frameRefNum+10*(parseInt(nd.id.replace(/\D/g,''))||1);
-          const refNum=extractRefNum(nd.label,String(fallbackRef));
-          const cleanLabel=_safeCleanLabel(nd.label);
+        fig2L.objects.forEach(obj=>{
+          const bx=frameX+obj.x;
+          const by=frameY+obj.y;
+          const nd=displayNodes.find(n=>n.id===obj.id);
+          if(!nd)return;
+          const refNum=extractRefNum(nd.label,String(obj.fallbackRef));
           const shapeType=matchIconShape(nd.label);
-          const sm=_shapeMetrics(shapeType,innerBoxW,boxH);
-          const sx=bx+sm.dx;
-          
-          drawCanvasShape(ctx,shapeType,sx,by,sm.sw,sm.sh,SHADOW,1.5);
-          const displayLabel=cleanLabel.length>(innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>1?8:14)+'…':cleanLabel;
-          const fontSize=innerMaxCols>2?9:innerMaxCols>1?10:11;
-          
-          // ★ 박스 내부 2줄: 라벨 + (참조번호) ★
-          ctx.fillStyle='#000000';ctx.font=`${fontSize}px "맑은 고딕", sans-serif`;
-          ctx.textAlign='center';ctx.textBaseline='middle';
-          const textCy=_shapeTextCy(shapeType,by,sm.sh);
-          ctx.fillText(displayLabel,sx+sm.sw/2,textCy-6);
-          ctx.fillStyle='#444444';ctx.font=`${Math.max(fontSize-1,8)}px "맑은 고딕", sans-serif`;
-          ctx.fillText('('+refNum+')',sx+sm.sw/2,textCy+8);
-          ctx.textAlign='left';ctx.textBaseline='alphabetic';
-          
+          const sm=_shapeMetrics(shapeType,obj.w,obj.h);
+          const sx=bx+(obj.w-sm.sw)/2;
           innerNodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
         });
         
-        // ★ 프레임 참조번호만 외부 리더라인으로 표시 ★
-        const frameLeaderEndX=frameX+frameW+25;
-        const frameLeaderY=frameY+frameH/2;
-        ctx.strokeStyle='#000000';ctx.lineWidth=1;
-        ctx.beginPath();ctx.moveTo(frameX+frameW,frameLeaderY);ctx.lineTo(frameLeaderEndX,frameLeaderY);ctx.stroke();
-        ctx.fillStyle='#000000';ctx.font='11px "맑은 고딕", sans-serif';ctx.textAlign='left';
-        ctx.fillText(String(frameRefNum),frameLeaderEndX+6,frameLeaderY+4);
-        
-        // ★ 직각 라우팅 Edge 연결선 (fan 오프셋 겹침 방지) ★
         const innerEdges=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
         const cInnerFan={};const cInnerOff={};
         innerEdges.forEach(e=>{['from','to'].forEach(k=>{const nid=e[k];if(!cInnerFan[nid])cInnerFan[nid]=0;const key=e.from+'_'+e.to;if(!cInnerOff[key])cInnerOff[key]={};cInnerOff[key][k+'Idx']=cInnerFan[nid];cInnerFan[nid]++;});});
@@ -6020,7 +6097,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           if(!route||route.length<2)return;
           ctx.lineWidth=1;ctx.strokeStyle='#000000';
           ctx.beginPath();ctx.moveTo(route[0].x,route[0].y);
-          for(let i=1;i<route.length;i++)ctx.lineTo(route[i].x,route[i].y);
+          for(let ri=1;ri<route.length;ri++)ctx.lineTo(route[ri].x,route[ri].y);
           ctx.stroke();
           [[route[route.length-1],route[route.length-2]],[route[0],route[1]]].forEach(([tip,prev])=>{
             const a=Math.atan2(tip.y-prev.y,tip.x-prev.x);
@@ -6030,6 +6107,38 @@ function downloadDiagramImages(sid, format='jpeg'){
             ctx.closePath();ctx.fillStyle='#000000';ctx.fill();
           });
         });
+
+        // 구성요소 박스 렌더링
+        fig2L.objects.forEach(obj=>{
+          const bx=frameX+obj.x;
+          const by=frameY+obj.y;
+          const nd=displayNodes.find(n=>n.id===obj.id);
+          if(!nd)return;
+          const refNum=extractRefNum(nd.label,String(obj.fallbackRef));
+          const cleanLabel=_safeCleanLabel(nd.label);
+          const shapeType=matchIconShape(nd.label);
+          const sm=_shapeMetrics(shapeType,obj.w,obj.h);
+          const sx=bx+(obj.w-sm.sw)/2;
+          
+          drawCanvasShape(ctx,shapeType,sx,by,sm.sw,sm.sh,SHADOW_PX,1.5);
+          const displayLabel=cleanLabel.length>(innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>1?8:14)+'…':cleanLabel;
+          const fontSize=innerMaxCols>2?9:innerMaxCols>1?10:11;
+          ctx.fillStyle='#000000';ctx.font=`${fontSize}px "맑은 고딕", sans-serif`;
+          ctx.textAlign='center';ctx.textBaseline='middle';
+          const textCy=_shapeTextCy(shapeType,by,sm.sh);
+          ctx.fillText(displayLabel,sx+sm.sw/2,textCy-6);
+          ctx.fillStyle='#444444';ctx.font=`${Math.max(fontSize-1,8)}px "맑은 고딕", sans-serif`;
+          ctx.fillText('('+refNum+')',sx+sm.sw/2,textCy+8);
+          ctx.textAlign='left';ctx.textBaseline='alphabetic';
+        });
+        
+        // 프레임 참조번호
+        const frameLeaderEndX=frameX+frameW+LEADER_W;
+        const frameLeaderY=frameY+frameH/2;
+        ctx.strokeStyle='#000000';ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(frameX+frameW,frameLeaderY);ctx.lineTo(frameLeaderEndX,frameLeaderY);ctx.stroke();
+        ctx.fillStyle='#000000';ctx.font='11px "맑은 고딕", sans-serif';ctx.textAlign='left';
+        ctx.fillText(String(frameRefNum),frameLeaderEndX+6,frameLeaderY+4);
       }
     } // end else (장치 도면)
     } // end if(nodes.length)
