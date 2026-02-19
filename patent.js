@@ -884,7 +884,10 @@ async function _cascadeRunShort(sid){
 async function _cascadeRunLong(sid){
   const prompt=buildPrompt(sid);
   if(!prompt)return;
-  const t=await App.callClaudeWithContinuation(prompt);
+  let t=await App.callClaudeWithContinuation(prompt);
+  // v8.1: 도면 범위 초과 자동 교정
+  if(sid==='step_08')t=sanitizeDescFigureRefs(t,'device');
+  if(sid==='step_12')t=sanitizeDescFigureRefs(t,'method');
   outputs[sid]=t;markOutputTimestamp(sid);_cascadeRender(sid,t);
 }
 async function _cascadeRunDiagram(sid){
@@ -951,6 +954,88 @@ function getFullDescription(){
 }
 function getLastClaimNumber(t){const m=t.match(/【청구항\s*(\d+)】/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
 function getLastFigureNumber(t){const m=t.match(/도\s*(\d+)/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
+
+// ═══ v8.1: 상세설명 도면 참조 범위 검증 + 자동 교정 ═══
+// type: 'device' → step_08 (장치), 'method' → step_12 (방법)
+function sanitizeDescFigureRefs(text,type){
+  if(!text)return text;
+  // 허용 도면 범위 결정
+  let maxAllowed;
+  if(type==='device'){
+    const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
+    maxAllowed=getLastFigureNumber(outputs.step_07||'')||deviceFigCount;
+  }else{
+    // 방법: 장치 마지막 도면 + 방법 도면
+    const deviceMax=getLastFigureNumber(outputs.step_07||'')||parseInt(document.getElementById('optDeviceFigures')?.value||4);
+    const methodMax=getLastFigureNumber(outputs.step_11||'');
+    maxAllowed=methodMax||deviceMax+parseInt(document.getElementById('optMethodFigures')?.value||2);
+  }
+  
+  // 모든 "도 N" 참조 추출
+  const figRefs=[...text.matchAll(/도\s+(\d+)/g)].map(m=>parseInt(m[1]));
+  const outOfRange=figRefs.filter(n=>n>maxAllowed);
+  if(!outOfRange.length)return text;
+  
+  // 초과 도면 번호 (중복 제거)
+  const badNums=[...new Set(outOfRange)].sort((a,b)=>a-b);
+  console.warn(`[v8.1] ${type} 상세설명: 범위 초과 도면 발견 — 도 ${badNums.join(', ')} (허용: ~도 ${maxAllowed})`);
+  
+  // 자동 교정: 초과 도면 참조 문단 제거
+  let cleaned=text;
+  const lines=cleaned.split('\n');
+  const filteredLines=[];
+  let skipSection=false;
+  
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    // "도 N을 참조하면," or "도 N은 ~" 로 시작하는 줄이 초과 도면이면 해당 섹션 스킵
+    const figStartMatch=line.match(/^\s*도\s+(\d+)\s*[을를은는]/);
+    if(figStartMatch){
+      const figN=parseInt(figStartMatch[1]);
+      if(figN>maxAllowed){
+        skipSection=true;
+        continue;
+      }else{
+        skipSection=false;
+      }
+    }
+    // 새로운 "도 N을 참조하면" 패턴이 나오면 스킵 해제 판단
+    if(skipSection){
+      const newFigStart=line.match(/^\s*도\s+(\d+)\s*[을를은는]/);
+      if(newFigStart){
+        const n=parseInt(newFigStart[1]);
+        if(n<=maxAllowed){skipSection=false;}
+        else continue;
+      }else{
+        // 빈 줄 2개 연속이면 섹션 끝으로 간주
+        if(line.trim()===''&&i+1<lines.length&&lines[i+1].trim()===''){
+          skipSection=false;
+        }
+        if(skipSection)continue;
+      }
+    }
+    
+    // 개별 문장 내 초과 도면 참조 제거 (문단 중간에 삽입된 경우)
+    let safeLine=line;
+    badNums.forEach(n=>{
+      // "도 N에서는 ~." 형태의 완전한 문장 제거
+      safeLine=safeLine.replace(new RegExp(`도\\s*${n}[을를은는에]서?[^.。]*[.。]\\s*`,'g'),'');
+      // "도 N을 참조하면, ~." 형태
+      safeLine=safeLine.replace(new RegExp(`도\\s*${n}[을를]\\s*참조하면[^.。]*[.。]\\s*`,'g'),'');
+    });
+    filteredLines.push(safeLine);
+  }
+  
+  cleaned=filteredLines.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+  
+  // 토스트 알림
+  if(cleaned!==text){
+    const removed=text.length-cleaned.length;
+    App.showToast(`⚠️ 범위 초과 도면(도 ${badNums.join(',')}) 참조 자동 제거 (${removed}자)`,'error');
+  }
+  
+  return cleaned;
+}
 function extractBriefDescriptions(s07,s11){
   const d=[],seen=new Set();
   // 1. AI 출력에서 간단한 설명 추출
@@ -1134,6 +1219,29 @@ function getFullInvention(opts){
              .replace(/\[작성\s*요청\][\s\S]*?(?=\[(?!작성)|$)/gi,'')
              .replace(/\[청구항\s*구성\][\s\S]*?(?=\[(?!청구항)|$)/gi,'')
              .trim();
+  }
+  // opts.deviceOnly: 장치 상세설명 전용 — 방법 관련 문장 제거
+  if(opts&&opts.deviceOnly){
+    text=text.split('\n').filter(line=>{
+      const l=line.trim();
+      if(!l)return true; // 빈 줄 유지
+      // 방법 단계 정의 줄 제거 (S100, S200, S110 등으로 시작)
+      if(/^S\d{2,4}/i.test(l))return false;
+      // "단계 S110" 또는 "S110 단계" 패턴 포함 줄
+      if(/단계\s*S\d|S\d{2,4}\s*단계/i.test(l))return false;
+      // "S110:" 등으로 시작하는 줄
+      if(/^S\d{2,4}\s*[:：]/i.test(l))return false;
+      // "S110 내지 S150" 등 방법 범위 표현
+      if(/S\d{2,4}\s*내지\s*S\d/i.test(l))return false;
+      // "~하는 단계" + S참조 혼합
+      if(/하는\s*단계.*S\d|S\d.*하는\s*단계/i.test(l))return false;
+      return true;
+    }).join('\n');
+    return '\n\n★★★ [발명 내용 — 아래 내용에서 장치 구성(~부)에 관련된 기술적 요소만 참고하라. 방법/단계(S+숫자)는 무시하라] ★★★\n'+text;
+  }
+  // opts.methodOnly: 방법 상세설명 전용
+  if(opts&&opts.methodOnly){
+    return '\n\n★★★ [발명 내용 — 아래 내용에서 방법/절차/단계에 관련된 기술적 요소만 참고하라] ★★★\n'+text;
   }
   return '\n\n★★★ [발명 내용 — 아래 내용의 기술적 요소를 빠짐없이 반영하라] ★★★\n'+text;
 }
@@ -1795,9 +1903,9 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 앵커 종속항의 핵심 처리에 대해 1개 이상의 대안적 구현을 기술
 - 변형 실시예는 독립항의 보호범위를 뒷받침하는 방향이어야 한다
 
-★★★ 발명 내용의 모든 기술적 요소를 장치 구성요소(~부)의 동작으로 변환하여 빠짐없이 반영하라. 방법/단계 표현은 제외. ★★★
+★★★ 장치 도면(도 1~도 ${lastDeviceFig})에 포함된 구성요소만 설명하라. 도면에 없는 내용을 임의로 추가하지 마라. ★★★
 
-${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true})}${styleRef}`;}
+${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
 
     case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
@@ -2194,7 +2302,11 @@ async function runLongStep(sid){if(globalProcessing)return;const dep=checkDepend
   const _hasCmd=!!getStepUserCommand(sid),_hasOut=!!outputs[sid];
   const _modeLabel=(_hasCmd&&_hasOut)?'부분 수정':'생성';
   App.showProgress(pid,`${STEP_NAMES[sid]} ${_modeLabel} 중...`,0,1);
-  try{const t=await App.callClaudeWithContinuation(buildPrompt(sid),pid);outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
+  try{let t=await App.callClaudeWithContinuation(buildPrompt(sid),pid);
+    // v8.1: step_08 도면 범위 초과 자동 교정
+    if(sid==='step_08')t=sanitizeDescFigureRefs(t,'device');
+    if(sid==='step_12')t=sanitizeDescFigureRefs(t,'method');
+    outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
 async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);markOutputTimestamp('step_09');renderOutput('step_09',outputs.step_09);saveProject(true);App.showToast('수학식 삽입 완료');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
 
 async function applyReview(){
@@ -2233,17 +2345,19 @@ async function applyReview(){
 [검토 결과] ${outputs.step_13}
 [청구범위] ${outputs.step_06||''}
 [도면] ${outputs.step_07||''}
-[현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention({stripMeta:true})}${getStyleRef()}${buildUserCommandSuffix('step_08')}`,'progressApplyReview');
-    outputs.step_08=improvedDesc;markOutputTimestamp('step_08');
+[현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention({stripMeta:true,deviceOnly:true})}${getStyleRef()}${buildUserCommandSuffix('step_08')}`,'progressApplyReview');
+    // v8.1: 도면 범위 초과 자동 교정
+    const sanitizedDesc=sanitizeDescFigureRefs(improvedDesc,'device');
+    outputs.step_08=sanitizedDesc;markOutputTimestamp('step_08');
 
     // ═══ [2] 수학식 재삽입 ═══
     App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 삽입 중...`,2,totalSteps);
-    const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${improvedDesc}`);
-    const finalDesc=insertMathBlocks(improvedDesc,mathR.text);
+    const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${sanitizedDesc}`);
+    const finalDesc=insertMathBlocks(sanitizedDesc,mathR.text);
     outputs.step_09=finalDesc; // BUG-B fix: step_09도 갱신하여 저장/리로드 시 UI 일관성 유지
     outputs.step_13_applied=finalDesc;
     markOutputTimestamp('step_09');markOutputTimestamp('step_13_applied');
-    renderOutput('step_08',improvedDesc);renderOutput('step_09',finalDesc);
+    renderOutput('step_08',sanitizedDesc);renderOutput('step_09',finalDesc);
 
     // ═══ [3] 방법 상세설명 보완 (있는 경우만) ═══
     if(hasMethodDesc){
