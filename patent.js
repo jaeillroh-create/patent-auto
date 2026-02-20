@@ -2260,7 +2260,7 @@ ${_userFigBlock?`\n${_userFigBlock}\n★ 사용자 도면도 "도 N을 참조하
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
 
-    case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
+    case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
     // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
     case 'step_10':{
@@ -2442,6 +2442,8 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
 [3] 수학식 정합성 검토
 - 수학식의 변수가 상세설명에서 모두 정의되어 있는지 확인
 - 수학식이 청구항의 기술적 구성과 대응되는지 확인
+- ★ 수학식 간 교차참조 정확성: 본문에서 "수학식 N에 의해 산출된 X"라고 기재된 경우, 실제로 수학식 N이 X를 산출하는 수식인지 확인. 번호 오기(誤記)가 있으면 반드시 지적하라.
+- ★ 수학식 번호 순서: 상세설명에서 수학식이 처음 등장하는 순서가 【수학식 1】→【수학식 2】→... 순차적인지 확인
 - 수학식이 없는 경우 이 항목은 "해당 없음"으로 표기
 
 [4] 반복실시 가능성 (특허법 제42조 제3항 제1호)
@@ -2734,6 +2736,8 @@ async function applyReview(){
 - 특허문체(~한다). 글머리 금지. 생략 금지.
 - 제한성 표현 금지.
 - 수학식은 포함하지 마라 (별도 삽입 예정).
+- ⛔ 수학식 관련 일체 금지: 【수학식 N】 블록, 수식, "수학식 N에 의해", "수학식 N에 따라" 등 수학식 번호를 참조하는 표현 모두 금지. 수학식은 이후 별도로 삽입되므로 본문에서 수학식 번호를 언급하지 마라.
+- ⛔ 검토 결과에서 수학식 번호 오기(예: "수학식 1을 수학식 2로 정정")를 지적한 경우에도, 수학식 번호를 직접 수정하지 마라. 수학식 번호 정합성은 자동으로 처리된다.
 - ⛔ "~하는 단계", "S100", "S401" 등 방법 표현/단계번호 절대 금지. 장치 구성요소(~부)의 동작만 서술.
 
 [발명의 명칭] ${selectedTitle}
@@ -2777,14 +2781,14 @@ async function applyReview(){
         // 보존 실패한 수학식은 새로 생성
         if(successCount<existingMath.length){
           console.log(`[applyReview] 보존 실패 ${existingMath.length-successCount}개 → 새로 생성`);
-          const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 ${existingMath.length-successCount}개.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${finalDesc}`);
+          const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 ${existingMath.length-successCount}개.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n⛔ 수학식 간 교차참조 금지: \"수학식 N에 의해\" 등 다른 수학식 번호 참조 금지. 변수명으로만 설명하라.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${finalDesc}`);
           finalDesc=insertMathBlocks(finalDesc,mathR.text);
         }
-        // 수학식 번호 재정렬
+        // 수학식 번호 재정렬 (헤더 + 본문 교차참조 모두 갱신)
         finalDesc=renumberMathBlocks(finalDesc);
       }else{
         // 기존 수학식 없으면 새로 생성
-        const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${sanitizedDesc}`);
+        const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n⛔ 수학식 간 교차참조 금지: \"수학식 N에 의해\" 등 다른 수학식 번호 참조 금지. 변수명으로만 설명하라.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${sanitizedDesc}`);
         finalDesc=insertMathBlocks(sanitizedDesc,mathR.text);
       }
     }else{
@@ -3367,11 +3371,37 @@ function stripMathBlocks(text){
   r=r.replace(/\n{3,}/g,'\n\n');
   return r.trim();
 }
-// v10.2: 수학식 번호 순차 재정렬 (위→아래 순서로 1,2,3...)
+// v10.2: 수학식 번호 순차 재정렬 (헤더 + 본문 교차참조 모두 갱신)
 function renumberMathBlocks(text){
   if(!text)return text;
-  let counter=0;
-  return text.replace(/【수학식\s*\d+】/g,()=>{counter++;return `【수학식 ${counter}】`;});
+  
+  // 1단계: 모든 【수학식 N】 헤더 수집 → 위→아래 출현 순서대로 매핑 구축
+  const headerRe=/【수학식\s*(\d+)】/g;
+  const oldToNew={};  // {oldNum: newNum}
+  let m,newNum=0;
+  while((m=headerRe.exec(text))!==null){
+    const oldN=m[1];
+    if(!(oldN in oldToNew)){newNum++;oldToNew[oldN]=String(newNum);}
+  }
+  if(!newNum)return text;
+  
+  // 이미 순차적이면 변경 불필요
+  const needsRename=Object.entries(oldToNew).some(([o,n])=>o!==n);
+  if(!needsRename)return text;
+  
+  // 2단계: 2-pass 치환 (충돌 방지: old→임시→최종)
+  let r=text;
+  // 큰 번호부터 치환 (수학식 10 → 수학식 1 부분매칭 방지)
+  const sortedOld=Object.keys(oldToNew).sort((a,b)=>parseInt(b)-parseInt(a));
+  for(const oldN of sortedOld){
+    // 【수학식 N】 헤더 + 본문 "수학식 N" 참조 모두 매칭
+    // 후행 문자: 】, 한국어 조사(에,을,의,은,는,이,과,와), 공백, 구두점
+    const re=new RegExp(`수학식\\s*${oldN}(?=】|에|을|를|의|은|는|이|과|와|로|\\s|,|\\.|;|:|$)`,'g');
+    r=r.replace(re,`수학식__RENUM_${oldToNew[oldN]}__`);
+  }
+  // 임시 → 최종
+  r=r.replace(/수학식__RENUM_(\d+)__/g,'수학식 $1');
+  return r;
 }
 // v10.2: 기존 수학식 블록 추출 (원문에서 수학식+설명 전체를 보존)
 function extractExistingMathBlocks(text){
