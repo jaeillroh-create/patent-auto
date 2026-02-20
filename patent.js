@@ -826,6 +826,9 @@ function onStepCompleted(sid){
   document.querySelectorAll(`.stale-warning[data-step="${sid}"]`).forEach(w=>w.remove());
   // 2. cascade 패널 업데이트
   _updateCascadePanelItem(sid,'done');
+  // 3. v10.2: 산출물 미리보기 자동 갱신 (현재 산출물 탭이 활성일 때)
+  const previewTab=document.querySelector('.tab-item:nth-child(5)');
+  if(previewTab&&previewTab.classList.contains('active'))renderPreview();
 }
 function _updateCascadePanelItem(sid,status){
   const panel=document.getElementById('cascadePanel');
@@ -1190,43 +1193,36 @@ function getLastFigureNumber(t){const m=t.match(/도\s*(\d+)/g);if(!m)return 0;r
 function sanitizeDescFigureRefs(text,type){
   if(!text)return text;
   
-  // ★ Safety net A: "도면의 간단한 설명" 스타일 문장 제거 ★
-  // 근본 원인(이어쓰기)이 수정되어도, 1차 호출에서 포함될 가능성 대비
+  // ★ v10.2: Step 8 수학식 제거 (수학식은 Step 9에서만 삽입) ★
+  if(type==='device'){
+    // 【수학식 N】 블록 및 관련 수식/변수 설명 전체 제거
+    // "여기서," "예를 들어," 등은 수학식 직후에 나오는 설명이므로 함께 제거
+    text=text.replace(/【수학식\s*\d+】[^\n]*(?:\n(?!도\s+\d|이러한|한편|또한|구체적|상기)[^\n]*)*/g,'').trim();
+    // "수학식 N에 따르면" 등 수학식 참조 문장 제거
+    text=text.replace(/[^\n]*수학식\s*\d+[^\n]*\n?/g,'').trim();
+    text=text.replace(/\n{3,}/g,'\n\n');
+  }
+  
+  // ★ Safety net A: v10.2 — 도면 소개문은 유지 (Step 8에서 의도적으로 포함) ★
+  // "도 N은 ~블록도이다" 형태는 이제 Step 8 필수 출력이므로 제거하지 않음
   if(type==='device'||type==='method'){
-    const briefPattern=/^\s*도\s+\d+\s*[은는]\s+[^.]*(?:블록도|흐름도|구성도|개념도|순서도|도면|도시한 것|나타내는 도|나타낸 것)(?:이다|를 나타낸다)?[.。]?\s*$/;
-    const lines=text.split('\n');
-    let hasBrief=false;
-    const cleanedLines=lines.filter(line=>{
-      if(briefPattern.test(line.trim())){
-        hasBrief=true;
-        return false; // 제거
-      }
-      return true;
-    });
-    if(hasBrief){
-      text=cleanedLines.join('\n').replace(/\n{3,}/g,'\n\n').trim();
-      console.warn(`[v9.0] ${type} 상세설명: "도면의 간단한 설명" 스타일 문장 자동 제거`);
-    }
     
     // ★ Safety net B: 중복 출력 감지 & 제거 ★
     // 근본 원인(이어쓰기)이 수정되어도, 예외적으로 발생할 수 있는 중복 대비
     const fig1Refs=[...text.matchAll(/도\s+1[을를]\s*참조하면/g)];
     if(fig1Refs.length>=2){
-      // "도 1을 참조하면"의 마지막 출현 위치부터 사용 (나중 것이 더 완성도 높음)
+      // v10.2: "도 1을 참조하면"의 마지막 출현 위치 → 그 앞의 도면 소개문도 보존
       const lastIdx=fig1Refs[fig1Refs.length-1].index;
-      const removed=text.substring(0,lastIdx).trim();
-      text=text.substring(lastIdx).trim();
+      // 도면 소개문("도 1은 ~이다") 탐색: lastIdx 앞 300자 이내에서 "도 1은" 패턴 찾기
+      const searchStart=Math.max(0,lastIdx-300);
+      const introMatch=text.substring(searchStart,lastIdx).match(/도\s+1[은는]\s+[^\n]*(?:블록도|예시도|구성도|개념도)[^\n]*\.\s*/);
+      const cutIdx=introMatch?searchStart+introMatch.index:lastIdx;
+      const removed=text.substring(0,cutIdx).trim();
+      text=text.substring(cutIdx).trim();
       console.warn(`[v9.0] ${type} 상세설명: 중복 출력 감지 — "도 1을 참조하면" ${fig1Refs.length}회 발견, 마지막 본 사용 (${removed.length}자 제거)`);
     } else {
-      // "도 1을 참조하면"이 1회인데 그 앞에 긴 내용(참조번호 포함)이 있으면 → 프리앰블 개요
-      const firstRefIdx=text.search(/도\s+1[을를]\s*참조하면/);
-      if(firstRefIdx>0){
-        const preamble=text.substring(0,firstRefIdx).trim();
-        if(preamble.length>150 && /\(\d{3,}\)/.test(preamble)){
-          text=text.substring(firstRefIdx).trim();
-          console.warn(`[v9.0] ${type} 상세설명: 프리앰블 개요 제거 (${preamble.length}자)`);
-        }
-      }
+      // v10.2: 도면 소개문("도 1은 ~이다")이 "도 1을 참조하면" 앞에 올 수 있으므로
+      // 프리앰블 제거 로직을 비활성화 (의도된 콘텐츠 보호)
     }
   }
   // 허용 도면 범위 결정
@@ -1306,9 +1302,28 @@ function sanitizeDescFigureRefs(text,type){
   
   return cleaned;
 }
+// v10.2: 한국어 "은/는" 조사 선택 — 도면 번호 기준
+function figParticle(n){
+  // 받침 있는 숫자: 1(일),3(삼),6(육),7(칠),8(팔)
+  // 받침 없는 숫자: 2(이),4(사),5(오),9(구),0(영)
+  // 10의 배수: 십→받침→은
+  const lastDigit=n%10;
+  if(lastDigit===0)return n>=10?'은':'는'; // 10,20,30...→십(받침), 0→영(무받침)
+  if([1,3,6,7,8].includes(lastDigit))return '은';
+  return '는'; // 2,4,5,9
+}
 function extractBriefDescriptions(s07,s11){
   const d=[],seen=new Set();
-  // 1. AI 출력에서 간단한 설명 추출
+  // v10.2: 0. Step 8 상세설명에서 도면 소개문 우선 추출
+  const latestDesc=getLatestDescription();
+  if(latestDesc){
+    latestDesc.split('\n').forEach(l=>{
+      // "도 N은 ~블록도이다." 또는 "도 N은 ~예시도이다. 도 N을 참조하면,~" (같은 줄)
+      const m=l.trim().match(/^(도\s*(\d+)\s*[은는]\s+.+?(?:블록도|예시도|구성도|개념도|순서도|흐름도|도면)[^.]*이다\.)/);
+      if(m&&!seen.has(m[2])){seen.add(m[2]);d.push(m[1]);}
+    });
+  }
+  // 1. AI 출력에서 간단한 설명 추출 (Step 8에서 이미 추출된 것은 건너뜀)
   [s07,s11].forEach(t=>{if(!t)return;const i=t.indexOf('---BRIEF_DESCRIPTIONS---');
     if(i>=0){
       // 마커 이후: 도 N으로 시작하는 줄 추출
@@ -1320,9 +1335,9 @@ function extractBriefDescriptions(s07,s11){
   });
   // 1b. v10.0: 사용자 도면 간단한 설명 추가
   requiredFigures.forEach(rf=>{
-    const fn=String(rf.num);
+    const fn=String(rf.num);const n=parseInt(fn);
     if(!seen.has(fn)){
-      d.push(`도 ${fn}은 ${rf.description}을 나타내는 도면이다.`);
+      d.push(`도 ${fn}${figParticle(n)} ${rf.description}을 나타내는 도면이다.`);
       seen.add(fn);
     }
   });
@@ -1335,23 +1350,24 @@ function extractBriefDescriptions(s07,s11){
   const methAutoNums=getAutoFigNums('step_11');
   // 2a. 장치 도면 폴백
   devData.forEach((dd,i)=>{const fn=String(devAutoNums[i]||(i+1));if(seen.has(fn))return;
+    const n=parseInt(fn);const pp=figParticle(n);
     function exRef(lab){const m=lab.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);return m?m[1]:'';}
     const allL1=dd.nodes.every(n=>{const r=exRef(n.label);if(!r)return false;const num=parseInt(r);return(num>0&&num<10)||(num>=100&&num<1000&&num%100===0);});
-    if(i===0||allL1){d.push(`도 ${fn}은 ${title}의 전체 구성을 나타내는 블록도이다.`);}
+    if(i===0||allL1){d.push(`도 ${fn}${pp} ${title}의 전체 구성을 나타내는 블록도이다.`);}
     else{const refs=dd.nodes.map(n=>exRef(n.label)).filter(Boolean).map(Number).filter(n=>n>=100&&n<1000&&n%100===0);
       const pRef=refs.length?refs[0]:100;const pNode=dd.nodes.find(n=>{const r=exRef(n.label);return r&&parseInt(r)===pRef;});
       const pName=pNode?pNode.label.replace(/[\s(](?:S|D)?\d+[)\s]*$/i,'').trim():devSubject;
-      d.push(`도 ${fn}은 ${pName}(${pRef})의 내부 구성을 나타내는 블록도이다.`);}
+      d.push(`도 ${fn}${pp} ${pName}(${pRef})의 내부 구성을 나타내는 블록도이다.`);}
     seen.add(fn);});
   // 2b. 방법 도면 폴백
   methodData.forEach((md,i)=>{const fn=String(methAutoNums[i]||(devData.length+i+1));if(seen.has(fn))return;
-    d.push(`도 ${fn}은 ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});
+    const n=parseInt(fn);d.push(`도 ${fn}${figParticle(n)} ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});
   // 2c. diagramData 없을 때 텍스트 기반 폴백
-  if(!devData.length&&s07){const figs=s07.match(/도\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];
-    if(fn==='1'){d.push(`도 1은 ${title}의 전체 구성을 나타내는 블록도이다.`);}
-    else{d.push(`도 ${fn}은 ${title}의 세부 구성을 나타내는 블록도이다.`);}seen.add(fn);});}
-  if(!methodData.length&&s11){const figs=s11.match(/도\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];
-    d.push(`도 ${fn}은 ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});}
+  if(!devData.length&&s07){const figs=s07.match(/도\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];const n=parseInt(fn);
+    if(fn==='1'){d.push(`도 1${figParticle(1)} ${title}의 전체 구성을 나타내는 블록도이다.`);}
+    else{d.push(`도 ${fn}${figParticle(n)} ${title}의 세부 구성을 나타내는 블록도이다.`);}seen.add(fn);});}
+  if(!methodData.length&&s11){const figs=s11.match(/도\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];const n=parseInt(fn);
+    d.push(`도 ${fn}${figParticle(n)} ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});}
   // 3. 정렬
   d.sort((a,b)=>{const na=parseInt(a.match(/도\s*(\d+)/)?.[1]||0),nb=parseInt(b.match(/도\s*(\d+)/)?.[1]||0);return na-nb;});
   return d.join('\n');
@@ -1804,10 +1820,9 @@ async function searchPriorArt(title){
 
   const fmtNum=hasRegNum?formatRegNumber(best._regNum):formatRegNumber(best._appNum);
   const docType=hasRegNum?'한국등록특허':'한국공개특허';
-  const sourceNote=best.source==='claude'?' (AI 추천 — KIPRIS 검증 필요)':'';
-  const src=best.source==='claude'?'AI':'KIPRIS';
+  // v10.2: 특허번호만 표시 — 발명의 명칭 및 AI 추천 문구 제거
   return{
-    formatted:`【특허문헌】\n(특허문헌 1) ${docType} 제${fmtNum||'미확인'}호${best._title?` (${best._title})`:''}`+sourceNote,
+    formatted:`【특허문헌】\n(특허문헌 1) ${docType} 제${fmtNum||'미확인'}호`,
     patent:{
       publicationNumber:best._regNum||best._appNum,
       title:best._title,
@@ -1817,8 +1832,8 @@ async function searchPriorArt(title){
       ipcNumber:best.ipcNumber||'',
       source:best.source||'kipris'
     },
-    sourceNote,
-    src
+    sourceNote:'',
+    src:best.source==='claude'?'AI':'KIPRIS'
   };
 }
 
@@ -2205,10 +2220,22 @@ ${!hasMethodClaims?`- 방법 청구항이 생성되지 않았으므로, 방법 �
 - 청구항 원문을 그대로 출력하지 마라 — 상세설명 본문만 작성하라
 - 발명 내용 원문을 에코하지 마라
 
-⛔⛔⛔ 도면의 간단한 설명 포함 금지 ⛔⛔⛔
-- "도 1은 ~을 나타내는 블록도이다" 형태의 문장은 별도 항목(Step 18)에서 작성된다.
-- 본 항목에서는 "도 N을 참조하면," 형태의 상세설명만 작성하라.
-- 출력은 "도 1을 참조하면," 으로 시작하라.
+⛔⛔⛔ 수학식 포함 절대 금지 ⛔⛔⛔
+- 【수학식 1】, 【수학식 2】 등 수학식 블록을 절대 포함하지 마라.
+- 수식, 수학 공식, 변수 정의 등을 본문에 삽입하지 마라.
+- 수학식은 별도 단계(Step 9)에서 선택적으로 삽입되므로, 이 단계에서는 알고리즘의 동작 원리를 자연어로만 설명하라.
+- "수학식 N에 따르면", "상기 수식에 의해" 등 수학식을 참조하는 표현도 금지.
+
+★★★ 도면 소개 규칙 (필수) ★★★
+- 각 도면을 설명하기 전에, 먼저 해당 도면의 명칭을 한 문장으로 소개한 후, 바로 이어서 "도 N을 참조하면," 으로 시작하여 설명하라.
+- 형식 예시:
+  도 1은 [발명의 명칭]의 전체 구성을 나타내는 예시적 블록도이다. 도 1을 참조하면, ...
+  도 2는 [구성요소]의 내부 구조를 나타내는 예시도이다. 도 2를 참조하면, ...
+  도 3은 [구성요소]의 하드웨어 구조를 나타내는 예시도이다. 도 3을 참조하면, ...
+- 이 도면 소개문은 이후 【도면의 간단한 설명】에서도 동일하게 사용되므로, 정확하고 일관되게 작성하라.
+- "도 N" 뒤의 조사 "은/는"은 한국어 문법에 맞게 선택하라:
+  받침 있는 숫자 뒤 → "은" (예: 도 1은, 도 3은, 도 6은, 도 7은, 도 8은, 도 10은)
+  받침 없는 숫자 뒤 → "는" (예: 도 2는, 도 4는, 도 5는, 도 9는)
 
 ★ 분량 규칙:
 - 도면 1개당 ${dlCfg.charPerFig}(공백 포함)
@@ -2683,10 +2710,15 @@ async function applyReview(){
     const sanitizedDesc=sanitizeDescFigureRefs(improvedDesc,'device');
     // ★ v9.1: step_08 원본은 보존. 검토 반영본은 step_13_applied에만 저장 ★
 
-    // ═══ [2] 수학식 재삽입 ═══
-    App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 삽입 중...`,2,totalSteps);
-    const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${sanitizedDesc}`);
-    const finalDesc=insertMathBlocks(sanitizedDesc,mathR.text);
+    // ═══ [2] 수학식 재삽입 (Step 9를 이전에 실행한 경우에만) ═══
+    let finalDesc=sanitizedDesc;
+    if(outputs.step_09){
+      App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 삽입 중...`,2,totalSteps);
+      const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${sanitizedDesc}`);
+      finalDesc=insertMathBlocks(sanitizedDesc,mathR.text);
+    }else{
+      App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 삽입 건너뜀 (Step 9 미실행)...`,2,totalSteps);
+    }
     // ★ v9.1: step_13_applied에만 저장 — step_08, step_09 원본 보존 ★
     outputs.step_13_applied=finalDesc;
     markOutputTimestamp('step_13_applied');
@@ -3753,24 +3785,32 @@ function _shapeLeaderX(type,x,w){
 function _shapeVisualBounds(type,x,y,w,h){
   switch(type){
     case 'cloud':
-      return{top:y+h*0.06, bottom:y+h*0.82, left:x+w*0.02, right:x+w*0.98, cx:x+w/2, cy:y+h*0.45};
+      // v10.1: 실제 곡선 경계 기준 (bezier 극값이 아닌 연결 가능 영역)
+      return{top:y+h*0.10, bottom:y+h*0.82, left:x+w*0.08, right:x+w*0.92, cx:x+w/2, cy:y+h*0.45};
     case 'database':{
       const ry=Math.min(h*0.18,w*0.15,22);
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     }
     case 'monitor':{
-      const sh=h*0.72; // 화면부 높이
-      const baseBottom=y+h*0.93; // 받침대 하단
-      return{top:y, bottom:baseBottom, left:x, right:x+w, cx:x+w/2, cy:y+sh/2};
+      const sh=h*0.72;
+      return{top:y, bottom:y+h*0.93, left:x, right:x+w, cx:x+w/2, cy:y+sh/2};
     }
     case 'server':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'sensor':{
       const cr=Math.min(w*0.28,h*0.38);
-      return{top:y+h*0.12, bottom:y+h*0.88, left:x+w*0.04, right:x+w*0.92, cx:x+w*0.32, cy:y+h*0.50};
+      // v10.2: 파동호 최외곽(cr*2.65) 반영 — 실제 렌더링 범위
+      const waveCx=x+w*0.32;
+      const waveRight=waveCx+cr*2.65*Math.cos(Math.PI*0.05); // outermost arc tip
+      return{top:y+h*0.12, bottom:y+h*0.88, left:x+w*0.04, right:Math.max(x+w*0.92,waveRight), cx:x+w*0.32, cy:y+h*0.50};
     }
     case 'antenna':{
-      return{top:y+h*0.18, bottom:y+h*0.92, left:x+w*0.16, right:x+w*0.62, cx:x+w*0.38, cy:y+h*0.55};
+      // v10.2: 파동호가 위쪽으로 확장 — topY+outerArc*sin(-0.55π) 반영
+      const aTopY=y+h*0.18;
+      const outerArc=h*0.36;
+      const waveTop=aTopY+outerArc*Math.sin(-Math.PI*0.55);
+      const waveRight=x+w*0.38+outerArc*Math.cos(-Math.PI*0.05);
+      return{top:Math.min(y+h*0.18,waveTop), bottom:y+h*0.92, left:x+w*0.16, right:Math.max(x+w*0.62,waveRight), cx:x+w*0.38, cy:y+h*0.55};
     }
     case 'document':{
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
@@ -3779,11 +3819,123 @@ function _shapeVisualBounds(type,x,y,w,h){
       return{top:y+h*0.08, bottom:y+h*0.83, left:x+w*0.05, right:x+w*0.85, cx:x+w*0.45, cy:y+h*0.50};
     }
     case 'speaker':{
-      return{top:y+h*0.08, bottom:y+h*0.92, left:x+w*0.10, right:x+w*0.55, cx:x+w*0.35, cy:y+h*0.50};
+      // v10.2: 음파호 최외곽(h*0.46) 반영
+      const waveRight=x+w*0.55+h*0.46*Math.cos(Math.PI*0.05);
+      return{top:y+h*0.08, bottom:y+h*0.92, left:x+w*0.10, right:Math.max(x+w*0.55,waveRight), cx:x+w*0.35, cy:y+h*0.50};
     }
     default:
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
   }
+}
+
+// ═══ v10.1: Shape precise anchor points ═══
+// Returns exact {px, py} where a leader line or arrow should touch the shape.
+// Unlike _shapeVisualBounds (axis-aligned bounding box), this accounts for
+// the actual shape curve at the specific connection direction.
+function _shapeAnchor(type,x,y,w,h,dir){
+  switch(type){
+    case 'cloud':{
+      // Cloud bezier curve: actual boundary varies by height
+      // At center height (~h*0.45): left edge ≈ x+w*0.10, right edge ≈ x+w*0.90
+      // Bottom: flat edge from x+w*0.2 to x+w*0.8 at y+h*0.82
+      // Top: highest point near x+w*0.48 at ~y+h*0.08
+      switch(dir){
+        case 'bottom':return{px:x+w*0.50,py:y+h*0.82};
+        case 'top':   return{px:x+w*0.48,py:y+h*0.08};
+        case 'left':  return{px:x+w*0.10,py:y+h*0.45};
+        case 'right': return{px:x+w*0.90,py:y+h*0.38};
+      }
+      break;
+    }
+    case 'database':{
+      // Cylinder: top/bottom ellipses, straight sides
+      switch(dir){
+        case 'bottom':return{px:x+w/2,py:y+h};
+        case 'top':   return{px:x+w/2,py:y};
+        case 'left':  return{px:x,py:y+h/2};
+        case 'right': return{px:x+w,py:y+h/2};
+      }
+      break;
+    }
+    case 'monitor':{
+      // Screen top → base bottom, narrow stand in middle
+      const screenCy=y+h*0.36;
+      switch(dir){
+        case 'bottom':return{px:x+w/2,py:y+h*0.93}; // base bottom
+        case 'top':   return{px:x+w/2,py:y};
+        case 'left':  return{px:x,py:screenCy};
+        case 'right': return{px:x+w,py:screenCy};
+      }
+      break;
+    }
+    case 'server':{
+      switch(dir){
+        case 'bottom':return{px:x+w/2,py:y+h};
+        case 'top':   return{px:x+w/2,py:y};
+        case 'left':  return{px:x,py:y+h/2};
+        case 'right': return{px:x+w,py:y+h/2};
+      }
+      break;
+    }
+    case 'sensor':{
+      const cr=Math.min(w*0.28,h*0.38);
+      const ccx=x+w*0.32,ccy=y+h*0.50;
+      switch(dir){
+        case 'bottom':return{px:ccx,py:ccy+cr};
+        case 'top':   return{px:ccx,py:ccy-cr};
+        case 'left':  return{px:ccx-cr,py:ccy};
+        case 'right': return{px:x+w*0.88,py:ccy}; // wave arcs extent
+      }
+      break;
+    }
+    case 'antenna':{
+      const poleX=x+w*0.38;
+      switch(dir){
+        case 'bottom':return{px:poleX,py:y+h*0.92};
+        case 'top':   return{px:poleX,py:y+h*0.18};
+        case 'left':  return{px:x+w*0.16,py:y+h*0.55};
+        case 'right': return{px:x+w*0.62,py:y+h*0.40};
+      }
+      break;
+    }
+    case 'document':{
+      switch(dir){
+        case 'bottom':return{px:x+w/2,py:y+h};
+        case 'top':   return{px:x+w*0.40,py:y}; // avoid fold corner
+        case 'left':  return{px:x,py:y+h/2};
+        case 'right': return{px:x+w,py:y+h/2};
+      }
+      break;
+    }
+    case 'camera':{
+      switch(dir){
+        case 'bottom':return{px:x+w*0.45,py:y+h*0.83};
+        case 'top':   return{px:x+w*0.45,py:y+h*0.08};
+        case 'left':  return{px:x+w*0.05,py:y+h*0.50};
+        case 'right': return{px:x+w*0.85,py:y+h*0.50};
+      }
+      break;
+    }
+    case 'speaker':{
+      switch(dir){
+        case 'bottom':return{px:x+w*0.35,py:y+h*0.92};
+        case 'top':   return{px:x+w*0.35,py:y+h*0.08};
+        case 'left':  return{px:x+w*0.10,py:y+h*0.50};
+        case 'right': return{px:x+w*0.55,py:y+h*0.50};
+      }
+      break;
+    }
+    default:{
+      // Box: exact rectangle edges
+      switch(dir){
+        case 'bottom':return{px:x+w/2,py:y+h};
+        case 'top':   return{px:x+w/2,py:y};
+        case 'left':  return{px:x,py:y+h/2};
+        case 'right': return{px:x+w,py:y+h/2};
+      }
+    }
+  }
+  return{px:x+w/2,py:y+h}; // fallback
 }
 
 // ── Shape natural proportion metrics ──
@@ -4453,13 +4605,21 @@ function staggerLeaderYPositions(leaderEntries,minGap){
 function getConnectionPoints(fromBox,toBox){
   const dx=toBox.cx-fromBox.cx, dy=toBox.cy-fromBox.cy;
   if(Math.abs(dx)<1&&Math.abs(dy)<1)return null;
+  // ★ v10.2: _shapeAnchor 기반 연결점 (shape 경계 정확 반영) ★
+  let fromDir,toDir;
   if(Math.abs(dy)>=Math.abs(dx)){
-    if(dy>0)return{x1:fromBox.cx,y1:fromBox.y+fromBox.h,x2:toBox.cx,y2:toBox.y};
-    return{x1:fromBox.cx,y1:fromBox.y,x2:toBox.cx,y2:toBox.y+toBox.h};
+    fromDir=dy>0?'bottom':'top'; toDir=dy>0?'top':'bottom';
   }else{
-    if(dx>0)return{x1:fromBox.x+fromBox.w,y1:fromBox.cy,x2:toBox.x,y2:toBox.cy};
-    return{x1:fromBox.x,y1:fromBox.cy,x2:toBox.x+toBox.w,y2:toBox.cy};
+    fromDir=dx>0?'right':'left'; toDir=dx>0?'left':'right';
   }
+  const fSt=fromBox._shapeType||'box', tSt=toBox._shapeType||'box';
+  const fSx=fromBox._sx!=null?fromBox._sx:fromBox.x, fSy=fromBox._sy!=null?fromBox._sy:fromBox.y;
+  const fSw=fromBox._sw||fromBox.w, fSh=fromBox._sh||fromBox.h;
+  const tSx=toBox._sx!=null?toBox._sx:toBox.x, tSy=toBox._sy!=null?toBox._sy:toBox.y;
+  const tSw=toBox._sw||toBox.w, tSh=toBox._sh||toBox.h;
+  const fAnc=_shapeAnchor(fSt,fSx,fSy,fSw,fSh,fromDir);
+  const tAnc=_shapeAnchor(tSt,tSx,tSy,tSw,tSh,toDir);
+  return{x1:fAnc.px,y1:fAnc.py,x2:tAnc.px,y2:tAnc.py};
 }
 
 // ═══ v8.0: 객체 기반 충돌 방지 레이아웃 엔진 (공통) ═══
@@ -4547,6 +4707,81 @@ function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNu
   });
   
   return{objects, frameW, frameH, contentW, contentH};
+}
+
+// ═══ v10.2: 연결선 끝점을 Shape 곡면 경계에 정확히 스냅 ═══
+// getOrthogonalRoute는 직사각형 nodeBox 기반이라 cloud/database/monitor 등
+// 곡면 shape에서 연결선이 shape 밖에서 시작/끝하는 문제를 수정
+// 핵심: 직교(orthogonal) 속성 유지 + 경계 좌표만 조정
+function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT){
+  if(!route||route.length<2)return route;
+  const r=[...route.map(p=>({...p}))]; // deep copy
+  
+  // 1) 시작점(from) exit 방향 결정
+  const seg0dx=r[1].x-r[0].x, seg0dy=r[1].y-r[0].y;
+  let fromDir;
+  if(Math.abs(seg0dy)>Math.abs(seg0dx)){fromDir=seg0dy>0?'bottom':'top';}
+  else{fromDir=seg0dx>0?'right':'left';}
+  
+  // 2) 끝점(to) entry 방향 결정
+  const last=r.length-1;
+  const segLdx=r[last].x-r[last-1].x, segLdy=r[last].y-r[last-1].y;
+  let toDir;
+  if(Math.abs(segLdy)>Math.abs(segLdx)){toDir=segLdy>0?'bottom':'top';}
+  else{toDir=segLdx>0?'right':'left';}
+  
+  // 3) Shape anchor로 시작점 스냅 (직교 유지)
+  if(fromBox._shapeType&&fromBox._shapeType!=='box'){
+    const anc=_shapeAnchor(fromBox._shapeType,fromBox._sx,fromBox._sy,fromBox._sw,fromBox._sh,fromDir);
+    const ancX=anc.px+offF, ancY=anc.py;
+    if(fromDir==='right'||fromDir==='left'){
+      // 수평 exit → 시작점 X를 anchor로 이동 (Y 유지 → 직교 보장)
+      r[0].x=ancX;
+    }else{
+      // 수직 exit → 시작점 Y + X를 anchor로 이동
+      const origFirstIsVertical=(r.length>=2&&Math.abs(r[1].x-r[0].x)<4);
+      r[0].y=ancY;
+      r[0].x=ancX;
+      if(origFirstIsVertical){
+        // 원래 수직 직선이었으면 다음 점도 같은 X로 정렬
+        r[1].x=ancX;
+      }else{
+        // L-shape: 원래 수평 전환점이 있음 → 중간점 삽입으로 직교 유지
+        // r[0](ancX, ancY) → 삽입(ancX, r[1].y) → r[1](r[1].x, r[1].y)
+        if(Math.abs(ancX-r[1].x)>2&&Math.abs(ancY-r[1].y)>2){
+          r.splice(1,0,{x:ancX,y:r[1].y});
+        }
+      }
+    }
+  }
+  
+  // 4) Shape anchor로 끝점 스냅 (직교 유지)
+  const lastIdx=r.length-1;
+  if(toBox._shapeType&&toBox._shapeType!=='box'){
+    const anc=_shapeAnchor(toBox._shapeType,toBox._sx,toBox._sy,toBox._sw,toBox._sh,toDir);
+    const ancX=anc.px+offT, ancY=anc.py;
+    if(toDir==='right'||toDir==='left'){
+      // 수평 entry → 끝점 X를 anchor로 이동 (Y 유지)
+      r[lastIdx].x=ancX;
+    }else{
+      // 수직 entry → 직교를 유지하며 끝점 이동
+      const origLastIsVertical=(lastIdx>=1&&Math.abs(r[lastIdx-1].x-r[lastIdx].x)<4);
+      r[lastIdx].y=ancY;
+      r[lastIdx].x=ancX;
+      if(origLastIsVertical){
+        // 원래 수직 직선이었으면 이전 점도 같은 X로 정렬
+        r[lastIdx-1].x=ancX;
+      }else{
+        // L-shape: 끝 부분이 수평이었음 → 중간점 삽입으로 직교 유지
+        // r[lastIdx-1](px, py) → 삽입(ancX, py) → r[lastIdx](ancX, ancY)
+        if(Math.abs(ancX-r[lastIdx-1].x)>2&&Math.abs(ancY-r[lastIdx-1].y)>2){
+          r.splice(lastIdx,0,{x:ancX,y:r[lastIdx-1].y});
+        }
+      }
+    }
+  }
+  
+  return r;
 }
 
 function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
@@ -4825,13 +5060,13 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const{grid,maxCols,numRows,uniqueEdges}=layout;
     
     // 열 수에 따른 박스 크기 조정
-    const colGap=0.7*PX; // v9.0: 연결선 공간 확보 (0.55→0.7)
+    const colGap=0.85*PX; // v10.1: 연결선 공간 확보 (0.7→0.85)
     const boxW2D=maxCols<=1?5.0*PX:maxCols===2?3.2*PX:2.4*PX;
     const maxNodeAreaW=maxCols*boxW2D+(maxCols-1)*colGap;
-    const marginX=0.7*PX; // v9.0: (0.6→0.7)
-    const marginY=0.7*PX; // v9.0: (0.6→0.7)
-    const refNumH=28; // v9.0: (26→28)
-    const rowGapBase=0.7*PX; // v9.0: 연결선 통과 공간 (0.55→0.7)
+    const marginX=0.8*PX; // v10.1: (0.7→0.8)
+    const marginY=0.8*PX; // v10.1: (0.7→0.8)
+    const refNumH=30; // v10.1: (28→30) 참조번호 + 여유 공간
+    const rowGapBase=0.85*PX; // v10.1: 행 간격 확대 (0.7→0.85)
     
     // ★ 행별 실제 최대 Shape 높이 계산 (겹침 방지 핵심) ★
     const rowMaxH={};
@@ -4882,14 +5117,17 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       
       // v9.1: nodeBox는 시각적 경계 기반 (연결선 라우팅에 사용)
       const vb=_shapeVisualBounds(shapeType,sx,sy,sm.sw,sm.sh);
-      nodeBoxes[nd.id]={x:vb.left,y:vb.top,w:vb.right-vb.left,h:vb.bottom-vb.top,cx:sx+sm.sw/2,cy:(vb.top+vb.bottom)/2};
+      // ★ v10.2: cx/cy는 _shapeVisualBounds의 논리적 중심 사용 (sensor 원 중심, antenna 기둥 등) ★
+      nodeBoxes[nd.id]={x:vb.left,y:vb.top,w:vb.right-vb.left,h:vb.bottom-vb.top,cx:vb.cx,cy:vb.cy,
+        // v10.2: shape 정보 보존 (연결선 endpoint snapping용)
+        _shapeType:shapeType,_sx:sx,_sy:sy,_sw:sm.sw,_sh:sm.sh};
       nodeData.push({id:nd.id,sx,sy,sw:sm.sw,sh:sm.sh,shapeType,displayLabel,refNum,bx,boxW2D,row:grid[nd.id].row});
     });
     
     // ── Phase 1.5: 겹침 검증 & 자동 보정 ──
-    // v9.1: 시각적 경계 기준 겹침 검사
-    const REF_PADDING=refNumH+4; // Shape 아래 참조번호+여유
-    const MIN_GAP=8; // 최소 간격(px)
+    // v10.1: anchor 기반 정확한 하단 계산
+    const REF_PADDING=refNumH+6; // Shape 아래 참조번호+여유
+    const MIN_GAP=12; // v10.1: 최소 간격 확대 (8→12px)
     let correctionApplied=true;
     let correctionRounds=0;
     while(correctionApplied&&correctionRounds<10){
@@ -4902,16 +5140,20 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
         for(let j=0;j<nodeData.length;j++){
           if(i===j)continue;
           const b=nodeData[j];
+          // ★ v10.2: 같은 행 shape은 수직 push-down 제외 (수평 간격은 grid이 보장) ★
+          if(a.row===b.row)continue;
           const bVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);
           // 수직 겹침: a의 하단이 b의 상단을 넘고, 수평으로도 겹침
-          const hOverlap=!(a.sx+a.sw+8<b.sx||b.sx+b.sw+8<a.sx); // X축 겹침 (8px 여유)
+          // ★ v10.2: visual bounds 기반 수평 겹침 검사 (sensor 파동호, cloud 곡선 등 반영) ★
+          const hOverlap=!(aVb.right+8<bVb.left||bVb.right+8<aVb.left);
           if(hOverlap&&bVb.top<aBottom+MIN_GAP&&b.sy>=a.sy){
-            const pushDown=aBottom+MIN_GAP-b.sy;
+            const pushDown=aBottom+MIN_GAP-bVb.top; // ★ bVb.top 기준으로 정확한 push 계산 ★
             if(pushDown>0){
               b.sy+=pushDown;
-              // nodeBoxes도 업데이트
+              // nodeBoxes도 업데이트 (★ shape 정보 보존 필수 ★)
               const newVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);
-              nodeBoxes[b.id]={x:newVb.left,y:newVb.top,w:newVb.right-newVb.left,h:newVb.bottom-newVb.top,cx:b.sx+b.sw/2,cy:(newVb.top+newVb.bottom)/2};
+              nodeBoxes[b.id]={x:newVb.left,y:newVb.top,w:newVb.right-newVb.left,h:newVb.bottom-newVb.top,cx:newVb.cx,cy:newVb.cy,
+                _shapeType:b.shapeType,_sx:b.sx,_sy:b.sy,_sw:b.sw,_sh:b.sh};
               correctionApplied=true;
             }
           }
@@ -4955,8 +5197,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const fbA={...fb,id:e.from,cx:fb.cx+offF};
       const tbA={...tb,id:e.to,cx:tb.cx+offT};
       const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
-      const route=getOrthogonalRoute(fbA,tbA,allBoxArr);
-      if(route)svg+=svgOrthogonalEdge(route,mkId);
+      let route=getOrthogonalRoute(fbA,tbA,allBoxArr);
+      if(!route)return;
+      
+      // ★ v10.2: 연결선 시작/끝점을 Shape anchor에 스냅 ★
+      // 직사각형 nodeBox 경계 대신 실제 곡면 shape 경계에 맞춤
+      route=_snapRouteToShapeAnchors(route,fb,tb,offF,offT);
+      
+      svg+=svgOrthogonalEdge(route,mkId);
     });
     
     // ── Phase 3: Shape + 지능형 참조번호 배치 (연결 방향 회피) ──
@@ -4992,29 +5240,30 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       svg+=`<text x="${sx+sw/2}" y="${labelY}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       
       // ★ 참조번호: 연결이 없는 쪽에 배치 (우선순위: 하단→우측→좌측→내부) ★
-      // v9.1: 시각적 경계 기준 leader line (bounding box ≠ visual bounds)
-      const vb=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
+      // v10.2: _shapeAnchor 기반 + leader line 길이 증가 + 연결 명확화
       let refSvg='';
       if(!dir.bottom){
-        // 하단: 수직선 + 번호 — shape 시각적 하단에서 시작
-        const ly=vb.bottom, ly2=ly+8;
-        refSvg=`<line x1="${sx+sw/2}" y1="${ly}" x2="${sx+sw/2}" y2="${ly2}" stroke="#000" stroke-width="1"/>`;
-        refSvg+=`<text x="${sx+sw/2}" y="${ly2+11}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+        // 하단: 수직선 + 번호 — shape 정확한 하단 앵커에서 시작
+        const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'bottom');
+        const ly2=anc.py+12; // v10.2: 12px leader line (was 8)
+        refSvg=`<line x1="${anc.px}" y1="${anc.py}" x2="${anc.px}" y2="${ly2}" stroke="#000" stroke-width="1"/>`;
+        refSvg+=`<text x="${anc.px}" y="${ly2+12}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }else if(!dir.right){
-        // 우측: 수평선 + 번호 — shape 시각적 우측에서 시작
-        const lx=vb.right, lx2=lx+12;
-        const ly=(vb.top+vb.bottom)/2;
-        refSvg=`<line x1="${lx}" y1="${ly}" x2="${lx2}" y2="${ly}" stroke="#000" stroke-width="1"/>`;
-        refSvg+=`<text x="${lx2+4}" y="${ly+4}" text-anchor="start" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+        // 우측: 수평선 + 번호 — shape 정확한 우측 앵커에서 시작
+        const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'right');
+        const lx2=anc.px+15; // v10.2: 15px leader (was 12)
+        refSvg=`<line x1="${anc.px}" y1="${anc.py}" x2="${lx2}" y2="${anc.py}" stroke="#000" stroke-width="1"/>`;
+        refSvg+=`<text x="${lx2+4}" y="${anc.py+4}" text-anchor="start" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }else if(!dir.left){
-        // 좌측: 수평선 + 번호 — shape 시각적 좌측에서 시작
-        const lx=vb.left, lx2=lx-12;
-        const ly=(vb.top+vb.bottom)/2;
-        refSvg=`<line x1="${lx}" y1="${ly}" x2="${lx2}" y2="${ly}" stroke="#000" stroke-width="1"/>`;
-        refSvg+=`<text x="${lx2-4}" y="${ly+4}" text-anchor="end" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+        // 좌측: 수평선 + 번호 — shape 정확한 좌측 앵커에서 시작
+        const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'left');
+        const lx2=anc.px-15; // v10.2: 15px leader (was 12)
+        refSvg=`<line x1="${anc.px}" y1="${anc.py}" x2="${lx2}" y2="${anc.py}" stroke="#000" stroke-width="1"/>`;
+        refSvg+=`<text x="${lx2-4}" y="${anc.py+4}" text-anchor="end" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }else{
         // 모든 방향 사용 중 → Shape 내부에 (참조번호) 표시
-        refSvg=`<text x="${sx+sw/2}" y="${textCy+fontSize+4}" text-anchor="middle" font-size="${Math.max(fontSize-1,8)}" font-family="맑은 고딕,Arial,sans-serif" fill="#444">(${refNum})</text>`;
+        const textCy2=_shapeTextCy(shapeType,sy,sh);
+        refSvg=`<text x="${sx+sw/2}" y="${textCy2+fontSize+4}" text-anchor="middle" font-size="${Math.max(fontSize-1,8)}" font-family="맑은 고딕,Arial,sans-serif" fill="#444">(${refNum})</text>`;
       }
       svg+=refSvg;
     });
@@ -5096,7 +5345,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       svg+=`<text x="${sx+sm.sw/2}" y="${textCy-2}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
       svg+=`<text x="${sx+sm.sw/2}" y="${textCy+fontSize+2}" text-anchor="middle" font-size="${Math.max(fontSize-1,8)}" font-family="맑은 고딕,Arial,sans-serif" fill="#444">(${refNum})</text>`;
       
-      innerNodeBoxes[nd.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2};
+      innerNodeBoxes[nd.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2,
+        _shapeType:shapeType,_sx:sx,_sy:sy,_sw:sm.sw,_sh:sm.sh};
     });
     
     // 3. 프레임 참조번호 외부 리더라인
@@ -5121,8 +5371,11 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const offT=fanT>1?(iT-((fanT-1)/2))*8:0;
       const fbA={...fb,id:e.from,cx:fb.cx+offF};const tbA={...tb,id:e.to,cx:tb.cx+offT};
       const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
-      const route=getOrthogonalRoute(fbA,tbA,allBoxArr);
-      if(route)svg+=svgOrthogonalEdge(route,mkId);
+      let route=getOrthogonalRoute(fbA,tbA,allBoxArr);
+      if(route){
+        route=_snapRouteToShapeAnchors(route,fb,tb,offF,offT);
+        svg+=svgOrthogonalEdge(route,mkId);
+      }
     });
     
     svg+='</svg>';
@@ -5968,7 +6221,7 @@ function downloadPptx(sid){
           nodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
           // v9.1: visual bounds 저장 (leader line에 사용)
           const _vb=_shapeVisualBounds(shapeType,sx,by,sm.sw,sm.sh);
-          nodeBoxes[n.id]={x:_vb.left,y:_vb.top,w:_vb.right-_vb.left,h:_vb.bottom-_vb.top,cx:sx+sm.sw/2,cy:(_vb.top+_vb.bottom)/2,_sx:sx,_sy:by,_sw:sm.sw,_sh:sm.sh,_shapeType:shapeType};
+          nodeBoxes[n.id]={x:_vb.left,y:_vb.top,w:_vb.right-_vb.left,h:_vb.bottom-_vb.top,cx:_vb.cx,cy:_vb.cy,_sx:sx,_sy:by,_sw:sm.sw,_sh:sm.sh,_shapeType:shapeType};
         });
         
         // refNum 데이터 수집 (edge 분석 후 배치)
@@ -6038,23 +6291,24 @@ function downloadPptx(sid){
         (pptxRefData||[]).forEach(r=>{
           const dir=pNodeConnDir[r.id]||{};
           const nb=nodeBoxes[r.id];
-          // v9.1: visual bounds 기준 leader line
-          const vBottom=nb?nb.y+nb.h:r.by+r.sh;
-          const vRight=nb?nb.x+nb.w:r.sx+r.sw;
-          const vLeft=nb?nb.x:r.sx;
-          const vMidY=nb?nb.cy:r.by+r.sh/2;
+          // ★ v10.2: _shapeAnchor 기반 정확한 leader line 시작점 ★
+          const st=nb?nb._shapeType:'box';
+          const _sx=nb?nb._sx:r.sx, _sy=nb?nb._sy:r.by, _sw=nb?nb._sw:r.sw, _sh=nb?nb._sh:r.sh;
           if(!dir.bottom){
-            slide.addShape(pptx.shapes.LINE,{x:r.sx+r.sw/2,y:vBottom,w:0,h:0.1,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(r.refNum),{x:r.sx,y:vBottom+0.1,w:r.sw,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'top'});
+            const anc=_shapeAnchor(st,_sx,_sy,_sw,_sh,'bottom');
+            slide.addShape(pptx.shapes.LINE,{x:anc.px,y:anc.py,w:0,h:0.12,line:{color:'000000',width:LINE_ARROW}});
+            slide.addText(String(r.refNum),{x:anc.px-0.3,y:anc.py+0.12,w:0.6,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'top'});
           }else if(!dir.right){
-            slide.addShape(pptx.shapes.LINE,{x:vRight,y:vMidY,w:0.12,h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(r.refNum),{x:vRight+0.12,y:vMidY-0.1,w:0.5,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+            const anc=_shapeAnchor(st,_sx,_sy,_sw,_sh,'right');
+            slide.addShape(pptx.shapes.LINE,{x:anc.px,y:anc.py,w:0.15,h:0,line:{color:'000000',width:LINE_ARROW}});
+            slide.addText(String(r.refNum),{x:anc.px+0.15,y:anc.py-0.1,w:0.5,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           }else if(!dir.left){
-            slide.addShape(pptx.shapes.LINE,{x:vLeft-0.12,y:vMidY,w:0.12,h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(r.refNum),{x:vLeft-0.62,y:vMidY-0.1,w:0.5,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'right',valign:'middle'});
+            const anc=_shapeAnchor(st,_sx,_sy,_sw,_sh,'left');
+            slide.addShape(pptx.shapes.LINE,{x:anc.px-0.15,y:anc.py,w:0.15,h:0,line:{color:'000000',width:LINE_ARROW}});
+            slide.addText(String(r.refNum),{x:anc.px-0.65,y:anc.py-0.1,w:0.5,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'right',valign:'middle'});
           }else{
             // 모든 방향 사용 중 → 내부 표시는 slide.addText로 2줄
-            slide.addText('('+r.refNum+')',{x:r.sx,y:r.by+r.sh*0.55,w:r.sw,h:0.2,fontSize:9,fontFace:'맑은 고딕',color:'444444',align:'center',valign:'top'});
+            slide.addText('('+r.refNum+')',{x:_sx,y:_sy+_sh*0.55,w:_sw,h:0.2,fontSize:9,fontFace:'맑은 고딕',color:'444444',align:'center',valign:'top'});
           }
         });
       }else{
@@ -6106,7 +6360,8 @@ function downloadPptx(sid){
           const fontSize=Math.min(innerMaxCols>1?9:11,Math.max(8,12-dCount*0.3));
           slide.addText([{text:cleanLabel,options:{fontSize,breakType:'none'}},{text:'\n('+refNum+')',options:{fontSize:Math.max(fontSize-1,7),color:'444444'}}],{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
-          innerNodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
+          innerNodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2,
+            _shapeType:shapeType,_sx:sx,_sy:by,_sw:sm.sw,_sh:sm.sh};
         });
         
         const frameLeaderY=frameY+frameH/2;
@@ -6566,22 +6821,25 @@ function downloadDiagramImages(sid, format='jpeg'){
           const shapeType=matchIconShape(nd.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
           const sx=bx+sm.dx;
-          // v9.1: visual bounds 기준 nodeBox
+          // v9.1: visual bounds 기준 nodeBox (★ v10.2: shape 데이터 보존 ★)
           const vb=_shapeVisualBounds(shapeType,sx,by,sm.sw,sm.sh);
-          nodeBoxes[nd.id]={x:vb.left,y:vb.top,w:vb.right-vb.left,h:vb.bottom-vb.top,cx:sx+sm.sw/2,cy:(vb.top+vb.bottom)/2};
-          nodeData.push({id:nd.id,sx,sy:by,sw:sm.sw,sh:sm.sh,shapeType,cleanLabel,refNum});
+          nodeBoxes[nd.id]={x:vb.left,y:vb.top,w:vb.right-vb.left,h:vb.bottom-vb.top,cx:vb.cx,cy:vb.cy,
+            _shapeType:shapeType,_sx:sx,_sy:by,_sw:sm.sw,_sh:sm.sh};
+          nodeData.push({id:nd.id,sx,sy:by,sw:sm.sw,sh:sm.sh,shapeType,cleanLabel,refNum,row:gp.row});
         });
         
-        // ★ Phase 1.5: 겹침 검증 & 자동 보정 (v9.1: visual bounds) ★
+        // ★ Phase 1.5: 겹침 검증 & 자동 보정 (v10.2: visual bounds 기반) ★
         const REF_PAD=refNumH+4,MIN_GAP=6;
         let fixApplied=true,fixRounds=0;
         while(fixApplied&&fixRounds<10){fixApplied=false;fixRounds++;
           for(let i=0;i<nodeData.length;i++){const a=nodeData[i];const aVb=_shapeVisualBounds(a.shapeType,a.sx,a.sy,a.sw,a.sh);const aBot=aVb.bottom+REF_PAD;
             for(let j=0;j<nodeData.length;j++){if(i===j)continue;const b=nodeData[j];
+              if(a.row===b.row)continue; // ★ v10.2: 같은 행 shape은 수직 push 제외 ★
               const bVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);
-              const hOvl=!(a.sx+a.sw+6<b.sx||b.sx+b.sw+6<a.sx);
-              if(hOvl&&bVb.top<aBot+MIN_GAP&&b.sy>=a.sy){const push=aBot+MIN_GAP-b.sy;
-                if(push>0){b.sy+=push;const newVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);nodeBoxes[b.id]={x:newVb.left,y:newVb.top,w:newVb.right-newVb.left,h:newVb.bottom-newVb.top,cx:b.sx+b.sw/2,cy:(newVb.top+newVb.bottom)/2};fixApplied=true;}}
+              const hOvl=!(aVb.right+6<bVb.left||bVb.right+6<aVb.left); // ★ v10.2: visual bounds 기반 수평 겹침 ★
+              if(hOvl&&bVb.top<aBot+MIN_GAP&&b.sy>=a.sy){const push=aBot+MIN_GAP-bVb.top; // ★ v10.2: bVb.top 기준 ★
+                if(push>0){b.sy+=push;const newVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);nodeBoxes[b.id]={x:newVb.left,y:newVb.top,w:newVb.right-newVb.left,h:newVb.bottom-newVb.top,cx:newVb.cx,cy:newVb.cy,
+                  _shapeType:b.shapeType,_sx:b.sx,_sy:b.sy,_sw:b.sw,_sh:b.sh};fixApplied=true;}}
         }}}
         
         // Phase 2: 연결선 먼저 (Shape 아래에 깔림)
@@ -6648,19 +6906,21 @@ function downloadDiagramImages(sid, format='jpeg'){
           const cDir=nodeConnDir[id]||{};
           const cRefInside=cDir.top&&cDir.bottom&&cDir.left&&cDir.right;
           ctx.fillText(displayLabel,sx+sw/2,cRefInside?_shapeTextCy(shapeType,sy,sh)-4:_shapeTextCy(shapeType,sy,sh));
-          // ★ 참조번호: 연결 없는 쪽에 배치 (v9.1: visual bounds 기준) ★
+          // ★ 참조번호: 연결 없는 쪽에 배치 (v10.2: _shapeAnchor 기반) ★
           const dir=nodeConnDir[id]||{};
-          const vb=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
           ctx.strokeStyle='#000000';ctx.lineWidth=1;ctx.font='11px "맑은 고딕", sans-serif';
           if(!dir.bottom){
-            ctx.beginPath();ctx.moveTo(sx+sw/2,vb.bottom);ctx.lineTo(sx+sw/2,vb.bottom+8);ctx.stroke();
-            ctx.fillText(String(refNum),sx+sw/2,vb.bottom+20);
+            const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'bottom');
+            ctx.beginPath();ctx.moveTo(anc.px,anc.py);ctx.lineTo(anc.px,anc.py+12);ctx.stroke();
+            ctx.fillText(String(refNum),anc.px,anc.py+24);
           }else if(!dir.right){
-            ctx.beginPath();ctx.moveTo(vb.right,vb.cy);ctx.lineTo(vb.right+12,vb.cy);ctx.stroke();
-            ctx.textAlign='left';ctx.fillText(String(refNum),vb.right+14,vb.cy+1);
+            const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'right');
+            ctx.beginPath();ctx.moveTo(anc.px,anc.py);ctx.lineTo(anc.px+15,anc.py);ctx.stroke();
+            ctx.textAlign='left';ctx.fillText(String(refNum),anc.px+17,anc.py+1);
           }else if(!dir.left){
-            ctx.beginPath();ctx.moveTo(vb.left,vb.cy);ctx.lineTo(vb.left-12,vb.cy);ctx.stroke();
-            ctx.textAlign='right';ctx.fillText(String(refNum),vb.left-14,vb.cy+1);
+            const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'left');
+            ctx.beginPath();ctx.moveTo(anc.px,anc.py);ctx.lineTo(anc.px-15,anc.py);ctx.stroke();
+            ctx.textAlign='right';ctx.fillText(String(refNum),anc.px-17,anc.py+1);
           }else{
             // 모든 방향 사용 중 → Shape 내부에 (참조번호) 표시
             ctx.fillStyle='#444444';ctx.font=`${Math.max(fontSize-1,8)}px "맑은 고딕", sans-serif`;
@@ -6714,7 +6974,8 @@ function downloadDiagramImages(sid, format='jpeg'){
           const shapeType=matchIconShape(nd.label);
           const sm=_shapeMetrics(shapeType,obj.w,obj.h);
           const sx=bx+(obj.w-sm.sw)/2;
-          innerNodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
+          innerNodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2,
+            _shapeType:shapeType,_sx:sx,_sy:by,_sw:sm.sw,_sh:sm.sh};
         });
         
         const innerEdges=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
@@ -6855,7 +7116,7 @@ function renderTitleCards(c,text){
   document.getElementById('titleConfirmArea').style.display='block';
 }
 function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tossface">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tossface">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
-function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
+function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral" id="charCount_${sid}">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="outputs['${sid}']=this.value;markOutputTimestamp('${sid}');saveProject(true);document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'" oninput="outputs['${sid}']=this.value;document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'">${App.escapeHtml(text)}</textarea></div>`;}
 function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tossface">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
 function toggleAccordion(h){h.classList.toggle('open');const b=h.nextElementSibling;if(b)b.classList.toggle('open');}
 
