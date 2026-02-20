@@ -2811,87 +2811,196 @@ function sanitizeMethodFromDevice(text){
   return cleaned.join('\n').replace(/\n{3,}/g,'\n\n').trim();
 }
 
+// v10.3: 편집 지시 파서 — LLM이 출력한 EDIT 블록을 구조화
+function parseEditInstructions(text){
+  if(!text)return[];
+  const edits=[];
+  const re=/---EDIT_\d+---\s*\nANCHOR:\s*(.+)\s*\nACTION:\s*(ADD_AFTER|ADD_BEFORE|MODIFY)\s*\nCONTENT:\s*([\s\S]*?)(?:\nREASON:\s*([\s\S]*?))?(?=---EDIT_\d+---|$)/g;
+  let m;
+  while((m=re.exec(text))!==null){
+    const anchor=m[1].trim();
+    const action=m[2].trim();
+    let content=m[3].trim();
+    const reason=(m[4]||'').trim();
+    // CONTENT에서 다음 EDIT 또는 끝까지의 불필요한 텍스트 제거
+    content=content.replace(/\n---EDIT_\d+---[\s\S]*/,'').trim();
+    if(anchor.length>=10&&content.length>=5){
+      edits.push({anchor,action,content,reason});
+    }
+  }
+  return edits;
+}
+
+// v10.3: 편집 지시를 원문에 적용 — 원본 구조 100% 보존
+function applyEditInstructions(originalText,edits){
+  if(!edits||!edits.length)return originalText;
+  let result=originalText;
+  let appliedCount=0;
+  
+  // 역순으로 적용 (뒤→앞) — 인덱스 변위 방지
+  // 먼저 각 편집의 위치를 찾아서 정렬
+  const located=[];
+  for(const edit of edits){
+    const idx=fuzzyFindAnchor(result,edit.anchor);
+    if(idx>=0){
+      located.push({...edit,index:idx});
+    }else{
+      console.warn(`[applyEditInstructions] 앵커 매칭 실패: "${edit.anchor.slice(0,40)}..." → 건너뜀`);
+    }
+  }
+  
+  // 위치 내림차순 정렬 (뒤→앞)
+  located.sort((a,b)=>b.index-a.index);
+  
+  for(const edit of located){
+    // 앵커 주변의 정확한 문장 경계 찾기
+    const anchorStart=edit.index;
+    // 앵커 문자열의 끝 위치 찾기
+    const anchorText=edit.anchor;
+    const exactIdx=result.indexOf(anchorText,Math.max(0,anchorStart-50));
+    const anchorEnd=exactIdx>=0?exactIdx+anchorText.length:anchorStart+anchorText.length;
+    // 문장 끝(마침표) 찾기
+    const dotAfter=result.indexOf('.',anchorEnd);
+    const sentenceEnd=(dotAfter>=0&&dotAfter-anchorEnd<200)?dotAfter+1:anchorEnd;
+    
+    // 청구항 헤더가 CONTENT에 혼입되지 않았는지 확인
+    if(/【청구항|청구항\s*\d+|【발명|【기술분야|【배경기술/.test(edit.content)){
+      console.warn(`[applyEditInstructions] 청구항/섹션 헤더 감지 → 건너뜀: "${edit.content.slice(0,40)}..."`);
+      continue;
+    }
+    
+    switch(edit.action){
+      case 'ADD_AFTER':
+        // 문장 끝 뒤에 삽입
+        result=result.slice(0,sentenceEnd)+' '+edit.content+result.slice(sentenceEnd);
+        appliedCount++;
+        console.log(`[applyEditInstructions] ADD_AFTER 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." 뒤에 ${edit.content.length}자 추가`);
+        break;
+      case 'ADD_BEFORE':
+        // 앵커 시작 앞에 삽입
+        result=result.slice(0,anchorStart)+edit.content+' '+result.slice(anchorStart);
+        appliedCount++;
+        console.log(`[applyEditInstructions] ADD_BEFORE 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." 앞에 ${edit.content.length}자 추가`);
+        break;
+      case 'MODIFY':
+        // 앵커 문장을 CONTENT로 교체
+        if(exactIdx>=0){
+          result=result.slice(0,exactIdx)+edit.content+result.slice(exactIdx+anchorText.length);
+          appliedCount++;
+          console.log(`[applyEditInstructions] MODIFY 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." → "${edit.content.slice(0,30)}..."`);
+        }
+        break;
+    }
+  }
+  
+  console.log(`[applyEditInstructions] 총 ${edits.length}개 중 ${appliedCount}개 적용 완료`);
+  return result;
+}
+
+// v10.3: 청구범위에서 구성요소 목록만 추출 (청구항 전문 대신 핵심 정보만)
+function extractClaimComponents(claimText){
+  if(!claimText)return '';
+  // 구성요소(참조번호) 패턴 추출
+  const components=new Set();
+  const re=/([가-힣]*(?:부|모듈|유닛|서버|장치|단말|센서|프로세서|메모리|인터페이스|엔진|매니저))\s*\((\d+[a-z]?)\)/g;
+  let m;
+  while((m=re.exec(claimText))!==null){
+    components.add(`${m[1]}(${m[2]})`);
+  }
+  if(!components.size){
+    // 참조번호 없는 경우 구성요소명만 추출
+    const nameRe=/([가-힣]{2,}(?:부|모듈|유닛))/g;
+    while((m=nameRe.exec(claimText))!==null)components.add(m[1]);
+  }
+  return components.size?`구성요소 목록: ${[...components].join(', ')}`:'(구성요소 목록 없음)';
+}
+
 async function applyReview(){
   if(globalProcessing)return;if(!outputs.step_13){App.showToast('검토 결과 없음','error');return;}
   const cur=getLatestDescription();if(!cur){App.showToast('상세설명 없음','error');return;}
   const hasMethodDesc=!!(outputs.step_12&&includeMethodClaims);
-  const totalSteps=hasMethodDesc?4:3;
+  const totalSteps=hasMethodDesc?3:2;
   beforeReviewText=cur;setGlobalProcessing(true);loadingState.applyReview=true;App.setButtonLoading('btnApplyReview',true);
   try{
-    // v10.2: 검토 결과를 장치/방법으로 분리
-    const deviceReview=filterReviewForScope(outputs.step_13,'device');
-    const methodReview=hasMethodDesc?filterReviewForScope(outputs.step_13,'method'):'';
-    // ═══ [1] 장치 상세설명 보완 (원문 유지 + 지적사항만 보완) ═══
-    App.showProgress('progressApplyReview',`[1/${totalSteps}] 장치 상세설명 보완 중...`,1,totalSteps);
-    const improvedDesc=await App.callClaudeWithContinuation(`[검토 결과]의 지적사항을 반영하여 아래 [현재 상세설명]을 보완하라.
+    // ═══════════════════════════════════════════════════════════════
+    // v10.3: 편집 지시 기반 아키텍처 (전문 재작성 → 편집 지시 + 코드 적용)
+    // ═══════════════════════════════════════════════════════════════
+    // [기존 문제] LLM에게 전문 재작성 요청 → 청구항 구조로 변질
+    // [해결] LLM은 "어디에 무엇을 추가/수정할지"만 출력 → 코드가 원문에 적용
+    // ═══════════════════════════════════════════════════════════════
 
-★★★ 최우선 원칙: 원문 최대 유지 + 분량 증가만 허용 ★★★
-- 검토에서 지적된 부분만 수정·보완하라. 지적 없는 부분은 원문을 그대로 유지하라.
-- 기존 구성요소 설명의 문체·분량·표현·순서를 임의로 변경하지 마라.
-- 새로운 문장을 추가할 때는 기존 문맥에 자연스럽게 삽입하라.
-- ⛔ 현재 상세설명의 글자수: 약 ${stripMathBlocks(cur).length.toLocaleString()}자이다. 출력 글자수는 이보다 같거나 반드시 많아야 한다. 분량이 줄어드는 것은 절대 금지한다.
-- ⛔ 기존 문장을 삭제하거나 요약·축약·통합하지 마라. 오직 추가·보완만 허용한다.
-- ⛔ "간결하게", "요약하면" 등의 축약 표현을 사용하지 마라.
+    // ═══ [1] 장치 상세설명 — 편집 지시 생성 + 적용 ═══
+    App.showProgress('progressApplyReview',`[1/${totalSteps}] 장치 상세설명 편집 지시 생성 중...`,1,totalSteps);
+    const baseDesc=stripMathBlocks(cur);
+    const editInstructions=await App.callClaude(`아래 [검토 결과]의 지적사항을 반영하기 위한 편집 지시를 생성하라.
 
-★★ 앵커 종속항 보완 집중 ★★
-- 검토 항목 [6]의 앵커 관련 지적사항은 반드시 보완하라.
-- 앵커 종속항의 기술적 구성에 대해:
-  (1) 동작 원리를 단계별(입력→처리→출력)로 보완
-  (2) "이러한 구성에 의하면, ~한 기술적 효과를 얻을 수 있다" 문장 추가
-  (3) 기준값/임계값의 의의 설명 추가
+★★★ 중요: 상세설명 전체를 다시 작성하지 마라. 편집 지시만 출력하라. ★★★
 
-★★ 기재불비 지적사항 보완 ★★
-- 검토 항목 [9] 용어 일관성 지적: 청구항에 사용된 구성요소 명칭과 일치하도록 상세설명의 용어를 수정하라.
-- 검토 항목 [10] 도면 부호 정합성 지적: 상세설명의 참조번호가 도면과 일치하도록 보완하라.
-- 검토 항목 [8] 명확성 관련 지적이 상세설명에 해당하는 경우 보완하라.
+[편집 지시 형식]
+각 편집은 아래 형식으로 출력한다:
 
-⛔⛔⛔ 범위 제한: 장치 상세설명만 보완 ⛔⛔⛔
-- 이 작업은 장치(~부, ~장치, ~시스템) 구성요소의 상세설명만 보완하는 것이다.
-- 방법/단계/순서도/흐름도에 대한 내용은 절대 포함하지 마라.
-- 검토 결과에 방법 관련 지적이 있더라도 무시하라 (방법은 별도로 처리됨).
-- 기존 도면 구조(블록도, 구성도)를 그대로 유지하라. 새로운 도면 유형(순서도, 흐름도)을 추가하지 마라.
+---EDIT_1---
+ANCHOR: (수정할 위치의 기존 문장을 정확히 복사. 20자 이상)
+ACTION: ADD_AFTER 또는 MODIFY 또는 ADD_BEFORE
+CONTENT: (추가하거나 수정할 문장. 특허문체(~한다). 구성요소(참조번호) 형태.)
+REASON: (어떤 검토 항목의 지적을 반영하는지)
 
-규칙:
-- 이 항목만 작성. 다른 항목 포함 금지.
-- ${getDeviceSubject()}(100)를 주어. "구성요소(참조번호)" 형태.
-- 도면별 "도 N을 참조하면," 형태 유지. 기존 도면 번호 범위만 사용하라.
-- 특허문체(~한다). 글머리 금지. 생략 금지.
-- 제한성 표현 금지.
-- 수학식은 포함하지 마라 (별도 삽입 예정).
-- ⛔ 수학식 관련 일체 금지: 【수학식 N】 블록, 수식, "수학식 N에 의해", "수학식 N에 따라" 등 수학식 번호를 참조하는 표현 모두 금지. 수학식은 이후 별도로 삽입되므로 본문에서 수학식 번호를 언급하지 마라.
-- ⛔ 검토 결과에서 수학식 번호 오기(예: "수학식 1을 수학식 2로 정정")를 지적한 경우에도, 수학식 번호를 직접 수정하지 마라. 수학식 번호 정합성은 자동으로 처리된다.
-- ⛔ "~하는 단계", "S100", "S401" 등 방법 표현/단계번호 절대 금지. 장치 구성요소(~부)의 동작만 서술.
+---EDIT_2---
+ANCHOR: ...
+ACTION: ...
+CONTENT: ...
+REASON: ...
+
+[ACTION 설명]
+- ADD_AFTER: ANCHOR 문장 바로 뒤에 CONTENT를 삽입
+- ADD_BEFORE: ANCHOR 문장 바로 앞에 CONTENT를 삽입
+- MODIFY: ANCHOR 문장을 CONTENT로 교체 (용어 수정 등)
+
+[규칙]
+- ANCHOR는 [현재 상세설명]에 실제로 존재하는 문장을 정확히 복사하라 (부분 문장 가능, 20자 이상).
+- CONTENT에는 특허문체로 작성. 구성요소(참조번호) 형태 사용.
+- ⛔ 【청구항 N】, 청구항 1 등 청구항 헤더/번호/구조 절대 금지.
+- ⛔ 【수학식 N】 블록, 수학식 번호 참조 금지 (수학식은 별도 처리).
+- ⛔ "~하는 단계", "S100" 등 방법 표현 금지. 장치 구성요소(~부)의 동작만.
+- ⛔ 기존 문장을 삭제하는 편집 금지. 추가(ADD)와 수정(MODIFY)만 가능.
+- "뒷받침 부족" → 해당 구성요소 설명 뒤에 동작 원리를 ADD_AFTER
+- "앵커 종속항 보완" → 해당 구성요소 뒤에 (1) 동작 상세 (2) 기술적 효과 ADD_AFTER
+- "용어 불일치" → 해당 문장을 올바른 용어로 MODIFY
+- 검토에서 지적되지 않은 부분은 편집하지 마라.
+- 최대 15개 이내로 핵심 지적만 반영하라.
 
 [발명의 명칭] ${selectedTitle}
-[검토 결과 — 장치 관련 항목만] ${deviceReview}
-[장치 청구범위] ${outputs.step_06||''}
-[장치 도면 설계] ${outputs.step_07||''}${extractDeviceFigSummary()}
-[현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention({stripMeta:true,deviceOnly:true})}${getStyleRef()}${buildUserCommandSuffix('step_08')}`,'progressApplyReview');
-    // v10.2: 방법/순서도/흐름도 혼입 제거 (후처리 안전망)
-    let cleanedDesc=sanitizeMethodFromDevice(improvedDesc);
-    // v8.1: 도면 범위 초과 자동 교정
-    const sanitizedDesc=sanitizeDescFigureRefs(cleanedDesc,'device');
-    // ★ v9.1: step_08 원본은 보존. 검토 반영본은 step_13_applied에만 저장 ★
-    // v10.2: 분량 감소 경고
-    const origLen=stripMathBlocks(cur).length;
-    const newLen=sanitizedDesc.length;
-    if(newLen<origLen*0.9){
-      console.warn(`[applyReview] ⚠️ 분량 감소: ${origLen.toLocaleString()}자 → ${newLen.toLocaleString()}자 (${Math.round((1-newLen/origLen)*100)}% 감소)`);
-      App.showToast(`⚠️ 검토 반영 후 분량 ${Math.round((1-newLen/origLen)*100)}% 감소 — 확인 필요`,'warning');
+[검토 결과] ${filterReviewForScope(outputs.step_13,'device')}
+[청구항 구성요소 참조] ${extractClaimComponents(outputs.step_06||'')}
+[현재 상세설명]
+${baseDesc}`);
+
+    // 편집 지시 파싱
+    const edits=parseEditInstructions(editInstructions.text);
+    console.log(`[applyReview] 편집 지시 ${edits.length}개 파싱 완료`);
+
+    // 편집 적용 (원문 기반)
+    let finalDesc=applyEditInstructions(baseDesc,edits);
+    console.log(`[applyReview] 편집 적용 완료: ${baseDesc.length}자 → ${finalDesc.length}자`);
+
+    // 후처리: 방법 혼입 제거 + 도면 범위 교정
+    finalDesc=sanitizeMethodFromDevice(finalDesc);
+    finalDesc=sanitizeDescFigureRefs(finalDesc,'device');
+
+    // 분량 감소 경고 (편집 지시 방식에선 거의 발생하지 않음)
+    if(finalDesc.length<baseDesc.length*0.95){
+      console.warn(`[applyReview] ⚠️ 분량 감소: ${baseDesc.length}자 → ${finalDesc.length}자`);
+      App.showToast(`⚠️ 검토 반영 후 분량 감소 감지 — 확인 필요`,'warning');
     }
 
-    // ═══ [2] 수학식 재삽입 (Step 9를 이전에 실행한 경우에만) ═══
-    let finalDesc=sanitizedDesc;
+    // ═══ [2] 수학식 재삽입 ═══
     if(outputs.step_09){
       App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 재삽입 중...`,2,totalSteps);
-      // v10.2: 기존 수학식 보존 전략 — 원문에서 추출 후 재삽입 (번호 순서 유지)
       const existingMath=extractExistingMathBlocks(cur);
       if(existingMath.length>0){
-        // 기존 수학식이 있으면 원본 수학식을 보존하여 재삽입
         console.log(`[applyReview] 기존 수학식 ${existingMath.length}개 보존 재삽입`);
         const inserted=new Set();
         let successCount=0;
-        // 역순 삽입 (하단→상단) — 인덱스 변위 방지
         for(const x of [...existingMath].reverse()){
           const i=fuzzyFindAnchor(finalDesc,x.anchor);
           if(i>=0&&!inserted.has(x.anchor)){
@@ -2902,54 +3011,49 @@ async function applyReview(){
             successCount++;
           }
         }
-        // 보존 실패한 수학식은 새로 생성
         if(successCount<existingMath.length){
           console.log(`[applyReview] 보존 실패 ${existingMath.length-successCount}개 → 새로 생성`);
-          const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 ${existingMath.length-successCount}개.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n⛔ 수학식 간 교차참조 금지: \"수학식 N에 의해\" 등 다른 수학식 번호 참조 금지. 변수명으로만 설명하라.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${finalDesc}`);
+          const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 ${existingMath.length-successCount}개.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n⛔ 수학식 간 교차참조 금지: 변수명으로만 설명하라.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${finalDesc}`);
           finalDesc=insertMathBlocks(finalDesc,mathR.text);
         }
-        // 수학식 번호 재정렬 (헤더 + 본문 교차참조 모두 갱신)
         finalDesc=renumberMathBlocks(finalDesc);
       }else{
-        // 기존 수학식 없으면 새로 생성
-        const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n⛔ 수학식 간 교차참조 금지: \"수학식 N에 의해\" 등 다른 수학식 번호 참조 금지. 변수명으로만 설명하라.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${sanitizedDesc}`);
-        finalDesc=insertMathBlocks(sanitizedDesc,mathR.text);
+        const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n⛔ 수학식 간 교차참조 금지: 변수명으로만 설명하라.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${finalDesc}`);
+        finalDesc=insertMathBlocks(finalDesc,mathR.text);
       }
-    }else{
-      App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 삽입 건너뜀 (Step 9 미실행)...`,2,totalSteps);
     }
-    // ★ v9.1: step_13_applied에만 저장 — step_08, step_09 원본 보존 ★
     outputs.step_13_applied=finalDesc;
     markOutputTimestamp('step_13_applied');
 
-    // ═══ [3] 방법 상세설명 보완 (있는 경우만) ═══
+    // ═══ [3] 방법 상세설명 — 편집 지시 생성 + 적용 ═══
     if(hasMethodDesc){
-      App.showProgress('progressApplyReview',`[3/${totalSteps}] 방법 상세설명 보완 중...`,3,totalSteps);
-      const improvedMethod=await App.callClaudeWithContinuation(`[검토 결과]의 방법 관련 지적사항을 반영하여 아래 [현재 방법 상세설명]을 보완하라.
+      App.showProgress('progressApplyReview',`[3/${totalSteps}] 방법 상세설명 편집 지시 생성 중...`,3,totalSteps);
+      const baseMethod=getLatestMethodDescription()||'';
+      const methodEditInstructions=await App.callClaude(`아래 [검토 결과]의 방법 관련 지적사항을 반영하기 위한 편집 지시를 생성하라.
 
-★★★ 최우선 원칙: 원문 최대 유지 + 분량 증가만 허용 ★★★
-- 검토에서 지적된 부분만 수정·보완하라. 지적 없는 부분은 원문을 그대로 유지하라.
-- ⛔ 현재 방법 상세설명의 글자수: 약 ${(getLatestMethodDescription()||'').length.toLocaleString()}자이다. 출력 글자수는 이보다 같거나 반드시 많아야 한다.
-- ⛔ 기존 문장을 삭제하거나 요약·축약·통합하지 마라. 오직 추가·보완만 허용한다.
+★★★ 중요: 상세설명 전체를 다시 작성하지 마라. 편집 지시만 출력하라. ★★★
 
-★★ 방법 앵커 종속항 보완 집중 ★★
-- 앵커 종속항의 기술적 구성에 대해 동작 원리와 기술적 효과를 보완하라.
+[편집 지시 형식]
+---EDIT_1---
+ANCHOR: (수정할 위치의 기존 문장 정확히 복사. 20자 이상)
+ACTION: ADD_AFTER 또는 MODIFY 또는 ADD_BEFORE
+CONTENT: (추가/수정할 문장. 특허문체.)
+REASON: (검토 항목)
 
-⛔⛔⛔ 범위 제한: 방법 상세설명만 보완 ⛔⛔⛔
-- 이 작업은 방법(~단계, ~방법) 상세설명만 보완하는 것이다.
-- 장치 구성요소(~부)의 블록도 설명은 포함하지 마라 (장치는 별도로 처리됨).
-- 검토 결과에 장치 관련 지적이 있더라도 무시하라.
-
-규칙:
-- 방법 상세설명만 작성. 장치 상세설명 포함 금지.
-- 특허문체(~한다). 글머리 금지. 생략 금지. 제한성 표현 금지.
-- 수행 주체: "${getDeviceSubject()}"로 일관되게 서술.
+[규칙]
+- ANCHOR는 [현재 방법 상세설명]에 실제 존재하는 문장. 
+- ⛔ 【청구항 N】, 청구항 번호/구조 절대 금지.
+- 방법 상세설명만 편집. 장치 블록도 내용 금지.
+- 수행 주체: "${getDeviceSubject()}". 최대 10개 편집.
 
 [발명의 명칭] ${selectedTitle}
-[검토 결과 — 방법 관련 항목만] ${methodReview}
-[방법 청구항] ${outputs.step_10||''}
-[현재 방법 상세설명] ${getLatestMethodDescription()}${getStyleRef()}${buildUserCommandSuffix('step_12')}`,'progressApplyReview');
-      // ★ v9.1: step_12 원본 보존 — 검토 반영본은 step_13_applied_method에만 저장 ★
+[검토 결과] ${filterReviewForScope(outputs.step_13,'method')}
+[현재 방법 상세설명]
+${baseMethod}`);
+
+      const methodEdits=parseEditInstructions(methodEditInstructions.text);
+      console.log(`[applyReview] 방법 편집 지시 ${methodEdits.length}개 파싱`);
+      const improvedMethod=applyEditInstructions(baseMethod,methodEdits);
       outputs.step_13_applied_method=improvedMethod;
       markOutputTimestamp('step_13_applied_method');
     }
