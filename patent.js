@@ -2260,7 +2260,7 @@ ${_userFigBlock?`\n${_userFigBlock}\n★ 사용자 도면도 "도 N을 참조하
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
 
-    case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
+    case 'step_09':return `상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n⛔⛔ ANCHOR 규칙 ⛔⛔\n- ANCHOR는 반드시 마침표(다.)로 끝나는 완전한 문장의 끝부분을 사용하라.\n- ❌ 금지: 쉼표(,) 또는 접속어(~하고, ~하며)로 끝나는 절 중간을 ANCHOR로 사용\n- ❌ 금지: \"예를 들어\" 블록 내부를 ANCHOR로 사용\n- ✅ 올바른 ANCHOR 예: \"~을 산출한다.\" \"~을 포함한다.\" \"~으로 구성된다.\"\n\n⛔⛔ FORMULA 규칙 ⛔⛔\n- FORMULA에는 【수학식 N】 + 수식 + \"여기서,\" + \"예를 들어,\" 만 포함.\n- ⛔ FORMULA 안에 상세설명 원문 텍스트를 절대 포함하지 마라.\n- FORMULA는 \"예를 들어,\" 예시 문장의 마침표(다.)로 종료하라.\n- FORMULA 종료 후 추가 텍스트 금지.\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 끝부분 20자 이상, 반드시 \"다.\"로 종료)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
     // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
     case 'step_10':{
@@ -2853,15 +2853,12 @@ function applyEditInstructions(originalText,edits){
   located.sort((a,b)=>b.index-a.index);
   
   for(const edit of located){
-    // 앵커 주변의 정확한 문장 경계 찾기
+    // v10.3: 앵커 위치에서 정확한 문장 끝 찾기
     const anchorStart=edit.index;
-    // 앵커 문자열의 끝 위치 찾기
-    const anchorText=edit.anchor;
-    const exactIdx=result.indexOf(anchorText,Math.max(0,anchorStart-50));
-    const anchorEnd=exactIdx>=0?exactIdx+anchorText.length:anchorStart+anchorText.length;
-    // 문장 끝(마침표) 찾기
-    const dotAfter=result.indexOf('.',anchorEnd);
-    const sentenceEnd=(dotAfter>=0&&dotAfter-anchorEnd<200)?dotAfter+1:anchorEnd;
+    const sentenceEnd=findSentenceEndAfterAnchor(result,anchorStart,edit.anchor);
+    
+    // 정확 매칭 시 앵커 텍스트 위치 확인 (MODIFY용)
+    const exactIdx=result.indexOf(edit.anchor,Math.max(0,anchorStart-50));
     
     // 청구항 헤더가 CONTENT에 혼입되지 않았는지 확인
     if(/【청구항|청구항\s*\d+|【발명|【기술분야|【배경기술/.test(edit.content)){
@@ -2869,23 +2866,27 @@ function applyEditInstructions(originalText,edits){
       continue;
     }
     
+    // v10.3: 중복 삽입 방지 — 이미 동일 내용이 근처에 있으면 건너뜀
+    const nearbyRegion=result.slice(Math.max(0,anchorStart-200),Math.min(result.length,anchorStart+edit.anchor.length+500));
+    if(edit.action!=='MODIFY'&&nearbyRegion.includes(edit.content.slice(0,30))){
+      console.warn(`[applyEditInstructions] 중복 감지 → 건너뜀: "${edit.content.slice(0,30)}..."`);
+      continue;
+    }
+    
     switch(edit.action){
       case 'ADD_AFTER':
-        // 문장 끝 뒤에 삽입
         result=result.slice(0,sentenceEnd)+' '+edit.content+result.slice(sentenceEnd);
         appliedCount++;
         console.log(`[applyEditInstructions] ADD_AFTER 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." 뒤에 ${edit.content.length}자 추가`);
         break;
       case 'ADD_BEFORE':
-        // 앵커 시작 앞에 삽입
         result=result.slice(0,anchorStart)+edit.content+' '+result.slice(anchorStart);
         appliedCount++;
         console.log(`[applyEditInstructions] ADD_BEFORE 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." 앞에 ${edit.content.length}자 추가`);
         break;
       case 'MODIFY':
-        // 앵커 문장을 CONTENT로 교체
         if(exactIdx>=0){
-          result=result.slice(0,exactIdx)+edit.content+result.slice(exactIdx+anchorText.length);
+          result=result.slice(0,exactIdx)+edit.content+result.slice(exactIdx+edit.anchor.length);
           appliedCount++;
           console.log(`[applyEditInstructions] MODIFY 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." → "${edit.content.slice(0,30)}..."`);
         }
@@ -3005,20 +3006,21 @@ ${baseDesc}`);
           const i=fuzzyFindAnchor(finalDesc,x.anchor);
           if(i>=0&&!inserted.has(x.anchor)){
             inserted.add(x.anchor);
-            const s=i+x.anchor.length,p=finalDesc.indexOf('.',s);
-            const ip=(p>=0&&p-s<100)?p+1:s;
+            // v10.3: 정확한 문장 끝 위치에 삽입
+            const ip=findSentenceEndAfterAnchor(finalDesc,i,x.anchor);
             finalDesc=finalDesc.slice(0,ip)+'\n\n'+x.formula+'\n\n'+finalDesc.slice(ip);
             successCount++;
           }
         }
         if(successCount<existingMath.length){
           console.log(`[applyReview] 보존 실패 ${existingMath.length-successCount}개 → 새로 생성`);
-          const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 ${existingMath.length-successCount}개.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n⛔ 수학식 간 교차참조 금지: 변수명으로만 설명하라.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${finalDesc}`);
+          const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 ${existingMath.length-successCount}개.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n⛔ 수학식 간 교차참조 금지: 변수명으로만 설명하라.\n⛔ ANCHOR는 반드시 \"다.\"로 끝나는 완전한 문장 끝부분 사용. 쉼표 절(~하고,) 금지.\n⛔ FORMULA에는 수학식+여기서+예를 들어만 포함. 원문 텍스트 포함 금지.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 끝 20자 이상, \"다.\"로 종료)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${finalDesc}`);
           finalDesc=insertMathBlocks(finalDesc,mathR.text);
         }
+        finalDesc=_deduplicateSentences(finalDesc); // v10.3: 수학식 재삽입 후 중복 제거
         finalDesc=renumberMathBlocks(finalDesc);
       }else{
-        const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n⛔ 수학식 간 교차참조 금지: 변수명으로만 설명하라.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${finalDesc}`);
+        const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n⛔ 수학식 간 교차참조 금지: 변수명으로만 설명하라.\n⛔ ANCHOR는 반드시 \"다.\"로 끝나는 완전한 문장 끝부분 사용. 쉼표 절(~하고,) 금지.\n⛔ FORMULA에는 수학식+여기서+예를 들어만 포함. 원문 텍스트 포함 금지.\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 끝 20자 이상, \"다.\"로 종료)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${finalDesc}`);
         finalDesc=insertMathBlocks(finalDesc,mathR.text);
       }
     }
@@ -3463,6 +3465,14 @@ ${diagram}`,4096);
             const cleanLabel=n.label.replace(/[\s(](?:S|D)?\d+[)\s]*$/i,'').trim();
             const shapeType=matchIconShape(n.label);
             const sm=_shapeMetrics(shapeType,batchBoxW,boxH);
+            // v10.3: 텍스트 너비 기반 최소 shape 너비 (PPTX batch - 인치)
+            const _bfs=Math.min(11,Math.max(8,13-nodes.length*0.35));
+            const _btw=cleanLabel.length*(_bfs/72)*0.65;
+            const _bmsw=_btw+0.25;
+            if(sm.sw<_bmsw&&shapeType!=='box'){
+              sm.sw=Math.min(_bmsw,batchBoxW*0.85);
+              sm.dx=(batchBoxW-sm.sw)/2;
+            }
             const SO=SHADOW_OFFSET;
             const sx=bx+sm.dx;
             // Shape-aware 렌더링 (natural proportions)
@@ -3588,7 +3598,62 @@ ${diagram}`,4096);
 function parseTitleCandidates(t){const c=[];let m;const re=/\[(\d+)\]\s*국문:\s*(.+?)\s*[/／]\s*영문:\s*(.+)/g;while((m=re.exec(t))!==null)c.push({num:m[1],korean:m[2].trim(),english:m[3].trim()});return c;}
 function parseClaimStats(t){const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,c={};let m;while((m=cp.exec(t))!==null)c[parseInt(m[1])]=m[2].trim();const tot=Object.keys(c).length;let dep=0;Object.values(c).forEach(x=>{if(/있어서|따른/.test(x))dep++;});return{total:tot,independent:tot-dep,dependent:dep,claims:c};}
 function extractMermaidBlocks(t){return(t.match(/```mermaid\n([\s\S]*?)```/g)||[]).map(b=>b.replace(/```mermaid\n/,'').replace(/```/,'').trim());}
-function parseMathBlocks(t){const b=[];let m;const re=/---MATH_BLOCK_\d+---\s*\nANCHOR:\s*(.+)\s*\nFORMULA:\s*\n([\s\S]*?)(?=---MATH_BLOCK_|\s*$)/g;while((m=re.exec(t))!==null)b.push({anchor:m[1].trim(),formula:m[2].trim()});return b;}
+function parseMathBlocks(t){const b=[];let m;const re=/---MATH_BLOCK_\d+---\s*\nANCHOR:\s*(.+)\s*\nFORMULA:\s*\n([\s\S]*?)(?=---MATH_BLOCK_|\s*$)/g;while((m=re.exec(t))!==null)b.push({anchor:m[1].trim(),formula:_sanitizeMathFormula(m[2].trim())});return b;}
+
+// v10.3: 수학식 FORMULA 오염 제거 — LLM이 원문 텍스트를 FORMULA에 포함시키는 문제
+// 【수학식 N】 + 수식 + "여기서," 설명 + "예를 들어," 예시까지만 보존
+function _sanitizeMathFormula(formula){
+  if(!formula)return formula;
+  const lines=formula.split('\n');
+  const cleanLines=[];
+  let foundExample=false; // "예를 들어" 라인 도달 여부
+  let exampleDone=false;  // 예시 문장 종료 여부
+  
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    const trimmed=line.trim();
+    
+    // 수학식 종료 후 원문 오염 감지
+    if(exampleDone){
+      // 빈 줄은 허용 (수학식 블록 종료 마커)
+      if(!trimmed){cleanLines.push(line);continue;}
+      // 원문 텍스트 패턴 감지 — 수학식이 아닌 일반 서술문
+      // 쉼표로 시작하는 문장 잔해 (", 경고 상태로 판정된 경우...")
+      if(trimmed.startsWith(',')||trimmed.startsWith('.')){
+        console.warn(`[_sanitizeMathFormula] 원문 오염 제거: "${trimmed.slice(0,50)}..."`);
+        break; // 이후 모든 라인 폐기
+      }
+      // 한국어 서술문 패턴 (구성요소, 동작 설명)
+      if(/^[가-힣]/.test(trimmed)&&!trimmed.startsWith('【수학식')&&
+         !trimmed.startsWith('여기서')&&!trimmed.startsWith('예를 들어')&&
+         !trimmed.startsWith('일 예로')&&!trimmed.startsWith('구체적')&&
+         !/^[A-Z_a-z(]/.test(trimmed)&&
+         (trimmed.includes('하고,')||trimmed.includes('하며,')||trimmed.includes('한다.')||
+          trimmed.includes('된다.')||trimmed.includes('있다.')||trimmed.includes('이다.'))){
+        console.warn(`[_sanitizeMathFormula] 원문 서술문 감지, 이후 폐기: "${trimmed.slice(0,50)}..."`);
+        break;
+      }
+      cleanLines.push(line);
+      continue;
+    }
+    
+    // 예를 들어 라인 감지
+    if(!foundExample&&(trimmed.startsWith('예를 들어')||trimmed.startsWith('일 예로')||trimmed.startsWith('구체적 예시'))){
+      foundExample=true;
+    }
+    
+    // 예를 들어 라인 이후 마침표로 끝나면 예시 완료
+    if(foundExample&&trimmed.length>5&&/[.다]$/.test(trimmed)){
+      exampleDone=true;
+    }
+    
+    cleanLines.push(line);
+  }
+  
+  // 끝부분 빈 줄 정리
+  while(cleanLines.length>0&&!cleanLines[cleanLines.length-1].trim())cleanLines.pop();
+  return cleanLines.join('\n');
+}
 function stripMathBlocks(text){
   if(!text)return '';
   // Remove existing math blocks (【수학식 N】 blocks) more thoroughly to prevent duplication
@@ -3654,37 +3719,227 @@ function extractExistingMathBlocks(text){
 }
 // ═══ A3 fix: 유사도 기반 앵커 매칭 (v5.5, v10.2: 독립 함수 추출) ═══
 function fuzzyFindAnchor(text,anchor){
+  if(!text||!anchor||anchor.length<5)return -1;
   // 1차: 정확 매칭
   const exact=text.indexOf(anchor);
   if(exact>=0)return exact;
-  // 2차: 공백/구두점 정규화 후 매칭
-  const normalize=s=>s.replace(/\s+/g,' ').replace(/[.,;:!?·…]/g,'').trim();
-  const normText=normalize(text);
-  const normAnchor=normalize(anchor);
+  // 2차: 정규화 + 정확한 위치 역매핑 (ratio 방식 폐기 — v10.3)
+  const isPunct=c=>'.,;:!?·…'.includes(c);
+  const normAnchor=_normForAnchor(anchor);
+  if(normAnchor.length<5)return -1;
+  
+  // 원문의 각 문자 → 정규화 문자열에서의 인덱스 매핑 구축
+  const normChars=[];
+  const normToOrig=[]; // normToOrig[i] = 정규화 i번째 문자의 원문 위치
+  let prevSp=true;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(isPunct(c))continue;
+    if(/\s/.test(c)){
+      if(!prevSp&&normChars.length>0){normChars.push(' ');normToOrig.push(i);prevSp=true;}
+    }else{normChars.push(c);normToOrig.push(i);prevSp=false;}
+  }
+  const normText=normChars.join('');
   const normIdx=normText.indexOf(normAnchor);
-  if(normIdx>=0){
-    const ratio=normIdx/normText.length;
-    return Math.floor(ratio*text.length);
+  if(normIdx>=0&&normIdx<normToOrig.length){
+    return normToOrig[normIdx]; // ★ 정확한 원문 위치 반환 ★
   }
   // 3차: 앵커의 핵심 키워드(3단어 이상) 연속 매칭
   const words=anchor.replace(/[.,;:!?·…]/g,'').split(/\s+/).filter(w=>w.length>=2);
   if(words.length>=3){
     const escaped=words.slice(0,Math.min(5,words.length)).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
-    const keyPhrase=escaped.join('\\s*');
+    const keyPhrase=escaped.join('\\s*[.,;:!?·…]*\\s*'); // v10.3: 구두점 허용
     try{
       const re=new RegExp(keyPhrase);
       const km=text.match(re);
       if(km)return text.indexOf(km[0]);
-    }catch(e){/* regex 실패 시 4차로 진행 */}
+    }catch(e){/* regex 실패 시 4차로 */}
   }
-  // 4차: 앵커 앞 15자로 부분 매칭
-  if(anchor.length>=15){
-    const partial=anchor.slice(0,15);
+  // 4차: 앵커 앞 20자로 부분 매칭
+  if(anchor.length>=20){
+    const partial=anchor.slice(0,20);
     const pi=text.indexOf(partial);
     if(pi>=0)return pi;
   }
   return -1;
 }
+
+// 앵커 정규화 헬퍼 (공백 정리 + 구두점 제거)
+function _normForAnchor(s){
+  const isPunct=c=>'.,;:!?·…'.includes(c);
+  let r='',prev=true;
+  for(const c of s){
+    if(isPunct(c))continue;
+    if(/\s/.test(c)){if(!prev&&r.length){r+=' ';prev=true;}}
+    else{r+=c;prev=false;}
+  }
+  return r.trim();
+}
+
+// v10.3: 앵커 위치에서 문장 끝(마침표) 찾기
+// 핵심: 한국어 문장 종결어미(~다.) 뒤의 마침표만 문장 끝으로 인정
+// "생성하고," 같은 쉼표 절은 건너뛰고 "생성할 수 있다." 같은 종결어미 뒤 마침표까지 이동
+function findSentenceEndAfterAnchor(text,anchorStart,anchor){
+  // Step 1: 앵커의 실제 끝 위치를 원문에서 정확히 추적
+  const normEnd=_normForAnchor(anchor).slice(-15);
+  let actualEnd=Math.min(anchorStart+anchor.length,text.length);
+  
+  if(normEnd&&normEnd.length>=5){
+    const searchEnd=Math.min(anchorStart+anchor.length*2+100,text.length);
+    const region=text.slice(anchorStart,searchEnd);
+    const normRegion=_normForAnchor(region);
+    const tailIdx=normRegion.indexOf(normEnd);
+    if(tailIdx>=0){
+      const isPunct=c=>'.,;:!?·…'.includes(c);
+      let normPos=0,origPos=0,prevSp=true;
+      const target=tailIdx+normEnd.length;
+      for(origPos=0;origPos<region.length&&normPos<target;origPos++){
+        const c=region[origPos];
+        if(isPunct(c))continue;
+        if(/\s/.test(c)){if(!prevSp){normPos++;prevSp=true;}}
+        else{normPos++;prevSp=false;}
+      }
+      actualEnd=anchorStart+origPos;
+    }
+  }
+  
+  // Step 2: actualEnd부터 한국어 문장 종결 패턴(~다.) 찾기
+  // 한국어 서술문 종결: ~한다. ~된다. ~있다. ~이다. ~같다. ~높다. ~낮다. ~않다.
+  for(let pos=actualEnd;pos<text.length;pos++){
+    if(text[pos]==='.'){
+      // 마침표 앞 2~3자가 한국어 종결어미인지 확인
+      const before=text.slice(Math.max(0,pos-4),pos);
+      const next=pos+1<text.length?text[pos+1]:'';
+      
+      // "0.5" 같은 소수점은 건너뜀
+      const prevChar=pos>0?text[pos-1]:'';
+      if(/\d/.test(prevChar)&&/\d/.test(next))continue;
+      
+      // 한국어 문장 종결 패턴 — 가장 신뢰도 높은 기준
+      const isKoreanSentEnd=/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다)$/.test(before);
+      // "~수 있다." "~할 수 있다." 패턴
+      const isCanPattern=/있다$/.test(before)&&/수\s*있다/.test(text.slice(Math.max(0,pos-10),pos));
+      
+      if(isKoreanSentEnd||isCanPattern){
+        return pos+1;
+      }
+      
+      // 마침표 다음이 공백/줄바꿈/EOF이고, 앞 글자가 한글이면 문장 끝 가능
+      if((!next||next===' '||next==='\n'||next==='\r')&&/[가-힣)]/.test(prevChar)){
+        return pos+1;
+      }
+    }
+  }
+  
+  // 마침표 없으면 줄바꿈 찾기
+  const nlIdx=text.indexOf('\n',actualEnd);
+  if(nlIdx>=0)return nlIdx;
+  
+  return text.length;
+}
+// v10.3: 수학식 삽입 후 문장/절 중복 감지/제거
+// 패턴 1: 마침표 문장 중복 (수학식 블록 사이에 같은 문장)
+// 패턴 2: 쉼표 절 중복 (긴 문장의 일부 절이 수학식 앞/뒤에 중복)
+function _deduplicateSentences(text){
+  if(!text)return text;
+  let result=text;
+  let removedCount=0;
+  
+  // ═══ 패턴 1: 50자 이상 동일 텍스트 조각이 2회 이상 등장 ═══
+  // 수학식 블록 앞/뒤에서만 제거 (다른 도면의 정상 반복은 보존)
+  const mathBlockPositions=[];
+  const mathRe=/【수학식\s*\d+】/g;
+  let mm;
+  while((mm=mathRe.exec(result))!==null)mathBlockPositions.push(mm.index);
+  
+  if(mathBlockPositions.length>0){
+    // 50자 이상 연속 텍스트 조각으로 중복 검사
+    // 쉼표 절(, ~하고) 또는 마침표 문장 단위로 분리
+    const clauseRe=/([^,.\n]{20,}(?:하고|하며|한다|된다|있다|이다|같다|높다|낮다|크다|작다|많다|적다)[,.])/g;
+    let cm;
+    const clauses=[];
+    while((cm=clauseRe.exec(result))!==null){
+      clauses.push({text:cm[1].trim(),start:cm.index,end:cm.index+cm[0].length});
+    }
+    
+    // 동일 절 그룹화
+    const clauseMap=new Map();
+    for(const c of clauses){
+      const key=c.text.replace(/\s+/g,' ');
+      if(key.length<25)continue;
+      if(!clauseMap.has(key))clauseMap.set(key,[]);
+      clauseMap.get(key).push(c);
+    }
+    
+    const toRemove=[];
+    for(const [key,occurrences] of clauseMap){
+      if(occurrences.length<2)continue;
+      // 수학식이 두 등장 사이에 있는 경우만 제거
+      const hasMathBetween=occurrences.some((o,i)=>{
+        if(i===0)return false;
+        const between=result.slice(occurrences[i-1].end,o.start);
+        return between.includes('【수학식');
+      });
+      if(hasMathBetween){
+        for(let i=1;i<occurrences.length;i++){
+          toRemove.push(occurrences[i]);
+        }
+      }
+    }
+    
+    // ═══ 패턴 2: 마침표 기준 긴 문장 중복 ═══
+    const sentRe=/([^.\n]{40,}\.)/g;
+    let sm2;
+    const sentences=[];
+    while((sm2=sentRe.exec(result))!==null){
+      sentences.push({text:sm2[1].trim(),start:sm2.index,end:sm2.index+sm2[0].length});
+    }
+    
+    const sentMap=new Map();
+    for(const s of sentences){
+      const key=s.text.replace(/\s+/g,' ');
+      if(key.length<40)continue;
+      if(!sentMap.has(key))sentMap.set(key,[]);
+      sentMap.get(key).push(s);
+    }
+    
+    for(const [key,occurrences] of sentMap){
+      if(occurrences.length<2)continue;
+      const hasMathBetween=occurrences.some((o,i)=>{
+        if(i===0)return false;
+        const between=result.slice(occurrences[i-1].end,o.start);
+        return between.includes('【수학식');
+      });
+      if(hasMathBetween){
+        for(let i=1;i<occurrences.length;i++){
+          // 이미 제거 대상이 아닌 경우만 추가
+          if(!toRemove.some(r=>r.start===occurrences[i].start))
+            toRemove.push(occurrences[i]);
+        }
+      }
+    }
+    
+    // 역순 제거
+    toRemove.sort((a,b)=>b.start-a.start);
+    for(const rm of toRemove){
+      let start=rm.start;
+      let end=rm.end;
+      // 앞뒤 공백/쉼표 정리
+      while(start>0&&' \n,'.includes(result[start-1]))start--;
+      while(end<result.length&&' \n'.includes(result[end]))end++;
+      result=result.slice(0,start)+result.slice(end);
+      removedCount++;
+      console.log(`[_deduplicateSentences] 중복 제거: "${rm.text.slice(0,50)}..."`);
+    }
+  }
+  
+  if(removedCount>0){
+    result=result.replace(/\n{3,}/g,'\n\n');
+    console.log(`[_deduplicateSentences] 총 ${removedCount}개 중복 제거`);
+  }
+  return result;
+}
+
 function insertMathBlocks(s08,s09){
   // First strip any existing math blocks from base text to prevent duplication
   let r=stripMathBlocks(s08);
@@ -3698,8 +3953,8 @@ function insertMathBlocks(s08,s09){
     const i=fuzzyFindAnchor(r,x.anchor);
     if(i>=0 && !inserted.has(x.anchor)){
       inserted.add(x.anchor);
-      const s=i+x.anchor.length,p=r.indexOf('.',s);
-      const ip=(p>=0&&p-s<100)?p+1:s;
+      // v10.3: 앵커의 실제 끝 위치 → 해당 문장 마침표 뒤에 삽입
+      const ip=findSentenceEndAfterAnchor(r,i,x.anchor);
       r=r.slice(0,ip)+'\n\n'+x.formula+'\n\n'+r.slice(ip);
       successCount++;
     }else{
@@ -3713,6 +3968,8 @@ function insertMathBlocks(s08,s09){
   }else if(successCount>0){
     App.showToast(`수학식 ${successCount}개 삽입 완료`);
   }
+  // v10.3: 삽입 후 문장 중복 감지 및 제거
+  r=_deduplicateSentences(r);
   // v10.2: 수학식 번호 순차 재정렬 (삽입 순서와 무관하게 위→아래 순서 보장)
   r=renumberMathBlocks(r);
   return r;
@@ -4324,49 +4581,63 @@ function _shapeAnchor(type,x,y,w,h,dir){
 
 // ── Shape natural proportion metrics ──
 // Computes natural shape dimensions fitted within a box slot.
-// Uses absolute aspect ratios so shapes look correct regardless of boxW/boxH.
+// v10.3: 사각형 기반 shape(서버, 모니터)는 boxW의 대부분 사용 (텍스트 겹침 방지)
+// 고유 비율 필요 shape(센서 원, 안테나 기둥)만 aspect ratio 적용
 function _shapeMetrics(type,boxW,boxH){
-  // Natural desired pixel aspect ratios (width : height)
-  // v9.1: 축소된 비율 — 도 1에서 행 내 겹침 방지
   switch(type){
     case 'database':{
       const sh=boxH*1.45, sw=sh*1.30;
-      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
+      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
     }
     case 'cloud':{
       const sh=boxH*1.20, sw=sh*2.40;
-      return{sw:Math.min(sw,boxW*0.70),sh,dx:(boxW-Math.min(sw,boxW*0.70))/2};
+      return{sw:Math.min(sw,boxW*0.75),sh,dx:(boxW-Math.min(sw,boxW*0.75))/2};
     }
     case 'server':{
-      const sh=boxH*1.45, sw=sh*1.05;
-      return{sw:Math.min(sw,boxW*0.45),sh,dx:(boxW-Math.min(sw,boxW*0.45))/2};
+      // v10.3: 서버는 사각형 — boxW의 대부분 사용 (텍스트 수용)
+      const sw=boxW*0.85, sh=sw*0.80; // 가로가 넓은 서버 랙
+      return{sw,sh:Math.max(sh,boxH),dx:(boxW-sw)/2};
     }
     case 'monitor':{
-      const sh=boxH*1.45, sw=sh*1.40;
-      return{sw:Math.min(sw,boxW*0.55),sh,dx:(boxW-Math.min(sw,boxW*0.55))/2};
+      // v10.3: 모니터도 사각형 기반 — 넓게
+      const sw=boxW*0.82, sh=sw*0.70;
+      return{sw,sh:Math.max(sh,boxH),dx:(boxW-sw)/2};
     }
     case 'sensor':{
       const sh=boxH*1.35, sw=sh*1.70;
-      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
+      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
     }
     case 'antenna':{
       const sh=boxH*1.45, sw=sh*1.50;
-      return{sw:Math.min(sw,boxW*0.55),sh,dx:(boxW-Math.min(sw,boxW*0.55))/2};
+      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
     }
     case 'document':{
-      const sh=boxH*1.45, sw=sh*0.75;
-      return{sw:Math.min(sw,boxW*0.42),sh,dx:(boxW-Math.min(sw,boxW*0.42))/2};
+      const sh=boxH*1.45, sw=sh*0.85;
+      return{sw:Math.min(sw,boxW*0.55),sh,dx:(boxW-Math.min(sw,boxW*0.55))/2};
     }
     case 'camera':{
       const sh=boxH*1.30, sw=sh*1.40;
-      return{sw:Math.min(sw,boxW*0.55),sh,dx:(boxW-Math.min(sw,boxW*0.55))/2};
+      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
     }
     case 'speaker':{
       const sh=boxH*1.35, sw=sh*1.40;
-      return{sw:Math.min(sw,boxW*0.55),sh,dx:(boxW-Math.min(sw,boxW*0.55))/2};
+      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
     }
     default:return{sw:boxW,sh:boxH,dx:0};
   }
+}
+
+// v10.3: 텍스트 너비 추정 (한글=폰트크기, 영문=폰트크기*0.6, 공백=폰트크기*0.3)
+function _estimateTextWidth(text,fontSize){
+  if(!text)return 0;
+  let w=0;
+  for(let i=0;i<text.length;i++){
+    const c=text.charCodeAt(i);
+    if(c>=0xAC00&&c<=0xD7AF||c>=0x4E00&&c<=0x9FFF)w+=fontSize; // 한글/한자
+    else if(c===32)w+=fontSize*0.3; // 공백
+    else w+=fontSize*0.65; // 영문/숫자
+  }
+  return w;
 }
 
 // ═══ 도면 규칙 위반 시 자동 재생성 ═══
@@ -5445,7 +5716,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     
     // 열 수에 따른 박스 크기 조정
     const colGap=0.85*PX; // v10.1: 연결선 공간 확보 (0.7→0.85)
-    const boxW2D=maxCols<=1?5.0*PX:maxCols===2?3.2*PX:2.4*PX;
+    // v10.3: 셀 너비 확대 (한글 텍스트 수용)
+    const boxW2D=maxCols<=1?5.5*PX:maxCols===2?4.2*PX:3.0*PX;
     const maxNodeAreaW=maxCols*boxW2D+(maxCols-1)*colGap;
     const marginX=0.8*PX; // v10.1: (0.7→0.8)
     const marginY=0.8*PX; // v10.1: (0.7→0.8)
@@ -5476,7 +5748,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const leaderMargin=0.5*PX;
     const svgW=marginX+maxNodeAreaW+leaderMargin;
     const svgH=totalH;
-    const maxW=maxCols<=1?600:maxCols===2?750:900;
+    const maxW=maxCols<=1?650:maxCols===2?850:950;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
@@ -5494,9 +5766,19 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 사용 ★
       const refNum=extractRefNum(nd.label,String((parseInt(nd.id.replace(/\D/g,''))||1)*100));
       const cleanLabel=_safeCleanLabel(nd.label);
-      const displayLabel=cleanLabel.length>(maxCols>1?10:16)?cleanLabel.slice(0,maxCols>1?8:14)+'…':cleanLabel;
+      const displayLabel=cleanLabel.length>(maxCols>2?7:maxCols>1?10:16)?cleanLabel.slice(0,maxCols>2?5:maxCols>1?8:14)+'…':cleanLabel;
       const shapeType=matchIconShape(nd.label);
       const sm=_shapeMetrics(shapeType,boxW2D,boxH);
+      // v10.3: 텍스트 너비 기반 최소 shape 너비 보장 (겹침 방지)
+      const fontSize=maxCols>2?10:maxCols>1?11:12;
+      const textW=_estimateTextWidth(displayLabel,fontSize);
+      const minShapeW=textW+20; // 양쪽 10px 패딩
+      if(sm.sw<minShapeW&&shapeType!=='box'){
+        const oldSw=sm.sw;
+        sm.sw=Math.min(minShapeW,boxW2D*0.85); // 셀 너비의 85% 초과 방지
+        sm.dx=(boxW2D-sm.sw)/2;
+        console.log(`[renderDiagramSvg] 텍스트 너비 보정: "${displayLabel}" shape ${shapeType}: ${Math.round(oldSw)}→${Math.round(sm.sw)}px (텍스트 ${Math.round(textW)}px)`);
+      }
       const sx=bx+sm.dx, sy=by;
       
       // v9.1: nodeBox는 시각적 경계 기반 (연결선 라우팅에 사용)
@@ -5616,7 +5898,10 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sw,sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sw,sh,2);
       const textCy=_shapeTextCy(shapeType,sy,sh);
-      const fontSize=maxCols>2?10:maxCols>1?11:12;
+      let fontSize=maxCols>2?10:maxCols>1?11:12;
+      // v10.3: 텍스트가 shape보다 넓으면 폰트 축소
+      let textW=_estimateTextWidth(displayLabel,fontSize);
+      while(textW>sw*0.92&&fontSize>7){fontSize--;textW=_estimateTextWidth(displayLabel,fontSize);}
       const dir=nodeConnDir[id]||{};
       const refInside=dir.top&&dir.bottom&&dir.left&&dir.right;
       // 참조번호 내부 표시 시 라벨을 위로 올림
@@ -5716,12 +6001,20 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const refNum=extractRefNum(nd.label,String(obj.fallbackRef));
       const shapeType=matchIconShape(nd.label);
       const sm=_shapeMetrics(shapeType,obj.w,obj.h);
+      // v10.3: 텍스트 너비 기반 최소 shape 너비 (도 2+ SVG)
+      const cleanLabel=_safeCleanLabel(nd.label);
+      const displayLabel=cleanLabel.length>(innerMaxCols>2?7:innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>2?5:innerMaxCols>1?8:14)+'…':cleanLabel;
+      const fontSize2=innerMaxCols>2?9:innerMaxCols>1?10:11;
+      const textW2=_estimateTextWidth(displayLabel,fontSize2);
+      const minSw2=textW2+16;
+      if(sm.sw<minSw2&&shapeType!=='box'){
+        sm.sw=Math.min(minSw2,obj.w*0.90);
+        sm.dx=(obj.w-sm.sw)/2;
+      }
       const sx=bx+(obj.w-sm.sw)/2, sy=by;
       
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sm.sw,sm.sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sm.sw,sm.sh,1.5);
-      const cleanLabel=_safeCleanLabel(nd.label);
-      const displayLabel=cleanLabel.length>(innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>1?8:14)+'…':cleanLabel;
       const textCy=_shapeTextCy(shapeType,sy,sm.sh);
       const fontSize=innerMaxCols>2?9:innerMaxCols>1?10:11;
       
@@ -6595,6 +6888,14 @@ function downloadPptx(sid){
           const cleanLabel=_safeCleanLabel(n.label);
           const shapeType=matchIconShape(n.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
+          // v10.3: 텍스트 너비 기반 최소 shape 너비 (PPTX - 인치 단위)
+          const pptxFontSize=Math.min(maxCols>1?10:12,Math.max(8,13-nodeCount*0.3));
+          const estTextWInch=cleanLabel.length*(pptxFontSize/72)*0.65; // 대략적 인치 환산
+          const minSwInch=estTextWInch+0.25; // 양쪽 패딩
+          if(sm.sw<minSwInch&&shapeType!=='box'){
+            sm.sw=Math.min(minSwInch,boxW2D*0.85);
+            sm.dx=(boxW2D-sm.sw)/2;
+          }
           const sx=bx+sm.dx;
           
           addPptxIconShape(slide,shapeType,sx,by,sm.sw,sm.sh,LINE_FRAME);
@@ -7177,7 +7478,8 @@ function downloadDiagramImages(sid, format='jpeg'){
         const layout=computeDeviceLayout2D(nodes,edges);
         const{grid,maxCols,numRows,uniqueEdges}=layout;
         const colGap=25;
-        const boxW2D=maxCols<=1?520:maxCols===2?260:175;
+        // v10.3: 셀 너비 확대 (한글 텍스트 수용)
+        const boxW2D=maxCols<=1?520:maxCols===2?340:230;
         const nodeAreaW=maxCols*boxW2D+(maxCols-1)*colGap;
         const marginX=30;
         const boxStartY=50;
@@ -7204,6 +7506,15 @@ function downloadDiagramImages(sid, format='jpeg'){
           const cleanLabel=_safeCleanLabel(nd.label);
           const shapeType=matchIconShape(nd.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
+          // v10.3: 텍스트 너비 기반 최소 shape 너비 (Canvas)
+          const cFontSize=maxCols>2?10:maxCols>1?11:12;
+          const cDisplayLabel=cleanLabel.length>(maxCols>2?7:maxCols>1?10:16)?cleanLabel.slice(0,maxCols>2?5:maxCols>1?8:14)+'…':cleanLabel;
+          const cTextW=_estimateTextWidth(cDisplayLabel,cFontSize);
+          const cMinSw=cTextW+20;
+          if(sm.sw<cMinSw&&shapeType!=='box'){
+            sm.sw=Math.min(cMinSw,boxW2D*0.85);
+            sm.dx=(boxW2D-sm.sw)/2;
+          }
           const sx=bx+sm.dx;
           // v9.1: visual bounds 기준 nodeBox (★ v10.2: shape 데이터 보존 ★)
           const vb=_shapeVisualBounds(shapeType,sx,by,sm.sw,sm.sh);
@@ -7283,8 +7594,11 @@ function downloadDiagramImages(sid, format='jpeg'){
         nodeData.forEach(nd=>{
           const{id,sx,sy,sw,sh,shapeType,cleanLabel,refNum}=nd;
           drawCanvasShape(ctx,shapeType,sx,sy,sw,sh,SHADOW,2);
-          const displayLabel=cleanLabel.length>(maxCols>1?10:16)?cleanLabel.slice(0,maxCols>1?8:14)+'…':cleanLabel;
-          const fontSize=maxCols>2?10:maxCols>1?11:12;
+          const displayLabel=cleanLabel.length>(maxCols>2?7:maxCols>1?10:16)?cleanLabel.slice(0,maxCols>2?5:maxCols>1?8:14)+'…':cleanLabel;
+          let fontSize=maxCols>2?10:maxCols>1?11:12;
+          // v10.3: 텍스트가 shape보다 넓으면 폰트 축소
+          let _tw=_estimateTextWidth(displayLabel,fontSize);
+          while(_tw>sw*0.92&&fontSize>7){fontSize--;_tw=_estimateTextWidth(displayLabel,fontSize);}
           ctx.fillStyle='#000000';ctx.font=`${fontSize}px "맑은 고딕", sans-serif`;
           ctx.textAlign='center';ctx.textBaseline='middle';
           const cDir=nodeConnDir[id]||{};
@@ -7403,7 +7717,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           const sx=bx+(obj.w-sm.sw)/2;
           
           drawCanvasShape(ctx,shapeType,sx,by,sm.sw,sm.sh,SHADOW_PX,1.5);
-          const displayLabel=cleanLabel.length>(innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>1?8:14)+'…':cleanLabel;
+          const displayLabel=cleanLabel.length>(innerMaxCols>2?7:innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>2?5:innerMaxCols>1?8:14)+'…':cleanLabel;
           const fontSize=innerMaxCols>2?9:innerMaxCols>1?10:11;
           ctx.fillStyle='#000000';ctx.font=`${fontSize}px "맑은 고딕", sans-serif`;
           ctx.textAlign='center';ctx.textBaseline='middle';
