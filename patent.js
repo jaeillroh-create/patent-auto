@@ -2698,6 +2698,119 @@ async function runLongStep(sid){if(globalProcessing)return;const dep=checkDepend
     outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
 async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);markOutputTimestamp('step_09');invalidateDownstream('step_09');renderOutput('step_09',outputs.step_09);onStepCompleted('step_09');saveProject(true);App.showToast('수학식 삽입 완료');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
 
+// v10.2: 검토 결과를 장치/방법 범위로 필터링
+function filterReviewForScope(reviewText,scope){
+  if(!reviewText)return '';
+  if(scope==='all')return reviewText;
+  
+  const lines=reviewText.split('\n');
+  const filtered=[];
+  
+  // 방법 관련 키워드 (장치 범위에서 제외할 대상)
+  const methodKeywords=/방법\s*청구항|방법\s*상세설명|방법\s*도면|방법\s*앵커|순서도|흐름도|~하는\s*단계|S\d{3}|단계\s*[:(]S|방법\s*독립항|방법\s*종속항/;
+  // 장치 관련 키워드 (방법 범위에서 제외할 대상)
+  const deviceKeywords=/장치\s*청구항|장치\s*상세설명|장치\s*도면|장치\s*앵커|블록도|구성도|장치\s*독립항|장치\s*종속항/;
+  
+  const excludeRe=scope==='device'?methodKeywords:deviceKeywords;
+  
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    
+    // 검토 항목 헤더 ([1]~[11]) → 항상 포함
+    if(/^\[(\d{1,2})\]\s/.test(line)){filtered.push(line);continue;}
+    
+    // ✅/⚠️ 판정 라인 → 항상 포함
+    if(/^[✅⚠️]/.test(line.trim())){filtered.push(line);continue;}
+    
+    // 전체 요약/우선순위 → 항상 포함
+    if(/전체\s*요약|보완\s*우선순위/.test(line)){filtered.push(line);continue;}
+    
+    // 빈 줄 → 항상 포함
+    if(line.trim()===''){filtered.push(line);continue;}
+    
+    // 해당 scope와 반대되는 키워드가 포함된 라인 검사
+    if(excludeRe.test(line)){
+      // "장치 및 방법" 같이 양쪽 다 언급하면 포함
+      const bothScopes=/장치\s*및\s*방법|장치와\s*방법|장치,\s*방법/.test(line);
+      if(!bothScopes)continue;  // 이 라인만 skip (다음 라인은 독립 판단)
+    }
+    
+    filtered.push(line);
+  }
+  
+  // 연속 빈줄 정리
+  return filtered.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+
+// v10.2: 장치 도면 목록 요약 (LLM에 명시적으로 어떤 도면만 존재하는지 전달)
+function extractDeviceFigSummary(){
+  const design=outputs.step_07||'';
+  if(!design)return '';
+  const figs=[...design.matchAll(/도\s+(\d+)[은는]\s*([^\n]+)/g)].map(m=>`도 ${m[1]}: ${m[2].replace(/이다\.\s*$/,'').trim()}`);
+  if(!figs.length)return '';
+  const deviceMax=getLastFigureNumber(design)||parseInt(document.getElementById('optDeviceFigures')?.value||4);
+  return `\n\n★★★ 현재 존재하는 장치 도면 (이 도면만 참조 가능) ★★★\n${figs.join('\n')}\n총 ${figs.length}개 도면 (도 1 ~ 도 ${deviceMax})\n⛔ 위 목록에 없는 도면은 존재하지 않는다. 순서도, 흐름도, 방법도면은 장치 도면에 포함되지 않는다.\n⛔ 새로운 도면(도 ${deviceMax+1} 이상)을 추가하거나 참조하지 마라.`;
+}
+
+// v10.2: 장치 상세설명에서 방법/순서도/흐름도 관련 내용 제거 (후처리 안전망)
+function sanitizeMethodFromDevice(text){
+  if(!text)return text;
+  
+  // 1단계: 장치 도면 최대 번호 확인
+  const deviceMax=getLastFigureNumber(outputs.step_07||'')||parseInt(document.getElementById('optDeviceFigures')?.value||4);
+  
+  // 2단계: 순서도/흐름도 도면 번호 수집 (소개문에서 추출)
+  const methodFigNums=new Set();
+  const introRe=/도\s+(\d+)[은는]\s*[^\n]*(?:순서도|흐름도|방법|절차)[^\n]*(?:이다|나타낸다|도시한다)/g;
+  let m;
+  while((m=introRe.exec(text))!==null)methodFigNums.add(parseInt(m[1]));
+  // 장치 도면 범위 밖의 도면도 방법으로 간주
+  const allFigRefs=[...text.matchAll(/도\s+(\d+)/g)].map(x=>parseInt(x[1]));
+  allFigRefs.forEach(n=>{if(n>deviceMax)methodFigNums.add(n);});
+  
+  if(!methodFigNums.size){
+    // 방법 도면이 없으면 단독 S단계 문장만 제거
+    return text.replace(/^[^\n]*S\d{3}[^\n]*$/gm,'').replace(/\n{3,}/g,'\n\n').trim();
+  }
+  
+  console.log(`[sanitizeMethodFromDevice] 방법 도면 번호 감지: 도 ${[...methodFigNums].sort((a,b)=>a-b).join(', ')} (장치 도면: ~도 ${deviceMax})`);
+  
+  // 3단계: 방법 도면 관련 단락 제거
+  const lines=text.split('\n');
+  const cleaned=[];
+  let skipParagraph=false;
+  
+  // 방법 도면 번호 패턴 생성
+  const methodFigPattern=new RegExp(`도\\s+(${[...methodFigNums].join('|')})[^0-9]`);
+  
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    const trimmed=line.trim();
+    
+    // 빈 줄 → 단락 리셋
+    if(!trimmed){skipParagraph=false;cleaned.push(line);continue;}
+    
+    if(skipParagraph)continue;
+    
+    // 방법 도면 소개문: "도 N은 ~순서도/흐름도이다"
+    if(methodFigPattern.test(trimmed)&&/도\s+\d+[은는을를]\s*/.test(trimmed)){
+      skipParagraph=true;
+      console.warn(`[sanitizeMethodFromDevice] 방법 도면 단락 제거: "${trimmed.slice(0,80)}..."`);
+      continue;
+    }
+    
+    // 단독 S단계 문장
+    if(/S\d{3}/.test(trimmed)&&/단계|수행|실행/.test(trimmed)){
+      console.warn(`[sanitizeMethodFromDevice] S단계 문장 제거: "${trimmed.slice(0,80)}..."`);
+      continue;
+    }
+    
+    cleaned.push(line);
+  }
+  
+  return cleaned.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+
 async function applyReview(){
   if(globalProcessing)return;if(!outputs.step_13){App.showToast('검토 결과 없음','error');return;}
   const cur=getLatestDescription();if(!cur){App.showToast('상세설명 없음','error');return;}
@@ -2705,6 +2818,9 @@ async function applyReview(){
   const totalSteps=hasMethodDesc?4:3;
   beforeReviewText=cur;setGlobalProcessing(true);loadingState.applyReview=true;App.setButtonLoading('btnApplyReview',true);
   try{
+    // v10.2: 검토 결과를 장치/방법으로 분리
+    const deviceReview=filterReviewForScope(outputs.step_13,'device');
+    const methodReview=hasMethodDesc?filterReviewForScope(outputs.step_13,'method'):'';
     // ═══ [1] 장치 상세설명 보완 (원문 유지 + 지적사항만 보완) ═══
     App.showProgress('progressApplyReview',`[1/${totalSteps}] 장치 상세설명 보완 중...`,1,totalSteps);
     const improvedDesc=await App.callClaudeWithContinuation(`[검토 결과]의 지적사항을 반영하여 아래 [현재 상세설명]을 보완하라.
@@ -2729,10 +2845,16 @@ async function applyReview(){
 - 검토 항목 [10] 도면 부호 정합성 지적: 상세설명의 참조번호가 도면과 일치하도록 보완하라.
 - 검토 항목 [8] 명확성 관련 지적이 상세설명에 해당하는 경우 보완하라.
 
+⛔⛔⛔ 범위 제한: 장치 상세설명만 보완 ⛔⛔⛔
+- 이 작업은 장치(~부, ~장치, ~시스템) 구성요소의 상세설명만 보완하는 것이다.
+- 방법/단계/순서도/흐름도에 대한 내용은 절대 포함하지 마라.
+- 검토 결과에 방법 관련 지적이 있더라도 무시하라 (방법은 별도로 처리됨).
+- 기존 도면 구조(블록도, 구성도)를 그대로 유지하라. 새로운 도면 유형(순서도, 흐름도)을 추가하지 마라.
+
 규칙:
 - 이 항목만 작성. 다른 항목 포함 금지.
 - ${getDeviceSubject()}(100)를 주어. "구성요소(참조번호)" 형태.
-- 도면별 "도 N을 참조하면," 형태 유지.
+- 도면별 "도 N을 참조하면," 형태 유지. 기존 도면 번호 범위만 사용하라.
 - 특허문체(~한다). 글머리 금지. 생략 금지.
 - 제한성 표현 금지.
 - 수학식은 포함하지 마라 (별도 삽입 예정).
@@ -2741,12 +2863,14 @@ async function applyReview(){
 - ⛔ "~하는 단계", "S100", "S401" 등 방법 표현/단계번호 절대 금지. 장치 구성요소(~부)의 동작만 서술.
 
 [발명의 명칭] ${selectedTitle}
-[검토 결과] ${outputs.step_13}
-[청구범위] ${outputs.step_06||''}
-[도면] ${outputs.step_07||''}
+[검토 결과 — 장치 관련 항목만] ${deviceReview}
+[장치 청구범위] ${outputs.step_06||''}
+[장치 도면 설계] ${outputs.step_07||''}${extractDeviceFigSummary()}
 [현재 상세설명] ${stripMathBlocks(cur)}${getFullInvention({stripMeta:true,deviceOnly:true})}${getStyleRef()}${buildUserCommandSuffix('step_08')}`,'progressApplyReview');
+    // v10.2: 방법/순서도/흐름도 혼입 제거 (후처리 안전망)
+    let cleanedDesc=sanitizeMethodFromDevice(improvedDesc);
     // v8.1: 도면 범위 초과 자동 교정
-    const sanitizedDesc=sanitizeDescFigureRefs(improvedDesc,'device');
+    const sanitizedDesc=sanitizeDescFigureRefs(cleanedDesc,'device');
     // ★ v9.1: step_08 원본은 보존. 검토 반영본은 step_13_applied에만 저장 ★
     // v10.2: 분량 감소 경고
     const origLen=stripMathBlocks(cur).length;
@@ -2811,13 +2935,18 @@ async function applyReview(){
 ★★ 방법 앵커 종속항 보완 집중 ★★
 - 앵커 종속항의 기술적 구성에 대해 동작 원리와 기술적 효과를 보완하라.
 
+⛔⛔⛔ 범위 제한: 방법 상세설명만 보완 ⛔⛔⛔
+- 이 작업은 방법(~단계, ~방법) 상세설명만 보완하는 것이다.
+- 장치 구성요소(~부)의 블록도 설명은 포함하지 마라 (장치는 별도로 처리됨).
+- 검토 결과에 장치 관련 지적이 있더라도 무시하라.
+
 규칙:
 - 방법 상세설명만 작성. 장치 상세설명 포함 금지.
 - 특허문체(~한다). 글머리 금지. 생략 금지. 제한성 표현 금지.
 - 수행 주체: "${getDeviceSubject()}"로 일관되게 서술.
 
 [발명의 명칭] ${selectedTitle}
-[검토 결과] ${outputs.step_13}
+[검토 결과 — 방법 관련 항목만] ${methodReview}
 [방법 청구항] ${outputs.step_10||''}
 [현재 방법 상세설명] ${getLatestMethodDescription()}${getStyleRef()}${buildUserCommandSuffix('step_12')}`,'progressApplyReview');
       // ★ v9.1: step_12 원본 보존 — 검토 반영본은 step_13_applied_method에만 저장 ★
