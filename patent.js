@@ -2680,10 +2680,13 @@ async function applyReview(){
     App.showProgress('progressApplyReview',`[1/${totalSteps}] 장치 상세설명 보완 중...`,1,totalSteps);
     const improvedDesc=await App.callClaudeWithContinuation(`[검토 결과]의 지적사항을 반영하여 아래 [현재 상세설명]을 보완하라.
 
-★★★ 최우선 원칙: 원문 최대 유지 ★★★
+★★★ 최우선 원칙: 원문 최대 유지 + 분량 증가만 허용 ★★★
 - 검토에서 지적된 부분만 수정·보완하라. 지적 없는 부분은 원문을 그대로 유지하라.
 - 기존 구성요소 설명의 문체·분량·표현·순서를 임의로 변경하지 마라.
 - 새로운 문장을 추가할 때는 기존 문맥에 자연스럽게 삽입하라.
+- ⛔ 현재 상세설명의 글자수: 약 ${stripMathBlocks(cur).length.toLocaleString()}자이다. 출력 글자수는 이보다 같거나 반드시 많아야 한다. 분량이 줄어드는 것은 절대 금지한다.
+- ⛔ 기존 문장을 삭제하거나 요약·축약·통합하지 마라. 오직 추가·보완만 허용한다.
+- ⛔ "간결하게", "요약하면" 등의 축약 표현을 사용하지 마라.
 
 ★★ 앵커 종속항 보완 집중 ★★
 - 검토 항목 [6]의 앵커 관련 지적사항은 반드시 보완하라.
@@ -2709,13 +2712,49 @@ async function applyReview(){
     // v8.1: 도면 범위 초과 자동 교정
     const sanitizedDesc=sanitizeDescFigureRefs(improvedDesc,'device');
     // ★ v9.1: step_08 원본은 보존. 검토 반영본은 step_13_applied에만 저장 ★
+    // v10.2: 분량 감소 경고
+    const origLen=stripMathBlocks(cur).length;
+    const newLen=sanitizedDesc.length;
+    if(newLen<origLen*0.9){
+      console.warn(`[applyReview] ⚠️ 분량 감소: ${origLen.toLocaleString()}자 → ${newLen.toLocaleString()}자 (${Math.round((1-newLen/origLen)*100)}% 감소)`);
+      App.showToast(`⚠️ 검토 반영 후 분량 ${Math.round((1-newLen/origLen)*100)}% 감소 — 확인 필요`,'warning');
+    }
 
     // ═══ [2] 수학식 재삽입 (Step 9를 이전에 실행한 경우에만) ═══
     let finalDesc=sanitizedDesc;
     if(outputs.step_09){
-      App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 삽입 중...`,2,totalSteps);
-      const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${sanitizedDesc}`);
-      finalDesc=insertMathBlocks(sanitizedDesc,mathR.text);
+      App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 재삽입 중...`,2,totalSteps);
+      // v10.2: 기존 수학식 보존 전략 — 원문에서 추출 후 재삽입 (번호 순서 유지)
+      const existingMath=extractExistingMathBlocks(cur);
+      if(existingMath.length>0){
+        // 기존 수학식이 있으면 원본 수학식을 보존하여 재삽입
+        console.log(`[applyReview] 기존 수학식 ${existingMath.length}개 보존 재삽입`);
+        const inserted=new Set();
+        let successCount=0;
+        // 역순 삽입 (하단→상단) — 인덱스 변위 방지
+        for(const x of [...existingMath].reverse()){
+          const i=fuzzyFindAnchor(finalDesc,x.anchor);
+          if(i>=0&&!inserted.has(x.anchor)){
+            inserted.add(x.anchor);
+            const s=i+x.anchor.length,p=finalDesc.indexOf('.',s);
+            const ip=(p>=0&&p-s<100)?p+1:s;
+            finalDesc=finalDesc.slice(0,ip)+'\n\n'+x.formula+'\n\n'+finalDesc.slice(ip);
+            successCount++;
+          }
+        }
+        // 보존 실패한 수학식은 새로 생성
+        if(successCount<existingMath.length){
+          console.log(`[applyReview] 보존 실패 ${existingMath.length-successCount}개 → 새로 생성`);
+          const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 ${existingMath.length-successCount}개.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${finalDesc}`);
+          finalDesc=insertMathBlocks(finalDesc,mathR.text);
+        }
+        // 수학식 번호 재정렬
+        finalDesc=renumberMathBlocks(finalDesc);
+      }else{
+        // 기존 수학식 없으면 새로 생성
+        const mathR=await App.callClaude(`상세설명의 핵심 알고리즘에 수학식 5개 내외.\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 20자 이상)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터)\n예를 들어, (수치 대입 설명)\n\n${selectedTitle}\n[현재 상세설명] ${sanitizedDesc}`);
+        finalDesc=insertMathBlocks(sanitizedDesc,mathR.text);
+      }
     }else{
       App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 삽입 건너뜀 (Step 9 미실행)...`,2,totalSteps);
     }
@@ -2728,8 +2767,10 @@ async function applyReview(){
       App.showProgress('progressApplyReview',`[3/${totalSteps}] 방법 상세설명 보완 중...`,3,totalSteps);
       const improvedMethod=await App.callClaudeWithContinuation(`[검토 결과]의 방법 관련 지적사항을 반영하여 아래 [현재 방법 상세설명]을 보완하라.
 
-★★★ 최우선 원칙: 원문 최대 유지 ★★★
+★★★ 최우선 원칙: 원문 최대 유지 + 분량 증가만 허용 ★★★
 - 검토에서 지적된 부분만 수정·보완하라. 지적 없는 부분은 원문을 그대로 유지하라.
+- ⛔ 현재 방법 상세설명의 글자수: 약 ${(getLatestMethodDescription()||'').length.toLocaleString()}자이다. 출력 글자수는 이보다 같거나 반드시 많아야 한다.
+- ⛔ 기존 문장을 삭제하거나 요약·축약·통합하지 마라. 오직 추가·보완만 허용한다.
 
 ★★ 방법 앵커 종속항 보완 집중 ★★
 - 앵커 종속항의 기술적 구성에 대해 동작 원리와 기술적 효과를 보완하라.
@@ -2759,7 +2800,18 @@ async function applyReview(){
 }
 function showReviewDiff(mode){
   const area=document.getElementById('reviewDiffArea'),bb=document.getElementById('btnDiffBefore'),ba=document.getElementById('btnDiffAfter');if(!area)return;
-  if(mode==='before'){area.value=beforeReviewText||'(없음)';if(bb)bb.className='btn btn-primary btn-sm';if(ba)ba.className='btn btn-outline btn-sm';}
+  if(mode==='before'){
+    const text=beforeReviewText||'(없음)';
+    area.value=text;
+    if(bb)bb.className='btn btn-primary btn-sm';if(ba)ba.className='btn btn-outline btn-sm';
+    // v10.2: 글자수 표시
+    if(bb)bb.innerHTML=`반영 전 <span class="badge badge-neutral" style="margin-left:4px;font-size:10px">${text.length.toLocaleString()}자</span>`;
+    if(ba){
+      let afterText=outputs.step_13_applied||'(없음)';
+      if(outputs.step_13_applied_method)afterText+='\n\n'+outputs.step_13_applied_method;
+      ba.innerHTML=`반영 후 <span class="badge badge-neutral" style="margin-left:4px;font-size:10px">${afterText.length.toLocaleString()}자</span>`;
+    }
+  }
   else{
     // v9.1: 장치 + 방법 검토 반영본 모두 표시
     let afterText=outputs.step_13_applied||'(없음)';
@@ -2768,6 +2820,21 @@ function showReviewDiff(mode){
     }
     area.value=afterText;
     if(bb)bb.className='btn btn-outline btn-sm';if(ba)ba.className='btn btn-primary btn-sm';
+    // v10.2: 글자수 표시
+    const beforeText=beforeReviewText||'(없음)';
+    if(bb)bb.innerHTML=`반영 전 <span class="badge badge-neutral" style="margin-left:4px;font-size:10px">${beforeText.length.toLocaleString()}자</span>`;
+    if(ba)ba.innerHTML=`반영 후 <span class="badge badge-neutral" style="margin-left:4px;font-size:10px">${afterText.length.toLocaleString()}자</span>`;
+    // v10.2: 분량 변화 안내
+    const diff=afterText.length-beforeText.length;
+    const diffLabel=diff>=0?`+${diff.toLocaleString()}`:`${diff.toLocaleString()}`;
+    const diffColor=diff>=0?'#2e7d32':'#c62828';
+    const countEl=document.getElementById('reviewDiffCount');
+    if(countEl)countEl.innerHTML=`<span style="color:${diffColor};font-size:12px;font-weight:600">${diffLabel}자 (${diff>=0?'증가':'감소'})</span>`;
+    else{
+      const newEl=document.createElement('span');newEl.id='reviewDiffCount';
+      newEl.innerHTML=`<span style="color:${diffColor};font-size:12px;font-weight:600">${diffLabel}자 (${diff>=0?'증가':'감소'})</span>`;
+      ba.parentElement?.appendChild(newEl);
+    }
   }
 }
 async function runDiagramStep(sid){
@@ -3268,6 +3335,61 @@ function stripMathBlocks(text){
   r=r.replace(/\n{3,}/g,'\n\n');
   return r.trim();
 }
+// v10.2: 수학식 번호 순차 재정렬 (위→아래 순서로 1,2,3...)
+function renumberMathBlocks(text){
+  if(!text)return text;
+  let counter=0;
+  return text.replace(/【수학식\s*\d+】/g,()=>{counter++;return `【수학식 ${counter}】`;});
+}
+// v10.2: 기존 수학식 블록 추출 (원문에서 수학식+설명 전체를 보존)
+function extractExistingMathBlocks(text){
+  if(!text)return[];
+  const blocks=[];
+  const re=/\n*(【수학식\s*\d+】[\s\S]*?)(?=\n\n(?:도\s|이때|또한|한편|다음|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}(?:서버|시스템|장치|단말))|\n\n\n|$)/g;
+  let m;
+  while((m=re.exec(text))!==null){
+    const formula=m[1].trim();
+    // 수학식 직전 문장을 앵커로 사용 (최대 100자)
+    const before=text.substring(Math.max(0,m.index-200),m.index);
+    const sentences=before.split(/[.。]\s*/);
+    const anchor=sentences.length>1?sentences[sentences.length-2].trim():'';
+    if(anchor.length>=10)blocks.push({anchor,formula});
+  }
+  return blocks;
+}
+// ═══ A3 fix: 유사도 기반 앵커 매칭 (v5.5, v10.2: 독립 함수 추출) ═══
+function fuzzyFindAnchor(text,anchor){
+  // 1차: 정확 매칭
+  const exact=text.indexOf(anchor);
+  if(exact>=0)return exact;
+  // 2차: 공백/구두점 정규화 후 매칭
+  const normalize=s=>s.replace(/\s+/g,' ').replace(/[.,;:!?·…]/g,'').trim();
+  const normText=normalize(text);
+  const normAnchor=normalize(anchor);
+  const normIdx=normText.indexOf(normAnchor);
+  if(normIdx>=0){
+    const ratio=normIdx/normText.length;
+    return Math.floor(ratio*text.length);
+  }
+  // 3차: 앵커의 핵심 키워드(3단어 이상) 연속 매칭
+  const words=anchor.replace(/[.,;:!?·…]/g,'').split(/\s+/).filter(w=>w.length>=2);
+  if(words.length>=3){
+    const escaped=words.slice(0,Math.min(5,words.length)).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+    const keyPhrase=escaped.join('\\s*');
+    try{
+      const re=new RegExp(keyPhrase);
+      const km=text.match(re);
+      if(km)return text.indexOf(km[0]);
+    }catch(e){/* regex 실패 시 4차로 진행 */}
+  }
+  // 4차: 앵커 앞 15자로 부분 매칭
+  if(anchor.length>=15){
+    const partial=anchor.slice(0,15);
+    const pi=text.indexOf(partial);
+    if(pi>=0)return pi;
+  }
+  return -1;
+}
 function insertMathBlocks(s08,s09){
   // First strip any existing math blocks from base text to prevent duplication
   let r=stripMathBlocks(s08);
@@ -3277,43 +3399,8 @@ function insertMathBlocks(s08,s09){
   const inserted=new Set();
   let successCount=0,failCount=0;
   
-  // ═══ A3 fix: 유사도 기반 매칭 (v5.5) ═══
-  function fuzzyFind(text,anchor){
-    // 1차: 정확 매칭
-    const exact=text.indexOf(anchor);
-    if(exact>=0)return exact;
-    // 2차: 공백/구두점 정규화 후 매칭
-    const normalize=s=>s.replace(/\s+/g,' ').replace(/[.,;:!?·…]/g,'').trim();
-    const normText=normalize(text);
-    const normAnchor=normalize(anchor);
-    const normIdx=normText.indexOf(normAnchor);
-    if(normIdx>=0){
-      // 원본 텍스트에서 대략적 위치 찾기
-      const ratio=normIdx/normText.length;
-      return Math.floor(ratio*text.length);
-    }
-    // 3차: 앵커의 핵심 키워드(3단어 이상) 연속 매칭
-    const words=anchor.replace(/[.,;:!?·…]/g,'').split(/\s+/).filter(w=>w.length>=2);
-    if(words.length>=3){
-      const escaped=words.slice(0,Math.min(5,words.length)).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
-      const keyPhrase=escaped.join('\\s*');
-      try{
-        const re=new RegExp(keyPhrase);
-        const km=text.match(re);
-        if(km)return text.indexOf(km[0]);
-      }catch(e){/* regex 실패 시 4차로 진행 */}
-    }
-    // 4차: 앵커 앞 15자로 부분 매칭
-    if(anchor.length>=15){
-      const partial=anchor.slice(0,15);
-      const pi=text.indexOf(partial);
-      if(pi>=0)return pi;
-    }
-    return -1;
-  }
-  
   for(const x of b.reverse()){
-    const i=fuzzyFind(r,x.anchor);
+    const i=fuzzyFindAnchor(r,x.anchor);
     if(i>=0 && !inserted.has(x.anchor)){
       inserted.add(x.anchor);
       const s=i+x.anchor.length,p=r.indexOf('.',s);
@@ -3331,6 +3418,8 @@ function insertMathBlocks(s08,s09){
   }else if(successCount>0){
     App.showToast(`수학식 ${successCount}개 삽입 완료`);
   }
+  // v10.2: 수학식 번호 순차 재정렬 (삽입 순서와 무관하게 위→아래 순서 보장)
+  r=renumberMathBlocks(r);
   return r;
 }
 
