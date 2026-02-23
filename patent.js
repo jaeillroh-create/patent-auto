@@ -1116,18 +1116,111 @@ async function _cascadeRunDiagram(sid){
   if(!prompt)return;
   let r=await App.callClaude(prompt);
   let designText=r.text;
-  // BUG-4 fix: 도면 검증 (장치 도면만, 최대 1회 재생성)
-  if(sid==='step_07'&&typeof validateDiagramDesignText==='function'){
-    const preIssues=validateDiagramDesignText(designText);
-    if(preIssues.some(i=>i.severity==='ERROR')){
-      const fb=`이전 도면 설계에 규칙 위반이 있습니다. 수정하여 다시 생성하세요.\n${preIssues.map(i=>i.message).join('\n')}\n원래 요청: ${prompt.slice(0,1500)}`;
-      r=await App.callClaude(fb);designText=r.text;
+  
+  // v10.3: 도면 설계 검증 — 도면 수, 도면 번호, 청구항 정합성
+  if(sid==='step_07'){
+    const totalFig=parseInt(document.getElementById('optDeviceFigures')?.value||4);
+    const genCount=totalFig-requiredFigures.length;
+    const figNums=computeFigNums(Math.max(genCount,0),0);
+    const expectedNums=figNums.device;
+    
+    const preIssues=validateDiagramDesignText(designText,genCount,expectedNums);
+    const hasError=preIssues.some(i=>i.severity==='ERROR');
+    
+    if(hasError){
+      console.warn('[_cascadeRunDiagram] 도면 설계 검증 실패:',preIssues.map(i=>i.message).join('; '));
+      // 오류 메시지를 포함하여 재생성 요청
+      const fb=`이전 도면 설계에 규칙 위반이 있습니다. 아래 오류를 모두 수정하여 다시 생성하세요.
+
+[오류 목록]
+${preIssues.filter(i=>i.severity==='ERROR').map(i=>'⛔ '+i.message).join('\n')}
+${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n')}
+
+★★★ 핵심 수정사항 ★★★
+- 도면을 정확히 ${genCount}개만 생성하라: ${expectedNums.map(n=>'도 '+n).join(', ')}
+- 구성요소 명칭과 참조번호는 【장치 청구범위】에서 가져와 사용하라
+
+원래 요청:
+${prompt.slice(0,2000)}`;
+      r=await App.callClaude(fb);
+      designText=r.text;
+      
+      // 재생성 후 2차 검증 — 도면 수만 확인
+      const postIssues=validateDiagramDesignText(designText,genCount,expectedNums);
+      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
+        console.warn('[_cascadeRunDiagram] 2차 검증도 도면 수 불일치 — 초과분 수동 제거 시도');
+        // 설계 텍스트에서 초과 도면 제거
+        designText=_trimDesignTextToExpectedFigures(designText,expectedNums);
+      }
     }
   }
+  
+  if(sid==='step_11'){
+    const methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
+    const devCount=diagramData.step_07?.length||0;
+    const figNums=computeFigNums(devCount,methFigCount);
+    const expectedNums=figNums.method;
+    
+    const preIssues=validateDiagramDesignText(designText,methFigCount,expectedNums);
+    if(preIssues.some(i=>i.severity==='ERROR')){
+      const fb=`도면 설계 오류:\n${preIssues.map(i=>i.message).join('\n')}\n도면을 정확히 ${methFigCount}개만 생성하라: ${expectedNums.map(n=>'도 '+n).join(', ')}\n원래 요청: ${prompt.slice(0,1500)}`;
+      r=await App.callClaude(fb);designText=r.text;
+    }
+    // ★ 2차 검증: 도면 수 강제 트림 ★
+    const postIssues=validateDiagramDesignText(designText,methFigCount,expectedNums);
+    if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
+      designText=_trimDesignTextToExpectedFigures(designText,expectedNums);
+    }
+  }
+  
   outputs[sid]=designText;markOutputTimestamp(sid);_cascadeRender(sid,designText);
   const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
   outputs[sid+'_mermaid']=mr.text;
   renderDiagrams(sid,mr.text);
+}
+
+// v10.3: 설계 텍스트에서 초과 도면 제거
+function _trimDesignTextToExpectedFigures(text,expectedNums){
+  if(!expectedNums||!expectedNums.length)return text;
+  const expectedSet=new Set(expectedNums);
+  
+  // BRIEF_DESCRIPTIONS 섹션 분리
+  const briefIdx=text.indexOf('---BRIEF_DESCRIPTIONS---');
+  let designPart=briefIdx>=0?text.slice(0,briefIdx):text;
+  let briefPart=briefIdx>=0?text.slice(briefIdx):'';
+  
+  // 도면별 분리
+  const figSections=[];
+  const figRe=/(?:^|\n)(도\s*(\d+)\s*[:：])/g;
+  let m;
+  const starts=[];
+  while((m=figRe.exec(designPart))!==null){
+    starts.push({pos:m.index,num:parseInt(m[2])});
+  }
+  
+  let result='';
+  for(let i=0;i<starts.length;i++){
+    const end=i+1<starts.length?starts[i+1].pos:designPart.length;
+    if(expectedSet.has(starts[i].num)){
+      result+=designPart.slice(starts[i].pos,end);
+    }else{
+      console.log(`[_trimDesignText] 초과 도면 제거: 도 ${starts[i].num}`);
+    }
+  }
+  
+  // BRIEF_DESCRIPTIONS에서도 초과 도면 라인 제거
+  if(briefPart){
+    const lines=briefPart.split('\n');
+    briefPart=lines.filter(l=>{
+      const fm=l.match(/도\s*(\d+)/);
+      if(!fm)return true;
+      const fnum=parseInt(fm[1]);
+      // 사용자 도면이나 예상 도면이면 유지
+      return expectedSet.has(fnum)||requiredFigures.some(rf=>rf.num===fnum);
+    }).join('\n');
+  }
+  
+  return (result+'\n\n'+briefPart).replace(/\n{3,}/g,'\n\n').trim();
 }
 async function _cascadeRunMath(){
   const r=await App.callClaude(buildPrompt('step_09'));
@@ -1187,6 +1280,16 @@ function getFullDescription(){
 }
 function getLastClaimNumber(t){const m=t.match(/【청구항\s*(\d+)】/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
 function getLastFigureNumber(t){const m=t.match(/도\s*(\d+)/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
+
+// v10.3: 도면 설계 텍스트에서 정확한 도면 번호 목록 추출 (헤더 기반)
+function _extractFigureNumbersFromDesign(text){
+  if(!text)return [];
+  const nums=[];
+  const re=/^도\s*(\d+)\s*[:：]/gm;
+  let m;
+  while((m=re.exec(text))!==null)nums.push(parseInt(m[1]));
+  return[...new Set(nums)].sort((a,b)=>a-b);
+}
 
 // ═══ v9.0: 상세설명 후처리 (safety net — 근본 수정은 callClaudeWithContinuation 오버라이드) ═══
 // type: 'device' → step_08 (장치), 'method' → step_12 (방법)
@@ -1939,8 +2042,21 @@ ${T}${getFullInvention()}${styleRef}`;}
       const genCount=totalFig-requiredFigures.length;
       const figNums=computeFigNums(Math.max(genCount,0),0);
       const autoNums=figNums.device;
-      return `【장치 청구범위】에 대한 도면을 설계하라. 총 도면 수: ${totalFig}개 (자동 생성 ${genCount}개${requiredFigures.length?', 사용자 도면 '+requiredFigures.length+'개':''}).
-${reqInst?`\n사용자 도면: ${requiredFigures.map(rf=>'도 '+rf.num).join(', ')} (사용자가 이미 보유).\n★ 자동 생성할 도면 번호: ${autoNums.map(n=>'도 '+n).join(', ')}.\n위 번호만 사용하여 도면을 생성하라. 사용자 도면 번호(${requiredFigures.map(rf=>'도 '+rf.num).join(', ')})는 절대 생성하지 마라.`:''}
+      return `【장치 청구범위】에 대한 도면을 설계하라.
+
+⛔⛔⛔ 도면 수 규칙 (절대 준수) ⛔⛔⛔
+- 자동 생성할 도면: 정확히 ${genCount}개 (${autoNums.map(n=>'도 '+n).join(', ')})
+- ★★★ 도면을 ${genCount}개보다 많이 생성하지 마라. ${genCount}개보다 적게 생성하지 마라. ★★★
+${requiredFigures.length?`- 사용자 도면: ${requiredFigures.map(rf=>'도 '+rf.num+' ('+rf.description+')').join(', ')} — 이미 보유. 생성 금지.\n- 총 도면 수: ${totalFig}개 (자동 ${genCount}개 + 사용자 ${requiredFigures.length}개)`:`- 총 도면 수: ${totalFig}개`}
+
+★★★ 청구항 구성요소 정합 규칙 (핵심) ★★★
+- 도면에 사용하는 구성요소 명칭과 참조번호는 반드시 【장치 청구범위】와 일치해야 한다.
+- 청구항에 "통신부(110)"가 있으면 도면에서도 "통신부(110)"으로 표기하라.
+- 청구항에 없는 구성요소를 도면에 임의로 추가하지 마라.
+- 단, 도 1의 L1 외부 장치(사용자 단말, 네트워크 등)는 청구항에 명시적으로 없더라도 시스템 구성상 필요하면 추가 가능.
+- 도 2 이후의 내부 구성요소는 반드시 청구항에 기재된 것만 사용하라.
+
+${_buildClaimComponentHierarchy(outputs.step_06||'')}
 
 ════════════════════════════════════════════════════════════════
 ★★★ 특허 도면 생성 규칙 v4.0 ★★★
@@ -2088,50 +2204,29 @@ ${reqInst?`\n사용자 도면: ${requiredFigures.map(rf=>'도 '+rf.num).join(', 
 [파트1: 도면 설계 출력 형식]
 
 ★★★ 반드시 아래 형식을 정확히 따르라. 공간배치를 반드시 명시하라 ★★★
+★★★ 도면을 정확히 ${genCount}개만 설계하라: ${autoNums.map(n=>'도 '+n).join(', ')} ★★★
+★★★ 구성요소 명칭과 참조번호는 【장치 청구범위】에서 그대로 가져와 사용하라 ★★★
 
-도 1: 전체 시스템 구성도
-유형: 블록도 (최외곽 박스 없음)
-구성요소: L1 장치만 나열
-- ${getDeviceSubject()}(100)
-- 사용자 단말(200)
-- 데이터베이스(400)
-연결관계 분석: (어떤 구성요소끼리 데이터를 교환하는지 청구항 기반으로 판단)
-- ${getDeviceSubject()}(100)는 사용자 단말(200)과 네트워크를 통해 데이터를 교환 → 연결
-- ${getDeviceSubject()}(100)는 데이터베이스(400)에 데이터를 저장/조회 → 연결
-- 사용자 단말(200)은 데이터베이스(400)와 직접 통신하지 않음 → 연결 없음
-연결관계: ${getDeviceSubject()}(100) ↔ 사용자 단말(200), ${getDeviceSubject()}(100) ↔ 데이터베이스(400)
+각 도면의 출력 형식 (모든 도면에 동일 적용):
+
+도 N: [도면 제목]
+유형: 블록도 (도 1은 최외곽 박스 없음 / 도 2+는 최외곽 = 직계 부모)
+구성요소: [해당 레벨 구성요소 나열 — 청구항에서 추출]
+- [구성요소명(참조번호)]
+- [구성요소명(참조번호)]
+- ...
+연결관계: [구성요소 간 데이터 흐름 분석]
 공간배치:
-  허브: ${getDeviceSubject()}(100) — 가장 많은 연결을 가진 중심 노드
-  행1: ${getDeviceSubject()}(100)
-  행2: 사용자 단말(200), 데이터베이스(400)
+  허브: [가장 많은 연결을 가진 노드]
+  행1: [노드들]
+  행2: [노드들]
 
-도 2: ${getDeviceSubject()}(100) 상세 블록도
-유형: 블록도 (최외곽 = ${getDeviceSubject()}(100))
-구성요소: ${getDeviceSubject()}(100) 내부 L2 구성
-- 통신부(110)
-- 프로세서(120)
-- 메모리(130)
-- 저장부(140)
-연결관계: 통신부(110) ↔ 프로세서(120) ↔ 메모리(130), 프로세서(120) ↔ 저장부(140)
-공간배치:
-  허브: 프로세서(120)
-  행1: 통신부(110)
-  행2: 프로세서(120)
-  행3: 메모리(130), 저장부(140)
-
-도 3: 프로세서(120) 상세 블록도 (L3 상세화 예시)
-유형: 블록도 (최외곽 = 프로세서(120), ${getDeviceSubject()}(100)가 아님!)
-구성요소: 프로세서(120) 내부 L3 구성
-- 연산부(121)
-- 캐시부(122)
-- 제어부(123)
-연결관계: 연산부(121) ↔ 제어부(123), 캐시부(122) ↔ 제어부(123)
-공간배치:
-  허브: 제어부(123)
-  행1: 연산부(121), 캐시부(122)
-  행2: 제어부(123)
-
-(도면 수에 맞게 도 4, 도 5... 추가)
+★ 도면 설계 흐름 ★
+① 도 ${autoNums[0]||1}: 전체 시스템 구성도 — L1 장치(X00)만 표시, 최외곽 박스 없음
+${genCount>=2?`② 도 ${autoNums[1]||2}: ${getDeviceSubject()}(100) 상세 블록도 — 최외곽=${getDeviceSubject()}(100), 내부=청구항의 L2 구성요소(XY0)`:''}
+${genCount>=3?`③ 도 ${autoNums[2]||3}: 핵심 L2 구성요소의 상세 블록도 — 최외곽=해당 L2, 내부=청구항의 L3 구성요소(XYZ)`:''}
+${genCount>=4?`④ 도 ${autoNums[3]||4}: 추가 상세화 대상의 블록도 (다른 L2 상세 또는 L3 상세)`:''}
+${genCount>=5?autoNums.slice(4).map((n,i)=>`⑤ 도 ${n}: 추가 상세화 블록도`).join('\n'):''}
 
 ★★★ 공간배치 규칙 ★★★
 1. "허브" = 가장 많은 연결을 가진 노드 (반드시 1개 지정)
@@ -2143,17 +2238,21 @@ ${reqInst?`\n사용자 도면: ${requiredFigures.map(rf=>'도 '+rf.num).join(', 
 ★★★ 참조번호 순서 규칙 (도면 설계 + 상세설명 연계) ★★★
 - 구성요소 나열 시 참조번호 오름차순으로 정렬하라: 110→120→130→140
 - 도면 내 행 배치도 가능한 한 번호 순서를 존중하라 (작은 번호가 위쪽/왼쪽)
-- 예: 행1: 통신부(110), 행2: 프로세서(120), 행3: 메모리(130), 저장부(140)
-- 하위 구성요소(L3)도 오름차순: 121→122→123
 - 이 순서는 상세설명(Step 8)에서 "도 N을 참조하면" 설명 순서의 기준이 된다
 
 [파트2: 도면의 간단한 설명]
-★★★ 모든 도면에 대해 빠짐없이 간단한 설명을 작성하라 ★★★
+★★★ 생성한 도면(${autoNums.map(n=>'도 '+n).join(', ')})과 사용자 도면 모두에 대해 빠짐없이 간단한 설명을 작성하라 ★★★
 ---BRIEF_DESCRIPTIONS---
 ${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 도면이다.`).join('\n')}
-도 1은 ${selectedTitle||'본 발명'}의 전체 구성을 나타내는 블록도이다.
-도 2는 ${getDeviceSubject()}(100)의 내부 구성을 나타내는 블록도이다.
-(도 3, 도 4... 모든 도면에 대해 작성)
+(각 도면에 대해 "도 N은 [대상]의 [내용]을 나타내는 블록도이다." 형식으로 작성)
+
+⛔⛔⛔ 최종 점검 ⛔⛔⛔
+- 도면 수가 정확히 ${genCount}개인가? (${autoNums.map(n=>'도 '+n).join(', ')})
+- 모든 구성요소 명칭과 참조번호가 【장치 청구범위】와 일치하는가?
+- 도 1은 L1(X00) 장치만 포함하는가?
+- 도 2+의 내부 구성요소는 청구항에 있는 것만 사용했는가?
+- "~모듈" 대신 "~부"를 사용했는가?
+- 최외곽 박스가 직계 부모인가? (세대 점프 없는가?)
 
 ★★★ "~모듈" 절대 금지 → "~부"로 통일 ★★★
 ★★★ 도 1은 L1(100,200,300,400) 장치만, 최외곽 박스 없음 ★★★
@@ -2169,15 +2268,24 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
         custom:{charPerFig:'약 '+customDetailChars+'자',total:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 변형 실시예를 포함하라.'}
       }[detailLevel];
       const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
-      // v10.0: 사용자 도면 포함한 정확한 마지막 장치 도면 번호
-      const autoDevCount=deviceFigCount-requiredFigures.length;
-      const _figNums=computeFigNums(Math.max(autoDevCount,0),0);
-      const lastDeviceFig=Math.max(
-        getLastFigureNumber(outputs.step_07||'')||0,
-        _figNums.lastDeviceFig,
-        ...requiredFigures.map(f=>f.num).filter(n=>n<=(_figNums.lastDeviceFig||deviceFigCount)),
-        deviceFigCount
-      );
+      
+      // v10.3: 실제 도면 설계 텍스트에서 도면 번호 목록 추출
+      const designText=outputs.step_07||'';
+      const actualFigNums=_extractFigureNumbersFromDesign(designText);
+      // 사용자 도면 번호도 포함
+      const allFigNumsRaw=[...new Set([...actualFigNums,...requiredFigures.map(f=>f.num)])].sort((a,b)=>a-b);
+      // ★ Safety: UI 설정 도면 수 초과 방지 ★
+      const expectedTotalFig=deviceFigCount;
+      const allFigNums=allFigNumsRaw.length>expectedTotalFig?allFigNumsRaw.slice(0,expectedTotalFig):allFigNumsRaw;
+      const lastDeviceFig=allFigNums.length>0?Math.max(...allFigNums):deviceFigCount;
+      const figListStr=allFigNums.map(n=>'도 '+n).join(', ');
+      
+      // ★ 도면 설계에서 구성요소 목록 추출 (Step 8에 도면과 동일한 구성요소 사용 강제) ★
+      const _designComponents=_extractStructuredComponents(designText);
+      const _designCompStr=_designComponents.length>0?
+        `\n★★★ 도면 구성요소 목록 (이 명칭과 참조번호만 사용하라) ★★★\n${_designComponents.map(c=>c.name+'('+c.refNum+')').join(', ')}\n`:'';
+      
+      
       const hasMethodClaims=!!outputs.step_10;
       const _userFigBlock=getUserFiguresPromptBlock();
       return `아래 발명에 대한 【발명을 실시하기 위한 구체적인 내용】의 본문만 작성하라.
@@ -2195,9 +2303,10 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
 - 제한성 표현(만, 반드시, ~에 한하여 등) 사용 금지.
 
 ⛔⛔⛔ 도면 범위 제한 (위반 시 전체 무효) ⛔⛔⛔
-- 이 발명의 장치 도면은 도 1 ~ 도 ${lastDeviceFig}까지만 존재한다.
+- 이 발명의 장치 도면: ${figListStr} (총 ${allFigNums.length}개)
+- 위 도면만 "도 N을 참조하면," 형태로 설명하라. 위 목록에 없는 도면 번호를 절대 참조하지 마라.
 - 도 ${lastDeviceFig+1} 이후의 도면을 참조하거나 "도 ${lastDeviceFig+1}을 참조하면" 등의 표현을 절대 사용하지 마라.
-- [장치 도면]에 기재된 도면 번호만 참조하라. 기재되지 않은 도면 번호를 임의로 생성하지 마라.
+- [장치 도면]에 기재된 구성요소 명칭과 참조번호를 그대로 사용하라. 임의 변경/추가 금지.
 ${!hasMethodClaims?`- 방법 청구항이 생성되지 않았으므로, 방법 도면(흐름도) 및 방법 설명이 존재하지 않는다.
 - 방법 관련 내용(S+숫자, ~하는 단계, 흐름도 참조)을 절대 포함하지 마라.`:''}
 
@@ -2255,7 +2364,9 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 앵커 종속항의 핵심 처리에 대해 1개 이상의 대안적 구현을 기술
 - 변형 실시예는 독립항의 보호범위를 뒷받침하는 방향이어야 한다
 
-★★★ 장치 도면(도 1~도 ${lastDeviceFig})에 포함된 구성요소만 설명하라. 도면에 없는 내용을 임의로 추가하지 마라. ★★★
+★★★ 장치 도면(${figListStr})에 포함된 구성요소만 설명하라. 도면에 없는 내용을 임의로 추가하지 마라. ★★★
+★★★ 도면의 구성요소 명칭과 참조번호를 청구항 및 도면 설계와 동일하게 사용하라. ★★★
+${_designCompStr}
 ${_userFigBlock?`\n${_userFigBlock}\n★ 사용자 도면도 "도 N을 참조하면," 형태로 도면 번호 순서에 맞게 설명을 포함하라.\n★ 사용자 도면의 설명은 발명 내용 및 청구범위와 정합되도록, 위 도면 설명을 기초로 기술적 의미를 보완하여 작성하라.`:''}
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
@@ -2325,8 +2436,16 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
       const lf=_mfn.lastDeviceFig||getLastFigureNumber(outputs.step_07||'');
       const methAutoNums=_mfn.method;
       const firstMeth=methAutoNums[0]||(lf+1);
-      return `【방법 청구범위】에 대한 흐름도를 설계하라. 총 ${f}개, 도 ${firstMeth}부터.
-${requiredFigures.length?`\n★ 사용자 도면(${requiredFigures.map(rf=>'도 '+rf.num).join(', ')})은 이미 사용 중이므로 건너뛰라.\n★ 생성할 방법 도면 번호: ${methAutoNums.map(n=>'도 '+n).join(', ')}`:''}
+      return `【방법 청구범위】에 대한 흐름도를 설계하라.
+
+⛔⛔⛔ 도면 수 규칙 (절대 준수) ⛔⛔⛔
+- 생성할 흐름도: 정확히 ${f}개 (${methAutoNums.map(n=>'도 '+n).join(', ')})
+- ★★★ 흐름도를 ${f}개보다 많이 생성하지 마라. ${f}개보다 적게 생성하지 마라. ★★★
+${requiredFigures.length?`- 사용자 도면(${requiredFigures.map(rf=>'도 '+rf.num).join(', ')})은 이미 사용 중. 건너뛰라.`:''}
+
+★★★ 방법 청구항 정합 규칙 ★★★
+- 흐름도의 단계명과 S번호는 반드시 【방법 청구범위】와 일치해야 한다.
+- 청구항에 없는 단계를 임의로 추가하지 마라.
 
 ⛔⛔⛔ 절대 금지 사항 (위반 시 도면 전체 무효) ⛔⛔⛔
 - 장치 구성요소(통신부, 프로세서, ~부 등) 포함 금지
@@ -2916,6 +3035,51 @@ function extractClaimComponents(claimText){
   return components.size?`구성요소 목록: ${[...components].join(', ')}`:'(구성요소 목록 없음)';
 }
 
+// ★ 청구항에서 구성요소 계층 구조를 추출하여 도면 설계 프롬프트에 포함할 텍스트 생성 ★
+function _buildClaimComponentHierarchy(claimText){
+  if(!claimText)return '';
+  const comps=_extractStructuredComponents(claimText);
+  if(!comps.length)return '';
+  
+  // 레벨 분류
+  const l1=[],l2=[],l3=[],l4=[];
+  for(const c of comps){
+    const n=c.refNum;
+    if(n>=1000)l4.push(c);
+    else if(n>=100&&n%100===0)l1.push(c);
+    else if(n>=100&&n%10===0)l2.push(c);
+    else if(n>=100)l3.push(c);
+  }
+  
+  // 계층 구조 문자열 생성
+  let result=`⛔⛔⛔ 청구항 구성요소 목록 (이 명칭과 참조번호를 그대로 사용하라) ⛔⛔⛔\n`;
+  
+  if(l1.length){
+    result+=`■ L1 (최상위 장치, X00): ${l1.map(c=>c.name+'('+c.refNum+')').join(', ')}\n`;
+    for(const parent of l1){
+      const children=l2.filter(c=>Math.floor(c.refNum/100)*100===parent.refNum);
+      if(children.length){
+        result+=`  └ ${parent.name}(${parent.refNum}) 하위 L2: ${children.map(c=>c.name+'('+c.refNum+')').join(', ')}\n`;
+        for(const child of children){
+          const grandchildren=l3.filter(c=>Math.floor(c.refNum/10)*10===child.refNum);
+          if(grandchildren.length){
+            result+=`    └ ${child.name}(${child.refNum}) 하위 L3: ${grandchildren.map(c=>c.name+'('+c.refNum+')').join(', ')}\n`;
+          }
+        }
+      }
+    }
+  }
+  
+  if(l2.length){
+    const orphanL2=l2.filter(c=>!l1.some(p=>Math.floor(c.refNum/100)*100===p.refNum));
+    if(orphanL2.length)result+=`■ L2 (추가): ${orphanL2.map(c=>c.name+'('+c.refNum+')').join(', ')}\n`;
+  }
+  
+  result+=`\n★ 위 목록의 구성요소 명칭과 참조번호를 반드시 그대로 사용하라. 임의 변경/추가 금지.\n`;
+  result+=`★ 도 2 이후의 내부 구성요소는 위 목록에서만 선택하라.\n`;
+  return result;
+}
+
 async function applyReview(){
   if(globalProcessing)return;if(!outputs.step_13){App.showToast('검토 결과 없음','error');return;}
   const cur=getLatestDescription();if(!cur){App.showToast('상세설명 없음','error');return;}
@@ -3123,23 +3287,29 @@ async function runDiagramStep(sid){
     let r=await App.callClaude(buildPrompt(sid));
     let designText=r.text;
     
-    // 2. 도면 설계 텍스트 사전 검증 (장치 도면만)
+    // 2. 도면 설계 텍스트 사전 검증 (도면 수 + 규칙 검증)
     if(sid==='step_07'){
-      const preIssues=validateDiagramDesignText(designText);
+      const totalFig=parseInt(document.getElementById('optDeviceFigures')?.value||4);
+      const _genCount=totalFig-requiredFigures.length;
+      const _figNums=computeFigNums(Math.max(_genCount,0),0);
+      const _expectedNums=_figNums.device;
+      
+      const preIssues=validateDiagramDesignText(designText,_genCount,_expectedNums);
       const hasPreErrors=preIssues.some(iss=>iss.severity==='ERROR');
       
-      // 에러 발견 시 자동 재생성 시도 (최대 2회)
       if(hasPreErrors){
-        console.log('도면 설계 규칙 위반 발견, 재생성 시도...',preIssues);
+        console.log('[runDiagramStep] 도면 설계 규칙 위반 발견:',preIssues.map(i=>i.message).join('; '));
         
-        const feedbackPrompt=`이전 도면 설계에 규칙 위반이 있습니다. 아래 오류를 수정하여 다시 생성하세요.
+        const feedbackPrompt=`이전 도면 설계에 규칙 위반이 있습니다. 아래 오류를 모두 수정하여 다시 생성하세요.
 
 ═══ 발견된 오류 ═══
-${preIssues.map(i=>i.message).join('\n')}
+${preIssues.filter(i=>i.severity==='ERROR').map(i=>'⛔ '+i.message).join('\n')}
+${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n')}
 
-═══ 핵심 규칙 ═══
+═══ 핵심 수정사항 ═══
+- 도면을 정확히 ${_genCount}개만 생성하라: ${_expectedNums.map(n=>'도 '+n).join(', ')}
+- 구성요소 명칭과 참조번호는 【장치 청구범위】에서 가져와 사용하라
 [R3] 도 1: L1 장치만 허용 (100, 200, 300...). L2/L3(110, 111...) 절대 금지!
-     도 1의 구성요소에는 100, 200, 300, 400... 만 포함해야 합니다.
 [R5] 도 2+: 내부가 L2(110,120)면 최외곽=L1(100), 내부가 L3(111,112)면 최외곽=L2(110)
 
 원래 요청: ${buildPrompt(sid).slice(0,1500)}
@@ -3149,6 +3319,33 @@ ${preIssues.map(i=>i.message).join('\n')}
         r=await App.callClaude(feedbackPrompt);
         designText=r.text;
         App.showToast('도면 규칙 위반 감지, 자동 재생성됨','warning');
+      }
+      
+      // ★ 2차 검증 — 재생성 후에도 도면 수 불일치이면 강제 트림 ★
+      const postIssues=validateDiagramDesignText(designText,_genCount,_expectedNums);
+      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
+        console.warn('[runDiagramStep] 재생성 후에도 도면 수 불일치 — 초과분 수동 제거');
+        designText=_trimDesignTextToExpectedFigures(designText,_expectedNums);
+        App.showToast(`도면 수 강제 조정: ${_genCount}개로 트림`,'warning');
+      }
+    }
+    
+    if(sid==='step_11'){
+      const _methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
+      const _devCount=diagramData.step_07?.length||0;
+      const _figNums=computeFigNums(_devCount,_methFigCount);
+      const _expectedNums=_figNums.method;
+      
+      const preIssues=validateDiagramDesignText(designText,_methFigCount,_expectedNums);
+      if(preIssues.some(i=>i.severity==='ERROR')){
+        const fb=`도면 설계 오류:\n${preIssues.map(i=>i.message).join('\n')}\n도면을 정확히 ${_methFigCount}개만 생성하라: ${_expectedNums.map(n=>'도 '+n).join(', ')}\n원래 요청: ${buildPrompt(sid).slice(0,1500)}`;
+        r=await App.callClaude(fb);
+        designText=r.text;
+      }
+      
+      const postIssues=validateDiagramDesignText(designText,_methFigCount,_expectedNums);
+      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
+        designText=_trimDesignTextToExpectedFigures(designText,_expectedNums);
       }
     }
     
@@ -4091,12 +4288,27 @@ graph TD
 - 모든 화살표는 --> (단방향만)`;
   }
   
+  // v10.3: 설계 텍스트에서 실제 도면 번호 추출
+  const designFigNums=[];
+  const dfRe=/^도\s*(\d+)\s*[:：]/gm;
+  let dfm;
+  while((dfm=dfRe.exec(src))!==null)designFigNums.push(parseInt(dfm[1]));
+  const uniqueDesignFigs=[...new Set(designFigNums)].sort((a,b)=>a-b);
+  
   return `아래 도면 설계를 Mermaid flowchart 코드로 변환하라. 각 도면당 \`\`\`mermaid 블록 1개.
+
+⛔⛔⛔ 도면 수 규칙 (절대 준수) ⛔⛔⛔
+- 도면 설계에 기재된 도면: ${uniqueDesignFigs.length}개 (${uniqueDesignFigs.map(n=>'도 '+n).join(', ')})
+- mermaid 블록을 정확히 ${uniqueDesignFigs.length}개만 생성하라.
+- 도면 설계에 없는 도면의 mermaid 코드를 절대 생성하지 마라.
+- 도면 설계에 있는 모든 도면을 빠짐없이 변환하라.
+
+★★★ 구성요소 정합: 도면 설계의 구성요소 명칭과 참조번호를 그대로 사용하라. 임의 변경 금지. ★★★
 
 ${rules}
 
 ═══ 출력 형식 ═══
-각 도면마다:
+각 도면마다 (${uniqueDesignFigs.map(n=>'도 '+n).join(' → ')} 순서):
 \`\`\`mermaid
 graph TD
     노드정의들...
@@ -4689,7 +4901,9 @@ ${isMethod?`[방법 도면 규칙]
 ${prevDesign.slice(0,2000)}
 
 위 오류를 모두 수정하여 도면 설계를 다시 출력하세요.
-${isMethod?'방법 흐름도는 시작/종료 노드를 반드시 포함!':'도 1에는 반드시 L1 장치만 포함해야 합니다!'}`;
+${isMethod?'방법 흐름도는 시작/종료 노드를 반드시 포함!':'도 1에는 반드시 L1 장치만 포함해야 합니다!'}
+${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
+[장치 청구범위] ${(outputs.step_06||'').slice(0,2000)}`;
 
   setGlobalProcessing(true);
   const btnEl=document.getElementById(btnId);
@@ -4697,9 +4911,33 @@ ${isMethod?'방법 흐름도는 시작/종료 노드를 반드시 포함!':'도 
   
   try{
     const r1=await App.callClaude(feedbackPrompt);
-    outputs[stepId]=r1.text;
+    let regenDesign=r1.text;
+    
+    // ★ 재생성 후 도면 수 검증 + 강제 트림 ★
+    if(stepId==='step_07'){
+      const totalFig=parseInt(document.getElementById('optDeviceFigures')?.value||4);
+      const _genCount=totalFig-requiredFigures.length;
+      const _figNums=computeFigNums(Math.max(_genCount,0),0);
+      const _expectedNums=_figNums.device;
+      const postIssues=validateDiagramDesignText(regenDesign,_genCount,_expectedNums);
+      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
+        regenDesign=_trimDesignTextToExpectedFigures(regenDesign,_expectedNums);
+        App.showToast(`도면 수 강제 조정: ${_genCount}개로 트림`,'warning');
+      }
+    }else if(stepId==='step_11'){
+      const _methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
+      const _devCount=diagramData.step_07?.length||0;
+      const _figNums=computeFigNums(_devCount,_methFigCount);
+      const _expectedNums=_figNums.method;
+      const postIssues=validateDiagramDesignText(regenDesign,_methFigCount,_expectedNums);
+      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
+        regenDesign=_trimDesignTextToExpectedFigures(regenDesign,_expectedNums);
+      }
+    }
+    
+    outputs[stepId]=regenDesign;
     const resEl=document.getElementById(stepId==='step_07'?'resStep07':'resStep11');
-    if(resEl)resEl.value=r1.text;
+    if(resEl)resEl.value=regenDesign;
     saveProject(true);
     
     // Mermaid 변환
@@ -4718,11 +4956,41 @@ ${isMethod?'방법 흐름도는 시작/종료 노드를 반드시 포함!':'도 
 }
 
 // ═══ 도면 설계 텍스트 사전 검증 ═══
-function validateDiagramDesignText(text){
+function validateDiagramDesignText(text,expectedCount,expectedNums){
   const issues=[];
   
-  // 도면별로 분리
-  const figPattern=/도\s*(\d+)[:\s]*(.*?)(?=도\s*\d+[:\s]|---BRIEF|$)/gs;
+  // 1. 도면 수 검증 — 설계 텍스트에서 실제 도면 수 추출
+  const figHeaders=(text.match(/^도\s*(\d+)\s*[:：]/gm)||[]);
+  const actualFigNums=figHeaders.map(h=>parseInt(h.match(/\d+/)[0]));
+  const uniqueFigNums=[...new Set(actualFigNums)].sort((a,b)=>a-b);
+  
+  if(expectedCount&&uniqueFigNums.length!==expectedCount){
+    issues.push({
+      severity:'ERROR',
+      message:`도면 수 불일치: 설계 ${uniqueFigNums.length}개 (${uniqueFigNums.map(n=>'도 '+n).join(', ')}) ≠ 예상 ${expectedCount}개${expectedNums?' ('+expectedNums.map(n=>'도 '+n).join(', ')+')':''}`
+    });
+  }
+  
+  // 2. 도면 번호 검증 — 예상 번호와 일치하는지
+  if(expectedNums&&expectedNums.length>0){
+    const missing=expectedNums.filter(n=>!uniqueFigNums.includes(n));
+    const extra=uniqueFigNums.filter(n=>!expectedNums.includes(n));
+    if(missing.length>0){
+      issues.push({
+        severity:'ERROR',
+        message:`누락된 도면: ${missing.map(n=>'도 '+n).join(', ')}. 이 도면 번호를 반드시 포함하라.`
+      });
+    }
+    if(extra.length>0){
+      issues.push({
+        severity:'ERROR',
+        message:`초과 생성된 도면: ${extra.map(n=>'도 '+n).join(', ')}. 예상 도면(${expectedNums.map(n=>'도 '+n).join(', ')})만 생성하라.`
+      });
+    }
+  }
+  
+  // 3. 도면별 검증
+  const figPattern=/도\s*(\d+)\s*[:：]\s*(.*?)(?=\n도\s*\d+\s*[:：]|---BRIEF|$)/gs;
   let match;
   
   while((match=figPattern.exec(text))!==null){
@@ -4732,13 +5000,13 @@ function validateDiagramDesignText(text){
     // 참조번호 추출
     const refs=(content.match(/\((\d+)\)/g)||[]).map(r=>parseInt(r.replace(/[()]/g,'')));
     
-    if(figNum===1){
-      // 도 1 검증: L1만 허용
+    if(figNum===1||(expectedNums&&expectedNums[0]===figNum)){
+      // 도 1 (또는 첫 번째 도면) 검증: L1만 허용
       const nonL1=refs.filter(r=>r%100!==0);
       if(nonL1.length>0){
         issues.push({
           severity:'ERROR',
-          message:`도 1 설계에 L2/L3 참조번호 포함: ${nonL1.join(', ')}. 도 1은 L1(X00)만 허용.`
+          message:`도 ${figNum} (시스템 구성도)에 L2/L3 참조번호 포함: ${nonL1.join(', ')}. 도 ${figNum}은 L1(X00)만 허용.`
         });
       }
     }
@@ -4750,9 +5018,100 @@ function validateDiagramDesignText(text){
         message:`도 ${figNum} 설계에 "~모듈" 사용. "~부"로 변경 필요.`
       });
     }
+    
+    // 도 2+ 내부 구성요소 최소 3개 검증
+    if(figNum>1||(!expectedNums||expectedNums[0]!==figNum)){
+      const innerRefs=refs.filter(r=>r%100!==0);
+      if(innerRefs.length>0&&innerRefs.length<3){
+        issues.push({
+          severity:'WARNING',
+          message:`도 ${figNum} 내부 구성요소 ${innerRefs.length}개(최소 3개 권장). 청구항에서 추가 구성요소를 포함하거나 기능 분리를 고려하라.`
+        });
+      }
+    }
+  }
+  
+  // 4. BRIEF_DESCRIPTIONS 존재 검증
+  if(!text.includes('---BRIEF_DESCRIPTIONS---')){
+    issues.push({
+      severity:'WARNING',
+      message:'도면의 간단한 설명(---BRIEF_DESCRIPTIONS---) 섹션이 누락됨.'
+    });
+  }
+  
+  // 5. ★ 청구항 ↔ 도면 구성요소 교차검증 ★
+  const claimText=outputs.step_06||'';
+  if(claimText){
+    const claimComps=_extractStructuredComponents(claimText);
+    const designComps=_extractStructuredComponents(text);
+    
+    if(claimComps.length>0&&designComps.length>0){
+      // 5a. 청구항에 있는데 도면에 없는 구성요소 (참조번호 기준)
+      const designRefNums=new Set(designComps.map(c=>c.refNum));
+      const missingInDesign=claimComps.filter(c=>!designRefNums.has(c.refNum)&&c.refNum%100!==0);
+      // L1(X00)은 도 1에 이미 있으므로 제외, L2/L3만 체크
+      if(missingInDesign.length>0){
+        issues.push({
+          severity:'WARNING',
+          message:`청구항 구성요소 중 도면에 누락: ${missingInDesign.map(c=>c.name+'('+c.refNum+')').join(', ')}. 도면에 반영 필요.`
+        });
+      }
+      
+      // 5b. 도면에 있는데 청구항에 없는 구성요소 (L2/L3, 도 1 외부장치 제외)
+      const claimRefNums=new Set(claimComps.map(c=>c.refNum));
+      const extraInDesign=designComps.filter(c=>!claimRefNums.has(c.refNum)&&c.refNum%100!==0);
+      if(extraInDesign.length>0){
+        // L1 외부장치(200,300,400)는 도 1에서 허용되므로 제외
+        const trueExtras=extraInDesign.filter(c=>!(c.refNum>=200&&c.refNum%100===0));
+        if(trueExtras.length>0){
+          issues.push({
+            severity:'WARNING',
+            message:`도면에 청구항에 없는 구성요소: ${trueExtras.map(c=>c.name+'('+c.refNum+')').join(', ')}. 청구항과 일치시킬 것.`
+          });
+        }
+      }
+      
+      // 5c. 참조번호는 같은데 이름이 다른 구성요소
+      const claimMap=new Map(claimComps.map(c=>[c.refNum,c.name]));
+      const nameMismatches=[];
+      for(const dc of designComps){
+        const claimName=claimMap.get(dc.refNum);
+        if(claimName&&claimName!==dc.name){
+          // 이름이 완전히 다른 경우만 (부분 포함 제외)
+          if(!claimName.includes(dc.name)&&!dc.name.includes(claimName)){
+            nameMismatches.push({refNum:dc.refNum,claim:claimName,design:dc.name});
+          }
+        }
+      }
+      if(nameMismatches.length>0){
+        issues.push({
+          severity:'ERROR',
+          message:`구성요소 명칭 불일치: ${nameMismatches.map(m=>`(${m.refNum}) 청구항="${m.claim}" ≠ 도면="${m.design}"`).join(', ')}. 청구항 명칭을 사용하라.`
+        });
+      }
+    }
   }
   
   return issues;
+}
+
+// ★ 구조적 구성요소 추출 (청구항/도면 텍스트 공용) ★
+function _extractStructuredComponents(text){
+  if(!text)return [];
+  const comps=[];
+  const seen=new Set();
+  const re=/([가-힣A-Za-z]*(?:부|모듈|유닛|서버|장치|단말|센서|프로세서|메모리|인터페이스|엔진|매니저|시스템|플랫폼|컨트롤러|네트워크|데이터베이스|스토리지|게이트웨이))\s*\((\d{2,4})\)/g;
+  let m;
+  while((m=re.exec(text))!==null){
+    const name=m[1].trim();
+    const refNum=parseInt(m[2]);
+    const key=`${name}_${refNum}`;
+    if(!seen.has(key)){
+      seen.add(key);
+      comps.push({name,refNum});
+    }
+  }
+  return comps;
 }
 
 // ═══════════ UNIFIED DIAGRAM ENGINE ═══════════
@@ -6387,11 +6746,29 @@ function postRenderValidation(sid){
 function renderDiagrams(sid,mt){
   const cid=sid==='step_07'?'diagramsStep07':'diagramsStep11';
   const el=document.getElementById(cid);
-  const blocks=extractMermaidBlocks(mt);
+  let blocks=extractMermaidBlocks(mt);
   if(!blocks.length){
     el.innerHTML=`<div class="diagram-container"><pre style="font-size:12px;white-space:pre-wrap">${App.escapeHtml(mt)}</pre></div>`;
     return;
   }
+  
+  // v10.3: 도면 수 강제 제한 — 설계 텍스트 또는 UI 설정값 기준
+  let expectedCount;
+  if(sid==='step_07'){
+    const totalFig=parseInt(document.getElementById('optDeviceFigures')?.value||4);
+    const fromUI=totalFig-requiredFigures.length;
+    // 설계 텍스트에서 실제 도면 수도 확인
+    const fromDesign=_extractFigureNumbersFromDesign(outputs[sid]||'').length;
+    expectedCount=fromDesign>0?Math.min(fromUI,fromDesign):fromUI;
+  }else{
+    expectedCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
+  }
+  if(blocks.length>expectedCount&&expectedCount>0){
+    console.warn(`[renderDiagrams] ${sid}: mermaid 블록 ${blocks.length}개 > 예상 ${expectedCount}개 → 초과분 제거`);
+    App.showToast(`도면 ${blocks.length}개 생성됨 → ${expectedCount}개로 조정`,'warning');
+    blocks=blocks.slice(0,expectedCount);
+  }
+  
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
   diagramData[sid]=[];
   
