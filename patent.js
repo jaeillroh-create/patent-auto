@@ -4506,10 +4506,15 @@ function _drawShapeBody(type,x,y,w,h,sw){
     case 'cloud':return `<path d="${_cloudPathD(x,y,w,h)}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
     case 'server':{
       const h3=h/3,dotR=Math.min(3,h*0.07);
-      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`+
-        `<line x1="${x}" y1="${y+h3}" x2="${x+w}" y2="${y+h3}" stroke="#000" stroke-width="${sw*0.55}"/>`+
-        `<line x1="${x}" y1="${y+2*h3}" x2="${x+w}" y2="${y+2*h3}" stroke="#000" stroke-width="${sw*0.55}"/>`+
-        [0.5,1.5,2.5].map(m=>`<circle cx="${x+w-dotR*4}" cy="${y+h3*m}" r="${dotR}" fill="#000"/>`).join('');
+      // ★ v10.4: 서버 shape — 텍스트 영역(중앙)에 흰색 배경, 점은 우측에만 ★
+      let s=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
+      s+=`<line x1="${x}" y1="${y+h3}" x2="${x+w}" y2="${y+h3}" stroke="#000" stroke-width="${sw*0.55}"/>`;
+      s+=`<line x1="${x}" y1="${y+2*h3}" x2="${x+w}" y2="${y+2*h3}" stroke="#000" stroke-width="${sw*0.55}"/>`;
+      // 점을 오른쪽 상단 모서리에 배치 (텍스트와 겹치지 않도록)
+      [0.5,1.5,2.5].forEach(m=>{
+        s+=`<circle cx="${x+w-dotR*3}" cy="${y+h3*m}" r="${dotR}" fill="#000"/>`;
+      });
+      return s;
     }
     case 'monitor':{
       const sh=h*0.72,standW=w*0.12,standH=h*0.14,baseW=w*0.25,baseH=h*0.05;
@@ -4608,17 +4613,25 @@ function _drawShapeBody(type,x,y,w,h,sw){
 }
 
 function _shapeTextCy(type,y,h){
+  // ★ v10.4: 아이콘 shape는 텍스트를 아이콘 아래에 배치 ★
+  // 아이콘 shape: 시각적 형상이 전체 영역을 차지 → 텍스트가 겹침
   switch(type){
+    case 'sensor':return y+h+12;   // 아이콘 하단 아래
+    case 'antenna':return y+h+12;
+    case 'camera':return y+h+12;
+    case 'speaker':return y+h+12;
+    case 'cloud':return y+h*0.50;  // 내부 중앙 (cloud는 내부 공간 충분)
     case 'database':return y+h*0.55;
-    case 'cloud':return y+h*0.50;
     case 'monitor':return y+h*0.72*0.45;
-    case 'sensor':return y+h*0.50;
-    case 'antenna':return y+h*0.65;
     case 'document':return y+h*0.62;
-    case 'camera':return y+h*0.52;
-    case 'speaker':return y+h*0.50;
+    case 'server':return y+h/2;    // 서버 3분할 중앙
     default:return y+h/2;
   }
+}
+
+// ★ v10.4: 아이콘 shape 여부 판별 — 텍스트를 아이콘 아래에 배치해야 하는 shape ★
+function _isIconShape(type){
+  return type==='sensor'||type==='antenna'||type==='camera'||type==='speaker';
 }
 
 // ── Shape right edge X for leader line ──
@@ -4636,14 +4649,14 @@ function _shapeLeaderX(type,x,w){
 // ── v9.1: Shape 시각적 경계 (bounding box ≠ visual bounds) ──
 // 연결선 앵커, leader line 시작점에 사용
 function _shapeVisualBounds(type,x,y,w,h){
+  // ★ v10.4: cx/cy는 항상 기하학적 중심점 (라우팅 대칭성 보장) ★
+  // 아이콘 shape는 하단에 라벨 영역(~20px) 포함
+  const iconTextH=_isIconShape(type)?22:0;
   switch(type){
     case 'cloud':
-      // v10.1: 실제 곡선 경계 기준 (bezier 극값이 아닌 연결 가능 영역)
       return{top:y+h*0.10, bottom:y+h*0.82, left:x+w*0.08, right:x+w*0.92, cx:x+w/2, cy:y+h*0.45};
-    case 'database':{
-      const ry=Math.min(h*0.18,w*0.15,22);
+    case 'database':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
-    }
     case 'monitor':{
       const sh=h*0.72;
       return{top:y, bottom:y+h*0.93, left:x, right:x+w, cx:x+w/2, cy:y+sh/2};
@@ -4652,29 +4665,31 @@ function _shapeVisualBounds(type,x,y,w,h){
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'sensor':{
       const cr=Math.min(w*0.28,h*0.38);
-      // v10.2: 파동호 최외곽(cr*2.65) 반영 — 실제 렌더링 범위
       const waveCx=x+w*0.32;
-      const waveRight=waveCx+cr*2.65*Math.cos(Math.PI*0.05); // outermost arc tip
-      return{top:y+h*0.12, bottom:y+h*0.88, left:x+w*0.04, right:Math.max(x+w*0.92,waveRight), cx:x+w*0.32, cy:y+h*0.50};
+      const waveRight=waveCx+cr*2.65*Math.cos(Math.PI*0.05);
+      const vLeft=waveCx-cr;
+      const vRight=Math.max(x+w*0.92,waveRight);
+      // ★ v10.4: 하단에 라벨+참조번호 영역 포함 (30px) — 겹침 검증용 ★
+      return{top:y+h*0.12, bottom:y+h*0.88+30, left:vLeft, right:vRight,
+        cx:x+w/2, cy:y+h/2};  // cx를 shape 전체 중앙으로 수정
     }
     case 'antenna':{
-      // v10.2: 파동호가 위쪽으로 확장 — topY+outerArc*sin(-0.55π) 반영
       const aTopY=y+h*0.18;
       const outerArc=h*0.36;
       const waveTop=aTopY+outerArc*Math.sin(-Math.PI*0.55);
       const waveRight=x+w*0.38+outerArc*Math.cos(-Math.PI*0.05);
-      return{top:Math.min(y+h*0.18,waveTop), bottom:y+h*0.92, left:x+w*0.16, right:Math.max(x+w*0.62,waveRight), cx:x+w*0.38, cy:y+h*0.55};
+      return{top:Math.min(y+h*0.18,waveTop), bottom:y+h*0.92+iconTextH, left:x+w*0.16, right:Math.max(x+w*0.62,waveRight),
+        cx:x+w*0.43, cy:y+h/2};
     }
-    case 'document':{
+    case 'document':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
-    }
-    case 'camera':{
-      return{top:y+h*0.08, bottom:y+h*0.83, left:x+w*0.05, right:x+w*0.85, cx:x+w*0.45, cy:y+h*0.50};
-    }
+    case 'camera':
+      return{top:y+h*0.08, bottom:y+h*0.83+iconTextH, left:x+w*0.05, right:x+w*0.85,
+        cx:x+w*0.45, cy:y+h/2};
     case 'speaker':{
-      // v10.2: 음파호 최외곽(h*0.46) 반영
-      const waveRight=x+w*0.55+h*0.46*Math.cos(Math.PI*0.05);
-      return{top:y+h*0.08, bottom:y+h*0.92, left:x+w*0.10, right:Math.max(x+w*0.55,waveRight), cx:x+w*0.35, cy:y+h*0.50};
+      const spWaveRight=x+w*0.55+h*0.46*Math.cos(Math.PI*0.05);
+      return{top:y+h*0.08, bottom:y+h*0.92+iconTextH, left:x+w*0.10, right:Math.max(x+w*0.55,spWaveRight),
+        cx:x+w*0.35, cy:y+h/2};
     }
     default:
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
@@ -4686,105 +4701,78 @@ function _shapeVisualBounds(type,x,y,w,h){
 // Unlike _shapeVisualBounds (axis-aligned bounding box), this accounts for
 // the actual shape curve at the specific connection direction.
 function _shapeAnchor(type,x,y,w,h,dir){
+  // ★ v10.4: 모든 shape 앵커를 각 변의 정확한 중앙으로 통일 ★
+  // 사용자 요구: "화살표 등 연결 선은 구성의 중앙(가로든 세로든)에 접점을 형성"
+  // 원칙: left/right → py = y+h/2 (수직 중앙), top/bottom → px = x+w/2 (수평 중앙)
+  // edge 좌표는 shape의 실제 시각적 경계
+  
   switch(type){
     case 'cloud':{
-      // Cloud bezier curve: actual boundary varies by height
-      // At center height (~h*0.45): left edge ≈ x+w*0.10, right edge ≈ x+w*0.90
-      // Bottom: flat edge from x+w*0.2 to x+w*0.8 at y+h*0.82
-      // Top: highest point near x+w*0.48 at ~y+h*0.08
+      const cy=y+h*0.45; // cloud 수직 중앙은 약간 위
       switch(dir){
-        case 'bottom':return{px:x+w*0.50,py:y+h*0.82};
-        case 'top':   return{px:x+w*0.48,py:y+h*0.08};
-        case 'left':  return{px:x+w*0.10,py:y+h*0.45};
-        case 'right': return{px:x+w*0.90,py:y+h*0.38};
-      }
-      break;
-    }
-    case 'database':{
-      // Cylinder: top/bottom ellipses, straight sides
-      switch(dir){
-        case 'bottom':return{px:x+w/2,py:y+h};
-        case 'top':   return{px:x+w/2,py:y};
-        case 'left':  return{px:x,py:y+h/2};
-        case 'right': return{px:x+w,py:y+h/2};
-      }
-      break;
-    }
-    case 'monitor':{
-      // Screen top → base bottom, narrow stand in middle
-      const screenCy=y+h*0.36;
-      switch(dir){
-        case 'bottom':return{px:x+w/2,py:y+h*0.93}; // base bottom
-        case 'top':   return{px:x+w/2,py:y};
-        case 'left':  return{px:x,py:screenCy};
-        case 'right': return{px:x+w,py:screenCy};
-      }
-      break;
-    }
-    case 'server':{
-      switch(dir){
-        case 'bottom':return{px:x+w/2,py:y+h};
-        case 'top':   return{px:x+w/2,py:y};
-        case 'left':  return{px:x,py:y+h/2};
-        case 'right': return{px:x+w,py:y+h/2};
+        case 'bottom':return{px:x+w/2,   py:y+h*0.82};
+        case 'top':   return{px:x+w/2,   py:y+h*0.08};
+        case 'left':  return{px:x+w*0.10, py:cy};
+        case 'right': return{px:x+w*0.90, py:cy};
       }
       break;
     }
     case 'sensor':{
+      // ★ 센서: 원+파동호의 중앙에서 연결 ★
+      const cy=y+h/2;
       const cr=Math.min(w*0.28,h*0.38);
-      const ccx=x+w*0.32,ccy=y+h*0.50;
+      const waveCx=x+w*0.32;
+      const waveRight=waveCx+cr*2.65; // 파동호 최외곽
+      const leftEdge=waveCx-cr;       // 원 좌측
       switch(dir){
-        case 'bottom':return{px:ccx,py:ccy+cr};
-        case 'top':   return{px:ccx,py:ccy-cr};
-        case 'left':  return{px:ccx-cr,py:ccy};
-        case 'right': return{px:x+w*0.88,py:ccy}; // wave arcs extent
+        case 'bottom':return{px:x+w/2, py:y+h*0.88};
+        case 'top':   return{px:x+w/2, py:y+h*0.12};
+        case 'left':  return{px:leftEdge, py:cy};
+        case 'right': return{px:Math.min(waveRight, x+w*0.92), py:cy};
       }
       break;
     }
     case 'antenna':{
-      const poleX=x+w*0.38;
+      const cy=y+h/2;
       switch(dir){
-        case 'bottom':return{px:poleX,py:y+h*0.92};
-        case 'top':   return{px:poleX,py:y+h*0.18};
-        case 'left':  return{px:x+w*0.16,py:y+h*0.55};
-        case 'right': return{px:x+w*0.62,py:y+h*0.40};
-      }
-      break;
-    }
-    case 'document':{
-      switch(dir){
-        case 'bottom':return{px:x+w/2,py:y+h};
-        case 'top':   return{px:x+w*0.40,py:y}; // avoid fold corner
-        case 'left':  return{px:x,py:y+h/2};
-        case 'right': return{px:x+w,py:y+h/2};
+        case 'bottom':return{px:x+w/2, py:y+h*0.92};
+        case 'top':   return{px:x+w/2, py:y+h*0.10};
+        case 'left':  return{px:x+w*0.16, py:cy};
+        case 'right': return{px:x+w*0.70, py:cy};
       }
       break;
     }
     case 'camera':{
+      const cy=y+h/2;
       switch(dir){
-        case 'bottom':return{px:x+w*0.45,py:y+h*0.83};
-        case 'top':   return{px:x+w*0.45,py:y+h*0.08};
-        case 'left':  return{px:x+w*0.05,py:y+h*0.50};
-        case 'right': return{px:x+w*0.85,py:y+h*0.50};
+        case 'bottom':return{px:x+w/2, py:y+h*0.83};
+        case 'top':   return{px:x+w/2, py:y+h*0.08};
+        case 'left':  return{px:x+w*0.05, py:cy};
+        case 'right': return{px:x+w*0.85, py:cy};
       }
       break;
     }
     case 'speaker':{
+      const cy=y+h/2;
       switch(dir){
-        case 'bottom':return{px:x+w*0.35,py:y+h*0.92};
-        case 'top':   return{px:x+w*0.35,py:y+h*0.08};
-        case 'left':  return{px:x+w*0.10,py:y+h*0.50};
-        case 'right': return{px:x+w*0.55,py:y+h*0.50};
+        case 'bottom':return{px:x+w/2, py:y+h*0.92};
+        case 'top':   return{px:x+w/2, py:y+h*0.08};
+        case 'left':  return{px:x+w*0.10, py:cy};
+        case 'right': return{px:x+w*0.55, py:cy};
       }
       break;
     }
+    // 사각형 계열: 정확한 변 중앙
+    case 'database':
+    case 'server':
+    case 'document':
+    case 'monitor':
     default:{
-      // Box: exact rectangle edges
       switch(dir){
-        case 'bottom':return{px:x+w/2,py:y+h};
-        case 'top':   return{px:x+w/2,py:y};
-        case 'left':  return{px:x,py:y+h/2};
-        case 'right': return{px:x+w,py:y+h/2};
+        case 'bottom':return{px:x+w/2, py:y+h};
+        case 'top':   return{px:x+w/2, py:y};
+        case 'left':  return{px:x,     py:y+h/2};
+        case 'right': return{px:x+w,   py:y+h/2};
       }
     }
   }
@@ -4868,32 +4856,99 @@ function _fitLabelLines(label, maxWidth, baseFontSize, minFontSize){
   while(fs>minFS&&tw>maxWidth){fs--;tw=_estimateTextWidth(label,fs);}
   if(tw<=maxWidth) return {lines:[label],fontSize:fs};
   
-  // 2단계: 2줄로 분할 (폰트는 baseFontSize-1부터 재시도)
+  // 2단계: 2줄로 분할
   fs=Math.max(baseFontSize-1,minFS);
+  const words=label.split(/\s+/);
+  
+  // 최적 2줄 분할 (양쪽 길이 균형)
+  let bestSplit2=_findBestSplit(words,2,fs,maxWidth);
+  if(bestSplit2.fits) return {lines:bestSplit2.lines, fontSize:bestSplit2.fontSize};
+  
+  // 2줄에서 폰트 축소 시도
+  for(let tryFs=fs-1;tryFs>=minFS;tryFs--){
+    bestSplit2=_findBestSplit(words,2,tryFs,maxWidth);
+    if(bestSplit2.fits) return {lines:bestSplit2.lines, fontSize:bestSplit2.fontSize};
+  }
+  
+  // 3단계: 3줄로 분할 (매우 긴 서버명 등)
+  fs=Math.max(baseFontSize-1,minFS);
+  let bestSplit3=_findBestSplit(words,3,fs,maxWidth);
+  if(bestSplit3.fits) return {lines:bestSplit3.lines, fontSize:bestSplit3.fontSize};
+  
+  // 3줄에서 폰트 축소 시도
+  for(let tryFs=fs-1;tryFs>=minFS;tryFs--){
+    bestSplit3=_findBestSplit(words,3,tryFs,maxWidth);
+    if(bestSplit3.fits) return {lines:bestSplit3.lines, fontSize:bestSplit3.fontSize};
+  }
+  
+  // 4단계: 최소 폰트에서 강제 2줄 분할 (중간점)
+  fs=minFS;
   const mid=Math.ceil(label.length/2);
-  // 공백 기준 최적 분할점 찾기
   let splitIdx=label.lastIndexOf(' ',mid);
-  if(splitIdx<=0||splitIdx>=label.length-1){
-    // 공백 없으면 중간에서 분할
-    splitIdx=mid;
+  if(splitIdx<=0||splitIdx>=label.length-1)splitIdx=mid;
+  return {lines:[label.slice(0,splitIdx).trim(),label.slice(splitIdx).trim()],fontSize:fs};
+}
+
+// ★ v10.4: 단어 단위 최적 분할 ★
+function _findBestSplit(words,numLines,fontSize,maxWidth){
+  if(words.length<numLines){
+    // 단어 수 < 줄 수 → 글자 단위 분할
+    const label=words.join(' ');
+    const charsPerLine=Math.ceil(label.length/numLines);
+    const lines=[];
+    for(let i=0;i<numLines;i++){
+      const start=i*charsPerLine;
+      const end=Math.min(start+charsPerLine,label.length);
+      if(start<label.length)lines.push(label.slice(start,end).trim());
+    }
+    const maxW=Math.max(...lines.map(l=>_estimateTextWidth(l,fontSize)));
+    return{lines:lines.filter(l=>l.length>0), fontSize, fits:maxW<=maxWidth};
   }
-  const line1=label.slice(0,splitIdx).trim();
-  const line2=label.slice(splitIdx).trim();
   
-  // 2줄 중 더 긴 쪽이 maxWidth에 맞을 때까지 폰트 축소
-  const maxLineW=Math.max(_estimateTextWidth(line1,fs),_estimateTextWidth(line2,fs));
-  while(fs>minFS&&maxLineW>maxWidth){
-    fs--;
-    const w1=_estimateTextWidth(line1,fs),w2=_estimateTextWidth(line2,fs);
-    if(Math.max(w1,w2)<=maxWidth)break;
+  // 단어 단위로 줄 수 맞춰 분할 — 각 줄 길이 균형
+  if(numLines===2){
+    let bestLines=null, bestDiff=Infinity;
+    for(let i=1;i<words.length;i++){
+      const l1=words.slice(0,i).join(' ');
+      const l2=words.slice(i).join(' ');
+      const w1=_estimateTextWidth(l1,fontSize);
+      const w2=_estimateTextWidth(l2,fontSize);
+      const maxW=Math.max(w1,w2);
+      const diff=Math.abs(w1-w2);
+      if(maxW<=maxWidth&&diff<bestDiff){bestDiff=diff;bestLines=[l1,l2];}
+    }
+    if(bestLines)return{lines:bestLines, fontSize, fits:true};
+    // 못 맞추면 최소 maxW 분할 반환
+    let minMaxW=Infinity, fallbackLines=null;
+    for(let i=1;i<words.length;i++){
+      const l1=words.slice(0,i).join(' ');
+      const l2=words.slice(i).join(' ');
+      const maxW=Math.max(_estimateTextWidth(l1,fontSize),_estimateTextWidth(l2,fontSize));
+      if(maxW<minMaxW){minMaxW=maxW;fallbackLines=[l1,l2];}
+    }
+    return{lines:fallbackLines||[words.join(' ')], fontSize, fits:false};
   }
   
-  return {lines:[line1,line2],fontSize:fs};
+  if(numLines===3){
+    let bestLines=null, bestMaxW=Infinity;
+    for(let i=1;i<words.length-1;i++){
+      for(let j=i+1;j<words.length;j++){
+        const l1=words.slice(0,i).join(' ');
+        const l2=words.slice(i,j).join(' ');
+        const l3=words.slice(j).join(' ');
+        const maxW=Math.max(_estimateTextWidth(l1,fontSize),_estimateTextWidth(l2,fontSize),_estimateTextWidth(l3,fontSize));
+        if(maxW<bestMaxW){bestMaxW=maxW;bestLines=[l1,l2,l3];}
+      }
+    }
+    if(bestLines)return{lines:bestLines, fontSize, fits:bestMaxW<=maxWidth};
+    return{lines:[words.join(' ')], fontSize, fits:false};
+  }
+  
+  return{lines:[words.join(' ')], fontSize, fits:false};
 }
 
 function _svgMultiLineLabel(cx, baseY, label, maxWidth, baseFontSize, options){
   // SVG <text> 요소들 반환 (중앙정렬)
-  // options: {fill, fontFamily, dy (줄간격), minFontSize}
   const opt=options||{};
   const fill=opt.fill||'#000';
   const ff=opt.fontFamily||'맑은 고딕,Arial,sans-serif';
@@ -4901,15 +4956,13 @@ function _svgMultiLineLabel(cx, baseY, label, maxWidth, baseFontSize, options){
   const {lines,fontSize}=_fitLabelLines(label,maxWidth,baseFontSize,minFS);
   
   let svg='';
-  if(lines.length===1){
-    svg+=`<text x="${cx}" y="${baseY}" text-anchor="middle" font-size="${fontSize}" font-family="${ff}" fill="${fill}">${App.escapeHtml(lines[0])}</text>`;
-  }else{
-    const lineH=fontSize+2;
-    const startY=baseY-lineH/2;
-    lines.forEach((line,i)=>{
-      svg+=`<text x="${cx}" y="${startY+i*lineH}" text-anchor="middle" font-size="${fontSize}" font-family="${ff}" fill="${fill}">${App.escapeHtml(line)}</text>`;
-    });
-  }
+  const lineH=fontSize+2;
+  // 전체 텍스트 블록의 수직 중앙 맞춤
+  const totalH=lines.length*lineH;
+  const startY=baseY-(totalH/2)+lineH*0.75; // baseline 보정
+  lines.forEach((line,i)=>{
+    svg+=`<text x="${cx}" y="${startY+i*lineH}" text-anchor="middle" font-size="${fontSize}" font-family="${ff}" fill="${fill}">${App.escapeHtml(line)}</text>`;
+  });
   return {svg,fontSize,lineCount:lines.length};
 }
 
@@ -5817,67 +5870,75 @@ function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT){
   if(!route||route.length<2)return route;
   const r=[...route.map(p=>({...p}))]; // deep copy
   
+  // ★ v10.4: 각 shape의 정확한 변 중앙에서 연결 (직교 유지) ★
+  // 원칙: 화살표는 반드시 구성의 중앙(가로든 세로든)에 접점을 형성
+  
   // 1) 시작점(from) exit 방향 결정
   const seg0dx=r[1].x-r[0].x, seg0dy=r[1].y-r[0].y;
   let fromDir;
   if(Math.abs(seg0dy)>Math.abs(seg0dx)){fromDir=seg0dy>0?'bottom':'top';}
   else{fromDir=seg0dx>0?'right':'left';}
   
-  // 2) 끝점(to) entry 방향 결정
+  // 2) 끝점(to) entry 방향 결정 — ★ 진입 방향은 세그먼트 반대 ★
   const last=r.length-1;
   const segLdx=r[last].x-r[last-1].x, segLdy=r[last].y-r[last-1].y;
   let toDir;
-  if(Math.abs(segLdy)>Math.abs(segLdx)){toDir=segLdy>0?'bottom':'top';}
-  else{toDir=segLdx>0?'right':'left';}
+  // 화살표가 오른쪽으로 이동하며 도착 → 왼쪽에서 진입(left)
+  // 화살표가 아래로 이동하며 도착 → 위에서 진입(top)
+  if(Math.abs(segLdy)>Math.abs(segLdx)){toDir=segLdy>0?'top':'bottom';}
+  else{toDir=segLdx>0?'left':'right';}
   
-  // 3) Shape anchor로 시작점 스냅 (직교 유지)
-  if(fromBox._shapeType&&fromBox._shapeType!=='box'){
-    const anc=_shapeAnchor(fromBox._shapeType,fromBox._sx,fromBox._sy,fromBox._sw,fromBox._sh,fromDir);
-    const ancX=anc.px+offF, ancY=anc.py;
-    if(fromDir==='right'||fromDir==='left'){
-      // 수평 exit → 시작점 X를 anchor로 이동 (Y 유지 → 직교 보장)
-      r[0].x=ancX;
-    }else{
-      // 수직 exit → 시작점 Y + X를 anchor로 이동
-      const origFirstIsVertical=(r.length>=2&&Math.abs(r[1].x-r[0].x)<4);
-      r[0].y=ancY;
-      r[0].x=ancX;
-      if(origFirstIsVertical){
-        // 원래 수직 직선이었으면 다음 점도 같은 X로 정렬
-        r[1].x=ancX;
+  // 3) 시작점 shape anchor 계산
+  const fromST=fromBox._shapeType||'box';
+  const fromAnc=_shapeAnchor(fromST,fromBox._sx||fromBox.x,fromBox._sy||fromBox.y,
+    fromBox._sw||fromBox.w,fromBox._sh||fromBox.h,fromDir);
+  const fromAncX=fromAnc.px, fromAncY=fromAnc.py; // v10.4: offset 폐지 — 정확한 변 중앙
+  
+  // 4) 끝점 shape anchor 계산
+  const toST=toBox._shapeType||'box';
+  const toAnc=_shapeAnchor(toST,toBox._sx||toBox.x,toBox._sy||toBox.y,
+    toBox._sw||toBox.w,toBox._sh||toBox.h,toDir);
+  const toAncX=toAnc.px, toAncY=toAnc.py; // v10.4: offset 폐지 — 정확한 변 중앙
+  
+  // 5) 시작점 스냅
+  r[0].x=fromAncX;
+  r[0].y=fromAncY;
+  
+  // 6) 끝점 스냅
+  r[r.length-1].x=toAncX;
+  r[r.length-1].y=toAncY;
+  
+  // 7) 직교성 복원 — 중간점들을 조정하여 모든 세그먼트가 수평/수직이 되도록
+  if(r.length===2){
+    // 직선 경로 — 시작/끝 Y가 다르면 L-shape로 변환
+    if(Math.abs(fromAncY-toAncY)>2){
+      if(fromDir==='right'||fromDir==='left'){
+        // 수평 출발 → 중간에서 꺾임
+        const midX=(fromAncX+toAncX)/2;
+        r.splice(1,0,{x:midX,y:fromAncY},{x:midX,y:toAncY});
       }else{
-        // L-shape: 원래 수평 전환점이 있음 → 중간점 삽입으로 직교 유지
-        // r[0](ancX, ancY) → 삽입(ancX, r[1].y) → r[1](r[1].x, r[1].y)
-        if(Math.abs(ancX-r[1].x)>2&&Math.abs(ancY-r[1].y)>2){
-          r.splice(1,0,{x:ancX,y:r[1].y});
-        }
+        // 수직 출발 → 중간에서 꺾임
+        const midY=(fromAncY+toAncY)/2;
+        r.splice(1,0,{x:fromAncX,y:midY},{x:toAncX,y:midY});
       }
+    }else if(Math.abs(fromAncX-toAncX)>2&&(fromDir==='top'||fromDir==='bottom')){
+      const midY=(fromAncY+toAncY)/2;
+      r.splice(1,0,{x:fromAncX,y:midY},{x:toAncX,y:midY});
     }
-  }
-  
-  // 4) Shape anchor로 끝점 스냅 (직교 유지)
-  const lastIdx=r.length-1;
-  if(toBox._shapeType&&toBox._shapeType!=='box'){
-    const anc=_shapeAnchor(toBox._shapeType,toBox._sx,toBox._sy,toBox._sw,toBox._sh,toDir);
-    const ancX=anc.px+offT, ancY=anc.py;
-    if(toDir==='right'||toDir==='left'){
-      // 수평 entry → 끝점 X를 anchor로 이동 (Y 유지)
-      r[lastIdx].x=ancX;
+  }else if(r.length>=3){
+    // 다점 경로 — 첫 번째/마지막 세그먼트만 정렬
+    // 첫 번째 세그먼트: r[0] → r[1]
+    if(fromDir==='right'||fromDir==='left'){
+      r[1].y=fromAncY; // 수평 출발이면 r[1]의 Y를 맞춤
     }else{
-      // 수직 entry → 직교를 유지하며 끝점 이동
-      const origLastIsVertical=(lastIdx>=1&&Math.abs(r[lastIdx-1].x-r[lastIdx].x)<4);
-      r[lastIdx].y=ancY;
-      r[lastIdx].x=ancX;
-      if(origLastIsVertical){
-        // 원래 수직 직선이었으면 이전 점도 같은 X로 정렬
-        r[lastIdx-1].x=ancX;
-      }else{
-        // L-shape: 끝 부분이 수평이었음 → 중간점 삽입으로 직교 유지
-        // r[lastIdx-1](px, py) → 삽입(ancX, py) → r[lastIdx](ancX, ancY)
-        if(Math.abs(ancX-r[lastIdx-1].x)>2&&Math.abs(ancY-r[lastIdx-1].y)>2){
-          r.splice(lastIdx,0,{x:ancX,y:r[lastIdx-1].y});
-        }
-      }
+      r[1].x=fromAncX; // 수직 출발이면 r[1]의 X를 맞춤
+    }
+    // 마지막 세그먼트: r[last-1] → r[last]
+    const lastIdx=r.length-1;
+    if(toDir==='right'||toDir==='left'){
+      r[lastIdx-1].y=toAncY;
+    }else{
+      r[lastIdx-1].x=toAncX;
     }
   }
   
@@ -6309,20 +6370,16 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     svgEdgesToDraw.forEach(e=>{
       const fb=nodeBoxes[e.from], tb=nodeBoxes[e.to];
       if(!fb||!tb)return;
-      const key=e.from+'_'+e.to;
-      const fanF=svgFanCount[e.from]||1, fanT=svgFanCount[e.to]||1;
-      const iF=svgEdgeOff[key]?.fromIdx||0, iT=svgEdgeOff[key]?.toIdx||0;
-      const offF=fanF>1?(iF-((fanF-1)/2))*8:0;
-      const offT=fanT>1?(iT-((fanT-1)/2))*8:0;
-      const fbA={...fb,id:e.from,cx:fb.cx+offF};
-      const tbA={...tb,id:e.to,cx:tb.cx+offT};
+      // ★ v10.4: fan offset 제거 — 모든 화살표는 shape 변의 정확한 중앙에 접점 ★
+      // 사용자 요구: "화살표 등 연결 선은 구성의 중앙(가로든 세로든)에 접점을 형성"
+      const fbA={...fb,id:e.from};
+      const tbA={...tb,id:e.to};
       const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
       let route=getOrthogonalRoute(fbA,tbA,allBoxArr);
       if(!route)return;
       
-      // ★ v10.2: 연결선 시작/끝점을 Shape anchor에 스냅 ★
-      // 직사각형 nodeBox 경계 대신 실제 곡면 shape 경계에 맞춤
-      route=_snapRouteToShapeAnchors(route,fb,tb,offF,offT);
+      // ★ v10.4: 연결선 시작/끝점을 Shape 변 중앙에 스냅 (offF=0, offT=0) ★
+      route=_snapRouteToShapeAnchors(route,fb,tb,0,0);
       
       svg+=svgOrthogonalEdge(route,mkId);
     });
@@ -6351,21 +6408,69 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       const{id,sx,sy,sw,sh,shapeType,displayLabel,refNum}=nd;
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sw,sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sw,sh,2);
-      const textCy=_shapeTextCy(shapeType,sy,sh);
       let fontSize=Math.max(7,(maxCols>2?10:maxCols>1?11:12)+_fo);
       const dir=nodeConnDir[id]||{};
       const refInside=dir.top&&dir.bottom&&dir.left&&dir.right;
       const labelMaxW=sw*0.90;
-      const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize,7);
-      fontSize=labelFit.fontSize;
-      const labelBaseY=refInside?textCy-2:textCy+(labelFit.lines.length>1?0:4);
-      const {svg:lSvg}=_svgMultiLineLabel(sx+sw/2, labelBaseY, displayLabel, labelMaxW, fontSize, {minFontSize:7});
-      svg+=lSvg;
+      
+      // ★ v10.4: 아이콘 shape는 텍스트를 아이콘 아래에 배치 (겹침 방지) ★
+      if(_isIconShape(shapeType)){
+        // 아이콘 shape: 전체 영역이 그림 → 텍스트를 아래 별도 공간에 배치
+        // iconBottom = shape의 실제 하단 경계 (visual bounds 기준)
+        const vb=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
+        const iconVisualBottom=vb.bottom;
+        // 아이콘 하단에서 충분한 간격(8px)을 두고 텍스트 시작
+        const labelStartY=iconVisualBottom+8;
+        // 텍스트는 이 지점을 TOP으로 사용 (중앙정렬 아님 — 상단 정렬)
+        const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize,7);
+        const lineH=labelFit.fontSize+2;
+        let labelSvg='';
+        labelFit.lines.forEach((line,li)=>{
+          labelSvg+=`<text x="${sx+sw/2}" y="${labelStartY+li*lineH+labelFit.fontSize}" text-anchor="middle" font-size="${labelFit.fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(line)}</text>`;
+        });
+        svg+=labelSvg;
+        console.log(`[Fig1 Icon] "${displayLabel}" shape=${shapeType}: iconBottom=${Math.round(iconVisualBottom)}, textY=${Math.round(labelStartY+labelFit.fontSize)}, fs=${labelFit.fontSize}`);
+      }else if(shapeType==='server'){
+        // ★ v10.4: 서버 shape — 텍스트를 전체 중앙에 배치 + 흰색 배경으로 가로선 가림 ★
+        const textCy2=_shapeTextCy(shapeType,sy,sh);
+        // 점(dots)이 우측에 있으므로 텍스트 너비를 제한 (sw의 75%)
+        const serverLabelMaxW=sw*0.75;
+        const labelFit=_fitLabelLines(displayLabel,serverLabelMaxW,fontSize,7);
+        const lineH=labelFit.fontSize+2;
+        const totalTextH=labelFit.lines.length*lineH;
+        // 텍스트 시작 Y (수직 중앙정렬)
+        const textStartY=textCy2-(totalTextH/2)+labelFit.fontSize*0.8;
+        // 흰색 배경으로 가로 구분선 가림
+        const bgPad=4;
+        svg+=`<rect x="${sx+sw*0.05}" y="${textStartY-labelFit.fontSize-bgPad}" width="${sw*0.80}" height="${totalTextH+bgPad*2+4}" fill="#fff" stroke="none"/>`;
+        let labelSvg='';
+        labelFit.lines.forEach((line,li)=>{
+          labelSvg+=`<text x="${sx+sw/2}" y="${textStartY+li*lineH}" text-anchor="middle" font-size="${labelFit.fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(line)}</text>`;
+        });
+        svg+=labelSvg;
+      }else{
+        // 일반 shape: shape 내부 중앙에 텍스트
+        const textCy=_shapeTextCy(shapeType,sy,sh);
+        const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize,7);
+        fontSize=labelFit.fontSize;
+        const labelBaseY=refInside?textCy-2:textCy;
+        const {svg:lSvg}=_svgMultiLineLabel(sx+sw/2, labelBaseY, displayLabel, labelMaxW, fontSize, {minFontSize:7});
+        svg+=lSvg;
+      }
       
       // ★ 참조번호: 연결이 없는 쪽에 배치 (우선순위: 하단→우측→좌측→내부) ★
-      // v10.2: _shapeAnchor 기반 + leader line 길이 증가 + 연결 명확화
       let refSvg='';
-      if(!dir.bottom){
+      // 아이콘 shape는 참조번호도 아이콘 아래 (라벨 아래)에 배치
+      if(_isIconShape(shapeType)){
+        const vb=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
+        const iconVisualBottom=vb.bottom;
+        const labelFit=_fitLabelLines(displayLabel,sw*0.90,fontSize,7);
+        const lineH=labelFit.fontSize+2;
+        const labelBlockH=labelFit.lines.length*lineH;
+        // 참조번호: 아이콘 하단 + 라벨 텍스트 높이 + 간격
+        const refY=iconVisualBottom+8+labelBlockH+labelFit.fontSize+4;
+        refSvg=`<text x="${sx+sw/2}" y="${refY}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      }else if(!dir.bottom){
         // 하단: 수직선 + 번호 — shape 정확한 하단 앵커에서 시작
         const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'bottom');
         const ly2=anc.py+12; // v10.2: 12px leader line (was 8)
@@ -6498,23 +6603,15 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     
     // 4. 직각 라우팅 edge 기반 연결선
     const innerEdgesToDraw2=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
-    const svg2FanCount={};const svg2EdgeOff={};
-    innerEdgesToDraw2.forEach(e=>{
-      ['from','to'].forEach(k=>{const nid=e[k];if(!svg2FanCount[nid])svg2FanCount[nid]=0;const key=e.from+'_'+e.to;if(!svg2EdgeOff[key])svg2EdgeOff[key]={};svg2EdgeOff[key][k+'Idx']=svg2FanCount[nid];svg2FanCount[nid]++;});
-    });
+    // ★ v10.4: fan offset 제거 — 화살표는 항상 shape 변의 정확한 중앙에 접점 ★
     innerEdgesToDraw2.forEach(e=>{
       const fb=innerNodeBoxes[e.from],tb=innerNodeBoxes[e.to];
       if(!fb||!tb)return;
-      const key=e.from+'_'+e.to;
-      const fanF=svg2FanCount[e.from]||1,fanT=svg2FanCount[e.to]||1;
-      const iF=svg2EdgeOff[key]?.fromIdx||0,iT=svg2EdgeOff[key]?.toIdx||0;
-      const offF=fanF>1?(iF-((fanF-1)/2))*8:0;
-      const offT=fanT>1?(iT-((fanT-1)/2))*8:0;
-      const fbA={...fb,id:e.from,cx:fb.cx+offF};const tbA={...tb,id:e.to,cx:tb.cx+offT};
+      const fbA={...fb,id:e.from};const tbA={...tb,id:e.to};
       const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
       let route=getOrthogonalRoute(fbA,tbA,allBoxArr);
       if(route){
-        route=_snapRouteToShapeAnchors(route,fb,tb,offF,offT);
+        route=_snapRouteToShapeAnchors(route,fb,tb,0,0);
         svg+=svgOrthogonalEdge(route,mkId);
       }
     });
@@ -6529,7 +6626,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
 // 렌더링된 SVG를 실제 DOM에서 분석하여 시각적 문제를 자동 감지 + 보정
 
 function _postRenderValidateSvg(containerId, figNum){
-  // 렌더링된 SVG DOM에서 실제 bounding box를 분석
+  // ★ v10.4 Enhanced: 철저한 SVG DOM 기반 시각적 검증 ★
   const container=document.getElementById(containerId);
   if(!container)return{issues:[],pass:true};
   const svgEl=container.querySelector('svg');
@@ -6541,7 +6638,9 @@ function _postRenderValidateSvg(containerId, figNum){
   const vb=(svgEl.getAttribute('viewBox')||'').split(/\s+/).map(Number);
   const svgW=vb[2]||800, svgH=vb[3]||600;
   
-  // ── 1단계: 모든 <text> 요소의 실제 bounding box 수집 ──
+  // ── 1단계: 모든 요소 수집 ──
+  
+  // 1a. 텍스트 요소
   const textEls=svgEl.querySelectorAll('text');
   const textBoxes=[];
   textEls.forEach(t=>{
@@ -6557,25 +6656,48 @@ function _postRenderValidateSvg(containerId, figNum){
     }catch(e){}
   });
   
-  // ── 2단계: 모든 shape 요소의 bounding box 수집 ──
+  // 1b. Shape 요소 (그림자/배경 제외)
   const shapeBoxes=[];
-  // rect (그림자 제외 — fill="#fff" 또는 stroke가 있는 것만)
-  svgEl.querySelectorAll('rect[stroke],rect[fill="#fff"],rect[fill="white"]').forEach(r=>{
-    const x=parseFloat(r.getAttribute('x'))||0;
-    const y=parseFloat(r.getAttribute('y'))||0;
-    const w=parseFloat(r.getAttribute('width'))||0;
-    const h=parseFloat(r.getAttribute('height'))||0;
-    if(w>0&&h>0) shapeBoxes.push({el:r, x,y,w,h, type:'rect'});
-  });
-  // polygon, circle, ellipse
-  svgEl.querySelectorAll('polygon[stroke],circle[stroke],ellipse[stroke]').forEach(s=>{
+  const shadowFills=['#000','black'];
+  svgEl.querySelectorAll('rect,circle,ellipse,polygon,path').forEach(el=>{
     try{
-      const bbox=s.getBBox();
-      if(bbox.width>0) shapeBoxes.push({el:s, x:bbox.x,y:bbox.y,w:bbox.width,h:bbox.height, type:s.tagName});
+      const fill=el.getAttribute('fill')||'';
+      const stroke=el.getAttribute('stroke')||'';
+      const opacity=parseFloat(el.getAttribute('opacity')||'1');
+      // 그림자 제외 (fill="#000" + opacity<1, 또는 stroke 없이 fill="#000")
+      if(shadowFills.includes(fill)&&(opacity<1||!stroke))return;
+      // 흰색 배경 rect 제외 (텍스트 배경용)
+      if(fill==='#fff'&&!stroke&&el.tagName==='rect')return;
+      // 마커(arrowhead) 내부 요소 제외
+      if(el.closest('marker'))return;
+      
+      const bbox=el.getBBox();
+      if(bbox.width<5||bbox.height<5)return; // 너무 작은 장식 요소 제외
+      
+      shapeBoxes.push({el, x:bbox.x,y:bbox.y,w:bbox.width,h:bbox.height, 
+        type:el.tagName, fill, stroke});
     }catch(e){}
   });
   
-  // ── 검사 A: 텍스트-텍스트 겹침 ──
+  // 1c. 연결선 요소 (polyline with marker)
+  const connectionLines=[];
+  svgEl.querySelectorAll('polyline[marker-end],line[marker-end]').forEach(el=>{
+    try{
+      const bbox=el.getBBox();
+      // 연결선의 시작/끝점 추출
+      if(el.tagName==='polyline'){
+        const pts=(el.getAttribute('points')||'').trim().split(/\s+/).map(p=>{
+          const [x,y]=p.split(',').map(Number);
+          return{x,y};
+        }).filter(p=>!isNaN(p.x)&&!isNaN(p.y));
+        if(pts.length>=2){
+          connectionLines.push({el, start:pts[0], end:pts[pts.length-1], points:pts});
+        }
+      }
+    }catch(e){}
+  });
+  
+  // ── 검사 A: 텍스트-텍스트 겹침 (감도 향상) ──
   for(let i=0;i<textBoxes.length;i++){
     for(let j=i+1;j<textBoxes.length;j++){
       const a=textBoxes[i], b=textBoxes[j];
@@ -6583,11 +6705,11 @@ function _postRenderValidateSvg(containerId, figNum){
       const overlapY=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
       const overlapArea=overlapX*overlapY;
       const minArea=Math.min(a.w*a.h,b.w*b.h);
-      // 겹침 면적이 작은 쪽의 15% 이상이면 문제
-      if(overlapArea>minArea*0.15){
+      // ★ 10% 이상 겹침이면 감지 (기존 15% → 10%) ★
+      if(overlapArea>minArea*0.10&&overlapArea>20){
         issues.push({
           type:'TEXT_OVERLAP', severity:'ERROR',
-          msg:`텍스트 겹침: "${a.text.slice(0,12)}" ↔ "${b.text.slice(0,12)}" (${Math.round(overlapArea)}px²)`,
+          msg:`텍스트 겹침: "${a.text.slice(0,15)}" ↔ "${b.text.slice(0,15)}" (${Math.round(overlapArea)}px²)`,
           elements:[a,b], overlapArea
         });
       }
@@ -6596,69 +6718,64 @@ function _postRenderValidateSvg(containerId, figNum){
   
   // ── 검사 B: 텍스트가 SVG 경계 밖으로 잘림 ──
   textBoxes.forEach(tb=>{
-    const clipRight=tb.x+tb.w-svgW;
-    const clipBottom=tb.y+tb.h-svgH;
-    const clipLeft=-tb.x;
-    const clipTop=-tb.y;
-    if(clipRight>3||clipBottom>3||clipLeft>3||clipTop>3){
+    const margin=svgW*0.02; // 2% 마진 허용
+    const clipRight=tb.x+tb.w-(svgW-margin);
+    const clipBottom=tb.y+tb.h-(svgH-margin);
+    const clipLeft=margin-tb.x;
+    const clipTop=margin-tb.y;
+    if(clipRight>2||clipBottom>2||clipLeft>2||clipTop>2){
       issues.push({
         type:'TEXT_CLIPPED', severity:'WARNING',
-        msg:`텍스트 잘림: "${tb.text.slice(0,12)}" (R:${Math.round(clipRight)} B:${Math.round(clipBottom)} L:${Math.round(clipLeft)} T:${Math.round(clipTop)})`,
+        msg:`텍스트 잘림: "${tb.text.slice(0,12)}" (R:${Math.round(clipRight)} B:${Math.round(clipBottom)})`,
         element:tb, clip:{right:clipRight,bottom:clipBottom,left:clipLeft,top:clipTop}
       });
     }
   });
   
-  // ── 검사 C: 텍스트가 소속 shape 밖으로 넘침 ──
-  // (각 텍스트의 가장 가까운 shape를 찾아 포함 여부 확인)
+  // ── 검사 C: 텍스트-Shape 겹침 (라벨이 다른 shape 위에 올라감) ──
   textBoxes.forEach(tb=>{
-    // 참조번호 텍스트 (shape 외부에 있는 게 정상) 제외
-    if(/^\(?\d+\)?$/.test(tb.text.trim())||/^[SD]\d+$/i.test(tb.text.trim()))return;
-    // 연결선 레이블 제외
-    if(tb.text.trim().length<=2)return;
+    if(/^\(?\d+\)?$/.test(tb.text.trim()))return; // 참조번호 제외
+    if(tb.text.trim().length<=1)return;
     
-    // 가장 가까운 shape 찾기 (중심점 기준)
     const tcx=tb.x+tb.w/2, tcy=tb.y+tb.h/2;
-    let closest=null, closestDist=Infinity;
-    shapeBoxes.forEach(sb=>{
-      const scx=sb.x+sb.w/2, scy=sb.y+sb.h/2;
-      const d=Math.hypot(tcx-scx,tcy-scy);
-      if(d<closestDist){closestDist=d;closest=sb;}
-    });
     
-    if(closest){
-      const overflow={
-        left:closest.x-(tb.x),
-        right:(tb.x+tb.w)-(closest.x+closest.w),
-        top:closest.y-(tb.y),
-        bottom:(tb.y+tb.h)-(closest.y+closest.h)
-      };
-      // 텍스트가 shape 너비의 20% 이상 넘치면 문제
-      const maxOverflow=Math.max(overflow.left,overflow.right);
-      if(maxOverflow>closest.w*0.20){
+    shapeBoxes.forEach(sb=>{
+      // 프레임(가장 큰 shape) 제외
+      if(sb.w>svgW*0.5)return;
+      
+      const scx=sb.x+sb.w/2, scy=sb.y+sb.h/2;
+      // 텍스트가 이 shape의 내부 라벨인지 확인 (중앙 간 거리로 판정)
+      const isOwnLabel=Math.abs(tcx-scx)<sb.w*0.6&&Math.abs(tcy-scy)<sb.h*0.8;
+      if(isOwnLabel)return; // 자기 shape 라벨은 정상
+      
+      // 다른 shape의 영역에 텍스트가 겹침?
+      const overlapX=Math.max(0,Math.min(tb.x+tb.w,sb.x+sb.w)-Math.max(tb.x,sb.x));
+      const overlapY=Math.max(0,Math.min(tb.y+tb.h,sb.y+sb.h)-Math.max(tb.y,sb.y));
+      if(overlapX>5&&overlapY>5){
         issues.push({
-          type:'TEXT_OVERFLOW', severity:'WARNING',
-          msg:`텍스트 넘침: "${tb.text.slice(0,12)}" shape 밖 ${Math.round(maxOverflow)}px`,
-          element:tb, shape:closest, overflow
+          type:'TEXT_SHAPE_CROSS', severity:'ERROR',
+          msg:`텍스트 "${tb.text.slice(0,12)}" 다른 shape 영역 침범 (${Math.round(overlapX)}×${Math.round(overlapY)}px)`,
+          element:tb, shape:sb
         });
       }
-    }
+    });
   });
   
-  // ── 검사 D: shape-shape 겹침 (그림자 제외) ──
+  // ── 검사 D: shape-shape 겹침 ──
   for(let i=0;i<shapeBoxes.length;i++){
     for(let j=i+1;j<shapeBoxes.length;j++){
       const a=shapeBoxes[i], b=shapeBoxes[j];
-      // 프레임 rect (가장 큰 rect)는 내부 요소와 겹치는 게 정상
-      if(a.w>svgW*0.6||b.w>svgW*0.6)continue;
-      // 그림자 rect 무시 (fill="black"/"#000")
-      if(a.el.getAttribute('fill')==='#000'||b.el.getAttribute('fill')==='#000')continue;
+      if(a.w>svgW*0.5||b.w>svgW*0.5)continue; // 프레임 제외
+      // 같은 shape 내부 요소 (ex: circle inside rect) 제외
+      if(a.el.contains(b.el)||b.el.contains(a.el))continue;
+      // circle/ellipse(아이콘 장식) vs rect 겹침은 완화
+      if(a.type!==b.type)continue;
       
       const overlapX=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x));
       const overlapY=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
       const overlapArea=overlapX*overlapY;
       const minArea=Math.min(a.w*a.h,b.w*b.h);
-      if(overlapArea>minArea*0.10){
+      if(overlapArea>minArea*0.08&&overlapArea>100){
         issues.push({
           type:'SHAPE_OVERLAP', severity:'ERROR',
           msg:`Shape 겹침: ${Math.round(overlapArea)}px² (${Math.round(overlapArea/minArea*100)}%)`,
@@ -6668,16 +6785,86 @@ function _postRenderValidateSvg(containerId, figNum){
     }
   }
   
-  // ── 검사 E: 연결선이 shape을 관통하는지 확인 ──
-  const lineEls=svgEl.querySelectorAll('line[stroke="#000"],polyline[stroke="#000"],path[stroke="#000"]');
-  // (복잡한 경로 분석은 생략 — 직각 라우팅으로 이미 우회하므로 간략 검사)
+  // ── 검사 E: 연결선 접점 중앙 정렬 검증 ──
+  connectionLines.forEach(cl=>{
+    // 시작점/끝점이 가장 가까운 shape의 변 중앙에 있는지 확인
+    [cl.start,cl.end].forEach((pt,ptIdx)=>{
+      let closestShape=null, minDist=Infinity;
+      shapeBoxes.forEach(sb=>{
+        if(sb.w>svgW*0.5)return; // 프레임 제외
+        // shape 경계까지의 최소 거리
+        const cx=sb.x+sb.w/2, cy=sb.y+sb.h/2;
+        const d=Math.hypot(pt.x-cx,pt.y-cy);
+        if(d<minDist){minDist=d;closestShape=sb;}
+      });
+      
+      if(closestShape){
+        const sb=closestShape;
+        const cx=sb.x+sb.w/2, cy=sb.y+sb.h/2;
+        // 접점이 shape의 어느 변에 가장 가까운지 판정
+        const distLeft=Math.abs(pt.x-sb.x);
+        const distRight=Math.abs(pt.x-(sb.x+sb.w));
+        const distTop=Math.abs(pt.y-sb.y);
+        const distBottom=Math.abs(pt.y-(sb.y+sb.h));
+        const minEdgeDist=Math.min(distLeft,distRight,distTop,distBottom);
+        
+        // 변에 닿는 점이면 → 해당 변의 중앙에 있는지 확인
+        if(minEdgeDist<8){ // 8px 이내가 "변에 닿음"
+          const tolerance=Math.max(8, Math.min(sb.w,sb.h)*0.15); // 15% 또는 8px
+          let offCenter=0;
+          if(distLeft<=minEdgeDist+2||distRight<=minEdgeDist+2){
+            // 좌/우 변에 닿음 → py가 수직 중앙(cy)인지 확인
+            offCenter=Math.abs(pt.y-cy);
+          }else{
+            // 상/하 변에 닿음 → px가 수평 중앙(cx)인지 확인
+            offCenter=Math.abs(pt.x-cx);
+          }
+          
+          if(offCenter>tolerance){
+            issues.push({
+              type:'CONN_OFF_CENTER', severity:'WARNING',
+              msg:`연결선 접점 중앙 미정렬: ${ptIdx===0?'시작':'끝'}점 (오차 ${Math.round(offCenter)}px, 허용 ${Math.round(tolerance)}px)`,
+              point:pt, shape:closestShape
+            });
+          }
+        }
+      }
+    });
+  });
   
-  const pass=issues.filter(i=>i.severity==='ERROR').length===0;
-  return{issues, pass, textBoxes, shapeBoxes};
+  // ── 검사 F: 빈 라벨 shape (텍스트 없는 박스) ──
+  shapeBoxes.filter(sb=>sb.w>30&&sb.h>20&&sb.w<svgW*0.5&&sb.stroke).forEach(sb=>{
+    const hasLabel=textBoxes.some(tb=>{
+      const tcx=tb.x+tb.w/2, tcy=tb.y+tb.h/2;
+      return tcx>sb.x&&tcx<sb.x+sb.w&&tcy>sb.y-sb.h*0.5&&tcy<sb.y+sb.h*1.5;
+    });
+    if(!hasLabel&&sb.type==='rect'){
+      // rect에 라벨이 없으면 경고 (서버 내부 섹션선 등은 제외)
+      // 너비가 50px 이상이고 높이가 20px 이상인 의미있는 shape만
+      if(sb.w>80&&sb.h>40){
+        issues.push({
+          type:'EMPTY_SHAPE', severity:'INFO',
+          msg:`Shape에 라벨 없음 (${Math.round(sb.w)}×${Math.round(sb.h)}px @ ${Math.round(sb.x)},${Math.round(sb.y)})`,
+          shape:sb
+        });
+      }
+    }
+  });
+  
+  const errorCount=issues.filter(i=>i.severity==='ERROR').length;
+  const pass=errorCount===0;
+  
+  // 콘솔 리포트
+  if(issues.length>0){
+    console.log(`[PostRender] 도 ${figNum}: ${errorCount} ERR, ${issues.filter(i=>i.severity==='WARNING').length} WARN, ${issues.filter(i=>i.severity==='INFO').length} INFO`);
+    issues.forEach(i=>console.log(`  [${i.severity}] ${i.type}: ${i.msg}`));
+  }
+  
+  return{issues, pass, textBoxes, shapeBoxes, connectionLines};
 }
 
 function _autoFixRenderedSvg(containerId, issues, attempt){
-  // 렌더링된 SVG DOM을 직접 수정하여 문제 해결
+  // ★ v10.4 Enhanced: 렌더링된 SVG DOM 직접 수정으로 문제 해결 ★
   const container=document.getElementById(containerId);
   if(!container)return 0;
   const svgEl=container.querySelector('svg');
@@ -6688,73 +6875,55 @@ function _autoFixRenderedSvg(containerId, issues, attempt){
   issues.forEach(issue=>{
     switch(issue.type){
       case 'TEXT_OVERLAP':{
-        // 겹치는 두 텍스트 중 아래쪽을 더 아래로 이동
         const [a,b]=issue.elements;
         const lowerEl=a.y>b.y?a:b;
         const upperEl=a.y>b.y?b:a;
         const gapNeeded=(upperEl.y+upperEl.h+2)-lowerEl.y;
         if(gapNeeded>0){
           const curY=parseFloat(lowerEl.el.getAttribute('y'))||0;
-          lowerEl.el.setAttribute('y',String(curY+gapNeeded+2));
+          lowerEl.el.setAttribute('y',String(curY+gapNeeded+4));
           fixCount++;
         }
-        // 폰트 축소도 시도 (2차 이후)
         if(attempt>=1){
           [a,b].forEach(tb=>{
             const fs=parseFloat(tb.el.getAttribute('font-size'))||11;
-            if(fs>7){
-              tb.el.setAttribute('font-size',String(Math.max(7,fs-1)));
-              fixCount++;
-            }
+            if(fs>7){tb.el.setAttribute('font-size',String(Math.max(7,fs-1)));fixCount++;}
           });
         }
         break;
       }
       
-      case 'TEXT_CLIPPED':{
-        // SVG viewBox 확장
-        const clip=issue.clip;
-        const vb=(svgEl.getAttribute('viewBox')||'').split(/\s+/).map(Number);
-        let changed=false;
-        if(clip.right>3){vb[2]+=clip.right+10;changed=true;}
-        if(clip.bottom>3){vb[3]+=clip.bottom+10;changed=true;}
-        if(clip.left>3){
-          // 모든 요소를 오른쪽으로 이동하는 대신 viewBox 원점을 왼쪽으로
-          vb[0]-=(clip.left+10);vb[2]+=(clip.left+10);changed=true;
-        }
-        if(clip.top>3){vb[1]-=(clip.top+10);vb[3]+=(clip.top+10);changed=true;}
-        if(changed){
-          svgEl.setAttribute('viewBox',vb.join(' '));
-          fixCount++;
-        }
+      case 'TEXT_SHAPE_CROSS':{
+        // 다른 shape에 겹친 텍스트 → 폰트 축소 + 위치 이동
+        const tb=issue.element;
+        const fs=parseFloat(tb.el.getAttribute('font-size'))||11;
+        if(fs>7){tb.el.setAttribute('font-size',String(Math.max(7,fs-1)));fixCount++;}
         break;
       }
       
-      case 'TEXT_OVERFLOW':{
-        // 텍스트 폰트 축소
-        const tb=issue.element;
-        const fs=parseFloat(tb.el.getAttribute('font-size'))||11;
-        if(fs>7){
-          tb.el.setAttribute('font-size',String(Math.max(7,fs-1)));
-          fixCount++;
-        }
+      case 'TEXT_CLIPPED':{
+        const clip=issue.clip;
+        const vbArr=(svgEl.getAttribute('viewBox')||'').split(/\s+/).map(Number);
+        let changed=false;
+        if(clip.right>2){vbArr[2]+=clip.right+15;changed=true;}
+        if(clip.bottom>2){vbArr[3]+=clip.bottom+15;changed=true;}
+        if(clip.left>2){vbArr[0]-=(clip.left+15);vbArr[2]+=(clip.left+15);changed=true;}
+        if(clip.top>2){vbArr[1]-=(clip.top+15);vbArr[3]+=(clip.top+15);changed=true;}
+        if(changed){svgEl.setAttribute('viewBox',vbArr.join(' '));fixCount++;}
         break;
       }
       
       case 'SHAPE_OVERLAP':{
-        // Shape 간 겹침: SVG viewBox 확장 + 아래쪽 shape를 더 아래로 이동
-        const [a,b]=issue.elements;
-        const lowerShape=a.y>b.y?a:b;
-        const upperShape=a.y>b.y?b:a;
-        const gapNeeded=(upperShape.y+upperShape.h+4)-lowerShape.y;
-        if(gapNeeded>0){
-          // shape element의 y 속성 직접 이동은 복잡 (transform 필요)
-          // viewBox 확장으로 대응
-          const vb=(svgEl.getAttribute('viewBox')||'').split(/\s+/).map(Number);
-          vb[3]+=gapNeeded+10;
-          svgEl.setAttribute('viewBox',vb.join(' '));
-          fixCount++;
-        }
+        const vbArr=(svgEl.getAttribute('viewBox')||'').split(/\s+/).map(Number);
+        vbArr[3]+=20;
+        svgEl.setAttribute('viewBox',vbArr.join(' '));
+        fixCount++;
+        break;
+      }
+      
+      case 'CONN_OFF_CENTER':{
+        // 연결선 접점 중앙 미정렬 — DOM 수정으로는 어려움 (재렌더링 필요)
+        // 경고만 기록
         break;
       }
     }
@@ -7814,8 +7983,9 @@ function downloadPptx(sid){
           const idxTo=pptxEdgeOffsets[e.from+'_'+e.to]?.toIdx||0;
           const offsetTo=fanTo>1?(idxTo-((fanTo-1)/2))*0.08:0;
           
-          const fbA={...fb,cx:fb.cx+offsetFrom};
-          const tbA={...tb,cx:tb.cx+offsetTo};
+          // ★ v10.4: fan offset 제거 — 정확한 중앙 접점 ★
+          const fbA={...fb};
+          const tbA={...tb};
           const pts=getConnectionPoints(fbA,tbA);
           if(!pts)return;
           const dx=pts.x2-pts.x1,dy=pts.y2-pts.y1;
@@ -7937,7 +8107,8 @@ function downloadPptx(sid){
           const iF=pInnerOff[key]?.fromIdx||0,iT=pInnerOff[key]?.toIdx||0;
           const offF=fanF>1?(iF-((fanF-1)/2))*0.08:0;
           const offT=fanT>1?(iT-((fanT-1)/2))*0.08:0;
-          const fbA={...fb,cx:fb.cx+offF};const tbA={...tb,cx:tb.cx+offT};
+          // ★ v10.4: fan offset 제거 — 정확한 중앙 접점 ★
+          const fbA={...fb};const tbA={...tb};
           const pts=getConnectionPoints(fbA,tbA);
           if(!pts)return;
           const dx=pts.x2-pts.x1,dy=pts.y2-pts.y1;
@@ -8442,8 +8613,9 @@ function downloadDiagramImages(sid, format='jpeg'){
           const idxTo=edgeOffsets[e.from+'_'+e.to]?.toIdx||0;
           const offsetFrom=fanFrom>1?(idxFrom-((fanFrom-1)/2))*8:0;
           const offsetTo=fanTo>1?(idxTo-((fanTo-1)/2))*8:0;
-          const fbAdj={...fb,id:e.from,cx:fb.cx+offsetFrom};
-          const tbAdj={...tb,id:e.to,cx:tb.cx+offsetTo};
+          // ★ v10.4: fan offset 제거 — 정확한 중앙 접점 ★
+          const fbAdj={...fb,id:e.from};
+          const tbAdj={...tb,id:e.to};
           const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
           drawCanvasOrthogonalEdge(ctx,fbAdj,tbAdj,6,allBoxArr);
         });
@@ -8559,7 +8731,8 @@ function downloadDiagramImages(sid, format='jpeg'){
           const iF=cInnerOff[key]?.fromIdx||0,iT=cInnerOff[key]?.toIdx||0;
           const offF=fanF>1?(iF-((fanF-1)/2))*7:0;
           const offT=fanT>1?(iT-((fanT-1)/2))*7:0;
-          const fbA={...fb,id:e.from,cx:fb.cx+offF};const tbA={...tb,id:e.to,cx:tb.cx+offT};
+          // ★ v10.4: fan offset 제거 — 정확한 중앙 접점 ★
+          const fbA={...fb,id:e.from};const tbA={...tb,id:e.to};
           const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
           const route=getOrthogonalRoute(fbA,tbA,allBoxArr);
           if(!route||route.length<2)return;
