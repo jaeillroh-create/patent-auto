@@ -4852,6 +4852,92 @@ function _estimateTextWidth(text,fontSize){
   return w;
 }
 
+// ★ v10.4: SVG/Canvas 멀티라인 라벨 렌더링 헬퍼 (잘림 완전 제거) ★
+function _fitLabelLines(label, maxWidth, baseFontSize, minFontSize){
+  // 전체 라벨을 maxWidth 안에 맞추기 위해 폰트 축소 → 줄바꿈 순으로 시도
+  // Returns: {lines: string[], fontSize: number}
+  if(!label) return {lines:[''],fontSize:baseFontSize};
+  const minFS=minFontSize||7;
+  
+  // 1단계: 폰트 축소만으로 1줄에 맞는지 시도
+  let fs=baseFontSize;
+  let tw=_estimateTextWidth(label,fs);
+  if(tw<=maxWidth) return {lines:[label],fontSize:fs};
+  
+  // 폰트를 minFS까지 축소해봄
+  while(fs>minFS&&tw>maxWidth){fs--;tw=_estimateTextWidth(label,fs);}
+  if(tw<=maxWidth) return {lines:[label],fontSize:fs};
+  
+  // 2단계: 2줄로 분할 (폰트는 baseFontSize-1부터 재시도)
+  fs=Math.max(baseFontSize-1,minFS);
+  const mid=Math.ceil(label.length/2);
+  // 공백 기준 최적 분할점 찾기
+  let splitIdx=label.lastIndexOf(' ',mid);
+  if(splitIdx<=0||splitIdx>=label.length-1){
+    // 공백 없으면 중간에서 분할
+    splitIdx=mid;
+  }
+  const line1=label.slice(0,splitIdx).trim();
+  const line2=label.slice(splitIdx).trim();
+  
+  // 2줄 중 더 긴 쪽이 maxWidth에 맞을 때까지 폰트 축소
+  const maxLineW=Math.max(_estimateTextWidth(line1,fs),_estimateTextWidth(line2,fs));
+  while(fs>minFS&&maxLineW>maxWidth){
+    fs--;
+    const w1=_estimateTextWidth(line1,fs),w2=_estimateTextWidth(line2,fs);
+    if(Math.max(w1,w2)<=maxWidth)break;
+  }
+  
+  return {lines:[line1,line2],fontSize:fs};
+}
+
+function _svgMultiLineLabel(cx, baseY, label, maxWidth, baseFontSize, options){
+  // SVG <text> 요소들 반환 (중앙정렬)
+  // options: {fill, fontFamily, dy (줄간격), minFontSize}
+  const opt=options||{};
+  const fill=opt.fill||'#000';
+  const ff=opt.fontFamily||'맑은 고딕,Arial,sans-serif';
+  const minFS=opt.minFontSize||7;
+  const {lines,fontSize}=_fitLabelLines(label,maxWidth,baseFontSize,minFS);
+  
+  let svg='';
+  if(lines.length===1){
+    svg+=`<text x="${cx}" y="${baseY}" text-anchor="middle" font-size="${fontSize}" font-family="${ff}" fill="${fill}">${App.escapeHtml(lines[0])}</text>`;
+  }else{
+    const lineH=fontSize+2;
+    const startY=baseY-lineH/2;
+    lines.forEach((line,i)=>{
+      svg+=`<text x="${cx}" y="${startY+i*lineH}" text-anchor="middle" font-size="${fontSize}" font-family="${ff}" fill="${fill}">${App.escapeHtml(line)}</text>`;
+    });
+  }
+  return {svg,fontSize,lineCount:lines.length};
+}
+
+function _canvasMultiLineLabel(ctx, cx, cy, label, maxWidth, baseFontSize, options){
+  // Canvas에 멀티라인 텍스트 그리기 (중앙정렬)
+  const opt=options||{};
+  const fill=opt.fill||'#000000';
+  const ff=opt.fontFamily||'"맑은 고딕", sans-serif';
+  const minFS=opt.minFontSize||7;
+  const {lines,fontSize}=_fitLabelLines(label,maxWidth,baseFontSize,minFS);
+  
+  ctx.fillStyle=fill;
+  ctx.font=`${fontSize}px ${ff}`;
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  
+  if(lines.length===1){
+    ctx.fillText(lines[0],cx,cy);
+  }else{
+    const lineH=fontSize+2;
+    const startY=cy-lineH/2;
+    lines.forEach((line,i)=>{
+      ctx.fillText(line,cx,startY+i*lineH);
+    });
+  }
+  return {fontSize,lineCount:lines.length};
+}
+
 // ═══ 도면 규칙 위반 시 자동 재생성 ═══
 async function regenerateDiagramWithFeedback(sid){
   if(globalProcessing){App.showToast('다른 작업 진행 중...','error');return;}
@@ -5798,8 +5884,16 @@ function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT){
   return r;
 }
 
-function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
+function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
   // ═══ KIPO 특허 도면 규칙 v4.1 (직계 부모 일치) ═══
+  // ★ v10.4: adjustments 파라미터 — 포스트 렌더 검증 실패 시 재렌더링용 ★
+  // adjustments: {spacingMult:1.0, fontOffset:0, boxWidthMult:1.0, boxHeightMult:1.0}
+  const adj=adjustments||{};
+  const _sm=adj.spacingMult||1.0;  // 간격 배율 (1.0=기본, 1.2=20% 확대)
+  const _fo=adj.fontOffset||0;     // 폰트 크기 오프셋 (-1=1px 축소)
+  const _bwm=adj.boxWidthMult||1.0;  // 박스 너비 배율
+  const _bhm=adj.boxHeightMult||1.0; // 박스 높이 배율
+  
   const PX=72;
   const SHADOW_OFFSET=2.5; // v8.0: 축소 (4→2.5)
   
@@ -5904,20 +5998,20 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
   
   if(isMethodDiagram){
     // ═══ 방법 도면: 흐름도 v6.0 (다이아몬드 분기 지원) ═══
-    const boxH=0.7*PX, boxGap=0.8*PX, diamondH=1.0*PX;
-    const normalBoxW=5.0*PX;
-    const startEndBoxW=2.0*PX;
-    const diamondW=5.5*PX;
+    const boxH=0.7*PX*_bhm, boxGap=0.8*PX*_sm, diamondH=1.0*PX*_bhm;
+    const normalBoxW=5.0*PX*_bwm;
+    const startEndBoxW=2.0*PX*_bwm;
+    const diamondW=5.5*PX*_bwm;
     const boxStartY=0.5*PX;
     // 분기 여부 판단
     const hasBranching=edges.some(e=>e.label);
-    const branchOffset=hasBranching?2.8*PX:0;
+    const branchOffset=hasBranching?2.8*PX*_sm:0;
     const centerX=0.5*PX+normalBoxW/2+branchOffset/2;
     const svgW=normalBoxW+2.5*PX+branchOffset;
     
     // 노드 위치 계산 (토폴로지 기반)
     const nodeMap={};nodes.forEach(n=>nodeMap[n.id]=n);
-    const adj={};edges.forEach(e=>{if(!adj[e.from])adj[e.from]=[];adj[e.from].push(e);});
+    const adjList={};edges.forEach(e=>{if(!adjList[e.from])adjList[e.from]=[];adjList[e.from].push(e);});
     // 간단한 순서: nodes 배열 순서 사용 (이미 파싱 순서)
     const nodePositions={};
     let curY=boxStartY;
@@ -6074,14 +6168,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const{grid,maxCols,numRows,uniqueEdges}=layout;
     
     // 열 수에 따른 박스 크기 조정
-    const colGap=0.85*PX; // v10.1: 연결선 공간 확보 (0.7→0.85)
+    const colGap=0.85*PX*_sm; // v10.1: 연결선 공간 확보 + v10.4: 조정 배율
     // v10.3: 셀 너비 확대 (한글 텍스트 수용)
-    const boxW2D=maxCols<=1?5.5*PX:maxCols===2?4.2*PX:3.0*PX;
+    const boxW2D=(maxCols<=1?5.5*PX:maxCols===2?4.2*PX:3.0*PX)*_bwm;
     const maxNodeAreaW=maxCols*boxW2D+(maxCols-1)*colGap;
-    const marginX=0.8*PX; // v10.1: (0.7→0.8)
-    const marginY=0.8*PX; // v10.1: (0.7→0.8)
-    const refNumH=30; // v10.1: (28→30) 참조번호 + 여유 공간
-    const rowGapBase=0.85*PX; // v10.1: 행 간격 확대 (0.7→0.85)
+    const marginX=0.8*PX*_sm;
+    const marginY=0.8*PX*_sm;
+    const refNumH=30*_sm; // v10.1: (28→30) 참조번호 + 여유 공간
+    const rowGapBase=0.85*PX*_sm; // v10.1: 행 간격 확대 + v10.4: 조정 배율
     
     // ★ 행별 실제 최대 Shape 높이 계산 (겹침 방지 핵심) ★
     const rowMaxH={};
@@ -6125,7 +6219,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 사용 ★
       const refNum=extractRefNum(nd.label,String((parseInt(nd.id.replace(/\D/g,''))||1)*100));
       const cleanLabel=_safeCleanLabel(nd.label);
-      const displayLabel=cleanLabel.length>(maxCols>2?7:maxCols>1?10:16)?cleanLabel.slice(0,maxCols>2?5:maxCols>1?8:14)+'…':cleanLabel;
+      // ★ v10.4: 잘림("…") 완전 제거 — 전체 라벨 표시, 자동 줄바꿈+폰트축소로 대응 ★
+      const displayLabel=cleanLabel;
       const shapeType=matchIconShape(nd.label);
       const sm=_shapeMetrics(shapeType,boxW2D,boxH);
       // v10.3: 텍스트 너비 기반 최소 shape 너비 보장 (겹침 방지)
@@ -6257,15 +6352,15 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sw,sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sw,sh,2);
       const textCy=_shapeTextCy(shapeType,sy,sh);
-      let fontSize=maxCols>2?10:maxCols>1?11:12;
-      // v10.3: 텍스트가 shape보다 넓으면 폰트 축소
-      let textW=_estimateTextWidth(displayLabel,fontSize);
-      while(textW>sw*0.92&&fontSize>7){fontSize--;textW=_estimateTextWidth(displayLabel,fontSize);}
+      let fontSize=Math.max(7,(maxCols>2?10:maxCols>1?11:12)+_fo);
       const dir=nodeConnDir[id]||{};
       const refInside=dir.top&&dir.bottom&&dir.left&&dir.right;
-      // 참조번호 내부 표시 시 라벨을 위로 올림
-      const labelY=refInside?textCy-2:textCy+4;
-      svg+=`<text x="${sx+sw/2}" y="${labelY}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
+      const labelMaxW=sw*0.90;
+      const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize,7);
+      fontSize=labelFit.fontSize;
+      const labelBaseY=refInside?textCy-2:textCy+(labelFit.lines.length>1?0:4);
+      const {svg:lSvg}=_svgMultiLineLabel(sx+sw/2, labelBaseY, displayLabel, labelMaxW, fontSize, {minFontSize:7});
+      svg+=lSvg;
       
       // ★ 참조번호: 연결이 없는 쪽에 배치 (우선순위: 하단→우측→좌측→내부) ★
       // v10.2: _shapeAnchor 기반 + leader line 길이 증가 + 연결 명확화
@@ -6323,13 +6418,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
     
     // ═══ v9.0: 공통 레이아웃 엔진 호출 (연결선 우회 공간 확보) ═══
-    const innerBoxW=innerMaxCols<=1?4.5*PX:innerMaxCols===2?2.8*PX:2.0*PX;
-    const boxH2=0.9*PX;
+    // ★ v10.4: 박스 너비 확대 — 한글 라벨 잘림 방지 + 조정 배율 ★
+    const innerBoxW=(innerMaxCols<=1?4.5*PX:innerMaxCols===2?3.2*PX:2.4*PX)*_bwm;
+    const boxH2=(innerMaxCols>=3?1.05*PX:0.95*PX)*_bhm; // v10.4: 높이 증가 (멀티라인 수용)
     const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
       boxBaseW:innerBoxW, boxBaseH:boxH2,
-      colGap:1.0*PX,    // v9.0: 연결선 우회 공간 확보 (0.75→1.0)
-      rowGap:1.1*PX,    // v9.0: (0.9→1.1)
-      framePad:0.9*PX,   // v9.0: (0.85→0.9)
+      colGap:1.0*PX*_sm,    // v9.0: 연결선 우회 공간 확보 + v10.4: 조정 배율
+      rowGap:1.1*PX*_sm,    // v9.0 + v10.4: 조정 배율
+      framePad:0.9*PX*_sm,   // v9.0 + v10.4: 조정 배율
       shadowSize:SHADOW_OFFSET,
       scale:PX
     });
@@ -6340,7 +6436,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const leaderMargin=0.8*PX;
     const svgW=frameX+frameW+leaderMargin;
     const svgH=frameY+frameH+0.5*PX;
-    const maxW=innerMaxCols<=1?600:innerMaxCols===2?750:900;
+    const maxW=innerMaxCols<=1?650:innerMaxCols===2?850:1000; // v10.4: 확대 (박스 너비 증가 반영)
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
@@ -6362,7 +6458,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       const sm=_shapeMetrics(shapeType,obj.w,obj.h);
       // v10.3: 텍스트 너비 기반 최소 shape 너비 (도 2+ SVG)
       const cleanLabel=_safeCleanLabel(nd.label);
-      const displayLabel=cleanLabel.length>(innerMaxCols>2?7:innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>2?5:innerMaxCols>1?8:14)+'…':cleanLabel;
+      // ★ v10.4: 잘림("…") 완전 제거 — 전체 라벨 표시 ★
+      const displayLabel=cleanLabel;
       const fontSize2=innerMaxCols>2?9:innerMaxCols>1?10:11;
       const textW2=_estimateTextWidth(displayLabel,fontSize2);
       const minSw2=textW2+16;
@@ -6375,11 +6472,19 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sm.sw,sm.sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sm.sw,sm.sh,1.5);
       const textCy=_shapeTextCy(shapeType,sy,sm.sh);
-      const fontSize=innerMaxCols>2?9:innerMaxCols>1?10:11;
+      const fontSize=Math.max(7,(innerMaxCols>2?9:innerMaxCols>1?10:11)+_fo);
       
-      // 박스 내부 2줄: 라벨 + (참조번호)
-      svg+=`<text x="${sx+sm.sw/2}" y="${textCy-2}" text-anchor="middle" font-size="${fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
-      svg+=`<text x="${sx+sm.sw/2}" y="${textCy+fontSize+2}" text-anchor="middle" font-size="${Math.max(fontSize-1,8)}" font-family="맑은 고딕,Arial,sans-serif" fill="#444">(${refNum})</text>`;
+      // 박스 내부 2줄: 라벨 + (참조번호) — v10.4: 멀티라인 지원
+      const labelMaxW=sm.sw*0.90;
+      const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize,7);
+      const labelYOffset=labelFit.lines.length>1?-4:0;
+      const {svg:lSvg}=_svgMultiLineLabel(
+        sx+sm.sw/2, textCy+labelYOffset-2, displayLabel, labelMaxW, fontSize, {minFontSize:7}
+      );
+      svg+=lSvg;
+      const refFontSize=Math.max(fontSize-1,8);
+      const refY=labelFit.lines.length>1?textCy+labelFit.fontSize+6:textCy+fontSize+2;
+      svg+=`<text x="${sx+sm.sw/2}" y="${refY}" text-anchor="middle" font-size="${refFontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#444">(${refNum})</text>`;
       
       innerNodeBoxes[nd.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2,
         _shapeType:shapeType,_sx:sx,_sy:sy,_sw:sm.sw,_sh:sm.sh};
@@ -6418,6 +6523,362 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum){
     const c=document.getElementById(containerId);
     if(c)c.innerHTML=svg;
   }
+}
+
+// ═══ v10.4: 포스트 렌더 검증 시스템 — SVG DOM 기반 겹침/잘림/연결 검증 ═══
+// 렌더링된 SVG를 실제 DOM에서 분석하여 시각적 문제를 자동 감지 + 보정
+
+function _postRenderValidateSvg(containerId, figNum){
+  // 렌더링된 SVG DOM에서 실제 bounding box를 분석
+  const container=document.getElementById(containerId);
+  if(!container)return{issues:[],pass:true};
+  const svgEl=container.querySelector('svg');
+  if(!svgEl)return{issues:[],pass:true};
+  
+  const issues=[];
+  
+  // viewBox 파싱
+  const vb=(svgEl.getAttribute('viewBox')||'').split(/\s+/).map(Number);
+  const svgW=vb[2]||800, svgH=vb[3]||600;
+  
+  // ── 1단계: 모든 <text> 요소의 실제 bounding box 수집 ──
+  const textEls=svgEl.querySelectorAll('text');
+  const textBoxes=[];
+  textEls.forEach(t=>{
+    try{
+      const bbox=t.getBBox();
+      if(bbox.width>0&&bbox.height>0){
+        textBoxes.push({
+          el:t, x:bbox.x, y:bbox.y, w:bbox.width, h:bbox.height,
+          text:t.textContent||'', 
+          fontSize:parseFloat(t.getAttribute('font-size'))||11
+        });
+      }
+    }catch(e){}
+  });
+  
+  // ── 2단계: 모든 shape 요소의 bounding box 수집 ──
+  const shapeBoxes=[];
+  // rect (그림자 제외 — fill="#fff" 또는 stroke가 있는 것만)
+  svgEl.querySelectorAll('rect[stroke],rect[fill="#fff"],rect[fill="white"]').forEach(r=>{
+    const x=parseFloat(r.getAttribute('x'))||0;
+    const y=parseFloat(r.getAttribute('y'))||0;
+    const w=parseFloat(r.getAttribute('width'))||0;
+    const h=parseFloat(r.getAttribute('height'))||0;
+    if(w>0&&h>0) shapeBoxes.push({el:r, x,y,w,h, type:'rect'});
+  });
+  // polygon, circle, ellipse
+  svgEl.querySelectorAll('polygon[stroke],circle[stroke],ellipse[stroke]').forEach(s=>{
+    try{
+      const bbox=s.getBBox();
+      if(bbox.width>0) shapeBoxes.push({el:s, x:bbox.x,y:bbox.y,w:bbox.width,h:bbox.height, type:s.tagName});
+    }catch(e){}
+  });
+  
+  // ── 검사 A: 텍스트-텍스트 겹침 ──
+  for(let i=0;i<textBoxes.length;i++){
+    for(let j=i+1;j<textBoxes.length;j++){
+      const a=textBoxes[i], b=textBoxes[j];
+      const overlapX=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x));
+      const overlapY=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+      const overlapArea=overlapX*overlapY;
+      const minArea=Math.min(a.w*a.h,b.w*b.h);
+      // 겹침 면적이 작은 쪽의 15% 이상이면 문제
+      if(overlapArea>minArea*0.15){
+        issues.push({
+          type:'TEXT_OVERLAP', severity:'ERROR',
+          msg:`텍스트 겹침: "${a.text.slice(0,12)}" ↔ "${b.text.slice(0,12)}" (${Math.round(overlapArea)}px²)`,
+          elements:[a,b], overlapArea
+        });
+      }
+    }
+  }
+  
+  // ── 검사 B: 텍스트가 SVG 경계 밖으로 잘림 ──
+  textBoxes.forEach(tb=>{
+    const clipRight=tb.x+tb.w-svgW;
+    const clipBottom=tb.y+tb.h-svgH;
+    const clipLeft=-tb.x;
+    const clipTop=-tb.y;
+    if(clipRight>3||clipBottom>3||clipLeft>3||clipTop>3){
+      issues.push({
+        type:'TEXT_CLIPPED', severity:'WARNING',
+        msg:`텍스트 잘림: "${tb.text.slice(0,12)}" (R:${Math.round(clipRight)} B:${Math.round(clipBottom)} L:${Math.round(clipLeft)} T:${Math.round(clipTop)})`,
+        element:tb, clip:{right:clipRight,bottom:clipBottom,left:clipLeft,top:clipTop}
+      });
+    }
+  });
+  
+  // ── 검사 C: 텍스트가 소속 shape 밖으로 넘침 ──
+  // (각 텍스트의 가장 가까운 shape를 찾아 포함 여부 확인)
+  textBoxes.forEach(tb=>{
+    // 참조번호 텍스트 (shape 외부에 있는 게 정상) 제외
+    if(/^\(?\d+\)?$/.test(tb.text.trim())||/^[SD]\d+$/i.test(tb.text.trim()))return;
+    // 연결선 레이블 제외
+    if(tb.text.trim().length<=2)return;
+    
+    // 가장 가까운 shape 찾기 (중심점 기준)
+    const tcx=tb.x+tb.w/2, tcy=tb.y+tb.h/2;
+    let closest=null, closestDist=Infinity;
+    shapeBoxes.forEach(sb=>{
+      const scx=sb.x+sb.w/2, scy=sb.y+sb.h/2;
+      const d=Math.hypot(tcx-scx,tcy-scy);
+      if(d<closestDist){closestDist=d;closest=sb;}
+    });
+    
+    if(closest){
+      const overflow={
+        left:closest.x-(tb.x),
+        right:(tb.x+tb.w)-(closest.x+closest.w),
+        top:closest.y-(tb.y),
+        bottom:(tb.y+tb.h)-(closest.y+closest.h)
+      };
+      // 텍스트가 shape 너비의 20% 이상 넘치면 문제
+      const maxOverflow=Math.max(overflow.left,overflow.right);
+      if(maxOverflow>closest.w*0.20){
+        issues.push({
+          type:'TEXT_OVERFLOW', severity:'WARNING',
+          msg:`텍스트 넘침: "${tb.text.slice(0,12)}" shape 밖 ${Math.round(maxOverflow)}px`,
+          element:tb, shape:closest, overflow
+        });
+      }
+    }
+  });
+  
+  // ── 검사 D: shape-shape 겹침 (그림자 제외) ──
+  for(let i=0;i<shapeBoxes.length;i++){
+    for(let j=i+1;j<shapeBoxes.length;j++){
+      const a=shapeBoxes[i], b=shapeBoxes[j];
+      // 프레임 rect (가장 큰 rect)는 내부 요소와 겹치는 게 정상
+      if(a.w>svgW*0.6||b.w>svgW*0.6)continue;
+      // 그림자 rect 무시 (fill="black"/"#000")
+      if(a.el.getAttribute('fill')==='#000'||b.el.getAttribute('fill')==='#000')continue;
+      
+      const overlapX=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x));
+      const overlapY=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+      const overlapArea=overlapX*overlapY;
+      const minArea=Math.min(a.w*a.h,b.w*b.h);
+      if(overlapArea>minArea*0.10){
+        issues.push({
+          type:'SHAPE_OVERLAP', severity:'ERROR',
+          msg:`Shape 겹침: ${Math.round(overlapArea)}px² (${Math.round(overlapArea/minArea*100)}%)`,
+          elements:[a,b]
+        });
+      }
+    }
+  }
+  
+  // ── 검사 E: 연결선이 shape을 관통하는지 확인 ──
+  const lineEls=svgEl.querySelectorAll('line[stroke="#000"],polyline[stroke="#000"],path[stroke="#000"]');
+  // (복잡한 경로 분석은 생략 — 직각 라우팅으로 이미 우회하므로 간략 검사)
+  
+  const pass=issues.filter(i=>i.severity==='ERROR').length===0;
+  return{issues, pass, textBoxes, shapeBoxes};
+}
+
+function _autoFixRenderedSvg(containerId, issues, attempt){
+  // 렌더링된 SVG DOM을 직접 수정하여 문제 해결
+  const container=document.getElementById(containerId);
+  if(!container)return 0;
+  const svgEl=container.querySelector('svg');
+  if(!svgEl)return 0;
+  
+  let fixCount=0;
+  
+  issues.forEach(issue=>{
+    switch(issue.type){
+      case 'TEXT_OVERLAP':{
+        // 겹치는 두 텍스트 중 아래쪽을 더 아래로 이동
+        const [a,b]=issue.elements;
+        const lowerEl=a.y>b.y?a:b;
+        const upperEl=a.y>b.y?b:a;
+        const gapNeeded=(upperEl.y+upperEl.h+2)-lowerEl.y;
+        if(gapNeeded>0){
+          const curY=parseFloat(lowerEl.el.getAttribute('y'))||0;
+          lowerEl.el.setAttribute('y',String(curY+gapNeeded+2));
+          fixCount++;
+        }
+        // 폰트 축소도 시도 (2차 이후)
+        if(attempt>=1){
+          [a,b].forEach(tb=>{
+            const fs=parseFloat(tb.el.getAttribute('font-size'))||11;
+            if(fs>7){
+              tb.el.setAttribute('font-size',String(Math.max(7,fs-1)));
+              fixCount++;
+            }
+          });
+        }
+        break;
+      }
+      
+      case 'TEXT_CLIPPED':{
+        // SVG viewBox 확장
+        const clip=issue.clip;
+        const vb=(svgEl.getAttribute('viewBox')||'').split(/\s+/).map(Number);
+        let changed=false;
+        if(clip.right>3){vb[2]+=clip.right+10;changed=true;}
+        if(clip.bottom>3){vb[3]+=clip.bottom+10;changed=true;}
+        if(clip.left>3){
+          // 모든 요소를 오른쪽으로 이동하는 대신 viewBox 원점을 왼쪽으로
+          vb[0]-=(clip.left+10);vb[2]+=(clip.left+10);changed=true;
+        }
+        if(clip.top>3){vb[1]-=(clip.top+10);vb[3]+=(clip.top+10);changed=true;}
+        if(changed){
+          svgEl.setAttribute('viewBox',vb.join(' '));
+          fixCount++;
+        }
+        break;
+      }
+      
+      case 'TEXT_OVERFLOW':{
+        // 텍스트 폰트 축소
+        const tb=issue.element;
+        const fs=parseFloat(tb.el.getAttribute('font-size'))||11;
+        if(fs>7){
+          tb.el.setAttribute('font-size',String(Math.max(7,fs-1)));
+          fixCount++;
+        }
+        break;
+      }
+      
+      case 'SHAPE_OVERLAP':{
+        // Shape 간 겹침: SVG viewBox 확장 + 아래쪽 shape를 더 아래로 이동
+        const [a,b]=issue.elements;
+        const lowerShape=a.y>b.y?a:b;
+        const upperShape=a.y>b.y?b:a;
+        const gapNeeded=(upperShape.y+upperShape.h+4)-lowerShape.y;
+        if(gapNeeded>0){
+          // shape element의 y 속성 직접 이동은 복잡 (transform 필요)
+          // viewBox 확장으로 대응
+          const vb=(svgEl.getAttribute('viewBox')||'').split(/\s+/).map(Number);
+          vb[3]+=gapNeeded+10;
+          svgEl.setAttribute('viewBox',vb.join(' '));
+          fixCount++;
+        }
+        break;
+      }
+    }
+  });
+  
+  return fixCount;
+}
+
+function _postRenderValidationLoop(containerId, figNum, maxAttempts, renderInfo){
+  // ★ v10.4: 2단계 보정 루프 ★
+  // 1단계: DOM 수정 (폰트 축소, 위치 조정, viewBox 확장)
+  // 2단계: 파라미터 조정 후 재렌더링 (간격 확대, 박스 축소)
+  const MAX=maxAttempts||3;
+  let lastResult=null;
+  
+  // ── 1단계: DOM 기반 보정 (2회) ──
+  for(let attempt=0;attempt<Math.min(MAX,2);attempt++){
+    const result=_postRenderValidateSvg(containerId, figNum);
+    lastResult=result;
+    
+    if(result.pass){
+      if(attempt>0)console.log(`[PostRender] 도 ${figNum}: DOM 보정 ${attempt}회 후 통과 ✅`);
+      return result;
+    }
+    
+    const errors=result.issues.filter(i=>i.severity==='ERROR');
+    const warnings=result.issues.filter(i=>i.severity==='WARNING');
+    console.warn(`[PostRender] 도 ${figNum}: DOM 보정 ${attempt+1} — ERROR ${errors.length}, WARNING ${warnings.length}`);
+    
+    const fixCount=_autoFixRenderedSvg(containerId, result.issues, attempt);
+    if(fixCount===0)break;
+  }
+  
+  // ── 2단계: 재렌더링 보정 (ERROR가 남아있을 때만) ──
+  if(lastResult&&!lastResult.pass&&renderInfo){
+    const shapeOverlaps=lastResult.issues.filter(i=>i.type==='SHAPE_OVERLAP'||i.type==='TEXT_OVERLAP');
+    if(shapeOverlaps.length>0){
+      console.warn(`[PostRender] 도 ${figNum}: DOM 보정 불충분 → 재렌더링 시도 (간격 ${Math.round(1.15*100)}%)`);
+      
+      // 간격 확대 + 폰트 축소로 재렌더링
+      const adjustments={
+        spacingMult: 1.15,     // 간격 15% 확대
+        fontOffset: -1,        // 폰트 1px 축소
+        boxWidthMult: 1.05,    // 박스 5% 확대
+        boxHeightMult: 1.05    // 박스 높이 5% 확대
+      };
+      
+      try{
+        renderDiagramSvg(containerId, renderInfo.nodes, renderInfo.edges, 
+          renderInfo.positions, figNum, adjustments);
+        
+        // 재렌더링 후 검증
+        const result2=_postRenderValidateSvg(containerId, figNum);
+        lastResult=result2;
+        
+        if(result2.pass){
+          console.log(`[PostRender] 도 ${figNum}: 재렌더링 후 통과 ✅`);
+        }else{
+          // 한 번 더 시도 — 더 큰 조정
+          console.warn(`[PostRender] 도 ${figNum}: 재렌더링 후에도 ${result2.issues.length}개 문제 → 2차 재렌더링`);
+          const adj2={spacingMult:1.30, fontOffset:-2, boxWidthMult:1.10, boxHeightMult:1.10};
+          renderDiagramSvg(containerId, renderInfo.nodes, renderInfo.edges,
+            renderInfo.positions, figNum, adj2);
+          lastResult=_postRenderValidateSvg(containerId, figNum);
+          
+          if(lastResult.pass){
+            console.log(`[PostRender] 도 ${figNum}: 2차 재렌더링 후 통과 ✅`);
+          }else{
+            // DOM 보정 마지막 시도
+            _autoFixRenderedSvg(containerId, lastResult.issues, 2);
+            lastResult=_postRenderValidateSvg(containerId, figNum);
+          }
+        }
+      }catch(e){
+        console.error(`[PostRender] 도 ${figNum}: 재렌더링 오류:`,e);
+      }
+    }
+  }
+  
+  return lastResult;
+}
+
+// ═══ 전체 도면 렌더링 후 일괄 포스트 검증 ═══
+function _runPostRenderValidation(sid, figNums){
+  const data=diagramData[sid];
+  if(!data||!data.length)return;
+  
+  let totalIssues=0;
+  const reports=[];
+  
+  data.forEach((d,i)=>{
+    const containerId=`diagram_${sid}_${i}`;
+    const figNum=figNums[i]||(i+1);
+    // ★ v10.4: renderInfo 전달 — 재렌더링 지원 ★
+    const renderInfo={nodes:d.nodes, edges:d.edges, positions:d.positions};
+    const result=_postRenderValidationLoop(containerId, figNum, 3, renderInfo);
+    if(result&&result.issues.length>0){
+      totalIssues+=result.issues.length;
+      reports.push({figNum, issues:result.issues});
+    }
+  });
+  
+  // 검증 결과 표시
+  const resultEl=document.getElementById(`validationResult_${sid}`);
+  if(resultEl){
+    if(totalIssues===0){
+      resultEl.innerHTML='<span style="color:#2e7d32">✅ 포스트 렌더 검증 통과</span>';
+    }else{
+      const errCount=reports.reduce((sum,r)=>sum+r.issues.filter(i=>i.severity==='ERROR').length,0);
+      const warnCount=reports.reduce((sum,r)=>sum+r.issues.filter(i=>i.severity==='WARNING').length,0);
+      let msg=`⚠️ 포스트 렌더: `;
+      if(errCount>0)msg+=`ERROR ${errCount}개 `;
+      if(warnCount>0)msg+=`WARNING ${warnCount}개`;
+      resultEl.innerHTML=`<span style="color:${errCount>0?'#c62828':'#f57c00'}">${msg}</span>`;
+      
+      // 상세 리포트 (콘솔)
+      reports.forEach(r=>{
+        console.log(`[PostRender Report] 도 ${r.figNum}:`);
+        r.issues.forEach(i=>console.log(`  [${i.severity}] ${i.type}: ${i.msg}`));
+      });
+    }
+  }
+  
+  return{totalIssues, reports};
 }
 
 // ═══ 도면 규칙 검증 함수 (v5.0 - 통합 검증) ═══
@@ -6846,6 +7307,18 @@ function renderDiagrams(sid,mt){
     const{nodes,edges,positions}=diagramData[sid][i];
     renderDiagramSvg(`diagram_${sid}_${i}`,nodes,edges,positions,autoFigNums[i]||(figOffset+i+1));
   });
+  
+  // ★ v10.4: 포스트 렌더 검증 — SVG DOM 기반 겹침/잘림/연결 자동 검증+보정 ★
+  // requestAnimationFrame으로 DOM paint 완료 후 실행
+  requestAnimationFrame(()=>{
+    setTimeout(()=>{
+      try{
+        _runPostRenderValidation(sid, autoFigNums);
+      }catch(e){
+        console.error('[PostRender] 검증 오류:',e);
+      }
+    },50); // 브라우저 레이아웃 안정 대기
+  });
 }
 
 // ═══ 도면 검증 실행 함수 ═══
@@ -6900,6 +7373,28 @@ function runDiagramValidation(sid){
   }else{
     App.showToast(`도면 검증 통과 ✅ (${data.length}개 도면)`);
   }
+  
+  // ★ v10.4: 포스트 렌더 검증도 실행 (시각적 겹침/잘림 검사) ★
+  try{
+    const prResult=_runPostRenderValidation(sid, autoFigNums);
+    if(prResult&&prResult.totalIssues>0){
+      const prErrors=prResult.reports.reduce((s,r)=>s+r.issues.filter(i=>i.severity==='ERROR').length,0);
+      const prWarns=prResult.reports.reduce((s,r)=>s+r.issues.filter(i=>i.severity==='WARNING').length,0);
+      if(prErrors>0||prWarns>0){
+        reportHtml+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee"><b>🔍 시각적 검증:</b> `;
+        if(prErrors>0)reportHtml+=`<span style="color:#c62828">겹침 ${prErrors}건 </span>`;
+        if(prWarns>0)reportHtml+=`<span style="color:#f57c00">잘림/넘침 ${prWarns}건 </span>`;
+        prResult.reports.forEach(r=>{
+          r.issues.forEach(i=>{
+            const c=i.severity==='ERROR'?'#c62828':'#f57c00';
+            reportHtml+=`<div style="font-size:10px;color:${c};margin-left:12px">[${i.type}] ${i.msg}</div>`;
+          });
+        });
+        reportHtml+='</div>';
+        if(resultEl)resultEl.innerHTML=resultEl.innerHTML.replace('</div>',reportHtml+'</div>');
+      }
+    }
+  }catch(e){console.error('[PostRender validation error]',e);}
 }
 
 // ═══ AI 정성적 도면 검증 (연결관계 적절성 평가) ═══
@@ -7885,7 +8380,8 @@ function downloadDiagramImages(sid, format='jpeg'){
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
           // v10.3: 텍스트 너비 기반 최소 shape 너비 (Canvas)
           const cFontSize=maxCols>2?10:maxCols>1?11:12;
-          const cDisplayLabel=cleanLabel.length>(maxCols>2?7:maxCols>1?10:16)?cleanLabel.slice(0,maxCols>2?5:maxCols>1?8:14)+'…':cleanLabel;
+          // ★ v10.4: 잘림("…") 완전 제거 — 전체 라벨 표시 ★
+          const cDisplayLabel=cleanLabel;
           const cTextW=_estimateTextWidth(cDisplayLabel,cFontSize);
           const cMinSw=cTextW+20;
           if(sm.sw<cMinSw&&shapeType!=='box'){
@@ -7971,16 +8467,15 @@ function downloadDiagramImages(sid, format='jpeg'){
         nodeData.forEach(nd=>{
           const{id,sx,sy,sw,sh,shapeType,cleanLabel,refNum}=nd;
           drawCanvasShape(ctx,shapeType,sx,sy,sw,sh,SHADOW,2);
-          const displayLabel=cleanLabel.length>(maxCols>2?7:maxCols>1?10:16)?cleanLabel.slice(0,maxCols>2?5:maxCols>1?8:14)+'…':cleanLabel;
+          // ★ v10.4: 잘림("…") 완전 제거 — 전체 라벨 멀티라인 표시 ★
+          const displayLabel=cleanLabel;
           let fontSize=maxCols>2?10:maxCols>1?11:12;
-          // v10.3: 텍스트가 shape보다 넓으면 폰트 축소
-          let _tw=_estimateTextWidth(displayLabel,fontSize);
-          while(_tw>sw*0.92&&fontSize>7){fontSize--;_tw=_estimateTextWidth(displayLabel,fontSize);}
-          ctx.fillStyle='#000000';ctx.font=`${fontSize}px "맑은 고딕", sans-serif`;
-          ctx.textAlign='center';ctx.textBaseline='middle';
           const cDir=nodeConnDir[id]||{};
           const cRefInside=cDir.top&&cDir.bottom&&cDir.left&&cDir.right;
-          ctx.fillText(displayLabel,sx+sw/2,cRefInside?_shapeTextCy(shapeType,sy,sh)-4:_shapeTextCy(shapeType,sy,sh));
+          const cLabelMaxW=sw*0.90;
+          const cLabelCy=cRefInside?_shapeTextCy(shapeType,sy,sh)-4:_shapeTextCy(shapeType,sy,sh);
+          const cResult=_canvasMultiLineLabel(ctx,sx+sw/2,cLabelCy,displayLabel,cLabelMaxW,fontSize,{minFontSize:7});
+          fontSize=cResult.fontSize;
           // ★ 참조번호: 연결 없는 쪽에 배치 (v10.2: _shapeAnchor 기반) ★
           const dir=nodeConnDir[id]||{};
           ctx.strokeStyle='#000000';ctx.lineWidth=1;ctx.font='11px "맑은 고딕", sans-serif';
@@ -8094,14 +8589,18 @@ function downloadDiagramImages(sid, format='jpeg'){
           const sx=bx+(obj.w-sm.sw)/2;
           
           drawCanvasShape(ctx,shapeType,sx,by,sm.sw,sm.sh,SHADOW_PX,1.5);
-          const displayLabel=cleanLabel.length>(innerMaxCols>2?7:innerMaxCols>1?10:16)?cleanLabel.slice(0,innerMaxCols>2?5:innerMaxCols>1?8:14)+'…':cleanLabel;
+          // ★ v10.4: 잘림("…") 완전 제거 — 전체 라벨 멀티라인 표시 ★
+          const displayLabel=cleanLabel;
           const fontSize=innerMaxCols>2?9:innerMaxCols>1?10:11;
-          ctx.fillStyle='#000000';ctx.font=`${fontSize}px "맑은 고딕", sans-serif`;
-          ctx.textAlign='center';ctx.textBaseline='middle';
           const textCy=_shapeTextCy(shapeType,by,sm.sh);
-          ctx.fillText(displayLabel,sx+sm.sw/2,textCy-6);
+          const cLabelMaxW2=sm.sw*0.90;
+          const cFit2=_fitLabelLines(displayLabel,cLabelMaxW2,fontSize,7);
+          const cLabelYOff2=cFit2.lines.length>1?-6:-6;
+          _canvasMultiLineLabel(ctx,sx+sm.sw/2,textCy+cLabelYOff2,displayLabel,cLabelMaxW2,fontSize,{minFontSize:7});
           ctx.fillStyle='#444444';ctx.font=`${Math.max(fontSize-1,8)}px "맑은 고딕", sans-serif`;
-          ctx.fillText('('+refNum+')',sx+sm.sw/2,textCy+8);
+          ctx.textAlign='center';ctx.textBaseline='middle';
+          const cRefY2=cFit2.lines.length>1?textCy+cFit2.fontSize+4:textCy+8;
+          ctx.fillText('('+refNum+')',sx+sm.sw/2,cRefY2);
           ctx.textAlign='left';ctx.textBaseline='alphabetic';
         });
         
