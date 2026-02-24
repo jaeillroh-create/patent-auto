@@ -5441,7 +5441,7 @@ function computeDeviceLayout2D(nodes,edges){
   });
   const uniqueEdges=[...edgeSet].map(k=>{const[f,t]=k.split('|');return{from:f,to:t};});
   
-  // No edges → grid layout
+  // No edges → simple grid
   if(edges.length===0){
     const grid={};const rows=[];
     for(let i=0;i<n;i+=MAX_COLS){rows.push(nodes.slice(i,Math.min(i+MAX_COLS,n)).map(nd=>nd.id));}
@@ -5449,127 +5449,82 @@ function computeDeviceLayout2D(nodes,edges){
     return{grid,maxCols:Math.min(n,MAX_COLS),numRows:rows.length,uniqueEdges:[],layers:rows};
   }
   
-  // Find hub (highest degree)
-  let hubId=nodes[0].id, maxDeg=0;
-  nodes.forEach(nd=>{const deg=(adj[nd.id]||new Set()).size;if(deg>maxDeg){maxDeg=deg;hubId=nd.id;}});
+  // ═══ 1단계: 최장 경로(체인) 탐색 — DFS ═══
+  // 그래프의 가장 긴 경로를 찾아 주축으로 사용
+  let longestPath=[];
+  const allIds=nodes.map(nd=>nd.id);
   
-  // Ensure all nodes reachable
-  const visited=new Set([hubId]);
-  let frontier=[hubId];
-  while(frontier.length){
-    const next=[];
-    frontier.forEach(id=>{(adj[id]||new Set()).forEach(nid=>{if(!visited.has(nid)){visited.add(nid);next.push(nid);}});});
-    frontier=next;
-  }
-  nodes.forEach(nd=>{visited.add(nd.id);});
+  // 모든 리프 노드(degree 1)에서 DFS
+  const leaves=allIds.filter(id=>(adj[id]||new Set()).size<=1);
+  const startNodes=leaves.length>0?leaves:allIds;
   
-  const hubNbrs=[...(adj[hubId]||new Set())];
-  const others=nodes.filter(nd=>nd.id!==hubId&&!hubNbrs.includes(nd.id)).map(nd=>nd.id);
-  
-  // ★ Hub-Spoke 배치: 허브와 같은 행 또는 같은 열에 이웃 배치 → 직선 연결 ★
-  // 같은 행 = 수평 직선, 같은 열 = 수직 직선
-  // 허브 위치: 중간 행 중앙 열 (row=R, col=1)
-  // 직선 위치 4곳: 위(R-1,1), 왼쪽(R,0), 오른쪽(R,2), 아래(R+1,1)
-  let layers=[];
-  const nN=hubNbrs.length;
-  
-  if(nN===0){
-    layers=[[hubId]];
-  }else if(nN===1){
-    layers=[[hubId,hubNbrs[0]]];
-  }else if(nN===2){
-    // 2이웃: 허브 양옆에 배치 → 모두 수평 직선
-    layers=[[hubNbrs[0],hubId,hubNbrs[1]]];
-  }else if(nN===3){
-    // 3이웃: 연결된 쌍은 같은 열(수직 정렬)에 배치 → 꺾임 최소화
-    // 연결된 쌍 찾기
-    let connPair=null;
-    for(let i=0;i<3;i++){
-      for(let j=i+1;j<3;j++){
-        if(adj[hubNbrs[i]].has(hubNbrs[j])){connPair=[hubNbrs[i],hubNbrs[j]];break;}
-      }
-      if(connPair)break;
-    }
-    if(connPair){
-      // 연결된 쌍(pA, pB): pA는 허브와 같은 행, pB는 아래 같은 열 → 수직 직선
-      const[pA,pB]=connPair;
-      const other=hubNbrs.find(n=>n!==pA&&n!==pB);
-      // Row 0: [other, hub, pA] (3cols)
-      // Row 1: [pB] at col 2 (layerSize=3으로 정렬)
-      layers=[[other,hubId,pA],[pB]];
-      // pB를 pA와 같은 열에 정렬 (layerSize 오버라이드)
-      layers._alignCol={[pB]:{col:2,layerSize:3}};
-    }else{
-      // 연결된 쌍 없음: 고립 노드를 위에, 나머지 허브 양옆
-      let topChild=null,sideA=null,sideB=null;
-      for(let i=0;i<3;i++){
-        const ci=hubNbrs[i];
-        const otherTwo=hubNbrs.filter((_,j)=>j!==i);
-        if(!adj[ci].has(otherTwo[0])&&!adj[ci].has(otherTwo[1])){
-          topChild=ci;sideA=otherTwo[0];sideB=otherTwo[1];break;
+  for(const startId of startNodes){
+    const stack=[[startId,[startId]]];
+    const visited=new Set();
+    while(stack.length>0){
+      const[cur,path]=stack.pop();
+      if(path.length>longestPath.length)longestPath=[...path];
+      visited.add(cur);
+      (adj[cur]||new Set()).forEach(next=>{
+        if(!path.includes(next)){
+          stack.push([next,[...path,next]]);
         }
-      }
-      if(!topChild){topChild=hubNbrs[0];sideA=hubNbrs[1];sideB=hubNbrs[2];}
-      layers=[[topChild],[sideA,hubId,sideB]];
+      });
     }
-  }else if(nN===4){
-    // 4이웃: 완전 십자형 — 위1, 양옆2, 아래1 → 4개 모두 직선!
-    let top=null,left=null,right=null,bottom=null;
-    // 서로 연결된 쌍을 같은 행에
-    const pairs=[];
-    for(let i=0;i<4;i++)for(let j=i+1;j<4;j++){if(adj[hubNbrs[i]].has(hubNbrs[j]))pairs.push([i,j]);}
-    if(pairs.length>0){
-      const[pi,pj]=pairs[0];
-      left=hubNbrs[pi];right=hubNbrs[pj];
-      const rest=hubNbrs.filter((_,k)=>k!==pi&&k!==pj);
-      top=rest[0];bottom=rest[1];
-    }else{
-      top=hubNbrs[0];left=hubNbrs[1];right=hubNbrs[2];bottom=hubNbrs[3];
-    }
-    layers=[[top],[left,hubId,right],[bottom]];
-  }else if(nN===5){
-    // 5이웃: 위1, 양옆2, 아래2
-    layers=[[hubNbrs[0]],[hubNbrs[1],hubId,hubNbrs[2]],[hubNbrs[3],hubNbrs[4]]];
-  }else{
-    // 6+이웃: 위2, 허브+양옆, 나머지 아래
-    layers=[[hubNbrs[0],hubNbrs[1]],[hubNbrs[2],hubId,hubNbrs[3]]];
-    const rest=hubNbrs.slice(4);
-    for(let i=0;i<rest.length;i+=MAX_COLS){layers.push(rest.slice(i,Math.min(i+MAX_COLS,rest.length)));}
   }
   
-  // ★ v10.5: 비이웃 노드를 연결된 기존 노드의 같은 열에 배치 → 수직 직선 보장 ★
-  const alignCol=layers._alignCol||{};
-  // BFS 순서로 others 정렬 (이미 배치된 노드와 연결된 것 우선)
-  const placed=new Set();
-  layers.forEach(row=>row.forEach(id=>placed.add(id)));
-  const othersQueue=[...others];
-  const maxIter=othersQueue.length*2;
-  let iter=0;
-  while(othersQueue.length>0&&iter<maxIter){
-    iter++;
-    const id=othersQueue.shift();
-    const neighbors=[...(adj[id]||new Set())];
+  // ═══ 2단계: 체인 기반 행 배치 — 스네이크 순서 ═══
+  // 최장 경로를 MAX_COLS씩 잘라 행으로 배치
+  // 짝수 행: 왼→오, 홀수 행: 오→왼 (스네이크) → 행 경계에서 같은 열 보장
+  let layers=[];
+  for(let i=0;i<longestPath.length;i+=MAX_COLS){
+    const chunk=longestPath.slice(i,Math.min(i+MAX_COLS,longestPath.length));
+    const rowIdx=Math.floor(i/MAX_COLS);
+    if(rowIdx%2===1)chunk.reverse(); // 스네이크: 홀수 행 역순
+    layers.push(chunk);
+  }
+  
+  // 나머지 노드 (체인에 포함되지 않은 것) 배치
+  const placed=new Set(longestPath);
+  const remaining=allIds.filter(id=>!placed.has(id));
+  
+  // 나머지를 연결된 기존 노드 옆에 배치
+  const alignCol={};
+  const remQueue=[...remaining];
+  let remIter=0;
+  while(remQueue.length>0&&remIter<remaining.length*3){
+    remIter++;
+    const id=remQueue.shift();
+    const nbrs=[...(adj[id]||new Set())];
     let bestPlaced=false;
     
-    // 연결된 기존 노드 찾기 → 같은 열 아래에 배치
-    for(const nbr of neighbors){
+    // 연결된 기존 노드의 같은 행(빈자리) 또는 같은 열(아래 행)에 배치
+    for(const nbr of nbrs){
       if(!placed.has(nbr))continue;
-      // nbr의 열 위치 찾기
-      let nbrCol=-1, nbrRow=-1, nbrLayerSize=1;
+      
+      // nbr의 위치 찾기
+      let nbrRow=-1, nbrCol=-1;
       for(let ri=0;ri<layers.length;ri++){
         const ci=layers[ri].indexOf(nbr);
-        if(ci>=0){nbrRow=ri;nbrCol=ci;nbrLayerSize=layers[ri].length;break;}
+        if(ci>=0){nbrRow=ri;nbrCol=ci;break;}
       }
-      // alignCol에 nbr가 있으면 그 열 사용
-      if(alignCol[nbr])nbrCol=alignCol[nbr].col;
-      if(nbrCol<0)continue;
+      if(alignCol[nbr]){nbrCol=alignCol[nbr].col;}
+      if(nbrRow<0)continue;
       
-      // nbr 아래 행에 배치 (새 행 생성 가능)
+      // 옵션 1: 같은 행에 빈 자리 → 수평 직선
+      if(layers[nbrRow].length<MAX_COLS){
+        layers[nbrRow].push(id);
+        placed.add(id);
+        bestPlaced=true;
+        break;
+      }
+      
+      // 옵션 2: 아래 행에 배치 → 같은 열 수직 직선
       const targetRow=nbrRow+1;
       while(layers.length<=targetRow)layers.push([]);
       if(layers[targetRow].length<MAX_COLS){
         layers[targetRow].push(id);
-        alignCol[id]={col:nbrCol,layerSize:Math.max(nbrLayerSize,layers[targetRow].length)};
+        alignCol[id]={col:nbrCol, layerSize:Math.max(layers[nbrRow].length,layers[targetRow].length)};
         placed.add(id);
         bestPlaced=true;
         break;
@@ -5577,28 +5532,83 @@ function computeDeviceLayout2D(nodes,edges){
     }
     
     if(!bestPlaced){
-      // 연결된 노드가 아직 미배치 → 큐 뒤로
-      if(neighbors.some(n=>others.includes(n)&&!placed.has(n))&&iter<maxIter-others.length){
-        othersQueue.push(id);
-        continue;
+      if(nbrs.some(nb=>remaining.includes(nb)&&!placed.has(nb))&&remIter<remaining.length*2){
+        remQueue.push(id); continue;
       }
-      // 폴백: 빈 자리에 배치
+      // 폴백: 아무 빈 자리
       let added=false;
       for(let li=0;li<layers.length;li++){if(layers[li].length<MAX_COLS){layers[li].push(id);placed.add(id);added=true;break;}}
       if(!added){layers.push([id]);placed.add(id);}
     }
   }
-  layers._alignCol=alignCol;
   
-  // Grid 생성 (열 정렬 오버라이드 지원)
+  // ═══ 3단계: 레이아웃 검증 + 꺾임 최소화 ═══
+  
+  // 3a. 빈 행 제거
+  layers=layers.filter(r=>r.length>0);
+  
+  // 3b. 꺾임 수 계산 함수
+  function countBends(lyrs,ac){
+    let bends=0;
+    uniqueEdges.forEach(e=>{
+      let fr=-1,fc=-1,tr=-1,tc=-1;
+      for(let ri=0;ri<lyrs.length;ri++){
+        let ci=lyrs[ri].indexOf(e.from);
+        if(ci>=0){fr=ri;fc=ac[e.from]?ac[e.from].col:ci;}
+        ci=lyrs[ri].indexOf(e.to);
+        if(ci>=0){tr=ri;tc=ac[e.to]?ac[e.to].col:ci;}
+      }
+      if(fr>=0&&tr>=0&&fr!==tr&&fc!==tc)bends++;
+    });
+    return bends;
+  }
+  
+  // 3c. 행 내 순서 최적화 — 각 행 내에서 순열 탐색 (최대 6가지)
+  for(let ri=0;ri<layers.length;ri++){
+    if(layers[ri].length<=1)continue;
+    const row=layers[ri];
+    const perms=row.length<=2?[row,[row[1],row[0]]]:
+      row.length===3?[[row[0],row[1],row[2]],[row[0],row[2],row[1]],[row[1],row[0],row[2]],[row[1],row[2],row[0]],[row[2],row[0],row[1]],[row[2],row[1],row[0]]]:
+      [row]; // 4+ = skip
+    
+    let bestPerm=row, bestBends=countBends(layers,alignCol);
+    for(const perm of perms){
+      layers[ri]=perm;
+      // alignCol 임시 재계산
+      const tempAC={...alignCol};
+      const b=countBends(layers,tempAC);
+      if(b<bestBends){bestBends=b;bestPerm=[...perm];}
+    }
+    layers[ri]=bestPerm;
+  }
+  
+  // 3d. 수직 연결 열 정렬 재계산
+  Object.keys(alignCol).forEach(k=>delete alignCol[k]);
+  for(let ri=0;ri<layers.length-1;ri++){
+    const curRow=layers[ri];
+    const nextRow=layers[ri+1];
+    nextRow.forEach((nid,ni)=>{
+      const nbrs=[...(adj[nid]||new Set())];
+      for(const nbr of nbrs){
+        const nbrCI=curRow.indexOf(nbr);
+        if(nbrCI>=0){
+          alignCol[nid]={col:nbrCI, layerSize:Math.max(curRow.length,nextRow.length)};
+          break;
+        }
+      }
+    });
+  }
+  
+  console.log(`[Layout] ${n}nodes → ${layers.length}rows, chain=${longestPath.length}, bends=${countBends(layers,alignCol)}`);
+  
+  // Grid 생성
   const grid={};let maxCols=1;
-  const gridAlignCol=layers._alignCol||{};
   layers.forEach((layer,rowIdx)=>{
     maxCols=Math.max(maxCols,layer.length);
     layer.forEach((id,colIdx)=>{
-      if(gridAlignCol[id]){
-        grid[id]={row:rowIdx,col:gridAlignCol[id].col,layerSize:gridAlignCol[id].layerSize};
-        maxCols=Math.max(maxCols,gridAlignCol[id].layerSize);
+      if(alignCol[id]){
+        grid[id]={row:rowIdx,col:alignCol[id].col,layerSize:alignCol[id].layerSize};
+        maxCols=Math.max(maxCols,alignCol[id].layerSize);
       }else{
         grid[id]={row:rowIdx,col:colIdx,layerSize:layer.length};
       }
