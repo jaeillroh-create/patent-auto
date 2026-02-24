@@ -6815,29 +6815,6 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
         _shapeType:shapeType,_sx:sx,_sy:sy,_sw:sm.sw,_sh:sm.sh};
     });
     
-    // ★ v10.5: 같은 행/열 nodeBox cy/cx 정렬 (Fig 2+) — 직선 연결 보장 ★
-    const fig2RowCy={};
-    const fig2ColCx={};
-    displayNodes.forEach(nd=>{
-      const gp=innerGrid[nd.id];
-      const box=innerNodeBoxes[nd.id];
-      if(!gp||!box)return;
-      if(!fig2RowCy[gp.row])fig2RowCy[gp.row]=[];
-      fig2RowCy[gp.row].push({id:nd.id, cy:box.cy});
-      if(!fig2ColCx[gp.col])fig2ColCx[gp.col]=[];
-      fig2ColCx[gp.col].push({id:nd.id, cx:box.cx});
-    });
-    Object.values(fig2RowCy).forEach(items=>{
-      if(items.length<=1)return;
-      const avg=items.reduce((s,i)=>s+i.cy,0)/items.length;
-      items.forEach(i=>{if(innerNodeBoxes[i.id])innerNodeBoxes[i.id].cy=avg;});
-    });
-    Object.values(fig2ColCx).forEach(items=>{
-      if(items.length<=1)return;
-      const avg=items.reduce((s,i)=>s+i.cx,0)/items.length;
-      items.forEach(i=>{if(innerNodeBoxes[i.id])innerNodeBoxes[i.id].cx=avg;});
-    });
-    
     // ★ v10.4: L2 서브 프레임 렌더링 — L2 부모의 L3 자식들을 시각적으로 그룹화 ★
     Object.entries(l2SubFrames).forEach(([l2Ref,info])=>{
       if(!info.node||info.children.length===0)return;
@@ -6877,40 +6854,82 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     svg+=`<line x1="${frameX+frameW}" y1="${frameLeaderY}" x2="${frameLeaderEndX}" y2="${frameLeaderY}" stroke="#000" stroke-width="1"/>`;
     svg+=`<text x="${frameLeaderEndX+8}" y="${frameLeaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
     
-    // 4. 직각 라우팅 edge 기반 연결선 — ★ 같은 행/열은 직선 강제 ★
+    // 4. ★★ v10.5: 실제 앵커 기반 연결선 + 충돌 검사 (Fig 2+) ★★
     const innerEdgesToDraw2=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
-    // 행/열 센터 맵 빌드
-    const fig2RowCenter={}, fig2ColCenter={};
-    Object.entries(fig2RowCy).forEach(([r,items])=>{fig2RowCenter[r]=items.reduce((s,i)=>s+i.cy,0)/items.length;});
-    Object.entries(fig2ColCx).forEach(([c,items])=>{fig2ColCenter[c]=items.reduce((s,i)=>s+i.cx,0)/items.length;});
-    const fig2NodeRC={};
-    displayNodes.forEach(nd=>{const gp=innerGrid[nd.id];if(gp)fig2NodeRC[nd.id]={row:gp.row,col:gp.col};});
     
     innerEdgesToDraw2.forEach(e=>{
       const fb=innerNodeBoxes[e.from],tb=innerNodeBoxes[e.to];
       if(!fb||!tb)return;
-      const frc=fig2NodeRC[e.from], trc=fig2NodeRC[e.to];
-      const sameRow=frc&&trc&&frc.row===trc.row;
-      const sameCol=frc&&trc&&frc.col!=null&&trc.col!=null&&frc.col===trc.col;
+      
+      const dx=tb.cx-fb.cx, dy=tb.cy-fb.cy;
+      const isH=Math.abs(dx)>=Math.abs(dy);
       
       let route;
-      if(sameRow){
-        const cy=fig2RowCenter[frc.row]||fb.cy;
-        const goR=fb.cx<tb.cx;
-        const fa=_shapeAnchor(fb._shapeType||'box',fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goR?'right':'left');
-        const ta=_shapeAnchor(tb._shapeType||'box',tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goR?'left':'right');
-        route=[{x:fa.px,y:cy},{x:ta.px,y:cy}];
-      }else if(sameCol){
-        const cx=fig2ColCenter[frc.col]||fb.cx;
-        const goD=fb.cy<tb.cy;
-        const fa=_shapeAnchor(fb._shapeType||'box',fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goD?'bottom':'top');
-        const ta=_shapeAnchor(tb._shapeType||'box',tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goD?'top':'bottom');
-        route=[{x:cx,y:fa.py},{x:cx,y:ta.py}];
+      if(isH){
+        const goR=dx>0;
+        const fromAnc={x:goR?fb.x+fb.w:fb.x, y:fb.cy};
+        const toAnc={x:goR?tb.x:tb.x+tb.w, y:tb.cy};
+        if(Math.abs(fromAnc.y-toAnc.y)<3){
+          route=[fromAnc, toAnc];
+        }else{
+          const midX=(fromAnc.x+toAnc.x)/2;
+          route=[fromAnc, {x:midX,y:fromAnc.y}, {x:midX,y:toAnc.y}, toAnc];
+        }
       }else{
-        const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
-        const fbA={...fb,id:e.from};const tbA={...tb,id:e.to};
-        route=getOrthogonalRoute(fbA,tbA,allBoxArr);
-        if(route)route=_snapRouteToShapeAnchors(route,fb,tb,0,0,allBoxArr);
+        const goD=dy>0;
+        const fromAnc={x:fb.cx, y:goD?fb.y+fb.h:fb.y};
+        const toAnc={x:tb.cx, y:goD?tb.y:tb.y+tb.h};
+        if(Math.abs(fromAnc.x-toAnc.x)<3){
+          route=[fromAnc, toAnc];
+        }else{
+          const midY=(fromAnc.y+toAnc.y)/2;
+          route=[fromAnc, {x:fromAnc.x,y:midY}, {x:toAnc.x,y:midY}, toAnc];
+        }
+      }
+      
+      // ★ 충돌 검사: 다른 shape을 관통하면 우회 ★
+      const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
+      const excludeIds=new Set([e.from, e.to]);
+      if(_countRouteCollisions(route, allBoxArr, excludeIds)>0){
+        // 관통 시 직교 라우터로 폴백
+        const fbA={...fb, id:e.from};
+        const tbA={...tb, id:e.to};
+        const altRoute=getOrthogonalRoute(fbA, tbA, allBoxArr);
+        if(altRoute){
+          route=_snapRouteToShapeAnchors(altRoute, fb, tb, 0, 0, allBoxArr);
+          // 2차 충돌 검사 — 직교 라우터도 관통하면 직접 우회 경로 생성
+          if(_countRouteCollisions(route, allBoxArr, excludeIds)>0){
+            // 장애물을 돌아가는 경로 강제 생성
+            const fromAnc2=isH?{x:dx>0?fb.x+fb.w:fb.x, y:fb.cy}:{x:fb.cx, y:dy>0?fb.y+fb.h:fb.y};
+            const toAnc2=isH?{x:dx>0?tb.x:tb.x+tb.w, y:tb.cy}:{x:tb.cx, y:dy>0?tb.y:tb.y+tb.h};
+            // 장애물 위/아래로 우회
+            let bestDetour=null, bestHits=Infinity;
+            const obstacles=allBoxArr.filter(b=>!excludeIds.has(b.id));
+            for(const obs of obstacles){
+              // 위 우회
+              const topY=obs.y-12;
+              const detourTop=[fromAnc2,{x:fromAnc2.x,y:topY},{x:toAnc2.x,y:topY},toAnc2];
+              const hitsTop=_countRouteCollisions(detourTop,allBoxArr,excludeIds);
+              if(hitsTop<bestHits){bestHits=hitsTop;bestDetour=detourTop;}
+              // 아래 우회
+              const botY=obs.y+obs.h+12;
+              const detourBot=[fromAnc2,{x:fromAnc2.x,y:botY},{x:toAnc2.x,y:botY},toAnc2];
+              const hitsBot=_countRouteCollisions(detourBot,allBoxArr,excludeIds);
+              if(hitsBot<bestHits){bestHits=hitsBot;bestDetour=detourBot;}
+              // 왼쪽 우회
+              const leftX=obs.x-12;
+              const detourL=[fromAnc2,{x:leftX,y:fromAnc2.y},{x:leftX,y:toAnc2.y},toAnc2];
+              const hitsL=_countRouteCollisions(detourL,allBoxArr,excludeIds);
+              if(hitsL<bestHits){bestHits=hitsL;bestDetour=detourL;}
+              // 오른쪽 우회
+              const rightX=obs.x+obs.w+12;
+              const detourR=[fromAnc2,{x:rightX,y:fromAnc2.y},{x:rightX,y:toAnc2.y},toAnc2];
+              const hitsR=_countRouteCollisions(detourR,allBoxArr,excludeIds);
+              if(hitsR<bestHits){bestHits=hitsR;bestDetour=detourR;}
+            }
+            if(bestDetour)route=bestDetour;
+          }
+        }
       }
       if(route)svg+=svgOrthogonalEdge(route,mkId);
     });
@@ -9217,20 +9236,31 @@ function downloadDiagramImages(sid, format='jpeg'){
         });
         
         const innerEdges=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
-        const cInnerFan={};const cInnerOff={};
-        innerEdges.forEach(e=>{['from','to'].forEach(k=>{const nid=e[k];if(!cInnerFan[nid])cInnerFan[nid]=0;const key=e.from+'_'+e.to;if(!cInnerOff[key])cInnerOff[key]={};cInnerOff[key][k+'Idx']=cInnerFan[nid];cInnerFan[nid]++;});});
         innerEdges.forEach(e=>{
           const fb=innerNodeBoxes[e.from],tb=innerNodeBoxes[e.to];
           if(!fb||!tb)return;
-          const key=e.from+'_'+e.to;
-          const fanF=cInnerFan[e.from]||1,fanT=cInnerFan[e.to]||1;
-          const iF=cInnerOff[key]?.fromIdx||0,iT=cInnerOff[key]?.toIdx||0;
-          const offF=fanF>1?(iF-((fanF-1)/2))*7:0;
-          const offT=fanT>1?(iT-((fanT-1)/2))*7:0;
-          // ★ v10.4: fan offset 제거 — 정확한 중앙 접점 ★
-          const fbA={...fb,id:e.from};const tbA={...tb,id:e.to};
+          const dx=tb.cx-fb.cx, dy=tb.cy-fb.cy;
+          const isH=Math.abs(dx)>=Math.abs(dy);
+          let route;
+          if(isH){
+            const goR=dx>0;
+            const fa={x:goR?fb.x+fb.w:fb.x, y:fb.cy};
+            const ta={x:goR?tb.x:tb.x+tb.w, y:tb.cy};
+            route=Math.abs(fa.y-ta.y)<3?[fa,ta]:[fa,{x:(fa.x+ta.x)/2,y:fa.y},{x:(fa.x+ta.x)/2,y:ta.y},ta];
+          }else{
+            const goD=dy>0;
+            const fa={x:fb.cx, y:goD?fb.y+fb.h:fb.y};
+            const ta={x:tb.cx, y:goD?tb.y:tb.y+tb.h};
+            route=Math.abs(fa.x-ta.x)<3?[fa,ta]:[fa,{x:fa.x,y:(fa.y+ta.y)/2},{x:ta.x,y:(fa.y+ta.y)/2},ta];
+          }
+          // 충돌 검사
           const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
-          const route=getOrthogonalRoute(fbA,tbA,allBoxArr);
+          const excludeIds=new Set([e.from,e.to]);
+          if(_countRouteCollisions(route,allBoxArr,excludeIds)>0){
+            const fbA={...fb,id:e.from};const tbA={...tb,id:e.to};
+            const alt=getOrthogonalRoute(fbA,tbA,allBoxArr);
+            if(alt)route=_snapRouteToShapeAnchors(alt,fb,tb,0,0,allBoxArr);
+          }
           if(!route||route.length<2)return;
           ctx.lineWidth=1;ctx.strokeStyle='#000000';
           ctx.beginPath();ctx.moveTo(route[0].x,route[0].y);
