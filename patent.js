@@ -4330,6 +4330,41 @@ function _safeCleanLabel(label){
   if(cleaned.length<=1&&label.length>1)return label.replace(/[()]/g,'').trim();
   return cleaned||label;
 }
+
+// ★ v10.4: 도 1 전용 라벨 축약 — 발명 명칭이 아닌 구성 유형만 표시 ★
+// "스타일 프로파일 자동 전환 서버" → "서버"
+// "실내 환경 정보 기반 조명 스타일 자동 변경 서버" → "서버"  
+// "사용자 단말" → "사용자 단말" (이미 짧으므로 유지)
+function _shortenFig1Label(label){
+  if(!label)return '';
+  const clean=_safeCleanLabel(label);
+  // 이미 짧으면(4글자 이하) 그대로
+  if(clean.length<=4)return clean;
+  
+  // 핵심 구성 유형 접미사 목록 (긴 것부터 매칭)
+  const typeSuffixes=[
+    '서버 장치','센서 장치','조명 장치','촬영 장치','통신 장치','제어 장치','단말 장치',
+    '사용자 단말','클라이언트 단말','모바일 단말','휴대 단말',
+    '데이터베이스','네트워크','클라우드','스토리지',
+    '서버','단말','장치','모듈','시스템','센서','카메라','스피커','안테나','모니터','디스플레이'
+  ];
+  
+  for(const sfx of typeSuffixes){
+    if(clean.endsWith(sfx)){
+      return sfx;
+    }
+  }
+  
+  // 접미사 매칭 실패 시 마지막 2-3 단어만 사용
+  const words=clean.split(/\s+/);
+  if(words.length>2){
+    // 마지막 2단어 추출
+    const short=words.slice(-2).join(' ');
+    if(short.length<=8)return short;
+    return words[words.length-1]; // 마지막 1단어
+  }
+  return clean;
+}
 function _isL1RefNum(ref){
   if(!ref||String(ref).startsWith('S'))return false;
   const s=String(ref);
@@ -4669,9 +4704,9 @@ function _shapeVisualBounds(type,x,y,w,h){
       const waveRight=waveCx+cr*2.65*Math.cos(Math.PI*0.05);
       const vLeft=waveCx-cr;
       const vRight=Math.max(x+w*0.92,waveRight);
-      // ★ v10.4: 하단에 라벨+참조번호 영역 포함 (30px) — 겹침 검증용 ★
-      return{top:y+h*0.12, bottom:y+h*0.88+30, left:vLeft, right:vRight,
-        cx:x+w/2, cy:y+h/2};  // cx를 shape 전체 중앙으로 수정
+      // ★ v10.4: 하단에 라벨+참조번호 전체 영역 포함 (42px) — 연결선 우회용 ★
+      return{top:y+h*0.12, bottom:y+h*0.88+42, left:vLeft, right:vRight,
+        cx:x+w/2, cy:y+h/2};
     }
     case 'antenna':{
       const aTopY=y+h*0.18;
@@ -4718,14 +4753,15 @@ function _shapeAnchor(type,x,y,w,h,dir){
       break;
     }
     case 'sensor':{
-      // ★ 센서: 원+파동호의 중앙에서 연결 ★
+      // ★ v10.4: 센서 하단 앵커 = 텍스트+참조번호 아래 (겹침 방지) ★
       const cy=y+h/2;
       const cr=Math.min(w*0.28,h*0.38);
       const waveCx=x+w*0.32;
       const waveRight=waveCx+cr*2.65; // 파동호 최외곽
       const leftEdge=waveCx-cr;       // 원 좌측
+      const sensorFullBottom=y+h*0.88+42; // 아이콘+라벨+참조번호 전체 하단
       switch(dir){
-        case 'bottom':return{px:x+w/2, py:y+h*0.88};
+        case 'bottom':return{px:x+w/2, py:sensorFullBottom};
         case 'top':   return{px:x+w/2, py:y+h*0.12};
         case 'left':  return{px:leftEdge, py:cy};
         case 'right': return{px:Math.min(waveRight, x+w*0.92), py:cy};
@@ -5866,7 +5902,7 @@ function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNu
 // getOrthogonalRoute는 직사각형 nodeBox 기반이라 cloud/database/monitor 등
 // 곡면 shape에서 연결선이 shape 밖에서 시작/끝하는 문제를 수정
 // 핵심: 직교(orthogonal) 속성 유지 + 경계 좌표만 조정
-function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT){
+function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT,allBoxes){
   if(!route||route.length<2)return route;
   const r=[...route.map(p=>({...p}))]; // deep copy
   
@@ -5942,14 +5978,18 @@ function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT){
     }
   }
   
-  // 8) ★ v10.4: 경로 단순화 — 불필요한 꺾임 제거 ★
-  return _simplifyRoute(r);
+  // 8) ★ v10.4: 경로 단순화 — 불필요한 꺾임 제거 (장애물 인식) ★
+  return _simplifyRoute(r, allBoxes||[], fromBox, toBox);
 }
 
-// ★ v10.4: 직교 경로 단순화 — 불필요한 웨이포인트 제거 ★
-function _simplifyRoute(route){
+// ★ v10.4: 직교 경로 단순화 — 불필요한 웨이포인트 제거 (장애물 인식) ★
+function _simplifyRoute(route, obstacles, fromBox, toBox){
   if(!route||route.length<3)return route;
   let r=[...route.map(p=>({...p}))];
+  const excludeIds=new Set();
+  if(fromBox&&fromBox.id)excludeIds.add(fromBox.id);
+  if(toBox&&toBox.id)excludeIds.add(toBox.id);
+  const obs=(obstacles||[]).filter(b=>!excludeIds.has(b.id));
   
   // Pass 1: 동일선상(collinear) 중간점 제거
   // 3개 연속 점이 모두 같은 X 또는 같은 Y이면 중간점 불필요
@@ -6004,21 +6044,29 @@ function _simplifyRoute(route){
     r=simplified;
   }
   
-  // Pass 4: 시작/끝이 직선 가능하고 중간점들이 직선에서 가까운 경우만 직선화
-  // ★ 장애물 우회용 중간점은 보존 (시작-끝 축에서 멀리 떨어진 점은 유지) ★
+  // Pass 4: 시작/끝이 직선 가능하고 중간에 장애물이 없는 경우만 직선화
+  // ★ 장애물이 직선 경로에 있으면 우회점 보존 ★
   if(r.length>2){
     const first=r[0], last=r[r.length-1];
-    const tolerance=8; // 8px 이내면 "거의 직선"
+    const tolerance=8;
+    let canStraighten=false;
     
     if(Math.abs(first.x-last.x)<3){
-      // 같은 X → 수직 직선 가능? 중간점들도 같은 X 근처인지 확인
       const allNearX=r.slice(1,-1).every(p=>Math.abs(p.x-first.x)<tolerance);
-      if(allNearX) r=[first, last];
+      if(allNearX){
+        // 직선 경로가 장애물을 관통하는지 확인
+        const straightHits=_countRouteCollisions([first, last], obs, excludeIds);
+        if(straightHits===0) canStraighten=true;
+      }
     }else if(Math.abs(first.y-last.y)<3){
-      // 같은 Y → 수평 직선 가능? 중간점들도 같은 Y 근처인지 확인
       const allNearY=r.slice(1,-1).every(p=>Math.abs(p.y-first.y)<tolerance);
-      if(allNearY) r=[first, last];
+      if(allNearY){
+        const straightHits=_countRouteCollisions([first, last], obs, excludeIds);
+        if(straightHits===0) canStraighten=true;
+      }
     }
+    
+    if(canStraighten) r=[r[0], r[r.length-1]];
   }
   
   return r;
@@ -6359,8 +6407,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 사용 ★
       const refNum=extractRefNum(nd.label,String((parseInt(nd.id.replace(/\D/g,''))||1)*100));
       const cleanLabel=_safeCleanLabel(nd.label);
-      // ★ v10.4: 잘림("…") 완전 제거 — 전체 라벨 표시, 자동 줄바꿈+폰트축소로 대응 ★
-      const displayLabel=cleanLabel;
+      // ★ v10.4: 도 1은 축약 라벨 사용 (발명 명칭 대신 구성 유형만) ★
+      const displayLabel=isFig1?_shortenFig1Label(nd.label):cleanLabel;
       const shapeType=matchIconShape(nd.label);
       const sm=_shapeMetrics(shapeType,boxW2D,boxH);
       // v10.3: 텍스트 너비 기반 최소 shape 너비 보장 (겹침 방지)
@@ -6457,8 +6505,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       let route=getOrthogonalRoute(fbA,tbA,allBoxArr);
       if(!route)return;
       
-      // ★ v10.4: 연결선 시작/끝점을 Shape 변 중앙에 스냅 (offF=0, offT=0) ★
-      route=_snapRouteToShapeAnchors(route,fb,tb,0,0);
+      // ★ v10.4: 연결선 시작/끝점을 Shape 변 중앙에 스냅 + 장애물 인식 단순화 ★
+      route=_snapRouteToShapeAnchors(route,fb,tb,0,0,allBoxArr);
       
       svg+=svgOrthogonalEdge(route,mkId);
     });
@@ -6483,14 +6531,19 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     });
     
     // 3b. Shape 렌더 + 참조번호를 연결 없는 쪽에 배치
+    // ★ v10.4: 도면 내 균일 폰트 크기 — 전체 shape 중 최소 높이 기준 ★
+    const baseFontSize=Math.max(7,(maxCols>2?10:maxCols>1?11:12)+_fo);
+    // 비-아이콘 shape 중 최소 높이를 기준으로 폰트 크기 결정
+    const nonIconHeights=nodeData.filter(nd=>!_isIconShape(nd.shapeType)).map(nd=>nd.sh);
+    const minShapeH=nonIconHeights.length>0?Math.min(...nonIconHeights):boxH;
+    const uniformHeightFont=Math.floor(minShapeH*0.22);
+    const figFontSize=Math.max(baseFontSize, Math.min(uniformHeightFont, 14)); // 14px cap — 도면 내 통일
+    
     nodeData.forEach(nd=>{
       const{id,sx,sy,sw,sh,shapeType,displayLabel,refNum}=nd;
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sw,sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sw,sh,2);
-      let fontSize=Math.max(7,(maxCols>2?10:maxCols>1?11:12)+_fo);
-      // ★ v10.4: 박스 크기 비례 폰트 스케일링 — 박스 높이의 20% 목표 ★
-      const heightBasedFont=Math.floor(sh*0.20);
-      fontSize=Math.max(fontSize, Math.min(heightBasedFont, 16)); // 16px cap
+      let fontSize=figFontSize; // ★ 전체 도면 균일 폰트 ★
       const dir=nodeConnDir[id]||{};
       const refInside=dir.top&&dir.bottom&&dir.left&&dir.right;
       const labelMaxW=sw*0.90;
@@ -6598,7 +6651,41 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       return ref&&parseInt(ref)===frameRefNum;
     });
     const frameLabel=frameNode?frameNode.label.replace(/[\s(](?:S|D)?\d+[)\s]*$/i,'').trim():'';
-    const displayNodes=innerNodes.length>0?innerNodes:nodes;
+    
+    // ★ v10.4: L2/L3 계층 감지 — L2 부모를 서브 프레임으로 변환 ★
+    // L2 부모 노드가 L3 자식을 가지면, L2는 표시 노드에서 제거하고 서브 프레임으로 렌더링
+    const l2Parents={}; // {l2RefNum: {node, children:[L3 nodes]}}
+    innerNodes.forEach(n=>{
+      const ref=extractRefNum(n.label,'');
+      if(!ref)return;
+      const num=parseInt(ref);
+      if(isNaN(num))return;
+      // L2 판별: x10 단위 (110, 120 등)
+      if(num>=100&&num<1000&&num%10===0&&num%100!==0){
+        if(!l2Parents[num])l2Parents[num]={node:n, children:[]};
+        else l2Parents[num].node=n;
+      }
+      // L3 판별: x1 단위 (111, 112 등) → 부모 L2 계산
+      if(num>=100&&num<1000&&num%10!==0){
+        const parentL2=Math.floor(num/10)*10;
+        if(!l2Parents[parentL2])l2Parents[parentL2]={node:null, children:[]};
+        l2Parents[parentL2].children.push(n);
+      }
+    });
+    
+    // L3 자식이 있는 L2 부모는 서브 프레임으로 전환 (표시 노드에서 제거)
+    const l2SubFrames={}; // L2 부모 중 자식이 있는 것만
+    const l2ParentIdsToRemove=new Set();
+    Object.entries(l2Parents).forEach(([ref,info])=>{
+      if(info.node&&info.children.length>0){
+        l2SubFrames[ref]=info;
+        l2ParentIdsToRemove.add(info.node.id);
+      }
+    });
+    
+    // L2 부모를 제거한 표시 노드 목록
+    const displayNodesFiltered=innerNodes.filter(n=>!l2ParentIdsToRemove.has(n.id));
+    const displayNodes=displayNodesFiltered.length>0?displayNodesFiltered:(innerNodes.length>0?innerNodes:nodes);
     
     // 내부 노드 2D 레이아웃 계산
     const innerLayout=computeDeviceLayout2D(displayNodes,edges);
@@ -6634,6 +6721,19 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     svg+=`<rect x="${frameX}" y="${frameY}" width="${frameW}" height="${frameH}" fill="#fff" stroke="#000" stroke-width="2.25"/>`;
     
     // 2. 내부 노드 렌더링 — 레이아웃 엔진에서 계산된 좌표 사용
+    // ★ v10.4: 도면 내 균일 폰트 크기 — 전체 shape 중 최소 높이 기준 ★
+    const fig2BaseFontSize=Math.max(7,(innerMaxCols>2?9:innerMaxCols>1?10:11)+_fo);
+    const fig2ShapeHeights=fig2Layout.objects.map(obj=>{
+      const nd=displayNodes.find(n=>n.id===obj.id);
+      if(!nd)return obj.h;
+      const st=matchIconShape(nd.label);
+      const sm=_shapeMetrics(st,obj.w,obj.h);
+      return sm.sh;
+    });
+    const fig2MinH=fig2ShapeHeights.length>0?Math.min(...fig2ShapeHeights):boxH2;
+    const fig2HeightFont=Math.floor(fig2MinH*0.22);
+    const fig2FontSize=Math.max(fig2BaseFontSize, Math.min(fig2HeightFont, 13)); // 13px cap — 도 2+ 통일
+    
     const innerNodeBoxes={};
     fig2Layout.objects.forEach(obj=>{
       const bx=frameX+obj.x;
@@ -6659,10 +6759,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sm.sw,sm.sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sm.sw,sm.sh,1.5);
       const textCy=_shapeTextCy(shapeType,sy,sm.sh);
-      const fontSize=Math.max(7,(innerMaxCols>2?9:innerMaxCols>1?10:11)+_fo);
-      // ★ v10.4: 박스 크기 비례 폰트 스케일링 — shape 높이의 20% 목표 ★
-      const heightBasedFont2=Math.floor(sm.sh*0.20);
-      const fontSize2Final=Math.max(fontSize, Math.min(heightBasedFont2, 15)); // 15px cap
+      const fontSize2Final=fig2FontSize; // ★ v10.4: 도면 내 균일 폰트 ★
       
       // 박스 내부 2줄: 라벨 + (참조번호) — v10.4: 멀티라인 지원 + 비례 폰트
       const labelMaxW=sm.sw*0.90;
@@ -6678,6 +6775,39 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       
       innerNodeBoxes[nd.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2,
         _shapeType:shapeType,_sx:sx,_sy:sy,_sw:sm.sw,_sh:sm.sh};
+    });
+    
+    // ★ v10.4: L2 서브 프레임 렌더링 — L2 부모의 L3 자식들을 시각적으로 그룹화 ★
+    Object.entries(l2SubFrames).forEach(([l2Ref,info])=>{
+      if(!info.node||info.children.length===0)return;
+      // L3 자식 노드들의 경계 계산
+      const childBoxes=info.children.map(c=>{
+        const box=innerNodeBoxes[c.id];
+        return box;
+      }).filter(Boolean);
+      if(childBoxes.length===0)return;
+      
+      let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+      childBoxes.forEach(b=>{
+        minX=Math.min(minX, b.x);
+        minY=Math.min(minY, b.y);
+        maxX=Math.max(maxX, b.x+b.w);
+        maxY=Math.max(maxY, b.y+b.h);
+      });
+      
+      // 패딩 추가
+      const sfPad=12;
+      const sfX=minX-sfPad;
+      const sfY=minY-sfPad-16; // 상단에 라벨 공간
+      const sfW=(maxX-minX)+sfPad*2;
+      const sfH=(maxY-minY)+sfPad*2+16;
+      
+      // 서브 프레임 그리기 (점선)
+      svg+=`<rect x="${sfX}" y="${sfY}" width="${sfW}" height="${sfH}" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="6,3" rx="3"/>`;
+      
+      // L2 부모 라벨 + 참조번호
+      const l2Label=_safeCleanLabel(info.node.label);
+      svg+=`<text x="${sfX+6}" y="${sfY+11}" font-size="9" font-family="맑은 고딕,Arial,sans-serif" fill="#666">${App.escapeHtml(l2Label)} (${l2Ref})</text>`;
     });
     
     // 3. 프레임 참조번호 외부 리더라인
@@ -6696,7 +6826,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
       let route=getOrthogonalRoute(fbA,tbA,allBoxArr);
       if(route){
-        route=_snapRouteToShapeAnchors(route,fb,tb,0,0);
+        route=_snapRouteToShapeAnchors(route,fb,tb,0,0,allBoxArr);
         svg+=svgOrthogonalEdge(route,mkId);
       }
     });
@@ -7007,6 +7137,64 @@ function _postRenderValidateSvg(containerId, figNum){
     }
   });
   
+  // ── 검사 I: 연결선이 shape 관통 (ROUTE_PIERCE) ──
+  connectionLines.forEach(cl=>{
+    if(!cl.points||cl.points.length<2)return;
+    for(let i=0;i<cl.points.length-1;i++){
+      const p1=cl.points[i], p2=cl.points[i+1];
+      shapeBoxes.forEach(sb=>{
+        if(sb.w>svgW*0.5)return; // 프레임 제외
+        // 세그먼트가 shape 내부를 관통하는지 확인
+        const pad=3;
+        const bx1=sb.x+pad, by1=sb.y+pad, bx2=sb.x+sb.w-pad, by2=sb.y+sb.h-pad;
+        let intersects=false;
+        if(Math.abs(p1.y-p2.y)<2){
+          // 수평 세그먼트
+          if(p1.y>by1&&p1.y<by2){
+            const minX=Math.min(p1.x,p2.x), maxX=Math.max(p1.x,p2.x);
+            if(maxX>bx1&&minX<bx2)intersects=true;
+          }
+        }else if(Math.abs(p1.x-p2.x)<2){
+          // 수직 세그먼트
+          if(p1.x>bx1&&p1.x<bx2){
+            const minY=Math.min(p1.y,p2.y), maxY=Math.max(p1.y,p2.y);
+            if(maxY>by1&&minY<by2)intersects=true;
+          }
+        }
+        // 세그먼트 끝점이 shape 가장자리에 있는 건 정상 (연결)
+        if(intersects){
+          const startAtEdge=(i===0&&Math.hypot(p1.x-sb.x-sb.w/2,p1.y-sb.y-sb.h/2)<Math.max(sb.w,sb.h)*0.6);
+          const endAtEdge=(i===cl.points.length-2&&Math.hypot(p2.x-sb.x-sb.w/2,p2.y-sb.y-sb.h/2)<Math.max(sb.w,sb.h)*0.6);
+          if(!startAtEdge&&!endAtEdge){
+            issues.push({
+              type:'ROUTE_PIERCE', severity:'ERROR',
+              msg:`연결선 shape 관통: seg${i} (${Math.round(p1.x)},${Math.round(p1.y)}→${Math.round(p2.x)},${Math.round(p2.y)}) through shape at (${Math.round(sb.x)},${Math.round(sb.y)})`,
+              line:cl, shape:sb, segIndex:i
+            });
+          }
+        }
+      });
+    }
+  });
+  
+  // ── 검사 J: 동일 도면 내 글자 크기 불일치 ──
+  // 라벨 텍스트(참조번호 제외)의 폰트 크기가 2px 이상 차이나면 경고
+  const labelFontSizes=textBoxes
+    .filter(tb=>!/^\(?\d+\)?$/.test(tb.text.trim())&&tb.text.trim().length>1)
+    .map(tb=>tb.fontSize)
+    .filter(fs=>fs>0);
+  if(labelFontSizes.length>1){
+    const maxFs=Math.max(...labelFontSizes);
+    const minFs=Math.min(...labelFontSizes);
+    if(maxFs-minFs>=3){
+      issues.push({
+        type:'FONT_INCONSISTENT', severity:'WARNING',
+        msg:`글자 크기 불일치: ${minFs}px ~ ${maxFs}px (차이 ${maxFs-minFs}px)`,
+        minFontSize:minFs, maxFontSize:maxFs
+      });
+    }
+  }
+  
   const errorCount=issues.filter(i=>i.severity==='ERROR').length;
   const pass=errorCount===0;
   
@@ -7116,6 +7304,51 @@ function _autoFixRenderedSvg(containerId, issues, attempt){
           cl.el.setAttribute('points',midPt);
           fixCount++;
         }
+        break;
+      }
+      
+      case 'ROUTE_PIERCE':{
+        // 연결선이 shape를 관통 — DOM에서 경로 수정 (우회)
+        const cl=issue.line;
+        const sb=issue.shape;
+        if(!cl||!cl.el||!sb)break;
+        const pts=cl.points;
+        const start=pts[0], end=pts[pts.length-1];
+        // 관통 shape를 피해 L-shape 또는 Z-shape로 우회
+        const shapeRight=sb.x+sb.w+15;
+        const shapeLeft=sb.x-15;
+        const shapeBottom=sb.y+sb.h+15;
+        const shapeTop=sb.y-15;
+        // 가장 짧은 우회 경로 선택
+        let newPoints;
+        if(Math.abs(start.y-end.y)<Math.abs(start.x-end.x)){
+          // 주로 수평 이동 → 위/아래로 우회
+          const detourY=Math.abs(start.y-shapeTop)<Math.abs(start.y-shapeBottom)?shapeTop:shapeBottom;
+          newPoints=`${start.x},${start.y} ${start.x},${detourY} ${end.x},${detourY} ${end.x},${end.y}`;
+        }else{
+          // 주로 수직 이동 → 좌/우로 우회
+          const detourX=Math.abs(start.x-shapeLeft)<Math.abs(start.x-shapeRight)?shapeLeft:shapeRight;
+          newPoints=`${start.x},${start.y} ${detourX},${start.y} ${detourX},${end.y} ${end.x},${end.y}`;
+        }
+        cl.el.setAttribute('points',newPoints);
+        fixCount++;
+        break;
+      }
+      
+      case 'FONT_INCONSISTENT':{
+        // 폰트 크기 불일치 → 모든 라벨 텍스트를 최소 크기+1로 통일
+        const targetFs=Math.max(issue.minFontSize, Math.min(issue.minFontSize+1, 12));
+        const allTexts=svgEl.querySelectorAll('text');
+        allTexts.forEach(t=>{
+          const txt=t.textContent.trim();
+          if(/^\(?\d+\)?$/.test(txt))return; // 참조번호 제외
+          if(txt.length<=1)return;
+          const curFs=parseFloat(t.getAttribute('font-size'))||11;
+          if(Math.abs(curFs-targetFs)>=2){
+            t.setAttribute('font-size', String(targetFs));
+            fixCount++;
+          }
+        });
         break;
       }
     }
@@ -8119,11 +8352,13 @@ function downloadPptx(sid){
           const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 ★
           const refNum=extractRefNum(n.label,String((parseInt(n.id.replace(/\D/g,''))||1)*100));
           const cleanLabel=_safeCleanLabel(n.label);
+          // ★ v10.4: 도 1은 축약 라벨 사용 ★
+          const pptxDisplayLabel=isFig1?_shortenFig1Label(n.label):cleanLabel;
           const shapeType=matchIconShape(n.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
           // v10.3: 텍스트 너비 기반 최소 shape 너비 (PPTX - 인치 단위)
           const pptxFontSize=Math.min(maxCols>1?10:12,Math.max(8,13-nodeCount*0.3));
-          const estTextWInch=cleanLabel.length*(pptxFontSize/72)*0.65; // 대략적 인치 환산
+          const estTextWInch=pptxDisplayLabel.length*(pptxFontSize/72)*0.65; // 대략적 인치 환산
           const minSwInch=estTextWInch+0.25; // 양쪽 패딩
           if(sm.sw<minSwInch&&shapeType!=='box'){
             sm.sw=Math.min(minSwInch,boxW2D*0.85);
@@ -8134,7 +8369,7 @@ function downloadPptx(sid){
           addPptxIconShape(slide,shapeType,sx,by,sm.sw,sm.sh,LINE_FRAME);
           const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
           const fontSize=Math.min(maxCols>1?10:12,Math.max(8,13-nodeCount*0.3));
-          slide.addText(cleanLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          slide.addText(pptxDisplayLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
           nodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
           // v9.1: visual bounds 저장 (leader line에 사용)
@@ -8743,8 +8978,8 @@ function downloadDiagramImages(sid, format='jpeg'){
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
           // v10.3: 텍스트 너비 기반 최소 shape 너비 (Canvas)
           const cFontSize=maxCols>2?10:maxCols>1?11:12;
-          // ★ v10.4: 잘림("…") 완전 제거 — 전체 라벨 표시 ★
-          const cDisplayLabel=cleanLabel;
+          // ★ v10.4: 도 1은 축약 라벨 사용 ★
+          const cDisplayLabel=isFig1?_shortenFig1Label(nd.label):cleanLabel;
           const cTextW=_estimateTextWidth(cDisplayLabel,cFontSize);
           const cMinSw=cTextW+20;
           if(sm.sw<cMinSw&&shapeType!=='box'){
@@ -8831,8 +9066,8 @@ function downloadDiagramImages(sid, format='jpeg'){
         nodeData.forEach(nd=>{
           const{id,sx,sy,sw,sh,shapeType,cleanLabel,refNum}=nd;
           drawCanvasShape(ctx,shapeType,sx,sy,sw,sh,SHADOW,2);
-          // ★ v10.4: 잘림("…") 완전 제거 — 전체 라벨 멀티라인 표시 ★
-          const displayLabel=cleanLabel;
+          // ★ v10.4: 도 1은 축약 라벨 사용 ★
+          const displayLabel=isFig1?_shortenFig1Label(nd.label||cleanLabel):cleanLabel;
           let fontSize=maxCols>2?10:maxCols>1?11:12;
           const cDir=nodeConnDir[id]||{};
           const cRefInside=cDir.top&&cDir.bottom&&cDir.left&&cDir.right;
