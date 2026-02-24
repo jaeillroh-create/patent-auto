@@ -5942,6 +5942,85 @@ function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT){
     }
   }
   
+  // 8) ★ v10.4: 경로 단순화 — 불필요한 꺾임 제거 ★
+  return _simplifyRoute(r);
+}
+
+// ★ v10.4: 직교 경로 단순화 — 불필요한 웨이포인트 제거 ★
+function _simplifyRoute(route){
+  if(!route||route.length<3)return route;
+  let r=[...route.map(p=>({...p}))];
+  
+  // Pass 1: 동일선상(collinear) 중간점 제거
+  // 3개 연속 점이 모두 같은 X 또는 같은 Y이면 중간점 불필요
+  let changed=true;
+  while(changed){
+    changed=false;
+    for(let i=1;i<r.length-1;i++){
+      const prev=r[i-1], cur=r[i], next=r[i+1];
+      const sameX=Math.abs(prev.x-cur.x)<1&&Math.abs(cur.x-next.x)<1;
+      const sameY=Math.abs(prev.y-cur.y)<1&&Math.abs(cur.y-next.y)<1;
+      if(sameX||sameY){
+        r.splice(i,1);
+        changed=true;
+        break;
+      }
+    }
+  }
+  
+  // Pass 2: 제로 길이 세그먼트 제거 (두 점이 거의 같은 위치)
+  changed=true;
+  while(changed&&r.length>2){
+    changed=false;
+    for(let i=0;i<r.length-1;i++){
+      if(Math.abs(r[i].x-r[i+1].x)<1&&Math.abs(r[i].y-r[i+1].y)<1){
+        r.splice(i+1,1);
+        changed=true;
+        break;
+      }
+    }
+  }
+  
+  // Pass 3: U-turn 제거 — 연속 3개 세그먼트가 같은 축을 따라 왔다가 돌아가면 직선으로 대체
+  // 예: →↑→를 →로 단순화 (시작/끝 Y가 같으면)
+  if(r.length>=4){
+    const simplified=[];
+    simplified.push(r[0]);
+    for(let i=1;i<r.length-1;i++){
+      const prev=simplified[simplified.length-1];
+      const cur=r[i];
+      const next=r[i+1];
+      // prev→cur→next가 되돌아가는 패턴인지 확인
+      // 수평으로 가다가 수직으로 가다가 다시 수평: prev.y==cur.y, cur.x==next.x는 정상 L-turn
+      // 하지만 prev.y==next.y이고 중간에 불필요한 detour면 건너뜀
+      const skipable=
+        (Math.abs(prev.y-next.y)<2&&Math.abs(prev.y-cur.y)<2) || // 3점 모두 같은 Y → 중간점 불필요 (already handled)
+        (Math.abs(prev.x-next.x)<2&&Math.abs(prev.x-cur.x)<2);  // 3점 모두 같은 X
+      if(!skipable){
+        simplified.push(cur);
+      }
+    }
+    simplified.push(r[r.length-1]);
+    r=simplified;
+  }
+  
+  // Pass 4: 시작/끝이 직선 가능하고 중간점들이 직선에서 가까운 경우만 직선화
+  // ★ 장애물 우회용 중간점은 보존 (시작-끝 축에서 멀리 떨어진 점은 유지) ★
+  if(r.length>2){
+    const first=r[0], last=r[r.length-1];
+    const tolerance=8; // 8px 이내면 "거의 직선"
+    
+    if(Math.abs(first.x-last.x)<3){
+      // 같은 X → 수직 직선 가능? 중간점들도 같은 X 근처인지 확인
+      const allNearX=r.slice(1,-1).every(p=>Math.abs(p.x-first.x)<tolerance);
+      if(allNearX) r=[first, last];
+    }else if(Math.abs(first.y-last.y)<3){
+      // 같은 Y → 수평 직선 가능? 중간점들도 같은 Y 근처인지 확인
+      const allNearY=r.slice(1,-1).every(p=>Math.abs(p.y-first.y)<tolerance);
+      if(allNearY) r=[first, last];
+    }
+  }
+  
   return r;
 }
 
@@ -6409,6 +6488,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sw,sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sw,sh,2);
       let fontSize=Math.max(7,(maxCols>2?10:maxCols>1?11:12)+_fo);
+      // ★ v10.4: 박스 크기 비례 폰트 스케일링 — 박스 높이의 20% 목표 ★
+      const heightBasedFont=Math.floor(sh*0.20);
+      fontSize=Math.max(fontSize, Math.min(heightBasedFont, 16)); // 16px cap
       const dir=nodeConnDir[id]||{};
       const refInside=dir.top&&dir.bottom&&dir.left&&dir.right;
       const labelMaxW=sw*0.90;
@@ -6578,17 +6660,20 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       svg+=_drawShapeBody(shapeType,sx,sy,sm.sw,sm.sh,1.5);
       const textCy=_shapeTextCy(shapeType,sy,sm.sh);
       const fontSize=Math.max(7,(innerMaxCols>2?9:innerMaxCols>1?10:11)+_fo);
+      // ★ v10.4: 박스 크기 비례 폰트 스케일링 — shape 높이의 20% 목표 ★
+      const heightBasedFont2=Math.floor(sm.sh*0.20);
+      const fontSize2Final=Math.max(fontSize, Math.min(heightBasedFont2, 15)); // 15px cap
       
-      // 박스 내부 2줄: 라벨 + (참조번호) — v10.4: 멀티라인 지원
+      // 박스 내부 2줄: 라벨 + (참조번호) — v10.4: 멀티라인 지원 + 비례 폰트
       const labelMaxW=sm.sw*0.90;
-      const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize,7);
+      const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize2Final,7);
       const labelYOffset=labelFit.lines.length>1?-4:0;
       const {svg:lSvg}=_svgMultiLineLabel(
-        sx+sm.sw/2, textCy+labelYOffset-2, displayLabel, labelMaxW, fontSize, {minFontSize:7}
+        sx+sm.sw/2, textCy+labelYOffset-2, displayLabel, labelMaxW, fontSize2Final, {minFontSize:7}
       );
       svg+=lSvg;
-      const refFontSize=Math.max(fontSize-1,8);
-      const refY=labelFit.lines.length>1?textCy+labelFit.fontSize+6:textCy+fontSize+2;
+      const refFontSize=Math.max(fontSize2Final-1,8);
+      const refY=labelFit.lines.length>1?textCy+labelFit.fontSize+6:textCy+fontSize2Final+2;
       svg+=`<text x="${sx+sm.sw/2}" y="${refY}" text-anchor="middle" font-size="${refFontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#444">(${refNum})</text>`;
       
       innerNodeBoxes[nd.id]={x:sx,y:sy,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:sy+sm.sh/2,
@@ -6851,6 +6936,77 @@ function _postRenderValidateSvg(containerId, figNum){
     }
   });
   
+  // ── 검사 G: 글자 크기 대비 박스 크기 비율 검증 ──
+  // 라벨 텍스트가 shape 면적의 합리적 비율을 차지하는지 확인
+  textBoxes.forEach(tb=>{
+    if(/^\(?\d+\)?$/.test(tb.text.trim()))return; // 참조번호 제외
+    if(/^[SD]\d+$/i.test(tb.text.trim()))return;
+    if(tb.text.trim().length<=1)return;
+    
+    // 가장 가까운 shape 찾기
+    const tcx=tb.x+tb.w/2, tcy=tb.y+tb.h/2;
+    let closest=null, closestDist=Infinity;
+    shapeBoxes.forEach(sb=>{
+      if(sb.w>svgW*0.5)return; // 프레임 제외
+      const scx=sb.x+sb.w/2, scy=sb.y+sb.h/2;
+      const d=Math.hypot(tcx-scx,tcy-scy);
+      if(d<closestDist){closestDist=d;closest=sb;}
+    });
+    
+    if(closest){
+      // 텍스트 높이 대비 shape 높이 비율
+      const textRatioH=tb.h/closest.h;
+      // 텍스트 너비 대비 shape 너비 비율
+      const textRatioW=tb.w/closest.w;
+      
+      // 텍스트가 shape 높이의 12% 미만이면 글자가 너무 작음
+      if(textRatioH<0.12&&closest.h>40){
+        issues.push({
+          type:'FONT_TOO_SMALL', severity:'WARNING',
+          msg:`글자 크기 부족: "${tb.text.slice(0,12)}" 높이비 ${Math.round(textRatioH*100)}% (shape ${Math.round(closest.w)}×${Math.round(closest.h)}px, font ${tb.fontSize}px)`,
+          element:tb, shape:closest, ratio:textRatioH
+        });
+      }
+      // 텍스트가 shape 너비의 15% 미만이면 글자가 너무 작음
+      if(textRatioW<0.15&&closest.w>60&&tb.text.length>2){
+        issues.push({
+          type:'FONT_TOO_SMALL', severity:'WARNING',
+          msg:`글자 너비 부족: "${tb.text.slice(0,12)}" 너비비 ${Math.round(textRatioW*100)}% (shape ${Math.round(closest.w)}px, font ${tb.fontSize}px)`,
+          element:tb, shape:closest, ratio:textRatioW
+        });
+      }
+    }
+  });
+  
+  // ── 검사 H: 연결선 불필요한 꺾임 검증 ──
+  connectionLines.forEach(cl=>{
+    if(cl.points.length<=2)return; // 직선은 OK
+    
+    const start=cl.points[0], end=cl.points[cl.points.length-1];
+    const totalBends=cl.points.length-2; // 중간 웨이포인트 수 = 꺾임 수
+    
+    // 시작/끝이 같은 X(수직) 또는 같은 Y(수평)인데 중간에 꺾임이 있으면 불필요
+    const couldBeStraightV=Math.abs(start.x-end.x)<5;
+    const couldBeStraightH=Math.abs(start.y-end.y)<5;
+    
+    if((couldBeStraightV||couldBeStraightH)&&totalBends>0){
+      issues.push({
+        type:'UNNECESSARY_BEND', severity:'WARNING',
+        msg:`불필요한 꺾임: 직선 가능한데 ${totalBends}번 꺾임 (${Math.round(start.x)},${Math.round(start.y)} → ${Math.round(end.x)},${Math.round(end.y)})`,
+        line:cl, bendCount:totalBends
+      });
+    }
+    
+    // L-shape (1 꺾임)이면 OK, 2+꺾임이면 최적화 필요 경고
+    if(totalBends>=3){
+      issues.push({
+        type:'EXCESSIVE_BENDS', severity:'WARNING',
+        msg:`과도한 꺾임: ${totalBends}번 꺾임 (시작 ${Math.round(start.x)},${Math.round(start.y)} → 끝 ${Math.round(end.x)},${Math.round(end.y)})`,
+        line:cl, bendCount:totalBends
+      });
+    }
+  });
+  
   const errorCount=issues.filter(i=>i.severity==='ERROR').length;
   const pass=errorCount===0;
   
@@ -6923,7 +7079,43 @@ function _autoFixRenderedSvg(containerId, issues, attempt){
       
       case 'CONN_OFF_CENTER':{
         // 연결선 접점 중앙 미정렬 — DOM 수정으로는 어려움 (재렌더링 필요)
-        // 경고만 기록
+        break;
+      }
+      
+      case 'FONT_TOO_SMALL':{
+        // 박스 대비 글자가 너무 작음 → 폰트 크기 증가
+        const tb=issue.element;
+        const fs=parseFloat(tb.el.getAttribute('font-size'))||11;
+        const targetFs=Math.min(fs+2, 16); // 최대 16px까지 증가
+        if(targetFs>fs){
+          tb.el.setAttribute('font-size',String(targetFs));
+          fixCount++;
+        }
+        break;
+      }
+      
+      case 'UNNECESSARY_BEND':
+      case 'EXCESSIVE_BENDS':{
+        // 불필요한 꺾임 — DOM에서 polyline points 수정
+        const cl=issue.line;
+        if(!cl||!cl.el)break;
+        const pts=cl.points;
+        const start=pts[0], end=pts[pts.length-1];
+        // 직선 가능하면 직선화
+        if(Math.abs(start.x-end.x)<5){
+          cl.el.setAttribute('points',`${start.x},${start.y} ${start.x},${end.y}`);
+          fixCount++;
+        }else if(Math.abs(start.y-end.y)<5){
+          cl.el.setAttribute('points',`${start.x},${start.y} ${end.x},${start.y}`);
+          fixCount++;
+        }else if(pts.length>3){
+          // L-shape로 단순화
+          const midPt=Math.abs(start.x-end.x)>Math.abs(start.y-end.y)?
+            `${start.x},${start.y} ${end.x},${start.y} ${end.x},${end.y}`:
+            `${start.x},${start.y} ${start.x},${end.y} ${end.x},${end.y}`;
+          cl.el.setAttribute('points',midPt);
+          fixCount++;
+        }
         break;
       }
     }
