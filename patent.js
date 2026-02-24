@@ -6365,15 +6365,12 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const refNumH=30*_sm; // v10.1: (28→30) 참조번호 + 여유 공간
     const rowGapBase=0.85*PX*_sm; // v10.1: 행 간격 확대 + v10.4: 조정 배율
     
-    // ★ 행별 실제 최대 Shape 높이 계산 (겹침 방지 핵심) ★
+    // ★ v10.5: 행별 높이 — 도 1은 균일 box 기준 (서버/센서 shape 크기 무시) ★
     const rowMaxH={};
     nodes.forEach(nd=>{
       const gp=grid[nd.id]; if(!gp)return;
-      const st=matchIconShape(nd.label);
-      const sm=_shapeMetrics(st,boxW2D,boxH);
-      // v9.1: visual bounds 기준 높이 사용
-      const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);
-      const h=vb.bottom+refNumH; // 시각적 하단 + 참조번호 공간
+      // 도 1: 모든 shape = 'box' → 균일 높이
+      const h=boxH+refNumH;
       if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;
     });
     
@@ -6395,7 +6392,15 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const mkId=`ah_${containerId}`;
     svg+=`<defs><marker id="${mkId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#000"/></marker></defs>`;
     
-    // ── Phase 1: 위치 계산 (렌더링 전) ──
+    // ══════════════════════════════════════════════════════════════
+    // ★★★ v10.5: Phase 1~2 전면 재설계 — 균일 box + 실제 앵커 라우팅 ★★★
+    // ══════════════════════════════════════════════════════════════
+    
+    // ── Phase 1: 위치 계산 ──
+    // ★ 도 1 핵심 원칙: 모든 L1 구성을 균일 'box' shape로 렌더링 ★
+    // 이유: 서버(h=143), 센서(h=67), 박스(h=49) 등 shape별 높이 3배 차이 →
+    //       같은 행 수평 연결에서 중앙이 달라 연결선 꺾임/관통 발생
+    // 해결: 특허 도면 표준에 따라 L1 시스템 구성도는 동일 크기 직사각형
     const nodeBoxes={};
     const nodeData=[];
     nodes.forEach(nd=>{
@@ -6404,38 +6409,35 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       const rowW=gp.layerSize*boxW2D+(gp.layerSize-1)*colGap;
       const rowStartX=marginX+(maxNodeAreaW-rowW)/2;
       const bx=rowStartX+gp.col*(boxW2D+colGap);
-      const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 사용 ★
+      const by=rowY[gp.row];
       const refNum=extractRefNum(nd.label,String((parseInt(nd.id.replace(/\D/g,''))||1)*100));
-      const cleanLabel=_safeCleanLabel(nd.label);
-      // ★ v10.4: 도 1은 축약 라벨 사용 (발명 명칭 대신 구성 유형만) ★
-      const displayLabel=isFig1?_shortenFig1Label(nd.label):cleanLabel;
-      const shapeType=matchIconShape(nd.label);
-      const sm=_shapeMetrics(shapeType,boxW2D,boxH);
-      // v10.3: 텍스트 너비 기반 최소 shape 너비 보장 (겹침 방지)
+      const displayLabel=_shortenFig1Label(nd.label);
+      
+      // ★ 도 1: 모든 shape = 'box' (균일 높이 보장) ★
+      const shapeType='box';
+      const sm={sw:boxW2D, sh:boxH, dx:0};
+      // 텍스트 너비 기반 보정
       const fontSize=maxCols>2?10:maxCols>1?11:12;
       const textW=_estimateTextWidth(displayLabel,fontSize);
-      const minShapeW=textW+20; // 양쪽 10px 패딩
-      if(sm.sw<minShapeW&&shapeType!=='box'){
-        const oldSw=sm.sw;
-        sm.sw=Math.min(minShapeW,boxW2D*0.85); // 셀 너비의 85% 초과 방지
+      if(textW+20>sm.sw){
+        sm.sw=Math.min(textW+20, boxW2D);
         sm.dx=(boxW2D-sm.sw)/2;
-        console.log(`[renderDiagramSvg] 텍스트 너비 보정: "${displayLabel}" shape ${shapeType}: ${Math.round(oldSw)}→${Math.round(sm.sw)}px (텍스트 ${Math.round(textW)}px)`);
       }
       const sx=bx+sm.dx, sy=by;
       
-      // v9.1: nodeBox는 시각적 경계 기반 (연결선 라우팅에 사용)
-      const vb=_shapeVisualBounds(shapeType,sx,sy,sm.sw,sm.sh);
-      // ★ v10.2: cx/cy는 _shapeVisualBounds의 논리적 중심 사용 (sensor 원 중심, antenna 기둥 등) ★
-      nodeBoxes[nd.id]={x:vb.left,y:vb.top,w:vb.right-vb.left,h:vb.bottom-vb.top,cx:vb.cx,cy:vb.cy,
-        // v10.2: shape 정보 보존 (연결선 endpoint snapping용)
-        _shapeType:shapeType,_sx:sx,_sy:sy,_sw:sm.sw,_sh:sm.sh};
-      nodeData.push({id:nd.id,sx,sy,sw:sm.sw,sh:sm.sh,shapeType,displayLabel,refNum,bx,boxW2D,row:grid[nd.id].row,col:grid[nd.id].col});
+      nodeBoxes[nd.id]={
+        x:sx, y:sy, w:sm.sw, h:sm.sh,
+        cx:sx+sm.sw/2, cy:sy+sm.sh/2,
+        _shapeType:'box', _sx:sx, _sy:sy, _sw:sm.sw, _sh:sm.sh
+      };
+      nodeData.push({id:nd.id, sx, sy, sw:sm.sw, sh:sm.sh,
+        shapeType:'box', displayLabel, refNum, bx, boxW2D,
+        row:gp.row, col:gp.col});
     });
     
-    // ── Phase 1.5: 겹침 검증 & 자동 보정 ──
-    // v10.1: anchor 기반 정확한 하단 계산
-    const REF_PADDING=refNumH+6; // Shape 아래 참조번호+여유
-    const MIN_GAP=12; // v10.1: 최소 간격 확대 (8→12px)
+    // ── Phase 1.5: 겹침 검증 (간소화 — 모든 box 동일 높이) ──
+    const REF_PADDING=refNumH+6;
+    const MIN_GAP=12;
     let correctionApplied=true;
     let correctionRounds=0;
     while(correctionApplied&&correctionRounds<10){
@@ -6443,25 +6445,19 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       correctionRounds++;
       for(let i=0;i<nodeData.length;i++){
         const a=nodeData[i];
-        const aVb=_shapeVisualBounds(a.shapeType,a.sx,a.sy,a.sw,a.sh);
-        const aBottom=aVb.bottom+REF_PADDING; // 시각적 하단 + 참조번호
+        const aBottom=a.sy+a.sh+REF_PADDING;
         for(let j=0;j<nodeData.length;j++){
           if(i===j)continue;
           const b=nodeData[j];
-          // ★ v10.2: 같은 행 shape은 수직 push-down 제외 (수평 간격은 grid이 보장) ★
           if(a.row===b.row)continue;
-          const bVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);
-          // 수직 겹침: a의 하단이 b의 상단을 넘고, 수평으로도 겹침
-          // ★ v10.2: visual bounds 기반 수평 겹침 검사 (sensor 파동호, cloud 곡선 등 반영) ★
-          const hOverlap=!(aVb.right+8<bVb.left||bVb.right+8<aVb.left);
-          if(hOverlap&&bVb.top<aBottom+MIN_GAP&&b.sy>=a.sy){
-            const pushDown=aBottom+MIN_GAP-bVb.top; // ★ bVb.top 기준으로 정확한 push 계산 ★
-            if(pushDown>0){
-              b.sy+=pushDown;
-              // nodeBoxes도 업데이트 (★ shape 정보 보존 필수 ★)
-              const newVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);
-              nodeBoxes[b.id]={x:newVb.left,y:newVb.top,w:newVb.right-newVb.left,h:newVb.bottom-newVb.top,cx:newVb.cx,cy:newVb.cy,
-                _shapeType:b.shapeType,_sx:b.sx,_sy:b.sy,_sw:b.sw,_sh:b.sh};
+          const hOverlap=!(a.sx+a.sw+8<b.sx||b.sx+b.sw+8<a.sx);
+          if(hOverlap&&b.sy<aBottom+MIN_GAP&&b.sy>=a.sy){
+            const push=aBottom+MIN_GAP-b.sy;
+            if(push>0){
+              b.sy+=push;
+              nodeBoxes[b.id].y=b.sy;
+              nodeBoxes[b.id].cy=b.sy+b.sh/2;
+              nodeBoxes[b.id]._sy=b.sy;
               correctionApplied=true;
             }
           }
@@ -6469,111 +6465,90 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       }
     }
     
-    // 보정 후 SVG 높이 재계산
+    // SVG 높이 재계산
     let maxBottom=0;
     nodeData.forEach(nd=>{
-      const vb=_shapeVisualBounds(nd.shapeType,nd.sx,nd.sy,nd.sw,nd.sh);
-      const bottom=vb.bottom+REF_PADDING+10;
+      const bottom=nd.sy+nd.sh+REF_PADDING+10;
       if(bottom>maxBottom)maxBottom=bottom;
     });
     const correctedSvgH=Math.max(svgH,maxBottom+marginY);
-    // viewBox 업데이트
     svg=svg.replace(/viewBox="0 0 [^"]*"/,`viewBox="0 0 ${svgW} ${correctedSvgH}"`);
     
-    // ★★★ v10.5: Phase 1.7 — 같은 행/열 라우팅 정렬 (Phase 1.5 보정 이후!) ★★★
-    // Phase 1.5가 nodeBoxes를 갱신하므로, 그 이후에 정렬해야 유효함
-    const rowCyMap={};  // row → averaged cy
-    const colCxMap={};  // col → averaged cx
-    nodeData.forEach(nd=>{
-      const box=nodeBoxes[nd.id];
-      if(!box)return;
-      if(!rowCyMap[nd.row])rowCyMap[nd.row]=[];
-      rowCyMap[nd.row].push({id:nd.id, cy:box.cy});
-      if(nd.col!=null){
-        if(!colCxMap[nd.col])colCxMap[nd.col]=[];
-        colCxMap[nd.col].push({id:nd.id, cx:box.cx});
-      }
-    });
-    // 행별 공통 cy (수평 직선용)
-    const rowCenterY={};
-    Object.entries(rowCyMap).forEach(([row, items])=>{
-      rowCenterY[row]=items.reduce((s,i)=>s+i.cy,0)/items.length;
-    });
-    // 열별 공통 cx (수직 직선용)
-    const colCenterX={};
-    Object.entries(colCxMap).forEach(([col, items])=>{
-      colCenterX[col]=items.reduce((s,i)=>s+i.cx,0)/items.length;
-    });
-    // nodeBoxes에 정렬된 cx/cy 반영
-    nodeData.forEach(nd=>{
-      const box=nodeBoxes[nd.id];
-      if(!box)return;
-      if(rowCenterY[nd.row]!=null)box.cy=rowCenterY[nd.row];
-      if(nd.col!=null&&colCenterX[nd.col]!=null)box.cx=colCenterX[nd.col];
-    });
-    // nodeData에서 빠른 row/col 조회용 맵
-    const nodeRowCol={};
-    nodeData.forEach(nd=>{nodeRowCol[nd.id]={row:nd.row,col:nd.col};});
+    // ── Phase 2: 연결선 — ★ 실제 shape anchor 기반 라우팅 ★ ──
+    // 원칙: 모든 연결은 각 shape의 실제 변 중앙(edge center)에서 시작/끝
+    // box shape → 균일 높이 → 같은 행 = 같은 cy → 자연스러운 직선 연결
+    const svgEdgesToDraw=uniqueEdges.length>0?uniqueEdges:
+      (nodes.length>1?nodes.slice(0,-1).map((nd,i)=>({from:nd.id,to:nodes[i+1].id})):[]);
     
-    // ── Phase 2: 연결선 — ★ 같은 행/열은 직선 강제 ★ ──
-    const svgEdgesToDraw=uniqueEdges.length>0?uniqueEdges:(nodes.length>1?nodes.slice(0,-1).map((nd,i)=>({from:nd.id,to:nodes[i+1].id})):[]);
-    const svgFanCount={};
-    const svgEdgeOff={};
-    svgEdgesToDraw.forEach(e=>{
-      ['from','to'].forEach(k=>{
-        const nid=e[k];
-        if(!svgFanCount[nid])svgFanCount[nid]=0;
-        const key=e.from+'_'+e.to;
-        if(!svgEdgeOff[key])svgEdgeOff[key]={};
-        svgEdgeOff[key][k+'Idx']=svgFanCount[nid];
-        svgFanCount[nid]++;
-      });
-    });
     svgEdgesToDraw.forEach(e=>{
       const fb=nodeBoxes[e.from], tb=nodeBoxes[e.to];
       if(!fb||!tb)return;
       
-      const fromRC=nodeRowCol[e.from];
-      const toRC=nodeRowCol[e.to];
-      const sameRow=fromRC&&toRC&&fromRC.row===toRC.row;
-      const sameCol=fromRC&&toRC&&fromRC.col!=null&&toRC.col!=null&&fromRC.col===toRC.col;
+      // 두 shape의 상대 위치로 연결 방향 결정
+      const dx=tb.cx-fb.cx, dy=tb.cy-fb.cy;
+      const isHorizontal=Math.abs(dx)>=Math.abs(dy);
       
       let route;
       
-      if(sameRow){
-        // ★★ 같은 행: 수평 직선 강제 — getOrthogonalRoute 우회 ★★
-        const commonY=rowCenterY[fromRC.row];
-        const goRight=fb.cx<tb.cx;
-        const fromST=fb._shapeType||'box';
-        const toST=tb._shapeType||'box';
-        const fromAnc=_shapeAnchor(fromST,fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goRight?'right':'left');
-        const toAnc=_shapeAnchor(toST,tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goRight?'left':'right');
-        route=[{x:fromAnc.px, y:commonY}, {x:toAnc.px, y:commonY}];
-        console.log(`[Fig1 DirectH] ${e.from}→${e.to}: y=${Math.round(commonY)} (직선 강제)`);
-      }else if(sameCol){
-        // ★★ 같은 열: 수직 직선 강제 ★★
-        const commonX=colCenterX[fromRC.col];
-        const goDown=fb.cy<tb.cy;
-        const fromST=fb._shapeType||'box';
-        const toST=tb._shapeType||'box';
-        const fromAnc=_shapeAnchor(fromST,fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goDown?'bottom':'top');
-        const toAnc=_shapeAnchor(toST,tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goDown?'top':'bottom');
-        route=[{x:commonX, y:fromAnc.py}, {x:commonX, y:toAnc.py}];
-        console.log(`[Fig1 DirectV] ${e.from}→${e.to}: x=${Math.round(commonX)} (직선 강제)`);
+      if(isHorizontal){
+        // 수평 연결: from의 right/left → to의 left/right
+        const goRight=dx>0;
+        const fromAnc={
+          x: goRight ? fb.x+fb.w : fb.x,
+          y: fb.cy
+        };
+        const toAnc={
+          x: goRight ? tb.x : tb.x+tb.w,
+          y: tb.cy
+        };
+        
+        if(Math.abs(fromAnc.y-toAnc.y)<3){
+          // 같은 Y → 완벽한 수평 직선
+          route=[fromAnc, toAnc];
+        }else{
+          // Y 다름 → L-shape 라우팅
+          const midX=(fromAnc.x+toAnc.x)/2;
+          route=[fromAnc, {x:midX, y:fromAnc.y}, {x:midX, y:toAnc.y}, toAnc];
+        }
       }else{
-        // 다른 행/열: 기존 직교 라우팅
-        const fbA={...fb,id:e.from};
-        const tbA={...tb,id:e.to};
-        const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
-        route=getOrthogonalRoute(fbA,tbA,allBoxArr);
-        if(route){
-          route=_snapRouteToShapeAnchors(route,fb,tb,0,0,allBoxArr);
+        // 수직 연결: from의 bottom/top → to의 top/bottom
+        const goDown=dy>0;
+        const fromAnc={
+          x: fb.cx,
+          y: goDown ? fb.y+fb.h : fb.y
+        };
+        const toAnc={
+          x: tb.cx,
+          y: goDown ? tb.y : tb.y+tb.h
+        };
+        
+        if(Math.abs(fromAnc.x-toAnc.x)<3){
+          // 같은 X → 완벽한 수직 직선
+          route=[fromAnc, toAnc];
+        }else{
+          // X 다름 → L-shape 라우팅
+          const midY=(fromAnc.y+toAnc.y)/2;
+          route=[fromAnc, {x:fromAnc.x, y:midY}, {x:toAnc.x, y:midY}, toAnc];
         }
       }
-      if(!route)return;
-      svg+=svgOrthogonalEdge(route,mkId);
+      
+      // ★ 충돌 검사: route가 다른 shape을 관통하면 우회 ★
+      const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
+      const excludeIds=new Set([e.from, e.to]);
+      const collisions=_countRouteCollisions(route, allBoxArr, excludeIds);
+      
+      if(collisions>0){
+        // 관통 시 직교 라우터로 폴백 (더 정교한 우회)
+        const fbA={...fb, id:e.from};
+        const tbA={...tb, id:e.to};
+        const altRoute=getOrthogonalRoute(fbA, tbA, allBoxArr);
+        if(altRoute){
+          route=_snapRouteToShapeAnchors(altRoute, fb, tb, 0, 0, allBoxArr);
+        }
+      }
+      
+      if(route)svg+=svgOrthogonalEdge(route,mkId);
     });
-    
     // ── Phase 3: Shape + 지능형 참조번호 배치 (연결 방향 회피) ──
     // 3a. 각 노드의 연결 방향 분석
     const nodeConnDir={};
@@ -8450,12 +8425,13 @@ function downloadPptx(sid){
         const refNumH=0.25;
         const rowGapBase=0.25;
         
-        // ★ 행별 최대 Shape 높이 → 누적 Y좌표 ★
+        // ★ v10.5: 행별 높이 — 도 1은 균일 box 기준 ★
         const rowMaxH={};
-        nodes.forEach(n=>{const gp=grid[n.id];if(!gp)return;const st=matchIconShape(n.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=vb.bottom+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
+        nodes.forEach(n=>{const gp=grid[n.id];if(!gp)return;const h=boxH+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
         const rowY={};let accY=boxStartY;
         for(let r=0;r<numRows;r++){rowY[r]=accY;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase;}
         
+        // ★ v10.5: 모든 Fig 1 shape = box (PPTX) ★
         const nodeBoxes={};
         nodes.forEach(n=>{
           const gp=grid[n.id];
@@ -8463,35 +8439,21 @@ function downloadPptx(sid){
           const rowW=gp.layerSize*boxW2D+(gp.layerSize-1)*colGap;
           const rowStartX=marginX+(nodeAreaW-rowW)/2;
           const bx=rowStartX+gp.col*(boxW2D+colGap);
-          const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 ★
+          const by=rowY[gp.row];
           const refNum=extractRefNum(n.label,String((parseInt(n.id.replace(/\D/g,''))||1)*100));
-          const cleanLabel=_safeCleanLabel(n.label);
-          // ★ v10.4: 도 1은 축약 라벨 사용 ★
-          const pptxDisplayLabel=isFig1?_shortenFig1Label(n.label):cleanLabel;
-          const shapeType=matchIconShape(n.label);
-          const sm=_shapeMetrics(shapeType,boxW2D,boxH);
-          // v10.3: 텍스트 너비 기반 최소 shape 너비 (PPTX - 인치 단위)
-          const pptxFontSize=Math.min(maxCols>1?10:12,Math.max(8,13-nodeCount*0.3));
-          const estTextWInch=pptxDisplayLabel.length*(pptxFontSize/72)*0.65; // 대략적 인치 환산
-          const minSwInch=estTextWInch+0.25; // 양쪽 패딩
-          if(sm.sw<minSwInch&&shapeType!=='box'){
-            sm.sw=Math.min(minSwInch,boxW2D*0.85);
-            sm.dx=(boxW2D-sm.sw)/2;
-          }
-          const sx=bx+sm.dx;
+          const pptxDisplayLabel=isFig1?_shortenFig1Label(n.label):_safeCleanLabel(n.label);
+          const sw=boxW2D, sh=boxH;
           
-          addPptxIconShape(slide,shapeType,sx,by,sm.sw,sm.sh,LINE_FRAME);
-          const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
+          // box shape 직접 렌더링 (균일 크기)
+          addPptxIconShape(slide,'box',bx,by,sw,sh,LINE_FRAME);
           const fontSize=Math.min(maxCols>1?10:12,Math.max(8,13-nodeCount*0.3));
-          slide.addText(pptxDisplayLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          slide.addText(pptxDisplayLabel,{x:bx+0.04,y:by,w:sw-0.08,h:sh,fontSize,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
-          nodeBoxes[n.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2};
-          // v9.1: visual bounds 저장 (leader line에 사용)
-          const _vb=_shapeVisualBounds(shapeType,sx,by,sm.sw,sm.sh);
-          nodeBoxes[n.id]={x:_vb.left,y:_vb.top,w:_vb.right-_vb.left,h:_vb.bottom-_vb.top,cx:_vb.cx,cy:_vb.cy,_sx:sx,_sy:by,_sw:sm.sw,_sh:sm.sh,_shapeType:shapeType};
+          nodeBoxes[n.id]={x:bx, y:by, w:sw, h:sh, cx:bx+sw/2, cy:by+sh/2,
+            _sx:bx, _sy:by, _sw:sw, _sh:sh, _shapeType:'box'};
         });
         
-        // refNum 데이터 수집 (edge 분석 후 배치)
+        // refNum 데이터 수집
         const pptxRefData=[];
         nodes.forEach(n=>{
           const gp=grid[n.id];if(!gp)return;
@@ -8500,45 +8462,41 @@ function downloadPptx(sid){
           pptxRefData.push({id:n.id,refNum,sx:nb.x,by:nb.y,sw:nb.w,sh:nb.h});
         });
         
-        // Phase 2: Edge 연결선 (직각 라우팅 + fan 오프셋)
+        // ★ v10.5: Phase 2 — 실제 앵커 기반 edge 라우팅 (PPTX) ★
         const edgesToDraw=uniqueEdges.length>0?uniqueEdges:nodes.slice(0,-1).map((n,i)=>({from:n.id,to:nodes[i+1].id}));
-        const pptxFanCount={};
-        const pptxEdgeOffsets={};
-        edgesToDraw.forEach(e=>{
-          ['from','to'].forEach(k=>{
-            const nid=e[k];
-            if(!pptxFanCount[nid])pptxFanCount[nid]=0;
-            if(!pptxEdgeOffsets[e.from+'_'+e.to])pptxEdgeOffsets[e.from+'_'+e.to]={};
-            pptxEdgeOffsets[e.from+'_'+e.to][k+'Idx']=pptxFanCount[nid];
-            pptxFanCount[nid]++;
-          });
-        });
         
         edgesToDraw.forEach(e=>{
           const fb=nodeBoxes[e.from],tb=nodeBoxes[e.to];
           if(!fb||!tb)return;
-          const fanFrom=pptxFanCount[e.from]||1;
-          const idxFrom=pptxEdgeOffsets[e.from+'_'+e.to]?.fromIdx||0;
-          const offsetFrom=fanFrom>1?(idxFrom-((fanFrom-1)/2))*0.08:0;
-          const fanTo=pptxFanCount[e.to]||1;
-          const idxTo=pptxEdgeOffsets[e.from+'_'+e.to]?.toIdx||0;
-          const offsetTo=fanTo>1?(idxTo-((fanTo-1)/2))*0.08:0;
+          const dx=tb.cx-fb.cx, dy=tb.cy-fb.cy;
+          const isH=Math.abs(dx)>=Math.abs(dy);
           
-          // ★ v10.4: fan offset 제거 — 정확한 중앙 접점 ★
-          const fbA={...fb};
-          const tbA={...tb};
-          const pts=getConnectionPoints(fbA,tbA);
-          if(!pts)return;
-          const dx=pts.x2-pts.x1,dy=pts.y2-pts.y1;
-          if(Math.abs(dx)<0.01){
-            slide.addShape(pptx.shapes.LINE,{x:pts.x1,y:Math.min(pts.y1,pts.y2),w:0,h:Math.abs(dy),line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
-          }else if(Math.abs(dy)<0.01){
-            slide.addShape(pptx.shapes.LINE,{x:Math.min(pts.x1,pts.x2),y:pts.y1,w:Math.abs(dx),h:0,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+          if(isH){
+            const goR=dx>0;
+            const x1=goR?fb.x+fb.w:fb.x, y1=fb.cy;
+            const x2=goR?tb.x:tb.x+tb.w, y2=tb.cy;
+            if(Math.abs(y1-y2)<0.02){
+              // 수평 직선
+              slide.addShape(pptx.shapes.LINE,{x:Math.min(x1,x2),y:y1,w:Math.abs(x2-x1),h:0,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+            }else{
+              const midX=(x1+x2)/2;
+              slide.addShape(pptx.shapes.LINE,{x:x1,y:y1,w:Math.abs(midX-x1)*(midX>x1?1:-1)||0.001,h:0,line:{color:'000000',width:LINE_ARROW}});
+              slide.addShape(pptx.shapes.LINE,{x:midX,y:Math.min(y1,y2),w:0,h:Math.abs(y2-y1),line:{color:'000000',width:LINE_ARROW}});
+              slide.addShape(pptx.shapes.LINE,{x:midX,y:y2,w:Math.abs(x2-midX)*(x2>midX?1:-1)||0.001,h:0,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+            }
           }else{
-            const midY=(pts.y1+pts.y2)/2;
-            slide.addShape(pptx.shapes.LINE,{x:pts.x1,y:Math.min(pts.y1,midY),w:0,h:Math.abs(pts.y1-midY),line:{color:'000000',width:LINE_ARROW}});
-            slide.addShape(pptx.shapes.LINE,{x:Math.min(pts.x1,pts.x2),y:midY,w:Math.abs(dx),h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addShape(pptx.shapes.LINE,{x:pts.x2,y:Math.min(midY,pts.y2),w:0,h:Math.abs(pts.y2-midY),line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+            const goD=dy>0;
+            const x1=fb.cx, y1=goD?fb.y+fb.h:fb.y;
+            const x2=tb.cx, y2=goD?tb.y:tb.y+tb.h;
+            if(Math.abs(x1-x2)<0.02){
+              // 수직 직선
+              slide.addShape(pptx.shapes.LINE,{x:x1,y:Math.min(y1,y2),w:0,h:Math.abs(y2-y1),line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+            }else{
+              const midY=(y1+y2)/2;
+              slide.addShape(pptx.shapes.LINE,{x:x1,y:Math.min(y1,midY),w:0,h:Math.abs(midY-y1),line:{color:'000000',width:LINE_ARROW}});
+              slide.addShape(pptx.shapes.LINE,{x:Math.min(x1,x2),y:midY,w:Math.abs(x2-x1),h:0,line:{color:'000000',width:LINE_ARROW}});
+              slide.addShape(pptx.shapes.LINE,{x:x2,y:Math.min(midY,y2),w:0,h:Math.abs(y2-midY),line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+            }
           }
         });
         
@@ -9071,13 +9029,13 @@ function downloadDiagramImages(sid, format='jpeg'){
         const refNumH=22;
         const rowGapBase=25;
         
-        // ★ 행별 최대 Shape 높이 → 누적 Y좌표 ★
+        // ★ v10.5: 행별 높이 — 도 1은 균일 box 기준 ★
         const rowMaxH={};
-        nodes.forEach(nd=>{const gp=grid[nd.id];if(!gp)return;const st=matchIconShape(nd.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=vb.bottom+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
+        nodes.forEach(nd=>{const gp=grid[nd.id];if(!gp)return;const h=boxH+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
         const rowY={};let accY=boxStartY;
         for(let r=0;r<numRows;r++){rowY[r]=accY;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase;}
         
-        // Phase 1: 위치 계산만
+        // ★ v10.5: Phase 1 — 모든 Fig 1 shape = 'box' (균일 높이) ★
         const nodeBoxes={};
         const nodeData=[];
         nodes.forEach(nd=>{
@@ -9085,57 +9043,33 @@ function downloadDiagramImages(sid, format='jpeg'){
           const rowW=gp.layerSize*boxW2D+(gp.layerSize-1)*colGap;
           const rowStartX=marginX+(nodeAreaW-rowW)/2;
           const bx=rowStartX+gp.col*(boxW2D+colGap);
-          const by=rowY[gp.row]; // ★ 행별 누적 Y좌표 ★
+          const by=rowY[gp.row];
           const refNum=extractRefNum(nd.label,String((parseInt(nd.id.replace(/\D/g,''))||1)*100));
           const cleanLabel=_safeCleanLabel(nd.label);
-          const shapeType=matchIconShape(nd.label);
-          const sm=_shapeMetrics(shapeType,boxW2D,boxH);
-          // v10.3: 텍스트 너비 기반 최소 shape 너비 (Canvas)
-          const cFontSize=maxCols>2?10:maxCols>1?11:12;
-          // ★ v10.4: 도 1은 축약 라벨 사용 ★
           const cDisplayLabel=isFig1?_shortenFig1Label(nd.label):cleanLabel;
-          const cTextW=_estimateTextWidth(cDisplayLabel,cFontSize);
-          const cMinSw=cTextW+20;
-          if(sm.sw<cMinSw&&shapeType!=='box'){
-            sm.sw=Math.min(cMinSw,boxW2D*0.85);
-            sm.dx=(boxW2D-sm.sw)/2;
-          }
+          const shapeType='box'; // 도 1: 균일 box
+          const sm={sw:boxW2D, sh:boxH, dx:0};
           const sx=bx+sm.dx;
-          // v9.1: visual bounds 기준 nodeBox (★ v10.2: shape 데이터 보존 ★)
-          const vb=_shapeVisualBounds(shapeType,sx,by,sm.sw,sm.sh);
-          nodeBoxes[nd.id]={x:vb.left,y:vb.top,w:vb.right-vb.left,h:vb.bottom-vb.top,cx:vb.cx,cy:vb.cy,
-            _shapeType:shapeType,_sx:sx,_sy:by,_sw:sm.sw,_sh:sm.sh};
-          nodeData.push({id:nd.id,sx,sy:by,sw:sm.sw,sh:sm.sh,shapeType,cleanLabel,refNum,row:gp.row,col:gp.col});
+          nodeBoxes[nd.id]={x:sx, y:by, w:sm.sw, h:sm.sh,
+            cx:sx+sm.sw/2, cy:by+sm.sh/2,
+            _shapeType:'box', _sx:sx, _sy:by, _sw:sm.sw, _sh:sm.sh};
+          nodeData.push({id:nd.id, sx, sy:by, sw:sm.sw, sh:sm.sh,
+            shapeType:'box', cleanLabel:cDisplayLabel, refNum, row:gp.row, col:gp.col});
         });
         
-        // ★ Phase 1.5: 겹침 검증 & 자동 보정 (v10.2: visual bounds 기반) ★
-        const REF_PAD=refNumH+4,MIN_GAP=6;
-        let fixApplied=true,fixRounds=0;
+        // Phase 1.5: 겹침 검증 (균일 box — 간소화)
+        const REF_PAD=refNumH+4, MIN_GAP=6;
+        let fixApplied=true, fixRounds=0;
         while(fixApplied&&fixRounds<10){fixApplied=false;fixRounds++;
-          for(let i=0;i<nodeData.length;i++){const a=nodeData[i];const aVb=_shapeVisualBounds(a.shapeType,a.sx,a.sy,a.sw,a.sh);const aBot=aVb.bottom+REF_PAD;
+          for(let i=0;i<nodeData.length;i++){const a=nodeData[i];const aBot=a.sy+a.sh+REF_PAD;
             for(let j=0;j<nodeData.length;j++){if(i===j)continue;const b=nodeData[j];
-              if(a.row===b.row)continue; // ★ v10.2: 같은 행 shape은 수직 push 제외 ★
-              const bVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);
-              const hOvl=!(aVb.right+6<bVb.left||bVb.right+6<aVb.left); // ★ v10.2: visual bounds 기반 수평 겹침 ★
-              if(hOvl&&bVb.top<aBot+MIN_GAP&&b.sy>=a.sy){const push=aBot+MIN_GAP-bVb.top; // ★ v10.2: bVb.top 기준 ★
-                if(push>0){b.sy+=push;const newVb=_shapeVisualBounds(b.shapeType,b.sx,b.sy,b.sw,b.sh);nodeBoxes[b.id]={x:newVb.left,y:newVb.top,w:newVb.right-newVb.left,h:newVb.bottom-newVb.top,cx:newVb.cx,cy:newVb.cy,
-                  _shapeType:b.shapeType,_sx:b.sx,_sy:b.sy,_sw:b.sw,_sh:b.sh};fixApplied=true;}}
+              if(a.row===b.row)continue;
+              const hOvl=!(a.sx+a.sw+6<b.sx||b.sx+b.sw+6<a.sx);
+              if(hOvl&&b.sy<aBot+MIN_GAP&&b.sy>=a.sy){const push=aBot+MIN_GAP-b.sy;
+                if(push>0){b.sy+=push;nodeBoxes[b.id].y=b.sy;nodeBoxes[b.id].cy=b.sy+b.sh/2;nodeBoxes[b.id]._sy=b.sy;fixApplied=true;}}
         }}}
         
-        // ★ v10.5: Phase 1.7 — 같은 행/열 라우팅 정렬 (Canvas) ★
-        const cRowCy={}, cColCx={};
-        nodeData.forEach(nd=>{
-          const box=nodeBoxes[nd.id]; if(!box)return;
-          if(!cRowCy[nd.row])cRowCy[nd.row]=[]; cRowCy[nd.row].push(box.cy);
-          if(nd.col!=null){if(!cColCx[nd.col])cColCx[nd.col]=[]; cColCx[nd.col].push(box.cx);}
-        });
-        const cRowCenter={}, cColCenter={};
-        Object.entries(cRowCy).forEach(([r,vs])=>{cRowCenter[r]=vs.reduce((s,v)=>s+v,0)/vs.length;});
-        Object.entries(cColCx).forEach(([c,vs])=>{cColCenter[c]=vs.reduce((s,v)=>s+v,0)/vs.length;});
-        nodeData.forEach(nd=>{const box=nodeBoxes[nd.id];if(!box)return;if(cRowCenter[nd.row]!=null)box.cy=cRowCenter[nd.row];if(nd.col!=null&&cColCenter[nd.col]!=null)box.cx=cColCenter[nd.col];});
-        const cNodeRC={}; nodeData.forEach(nd=>{cNodeRC[nd.id]={row:nd.row,col:nd.col};});
-        
-        // Phase 2: 연결선 — ★ 같은 행/열은 직선 강제 (Canvas) ★
+        // Phase 2: 연결선 — 실제 shape anchor 기반 라우팅
         function drawCanvasOrthogonalEdge(ctx,route,aLen){
           if(!route||route.length<2)return;
           ctx.lineWidth=1;ctx.strokeStyle='#000000';
@@ -9155,28 +9089,29 @@ function downloadDiagramImages(sid, format='jpeg'){
         const edgesToDraw=uniqueEdges.length>0?uniqueEdges:nodes.slice(0,-1).map((n,i)=>({from:n.id,to:nodes[i+1].id}));
         edgesToDraw.forEach(e=>{
           const fb=nodeBoxes[e.from],tb=nodeBoxes[e.to];if(!fb||!tb)return;
-          const frc=cNodeRC[e.from], trc=cNodeRC[e.to];
-          const sameRow=frc&&trc&&frc.row===trc.row;
-          const sameCol=frc&&trc&&frc.col!=null&&trc.col!=null&&frc.col===trc.col;
-          
+          const dx=tb.cx-fb.cx, dy=tb.cy-fb.cy;
+          const isH=Math.abs(dx)>=Math.abs(dy);
           let route;
-          if(sameRow){
-            const cy=cRowCenter[frc.row];
-            const goR=fb.cx<tb.cx;
-            const fa=_shapeAnchor(fb._shapeType||'box',fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goR?'right':'left');
-            const ta=_shapeAnchor(tb._shapeType||'box',tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goR?'left':'right');
-            route=[{x:fa.px,y:cy},{x:ta.px,y:cy}];
-          }else if(sameCol){
-            const cx=cColCenter[frc.col];
-            const goD=fb.cy<tb.cy;
-            const fa=_shapeAnchor(fb._shapeType||'box',fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goD?'bottom':'top');
-            const ta=_shapeAnchor(tb._shapeType||'box',tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goD?'top':'bottom');
-            route=[{x:cx,y:fa.py},{x:cx,y:ta.py}];
+          if(isH){
+            const goR=dx>0;
+            const fromAnc={x:goR?fb.x+fb.w:fb.x, y:fb.cy};
+            const toAnc={x:goR?tb.x:tb.x+tb.w, y:tb.cy};
+            if(Math.abs(fromAnc.y-toAnc.y)<3)route=[fromAnc,toAnc];
+            else{const midX=(fromAnc.x+toAnc.x)/2;route=[fromAnc,{x:midX,y:fromAnc.y},{x:midX,y:toAnc.y},toAnc];}
           }else{
-            const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
+            const goD=dy>0;
+            const fromAnc={x:fb.cx, y:goD?fb.y+fb.h:fb.y};
+            const toAnc={x:tb.cx, y:goD?tb.y:tb.y+tb.h};
+            if(Math.abs(fromAnc.x-toAnc.x)<3)route=[fromAnc,toAnc];
+            else{const midY=(fromAnc.y+toAnc.y)/2;route=[fromAnc,{x:fromAnc.x,y:midY},{x:toAnc.x,y:midY},toAnc];}
+          }
+          // 충돌 검사
+          const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
+          const excludeIds=new Set([e.from,e.to]);
+          if(_countRouteCollisions(route,allBoxArr,excludeIds)>0){
             const fbA={...fb,id:e.from};const tbA={...tb,id:e.to};
-            route=getOrthogonalRoute(fbA,tbA,allBoxArr);
-            if(route)route=_snapRouteToShapeAnchors(route,fb,tb,0,0,allBoxArr);
+            const alt=getOrthogonalRoute(fbA,tbA,allBoxArr);
+            if(alt)route=_snapRouteToShapeAnchors(alt,fb,tb,0,0,allBoxArr);
           }
           if(route)drawCanvasOrthogonalEdge(ctx,route,6);
         });
