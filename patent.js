@@ -5928,13 +5928,13 @@ function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT,allBoxes){
   const fromST=fromBox._shapeType||'box';
   const fromAnc=_shapeAnchor(fromST,fromBox._sx||fromBox.x,fromBox._sy||fromBox.y,
     fromBox._sw||fromBox.w,fromBox._sh||fromBox.h,fromDir);
-  const fromAncX=fromAnc.px, fromAncY=fromAnc.py; // v10.4: offset 폐지 — 정확한 변 중앙
+  const fromAncX=fromAnc.px, fromAncY=fromAnc.py;
   
   // 4) 끝점 shape anchor 계산
   const toST=toBox._shapeType||'box';
   const toAnc=_shapeAnchor(toST,toBox._sx||toBox.x,toBox._sy||toBox.y,
     toBox._sw||toBox.w,toBox._sh||toBox.h,toDir);
-  const toAncX=toAnc.px, toAncY=toAnc.py; // v10.4: offset 폐지 — 정확한 변 중앙
+  const toAncX=toAnc.px, toAncY=toAnc.py;
   
   // 5) 시작점 스냅
   r[0].x=fromAncX;
@@ -6429,7 +6429,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       nodeBoxes[nd.id]={x:vb.left,y:vb.top,w:vb.right-vb.left,h:vb.bottom-vb.top,cx:vb.cx,cy:vb.cy,
         // v10.2: shape 정보 보존 (연결선 endpoint snapping용)
         _shapeType:shapeType,_sx:sx,_sy:sy,_sw:sm.sw,_sh:sm.sh};
-      nodeData.push({id:nd.id,sx,sy,sw:sm.sw,sh:sm.sh,shapeType,displayLabel,refNum,bx,boxW2D,row:grid[nd.id].row});
+      nodeData.push({id:nd.id,sx,sy,sw:sm.sw,sh:sm.sh,shapeType,displayLabel,refNum,bx,boxW2D,row:grid[nd.id].row,col:grid[nd.id].col});
     });
     
     // ── Phase 1.5: 겹침 검증 & 자동 보정 ──
@@ -6480,7 +6480,42 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     // viewBox 업데이트
     svg=svg.replace(/viewBox="0 0 [^"]*"/,`viewBox="0 0 ${svgW} ${correctedSvgH}"`);
     
-    // ── Phase 2: 연결선 (가장 먼저 렌더 → Shape 아래에 깔림) ──
+    // ★★★ v10.5: Phase 1.7 — 같은 행/열 라우팅 정렬 (Phase 1.5 보정 이후!) ★★★
+    // Phase 1.5가 nodeBoxes를 갱신하므로, 그 이후에 정렬해야 유효함
+    const rowCyMap={};  // row → averaged cy
+    const colCxMap={};  // col → averaged cx
+    nodeData.forEach(nd=>{
+      const box=nodeBoxes[nd.id];
+      if(!box)return;
+      if(!rowCyMap[nd.row])rowCyMap[nd.row]=[];
+      rowCyMap[nd.row].push({id:nd.id, cy:box.cy});
+      if(nd.col!=null){
+        if(!colCxMap[nd.col])colCxMap[nd.col]=[];
+        colCxMap[nd.col].push({id:nd.id, cx:box.cx});
+      }
+    });
+    // 행별 공통 cy (수평 직선용)
+    const rowCenterY={};
+    Object.entries(rowCyMap).forEach(([row, items])=>{
+      rowCenterY[row]=items.reduce((s,i)=>s+i.cy,0)/items.length;
+    });
+    // 열별 공통 cx (수직 직선용)
+    const colCenterX={};
+    Object.entries(colCxMap).forEach(([col, items])=>{
+      colCenterX[col]=items.reduce((s,i)=>s+i.cx,0)/items.length;
+    });
+    // nodeBoxes에 정렬된 cx/cy 반영
+    nodeData.forEach(nd=>{
+      const box=nodeBoxes[nd.id];
+      if(!box)return;
+      if(rowCenterY[nd.row]!=null)box.cy=rowCenterY[nd.row];
+      if(nd.col!=null&&colCenterX[nd.col]!=null)box.cx=colCenterX[nd.col];
+    });
+    // nodeData에서 빠른 row/col 조회용 맵
+    const nodeRowCol={};
+    nodeData.forEach(nd=>{nodeRowCol[nd.id]={row:nd.row,col:nd.col};});
+    
+    // ── Phase 2: 연결선 — ★ 같은 행/열은 직선 강제 ★ ──
     const svgEdgesToDraw=uniqueEdges.length>0?uniqueEdges:(nodes.length>1?nodes.slice(0,-1).map((nd,i)=>({from:nd.id,to:nodes[i+1].id})):[]);
     const svgFanCount={};
     const svgEdgeOff={};
@@ -6497,17 +6532,45 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     svgEdgesToDraw.forEach(e=>{
       const fb=nodeBoxes[e.from], tb=nodeBoxes[e.to];
       if(!fb||!tb)return;
-      // ★ v10.4: fan offset 제거 — 모든 화살표는 shape 변의 정확한 중앙에 접점 ★
-      // 사용자 요구: "화살표 등 연결 선은 구성의 중앙(가로든 세로든)에 접점을 형성"
-      const fbA={...fb,id:e.from};
-      const tbA={...tb,id:e.to};
-      const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
-      let route=getOrthogonalRoute(fbA,tbA,allBoxArr);
+      
+      const fromRC=nodeRowCol[e.from];
+      const toRC=nodeRowCol[e.to];
+      const sameRow=fromRC&&toRC&&fromRC.row===toRC.row;
+      const sameCol=fromRC&&toRC&&fromRC.col!=null&&toRC.col!=null&&fromRC.col===toRC.col;
+      
+      let route;
+      
+      if(sameRow){
+        // ★★ 같은 행: 수평 직선 강제 — getOrthogonalRoute 우회 ★★
+        const commonY=rowCenterY[fromRC.row];
+        const goRight=fb.cx<tb.cx;
+        const fromST=fb._shapeType||'box';
+        const toST=tb._shapeType||'box';
+        const fromAnc=_shapeAnchor(fromST,fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goRight?'right':'left');
+        const toAnc=_shapeAnchor(toST,tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goRight?'left':'right');
+        route=[{x:fromAnc.px, y:commonY}, {x:toAnc.px, y:commonY}];
+        console.log(`[Fig1 DirectH] ${e.from}→${e.to}: y=${Math.round(commonY)} (직선 강제)`);
+      }else if(sameCol){
+        // ★★ 같은 열: 수직 직선 강제 ★★
+        const commonX=colCenterX[fromRC.col];
+        const goDown=fb.cy<tb.cy;
+        const fromST=fb._shapeType||'box';
+        const toST=tb._shapeType||'box';
+        const fromAnc=_shapeAnchor(fromST,fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goDown?'bottom':'top');
+        const toAnc=_shapeAnchor(toST,tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goDown?'top':'bottom');
+        route=[{x:commonX, y:fromAnc.py}, {x:commonX, y:toAnc.py}];
+        console.log(`[Fig1 DirectV] ${e.from}→${e.to}: x=${Math.round(commonX)} (직선 강제)`);
+      }else{
+        // 다른 행/열: 기존 직교 라우팅
+        const fbA={...fb,id:e.from};
+        const tbA={...tb,id:e.to};
+        const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
+        route=getOrthogonalRoute(fbA,tbA,allBoxArr);
+        if(route){
+          route=_snapRouteToShapeAnchors(route,fb,tb,0,0,allBoxArr);
+        }
+      }
       if(!route)return;
-      
-      // ★ v10.4: 연결선 시작/끝점을 Shape 변 중앙에 스냅 + 장애물 인식 단순화 ★
-      route=_snapRouteToShapeAnchors(route,fb,tb,0,0,allBoxArr);
-      
       svg+=svgOrthogonalEdge(route,mkId);
     });
     
@@ -6777,6 +6840,29 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
         _shapeType:shapeType,_sx:sx,_sy:sy,_sw:sm.sw,_sh:sm.sh};
     });
     
+    // ★ v10.5: 같은 행/열 nodeBox cy/cx 정렬 (Fig 2+) — 직선 연결 보장 ★
+    const fig2RowCy={};
+    const fig2ColCx={};
+    displayNodes.forEach(nd=>{
+      const gp=innerGrid[nd.id];
+      const box=innerNodeBoxes[nd.id];
+      if(!gp||!box)return;
+      if(!fig2RowCy[gp.row])fig2RowCy[gp.row]=[];
+      fig2RowCy[gp.row].push({id:nd.id, cy:box.cy});
+      if(!fig2ColCx[gp.col])fig2ColCx[gp.col]=[];
+      fig2ColCx[gp.col].push({id:nd.id, cx:box.cx});
+    });
+    Object.values(fig2RowCy).forEach(items=>{
+      if(items.length<=1)return;
+      const avg=items.reduce((s,i)=>s+i.cy,0)/items.length;
+      items.forEach(i=>{if(innerNodeBoxes[i.id])innerNodeBoxes[i.id].cy=avg;});
+    });
+    Object.values(fig2ColCx).forEach(items=>{
+      if(items.length<=1)return;
+      const avg=items.reduce((s,i)=>s+i.cx,0)/items.length;
+      items.forEach(i=>{if(innerNodeBoxes[i.id])innerNodeBoxes[i.id].cx=avg;});
+    });
+    
     // ★ v10.4: L2 서브 프레임 렌더링 — L2 부모의 L3 자식들을 시각적으로 그룹화 ★
     Object.entries(l2SubFrames).forEach(([l2Ref,info])=>{
       if(!info.node||info.children.length===0)return;
@@ -6816,19 +6902,42 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     svg+=`<line x1="${frameX+frameW}" y1="${frameLeaderY}" x2="${frameLeaderEndX}" y2="${frameLeaderY}" stroke="#000" stroke-width="1"/>`;
     svg+=`<text x="${frameLeaderEndX+8}" y="${frameLeaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
     
-    // 4. 직각 라우팅 edge 기반 연결선
+    // 4. 직각 라우팅 edge 기반 연결선 — ★ 같은 행/열은 직선 강제 ★
     const innerEdgesToDraw2=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
-    // ★ v10.4: fan offset 제거 — 화살표는 항상 shape 변의 정확한 중앙에 접점 ★
+    // 행/열 센터 맵 빌드
+    const fig2RowCenter={}, fig2ColCenter={};
+    Object.entries(fig2RowCy).forEach(([r,items])=>{fig2RowCenter[r]=items.reduce((s,i)=>s+i.cy,0)/items.length;});
+    Object.entries(fig2ColCx).forEach(([c,items])=>{fig2ColCenter[c]=items.reduce((s,i)=>s+i.cx,0)/items.length;});
+    const fig2NodeRC={};
+    displayNodes.forEach(nd=>{const gp=innerGrid[nd.id];if(gp)fig2NodeRC[nd.id]={row:gp.row,col:gp.col};});
+    
     innerEdgesToDraw2.forEach(e=>{
       const fb=innerNodeBoxes[e.from],tb=innerNodeBoxes[e.to];
       if(!fb||!tb)return;
-      const fbA={...fb,id:e.from};const tbA={...tb,id:e.to};
-      const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
-      let route=getOrthogonalRoute(fbA,tbA,allBoxArr);
-      if(route){
-        route=_snapRouteToShapeAnchors(route,fb,tb,0,0,allBoxArr);
-        svg+=svgOrthogonalEdge(route,mkId);
+      const frc=fig2NodeRC[e.from], trc=fig2NodeRC[e.to];
+      const sameRow=frc&&trc&&frc.row===trc.row;
+      const sameCol=frc&&trc&&frc.col!=null&&trc.col!=null&&frc.col===trc.col;
+      
+      let route;
+      if(sameRow){
+        const cy=fig2RowCenter[frc.row]||fb.cy;
+        const goR=fb.cx<tb.cx;
+        const fa=_shapeAnchor(fb._shapeType||'box',fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goR?'right':'left');
+        const ta=_shapeAnchor(tb._shapeType||'box',tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goR?'left':'right');
+        route=[{x:fa.px,y:cy},{x:ta.px,y:cy}];
+      }else if(sameCol){
+        const cx=fig2ColCenter[frc.col]||fb.cx;
+        const goD=fb.cy<tb.cy;
+        const fa=_shapeAnchor(fb._shapeType||'box',fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goD?'bottom':'top');
+        const ta=_shapeAnchor(tb._shapeType||'box',tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goD?'top':'bottom');
+        route=[{x:cx,y:fa.py},{x:cx,y:ta.py}];
+      }else{
+        const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
+        const fbA={...fb,id:e.from};const tbA={...tb,id:e.to};
+        route=getOrthogonalRoute(fbA,tbA,allBoxArr);
+        if(route)route=_snapRouteToShapeAnchors(route,fb,tb,0,0,allBoxArr);
       }
+      if(route)svg+=svgOrthogonalEdge(route,mkId);
     });
     
     svg+='</svg>';
@@ -7382,18 +7491,23 @@ function _postRenderValidationLoop(containerId, figNum, maxAttempts, renderInfo)
     if(fixCount===0)break;
   }
   
-  // ── 2단계: 재렌더링 보정 (ERROR가 남아있을 때만) ──
-  if(lastResult&&!lastResult.pass&&renderInfo){
-    const shapeOverlaps=lastResult.issues.filter(i=>i.type==='SHAPE_OVERLAP'||i.type==='TEXT_OVERLAP');
-    if(shapeOverlaps.length>0){
-      console.warn(`[PostRender] 도 ${figNum}: DOM 보정 불충분 → 재렌더링 시도 (간격 ${Math.round(1.15*100)}%)`);
+  // ── 2단계: 재렌더링 보정 (ERROR 또는 심각한 WARNING이 남아있을 때) ──
+  if(lastResult&&renderInfo){
+    const hasErrors=!lastResult.pass;
+    const hasBends=lastResult.issues.filter(i=>i.type==='UNNECESSARY_BEND'||i.type==='EXCESSIVE_BENDS').length;
+    const hasPierce=lastResult.issues.filter(i=>i.type==='ROUTE_PIERCE').length;
+    const hasFontIssue=lastResult.issues.filter(i=>i.type==='FONT_INCONSISTENT'||i.type==='FONT_TOO_SMALL').length;
+    const needsRerender=hasErrors||hasPierce>0||hasBends>1||hasFontIssue>0;
+    
+    if(needsRerender){
+      console.warn(`[PostRender] 도 ${figNum}: DOM 보정 불충분 → 재렌더링 시도 (ERR:${hasErrors?'Y':'N'} BEND:${hasBends} PIERCE:${hasPierce} FONT:${hasFontIssue})`);
       
-      // 간격 확대 + 폰트 축소로 재렌더링
+      // 간격 확대 + 폰트 조정으로 재렌더링
       const adjustments={
-        spacingMult: 1.15,     // 간격 15% 확대
-        fontOffset: -1,        // 폰트 1px 축소
-        boxWidthMult: 1.05,    // 박스 5% 확대
-        boxHeightMult: 1.05    // 박스 높이 5% 확대
+        spacingMult: hasPierce>0?1.25:1.15,  // 관통 시 더 넓게
+        fontOffset: hasFontIssue>0?1:-1,      // 폰트 문제 시 확대, 아니면 축소
+        boxWidthMult: 1.05,
+        boxHeightMult: 1.05
       };
       
       try{
@@ -8991,7 +9105,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           const vb=_shapeVisualBounds(shapeType,sx,by,sm.sw,sm.sh);
           nodeBoxes[nd.id]={x:vb.left,y:vb.top,w:vb.right-vb.left,h:vb.bottom-vb.top,cx:vb.cx,cy:vb.cy,
             _shapeType:shapeType,_sx:sx,_sy:by,_sw:sm.sw,_sh:sm.sh};
-          nodeData.push({id:nd.id,sx,sy:by,sw:sm.sw,sh:sm.sh,shapeType,cleanLabel,refNum,row:gp.row});
+          nodeData.push({id:nd.id,sx,sy:by,sw:sm.sw,sh:sm.sh,shapeType,cleanLabel,refNum,row:gp.row,col:gp.col});
         });
         
         // ★ Phase 1.5: 겹침 검증 & 자동 보정 (v10.2: visual bounds 기반) ★
@@ -9008,9 +9122,21 @@ function downloadDiagramImages(sid, format='jpeg'){
                   _shapeType:b.shapeType,_sx:b.sx,_sy:b.sy,_sw:b.sw,_sh:b.sh};fixApplied=true;}}
         }}}
         
-        // Phase 2: 연결선 먼저 (Shape 아래에 깔림)
-        function drawCanvasOrthogonalEdge(ctx,fb,tb,aLen,allBoxArr){
-          const route=getOrthogonalRoute(fb,tb,allBoxArr);
+        // ★ v10.5: Phase 1.7 — 같은 행/열 라우팅 정렬 (Canvas) ★
+        const cRowCy={}, cColCx={};
+        nodeData.forEach(nd=>{
+          const box=nodeBoxes[nd.id]; if(!box)return;
+          if(!cRowCy[nd.row])cRowCy[nd.row]=[]; cRowCy[nd.row].push(box.cy);
+          if(nd.col!=null){if(!cColCx[nd.col])cColCx[nd.col]=[]; cColCx[nd.col].push(box.cx);}
+        });
+        const cRowCenter={}, cColCenter={};
+        Object.entries(cRowCy).forEach(([r,vs])=>{cRowCenter[r]=vs.reduce((s,v)=>s+v,0)/vs.length;});
+        Object.entries(cColCx).forEach(([c,vs])=>{cColCenter[c]=vs.reduce((s,v)=>s+v,0)/vs.length;});
+        nodeData.forEach(nd=>{const box=nodeBoxes[nd.id];if(!box)return;if(cRowCenter[nd.row]!=null)box.cy=cRowCenter[nd.row];if(nd.col!=null&&cColCenter[nd.col]!=null)box.cx=cColCenter[nd.col];});
+        const cNodeRC={}; nodeData.forEach(nd=>{cNodeRC[nd.id]={row:nd.row,col:nd.col};});
+        
+        // Phase 2: 연결선 — ★ 같은 행/열은 직선 강제 (Canvas) ★
+        function drawCanvasOrthogonalEdge(ctx,route,aLen){
           if(!route||route.length<2)return;
           ctx.lineWidth=1;ctx.strokeStyle='#000000';
           ctx.beginPath();ctx.moveTo(route[0].x,route[0].y);
@@ -9027,24 +9153,32 @@ function downloadDiagramImages(sid, format='jpeg'){
         }
         
         const edgesToDraw=uniqueEdges.length>0?uniqueEdges:nodes.slice(0,-1).map((n,i)=>({from:n.id,to:nodes[i+1].id}));
-        const edgeOffsets={};const nodeFanCount={};
-        edgesToDraw.forEach(e=>{['from','to'].forEach(k=>{
-          const nid=e[k];if(!nodeFanCount[nid])nodeFanCount[nid]=0;
-          if(!edgeOffsets[e.from+'_'+e.to])edgeOffsets[e.from+'_'+e.to]={};
-          edgeOffsets[e.from+'_'+e.to][k+'Idx']=nodeFanCount[nid];nodeFanCount[nid]++;
-        });});
         edgesToDraw.forEach(e=>{
           const fb=nodeBoxes[e.from],tb=nodeBoxes[e.to];if(!fb||!tb)return;
-          const fanFrom=nodeFanCount[e.from]||1,fanTo=nodeFanCount[e.to]||1;
-          const idxFrom=edgeOffsets[e.from+'_'+e.to]?.fromIdx||0;
-          const idxTo=edgeOffsets[e.from+'_'+e.to]?.toIdx||0;
-          const offsetFrom=fanFrom>1?(idxFrom-((fanFrom-1)/2))*8:0;
-          const offsetTo=fanTo>1?(idxTo-((fanTo-1)/2))*8:0;
-          // ★ v10.4: fan offset 제거 — 정확한 중앙 접점 ★
-          const fbAdj={...fb,id:e.from};
-          const tbAdj={...tb,id:e.to};
-          const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
-          drawCanvasOrthogonalEdge(ctx,fbAdj,tbAdj,6,allBoxArr);
+          const frc=cNodeRC[e.from], trc=cNodeRC[e.to];
+          const sameRow=frc&&trc&&frc.row===trc.row;
+          const sameCol=frc&&trc&&frc.col!=null&&trc.col!=null&&frc.col===trc.col;
+          
+          let route;
+          if(sameRow){
+            const cy=cRowCenter[frc.row];
+            const goR=fb.cx<tb.cx;
+            const fa=_shapeAnchor(fb._shapeType||'box',fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goR?'right':'left');
+            const ta=_shapeAnchor(tb._shapeType||'box',tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goR?'left':'right');
+            route=[{x:fa.px,y:cy},{x:ta.px,y:cy}];
+          }else if(sameCol){
+            const cx=cColCenter[frc.col];
+            const goD=fb.cy<tb.cy;
+            const fa=_shapeAnchor(fb._shapeType||'box',fb._sx||fb.x,fb._sy||fb.y,fb._sw||fb.w,fb._sh||fb.h,goD?'bottom':'top');
+            const ta=_shapeAnchor(tb._shapeType||'box',tb._sx||tb.x,tb._sy||tb.y,tb._sw||tb.w,tb._sh||tb.h,goD?'top':'bottom');
+            route=[{x:cx,y:fa.py},{x:cx,y:ta.py}];
+          }else{
+            const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
+            const fbA={...fb,id:e.from};const tbA={...tb,id:e.to};
+            route=getOrthogonalRoute(fbA,tbA,allBoxArr);
+            if(route)route=_snapRouteToShapeAnchors(route,fb,tb,0,0,allBoxArr);
+          }
+          if(route)drawCanvasOrthogonalEdge(ctx,route,6);
         });
         
         // Phase 3: Shape + 지능형 참조번호 배치 (연결 방향 회피)
