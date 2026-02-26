@@ -740,7 +740,7 @@ const STEP_DEPENDENCIES={
   step_03:{MUST:['step_05'],SHOULD:[]},
   step_05:{MUST:['step_16'],SHOULD:[]},
   step_06:{MUST:['step_07','step_08','step_10','step_13','step_14','step_15','step_16','step_17','step_19'],SHOULD:['step_09','step_11','step_12','step_18','step_20']},
-  step_07:{MUST:['step_08','step_18'],SHOULD:['step_11','step_09','step_13']},
+  step_07:{MUST:['step_08','step_11','step_18'],SHOULD:['step_09','step_13']},
   step_08:{MUST:['step_09','step_13'],SHOULD:['step_12','step_14','step_15','step_16']},
   step_09:{MUST:[],SHOULD:['step_13']},
   step_10:{MUST:['step_11','step_12','step_13','step_17','step_20'],SHOULD:['step_14','step_15','step_18']},
@@ -2160,9 +2160,16 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
 
 ★★★ 배치 품질 규칙 (렌더링 겹침 방지) ★★★
   ⛔ 한 행에 3개 초과 금지 → 한 행에는 최대 3개까지 배치
-  ⛔ 연결된 노드끼리 같은 행 금지 → 연결이 있으면 다른 행에 배치
-  ✅ 허브는 중간 행에 배치 (위아래로 연결 대상이 분산)
-  ✅ 같은 행 노드는 서로 직접 연결 없는 것만
+  ✅ 도 2 이후 내부 블록도: 데이터 흐름 방향에 따라 입력측→처리→출력측 순서로 배치
+  ✅ 흐름 방향이 명확하지 않으면 참조번호 오름차순으로 배치
+
+★★★ 점진적 구체화 원칙 (Progressive Detail) ★★★
+  - 도면 번호가 증가할수록 더 구체적인 내용을 표현해야 한다
+  - 도 1: 전체 시스템 개요 (L1 장치 간 관계)
+  - 도 2: 핵심 장치의 내부 구성 (독립항의 주 청구 대상을 가장 먼저 상세화)
+  - 도 3: 도 2에서 가장 중요한 구성요소를 다시 상세화
+  - 도 4+: 부수적 장치 또는 더 깊은 계층의 상세화
+  - 순서 결정 기준: 청구항에서 가장 많이 언급되고, 발명의 핵심인 구성요소를 먼저 상세화
 
 ⛔⛔⛔ 참조번호 고유성 규칙 (절대 위반 금지) ⛔⛔⛔
   - 모든 참조번호는 전체 도면세트 내에서 고유해야 한다. 동일 번호 재사용 불가.
@@ -2217,7 +2224,8 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
 - ...
 연결관계: [구성요소 간 데이터 흐름 분석]
 공간배치:
-  허브: [가장 많은 연결을 가진 노드]
+  데이터흐름: [입력측 구성요소 → 처리 구성요소 → 출력측 구성요소]
+  도 1은 허브중심배치, 도 2+는 흐름방향배치
   행1: [노드들]
   행2: [노드들]
 
@@ -2310,11 +2318,13 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
 ${!hasMethodClaims?`- 방법 청구항이 생성되지 않았으므로, 방법 도면(흐름도) 및 방법 설명이 존재하지 않는다.
 - 방법 관련 내용(S+숫자, ~하는 단계, 흐름도 참조)을 절대 포함하지 마라.`:''}
 
-★★★ 설명 순서 규칙 (참조번호 순서 준수) ★★★
-- 도면 부호의 번호가 작은 것부터 큰 것 순서로 설명하라.
-- 도 1 → 도 2 → 도 3 → ... 순서로 진행하라.
-- 각 도면 내에서도 참조번호 오름차순으로 설명하라: 예) 110→120→130→140 순서.
-- 같은 L2 구성요소 내의 L3 하위 요소도 오름차순: 예) 121→122→123 순서.
+★★★ 설명 순서 규칙 ★★★
+- 도 1 → 도 2 → 도 3 → ... 순서로 진행하라 (도면 간 순서는 반드시 번호순).
+- 각 도면 내에서는 데이터/정보 흐름 순서에 따라 설명하라:
+  → 입력측 구성요소부터 시작하여 처리→출력 순서로 기술
+  → 예) 통신부(110)에서 데이터를 수신하면, 프로세서(120)가 분석하고, 저장부(140)에 저장한다
+- 흐름 방향이 불분명하면 참조번호 오름차순: 예) 110→120→130→140.
+- 같은 L2 구성요소 내의 L3 하위 요소도 흐름순 또는 오름차순: 예) 121→122→123.
 
 ⛔⛔⛔ 방법 표현 절대 금지 (위반 시 전체 무효) ⛔⛔⛔
 - \"~하는 단계\", \"~하는 단계이다\" 표현 절대 금지
@@ -3621,7 +3631,7 @@ ${diagram}`,4096);
             return true;
           });
           const batchDisplayNodes=batchInnerNodes.length>0?batchInnerNodes:nodes;
-          const batchLayout=computeDeviceLayout2D(batchDisplayNodes,edges);
+          const batchLayout=computeDeviceLayout2D(batchDisplayNodes,edges,figNum);
           const{grid:batchGrid,maxCols:batchMaxCols,numRows:batchNumRows,uniqueEdges:batchUniqueEdges}=batchLayout;
           
           // ═══ v8.0: 충돌 방지 기반 레이아웃 상수 ═══
@@ -4204,10 +4214,14 @@ graph TD
 - 연결은 --> 만 사용 (양방향은 A --> B와 B --> A 두 줄로)
 
 ★★★ 노드 정의 순서 = 렌더링 배치에 직접 영향 ★★★
-- 도면 설계의 "공간배치"를 반드시 따르라
-- 허브 노드를 가장 먼저 정의하라 (BFS 시작점이 됨)
-- 같은 행의 노드는 연속 정의하라
-- 연결 방향: 허브 → 자식 방향으로 정의 (A --> B, A --> C)
+- 도 1: 허브 노드(가장 많은 연결)를 가장 먼저 정의하라
+- 도 2+: 데이터 흐름의 입력측(in-degree가 낮은 노드)을 먼저 정의하라
+  → 입력→처리→출력 순서로 노드를 정의
+  → 참조번호 작은 순서 아님! 데이터 흐름 순서!
+- 같은 처리 단계의 노드는 연속 정의하라
+- 연결 방향: 데이터/정보 흐름 방향과 일치시키라
+  수집부→분석부→결정부→전송부 순이면 A-->B-->C-->D
+- 순환 연결(A→B→C→A) 금지 — 단방향 데이터 흐름만 표현
 `;
   
   if(isDevice){
@@ -4238,12 +4252,13 @@ graph TD
 - 데이터/정보 도면(~정보, ~데이터): 정보 항목은 ${getDeviceSubject()} 입력 데이터 → 상호 화살표 연결 부적절 → 연결선 없이 병렬 배치 (노드 정의만, A --> B 금지)
 - 장치 블록도: 데이터 흐름이 있는 구성요소만 --> 연결
 - 상위 구성(110)과 하위 구성(111,112,113)을 같은 레벨에 표현 금지
+- ★ 순환 연결(A-->B-->C-->A) 절대 금지 — 단방향 흐름만
 
 ★★★ 공간배치 → Mermaid 변환 규칙 ★★★
-도면 설계에 "공간배치" 섹션이 있으면:
-1. "허브"로 지정된 노드의 ID를 가장 먼저 정의하라
-2. "행1" 노드를 먼저, "행2" 노드를 그 다음에 정의하라
-3. 허브에서 다른 노드로의 연결을 먼저 작성하라 (허브가 BFS 루트가 됨)
+도면 설계에 "데이터흐름" 또는 "공간배치" 섹션이 있으면:
+1. 도 1: "허브"로 지정된 노드의 ID를 가장 먼저 정의하라
+2. 도 2+: 입력측(데이터 흐름의 시작점) 노드를 가장 먼저 정의하라
+3. 데이터 흐름 순서대로 노드를 정의하라 (입력→처리→출력)
 4. 같은 행 노드 간 연결이 있으면 반드시 별도 행으로 분리 (겹침 방지)
 
 예시 (허브=서버(100), 행1=서버, 행2=단말+DB):
@@ -5071,6 +5086,8 @@ ${isMethod?`[방법 도면 규칙]
 - 데이터/정보 도면: 정보 항목은 ${getDeviceSubject()} 입력용이므로 상호 간 화살표 연결 부적절 → 병렬 배치
 - 장치 블록도: 기술적 데이터 흐름이 있으면 화살표 연결
 - 상위+하위 구성이 같은 레벨에 표현 금지 → 하위는 상위 내부에 포함
+- ★ 순환 연결(A→B→C→A) 금지 — 데이터 흐름은 단방향이어야 함
+- ★ 도 2+: 데이터 흐름의 입력측→처리→출력측 순서로 구성요소를 배치하라
 
 ═══ 이전 도면 설계 (오류 포함) ═══
 ${prevDesign.slice(0,2000)}
@@ -5424,130 +5441,213 @@ function computeEdgeRoutes(edges,positions){
 // ═══ 2D Layout Engine v3.0: Hub-Spoke (꺾임 최소화) ═══
 // 핵심: 허브를 중앙에, 이웃 노드를 상하좌우에 배치 → 직선 연결 극대화
 // 같은 행/열의 노드끼리는 직선 연결, 다른 행+열이면 꺾임 발생
-function computeDeviceLayout2D(nodes,edges){
+function computeDeviceLayout2D(nodes,edges,figNum){
   const n=nodes.length;
   if(n===0)return{grid:{},maxCols:1,numRows:0,uniqueEdges:[]};
   const MAX_COLS=3;
+  figNum=figNum||1;
   
-  // Build bidirectional adjacency
-  const adj={};
-  nodes.forEach(nd=>{adj[nd.id]=new Set();});
+  // ═══ 공통: 인접 리스트 + 방향 그래프 구축 ═══
+  const adj={};        // 양방향 (탐색용)
+  const dirAdj={};     // 단방향 (위상 정렬용)
+  const dirAdjRev={};  // 역방향
+  nodes.forEach(nd=>{adj[nd.id]=new Set();dirAdj[nd.id]=new Set();dirAdjRev[nd.id]=new Set();});
   const edgeSet=new Set();
   edges.forEach(e=>{
     const k1=e.from+'|'+e.to, k2=e.to+'|'+e.from;
     if(!edgeSet.has(k1)&&!edgeSet.has(k2))edgeSet.add(k1);
     if(adj[e.from])adj[e.from].add(e.to);
     if(adj[e.to])adj[e.to].add(e.from);
+    if(dirAdj[e.from])dirAdj[e.from].add(e.to);
+    if(dirAdjRev[e.to])dirAdjRev[e.to].add(e.from);
   });
   const uniqueEdges=[...edgeSet].map(k=>{const[f,t]=k.split('|');return{from:f,to:t};});
+  const allIds=nodes.map(nd=>nd.id);
   
-  // No edges → simple grid
+  // ═══ edge 없음 → 참조번호 오름차순 그리드 ═══
   if(edges.length===0){
+    const sorted=[...nodes].sort((a,b)=>{
+      const ra=parseInt((a.label.match(/\((\d+)\)/)||[])[1])||9999;
+      const rb=parseInt((b.label.match(/\((\d+)\)/)||[])[1])||9999;
+      return ra-rb;
+    });
     const grid={};const rows=[];
-    for(let i=0;i<n;i+=MAX_COLS){rows.push(nodes.slice(i,Math.min(i+MAX_COLS,n)).map(nd=>nd.id));}
+    for(let i=0;i<n;i+=MAX_COLS){rows.push(sorted.slice(i,Math.min(i+MAX_COLS,n)).map(nd=>nd.id));}
     rows.forEach((row,ri)=>{row.forEach((id,ci)=>{grid[id]={row:ri,col:ci,layerSize:row.length};});});
     return{grid,maxCols:Math.min(n,MAX_COLS),numRows:rows.length,uniqueEdges:[],layers:rows};
   }
   
-  // ═══ 1단계: 최장 경로(체인) 탐색 — DFS ═══
-  // 그래프의 가장 긴 경로를 찾아 주축으로 사용
-  let longestPath=[];
-  const allIds=nodes.map(nd=>nd.id);
+  // ═══ 순환 검출 (Kahn's algorithm) ═══
+  function _detectCycle(){
+    const inDeg={};
+    allIds.forEach(id=>{inDeg[id]=0;});
+    allIds.forEach(id=>{(dirAdj[id]||new Set()).forEach(to=>{inDeg[to]=(inDeg[to]||0)+1;});});
+    const q=allIds.filter(id=>inDeg[id]===0);
+    let visited=0;
+    while(q.length>0){
+      const cur=q.shift();visited++;
+      (dirAdj[cur]||new Set()).forEach(next=>{inDeg[next]--;if(inDeg[next]===0)q.push(next);});
+    }
+    return visited<n; // true = 순환 있음
+  }
+  const hasCycle=_detectCycle();
   
-  // 모든 리프 노드(degree 1)에서 DFS
-  const leaves=allIds.filter(id=>(adj[id]||new Set()).size<=1);
-  const startNodes=leaves.length>0?leaves:allIds;
+  // ═══ 그래프 유형 분류 ═══
+  const degrees=allIds.map(id=>(adj[id]||new Set()).size);
+  const maxDeg=Math.max(...degrees);
+  const hasHub=maxDeg>=Math.max(3, Math.ceil(n*0.35));
+  const isFig1=(figNum===1);
   
-  for(const startId of startNodes){
-    const stack=[[startId,[startId]]];
+  let strategy;
+  if(isFig1&&hasHub){
+    strategy='HUB_SPOKE';      // 도 1 + 허브 있음 → 허브 중심
+  }else if(isFig1){
+    strategy='CHAIN_FIRST';     // 도 1 + 허브 없음 → 체인 기반
+  }else if(!hasCycle&&edges.length>0){
+    strategy='TOPOLOGICAL';     // 도 2+ + DAG → 위상 정렬 (핵심 개선)
+  }else{
+    strategy='CHAIN_FIRST';     // 순환 그래프 → 체인 기반 폴백
+  }
+  
+  console.log(`[Layout v12] figNum=${figNum}, n=${n}, strategy=${strategy}, hasCycle=${hasCycle}, maxDeg=${maxDeg}`);
+  
+  // ═══ 전략별 레이어 생성 ═══
+  let layers=[];
+  const alignCol={};
+  
+  if(strategy==='TOPOLOGICAL'){
+    // ── 위상 정렬: 입력→출력 방향 배치 ──
+    // 양방향 edge가 있으면 참조번호 작은 쪽→큰 쪽으로 단방향화
+    const inDeg={};
+    allIds.forEach(id=>{inDeg[id]=0;});
+    allIds.forEach(id=>{(dirAdj[id]||new Set()).forEach(to=>{inDeg[to]=(inDeg[to]||0)+1;});});
+    
+    const q=allIds.filter(id=>inDeg[id]===0);
+    // 시작 노드가 여러개면 참조번호 오름차순 정렬
+    q.sort((a,b)=>{
+      const ra=parseInt((nodes.find(nd=>nd.id===a)?.label.match(/\((\d+)\)/)||[])[1])||9999;
+      const rb=parseInt((nodes.find(nd=>nd.id===b)?.label.match(/\((\d+)\)/)||[])[1])||9999;
+      return ra-rb;
+    });
+    
+    const topoOrder=[];
     const visited=new Set();
-    while(stack.length>0){
-      const[cur,path]=stack.pop();
-      if(path.length>longestPath.length)longestPath=[...path];
+    while(q.length>0){
+      const cur=q.shift();
+      if(visited.has(cur))continue;
       visited.add(cur);
-      (adj[cur]||new Set()).forEach(next=>{
-        if(!path.includes(next)){
-          stack.push([next,[...path,next]]);
-        }
+      topoOrder.push(cur);
+      // 이웃을 참조번호순으로 정렬하여 추가
+      const nexts=[...(dirAdj[cur]||new Set())].sort((a,b)=>{
+        const ra=parseInt((nodes.find(nd=>nd.id===a)?.label.match(/\((\d+)\)/)||[])[1])||9999;
+        const rb=parseInt((nodes.find(nd=>nd.id===b)?.label.match(/\((\d+)\)/)||[])[1])||9999;
+        return ra-rb;
+      });
+      nexts.forEach(next=>{
+        inDeg[next]--;
+        if(inDeg[next]===0)q.push(next);
       });
     }
-  }
-  
-  // ═══ 2단계: 체인 기반 행 배치 — 스네이크 순서 ═══
-  // 최장 경로를 MAX_COLS씩 잘라 행으로 배치
-  // 짝수 행: 왼→오, 홀수 행: 오→왼 (스네이크) → 행 경계에서 같은 열 보장
-  let layers=[];
-  for(let i=0;i<longestPath.length;i+=MAX_COLS){
-    const chunk=longestPath.slice(i,Math.min(i+MAX_COLS,longestPath.length));
-    const rowIdx=Math.floor(i/MAX_COLS);
-    if(rowIdx%2===1)chunk.reverse(); // 스네이크: 홀수 행 역순
-    layers.push(chunk);
-  }
-  
-  // 나머지 노드 (체인에 포함되지 않은 것) 배치
-  const placed=new Set(longestPath);
-  const remaining=allIds.filter(id=>!placed.has(id));
-  
-  // 나머지를 연결된 기존 노드 옆에 배치
-  const alignCol={};
-  const remQueue=[...remaining];
-  let remIter=0;
-  while(remQueue.length>0&&remIter<remaining.length*3){
-    remIter++;
-    const id=remQueue.shift();
-    const nbrs=[...(adj[id]||new Set())];
-    let bestPlaced=false;
+    // 위상 정렬에서 빠진 노드(고립) 추가
+    allIds.forEach(id=>{if(!visited.has(id))topoOrder.push(id);});
     
-    // 연결된 기존 노드의 같은 행(빈자리) 또는 같은 열(아래 행)에 배치
-    for(const nbr of nbrs){
-      if(!placed.has(nbr))continue;
-      
-      // nbr의 위치 찾기
-      let nbrRow=-1, nbrCol=-1;
-      for(let ri=0;ri<layers.length;ri++){
-        const ci=layers[ri].indexOf(nbr);
-        if(ci>=0){nbrRow=ri;nbrCol=ci;break;}
-      }
-      if(alignCol[nbr]){nbrCol=alignCol[nbr].col;}
-      if(nbrRow<0)continue;
-      
-      // 옵션 1: 같은 행에 빈 자리 → 수평 직선
-      if(layers[nbrRow].length<MAX_COLS){
-        layers[nbrRow].push(id);
-        placed.add(id);
-        bestPlaced=true;
-        break;
-      }
-      
-      // 옵션 2: 아래 행에 배치 → 같은 열 수직 직선
-      const targetRow=nbrRow+1;
-      while(layers.length<=targetRow)layers.push([]);
-      if(layers[targetRow].length<MAX_COLS){
-        layers[targetRow].push(id);
-        alignCol[id]={col:nbrCol, layerSize:Math.max(layers[nbrRow].length,layers[targetRow].length)};
-        placed.add(id);
-        bestPlaced=true;
-        break;
-      }
+    // 위상 순서를 MAX_COLS씩 스네이크 배치
+    for(let i=0;i<topoOrder.length;i+=MAX_COLS){
+      const chunk=topoOrder.slice(i,Math.min(i+MAX_COLS,topoOrder.length));
+      const rowIdx=Math.floor(i/MAX_COLS);
+      if(rowIdx%2===1)chunk.reverse();
+      layers.push(chunk);
     }
     
-    if(!bestPlaced){
-      if(nbrs.some(nb=>remaining.includes(nb)&&!placed.has(nb))&&remIter<remaining.length*2){
-        remQueue.push(id); continue;
-      }
-      // 폴백: 아무 빈 자리
+  }else if(strategy==='HUB_SPOKE'){
+    // ── 허브 중심 배치 (도 1 전용) ──
+    // ★ v12: 동점 허브 → 참조번호 작은 노드 우선 ★
+    const hubId=allIds.reduce((best,id)=>{
+      const degA=(adj[id]||new Set()).size, degB=(adj[best]||new Set()).size;
+      if(degA!==degB)return degA>degB?id:best;
+      const ra=parseInt((nodes.find(nd=>nd.id===id)?.label.match(/\((\d+)\)/)||[])[1])||9999;
+      const rb=parseInt((nodes.find(nd=>nd.id===best)?.label.match(/\((\d+)\)/)||[])[1])||9999;
+      return ra<rb?id:best;
+    },allIds[0]);
+    const hubNbrs=[...(adj[hubId]||new Set())];
+    // 허브를 중간 행 중앙에, 이웃을 위/아래 행에 배치
+    const topNbrs=hubNbrs.slice(0,Math.min(MAX_COLS,Math.ceil(hubNbrs.length/2)));
+    const botNbrs=hubNbrs.slice(topNbrs.length, topNbrs.length+MAX_COLS);
+    // ★ v12 FIX: 7개 이상 이웃 시 누락 방지 — 나머지 이웃도 추가 행에 배치 ★
+    const extraNbrs=hubNbrs.slice(topNbrs.length+botNbrs.length);
+    
+    if(topNbrs.length>0)layers.push(topNbrs);
+    layers.push([hubId]);
+    if(botNbrs.length>0)layers.push(botNbrs);
+    for(let ei=0;ei<extraNbrs.length;ei+=MAX_COLS){
+      layers.push(extraNbrs.slice(ei,Math.min(ei+MAX_COLS,extraNbrs.length)));
+    }
+    
+    // 나머지 (허브 이웃이 아닌 노드)
+    const placed2=new Set([hubId,...hubNbrs]);
+    allIds.filter(id=>!placed2.has(id)).forEach(id=>{
       let added=false;
-      for(let li=0;li<layers.length;li++){if(layers[li].length<MAX_COLS){layers[li].push(id);placed.add(id);added=true;break;}}
-      if(!added){layers.push([id]);placed.add(id);}
+      for(const lyr of layers){if(lyr.length<MAX_COLS){lyr.push(id);added=true;break;}}
+      if(!added)layers.push([id]);
+    });
+    
+  }else{
+    // ── 체인 기반 (기존 v10.6 알고리즘) ──
+    let longestPath=[];
+    const leaves=allIds.filter(id=>(adj[id]||new Set()).size<=1);
+    const startNodes=leaves.length>0?leaves:allIds;
+    
+    for(const startId of startNodes){
+      const stack=[[startId,[startId]]];
+      while(stack.length>0){
+        const[cur,path]=stack.pop();
+        if(path.length>longestPath.length)longestPath=[...path];
+        (adj[cur]||new Set()).forEach(next=>{
+          if(!path.includes(next))stack.push([next,[...path,next]]);
+        });
+      }
+    }
+    
+    for(let i=0;i<longestPath.length;i+=MAX_COLS){
+      const chunk=longestPath.slice(i,Math.min(i+MAX_COLS,longestPath.length));
+      const rowIdx=Math.floor(i/MAX_COLS);
+      if(rowIdx%2===1)chunk.reverse();
+      layers.push(chunk);
+    }
+    
+    // 나머지 노드 배치
+    const placed=new Set(longestPath);
+    const remaining=allIds.filter(id=>!placed.has(id));
+    const remQueue=[...remaining];
+    let remIter=0;
+    while(remQueue.length>0&&remIter<remaining.length*3){
+      remIter++;
+      const id=remQueue.shift();
+      const nbrs=[...(adj[id]||new Set())];
+      let bestPlaced=false;
+      for(const nbr of nbrs){
+        if(!placed.has(nbr))continue;
+        let nbrRow=-1;
+        for(let ri=0;ri<layers.length;ri++){if(layers[ri].indexOf(nbr)>=0){nbrRow=ri;break;}}
+        if(nbrRow<0)continue;
+        if(layers[nbrRow].length<MAX_COLS){layers[nbrRow].push(id);placed.add(id);bestPlaced=true;break;}
+        const targetRow=nbrRow+1;
+        while(layers.length<=targetRow)layers.push([]);
+        if(layers[targetRow].length<MAX_COLS){layers[targetRow].push(id);placed.add(id);bestPlaced=true;break;}
+      }
+      if(!bestPlaced){
+        if(nbrs.some(nb=>!placed.has(nb))&&remIter<remaining.length*2){remQueue.push(id);continue;}
+        let added=false;
+        for(let li=0;li<layers.length;li++){if(layers[li].length<MAX_COLS){layers[li].push(id);placed.add(id);added=true;break;}}
+        if(!added){layers.push([id]);placed.add(id);}
+      }
     }
   }
   
-  // ═══ 3단계: 레이아웃 검증 + 꺾임 최소화 ═══
-  
-  // 3a. 빈 행 제거
+  // ═══ 공통 후처리: 빈 행 제거 + 꺾임 최소화 ═══
   layers=layers.filter(r=>r.length>0);
   
-  // 3b. 꺾임 수 계산 함수
+  // 꺾임 수 계산 함수
   function countBends(lyrs,ac){
     let bends=0;
     uniqueEdges.forEach(e=>{
@@ -5563,43 +5663,38 @@ function computeDeviceLayout2D(nodes,edges){
     return bends;
   }
   
-  // 3c. 행 내 순서 최적화 — 각 행 내에서 순열 탐색 (최대 6가지)
+  // 행 내 순서 최적화 — 순열 탐색
   for(let ri=0;ri<layers.length;ri++){
     if(layers[ri].length<=1)continue;
     const row=layers[ri];
     const perms=row.length<=2?[row,[row[1],row[0]]]:
       row.length===3?[[row[0],row[1],row[2]],[row[0],row[2],row[1]],[row[1],row[0],row[2]],[row[1],row[2],row[0]],[row[2],row[0],row[1]],[row[2],row[1],row[0]]]:
-      [row]; // 4+ = skip
-    
+      [row];
     let bestPerm=row, bestBends=countBends(layers,alignCol);
     for(const perm of perms){
       layers[ri]=perm;
-      // alignCol 임시 재계산
-      const tempAC={...alignCol};
-      const b=countBends(layers,tempAC);
+      const b=countBends(layers,{...alignCol});
       if(b<bestBends){bestBends=b;bestPerm=[...perm];}
     }
     layers[ri]=bestPerm;
   }
   
-  // 3d. 수직 연결 열 정렬 재계산
+  // 수직 연결 열 정렬 재계산
   Object.keys(alignCol).forEach(k=>delete alignCol[k]);
   for(let ri=0;ri<layers.length-1;ri++){
     const curRow=layers[ri];
     const nextRow=layers[ri+1];
-    nextRow.forEach((nid,ni)=>{
+    nextRow.forEach(nid=>{
       const nbrs=[...(adj[nid]||new Set())];
       for(const nbr of nbrs){
         const nbrCI=curRow.indexOf(nbr);
-        if(nbrCI>=0){
-          alignCol[nid]={col:nbrCI, layerSize:Math.max(curRow.length,nextRow.length)};
-          break;
-        }
+        if(nbrCI>=0){alignCol[nid]={col:nbrCI,layerSize:Math.max(curRow.length,nextRow.length)};break;}
       }
     });
   }
   
-  console.log(`[Layout] ${n}nodes → ${layers.length}rows, chain=${longestPath.length}, bends=${countBends(layers,alignCol)}`);
+  const finalBends=countBends(layers,alignCol);
+  console.log(`[Layout v12] ${n}nodes → ${layers.length}rows, strategy=${strategy}, bends=${finalBends}`);
   
   // Grid 생성
   const grid={};let maxCols=1;
@@ -5623,9 +5718,10 @@ function computeDeviceLayout2D(nodes,edges){
 // ★ 핵심 변경: 모든 경로(직선 포함)에 충돌 검사 적용 + Z-shape 우회 ★
 const ROUTE_PAD=15; // 연결선↔박스 최소 간격 (px)
 
-function getOrthogonalRoute(fromBox,toBox,allBoxes){
+function getOrthogonalRoute(fromBox,toBox,allBoxes,routePad){
+  const pad=(routePad!==undefined)?routePad:ROUTE_PAD;
   const dx=toBox.cx-fromBox.cx, dy=toBox.cy-fromBox.cy;
-  if(Math.abs(dx)<1&&Math.abs(dy)<1)return null;
+  if(Math.abs(dx)<(pad*0.05)&&Math.abs(dy)<(pad*0.05))return null;
   
   const excludeIds=new Set([fromBox.id,toBox.id].filter(Boolean));
   const obstacles=(allBoxes||[]).filter(b=>!excludeIds.has(b.id));
@@ -5658,7 +5754,7 @@ function getOrthogonalRoute(fromBox,toBox,allBoxes){
   
   let bestRoute=null, bestHits=Infinity;
   candidates.forEach(c=>{
-    const hits=_countRouteCollisions(c.route,obstacles,excludeIds);
+    const hits=_countRouteCollisions(c.route,obstacles,excludeIds,pad);
     if(hits<bestHits){bestHits=hits;bestRoute=c.route;}
   });
   
@@ -5667,9 +5763,9 @@ function getOrthogonalRoute(fromBox,toBox,allBoxes){
   
   // ── Z-shape 우회 경로 시도 ──
   // 충돌하는 박스를 피해 바깥으로 우회
-  const zRoutes=_buildZRoutes(fromBox,toBox,obstacles,dx,dy);
+  const zRoutes=_buildZRoutes(fromBox,toBox,obstacles,dx,dy,pad);
   zRoutes.forEach(zr=>{
-    const hits=_countRouteCollisions(zr,obstacles,excludeIds);
+    const hits=_countRouteCollisions(zr,obstacles,excludeIds,pad);
     if(hits<bestHits){bestHits=hits;bestRoute=zr;}
   });
   
@@ -5696,9 +5792,9 @@ function _buildLRoute_HV(from,to,dy,dx){
 
 // ★ Z-shape 우회 경로 생성 (장애물 회피의 핵심) ★
 // 4방향으로 우회하는 5점 경로를 생성
-function _buildZRoutes(from,to,obstacles,dx,dy){
+function _buildZRoutes(from,to,obstacles,dx,dy,routePad){
   const routes=[];
-  const PAD=ROUTE_PAD+8;
+  const PAD=(routePad!==undefined?routePad:ROUTE_PAD)+8*(routePad!==undefined?routePad/ROUTE_PAD:1);
   
   // 모든 장애물의 바운딩 박스 경계 수집
   let globalMinX=Infinity,globalMinY=Infinity,globalMaxX=-Infinity,globalMaxY=-Infinity;
@@ -5749,31 +5845,35 @@ function _buildZRoutes(from,to,obstacles,dx,dy){
 }
 
 // 경로가 박스를 관통하는지 검사
-function _countRouteCollisions(route,allBoxes,excludeIds){
+// ★ v11.1: pad 파라미터 추가 — PPTX(inch) vs SVG(px) 단위 대응 ★
+function _countRouteCollisions(route,allBoxes,excludeIds,pad){
   let hits=0;
+  const usePad=(pad!==undefined)?pad:ROUTE_PAD;
   for(let i=0;i<route.length-1;i++){
     const p1=route[i],p2=route[i+1];
     allBoxes.forEach(box=>{
       if(excludeIds&&excludeIds.has(box.id))return;
-      if(_segmentIntersectsBox(p1,p2,box))hits++;
+      if(_segmentIntersectsBox(p1,p2,box,usePad))hits++;
     });
   }
   return hits;
 }
 
-// H/V 세그먼트가 박스와 교차하는지 (★ pad=ROUTE_PAD로 충분한 여백 확보 ★)
-function _segmentIntersectsBox(p1,p2,box){
-  const pad=ROUTE_PAD;
+// H/V 세그먼트가 박스와 교차하는지
+// ★ v12 FIX: 좌표계 독립 — px(SVG) / inch(PPTX) 모두 정확 ★
+function _segmentIntersectsBox(p1,p2,box,pad){
+  if(pad===undefined)pad=ROUTE_PAD;
   const bx1=box.x-pad,by1=box.y-pad,bx2=box.x+box.w+pad,by2=box.y+box.h+pad;
-  if(Math.abs(p1.y-p2.y)<1){
-    // 수평 세그먼트
-    const y=p1.y;
+  // ★ v12: 절대 임계값(1) 대신 상대 비교 — PPTX(inch)에서 수직선 오판 방지 ★
+  if(Math.abs(p1.y-p2.y)<=Math.abs(p1.x-p2.x)){
+    // 수평 세그먼트 (또는 점)
+    const y=(p1.y+p2.y)/2;
     if(y<by1||y>by2)return false;
     const minX=Math.min(p1.x,p2.x),maxX=Math.max(p1.x,p2.x);
     return maxX>bx1&&minX<bx2;
   }else{
     // 수직 세그먼트
-    const x=p1.x;
+    const x=(p1.x+p2.x)/2;
     if(x<bx1||x>bx2)return false;
     const minY=Math.min(p1.y,p2.y),maxY=Math.max(p1.y,p2.y);
     return maxY>by1&&minY<by2;
@@ -5849,7 +5949,11 @@ function staggerLeaderYPositions(leaderEntries,minGap){
 // Backward-compat: returns {x1,y1,x2,y2} for PPTX/Canvas L-shape routing
 function getConnectionPoints(fromBox,toBox){
   const dx=toBox.cx-fromBox.cx, dy=toBox.cy-fromBox.cy;
-  if(Math.abs(dx)<1&&Math.abs(dy)<1)return null;
+  // ★ v12 CRITICAL FIX: 하드코딩 <1 → 박스 크기의 5% 상대 임계값 ★
+  // 기존: PPTX(inch)에서 0.5인치 거리 노드도 "동일점" 판정 → edge 누락
+  const minDim=Math.min(fromBox.w||1,fromBox.h||1,toBox.w||1,toBox.h||1);
+  const threshold=Math.max(minDim*0.05, 0.01); // 최소 0.01 (inch/px 모두 안전)
+  if(Math.abs(dx)<threshold&&Math.abs(dy)<threshold)return null;
   // ★ v10.2: _shapeAnchor 기반 연결점 (shape 경계 정확 반영) ★
   let fromDir,toDir;
   if(Math.abs(dy)>=Math.abs(dx)){
@@ -5895,7 +5999,10 @@ function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNu
   
   // Phase 2: 충돌 감지 & 자동 보정 (최대 20라운드)
   // v9.0: 연결선 라우팅 공간을 확보하기 위해 MIN_SEP 대폭 증가
-  const MIN_SEP=Math.max(colGap*0.5, rowGap*0.4, shadowSize*4+ROUTE_PAD);
+  // ★ v12 CRITICAL FIX: ROUTE_PAD(15px) → opts.routePad로 좌표계 독립화 ★
+  // 기존: PPTX(inch)에서 MIN_SEP=15.16인치 → 객체 15인치씩 밀림 → 슬라이드 이탈
+  const _rpad=(opts&&opts.routePad!==undefined)?opts.routePad:ROUTE_PAD;
+  const MIN_SEP=Math.max(colGap*0.5, rowGap*0.4, shadowSize*4+_rpad);
   for(let round=0;round<20;round++){
     let anyFixed=false;
     for(let i=0;i<objects.length;i++){
@@ -5958,9 +6065,10 @@ function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNu
 // getOrthogonalRoute는 직사각형 nodeBox 기반이라 cloud/database/monitor 등
 // 곡면 shape에서 연결선이 shape 밖에서 시작/끝하는 문제를 수정
 // 핵심: 직교(orthogonal) 속성 유지 + 경계 좌표만 조정
-function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT,allBoxes){
+function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT,allBoxes,coordTol){
   if(!route||route.length<2)return route;
   const r=[...route.map(p=>({...p}))]; // deep copy
+  const _ct=(coordTol!==undefined&&coordTol>0)?coordTol:1; // ★ v12: 좌표계 독립 임계값 (SVG:1=px, PPTX:≈0.005=inch) ★
   
   // ★ v10.4: 각 shape의 정확한 변 중앙에서 연결 (직교 유지) ★
   // 원칙: 화살표는 반드시 구성의 중앙(가로든 세로든)에 접점을 형성
@@ -6003,7 +6111,7 @@ function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT,allBoxes){
   // 7) 직교성 복원 — 중간점들을 조정하여 모든 세그먼트가 수평/수직이 되도록
   if(r.length===2){
     // 직선 경로 — 시작/끝 Y가 다르면 L-shape로 변환
-    if(Math.abs(fromAncY-toAncY)>2){
+    if(Math.abs(fromAncY-toAncY)>2*_ct){
       if(fromDir==='right'||fromDir==='left'){
         // 수평 출발 → 중간에서 꺾임
         const midX=(fromAncX+toAncX)/2;
@@ -6013,7 +6121,7 @@ function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT,allBoxes){
         const midY=(fromAncY+toAncY)/2;
         r.splice(1,0,{x:fromAncX,y:midY},{x:toAncX,y:midY});
       }
-    }else if(Math.abs(fromAncX-toAncX)>2&&(fromDir==='top'||fromDir==='bottom')){
+    }else if(Math.abs(fromAncX-toAncX)>2*_ct&&(fromDir==='top'||fromDir==='bottom')){
       const midY=(fromAncY+toAncY)/2;
       r.splice(1,0,{x:fromAncX,y:midY},{x:toAncX,y:midY});
     }
@@ -6035,13 +6143,15 @@ function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT,allBoxes){
   }
   
   // 8) ★ v10.4: 경로 단순화 — 불필요한 꺾임 제거 (장애물 인식) ★
-  return _simplifyRoute(r, allBoxes||[], fromBox, toBox);
+  return _simplifyRoute(r, allBoxes||[], fromBox, toBox, _ct);
 }
 
 // ★ v10.4: 직교 경로 단순화 — 불필요한 웨이포인트 제거 (장애물 인식) ★
-function _simplifyRoute(route, obstacles, fromBox, toBox){
+// ★ v12: coordTol 파라미터 추가 — SVG(px)와 PPTX(inch) 좌표계 모두 정확 ★
+function _simplifyRoute(route, obstacles, fromBox, toBox, coordTol){
   if(!route||route.length<3)return route;
   let r=[...route.map(p=>({...p}))];
+  const _ct=(coordTol!==undefined&&coordTol>0)?coordTol:1; // SVG:1(px), PPTX:≈0.005(inch)
   const excludeIds=new Set();
   if(fromBox&&fromBox.id)excludeIds.add(fromBox.id);
   if(toBox&&toBox.id)excludeIds.add(toBox.id);
@@ -6054,8 +6164,8 @@ function _simplifyRoute(route, obstacles, fromBox, toBox){
     changed=false;
     for(let i=1;i<r.length-1;i++){
       const prev=r[i-1], cur=r[i], next=r[i+1];
-      const sameX=Math.abs(prev.x-cur.x)<1&&Math.abs(cur.x-next.x)<1;
-      const sameY=Math.abs(prev.y-cur.y)<1&&Math.abs(cur.y-next.y)<1;
+      const sameX=Math.abs(prev.x-cur.x)<_ct&&Math.abs(cur.x-next.x)<_ct;
+      const sameY=Math.abs(prev.y-cur.y)<_ct&&Math.abs(cur.y-next.y)<_ct;
       if(sameX||sameY){
         r.splice(i,1);
         changed=true;
@@ -6069,7 +6179,7 @@ function _simplifyRoute(route, obstacles, fromBox, toBox){
   while(changed&&r.length>2){
     changed=false;
     for(let i=0;i<r.length-1;i++){
-      if(Math.abs(r[i].x-r[i+1].x)<1&&Math.abs(r[i].y-r[i+1].y)<1){
+      if(Math.abs(r[i].x-r[i+1].x)<_ct&&Math.abs(r[i].y-r[i+1].y)<_ct){
         r.splice(i+1,1);
         changed=true;
         break;
@@ -6090,8 +6200,8 @@ function _simplifyRoute(route, obstacles, fromBox, toBox){
       // 수평으로 가다가 수직으로 가다가 다시 수평: prev.y==cur.y, cur.x==next.x는 정상 L-turn
       // 하지만 prev.y==next.y이고 중간에 불필요한 detour면 건너뜀
       const skipable=
-        (Math.abs(prev.y-next.y)<2&&Math.abs(prev.y-cur.y)<2) || // 3점 모두 같은 Y → 중간점 불필요 (already handled)
-        (Math.abs(prev.x-next.x)<2&&Math.abs(prev.x-cur.x)<2);  // 3점 모두 같은 X
+        (Math.abs(prev.y-next.y)<2*_ct&&Math.abs(prev.y-cur.y)<2*_ct) || // 3점 모두 같은 Y → 중간점 불필요 (already handled)
+        (Math.abs(prev.x-next.x)<2*_ct&&Math.abs(prev.x-cur.x)<2*_ct);  // 3점 모두 같은 X
       if(!skipable){
         simplified.push(cur);
       }
@@ -6102,22 +6212,25 @@ function _simplifyRoute(route, obstacles, fromBox, toBox){
   
   // Pass 4: 시작/끝이 직선 가능하고 중간에 장애물이 없는 경우만 직선화
   // ★ 장애물이 직선 경로에 있으면 우회점 보존 ★
+  // ★ v12: _ct 적용 + _countRouteCollisions에 pad 전달 ★
   if(r.length>2){
     const first=r[0], last=r[r.length-1];
-    const tolerance=8;
+    const tolerance=8*_ct;
     let canStraighten=false;
+    // ★ v12: _ct 기반 pad를 역산하여 충돌 검사에 전달 ★
+    const _pad=(_ct<0.1)?(_ct*15):undefined; // PPTX면 인치 pad, SVG면 기본값
     
-    if(Math.abs(first.x-last.x)<3){
+    if(Math.abs(first.x-last.x)<3*_ct){
       const allNearX=r.slice(1,-1).every(p=>Math.abs(p.x-first.x)<tolerance);
       if(allNearX){
         // 직선 경로가 장애물을 관통하는지 확인
-        const straightHits=_countRouteCollisions([first, last], obs, excludeIds);
+        const straightHits=_countRouteCollisions([first, last], obs, excludeIds, _pad);
         if(straightHits===0) canStraighten=true;
       }
-    }else if(Math.abs(first.y-last.y)<3){
+    }else if(Math.abs(first.y-last.y)<3*_ct){
       const allNearY=r.slice(1,-1).every(p=>Math.abs(p.y-first.y)<tolerance);
       if(allNearY){
-        const straightHits=_countRouteCollisions([first, last], obs, excludeIds);
+        const straightHits=_countRouteCollisions([first, last], obs, excludeIds, _pad);
         if(straightHits===0) canStraighten=true;
       }
     }
@@ -6408,7 +6521,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
   if(isFig1){
     // ═══ 도 1: 2D 토폴로지 블록도 v10.0 ═══
     // 렌더 순서: ①연결선 → ②Shape(위에 덮음) → ③참조번호(Shape 아래)
-    const layout=computeDeviceLayout2D(nodes,edges);
+    const layout=computeDeviceLayout2D(nodes,edges,figNum);
     const{grid,maxCols,numRows,uniqueEdges}=layout;
     
     // 열 수에 따른 박스 크기 조정
@@ -6785,7 +6898,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const displayNodes=displayNodesFiltered.length>0?displayNodesFiltered:(innerNodes.length>0?innerNodes:nodes);
     
     // 내부 노드 2D 레이아웃 계산
-    const innerLayout=computeDeviceLayout2D(displayNodes,edges);
+    const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
     const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
     
     // ═══ v9.0: 공통 레이아웃 엔진 호출 (연결선 우회 공간 확보) ═══
@@ -7890,7 +8003,7 @@ function validateDiagramRules(nodes,figNum,designText,edges){
     
     // R10b. 같은 행에 4개 이상 노드 검증
     if(edgeList.length>0){
-      const layout=computeDeviceLayout2D(nodes,edgeList);
+      const layout=computeDeviceLayout2D(nodes,edgeList,figNum);
       if(layout.layers){
         layout.layers.forEach((layer,rowIdx)=>{
           if(layer.length>3){
@@ -7898,6 +8011,28 @@ function validateDiagramRules(nodes,figNum,designText,edges){
           }
         });
       }
+    }
+  }
+  
+  // ═══ R11. 순환 참조 검출 (위상 정렬 전제 조건) ═══
+  // ★ v12 FIX: edgeList 스코프 버그 — edges 파라미터 직접 사용 ★
+  const _r11Edges=edges||[];
+  if(_r11Edges.length>0&&figNum>1){
+    const _adj2={};
+    nodes.forEach(nd=>{_adj2[nd.id]=new Set();});
+    _r11Edges.forEach(e=>{if(_adj2[e.from])_adj2[e.from].add(e.to);});
+    const _inDeg={};
+    nodes.forEach(nd=>{_inDeg[nd.id]=0;});
+    _r11Edges.forEach(e=>{_inDeg[e.to]=(_inDeg[e.to]||0)+1;});
+    const _q=nodes.map(nd=>nd.id).filter(id=>_inDeg[id]===0);
+    let _visited=0;
+    const _q2=[..._q];
+    while(_q2.length>0){
+      const cur=_q2.shift();_visited++;
+      (_adj2[cur]||new Set()).forEach(next=>{_inDeg[next]--;if(_inDeg[next]===0)_q2.push(next);});
+    }
+    if(_visited<nodes.length){
+      issues.push({severity:'WARNING',rule:'R11',message:`도 ${figNum}: 순환 참조 감지 — 데이터 흐름이 단방향이 되도록 연결 방향을 수정하라`});
     }
   }
   
@@ -8492,7 +8627,7 @@ function downloadPptx(sid){
       
       if(isFig1){
         // ═══ 도 1: 2D 토폴로지 블록도 v13.0 (행별 높이 기반 겹침 방지) ═══
-        const layout=computeDeviceLayout2D(nodes,edges);
+        const layout=computeDeviceLayout2D(nodes,edges,figNum);
         const{grid,maxCols,numRows,uniqueEdges}=layout;
         const colGap=0.35;
         const boxW2D=maxCols<=1?PAGE_W-2.0:maxCols===2?(PAGE_W-2.0-colGap)/2:(PAGE_W-2.0-colGap*2)/3;
@@ -8545,7 +8680,11 @@ function downloadPptx(sid){
         });
         
         // ★ v10.5: Phase 2 — 실제 앵커 기반 edge 라우팅 (PPTX) ★
+        // ★ v11.1: PPTX는 인치 좌표 → px용 ROUTE_PAD(15) 대신 인치용 패딩 사용 ★
+        const PPTX_PAD=0.08; // 인치: 연결선↔박스 최소 간격
         const edgesToDraw=uniqueEdges.length>0?uniqueEdges:nodes.slice(0,-1).map((n,i)=>({from:n.id,to:nodes[i+1].id}));
+        // ★ v12 FIX: allBoxArr 루프 밖 호이스트 ★
+        const pAllBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
         
         edgesToDraw.forEach(e=>{
           const fb=nodeBoxes[e.from],tb=nodeBoxes[e.to];
@@ -8553,32 +8692,90 @@ function downloadPptx(sid){
           const dx=tb.cx-fb.cx, dy=tb.cy-fb.cy;
           const isH=Math.abs(dx)>=Math.abs(dy);
           
+          // ★ v11: route 계산 → 충돌 검사 → 우회 ★
+          let route;
           if(isH){
             const goR=dx>0;
-            const x1=goR?fb.x+fb.w:fb.x, y1=fb.cy;
-            const x2=goR?tb.x:tb.x+tb.w, y2=tb.cy;
-            if(Math.abs(y1-y2)<0.02){
-              // 수평 직선
-              slide.addShape(pptx.shapes.LINE,{x:Math.min(x1,x2),y:y1,w:Math.abs(x2-x1),h:0,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+            const fromAnc={x:goR?fb.x+fb.w:fb.x, y:fb.cy};
+            const toAnc={x:goR?tb.x:tb.x+tb.w, y:tb.cy};
+            if(Math.abs(fromAnc.y-toAnc.y)<0.02){
+              route=[fromAnc, toAnc];
             }else{
-              const midX=(x1+x2)/2;
-              slide.addShape(pptx.shapes.LINE,{x:x1,y:y1,w:Math.abs(midX-x1)*(midX>x1?1:-1)||0.001,h:0,line:{color:'000000',width:LINE_ARROW}});
-              slide.addShape(pptx.shapes.LINE,{x:midX,y:Math.min(y1,y2),w:0,h:Math.abs(y2-y1),line:{color:'000000',width:LINE_ARROW}});
-              slide.addShape(pptx.shapes.LINE,{x:midX,y:y2,w:Math.abs(x2-midX)*(x2>midX?1:-1)||0.001,h:0,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+              const midX=(fromAnc.x+toAnc.x)/2;
+              route=[fromAnc,{x:midX,y:fromAnc.y},{x:midX,y:toAnc.y},toAnc];
             }
           }else{
             const goD=dy>0;
-            const x1=fb.cx, y1=goD?fb.y+fb.h:fb.y;
-            const x2=tb.cx, y2=goD?tb.y:tb.y+tb.h;
-            if(Math.abs(x1-x2)<0.02){
-              // 수직 직선
-              slide.addShape(pptx.shapes.LINE,{x:x1,y:Math.min(y1,y2),w:0,h:Math.abs(y2-y1),line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+            const fromAnc={x:fb.cx, y:goD?fb.y+fb.h:fb.y};
+            const toAnc={x:tb.cx, y:goD?tb.y:tb.y+tb.h};
+            if(Math.abs(fromAnc.x-toAnc.x)<0.02){
+              route=[fromAnc, toAnc];
             }else{
-              const midY=(y1+y2)/2;
-              slide.addShape(pptx.shapes.LINE,{x:x1,y:Math.min(y1,midY),w:0,h:Math.abs(midY-y1),line:{color:'000000',width:LINE_ARROW}});
-              slide.addShape(pptx.shapes.LINE,{x:Math.min(x1,x2),y:midY,w:Math.abs(x2-x1),h:0,line:{color:'000000',width:LINE_ARROW}});
-              slide.addShape(pptx.shapes.LINE,{x:x2,y:Math.min(midY,y2),w:0,h:Math.abs(y2-midY),line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+              const midY=(fromAnc.y+toAnc.y)/2;
+              route=[fromAnc,{x:fromAnc.x,y:midY},{x:toAnc.x,y:midY},toAnc];
             }
+          }
+          
+          // 충돌 검사 (PPTX — 인치 좌표)
+          const pExclude=new Set([e.from, e.to]);
+          if(_countRouteCollisions(route,pAllBoxArr,pExclude,PPTX_PAD)>0){
+            const fbA={...fb,id:e.from}, tbA={...tb,id:e.to};
+            const altRoute=getOrthogonalRoute(fbA,tbA,pAllBoxArr,PPTX_PAD);
+            if(altRoute){
+              route=_snapRouteToShapeAnchors(altRoute,fb,tb,0,0,pAllBoxArr,PPTX_PAD/ROUTE_PAD);
+              // ★ v12 FIX: 4방향 우회 (상/하/좌/우) — SVG와 동일 ★
+              if(_countRouteCollisions(route,pAllBoxArr,pExclude,PPTX_PAD)>0){
+                const obstacles=pAllBoxArr.filter(b=>!pExclude.has(b.id));
+                let bestDetour=null, bestHits=Infinity;
+                for(const obs of obstacles){
+                  const topY=obs.y-0.15;
+                  const botY=obs.y+obs.h+0.15;
+                  const leftX=obs.x-0.15;
+                  const rightX=obs.x+obs.w+0.15;
+                  const fa2=route[0], ta2=route[route.length-1];
+                  [
+                    [fa2,{x:fa2.x,y:topY},{x:ta2.x,y:topY},ta2],
+                    [fa2,{x:fa2.x,y:botY},{x:ta2.x,y:botY},ta2],
+                    [fa2,{x:leftX,y:fa2.y},{x:leftX,y:ta2.y},ta2],
+                    [fa2,{x:rightX,y:fa2.y},{x:rightX,y:ta2.y},ta2]
+                  ].forEach(dt=>{
+                    const h=_countRouteCollisions(dt,pAllBoxArr,pExclude,PPTX_PAD);
+                    if(h<bestHits){bestHits=h;bestDetour=dt;}
+                  });
+                }
+                if(bestDetour&&bestHits<_countRouteCollisions(route,pAllBoxArr,pExclude,PPTX_PAD))route=bestDetour;
+              }
+            }
+          }
+          
+          // PPTX 라인 그리기 (route 세그먼트별)
+          // ★ v12: 화살표 방향 수정 + 바운딩 박스 클램핑 ★
+          for(let ri=0;ri<route.length-1;ri++){
+            const p1=route[ri], p2=route[ri+1];
+            const isLast=ri===route.length-2;
+            const isFirst=ri===0;
+            const dx12=p2.x-p1.x, dy12=p2.y-p1.y;
+            const isHoriz=Math.abs(dx12)>Math.abs(dy12);
+            const goPositive=isHoriz?(dx12>=0):(dy12>=0);
+            
+            const lineOpts={color:'000000',width:LINE_ARROW};
+            // 화살표는 route의 양 끝단에만 배치 — 방향 보정
+            // PptxGenJS: beginArrow at (x,y), endArrow at (x+w,y+h)
+            // Math.min 정규화: (x,y)=작은값 쪽, (x+w,y+h)=큰값 쪽
+            if(isFirst){
+              if(goPositive)lineOpts.beginArrowType='triangle'; // p1이 작은값 쪽
+              else lineOpts.endArrowType='triangle';            // p1이 큰값 쪽
+            }
+            if(isLast){
+              if(goPositive)lineOpts.endArrowType='triangle';   // p2가 큰값 쪽
+              else lineOpts.beginArrowType='triangle';           // p2가 작은값 쪽
+            }
+            // 바운딩 클램핑 (슬라이드 영역 내)
+            const cx1=Math.max(0.1,Math.min(p1.x,p2.x));
+            const cy1=Math.max(0.1,Math.min(p1.y,p2.y));
+            const cw=Math.max(0.001, Math.min(Math.abs(dx12)||0.001, PAGE_W+PAGE_MARGIN*2-cx1-0.1));
+            const ch=Math.max(0.001, Math.min(Math.abs(dy12)||0.001, PAGE_H+PAGE_MARGIN*2-cy1-0.1));
+            slide.addShape(pptx.shapes.LINE,{x:cx1,y:cy1,w:cw,h:ch,line:lineOpts});
           }
         });
         
@@ -8621,6 +8818,7 @@ function downloadPptx(sid){
         });
       }else{
         // 도 2+: 공통 레이아웃 엔진 사용 (v8.0)
+        const PPTX_PAD=0.08; // 인치: 연결선↔박스 최소 간격 (v11)
         
         const innerNodes=nodes.filter(n=>{
           const ref=extractRefNum(n.label,'');
@@ -8632,7 +8830,7 @@ function downloadPptx(sid){
         const displayNodes=innerNodes.length>0?innerNodes:nodes;
         const dCount=displayNodes.length;
         
-        const innerLayout=computeDeviceLayout2D(displayNodes,edges);
+        const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
         const innerBoxW=innerMaxCols<=1?(PAGE_W-1.6):innerMaxCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
         const pBoxH=Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
@@ -8640,7 +8838,8 @@ function downloadPptx(sid){
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:innerBoxW, boxBaseH:pBoxH,
           colGap:0.55, rowGap:0.50, framePad:0.55,
-          shadowSize:SHADOW_OFFSET, scale:1
+          shadowSize:SHADOW_OFFSET, scale:1,
+          routePad:PPTX_PAD  // ★ v12: inch 단위 패딩 (15px→0.08inch) ★
         });
         
         const frameX=PAGE_MARGIN,frameY=PAGE_MARGIN+TITLE_H;
@@ -8680,6 +8879,8 @@ function downloadPptx(sid){
         const innerEdgesToDraw=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
         const pInnerFan={};const pInnerOff={};
         innerEdgesToDraw.forEach(e=>{['from','to'].forEach(k=>{const nid=e[k];if(!pInnerFan[nid])pInnerFan[nid]=0;const key=e.from+'_'+e.to;if(!pInnerOff[key])pInnerOff[key]={};pInnerOff[key][k+'Idx']=pInnerFan[nid];pInnerFan[nid]++;});});
+        // ★ v12 FIX HIGH-3: allBoxArr를 루프 밖으로 호이스트 ★
+        const pAllInnerBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
         innerEdgesToDraw.forEach(e=>{
           const fb=innerNodeBoxes[e.from],tb=innerNodeBoxes[e.to];
           if(!fb||!tb)return;
@@ -8688,20 +8889,75 @@ function downloadPptx(sid){
           const iF=pInnerOff[key]?.fromIdx||0,iT=pInnerOff[key]?.toIdx||0;
           const offF=fanF>1?(iF-((fanF-1)/2))*0.08:0;
           const offT=fanT>1?(iT-((fanT-1)/2))*0.08:0;
-          // ★ v10.4: fan offset 제거 — 정확한 중앙 접점 ★
+          // ★ v11: 충돌 검사 기반 라우팅 ★
           const fbA={...fb};const tbA={...tb};
           const pts=getConnectionPoints(fbA,tbA);
           if(!pts)return;
-          const dx=pts.x2-pts.x1,dy=pts.y2-pts.y1;
-          if(Math.abs(dx)<0.01){
-            slide.addShape(pptx.shapes.LINE,{x:pts.x1,y:Math.min(pts.y1,pts.y2),w:0,h:Math.abs(dy),line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
-          }else if(Math.abs(dy)<0.01){
-            slide.addShape(pptx.shapes.LINE,{x:Math.min(pts.x1,pts.x2),y:pts.y1,w:Math.abs(dx),h:0,line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+          
+          let route;
+          const dx2=pts.x2-pts.x1,dy2=pts.y2-pts.y1;
+          if(Math.abs(dx2)<0.01){
+            route=[{x:pts.x1,y:pts.y1},{x:pts.x2,y:pts.y2}];
+          }else if(Math.abs(dy2)<0.01){
+            route=[{x:pts.x1,y:pts.y1},{x:pts.x2,y:pts.y2}];
           }else{
             const midY=(pts.y1+pts.y2)/2;
-            slide.addShape(pptx.shapes.LINE,{x:pts.x1,y:Math.min(pts.y1,midY),w:0,h:Math.abs(pts.y1-midY),line:{color:'000000',width:LINE_ARROW}});
-            slide.addShape(pptx.shapes.LINE,{x:Math.min(pts.x1,pts.x2),y:midY,w:Math.abs(dx),h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addShape(pptx.shapes.LINE,{x:pts.x2,y:Math.min(midY,pts.y2),w:0,h:Math.abs(pts.y2-midY),line:{color:'000000',width:LINE_ARROW,endArrowType:'triangle',beginArrowType:'triangle'}});
+            route=[{x:pts.x1,y:pts.y1},{x:pts.x1,y:midY},{x:pts.x2,y:midY},{x:pts.x2,y:pts.y2}];
+          }
+          
+          // 충돌 검사
+          const pExclude2=new Set([e.from,e.to]);
+          if(_countRouteCollisions(route,pAllInnerBoxArr,pExclude2,PPTX_PAD)>0){
+            const alt=getOrthogonalRoute({...fb,id:e.from},{...tb,id:e.to},pAllInnerBoxArr,PPTX_PAD);
+            if(alt){
+              // ★ v12 FIX HIGH-2: fan offset 실제 적용 ★
+              route=_snapRouteToShapeAnchors(alt,fb,tb,offF,offT,pAllInnerBoxArr,PPTX_PAD/ROUTE_PAD);
+              if(_countRouteCollisions(route,pAllInnerBoxArr,pExclude2,PPTX_PAD)>0){
+                const obstacles=pAllInnerBoxArr.filter(b=>!pExclude2.has(b.id));
+                let bestDet=null,bestH=Infinity;
+                // ★ v12 FIX HIGH-1: 4방향 우회 (상/하/좌/우) — SVG와 동일 ★
+                for(const obs of obstacles){
+                  const tY=obs.y-0.15,bY=obs.y+obs.h+0.15;
+                  const lX=obs.x-0.15,rX=obs.x+obs.w+0.15;
+                  const fa=route[0],ta=route[route.length-1];
+                  [
+                    [fa,{x:fa.x,y:tY},{x:ta.x,y:tY},ta],       // 위 우회
+                    [fa,{x:fa.x,y:bY},{x:ta.x,y:bY},ta],       // 아래 우회
+                    [fa,{x:lX,y:fa.y},{x:lX,y:ta.y},ta],        // 왼쪽 우회
+                    [fa,{x:rX,y:fa.y},{x:rX,y:ta.y},ta]         // 오른쪽 우회
+                  ].forEach(dt=>{
+                    const h2=_countRouteCollisions(dt,pAllInnerBoxArr,pExclude2,PPTX_PAD);
+                    if(h2<bestH){bestH=h2;bestDet=dt;}
+                  });
+                }
+                if(bestDet&&bestH<_countRouteCollisions(route,pAllInnerBoxArr,pExclude2,PPTX_PAD))route=bestDet;
+              }
+            }
+          }
+          
+          // PPTX 라인 그리기
+          // ★ v12: 화살표 방향 수정 + 바운딩 박스 클램핑 ★
+          for(let ri=0;ri<route.length-1;ri++){
+            const p1=route[ri],p2=route[ri+1];
+            const isLast=ri===route.length-2, isFirst=ri===0;
+            const dx12=p2.x-p1.x, dy12=p2.y-p1.y;
+            const isHoriz=Math.abs(dx12)>Math.abs(dy12);
+            const goPositive=isHoriz?(dx12>=0):(dy12>=0);
+            
+            const lineOpts={color:'000000',width:LINE_ARROW};
+            if(isFirst){
+              if(goPositive)lineOpts.beginArrowType='triangle';
+              else lineOpts.endArrowType='triangle';
+            }
+            if(isLast){
+              if(goPositive)lineOpts.endArrowType='triangle';
+              else lineOpts.beginArrowType='triangle';
+            }
+            const cx1=Math.max(0.1,Math.min(p1.x,p2.x));
+            const cy1=Math.max(0.1,Math.min(p1.y,p2.y));
+            const cw=Math.max(0.001, Math.min(Math.abs(dx12)||0.001, PAGE_W+PAGE_MARGIN*2-cx1-0.1));
+            const ch=Math.max(0.001, Math.min(Math.abs(dy12)||0.001, PAGE_H+PAGE_MARGIN*2-cy1-0.1));
+            slide.addShape(pptx.shapes.LINE,{x:cx1,y:cy1,w:cw,h:ch,line:lineOpts});
           }
         });
       }
@@ -9099,7 +9355,7 @@ function downloadDiagramImages(sid, format='jpeg'){
       
       if(isFig1){
         // ═══ 도 1: 2D 토폴로지 v13.0 (행별 높이 기반 겹침 방지) ═══
-        const layout=computeDeviceLayout2D(nodes,edges);
+        const layout=computeDeviceLayout2D(nodes,edges,figNum);
         const{grid,maxCols,numRows,uniqueEdges}=layout;
         const colGap=25;
         // v10.3: 셀 너비 확대 (한글 텍스트 수용)
@@ -9261,7 +9517,7 @@ function downloadDiagramImages(sid, format='jpeg'){
         });
         const displayNodes=innerNodes.length>0?innerNodes:nodes;
         
-        const innerLayout=computeDeviceLayout2D(displayNodes,edges);
+        const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
 
         const SHADOW_PX=2;
