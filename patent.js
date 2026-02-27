@@ -2119,9 +2119,14 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   ⛔⛔ 핵심: 한 도면에는 반드시 "한 레벨"만 표시 ⛔⛔
   최외곽 박스 = 상위 장치
   내부 박스 = 그 상위 장치의 직계 자식 레벨만
-  ★★ 최소 내부 구성요소: 3개 이상 (2개만으로는 도면이 빈약) ★★
-  → 청구항에서 하위 구성요소가 2개뿐이라면, 기능적으로 분리하여 3~5개로 확장하라
-  → 예: 프로세서(110), 메모리(120)뿐이라면 → 통신부(130), 저장부(140), 제어부(150) 등 추가
+  
+  ⛔⛔⛔ 내부 구성요소 수량 규칙 (절대 준수) ⛔⛔⛔
+  ★★ 최소: 3개 이상 (2개만으로는 도면이 빈약) ★★
+  ★★ 최대: 5개 이하 (6개 이상이면 반드시 도면을 분할하라) ★★
+  → 청구항에 하위 구성요소가 6개 이상이면, 핵심 3~5개만 골라 이 도면에 넣고 나머지는 다음 도면에서 다루라.
+  → 청구항에 하위 구성요소가 2개뿐이면, 기능적으로 분리하여 3~4개로 확장하라.
+  → 구성요소를 억지로 세분화하여 수를 늘리지 마라. 청구항에 명시된 핵심 구성만 사용하라.
+  ⛔ 절대 금지: 하나의 도면에 6개 이상의 내부 블록을 배치하는 것
   
   ✅ 올바른 예 (도 2: ${getDeviceSubject()} 상세):
   최외곽=${getDeviceSubject()}(100), 내부=L2 4개: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)
@@ -2130,6 +2135,10 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   ⛔ 잘못된 예 (내부 구성 2개만):
   최외곽=${getDeviceSubject()}(100), 내부=프로세서(110), 메모리(120)
   → 2개만으로 도면이 빈약하고, 참조번호 100과 120이 겹칠 위험
+  
+  ⛔ 잘못된 예 (내부 구성 7개 — 과잉):
+  최외곽=${getDeviceSubject()}(100), 내부=프로세서(110)+메모리(120)+통신부(130)+저장부(140)+제어부(150)+분석부(160)+검증부(170)
+  → 7개는 과잉! 연결선 교차, 도면 가독성 저하 → 핵심 4~5개만 선택하고 나머지는 다음 도면에서 다루라
   
   ⛔ 잘못된 예 (L2+L3 혼합):
   최외곽=${getDeviceSubject()}(100), 내부=프로세서(110)+연산부(111)+캐시부(112)+메모리(120)
@@ -2259,6 +2268,7 @@ ${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 �
 - 모든 구성요소 명칭과 참조번호가 【장치 청구범위】와 일치하는가?
 - 도 1은 L1(X00) 장치만 포함하는가?
 - 도 2+의 내부 구성요소는 청구항에 있는 것만 사용했는가?
+- ★★ 도 2+의 내부 구성요소가 5개를 초과하지 않는가? (6개 이상이면 분할!) ★★
 - "~모듈" 대신 "~부"를 사용했는가?
 - 최외곽 박스가 직계 부모인가? (세대 점프 없는가?)
 
@@ -4831,48 +4841,61 @@ function _shapeAnchor(type,x,y,w,h,dir){
 }
 
 // ── Shape natural proportion metrics ──
-// Computes natural shape dimensions fitted within a box slot.
-// v10.3: 사각형 기반 shape(서버, 모니터)는 boxW의 대부분 사용 (텍스트 겹침 방지)
-// 고유 비율 필요 shape(센서 원, 안테나 기둥)만 aspect ratio 적용
+// ★ v13: 모든 shape를 균일 크기로 정규화 — 아이콘은 장식, 크기는 동일 ★
+// 원칙: 어떤 shape도 boxH의 115%를 초과하지 않는다
+// 기존: server=boxW*0.85(너비)×sw*0.80(높이) → boxH의 5배 가능 → 심각한 비율 불균형
+// v13: 모든 shape의 높이를 boxH 기준 1.0~1.15배로 통일
 function _shapeMetrics(type,boxW,boxH){
+  const SHAPE_W=boxW*0.65;   // 셀 너비의 65% (모든 shape 동일)
+  const MAX_SH=boxH*1.15;    // 셀 높이의 최대 115%
   switch(type){
     case 'database':{
-      const sh=boxH*1.45, sw=sh*1.30;
-      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
+      const sw=SHAPE_W*0.80;
+      const sh=Math.min(MAX_SH, Math.max(boxH,sw*0.90));
+      return{sw,sh,dx:(boxW-sw)/2};
     }
     case 'cloud':{
-      const sh=boxH*1.20, sw=sh*2.40;
-      return{sw:Math.min(sw,boxW*0.75),sh,dx:(boxW-Math.min(sw,boxW*0.75))/2};
+      const sw=SHAPE_W;
+      const sh=Math.min(MAX_SH, Math.max(boxH,sw*0.50));
+      return{sw,sh,dx:(boxW-sw)/2};
     }
     case 'server':{
-      // v10.3: 서버는 사각형 — boxW의 대부분 사용 (텍스트 수용)
-      const sw=boxW*0.85, sh=sw*0.80; // 가로가 넓은 서버 랙
-      return{sw,sh:Math.max(sh,boxH),dx:(boxW-sw)/2};
+      // v13: 서버 높이를 boxH 기준으로 제한 (기존: sw*0.80 → boxH의 5배 가능)
+      const sw=SHAPE_W;
+      const sh=Math.min(MAX_SH, Math.max(boxH,sw*0.45));
+      return{sw,sh,dx:(boxW-sw)/2};
     }
     case 'monitor':{
-      // v10.3: 모니터도 사각형 기반 — 넓게
-      const sw=boxW*0.82, sh=sw*0.70;
-      return{sw,sh:Math.max(sh,boxH),dx:(boxW-sw)/2};
+      // v13: 모니터 높이를 boxH 기준으로 제한 (기존: sw*0.70 → boxH의 4배 가능)
+      const sw=SHAPE_W;
+      const sh=Math.min(MAX_SH, Math.max(boxH,sw*0.48));
+      return{sw,sh,dx:(boxW-sw)/2};
     }
     case 'sensor':{
-      const sh=boxH*1.35, sw=sh*1.70;
-      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
+      // v13: 센서 크기 정규화 (기존: boxH*1.35×1.70 → 과도한 크기)
+      const sw=SHAPE_W*0.85;
+      const sh=Math.min(MAX_SH, Math.max(boxH,sw*0.85));
+      return{sw,sh,dx:(boxW-sw)/2};
     }
     case 'antenna':{
-      const sh=boxH*1.45, sw=sh*1.50;
-      return{sw:Math.min(sw,boxW*0.60),sh,dx:(boxW-Math.min(sw,boxW*0.60))/2};
+      const sw=SHAPE_W*0.70;
+      const sh=Math.min(MAX_SH, Math.max(boxH,sw*1.10));
+      return{sw,sh,dx:(boxW-sw)/2};
     }
     case 'document':{
-      const sh=boxH*1.45, sw=sh*0.85;
-      return{sw:Math.min(sw,boxW*0.55),sh,dx:(boxW-Math.min(sw,boxW*0.55))/2};
+      const sw=SHAPE_W*0.75;
+      const sh=Math.min(MAX_SH, Math.max(boxH,sw*0.85));
+      return{sw,sh,dx:(boxW-sw)/2};
     }
     case 'camera':{
-      const sh=boxH*1.30, sw=sh*1.40;
-      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
+      const sw=SHAPE_W*0.85;
+      const sh=Math.min(MAX_SH, Math.max(boxH,sw*0.75));
+      return{sw,sh,dx:(boxW-sw)/2};
     }
     case 'speaker':{
-      const sh=boxH*1.35, sw=sh*1.40;
-      return{sw:Math.min(sw,boxW*0.65),sh,dx:(boxW-Math.min(sw,boxW*0.65))/2};
+      const sw=SHAPE_W*0.85;
+      const sh=Math.min(MAX_SH, Math.max(boxH,sw*0.75));
+      return{sw,sh,dx:(boxW-sw)/2};
     }
     default:return{sw:boxW,sh:boxH,dx:0};
   }
@@ -7029,6 +7052,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     // 4. ★★ v10.5: 실제 앵커 기반 연결선 + 충돌 검사 (Fig 2+) ★★
     const innerEdgesToDraw2=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
     
+    // ★ v13.0 FIX: allBoxArr 루프 밖 호이스트 (PPTX A6과 동일 수정) ★
+    const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
     innerEdgesToDraw2.forEach(e=>{
       const fb=innerNodeBoxes[e.from],tb=innerNodeBoxes[e.to];
       if(!fb||!tb)return;
@@ -7060,7 +7085,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       }
       
       // ★ 충돌 검사: 다른 shape을 관통하면 우회 ★
-      const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
+      // ★ v13.0: allBoxArr는 루프 밖에서 1회 생성 ★
       const excludeIds=new Set([e.from, e.to]);
       if(_countRouteCollisions(route, allBoxArr, excludeIds)>0){
         // 관통 시 직교 라우터로 폴백
@@ -8036,6 +8061,24 @@ function validateDiagramRules(nodes,figNum,designText,edges){
     }
   }
   
+  // ═══ R12. 도 2+ 내부 구성요소 수량 제한 (3~5개) ═══ [v13.0]
+  // 프롬프트 규칙(L2123-2128)의 코드 측 강제 검증
+  if(figNum>1&&!isMethodFig){
+    const _innerNodes=nodes.filter(n=>{
+      const ref=extractRef(n.label);
+      if(!ref)return true;
+      return !isL1(ref); // L1(프레임) 제외
+    });
+    const _innerCount=_innerNodes.length;
+    if(_innerCount>5){
+      issues.push({severity:'ERROR',rule:'R12',
+        message:`도 ${figNum}: 내부 구성요소 ${_innerCount}개 (최대 5개 초과). 핵심 3~5개만 남기고 나머지는 다음 도면으로 분리 필요.`});
+    }else if(_innerCount>0&&_innerCount<3){
+      issues.push({severity:'WARNING',rule:'R12',
+        message:`도 ${figNum}: 내부 구성요소 ${_innerCount}개 (최소 3개 권장). 기능 분리하여 3~4개로 확장 권장.`});
+    }
+  }
+  
   return issues;
 }
 
@@ -8661,9 +8704,16 @@ function downloadPptx(sid){
           const sx=bx+sm.dx;
           
           addPptxIconShape(slide,shapeType,sx,by,sm.sw,sm.sh,LINE_FRAME);
-          const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
           const fontSize=Math.min(maxCols>1?10:12,Math.max(8,13-nodeCount*0.3));
-          slide.addText(pptxDisplayLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          // ★ v13.0 FIX: 아이콘 shape 텍스트를 아이콘 하단 아래에 배치 (SVG와 동일 로직) ★
+          if(_isIconShape(shapeType)){
+            // sensor/antenna/camera/speaker: 아이콘이 전체 영역 차지 → 텍스트를 아이콘 아래에
+            const iconBottomY=by+sm.sh;
+            slide.addText(pptxDisplayLabel,{x:sx,y:iconBottomY+0.03,w:sm.sw,h:0.25,fontSize:Math.max(fontSize-1,8),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'top'});
+          }else{
+            const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
+            slide.addText(pptxDisplayLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          }
           
           // 셀 기반 nodeBox (라우팅용) — 균일 크기
           nodeBoxes[n.id]={x:bx, y:by, w:boxW2D, h:boxH, cx:bx+boxW2D/2, cy:by+boxH/2,
@@ -9556,6 +9606,8 @@ function downloadDiagramImages(sid, format='jpeg'){
         });
         
         const innerEdges=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
+        // ★ v13.0 FIX: allBoxArr 루프 밖 호이스트 (Canvas Fig2) ★
+        const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
         innerEdges.forEach(e=>{
           const fb=innerNodeBoxes[e.from],tb=innerNodeBoxes[e.to];
           if(!fb||!tb)return;
@@ -9573,8 +9625,7 @@ function downloadDiagramImages(sid, format='jpeg'){
             const ta={x:tb.cx, y:goD?tb.y:tb.y+tb.h};
             route=Math.abs(fa.x-ta.x)<3?[fa,ta]:[fa,{x:fa.x,y:(fa.y+ta.y)/2},{x:ta.x,y:(fa.y+ta.y)/2},ta];
           }
-          // 충돌 검사
-          const allBoxArr=Object.entries(innerNodeBoxes).map(([k,v])=>({...v,id:k}));
+          // 충돌 검사 — ★ v13.0: allBoxArr는 루프 밖에서 1회 생성 ★
           const excludeIds=new Set([e.from,e.to]);
           if(_countRouteCollisions(route,allBoxArr,excludeIds)>0){
             const fbA={...fb,id:e.from};const tbA={...tb,id:e.to};
