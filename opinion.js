@@ -109,54 +109,68 @@ Opinion.init = function(){
 
 // ═══ Template Management ═══
 Opinion.loadSavedTemplate = async function() {
+  var loaded = false;
+
+  // 1차: Supabase DB
   try {
     var {data} = await sb.from('opinion_user_settings')
       .select('setting_value')
       .eq('user_id', currentUser.id)
       .eq('setting_key', 'custom_template')
       .maybeSingle();
-    if (data && data.setting_value) {
+    if (data && data.setting_value && data.setting_value.text) {
       Opinion.state.customTemplate = data.setting_value;
       Opinion.state.refText = data.setting_value.text || '';
-      console.log('[Opinion] Custom template loaded');
+      loaded = true;
+      console.log('[Opinion] Custom template loaded from DB');
+      // DB 데이터를 localStorage에도 동기화 (오프라인 대비)
+      try { localStorage.setItem('opinion_custom_template', JSON.stringify(data.setting_value)); } catch(e){}
     }
   } catch(e) {
-    // 테이블 없을 수 있음 — localStorage fallback
-    console.warn('[Opinion] DB template load skipped:', e.message);
+    console.warn('[Opinion] DB template query failed:', e.message);
+  }
+
+  // 2차: localStorage (DB 실패 또는 DB에 없을 때)
+  if (!loaded) {
     try {
       var saved = localStorage.getItem('opinion_custom_template');
       if (saved) {
         var parsed = JSON.parse(saved);
-        Opinion.state.customTemplate = parsed;
-        Opinion.state.refText = parsed.text || '';
-        console.log('[Opinion] Custom template loaded from localStorage');
+        if (parsed && parsed.text) {
+          Opinion.state.customTemplate = parsed;
+          Opinion.state.refText = parsed.text || '';
+          loaded = true;
+          console.log('[Opinion] Custom template loaded from localStorage');
+        }
       }
     } catch(le) {}
   }
+
   Opinion.updateTemplateStatus();
 };
 
 Opinion.saveTemplate = async function(name, text) {
   var template = { name: name, text: text, saved_at: new Date().toISOString() };
+
+  // 항상 localStorage에 저장 (즉시 사용 가능)
+  try { localStorage.setItem('opinion_custom_template', JSON.stringify(template)); } catch(e){}
+
+  // DB에도 저장 시도
   try {
-    // upsert
     await sb.from('opinion_user_settings').upsert({
       user_id: currentUser.id,
       setting_key: 'custom_template',
       setting_value: template
     }, { onConflict: 'user_id,setting_key' });
-    Opinion.state.customTemplate = template;
-    Opinion.state.refText = text;
-    showToast('양식이 저장되었습니다. 모든 프로젝트에 자동 적용됩니다.');
+    console.log('[Opinion] Template saved to DB');
   } catch(e) {
-    // 테이블 없으면 localStorage fallback
-    console.warn('[Opinion] DB save failed, using localStorage:', e.message);
-    try { localStorage.setItem('opinion_custom_template', JSON.stringify(template)); } catch(le){}
-    Opinion.state.customTemplate = template;
-    Opinion.state.refText = text;
-    showToast('양식이 저장되었습니다 (로컬).');
+    console.warn('[Opinion] DB save failed (localStorage OK):', e.message);
   }
+
+  Opinion.state.customTemplate = template;
+  Opinion.state.refText = text;
   Opinion.updateTemplateStatus();
+  showToast('양식이 저장되었습니다. 새로고침해도 유지됩니다.');
 };
 
 Opinion.clearTemplate = async function() {
@@ -633,7 +647,30 @@ Opinion.updateParseButton = function() {
 
 Opinion.handleFiles=function(e){Array.from(e.target.files||[]).forEach(function(f){Opinion.addFile(f);});e.target.value='';};
 Opinion.handleDrop=function(e){Array.from(e.dataTransfer.files||[]).forEach(function(f){Opinion.addFile(f);});};
-// ═══ 토큰 사용량 추적 ═══
+// ═══ 검증 항목 한글 라벨 ═══
+Opinion.CHECK_TYPE_LABELS = {
+  term_existence: '용어 존재 여부',
+  context_match: '문맥 일치 여부',
+  combination_check: '조합 기재 여부',
+  cited_ref_origin: '인용발명 유래 여부',
+  within_scope: '최초 명세서 범위 내',
+  within_original_scope: '최초 명세서 범위 내',
+  resolved: '지적사항 해소 여부',
+  deficiency_resolved: '지적사항 해소 여부',
+  merge_accuracy: '병합 정확성',
+  dependency: '인용관계 정합성',
+  dependency_integrity: '인용관계 정합성',
+  new_matter: '신규사항 추가 여부',
+  no_new_matter: '신규사항 추가 여부',
+  scope: '권리범위 일치',
+  scope_consistency: '권리범위 일치'
+};
+
+Opinion.getCheckLabel = function(checkType) {
+  return Opinion.CHECK_TYPE_LABELS[checkType] || checkType;
+};
+
+Opinion.RESULT_LABELS = { pass: '통과', warn: '주의', fail: '실패' };
 Opinion.usage = { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
 
 // callForJSON 래퍼에 토큰 추적 추가
@@ -1337,9 +1374,19 @@ Opinion.startDraft=async function(){
     Opinion.state.lastRevisionNote = ''; // 사용 후 초기화
 
     var prompts = {
-      inventive_step: '위 분석 결과를 기반으로 보정 청구항 대안 2~3개를 생성해 주세요.'+revCtx+'\n각 대안별로 name, claims_text(보정 청구항 전문), amendments(보정 사항 요약), scope(broad/moderate/narrow), risk(low/medium/high).\nJSON: {"alternatives":[{"id":"alt1","name":"...","claims_text":"...","amendments":"...","scope":"...","risk":"..."}]}',
-      description_deficiency: '위 분석 결과의 각 지적사항을 반영한 수정 청구항을 생성해 주세요.'+revCtx+'\nJSON: {"corrected_claims":[{"claim_no":N,"original":"원문","corrected":"수정문","changes":[{"type":"...","detail":"..."}]}]}',
-      partial_rejection: '위 분석 결과를 기반으로 등록가능 종속항을 독립항에 병합한 청구항을 생성해 주세요.'+revCtx+'\nJSON: {"merged_claim":{"claim_no":1,"text":"병합된 전문"},"remaining_claims":[{"old_no":N,"new_no":N,"text":"...","changed":bool}],"deleted_claims":[N]}'
+      inventive_step: '위 분석 결과를 기반으로 보정 청구항 대안 2~3개를 생성해 주세요.'+revCtx+'\n\n'
+        +'⚠️ 중요 — 명세서 뒷받침 교차검증:\n'
+        +'1. 보정에 사용하는 모든 용어는 반드시 출원 명세서에 기재된 용어만 사용하세요.\n'
+        +'2. 인용발명에만 있는 용어(인용발명 고유 표현)는 절대 보정에 사용하지 마세요.\n'
+        +'3. 각 보정 문언에 대해 근거가 되는 명세서 단락번호(【0001】형식)를 spec_basis로 명시하세요.\n'
+        +'4. 여러 구성요소를 조합하는 경우, 해당 조합이 명세서의 동일 단락에 기재되어 있는지 확인하세요.\n\n'
+        +'JSON: {"alternatives":[{"id":"alt1","name":"전략명","claims_text":"보정 청구항 전문","amendments":"보정 사항 요약","scope":"broad|moderate|narrow","risk":"low|medium|high","spec_basis":["【0029】","【0035】"]}]}',
+      description_deficiency: '위 분석 결과의 각 지적사항을 반영한 수정 청구항을 생성해 주세요.'+revCtx+'\n\n'
+        +'⚠️ 수정 문언은 반드시 최초 명세서 범위 내에서만 작성. 각 수정에 명세서 근거 단락을 명시.\n\n'
+        +'JSON: {"corrected_claims":[{"claim_no":N,"original":"원문","corrected":"수정문","spec_basis":["【0001】"],"changes":[{"type":"...","detail":"..."}]}]}',
+      partial_rejection: '위 분석 결과를 기반으로 등록가능 종속항을 독립항에 병합한 청구항을 생성해 주세요.'+revCtx+'\n\n'
+        +'⚠️ 병합 시 종속항의 문언을 그대로 독립항에 통합. 새로운 표현 추가 금지.\n\n'
+        +'JSON: {"merged_claim":{"claim_no":1,"text":"병합된 전문","spec_basis":["【0001】"]},"remaining_claims":[{"old_no":N,"new_no":N,"text":"...","changed":bool}],"deleted_claims":[N]}'
     };
     var dr = await Opinion.callForJSON(
       Opinion.SYS_PROMPT+'\n\n'+ctx+prompts[t],
@@ -1399,7 +1446,7 @@ Opinion.startValidation=async function(){
 Opinion.renderValidation=function(L,R,status){
   var p=Opinion.state.current,v=Opinion.state.validation||{},sm=v.summary||{},ready=['validated','correction_validated','merge_validated'].indexOf(status)>=0;
   var nav=Opinion.renderNavBar('gate2');
-  L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 2: 청구항 확정</div><p style="font-size:13px;color:var(--color-text-secondary)">검증 보고서를 검토하고 확정해 주세요.</p><div style="margin-top:12px"><div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ PASS '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ WARN '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ FAIL '+(sm.fail||0)+'</div></div></div><div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(2)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate2Approve" onclick="Opinion.approveGate(2)"><span class="tossface">✅</span> 확정</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">검증 중...</div></div>');
+  L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 2: 청구항 확정</div><p style="font-size:13px;color:var(--color-text-secondary)">검증 보고서를 검토하고 확정해 주세요.</p><div style="margin-top:12px"><div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ 통과 '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ 주의 '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ 실패 '+(sm.fail||0)+'</div></div></div><div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(2)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate2Approve" onclick="Opinion.approveGate(2)"><span class="tossface">✅</span> 확정</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">검증 중...</div></div>');
   var items=v.elements||v.results||[];
   R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">🔬</span> 검증 보고서</div></div>'
     +(items.length?items.map(function(e,i){
@@ -1409,14 +1456,14 @@ Opinion.renderValidation=function(L,R,status){
         +'<div class="opinion-val-item-header">'
         +'<div class="el-no">'+(e.element_no||(i+1))+'</div>'
         +'<div class="el-label" style="line-height:1.5">'+escapeHtml(e.element_text||e.detail||'항목 '+(i+1))+'</div>'
-        +'<div class="el-result">'+(r==='pass'?'✅':r==='warn'?'⚠️':'❌')+' '+r.toUpperCase()+'</div>'
+        +'<div class="el-result">'+(r==='pass'?'✅ 통과':r==='warn'?'⚠️ 주의':'❌ 실패')+'</div>'
         +'</div>'
         +'<div class="opinion-val-item-body">'
         +(checks.length?checks.map(function(c){
           var ci=c.result==='pass'?'✅':c.result==='warn'?'⚠️':'❌';
           return '<div style="display:flex;gap:8px;padding:6px 0;align-items:flex-start">'
             +'<span>'+ci+'</span>'
-            +'<div><b>'+escapeHtml(c.check_type||'')+'</b>: '+escapeHtml(c.detail||'')+'</div>'
+            +'<div><b>'+escapeHtml(Opinion.getCheckLabel(c.check_type||''))+'</b>: '+escapeHtml(c.detail||'')+'</div>'
             +'</div>';
         }).join(''):'<div>'+escapeHtml(e.detail||JSON.stringify(e,null,2))+'</div>')
         +'</div></div>';
@@ -1681,14 +1728,14 @@ Opinion.downloadDocx = async function(type) {
       content+='<div style="page-break-before:always"></div>\n';
       content+='<h1 style="text-align:center;font-size:18pt">검증 보고서</h1>\n';
       var sm=v.summary||{};
-      content+='<p>PASS: '+(sm.pass||0)+' / WARN: '+(sm.warn||0)+' / FAIL: '+(sm.fail||0)+'</p>\n';
+      content+='<p>통과: '+(sm.pass||0)+' / 주의: '+(sm.warn||0)+' / 실패: '+(sm.fail||0)+'</p>\n';
       items.forEach(function(e,i){
         var r=e.overall_result||e.result||'pass';
         var icon=r==='pass'?'✅':r==='warn'?'⚠️':'❌';
         content+='<h3>'+icon+' '+(e.element_no||(i+1))+'. '+escapeHtml(e.element_text||e.detail||'')+'</h3>\n';
         (e.checks||[]).forEach(function(c){
           var ci=c.result==='pass'?'✅':c.result==='warn'?'⚠️':'❌';
-          content+='<p>'+ci+' <b>'+escapeHtml(c.check_type||'')+'</b>: '+escapeHtml(c.detail||'')+'</p>\n';
+          content+='<p>'+ci+' <b>'+escapeHtml(Opinion.getCheckLabel(c.check_type||''))+'</b>: '+escapeHtml(c.detail||'')+'</p>\n';
         });
       });
       fileName='의견서+검증보고서_'+escapeHtml(p.application_no||p.title||'output');
@@ -1749,26 +1796,44 @@ Opinion.resetToUploadWithManual=async function(){
 // ═══ Utilities ═══
 Opinion.setStatus=async function(id,s){try{await sb.from('opinion_projects').update({status:s,updated_at:new Date().toISOString()}).eq('id',id);var p=Opinion.state.current;if(p&&p.id===id)p.status=s;Opinion.state.projects.forEach(function(x){if(x.id===id)x.status=s;});}catch(e){console.error('[Opinion] status:',e);}};
 Opinion.loadData=async function(id){try{
-  var{data:a}=await sb.from('opinion_issue_analyses').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(a)Opinion.state.analysis=a.result_data;
-  var{data:d}=await sb.from('opinion_draft_claims').select('draft_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(d)Opinion.state.draftResult=d.draft_data;
+  var{data:a}=await sb.from('opinion_issue_analyses').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+  if(a && a.result_data) {
+    // _parse_failed 데이터 정리
+    var ad = a.result_data;
+    if (ad._parse_failed && ad.raw_text) {
+      // raw_text에서 JSON 재추출 시도
+      var reparsed = Opinion.parseJSON(ad.raw_text);
+      Opinion.state.analysis = reparsed._parse_failed ? ad : reparsed;
+    } else {
+      Opinion.state.analysis = ad;
+    }
+  }
+  var{data:d}=await sb.from('opinion_draft_claims').select('draft_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+  if(d && d.draft_data) {
+    var dd = d.draft_data;
+    if (dd._parse_failed && dd.raw_text) {
+      var reparsed2 = Opinion.parseJSON(dd.raw_text);
+      Opinion.state.draftResult = reparsed2._parse_failed ? dd : reparsed2;
+    } else {
+      Opinion.state.draftResult = dd;
+    }
+  }
   var{data:v}=await sb.from('opinion_validation_results').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(v)Opinion.state.validation=v.result_data;
   var{data:o}=await sb.from('opinion_opinion_drafts').select('content').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();
   if(o && o.content) {
     var c = o.content;
-    // DB에서 꺼낸 데이터 정규화
     if (typeof c === 'string') {
-      // 순수 문자열 → 섹션으로 파싱 시도
-      Opinion.state.opinionDraft = Opinion.parseOpinionSections ? Opinion.parseOpinionSections(c) : { title:'의견서', sections:[{heading:'의견서',content:c}] };
+      Opinion.state.opinionDraft = Opinion.parseOpinionSections(c);
     } else if (c.sections && c.sections.length) {
       Opinion.state.opinionDraft = c;
     } else if (c.raw_text) {
-      Opinion.state.opinionDraft = Opinion.parseOpinionSections ? Opinion.parseOpinionSections(c.raw_text) : { title:'의견서', sections:[{heading:'의견서',content:c.raw_text}] };
+      Opinion.state.opinionDraft = Opinion.parseOpinionSections(c.raw_text);
     } else {
       Opinion.state.opinionDraft = c;
     }
   }
   var{data:t}=await sb.from('opinion_type_determinations').select('*').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(t)Opinion.state.typeResult=t;
-}catch(e){console.warn('[Opinion] load:',e);}Opinion.renderDetail();};
+}catch(e){console.warn('[Opinion] loadData:',e);}Opinion.renderDetail();};
 // ═══ 강화된 JSON 파서 (5단계 추출 시도) ═══
 Opinion.parseJSON = function(text) {
   if (!text) return {};
