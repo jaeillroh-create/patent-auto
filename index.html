@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="common.css" />
   <link rel="stylesheet" href="patent.css" />
   <link rel="stylesheet" href="trademark.css" />
+  <link rel="stylesheet" href="opinion.css" />
 </head>
 <body>
 <div id="toastContainer" class="toast-container"></div>
@@ -92,6 +93,19 @@
 
     <!-- ═══ 특허 대시보드 패널 ═══ -->
     <div id="patent-dashboard-panel" class="service-panel active">
+
+      <!-- ★ 특허 서브탭 (명세서 작성 / 의견서 대응) ★ -->
+      <nav class="patent-sub-tab-nav">
+        <button class="patent-sub-tab active" data-subtab="spec" onclick="App.switchPatentSubTab('spec')">
+          <span class="tossface">📑</span> 명세서 작성
+        </button>
+        <button class="patent-sub-tab" data-subtab="opinion" onclick="App.switchPatentSubTab('opinion')">
+          <span class="tossface">📝</span> 의견서 대응
+        </button>
+      </nav>
+
+      <!-- ═══ 서브패널 1: 기존 명세서 ═══ -->
+      <div id="patent-sub-spec" class="patent-sub-panel active">
       <div style="display:flex;gap:20px;align-items:flex-start">
         <!-- 왼쪽: 액션 패널 (좁게) -->
         <div style="width:240px;flex-shrink:0">
@@ -154,6 +168,68 @@
           </div>
         </div>
       </div>
+      </div><!-- /patent-sub-spec -->
+
+      <!-- ═══ 서브패널 2: 의견서 대응 ═══ -->
+      <div id="patent-sub-opinion" class="patent-sub-panel">
+
+        <!-- 의견서 프로젝트 목록 -->
+        <div id="opinionListView">
+          <div class="opinion-dashboard">
+            <div class="opinion-sidebar">
+              <h2 style="font-size:20px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px"><span class="tossface">📝</span> 의견서 대응</h2>
+              <p style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:16px;line-height:1.4">AI 기반 의견제출통지서 대응 자동화</p>
+              <button class="btn btn-primary btn-full" onclick="Opinion.openCreateModal()" style="margin-bottom:8px;padding:12px;font-size:14px"><span class="tossface">➕</span> 새 의견서 프로젝트</button>
+              <div class="card" style="padding:12px;margin-top:12px">
+                <div style="font-size:12px;font-weight:600;margin-bottom:8px"><span class="tossface">ℹ️</span> 지원 유형</div>
+                <div style="font-size:11px;line-height:1.7;color:var(--color-text-secondary)">
+                  <div style="margin-bottom:4px"><span class="opinion-type-badge type-a">⚖️ A. 진보성</span></div>
+                  <div style="margin-bottom:4px"><span class="opinion-type-badge type-b">📝 B. 기재불비</span></div>
+                  <div><span class="opinion-type-badge type-c">📋 C. 일부거절</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="opinion-main">
+              <div class="card" style="padding:0;overflow:hidden">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
+                  <colgroup><col style="width:14%"><col style="width:32%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:18%"></colgroup>
+                  <thead><tr style="background:var(--color-bg-tertiary);border-bottom:1px solid var(--color-border)">
+                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--color-text-secondary)">출원번호</th>
+                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--color-text-secondary)">사건명</th>
+                    <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">상태</th>
+                    <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">기한</th>
+                    <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">수정일</th>
+                    <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">작업</th>
+                  </tr></thead>
+                  <tbody id="opinionProjectList"></tbody>
+                </table>
+              </div>
+              <div style="text-align:right;margin-top:6px;font-size:11px;color:var(--color-text-tertiary)" id="opinionProjectCount">총 0건</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 의견서 프로젝트 상세 -->
+        <div id="opinionDetailView" style="display:none">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <button class="btn btn-ghost btn-sm" onclick="Opinion.backToList()"><span class="tossface">←</span></button>
+            <div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span id="opinionDetailAppNo" style="font-size:12px;font-weight:600;color:var(--color-primary)">-</span>
+                <h2 id="opinionDetailTitle" style="font-size:18px;font-weight:700">프로젝트</h2>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:4px"><span id="opinionDetailType"></span><span id="opinionDetailStatus"></span></div>
+            </div>
+          </div>
+          <div class="opinion-pipeline" id="opinionPipeline"></div>
+          <div class="opinion-detail">
+            <div class="opinion-detail-left" id="opinionDetailLeft"></div>
+            <div class="opinion-detail-right" id="opinionDetailRight"></div>
+          </div>
+        </div>
+
+      </div><!-- /patent-sub-opinion -->
+
     </div><!-- /patent-dashboard-panel -->
 
     <!-- ═══ 상표 대시보드 패널 ═══ -->
@@ -704,6 +780,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="common.js?v=20260209b"></script>
 <script src="patent.js?v=20260209b"></script>
+<script src="opinion.js?v=20260209b"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
   var _cv='?v='+Date.now();
@@ -711,5 +788,28 @@
     if(r.ok){var s=document.createElement('script');s.src='trademark.js'+_cv;document.body.appendChild(s);}
   }).catch(function(){});
 </script>
+
+<!-- 의견서 프로젝트 생성 모달 -->
+<div id="opinionCreateModal" class="modal-overlay" style="display:none">
+  <div class="modal-content" style="max-width:420px;padding:24px">
+    <div class="modal-title" style="font-size:16px;margin-bottom:16px"><span class="tossface">📝</span> 새 의견서 프로젝트</div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:6px">사건명</label>
+      <input type="text" class="input-field" id="opinionNewTitle" placeholder="예: 루나크 의견대응 (10-2025-0128349)" style="padding:10px 12px;font-size:14px" />
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:6px">출원번호</label>
+      <input type="text" class="input-field" id="opinionNewAppNo" placeholder="10-2025-0128349" style="padding:10px 12px;font-size:14px" />
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:6px">의견서 제출기한</label>
+      <input type="date" class="input-field" id="opinionNewDeadline" style="padding:10px 12px;font-size:14px" />
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn btn-ghost" onclick="Opinion.closeCreateModal()" style="flex:1;padding:10px">취소</button>
+      <button class="btn btn-primary" onclick="Opinion.create()" style="flex:1;padding:10px">만들기</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
