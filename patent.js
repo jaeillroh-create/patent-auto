@@ -58,7 +58,9 @@ const STEP8_SUFFIX = `본 발명에 따른 방법들은 다양한 컴퓨터 수�
 컴퓨터 판독 가능 매체의 예에는 롬(ROM), 램(RAM), 플래시 메모리(flash memory) 등과 같이 프로그램 명령을 저장하고 수행하도록 특별히 구성된 하드웨어 장치가 포함될 수 있다. 프로그램 명령의 예에는 컴파일러(compiler)에 의해 만들어지는 것과 같은 기계어 코드뿐만 아니라 인터프리터(interpreter) 등을 사용해서 컴퓨터에 의해 실행될 수 있는 고급 언어 코드를 포함할 수 있다. 상술한 하드웨어 장치는 본 발명의 동작을 수행하기 위해 적어도 하나의 소프트웨어 모듈로 작동하도록 구성될 수 있으며, 그 역도 마찬가지이다.
 또한, 상술한 방법 또는 장치는 그 구성이나 기능의 전부 또는 일부가 결합되어 구현되거나, 분리되어 구현될 수 있다.
 상기에서는 본 발명의 바람직한 실시예를 참조하여 설명하였지만, 해당 기술 분야의 숙련된 당업자는 하기의 특허 청구의 범위에 기재된 본 발명의 사상 및 필드로부터 벗어나지 않는 범위 내에서 본 발명을 다양하게 수정 및 변경시킬 수 있음을 이해할 수 있을 것이다.`;
-const STEP_NAMES={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술문헌',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'도면 설계',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서',step_20:'기록매체/프로그램 청구항'};
+const STEP_NAMES={step_01:'A1. 발명의 명칭',step_02:'D5. 기술분야',step_03:'D4. 배경기술',step_04:'E2. 선행기술 검색',step_05:'D2. 해결하고자 하는 과제',step_06:'A2. 장치 청구항',step_07:'B1. 장치 도면',step_08:'C1. 장치 상세설명',step_09:'C2. 수학식',step_10:'A3. 방법 청구항',step_11:'B2. 방법 도면',step_12:'C3. 방법 상세설명',step_13:'E1. AI 검토',step_14:'E4. 대안 청구항',step_15:'E3. 특허성 검토',step_16:'D3. 발명의 효과',step_17:'D1. 과제의 해결 수단',step_18:'F1. 부호의 설명',step_19:'F2. 요약서',step_20:'A4. 기록매체/프로그램 청구항'};
+// Phase 없는 순수 이름 (프롬프트 내부용)
+const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술 검색',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'장치 도면',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'AI 검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서',step_20:'기록매체/프로그램 청구항'};
 
 // ═══ v9.0: callClaudeWithContinuation 오버라이드 ═══
 // 근본 원인: common.js의 이어쓰기 프롬프트가 원본 규칙을 전부 소실시킴
@@ -736,18 +738,27 @@ function injectAllUserCommandUIs(){
 // ═══ A4 fix: Step 의존성 무효화 시스템 (v5.5) ═══
 // ═══ v7.0: 완전 의존성 맵 (MUST=필수/SHOULD=권장) ═══
 const STEP_DEPENDENCIES={
-  step_01:{MUST:['step_02','step_05','step_16','step_17','step_19'],SHOULD:['step_03','step_04']},
-  step_03:{MUST:['step_05'],SHOULD:[]},
-  step_05:{MUST:['step_16'],SHOULD:[]},
-  step_06:{MUST:['step_07','step_08','step_10','step_13','step_14','step_15','step_16','step_17','step_19'],SHOULD:['step_09','step_11','step_12','step_18','step_20']},
-  step_07:{MUST:['step_08','step_11','step_18'],SHOULD:['step_09','step_13']},
-  step_08:{MUST:['step_09','step_13'],SHOULD:['step_12','step_14','step_15','step_16']},
-  step_09:{MUST:[],SHOULD:['step_13']},
-  step_10:{MUST:['step_11','step_12','step_13','step_17','step_20'],SHOULD:['step_14','step_15','step_18']},
-  step_11:{MUST:['step_12','step_18'],SHOULD:['step_13']},
-  step_12:{MUST:['step_13'],SHOULD:[]},
-  step_15:{MUST:[],SHOULD:['step_08','step_09','step_12']},
-  step_20:{MUST:['step_17'],SHOULD:[]},
+  // ═══ v14: 역설계 체인 반영 ═══
+  step_01:{MUST:['step_06'],SHOULD:[]},                    // 명칭 → 청구항 (직행)
+  step_06:{MUST:['step_10','step_07','step_17'],SHOULD:['step_08','step_11','step_14','step_15','step_19','step_20']}, // 장치청구 → 방법,도면,해결수단
+  step_10:{MUST:['step_11','step_12','step_17','step_20'],SHOULD:['step_14','step_15','step_18']}, // 방법청구 → 방법도면,상세,해결수단,기록매체
+  step_07:{MUST:['step_08','step_18'],SHOULD:['step_09','step_13']},     // 장치도면 → 상세설명, 부호
+  step_08:{MUST:['step_09','step_13'],SHOULD:['step_12','step_14','step_15']}, // 상세설명 → 수학식, 검토
+  step_09:{MUST:[],SHOULD:['step_13']},                    // 수학식 → 검토
+  step_11:{MUST:['step_12','step_18'],SHOULD:['step_13']},  // 방법도면 → 방법상세, 부호
+  step_12:{MUST:['step_13'],SHOULD:[]},                    // 방법상세 → 검토
+  step_17:{MUST:['step_05'],SHOULD:[]},                    // ★ 역설계: 해결수단 → 과제
+  step_05:{MUST:['step_16','step_03'],SHOULD:[]},           // ★ 역설계: 과제 → 효과, 배경기술
+  step_16:{MUST:[],SHOULD:[]},                             // 효과 (종단)
+  step_03:{MUST:[],SHOULD:['step_02']},                    // 배경기술 → 기술분야
+  step_02:{MUST:[],SHOULD:[]},                             // 기술분야 (종단)
+  step_13:{MUST:[],SHOULD:['step_15','step_04']},           // 검토 → 특허성, 선행기술
+  step_04:{MUST:[],SHOULD:['step_15']},                    // 선행기술 → 특허성
+  step_15:{MUST:[],SHOULD:['step_14','step_08','step_09','step_12']}, // 특허성 → 대안, 보완
+  step_20:{MUST:['step_17'],SHOULD:[]},                    // 기록매체 → 해결수단
+  step_14:{MUST:[],SHOULD:[]},                             // 대안청구 (종단)
+  step_18:{MUST:[],SHOULD:[]},                             // 부호 (종단)
+  step_19:{MUST:[],SHOULD:[]},                             // 요약서 (종단)
 };
 
 // 각 step의 실행 함수 매핑 (연쇄 재생성용)
@@ -1176,7 +1187,7 @@ ${prompt.slice(0,2000)}`;
   outputs[sid]=designText;markOutputTimestamp(sid);_cascadeRender(sid,designText);
   const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
   outputs[sid+'_mermaid']=mr.text;
-  renderDiagrams(sid,mr.text);
+  renderDiagramsV14(sid,mr.text);
 }
 
 // v10.3: 설계 텍스트에서 초과 도면 제거
@@ -1969,10 +1980,10 @@ ${prompt}`;
 function _buildPromptCore(stepId,inv,T,styleRef){
   switch(stepId){
     case 'step_01':return `프로젝트를 분석하여 특허 발명의 명칭 후보를 5가지 생성하라.\n형태: \"~${selectedTitleType}\"\n각 후보에 국문+영문.\n\n출력형식:\n[1] 국문: (명칭) / 영문: (명칭)\n[2] 국문: (명칭) / 영문: (명칭)\n[3] 국문: (명칭) / 영문: (명칭)\n[4] 국문: (명칭) / 영문: (명칭)\n[5] 국문: (명칭) / 영문: (명칭)\n\n[프로젝트]\n${inv}`;
-    case 'step_02':return `【기술분야】를 작성. \"본 발명은 ~에 관한 것이다.\" 한 문장만. 50자 이내. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}${styleRef}`;
-    case 'step_03':return `【발명의 배경이 되는 기술】을 작성. 3문단(기존문제/최근동향/필요성), 각 450자. 번호 없이. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}\n[프로젝트] ${inv}${styleRef}`;
+    case 'step_02':return `【기술분야】를 작성. "본 발명은 ~에 관한 것이다." 한 문장만. 50자 이내. 다른 항목 포함 금지. 헤더 금지.\n★ 최종 확정된 청구항의 범위를 기반으로 기술분야를 한 문장으로 요약하라.\n\n발명의 명칭: ${T}\n[장치 청구항 독립항] ${(outputs.step_06||'').slice(0,1000)}${styleRef}`;
+    case 'step_03':return `【발명의 배경이 되는 기술】을 작성.\n\n★ 역설계 작성 원칙 ★\n아래 [과제]에서 제기한 문제가 왜 존재하는지, 종래 기술의 한계를 설명하라.\n과제에서 "A가 문제다"라고 했으면, 배경기술에서는 "종래 기술은 A를 해결하지 못했다"를 논거로 전개.\n\n3문단(기존문제/최근동향/필요성), 각 450자. 번호 없이. 다른 항목 포함 금지. 헤더 금지.\n\n발명의 명칭: ${T}\n[과제] ${outputs.step_05||''}\n[장치 청구항 요약] ${(outputs.step_06||'').slice(0,1500)}\n[프로젝트] ${inv}${styleRef}`;
     case 'step_04':return null; // KIPRIS API 실시간 검색으로 대체
-    case 'step_05':return `【해결하고자 하는 과제】작성. \"본 발명은 ~을 제공하는 것을 목적으로 한다.\" 150자 이내. 마지막: \"본 발명의 기술적 과제는 이상에서 언급한 기술적 과제로 제한되지 않으며, 언급되지 않은 또 다른 기술적 과제들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\" 헤더 금지.\n\n발명의 명칭: ${T}\n[배경기술] ${outputs.step_03||''}${styleRef}`;
+    case 'step_05':return `【해결하고자 하는 과제】를 역설계 방식으로 작성하라.\n\n★ 역설계 원칙 ★\n아래 [과제의 해결 수단]은 이미 확정된 청구항의 요약이다.\n이 해결 수단이 "해결하는 문제가 무엇인지"를 역으로 추론하여 과제를 작성하라.\n\n패턴: 해결수단이 "A를 제공한다" → 과제는 "종래에는 A가 없어서 B 문제가 있었다"\n패턴: 해결수단이 "X부를 포함하는 장치" → 과제는 "종래 X 처리가 비효율적이었다"\n\n"본 발명은 ~을 제공하는 것을 목적으로 한다." 150자 이내.\n마지막: "본 발명의 기술적 과제는 이상에서 언급한 기술적 과제로 제한되지 않으며, 언급되지 않은 또 다른 기술적 과제들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다." 헤더 금지.\n\n발명의 명칭: ${T}\n[과제의 해결 수단] ${outputs.step_17||''}\n[장치 청구항 요약] ${(outputs.step_06||'').slice(0,2000)}${styleRef}`;
 
     // ═══ Step 6: 장치 청구항 (v4.7 완전 재작성) ═══
     case 'step_06':{
@@ -2665,7 +2676,7 @@ ${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설�
 각 항목별로 평가 결과와 개선 제안을 작성하라.
 
 ${T}\n[전체 청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명 요약] ${(getLatestDescription()||'').slice(0,3000)}\n[발명 내용] ${inv.slice(0,2000)}`;
-    case 'step_16':return `발명의 효과. \"본 발명에 따르면,\"시작. 150자 이내. 마지막: \"본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며, 언급되지 않은 또 다른 효과들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다.\"\n${T}\n[독립항] ${(outputs.step_06||'').match(/【청구항 1】[\s\S]*?(?=【청구항 2】|$)/)?.[0]||''}\n[과제] ${outputs.step_05||''}\n[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
+    case 'step_16':return `발명의 효과. "본 발명에 따르면,"시작. 150자 이내.\n\n★ 과제-효과 1:1 대응 원칙 ★\n아래 [과제]에서 제기한 각 문제에 대해 1:1로 대응하는 효과를 기술하라.\n과제에서 "A가 문제"라고 했으면, 효과에서는 "A를 해결하여 B 이점이 있다"로 대응.\n\n마지막: "본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며, 언급되지 않은 또 다른 효과들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다."\n${T}\n[과제] ${outputs.step_05||''}\n[독립항] ${(outputs.step_06||'').match(/【청구항 1】[\\s\\S]*?(?=【청구항 2】|$)/)?.[0]||''}\n[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
     case 'step_17':return `과제의 해결 수단. 각 독립항 카테고리별로 요약하라.
 형식:
 "본 발명의 일 실시예에 따른 ${getDeviceSubject()}는, ..." (장치 독립항 요약)
@@ -3431,6 +3442,63 @@ async function runBatch25(){
   finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}
 }
 async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;markOutputTimestamp(steps[i]);renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
+
+// ═══ v14: Phase 기반 배치 실행 (역설계 체인) ═══
+
+// Phase D: 역설계 체인 (해결수단→과제→효과→배경기술→기술분야)
+async function runPhaseD(){
+  if(globalProcessing)return;
+  if(!outputs.step_06){App.showToast('장치 청구항(A2)을 먼저 작성하세요','error');return;}
+  setGlobalProcessing(true);
+  const btn=document.getElementById('btnPhaseD');
+  if(btn){btn.disabled=true;btn.textContent='⏳ 역설계 진행 중...';}
+  const container=document.getElementById('resultsPhaseDChain');
+  if(container)container.innerHTML='';
+  
+  const steps=['step_17','step_05','step_16','step_03','step_02'];
+  const stepLabels={step_17:'D1. 해결 수단',step_05:'D2. 과제',step_16:'D3. 효과',step_03:'D4. 배경기술',step_02:'D5. 기술분야'};
+  
+  try{
+    for(let i=0;i<steps.length;i++){
+      const sid=steps[i];
+      App.showProgress('progressPhaseD',`${stepLabels[sid]} (${i+1}/${steps.length})`,i+1,steps.length);
+      const r=await App.callClaude(buildPrompt(sid));
+      outputs[sid]=r.text;
+      markOutputTimestamp(sid);
+      if(container)renderBatchResult('resultsPhaseDChain',sid,r.text);
+    }
+    App.clearProgress('progressPhaseD');
+    saveProject(true);
+    App.showToast('✅ 역설계 체인 완료 (D1→D5)');
+  }catch(e){
+    App.clearProgress('progressPhaseD');
+    App.showToast(e.message,'error');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='🔄 역설계 체인 일괄 생성';}
+    setGlobalProcessing(false);
+  }
+}
+
+// Phase F: 마무리 (부호+요약서)
+async function runPhaseF(){
+  if(globalProcessing)return;
+  if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}
+  setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);
+  document.getElementById('resultsBatchFinish').innerHTML='';
+  const steps=['step_18','step_19'];
+  try{
+    for(let i=0;i<steps.length;i++){
+      App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/${steps.length})`,i+1,steps.length);
+      const r=await App.callClaude(buildPrompt(steps[i]));
+      outputs[steps[i]]=r.text;markOutputTimestamp(steps[i]);
+      renderBatchResult('resultsBatchFinish',steps[i],r.text);
+    }
+    App.clearProgress('progressBatchFinish');
+    saveProject(true);App.showToast('✅ 마무리 완료 (F1→F2)');
+  }catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}
+  finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}
+}
+
 
 // ═══════════ PROVISIONAL APPLICATION (가출원) ═══════════
 async function openProvisionalModal(){
@@ -5330,6 +5398,125 @@ function _extractStructuredComponents(text){
 }
 
 // ═══════════ UNIFIED DIAGRAM ENGINE ═══════════
+
+// ═══════════════════════════════════════════════════════════════
+// ★★★ v14: 도면 JSON 아키텍처 (Option B) ★★★
+// LLM이 JSON 좌표 직접 출력 → 경량 렌더러가 SVG+PPTX 생성
+// 파싱 실패 시 기존 Mermaid 파이프라인으로 자동 폴백
+// ═══════════════════════════════════════════════════════════════
+
+function parseDesignJSON(responseText){
+  const jsonMatch=responseText.match(/```json\n([\s\S]*?)```/);
+  if(!jsonMatch)return{success:false,fallback:'mermaid',error:'JSON block not found'};
+  try{
+    const parsed=JSON.parse(jsonMatch[1]);
+    const figures=parsed.figures||[parsed];
+    if(!figures.length)return{success:false,fallback:'mermaid',error:'empty figures'};
+    const PW=8.27,PH=11.69,M=0.6;
+    for(const fig of figures){
+      if(!fig.blocks||!Array.isArray(fig.blocks))return{success:false,fallback:'mermaid',error:'no blocks'};
+      for(const b of fig.blocks){
+        if(typeof b.x!=='number')b.x=M; if(typeof b.y!=='number')b.y=M;
+        if(typeof b.w!=='number')b.w=1.8; if(typeof b.h!=='number')b.h=0.7;
+        b.x=Math.max(M,Math.min(b.x,PW-b.w-M));
+        b.y=Math.max(M,Math.min(b.y,PH-b.h-M));
+      }
+      fig.blocks=_autoCorrectOverlaps(fig.blocks);
+      if(!fig.connections)fig.connections=[];
+      fig.connections.forEach(c=>{
+        if(!c.route||!c.route.length){
+          const fb=fig.blocks.find(bl=>bl.id===c.from),tb=fig.blocks.find(bl=>bl.id===c.to);
+          if(fb&&tb)c.route=_autoRouteJSON(fb,tb);
+        }
+        if(!c.arrow)c.arrow='end';
+      });
+    }
+    return{success:true,data:{figures}};
+  }catch(e){return{success:false,fallback:'mermaid',error:e.message};}
+}
+
+function _autoCorrectOverlaps(blocks){
+  const PAD=0.15;
+  for(let iter=0;iter<10;iter++){
+    let any=false;
+    for(let i=0;i<blocks.length;i++){
+      for(let j=i+1;j<blocks.length;j++){
+        const a=blocks[i],b=blocks[j];
+        if(a.x<b.x+b.w+PAD&&a.x+a.w+PAD>b.x&&a.y<b.y+b.h+PAD&&a.y+a.h+PAD>b.y){
+          const dx=(a.x+a.w+PAD)-b.x,dy=(a.y+a.h+PAD)-b.y;
+          if(Math.abs(dx)<Math.abs(dy))b.x+=dx+0.1; else b.y+=dy+0.1;
+          any=true;
+        }
+      }
+    }
+    if(!any)break;
+  }
+  return blocks;
+}
+
+function _autoRouteJSON(fb,tb){
+  const fcx=fb.x+fb.w/2,fcy=fb.y+fb.h/2,tcx=tb.x+tb.w/2,tcy=tb.y+tb.h/2;
+  const dx=tcx-fcx,dy=tcy-fcy,isH=Math.abs(dx)>=Math.abs(dy);
+  let s,e;
+  if(isH){s={x:dx>0?fb.x+fb.w:fb.x,y:fcy};e={x:dx>0?tb.x:tb.x+tb.w,y:tcy};}
+  else{s={x:fcx,y:dy>0?fb.y+fb.h:fb.y};e={x:tcx,y:dy>0?tb.y:tb.y+tb.h};}
+  if(Math.abs(s.x-e.x)<0.05||Math.abs(s.y-e.y)<0.05)return[s,e];
+  if(isH){const m=(s.x+e.x)/2;return[s,{x:m,y:s.y},{x:m,y:e.y},e];}
+  else{const m=(s.y+e.y)/2;return[s,{x:s.x,y:m},{x:e.x,y:m},e];}
+}
+
+function renderDiagramFromJSON(containerId,figData,figNum){
+  const PX=72,PW=(figData.pageSize?.w||8.27)*PX,PH=(figData.pageSize?.h||11.69)*PX;
+  let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PW} ${PH}" style="background:#fff;border:1px solid #ddd;max-width:100%;height:auto">`;
+  svg+=`<text x="${PW/2}" y="30" text-anchor="middle" font-size="14" font-weight="bold" fill="#333">【도 ${figNum}】</text>`;
+  if(figData.frame){const f=figData.frame;svg+=`<rect x="${f.x*PX}" y="${f.y*PX}" width="${f.w*PX}" height="${f.h*PX}" fill="none" stroke="#000" stroke-width="2" rx="4"/>`;svg+=`<text x="${(f.x+f.w/2)*PX}" y="${(f.y-0.08)*PX}" text-anchor="middle" font-size="12" fill="#000">${f.label||''}</text>`;}
+  (figData.connections||[]).forEach(conn=>{if(!conn.route||conn.route.length<2)return;const pts=conn.route.map(p=>`${p.x*PX},${p.y*PX}`).join(' ');const mid=`arr_${figNum}_${conn.from}_${conn.to}`;svg+=`<defs><marker id="${mid}" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#000"/></marker></defs>`;let ma='';if(conn.arrow==='end'||conn.arrow==='both')ma+=` marker-end="url(#${mid})"`;if(conn.arrow==='start'||conn.arrow==='both')ma+=` marker-start="url(#${mid})"`;svg+=`<polyline points="${pts}" fill="none" stroke="#000" stroke-width="1.2"${ma}/>`; });
+  (figData.blocks||[]).forEach(block=>{const bx=block.x*PX,by=block.y*PX,bw=block.w*PX,bh=block.h*PX;if(block.shape==='diamond'){const cx=bx+bw/2,cy=by+bh/2;svg+=`<polygon points="${cx},${by} ${bx+bw},${cy} ${cx},${by+bh} ${bx},${cy}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;}else if(block.shape==='stadium'){svg+=`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="${bh/2}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;}else{svg+=`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="#fff" stroke="#000" stroke-width="1.5" rx="3"/>`;}const label=block.label||'';const fs=Math.min(12,Math.max(8,(bw-10)/Math.max(label.length,1)*1.5));svg+=`<text x="${bx+bw/2}" y="${by+bh/2+4}" text-anchor="middle" font-size="${fs}" fill="#000">${label}</text>`;if(block.refNum){let rl=block.refLeader;const pos=block.refNumPos||'right';if(!rl){if(pos==='right')rl={startX:block.x+block.w,startY:block.y+block.h/2,endX:block.x+block.w+0.4,endY:block.y+block.h/2};else if(pos==='left')rl={startX:block.x,startY:block.y+block.h/2,endX:block.x-0.4,endY:block.y+block.h/2};else if(pos==='top')rl={startX:block.x+block.w/2,startY:block.y,endX:block.x+block.w/2,endY:block.y-0.3};else rl={startX:block.x+block.w/2,startY:block.y+block.h,endX:block.x+block.w/2,endY:block.y+block.h+0.3};}svg+=`<line x1="${rl.startX*PX}" y1="${rl.startY*PX}" x2="${rl.endX*PX}" y2="${rl.endY*PX}" stroke="#000" stroke-width="0.8"/>`;const anc=pos==='left'?'end':'start';const rdx=pos==='left'?-4:4;svg+=`<text x="${rl.endX*PX+rdx}" y="${rl.endY*PX+4}" text-anchor="${anc}" font-size="11" fill="#000">${block.refNum}</text>`;}});
+  svg+=`</svg>`;
+  const el=document.getElementById(containerId);if(el)el.innerHTML+=`<div style="margin:12px 0">${svg}</div>`;
+  return svg;
+}
+
+function generatePptxFromJSON(figDataArray,fileName){
+  if(typeof PptxGenJS==='undefined'){App.showToast('PPTX 라이브러리 로드 안됨','error');return;}
+  const pptx=new PptxGenJS();pptx.defineLayout({name:'A4P',width:8.27,height:11.69});pptx.layout='A4P';
+  figDataArray.forEach((fig,idx)=>{
+    const slide=pptx.addSlide();const fn=fig.figNum||(idx+1);
+    slide.addText('【도 '+fn+'】',{x:0.5,y:0.2,w:7.27,h:0.4,fontSize:14,bold:true,align:'center',fontFace:'맑은 고딕'});
+    if(fig.frame){const f=fig.frame;slide.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:f.x,y:f.y,w:f.w,h:f.h,fill:{color:'FFFFFF'},line:{color:'000000',width:2},rectRadius:0.05});slide.addText(f.label||'',{x:f.x,y:f.y-0.25,w:f.w,h:0.25,fontSize:11,align:'center',fontFace:'맑은 고딕'});}
+    (fig.connections||[]).forEach(conn=>{if(!conn.route||conn.route.length<2)return;for(let ri=0;ri<conn.route.length-1;ri++){const p1=conn.route[ri],p2=conn.route[ri+1];const lo={color:'000000',width:1.0};if(ri===conn.route.length-2&&(conn.arrow==='end'||conn.arrow==='both'))lo.endArrowType='triangle';if(ri===0&&(conn.arrow==='start'||conn.arrow==='both'))lo.beginArrowType='triangle';slide.addShape(pptx.shapes.LINE,{x:Math.min(p1.x,p2.x),y:Math.min(p1.y,p2.y),w:Math.max(0.001,Math.abs(p2.x-p1.x)||0.001),h:Math.max(0.001,Math.abs(p2.y-p1.y)||0.001),line:lo});}});
+    (fig.blocks||[]).forEach(block=>{const st=block.shape==='diamond'?pptx.shapes.DIAMOND:block.shape==='circle'?pptx.shapes.OVAL:pptx.shapes.ROUNDED_RECTANGLE;slide.addShape(st,{x:block.x,y:block.y,w:block.w,h:block.h,fill:{color:'FFFFFF'},line:{color:'000000',width:1.5},rectRadius:block.shape==='stadium'?0.35:0.05});slide.addText(block.label||'',{x:block.x+0.04,y:block.y,w:block.w-0.08,h:block.h,fontSize:Math.min(11,Math.max(7,block.w*5)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});if(block.refNum){let rl=block.refLeader;const pos=block.refNumPos||'right';if(!rl){if(pos==='right')rl={startX:block.x+block.w,startY:block.y+block.h/2,endX:block.x+block.w+0.35,endY:block.y+block.h/2};else if(pos==='left')rl={startX:block.x,startY:block.y+block.h/2,endX:block.x-0.35,endY:block.y+block.h/2};else if(pos==='top')rl={startX:block.x+block.w/2,startY:block.y,endX:block.x+block.w/2,endY:block.y-0.25};else rl={startX:block.x+block.w/2,startY:block.y+block.h,endX:block.x+block.w/2,endY:block.y+block.h+0.25};}slide.addShape(pptx.shapes.LINE,{x:Math.min(rl.startX,rl.endX),y:Math.min(rl.startY,rl.endY),w:Math.max(0.001,Math.abs(rl.endX-rl.startX)||0.001),h:Math.max(0.001,Math.abs(rl.endY-rl.startY)||0.001),line:{color:'000000',width:0.75}});slide.addText(block.refNum,{x:pos==='left'?rl.endX-0.4:rl.endX,y:rl.endY-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:pos==='left'?'right':'left'});}});
+  });
+  pptx.writeFile({fileName:fileName||'patent_diagram_v14.pptx'});App.showToast('PPTX 다운로드 완료');
+}
+
+function renderDiagramsV14(sid,responseText){
+  const cid=sid==='step_07'?'diagramsStep07':'diagramsStep11';
+  const el=document.getElementById(cid);if(el)el.innerHTML='';
+  const jr=parseDesignJSON(responseText);
+  if(jr.success){
+    console.log('[v14] JSON 도면 렌더링');
+    const figs=jr.data.figures;
+    diagramData[sid]=figs.map(f=>({_version:2,json:f}));
+    const autoNums=getAutoFigNums(sid);
+    figs.forEach((fig,i)=>renderDiagramFromJSON(cid,fig,fig.figNum||autoNums[i]||(i+1)));
+    const dl=document.getElementById(sid==='step_07'?'diagramDownload07':'diagramDownload11');if(dl)dl.style.display='block';
+    return true;
+  }
+  console.warn('[v14] JSON 실패:',jr.error,'→ Mermaid 폴백');
+  renderDiagrams(sid,responseText);
+  return false;
+}
+
+function downloadPptxV14(sid){
+  const data=diagramData[sid];
+  if(data&&data.length&&data[0]._version===2){
+    generatePptxFromJSON(data.map(d=>d.json),sid==='step_07'?'장치도면.pptx':'방법도면.pptx');
+    return;
+  }
+  downloadPptx(sid);
+}
+
 function parseMermaidGraph(code){
   const nodes={},edges=[];
   

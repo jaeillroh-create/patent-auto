@@ -301,11 +301,11 @@
       </div>
     </header>
     <div class="tab-container" role="tablist">
-      <button class="tab-item active" role="tab" aria-selected="true" onclick="switchTab(0)"><span class="tab-icon tossface">📋</span><span class="tab-label">기본정보</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(1)"><span class="tab-icon tossface">⚖️</span><span class="tab-label">청구범위</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(2)"><span class="tab-icon tossface">🖼️</span><span class="tab-label">도면·설명</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(3)"><span class="tab-icon tossface">🔍</span><span class="tab-label">검토</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(4)"><span class="tab-icon tossface">📥</span><span class="tab-label">산출물</span></button>
+      <button class="tab-item active" role="tab" aria-selected="true" onclick="switchTab(0)"><span class="tab-icon tossface">📋</span><span class="tab-label">A. 기본</span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(1)"><span class="tab-icon tossface">⚖️</span><span class="tab-label">A. 청구항</span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(2)"><span class="tab-icon tossface">🖼️</span><span class="tab-label">B·C. 도면</span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(3)"><span class="tab-icon tossface">🔍</span><span class="tab-label">D·E. 검증</span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(4)"><span class="tab-icon tossface">📥</span><span class="tab-label">F. 산출물</span></button>
     </div>
 
     <!-- ══ TAB 0: 기본정보 ══ -->
@@ -348,7 +348,7 @@
         </div>
         <div id="batchArea" style="display:none">
           <div class="card">
-            <div class="card-header"><div class="card-title"><span class="tossface">🚀</span> Step 2~5: 일괄 생성</div></div>
+            <div class="card-header"><div class="card-title"><span class="tossface">🚀</span> Step 2~5: 기본 항목 (선택)</div></div>
             <p style="font-size:12px;color:var(--pt-gray-500);padding:0 18px 12px">기술분야 · 배경기술 · 선행기술문헌 · 해결과제</p>
             <div id="progressBatch" style="margin:0 18px 12px"></div>
             <div style="padding:0 18px 18px"><button class="btn btn-primary btn-full" id="btnBatch25" onclick="runBatch25()"><span class="tossface">🚀</span> 일괄 생성</button></div>
@@ -572,7 +572,7 @@
           <div id="diagramDownload07" style="padding:0 16px 16px;display:none">
             <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;font-weight:600">도면 다운로드</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-outline" onclick="downloadPptx('step_07')" style="flex:1;min-width:90px"><span class="tossface">📊</span> PPTX</button>
+              <button class="btn btn-outline" onclick="downloadPptxV14('step_07')" style="flex:1;min-width:90px"><span class="tossface">📊</span> PPTX</button>
               <button class="btn btn-outline" onclick="downloadDiagramImages('step_07','jpeg')" style="flex:1;min-width:90px"><span class="tossface">🖼️</span> JPEG</button>
               <button class="btn btn-outline" onclick="downloadDiagramImages('step_07','tif')" style="flex:1;min-width:90px"><span class="tossface">📄</span> TIF</button>
             </div>
@@ -594,7 +594,7 @@
           <div id="diagramDownload11" style="padding:0 16px 16px;display:none">
             <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;font-weight:600">도면 다운로드</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-outline" onclick="downloadPptx('step_11')" style="flex:1;min-width:90px"><span class="tossface">📊</span> PPTX</button>
+              <button class="btn btn-outline" onclick="downloadPptxV14('step_11')" style="flex:1;min-width:90px"><span class="tossface">📊</span> PPTX</button>
               <button class="btn btn-outline" onclick="downloadDiagramImages('step_11','jpeg')" style="flex:1;min-width:90px"><span class="tossface">🖼️</span> JPEG</button>
               <button class="btn btn-outline" onclick="downloadDiagramImages('step_11','tif')" style="flex:1;min-width:90px"><span class="tossface">📄</span> TIF</button>
             </div>
@@ -611,6 +611,15 @@
     <div id="page3" class="page" role="tabpanel">
       <!-- 왼쪽: 설정 -->
       <div class="page-left">
+        <div class="card">
+          <div class="card-header"><div class="card-title"><span class="tossface">📐</span> Phase D: 논리 프레임 (역설계)</div></div>
+          <div style="padding:12px 18px;background:#eff6ff;border-radius:8px;margin:0 18px 12px;font-size:12px;color:#1e40af">
+            💡 청구항 기반으로 과제·효과·배경기술을 역으로 생성합니다. (실무 변리사 작성 순서)
+          </div>
+          <div id="progressPhaseD" style="margin:8px 18px"></div>
+          <div style="padding:0 18px 18px"><button class="btn btn-primary btn-full" id="btnPhaseD" onclick="runPhaseD()"><span class="tossface">🔄</span> 역설계 체인 일괄 생성 (D1→D5)</button></div>
+          <div id="resultsPhaseDChain" class="result-area" style="margin:0 18px 18px"></div>
+        </div>
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">🔍</span> Step 13: AI 검토</div></div>
           <p style="font-size:12px;color:var(--pt-gray-500);margin-bottom:12px">청구범위 뒷받침, 기술적 비약, 수학식 정합성 검토</p>
@@ -653,10 +662,10 @@
           <div class="stat-card stat-card-cost"><div class="stat-card-value" id="statCost">$0.00</div><div class="stat-card-label">비용</div></div>
         </div>
         <div class="card">
-          <div class="card-header"><div class="card-title"><span class="tossface">🏁</span> Step 16~19: 마무리</div></div>
+          <div class="card-header"><div class="card-title"><span class="tossface">🏁</span> F. 마무리 (부호+요약서)</div></div>
           <p style="font-size:12px;color:var(--pt-gray-500);padding:0 0 12px">효과 · 해결수단 · 부호설명 · 요약서</p>
           <div id="progressBatchFinish" style="margin:8px 0"></div>
-          <button class="btn btn-primary btn-full" id="btnBatchFinish" onclick="runBatchFinish()"><span class="tossface">🏁</span> 마무리 일괄 생성</button>
+          <button class="btn btn-primary btn-full" id="btnBatchFinish" onclick="runPhaseF()"><span class="tossface">🏁</span> 마무리 일괄 생성</button>
         </div>
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tossface">📥</span> 다운로드</div></div>
