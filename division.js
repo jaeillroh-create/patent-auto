@@ -94,18 +94,69 @@ Division.callAI = async function(prompt, maxTokens){
   } catch(e) { clearTimeout(tout); if(e.name === 'AbortError') throw new Error('타임아웃(5분)'); throw e; }
 };
 
-// ═══ 견고한 JSON 추출 (마크다운 fence, 전후 텍스트 제거) ═══
+// ═══ 견고한 JSON 추출 (마크다운 fence, 전후 텍스트, 트레일링 콤마, 잘림 복구) ═══
 Division._extractJSON = function(text){
   if(!text) throw new Error('빈 응답');
+  // 디버그: 원본 응답 앞 500자 콘솔 출력
+  console.log('[Division] API 응답 (앞 500자):', text.substring(0, 500));
+  console.log('[Division] API 응답 길이:', text.length, '글자');
+
   // 1차: ```json ... ``` 블록 추출
   var fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if(fenceMatch) text = fenceMatch[1].trim();
+
   // 2차: 첫 번째 { ~ 마지막 } 추출
   var firstBrace = text.indexOf('{');
   var lastBrace = text.lastIndexOf('}');
-  if(firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) throw new Error('JSON 구조를 찾을 수 없음');
+  if(firstBrace === -1) throw new Error('JSON 시작({)을 찾을 수 없음. 응답 시작: ' + text.substring(0, 200));
+  if(lastBrace === -1 || lastBrace <= firstBrace) throw new Error('JSON 종료(})를 찾을 수 없음 — 응답이 잘린 것 같습니다');
+
   var jsonStr = text.substring(firstBrace, lastBrace + 1);
-  return JSON.parse(jsonStr);
+
+  // 3차: 흔한 JSON 오류 보정
+  // 트레일링 콤마 제거: ,] → ] , ,} → }
+  jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1');
+  // 제어문자 제거 (탭/줄바꿈 제외)
+  jsonStr = jsonStr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+
+  try {
+    return JSON.parse(jsonStr);
+  } catch(e) {
+    console.error('[Division] JSON 파싱 실패. 정제된 문자열 (앞 1000자):', jsonStr.substring(0, 1000));
+    // 4차: 잘린 JSON 복구 시도 — 열린 괄호 수 세서 닫기
+    var opens = 0, closes = 0;
+    for(var i = 0; i < jsonStr.length; i++){
+      if(jsonStr[i] === '{') opens++;
+      if(jsonStr[i] === '}') closes++;
+    }
+    if(opens > closes){
+      var repaired = jsonStr;
+      // 마지막 완전한 항목 뒤에서 자르고 닫기
+      var lastComplete = repaired.lastIndexOf('},');
+      if(lastComplete === -1) lastComplete = repaired.lastIndexOf('}');
+      if(lastComplete > 0){
+        repaired = repaired.substring(0, lastComplete + 1);
+        // 남은 열린 괄호만큼 닫기
+        var remaining = 0;
+        for(var j = 0; j < repaired.length; j++){
+          if(repaired[j] === '{') remaining++;
+          if(repaired[j] === '}') remaining--;
+        }
+        for(var k = 0; k < remaining; k++){
+          // 열린 배열도 닫기
+          var openBrackets = (repaired.match(/\[/g)||[]).length - (repaired.match(/\]/g)||[]).length;
+          for(var l = 0; l < openBrackets; l++) repaired += ']';
+          repaired += '}';
+        }
+        repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+        try {
+          console.log('[Division] 잘린 JSON 복구 시도...');
+          return JSON.parse(repaired);
+        } catch(e2) { /* 복구 실패 — 원본 에러 throw */ }
+      }
+    }
+    throw new Error('JSON 파싱 실패: ' + e.message + '\n앞 300자: ' + jsonStr.substring(0, 300));
+  }
 };
 
 // ═══════════════════════════════════════════
@@ -571,10 +622,24 @@ Division.runParse = async function(){
     App.showProgress('divisionProgress', 'AI 파싱 분석 중...', files.length + 1, files.length + 3);
     var parsePrompt = Division._buildParsePrompt(fileTexts, p);
     var result = await Division.callAI(parsePrompt);
+
+    // 응답 잘림 감지
+    if(result.stopReason === 'max_tokens'){
+      console.warn('[Division] 파싱 응답이 max_tokens로 잘림. 응답 길이:', result.text.length);
+      showToast('응답이 길어 잘렸습니다. 재시도 중...', 'info');
+      // 잘린 경우: 텍스트 입력 축소 후 재시도
+      var shorterPrompt = Division._buildParsePrompt(fileTexts, p, true); // shortened=true
+      result = await Division.callAI(shorterPrompt);
+    }
+
     App.showProgress('divisionProgress', '결과 저장 중...', files.length + 2, files.length + 3);
     var parsed;
     try { parsed = Division._extractJSON(result.text); }
-    catch(e) { showToast('파싱 결과 JSON 해석 실패. 재시도해 주세요.', 'error'); App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); return; }
+    catch(e) {
+      console.error('[Division] JSON 추출 실패:', e.message);
+      showToast('파싱 결과 해석 실패: ' + e.message.substring(0, 80), 'error');
+      App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); return;
+    }
     if(parsed.claims && parsed.claims.length > 0){
       var claimRows = parsed.claims.map(function(c){ return { project_id:p.id, claim_number:c.claim_number, claim_type:c.claim_type||'independent', parent_claim_number:c.parent_claim_number||null, original_text:c.original_text||'', amended_text:c.amended_text||null, rejection_status:c.rejection_status||'not_rejected', amendment_status:c.amendment_status||'maintained', division_role:c.division_role||'dep_candidate' }; });
       await sb.from('division_claims_parsed').delete().eq('project_id', p.id);
@@ -595,14 +660,22 @@ Division.runParse = async function(){
   } catch(e) { App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); showToast('파싱 실패: ' + e.message, 'error'); }
 };
 
-Division._buildParsePrompt = function(fileTexts, p){
+Division._buildParsePrompt = function(fileTexts, p, shortened){
+  var appLimit = shortened ? 15000 : 30000;
+  var notiLimit = shortened ? 5000 : 10000;
+  var opnLimit = shortened ? 5000 : 10000;
+  var amdLimit = shortened ? 8000 : 15000;
+  var paraInstruction = shortened
+    ? '6. 명세서 단락은 생략하라 (paragraphs: []). 청구항만 파싱.\n'
+    : '6. 명세서 단락은 【NNNN】 패턴으로 분리. 단, content는 각 단락의 첫 200자만 포함.\n';
+
   // 직접 입력 모드
   if(p.input_mode === 'direct' && fileTexts._direct_claims){
-    return '아래 한국 특허 출원서와 최종 등록 청구항을 분석하여 구조화된 JSON으로 파싱하라.\n\n[특허출원서 (명세서 포함)]\n' + (fileTexts.application || '(없음)').substring(0, 30000) + '\n\n[최종 등록 청구항 (사용자 직접 입력)]\n' + fileTexts._direct_claims.substring(0, 15000) + '\n\n※ 이 건은 의견제출통지서 없이 등록결정된 건입니다. 모든 청구항은 거절 이력이 없습니다.\n\n출력 JSON 형식:\n{"claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"original_text":"등록 청구항 원문","amended_text":null,"rejection_status":"not_rejected","amendment_status":"maintained","division_role":"basis|dep_candidate|product_claim"}],"paragraphs":[{"number":"0001","content":"단락내용"}],"reference_symbols":[{"name":"장치하우징","number":"100"}],"warnings":[]}\n\n파싱 규칙:\n1. 【청구항 N】 패턴으로 청구항 분리\n2. "제N항에 있어서" → dependent, parent=N\n3. 거절 이력 없음 → 모든 rejection_status="not_rejected", amendment_status="maintained"\n4. 독립항 중 가장 넓은 범위를 가진 항 → basis\n5. 나머지 독립항 → product_claim 또는 dep_candidate\n6. 종속항 → dep_candidate\n7. 명세서 단락은 【NNNN】 패턴으로 분리\n\nJSON만 출력하라.';
+    return '아래 한국 특허 출원서와 최종 등록 청구항을 분석하여 구조화된 JSON으로 파싱하라.\n\n[특허출원서 (명세서 포함)]\n' + (fileTexts.application || '(없음)').substring(0, appLimit) + '\n\n[최종 등록 청구항 (사용자 직접 입력)]\n' + fileTexts._direct_claims.substring(0, 15000) + '\n\n※ 이 건은 의견제출통지서 없이 등록결정된 건입니다. 모든 청구항은 거절 이력이 없습니다.\n\n★★★ 반드시 JSON만 출력하라. 설명·인사·마크다운 없이 { 로 시작하고 } 로 끝나는 순수 JSON만. ★★★\n\n출력 JSON 형식:\n{"claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"original_text":"등록 청구항 원문","amended_text":null,"rejection_status":"not_rejected","amendment_status":"maintained","division_role":"basis|dep_candidate|product_claim"}],"paragraphs":[{"number":"0001","content":"단락 첫200자"}],"reference_symbols":[{"name":"장치하우징","number":"100"}],"warnings":[]}\n\n파싱 규칙:\n1. 【청구항 N】 패턴으로 청구항 분리\n2. "제N항에 있어서" → dependent, parent=N\n3. 거절 이력 없음 → 모든 rejection_status="not_rejected", amendment_status="maintained"\n4. 독립항 중 가장 넓은 범위를 가진 항 → basis\n5. 나머지 독립항 → product_claim 또는 dep_candidate\n6. 종속항 → dep_candidate\n' + paraInstruction;
   }
 
   // 전체 문서 업로드 모드
-  return '아래 한국 특허 문서들을 분석하여 구조화된 JSON으로 파싱하라.\n\n[특허출원서]\n' + (fileTexts.application || '(없음)').substring(0, 30000) + '\n\n[의견제출통지서]\n' + (fileTexts.notification || '(없음)').substring(0, 10000) + '\n\n[의견서]\n' + (fileTexts.opinion || '(없음)').substring(0, 10000) + '\n\n[보정서]\n' + (fileTexts.amendment || '(없음)').substring(0, 15000) + '\n\n출력 JSON 형식:\n{"claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"original_text":"원문","amended_text":"보정후(정정된경우)","rejection_status":"rejected|not_rejected","amendment_status":"amended|deleted|maintained","division_role":"basis|merge_candidate|dep_candidate|excluded|included_in_basis|product_claim"}],"paragraphs":[{"number":"0001","content":"단락내용"}],"reference_symbols":[{"name":"장치하우징","number":"100"}],"warnings":[]}\n\n파싱 규칙:\n1. 【청구항 N】 패턴으로 청구항 분리\n2. "제N항에 있어서" → dependent, parent=N\n3. 통지서에서 거절 대상 청구항 추출 → rejection_status\n4. 보정서에서 정정/삭제/유지 상태 추출 → amendment_status\n5. division_role 자동 분류: 거절+정정(병합포함)→basis, 미지적+유지→merge_candidate, 거절+유지→dep_candidate, 삭제(다른항병합)→included_in_basis\n6. 명세서 단락은 【NNNN】 패턴으로 분리\n7. 구성요소명(참조번호) 패턴 추출\n\nJSON만 출력하라. 설명 없이 순수 JSON만.';
+  return '아래 한국 특허 문서들을 분석하여 구조화된 JSON으로 파싱하라.\n\n[특허출원서]\n' + (fileTexts.application || '(없음)').substring(0, appLimit) + '\n\n[의견제출통지서]\n' + (fileTexts.notification || '(없음)').substring(0, notiLimit) + '\n\n[의견서]\n' + (fileTexts.opinion || '(없음)').substring(0, opnLimit) + '\n\n[보정서]\n' + (fileTexts.amendment || '(없음)').substring(0, amdLimit) + '\n\n★★★ 반드시 JSON만 출력하라. 설명·인사·마크다운 없이 { 로 시작하고 } 로 끝나는 순수 JSON만. ★★★\n\n출력 JSON 형식:\n{"claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"original_text":"원문","amended_text":"보정후(정정된경우)","rejection_status":"rejected|not_rejected","amendment_status":"amended|deleted|maintained","division_role":"basis|merge_candidate|dep_candidate|excluded|included_in_basis|product_claim"}],"paragraphs":[{"number":"0001","content":"단락 첫200자"}],"reference_symbols":[{"name":"장치하우징","number":"100"}],"warnings":[]}\n\n파싱 규칙:\n1. 【청구항 N】 패턴으로 청구항 분리\n2. "제N항에 있어서" → dependent, parent=N\n3. 통지서에서 거절 대상 청구항 추출 → rejection_status\n4. 보정서에서 정정/삭제/유지 상태 추출 → amendment_status\n5. division_role 자동 분류: 거절+정정(병합포함)→basis, 미지적+유지→merge_candidate, 거절+유지→dep_candidate, 삭제(다른항병합)→included_in_basis\n' + paraInstruction + '7. 구성요소명(참조번호) 패턴 추출';
 };
 
 // ═══════════════════════════════════════════
@@ -681,7 +754,7 @@ Division.runAnalyze = async function(){
     App.showProgress('divisionAnalyzeProgress','결과 저장 중...',3,4);
     var analyzed;
     try { analyzed = Division._extractJSON(result.text); }
-    catch(e) { showToast('분석 결과 JSON 해석 실패','error'); return; }
+    catch(e) { showToast('분석 결과 해석 실패: ' + e.message.substring(0,80),'error'); return; }
     await sb.from('division_unused_components').delete().eq('project_id',p.id);
     if(analyzed.unused_components && analyzed.unused_components.length > 0){
       var compRows = analyzed.unused_components.map(function(uc){ return { project_id:p.id, paragraph_number:uc.paragraph_number||'', content:uc.content||'', related_element:uc.related_element||'', limitation_type:uc.limitation_type||'functional', risk_level:uc.risk_level||'safe', risk_flags:uc.risk_flags||[], insertion_point:uc.insertion_point||'', suggestion:uc.suggestion||'', user_selection:'pending' }; });
@@ -834,7 +907,7 @@ Division.runAssemble = async function(){
     App.showProgress('divisionAssembleProgress','결과 저장 중...',2,3);
     var assembled;
     try { assembled = Division._extractJSON(result.text); }
-    catch(e) { showToast('조립 결과 JSON 해석 실패','error'); App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false); return; }
+    catch(e) { showToast('조립 결과 해석 실패: ' + e.message.substring(0,80),'error'); App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false); return; }
     await sb.from('division_claims_output').delete().eq('project_id',p.id);
     if(assembled.division_claims && assembled.division_claims.length > 0){
       var rows = assembled.division_claims.map(function(dc){ return { project_id:p.id, claim_number:dc.claim_number, claim_type:dc.claim_type||'independent', parent_claim_number:dc.parent_claim_number||null, claim_text:dc.claim_text||'', claim_text_highlighted:dc.claim_text_highlighted||'', version:1 }; });
@@ -925,7 +998,7 @@ Division.runVerify = async function(){
     var result = await Division.callAI(verifyPrompt);
     var verified;
     try { verified = Division._extractJSON(result.text); }
-    catch(e) { showToast('검증 결과 JSON 해석 실패','error'); App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); return; }
+    catch(e) { showToast('검증 결과 해석 실패: ' + e.message.substring(0,80),'error'); App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); return; }
     await sb.from('division_validation_results').delete().eq('project_id',p.id);
     if(verified.results && verified.results.length > 0){
       var rows = verified.results.map(function(vr){ return { project_id:p.id, check_type:vr.check_type||'format', target_text:vr.target_text||'', result:vr.result||'pass', detail:vr.detail||'', suggestion:vr.suggestion||'', spec_paragraph_number:vr.spec_paragraph_number||null }; });
