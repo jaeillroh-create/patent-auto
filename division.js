@@ -640,17 +640,58 @@ Division.runParse = async function(){
       showToast('파싱 결과 해석 실패: ' + e.message.substring(0, 80), 'error');
       App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); return;
     }
+    // ── 데이터 정제(sanitize) + DB 저장 ──
+    var VALID_CLAIM_TYPE = ['independent','dependent'];
+    var VALID_REJ = ['rejected','not_rejected'];
+    var VALID_AMD = ['amended','deleted','maintained'];
+    var VALID_ROLE = ['basis','merge_candidate','dep_candidate','excluded','included_in_basis','product_claim'];
+    function sanitizeEnum(val, validList, fallback){ val = (val||'').trim().toLowerCase().replace(/\s+/g,'_'); return validList.indexOf(val) >= 0 ? val : fallback; }
+
+    var claimsSaved = false;
     if(parsed.claims && parsed.claims.length > 0){
-      var claimRows = parsed.claims.map(function(c){ return { project_id:p.id, claim_number:c.claim_number, claim_type:c.claim_type||'independent', parent_claim_number:c.parent_claim_number||null, original_text:c.original_text||'', amended_text:c.amended_text||null, rejection_status:c.rejection_status||'not_rejected', amendment_status:c.amendment_status||'maintained', division_role:c.division_role||'dep_candidate' }; });
+      var claimRows = parsed.claims.map(function(c){
+        return {
+          project_id: p.id,
+          claim_number: parseInt(c.claim_number) || 1,
+          claim_type: sanitizeEnum(c.claim_type, VALID_CLAIM_TYPE, 'independent'),
+          parent_claim_number: c.parent_claim_number ? parseInt(c.parent_claim_number) : null,
+          original_text: (c.original_text || c.text || '').substring(0, 50000),
+          amended_text: c.amended_text || null,
+          rejection_status: sanitizeEnum(c.rejection_status, VALID_REJ, 'not_rejected'),
+          amendment_status: sanitizeEnum(c.amendment_status, VALID_AMD, 'maintained'),
+          division_role: sanitizeEnum(c.division_role, VALID_ROLE, 'dep_candidate')
+        };
+      });
+      // 중복 claim_number 제거 (같은 번호 있으면 첫 번째만)
+      var seen = {};
+      claimRows = claimRows.filter(function(r){ if(seen[r.claim_number]) return false; seen[r.claim_number]=true; return true; });
+
+      console.log('[Division] 저장할 청구항:', claimRows.length, '건');
       await sb.from('division_claims_parsed').delete().eq('project_id', p.id);
-      await sb.from('division_claims_parsed').insert(claimRows);
-    }
-    if(parsed.paragraphs){
-      await sb.from('division_spec_paragraphs').delete().eq('project_id', p.id);
-      if(parsed.paragraphs.length > 0){
-        var paraRows = parsed.paragraphs.map(function(para){ return { project_id:p.id, paragraph_number:para.number, content:para.content }; });
-        await sb.from('division_spec_paragraphs').insert(paraRows);
+      var {error:insertErr} = await sb.from('division_claims_parsed').insert(claimRows);
+      if(insertErr){
+        console.error('[Division] 청구항 DB 저장 실패:', insertErr);
+        showToast('청구항 DB 저장 실패: ' + (insertErr.message || insertErr.details || JSON.stringify(insertErr)).substring(0,100), 'error');
+        App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); return;
       }
+      claimsSaved = true;
+    }
+
+    if(parsed.paragraphs && parsed.paragraphs.length > 0){
+      await sb.from('division_spec_paragraphs').delete().eq('project_id', p.id);
+      var paraRows = parsed.paragraphs.map(function(para){
+        return { project_id: p.id, paragraph_number: String(para.number || '0000'), content: (para.content || '').substring(0, 50000) };
+      });
+      // 중복 paragraph_number 제거
+      var seenPara = {};
+      paraRows = paraRows.filter(function(r){ if(seenPara[r.paragraph_number]) return false; seenPara[r.paragraph_number]=true; return true; });
+      var {error:paraErr} = await sb.from('division_spec_paragraphs').insert(paraRows);
+      if(paraErr) console.warn('[Division] 단락 저장 실패 (무시):', paraErr);
+    }
+
+    if(!claimsSaved){
+      showToast('파싱된 청구항이 없습니다. 문서를 확인해 주세요.', 'error');
+      App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); return;
     }
     await sb.from('division_projects').update({status:'parsed', updated_at: new Date().toISOString()}).eq('id', p.id);
     p.status = 'parsed';
@@ -727,7 +768,19 @@ Division.updateClaimRole = async function(sel){
     Division.renderDetail();
   } catch(e) { showToast('역할 변경 실패','error'); }
 };
-Division.confirmParse = async function(){ var p=Division.state.current; if(!p) return; showToast('파싱 승인 완료. 분석을 시작합니다.'); Division.runAnalyze(); };
+Division.confirmParse = async function(){
+  var p = Division.state.current; if(!p) return;
+  // 청구항 존재 확인
+  if(!Division.state.claims || Division.state.claims.length === 0){
+    showToast('파싱된 청구항이 없습니다. 먼저 파싱을 실행해 주세요.', 'error'); return;
+  }
+  // 기초(basis) 청구항 존재 확인
+  var hasBasis = Division.state.claims.some(function(c){ return c.division_role === 'basis'; });
+  if(!hasBasis){
+    showToast('기초(basis) 역할의 청구항을 지정해 주세요.', 'error'); return;
+  }
+  showToast('파싱 승인 완료. 분석을 시작합니다.'); Division.runAnalyze();
+};
 Division.rerunParse = function(){ Division.renderUpload(document.getElementById('divisionDetailLeft'),document.getElementById('divisionDetailRight'),Division.state.current); };
 
 // ═══════════════════════════════════════════
