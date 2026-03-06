@@ -259,8 +259,8 @@
                 <div style="font-size:12px;font-weight:600;margin-bottom:8px"><span class="tossface">ℹ️</span> 지원 유형</div>
                 <div style="font-size:11px;line-height:1.7;color:var(--color-text-secondary)">
                   <div style="margin-bottom:4px"><span class="division-type-badge dtype-merge">🔀 M. 청구항 병합형</span></div>
-                  <div style="margin-bottom:4px"><span class="division-type-badge dtype-category" style="opacity:0.5">🔄 C. 카테고리변경형 (준비 중)</span></div>
-                  <div><span class="division-type-badge dtype-strategic" style="opacity:0.5">🎯 S. 전략적 분할 (준비 중)</span></div>
+                  <div style="margin-bottom:4px"><span class="division-type-badge dtype-category">🔄 C. 카테고리 변경형</span></div>
+                  <div><span class="division-type-badge dtype-strategic">🎯 S. 전략적 분할</span></div>
                 </div>
               </div>
             </div>
@@ -913,23 +913,31 @@
           <div style="font-size:11px;color:var(--color-text-tertiary)">등록항 + 미활용 구성 부가</div>
         </div>
       </label>
-      <label class="division-title-option" style="margin-bottom:6px;opacity:0.5;cursor:not-allowed">
-        <input type="radio" name="divisionType" value="category_change" disabled />
+      <label class="division-title-option" style="margin-bottom:6px">
+        <input type="radio" name="divisionType" value="category_change" />
         <div>
-          <div style="font-size:13px;font-weight:600">🔄 카테고리 변경형 <span style="font-size:10px;color:var(--color-text-tertiary)">(준비 중)</span></div>
+          <div style="font-size:13px;font-weight:600">🔄 카테고리 변경형</div>
           <div style="font-size:11px;color:var(--color-text-tertiary)">방법↔장치 전환</div>
         </div>
       </label>
-      <label class="division-title-option" style="opacity:0.5;cursor:not-allowed">
-        <input type="radio" name="divisionType" value="strategic" disabled />
+      <label class="division-title-option">
+        <input type="radio" name="divisionType" value="strategic" />
         <div>
-          <div style="font-size:13px;font-weight:600">🎯 전략적 분할 <span style="font-size:10px;color:var(--color-text-tertiary)">(준비 중)</span></div>
+          <div style="font-size:13px;font-weight:600">🎯 전략적 분할</div>
           <div style="font-size:11px;color:var(--color-text-tertiary)">새 독립항 구성</div>
         </div>
       </label>
     </div>
     <div style="margin-bottom:14px">
       <label class="checkbox-label"><input type="checkbox" id="divisionInclPriorArt" /><span style="font-size:13px">인용발명 대비 분석 포함</span></label>
+    </div>
+    <div style="margin-bottom:14px;padding-top:14px;border-top:1px solid var(--color-border)">
+      <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:6px">원출원 발명의 명칭 (국문)</label>
+      <input type="text" class="input-field" id="divisionOrigTitleKo" placeholder="예: 생두의 로스팅 방법 및 이에 의해 제조된 커피 원두" style="padding:10px 12px;font-size:13px" />
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:6px">원출원 발명의 명칭 (영문)</label>
+      <input type="text" class="input-field" id="divisionOrigTitleEn" placeholder="예: Method for roasting green coffee beans and coffee beans produced thereby" style="padding:10px 12px;font-size:13px" />
     </div>
     <div style="display:flex;gap:8px;margin-top:18px">
       <button class="btn btn-ghost" onclick="Division.closeCreateModal()" style="flex:1;padding:10px">취소</button>

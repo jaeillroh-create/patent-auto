@@ -56,6 +56,26 @@
 .division-file-label { flex: 1; font-weight: 500; }
 .division-file-status.uploaded { color: var(--color-success); font-size: 12px; }
 
+/* 업로드 완료 행 */
+.division-file-row-uploaded { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-sm); margin-bottom: 8px; font-size: 13px; }
+.division-file-row-uploaded .division-file-info { flex: 1; min-width: 0; }
+.division-file-row-uploaded .division-file-name { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.division-file-row-uploaded .division-file-check { color: var(--color-success); font-size: 14px; flex-shrink: 0; }
+
+/* 드래그앤드롭 영역 */
+.division-drop-zone { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 2px dashed var(--color-border); border-radius: var(--radius-md); margin-bottom: 8px; cursor: pointer; background: var(--color-bg-tertiary); transition: all 0.2s; }
+.division-drop-zone:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
+.division-drop-zone.dragover { border-color: var(--color-primary); background: var(--color-primary-light); box-shadow: 0 0 0 3px rgba(49,130,246,0.15); transform: scale(1.01); }
+.division-drop-label { font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.division-drop-hint { font-size: 11px; color: var(--color-text-tertiary); flex: 1; text-align: right; }
+
+/* 입력 모드 토글 */
+.division-mode-toggle { display: flex; gap: 0; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 12px; }
+.division-mode-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 12px; border: none; background: #fff; font-size: 12px; font-weight: var(--font-weight-medium); font-family: var(--font-family); color: var(--color-text-tertiary); cursor: pointer; transition: all 0.15s; }
+.division-mode-btn:first-child { border-right: 1px solid var(--color-border); }
+.division-mode-btn:hover { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+.division-mode-btn.active { background: var(--color-primary); color: #fff; font-weight: var(--font-weight-semibold); }
+
 /* ═══ 7. 정보 박스 ═══ */
 .division-info-box { padding: 14px 16px; background: var(--color-bg-tertiary); border-radius: var(--radius-sm); border-left: 3px solid var(--color-primary); }
 
@@ -117,6 +137,11 @@
 .division-title-option:hover { background: var(--color-bg-tertiary); }
 .division-title-option input[type="radio"] { margin-top: 3px; flex-shrink: 0; }
 
+/* ═══ 14-1. 명칭 변경 경고 ═══ */
+.division-title-warning { margin-top: 12px; padding: 12px 14px; background: var(--color-warning-light); border: 1px solid var(--color-warning); border-radius: var(--radius-sm); font-size: 13px; color: #92400e; line-height: 1.6; }
+.division-title-warning ul { margin: 4px 0 0 16px; padding: 0; }
+.division-title-warning li { margin-bottom: 2px; }
+
 /* ═══ 15. 반응형 ═══ */
 @media (max-width: 768px) {
   .division-dashboard { flex-direction: column; }
@@ -128,4 +153,8 @@
   .division-step-connector { width: 16px; }
   .division-summary-grid { flex-direction: column; }
   .division-val-summary { flex-wrap: wrap; }
+  .division-mode-toggle { flex-direction: column; }
+  .division-mode-btn:first-child { border-right: none; border-bottom: 1px solid var(--color-border); }
+  .division-drop-zone { flex-wrap: wrap; }
+  .division-drop-hint { text-align: left; width: 100%; }
 }

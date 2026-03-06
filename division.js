@@ -9,8 +9,8 @@ window.Division = window.Division || {};
 // ═══ Constants ═══
 Division.TYPES = {
   merge:           { code:'M', label:'청구항 병합형',     icon:'🔀', css:'dtype-merge',    desc:'등록항 + 미활용 구성 부가' },
-  category_change: { code:'C', label:'카테고리 변경형',   icon:'🔄', css:'dtype-category', desc:'방법↔장치 전환', disabled:true },
-  strategic:       { code:'S', label:'전략적 분할',       icon:'🎯', css:'dtype-strategic', desc:'새 독립항 구성', disabled:true }
+  category_change: { code:'C', label:'카테고리 변경형',   icon:'🔄', css:'dtype-category', desc:'방법↔장치 전환' },
+  strategic:       { code:'S', label:'전략적 분할',       icon:'🎯', css:'dtype-strategic', desc:'새 독립항 구성' }
 };
 
 Division.STATUS = {
@@ -71,6 +71,41 @@ Division.state = {
 Division.init = function(){
   console.log('[Division] init');
   Division.loadProjects();
+};
+
+// ═══ AI 호출 (Division 전용 시스템 프롬프트 사용) ═══
+Division.callAI = async function(prompt, maxTokens){
+  maxTokens = maxTokens || 16384;
+  if(!App.ensureApiKey()){ App.openProfileSettings(); throw new Error('API Key를 먼저 입력해 주세요'); }
+  var prov = selectedProvider, mc = App.getModelConfig();
+  var req = App.buildAPIRequest(prov, selectedModel, Division.SYS_PROMPT, prompt, maxTokens);
+  var ctrl = new AbortController(), tout = setTimeout(function(){ ctrl.abort(); }, 300000); // 5분
+  try {
+    var res = await fetch(req.url, { method:'POST', signal:ctrl.signal, headers:req.headers, body:JSON.stringify(req.body) });
+    clearTimeout(tout);
+    if(res.status === 401 || res.status === 403){ showToast('API Key가 유효하지 않습니다','error'); throw new Error('API Key 유효하지 않음'); }
+    if(res.status === 429) throw new Error('요청 과다. 30초 후 재시도');
+    if(res.status >= 500) throw new Error('서버 오류 (' + res.status + ')');
+    var d = await res.json(), parsed = App.parseAPIResponse(prov, d);
+    if(typeof usage !== 'undefined'){ usage.calls++; usage.inputTokens += parsed.it; usage.outputTokens += parsed.ot;
+      usage.cost += (parsed.it * mc.inputCost / 1e6) + (parsed.ot * mc.outputCost / 1e6); }
+    if(typeof updateStats === 'function') updateStats();
+    return { text: parsed.text, stopReason: parsed.stopReason };
+  } catch(e) { clearTimeout(tout); if(e.name === 'AbortError') throw new Error('타임아웃(5분)'); throw e; }
+};
+
+// ═══ 견고한 JSON 추출 (마크다운 fence, 전후 텍스트 제거) ═══
+Division._extractJSON = function(text){
+  if(!text) throw new Error('빈 응답');
+  // 1차: ```json ... ``` 블록 추출
+  var fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if(fenceMatch) text = fenceMatch[1].trim();
+  // 2차: 첫 번째 { ~ 마지막 } 추출
+  var firstBrace = text.indexOf('{');
+  var lastBrace = text.lastIndexOf('}');
+  if(firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) throw new Error('JSON 구조를 찾을 수 없음');
+  var jsonStr = text.substring(firstBrace, lastBrace + 1);
+  return JSON.parse(jsonStr);
 };
 
 // ═══════════════════════════════════════════
@@ -142,11 +177,10 @@ Division.create = async function(){
   if(!divType){ showToast('분할출원 유형을 선택해 주세요', 'error'); return; }
 
   var typeVal = divType.value;
-  if(Division.TYPES[typeVal] && Division.TYPES[typeVal].disabled){
-    showToast('해당 유형은 준비 중입니다', 'error'); return;
-  }
 
   var inclPriorArt = document.getElementById('divisionInclPriorArt')?.checked || false;
+  var origTitleKo = (document.getElementById('divisionOrigTitleKo')?.value || '').trim();
+  var origTitleEn = (document.getElementById('divisionOrigTitleEn')?.value || '').trim();
 
   try {
     var {data, error} = await sb.from('division_projects').insert({
@@ -155,6 +189,8 @@ Division.create = async function(){
       application_number: appNum || '',
       division_type: typeVal,
       include_prior_art: inclPriorArt,
+      original_title_ko: origTitleKo || null,
+      original_title_en: origTitleEn || null,
       status: 'created',
       user_id: currentUser.id
     }).select().single();
@@ -278,30 +314,86 @@ Division.renderMainForStep = function(p, stepKey){
 };
 
 // ═══════════════════════════════════════════
-// 6. 화면: 파일 업로드
+// 6. 화면: 파일 업로드 (드래그앤드롭 + 이중 모드)
 // ═══════════════════════════════════════════
 Division.renderUpload = function(left, right, p){
   var files = Division.state.files;
-  var h = '<div class="card" style="padding:16px">';
-  h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📁</span> 필수 파일</div>';
-  ['application','notification','opinion','amendment'].forEach(function(ft){
-    var info = Division.FILE_TYPES[ft];
-    var uploaded = files.find(function(f){ return f.file_type === ft; });
-    h += '<div class="division-file-row">';
-    h += '<span class="division-file-icon">' + info.icon + '</span>';
-    h += '<span class="division-file-label">' + info.label + '</span>';
-    if(uploaded){
-      h += '<span class="division-file-status uploaded">✅ 업로드됨</span>';
-      h += '<button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + uploaded.id + '\')" style="font-size:10px;color:var(--color-error)">삭제</button>';
-    } else {
-      h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="tossface">📄</span> 선택';
-      h += '<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'' + ft + '\')" /></label>';
-    }
-    h += '</div>';
-  });
+  var inputMode = p.input_mode || 'full'; // full | direct
+
+  // === 왼쪽: 입력 모드 선택 + 파일/텍스트 입력 ===
+  var h = '';
+
+  // 모드 토글
+  h += '<div class="division-mode-toggle">';
+  h += '<button class="division-mode-btn' + (inputMode==='full'?' active':'') + '" onclick="Division.switchInputMode(\'full\')"><span class="tossface">📋</span> 전체 문서 업로드</button>';
+  h += '<button class="division-mode-btn' + (inputMode==='direct'?' active':'') + '" onclick="Division.switchInputMode(\'direct\')"><span class="tossface">✏️</span> 등록 청구항 직접 입력</button>';
   h += '</div>';
 
-  // 선택 파일
+  if(inputMode === 'full'){
+    // ── 모드 A: 전체 문서 업로드 (드래그앤드롭) ──
+    h += '<div class="card" style="padding:16px">';
+    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tossface">📁</span> 필수 파일</div>';
+    h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">파일을 드래그하여 각 항목에 놓거나 클릭하여 선택하세요.</div>';
+
+    ['application','notification','opinion','amendment'].forEach(function(ft){
+      var info = Division.FILE_TYPES[ft];
+      var uploaded = files.find(function(f){ return f.file_type === ft; });
+      if(uploaded){
+        h += '<div class="division-file-row-uploaded">';
+        h += '<span class="division-file-icon">' + info.icon + '</span>';
+        h += '<div class="division-file-info"><div class="division-file-label">' + info.label + '</div>';
+        h += '<div class="division-file-name">' + escapeHtml(uploaded.file_name || '') + '</div></div>';
+        h += '<span class="division-file-check">✅</span>';
+        h += '<button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + uploaded.id + '\')" style="font-size:10px;color:var(--color-error);padding:4px 8px">✕</button>';
+        h += '</div>';
+      } else {
+        h += '<div class="division-drop-zone" id="dropZone_' + ft + '" data-file-type="' + ft + '"';
+        h += ' ondragover="Division.handleDragOver(event)" ondragleave="Division.handleDragLeave(event)" ondrop="Division.handleDrop(event,\'' + ft + '\')">';
+        h += '<span class="division-file-icon">' + info.icon + '</span>';
+        h += '<span class="division-drop-label">' + info.label + '</span>';
+        h += '<span class="division-drop-hint">PDF를 여기에 드래그하거나 클릭</span>';
+        h += '<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'' + ft + '\')" />';
+        h += '</div>';
+      }
+    });
+    h += '</div>';
+
+  } else {
+    // ── 모드 B: 출원서 + 최종 등록 청구항 직접 입력 ──
+    h += '<div class="card" style="padding:16px">';
+    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tossface">📄</span> 특허출원서</div>';
+    h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">명세서 원문이 포함된 출원서 PDF를 업로드하세요.</div>';
+
+    var appFile = files.find(function(f){ return f.file_type === 'application'; });
+    if(appFile){
+      h += '<div class="division-file-row-uploaded">';
+      h += '<span class="division-file-icon">📄</span>';
+      h += '<div class="division-file-info"><div class="division-file-label">특허출원서</div>';
+      h += '<div class="division-file-name">' + escapeHtml(appFile.file_name || '') + '</div></div>';
+      h += '<span class="division-file-check">✅</span>';
+      h += '<button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + appFile.id + '\')" style="font-size:10px;color:var(--color-error);padding:4px 8px">✕</button>';
+      h += '</div>';
+    } else {
+      h += '<div class="division-drop-zone" id="dropZone_application" data-file-type="application"';
+      h += ' ondragover="Division.handleDragOver(event)" ondragleave="Division.handleDragLeave(event)" ondrop="Division.handleDrop(event,\'application\')">';
+      h += '<span class="division-file-icon">📄</span>';
+      h += '<span class="division-drop-label">특허출원서</span>';
+      h += '<span class="division-drop-hint">PDF를 여기에 드래그하거나 클릭</span>';
+      h += '<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'application\')" />';
+      h += '</div>';
+    }
+    h += '</div>';
+
+    // 최종 등록 청구항 텍스트 입력
+    h += '<div class="card" style="padding:16px;margin-top:12px">';
+    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tossface">✏️</span> 최종 등록 청구항</div>';
+    h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">등록결정 시 확정된 청구항 전문을 붙여넣으세요. (보정서가 있으면 보정 후 최종본)</div>';
+    h += '<textarea class="textarea-field" id="divisionDirectClaims" rows="12" placeholder="【청구항 1】\n생두의 수분 함량을 기준으로 설정된 제1 온도 구간에서의...\n\n【청구항 2】\n제1항에 있어서,\n..." style="font-size:13px;line-height:1.7">' + escapeHtml(p.direct_claims_text || '') + '</textarea>';
+    h += '<button class="btn btn-outline btn-sm" onclick="Division.saveDirectClaims()" style="margin-top:8px"><span class="tossface">💾</span> 저장</button>';
+    h += '</div>';
+  }
+
+  // 선택 파일 (공통)
   h += '<div class="card" style="padding:16px;margin-top:12px">';
   h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📎</span> 선택 파일</div>';
   h += '<label class="checkbox-label" style="margin-bottom:8px"><input type="checkbox" ' + (p.include_prior_art ? 'checked' : '') + ' onchange="Division.togglePriorArt(this.checked)" /><span>인용발명 대비 분석 포함</span></label>';
@@ -319,30 +411,94 @@ Division.renderUpload = function(left, right, p){
   h += '</div></div>';
   left.innerHTML = h;
 
-  // 오른쪽
-  var requiredTypes = ['application','notification','opinion','amendment'];
-  var allUploaded = requiredTypes.every(function(ft){ return files.some(function(f){ return f.file_type === ft; }); });
+  // 드래그존 클릭 이벤트 바인딩
+  setTimeout(function(){
+    document.querySelectorAll('.division-drop-zone').forEach(function(zone){
+      zone.addEventListener('click', function(){ zone.querySelector('input[type=file]').click(); });
+    });
+  }, 0);
+
+  // === 오른쪽: 안내 + 파싱 시작 ===
+  var canParse = false;
+  if(inputMode === 'full'){
+    var requiredTypes = ['application','notification','opinion','amendment'];
+    canParse = requiredTypes.every(function(ft){ return files.some(function(f){ return f.file_type === ft; }); });
+  } else {
+    var hasApp = files.some(function(f){ return f.file_type === 'application'; });
+    var hasText = !!(p.direct_claims_text && p.direct_claims_text.trim());
+    canParse = hasApp && hasText;
+  }
+
   var rh = '<div class="card" style="padding:20px">';
   rh += '<div style="font-size:16px;font-weight:700;margin-bottom:12px"><span class="tossface">🔀</span> 분할출원 청구항 자동 작성</div>';
-  rh += '<div style="font-size:13px;line-height:1.7;color:var(--color-text-secondary);margin-bottom:16px">원출원 문서를 업로드하면, AI가 청구항을 파싱·분석하고<br>분할출원에 적합한 새 청구항을 자동으로 조립합니다.</div>';
+  rh += '<div style="font-size:13px;line-height:1.7;color:var(--color-text-secondary);margin-bottom:16px">';
+  if(inputMode === 'full'){
+    rh += '원출원 문서를 업로드하면, AI가 청구항을 파싱·분석하고<br>분할출원에 적합한 새 청구항을 자동으로 조립합니다.';
+  } else {
+    rh += '출원서와 최종 등록 청구항을 입력하면,<br>AI가 분할출원 청구항을 자동으로 구성합니다.<br><span style="font-size:11px;color:var(--color-text-tertiary)">※ 통지서 없이 등록결정된 경우 등에 사용</span>';
+  }
+  rh += '</div>';
+
   rh += '<div class="division-info-box"><div style="font-weight:600;margin-bottom:8px">📋 처리 단계</div>';
-  rh += '<div style="font-size:12px;line-height:1.8;color:var(--color-text-secondary)">① 파싱 — 출원서·통지서·보정서 구조화<br>② 분석 — 미활용 구성 탐색 + 리스크 스크리닝<br>③ 조립 — 독립항/종속항 자동 구성<br>④ 검증 — 기재불비 검증 + 형식 검증<br>⑤ 확정 — 발명 명칭 + 최종 출력</div></div>';
+  rh += '<div style="font-size:12px;line-height:1.8;color:var(--color-text-secondary)">① 파싱 — 출원서·청구항 구조화<br>② 분석 — 미활용 구성 탐색 + 리스크 스크리닝<br>③ 조립 — 독립항/종속항 자동 구성<br>④ 검증 — 기재불비 검증 + 형식 검증<br>⑤ 확정 — 발명 명칭 + 최종 출력</div></div>';
   rh += '<div id="divisionProgress" style="margin-top:12px"></div>';
-  if(allUploaded){
+
+  if(canParse){
     rh += '<button class="btn btn-primary btn-full" id="btnDivisionParse" onclick="Division.runParse()" style="margin-top:16px;padding:14px;font-size:14px"><span class="tossface">🔍</span> 파싱 시작</button>';
   } else {
-    rh += '<div style="margin-top:16px;padding:12px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm);text-align:center;font-size:13px;color:var(--color-text-tertiary)">⚠️ 필수 파일 4종을 모두 업로드하면 파싱을 시작할 수 있습니다.</div>';
+    var msg = inputMode==='full' ? '⚠️ 필수 파일 4종을 모두 업로드하면 파싱을 시작할 수 있습니다.' : '⚠️ 출원서 업로드 + 최종 등록 청구항 입력 후 파싱을 시작할 수 있습니다.';
+    rh += '<div style="margin-top:16px;padding:12px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm);text-align:center;font-size:13px;color:var(--color-text-tertiary)">' + msg + '</div>';
   }
   rh += '</div>';
   right.innerHTML = rh;
 };
 
 // ═══════════════════════════════════════════
-// 7. 파일 업로드/삭제
+// 6-1. 입력 모드 전환 + 직접 입력 저장
 // ═══════════════════════════════════════════
+Division.switchInputMode = async function(mode){
+  var p = Division.state.current; if(!p) return;
+  p.input_mode = mode;
+  await sb.from('division_projects').update({input_mode: mode}).eq('id', p.id);
+  Division.renderDetail();
+};
+
+Division.saveDirectClaims = async function(){
+  var p = Division.state.current; if(!p) return;
+  var text = (document.getElementById('divisionDirectClaims')?.value || '').trim();
+  if(!text){ showToast('청구항 텍스트를 입력해 주세요', 'error'); return; }
+  await sb.from('division_projects').update({direct_claims_text: text, updated_at: new Date().toISOString()}).eq('id', p.id);
+  p.direct_claims_text = text;
+  showToast('저장되었습니다');
+  Division.renderDetail();
+};
+
+// ═══════════════════════════════════════════
+// 7. 파일 업로드/삭제 (드래그앤드롭 + 클릭)
+// ═══════════════════════════════════════════
+Division.handleDragOver = function(e){
+  e.preventDefault(); e.stopPropagation();
+  e.currentTarget.classList.add('dragover');
+};
+Division.handleDragLeave = function(e){
+  e.preventDefault(); e.stopPropagation();
+  e.currentTarget.classList.remove('dragover');
+};
+Division.handleDrop = function(e, fileType){
+  e.preventDefault(); e.stopPropagation();
+  e.currentTarget.classList.remove('dragover');
+  var file = e.dataTransfer.files[0];
+  if(!file) return;
+  if(!file.name.toLowerCase().endsWith('.pdf')){ showToast('PDF 파일만 업로드 가능합니다', 'error'); return; }
+  Division._doUpload(file, fileType);
+};
 Division.uploadFile = async function(event, fileType){
   var file = event.target.files[0]; if(!file) return;
   if(!file.name.toLowerCase().endsWith('.pdf')){ showToast('PDF 파일만 업로드 가능합니다', 'error'); return; }
+  Division._doUpload(file, fileType);
+};
+
+Division._doUpload = async function(file, fileType){
   var p = Division.state.current; if(!p) return;
   try {
     showToast('업로드 중...');
@@ -352,9 +508,15 @@ Division.uploadFile = async function(event, fileType){
     var {data, error} = await sb.from('division_files').insert({ project_id:p.id, file_type:fileType, storage_path:storagePath, file_name:file.name, file_size:file.size }).select().single();
     if(error) throw error;
     Division.state.files.push(data);
-    var requiredTypes = ['application','notification','opinion','amendment'];
-    var allUploaded = requiredTypes.every(function(ft){ return Division.state.files.some(function(f){ return f.file_type === ft; }); });
-    if(allUploaded && p.status === 'created'){
+    // 상태 전이: 입력 모드에 따라 필수 조건 다름
+    var ready = false;
+    if(p.input_mode === 'direct'){
+      ready = Division.state.files.some(function(f){ return f.file_type==='application'; }) && !!(p.direct_claims_text && p.direct_claims_text.trim());
+    } else {
+      var requiredTypes = ['application','notification','opinion','amendment'];
+      ready = requiredTypes.every(function(ft){ return Division.state.files.some(function(f){ return f.file_type === ft; }); });
+    }
+    if(ready && p.status === 'created'){
       await sb.from('division_projects').update({status:'uploaded', updated_at: new Date().toISOString()}).eq('id', p.id);
       p.status = 'uploaded';
     }
@@ -402,12 +564,16 @@ Division.runParse = async function(){
         fileTexts[f.file_type] = text;
       } catch(e) { console.warn('[Division] 파일 추출 실패:', f.file_type, e); fileTexts[f.file_type] = ''; }
     }
+    // 직접 입력 모드: direct_claims_text를 fileTexts에 주입
+    if(p.input_mode === 'direct' && p.direct_claims_text){
+      fileTexts._direct_claims = p.direct_claims_text;
+    }
     App.showProgress('divisionProgress', 'AI 파싱 분석 중...', files.length + 1, files.length + 3);
     var parsePrompt = Division._buildParsePrompt(fileTexts, p);
-    var result = await App.callClaude(parsePrompt);
+    var result = await Division.callAI(parsePrompt);
     App.showProgress('divisionProgress', '결과 저장 중...', files.length + 2, files.length + 3);
     var parsed;
-    try { var cleaned = result.text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim(); parsed = JSON.parse(cleaned); }
+    try { parsed = Division._extractJSON(result.text); }
     catch(e) { showToast('파싱 결과 JSON 해석 실패. 재시도해 주세요.', 'error'); App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); return; }
     if(parsed.claims && parsed.claims.length > 0){
       var claimRows = parsed.claims.map(function(c){ return { project_id:p.id, claim_number:c.claim_number, claim_type:c.claim_type||'independent', parent_claim_number:c.parent_claim_number||null, original_text:c.original_text||'', amended_text:c.amended_text||null, rejection_status:c.rejection_status||'not_rejected', amendment_status:c.amendment_status||'maintained', division_role:c.division_role||'dep_candidate' }; });
@@ -430,6 +596,12 @@ Division.runParse = async function(){
 };
 
 Division._buildParsePrompt = function(fileTexts, p){
+  // 직접 입력 모드
+  if(p.input_mode === 'direct' && fileTexts._direct_claims){
+    return '아래 한국 특허 출원서와 최종 등록 청구항을 분석하여 구조화된 JSON으로 파싱하라.\n\n[특허출원서 (명세서 포함)]\n' + (fileTexts.application || '(없음)').substring(0, 30000) + '\n\n[최종 등록 청구항 (사용자 직접 입력)]\n' + fileTexts._direct_claims.substring(0, 15000) + '\n\n※ 이 건은 의견제출통지서 없이 등록결정된 건입니다. 모든 청구항은 거절 이력이 없습니다.\n\n출력 JSON 형식:\n{"claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"original_text":"등록 청구항 원문","amended_text":null,"rejection_status":"not_rejected","amendment_status":"maintained","division_role":"basis|dep_candidate|product_claim"}],"paragraphs":[{"number":"0001","content":"단락내용"}],"reference_symbols":[{"name":"장치하우징","number":"100"}],"warnings":[]}\n\n파싱 규칙:\n1. 【청구항 N】 패턴으로 청구항 분리\n2. "제N항에 있어서" → dependent, parent=N\n3. 거절 이력 없음 → 모든 rejection_status="not_rejected", amendment_status="maintained"\n4. 독립항 중 가장 넓은 범위를 가진 항 → basis\n5. 나머지 독립항 → product_claim 또는 dep_candidate\n6. 종속항 → dep_candidate\n7. 명세서 단락은 【NNNN】 패턴으로 분리\n\nJSON만 출력하라.';
+  }
+
+  // 전체 문서 업로드 모드
   return '아래 한국 특허 문서들을 분석하여 구조화된 JSON으로 파싱하라.\n\n[특허출원서]\n' + (fileTexts.application || '(없음)').substring(0, 30000) + '\n\n[의견제출통지서]\n' + (fileTexts.notification || '(없음)').substring(0, 10000) + '\n\n[의견서]\n' + (fileTexts.opinion || '(없음)').substring(0, 10000) + '\n\n[보정서]\n' + (fileTexts.amendment || '(없음)').substring(0, 15000) + '\n\n출력 JSON 형식:\n{"claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"original_text":"원문","amended_text":"보정후(정정된경우)","rejection_status":"rejected|not_rejected","amendment_status":"amended|deleted|maintained","division_role":"basis|merge_candidate|dep_candidate|excluded|included_in_basis|product_claim"}],"paragraphs":[{"number":"0001","content":"단락내용"}],"reference_symbols":[{"name":"장치하우징","number":"100"}],"warnings":[]}\n\n파싱 규칙:\n1. 【청구항 N】 패턴으로 청구항 분리\n2. "제N항에 있어서" → dependent, parent=N\n3. 통지서에서 거절 대상 청구항 추출 → rejection_status\n4. 보정서에서 정정/삭제/유지 상태 추출 → amendment_status\n5. division_role 자동 분류: 거절+정정(병합포함)→basis, 미지적+유지→merge_candidate, 거절+유지→dep_candidate, 삭제(다른항병합)→included_in_basis\n6. 명세서 단락은 【NNNN】 패턴으로 분리\n7. 구성요소명(참조번호) 패턴 추출\n\nJSON만 출력하라. 설명 없이 순수 JSON만.';
 };
 
@@ -505,20 +677,23 @@ Division.runAnalyze = async function(){
     var excludedClaims = claims.filter(function(c){ return c.division_role==='excluded'; });
     var excludedText = excludedClaims.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text); }).join('\n');
     var analyzePrompt = Division._buildAnalyzePrompt(basisClaim, specText, excludedText, claims);
-    var result = await App.callClaude(analyzePrompt);
+    var result = await Division.callAI(analyzePrompt);
     App.showProgress('divisionAnalyzeProgress','결과 저장 중...',3,4);
     var analyzed;
-    try { var cleaned = result.text.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim(); analyzed = JSON.parse(cleaned); }
+    try { analyzed = Division._extractJSON(result.text); }
     catch(e) { showToast('분석 결과 JSON 해석 실패','error'); return; }
     await sb.from('division_unused_components').delete().eq('project_id',p.id);
     if(analyzed.unused_components && analyzed.unused_components.length > 0){
       var compRows = analyzed.unused_components.map(function(uc){ return { project_id:p.id, paragraph_number:uc.paragraph_number||'', content:uc.content||'', related_element:uc.related_element||'', limitation_type:uc.limitation_type||'functional', risk_level:uc.risk_level||'safe', risk_flags:uc.risk_flags||[], insertion_point:uc.insertion_point||'', suggestion:uc.suggestion||'', user_selection:'pending' }; });
       await sb.from('division_unused_components').insert(compRows);
     }
-    await sb.from('division_projects').update({status:'analyzed', updated_at: new Date().toISOString()}).eq('id',p.id);
+    await sb.from('division_projects').update({status:'analyzed', updated_at: new Date().toISOString(), analysis_meta: analyzed.themes ? {themes:analyzed.themes} : analyzed.original_category ? {original_category:analyzed.original_category, target_category:analyzed.target_category} : null}).eq('id',p.id);
     p.status = 'analyzed';
+    if(analyzed.themes) p.analysis_meta = {themes:analyzed.themes};
+    if(analyzed.original_category) p.analysis_meta = {original_category:analyzed.original_category, target_category:analyzed.target_category};
     App.clearProgress('divisionAnalyzeProgress');
-    showToast('분석 완료! 부가 구성을 선택해 주세요.');
+    var toastMsg = p.division_type==='strategic' ? '분석 완료! 테마를 선택해 주세요.' : p.division_type==='category_change' ? '분석 완료! 변환 구성을 확인해 주세요.' : '분석 완료! 부가 구성을 선택해 주세요.';
+    showToast(toastMsg);
     await Division.loadData(p.id);
   } catch(e) { App.clearProgress('divisionAnalyzeProgress'); showToast('분석 실패: '+e.message,'error'); }
 };
@@ -526,6 +701,18 @@ Division.runAnalyze = async function(){
 Division._buildAnalyzePrompt = function(basisClaim, specText, excludedText, allClaims){
   var basisText = basisClaim.amended_text||basisClaim.original_text;
   var allClaimsText = allClaims.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text).substring(0,500); }).join('\n');
+  var p = Division.state.current;
+  var divType = p ? p.division_type : 'merge';
+
+  if(divType === 'category_change'){
+    return '아래 등록 청구항과 명세서를 분석하여, 카테고리 변경(방법↔장치 전환) 분할출원을 위한 분석을 수행하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[전체 청구항]\n'+allClaimsText+'\n\n[명세서 전 단락]\n'+specText.substring(0,40000)+'\n\n분석 규칙:\n1. 등록 청구항이 "방법" 청구항인지 "장치" 청구항인지 판별\n2. 방법 청구항이면 → 장치 청구항으로 변환할 구성요소 매핑 도출\n   - 각 방법 단계를 수행하는 "~부", "~모듈", "~수단" 형태의 구성요소 식별\n   - 명세서에서 해당 구성요소의 구조적 뒷받침 단락 매핑\n3. 장치 청구항이면 → 방법 청구항으로 변환할 단계 매핑 도출\n   - 각 구성요소가 수행하는 동작/기능을 "~하는 단계" 형태로 변환\n4. 변환 시 명세서 뒷받침 존재 여부 확인\n5. 리스크 평가: 변환이 자연스러운지, 추상적 표현이 발생하는지\n\n출력 JSON:\n{"original_category":"method|apparatus","target_category":"apparatus|method","unused_components":[{"paragraph_number":"0098","content":"변환할 구성 내용","related_element":"원본 구성요소명","limitation_type":"structural","risk_level":"safe|caution|danger","risk_flags":[],"insertion_point":"변환 매핑 설명","suggestion":"변환 시 권장 표현"}]}\n\nJSON만 출력하라.';
+  }
+
+  if(divType === 'strategic'){
+    return '아래 등록 청구항과 명세서를 분석하여, 전략적 분할출원을 위한 새로운 독립항 후보 테마를 도출하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[전체 청구항]\n'+allClaimsText+'\n\n[명세서 전 단락]\n'+specText.substring(0,40000)+'\n\n[제외 대상 청구항]\n'+(excludedText||'(없음)')+'\n\n분석 규칙:\n1. 명세서에서 기존 청구항과 다른 관점/테마의 발명 개념을 식별\n2. 각 테마에 대해:\n   - 독립항을 구성할 수 있는 핵심 구성요소 나열\n   - 명세서 뒷받침 단락 매핑\n   - 기존 등록 청구항과의 차별점\n   - 등록 가능성 평가 (safe/caution/danger)\n3. 테마 예시: 다른 구성요소를 중심으로 한 독립항, 하위 시스템 단독 청구, 제조방법 관점 등\n4. 각 테마의 구성요소가 명세서에 충분히 뒷받침되는지 확인\n\n출력 JSON:\n{"themes":[{"theme_id":"T1","theme_name":"테마명","description":"테마 설명","key_elements":["구성요소1","구성요소2"],"spec_paragraphs":["0098","0102"],"differentiation":"기존 청구항과의 차별점","risk_level":"safe|caution|danger","risk_flags":[]}],"unused_components":[{"paragraph_number":"0098","content":"활용 가능한 구성","related_element":"관련 구성요소","limitation_type":"structural","risk_level":"safe","risk_flags":[],"insertion_point":"T1 테마에 활용","suggestion":""}]}\n\nJSON만 출력하라.';
+  }
+
+  // merge (기본)
   return '아래 등록 청구항과 명세서를 분석하여, 분할출원에 활용 가능한 미활용 구성을 추출하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[전체 청구항]\n'+allClaimsText+'\n\n[명세서 전 단락]\n'+specText.substring(0,40000)+'\n\n[제외 대상 청구항]\n'+(excludedText||'(없음)')+'\n\n규칙:\n1. 명세서 단락 중 어떤 청구항에도 기재되지 않은 구성을 추출\n2. 제외 대상 청구항의 구성과 중복되는 것은 제외\n3. 각 구성 분류: limitation_type(structural/material/shape/arrangement/functional), risk_level(safe:flag0/caution:flag1/danger:flag2+), risk_flags(금지어,추상적표현 등)\n4. insertion_point: 어느 구성요소 앞/뒤에 삽입할지\n\n출력 JSON:\n{"unused_components":[{"paragraph_number":"0098","content":"밀폐된 공간 구조를 형성하는","related_element":"장치 하우징","limitation_type":"structural","risk_level":"safe","risk_flags":[],"insertion_point":"장치 하우징 앞에 삽입","suggestion":""}]}\n\nJSON만 출력하라.';
 };
 
@@ -535,13 +722,54 @@ Division._buildAnalyzePrompt = function(basisClaim, specText, excludedText, allC
 Division.renderAnalyze = function(left, right, p){
   var unused = Division.state.unusedComponents;
   var claims = Division.state.claims;
+  var divType = p.division_type;
   var groups = { safe:[], caution:[], danger:[] };
   unused.forEach(function(uc){ (groups[uc.risk_level]||groups.safe).push(uc); });
-  var h = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🔧</span> 병합할 청구항</div>';
-  var mergeCandidates = claims.filter(function(c){ return c.division_role==='merge_candidate'; });
-  if(!mergeCandidates.length){ h += '<div style="font-size:13px;color:var(--color-text-tertiary);padding:8px">병합 후보 청구항이 없습니다.</div>'; }
-  else { mergeCandidates.forEach(function(c){ h += '<label class="checkbox-label" style="margin-bottom:6px;font-size:13px"><input type="checkbox" checked data-merge-claim="'+c.claim_number+'" /><span>제'+c.claim_number+'항 — '+escapeHtml((c.amended_text||c.original_text).substring(0,60))+'...</span></label>'; }); }
-  h += '</div>';
+
+  var h = '';
+
+  // === 카테고리 변경형: 변환 방향 표시 ===
+  if(divType === 'category_change'){
+    var meta = p.analysis_meta || {};
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🔄</span> 카테고리 변환</div>';
+    h += '<div class="division-info-box" style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;text-align:center">';
+    h += '<span style="color:var(--color-primary)">' + (meta.original_category==='method'?'방법 청구항':'장치 청구항') + '</span>';
+    h += ' <span style="font-size:18px;margin:0 12px">→</span> ';
+    h += '<span style="color:var(--color-success)">' + (meta.target_category==='apparatus'?'장치 청구항':'방법 청구항') + '</span>';
+    h += '</div></div></div>';
+  }
+
+  // === 전략적 분할: 테마 목록 ===
+  if(divType === 'strategic'){
+    var themes = (p.analysis_meta && p.analysis_meta.themes) || [];
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🎯</span> 독립항 테마 후보</div>';
+    if(!themes.length){ h += '<div style="font-size:13px;color:var(--color-text-tertiary);padding:8px">테마 후보가 없습니다.</div>'; }
+    else { themes.forEach(function(t){
+      var riskInfo = Division.RISK_LABELS[t.risk_level] || Division.RISK_LABELS.safe;
+      h += '<div class="division-component-row ' + riskInfo.css + '">';
+      h += '<label class="checkbox-label" style="flex:1"><input type="checkbox" checked data-theme-id="' + t.theme_id + '" /><div>';
+      h += '<div style="font-weight:600">' + riskInfo.icon + ' ' + escapeHtml(t.theme_name) + '</div>';
+      h += '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px">' + escapeHtml(t.description) + '</div>';
+      h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px">핵심 구성: ' + (t.key_elements||[]).map(function(e){return escapeHtml(e);}).join(', ') + '</div>';
+      h += '<div style="font-size:11px;color:var(--color-text-tertiary)">근거 단락: ' + (t.spec_paragraphs||[]).join(', ') + '</div>';
+      h += '<div style="font-size:11px;color:var(--color-primary);margin-top:2px">차별점: ' + escapeHtml(t.differentiation||'') + '</div>';
+      if(t.risk_flags && t.risk_flags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:2px">⚠️ ' + escapeHtml(t.risk_flags.join(', ')) + '</div>';
+      h += '</div></label></div>';
+    }); }
+    h += '</div>';
+  }
+
+  // === 병합형 / 공통: 병합 청구항 + 미활용 구성 ===
+  if(divType === 'merge'){
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🔧</span> 병합할 청구항</div>';
+    var mergeCandidates = claims.filter(function(c){ return c.division_role==='merge_candidate'; });
+    if(!mergeCandidates.length){ h += '<div style="font-size:13px;color:var(--color-text-tertiary);padding:8px">병합 후보 청구항이 없습니다.</div>'; }
+    else { mergeCandidates.forEach(function(c){ h += '<label class="checkbox-label" style="margin-bottom:6px;font-size:13px"><input type="checkbox" checked data-merge-claim="'+c.claim_number+'" /><span>제'+c.claim_number+'항 — '+escapeHtml((c.amended_text||c.original_text).substring(0,60))+'...</span></label>'; }); }
+    h += '</div>';
+  }
+
+  // 공통: 미활용/변환 구성 목록 (모든 유형)
+  var compTitle = divType==='category_change' ? '변환 구성 후보' : divType==='strategic' ? '활용 가능 구성' : '미활용 구성 후보';
   ['safe','caution','danger'].forEach(function(level){
     var items = groups[level]; var info = Division.RISK_LABELS[level]; if(!items.length) return;
     h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px">'+info.icon+' '+info.label+' ('+items.length+'건)</div>';
@@ -558,10 +786,19 @@ Division.renderAnalyze = function(left, right, p){
   });
   left.innerHTML = h;
 
+  // 오른쪽: 요약
   var selectedCount = unused.filter(function(uc){ return uc.user_selection==='selected'||(uc.user_selection==='pending'&&uc.risk_level==='safe'); }).length;
+  var mergeCandidates = claims.filter(function(c){ return c.division_role==='merge_candidate'; });
   var rh = '<div class="card" style="padding:20px"><div style="font-size:16px;font-weight:700;margin-bottom:16px"><span class="tossface">📋</span> 구성 요약</div>';
-  rh += '<div class="division-summary-grid"><div class="division-summary-item"><div class="division-summary-num">'+selectedCount+'</div><div class="division-summary-label">선택된 부가 구성</div></div>';
-  rh += '<div class="division-summary-item"><div class="division-summary-num">'+mergeCandidates.length+'</div><div class="division-summary-label">병합 청구항</div></div></div></div>';
+  rh += '<div class="division-summary-grid">';
+  if(divType === 'strategic'){
+    var themes = (p.analysis_meta && p.analysis_meta.themes) || [];
+    rh += '<div class="division-summary-item"><div class="division-summary-num">'+themes.length+'</div><div class="division-summary-label">테마 후보</div></div>';
+  } else if(divType === 'merge'){
+    rh += '<div class="division-summary-item"><div class="division-summary-num">'+mergeCandidates.length+'</div><div class="division-summary-label">병합 청구항</div></div>';
+  }
+  rh += '<div class="division-summary-item"><div class="division-summary-num">'+selectedCount+'</div><div class="division-summary-label">선택된 구성</div></div>';
+  rh += '</div></div>';
   rh += '<div id="divisionAssembleProgress" style="margin-top:12px"></div>';
   rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.rerunAnalyze()" style="flex:1;padding:12px"><span class="tossface">🔄</span> 재분석</button>';
   rh += '<button class="btn btn-primary" id="btnDivisionAssemble" onclick="Division.runAssemble()" style="flex:1;padding:12px"><span class="tossface">🔧</span> 조립 실행</button></div>';
@@ -593,10 +830,10 @@ Division.runAssemble = async function(){
     var mergeClaims = claims.filter(function(c){ return mergeNums.indexOf(c.claim_number)>=0; });
     var depCandidates = claims.filter(function(c){ return c.division_role==='dep_candidate'; });
     var assemblePrompt = Division._buildAssemblePrompt(basisClaim, selected, mergeClaims, depCandidates);
-    var result = await App.callClaude(assemblePrompt);
+    var result = await Division.callAI(assemblePrompt);
     App.showProgress('divisionAssembleProgress','결과 저장 중...',2,3);
     var assembled;
-    try { var cleaned = result.text.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim(); assembled = JSON.parse(cleaned); }
+    try { assembled = Division._extractJSON(result.text); }
     catch(e) { showToast('조립 결과 JSON 해석 실패','error'); App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false); return; }
     await sb.from('division_claims_output').delete().eq('project_id',p.id);
     if(assembled.division_claims && assembled.division_claims.length > 0){
@@ -616,8 +853,28 @@ Division.runAssemble = async function(){
 Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeClaims, depCandidates){
   var basisText = basisClaim.amended_text||basisClaim.original_text;
   var compList = selectedComponents.map(function(uc){ return '- 내용: '+uc.content+'\n  삽입위치: '+uc.insertion_point+'\n  유형: '+uc.limitation_type; }).join('\n');
-  var mergeList = mergeClaims.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text); }).join('\n\n');
   var depList = depCandidates.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text); }).join('\n\n');
+  var p = Division.state.current;
+  var divType = p ? p.division_type : 'merge';
+
+  if(divType === 'category_change'){
+    var meta = p.analysis_meta || {};
+    return '아래 등록 청구항을 카테고리 변경하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis) — '+( meta.original_category==='method'?'방법':'장치')+']\n'+basisText+'\n\n[변환 방향]\n'+(meta.original_category==='method'?'방법 → 장치':'장치 → 방법')+'\n\n[변환에 활용할 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+'\n\n조립 규칙:\n1. 방법→장치 변환:\n   - "~하는 단계" → "~하는 ~부/모듈/수단"\n   - 말미: "~을 포함하는 [장치명]." 형태\n   - 각 단계를 수행하는 구성요소를 명세서에서 식별하여 구조적으로 기재\n2. 장치→방법 변환:\n   - "~부/수단" → "~하는 단계"\n   - 말미: "~을 포함하는 [동작명] 방법." 형태\n   - 구성요소의 동작/기능을 시간순으로 배열\n3. 선택된 변환 구성은 변환된 청구항에 자연스럽게 통합\n4. 종속항도 동일하게 카테고리 변환\n5. 변환 부분은 **볼드**로 표시\n6. 명칭: 변환된 카테고리를 반영한 국문/영문 각 2개\n\n출력 JSON:\n{"division_claims":[{"claim_number":1,"claim_type":"independent","parent_claim_number":null,"claim_text":"최종텍스트","claim_text_highlighted":"**변환부분** 표시"}],"title_candidates":[{"ko":"국문명칭","en":"English title"}]}\n\nJSON만 출력하라.';
+  }
+
+  if(divType === 'strategic'){
+    var themes = (p.analysis_meta && p.analysis_meta.themes) || [];
+    // 선택된 테마 수집
+    var selectedThemes = [];
+    var themeCheckboxes = document.querySelectorAll('[data-theme-id]:checked');
+    themeCheckboxes.forEach(function(cb){ var tid=cb.dataset.themeId; var t=themes.find(function(x){return x.theme_id===tid;}); if(t) selectedThemes.push(t); });
+    var themesDesc = selectedThemes.map(function(t){ return '테마: '+t.theme_name+'\n설명: '+t.description+'\n핵심구성: '+(t.key_elements||[]).join(', ')+'\n근거단락: '+(t.spec_paragraphs||[]).join(', '); }).join('\n\n');
+
+    return '아래 등록 청구항과 선택된 테마를 기반으로 전략적 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis — 참고용)]\n'+basisText+'\n\n[선택된 테마]\n'+(themesDesc||'(없음)')+'\n\n[활용할 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+'\n\n조립 규칙:\n1. 각 테마별로 새로운 독립항을 작성\n   - 기존 등록 청구항과 다른 관점의 독립항\n   - 명세서 뒷받침 범위 내에서 구성\n   - 핵심 구성요소를 중심으로 한 완결된 청구항\n2. 선택된 활용 구성은 해당 테마의 독립항에 자연스럽게 통합\n3. 각 독립항에 대해 1~2개 종속항 자동 구성\n4. 새로 작성된 부분은 **볼드**로 표시\n5. 명칭: 전략적 분할의 핵심을 반영한 국문/영문 각 2개\n\n출력 JSON:\n{"division_claims":[{"claim_number":1,"claim_type":"independent","parent_claim_number":null,"claim_text":"최종텍스트","claim_text_highlighted":"**신규부분** 표시"}],"title_candidates":[{"ko":"국문명칭","en":"English title"}]}\n\nJSON만 출력하라.';
+  }
+
+  // merge (기본)
+  var mergeList = mergeClaims.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text); }).join('\n\n');
   return '아래 등록 청구항에 부가 구성을 삽입하고 병합 청구항을 결합하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 부가 구성]\n'+(compList||'(없음)')+'\n\n[병합 대상 청구항]\n'+(mergeList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+'\n\n조립 규칙:\n1. 독립항: structural→명칭앞형용구, material→재질병기, shape→형상추가, functional→뒤에부가\n2. 병합: "제N항에있어서,"제거, "상기{구성요소}는,"이하추출, 말미앞삽입\n3. 종속항: dep_candidate→"제1항에있어서,"변환, 삭제번호건너뛰기재번호\n4. 명칭: 국문/영문 각 2개\n\n출력 JSON:\n{"division_claims":[{"claim_number":1,"claim_type":"independent","parent_claim_number":null,"claim_text":"최종텍스트","claim_text_highlighted":"**부가**와 ***병합*** 표시"}],"title_candidates":[{"ko":"국문명칭","en":"English title"}]}\n\nJSON만 출력하라.';
 };
 
@@ -665,9 +922,9 @@ Division.runVerify = async function(){
     var specText = (paragraphs||[]).map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
     App.showProgress('divisionVerifyProgress','AI 검증 분석 중...',2,3);
     var verifyPrompt = Division._buildVerifyPrompt(claimsText, specText);
-    var result = await App.callClaude(verifyPrompt);
+    var result = await Division.callAI(verifyPrompt);
     var verified;
-    try { var cleaned = result.text.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim(); verified = JSON.parse(cleaned); }
+    try { verified = Division._extractJSON(result.text); }
     catch(e) { showToast('검증 결과 JSON 해석 실패','error'); App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); return; }
     await sb.from('division_validation_results').delete().eq('project_id',p.id);
     if(verified.results && verified.results.length > 0){
@@ -713,40 +970,109 @@ Division.renderVerify = function(left, right, p){
   left.innerHTML = h;
 
   var rh = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🏷️</span> 발명의 명칭</div>';
+
+  // 원출원 명칭 표시
+  if(p.original_title_ko){
+    rh += '<div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:10px;padding:8px 10px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm)">';
+    rh += '<div><strong>원출원:</strong> ' + escapeHtml(p.original_title_ko) + '</div>';
+    if(p.original_title_en) rh += '<div style="margin-top:2px;font-size:11px">' + escapeHtml(p.original_title_en) + '</div>';
+    rh += '</div>';
+  }
+
+  // 명칭 선택: 원출원 동일 / AI 제안 / 직접 입력
+  rh += '<div style="font-size:12px;font-weight:600;color:var(--color-text-secondary);margin-bottom:8px">분할출원 명칭 선택</div>';
+
+  // 옵션 0: 원출원과 동일
+  if(p.original_title_ko){
+    rh += '<label class="division-title-option"><input type="radio" name="divisionTitle" value="original" checked /><div>';
+    rh += '<div style="font-size:13px;font-weight:500">원출원과 동일</div>';
+    rh += '<div style="font-size:11px;color:var(--color-text-tertiary)">' + escapeHtml(p.original_title_ko) + '</div>';
+    rh += '</div></label>';
+  }
+
+  // 옵션 1~N: AI 제안
   var candidates = p.title_candidates || [];
   if(candidates.length > 0){
     candidates.forEach(function(tc,i){
-      rh += '<label class="division-title-option"><input type="radio" name="divisionTitle" value="'+i+'"'+(i===0?' checked':'')+' /><div>';
+      rh += '<label class="division-title-option"><input type="radio" name="divisionTitle" value="'+i+'"' + (!p.original_title_ko && i===0 ? ' checked' : '') + ' /><div>';
       rh += '<div style="font-size:13px;font-weight:500">'+escapeHtml(tc.ko)+'</div>';
       rh += '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">'+escapeHtml(tc.en)+'</div></div></label>';
     });
-    rh += '<label class="division-title-option"><input type="radio" name="divisionTitle" value="custom" /><div style="flex:1"><input type="text" class="input-field" id="divisionCustomTitle" placeholder="직접 입력 (국문)" style="font-size:13px;padding:6px 10px" /></div></label>';
-  } else {
-    rh += '<input type="text" class="input-field" id="divisionCustomTitle" placeholder="국문 명칭" style="margin-top:8px;font-size:13px;padding:8px 10px" />';
-    rh += '<input type="text" class="input-field" id="divisionCustomTitleEn" placeholder="영문 명칭" style="margin-top:6px;font-size:13px;padding:8px 10px" />';
   }
+
+  // 옵션: 직접 입력
+  rh += '<label class="division-title-option"><input type="radio" name="divisionTitle" value="custom" onchange="Division.onTitleRadioChange()" /><div style="flex:1">';
+  rh += '<div style="font-size:13px;font-weight:500;margin-bottom:6px">직접 입력</div>';
+  rh += '<input type="text" class="input-field" id="divisionCustomTitle" placeholder="국문 명칭" style="font-size:13px;padding:6px 10px;margin-bottom:4px" />';
+  rh += '<input type="text" class="input-field" id="divisionCustomTitleEn" placeholder="영문 명칭" style="font-size:13px;padding:6px 10px" />';
+  rh += '</div></label>';
+
+  // ⚠️ 명칭 변경 시 경고
+  rh += '<div id="divisionTitleWarning" class="division-title-warning" style="display:none">';
+  rh += '<div style="font-weight:600;margin-bottom:4px">⚠️ 발명의 명칭 변경 시 유의사항</div>';
+  rh += '<div style="font-size:12px;line-height:1.7">';
+  rh += '분할출원의 명칭을 원출원과 다르게 하는 경우, 명세서의 다음 부분도 함께 변경해야 합니다:';
+  rh += '<ul style="margin:6px 0 0 16px;padding:0"><li>【발명의 명칭】 항목</li><li>【요약서】의 발명 제목</li><li>【국제특허분류】가 달라지는 경우 IPC 코드</li><li>출원서 표지의 발명의 명칭란</li></ul>';
+  rh += '명칭 변경은 분할출원의 권리범위 해석에 영향을 줄 수 있으므로 신중히 결정하세요.';
+  rh += '</div></div>';
   rh += '</div>';
   if(failCount > 0){ rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)">⚠️ 검증 실패 항목이 있습니다. 수정하거나 제외한 후 재검증하세요.<br>명세서 뒷받침이 부족한 구성은 제외하거나, 별도 명세서 보정이 필요합니다.</div>'; }
   rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tossface">🔄</span> 재검증</button>';
   rh += '<button class="btn btn-primary" onclick="Division.confirmFinal()" style="flex:1;padding:12px"><span class="tossface">🏁</span> 최종 확정</button></div>';
   right.innerHTML = rh;
+  Division._bindTitleRadios();
 };
 
 // ═══════════════════════════════════════════
 // 16. 최종 확정
 // ═══════════════════════════════════════════
+Division.onTitleRadioChange = function(){
+  var sel = document.querySelector('input[name="divisionTitle"]:checked');
+  var warn = document.getElementById('divisionTitleWarning');
+  if(!warn) return;
+  // 원출원과 동일이 아닌 옵션 선택 시 경고 표시
+  warn.style.display = (sel && sel.value !== 'original') ? 'block' : 'none';
+};
+
+// 타이틀 라디오 변경 이벤트 바인딩 (renderVerify 후)
+Division._bindTitleRadios = function(){
+  setTimeout(function(){
+    document.querySelectorAll('input[name="divisionTitle"]').forEach(function(r){
+      r.addEventListener('change', Division.onTitleRadioChange);
+    });
+  }, 0);
+};
+
 Division.confirmFinal = async function(){
   var p = Division.state.current; if(!p) return;
   var sel = document.querySelector('input[name="divisionTitle"]:checked');
   var titleKo = '', titleEn = '', candidates = p.title_candidates || [];
   if(sel){
-    if(sel.value==='custom'){ titleKo=(document.getElementById('divisionCustomTitle')?.value||'').trim(); titleEn=(document.getElementById('divisionCustomTitleEn')?.value||'').trim(); }
-    else { var idx=parseInt(sel.value); if(candidates[idx]){ titleKo=candidates[idx].ko; titleEn=candidates[idx].en; } }
-  } else { titleKo=(document.getElementById('divisionCustomTitle')?.value||'').trim(); titleEn=(document.getElementById('divisionCustomTitleEn')?.value||'').trim(); }
+    if(sel.value === 'original'){
+      titleKo = p.original_title_ko || '';
+      titleEn = p.original_title_en || '';
+    } else if(sel.value === 'custom'){
+      titleKo = (document.getElementById('divisionCustomTitle')?.value || '').trim();
+      titleEn = (document.getElementById('divisionCustomTitleEn')?.value || '').trim();
+    } else {
+      var idx = parseInt(sel.value);
+      if(candidates[idx]){ titleKo = candidates[idx].ko; titleEn = candidates[idx].en; }
+    }
+  } else {
+    titleKo = (document.getElementById('divisionCustomTitle')?.value || '').trim();
+    titleEn = (document.getElementById('divisionCustomTitleEn')?.value || '').trim();
+  }
   if(!titleKo){ showToast('발명의 명칭을 선택하거나 입력해 주세요','error'); return; }
+
+  // 명칭 변경 여부 확인
+  var titleChanged = p.original_title_ko && titleKo !== p.original_title_ko;
+  if(titleChanged){
+    if(!confirm('발명의 명칭이 원출원과 다릅니다.\n명세서의 【발명의 명칭】, 【요약서】 등도 함께 수정해야 합니다.\n계속하시겠습니까?')) return;
+  }
+
   try {
-    await sb.from('division_projects').update({ status:'confirmed', title_ko:titleKo, title_en:titleEn, updated_at:new Date().toISOString() }).eq('id',p.id);
-    p.status='confirmed'; p.title_ko=titleKo; p.title_en=titleEn;
+    await sb.from('division_projects').update({ status:'confirmed', title_ko:titleKo, title_en:titleEn, title_changed:titleChanged||false, updated_at:new Date().toISOString() }).eq('id',p.id);
+    p.status='confirmed'; p.title_ko=titleKo; p.title_en=titleEn; p.title_changed=titleChanged||false;
     showToast('최종 확정 완료!'); Division.renderDetail();
   } catch(e) { showToast('확정 실패: '+e.message,'error'); }
 };
@@ -767,7 +1093,15 @@ Division.renderConfirm = function(left, right, p){
   rh += '<div style="font-size:14px;font-weight:700"><span class="tossface">🏷️</span> 발명의 명칭</div>';
   rh += '<button class="btn btn-outline btn-sm" onclick="Division.copyText(\'divisionOutputTitle\')"><span class="tossface">📋</span> 복사</button></div>';
   rh += '<div id="divisionOutputTitle" style="font-size:13px;line-height:1.7"><div><strong>【국문】</strong>'+escapeHtml(p.title_ko||'')+'</div>';
-  rh += '<div style="margin-top:4px"><strong>【영문】</strong>'+escapeHtml(p.title_en||'')+'</div></div></div>';
+  rh += '<div style="margin-top:4px"><strong>【영문】</strong>'+escapeHtml(p.title_en||'')+'</div></div>';
+  if(p.title_changed){
+    rh += '<div style="margin-top:10px;padding:10px 12px;background:var(--color-warning-light);border-radius:var(--radius-sm);border-left:3px solid var(--color-warning);font-size:12px;line-height:1.6">';
+    rh += '<strong>⚠️ 명칭 변경됨</strong> — 원출원과 발명의 명칭이 다릅니다.<br>';
+    rh += '명세서의 【발명의 명칭】, 【요약서】, 출원서 표지도 함께 수정하세요.';
+    if(p.original_title_ko) rh += '<div style="margin-top:6px;color:var(--color-text-tertiary)">원출원: ' + escapeHtml(p.original_title_ko) + '</div>';
+    rh += '</div>';
+  }
+  rh += '</div>';
   rh += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🖍️</span> 하이라이트 버전</div>';
   rh += '<div style="font-size:13px;line-height:1.8">';
   divClaims.forEach(function(dc){
