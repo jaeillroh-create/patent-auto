@@ -5195,7 +5195,7 @@
     
     console.log(`[KIPRIS] 랭킹 완료: 전체 ${candidates.length}건 (유사군 중복: ${candidates.filter(c => c._hasGroupOverlap).length}건)`);
     
-    return candidates; // K0 제한 없음 - 전체 후보 유지 (메모리 연산이므로 성능 영향 없음)
+    return candidates; // 전체 후보 유지 (메모리 연산이므로 성능 영향 없음)
   };
   
   // ====== 메인 검색 함수 (통합 2-Stage) ======
@@ -9848,240 +9848,131 @@ JSON 배열로만 응답: ["상품명1", "상품명2"]`;
     }
   };
 
-  // 대형 류(09류, 35류) 전용 필터링 조회 — 키워드 그룹별 균형 보장
+  // ★ LLM 키워드 확장: 사업 맥락으로 DB 검색용 키워드 50개 생성
+  TM.generateExpandedKeywords = async function(classCode, businessContext) {
+    const businessSummary = businessContext.summary || '';
+    const coreProducts = (businessContext.coreProducts || []).join(', ');
+    const coreServices = (businessContext.coreServices || []).join(', ');
+    const expansion = (businessContext.expansionPotential || []).join(', ');
+    
+    const prompt = `당신은 상표 출원 전문가입니다. 아래 사업 내용을 보고, 제${classCode}류 고시명칭 DB에서 관련 상품을 빠짐없이 찾기 위한 **검색 키워드**를 생성하세요.
+
+【사업 내용】${businessSummary}
+【핵심 상품】${coreProducts || '없음'}
+【핵심 서비스】${coreServices || '없음'}
+【확장 가능성】${expansion || '없음'}
+
+【규칙】
+1. 고시명칭 DB의 상품명에 포함될 법한 **한글 단어** 위주로 생성
+2. 동의어, 유의어, 상위/하위 개념, 원재료, 관련 기술 등 폭넓게 커버
+3. 1~3글자 짧은 단어 권장 (DB ilike 검색에 유리)
+4. 너무 일반적인 단어(제품, 상품, 물품 등)는 제외
+5. 이 사업과 무관한 키워드는 절대 포함하지 않음
+
+【JSON으로만 응답 — 다른 텍스트 없이】
+{"keywords":["키워드1","키워드2",...]}`;
+    
+    try {
+      const response = await App.callClaudeSonnet(prompt, 500);
+      const text = (response.text || '').trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('JSON 파싱 실패');
+      const result = JSON.parse(jsonMatch[0]);
+      const keywords = result.keywords || [];
+      console.log(`[TM] 🔑 LLM 키워드 확장: ${keywords.length}개 생성`);
+      console.log(`[TM]   키워드: ${keywords.join(', ')}`);
+      return keywords;
+    } catch (e) {
+      console.error('[TM] 키워드 확장 실패:', e.message);
+      // 폴백: 기존 사업분석 키워드 사용
+      return [
+        ...(businessContext.coreProducts || []),
+        ...(businessContext.coreServices || []),
+        ...(businessContext.searchKeywords || []),
+        ...(businessContext.expansionPotential || [])
+      ];
+    }
+  };
+
+  // 대형 류(09류, 35류) 전용 필터링 조회 — LLM 키워드 확장 방식
   TM.fetchFilteredCandidates = async function(paddedCode, businessContext) {
-    const TOP_N = 200;  // LLM에 전달할 최대 후보 수
     const seen = new Set();
+    const allResults = [];
+    const classCode = parseInt(paddedCode, 10);
     
-    // ★ 핵심: 키워드 그룹별로 분리 수집
-    const keywordGroups = new Map(); // keyword → [items]
+    console.log(`[TM] ════ Tier B: LLM 키워드 확장 조회 시작 (제${classCode}류) ════`);
     
-    const addToGroup = (keyword, data) => {
-      if (!data) return;
-      if (!keywordGroups.has(keyword)) keywordGroups.set(keyword, []);
-      const group = keywordGroups.get(keyword);
-      for (const item of data) {
-        if (!seen.has(item.goods_name)) {
-          seen.add(item.goods_name);
-          group.push(item);
-        }
-      }
-    };
+    // ★ Pass 1: LLM으로 검색 키워드 50개 생성
+    const expandedKeywords = await TM.generateExpandedKeywords(classCode, businessContext);
     
-    const coreTerms = [
+    // 기존 사업분석 키워드도 병합 (누락 방지)
+    const baseKeywords = [
       ...(businessContext.coreProducts || []),
-      ...(businessContext.coreServices || [])
+      ...(businessContext.coreServices || []),
+      ...(businessContext.searchKeywords || []),
+      ...(businessContext.expansionPotential || [])
     ];
+    const allKeywords = [...new Set([...baseKeywords, ...expandedKeywords])];
+    console.log(`[TM] 검색 키워드 총 ${allKeywords.length}개 (기존 ${baseKeywords.length} + LLM ${expandedKeywords.length}, 중복 제거)`);
     
-    // 1. 핵심 키워드별 수집 (각 그룹으로 분리)
-    for (const term of coreTerms.slice(0, 10)) {
+    // ★ Pass 2: 전체 키워드로 DB ilike 검색 (제한 없이 수집)
+    for (const kw of allKeywords) {
+      if (!kw || kw.length < 1) continue;
       try {
-        const { data } = await App.sb
-          .from('gazetted_goods_cache')
-          .select('goods_name, similar_group_code, similar_group_name')
-          .eq('class_code', paddedCode)
-          .ilike('goods_name', `%${term}%`)
-          .limit(200);
-        addToGroup(term, data);
-      } catch (e) { /* continue */ }
-    }
-    
-    // 유사군명으로도 핵심 키워드 검색 (같은 그룹에 추가)
-    for (const term of coreTerms.slice(0, 5)) {
-      try {
-        const { data } = await App.sb
-          .from('gazetted_goods_cache')
-          .select('goods_name, similar_group_code, similar_group_name')
-          .eq('class_code', paddedCode)
-          .ilike('similar_group_name', `%${term}%`)
-          .limit(200);
-        addToGroup(term, data);
-      } catch (e) { /* continue */ }
-    }
-    
-    const coreGroupCount = keywordGroups.size;
-    console.log(`[TM] 핵심 키워드 ${coreTerms.length}개 → ${coreGroupCount}개 그룹, 총 ${seen.size}건`);
-    for (const [kw, items] of keywordGroups) {
-      console.log(`[TM]   "${kw}": ${items.length}건`);
-    }
-    
-    // 2. 보조 키워드 수집 (별도 그룹)
-    const searchKw = (businessContext.searchKeywords || [])
-      .filter(k => !coreTerms.includes(k));
-    for (const kw of searchKw.slice(0, 15)) {
-      try {
+        // 상품명 검색
         const { data } = await App.sb
           .from('gazetted_goods_cache')
           .select('goods_name, similar_group_code, similar_group_name')
           .eq('class_code', paddedCode)
           .ilike('goods_name', `%${kw}%`)
-          .limit(100);
-        addToGroup('_search_' + kw, data);
-      } catch (e) { /* continue */ }
-    }
-    
-    // 3. 확장 키워드 수집 (별도 그룹)
-    const expansion = (businessContext.expansionPotential || []);
-    for (const term of expansion.slice(0, 5)) {
-      try {
-        const { data } = await App.sb
-          .from('gazetted_goods_cache')
-          .select('goods_name, similar_group_code, similar_group_name')
-          .eq('class_code', paddedCode)
-          .ilike('goods_name', `%${term}%`)
-          .limit(100);
-        addToGroup('_exp_' + term, data);
-      } catch (e) { /* continue */ }
-    }
-    
-    console.log(`[TM] 전체 수집: ${seen.size}건 (${keywordGroups.size}개 그룹)`);
-    
-    // ★★★ 핵심 개선: 키워드 그룹별 균형 선택 (라운드로빈) ★★★
-    const selected = [];
-    const selectedNames = new Set();
-    
-    // Phase 1: 핵심 키워드 그룹별 최소 보장 (각 그룹당 최소 슬롯)
-    const coreGroups = coreTerms
-      .filter(t => keywordGroups.has(t) && keywordGroups.get(t).length > 0)
-      .map(t => ({ keyword: t, items: [...keywordGroups.get(t)], index: 0 }));
-    
-    if (coreGroups.length > 0) {
-      const minPerGroup = Math.max(5, Math.floor(TOP_N * 0.6 / coreGroups.length));
-      console.log(`[TM] 핵심 그룹 ${coreGroups.length}개, 그룹당 최소 ${minPerGroup}건 보장`);
-      
-      // 라운드로빈: 각 그룹에서 번갈아 추출
-      let round = 0;
-      while (selected.length < TOP_N * 0.6 && round < minPerGroup) {
-        for (const group of coreGroups) {
-          if (group.index >= group.items.length) continue;
-          const item = group.items[group.index];
-          group.index++;
-          if (!selectedNames.has(item.goods_name)) {
-            selectedNames.add(item.goods_name);
-            selected.push({ ...item, _matchedKeyword: group.keyword });
+          .limit(500);
+        if (data) {
+          for (const item of data) {
+            if (!seen.has(item.goods_name)) {
+              seen.add(item.goods_name);
+              allResults.push(item);
+            }
           }
         }
-        round++;
-      }
-      console.log(`[TM] Phase 1 (핵심 균형): ${selected.length}건`);
-    }
-    
-    // Phase 2: 나머지 슬롯은 보조/확장 키워드 + 남은 핵심 항목으로 채움
-    const allRemaining = [];
-    for (const [kw, items] of keywordGroups) {
-      for (const item of items) {
-        if (!selectedNames.has(item.goods_name)) {
-          const isCoreMatch = coreTerms.includes(kw);
-          allRemaining.push({
-            ...item,
-            _score: isCoreMatch ? 30 : (kw.startsWith('_search_') ? 15 : 5),
-            _matchedKeyword: kw
-          });
-        }
-      }
-    }
-    allRemaining.sort((a, b) => b._score - a._score);
-    
-    for (const item of allRemaining) {
-      if (selected.length >= TOP_N) break;
-      if (!selectedNames.has(item.goods_name)) {
-        selectedNames.add(item.goods_name);
-        selected.push(item);
+      } catch (e) { /* continue */ }
+      
+      // 유사군명으로도 검색 (2글자 이상 키워드만)
+      if (kw.length >= 2) {
+        try {
+          const { data: data2 } = await App.sb
+            .from('gazetted_goods_cache')
+            .select('goods_name, similar_group_code, similar_group_name')
+            .eq('class_code', paddedCode)
+            .ilike('similar_group_name', `%${kw}%`)
+            .limit(300);
+          if (data2) {
+            for (const item of data2) {
+              if (!seen.has(item.goods_name)) {
+                seen.add(item.goods_name);
+                allResults.push(item);
+              }
+            }
+          }
+        } catch (e) { /* continue */ }
       }
     }
     
-    console.log(`[TM] 필터링 최종: ${seen.size}건 수집 → 균형 선택 ${selected.length}건 (Tier B)`);
-    if (coreGroups.length > 0) {
-      for (const group of coreGroups) {
-        const count = selected.filter(s => s._matchedKeyword === group.keyword).length;
-        console.log(`[TM]   "${group.keyword}": ${count}건 포함`);
-      }
-    }
+    console.log(`[TM] 필터링 완료: 키워드 ${allKeywords.length}개 → 후보 ${allResults.length}건 수집 (Tier B)`);
     
     return {
-      candidates: selected,
-      totalInClass: seen.size,
-      strategy: 'filtered-balanced'
+      candidates: allResults,
+      totalInClass: allResults.length,
+      strategy: 'filtered-expanded'
     };
   };
 
   // ★ 원샷 상품 선택 (callClaudeSonnet 사용)
   TM.selectGoodsOneshot = async function(classCode, allCandidates, businessContext) {
     const MIN_GOODS = 10;
-    const MAX_LLM_INPUT = 200;  // ★ LLM에 보내는 최대 후보 수
     
-    // ★★★ 후보가 200건 초과 시 키워드 그룹별 균형 선택 ★★★
+    // 후보 전체를 LLM에 전달 (키워드 확장으로 이미 관련성 있는 후보만 수집됨)
     let candidates = allCandidates;
-    if (allCandidates.length > MAX_LLM_INPUT) {
-      console.log(`[TM] 후보 ${allCandidates.length}건 → 균형 선택으로 ${MAX_LLM_INPUT}건 축소`);
-      const coreTerms = [
-        ...(businessContext.coreProducts || []),
-        ...(businessContext.coreServices || [])
-      ].map(t => t.toLowerCase());
-      const kwTerms = (businessContext.searchKeywords || []).map(t => t.toLowerCase());
-      
-      // 핵심 키워드 그룹별 분리
-      const groups = new Map(); // keyword → items
-      const ungrouped = [];
-      
-      for (const c of allCandidates) {
-        const name = (c.goods_name || '').toLowerCase();
-        let matched = false;
-        for (const t of coreTerms) {
-          if (name.includes(t)) {
-            if (!groups.has(t)) groups.set(t, []);
-            groups.get(t).push(c);
-            matched = true;
-            break;
-          }
-        }
-        if (!matched) ungrouped.push(c);
-      }
-      
-      // 그룹별 라운드로빈으로 60% 채움
-      const selected = [];
-      const selectedNames = new Set();
-      const groupList = [...groups.entries()].map(([kw, items]) => ({ kw, items, idx: 0 }));
-      
-      if (groupList.length > 0) {
-        const target = Math.floor(MAX_LLM_INPUT * 0.6);
-        let round = 0;
-        while (selected.length < target && round < 100) {
-          let added = false;
-          for (const g of groupList) {
-            if (g.idx >= g.items.length) continue;
-            const item = g.items[g.idx];
-            g.idx++;
-            if (!selectedNames.has(item.goods_name)) {
-              selectedNames.add(item.goods_name);
-              selected.push(item);
-              added = true;
-            }
-          }
-          if (!added) break;
-          round++;
-        }
-      }
-      
-      // 나머지 40%는 보조 키워드 매칭 + 잔여
-      const kwScored = ungrouped.map(c => {
-        const name = (c.goods_name || '').toLowerCase();
-        let score = 0;
-        for (const t of kwTerms) { if (name.includes(t)) { score = 10; break; } }
-        return { ...c, _score: score };
-      }).sort((a, b) => b._score - a._score);
-      
-      for (const item of kwScored) {
-        if (selected.length >= MAX_LLM_INPUT) break;
-        if (!selectedNames.has(item.goods_name)) {
-          selectedNames.add(item.goods_name);
-          selected.push(item);
-        }
-      }
-      
-      candidates = selected;
-      console.log(`[TM] 균형 선택: ${candidates.length}건 (그룹 ${groupList.length}개)`);
-    }
+    console.log(`[TM] 원샷 선택: 제${classCode}류 후보 ${candidates.length}건 → LLM 전달`);
     
     const numberedList = candidates.map((c, i) =>
       `[${i + 1}] ${c.goods_name} (${c.similar_group_code || '?'})`
