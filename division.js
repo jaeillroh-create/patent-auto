@@ -369,77 +369,92 @@ Division.renderMainForStep = function(p, stepKey){
 // ═══════════════════════════════════════════
 Division.renderUpload = function(left, right, p){
   var files = Division.state.files;
-  var inputMode = p.input_mode || 'full'; // full | direct
+  var inputMode = p.input_mode || 'full';
 
-  // === 왼쪽: 입력 모드 선택 + 파일/텍스트 입력 ===
   var h = '';
 
   // 모드 토글
   h += '<div class="division-mode-toggle">';
-  h += '<button class="division-mode-btn' + (inputMode==='full'?' active':'') + '" onclick="Division.switchInputMode(\'full\')"><span class="tossface">📋</span> 전체 문서 업로드</button>';
-  h += '<button class="division-mode-btn' + (inputMode==='direct'?' active':'') + '" onclick="Division.switchInputMode(\'direct\')"><span class="tossface">✏️</span> 등록 청구항 직접 입력</button>';
+  h += '<button class="division-mode-btn' + (inputMode==='full'?' active':'') + '" onclick="Division.switchInputMode(\'full\')"><span class="tossface">📋</span> 문서 업로드</button>';
+  h += '<button class="division-mode-btn' + (inputMode==='direct'?' active':'') + '" onclick="Division.switchInputMode(\'direct\')"><span class="tossface">✏️</span> 청구항 직접 입력</button>';
   h += '</div>';
 
   if(inputMode === 'full'){
-    // ── 모드 A: 전체 문서 업로드 (드래그앤드롭) ──
-    h += '<div class="card" style="padding:16px">';
-    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tossface">📁</span> 필수 파일</div>';
-    h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">파일을 드래그하여 각 항목에 놓거나 클릭하여 선택하세요.</div>';
+    // ── 모드 A: 통합 드롭존 + 자동 분류 ──
 
-    ['application','notification','opinion','amendment'].forEach(function(ft){
+    // 통합 드롭존 (여러 파일 한 번에)
+    var allRequiredDone = ['application','notification','opinion','amendment'].every(function(ft){ return files.some(function(f){ return f.file_type===ft; }); });
+    if(!allRequiredDone){
+      h += '<div class="division-bulk-drop" id="divisionBulkDrop">';
+      h += '<div class="division-bulk-drop-inner">';
+      h += '<div style="font-size:32px;margin-bottom:8px"><span class="tossface">📂</span></div>';
+      h += '<div style="font-size:14px;font-weight:600;margin-bottom:4px">PDF 파일을 여기에 드래그하세요</div>';
+      h += '<div style="font-size:12px;color:var(--color-text-tertiary)">출원서 · 통지서 · 의견서 · 보정서를 한번에 넣으면 자동 분류합니다</div>';
+      h += '<div style="margin-top:12px"><label class="btn btn-outline btn-sm" style="cursor:pointer"><span class="tossface">📄</span> 또는 파일 선택';
+      h += '<input type="file" accept=".pdf" multiple style="display:none" onchange="Division.handleBulkFiles(event)" />';
+      h += '</label></div>';
+      h += '</div></div>';
+    }
+
+    // 분류된 파일 목록
+    h += '<div class="card" style="padding:16px;' + (allRequiredDone ? '' : 'margin-top:12px') + '">';
+    h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📁</span> 파일 분류 결과</div>';
+
+    ['application','notification','opinion','amendment','prior_art','decision'].forEach(function(ft){
       var info = Division.FILE_TYPES[ft];
       var uploaded = files.find(function(f){ return f.file_type === ft; });
+      var isRequired = info.required;
+
       if(uploaded){
         h += '<div class="division-file-row-uploaded">';
         h += '<span class="division-file-icon">' + info.icon + '</span>';
-        h += '<div class="division-file-info"><div class="division-file-label">' + info.label + '</div>';
+        h += '<div class="division-file-info"><div class="division-file-label">' + info.label + (isRequired?' <span style="color:var(--color-error);font-size:10px">필수</span>':'') + '</div>';
         h += '<div class="division-file-name">' + escapeHtml(uploaded.file_name || '') + '</div></div>';
-        h += '<span class="division-file-check">✅</span>';
+        // 유형 변경 드롭다운
+        h += '<select class="division-role-select" onchange="Division.reclassifyFile(\'' + uploaded.id + '\',this.value)" style="font-size:11px">';
+        ['application','notification','opinion','amendment','prior_art','decision'].forEach(function(opt){
+          h += '<option value="' + opt + '"' + (opt===ft?' selected':'') + '>' + Division.FILE_TYPES[opt].label + '</option>';
+        });
+        h += '</select>';
         h += '<button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + uploaded.id + '\')" style="font-size:10px;color:var(--color-error);padding:4px 8px">✕</button>';
         h += '</div>';
-      } else {
-        h += '<div class="division-drop-zone" id="dropZone_' + ft + '" data-file-type="' + ft + '"';
-        h += ' ondragover="Division.handleDragOver(event)" ondragleave="Division.handleDragLeave(event)" ondrop="Division.handleDrop(event,\'' + ft + '\')">';
-        h += '<span class="division-file-icon">' + info.icon + '</span>';
-        h += '<span class="division-drop-label">' + info.label + '</span>';
-        h += '<span class="division-drop-hint">PDF를 여기에 드래그하거나 클릭</span>';
-        h += '<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'' + ft + '\')" />';
+      } else if(isRequired) {
+        h += '<div class="division-file-row-missing">';
+        h += '<span class="division-file-icon" style="opacity:0.4">' + info.icon + '</span>';
+        h += '<span class="division-file-label" style="color:var(--color-text-tertiary)">' + info.label + ' <span style="color:var(--color-error);font-size:10px">필수</span></span>';
+        h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="tossface">📄</span> 선택';
+        h += '<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'' + ft + '\')" /></label>';
         h += '</div>';
       }
     });
     h += '</div>';
 
+    // 분류 중 상태
+    h += '<div id="divisionClassifyStatus" style="margin-top:8px"></div>';
+
   } else {
-    // ── 모드 B: 출원서 + 최종 등록 청구항 직접 입력 ──
+    // ── 모드 B: 출원서 + 직접 입력 ──
     h += '<div class="card" style="padding:16px">';
     h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tossface">📄</span> 특허출원서</div>';
-    h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">명세서 원문이 포함된 출원서 PDF를 업로드하세요.</div>';
-
+    h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">명세서 원문이 포함된 출원서 PDF</div>';
     var appFile = files.find(function(f){ return f.file_type === 'application'; });
     if(appFile){
-      h += '<div class="division-file-row-uploaded">';
-      h += '<span class="division-file-icon">📄</span>';
-      h += '<div class="division-file-info"><div class="division-file-label">특허출원서</div>';
-      h += '<div class="division-file-name">' + escapeHtml(appFile.file_name || '') + '</div></div>';
+      h += '<div class="division-file-row-uploaded"><span class="division-file-icon">📄</span>';
+      h += '<div class="division-file-info"><div class="division-file-label">특허출원서</div><div class="division-file-name">' + escapeHtml(appFile.file_name||'') + '</div></div>';
       h += '<span class="division-file-check">✅</span>';
-      h += '<button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + appFile.id + '\')" style="font-size:10px;color:var(--color-error);padding:4px 8px">✕</button>';
-      h += '</div>';
+      h += '<button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + appFile.id + '\')" style="font-size:10px;color:var(--color-error);padding:4px 8px">✕</button></div>';
     } else {
-      h += '<div class="division-drop-zone" id="dropZone_application" data-file-type="application"';
-      h += ' ondragover="Division.handleDragOver(event)" ondragleave="Division.handleDragLeave(event)" ondrop="Division.handleDrop(event,\'application\')">';
-      h += '<span class="division-file-icon">📄</span>';
-      h += '<span class="division-drop-label">특허출원서</span>';
-      h += '<span class="division-drop-hint">PDF를 여기에 드래그하거나 클릭</span>';
-      h += '<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'application\')" />';
-      h += '</div>';
+      h += '<div class="division-bulk-drop" id="divisionBulkDrop" style="padding:20px">';
+      h += '<div class="division-bulk-drop-inner"><span class="tossface" style="font-size:24px">📄</span> <span style="font-size:13px">출원서 PDF 드래그 또는 </span>';
+      h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px;margin-left:8px">선택<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'application\')" /></label>';
+      h += '</div></div>';
     }
     h += '</div>';
 
-    // 최종 등록 청구항 텍스트 입력
     h += '<div class="card" style="padding:16px;margin-top:12px">';
     h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tossface">✏️</span> 최종 등록 청구항</div>';
-    h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">등록결정 시 확정된 청구항 전문을 붙여넣으세요. (보정서가 있으면 보정 후 최종본)</div>';
-    h += '<textarea class="textarea-field" id="divisionDirectClaims" rows="12" placeholder="【청구항 1】\n생두의 수분 함량을 기준으로 설정된 제1 온도 구간에서의...\n\n【청구항 2】\n제1항에 있어서,\n..." style="font-size:13px;line-height:1.7">' + escapeHtml(p.direct_claims_text || '') + '</textarea>';
+    h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">등록결정 시 확정된 청구항 전문을 붙여넣으세요.</div>';
+    h += '<textarea class="textarea-field" id="divisionDirectClaims" rows="12" placeholder="【청구항 1】\n생두의 수분 함량을...\n\n【청구항 2】\n제1항에 있어서,\n..." style="font-size:13px;line-height:1.7">' + escapeHtml(p.direct_claims_text || '') + '</textarea>';
     h += '<button class="btn btn-outline btn-sm" onclick="Division.saveDirectClaims()" style="margin-top:8px"><span class="tossface">💾</span> 저장</button>';
     h += '</div>';
   }
@@ -447,57 +462,51 @@ Division.renderUpload = function(left, right, p){
   // 선택 파일 (공통)
   h += '<div class="card" style="padding:16px;margin-top:12px">';
   h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📎</span> 선택 파일</div>';
-  h += '<label class="checkbox-label" style="margin-bottom:8px"><input type="checkbox" ' + (p.include_prior_art ? 'checked' : '') + ' onchange="Division.togglePriorArt(this.checked)" /><span>인용발명 대비 분석 포함</span></label>';
+  h += '<label class="checkbox-label" style="margin-bottom:8px"><input type="checkbox" ' + (p.include_prior_art?'checked':'') + ' onchange="Division.togglePriorArt(this.checked)" /><span>인용발명 대비 분석 포함</span></label>';
   if(p.include_prior_art){
-    var priorFile = files.find(function(f){ return f.file_type === 'prior_art'; });
+    var priorFile = files.find(function(f){ return f.file_type==='prior_art'; });
     h += '<div class="division-file-row" style="margin-left:20px"><span class="division-file-icon">📚</span><span class="division-file-label">인용발명 PDF</span>';
     if(priorFile){ h += '<span class="division-file-status uploaded">✅</span><button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + priorFile.id + '\')" style="font-size:10px;color:var(--color-error)">삭제</button>'; }
     else { h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="tossface">📄</span> 선택<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'prior_art\')" /></label>'; }
     h += '</div>';
   }
-  var decFile = files.find(function(f){ return f.file_type === 'decision'; });
-  h += '<div class="division-file-row"><span class="division-file-icon">🏆</span><span class="division-file-label">등록결정서</span>';
-  if(decFile){ h += '<span class="division-file-status uploaded">✅</span><button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + decFile.id + '\')" style="font-size:10px;color:var(--color-error)">삭제</button>'; }
-  else { h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="tossface">📄</span> 선택<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'decision\')" /></label>'; }
-  h += '</div></div>';
+  h += '</div>';
   left.innerHTML = h;
 
-  // 드래그존 클릭 이벤트 바인딩
+  // 통합 드롭존 이벤트 바인딩
   setTimeout(function(){
-    document.querySelectorAll('.division-drop-zone').forEach(function(zone){
-      zone.addEventListener('click', function(){ zone.querySelector('input[type=file]').click(); });
-    });
+    var bulkZone = document.getElementById('divisionBulkDrop');
+    if(bulkZone){
+      bulkZone.addEventListener('dragover', function(e){ e.preventDefault(); e.stopPropagation(); bulkZone.classList.add('dragover'); });
+      bulkZone.addEventListener('dragleave', function(e){ e.preventDefault(); e.stopPropagation(); bulkZone.classList.remove('dragover'); });
+      bulkZone.addEventListener('drop', function(e){ e.preventDefault(); e.stopPropagation(); bulkZone.classList.remove('dragover'); Division.handleBulkDrop(e); });
+    }
   }, 0);
 
-  // === 오른쪽: 안내 + 파싱 시작 ===
+  // === 오른쪽: 안내 + 파싱 ===
   var canParse = false;
-  if(inputMode === 'full'){
-    var requiredTypes = ['application','notification','opinion','amendment'];
-    canParse = requiredTypes.every(function(ft){ return files.some(function(f){ return f.file_type === ft; }); });
+  if(inputMode==='full'){
+    canParse = ['application','notification','opinion','amendment'].every(function(ft){ return files.some(function(f){ return f.file_type===ft; }); });
   } else {
-    var hasApp = files.some(function(f){ return f.file_type === 'application'; });
-    var hasText = !!(p.direct_claims_text && p.direct_claims_text.trim());
-    canParse = hasApp && hasText;
+    canParse = files.some(function(f){ return f.file_type==='application'; }) && !!(p.direct_claims_text && p.direct_claims_text.trim());
   }
 
   var rh = '<div class="card" style="padding:20px">';
   rh += '<div style="font-size:16px;font-weight:700;margin-bottom:12px"><span class="tossface">🔀</span> 분할출원 청구항 자동 작성</div>';
   rh += '<div style="font-size:13px;line-height:1.7;color:var(--color-text-secondary);margin-bottom:16px">';
-  if(inputMode === 'full'){
-    rh += '원출원 문서를 업로드하면, AI가 청구항을 파싱·분석하고<br>분할출원에 적합한 새 청구항을 자동으로 조립합니다.';
-  } else {
-    rh += '출원서와 최종 등록 청구항을 입력하면,<br>AI가 분할출원 청구항을 자동으로 구성합니다.<br><span style="font-size:11px;color:var(--color-text-tertiary)">※ 통지서 없이 등록결정된 경우 등에 사용</span>';
-  }
+  rh += inputMode==='full' ? '원출원 문서를 업로드하면, AI가 자동 분류·파싱·분석하고<br>분할출원에 적합한 새 청구항을 조립합니다.'
+    : '출원서와 최종 등록 청구항을 입력하면,<br>AI가 분할출원 청구항을 구성합니다.';
   rh += '</div>';
-
   rh += '<div class="division-info-box"><div style="font-weight:600;margin-bottom:8px">📋 처리 단계</div>';
-  rh += '<div style="font-size:12px;line-height:1.8;color:var(--color-text-secondary)">① 파싱 — 출원서·청구항 구조화<br>② 분석 — 미활용 구성 탐색 + 리스크 스크리닝<br>③ 조립 — 독립항/종속항 자동 구성<br>④ 검증 — 기재불비 검증 + 형식 검증<br>⑤ 확정 — 발명 명칭 + 최종 출력</div></div>';
+  rh += '<div style="font-size:12px;line-height:1.8;color:var(--color-text-secondary)">① 파싱 — 출원서·청구항 구조화<br>② 분석 — 미활용 구성 탐색 + 리스크 스크리닝<br>③ 조립 — 독립항/종속항 자동 구성<br>④ 검증 — 기재불비 + 형식 검증<br>⑤ 확정 — 발명 명칭 + 최종 출력</div></div>';
   rh += '<div id="divisionProgress" style="margin-top:12px"></div>';
-
   if(canParse){
     rh += '<button class="btn btn-primary btn-full" id="btnDivisionParse" onclick="Division.runParse()" style="margin-top:16px;padding:14px;font-size:14px"><span class="tossface">🔍</span> 파싱 시작</button>';
   } else {
-    var msg = inputMode==='full' ? '⚠️ 필수 파일 4종을 모두 업로드하면 파싱을 시작할 수 있습니다.' : '⚠️ 출원서 업로드 + 최종 등록 청구항 입력 후 파싱을 시작할 수 있습니다.';
+    var uploadedTypes = files.map(function(f){ return f.file_type; });
+    var missing = ['application','notification','opinion','amendment'].filter(function(ft){ return uploadedTypes.indexOf(ft)<0; });
+    var missingLabels = missing.map(function(ft){ return Division.FILE_TYPES[ft].label; }).join(', ');
+    var msg = inputMode==='full' ? '⚠️ 미업로드: ' + (missingLabels||'없음') : '⚠️ 출원서 업로드 + 청구항 입력 필요';
     rh += '<div style="margin-top:16px;padding:12px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm);text-align:center;font-size:13px;color:var(--color-text-tertiary)">' + msg + '</div>';
   }
   rh += '</div>';
@@ -525,27 +534,142 @@ Division.saveDirectClaims = async function(){
 };
 
 // ═══════════════════════════════════════════
-// 7. 파일 업로드/삭제 (드래그앤드롭 + 클릭)
+// 7. 자동 분류 + 파일 업로드
 // ═══════════════════════════════════════════
-Division.handleDragOver = function(e){
-  e.preventDefault(); e.stopPropagation();
-  e.currentTarget.classList.add('dragover');
+
+// PDF 텍스트 패턴 기반 자동 분류
+Division.CLASSIFY_RULES = [
+  { type:'application',  patterns:[/【발명의\s*명칭】/, /【특허청구범위】/, /【발명의\s*상세한\s*설명】/, /【요약서】/, /【도면의\s*간단한\s*설명】/], minMatch:2 },
+  { type:'notification', patterns:[/의견제출통지서/, /거절이유통지서/, /특허법\s*제63조/, /거절이유를?\s*아래와?\s*같이/, /진보성이?\s*부정/], minMatch:1 },
+  { type:'amendment',    patterns:[/【보정대상항목】/, /보정서/, /【보정방법】/, /【보정내용】/], minMatch:1 },
+  { type:'opinion',      patterns:[/【의견내용】/, /의견서\s*$/, /위\s*거절이유에?\s*대하여/, /아래와?\s*같이\s*의견/], minMatch:1 },
+  { type:'decision',     patterns:[/등록결정/, /특허결정/, /설정등록/, /등록사정/], minMatch:1 },
+  { type:'prior_art',    patterns:[/인용발명/, /선행기술/, /비교대상발명/], minMatch:1 }
+];
+
+Division._classifyPdf = function(text){
+  if(!text || text.length < 50) return 'unknown';
+  var snippet = text.substring(0, 5000); // 첫 5000자로 판별
+  var scores = {};
+  Division.CLASSIFY_RULES.forEach(function(rule){
+    var matchCount = 0;
+    rule.patterns.forEach(function(pat){ if(pat.test(snippet)) matchCount++; });
+    if(matchCount >= rule.minMatch) scores[rule.type] = matchCount;
+  });
+  // 가장 높은 매치 반환
+  var best = null, bestScore = 0;
+  for(var k in scores){ if(scores[k] > bestScore){ bestScore = scores[k]; best = k; } }
+  return best || 'unknown';
 };
-Division.handleDragLeave = function(e){
-  e.preventDefault(); e.stopPropagation();
-  e.currentTarget.classList.remove('dragover');
+
+// 여러 파일 한번에 드롭
+Division.handleBulkDrop = function(e){
+  var fileList = e.dataTransfer ? e.dataTransfer.files : [];
+  if(!fileList || !fileList.length) return;
+  var pdfFiles = [];
+  for(var i = 0; i < fileList.length; i++){
+    if(fileList[i].name.toLowerCase().endsWith('.pdf')) pdfFiles.push(fileList[i]);
+  }
+  if(!pdfFiles.length){ showToast('PDF 파일만 업로드 가능합니다','error'); return; }
+  Division._classifyAndUpload(pdfFiles);
 };
-Division.handleDrop = function(e, fileType){
-  e.preventDefault(); e.stopPropagation();
-  e.currentTarget.classList.remove('dragover');
-  var file = e.dataTransfer.files[0];
-  if(!file) return;
-  if(!file.name.toLowerCase().endsWith('.pdf')){ showToast('PDF 파일만 업로드 가능합니다', 'error'); return; }
+
+// input[multiple]에서 선택
+Division.handleBulkFiles = function(e){
+  var fileList = e.target.files;
+  if(!fileList || !fileList.length) return;
+  var pdfFiles = [];
+  for(var i = 0; i < fileList.length; i++){
+    if(fileList[i].name.toLowerCase().endsWith('.pdf')) pdfFiles.push(fileList[i]);
+  }
+  if(!pdfFiles.length){ showToast('PDF 파일만 업로드 가능합니다','error'); return; }
+  Division._classifyAndUpload(pdfFiles);
+};
+
+// 핵심: 분류 → 업로드 → 화면 갱신
+Division._classifyAndUpload = async function(pdfFiles){
+  var p = Division.state.current; if(!p) return;
+  var statusEl = document.getElementById('divisionClassifyStatus');
+  if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tossface">🔍</span> ' + pdfFiles.length + '개 파일 분류 중...</div>';
+
+  var results = []; // {file, type, confidence}
+
+  for(var i = 0; i < pdfFiles.length; i++){
+    var file = pdfFiles[i];
+    if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tossface">🔍</span> ' + (i+1) + '/' + pdfFiles.length + ' 분류 중: ' + escapeHtml(file.name) + '</div>';
+
+    try {
+      // PDF 텍스트 추출 (첫 몇 페이지)
+      var buf = await file.arrayBuffer();
+      var text = await App.extractPdfText(buf);
+      var classified = Division._classifyPdf(text);
+
+      // 이미 해당 유형이 있으면 다른 유형으로 대체 시도
+      var existingTypes = Division.state.files.map(function(f){ return f.file_type; });
+      var alreadyQueued = results.map(function(r){ return r.type; });
+      var taken = existingTypes.concat(alreadyQueued);
+
+      if(classified !== 'unknown' && taken.indexOf(classified) >= 0){
+        // 해당 유형이 이미 점유 → 다른 빈 유형 찾기
+        var fallbackOrder = ['application','notification','opinion','amendment','prior_art','decision'];
+        var found = false;
+        for(var j = 0; j < fallbackOrder.length; j++){
+          if(taken.indexOf(fallbackOrder[j]) < 0){ classified = fallbackOrder[j]; found = true; break; }
+        }
+        if(!found) classified = 'prior_art'; // 모두 차면 인용발명으로
+      }
+
+      if(classified === 'unknown'){
+        // 미분류 → 빈 필수 슬롯 중 첫 번째
+        var emptyRequired = ['application','notification','opinion','amendment'].filter(function(ft){ return taken.indexOf(ft) < 0; });
+        classified = emptyRequired[0] || 'prior_art';
+      }
+
+      results.push({ file:file, type:classified });
+      console.log('[Division] 자동 분류:', file.name, '→', classified);
+    } catch(e){
+      console.warn('[Division] 분류 실패:', file.name, e);
+      results.push({ file:file, type:'prior_art' }); // 실패하면 인용발명으로
+    }
+  }
+
+  // 분류 결과 요약 토스트
+  var summary = results.map(function(r){ return Division.FILE_TYPES[r.type].label; }).join(', ');
+  showToast('분류 완료: ' + summary);
+
+  // 순차 업로드
+  for(var k = 0; k < results.length; k++){
+    var r = results[k];
+    if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tossface">📤</span> ' + (k+1) + '/' + results.length + ' 업로드 중: ' + escapeHtml(r.file.name) + '</div>';
+    await Division._doUpload(r.file, r.type);
+  }
+
+  if(statusEl) statusEl.innerHTML = '';
+  Division.renderDetail();
+};
+
+// 파일 유형 재분류 (드롭다운 변경 시)
+Division.reclassifyFile = async function(fileId, newType){
+  try {
+    await sb.from('division_files').update({file_type: newType}).eq('id', fileId);
+    var file = Division.state.files.find(function(f){ return f.id === fileId; });
+    if(file) file.file_type = newType;
+    showToast(Division.FILE_TYPES[newType].label + '로 변경됨');
+    Division.renderDetail();
+  } catch(e){ showToast('변경 실패','error'); }
+};
+
+// 개별 파일 업로드 (기존 호환)
+Division.handleDragOver = function(e){ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('dragover'); };
+Division.handleDragLeave = function(e){ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('dragover'); };
+Division.handleDrop = function(e, fileType){ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('dragover');
+  var file = e.dataTransfer.files[0]; if(!file) return;
+  if(!file.name.toLowerCase().endsWith('.pdf')){ showToast('PDF 파일만','error'); return; }
   Division._doUpload(file, fileType);
 };
 Division.uploadFile = async function(event, fileType){
   var file = event.target.files[0]; if(!file) return;
-  if(!file.name.toLowerCase().endsWith('.pdf')){ showToast('PDF 파일만 업로드 가능합니다', 'error'); return; }
+  if(!file.name.toLowerCase().endsWith('.pdf')){ showToast('PDF 파일만','error'); return; }
   Division._doUpload(file, fileType);
 };
 

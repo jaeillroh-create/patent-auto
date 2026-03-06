@@ -62,12 +62,22 @@
 .division-file-row-uploaded .division-file-name { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .division-file-row-uploaded .division-file-check { color: var(--color-success); font-size: 14px; flex-shrink: 0; }
 
-/* 드래그앤드롭 영역 */
+/* 드래그앤드롭 영역 (개별) */
 .division-drop-zone { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 2px dashed var(--color-border); border-radius: var(--radius-md); margin-bottom: 8px; cursor: pointer; background: var(--color-bg-tertiary); transition: all 0.2s; }
 .division-drop-zone:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
 .division-drop-zone.dragover { border-color: var(--color-primary); background: var(--color-primary-light); box-shadow: 0 0 0 3px rgba(49,130,246,0.15); transform: scale(1.01); }
 .division-drop-label { font-size: 13px; font-weight: 600; flex-shrink: 0; }
 .division-drop-hint { font-size: 11px; color: var(--color-text-tertiary); flex: 1; text-align: right; }
+
+/* 통합 드롭존 (여러 파일 한번에) */
+.division-bulk-drop { border: 2px dashed var(--color-border); border-radius: var(--radius-md); cursor: pointer; background: var(--color-bg-tertiary); transition: all 0.2s; }
+.division-bulk-drop:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
+.division-bulk-drop.dragover { border-color: var(--color-primary); background: #dbeafe; box-shadow: 0 0 0 4px rgba(49,130,246,0.15); transform: scale(1.01); }
+.division-bulk-drop-inner { padding: 32px 20px; text-align: center; pointer-events: none; }
+.division-bulk-drop-inner label { pointer-events: auto; }
+
+/* 미업로드 파일 행 */
+.division-file-row-missing { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px dashed var(--color-border); border-radius: var(--radius-sm); margin-bottom: 8px; background: var(--color-bg-tertiary); }
 
 /* 입력 모드 토글 */
 .division-mode-toggle { display: flex; gap: 0; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 12px; }
