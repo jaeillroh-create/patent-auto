@@ -395,7 +395,8 @@ Opinion.renderDetail = function(){
   document.getElementById('opinionDetailTitle').textContent=p.title||'무제';
   document.getElementById('opinionDetailAppNo').textContent=p.application_no||'-';
   document.getElementById('opinionDetailType').innerHTML='<span class="opinion-type-badge '+t.css+'">'+t.icon+' '+t.code+'. '+t.label+'</span>';
-  document.getElementById('opinionDetailStatus').innerHTML='<span class="opinion-status-badge '+s.css+'">'+s.label+'</span>';
+  document.getElementById('opinionDetailStatus').innerHTML='<span class="opinion-status-badge '+s.css+'">'+s.label+'</span> <span id="opinionUsage" style="font-size:11px;color:var(--color-text-tertiary);margin-left:8px"></span>';
+  Opinion.updateUsageDisplay();
   Opinion.renderPipeline(p);
   Opinion.renderMain(p);
 };
@@ -412,7 +413,7 @@ Opinion.STEP_TO_VIEW_STATUS = function(stepKey, type) {
     gate1: type==='description_deficiency'?'correction_confirmed':type==='partial_rejection'?'merge_confirmed':'strategy_confirmed',
     draft: type==='description_deficiency'?'corrections_drafted':type==='partial_rejection'?'merge_drafted':'claims_drafted',
     validate: type==='description_deficiency'?'correction_validated':type==='partial_rejection'?'merge_validated':'validated',
-    gate2:'claims_confirmed', opinion:'opinion_drafted', gate3:'approved', output:'completed'
+    gate2:'claims_confirmed', opinion:'opinion_drafted', gate3:'opinion_drafted', output:'completed'
   };
   return map[stepKey] || 'created';
 };
@@ -598,11 +599,15 @@ Opinion.renderUpload = function(L,R){
 
     +'</div>' // card 닫기
 
-    +'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">ℹ️</span> 필수 파일</div></div>'
+    +'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">ℹ️</span> 필수 파일 (역할 지정 필수)</div></div>'
     +'<div style="font-size:12px;line-height:1.7;color:var(--color-text-secondary)">'
-    +'<div style="margin-bottom:4px"><span class="tossface">📋</span> <b>의견제출통지서</b> (필수)</div>'
-    +'<div style="margin-bottom:4px"><span class="tossface">📄</span> <b>인용발명 공보</b> (유형 A/C 필수)</div>'
-    +'<div><span class="tossface">📑</span> <b>출원 명세서</b> (필수)</div></div></div>'
+    +'<div style="margin-bottom:6px;padding:6px 10px;border-left:3px solid #ef4444;background:#fff5f5;border-radius:0 6px 6px 0"><b>📋 의견제출통지서</b> — 심사관이 보낸 통지서 (필수)</div>'
+    +'<div style="margin-bottom:6px;padding:6px 10px;border-left:3px solid #3182f6;background:#eff6ff;border-radius:0 6px 6px 0"><b>📑 출원 명세서</b> — 우리 특허 (본원발명) (필수)</div>'
+    +'<div style="margin-bottom:6px;padding:6px 10px;border-left:3px solid #f59e0b;background:#fffbeb;border-radius:0 6px 6px 0"><b>📄 인용발명</b> — 심사관이 인용한 선행기술 (다른 특허)</div>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--color-error);margin-top:8px;padding:8px;background:var(--color-error-light);border-radius:6px;line-height:1.5">'
+    +'⚠️ <b>본원 명세서와 인용발명을 반드시 올바르게 지정해 주세요.</b> 잘못 지정하면 분석·의견서 전체가 틀어집니다.'
+    +'</div></div>'
     +'<div id="opinionParseProgress" style="margin-top:8px"></div>'
     +'<button class="btn btn-primary btn-full" id="btnOpinionParse" onclick="Opinion.startParsing()" disabled><span class="tossface">🔍</span> 문서 파싱 시작</button>';
 
@@ -628,21 +633,66 @@ Opinion.updateParseButton = function() {
 
 Opinion.handleFiles=function(e){Array.from(e.target.files||[]).forEach(function(f){Opinion.addFile(f);});e.target.value='';};
 Opinion.handleDrop=function(e){Array.from(e.dataTransfer.files||[]).forEach(function(f){Opinion.addFile(f);});};
+// ═══ 토큰 사용량 추적 ═══
+Opinion.usage = { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
+
+// callForJSON 래퍼에 토큰 추적 추가
+Opinion._origCallForJSON = Opinion.callForJSON;
+Opinion.callForJSON = async function(prompt, schemaHint) {
+  var result = await Opinion._origCallForJSON(prompt, schemaHint);
+  Opinion.usage.calls++;
+  Opinion.updateUsageDisplay();
+  return result;
+};
+
+Opinion.updateUsageDisplay = function() {
+  var el = document.getElementById('opinionUsage');
+  if (!el) return;
+  el.innerHTML = '<span class="tossface">🔢</span> API: ' + Opinion.usage.calls + '회';
+};
+
+// ═══ 파일 역할 상수 ═══
+Opinion.FILE_ROLES = {
+  notification: { label: '📋 의견제출통지서', color: '#ef4444' },
+  specification: { label: '📑 출원 명세서', color: '#3182f6' },
+  cited_ref: { label: '📄 인용발명', color: '#f59e0b' },
+  other: { label: '📎 기타', color: '#6b7684' }
+};
+
 Opinion.addFile=function(f){
   var ext='.'+f.name.split('.').pop().toLowerCase();
   if(['.pdf','.docx','.doc','.hwp','.hwpx','.txt'].indexOf(ext)<0){showToast('지원하지 않는 형식: '+ext,'error');return;}
   if(Opinion.state.files.some(function(x){return x.name===f.name;})){return;}
+  // 파일명으로 역할 자동 추측
+  var role = 'other';
+  var n = f.name.toLowerCase();
+  if(n.includes('통지') || n.includes('notification') || n.includes('oa') || n.includes('의견제출')) role='notification';
+  else if(n.includes('명세') || n.includes('출원') || n.includes('spec') || n.includes('특허출원서')) role='specification';
+  else if(n.includes('인용') || n.includes('cited') || n.includes('ref') || n.includes('문헌')) role='cited_ref';
+  f._role = role;
   Opinion.state.files.push(f); Opinion.renderFiles();
   Opinion.updateParseButton();
 };
 Opinion.removeFile=function(i){Opinion.state.files.splice(i,1);Opinion.renderFiles();Opinion.updateParseButton();};
+Opinion.setFileRole=function(i,role){if(Opinion.state.files[i])Opinion.state.files[i]._role=role;Opinion.renderFiles();};
+
 Opinion.renderFiles=function(){
   var el=document.getElementById('opinionFileList'); if(!el)return;
   el.innerHTML=Opinion.state.files.map(function(f,i){
     var ext=f.name.split('.').pop().toUpperCase();
-    var icon=ext==='PDF'?'📕':ext==='DOCX'||ext==='DOC'?'📘':'📄';
     var sz=f.size<1048576?Math.round(f.size/1024)+'KB':(f.size/1048576).toFixed(1)+'MB';
-    return '<div class="opinion-file-item"><span class="tossface">'+icon+'</span><span class="file-name">'+escapeHtml(f.name)+'</span><span class="file-type">'+ext+' · '+sz+'</span><button class="file-remove" onclick="Opinion.removeFile('+i+')">✕</button></div>';
+    var role=f._role||'other';
+    var roleInfo=Opinion.FILE_ROLES[role]||Opinion.FILE_ROLES.other;
+    return '<div class="opinion-file-item" style="border-left:3px solid '+roleInfo.color+'">'
+      +'<span class="file-name">'+escapeHtml(f.name)+'</span>'
+      +'<select onchange="Opinion.setFileRole('+i+',this.value)" style="font-size:10px;padding:2px 4px;border:1px solid var(--color-border);border-radius:4px;background:#fff;color:var(--color-text-secondary)">'
+      +'<option value="notification"'+(role==='notification'?' selected':'')+'>📋 통지서</option>'
+      +'<option value="specification"'+(role==='specification'?' selected':'')+'>📑 명세서</option>'
+      +'<option value="cited_ref"'+(role==='cited_ref'?' selected':'')+'>📄 인용발명</option>'
+      +'<option value="other"'+(role==='other'?' selected':'')+'>📎 기타</option>'
+      +'</select>'
+      +'<span class="file-type">'+ext+' · '+sz+'</span>'
+      +'<button class="file-remove" onclick="Opinion.removeFile('+i+')">✕</button></div>';
   }).join('');
 };
 
@@ -684,39 +734,36 @@ Opinion.startParsing = async function(){
       }); } catch(dbErr) { /* skip duplicates */ }
     }
 
-    // 2. 텍스트 추출 + 품질 검사
+    // 2. 텍스트 추출 + 품질 검사 + 역할별 분리
+    var textByRole = { notification:'', specification:'', cited_ref:'', other:'' };
     var allText = '';
-    var fileResults = []; // 파일별 추출 결과 추적
+    var fileResults = [];
     var totalFiles = (Opinion.state.files||[]).length;
 
     for(var j=0;j<totalFiles;j++){
       var ff=Opinion.state.files[j];
       showProgress('opinionParseProgress', ff.name+' 추출 중...', j+1, totalFiles + (manualText?1:0));
       var fileText = await Opinion.extractFileText(ff);
-
-      // 품질 검사: 의미 있는 텍스트인지
       var cleanText = fileText.replace(/[\s\n\r]+/g,' ').trim();
-      var quality = 'good';
-      if(cleanText.length < 30) quality = 'empty';
-      else if(cleanText.length < 200) quality = 'low';
-      else if(/[\ufffd\u0000]/.test(cleanText) || cleanText.replace(/[^\uAC00-\uD7A3a-zA-Z0-9]/g,'').length < cleanText.length*0.3) quality = 'garbled';
-
-      fileResults.push({ name: ff.name, quality: quality, length: cleanText.length });
+      var quality = cleanText.length < 30 ? 'empty' : cleanText.length < 200 ? 'low' : 'good';
+      var role = ff._role || 'other';
+      fileResults.push({ name: ff.name, quality: quality, length: cleanText.length, role: role });
 
       if(quality !== 'empty') {
-        allText += '=== [' + ff.name + '] ===\n' + fileText + '\n\n';
+        var roleLabel = (Opinion.FILE_ROLES[role]||{}).label || role;
+        var section = '=== [' + roleLabel + ': ' + ff.name + '] ===\n' + fileText + '\n\n';
+        textByRole[role] += section;
+        allText += section;
       }
     }
 
-    // 수동 텍스트 추가
     if(manualText) {
       allText += '=== [수동 입력 텍스트] ===\n' + manualText + '\n\n';
-      fileResults.push({ name: '수동 입력', quality: 'good', length: manualText.length });
+      fileResults.push({ name: '수동 입력', quality: 'good', length: manualText.length, role: 'other' });
     }
 
-    // 전체 품질 확인
     var effectiveText = allText.replace(/===\s*\[.*?\]\s*===/g,'').trim();
-    var failedFiles = fileResults.filter(function(r){ return r.quality==='empty'||r.quality==='garbled'; });
+    var failedFiles = fileResults.filter(function(r){ return r.quality==='empty'; });
 
     if(effectiveText.length < 100) {
       // 전체 텍스트 부족 → 실패 처리 + 안내
@@ -742,8 +789,19 @@ Opinion.startParsing = async function(){
     // 3. LLM 파싱
     showProgress('opinionParseProgress', 'AI 분석 중...', totalFiles+(manualText?1:0), totalFiles+(manualText?1:0));
     var parsed = await Opinion.callForJSON(
-      Opinion.SYS_PROMPT+'\n\n다음 의견제출통지서 및 관련 문서의 텍스트를 분석하여 구조화해 주세요.\n\n추출할 항목:\n1. application_no: 출원번호\n2. applicant: 출원인\n3. invention_title: 발명의 명칭\n4. rejection_reasons: [{claim_nos:[N], article:"§29②", reason:"진보성 위반", cited_refs:["인용문헌1"]}]\n5. cited_references: [{ref_no:N, title:"...", publication_no:"..."}]\n6. claims: [{no:N, text:"..."}]\n7. comparison_table: [{element_no:N, applicant_feature:"...", cited_feature:"..."}] (있는 경우)\n\n---\n'+allText.slice(0,30000),
-      '{"application_no":"10-...","invention_title":"...","rejection_reasons":[...],"cited_references":[...],"claims":[...]}'
+      Opinion.SYS_PROMPT+'\n\n아래 문서들을 분석하여 구조화해 주세요.\n'
+      +'⚠️ 중요: 각 문서는 [📋 의견제출통지서], [📑 출원 명세서], [📄 인용발명] 으로 구분되어 있습니다.\n'
+      +'출원 명세서 = 본원발명(우리 특허). 인용발명 = 심사관이 인용한 선행기술(다른 특허). 이 둘을 절대 혼동하지 마세요.\n\n'
+      +'추출할 항목:\n'
+      +'1. application_no: 본원 출원번호\n'
+      +'2. applicant: 본원 출원인\n'
+      +'3. invention_title: 본원 발명의 명칭\n'
+      +'4. rejection_reasons: [{claim_nos:[N], article:"§29②", reason:"진보성 위반", cited_refs:["인용문헌1"]}]\n'
+      +'5. cited_references: [{ref_no:N, title:"인용발명 제목", publication_no:"공개번호"}]\n'
+      +'6. claims: 본원 청구항 [{no:N, text:"..."}]\n'
+      +'7. comparison_table: 심사관 대비표 [{element_no:N, applicant_feature:"본원 구성", cited_feature:"인용발명 구성"}]\n\n'
+      +'---\n'+allText.slice(0,30000),
+      '{"application_no":"10-...","applicant":"...","invention_title":"...","rejection_reasons":[...],"cited_references":[...],"claims":[...]}'
     );
     // 추출 품질 메타 저장
     parsed._file_results = fileResults;
@@ -920,7 +978,8 @@ Opinion.startAnalysis = async function(){
     }
     var prompts={
       inventive_step:'위 의견제출통지서와 명세서를 분석하여 구성요소별 차이점과 보정 전략을 도출해 주세요.\n\n'
-        +'구성요소별 분석: 심사관이 대비한 각 구성요소에 대해, 본원 명세서의 실제 내용과 인용발명의 실제 내용을 비교하여 구체적 차이점을 서술하세요. 추상적 placeholder([차이점] 등)는 절대 사용하지 마세요.\n\n'
+        +'⚠️ 본원 명세서(출원인 특허) ≠ 인용발명(심사관이 인용한 선행기술). 이 둘을 절대 혼동하지 마세요.\n'
+        +'구성요소별 분석: 심사관이 대비한 각 구성요소에 대해, 본원 명세서의 실제 내용과 인용발명의 실제 내용을 비교하여 구체적 차이점을 서술하세요. 추상적 placeholder 금지.\n\n'
         +'보정 전략: 각 전략에 대해 구체적으로 어떤 종속항을 병합하고 어떤 구성요소를 구체화할지, 그 근거와 위험도를 서술하세요.\n\n'
         +'JSON:\n{"elements":[\n  {"element_id":"E1","claim_element":"실제 청구항 구성요소 문언","cited_ref":"인용문헌 N","cited_disclosure":"인용발명에 개시된 실제 내용","difference":"본원과의 구체적 차이점","strength":"strong|medium|weak","non_obviousness_argument":"진보성 주장 근거"}\n],\n"strategies":[\n  {"id":"S1","name":"전략명 (예: 종속항3 병합 + 감정엔진 구체화)","rationale":"이 전략의 근거와 기대 효과를 2~3문장으로","target_elements":["E3","E5"],"merge_claims":[3],"scope_impact":"narrow|moderate|broad","risk":"low|medium|high"}\n],\n"cited_references":[\n  {"ref_no":1,"title":"인용문헌 제목","key_features":"핵심 기술 요약"}\n]}',
       description_deficiency:'위 의견제출통지서의 기재불비 지적사항을 분석하세요. 각 지적에 대해 실제 심사관 지적 내용과 명세서에서 대응 기재를 찾아 구체적 수정 방향을 제시하세요.\n\nJSON:\n[{"claim_no":N,"deficiency_type":"unclear|inconsistent|unsupported","examiner_comment":"심사관 지적 원문","spec_reference":"【0001】등 관련 단락","suggested_correction":"구체적 수정 문언 제안"}]',
@@ -1112,11 +1171,11 @@ Opinion.renderAnalysisUI = function(type, a, extracted) {
           +'<span style="font-size:11px;font-weight:600;padding:2px 10px;border-radius:12px;background:'+strengthColor+'15;color:'+strengthColor+'">차이 '+strengthLabel+'</span></div>';
 
         if (el.claim_element && el.claim_element !== elName)
-          h += '<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.6;margin-bottom:6px"><b>청구항:</b> '+escapeHtml(el.claim_element)+'</div>';
+          h += '<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.6;margin-bottom:6px;padding:6px 10px;border-left:3px solid var(--color-primary);background:#fafcff;border-radius:0 6px 6px 0"><b style="color:var(--color-primary)">청구항:</b> '+escapeHtml(el.claim_element)+'</div>';
         if (cited)
-          h += '<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.6;margin-bottom:6px"><b>인용발명:</b> '+escapeHtml(cited)+'</div>';
+          h += '<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.6;margin-bottom:6px;padding:6px 10px;border-left:3px solid var(--color-error);background:#fff5f5;border-radius:0 6px 6px 0"><b style="color:var(--color-error)">인용발명:</b> '+escapeHtml(cited)+'</div>';
         if (diff)
-          h += '<div style="font-size:12px;padding:8px 10px;background:var(--color-bg-tertiary);border-radius:6px;margin-bottom:6px"><b>차이점:</b> '+escapeHtml(diff)+'</div>';
+          h += '<div style="font-size:12px;padding:8px 10px;background:var(--color-success-light);border-radius:6px;margin-bottom:6px;border-left:3px solid var(--color-success)"><b style="color:#065f46">★ 차이점:</b> '+escapeHtml(diff)+'</div>';
         if (arg)
           h += '<div style="font-size:11px;color:var(--color-primary);line-height:1.5">💡 '+escapeHtml(arg)+'</div>';
         h += '</div>';
@@ -1349,7 +1408,7 @@ Opinion.renderValidation=function(L,R,status){
       return '<div class="opinion-val-item '+r+'" onclick="this.classList.toggle(\'expanded\')">'
         +'<div class="opinion-val-item-header">'
         +'<div class="el-no">'+(e.element_no||(i+1))+'</div>'
-        +'<div class="el-label">'+escapeHtml((e.element_text||e.detail||'항목 '+(i+1)).slice(0,80))+'</div>'
+        +'<div class="el-label" style="line-height:1.5">'+escapeHtml(e.element_text||e.detail||'항목 '+(i+1))+'</div>'
         +'<div class="el-result">'+(r==='pass'?'✅':r==='warn'?'⚠️':'❌')+' '+r.toUpperCase()+'</div>'
         +'</div>'
         +'<div class="opinion-val-item-body">'
@@ -1427,14 +1486,31 @@ Opinion.renderOpinion=function(L,R,status){
     +contamHtml
     +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(3)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate3Approve" onclick="Opinion.approveGate(3)"><span class="tossface">✅</span> 승인</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">의견서 작성 중...</div></div>');
   var secs=o.sections||[];
-  R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="tossface">📝</span> '+escapeHtml(o.title||'의견서')+'</span></div><div class="opinion-preview-body">'+(secs.length?secs.map(function(s){return '<div class="opinion-section"><div style="font-weight:600;margin-bottom:6px">'+escapeHtml(s.heading||'')+'</div><div style="white-space:pre-wrap;line-height:1.8">'+escapeHtml(s.content||'')+'</div></div>';}).join(''):'<p style="color:var(--color-text-tertiary);text-align:center;padding:40px">의견서 미생성</p>')+'</div></div>';
+  var opinionHtml = '';
+  if (secs.length) {
+    opinionHtml = secs.map(function(s) {
+      var content = escapeHtml(s.content || '');
+      // 핵심 용어 강조
+      content = content.replace(/(【\d+】)/g, '<span style="color:var(--color-primary);font-weight:600">$1</span>');
+      content = content.replace(/(청구항\s*(?:제?\s*)?\d+(?:\s*항)?)/g, '<span style="font-weight:600">$1</span>');
+      content = content.replace(/(인용발명\s*\d*|인용문헌\s*\d*)/g, '<span style="color:var(--color-error);font-weight:500">$1</span>');
+      content = content.replace(/(본원발명|본원)/g, '<span style="color:var(--color-primary);font-weight:500">$1</span>');
+      content = content.replace(/\n/g, '<br>');
+      return '<div class="opinion-section">'
+        + '<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--color-text-primary);border-bottom:1px solid var(--color-divider);padding-bottom:6px">' + escapeHtml(s.heading || '') + '</div>'
+        + '<div style="line-height:1.9;color:var(--color-text-secondary)">' + content + '</div></div>';
+    }).join('');
+  } else {
+    opinionHtml = '<p style="color:var(--color-text-tertiary);text-align:center;padding:40px">의견서 미생성</p>';
+  }
+  R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="tossface">📝</span> '+escapeHtml(o.title||'의견서')+'</span></div><div class="opinion-preview-body">'+opinionHtml+'</div></div>';
 };
 
 // ═══ Output + DOCX Download ═══
 Opinion.startOutput=async function(){var p=Opinion.state.current;if(!p)return;await Opinion.setStatus(p.id,'generating_docs');await Opinion.setStatus(p.id,'completed');Opinion.renderDetail();showToast('출력물 생성 완료');};
 
 Opinion.renderOutput=function(L,R,status){
-  var done=status==='completed';
+  var done=status==='completed' || status==='approved';  // approved도 완료로 취급 (generating_docs는 즉시 완료됨)
   var nav=Opinion.renderNavBar('output');
   L.innerHTML=nav+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📥</span> 출력물</div></div><div style="display:flex;flex-direction:column;gap:8px">'
     +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadDocx(\'opinion\')"'+(done?'':' disabled')+'><span class="tossface">📝</span> 의견서 (Word)</button>'
