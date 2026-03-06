@@ -372,15 +372,11 @@ Opinion.startParsing = async function(){
   Opinion.renderDetail();
 
   try{
-    // 1. 파일 메타 DB 저장 (Storage 업로드는 선택적 — 실패해도 진행)
+    // 1. 파일 메타 DB 저장
     for(var i=0;i<Opinion.state.files.length;i++){
       var f=Opinion.state.files[i];
-      try{
-        var fp='opinion/'+p.id+'/'+f.name;
-        await sb.storage.from('project-files').upload(fp,f,{upsert:true});
-      }catch(storageErr){ console.warn('[Opinion] Storage upload skipped:', storageErr.message); }
       try { await sb.from('opinion_project_files').insert({
-        project_id:p.id, file_name:f.name, file_path:'opinion/'+p.id+'/'+f.name, file_size:f.size
+        project_id:p.id, file_name:f.name, file_path:f.name, file_size:f.size
       }); } catch(dbErr) { console.warn('[Opinion] File DB insert skipped:', dbErr.message); }
     }
 
