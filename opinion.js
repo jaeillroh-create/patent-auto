@@ -552,9 +552,20 @@ Opinion.startAnalysis = async function(){
   await Opinion.setStatus(p.id,'analyzing'); Opinion.renderDetail();
   try{
     var{data:pd}=await sb.from('opinion_parsed_documents').select('parsed_data,raw_text').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).single();
-    var ctx=pd?(pd.raw_text||JSON.stringify(pd.parsed_data||{})).slice(0,12000):'';
-    var prompts={inventive_step:'구성요소별 차이 분석 + 보정 전략 2~3개. JSON: {"elements":[...],"strategies":[...],"cited_references":[...]}',description_deficiency:'기재불비 지적사항 분석. JSON: [{"claim_no":N,"deficiency_type":"...","examiner_comment":"...","suggested_correction":"..."}]',partial_rejection:'등록가능 청구항 식별 + 병합 제안. JSON: {"rejected_claims":[...],"allowable_claims":[...],"merge_suggestion":{...}}'};
-    var r=await App.callClaude(Opinion.SYS_PROMPT+'\n\n'+prompts[type]+'\n\n---\n'+ctx);
+    var ctx='';
+    if(pd) {
+      if(pd.parsed_data && pd.parsed_data.application_no) ctx+='[파싱 결과]\n'+JSON.stringify(pd.parsed_data,null,1).slice(0,5000)+'\n\n';
+      if(pd.raw_text) ctx+='[원문]\n'+pd.raw_text.slice(0,20000)+'\n\n';
+    }
+    var prompts={
+      inventive_step:'위 의견제출통지서와 명세서를 분석하여 구성요소별 차이점과 보정 전략을 도출해 주세요.\n\n'
+        +'구성요소별 분석: 심사관이 대비한 각 구성요소에 대해, 본원 명세서의 실제 내용과 인용발명의 실제 내용을 비교하여 구체적 차이점을 서술하세요. 추상적 placeholder([차이점] 등)는 절대 사용하지 마세요.\n\n'
+        +'보정 전략: 각 전략에 대해 구체적으로 어떤 종속항을 병합하고 어떤 구성요소를 구체화할지, 그 근거와 위험도를 서술하세요.\n\n'
+        +'JSON:\n{"elements":[\n  {"element_id":"E1","claim_element":"실제 청구항 구성요소 문언","cited_ref":"인용문헌 N","cited_disclosure":"인용발명에 개시된 실제 내용","difference":"본원과의 구체적 차이점","strength":"strong|medium|weak","non_obviousness_argument":"진보성 주장 근거"}\n],\n"strategies":[\n  {"id":"S1","name":"전략명 (예: 종속항3 병합 + 감정엔진 구체화)","rationale":"이 전략의 근거와 기대 효과를 2~3문장으로","target_elements":["E3","E5"],"merge_claims":[3],"scope_impact":"narrow|moderate|broad","risk":"low|medium|high"}\n],\n"cited_references":[\n  {"ref_no":1,"title":"인용문헌 제목","key_features":"핵심 기술 요약"}\n]}',
+      description_deficiency:'위 의견제출통지서의 기재불비 지적사항을 분석하세요. 각 지적에 대해 실제 심사관 지적 내용과 명세서에서 대응 기재를 찾아 구체적 수정 방향을 제시하세요.\n\nJSON:\n[{"claim_no":N,"deficiency_type":"unclear|inconsistent|unsupported","examiner_comment":"심사관 지적 원문","spec_reference":"【0001】등 관련 단락","suggested_correction":"구체적 수정 문언 제안"}]',
+      partial_rejection:'위 의견제출통지서에서 청구항별 거절 상태를 분석하고 등록가능 청구항을 식별하세요.\n\nJSON:\n{"rejected_claims":[{"claim_no":N,"reason":"진보성 위반 등 구체적 이유"}],"allowable_claims":[{"claim_no":N,"basis":"거절이유 미지적 등 근거"}],"merge_suggestion":{"target":1,"source":N,"rationale":"병합 이유와 기대 효과"}}'
+    };
+    var r=await App.callClaude(Opinion.SYS_PROMPT+'\n\n'+ctx+'\n'+prompts[type]);
     var ar=Opinion.parseJSON(r.text);
     await sb.from('opinion_issue_analyses').insert({project_id:p.id,analysis_type:type,result_data:ar});
     Opinion.state.analysis=ar; await Opinion.setStatus(p.id,next); Opinion.renderDetail(); showToast('분석 완료');
@@ -567,7 +578,20 @@ Opinion.renderAnalysis = function(L,R,status){
   var a=Opinion.state.analysis||{};
   var gLabel=type==='inventive_step'?'전략 결정':type==='description_deficiency'?'수정 방향 확인':'병합 대상 확정';
   L.innerHTML=Opinion.renderNavBar('gate1')+'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 1: '+gLabel+'</div><p style="font-size:13px;color:var(--color-text-secondary)">분석 결과를 검토하고 확정해 주세요.</p>'
-    +(type==='inventive_step'&&a.strategies?a.strategies.map(function(s,i){return '<label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid var(--color-border);border-radius:8px;margin-top:8px;cursor:pointer"><input type="radio" name="opinionStrategy" value="'+i+'" '+(i===0?'checked':'')+' style="margin-top:3px"/><div><div style="font-size:13px;font-weight:600">'+escapeHtml(s.name||'전략 '+(i+1))+'</div><div style="font-size:12px;color:var(--color-text-secondary);margin-top:3px">'+escapeHtml(s.rationale||'')+'</div></div></label>';}).join(''):'<p style="margin-top:12px;font-size:13px;color:var(--color-text-secondary)">오른쪽 분석 결과를 검토 후 확정해 주세요.</p>')
+    +(type==='inventive_step'&&a.strategies&&a.strategies.length?'<div style="margin-top:12px">'+a.strategies.map(function(s,i){
+      var riskColor=s.risk==='low'?'var(--color-success)':s.risk==='high'?'var(--color-error)':'var(--color-warning)';
+      return '<label style="display:flex;align-items:flex-start;gap:10px;padding:14px;border:2px solid var(--color-border);border-radius:10px;margin-bottom:8px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.borderColor=\'var(--color-primary)\'" onmouseout="this.style.borderColor=\'var(--color-border)\'">'
+        +'<input type="radio" name="opinionStrategy" value="'+i+'" '+(i===0?'checked':'')+' style="margin-top:4px" />'
+        +'<div style="flex:1">'
+        +'<div style="font-size:14px;font-weight:600;color:var(--color-primary)">'+escapeHtml(s.name||('전략 '+(i+1)))+'</div>'
+        +(s.rationale?'<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;line-height:1.6">'+escapeHtml(s.rationale)+'</div>':'')
+        +'<div style="display:flex;gap:10px;margin-top:8px;font-size:11px;flex-wrap:wrap">'
+        +(s.scope_impact?'<span style="padding:2px 8px;border-radius:10px;background:var(--color-bg-tertiary)">📐 범위: <b>'+escapeHtml(s.scope_impact)+'</b></span>':'')
+        +(s.risk?'<span style="padding:2px 8px;border-radius:10px;background:'+riskColor+'15;color:'+riskColor+'">⚠️ 위험: <b>'+escapeHtml(s.risk)+'</b></span>':'')
+        +(s.target_elements?'<span style="padding:2px 8px;border-radius:10px;background:var(--color-bg-tertiary)">🎯 대상: '+s.target_elements.join(', ')+'</span>':'')
+        +(s.merge_claims?'<span style="padding:2px 8px;border-radius:10px;background:var(--color-bg-tertiary)">🔗 병합: 청구항 '+s.merge_claims.join(', ')+'</span>':'')
+        +'</div></div></label>';
+    }).join('')+'</div>':'<p style="margin-top:12px;font-size:13px;color:var(--color-text-secondary)">오른쪽 분석 결과를 검토 후 확정해 주세요.</p>')
     +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.backToList()">나중에</button><button class="btn btn-primary" id="btnGate1Approve" onclick="Opinion.approveGate(1)"><span class="tossface">✅</span> 확정</button></div></div>';
   R.innerHTML = Opinion.renderAnalysisUI(type, a);
 };
@@ -695,38 +719,241 @@ Opinion.reviseGate = async function(gn){
   try{await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:gn,decision:'revise',revision_note:note,decided_by:currentUser.id});await Opinion.setStatus(p.id,rb);Opinion.renderDetail();showToast('수정 요청 접수');}catch(e){showToast('실패','error');}
 };
 
-// ═══ Draft / Validate / Opinion / Output ═══
-Opinion.startDraft=async function(){var p=Opinion.state.current;if(!p)return;var t=p.rejection_type;var ds=t==='description_deficiency'?'drafting_corrections':t==='partial_rejection'?'drafting_merge':'drafting_claims';var dd=t==='description_deficiency'?'corrections_drafted':t==='partial_rejection'?'merge_drafted':'claims_drafted';await Opinion.setStatus(p.id,ds);try{var r=await App.callClaude(Opinion.SYS_PROMPT+'\n\n보정 청구항 초안 생성 (유형: '+t+'). JSON으로.');var dr=Opinion.parseJSON(r.text);await sb.from('opinion_draft_claims').insert({project_id:p.id,draft_type:t,draft_data:dr,status:'draft'});await Opinion.setStatus(p.id,dd);await Opinion.startValidation();}catch(e){showToast('초안 실패: '+e.message,'error');}};
+// ═══ Context Builder — 이전 단계 데이터를 LLM에 전달 ═══
+Opinion.getContext = async function(sections) {
+  var p=Opinion.state.current; if(!p) return '';
+  var ctx='';
+  try {
+    if(sections.indexOf('parsed')>=0) {
+      var{data:pd}=await sb.from('opinion_parsed_documents').select('raw_text,parsed_data').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+      if(pd) {
+        if(pd.parsed_data && pd.parsed_data.application_no) ctx+='[파싱 결과]\n'+JSON.stringify(pd.parsed_data,null,1).slice(0,6000)+'\n\n';
+        if(pd.raw_text) ctx+='[원문 (발췌)]\n'+pd.raw_text.slice(0,8000)+'\n\n';
+      }
+    }
+    if(sections.indexOf('analysis')>=0 && Opinion.state.analysis) {
+      ctx+='[분석 결과]\n'+JSON.stringify(Opinion.state.analysis,null,1).slice(0,4000)+'\n\n';
+    }
+    if(sections.indexOf('draft')>=0) {
+      var{data:dr}=await sb.from('opinion_draft_claims').select('draft_data').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+      if(dr) ctx+='[보정 청구항 초안]\n'+JSON.stringify(dr.draft_data,null,1).slice(0,4000)+'\n\n';
+    }
+    if(sections.indexOf('validation')>=0 && Opinion.state.validation) {
+      ctx+='[검증 결과]\n'+JSON.stringify(Opinion.state.validation,null,1).slice(0,3000)+'\n\n';
+    }
+    if(sections.indexOf('ref')>=0 && Opinion.state.refText) {
+      ctx+='[참고 의견서 양식]\n'+Opinion.state.refText.slice(0,5000)+'\n\n';
+    }
+  } catch(e) { console.warn('[Opinion] getContext:', e); }
+  return ctx;
+};
 
-Opinion.startValidation=async function(){var p=Opinion.state.current;if(!p)return;var t=p.rejection_type;var vs=t==='description_deficiency'?'correction_validated':t==='partial_rejection'?'merge_validated':'validated';await Opinion.setStatus(p.id,'validating');try{var prompts={inventive_step:'4중 뒷받침 검증(용어존재/문맥일치/조합확인/출처확인)',description_deficiency:'보정 범위 검증(최초명세서범위내/지적사항반영)',partial_rejection:'병합 적법성 검증(병합정확성/인용관계정합성/신규사항무/범위일치)'};var r=await App.callClaude(Opinion.SYS_PROMPT+'\n\n'+prompts[t]+'\nJSON: {"summary":{"total":N,"pass":N,"warn":N,"fail":N},"results":[{"check_type":"...","result":"pass|warn|fail","detail":"..."}]}');var vr=Opinion.parseJSON(r.text);await sb.from('opinion_validation_results').insert({project_id:p.id,validation_type:t,result_data:vr,summary:vr.summary||{}});Opinion.state.validation=vr;await Opinion.setStatus(p.id,vs);Opinion.renderDetail();showToast('검증 완료');}catch(e){showToast('검증 실패: '+e.message,'error');}};
+// ═══ Draft (이전 분석 결과 + 파싱 컨텍스트 전달) ═══
+Opinion.startDraft=async function(){
+  var p=Opinion.state.current;if(!p)return;
+  var t=p.rejection_type;
+  var ds=t==='description_deficiency'?'drafting_corrections':t==='partial_rejection'?'drafting_merge':'drafting_claims';
+  var dd=t==='description_deficiency'?'corrections_drafted':t==='partial_rejection'?'merge_drafted':'claims_drafted';
+  await Opinion.setStatus(p.id,ds);
+  try{
+    var ctx = await Opinion.getContext(['parsed','analysis']);
+    var prompts = {
+      inventive_step: '위 분석 결과를 기반으로 보정 청구항 대안 2~3개를 생성해 주세요.\n각 대안별로 name(이름), claims_text(보정 청구항 전문), amendments(보정 사항 요약), scope(권리범위: broad/moderate/narrow), risk(위험도: low/medium/high)를 포함.\nJSON: {"alternatives":[{"id":"alt1","name":"...","claims_text":"...","amendments":"...","scope":"...","risk":"..."}]}',
+      description_deficiency: '위 분석 결과의 각 지적사항을 반영한 수정 청구항을 생성해 주세요.\nJSON: {"corrected_claims":[{"claim_no":N,"original":"원문","corrected":"수정문","changes":[{"type":"...","detail":"..."}]}]}',
+      partial_rejection: '위 분석 결과를 기반으로 등록가능 종속항을 독립항에 병합한 청구항을 생성해 주세요.\nJSON: {"merged_claim":{"claim_no":1,"text":"병합된 청구항 전문"},"remaining_claims":[{"old_no":N,"new_no":N,"text":"...","changed":bool}],"deleted_claims":[N]}'
+    };
+    var r=await App.callClaude(Opinion.SYS_PROMPT+'\n\n'+ctx+prompts[t]);
+    var dr=Opinion.parseJSON(r.text);
+    await sb.from('opinion_draft_claims').insert({project_id:p.id,draft_type:t,draft_data:dr,status:'draft'});
+    Opinion.state.draftResult=dr;
+    await Opinion.setStatus(p.id,dd);
+    await Opinion.startValidation();
+  }catch(e){showToast('초안 실패: '+e.message,'error');}
+};
+
+// ═══ Validate (파싱 원문 + 분석 + 초안 컨텍스트 전달) ═══
+Opinion.startValidation=async function(){
+  var p=Opinion.state.current;if(!p)return;
+  var t=p.rejection_type;
+  var vs=t==='description_deficiency'?'correction_validated':t==='partial_rejection'?'merge_validated':'validated';
+  await Opinion.setStatus(p.id,'validating');
+  try{
+    var ctx = await Opinion.getContext(['parsed','analysis','draft']);
+    var prompts = {
+      inventive_step: '위 보정 청구항 초안을 명세서 원문과 대조하여 4중 뒷받침 검증을 수행해 주세요.\n\n각 보정된 구성요소에 대해:\n1. term_existence: 보정 문언의 용어가 명세서에 존재하는지\n2. context_match: 해당 맥락에서 사용되는지\n3. combination_check: 조합이 명세서 단일 단락에 기재되는지\n4. cited_ref_origin: 인용발명 유래 용어가 아닌지\n\nJSON: {"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"보정된 문언","checks":[{"check_type":"term_existence","result":"pass|warn|fail","detail":"구체적 근거"}],"overall_result":"pass|warn|fail"}]}',
+      description_deficiency: '위 수정 청구항이 보정 범위(최초 명세서 범위) 내에 있는지 검증해 주세요.\n\nJSON: {"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"수정 사항","checks":[{"check_type":"within_scope|resolved","result":"pass|warn|fail","detail":"..."}],"overall_result":"pass|warn|fail"}]}',
+      partial_rejection: '위 병합 청구항의 적법성을 검증해 주세요.\n\nJSON: {"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"검증 항목","checks":[{"check_type":"merge_accuracy|dependency|new_matter|scope","result":"pass|warn|fail","detail":"..."}],"overall_result":"pass|warn|fail"}]}'
+    };
+    var r=await App.callClaude(Opinion.SYS_PROMPT+'\n\n'+ctx+prompts[t]);
+    var vr=Opinion.parseJSON(r.text);
+    await sb.from('opinion_validation_results').insert({project_id:p.id,validation_type:t,result_data:vr,summary:vr.summary||{}});
+    Opinion.state.validation=vr;
+    await Opinion.setStatus(p.id,vs);
+    Opinion.renderDetail();
+    showToast('검증 완료');
+  }catch(e){showToast('검증 실패: '+e.message,'error');}
+};
 
 Opinion.renderValidation=function(L,R,status){
   var p=Opinion.state.current,v=Opinion.state.validation||{},sm=v.summary||{},ready=['validated','correction_validated','merge_validated'].indexOf(status)>=0;
   var nav=Opinion.renderNavBar('gate2');
   L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 2: 청구항 확정</div><p style="font-size:13px;color:var(--color-text-secondary)">검증 보고서를 검토하고 확정해 주세요.</p><div style="margin-top:12px"><div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ PASS '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ WARN '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ FAIL '+(sm.fail||0)+'</div></div></div><div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(2)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate2Approve" onclick="Opinion.approveGate(2)"><span class="tossface">✅</span> 확정</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">검증 중...</div></div>');
   var items=v.elements||v.results||[];
-  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">🔬</span> 검증 보고서</div></div>'+(items.length?items.map(function(e,i){var r=e.overall_result||e.result||'pass';return '<div class="opinion-val-item '+r+'" onclick="this.classList.toggle(\'expanded\')"><div class="opinion-val-item-header"><div class="el-no">'+(e.element_no||(i+1))+'</div><div class="el-label">'+escapeHtml((e.element_text||e.detail||'항목 '+(i+1)).slice(0,60))+'</div><div class="el-result">'+(r==='pass'?'✅':r==='warn'?'⚠️':'❌')+' '+r.toUpperCase()+'</div></div><div class="opinion-val-item-body">'+escapeHtml(e.detail||JSON.stringify(e.checks||[],null,2))+'</div></div>';}).join(''):'<p style="padding:20px;text-align:center;color:var(--color-text-tertiary)">검증 결과 없음</p>')+'</div>';
+  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">🔬</span> 검증 보고서</div></div>'
+    +(items.length?items.map(function(e,i){
+      var r=e.overall_result||e.result||'pass';
+      var checks=e.checks||[];
+      return '<div class="opinion-val-item '+r+'" onclick="this.classList.toggle(\'expanded\')">'
+        +'<div class="opinion-val-item-header">'
+        +'<div class="el-no">'+(e.element_no||(i+1))+'</div>'
+        +'<div class="el-label">'+escapeHtml((e.element_text||e.detail||'항목 '+(i+1)).slice(0,80))+'</div>'
+        +'<div class="el-result">'+(r==='pass'?'✅':r==='warn'?'⚠️':'❌')+' '+r.toUpperCase()+'</div>'
+        +'</div>'
+        +'<div class="opinion-val-item-body">'
+        +(checks.length?checks.map(function(c){
+          var ci=c.result==='pass'?'✅':c.result==='warn'?'⚠️':'❌';
+          return '<div style="display:flex;gap:8px;padding:6px 0;align-items:flex-start">'
+            +'<span>'+ci+'</span>'
+            +'<div><b>'+escapeHtml(c.check_type||'')+'</b>: '+escapeHtml(c.detail||'')+'</div>'
+            +'</div>';
+        }).join(''):'<div>'+escapeHtml(e.detail||JSON.stringify(e,null,2))+'</div>')
+        +'</div></div>';
+    }).join(''):'<p style="padding:20px;text-align:center;color:var(--color-text-tertiary)">검증 결과 없음</p>')
+    +'</div>';
 };
 
-Opinion.startOpinionDraft=async function(){var p=Opinion.state.current;if(!p)return;await Opinion.setStatus(p.id,'drafting_opinion');try{var t=p.rejection_type;var tpl={inventive_step:'진보성 의견서: 서두→보정내용→적법성→구성요소별차이점논증→결합용이성반박→결론',description_deficiency:'기재불비 의견서: 서두→보정내용(수정전후대비)→적법성→지적사항별수정설명→결론',partial_rejection:'일부거절 의견서: 서두→보정내용(병합+삭제)→적법성→병합구성차이점논증→결론'};var r=await App.callClaude(Opinion.SYS_PROMPT+'\n\n'+tpl[t]+'\nJSON: {"title":"의견서","sections":[{"heading":"...","content":"..."}]}');var od=Opinion.parseJSON(r.text);await sb.from('opinion_opinion_drafts').insert({project_id:p.id,opinion_type:t,content:od,status:'draft'});Opinion.state.opinionDraft=od;await Opinion.setStatus(p.id,'opinion_drafted');Opinion.renderDetail();showToast('의견서 초안 생성 완료');}catch(e){showToast('의견서 생성 실패: '+e.message,'error');}};
+// ═══ Opinion Draft (전체 컨텍스트 + 참고 양식 전달) ═══
+Opinion.startOpinionDraft=async function(){
+  var p=Opinion.state.current;if(!p)return;
+  await Opinion.setStatus(p.id,'drafting_opinion');
+  try{
+    var t=p.rejection_type;
+    var ctx = await Opinion.getContext(['parsed','analysis','draft','validation','ref']);
+    var tpl={
+      inventive_step:'위 자료를 기반으로 진보성 위반 의견서를 작성해 주세요.\n구조: 서두(통지서 수령 확인) → 1.보정내용(보정 청구항 전문 포함) → 2.보정의 적법성(명세서 단락 근거) → 3.구체적 의견내용((1)본원 기술적 요지, (2)인용발명 기술적 요지, (3)구성요소별 차이점 상세 논증, (4)결합 용이성 반박(결합동기 부재/기술적 격차/현저한 효과), (5)소결) → 4.결론\n\n각 섹션을 구체적이고 상세하게 작성. 명세서 단락번호(【0001】형식)를 인용.\nJSON: {"title":"의견서","sections":[{"heading":"서두","content":"..."},{"heading":"1. 보정내용","content":"..."},...]}',
+      description_deficiency:'위 자료를 기반으로 기재불비 의견서를 작성해 주세요.\n구조: 서두 → 1.보정내용(수정 전·후 대비) → 2.보정의 적법성 → 3.구체적 의견내용(지적사항별 수정 내용 + 거절이유 해소 설명) → 4.결론\nJSON: {"title":"의견서","sections":[{"heading":"...","content":"..."},...]}',
+      partial_rejection:'위 자료를 기반으로 일부거절 의견서를 작성해 주세요.\n구조: 서두 → 1.보정내용(병합 사실 + 삭제) → 2.보정의 적법성(종속항 병합=신규사항 아님) → 3.구체적 의견내용(병합된 구성의 차이점 논증) → 4.결론\nJSON: {"title":"의견서","sections":[{"heading":"...","content":"..."},...]}',
+    };
+    var r=await App.callClaude(Opinion.SYS_PROMPT+'\n\n'+ctx+tpl[t]);
+    var od=Opinion.parseJSON(r.text);
+    await sb.from('opinion_opinion_drafts').insert({project_id:p.id,opinion_type:t,content:od,status:'draft'});
+    Opinion.state.opinionDraft=od;
+    await Opinion.setStatus(p.id,'opinion_drafted');
+    Opinion.renderDetail();
+    showToast('의견서 초안 생성 완료');
+  }catch(e){showToast('의견서 생성 실패: '+e.message,'error');}
+};
 
 Opinion.renderOpinion=function(L,R,status){
   var ready=status==='opinion_drafted';
   var nav=Opinion.renderNavBar('gate3');
   L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 3: 최종 승인</div><p style="font-size:13px;color:var(--color-text-secondary)">의견서를 검토하고 승인하면 보정서+의견서가 생성됩니다.</p><div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(3)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate3Approve" onclick="Opinion.approveGate(3)"><span class="tossface">✅</span> 승인</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">의견서 작성 중...</div></div>');
   var o=Opinion.state.opinionDraft||{}, secs=o.sections||[];
-  R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="tossface">📝</span> '+escapeHtml(o.title||'의견서')+'</span></div><div class="opinion-preview-body">'+(secs.length?secs.map(function(s){return '<div class="opinion-section"><div style="font-weight:600;margin-bottom:6px">'+escapeHtml(s.heading||'')+'</div><div>'+escapeHtml(s.content||'')+'</div></div>';}).join(''):'<p style="color:var(--color-text-tertiary);text-align:center;padding:40px">의견서 미생성</p>')+'</div></div>';
+  R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="tossface">📝</span> '+escapeHtml(o.title||'의견서')+'</span></div><div class="opinion-preview-body">'+(secs.length?secs.map(function(s){return '<div class="opinion-section"><div style="font-weight:600;margin-bottom:6px">'+escapeHtml(s.heading||'')+'</div><div style="white-space:pre-wrap;line-height:1.8">'+escapeHtml(s.content||'')+'</div></div>';}).join(''):'<p style="color:var(--color-text-tertiary);text-align:center;padding:40px">의견서 미생성</p>')+'</div></div>';
 };
 
+// ═══ Output + DOCX Download ═══
 Opinion.startOutput=async function(){var p=Opinion.state.current;if(!p)return;await Opinion.setStatus(p.id,'generating_docs');await Opinion.setStatus(p.id,'completed');Opinion.renderDetail();showToast('출력물 생성 완료');};
 
 Opinion.renderOutput=function(L,R,status){
   var done=status==='completed';
   var nav=Opinion.renderNavBar('output');
-  L.innerHTML=nav+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📥</span> 출력물</div></div><div style="display:flex;flex-direction:column;gap:8px"><button class="btn btn-primary btn-full" onclick="Opinion.download(\'amendment\')"'+(done?'':' disabled')+'><span class="tossface">📋</span> 보정서 (DOCX)</button><button class="btn btn-primary btn-full" onclick="Opinion.download(\'opinion\')"'+(done?'':' disabled')+'><span class="tossface">📝</span> 의견서 (DOCX)</button><button class="btn btn-outline btn-full" onclick="Opinion.download(\'report\')"'+(done?'':' disabled')+'><span class="tossface">📊</span> 검증보고서 (PDF)</button></div></div>';
-  R.innerHTML='<div class="card" style="text-align:center;padding:40px">'+(done?'<div style="font-size:48px;margin-bottom:12px"><span class="tossface">🎉</span></div><h3 style="font-size:18px;font-weight:700;color:var(--color-success);margin-bottom:8px">의견서 대응 완료!</h3><p style="font-size:13px;color:var(--color-text-secondary)">보정서와 의견서가 생성되었습니다. 다운로드 후 특허로에 제출하세요.</p>':'<div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">출력물 생성 중...</div>')+'</div>';
+  L.innerHTML=nav+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📥</span> 출력물</div></div><div style="display:flex;flex-direction:column;gap:8px">'
+    +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadDocx(\'opinion\')"'+(done?'':' disabled')+'><span class="tossface">📝</span> 의견서 (Word)</button>'
+    +'<button class="btn btn-outline btn-full" onclick="Opinion.downloadDocx(\'all\')"'+(done?'':' disabled')+'><span class="tossface">📋</span> 전체 (의견서+검증보고서)</button>'
+    +'<button class="btn btn-ghost btn-full" onclick="Opinion.copyOpinionText()"'+(done?'':' disabled')+'><span class="tossface">📋</span> 텍스트 복사</button>'
+    +'</div></div>';
+  R.innerHTML='<div class="card" style="text-align:center;padding:40px">'+(done?'<div style="font-size:48px;margin-bottom:12px"><span class="tossface">🎉</span></div><h3 style="font-size:18px;font-weight:700;color:var(--color-success);margin-bottom:8px">의견서 대응 완료!</h3><p style="font-size:13px;color:var(--color-text-secondary)">다운로드 후 특허로에 제출하세요.</p>':'<div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">출력물 생성 중...</div>')+'</div>';
 };
-Opinion.download=function(t){showToast(t+' 다운로드 기능은 추후 구현됩니다','info');};
+
+// 의견서 텍스트 조합
+Opinion.getOpinionFullText = function() {
+  var o=Opinion.state.opinionDraft||{};
+  var secs=o.sections||[];
+  if(!secs.length) return '';
+  return secs.map(function(s){ return (s.heading?s.heading+'\n\n':'')+s.content; }).join('\n\n');
+};
+
+// 클립보드 복사
+Opinion.copyOpinionText = function() {
+  var text = Opinion.getOpinionFullText();
+  if(!text){showToast('복사할 의견서가 없습니다','error');return;}
+  navigator.clipboard.writeText(text).then(function(){showToast('의견서 텍스트가 복사되었습니다');}).catch(function(){
+    var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);showToast('복사됨');
+  });
+};
+
+// Word 다운로드 (HTML→Word 방식)
+Opinion.downloadDocx = function(type) {
+  var p=Opinion.state.current; if(!p) return;
+  var content='';
+  var fileName='';
+
+  if(type==='opinion'||type==='all') {
+    var o=Opinion.state.opinionDraft||{};
+    var secs=o.sections||[];
+    content+='<h1 style="text-align:center;font-size:18pt">의 견 서</h1>\n';
+    content+='<p style="text-align:right">출원번호: '+escapeHtml(p.application_no||'')+'</p>\n';
+    content+='<p style="text-align:right">사건명: '+escapeHtml(p.title||'')+'</p>\n<hr>\n';
+    secs.forEach(function(s){
+      content+='<h2 style="font-size:14pt;margin-top:20pt">'+escapeHtml(s.heading||'')+'</h2>\n';
+      content+='<p style="font-size:11pt;line-height:1.8;text-align:justify">'+escapeHtml(s.content||'').replace(/\n/g,'<br>')+'</p>\n';
+    });
+    fileName='의견서_'+escapeHtml(p.application_no||p.title||'output');
+  }
+
+  if(type==='all') {
+    var v=Opinion.state.validation||{};
+    var items=v.elements||v.results||[];
+    if(items.length) {
+      content+='<div style="page-break-before:always"></div>\n';
+      content+='<h1 style="text-align:center;font-size:18pt">검증 보고서</h1>\n';
+      var sm=v.summary||{};
+      content+='<p>PASS: '+(sm.pass||0)+' / WARN: '+(sm.warn||0)+' / FAIL: '+(sm.fail||0)+'</p>\n';
+      items.forEach(function(e,i){
+        var r=e.overall_result||e.result||'pass';
+        var icon=r==='pass'?'✅':r==='warn'?'⚠️':'❌';
+        content+='<h3>'+icon+' '+(e.element_no||(i+1))+'. '+escapeHtml(e.element_text||e.detail||'')+'</h3>\n';
+        (e.checks||[]).forEach(function(c){
+          var ci=c.result==='pass'?'✅':c.result==='warn'?'⚠️':'❌';
+          content+='<p>'+ci+' <b>'+escapeHtml(c.check_type||'')+'</b>: '+escapeHtml(c.detail||'')+'</p>\n';
+        });
+      });
+      fileName='의견서+검증보고서_'+escapeHtml(p.application_no||p.title||'output');
+    }
+  }
+
+  if(!content){showToast('다운로드할 내용이 없습니다','error');return;}
+
+  // HTML → Word blob
+  var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">'
+    +'<head><meta charset="utf-8"><style>body{font-family:"맑은 고딕",sans-serif;font-size:11pt;line-height:1.6}h1{font-size:18pt}h2{font-size:14pt;margin-top:16pt}h3{font-size:12pt}p{margin:4pt 0;text-align:justify}</style></head>'
+    +'<body>'+content+'</body></html>';
+
+  var blob=new Blob(['\ufeff'+html],{type:'application/msword'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download=fileName+'.doc';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast('다운로드 완료');
+};
+
+// ═══ 참고 의견서 양식 업로드 ═══
+Opinion.state.refText = '';
+
+Opinion.handleRefUpload = async function(event) {
+  var file = event.target.files[0];
+  if(!file) return;
+  try {
+    var text = await extractTextFromFile(file);
+    Opinion.state.refText = text;
+    var el=document.getElementById('opinionRefStatus');
+    if(el) el.innerHTML='<span style="color:var(--color-success)">✅ '+escapeHtml(file.name)+' ('+Math.round(text.length/1000)+'K자)</span>';
+    showToast('참고 양식이 등록되었습니다. 의견서 생성 시 참고됩니다.');
+  }catch(e){showToast('파일 읽기 실패','error');}
+  event.target.value='';
+};
 
 Opinion.renderFailed=function(L,R){L.innerHTML='<div class="card" style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:12px"><span class="tossface">⚠️</span></div><h3 style="font-size:16px;font-weight:600;color:var(--color-error);margin-bottom:8px">파싱 실패</h3><p style="font-size:13px;color:var(--color-text-secondary)">다른 파일을 업로드하세요.</p><button class="btn btn-primary" style="margin-top:16px" onclick="Opinion.resetUpload()"><span class="tossface">📁</span> 다시 업로드</button></div>';R.innerHTML='';};
 Opinion.resetUpload=async function(){var p=Opinion.state.current;if(p){await Opinion.setStatus(p.id,'created');Opinion.state.files=[];Opinion.renderDetail();}};
@@ -735,6 +962,7 @@ Opinion.resetUpload=async function(){var p=Opinion.state.current;if(p){await Opi
 Opinion.setStatus=async function(id,s){try{await sb.from('opinion_projects').update({status:s,updated_at:new Date().toISOString()}).eq('id',id);var p=Opinion.state.current;if(p&&p.id===id)p.status=s;Opinion.state.projects.forEach(function(x){if(x.id===id)x.status=s;});}catch(e){console.error('[Opinion] status:',e);}};
 Opinion.loadData=async function(id){try{
   var{data:a}=await sb.from('opinion_issue_analyses').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(a)Opinion.state.analysis=a.result_data;
+  var{data:d}=await sb.from('opinion_draft_claims').select('draft_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(d)Opinion.state.draftResult=d.draft_data;
   var{data:v}=await sb.from('opinion_validation_results').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(v)Opinion.state.validation=v.result_data;
   var{data:o}=await sb.from('opinion_opinion_drafts').select('content').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(o)Opinion.state.opinionDraft=o.content;
   var{data:t}=await sb.from('opinion_type_determinations').select('*').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(t)Opinion.state.typeResult=t;
