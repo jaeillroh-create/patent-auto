@@ -5123,7 +5123,7 @@
   
   // ====== Stage B: 상세 검증 & Re-rank ======
   
-  TM.rankAndFilter = function(candidates, sourceText, viennaCodes, targetClasses, targetGroups, topK = 200) {
+  TM.rankAndFilter = function(candidates, sourceText, viennaCodes, targetClasses, targetGroups) {
     // ============================================================
     // 상표 심사 핵심 원칙: 유사군 교집합이 있어야만 유사 판단
     // 유사군 교집합 없음 → 상표명 동일해도 등록 가능
@@ -5193,10 +5193,9 @@
       return b._totalScore - a._totalScore;
     });
     
-    console.log(`[KIPRIS] 랭킹 완료: Top ${Math.min(topK, candidates.length)}건`);
-    console.log(`[KIPRIS] 유사군 중복: ${candidates.filter(c => c._hasGroupOverlap).length}건`);
+    console.log(`[KIPRIS] 랭킹 완료: 전체 ${candidates.length}건 (유사군 중복: ${candidates.filter(c => c._hasGroupOverlap).length}건)`);
     
-    return candidates.slice(0, topK);
+    return candidates; // K0 제한 없음 - 전체 후보 유지 (메모리 연산이므로 성능 영향 없음)
   };
   
   // ====== 메인 검색 함수 (통합 2-Stage) ======
@@ -5237,13 +5236,12 @@
         return [];
       }
       
-      // ===== Stage B-1: 1차 랭킹 (K0 = 200) =====
+      // ===== Stage B-1: 1차 랭킹 (전체 후보 유지) =====
       onProgress?.(8, 10, '유사도 계산 중...');
       
       const ranked = TM.rankAndFilter(
         candidates, trademark, viennaCodes, 
-        targetClasses, targetGroups,
-        200 // K0
+        targetClasses, targetGroups
       );
       
       // 교집합 후보 우선 → 유사군 중복 우선으로 변경
