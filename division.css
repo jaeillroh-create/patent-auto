@@ -1,0 +1,131 @@
+/* ============================================================
+   분할출원 청구항 자동 작성 — division.css
+   Version: 1.0 — 병합형 분할출원
+   의존: common.css, patent.css, opinion.css (서브탭 스타일 공유)
+   ============================================================ */
+
+/* ═══ 1. 대시보드 레이아웃 ═══ */
+.division-dashboard { display: flex; gap: 20px; align-items: flex-start; }
+.division-sidebar { width: 240px; flex-shrink: 0; }
+.division-main { flex: 1; min-width: 0; }
+
+/* ═══ 2. 유형 배지 ═══ */
+.division-type-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: var(--font-weight-semibold); line-height: 1.6; white-space: nowrap; }
+.division-type-badge.dtype-merge { background: #dbeafe; color: #1e40af; }
+.division-type-badge.dtype-category { background: #e0e7ff; color: #3730a3; }
+.division-type-badge.dtype-strategic { background: #fce7f3; color: #9d174d; }
+
+/* ═══ 3. 상태 배지 ═══ */
+.division-status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
+.division-status-badge.dstatus-created { background: var(--color-bg-secondary); color: var(--color-text-tertiary); }
+.division-status-badge.dstatus-uploaded { background: #dbeafe; color: #1e40af; }
+.division-status-badge.dstatus-parsed { background: #e0e7ff; color: #3730a3; }
+.division-status-badge.dstatus-analyzed { background: var(--color-warning-light); color: #92400e; }
+.division-status-badge.dstatus-assembled { background: #fce7f3; color: #9d174d; }
+.division-status-badge.dstatus-verified { background: #ede9fe; color: #5b21b6; }
+.division-status-badge.dstatus-confirmed { background: var(--color-success-light); color: var(--color-success); }
+.division-status-badge.dstatus-error { background: var(--color-error-light); color: var(--color-error); }
+
+/* ═══ 4. 파이프라인 스테퍼 ═══ */
+.division-pipeline { display: flex; align-items: center; gap: 0; padding: 16px 20px; background: var(--color-bg-tertiary); border-radius: var(--radius-md); overflow-x: auto; margin-bottom: 20px; }
+.division-step { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.division-step-dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; transition: all 0.2s; }
+.division-step.pending .division-step-dot { background: var(--color-bg-secondary); color: var(--color-text-disabled); border: 2px solid var(--color-border); }
+.division-step.active .division-step-dot { background: var(--color-primary); color: #fff; box-shadow: 0 0 0 4px var(--color-primary-light); animation: divisionPulse 2s infinite; }
+.division-step.done .division-step-dot { background: var(--color-success); color: #fff; }
+.division-step-label { font-size: 12px; font-weight: var(--font-weight-medium); color: var(--color-text-tertiary); }
+.division-step.active .division-step-label { color: var(--color-primary); font-weight: var(--font-weight-semibold); }
+.division-step.done .division-step-label { color: var(--color-success); }
+.division-step.done:hover .division-step-dot { transform: scale(1.15); box-shadow: 0 0 0 3px rgba(34,197,94,0.2); cursor: pointer; }
+.division-step.done:hover .division-step-label { text-decoration: underline; }
+.division-step-connector { width: 28px; height: 2px; background: var(--color-border); margin: 0 6px; flex-shrink: 0; }
+.division-step-connector.done { background: var(--color-success); }
+@keyframes divisionPulse { 0%,100%{box-shadow:0 0 0 4px var(--color-primary-light)} 50%{box-shadow:0 0 0 8px rgba(59,130,246,0.1)} }
+
+/* ═══ 5. 상세 뷰 2패널 ═══ */
+.division-detail { display: flex; gap: 24px; align-items: flex-start; }
+.division-detail-left { flex: 0 0 50%; width: 50%; min-width: 320px; display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 200px); overflow-y: auto; padding-right: 8px; }
+.division-detail-left::-webkit-scrollbar { width: 5px; }
+.division-detail-left::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+.division-detail-right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+
+/* ═══ 6. 파일 업로드 행 ═══ */
+.division-file-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--color-divider); font-size: 13px; }
+.division-file-row:last-child { border-bottom: none; }
+.division-file-icon { font-size: 16px; flex-shrink: 0; }
+.division-file-label { flex: 1; font-weight: 500; }
+.division-file-status.uploaded { color: var(--color-success); font-size: 12px; }
+
+/* ═══ 7. 정보 박스 ═══ */
+.division-info-box { padding: 14px 16px; background: var(--color-bg-tertiary); border-radius: var(--radius-sm); border-left: 3px solid var(--color-primary); }
+
+/* ═══ 8. 청구항 분류 매트릭스 ═══ */
+.division-matrix-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.division-matrix-table th { padding: 8px 10px; text-align: left; font-weight: 600; font-size: 12px; color: var(--color-text-secondary); background: var(--color-bg-tertiary); border-bottom: 1px solid var(--color-border); }
+.division-matrix-table td { padding: 8px 10px; border-bottom: 1px solid var(--color-divider); vertical-align: middle; }
+.division-matrix-table tr:hover { background: var(--color-bg-tertiary); }
+.division-rej-badge { display: inline-block; padding: 1px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
+.division-rej-badge.rej-yes { background: #ffe4e6; color: #9f1239; }
+.division-rej-badge.rej-no { background: #d1fae5; color: #065f46; }
+.division-role-select { font-size: 12px; padding: 3px 6px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: #fff; font-family: inherit; cursor: pointer; }
+.division-role-select:focus { border-color: var(--color-primary); outline: none; box-shadow: 0 0 0 2px var(--color-primary-light); }
+
+/* ═══ 9. 청구항 블록 ═══ */
+.division-claim-text { padding: 14px 16px; background: var(--color-bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--color-border); }
+.division-claim-block { padding: 14px 16px; background: #fff; border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 12px; }
+.division-claim-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.division-claim-type-tag { font-size: 10px; padding: 1px 8px; border-radius: var(--radius-full); background: var(--color-bg-secondary); color: var(--color-text-tertiary); font-weight: 600; }
+.division-claim-body { font-size: 13px; line-height: 1.8; white-space: pre-wrap; }
+
+/* ═══ 10. 하이라이트 ═══ */
+.division-hl-added { background: #fef3c7; border-radius: 2px; padding: 0 2px; }
+.division-hl-merge { background: #dbeafe; border-radius: 2px; padding: 0 2px; font-style: italic; }
+
+/* ═══ 11. 미활용 구성 후보 ═══ */
+.division-component-row { padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); margin-bottom: 8px; }
+.division-component-row.risk-safe { border-left: 3px solid var(--color-success); }
+.division-component-row.risk-caution { border-left: 3px solid var(--color-warning); background: #fffbeb; }
+.division-component-row.risk-danger { border-left: 3px solid var(--color-error); background: #fff5f5; }
+
+/* ═══ 12. 구성 요약 그리드 ═══ */
+.division-summary-grid { display: flex; gap: 12px; }
+.division-summary-item { flex: 1; padding: 16px; background: var(--color-bg-tertiary); border-radius: var(--radius-md); text-align: center; }
+.division-summary-num { font-size: 28px; font-weight: 700; color: var(--color-primary); }
+.division-summary-label { font-size: 12px; color: var(--color-text-secondary); margin-top: 4px; }
+
+/* ═══ 13. 검증 결과 ═══ */
+.division-val-summary { display: flex; gap: 10px; margin-bottom: 16px; }
+.division-val-stat { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: var(--font-weight-semibold); }
+.division-val-stat.pass { background: #d1fae5; color: #065f46; }
+.division-val-stat.warn { background: #fef3c7; color: #92400e; }
+.division-val-stat.fail { background: #ffe4e6; color: #9f1239; }
+.division-val-row { border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 8px; overflow: hidden; }
+.division-val-row:hover { box-shadow: var(--shadow-sm); }
+.division-val-row-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; user-select: none; background: var(--color-bg-tertiary); }
+.division-val-row-body { padding: 12px 14px; font-size: 13px; line-height: 1.7; border-top: 1px solid var(--color-border); display: none; }
+.division-val-row.expanded .division-val-row-body { display: block; }
+.division-val-result-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-full); }
+.division-val-result-badge.vr-pass { background: #d1fae5; color: #065f46; }
+.division-val-result-badge.vr-warn { background: #fef3c7; color: #92400e; }
+.division-val-result-badge.vr-fail { background: #ffe4e6; color: #9f1239; }
+.division-val-row.vr-pass { border-left: 3px solid var(--color-success); }
+.division-val-row.vr-warn { border-left: 3px solid var(--color-warning); }
+.division-val-row.vr-fail { border-left: 3px solid var(--color-error); }
+
+/* ═══ 14. 명칭 선택 라디오 ═══ */
+.division-title-option { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); margin-bottom: 8px; cursor: pointer; }
+.division-title-option:hover { background: var(--color-bg-tertiary); }
+.division-title-option input[type="radio"] { margin-top: 3px; flex-shrink: 0; }
+
+/* ═══ 15. 반응형 ═══ */
+@media (max-width: 768px) {
+  .division-dashboard { flex-direction: column; }
+  .division-sidebar { width: 100%; }
+  .division-detail { flex-direction: column; }
+  .division-detail-left { flex: none; width: 100%; min-width: 0; max-height: none; }
+  .division-pipeline { padding: 12px 10px; }
+  .division-step-label { font-size: 10px; }
+  .division-step-connector { width: 16px; }
+  .division-summary-grid { flex-direction: column; }
+  .division-val-summary { flex-wrap: wrap; }
+}

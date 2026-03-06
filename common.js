@@ -331,6 +331,12 @@ App.initServiceTabs = function() {
   var hash = window.location.hash.replace('#', '');
   if (hash === 'trademark') {
     App.switchService('trademark');
+  } else if (hash.startsWith('patent-')) {
+    App.switchService('patent');
+    var subTab = hash.replace('patent-', '');
+    if (subTab && typeof App.switchPatentSubTab === 'function') {
+      App.switchPatentSubTab(subTab);
+    }
   } else {
     App.switchService('patent');
   }

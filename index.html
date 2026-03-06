@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="patent.css" />
   <link rel="stylesheet" href="trademark.css" />
   <link rel="stylesheet" href="opinion.css" />
+  <link rel="stylesheet" href="division.css" />
 </head>
 <body>
 <div id="toastContainer" class="toast-container"></div>
@@ -101,6 +102,9 @@
         </button>
         <button class="patent-sub-tab" data-subtab="opinion" onclick="App.switchPatentSubTab('opinion')">
           <span class="tossface">📝</span> 의견서 대응
+        </button>
+        <button class="patent-sub-tab" data-subtab="division" onclick="App.switchPatentSubTab('division')">
+          <span class="tossface">🔀</span> 분할출원
         </button>
       </nav>
 
@@ -240,6 +244,65 @@
         </div>
 
       </div><!-- /patent-sub-opinion -->
+
+      <!-- ═══ 서브패널 3: 분할출원 ═══ -->
+      <div id="patent-sub-division" class="patent-sub-panel">
+
+        <!-- 분할출원 프로젝트 목록 -->
+        <div id="divisionListView">
+          <div class="division-dashboard">
+            <div class="division-sidebar">
+              <h2 style="font-size:20px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px"><span class="tossface">🔀</span> 분할출원</h2>
+              <p style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:16px;line-height:1.4">AI 기반 분할출원 청구항 자동 작성</p>
+              <button class="btn btn-primary btn-full" onclick="Division.openCreateModal()" style="margin-bottom:8px;padding:12px;font-size:14px"><span class="tossface">➕</span> 새 분할출원 프로젝트</button>
+              <div class="card" style="padding:12px;margin-top:12px">
+                <div style="font-size:12px;font-weight:600;margin-bottom:8px"><span class="tossface">ℹ️</span> 지원 유형</div>
+                <div style="font-size:11px;line-height:1.7;color:var(--color-text-secondary)">
+                  <div style="margin-bottom:4px"><span class="division-type-badge dtype-merge">🔀 M. 청구항 병합형</span></div>
+                  <div style="margin-bottom:4px"><span class="division-type-badge dtype-category" style="opacity:0.5">🔄 C. 카테고리변경형 (준비 중)</span></div>
+                  <div><span class="division-type-badge dtype-strategic" style="opacity:0.5">🎯 S. 전략적 분할 (준비 중)</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="division-main">
+              <div class="card" style="padding:0;overflow:hidden">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
+                  <colgroup><col style="width:14%"><col style="width:36%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>
+                  <thead><tr style="background:var(--color-bg-tertiary);border-bottom:1px solid var(--color-border)">
+                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--color-text-secondary)">참조번호</th>
+                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--color-text-secondary)">프로젝트명</th>
+                    <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">상태</th>
+                    <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">수정일</th>
+                    <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">작업</th>
+                  </tr></thead>
+                  <tbody id="divisionProjectList"></tbody>
+                </table>
+              </div>
+              <div style="text-align:right;margin-top:6px;font-size:11px;color:var(--color-text-tertiary)" id="divisionProjectCount">총 0건</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 분할출원 프로젝트 상세 -->
+        <div id="divisionDetailView" style="display:none">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <button class="btn btn-ghost btn-sm" onclick="Division.backToList()"><span class="tossface">←</span></button>
+            <div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span id="divisionDetailRef" style="font-size:12px;font-weight:600;color:var(--color-primary)">-</span>
+                <h2 id="divisionDetailTitle" style="font-size:18px;font-weight:700">프로젝트</h2>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:4px"><span id="divisionDetailType"></span><span id="divisionDetailStatus"></span></div>
+            </div>
+          </div>
+          <div class="division-pipeline" id="divisionPipeline"></div>
+          <div class="division-detail">
+            <div class="division-detail-left" id="divisionDetailLeft"></div>
+            <div class="division-detail-right" id="divisionDetailRight"></div>
+          </div>
+        </div>
+
+      </div><!-- /patent-sub-division -->
 
     </div><!-- /patent-dashboard-panel -->
 
@@ -822,5 +885,59 @@
     </div>
   </div>
 </div>
+
+<!-- 분할출원 생성 모달 -->
+<div id="divisionCreateModal" class="modal-overlay" style="display:none">
+  <div class="modal-content" style="max-width:480px;padding:24px">
+    <div class="modal-title" style="font-size:16px;margin-bottom:16px"><span class="tossface">🔀</span> 새 분할출원 프로젝트</div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:6px">프로젝트명</label>
+      <input type="text" class="input-field" id="divisionNewName" placeholder="예: 25P1025 알씨에스컴퍼니 분할" style="padding:10px 12px;font-size:14px" />
+    </div>
+    <div style="display:flex;gap:12px;margin-bottom:14px">
+      <div style="flex:1">
+        <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:6px">원출원 참조번호</label>
+        <input type="text" class="input-field" id="divisionNewRefNum" placeholder="25P1025" style="padding:10px 12px;font-size:14px" />
+      </div>
+      <div style="flex:1">
+        <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:6px">원출원 출원번호</label>
+        <input type="text" class="input-field" id="divisionNewAppNum" placeholder="10-2025-0086758" style="padding:10px 12px;font-size:14px" />
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:var(--color-text-secondary);display:block;margin-bottom:8px">분할출원 유형</label>
+      <label class="division-title-option" style="margin-bottom:6px">
+        <input type="radio" name="divisionType" value="merge" checked />
+        <div>
+          <div style="font-size:13px;font-weight:600">🔀 청구항 병합형</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary)">등록항 + 미활용 구성 부가</div>
+        </div>
+      </label>
+      <label class="division-title-option" style="margin-bottom:6px;opacity:0.5;cursor:not-allowed">
+        <input type="radio" name="divisionType" value="category_change" disabled />
+        <div>
+          <div style="font-size:13px;font-weight:600">🔄 카테고리 변경형 <span style="font-size:10px;color:var(--color-text-tertiary)">(준비 중)</span></div>
+          <div style="font-size:11px;color:var(--color-text-tertiary)">방법↔장치 전환</div>
+        </div>
+      </label>
+      <label class="division-title-option" style="opacity:0.5;cursor:not-allowed">
+        <input type="radio" name="divisionType" value="strategic" disabled />
+        <div>
+          <div style="font-size:13px;font-weight:600">🎯 전략적 분할 <span style="font-size:10px;color:var(--color-text-tertiary)">(준비 중)</span></div>
+          <div style="font-size:11px;color:var(--color-text-tertiary)">새 독립항 구성</div>
+        </div>
+      </label>
+    </div>
+    <div style="margin-bottom:14px">
+      <label class="checkbox-label"><input type="checkbox" id="divisionInclPriorArt" /><span style="font-size:13px">인용발명 대비 분석 포함</span></label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn btn-ghost" onclick="Division.closeCreateModal()" style="flex:1;padding:10px">취소</button>
+      <button class="btn btn-primary" onclick="Division.create()" style="flex:1;padding:10px">만들기</button>
+    </div>
+  </div>
+</div>
+
+<script src="division.js"></script>
 </body>
 </html>

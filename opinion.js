@@ -315,6 +315,7 @@ App.switchPatentSubTab = function(sub){
   document.querySelectorAll('.patent-sub-panel').forEach(function(p){ p.classList.remove('active'); });
   var el=document.getElementById('patent-sub-'+sub); if(el) el.classList.add('active');
   if(sub==='opinion') Opinion.init();
+  if(sub==='division' && window.Division) Division.init();
   history.replaceState(null,'','#patent-'+sub);
 };
 
