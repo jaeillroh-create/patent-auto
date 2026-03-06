@@ -1430,41 +1430,118 @@ Opinion.TEMPLATE_GUARD = '\n\n⚠️ 중요 규칙: [참고 의견서 양식]은
 Opinion.startOpinionDraft=async function(){
   var p=Opinion.state.current;if(!p)return;
   await Opinion.setStatus(p.id,'drafting_opinion');
+  Opinion.renderDetail();
   try{
     var t=p.rejection_type;
     var ctx = await Opinion.getContext(['parsed','analysis','draft','validation','ref']);
     var revNote = Opinion.state.lastRevisionNote || '';
     var revCtx = revNote ? '\n\n[사용자 수정 지시]\n'+revNote+'\n이 지시를 반드시 반영하여 의견서를 작성하세요.\n' : '';
     Opinion.state.lastRevisionNote = '';
-    var tpl={
-      inventive_step:'위 자료를 기반으로 진보성 위반 의견서를 작성해 주세요.\n구조: 서두(통지서 수령 확인) → 1.보정내용(보정 청구항 전문 포함) → 2.보정의 적법성(명세서 단락 근거) → 3.구체적 의견내용((1)본원 기술적 요지, (2)인용발명 기술적 요지, (3)구성요소별 차이점 상세 논증, (4)결합 용이성 반박(결합동기 부재/기술적 격차/현저한 효과), (5)소결) → 4.결론\n\n각 섹션을 구체적이고 상세하게 작성. 명세서 단락번호(【0001】형식)를 인용.\nJSON: {"title":"의견서","sections":[{"heading":"서두","content":"..."},{"heading":"1. 보정내용","content":"..."},...]}',
-      description_deficiency:'위 자료를 기반으로 기재불비 의견서를 작성해 주세요.\n구조: 서두 → 1.보정내용(수정 전·후 대비) → 2.보정의 적법성 → 3.구체적 의견내용(지적사항별 수정 내용 + 거절이유 해소 설명) → 4.결론\nJSON: {"title":"의견서","sections":[{"heading":"...","content":"..."},...]}',
-      partial_rejection:'위 자료를 기반으로 일부거절 의견서를 작성해 주세요.\n구조: 서두 → 1.보정내용(병합 사실 + 삭제) → 2.보정의 적법성(종속항 병합=신규사항 아님) → 3.구체적 의견내용(병합된 구성의 차이점 논증) → 4.결론\nJSON: {"title":"의견서","sections":[{"heading":"...","content":"..."},...]}',
-    };
-    var od = await Opinion.callForJSON(
-      Opinion.SYS_PROMPT + Opinion.TEMPLATE_GUARD + '\n\n' + ctx + revCtx + tpl[t],
-      '{"title":"의견서","sections":[{"heading":"서두","content":"상기 출원에 대한..."},{"heading":"1. 보정내용","content":"..."}]}'
-    );
 
-    // ★ 양식 내용 오염 검증 ★
-    var fullText = (od.sections||[]).map(function(s){return s.content||'';}).join('\n');
+    // ★ JSON이 아닌 섹션 마커 방식으로 생성 — LLM이 자연스럽게 작성 가능 ★
+    var tpl={
+      inventive_step: '위 자료를 기반으로 진보성 위반(§29②) 의견서를 작성해 주세요.\n\n'
+        +'아래 섹션 구분자(## 제목)를 반드시 사용하여 각 섹션을 작성하세요.\n'
+        +'각 섹션은 구체적이고 상세하게, 명세서 단락번호(【0001】형식)를 인용하여 작성하세요.\n'
+        +'JSON 형식이 아닌 일반 텍스트로 작성하세요.\n\n'
+        +'## 서두\n(통지서 수령 확인. "상기 출원에 대한 의견제출통지서를 수령하였기에...")\n\n'
+        +'## 1. 보정내용\n(보정 개요 + 보정 청구항 전문)\n\n'
+        +'## 2. 보정의 적법성\n(각 보정사항별 명세서 근거 단락. "상기 보정은 명세서 【0000】에 기재된 범위 내...")\n\n'
+        +'## 3. 구체적 의견내용\n\n'
+        +'### (1) 본원발명의 기술적 요지\n(본원 발명의 핵심 기술 요약)\n\n'
+        +'### (2) 인용발명들의 기술적 요지\n(인용발명별 핵심 기술 요약)\n\n'
+        +'### (3) 본원발명과 인용발명의 대비\n(구성요소별 구체적 차이점 논증. 가. 구성요소 ❶... 나. 구성요소 ❷...)\n\n'
+        +'### (4) 결합의 용이성에 대한 반박\n(① 결합 동기 부재 ② 기술 분야의 상이 ③ 현저한 효과)\n\n'
+        +'### (5) 소결\n\n'
+        +'## 4. 결론\n("이상과 같이 본원발명은... 특허등록되어야 합니다.")',
+
+      description_deficiency: '위 자료를 기반으로 기재불비 위반(§42③④) 의견서를 작성해 주세요.\n\n'
+        +'아래 섹션 구분자(## 제목)를 사용하여 작성. JSON이 아닌 일반 텍스트.\n\n'
+        +'## 서두\n\n## 1. 보정내용\n(수정 전·후 대비)\n\n'
+        +'## 2. 보정의 적법성\n\n## 3. 구체적 의견내용\n(지적사항별 수정 내용 + 거절이유 해소 설명)\n\n## 4. 결론',
+
+      partial_rejection: '위 자료를 기반으로 일부 청구항 거절 의견서를 작성해 주세요.\n\n'
+        +'아래 섹션 구분자(## 제목)를 사용하여 작성. JSON이 아닌 일반 텍스트.\n\n'
+        +'## 서두\n\n## 1. 보정내용\n(병합 사실 + 삭제)\n\n'
+        +'## 2. 보정의 적법성\n(종속항 병합=신규사항 아님)\n\n'
+        +'## 3. 구체적 의견내용\n(병합된 구성의 차이점 논증)\n\n## 4. 결론'
+    };
+
+    var prompt = Opinion.SYS_PROMPT + Opinion.TEMPLATE_GUARD + '\n\n' + ctx + revCtx + tpl[t];
+    var r = await App.callClaude(prompt);
+    Opinion.usage.calls++;
+    Opinion.updateUsageDisplay();
+
+    // ★ 섹션 마커 기반 파싱 (JSON 불필요) ★
+    var od = Opinion.parseOpinionSections(r.text);
+
+    // 양식 내용 오염 검증
+    var fullText = od.sections.map(function(s){return s.content;}).join('\n');
     var check = Opinion.validateNoTemplateContamination(fullText);
     if (!check.clean) {
-      console.warn('[Opinion] Template contamination detected:', check.warnings);
+      console.warn('[Opinion] Template contamination:', check.warnings.length, 'items');
       od._contamination_warnings = check.warnings;
-      // 오염된 부분 표시 (Gate 3에서 사용자에게 경고)
     }
 
     await sb.from('opinion_opinion_drafts').insert({project_id:p.id,opinion_type:t,content:od,status:'draft'});
     Opinion.state.opinionDraft=od;
     await Opinion.setStatus(p.id,'opinion_drafted');
     Opinion.renderDetail();
-    if (!check.clean) {
-      showToast('⚠️ 의견서에 참고 양식 내용이 일부 혼입된 것 같습니다. Gate 3에서 확인하세요.', 'error');
+    showToast('의견서 초안 생성 완료 (' + od.sections.length + '개 섹션)');
+  }catch(e){
+    console.error('[Opinion] Opinion draft error:', e);
+    showToast('의견서 생성 실패: '+e.message,'error');
+    await Opinion.setStatus(p.id,'claims_confirmed');
+    Opinion.renderDetail();
+  }
+};
+
+// ★ 의견서 텍스트를 ## 섹션으로 분리하는 파서 ★
+Opinion.parseOpinionSections = function(text) {
+  if (!text) return { title: '의견서', sections: [] };
+
+  var sections = [];
+  // ## 또는 ### 로 시작하는 라인을 섹션 구분자로
+  var lines = text.split('\n');
+  var currentHeading = '';
+  var currentContent = [];
+  var foundAnySection = false;
+
+  lines.forEach(function(line) {
+    var headingMatch = line.match(/^#{2,3}\s+(.+)/);
+    if (headingMatch) {
+      // 이전 섹션 저장
+      if (currentHeading || currentContent.length > 0) {
+        sections.push({
+          heading: currentHeading || '(서문)',
+          content: currentContent.join('\n').trim()
+        });
+      }
+      currentHeading = headingMatch[1].trim();
+      currentContent = [];
+      foundAnySection = true;
     } else {
-      showToast('의견서 초안 생성 완료');
+      currentContent.push(line);
     }
-  }catch(e){showToast('의견서 생성 실패: '+e.message,'error');}
+  });
+
+  // 마지막 섹션 저장
+  if (currentHeading || currentContent.length > 0) {
+    sections.push({
+      heading: currentHeading || (foundAnySection ? '(후문)' : '의견서'),
+      content: currentContent.join('\n').trim()
+    });
+  }
+
+  // 섹션이 1개도 안 만들어졌으면 전체를 하나의 섹션으로
+  if (sections.length === 0) {
+    sections.push({ heading: '의견서', content: text.trim() });
+  }
+
+  // 제목에서 ## 마커 제거, 빈 content 섹션 필터
+  sections = sections.filter(function(s) { return s.content.length > 0; });
+
+  return { title: '의견서', sections: sections };
 };
 
 Opinion.renderOpinion=function(L,R,status){
@@ -1520,12 +1597,23 @@ Opinion.renderOutput=function(L,R,status){
   R.innerHTML='<div class="card" style="text-align:center;padding:40px">'+(done?'<div style="font-size:48px;margin-bottom:12px"><span class="tossface">🎉</span></div><h3 style="font-size:18px;font-weight:700;color:var(--color-success);margin-bottom:8px">의견서 대응 완료!</h3><p style="font-size:13px;color:var(--color-text-secondary)">다운로드 후 특허로에 제출하세요.</p>':'<div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">출력물 생성 중...</div>')+'</div>';
 };
 
-// 의견서 텍스트 조합
+// 의견서 텍스트 조합 (JSON sections 형식 + raw string 형식 모두 지원)
 Opinion.getOpinionFullText = function() {
-  var o=Opinion.state.opinionDraft||{};
-  var secs=o.sections||[];
-  if(!secs.length) return '';
-  return secs.map(function(s){ return (s.heading?s.heading+'\n\n':'')+s.content; }).join('\n\n');
+  var o=Opinion.state.opinionDraft;
+  if(!o) return '';
+
+  // sections 배열이 있는 경우
+  if(o.sections && o.sections.length) {
+    return o.sections.map(function(s){ return (s.heading?'## '+s.heading+'\n\n':'')+s.content; }).join('\n\n');
+  }
+
+  // raw_text가 있는 경우 (JSON 파싱 실패했던 케이스)
+  if(o.raw_text) return o.raw_text;
+
+  // string인 경우
+  if(typeof o === 'string') return o;
+
+  return '';
 };
 
 // 클립보드 복사
@@ -1541,12 +1629,28 @@ Opinion.copyOpinionText = function() {
 Opinion.downloadDocx = async function(type) {
   var p=Opinion.state.current; if(!p) return;
 
-  // 데이터가 없으면 DB에서 로드
+  // 데이터가 없으면 DB에서 로드 + 정규화
   if (!Opinion.state.opinionDraft || !(Opinion.state.opinionDraft.sections||[]).length) {
     try {
       var{data:o}=await sb.from('opinion_opinion_drafts').select('content').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
-      if(o && o.content) Opinion.state.opinionDraft = o.content;
+      if(o && o.content) {
+        var c = o.content;
+        if (typeof c === 'string') {
+          Opinion.state.opinionDraft = Opinion.parseOpinionSections(c);
+        } else if (c.raw_text) {
+          Opinion.state.opinionDraft = Opinion.parseOpinionSections(c.raw_text);
+        } else {
+          Opinion.state.opinionDraft = c;
+        }
+      }
     } catch(e){}
+  }
+  // 그래도 없으면 전체 텍스트로 시도
+  if (!Opinion.state.opinionDraft || !(Opinion.state.opinionDraft.sections||[]).length) {
+    var ft = Opinion.getOpinionFullText();
+    if (ft) {
+      Opinion.state.opinionDraft = Opinion.parseOpinionSections(ft);
+    }
   }
   if (!Opinion.state.validation) {
     try {
@@ -1648,7 +1752,21 @@ Opinion.loadData=async function(id){try{
   var{data:a}=await sb.from('opinion_issue_analyses').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(a)Opinion.state.analysis=a.result_data;
   var{data:d}=await sb.from('opinion_draft_claims').select('draft_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(d)Opinion.state.draftResult=d.draft_data;
   var{data:v}=await sb.from('opinion_validation_results').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(v)Opinion.state.validation=v.result_data;
-  var{data:o}=await sb.from('opinion_opinion_drafts').select('content').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(o)Opinion.state.opinionDraft=o.content;
+  var{data:o}=await sb.from('opinion_opinion_drafts').select('content').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+  if(o && o.content) {
+    var c = o.content;
+    // DB에서 꺼낸 데이터 정규화
+    if (typeof c === 'string') {
+      // 순수 문자열 → 섹션으로 파싱 시도
+      Opinion.state.opinionDraft = Opinion.parseOpinionSections ? Opinion.parseOpinionSections(c) : { title:'의견서', sections:[{heading:'의견서',content:c}] };
+    } else if (c.sections && c.sections.length) {
+      Opinion.state.opinionDraft = c;
+    } else if (c.raw_text) {
+      Opinion.state.opinionDraft = Opinion.parseOpinionSections ? Opinion.parseOpinionSections(c.raw_text) : { title:'의견서', sections:[{heading:'의견서',content:c.raw_text}] };
+    } else {
+      Opinion.state.opinionDraft = c;
+    }
+  }
   var{data:t}=await sb.from('opinion_type_determinations').select('*').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(t)Opinion.state.typeResult=t;
 }catch(e){console.warn('[Opinion] load:',e);}Opinion.renderDetail();};
 // ═══ 강화된 JSON 파서 (5단계 추출 시도) ═══
