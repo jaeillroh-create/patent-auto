@@ -645,48 +645,88 @@ Division.runParse = async function(){
     var VALID_REJ = ['rejected','not_rejected'];
     var VALID_AMD = ['amended','deleted','maintained'];
     var VALID_ROLE = ['basis','merge_candidate','dep_candidate','excluded','included_in_basis','product_claim'];
-    function sanitizeEnum(val, validList, fallback){ val = (val||'').trim().toLowerCase().replace(/\s+/g,'_'); return validList.indexOf(val) >= 0 ? val : fallback; }
+    function sanitize(val, validList, fb){ if(!val) return fb; val=String(val).trim().toLowerCase().replace(/[\s-]+/g,'_'); return validList.indexOf(val)>=0?val:fb; }
 
     var claimsSaved = false;
     if(parsed.claims && parsed.claims.length > 0){
-      var claimRows = parsed.claims.map(function(c){
-        return {
+      // 1) 행 데이터 정제
+      var claimRows = [];
+      parsed.claims.forEach(function(c, idx){
+        if(!c || !c.claim_number) return; // 빈 항목 무시
+        claimRows.push({
           project_id: p.id,
-          claim_number: parseInt(c.claim_number) || 1,
-          claim_type: sanitizeEnum(c.claim_type, VALID_CLAIM_TYPE, 'independent'),
+          claim_number: parseInt(c.claim_number) || (idx+1),
+          claim_type: sanitize(c.claim_type, VALID_CLAIM_TYPE, 'independent'),
           parent_claim_number: c.parent_claim_number ? parseInt(c.parent_claim_number) : null,
-          original_text: (c.original_text || c.text || '').substring(0, 50000),
-          amended_text: c.amended_text || null,
-          rejection_status: sanitizeEnum(c.rejection_status, VALID_REJ, 'not_rejected'),
-          amendment_status: sanitizeEnum(c.amendment_status, VALID_AMD, 'maintained'),
-          division_role: sanitizeEnum(c.division_role, VALID_ROLE, 'dep_candidate')
-        };
+          original_text: String(c.original_text || c.text || '(파싱 실패)').substring(0, 50000),
+          amended_text: c.amended_text ? String(c.amended_text).substring(0, 50000) : null,
+          rejection_status: sanitize(c.rejection_status, VALID_REJ, 'not_rejected'),
+          amendment_status: sanitize(c.amendment_status, VALID_AMD, 'maintained'),
+          division_role: sanitize(c.division_role, VALID_ROLE, 'dep_candidate')
+        });
       });
-      // 중복 claim_number 제거 (같은 번호 있으면 첫 번째만)
+
+      // 2) 중복 claim_number 제거
       var seen = {};
       claimRows = claimRows.filter(function(r){ if(seen[r.claim_number]) return false; seen[r.claim_number]=true; return true; });
 
-      console.log('[Division] 저장할 청구항:', claimRows.length, '건');
-      await sb.from('division_claims_parsed').delete().eq('project_id', p.id);
-      var {error:insertErr} = await sb.from('division_claims_parsed').insert(claimRows);
-      if(insertErr){
-        console.error('[Division] 청구항 DB 저장 실패:', insertErr);
-        showToast('청구항 DB 저장 실패: ' + (insertErr.message || insertErr.details || JSON.stringify(insertErr)).substring(0,100), 'error');
-        App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); return;
+      // 3) 기초(basis) 자동 지정: 등록 청구항 = 독립항 중 가장 먼저 나오는 항
+      //    보정서가 있으면 amended_text가 최종본, 없으면 original_text가 최종본
+      var hasBasis = claimRows.some(function(r){ return r.division_role === 'basis'; });
+      if(!hasBasis){
+        // 독립항 중 첫 번째를 basis로 자동 지정
+        for(var bi = 0; bi < claimRows.length; bi++){
+          if(claimRows[bi].claim_type === 'independent'){
+            claimRows[bi].division_role = 'basis';
+            console.log('[Division] 기초 청구항 자동 지정: 제' + claimRows[bi].claim_number + '항');
+            break;
+          }
+        }
       }
-      claimsSaved = true;
+
+      console.log('[Division] 저장할 청구항:', claimRows.length, '건');
+      console.log('[Division] 첫 행 샘플:', JSON.stringify(claimRows[0]).substring(0, 300));
+
+      // 4) DB 저장 (배치 → 실패 시 행별 폴백)
+      await sb.from('division_claims_parsed').delete().eq('project_id', p.id);
+      var {error:batchErr} = await sb.from('division_claims_parsed').insert(claimRows);
+
+      if(batchErr){
+        console.warn('[Division] 배치 INSERT 실패, 행별 삽입 시도:', batchErr.message || batchErr.details);
+        // 행별로 삽입 시도 — 실패한 행은 스킵
+        var savedCount = 0;
+        for(var ri = 0; ri < claimRows.length; ri++){
+          var {error:rowErr} = await sb.from('division_claims_parsed').insert(claimRows[ri]);
+          if(rowErr){
+            console.error('[Division] 행 ' + ri + ' 실패:', rowErr.message || rowErr.details, '데이터:', JSON.stringify(claimRows[ri]).substring(0, 200));
+          } else { savedCount++; }
+        }
+        if(savedCount === 0){
+          showToast('청구항 DB 저장 전체 실패. 콘솔을 확인해 주세요.', 'error');
+          App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); return;
+        }
+        showToast(savedCount + '/' + claimRows.length + '건 저장 (일부 실패)', 'info');
+        claimsSaved = true;
+      } else {
+        claimsSaved = true;
+      }
     }
 
+    // 단락 저장
     if(parsed.paragraphs && parsed.paragraphs.length > 0){
       await sb.from('division_spec_paragraphs').delete().eq('project_id', p.id);
-      var paraRows = parsed.paragraphs.map(function(para){
-        return { project_id: p.id, paragraph_number: String(para.number || '0000'), content: (para.content || '').substring(0, 50000) };
-      });
-      // 중복 paragraph_number 제거
+      var paraRows = [];
       var seenPara = {};
-      paraRows = paraRows.filter(function(r){ if(seenPara[r.paragraph_number]) return false; seenPara[r.paragraph_number]=true; return true; });
-      var {error:paraErr} = await sb.from('division_spec_paragraphs').insert(paraRows);
-      if(paraErr) console.warn('[Division] 단락 저장 실패 (무시):', paraErr);
+      parsed.paragraphs.forEach(function(para){
+        var num = String(para.number || para.paragraph_number || '0000').replace(/[^0-9]/g, '').substring(0, 10);
+        if(!num || seenPara[num]) return;
+        seenPara[num] = true;
+        paraRows.push({ project_id: p.id, paragraph_number: num, content: String(para.content || '').substring(0, 50000) });
+      });
+      if(paraRows.length > 0){
+        var {error:paraErr} = await sb.from('division_spec_paragraphs').insert(paraRows);
+        if(paraErr) console.warn('[Division] 단락 저장 실패 (무시):', paraErr.message);
+      }
     }
 
     if(!claimsSaved){
@@ -746,13 +786,16 @@ Division.renderParse = function(left, right, p){
   h += '</div>';
   left.innerHTML = h;
 
-  var rh = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📜</span> 등록 청구항 (보정 후 확정본)</div>';
+  var rh = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📜</span> 등록 청구항 (최종 확정본)</div>';
   var basisClaim = claims.find(function(c){ return c.division_role==='basis'; });
+  if(!basisClaim) basisClaim = claims.find(function(c){ return c.claim_type==='independent'; }); // 폴백
   if(basisClaim){
-    var displayText = basisClaim.amended_text || basisClaim.original_text;
-    rh += '<div class="division-claim-text"><div style="font-weight:600;margin-bottom:4px;color:var(--color-primary)">【청구항 ' + basisClaim.claim_number + '】(기초)</div>';
-    rh += '<div style="white-space:pre-wrap;font-size:13px;line-height:1.8">' + escapeHtml(displayText) + '</div></div>';
-  } else { rh += '<div style="text-align:center;padding:16px;color:var(--color-text-tertiary)">기초(basis) 역할의 청구항을 지정해 주세요.</div>'; }
+    // 최종 등록 청구항 = amended_text(보정 후) 또는 original_text(원출원 그대로)
+    var registeredText = basisClaim.amended_text || basisClaim.original_text;
+    var source = basisClaim.amended_text ? '보정 후 확정본' : '원출원 그대로';
+    rh += '<div class="division-claim-text"><div style="font-weight:600;margin-bottom:4px;color:var(--color-primary)">【청구항 ' + basisClaim.claim_number + '】 — 기초 (' + source + ')</div>';
+    rh += '<div style="white-space:pre-wrap;font-size:13px;line-height:1.8">' + escapeHtml(registeredText || '') + '</div></div>';
+  } else { rh += '<div style="text-align:center;padding:16px;color:var(--color-text-tertiary)">독립항이 파싱되지 않았습니다. 문서를 확인해 주세요.</div>'; }
   rh += '</div>';
   rh += '<div style="display:flex;gap:8px;margin-top:12px">';
   rh += '<button class="btn btn-ghost" onclick="Division.rerunParse()" style="flex:1;padding:12px"><span class="tossface">🔄</span> 재파싱</button>';
@@ -770,16 +813,22 @@ Division.updateClaimRole = async function(sel){
 };
 Division.confirmParse = async function(){
   var p = Division.state.current; if(!p) return;
-  // 청구항 존재 확인
-  if(!Division.state.claims || Division.state.claims.length === 0){
+  var claims = Division.state.claims;
+  if(!claims || claims.length === 0){
     showToast('파싱된 청구항이 없습니다. 먼저 파싱을 실행해 주세요.', 'error'); return;
   }
-  // 기초(basis) 청구항 존재 확인
-  var hasBasis = Division.state.claims.some(function(c){ return c.division_role === 'basis'; });
+  // 기초(basis) 미지정 시 자동 지정
+  var hasBasis = claims.some(function(c){ return c.division_role === 'basis'; });
   if(!hasBasis){
-    showToast('기초(basis) 역할의 청구항을 지정해 주세요.', 'error'); return;
+    var firstIndep = claims.find(function(c){ return c.claim_type === 'independent'; });
+    if(firstIndep){
+      await sb.from('division_claims_parsed').update({division_role:'basis'}).eq('id', firstIndep.id);
+      firstIndep.division_role = 'basis';
+      showToast('제' + firstIndep.claim_number + '항을 기초 청구항으로 자동 지정했습니다.', 'info');
+    }
   }
-  showToast('파싱 승인 완료. 분석을 시작합니다.'); Division.runAnalyze();
+  showToast('파싱 승인 완료. 분석을 시작합니다.');
+  Division.runAnalyze();
 };
 Division.rerunParse = function(){ Division.renderUpload(document.getElementById('divisionDetailLeft'),document.getElementById('divisionDetailRight'),Division.state.current); };
 
@@ -797,7 +846,13 @@ Division.runAnalyze = async function(){
     Division.state.specParagraphs = paragraphs || [];
     var claims = Division.state.claims;
     var basisClaim = claims.find(function(c){ return c.division_role==='basis'; });
-    if(!basisClaim){ showToast('기초 청구항이 지정되지 않았습니다','error'); return; }
+    if(!basisClaim){
+      // 폴백: 독립항 중 첫 번째를 basis로 사용
+      basisClaim = claims.find(function(c){ return c.claim_type==='independent'; });
+    }
+    if(!basisClaim){
+      showToast('독립항을 찾을 수 없습니다. 청구항을 확인해 주세요.','error'); return;
+    }
     App.showProgress('divisionAnalyzeProgress','미활용 구성 탐색 중...',2,4);
     var specText = (paragraphs||[]).map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
     var excludedClaims = claims.filter(function(c){ return c.division_role==='excluded'; });
@@ -825,8 +880,8 @@ Division.runAnalyze = async function(){
 };
 
 Division._buildAnalyzePrompt = function(basisClaim, specText, excludedText, allClaims){
-  var basisText = basisClaim.amended_text||basisClaim.original_text;
-  var allClaimsText = allClaims.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text).substring(0,500); }).join('\n');
+  var basisText = basisClaim ? (basisClaim.amended_text||basisClaim.original_text||'') : '(기초 청구항 없음)';
+  var allClaimsText = allClaims.map(function(c){ return '제'+c.claim_number+'항: '+((c.amended_text||c.original_text||'').substring(0,500)); }).join('\n');
   var p = Division.state.current;
   var divType = p ? p.division_type : 'merge';
 
@@ -953,6 +1008,8 @@ Division.runAssemble = async function(){
     var mergeNums = []; mergeCheckboxes.forEach(function(cb){ mergeNums.push(parseInt(cb.dataset.mergeClaim)); });
     var claims = Division.state.claims;
     var basisClaim = claims.find(function(c){ return c.division_role==='basis'; });
+    if(!basisClaim) basisClaim = claims.find(function(c){ return c.claim_type==='independent'; });
+    if(!basisClaim){ showToast('기초 청구항을 찾을 수 없습니다','error'); App.setButtonLoading('btnDivisionAssemble',false); return; }
     var mergeClaims = claims.filter(function(c){ return mergeNums.indexOf(c.claim_number)>=0; });
     var depCandidates = claims.filter(function(c){ return c.division_role==='dep_candidate'; });
     var assemblePrompt = Division._buildAssemblePrompt(basisClaim, selected, mergeClaims, depCandidates);
@@ -977,7 +1034,7 @@ Division.runAssemble = async function(){
 };
 
 Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeClaims, depCandidates){
-  var basisText = basisClaim.amended_text||basisClaim.original_text;
+  var basisText = basisClaim ? (basisClaim.amended_text||basisClaim.original_text||'') : '(기초 청구항 없음)';
   var compList = selectedComponents.map(function(uc){ return '- 내용: '+uc.content+'\n  삽입위치: '+uc.insertion_point+'\n  유형: '+uc.limitation_type; }).join('\n');
   var depList = depCandidates.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text); }).join('\n\n');
   var p = Division.state.current;
