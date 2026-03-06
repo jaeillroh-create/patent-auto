@@ -118,7 +118,7 @@ Opinion.del = async function(id){
 Opinion.open = async function(id){
   var p=Opinion.state.projects.find(function(x){return x.id===id;});
   if(!p){showToast('프로젝트를 찾을 수 없습니다','error');return;}
-  Opinion.state.current=p; Opinion.state.view='detail';
+  Opinion.state.current=p; Opinion.state.view='detail'; Opinion.state.viewStep=null;
   document.getElementById('opinionListView').style.display='none';
   document.getElementById('opinionDetailView').style.display='block';
   Opinion.renderDetail();
@@ -126,7 +126,7 @@ Opinion.open = async function(id){
 };
 
 Opinion.backToList = function(){
-  Opinion.state.current=null; Opinion.state.view='list';
+  Opinion.state.current=null; Opinion.state.view='list'; Opinion.state.viewStep=null;
   document.getElementById('opinionDetailView').style.display='none';
   document.getElementById('opinionListView').style.display='block';
   Opinion.loadProjects();
@@ -144,42 +144,167 @@ Opinion.renderDetail = function(){
   Opinion.renderMain(p);
 };
 
+// ═══ Step ↔ Status 매핑 ═══
+Opinion.STEP_GROUP = {upload:0,parse:0,type:0,analyze:1,gate1:2,draft:3,validate:4,gate2:5,opinion:6,gate3:7,output:8};
+Opinion.GROUP_ORDER = ['init','analysis','gate1','draft','validate','gate2','opinion','gate3','output'];
+
+// step key → 해당 단계의 "완료" 상태 (뷰 전환용)
+Opinion.STEP_TO_VIEW_STATUS = function(stepKey, type) {
+  var map = {
+    upload:'created', parse:'parsed', type:'type_determined',
+    analyze: type==='description_deficiency'?'deficiency_analyzed':type==='partial_rejection'?'allowable_identified':'analyzed',
+    gate1: type==='description_deficiency'?'correction_confirmed':type==='partial_rejection'?'merge_confirmed':'strategy_confirmed',
+    draft: type==='description_deficiency'?'corrections_drafted':type==='partial_rejection'?'merge_drafted':'claims_drafted',
+    validate: type==='description_deficiency'?'correction_validated':type==='partial_rejection'?'merge_validated':'validated',
+    gate2:'claims_confirmed', opinion:'opinion_drafted', gate3:'approved', output:'completed'
+  };
+  return map[stepKey] || 'created';
+};
+
+// step key → 해당 단계의 "시작" 상태 (되돌리기용)
+Opinion.STEP_TO_RESET_STATUS = function(stepKey, type) {
+  var map = {
+    upload:'created', parse:'created', type:'parsed',
+    analyze:'type_determined',
+    gate1: type==='description_deficiency'?'deficiency_analyzed':type==='partial_rejection'?'allowable_identified':'analyzed',
+    draft: type==='description_deficiency'?'correction_confirmed':type==='partial_rejection'?'merge_confirmed':'strategy_confirmed',
+    validate: type==='description_deficiency'?'drafting_corrections':type==='partial_rejection'?'drafting_merge':'drafting_claims',
+    gate2: type==='description_deficiency'?'correction_validated':type==='partial_rejection'?'merge_validated':'validated',
+    opinion:'claims_confirmed', gate3:'opinion_drafted', output:'approved'
+  };
+  return map[stepKey] || 'created';
+};
+
 Opinion.renderPipeline = function(p){
   var el=document.getElementById('opinionPipeline'); if(!el)return;
   var type=p.rejection_type||'inventive_step';
   var steps=[].concat(Opinion.PIPELINE.common_entry, Opinion.PIPELINE[type]||Opinion.PIPELINE.inventive_step, Opinion.PIPELINE.common_exit);
   var cg=(Opinion.STATUS[p.status]||{}).g||'init';
-  var go=['init','analysis','gate1','draft','validate','gate2','opinion','gate3','output'];
-  var ci=go.indexOf(cg);
-  var sg={upload:0,parse:0,type:0,analyze:1,gate1:2,draft:3,validate:4,gate2:5,opinion:6,gate3:7,output:8};
+  var ci=Opinion.GROUP_ORDER.indexOf(cg);
+  var viewStep=Opinion.state.viewStep;
   var h='';
   steps.forEach(function(step,i){
-    var si=sg[step.key]!==undefined?sg[step.key]:-1;
+    var si=Opinion.STEP_GROUP[step.key]!==undefined?Opinion.STEP_GROUP[step.key]:-1;
     var st=si<ci?'done':si===ci?'active':'pending';
+    var isViewing = viewStep===step.key;
+    var clickable = st==='done' || st==='active';
     if(i>0) h+='<div class="opinion-step-connector '+(st==='done'?'done':'')+'"></div>';
-    h+='<div class="opinion-step '+st+'"><div class="opinion-step-dot">'+(st==='done'?'✓':String(i+1))+'</div><span class="opinion-step-label">'+step.label+'</span></div>';
+    h+='<div class="opinion-step '+st+(isViewing?' viewing':'')+'"'
+      +(clickable?' onclick="Opinion.goToStep(\''+step.key+'\')" style="cursor:pointer"':'')+'>'
+      +'<div class="opinion-step-dot">'+(st==='done'?'✓':String(i+1))+'</div>'
+      +'<span class="opinion-step-label">'+step.label+'</span>'
+      +'</div>';
   });
   el.innerHTML=h;
 };
 
+// ═══ 파이프라인 스텝 클릭 → 해당 단계 뷰 전환 ═══
+Opinion.goToStep = function(stepKey) {
+  var p=Opinion.state.current; if(!p)return;
+  var type=p.rejection_type||'inventive_step';
+  var cg=(Opinion.STATUS[p.status]||{}).g||'init';
+  var ci=Opinion.GROUP_ORDER.indexOf(cg);
+  var si=Opinion.STEP_GROUP[stepKey]!==undefined?Opinion.STEP_GROUP[stepKey]:-1;
+
+  // 현재 단계이거나 미래 단계 → viewStep 해제 (현재 상태 그대로 표시)
+  if(si>=ci) { Opinion.state.viewStep=null; Opinion.renderDetail(); return; }
+
+  // 과거 단계 → viewStep 설정하여 과거 뷰 표시
+  Opinion.state.viewStep=stepKey;
+  Opinion.renderDetail();
+};
+
+// ═══ 현재 단계로 돌아가기 ═══
+Opinion.goToCurrent = function() {
+  Opinion.state.viewStep=null;
+  Opinion.renderDetail();
+};
+
+// ═══ 이전 단계로 되돌리기 (상태 롤백) ═══
+Opinion.rollbackToStep = async function(stepKey) {
+  var p=Opinion.state.current; if(!p)return;
+  var type=p.rejection_type||'inventive_step';
+  var targetStatus = Opinion.STEP_TO_RESET_STATUS(stepKey, type);
+  var stepLabel = '';
+  var allSteps=[].concat(Opinion.PIPELINE.common_entry, Opinion.PIPELINE[type]||Opinion.PIPELINE.inventive_step, Opinion.PIPELINE.common_exit);
+  allSteps.forEach(function(s){ if(s.key===stepKey) stepLabel=s.label; });
+
+  if(!confirm('프로젝트를 "'+stepLabel+'" 단계로 되돌리시겠습니까?\n해당 단계 이후의 진행 상태가 초기화됩니다.'))return;
+
+  try{
+    await Opinion.setStatus(p.id, targetStatus);
+    Opinion.state.viewStep=null;
+    showToast('"'+stepLabel+'" 단계로 되돌렸습니다');
+    Opinion.renderDetail();
+  }catch(e){showToast('되돌리기 실패','error');}
+};
+
+// ═══ 네비게이션 바 HTML 생성 (각 화면 상단에 삽입) ═══
+Opinion.renderNavBar = function(currentStepKey) {
+  var p=Opinion.state.current; if(!p) return '';
+  var type=p.rejection_type||'inventive_step';
+  var allSteps=[].concat(Opinion.PIPELINE.common_entry, Opinion.PIPELINE[type]||Opinion.PIPELINE.inventive_step, Opinion.PIPELINE.common_exit);
+  var cg=(Opinion.STATUS[p.status]||{}).g||'init';
+  var ci=Opinion.GROUP_ORDER.indexOf(cg);
+  var si=Opinion.STEP_GROUP[currentStepKey]!==undefined?Opinion.STEP_GROUP[currentStepKey]:-1;
+  var isViewingPast = Opinion.state.viewStep !== null;
+
+  // 이전/다음 스텝 찾기
+  var currentIdx=-1;
+  allSteps.forEach(function(s,i){ if(s.key===currentStepKey) currentIdx=i; });
+  var prevStep = currentIdx>0 ? allSteps[currentIdx-1] : null;
+  var prevClickable = prevStep && (Opinion.STEP_GROUP[prevStep.key]<ci);
+
+  var h='<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">';
+
+  // 이전 단계 보기
+  if(prevClickable) {
+    h+='<button class="btn btn-ghost btn-sm" onclick="Opinion.goToStep(\''+prevStep.key+'\')" style="font-size:12px">'
+      +'<span class="tossface">←</span> '+prevStep.label+'</button>';
+  }
+
+  // 현재 단계로 돌아가기 (과거 뷰일 때만)
+  if(isViewingPast) {
+    h+='<button class="btn btn-primary btn-sm" onclick="Opinion.goToCurrent()" style="font-size:12px">'
+      +'<span class="tossface">▶</span> 현재 단계로</button>';
+  }
+
+  // 이 단계로 되돌리기 (과거 뷰일 때, 해당 단계부터 다시 시작)
+  if(isViewingPast && si < ci) {
+    h+='<button class="btn btn-outline btn-sm" onclick="Opinion.rollbackToStep(\''+currentStepKey+'\')" style="font-size:12px;color:var(--color-warning);border-color:var(--color-warning)">'
+      +'<span class="tossface">↩️</span> 여기서 다시 시작</button>';
+  }
+
+  h+='</div>';
+  return h;
+};
+
 // ═══════════════════════════════════════════
-// 4. 상태별 메인 콘텐츠
+// 4. 상태별 메인 콘텐츠 (viewStep 오버라이드 지원)
 // ═══════════════════════════════════════════
 Opinion.renderMain = function(p){
   var L=document.getElementById('opinionDetailLeft'), R=document.getElementById('opinionDetailRight');
   if(!L||!R)return;
-  var s=p.status;
+
+  // viewStep이 설정되어 있으면 해당 단계의 뷰를 표시
+  var viewStep=Opinion.state.viewStep;
+  var s = viewStep ? Opinion.STEP_TO_VIEW_STATUS(viewStep, p.rejection_type) : p.status;
+
   if(s==='created') return Opinion.renderUpload(L,R);
   if(s==='parsing') return Opinion.renderLoading(L,R,'문서 파싱 중...','PDF에서 텍스트를 추출하고 있습니다');
   if(s==='parsed') return Opinion.renderParsed(L,R);
   if(s==='parse_failed') return Opinion.renderFailed(L,R);
   if(s==='type_determined') return Opinion.renderTypeView(L,R);
   if(['analyzing','analyzed','deficiency_analyzed','allowable_identified'].indexOf(s)>=0) return Opinion.renderAnalysis(L,R,s);
+  if(['strategy_confirmed','correction_confirmed','merge_confirmed'].indexOf(s)>=0) return Opinion.renderAnalysis(L,R,s==='correction_confirmed'?'deficiency_analyzed':s==='merge_confirmed'?'allowable_identified':'analyzed');
   if(['validating','validated','correction_validated','merge_validated'].indexOf(s)>=0) return Opinion.renderValidation(L,R,s);
   if(['claims_confirmed','drafting_opinion','opinion_drafted'].indexOf(s)>=0) return Opinion.renderOpinion(L,R,s);
   if(['approved','generating_docs','completed'].indexOf(s)>=0) return Opinion.renderOutput(L,R,s);
   // drafting states
-  Opinion.renderLoading(L,R,'청구항 작성 중...','AI가 초안을 생성하고 있습니다');
+  if(['drafting_claims','claims_drafted','drafting_corrections','corrections_drafted','drafting_merge','merge_drafted'].indexOf(s)>=0) {
+    return Opinion.renderLoading(L,R,'청구항 작성 중...','AI가 초안을 생성하고 있습니다');
+  }
+  Opinion.renderUpload(L,R);
 };
 
 Opinion.renderLoading = function(L,R,title,desc){
@@ -296,7 +421,7 @@ Opinion.startParsing = async function(){
 // 7. 유형 판별 (Phase 2)
 // ═══════════════════════════════════════════
 Opinion.renderParsed = function(L,R){
-  L.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">✅</span> 파싱 완료</div></div><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">문서 파싱이 완료되었습니다.<br>결과를 확인한 후 유형을 판별합니다.</p><button class="btn btn-primary btn-full" id="btnOpinionType" onclick="Opinion.determineType()" style="margin-top:12px"><span class="tossface">🔍</span> 유형 판별 시작</button></div>';
+  L.innerHTML=Opinion.renderNavBar('parse')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">✅</span> 파싱 완료</div></div><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">문서 파싱이 완료되었습니다.<br>결과를 확인한 후 유형을 판별합니다.</p><button class="btn btn-primary btn-full" id="btnOpinionType" onclick="Opinion.determineType()" style="margin-top:12px"><span class="tossface">🔍</span> 유형 판별 시작</button></div>';
   R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📋</span> 파싱 결과</div></div><div id="opinionParsedContent" style="font-size:13px;color:var(--color-text-secondary);padding:4px 0">로딩 중...</div></div>';
   Opinion.loadParsed();
 };
@@ -400,7 +525,7 @@ Opinion.determineType = async function(){
 
 Opinion.renderTypeView = function(L,R){
   var p=Opinion.state.current, t=Opinion.TYPES[p.rejection_type]||Opinion.TYPES.inventive_step, tr=Opinion.state.typeResult||{}, conf=Math.round((tr.confidence||0.5)*100);
-  L.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">🔍</span> 유형 판별 결과</div></div>'
+  L.innerHTML=Opinion.renderNavBar('type')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">🔍</span> 유형 판별 결과</div></div>'
     +'<div class="opinion-type-result"><div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:8px">AI 분석 결과</div>'
     +'<div class="opinion-type-determined '+t.css+'">'+t.icon+' '+t.code+'. '+t.label+'</div>'
     +'<div style="font-size:12px;color:var(--color-text-tertiary)">신뢰도: '+conf+'% <div class="opinion-confidence-bar"><div class="opinion-confidence-fill" style="width:'+conf+'%"></div></div></div>'
@@ -445,7 +570,7 @@ Opinion.renderAnalysis = function(L,R,status){
   if(!done){Opinion.renderLoading(L,R,'분석 중...','AI가 거절이유를 분석하고 있습니다');return;}
   var a=Opinion.state.analysis||{};
   var gLabel=type==='inventive_step'?'전략 결정':type==='description_deficiency'?'수정 방향 확인':'병합 대상 확정';
-  L.innerHTML='<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 1: '+gLabel+'</div><p style="font-size:13px;color:var(--color-text-secondary)">분석 결과를 검토하고 확정해 주세요.</p>'
+  L.innerHTML=Opinion.renderNavBar('gate1')+'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 1: '+gLabel+'</div><p style="font-size:13px;color:var(--color-text-secondary)">분석 결과를 검토하고 확정해 주세요.</p>'
     +(type==='inventive_step'&&a.strategies?a.strategies.map(function(s,i){return '<label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid var(--color-border);border-radius:8px;margin-top:8px;cursor:pointer"><input type="radio" name="opinionStrategy" value="'+i+'" '+(i===0?'checked':'')+' style="margin-top:3px"/><div><div style="font-size:13px;font-weight:600">'+escapeHtml(s.name||'전략 '+(i+1))+'</div><div style="font-size:12px;color:var(--color-text-secondary);margin-top:3px">'+escapeHtml(s.rationale||'')+'</div></div></label>';}).join(''):'<p style="margin-top:12px;font-size:13px;color:var(--color-text-secondary)">오른쪽 분석 결과를 검토 후 확정해 주세요.</p>')
     +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.backToList()">나중에</button><button class="btn btn-primary" id="btnGate1Approve" onclick="Opinion.approveGate(1)"><span class="tossface">✅</span> 확정</button></div></div>';
   R.innerHTML = Opinion.renderAnalysisUI(type, a);
@@ -581,7 +706,8 @@ Opinion.startValidation=async function(){var p=Opinion.state.current;if(!p)retur
 
 Opinion.renderValidation=function(L,R,status){
   var p=Opinion.state.current,v=Opinion.state.validation||{},sm=v.summary||{},ready=['validated','correction_validated','merge_validated'].indexOf(status)>=0;
-  L.innerHTML=ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 2: 청구항 확정</div><p style="font-size:13px;color:var(--color-text-secondary)">검증 보고서를 검토하고 확정해 주세요.</p><div style="margin-top:12px"><div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ PASS '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ WARN '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ FAIL '+(sm.fail||0)+'</div></div></div><div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(2)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate2Approve" onclick="Opinion.approveGate(2)"><span class="tossface">✅</span> 확정</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">검증 중...</div></div>';
+  var nav=Opinion.renderNavBar('gate2');
+  L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 2: 청구항 확정</div><p style="font-size:13px;color:var(--color-text-secondary)">검증 보고서를 검토하고 확정해 주세요.</p><div style="margin-top:12px"><div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ PASS '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ WARN '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ FAIL '+(sm.fail||0)+'</div></div></div><div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(2)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate2Approve" onclick="Opinion.approveGate(2)"><span class="tossface">✅</span> 확정</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">검증 중...</div></div>');
   var items=v.elements||v.results||[];
   R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">🔬</span> 검증 보고서</div></div>'+(items.length?items.map(function(e,i){var r=e.overall_result||e.result||'pass';return '<div class="opinion-val-item '+r+'" onclick="this.classList.toggle(\'expanded\')"><div class="opinion-val-item-header"><div class="el-no">'+(e.element_no||(i+1))+'</div><div class="el-label">'+escapeHtml((e.element_text||e.detail||'항목 '+(i+1)).slice(0,60))+'</div><div class="el-result">'+(r==='pass'?'✅':r==='warn'?'⚠️':'❌')+' '+r.toUpperCase()+'</div></div><div class="opinion-val-item-body">'+escapeHtml(e.detail||JSON.stringify(e.checks||[],null,2))+'</div></div>';}).join(''):'<p style="padding:20px;text-align:center;color:var(--color-text-tertiary)">검증 결과 없음</p>')+'</div>';
 };
@@ -590,7 +716,8 @@ Opinion.startOpinionDraft=async function(){var p=Opinion.state.current;if(!p)ret
 
 Opinion.renderOpinion=function(L,R,status){
   var ready=status==='opinion_drafted';
-  L.innerHTML=ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 3: 최종 승인</div><p style="font-size:13px;color:var(--color-text-secondary)">의견서를 검토하고 승인하면 보정서+의견서가 생성됩니다.</p><div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(3)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate3Approve" onclick="Opinion.approveGate(3)"><span class="tossface">✅</span> 승인</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">의견서 작성 중...</div></div>';
+  var nav=Opinion.renderNavBar('gate3');
+  L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 3: 최종 승인</div><p style="font-size:13px;color:var(--color-text-secondary)">의견서를 검토하고 승인하면 보정서+의견서가 생성됩니다.</p><div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(3)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate3Approve" onclick="Opinion.approveGate(3)"><span class="tossface">✅</span> 승인</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">의견서 작성 중...</div></div>');
   var o=Opinion.state.opinionDraft||{}, secs=o.sections||[];
   R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="tossface">📝</span> '+escapeHtml(o.title||'의견서')+'</span></div><div class="opinion-preview-body">'+(secs.length?secs.map(function(s){return '<div class="opinion-section"><div style="font-weight:600;margin-bottom:6px">'+escapeHtml(s.heading||'')+'</div><div>'+escapeHtml(s.content||'')+'</div></div>';}).join(''):'<p style="color:var(--color-text-tertiary);text-align:center;padding:40px">의견서 미생성</p>')+'</div></div>';
 };
@@ -599,7 +726,8 @@ Opinion.startOutput=async function(){var p=Opinion.state.current;if(!p)return;aw
 
 Opinion.renderOutput=function(L,R,status){
   var done=status==='completed';
-  L.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📥</span> 출력물</div></div><div style="display:flex;flex-direction:column;gap:8px"><button class="btn btn-primary btn-full" onclick="Opinion.download(\'amendment\')"'+(done?'':' disabled')+'><span class="tossface">📋</span> 보정서 (DOCX)</button><button class="btn btn-primary btn-full" onclick="Opinion.download(\'opinion\')"'+(done?'':' disabled')+'><span class="tossface">📝</span> 의견서 (DOCX)</button><button class="btn btn-outline btn-full" onclick="Opinion.download(\'report\')"'+(done?'':' disabled')+'><span class="tossface">📊</span> 검증보고서 (PDF)</button></div></div>';
+  var nav=Opinion.renderNavBar('output');
+  L.innerHTML=nav+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📥</span> 출력물</div></div><div style="display:flex;flex-direction:column;gap:8px"><button class="btn btn-primary btn-full" onclick="Opinion.download(\'amendment\')"'+(done?'':' disabled')+'><span class="tossface">📋</span> 보정서 (DOCX)</button><button class="btn btn-primary btn-full" onclick="Opinion.download(\'opinion\')"'+(done?'':' disabled')+'><span class="tossface">📝</span> 의견서 (DOCX)</button><button class="btn btn-outline btn-full" onclick="Opinion.download(\'report\')"'+(done?'':' disabled')+'><span class="tossface">📊</span> 검증보고서 (PDF)</button></div></div>';
   R.innerHTML='<div class="card" style="text-align:center;padding:40px">'+(done?'<div style="font-size:48px;margin-bottom:12px"><span class="tossface">🎉</span></div><h3 style="font-size:18px;font-weight:700;color:var(--color-success);margin-bottom:8px">의견서 대응 완료!</h3><p style="font-size:13px;color:var(--color-text-secondary)">보정서와 의견서가 생성되었습니다. 다운로드 후 특허로에 제출하세요.</p>':'<div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">출력물 생성 중...</div>')+'</div>';
 };
 Opinion.download=function(t){showToast(t+' 다운로드 기능은 추후 구현됩니다','info');};
