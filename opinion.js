@@ -203,6 +203,7 @@ Opinion.renderUpload = function(L,R){
     +'<div style="margin-bottom:4px"><span class="tossface">📋</span> <b>의견제출통지서</b> (필수)</div>'
     +'<div style="margin-bottom:4px"><span class="tossface">📄</span> <b>인용발명 공보</b> (유형 A/C 필수)</div>'
     +'<div><span class="tossface">📑</span> <b>출원 명세서</b> (필수)</div></div></div>'
+    +'<div id="opinionParseProgress" style="margin-top:8px"></div>'
     +'<button class="btn btn-primary btn-full" id="btnOpinionParse" onclick="Opinion.startParsing()" disabled><span class="tossface">🔍</span> 문서 파싱 시작</button>';
   R.innerHTML='<div class="card" style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:12px"><span class="tossface">📋</span></div><h3 style="font-size:16px;font-weight:600;margin-bottom:8px">의견제출통지서를 업로드하세요</h3><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6;max-width:400px;margin:0 auto">통지서를 업로드하면 AI가 자동으로 거절이유를 분석하고,<br>보정 전략 → 청구항 초안 → 검증 → 의견서 생성까지 안내합니다.</p></div>';
 };
@@ -229,22 +230,65 @@ Opinion.renderFiles=function(){
 // ═══════════════════════════════════════════
 // 6. 파싱 (Phase 1)
 // ═══════════════════════════════════════════
+// 텍스트 추출 — common.js의 App.extractTextFromFile 활용
+Opinion.extractFileText = async function(file) {
+  try {
+    return await extractTextFromFile(file);
+  } catch (e) {
+    console.warn('[Opinion] Extract failed:', file.name, e);
+    return '[텍스트 추출 실패: ' + file.name + ']';
+  }
+};
+
 Opinion.startParsing = async function(){
   var p=Opinion.state.current; if(!p||!Opinion.state.files.length)return;
   setButtonLoading('btnOpinionParse',true);
   await Opinion.setStatus(p.id,'parsing');
+  Opinion.renderDetail();
+
   try{
+    // 1. 파일 메타 DB 저장 (Storage 업로드는 선택적 — 실패해도 진행)
     for(var i=0;i<Opinion.state.files.length;i++){
-      var f=Opinion.state.files[i], fp='opinion/'+p.id+'/'+f.name;
-      await sb.storage.from('project-files').upload(fp,f,{upsert:true});
-      await sb.from('opinion_project_files').insert({project_id:p.id,file_name:f.name,file_path:fp,file_size:f.size});
+      var f=Opinion.state.files[i];
+      try{
+        var fp='opinion/'+p.id+'/'+f.name;
+        await sb.storage.from('project-files').upload(fp,f,{upsert:true});
+      }catch(storageErr){ console.warn('[Opinion] Storage upload skipped:', storageErr.message); }
+      try { await sb.from('opinion_project_files').insert({
+        project_id:p.id, file_name:f.name, file_path:'opinion/'+p.id+'/'+f.name, file_size:f.size
+      }); } catch(dbErr) { console.warn('[Opinion] File DB insert skipped:', dbErr.message); }
     }
-    var allText=''; for(var j=0;j<Opinion.state.files.length;j++){var ff=Opinion.state.files[j]; if(ff.name.endsWith('.txt'))allText+=await ff.text()+'\n\n'; else allText+='[파일: '+ff.name+' — 서버 파싱 필요]\n\n';}
-    var r=await App.callClaude(Opinion.SYS_PROMPT+'\n\n다음 의견제출통지서를 파싱하여 구조화 JSON으로: 출원번호, 출원인, 발명명칭, 거절이유(조항포함), 인용발명목록, 대비표, 청구항전문\n\n---\n'+allText.slice(0,15000));
-    await sb.from('opinion_parsed_documents').insert({project_id:p.id,raw_text:allText.slice(0,50000),parsed_data:Opinion.parseJSON(r.text)});
+
+    // 2. 파일별 텍스트 추출 (common.js의 extractTextFromFile 활용)
+    var allText = '';
+    var totalFiles = Opinion.state.files.length;
+    for(var j=0;j<totalFiles;j++){
+      var ff=Opinion.state.files[j];
+      showProgress('opinionParseProgress', ff.name+' 추출 중...', j+1, totalFiles);
+      var fileText = await Opinion.extractFileText(ff);
+      allText += '=== [' + ff.name + '] ===\n' + fileText + '\n\n';
+    }
+
+    if(allText.replace(/===\s*\[.*?\]\s*===/g,'').trim().length < 50){
+      throw new Error('파일에서 추출된 텍스트가 너무 적습니다. PDF가 이미지 스캔본일 수 있습니다.');
+    }
+
+    // 3. LLM 파싱
+    showProgress('opinionParseProgress', 'AI 분석 중...', totalFiles, totalFiles);
+    var r=await App.callClaude(Opinion.SYS_PROMPT+'\n\n다음 의견제출통지서 및 관련 문서의 텍스트를 분석하여 구조화해 주세요.\n\n추출할 항목 (반드시 JSON으로):\n1. application_no: 출원번호\n2. applicant: 출원인\n3. invention_title: 발명의 명칭\n4. rejection_reasons: [{claim_nos:[N], article:"§29②", reason:"진보성 위반", cited_refs:["인용문헌1"]}]\n5. cited_references: [{ref_no:N, title:"...", publication_no:"..."}]\n6. claims: [{no:N, text:"..."}]\n7. comparison_table: [{element_no:N, applicant_feature:"...", cited_feature:"..."}] (있는 경우)\n\n---\n'+allText.slice(0,30000));
+
+    var parsed = Opinion.parseJSON(r.text);
+    await sb.from('opinion_parsed_documents').insert({project_id:p.id, raw_text:allText.slice(0,100000), parsed_data:parsed});
+    clearProgress('opinionParseProgress');
     await Opinion.setStatus(p.id,'parsed');
     showToast('파싱 완료'); Opinion.renderDetail();
-  }catch(e){console.error('[Opinion] parse:',e);await Opinion.setStatus(p.id,'parse_failed');showToast('파싱 실패: '+e.message,'error');Opinion.renderDetail();}
+  }catch(e){
+    console.error('[Opinion] parse:',e);
+    clearProgress('opinionParseProgress');
+    await Opinion.setStatus(p.id,'parse_failed');
+    showToast('파싱 실패: '+e.message,'error');
+    Opinion.renderDetail();
+  }
   finally{setButtonLoading('btnOpinionParse',false);}
 };
 
@@ -252,15 +296,90 @@ Opinion.startParsing = async function(){
 // 7. 유형 판별 (Phase 2)
 // ═══════════════════════════════════════════
 Opinion.renderParsed = function(L,R){
-  L.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">✅</span> 파싱 완료</div></div><p style="font-size:13px;color:var(--color-text-secondary)">거절이유 유형을 판별합니다.</p><button class="btn btn-primary btn-full" id="btnOpinionType" onclick="Opinion.determineType()" style="margin-top:12px"><span class="tossface">🔍</span> 유형 판별 시작</button></div>';
-  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📋</span> 파싱 결과</div></div><div id="opinionParsedContent" style="font-size:12px;color:var(--color-text-secondary)">로딩 중...</div></div>';
+  L.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">✅</span> 파싱 완료</div></div><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">문서 파싱이 완료되었습니다.<br>결과를 확인한 후 유형을 판별합니다.</p><button class="btn btn-primary btn-full" id="btnOpinionType" onclick="Opinion.determineType()" style="margin-top:12px"><span class="tossface">🔍</span> 유형 판별 시작</button></div>';
+  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📋</span> 파싱 결과</div></div><div id="opinionParsedContent" style="font-size:13px;color:var(--color-text-secondary);padding:4px 0">로딩 중...</div></div>';
   Opinion.loadParsed();
 };
 Opinion.loadParsed = async function(){
   var p=Opinion.state.current,el=document.getElementById('opinionParsedContent');if(!p||!el)return;
   try{var{data}=await sb.from('opinion_parsed_documents').select('parsed_data').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).single();
-    if(data&&data.parsed_data)el.innerHTML='<pre style="white-space:pre-wrap;font-size:12px;background:var(--color-bg-tertiary);padding:16px;border-radius:8px;max-height:400px;overflow-y:auto">'+escapeHtml(JSON.stringify(data.parsed_data,null,2))+'</pre>';
+    if(data&&data.parsed_data){ Opinion.renderParsedUI(el, data.parsed_data); }
+    else { el.textContent='파싱 데이터가 없습니다.'; }
   }catch(e){el.textContent='데이터를 불러올 수 없습니다.';}
+};
+
+// 파싱 결과 구조화 렌더링
+Opinion.renderParsedUI = function(el, pd) {
+  if(pd.raw_text && !pd.application_no) {
+    // LLM이 구조화 실패 → raw_text만 있는 경우
+    el.innerHTML='<div style="padding:12px;background:var(--color-warning-light);border-radius:8px;border-left:3px solid var(--color-warning);margin-bottom:12px"><div style="font-weight:600;font-size:12px;color:#92400e;margin-bottom:4px">⚠️ 자동 구조화에 실패했습니다</div><div style="font-size:12px;color:#92400e">PDF 내용이 이미지 스캔본이거나 형식이 비표준일 수 있습니다. 유형 판별은 원문 기준으로 진행됩니다.</div></div>'
+      +'<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--color-text-secondary)">원문 텍스트 보기</summary>'
+      +'<pre style="white-space:pre-wrap;font-size:11px;background:var(--color-bg-tertiary);padding:12px;border-radius:8px;max-height:300px;overflow-y:auto;margin-top:8px">'+escapeHtml(pd.raw_text.slice(0,3000))+'</pre></details>';
+    return;
+  }
+
+  var h='';
+
+  // 기본 정보
+  if(pd.application_no||pd.invention_title||pd.applicant) {
+    h+='<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;padding:14px;background:var(--color-bg-tertiary);border-radius:8px;margin-bottom:14px;font-size:13px">';
+    if(pd.application_no) h+='<span style="font-weight:600;color:var(--color-text-secondary)">출원번호</span><span>'+escapeHtml(pd.application_no)+'</span>';
+    if(pd.invention_title) h+='<span style="font-weight:600;color:var(--color-text-secondary)">발명의 명칭</span><span>'+escapeHtml(pd.invention_title)+'</span>';
+    if(pd.applicant) h+='<span style="font-weight:600;color:var(--color-text-secondary)">출원인</span><span>'+escapeHtml(pd.applicant)+'</span>';
+    h+='</div>';
+  }
+
+  // 거절이유
+  if(pd.rejection_reasons&&pd.rejection_reasons.length) {
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tossface">⚠️</span> 거절이유</div>';
+    pd.rejection_reasons.forEach(function(rr) {
+      h+='<div style="padding:10px 14px;border:1px solid var(--color-border);border-radius:8px;margin-bottom:6px;background:#fff">'
+        +'<div style="font-size:13px;font-weight:600;color:var(--color-error)">'+escapeHtml(rr.article||'')+'<span style="font-weight:400;color:var(--color-text-secondary);margin-left:8px">'+escapeHtml(rr.reason||'')+'</span></div>'
+        +(rr.claim_nos?'<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:4px">대상 청구항: '+rr.claim_nos.join(', ')+'</div>':'')
+        +(rr.cited_refs?'<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">인용문헌: '+rr.cited_refs.join(', ')+'</div>':'')
+        +'</div>';
+    });
+    h+='</div>';
+  }
+
+  // 인용문헌
+  if(pd.cited_references&&pd.cited_references.length) {
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tossface">📄</span> 인용문헌</div>';
+    pd.cited_references.forEach(function(ref) {
+      h+='<div style="padding:8px 12px;background:var(--color-bg-tertiary);border-radius:6px;margin-bottom:4px;font-size:12px">'
+        +'<span style="font-weight:600">'+escapeHtml('인용문헌 '+(ref.ref_no||''))+'</span> '
+        +escapeHtml(ref.title||ref.publication_no||'')
+        +'</div>';
+    });
+    h+='</div>';
+  }
+
+  // 청구항
+  if(pd.claims&&pd.claims.length) {
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tossface">📑</span> 청구항 ('+pd.claims.length+'개)</div>';
+    h+='<details><summary style="cursor:pointer;font-size:12px;color:var(--color-primary);font-weight:500">청구항 펼치기</summary><div style="margin-top:8px">';
+    pd.claims.forEach(function(c) {
+      h+='<div style="padding:8px 12px;border-left:3px solid var(--color-primary-light);margin-bottom:6px;font-size:12px;line-height:1.6;background:var(--color-bg-tertiary);border-radius:0 6px 6px 0">'
+        +'<span style="font-weight:600;color:var(--color-primary)">【청구항 '+c.no+'】</span> '
+        +escapeHtml((c.text||'').slice(0,200))+(c.text&&c.text.length>200?'...':'')
+        +'</div>';
+    });
+    h+='</div></details></div>';
+  }
+
+  // 대비표
+  if(pd.comparison_table&&pd.comparison_table.length) {
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tossface">⚖️</span> 구성요소 대비표</div>';
+    h+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--color-bg-tertiary)"><th style="padding:8px;text-align:left;border-bottom:1px solid var(--color-border)">구성요소</th><th style="padding:8px;text-align:left;border-bottom:1px solid var(--color-border)">본원</th><th style="padding:8px;text-align:left;border-bottom:1px solid var(--color-border)">인용발명</th></tr></thead><tbody>';
+    pd.comparison_table.forEach(function(row) {
+      h+='<tr><td style="padding:6px 8px;border-bottom:1px solid var(--color-divider);font-weight:600">❶ '+(row.element_no||'')+'</td>'
+        +'<td style="padding:6px 8px;border-bottom:1px solid var(--color-divider)">'+escapeHtml(row.applicant_feature||'-')+'</td>'
+        +'<td style="padding:6px 8px;border-bottom:1px solid var(--color-divider)">'+escapeHtml(row.cited_feature||'-')+'</td></tr>';
+    });
+    h+='</tbody></table></div>';
+  }
+
+  el.innerHTML = h || '<p style="color:var(--color-text-tertiary)">파싱 데이터가 비어 있습니다.</p>';
 };
 
 Opinion.determineType = async function(){
@@ -329,7 +448,108 @@ Opinion.renderAnalysis = function(L,R,status){
   L.innerHTML='<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 1: '+gLabel+'</div><p style="font-size:13px;color:var(--color-text-secondary)">분석 결과를 검토하고 확정해 주세요.</p>'
     +(type==='inventive_step'&&a.strategies?a.strategies.map(function(s,i){return '<label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid var(--color-border);border-radius:8px;margin-top:8px;cursor:pointer"><input type="radio" name="opinionStrategy" value="'+i+'" '+(i===0?'checked':'')+' style="margin-top:3px"/><div><div style="font-size:13px;font-weight:600">'+escapeHtml(s.name||'전략 '+(i+1))+'</div><div style="font-size:12px;color:var(--color-text-secondary);margin-top:3px">'+escapeHtml(s.rationale||'')+'</div></div></label>';}).join(''):'<p style="margin-top:12px;font-size:13px;color:var(--color-text-secondary)">오른쪽 분석 결과를 검토 후 확정해 주세요.</p>')
     +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.backToList()">나중에</button><button class="btn btn-primary" id="btnGate1Approve" onclick="Opinion.approveGate(1)"><span class="tossface">✅</span> 확정</button></div></div>';
-  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📊</span> 분석 결과</div></div><pre style="white-space:pre-wrap;font-size:12px;background:var(--color-bg-tertiary);padding:16px;border-radius:8px;max-height:500px;overflow-y:auto">'+escapeHtml(JSON.stringify(a,null,2))+'</pre></div>';
+  R.innerHTML = Opinion.renderAnalysisUI(type, a);
+};
+
+// 분석 결과 구조화 렌더링
+Opinion.renderAnalysisUI = function(type, a) {
+  var h = '<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📊</span> 분석 결과</div></div>';
+
+  if (type === 'inventive_step') {
+    // 구성요소별 분석
+    var elements = a.elements || [];
+    if (elements.length) {
+      h += '<div style="margin-bottom:16px"><div style="font-weight:600;font-size:13px;margin-bottom:10px">구성요소별 대비</div>';
+      elements.forEach(function(el) {
+        var strengthColor = el.strength === 'strong' ? 'var(--color-success)' : el.strength === 'weak' ? 'var(--color-error)' : 'var(--color-warning)';
+        var strengthLabel = el.strength === 'strong' ? '강함' : el.strength === 'weak' ? '약함' : '보통';
+        h += '<div style="padding:12px;border:1px solid var(--color-border);border-radius:8px;margin-bottom:8px">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+          + '<span style="font-weight:600;font-size:13px">' + escapeHtml(el.element_id || ('구성요소 ' + el.no)) + '</span>'
+          + '<span style="font-size:11px;font-weight:600;padding:2px 10px;border-radius:12px;background:' + strengthColor + '20;color:' + strengthColor + '">차이 ' + strengthLabel + '</span>'
+          + '</div>'
+          + '<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.6">' + escapeHtml(el.claim_element || el.description || '') + '</div>'
+          + (el.difference ? '<div style="font-size:12px;margin-top:6px;padding:8px 10px;background:var(--color-bg-tertiary);border-radius:6px;color:var(--color-text-primary)"><b>차이점:</b> ' + escapeHtml(el.difference) + '</div>' : '')
+          + (el.non_obviousness_argument ? '<div style="font-size:11px;margin-top:4px;color:var(--color-primary)">💡 ' + escapeHtml(el.non_obviousness_argument).slice(0, 120) + '</div>' : '')
+          + '</div>';
+      });
+      h += '</div>';
+    }
+
+    // 전략 대안 (간략 표시)
+    var strategies = a.strategies || [];
+    if (strategies.length) {
+      h += '<div style="margin-bottom:12px"><div style="font-weight:600;font-size:13px;margin-bottom:10px">보정 전략 대안 (' + strategies.length + '개)</div>';
+      strategies.forEach(function(s, i) {
+        h += '<div style="padding:10px 14px;border:1px solid var(--color-border);border-radius:8px;margin-bottom:6px">'
+          + '<div style="font-weight:600;font-size:13px;color:var(--color-primary)">' + escapeHtml(s.name || ('전략 ' + (i + 1))) + '</div>'
+          + '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;line-height:1.6">' + escapeHtml(s.rationale || '') + '</div>'
+          + '<div style="display:flex;gap:12px;margin-top:6px;font-size:11px">'
+          + (s.scope_impact ? '<span>📐 범위: <b>' + escapeHtml(s.scope_impact) + '</b></span>' : '')
+          + (s.risk ? '<span>⚠️ 위험: <b>' + escapeHtml(s.risk) + '</b></span>' : '')
+          + '</div></div>';
+      });
+      h += '</div>';
+    }
+
+    // 인용문헌
+    var refs = a.cited_references || [];
+    if (refs.length) {
+      h += '<div><div style="font-weight:600;font-size:13px;margin-bottom:8px">인용문헌 (' + refs.length + '건)</div>';
+      refs.forEach(function(r) {
+        h += '<div style="padding:6px 12px;background:var(--color-bg-tertiary);border-radius:6px;margin-bottom:4px;font-size:12px">'
+          + '<b>인용문헌 ' + (r.ref_no || '') + '</b> ' + escapeHtml(r.title || r.key_features || '') + '</div>';
+      });
+      h += '</div>';
+    }
+  } else if (type === 'description_deficiency') {
+    // 기재불비 지적사항 목록
+    var items = Array.isArray(a) ? a : (a.deficiency_items || a.items || []);
+    if (items.length) {
+      h += '<div style="font-weight:600;font-size:13px;margin-bottom:10px">지적사항 (' + items.length + '건)</div>';
+      items.forEach(function(item, i) {
+        h += '<div style="padding:12px;border:1px solid var(--color-border);border-radius:8px;margin-bottom:8px">'
+          + '<div style="display:flex;justify-content:space-between;margin-bottom:6px">'
+          + '<span style="font-weight:600;font-size:13px">청구항 ' + (item.claim_no || (i + 1)) + '</span>'
+          + '<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--color-warning-light);color:#92400e">' + escapeHtml(item.deficiency_type || '불명확') + '</span>'
+          + '</div>'
+          + '<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.6">' + escapeHtml(item.examiner_comment || '') + '</div>'
+          + (item.suggested_correction ? '<div style="margin-top:8px;padding:8px 10px;background:var(--color-primary-light);border-radius:6px;border-left:3px solid var(--color-primary);font-size:12px"><b>수정 방향:</b> ' + escapeHtml(item.suggested_correction) + '</div>' : '')
+          + '</div>';
+      });
+    }
+  } else if (type === 'partial_rejection') {
+    // 등록가능 청구항 식별
+    var rej = a.rejected_claims || [];
+    var alw = a.allowable_claims || [];
+    var mg = a.merge_suggestion || {};
+    if (rej.length || alw.length) {
+      h += '<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:10px">청구항별 거절 현황</div>';
+      rej.forEach(function(r) {
+        h += '<div class="opinion-claim-row rejected"><span class="claim-no">청구항 ' + r.claim_no + '</span><span>❌</span><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">' + escapeHtml(r.reason || '거절') + '</span></div>';
+      });
+      alw.forEach(function(a) {
+        h += '<div class="opinion-claim-row allowable"><span class="claim-no">청구항 ' + a.claim_no + '</span><span>✅</span><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">' + escapeHtml(a.basis || '등록가능 후보') + '</span></div>';
+      });
+      h += '</div>';
+    }
+    if (mg.target || mg.source) {
+      h += '<div style="padding:14px;background:var(--color-primary-light);border-radius:8px;border-left:3px solid var(--color-primary)">'
+        + '<div style="font-weight:600;font-size:13px;color:var(--color-primary);margin-bottom:6px">💡 병합 제안</div>'
+        + '<div style="font-size:12px;line-height:1.6">청구항 ' + (mg.source || '?') + ' → 청구항 ' + (mg.target || '?') + '에 병합</div>'
+        + (mg.rationale ? '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px">' + escapeHtml(mg.rationale) + '</div>' : '')
+        + '</div>';
+    }
+  }
+
+  // 그래도 뭔가 없으면 fallback
+  if (h === '<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📊</span> 분석 결과</div></div>') {
+    h += '<details><summary style="cursor:pointer;font-size:12px;font-weight:500;color:var(--color-text-secondary)">원본 데이터 보기</summary>'
+      + '<pre style="white-space:pre-wrap;font-size:11px;background:var(--color-bg-tertiary);padding:12px;border-radius:8px;max-height:400px;overflow-y:auto;margin-top:8px">' + escapeHtml(JSON.stringify(a, null, 2)) + '</pre></details>';
+  }
+
+  h += '</div>';
+  return h;
 };
 
 Opinion.approveGate = async function(gn){
