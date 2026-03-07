@@ -147,6 +147,13 @@
 .division-title-option:hover { background: var(--color-bg-tertiary); }
 .division-title-option input[type="radio"] { margin-top: 3px; flex-shrink: 0; }
 
+/* ═══ 15. 청구항 개수 선택 버튼 그룹 ═══ */
+.division-claim-count-group { display: inline-flex; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; }
+.division-count-btn { padding: 6px 14px; border: none; background: #fff; font-size: 12px; font-weight: var(--font-weight-medium); font-family: var(--font-family); color: var(--color-text-secondary); cursor: pointer; transition: all 0.15s; border-right: 1px solid var(--color-border); }
+.division-count-btn:last-child { border-right: none; }
+.division-count-btn:hover { background: var(--color-bg-tertiary); }
+.division-count-btn.active { background: var(--color-primary); color: #fff; font-weight: var(--font-weight-semibold); }
+
 /* ═══ 14-1. 명칭 변경 경고 ═══ */
 .division-title-warning { margin-top: 12px; padding: 12px 14px; background: var(--color-warning-light); border: 1px solid var(--color-warning); border-radius: var(--radius-sm); font-size: 13px; color: #92400e; line-height: 1.6; }
 .division-title-warning ul { margin: 4px 0 0 16px; padding: 0; }

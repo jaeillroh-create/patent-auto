@@ -987,15 +987,62 @@ Division.runAnalyze = async function(){
     var analyzed;
     try { analyzed = Division._extractJSON(result.text); }
     catch(e) { showToast('분석 결과 해석 실패: ' + e.message.substring(0,80),'error'); return; }
+
+    // unused_components 저장 (enum 정제)
+    var VALID_LIM = ['structural','material','shape','arrangement','functional'];
+    var VALID_RISK = ['safe','caution','danger'];
+    function sEnum(v,list,fb){ if(!v) return fb; v=String(v).trim().toLowerCase().replace(/[\s-]+/g,'_'); return list.indexOf(v)>=0?v:fb; }
+
     await sb.from('division_unused_components').delete().eq('project_id',p.id);
     if(analyzed.unused_components && analyzed.unused_components.length > 0){
-      var compRows = analyzed.unused_components.map(function(uc){ return { project_id:p.id, paragraph_number:uc.paragraph_number||'', content:uc.content||'', related_element:uc.related_element||'', limitation_type:uc.limitation_type||'functional', risk_level:uc.risk_level||'safe', risk_flags:uc.risk_flags||[], insertion_point:uc.insertion_point||'', suggestion:uc.suggestion||'', user_selection:'pending' }; });
-      await sb.from('division_unused_components').insert(compRows);
+      var compRows = analyzed.unused_components.map(function(uc){
+        // risk_flags: 배열이 아니면 빈 배열로
+        var flags = uc.risk_flags;
+        if(!Array.isArray(flags)) flags = flags ? [String(flags)] : [];
+        return {
+          project_id: p.id,
+          paragraph_number: String(uc.paragraph_number||'0000').substring(0,20),
+          content: String(uc.content||'').substring(0,50000),
+          related_element: String(uc.related_element||'').substring(0,200),
+          limitation_type: sEnum(uc.limitation_type, VALID_LIM, 'functional'),
+          risk_level: sEnum(uc.risk_level, VALID_RISK, 'safe'),
+          risk_flags: JSON.stringify(flags), // JSONB는 문자열로 전달
+          insertion_point: String(uc.insertion_point||'').substring(0,5000),
+          suggestion: String(uc.suggestion||'').substring(0,5000),
+          user_selection: 'pending'
+        };
+      });
+      var {error:compErr} = await sb.from('division_unused_components').insert(compRows);
+      if(compErr){
+        console.error('[Division] 미활용 구성 저장 실패:', compErr.message||compErr.details);
+        // 행별 폴백
+        var saved=0;
+        for(var ci=0;ci<compRows.length;ci++){
+          var {error:re}=await sb.from('division_unused_components').insert(compRows[ci]);
+          if(re) console.warn('[Division] 구성 행 '+ci+' 실패:', re.message, JSON.stringify(compRows[ci]).substring(0,200));
+          else saved++;
+        }
+        if(saved>0) console.log('[Division] 미활용 구성 '+saved+'/'+compRows.length+'건 저장');
+      }
     }
-    await sb.from('division_projects').update({status:'analyzed', updated_at: new Date().toISOString(), analysis_meta: analyzed.themes ? {themes:analyzed.themes} : analyzed.original_category ? {original_category:analyzed.original_category, target_category:analyzed.target_category} : null}).eq('id',p.id);
+
+    // 프로젝트 상태 + analysis_meta 저장
+    var projUpdate = { status:'analyzed', updated_at:new Date().toISOString() };
+    // analysis_meta는 컬럼이 없을 수 있으므로 별도 시도
+    var metaData = analyzed.themes ? {themes:analyzed.themes} : analyzed.original_category ? {original_category:analyzed.original_category, target_category:analyzed.target_category} : null;
+
+    var {error:projErr} = await sb.from('division_projects').update(projUpdate).eq('id',p.id);
+    if(projErr){ console.error('[Division] 프로젝트 상태 업데이트 실패:', projErr.message); }
+
+    if(metaData){
+      var {error:metaErr} = await sb.from('division_projects').update({analysis_meta:metaData}).eq('id',p.id);
+      if(metaErr){
+        console.warn('[Division] analysis_meta 저장 실패 (컬럼 미존재?):', metaErr.message);
+        // 메모리에는 유지
+      }
+      p.analysis_meta = metaData;
+    }
     p.status = 'analyzed';
-    if(analyzed.themes) p.analysis_meta = {themes:analyzed.themes};
-    if(analyzed.original_category) p.analysis_meta = {original_category:analyzed.original_category, target_category:analyzed.target_category};
     App.clearProgress('divisionAnalyzeProgress');
     var toastMsg = p.division_type==='strategic' ? '분석 완료! 테마를 선택해 주세요.' : p.division_type==='category_change' ? '분석 완료! 변환 구성을 확인해 주세요.' : '분석 완료! 부가 구성을 선택해 주세요.';
     showToast(toastMsg);
@@ -1104,6 +1151,47 @@ Division.renderAnalyze = function(left, right, p){
   }
   rh += '<div class="division-summary-item"><div class="division-summary-num">'+selectedCount+'</div><div class="division-summary-label">선택된 구성</div></div>';
   rh += '</div></div>';
+
+  // 청구항 구성 설정
+  rh += '<div class="card" style="padding:16px;margin-top:12px">';
+  rh += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">⚙️</span> 청구항 구성</div>';
+
+  // 독립항 수
+  rh += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">';
+  rh += '<span style="font-size:13px;font-weight:500;min-width:80px">독립항 수</span>';
+  rh += '<div class="division-claim-count-group" id="divisionIndepCount">';
+  [1,2,3].forEach(function(n){
+    var active = (Division.state.indepCount||1) === n;
+    rh += '<button class="division-count-btn' + (active?' active':'') + '" onclick="Division.setIndepCount('+n+')">' + n + '</button>';
+  });
+  rh += '</div>';
+  rh += '<span style="font-size:11px;color:var(--color-text-tertiary)">기본 1개</span>';
+  rh += '</div>';
+
+  // 종속항 수 (독립항당)
+  rh += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">';
+  rh += '<span style="font-size:13px;font-weight:500;min-width:80px">종속항 수</span>';
+  rh += '<div class="division-claim-count-group" id="divisionDepCount">';
+  [0,2,4,6,'자동'].forEach(function(n){
+    var val = n === '자동' ? -1 : n;
+    var active = (Division.state.depCount === undefined ? -1 : Division.state.depCount) === val;
+    rh += '<button class="division-count-btn' + (active?' active':'') + '" onclick="Division.setDepCount('+val+')">' + (n === '자동' ? '자동' : n+'개') + '</button>';
+  });
+  rh += '</div>';
+  rh += '</div>';
+
+  // 예상 청구항 구성 요약
+  var ic = Division.state.indepCount || 1;
+  var dc = Division.state.depCount === undefined ? -1 : Division.state.depCount;
+  var totalEst = dc === -1 ? ic + '+ (AI 자동)' : (ic + ic*dc) + '항';
+  rh += '<div style="padding:10px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm);font-size:12px;color:var(--color-text-secondary);text-align:center">';
+  rh += '예상: 독립항 ' + ic + '개';
+  if(dc === -1) rh += ' + 종속항 자동 구성';
+  else if(dc > 0) rh += ' × 종속항 ' + dc + '개 = 총 ' + totalEst;
+  else rh += ' (종속항 없음)';
+  rh += '</div>';
+  rh += '</div>';
+
   rh += '<div id="divisionAssembleProgress" style="margin-top:12px"></div>';
   rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.rerunAnalyze()" style="flex:1;padding:12px"><span class="tossface">🔄</span> 재분석</button>';
   rh += '<button class="btn btn-primary" id="btnDivisionAssemble" onclick="Division.runAssemble()" style="flex:1;padding:12px"><span class="tossface">🔧</span> 조립 실행</button></div>';
@@ -1117,6 +1205,16 @@ Division.toggleComponent = async function(cb){
   } catch(e) { showToast('변경 실패','error'); }
 };
 Division.rerunAnalyze = function(){ Division.runAnalyze(); };
+
+// 청구항 개수 설정
+Division.setIndepCount = function(n){
+  Division.state.indepCount = n;
+  Division.renderDetail(); // 오른쪽 패널만 갱신하기 위해 전체 재렌더
+};
+Division.setDepCount = function(n){
+  Division.state.depCount = n; // -1=자동, 0,2,4,6
+  Division.renderDetail();
+};
 
 // ═══════════════════════════════════════════
 // 12. Checkpoint 3: 조립
@@ -1136,7 +1234,7 @@ Division.runAssemble = async function(){
     if(!basisClaim){ showToast('기초 청구항을 찾을 수 없습니다','error'); App.setButtonLoading('btnDivisionAssemble',false); return; }
     var mergeClaims = claims.filter(function(c){ return mergeNums.indexOf(c.claim_number)>=0; });
     var depCandidates = claims.filter(function(c){ return c.division_role==='dep_candidate'; });
-    var assemblePrompt = Division._buildAssemblePrompt(basisClaim, selected, mergeClaims, depCandidates);
+    var assemblePrompt = Division._buildAssemblePrompt(basisClaim, selected, mergeClaims, depCandidates, Division.state.indepCount||1, Division.state.depCount);
     var result = await Division.callAI(assemblePrompt);
     App.showProgress('divisionAssembleProgress','결과 저장 중...',2,3);
     var assembled;
@@ -1157,32 +1255,37 @@ Division.runAssemble = async function(){
   } catch(e) { App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false); showToast('조립 실패: '+e.message,'error'); }
 };
 
-Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeClaims, depCandidates){
+Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeClaims, depCandidates, indepCount, depCount){
   var basisText = basisClaim ? (basisClaim.amended_text||basisClaim.original_text||'') : '(기초 청구항 없음)';
   var compList = selectedComponents.map(function(uc){ return '- 내용: '+uc.content+'\n  삽입위치: '+uc.insertion_point+'\n  유형: '+uc.limitation_type; }).join('\n');
-  var depList = depCandidates.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text); }).join('\n\n');
+  var depList = depCandidates.map(function(c){ return '제'+c.claim_number+'항: '+((c.amended_text||c.original_text||'').substring(0,1000)); }).join('\n\n');
   var p = Division.state.current;
   var divType = p ? p.division_type : 'merge';
+  indepCount = indepCount || 1;
+  var depInstr = depCount === 0 ? '종속항 없이 독립항만 작성' : depCount > 0 ? '각 독립항에 종속항 '+depCount+'개씩 작성' : '각 독립항에 적절한 수의 종속항을 자동 구성 (원출원 종속항 후보 활용)';
+
+  var claimCountRule = '\n\n★★★ 청구항 구성 지시 ★★★\n- 독립항: 정확히 ' + indepCount + '개 작성\n- 종속항: ' + depInstr + '\n- 청구항 번호는 1부터 연번\n';
 
   if(divType === 'category_change'){
     var meta = p.analysis_meta || {};
-    return '아래 등록 청구항을 카테고리 변경하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis) — '+( meta.original_category==='method'?'방법':'장치')+']\n'+basisText+'\n\n[변환 방향]\n'+(meta.original_category==='method'?'방법 → 장치':'장치 → 방법')+'\n\n[변환에 활용할 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+'\n\n조립 규칙:\n1. 방법→장치 변환:\n   - "~하는 단계" → "~하는 ~부/모듈/수단"\n   - 말미: "~을 포함하는 [장치명]." 형태\n   - 각 단계를 수행하는 구성요소를 명세서에서 식별하여 구조적으로 기재\n2. 장치→방법 변환:\n   - "~부/수단" → "~하는 단계"\n   - 말미: "~을 포함하는 [동작명] 방법." 형태\n   - 구성요소의 동작/기능을 시간순으로 배열\n3. 선택된 변환 구성은 변환된 청구항에 자연스럽게 통합\n4. 종속항도 동일하게 카테고리 변환\n5. 변환 부분은 **볼드**로 표시\n6. 명칭: 변환된 카테고리를 반영한 국문/영문 각 2개\n\n출력 JSON:\n{"division_claims":[{"claim_number":1,"claim_type":"independent","parent_claim_number":null,"claim_text":"최종텍스트","claim_text_highlighted":"**변환부분** 표시"}],"title_candidates":[{"ko":"국문명칭","en":"English title"}]}\n\nJSON만 출력하라.';
+    return '아래 등록 청구항을 카테고리 변경하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis) — '+(meta.original_category==='method'?'방법':'장치')+']\n'+basisText+'\n\n[변환 방향]\n'+(meta.original_category==='method'?'방법 → 장치':'장치 → 방법')+'\n\n[변환에 활용할 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 방법→장치: "~하는 단계"→"~하는 ~부/수단", 말미 "~을 포함하는 [장치명]."\n2. 장치→방법: "~부/수단"→"~하는 단계", 말미 "~을 포함하는 방법."\n3. 변환 부분은 **볼드**\n4. 명칭: 국문/영문 각 2개\n\n★★★ JSON만 출력. {로 시작 }로 끝나는 순수 JSON. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"텍스트","claim_text_highlighted":"**표시**"}],"title_candidates":[{"ko":"","en":""}]}';
   }
 
   if(divType === 'strategic'){
     var themes = (p.analysis_meta && p.analysis_meta.themes) || [];
-    // 선택된 테마 수집
     var selectedThemes = [];
-    var themeCheckboxes = document.querySelectorAll('[data-theme-id]:checked');
-    themeCheckboxes.forEach(function(cb){ var tid=cb.dataset.themeId; var t=themes.find(function(x){return x.theme_id===tid;}); if(t) selectedThemes.push(t); });
-    var themesDesc = selectedThemes.map(function(t){ return '테마: '+t.theme_name+'\n설명: '+t.description+'\n핵심구성: '+(t.key_elements||[]).join(', ')+'\n근거단락: '+(t.spec_paragraphs||[]).join(', '); }).join('\n\n');
+    try { var themeCheckboxes = document.querySelectorAll('[data-theme-id]:checked');
+      themeCheckboxes.forEach(function(cb){ var tid=cb.dataset.themeId; var t=themes.find(function(x){return x.theme_id===tid;}); if(t) selectedThemes.push(t); });
+    } catch(e){}
+    if(!selectedThemes.length && themes.length > 0) selectedThemes = themes.slice(0, indepCount);
+    var themesDesc = selectedThemes.map(function(t){ return '테마: '+t.theme_name+'\n설명: '+t.description+'\n핵심: '+(t.key_elements||[]).join(', '); }).join('\n\n');
 
-    return '아래 등록 청구항과 선택된 테마를 기반으로 전략적 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis — 참고용)]\n'+basisText+'\n\n[선택된 테마]\n'+(themesDesc||'(없음)')+'\n\n[활용할 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+'\n\n조립 규칙:\n1. 각 테마별로 새로운 독립항을 작성\n   - 기존 등록 청구항과 다른 관점의 독립항\n   - 명세서 뒷받침 범위 내에서 구성\n   - 핵심 구성요소를 중심으로 한 완결된 청구항\n2. 선택된 활용 구성은 해당 테마의 독립항에 자연스럽게 통합\n3. 각 독립항에 대해 1~2개 종속항 자동 구성\n4. 새로 작성된 부분은 **볼드**로 표시\n5. 명칭: 전략적 분할의 핵심을 반영한 국문/영문 각 2개\n\n출력 JSON:\n{"division_claims":[{"claim_number":1,"claim_type":"independent","parent_claim_number":null,"claim_text":"최종텍스트","claim_text_highlighted":"**신규부분** 표시"}],"title_candidates":[{"ko":"국문명칭","en":"English title"}]}\n\nJSON만 출력하라.';
+    return '등록 청구항과 테마를 기반으로 전략적 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 테마]\n'+(themesDesc||'(없음)')+'\n\n[활용 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 테마별 새 독립항 (기존과 다른 관점)\n2. 명세서 뒷받침 범위 내\n3. 새 부분은 **볼드**\n4. 명칭: 국문/영문 각 2개\n\n★★★ JSON만 출력. ★★★\n\n출력: {"division_claims":[...],"title_candidates":[{"ko":"","en":""}]}';
   }
 
-  // merge (기본)
-  var mergeList = mergeClaims.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text); }).join('\n\n');
-  return '아래 등록 청구항에 부가 구성을 삽입하고 병합 청구항을 결합하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 부가 구성]\n'+(compList||'(없음)')+'\n\n[병합 대상 청구항]\n'+(mergeList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+'\n\n조립 규칙:\n1. 독립항: structural→명칭앞형용구, material→재질병기, shape→형상추가, functional→뒤에부가\n2. 병합: "제N항에있어서,"제거, "상기{구성요소}는,"이하추출, 말미앞삽입\n3. 종속항: dep_candidate→"제1항에있어서,"변환, 삭제번호건너뛰기재번호\n4. 명칭: 국문/영문 각 2개\n\n출력 JSON:\n{"division_claims":[{"claim_number":1,"claim_type":"independent","parent_claim_number":null,"claim_text":"최종텍스트","claim_text_highlighted":"**부가**와 ***병합*** 표시"}],"title_candidates":[{"ko":"국문명칭","en":"English title"}]}\n\nJSON만 출력하라.';
+  // merge
+  var mergeList = mergeClaims.map(function(c){ return '제'+c.claim_number+'항: '+((c.amended_text||c.original_text||'').substring(0,2000)); }).join('\n\n');
+  return '등록 청구항에 부가 구성을 삽입하고 병합 청구항을 결합하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 부가 구성]\n'+(compList||'(없음)')+'\n\n[병합 대상 청구항]\n'+(mergeList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 독립항: structural→명칭앞형용구, material→재질병기, shape→형상추가, functional→뒤에부가\n2. 병합: "제N항에있어서,"제거, 본문추출, 말미앞삽입\n3. 종속항: dep_candidate→"제1항에있어서,"변환, 번호재매핑\n4. 명칭: 국문/영문 각 2개\n\n★★★ JSON만 출력. {로 시작 }로 끝. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"텍스트","claim_text_highlighted":"**부가** ***병합***"}],"title_candidates":[{"ko":"","en":""}]}';
 };
 
 // ═══════════════════════════════════════════
