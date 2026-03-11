@@ -1915,7 +1915,7 @@ Division.confirmFinal = async function(){
 // ═══════════════════════════════════════════
 Division.renderConfirm = function(left, right, p){
   var divClaims = Division.state.divisionClaims;
-  var plainText = divClaims.map(function(dc){ return '【청구항 '+dc.claim_number+'】\n'+dc.claim_text; }).join('\n\n');
+  var plainText = divClaims.map(function(dc){ return '【청구항 '+dc.claim_number+'】\n'+(dc.claim_text||'').replace(/;\s*/g,';\n'); }).join('\n\n');
   var h = '<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
   h += '<div style="font-size:14px;font-weight:700"><span class="tossface">📋</span> 청구항 전문</div>';
   h += '<button class="btn btn-outline btn-sm" onclick="Division.copyText(\'divisionOutputText\')"><span class="tossface">📋</span> 전체 복사</button></div>';
@@ -1940,6 +1940,7 @@ Division.renderConfirm = function(left, right, p){
   divClaims.forEach(function(dc){
     var d = dc.claim_text_highlighted||dc.claim_text;
     d = d.replace(/\*\*\*(.*?)\*\*\*/g,'<span class="division-hl-merge">$1</span>').replace(/\*\*(.*?)\*\*/g,'<span class="division-hl-added">$1</span>');
+    d = d.replace(/;\s*/g,';<br>');
     rh += '<div style="margin-bottom:12px"><span style="font-weight:700;color:var(--color-primary)">【청구항 '+dc.claim_number+'】</span><br>'+d+'</div>';
   });
   rh += '</div></div>';
