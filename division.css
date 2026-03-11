@@ -224,6 +224,12 @@
 .division-count-btn:hover { background: var(--color-bg-tertiary); }
 .division-count-btn.active { background: var(--color-primary); color: #fff; font-weight: var(--font-weight-semibold); }
 
+/* ═══ 16. 분할 유형 전환 토글 ═══ */
+.division-type-switch { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 10px 14px; background: var(--color-bg-tertiary); border-radius: var(--radius-md); margin-bottom: 12px; }
+.division-type-switch-btn { padding: 6px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: #fff; font-size: 11px; font-weight: var(--font-weight-medium); font-family: var(--font-family); color: var(--color-text-tertiary); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.division-type-switch-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); }
+.division-type-switch-btn.active { border-color: var(--color-primary); background: var(--color-primary); color: #fff; font-weight: var(--font-weight-semibold); }
+
 /* ═══ 14-1. 명칭 변경 경고 ═══ */
 .division-title-warning { margin-top: 12px; padding: 12px 14px; background: var(--color-warning-light); border: 1px solid var(--color-warning); border-radius: var(--radius-sm); font-size: 13px; color: #92400e; line-height: 1.6; }
 .division-title-warning ul { margin: 4px 0 0 16px; padding: 0; }

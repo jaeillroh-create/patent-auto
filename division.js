@@ -389,6 +389,38 @@ Division.renderDetail = function(){
   Division.renderMain(p);
 };
 
+// ═══ 분할유형 전환 (파싱/분석 단계에서 변경 가능) ═══
+Division._renderTypeSwitch = function(currentType){
+  var h = '<div class="division-type-switch">';
+  h += '<span style="font-size:12px;font-weight:600;color:var(--color-text-secondary);margin-right:8px">분할 유형:</span>';
+  ['merge','category_change','strategic'].forEach(function(type){
+    var info = Division.TYPES[type];
+    var active = currentType === type;
+    h += '<button class="division-type-switch-btn' + (active?' active':'') + '" onclick="Division.switchType(\'' + type + '\')">';
+    h += info.icon + ' ' + info.label + '</button>';
+  });
+  h += '</div>';
+  return h;
+};
+
+Division.switchType = async function(newType){
+  var p = Division.state.current; if(!p) return;
+  if(p.division_type === newType) return;
+  var oldType = p.division_type;
+  try {
+    await sb.from('division_projects').update({ division_type:newType, updated_at:new Date().toISOString() }).eq('id', p.id);
+    p.division_type = newType;
+    showToast(Division.TYPES[newType].label + '로 변경됨');
+
+    // 분석 단계 이후면 재분석 필요 안내
+    var step = Division.STATUS_TO_STEP[p.status] || 0;
+    if(step >= 2){ // analyzed 이상
+      showToast('유형 변경 후 재분석을 권장합니다', 'info');
+    }
+    Division.renderDetail();
+  } catch(e){ showToast('유형 변경 실패: ' + e.message, 'error'); p.division_type = oldType; }
+};
+
 // ═══════════════════════════════════════════
 // 4. 파이프라인 스테퍼
 // ═══════════════════════════════════════════
@@ -1017,7 +1049,8 @@ Division.renderParse = function(left, right, p){
   var basisClaim = claims.find(function(c){ return c.division_role==='basis'; });
   if(!basisClaim) basisClaim = claims.find(function(c){ return c.claim_type==='independent'; });
 
-  var rh = '<div class="card" style="padding:16px">';
+  var rh = Division._renderTypeSwitch(p.division_type);
+  rh += '<div class="card" style="padding:16px">';
   rh += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">⭐</span> 분할출원 기초 청구항</div>';
   if(basisClaim){
     var regText = basisClaim.amended_text || basisClaim.original_text || '';
@@ -1325,10 +1358,11 @@ Division.renderAnalyze = function(left, right, p){
   });
   left.innerHTML = h;
 
-  // 오른쪽: 요약
+  // 오른쪽: 유형 전환 + 요약
   var selectedCount = unused.filter(function(uc){ return uc.user_selection==='selected'||(uc.user_selection==='pending'&&uc.risk_level==='safe'); }).length;
   var mergeCandidates = claims.filter(function(c){ return c.division_role==='merge_candidate'; });
-  var rh = '<div class="card" style="padding:20px"><div style="font-size:16px;font-weight:700;margin-bottom:16px"><span class="tossface">📋</span> 구성 요약</div>';
+  var rh = Division._renderTypeSwitch(p.division_type);
+  rh += '<div class="card" style="padding:20px"><div style="font-size:16px;font-weight:700;margin-bottom:16px"><span class="tossface">📋</span> 구성 요약</div>';
   rh += '<div class="division-summary-grid">';
   if(divType === 'strategic'){
     var themes = (p.analysis_meta && p.analysis_meta.themes) || [];
