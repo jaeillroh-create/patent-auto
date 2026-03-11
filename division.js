@@ -347,6 +347,7 @@ Division.open = async function(id){
   if(!p){ showToast('프로젝트를 찾을 수 없습니다', 'error'); return; }
   Division.state.current = p;
   Division.state.view = 'detail';
+  Division.state.currentStepKey = null; // 새 프로젝트 진입 시 DB 상태 기준
   document.getElementById('divisionListView').style.display = 'none';
   document.getElementById('divisionDetailView').style.display = 'block';
   Division.renderDetail();
@@ -356,6 +357,7 @@ Division.open = async function(id){
 Division.backToList = function(){
   Division.state.current = null;
   Division.state.view = 'list';
+  Division.state.currentStepKey = null;
   document.getElementById('divisionDetailView').style.display = 'none';
   document.getElementById('divisionListView').style.display = 'block';
   Division.loadProjects();
@@ -389,6 +391,22 @@ Division.renderDetail = function(){
   Division.renderMain(p);
 };
 
+// 현재 화면을 유지하면서 내용만 갱신 (유형 전환, 체크박스, 개수 변경 등)
+Division.renderStay = function(){
+  var p = Division.state.current; if(!p) return;
+  var t = Division.TYPES[p.division_type] || { code:'?', label:'미정', css:'dtype-merge', icon:'❓' };
+  var s = Division.STATUS[p.status] || { label:p.status, css:'dstatus-created' };
+  document.getElementById('divisionDetailType').innerHTML = '<span class="division-type-badge ' + t.css + '">' + t.icon + ' ' + t.label + '</span>';
+  document.getElementById('divisionDetailStatus').innerHTML = '<span class="division-status-badge ' + s.css + '">' + s.label + '</span>';
+  Division.renderPipeline(p);
+  // currentStepKey가 있으면 해당 화면 유지, 없으면 DB 상태 기준
+  if(Division.state.currentStepKey){
+    Division.renderMainForStep(p, Division.state.currentStepKey);
+  } else {
+    Division.renderMain(p);
+  }
+};
+
 // ═══ 분할유형 전환 (파싱/분석 단계에서 변경 가능) ═══
 Division._renderTypeSwitch = function(currentType){
   var h = '<div class="division-type-switch">';
@@ -417,7 +435,7 @@ Division.switchType = async function(newType){
     if(step >= 2){ // analyzed 이상
       showToast('유형 변경 후 재분석을 권장합니다', 'info');
     }
-    Division.renderDetail();
+    Division.renderStay(); // 현재 단계 유지
   } catch(e){ showToast('유형 변경 실패: ' + e.message, 'error'); p.division_type = oldType; }
 };
 
@@ -442,6 +460,7 @@ Division.renderPipeline = function(p){
 
 Division.goToStep = function(stepKey){
   var p = Division.state.current; if(!p) return;
+  Division.state.currentStepKey = stepKey; // 현재 보고 있는 단계 추적
   Division.renderMainForStep(p, stepKey);
 };
 
@@ -451,7 +470,9 @@ Division.goToStep = function(stepKey){
 Division.renderMain = function(p){
   var step = Division.STATUS_TO_STEP[p.status] || 0;
   var keys = ['upload','parse','analyze','assemble','verify','confirm'];
-  Division.renderMainForStep(p, keys[step] || 'upload');
+  var targetKey = Division.state.currentStepKey || keys[step] || 'upload';
+  Division.state.currentStepKey = targetKey; // 추적
+  Division.renderMainForStep(p, targetKey);
 };
 
 Division.renderMainForStep = function(p, stepKey){
@@ -625,7 +646,7 @@ Division.switchInputMode = async function(mode){
   var p = Division.state.current; if(!p) return;
   p.input_mode = mode;
   await sb.from('division_projects').update({input_mode: mode}).eq('id', p.id);
-  Division.renderDetail();
+  Division.renderStay();
 };
 
 Division.saveDirectClaims = async function(){
@@ -635,7 +656,7 @@ Division.saveDirectClaims = async function(){
   await sb.from('division_projects').update({direct_claims_text: text, updated_at: new Date().toISOString()}).eq('id', p.id);
   p.direct_claims_text = text;
   showToast('저장되었습니다');
-  Division.renderDetail();
+  Division.renderStay();
 };
 
 // ═══════════════════════════════════════════
@@ -750,7 +771,7 @@ Division._classifyAndUpload = async function(pdfFiles){
   }
 
   if(statusEl) statusEl.innerHTML = '';
-  Division.renderDetail();
+  Division.renderStay();
 };
 
 // 파일 유형 재분류 (드롭다운 변경 시)
@@ -760,7 +781,7 @@ Division.reclassifyFile = async function(fileId, newType){
     var file = Division.state.files.find(function(f){ return f.id === fileId; });
     if(file) file.file_type = newType;
     showToast(Division.FILE_TYPES[newType].label + '로 변경됨');
-    Division.renderDetail();
+    Division.renderStay();
   } catch(e){ showToast('변경 실패','error'); }
 };
 
@@ -801,7 +822,7 @@ Division._doUpload = async function(file, fileType){
       p.status = 'uploaded';
     }
     showToast(Division.FILE_TYPES[fileType].label + ' 업로드 완료');
-    Division.renderDetail();
+    Division.renderStay();
   } catch(e) { showToast('업로드 실패: ' + e.message, 'error'); }
 };
 
@@ -812,14 +833,14 @@ Division.removeFile = async function(fileId){
     if(file) await sb.storage.from('division-files').remove([file.storage_path]);
     await sb.from('division_files').delete().eq('id', fileId);
     Division.state.files = Division.state.files.filter(function(f){ return f.id !== fileId; });
-    showToast('파일 삭제됨'); Division.renderDetail();
+    showToast('파일 삭제됨'); Division.renderStay();
   } catch(e) { showToast('삭제 실패', 'error'); }
 };
 
 Division.togglePriorArt = async function(checked){
   var p = Division.state.current; if(!p) return;
   await sb.from('division_projects').update({include_prior_art: checked}).eq('id', p.id);
-  p.include_prior_art = checked; Division.renderDetail();
+  p.include_prior_art = checked; Division.renderStay();
 };
 
 // ═══════════════════════════════════════════
@@ -966,6 +987,7 @@ Division.runParse = async function(){
     p.status = 'parsed';
     App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false);
     showToast('파싱 완료! 결과를 확인해 주세요.');
+    Division.state.currentStepKey = 'parse'; // 파싱 결과 화면으로 이동
     await Division.loadData(p.id);
   } catch(e) { App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); showToast('파싱 실패: ' + e.message, 'error'); }
 };
@@ -1080,7 +1102,7 @@ Division.updateClaimRole = async function(sel){
   var id = sel.dataset.claimId, role = sel.value;
   try { await sb.from('division_claims_parsed').update({division_role:role}).eq('id',id);
     var c = Division.state.claims.find(function(x){return x.id===id;}); if(c) c.division_role=role;
-    Division.renderDetail();
+    Division.renderStay();
   } catch(e) { showToast('역할 변경 실패','error'); }
 };
 Division.confirmParse = async function(){
@@ -1102,7 +1124,10 @@ Division.confirmParse = async function(){
   showToast('파싱 승인 완료. 분석을 시작합니다.');
   Division.runAnalyze();
 };
-Division.rerunParse = function(){ Division.renderUpload(document.getElementById('divisionDetailLeft'),document.getElementById('divisionDetailRight'),Division.state.current); };
+Division.rerunParse = function(){
+  Division.state.currentStepKey = 'upload';
+  Division.renderStay();
+};
 
 // ═══════════════════════════════════════════
 // 10. Checkpoint 2: 분석
@@ -1194,6 +1219,7 @@ Division.runAnalyze = async function(){
     App.clearProgress('divisionAnalyzeProgress');
     var toastMsg = p.division_type==='strategic' ? '분석 완료! 테마를 선택해 주세요.' : p.division_type==='category_change' ? '분석 완료! 변환 구성을 확인해 주세요.' : '분석 완료! 부가 구성을 선택해 주세요.';
     showToast(toastMsg);
+    Division.state.currentStepKey = 'analyze'; // 분석 결과 화면으로 이동
     await Division.loadData(p.id);
   } catch(e) { App.clearProgress('divisionAnalyzeProgress'); showToast('분석 실패: '+e.message,'error'); }
 };
@@ -1227,6 +1253,45 @@ Division.renderAnalyze = function(left, right, p){
   unused.forEach(function(uc){ (groups[uc.risk_level]||groups.safe).push(uc); });
 
   var h = '';
+
+  // === 공통: 원출원 등록 청구항 + 구체화 포인트 ===
+  var basisClaim = claims.find(function(c){ return c.division_role==='basis'; }) || claims.find(function(c){ return c.claim_type==='independent'; });
+  if(basisClaim){
+    var basisText = basisClaim.amended_text || basisClaim.original_text || '';
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:10px"><span class="tossface">📜</span> 원출원 등록 청구항 → 구체화 포인트</div>';
+
+    // 구체화 포인트 매핑: 미활용 구성의 insertion_point → 원 청구항의 어떤 구성요소에 삽입되는지
+    var insertionMap = [];
+    unused.forEach(function(uc){
+      if(!uc.insertion_point) return;
+      var isSelected = uc.user_selection==='selected'||(uc.user_selection==='pending'&&uc.risk_level==='safe');
+      insertionMap.push({ target:uc.related_element, content:uc.content, paragraph:'【'+uc.paragraph_number+'】', type:uc.limitation_type, selected:isSelected, riskLevel:uc.risk_level });
+    });
+
+    // 청구항 텍스트에서 구성요소명을 하이라이트
+    var annotatedHtml = escapeHtml(Division._formatClaimText(basisText));
+    insertionMap.forEach(function(im){
+      if(!im.target) return;
+      var escaped = escapeHtml(im.target);
+      var color = im.selected ? (im.riskLevel==='safe'?'#059669':'#d97706') : '#9ca3af';
+      var marker = '<span style="background:' + (im.selected?'#ecfdf5':'#f9fafb') + ';border-bottom:2px solid ' + color + ';padding:0 2px" title="' + escapeHtml(im.content) + '">' + escaped + ' <sup style="font-size:9px;color:' + color + '">+</sup></span>';
+      annotatedHtml = annotatedHtml.replace(new RegExp(escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), marker);
+    });
+
+    h += '<div style="font-size:13px;line-height:2;white-space:pre-wrap;max-height:200px;overflow-y:auto;padding:10px;background:#fafbfc;border:1px solid var(--color-border);border-radius:var(--radius-sm)">' + annotatedHtml + '</div>';
+
+    // 삽입 포인트 범례
+    if(insertionMap.length > 0){
+      h += '<div style="margin-top:10px;font-size:11px;color:var(--color-text-tertiary)">';
+      h += '<div style="font-weight:600;margin-bottom:4px">📌 구체화 포인트 (' + insertionMap.filter(function(im){return im.selected;}).length + '/' + insertionMap.length + '건 선택)</div>';
+      insertionMap.forEach(function(im){
+        var icon = im.selected ? (im.riskLevel==='safe'?'🟢':'🟡') : '⚪';
+        h += '<div style="padding:2px 0">' + icon + ' <strong>' + escapeHtml(im.target) + '</strong> ← ' + escapeHtml(im.content.substring(0,60)) + (im.content.length>60?'...':'') + ' ' + im.paragraph + '</div>';
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+  }
 
   // === 카테고리 변경형: 변환 방향 표시 ===
   if(divType === 'category_change'){
@@ -1430,11 +1495,11 @@ Division.rerunAnalyze = function(){ Division.runAnalyze(); };
 // 청구항 개수 설정
 Division.setIndepCount = function(n){
   Division.state.indepCount = n;
-  Division.renderDetail(); // 오른쪽 패널만 갱신하기 위해 전체 재렌더
+  Division.renderStay(); // 분석 화면 유지
 };
 Division.setDepCount = function(n){
-  Division.state.depCount = n; // -1=자동, 0,2,4,6
-  Division.renderDetail();
+  Division.state.depCount = n;
+  Division.renderStay(); // 분석 화면 유지
 };
 
 // ═══════════════════════════════════════════
@@ -1447,8 +1512,18 @@ Division.runAssemble = async function(){
     App.setButtonLoading('btnDivisionAssemble',true);
     App.showProgress('divisionAssembleProgress','청구항 조립 중...',1,3);
     var selected = Division.state.unusedComponents.filter(function(uc){ return uc.user_selection==='selected'||(uc.user_selection==='pending'&&uc.risk_level==='safe'); });
+    // 병합 청구항: DOM 체크박스 → 없으면 저장된 state → 없으면 merge_candidate 전부
+    var mergeNums = [];
     var mergeCheckboxes = document.querySelectorAll('[data-merge-claim]:checked');
-    var mergeNums = []; mergeCheckboxes.forEach(function(cb){ mergeNums.push(parseInt(cb.dataset.mergeClaim)); });
+    if(mergeCheckboxes.length > 0){
+      mergeCheckboxes.forEach(function(cb){ mergeNums.push(parseInt(cb.dataset.mergeClaim)); });
+    } else if(Division.state.selectedMergeNums && Division.state.selectedMergeNums.length > 0){
+      mergeNums = Division.state.selectedMergeNums;
+    } else {
+      Division.state.claims.forEach(function(c){ if(c.division_role==='merge_candidate') mergeNums.push(c.claim_number); });
+    }
+    Division.state.selectedMergeNums = mergeNums;
+    console.log('[Division] 병합 대상:', mergeNums.length, '항');
     var claims = Division.state.claims;
     var basisClaim = claims.find(function(c){ return c.division_role==='basis'; });
     if(!basisClaim) basisClaim = claims.find(function(c){ return c.claim_type==='independent'; });
@@ -1463,7 +1538,11 @@ Division.runAssemble = async function(){
     catch(e) { showToast('조립 결과 해석 실패: ' + e.message.substring(0,80),'error'); App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false); return; }
     await sb.from('division_claims_output').delete().eq('project_id',p.id);
     if(assembled.division_claims && assembled.division_claims.length > 0){
-      var rows = assembled.division_claims.map(function(dc){ return { project_id:p.id, claim_number:dc.claim_number, claim_type:dc.claim_type||'independent', parent_claim_number:dc.parent_claim_number||null, claim_text:dc.claim_text||'', claim_text_highlighted:dc.claim_text_highlighted||'', version:1 }; });
+      var rows = assembled.division_claims.map(function(dc){
+        // ** 마크다운 마커 제거 — claim_text는 순수 텍스트만
+        var cleanText = (dc.claim_text||'').replace(/\*{2,3}/g,'');
+        return { project_id:p.id, claim_number:dc.claim_number, claim_type:dc.claim_type||'independent', parent_claim_number:dc.parent_claim_number||null, claim_text:cleanText, claim_text_highlighted:dc.claim_text_highlighted||dc.claim_text||'', version:1 };
+      });
       await sb.from('division_claims_output').insert(rows);
     }
     var updateData = { status:'assembled', updated_at:new Date().toISOString() };
@@ -1472,6 +1551,7 @@ Division.runAssemble = async function(){
     p.status = 'assembled'; if(assembled.title_candidates) p.title_candidates = assembled.title_candidates;
     App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false);
     showToast('조립 완료! 초안을 검토해 주세요.');
+    Division.state.currentStepKey = 'assemble'; // 조립 결과 화면으로 이동
     await Division.loadData(p.id);
   } catch(e) { App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false); showToast('조립 실패: '+e.message,'error'); }
 };
@@ -1506,7 +1586,7 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeCl
 
   // merge
   var mergeList = mergeClaims.map(function(c){ return '제'+c.claim_number+'항: '+((c.amended_text||c.original_text||'').substring(0,2000)); }).join('\n\n');
-  return '등록 청구항에 부가 구성을 삽입하고 병합 청구항을 결합하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 부가 구성]\n'+(compList||'(없음)')+'\n\n[병합 대상 청구항]\n'+(mergeList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 독립항: structural→명칭앞형용구, material→재질병기, shape→형상추가, functional→뒤에부가\n2. 병합: "제N항에있어서,"제거, 본문추출, 말미앞삽입\n3. 종속항: dep_candidate→"제1항에있어서,"변환, 번호재매핑\n4. 명칭: 국문/영문 각 2개\n\n★★★ JSON만 출력. {로 시작 }로 끝. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"텍스트","claim_text_highlighted":"**부가** ***병합***"}],"title_candidates":[{"ko":"","en":""}]}';
+  return '등록 청구항에 부가 구성을 삽입하고 병합 청구항을 결합하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 부가 구성]\n'+(compList||'(없음)')+'\n\n[병합 대상 청구항]\n'+(mergeList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 독립항: structural→명칭앞형용구, material→재질병기, shape→형상추가, functional→뒤에부가\n2. 병합: "제N항에있어서,"제거, 본문추출, 말미앞삽입\n3. 종속항: dep_candidate→"제1항에있어서,"변환, 번호재매핑\n4. 명칭: 국문/영문 각 2개\n5. ★★★ claim_text에는 마크다운(**) 없이 순수 텍스트만. claim_text_highlighted에만 변경부분 표시. ★★★\n\n★★★ JSON만 출력. {로 시작 }로 끝. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"순수텍스트(마크다운없이)","claim_text_highlighted":"원본유지 **부가구성** ***병합구성***"}],"title_candidates":[{"ko":"","en":""}]}';
 };
 
 // ═══════════════════════════════════════════
@@ -1527,7 +1607,7 @@ Division.renderAssemble = function(left, right, p){
     var divIndeps = divClaims.filter(function(c){ return c.claim_type==='independent'; });
     divIndeps.forEach(function(dc){
       var registeredText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
-      var divText = dc.claim_text || '';
+      var divText = (dc.claim_text || '').replace(/\*{2,3}/g, ''); // ** 마커 제거
 
       // 단어 단위 diff 생성
       var diffResult = Division._wordDiff(registeredText, divText);
@@ -1551,9 +1631,7 @@ Division.renderAssemble = function(left, right, p){
     if(divDeps.length > 0){
       h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📎</span> 종속항 (' + divDeps.length + '항)</div>';
       divDeps.forEach(function(dc){
-        var divHlText = dc.claim_text_highlighted || dc.claim_text || '';
-        divHlText = divHlText.replace(/\*\*\*(.*?)\*\*\*/g, '<span class="division-diff-added" style="font-style:italic">$1</span>');
-        divHlText = divHlText.replace(/\*\*(.*?)\*\*/g, '<span class="division-diff-added">$1</span>');
+        var divCleanText = (dc.claim_text || '').replace(/\*{2,3}/g, '');
 
         // 원본 종속항 찾기 (같은 번호 또는 parent 기준)
         var origDep = origClaims.find(function(oc){ return oc.claim_number === dc.claim_number; });
@@ -1563,7 +1641,7 @@ Division.renderAssemble = function(left, right, p){
         h += '<span style="font-weight:700;color:var(--color-primary)">【청구항 ' + dc.claim_number + '】</span>';
         h += '<span class="division-claim-type-tag">종속항 → 제' + (dc.parent_claim_number||1) + '항</span>';
         h += '</div>';
-        h += '<div class="division-claim-body">' + divHlText + '</div>';
+        h += '<div class="division-claim-body" style="white-space:pre-wrap">' + escapeHtml(Division._formatClaimText(divCleanText)) + '</div>';
         if(origDep){
           h += '<details style="margin-top:8px"><summary style="font-size:11px;color:var(--color-text-tertiary);cursor:pointer">원본 제' + origDep.claim_number + '항 보기</summary>';
           h += '<div style="font-size:12px;line-height:1.7;padding:8px;background:#f8fafc;border-radius:4px;margin-top:4px">' + escapeHtml(origDep.amended_text || origDep.original_text || '') + '</div>';
@@ -1597,7 +1675,7 @@ Division.renderAssemble = function(left, right, p){
 
   rh += '<div id="divisionVerifyProgress" style="margin-top:12px"></div>';
   rh += '<div style="display:flex;gap:8px;margin-top:12px">';
-  rh += '<button class="btn btn-ghost" onclick="Division.runAssemble()" style="flex:1;padding:12px"><span class="tossface">🔄</span> 재조립</button>';
+  rh += '<button class="btn btn-ghost" onclick="Division.goToStep(\'analyze\')" style="flex:1;padding:12px"><span class="tossface">🔄</span> 재조립 (구성 선택)</button>';
   rh += '<button class="btn btn-primary" id="btnDivisionVerify" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tossface">✅</span> 검증 실행</button></div>';
   right.innerHTML = rh;
 };
@@ -1629,7 +1707,9 @@ Division.runVerify = async function(){
     await sb.from('division_projects').update({status:'verified', updated_at:new Date().toISOString()}).eq('id',p.id);
     p.status = 'verified';
     App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false);
-    showToast('검증 완료!'); await Division.loadData(p.id);
+    showToast('검증 완료!');
+    Division.state.currentStepKey = 'verify'; // 검증 결과 화면으로 이동
+    await Division.loadData(p.id);
   } catch(e) { App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); showToast('검증 실패: '+e.message,'error'); }
 };
 
@@ -1768,7 +1848,9 @@ Division.confirmFinal = async function(){
   try {
     await sb.from('division_projects').update({ status:'confirmed', title_ko:titleKo, title_en:titleEn, title_changed:titleChanged||false, updated_at:new Date().toISOString() }).eq('id',p.id);
     p.status='confirmed'; p.title_ko=titleKo; p.title_en=titleEn; p.title_changed=titleChanged||false;
-    showToast('최종 확정 완료!'); Division.renderDetail();
+    showToast('최종 확정 완료!');
+    Division.state.currentStepKey = 'confirm';
+    Division.renderDetail();
   } catch(e) { showToast('확정 실패: '+e.message,'error'); }
 };
 
