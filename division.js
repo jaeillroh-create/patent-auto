@@ -1567,9 +1567,11 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeCl
 
   var claimCountRule = '\n\n★★★ 청구항 구성 지시 ★★★\n- 독립항: 정확히 ' + indepCount + '개 작성\n- 종속항: ' + depInstr + '\n- 청구항 번호는 1부터 연번\n';
 
+  var qualityRules = '\n\n품질 규칙 (필수 준수):\n- 추상적 표현 금지: "신속하게","효과적으로","최적의" 등 → 구체적 수치/구조로 대체\n- 기능적 기재 최소화: "~하기 위한 수단" → 구조적 표현으로 기재\n- 구성요소 명칭 통일: "상기" 일관 사용\n- 형식: 각 구성 끝에 세미콜론(;), 말미 마침표(.)\n- claim_text에는 마크다운(**) 없이 순수 텍스트만. claim_text_highlighted에만 변경부분 표시.\n';
+
   if(divType === 'category_change'){
     var meta = p.analysis_meta || {};
-    return '아래 등록 청구항을 카테고리 변경하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis) — '+(meta.original_category==='method'?'방법':'장치')+']\n'+basisText+'\n\n[변환 방향]\n'+(meta.original_category==='method'?'방법 → 장치':'장치 → 방법')+'\n\n[변환에 활용할 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 방법→장치: "~하는 단계"→"~하는 ~부/수단", 말미 "~을 포함하는 [장치명]."\n2. 장치→방법: "~부/수단"→"~하는 단계", 말미 "~을 포함하는 방법."\n3. 변환 부분은 **볼드**\n4. 명칭: 국문/영문 각 2개\n\n★★★ JSON만 출력. {로 시작 }로 끝나는 순수 JSON. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"텍스트","claim_text_highlighted":"**표시**"}],"title_candidates":[{"ko":"","en":""}]}';
+    return '아래 등록 청구항을 카테고리 변경하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis) — '+(meta.original_category==='method'?'방법':'장치')+']\n'+basisText+'\n\n[변환 방향]\n'+(meta.original_category==='method'?'방법 → 장치':'장치 → 방법')+'\n\n[변환에 활용할 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 방법→장치: "~하는 단계"→"~하는 ~부/수단", 말미 "~을 포함하는 [장치명]."\n2. 장치→방법: "~부/수단"→"~하는 단계", 말미 "~을 포함하는 방법."\n3. 명칭: 국문/영문 각 2개'+qualityRules+'\n★★★ JSON만 출력. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"순수텍스트","claim_text_highlighted":"**변환부분**"}],"title_candidates":[{"ko":"","en":""}]}';
   }
 
   if(divType === 'strategic'){
@@ -1581,12 +1583,12 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeCl
     if(!selectedThemes.length && themes.length > 0) selectedThemes = themes.slice(0, indepCount);
     var themesDesc = selectedThemes.map(function(t){ return '테마: '+t.theme_name+'\n설명: '+t.description+'\n핵심: '+(t.key_elements||[]).join(', '); }).join('\n\n');
 
-    return '등록 청구항과 테마를 기반으로 전략적 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 테마]\n'+(themesDesc||'(없음)')+'\n\n[활용 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 테마별 새 독립항 (기존과 다른 관점)\n2. 명세서 뒷받침 범위 내\n3. 새 부분은 **볼드**\n4. 명칭: 국문/영문 각 2개\n\n★★★ JSON만 출력. ★★★\n\n출력: {"division_claims":[...],"title_candidates":[{"ko":"","en":""}]}';
+    return '등록 청구항과 테마를 기반으로 전략적 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 테마]\n'+(themesDesc||'(없음)')+'\n\n[활용 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 테마별 새 독립항 (기존과 다른 관점)\n2. 명세서 뒷받침 범위 내\n3. 명칭: 국문/영문 각 2개'+qualityRules+'\n★★★ JSON만 출력. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"순수텍스트","claim_text_highlighted":"**신규부분**"}],"title_candidates":[{"ko":"","en":""}]}';
   }
 
   // merge
   var mergeList = mergeClaims.map(function(c){ return '제'+c.claim_number+'항: '+((c.amended_text||c.original_text||'').substring(0,2000)); }).join('\n\n');
-  return '등록 청구항에 부가 구성을 삽입하고 병합 청구항을 결합하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 부가 구성]\n'+(compList||'(없음)')+'\n\n[병합 대상 청구항]\n'+(mergeList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 독립항: structural→명칭앞형용구, material→재질병기, shape→형상추가, functional→뒤에부가\n2. 병합: "제N항에있어서,"제거, 본문추출, 말미앞삽입\n3. 종속항: dep_candidate→"제1항에있어서,"변환, 번호재매핑\n4. 명칭: 국문/영문 각 2개\n5. ★★★ claim_text에는 마크다운(**) 없이 순수 텍스트만. claim_text_highlighted에만 변경부분 표시. ★★★\n\n★★★ JSON만 출력. {로 시작 }로 끝. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"순수텍스트(마크다운없이)","claim_text_highlighted":"원본유지 **부가구성** ***병합구성***"}],"title_candidates":[{"ko":"","en":""}]}';
+  return '등록 청구항에 부가 구성을 삽입하고 병합 청구항을 결합하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 부가 구성]\n'+(compList||'(없음)')+'\n\n[병합 대상 청구항]\n'+(mergeList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n\n조립 규칙:\n1. 독립항: structural→명칭앞형용구, material→재질병기, shape→형상추가, functional→뒤에부가\n2. 병합: "제N항에있어서,"제거, 본문추출, 말미앞삽입\n3. 종속항: dep_candidate→"제1항에있어서,"변환, 번호재매핑\n4. 명칭: 국문/영문 각 2개\n\n품질 규칙 (필수 준수):\n5. 추상적 표현 금지: "신속하게","효과적으로","최적의" 등 → 구체적 수치/구조로 대체. 명세서에 기재된 표현을 그대로 사용.\n6. 기능적 기재 최소화: "~하기 위한 수단" → 구조적 표현("~을 포함하는 ~부")으로 기재.\n7. 원출원 구성 그대로 유지: 등록 청구항의 구성요소 명칭·표현을 수정하지 말 것. 부가/병합 부분만 추가.\n8. 구성요소 명칭 통일: "상기" 일관 사용, 참조부호 유지.\n9. 형식: 각 구성 끝에 세미콜론(;), 말미 마침표(.).\n10. claim_text에는 마크다운(**) 없이 순수 텍스트만. claim_text_highlighted에만 변경부분 **표시**.\n\n★★★ JSON만 출력. {로 시작 }로 끝. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"순수텍스트","claim_text_highlighted":"원본유지 **부가** ***병합***"}],"title_candidates":[{"ko":"","en":""}]}';
 };
 
 // ═══════════════════════════════════════════
@@ -1688,33 +1690,77 @@ Division.runVerify = async function(){
   if(!App.ensureApiKey()){ App.openProfileSettings(); return; }
   try {
     App.setButtonLoading('btnDivisionVerify',true);
-    App.showProgress('divisionVerifyProgress','기재불비 검증 중...',1,3);
+    App.showProgress('divisionVerifyProgress','명세서 전문 추출 중...',1,4);
+
+    // 1) 분할출원 청구항 텍스트
     var divClaims = Division.state.divisionClaims;
     var claimsText = divClaims.map(function(dc){ return '【청구항 '+dc.claim_number+'】\n'+dc.claim_text; }).join('\n\n');
-    var {data:paragraphs} = await sb.from('division_spec_paragraphs').select('*').eq('project_id',p.id);
-    var specText = (paragraphs||[]).map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
-    App.showProgress('divisionVerifyProgress','AI 검증 분석 중...',2,3);
-    var verifyPrompt = Division._buildVerifyPrompt(claimsText, specText);
+
+    // 2) 명세서 전문: 업로드된 출원서 PDF에서 직접 추출 (DB 단락은 200자 요약이므로 부족)
+    var specText = '';
+    var appFile = Division.state.files.find(function(f){ return f.file_type === 'application'; });
+    if(appFile){
+      try {
+        var {data:blob, error:dlErr} = await sb.storage.from('division-files').download(appFile.storage_path);
+        if(!dlErr && blob){
+          var buf = await blob.arrayBuffer();
+          specText = await App.extractPdfText(buf);
+          console.log('[Division] 검증용 명세서 추출 완료:', specText.length, '글자');
+        }
+      } catch(e){ console.warn('[Division] 명세서 PDF 추출 실패:', e); }
+    }
+
+    // 폴백: DB 단락 사용
+    if(!specText || specText.length < 500){
+      var {data:paragraphs} = await sb.from('division_spec_paragraphs').select('*').eq('project_id',p.id);
+      specText = (paragraphs||[]).map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
+      console.log('[Division] 검증용 DB 단락 사용:', specText.length, '글자');
+    }
+
+    // 3) 등록 청구항 (원본 대비 중복 체크용)
+    var origClaimsText = Division.state.claims.map(function(c){
+      return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text||'').substring(0,1000);
+    }).join('\n');
+
+    App.showProgress('divisionVerifyProgress','AI 검증 분석 중...',2,4);
+    var verifyPrompt = Division._buildVerifyPrompt(claimsText, specText, origClaimsText);
     var result = await Division.callAI(verifyPrompt);
+    App.showProgress('divisionVerifyProgress','결과 저장 중...',3,4);
     var verified;
     try { verified = Division._extractJSON(result.text); }
     catch(e) { showToast('검증 결과 해석 실패: ' + e.message.substring(0,80),'error'); App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); return; }
+
+    // DB 저장 (enum 정제)
+    var VALID_CHECK = ['abstract_expression','functional_limitation','support','overlap','format'];
+    var VALID_RESULT = ['pass','warning','fail'];
+    function sEnum(v,list,fb){ if(!v) return fb; v=String(v).trim().toLowerCase().replace(/[\s-]+/g,'_'); return list.indexOf(v)>=0?v:fb; }
+
     await sb.from('division_validation_results').delete().eq('project_id',p.id);
     if(verified.results && verified.results.length > 0){
-      var rows = verified.results.map(function(vr){ return { project_id:p.id, check_type:vr.check_type||'format', target_text:vr.target_text||'', result:vr.result||'pass', detail:vr.detail||'', suggestion:vr.suggestion||'', spec_paragraph_number:vr.spec_paragraph_number||null }; });
-      await sb.from('division_validation_results').insert(rows);
+      var rows = verified.results.map(function(vr){
+        return { project_id:p.id, check_type:sEnum(vr.check_type,VALID_CHECK,'format'), target_text:(vr.target_text||'').substring(0,5000), result:sEnum(vr.result,VALID_RESULT,'pass'), detail:(vr.detail||'').substring(0,5000), suggestion:(vr.suggestion||'').substring(0,5000), spec_paragraph_number:vr.spec_paragraph_number ? String(vr.spec_paragraph_number).substring(0,20) : null };
+      });
+      var {error:valErr} = await sb.from('division_validation_results').insert(rows);
+      if(valErr){
+        console.error('[Division] 검증 결과 저장 실패:', valErr.message);
+        // 행별 폴백
+        for(var vi=0;vi<rows.length;vi++){
+          var {error:re}=await sb.from('division_validation_results').insert(rows[vi]);
+          if(re) console.warn('[Division] 검증 행 '+vi+' 실패:', re.message);
+        }
+      }
     }
     await sb.from('division_projects').update({status:'verified', updated_at:new Date().toISOString()}).eq('id',p.id);
     p.status = 'verified';
     App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false);
     showToast('검증 완료!');
-    Division.state.currentStepKey = 'verify'; // 검증 결과 화면으로 이동
+    Division.state.currentStepKey = 'verify';
     await Division.loadData(p.id);
   } catch(e) { App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); showToast('검증 실패: '+e.message,'error'); }
 };
 
-Division._buildVerifyPrompt = function(claimsText, specText){
-  return '아래 분할출원 청구항에 대해 기재불비 검증을 수행하라.\n\n[분할출원 청구항]\n'+claimsText+'\n\n[명세서 전문]\n'+specText.substring(0,40000)+'\n\n검증 항목:\n1. abstract_expression: 추상적 표현\n2. functional_limitation: 기능적 기재\n3. support: 명세서 뒷받침\n4. overlap: 구성 중복\n5. format: 형식\n\n출력 JSON:\n{"overall":"pass|warning|fail","results":[{"check_type":"abstract_expression|functional_limitation|support|overlap|format","target_text":"검증대상","result":"pass|warning|fail","detail":"상세","suggestion":"수정제안","spec_paragraph_number":"0098"}],"format_checks":{"spacing":"pass|fail","ending":"pass|fail","dep_references":"pass|fail","overlap":"pass|fail"}}\n\nJSON만 출력하라.';
+Division._buildVerifyPrompt = function(claimsText, specText, origClaimsText){
+  return '아래 분할출원 청구항에 대해 기재불비 검증을 수행하라.\n\n[분할출원 청구항]\n'+claimsText+'\n\n[원출원 등록 청구항 (중복 체크 대상)]\n'+(origClaimsText||'(없음)')+'\n\n[명세서 전문]\n'+(specText||'(없음)').substring(0,50000)+'\n\n검증 항목:\n1. support (명세서 뒷받침): 분할출원 청구항의 각 구성요소가 명세서에 기재되어 있는지 확인. 명세서 단락번호 매핑. 뒷받침 없는 구성은 fail.\n2. abstract_expression (추상적 표현): "신속하게", "효과적으로", "최적의" 등 구체적 수치/구조가 없는 추상적 표현. 명확한 수치/구조로 대체 제안.\n3. functional_limitation (기능적 기재): "~하기 위한", "~에 의해" 등 기능만 기재하고 구조가 불명확한 경우. 구조적 표현으로 대체 제안.\n4. overlap (원출원 중복): 분할출원 독립항이 원출원 등록 청구항과 동일 범위이면 안 됨. 부가/병합/변환된 부분이 실질적 차이를 만드는지 확인.\n5. format (형식): 마침표(.) 누락, "상기" 일관성, 종속항 인용 정확성, 구성요소 명칭 통일.\n\n★ 명세서 전문이 제공된 경우 반드시 해당 내용으로 뒷받침 여부를 판단하라.\n★ 검증은 반드시 구체적 target_text(해당 구절)를 포함하여 어디가 문제인지 특정하라.\n\n★★★ JSON만 출력. ★★★\n\n출력 JSON:\n{"overall":"pass|warning|fail","results":[{"check_type":"support|abstract_expression|functional_limitation|overlap|format","target_text":"문제가 되는 구절","result":"pass|warning|fail","detail":"구체적 분석","suggestion":"수정 제안","spec_paragraph_number":"관련 명세서 단락번호 또는 N/A"}]}';
 };
 
 // ═══════════════════════════════════════════
