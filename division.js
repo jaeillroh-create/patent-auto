@@ -34,7 +34,7 @@ Division.PIPELINE = [
 ];
 
 Division.STEP_TO_STATUS = { upload:'uploaded', parse:'parsed', analyze:'analyzed', assemble:'assembled', verify:'verified', confirm:'confirmed' };
-Division.STATUS_TO_STEP = { created:0, uploaded:1, parsed:2, analyzed:3, assembled:4, verified:5, confirmed:6 };
+Division.STATUS_TO_STEP = { created:0, uploaded:0, parsed:1, analyzed:2, assembled:3, verified:4, confirmed:5 };
 
 Division.FILE_TYPES = {
   application:  { label:'특허출원서',       icon:'📄', required:true },
@@ -92,6 +92,17 @@ Division.callAI = async function(prompt, maxTokens){
     if(typeof updateStats === 'function') updateStats();
     return { text: parsed.text, stopReason: parsed.stopReason };
   } catch(e) { clearTimeout(tout); if(e.name === 'AbortError') throw new Error('타임아웃(5분)'); throw e; }
+};
+
+// ═══ JSONB에서 조회된 값을 안전하게 배열로 변환 ═══
+Division._toArray = function(val){
+  if(!val) return [];
+  if(Array.isArray(val)) return val;
+  if(typeof val === 'string'){
+    try { var parsed = JSON.parse(val); return Array.isArray(parsed) ? parsed : [String(val)]; }
+    catch(e){ return val.trim() ? [val] : []; }
+  }
+  return [String(val)];
 };
 
 // ═══ 견고한 JSON 추출 (마크다운 fence, 전후 텍스트, 트레일링 콤마, 잘림 복구) ═══
@@ -1006,7 +1017,7 @@ Division.runAnalyze = async function(){
           related_element: String(uc.related_element||'').substring(0,200),
           limitation_type: sEnum(uc.limitation_type, VALID_LIM, 'functional'),
           risk_level: sEnum(uc.risk_level, VALID_RISK, 'safe'),
-          risk_flags: JSON.stringify(flags), // JSONB는 문자열로 전달
+          risk_flags: flags, // JSONB — 배열 직접 전달 (stringify 금지)
           insertion_point: String(uc.insertion_point||'').substring(0,5000),
           suggestion: String(uc.suggestion||'').substring(0,5000),
           user_selection: 'pending'
@@ -1105,7 +1116,8 @@ Division.renderAnalyze = function(left, right, p){
       h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px">핵심 구성: ' + (t.key_elements||[]).map(function(e){return escapeHtml(e);}).join(', ') + '</div>';
       h += '<div style="font-size:11px;color:var(--color-text-tertiary)">근거 단락: ' + (t.spec_paragraphs||[]).join(', ') + '</div>';
       h += '<div style="font-size:11px;color:var(--color-primary);margin-top:2px">차별점: ' + escapeHtml(t.differentiation||'') + '</div>';
-      if(t.risk_flags && t.risk_flags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:2px">⚠️ ' + escapeHtml(t.risk_flags.join(', ')) + '</div>';
+      var tFlags = Division._toArray(t.risk_flags);
+      if(tFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:2px">⚠️ ' + escapeHtml(tFlags.join(', ')) + '</div>';
       h += '</div></label></div>';
     }); }
     h += '</div>';
@@ -1130,7 +1142,8 @@ Division.renderAnalyze = function(left, right, p){
       h += '<div class="division-component-row '+info.css+'"><label class="checkbox-label" style="flex:1"><input type="checkbox" '+(isChecked?'checked':'')+' data-component-id="'+uc.id+'" onchange="Division.toggleComponent(this)" /><div>';
       h += '<div style="font-weight:500">'+escapeHtml(uc.content)+'</div>';
       h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">【'+uc.paragraph_number+'】 → '+escapeHtml(uc.related_element)+' ('+uc.limitation_type+')</div>';
-      if(uc.risk_flags&&uc.risk_flags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:2px">⚠️ '+escapeHtml(uc.risk_flags.join(', '))+'</div>';
+      var ucFlags = Division._toArray(uc.risk_flags);
+      if(ucFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:2px">⚠️ '+escapeHtml(ucFlags.join(', '))+'</div>';
       if(uc.suggestion) h += '<div style="font-size:11px;color:var(--color-primary);margin-top:2px">💡 제안: '+escapeHtml(uc.suggestion)+'</div>';
       h += '</div></label></div>';
     });
