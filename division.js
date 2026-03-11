@@ -105,6 +105,68 @@ Division._toArray = function(val){
   return [String(val)];
 };
 
+// ═══ 청구항 텍스트를 구성요소별 줄바꿈 처리 ═══
+Division._formatClaimText = function(text){
+  if(!text) return '';
+  // 세미콜론(;) 뒤에 줄바꿈, "를 포함하는" 앞에 줄바꿈
+  var formatted = text
+    .replace(/;\s*/g, ';\n')
+    .replace(/(를\s*포함하는)/g, '\n$1')
+    .replace(/(을\s*포함하는)/g, '\n$1')
+    .replace(/(를\s*포함하며)/g, '\n$1')
+    .replace(/(단계;)/g, '$1\n');
+  return formatted;
+};
+
+// ═══ 단어 단위 Diff — 등록 청구항 vs 제안 청구항 비교 ═══
+Division._wordDiff = function(oldText, newText){
+  if(!oldText || !newText) return { html: escapeHtml(newText || ''), addedCount:0, removedCount:0 };
+
+  // 구성요소 구분자(;) 기준으로 분할하여 비교
+  var oldParts = oldText.split(/([;,.]|\s+)/).filter(function(s){return s.trim();});
+  var newParts = newText.split(/([;,.]|\s+)/).filter(function(s){return s.trim();});
+
+  // LCS (Longest Common Subsequence) 기반 diff
+  var m = oldParts.length, n = newParts.length;
+  var dp = [];
+  for(var i = 0; i <= m; i++){ dp[i] = []; for(var j = 0; j <= n; j++) dp[i][j] = 0; }
+  for(var i = 1; i <= m; i++){
+    for(var j = 1; j <= n; j++){
+      if(oldParts[i-1] === newParts[j-1]) dp[i][j] = dp[i-1][j-1] + 1;
+      else dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+
+  // Backtrack으로 diff 결과 생성
+  var result = [];
+  var i = m, j = n;
+  while(i > 0 || j > 0){
+    if(i > 0 && j > 0 && oldParts[i-1] === newParts[j-1]){
+      result.unshift({ type:'same', text:oldParts[i-1] });
+      i--; j--;
+    } else if(j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])){
+      result.unshift({ type:'added', text:newParts[j-1] });
+      j--;
+    } else {
+      result.unshift({ type:'removed', text:oldParts[i-1] });
+      i--;
+    }
+  }
+
+  // HTML 생성
+  var html = '', addedCount = 0, removedCount = 0;
+  result.forEach(function(r){
+    if(r.type === 'same') html += escapeHtml(r.text) + ' ';
+    else if(r.type === 'added'){ html += '<span class="division-diff-added">' + escapeHtml(r.text) + '</span> '; addedCount++; }
+    else { html += '<span class="division-diff-removed">' + escapeHtml(r.text) + '</span> '; removedCount++; }
+  });
+
+  // 줄바꿈 처리
+  html = html.replace(/;\s*/g, ';\n');
+
+  return { html:html, addedCount:addedCount, removedCount:removedCount };
+};
+
 // ═══ 견고한 JSON 추출 (마크다운 fence, 전후 텍스트, 트레일링 콤마, 잘림 복구) ═══
 Division._extractJSON = function(text){
   if(!text) throw new Error('빈 응답');
@@ -942,7 +1004,7 @@ Division.renderParse = function(left, right, p){
       else h += '<span style="font-size:10px;color:var(--color-text-tertiary)">' + (roleLabels[c.division_role]||'') + '</span>';
       h += '<span style="margin-left:auto;font-size:11px;color:var(--color-text-tertiary)">▼</span>';
       h += '</div>';
-      h += '<div class="claim-text">' + escapeHtml(registeredText) + '</div>';
+      h += '<div class="claim-text">' + escapeHtml(Division._formatClaimText(registeredText)) + '</div>';
       if(registeredText.length > 100) h += '<span class="claim-toggle" onclick="document.getElementById(\'regClaim_'+idx+'\').classList.toggle(\'expanded\')">▼ 전문 보기 / 접기</span>';
       h += '</div>';
     });
@@ -960,7 +1022,7 @@ Division.renderParse = function(left, right, p){
   if(basisClaim){
     var regText = basisClaim.amended_text || basisClaim.original_text || '';
     rh += '<div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:8px">제' + basisClaim.claim_number + '항 | ' + (basisClaim.amended_text ? '보정 후 확정본' : '원출원 그대로') + '</div>';
-    rh += '<div style="background:var(--color-bg-tertiary);padding:12px;border-radius:var(--radius-sm);font-size:13px;line-height:1.8;white-space:pre-wrap;max-height:200px;overflow-y:auto">' + escapeHtml(regText) + '</div>';
+    rh += '<div style="background:var(--color-bg-tertiary);padding:12px;border-radius:var(--radius-sm);font-size:13px;line-height:1.8;white-space:pre-wrap;max-height:250px;overflow-y:auto">' + escapeHtml(Division._formatClaimText(regText)) + '</div>';
   } else {
     rh += '<div style="text-align:center;padding:16px;color:var(--color-text-tertiary)">독립항이 파싱되지 않았습니다.</div>';
   }
@@ -1144,44 +1206,69 @@ Division.renderAnalyze = function(left, right, p){
     h += '</div></div></div>';
   }
 
-  // === 전략적 분할: 테마 목록 ===
+  // === 전략적 분할: 테마 목록 + 등록 청구항 대비 diff ===
   if(divType === 'strategic'){
     var themes = (p.analysis_meta && p.analysis_meta.themes) || [];
+    var basisClaim = claims.find(function(c){ return c.division_role==='basis'; }) || claims.find(function(c){ return c.claim_type==='independent'; });
+    var basisText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
+
     h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🎯</span> 독립항 테마 후보</div>';
     if(!themes.length){ h += '<div style="font-size:13px;color:var(--color-text-tertiary);padding:8px">테마 후보가 없습니다.</div>'; }
     else { themes.forEach(function(t, tidx){
       var riskInfo = Division.RISK_LABELS[t.risk_level] || Division.RISK_LABELS.safe;
-      h += '<div class="division-component-row ' + riskInfo.css + '" style="padding:14px">';
+      h += '<div class="division-theme-card ' + riskInfo.css + '">';
       h += '<label class="checkbox-label" style="flex:1;align-items:flex-start"><input type="checkbox" checked data-theme-id="' + t.theme_id + '" style="margin-top:4px" /><div style="flex:1">';
-      h += '<div style="font-weight:700;font-size:14px">' + riskInfo.icon + ' ' + escapeHtml(t.theme_name) + '</div>';
-      h += '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:6px;line-height:1.6">' + escapeHtml(t.description) + '</div>';
+
+      // 제목
+      h += '<div style="font-weight:700;font-size:14px;margin-bottom:6px">' + riskInfo.icon + ' ' + escapeHtml(t.theme_name) + '</div>';
+
+      // 설명 (줄바꿈 포함)
+      h += '<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.7;margin-bottom:8px">' + escapeHtml(t.description||'').replace(/\n/g,'<br>') + '</div>';
+
       // 핵심 구성요소 태그
       if(t.key_elements && t.key_elements.length){
-        h += '<div style="margin-top:8px">';
-        t.key_elements.forEach(function(el){ h += '<span class="division-element-tag">' + escapeHtml(el) + '</span> '; });
+        h += '<div style="margin-bottom:8px;display:flex;flex-wrap:wrap;gap:4px">';
+        t.key_elements.forEach(function(el){ h += '<span class="division-element-tag">' + escapeHtml(el) + '</span>'; });
         h += '</div>';
       }
-      // 청구항 형식 미리보기
-      h += '<div class="division-claim-preview" onclick="this.classList.toggle(\'expanded\')">';
-      h += '<strong style="color:var(--color-primary)">【청구항 ' + (tidx+1) + '】(예상 독립항)</strong>\n';
+
+      // 예상 청구항 미리보기 (스크롤 가능)
+      h += '<div class="division-claim-preview-scroll">';
+      h += '<div style="font-size:11px;font-weight:600;color:var(--color-primary);margin-bottom:4px">📝 예상 독립항 (청구항 ' + (tidx+1) + ')</div>';
       if(t.key_elements && t.key_elements.length){
-        h += t.key_elements.map(function(el, i){
-          if(i === 0) return escapeHtml(el) + ';\n';
-          return '상기 ' + escapeHtml(el) + ';\n';
-        }).join('');
-        h += '을 포함하는 ' + escapeHtml(t.theme_name) + '.';
+        var previewText = t.key_elements.map(function(el, i){
+          return (i === 0 ? '' : '상기 ') + escapeHtml(el) + ';';
+        }).join('\n');
+        previewText += '\n을 포함하는 ' + escapeHtml(t.theme_name) + '.';
+        h += '<div style="white-space:pre-wrap;font-size:12px;line-height:1.8">' + previewText + '</div>';
       } else {
-        h += '(핵심 구성 기반 독립항이 조립됩니다)';
+        h += '<div style="font-size:12px;color:var(--color-text-tertiary)">(핵심 구성 기반 독립항이 조립됩니다)</div>';
       }
       h += '</div>';
-      h += '<span class="division-claim-preview-toggle" onclick="this.previousElementSibling.classList.toggle(\'expanded\')">▼ 더보기</span>';
-      // 메타 정보
-      h += '<div style="display:flex;gap:12px;margin-top:6px;font-size:11px;color:var(--color-text-tertiary)">';
-      h += '<span>근거: ' + (t.spec_paragraphs||[]).map(function(s){return '【'+s+'】';}).join(' ') + '</span>';
-      h += '</div>';
-      if(t.differentiation) h += '<div style="font-size:11px;color:var(--color-primary);margin-top:4px">💡 차별점: ' + escapeHtml(t.differentiation) + '</div>';
+
+      // 등록 청구항과 비교 diff (토글)
+      if(basisText && t.key_elements && t.key_elements.length){
+        var proposedText = t.key_elements.map(function(el,i){ return (i===0?'':'상기 ') + el + ';'; }).join(' ') + ' 을 포함하는 ' + t.theme_name + '.';
+        var diffResult = Division._wordDiff(basisText, proposedText);
+
+        h += '<details class="division-diff-details">';
+        h += '<summary style="font-size:11px;color:var(--color-primary);cursor:pointer;margin-top:6px;font-weight:600">';
+        h += '⚖️ 등록 청구항과 비교 (추가 ' + diffResult.addedCount + ' / 삭제 ' + diffResult.removedCount + ')';
+        h += '</summary>';
+        h += '<div class="division-diff-box">';
+        h += '<div style="font-size:10px;margin-bottom:6px;color:var(--color-text-tertiary)"><span class="division-diff-added" style="padding:0 4px">추가</span> <span class="division-diff-removed" style="padding:0 4px">삭제</span> 동일</div>';
+        h += '<div style="font-size:12px;line-height:1.8;white-space:pre-wrap">' + diffResult.html + '</div>';
+        h += '</div></details>';
+      }
+
+      // 근거/차별점
+      h += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--color-divider)">';
+      h += '<div style="font-size:11px;color:var(--color-text-tertiary)">근거: ' + (t.spec_paragraphs||[]).map(function(s){return '【'+s+'】';}).join(' ') + '</div>';
+      if(t.differentiation) h += '<div style="font-size:11px;color:var(--color-primary);margin-top:2px">💡 ' + escapeHtml(t.differentiation) + '</div>';
       var tFlags = Division._toArray(t.risk_flags);
       if(tFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:2px">⚠️ ' + escapeHtml(tFlags.join(', ')) + '</div>';
+      h += '</div>';
+
       h += '</div></label></div>';
     }); }
     h += '</div>';
@@ -1407,21 +1494,21 @@ Division.renderAssemble = function(left, right, p){
     divIndeps.forEach(function(dc){
       var registeredText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
       var divText = dc.claim_text || '';
-      var divHlText = dc.claim_text_highlighted || dc.claim_text || '';
 
-      // 마크다운 → HTML 변환
-      divHlText = divHlText.replace(/\*\*\*(.*?)\*\*\*/g, '<span class="division-diff-added" style="font-style:italic">$1</span>');
-      divHlText = divHlText.replace(/\*\*(.*?)\*\*/g, '<span class="division-diff-added">$1</span>');
+      // 단어 단위 diff 생성
+      var diffResult = Division._wordDiff(registeredText, divText);
 
       h += '<div class="division-compare">';
-      h += '<div class="division-compare-header"><span class="tossface">⚖️</span> 청구항 ' + dc.claim_number + ' 비교 (독립항)</div>';
+      h += '<div class="division-compare-header"><span class="tossface">⚖️</span> 청구항 ' + dc.claim_number + ' 비교 (독립항)';
+      h += '<span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--color-text-tertiary)">추가 ' + diffResult.addedCount + ' / 삭제 ' + diffResult.removedCount + '</span>';
+      h += '</div>';
       h += '<div class="division-compare-titles">';
       h += '<div class="division-compare-col-title original">📜 등록 청구항 (원본)</div>';
       h += '<div class="division-compare-col-title division">🔀 분할출원 청구항 (신규)</div>';
       h += '</div>';
       h += '<div class="division-compare-body">';
-      h += '<div class="division-compare-col">' + escapeHtml(registeredText) + '</div>';
-      h += '<div class="division-compare-col">' + divHlText + '</div>';
+      h += '<div class="division-compare-col">' + escapeHtml(Division._formatClaimText(registeredText)) + '</div>';
+      h += '<div class="division-compare-col">' + diffResult.html + '</div>';
       h += '</div></div>';
     });
 
