@@ -380,7 +380,7 @@ async function openProject(pid){
   // Restore custom title type
   if(selectedTitleType){const ci=document.getElementById('customTitleType');if(ci)ci.value=selectedTitleType;document.getElementById('btnStep01').disabled=false;}
   if(selectedTitle){document.getElementById('titleInput').value=selectedTitle;const enInp=document.getElementById('titleInputEn');if(enInp)enInp.value=selectedTitleEn||'';document.getElementById('titleConfirmArea').style.display='block';document.getElementById('titleConfirmMsg').style.display='block';document.getElementById('batchArea').style.display='block';}
-  Object.keys(outputs).forEach(k=>{if(outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied'))renderOutput(k,outputs[k]);});
+  Object.keys(outputs).forEach(k=>{if(outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied'))_cascadeRender(k,outputs[k]);});
   // v5.5: 스텝별 사용자 명령어 UI 주입
   injectAllUserCommandUIs();
   // Restore diagrams and show download buttons
@@ -1296,7 +1296,7 @@ function getLastFigureNumber(t){const m=t.match(/도\s*(\d+)/g);if(!m)return 0;r
 function _extractFigureNumbersFromDesign(text){
   if(!text)return [];
   const nums=[];
-  const re=/^도\s*(\d+)\s*[:：]/gm;
+  const re=/^\s*도\s*(\d+)\s*[:：]/gm;
   let m;
   while((m=re.exec(text))!==null)nums.push(parseInt(m[1]));
   return[...new Set(nums)].sort((a,b)=>a-b);
@@ -2305,8 +2305,11 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
       const allFigNumsRaw=[...new Set([...actualFigNums,...requiredFigures.map(f=>f.num)])].sort((a,b)=>a-b);
       // ★ Safety: UI 설정 도면 수 초과 방지 ★
       const expectedTotalFig=deviceFigCount;
-      const allFigNums=allFigNumsRaw.length>expectedTotalFig?allFigNumsRaw.slice(0,expectedTotalFig):allFigNumsRaw;
-      const lastDeviceFig=allFigNums.length>0?Math.max(...allFigNums):deviceFigCount;
+      // ★ v10.4 fix: 도면 번호 목록이 비어있으면 computeFigNums로 순차 번호 생성
+      // (step_07 미생성 시 빈 목록으로 인해 LLM이 존재하지 않는 도면을 참조하는 버그 방지)
+      const _fallbackFigNums=allFigNumsRaw.length===0?computeFigNums(Math.max(deviceFigCount-requiredFigures.length,0),0).device.concat(requiredFigures.map(f=>f.num)).sort((a,b)=>a-b):allFigNumsRaw;
+      const allFigNums=_fallbackFigNums.length>expectedTotalFig?_fallbackFigNums.slice(0,expectedTotalFig):_fallbackFigNums;
+      const lastDeviceFig=allFigNums.length>0?Math.max(...allFigNums):1;
       const figListStr=allFigNums.map(n=>'도 '+n).join(', ');
       
       // ★ 도면 설계에서 구성요소 목록 추출 (Step 8에 도면과 동일한 구성요소 사용 강제) ★
@@ -8399,6 +8402,7 @@ function postRenderValidation(sid){
 function renderDiagrams(sid,mt){
   const cid=sid==='step_07'?'diagramsStep07':'diagramsStep11';
   const el=document.getElementById(cid);
+  if(!el){console.warn(`[renderDiagrams] DOM element not found: ${cid}`);return;}
   let blocks=extractMermaidBlocks(mt);
   if(!blocks.length){
     el.innerHTML=`<div class="diagram-container"><pre style="font-size:12px;white-space:pre-wrap">${App.escapeHtml(mt)}</pre></div>`;
@@ -10148,7 +10152,7 @@ function downloadAsWord(){
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
   const allClaims=[outputs.step_06,outputs.step_10,outputs.step_20].filter(Boolean).join('\n\n');
   const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,getLatestMethodDescription()].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
-  const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
+  const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:normal;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();App.showToast('Word 다운로드 완료');
 }
