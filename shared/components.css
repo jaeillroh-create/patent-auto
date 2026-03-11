@@ -1,0 +1,717 @@
+/* ═══════════════════════════════════════════════════════════════
+   DIDIM IP Center — 컴포넌트 라이브러리 스타일 (12종)
+   ★ TDS 컴포넌트 클론 + DIDIM 커스텀 디자인
+   ★ 모든 값은 design-tokens.css 토큰 참조
+   ★ Tossface 이모지 통일 적용
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Tossface 이모지 기본 스타일 ── */
+.tf {
+  font-family: 'Tossface', sans-serif;
+  font-style: normal;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── 애니메이션 ── */
+@keyframes dt-fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes dt-barGrow {
+  from { width: 0; }
+}
+
+/* ═══════════════════════════════════════════
+   1. Button (dt-btn)
+   — 4 variant × 4 size + disabled + icon
+   ═══════════════════════════════════════════ */
+.dt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: none;
+  font-family: var(--dt-font);
+  border-radius: var(--dt-r-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--dt-ease-fast);
+  line-height: 1;
+  outline: none;
+}
+.dt-btn:active:not(:disabled) { transform: scale(0.98); }
+
+/* Sizes */
+.dt-btn-sm { height: 28px; padding: 0 10px; font-size: 11.5px; font-weight: var(--dt-w-semibold); }
+.dt-btn-md { height: 36px; padding: 0 14px; font-size: 13px; font-weight: var(--dt-w-semibold); }
+.dt-btn-lg { height: 44px; padding: 0 20px; font-size: 14px; font-weight: var(--dt-w-semibold); }
+.dt-btn-xl { height: 52px; padding: 0 28px; font-size: 15px; font-weight: var(--dt-w-bold); }
+
+/* Variants */
+.dt-btn-primary { background: var(--dt-brand); color: var(--dt-white); }
+.dt-btn-primary:hover:not(:disabled) { background: var(--dt-brand-hover); }
+
+.dt-btn-secondary { background: var(--dt-white); color: var(--dt-brand); border: 1.5px solid var(--dt-brand); }
+.dt-btn-secondary:hover:not(:disabled) { background: var(--dt-brand-pale); }
+
+.dt-btn-ghost { background: transparent; color: var(--dt-g600); border: 1px solid var(--dt-g200); }
+.dt-btn-ghost:hover:not(:disabled) { background: var(--dt-g50); }
+
+.dt-btn-danger { background: var(--dt-danger); color: var(--dt-white); }
+.dt-btn-danger:hover:not(:disabled) { background: #C62828; }
+
+/* Disabled */
+.dt-btn:disabled {
+  background: var(--dt-g100) !important;
+  color: var(--dt-g300) !important;
+  border: 1.5px solid var(--dt-g150) !important;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Full width */
+.dt-btn-full { width: 100%; }
+
+/* Loading */
+.dt-btn-loading {
+  position: relative;
+  color: transparent !important;
+  pointer-events: none;
+}
+.dt-btn-loading::after {
+  content: '';
+  position: absolute;
+  width: 14px; height: 14px;
+  border: 2px solid var(--dt-white);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+/* Icon inside button */
+.dt-btn .dt-ic { flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════
+   2. Badge (dt-badge)
+   — 5 variant + icon
+   ═══════════════════════════════════════════ */
+.dt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
+  font-weight: var(--dt-w-semibold);
+  padding: 3px 10px;
+  border-radius: var(--dt-r-full);
+  line-height: 1.3;
+  font-family: var(--dt-font);
+}
+.dt-badge-icon { font-size: 10px; line-height: 1; }
+
+.dt-badge-brand { background: var(--dt-brand-light); color: var(--dt-brand); }
+.dt-badge-success { background: var(--dt-success-light); color: var(--dt-success); }
+.dt-badge-warning { background: var(--dt-warning-light); color: var(--dt-warning); }
+.dt-badge-danger { background: var(--dt-danger-light); color: var(--dt-danger); }
+.dt-badge-neutral { background: var(--dt-g100); color: var(--dt-g600); }
+
+/* ═══════════════════════════════════════════
+   3. SectionCard (dt-scard)
+   — icon + title + action 헤더 구조
+   ═══════════════════════════════════════════ */
+.dt-scard {
+  background: var(--dt-white);
+  border-radius: var(--dt-r-lg);
+  border: 1px solid var(--dt-g150);
+  overflow: hidden;
+  box-shadow: var(--dt-sh-sm);
+  transition: box-shadow var(--dt-ease-normal);
+}
+.dt-scard:hover { box-shadow: var(--dt-sh-md); }
+
+.dt-scard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 13px;
+  border-bottom: 1px solid var(--dt-g100);
+}
+.dt-scard-head-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.dt-scard-icon {
+  width: 20px; height: 20px;
+  border-radius: var(--dt-r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.dt-scard-title {
+  font-size: 14.5px;
+  font-weight: var(--dt-w-bold);
+  color: var(--dt-g900);
+}
+.dt-scard-action {
+  font-size: 11.5px;
+  color: var(--dt-g400);
+}
+.dt-scard-body { padding: 16px 20px; }
+.dt-scard-body--compact { padding: 16px; }
+.dt-scard-body--spacious { padding: 24px; }
+.dt-scard-body--none { padding: 0; }
+
+/* ═══════════════════════════════════════════
+   4. StatCard (dt-stat)
+   — label + value + unit + sub
+   ═══════════════════════════════════════════ */
+.dt-stat {
+  background: var(--dt-white);
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-lg);
+  padding: 16px 18px;
+  box-shadow: var(--dt-sh-sm);
+  transition: box-shadow var(--dt-ease-normal);
+}
+.dt-stat:hover { box-shadow: var(--dt-sh-md); }
+
+.dt-stat-label {
+  font-size: var(--dt-f-xs);
+  font-weight: var(--dt-w-semibold);
+  color: var(--dt-g400);
+  margin-bottom: 6px;
+}
+.dt-stat-value {
+  font-size: 24px;
+  font-weight: var(--dt-w-extrabold);
+  color: var(--dt-g900);
+  letter-spacing: -1px;
+  font-family: var(--dt-mono);
+}
+.dt-stat-unit {
+  font-size: 14px;
+  font-weight: var(--dt-w-semibold);
+  color: var(--dt-g400);
+  margin-left: 2px;
+  font-family: var(--dt-font);
+}
+.dt-stat-sub {
+  font-size: var(--dt-f-xs);
+  color: var(--dt-g400);
+  margin-top: 3px;
+}
+
+/* ═══════════════════════════════════════════
+   5. Input (dt-input)
+   — 36h / focus ring brand
+   ═══════════════════════════════════════════ */
+.dt-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--dt-r-sm);
+  border: 1.5px solid var(--dt-g150);
+  background: var(--dt-white);
+  transition: border-color var(--dt-ease-fast);
+}
+.dt-input-wrap:focus-within { border-color: var(--dt-brand); }
+.dt-input-wrap--error { border-color: var(--dt-danger) !important; }
+.dt-input-wrap--disabled { background: var(--dt-g50); }
+
+.dt-input-wrap .dt-ic { color: var(--dt-g400); flex-shrink: 0; }
+
+.dt-input-wrap input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--dt-f-md);
+  color: var(--dt-g900);
+  font-family: var(--dt-font);
+  width: 100%;
+  height: 100%;
+}
+.dt-input-wrap input::placeholder { color: var(--dt-g400); }
+.dt-input-wrap input:disabled { color: var(--dt-g300); }
+
+/* Large Input (44h) */
+.dt-input-wrap--lg { height: 44px; padding: 0 14px; }
+.dt-input-wrap--lg input { font-size: 14px; }
+
+/* ═══════════════════════════════════════════
+   6. Tag / Chip (dt-tag)
+   — 필터용 on/off + count + removable
+   ═══════════════════════════════════════════ */
+.dt-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 13px;
+  border-radius: var(--dt-r-full);
+  font-size: var(--dt-f-sm);
+  font-weight: var(--dt-w-medium);
+  background: var(--dt-white);
+  color: var(--dt-g600);
+  border: 1.5px solid var(--dt-g150);
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: var(--dt-font);
+  user-select: none;
+}
+.dt-tag:hover { background: var(--dt-g50); }
+
+.dt-tag--active {
+  background: var(--dt-brand-light);
+  color: var(--dt-brand);
+  border-color: var(--dt-brand);
+  font-weight: var(--dt-w-semibold);
+}
+.dt-tag--active:hover { background: var(--dt-brand-mid); }
+
+.dt-tag-count {
+  font-size: var(--dt-f-xs);
+  font-weight: var(--dt-w-bold);
+  border-radius: 10px;
+  padding: 1px 6px;
+  background: var(--dt-g100);
+  color: var(--dt-g400);
+}
+.dt-tag--active .dt-tag-count {
+  background: var(--dt-brand);
+  color: var(--dt-white);
+}
+.dt-tag-remove {
+  font-size: 10px;
+  color: var(--dt-g400);
+  cursor: pointer;
+  margin-left: -2px;
+  line-height: 1;
+}
+.dt-tag--active .dt-tag-remove { color: var(--dt-brand); }
+
+/* ═══════════════════════════════════════════
+   7. Progress (dt-progress)
+   — label + bar + percentage
+   ═══════════════════════════════════════════ */
+.dt-progress-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.dt-progress-label {
+  font-size: 12.5px;
+  font-weight: var(--dt-w-medium);
+  color: var(--dt-g600);
+}
+.dt-progress-pct {
+  font-size: 12.5px;
+  font-weight: var(--dt-w-bold);
+  color: var(--dt-g800);
+  font-family: var(--dt-mono);
+}
+.dt-progress-track {
+  height: 5px;
+  background: var(--dt-g100);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.dt-progress-fill {
+  height: 100%;
+  border-radius: 10px;
+  background: var(--dt-brand);
+  transition: width 0.8s cubic-bezier(.16,1,.3,1);
+}
+
+/* ═══════════════════════════════════════════
+   8. Checklist (dt-checklist)
+   — done/active/wait 3상태
+   ═══════════════════════════════════════════ */
+.dt-checklist { display: flex; flex-direction: column; gap: 5px; }
+
+.dt-check-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-radius: var(--dt-r-sm);
+  background: var(--dt-g50);
+  border: 1px solid var(--dt-g100);
+  cursor: pointer;
+  transition: all var(--dt-ease-fast);
+}
+.dt-check-item:hover { background: var(--dt-g100); }
+
+.dt-check-item-left { display: flex; align-items: center; gap: 9px; }
+
+.dt-check-dot {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dt-check-dot--done { border: 2px solid var(--dt-success); background: var(--dt-success); }
+.dt-check-dot--active { border: 2px solid var(--dt-brand); background: transparent; }
+.dt-check-dot--wait { border: 2px solid var(--dt-g300); background: transparent; }
+
+.dt-check-dot--done .dt-ic { color: var(--dt-white); }
+
+.dt-check-label {
+  font-size: 13px;
+  font-weight: var(--dt-w-medium);
+}
+.dt-check-label--done { color: var(--dt-g400); text-decoration: line-through; }
+.dt-check-label--active { color: var(--dt-g700); }
+.dt-check-label--wait { color: var(--dt-g700); }
+
+.dt-check-status {
+  font-size: var(--dt-f-xs);
+  font-weight: var(--dt-w-semibold);
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.dt-check-status--done { color: var(--dt-success); background: var(--dt-success-light); }
+.dt-check-status--active { color: var(--dt-brand); background: var(--dt-brand-light); }
+.dt-check-status--wait { color: var(--dt-g400); background: var(--dt-g100); }
+
+/* ═══════════════════════════════════════════
+   9. DocRow (dt-docrow)
+   — ok/warn/empty 3상태 + left border
+   ═══════════════════════════════════════════ */
+.dt-docrow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border-radius: var(--dt-r-md);
+  border: 1px solid var(--dt-g150);
+  background: var(--dt-white);
+  transition: all var(--dt-ease-fast);
+  cursor: pointer;
+}
+.dt-docrow:hover { box-shadow: var(--dt-sh-sm); }
+
+.dt-docrow--ok { border-left: 3px solid var(--dt-success); }
+.dt-docrow--warn { border-left: 3px solid var(--dt-warning); }
+.dt-docrow--empty { border-left: 3px solid var(--dt-g300); }
+
+.dt-docrow-icon {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.dt-docrow--ok .dt-docrow-icon { background: var(--dt-success-light); }
+.dt-docrow--warn .dt-docrow-icon { background: var(--dt-warning-light); }
+.dt-docrow--empty .dt-docrow-icon { background: var(--dt-g100); }
+
+.dt-docrow-body { flex: 1; min-width: 0; }
+.dt-docrow-name-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dt-docrow-name { font-size: 13px; font-weight: var(--dt-w-semibold); color: var(--dt-g800); }
+.dt-docrow-required {
+  font-size: var(--dt-f-micro);
+  font-weight: var(--dt-w-bold);
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--dt-danger-light);
+  color: var(--dt-danger);
+}
+.dt-docrow-file { font-size: 11.5px; color: var(--dt-g400); margin-top: 2px; }
+.dt-docrow-hint {
+  font-size: var(--dt-f-xs);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.dt-docrow--ok .dt-docrow-hint { color: var(--dt-brand); }
+.dt-docrow--warn .dt-docrow-hint { color: var(--dt-warning); }
+.dt-docrow--empty .dt-docrow-hint { color: var(--dt-brand); }
+
+/* ═══════════════════════════════════════════
+   10. Accordion (dt-accordion)
+   — open/close + accent bar + count
+   ═══════════════════════════════════════════ */
+.dt-accordion { border-bottom: 1px solid var(--dt-g150); }
+
+.dt-accordion-head {
+  padding: 16px 20px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  background: var(--dt-g50);
+  transition: background var(--dt-ease-normal);
+}
+.dt-accordion-head--open { background: var(--dt-white); }
+
+.dt-accordion-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.dt-accordion-accent { width: 3px; height: 22px; border-radius: 2px; flex-shrink: 0; }
+.dt-accordion-info { flex: 1; }
+.dt-accordion-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dt-accordion-title { font-size: var(--dt-f-lg); font-weight: var(--dt-w-bold); color: var(--dt-g900); letter-spacing: -0.3px; }
+.dt-accordion-count {
+  font-size: 11.5px;
+  font-weight: var(--dt-w-bold);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.dt-accordion-sub { font-size: var(--dt-f-sm); color: var(--dt-g500); margin-top: 3px; font-weight: var(--dt-w-medium); }
+
+.dt-accordion-right { display: flex; align-items: center; gap: 8px; }
+.dt-accordion-chevron {
+  color: var(--dt-g400);
+  transition: transform 0.25s cubic-bezier(.4,0,.2,1);
+}
+.dt-accordion-chevron--open { transform: rotate(180deg); }
+
+.dt-accordion-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height var(--dt-ease-spring);
+}
+.dt-accordion-body--open { max-height: 2000px; }
+.dt-accordion-body-inner { padding: 6px 0 16px; }
+
+/* ═══════════════════════════════════════════
+   11. AnchorNav (dt-anchornav)
+   — 스크롤 기반 섹션 이동 탭
+   ═══════════════════════════════════════════ */
+.dt-anchornav {
+  background: var(--dt-white);
+  border-bottom: 1px solid var(--dt-g150);
+  display: flex;
+  padding: 0 24px;
+  max-width: var(--dt-max-w);
+  margin: 0 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dt-anchornav::-webkit-scrollbar { display: none; }
+
+.dt-anchornav-item {
+  padding: 13px 17px;
+  font-size: var(--dt-f-md);
+  font-weight: var(--dt-w-medium);
+  color: var(--dt-g500);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all var(--dt-ease-fast);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  font-family: var(--dt-font);
+}
+.dt-anchornav-item:hover { color: var(--dt-g700); }
+.dt-anchornav-item--active {
+  font-weight: var(--dt-w-bold);
+  color: var(--dt-brand);
+  border-bottom-color: var(--dt-brand);
+}
+.dt-anchornav-err {
+  background: var(--dt-danger);
+  color: var(--dt-white);
+  font-size: var(--dt-f-micro);
+  font-weight: var(--dt-w-bold);
+  padding: 1px 5px;
+  border-radius: 10px;
+  min-width: 16px;
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════════
+   12. GlobalNav (dt-gnav)
+   — 전 페이지 공통 최상단 네비게이션
+   — 3상태: guest / trial / subscribed
+   ═══════════════════════════════════════════ */
+.dt-gnav {
+  background: var(--dt-white);
+  border-bottom: 1px solid var(--dt-g150);
+}
+.dt-gnav-inner {
+  max-width: var(--dt-max-w);
+  margin: 0 auto;
+  padding: 0 24px;
+  height: var(--dt-nav-h);
+  display: flex;
+  align-items: center;
+}
+
+/* Logo */
+.dt-gnav-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 28px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.dt-gnav-logo-circle {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 2.5px solid var(--dt-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dt-gnav-logo-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--dt-brand);
+}
+.dt-gnav-logo-text {
+  font-size: 16px;
+  font-weight: var(--dt-w-extrabold);
+  color: var(--dt-brand);
+  letter-spacing: -0.5px;
+}
+
+/* Menu */
+.dt-gnav-menu { display: flex; gap: 2px; }
+.dt-gnav-link {
+  padding: 6px 12px;
+  font-size: var(--dt-f-md);
+  font-weight: var(--dt-w-medium);
+  color: var(--dt-g600);
+  border-radius: var(--dt-r-sm);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.12s;
+  border: none;
+  font-family: var(--dt-font);
+  text-decoration: none;
+}
+.dt-gnav-link:hover {
+  background: var(--dt-g50);
+  color: var(--dt-g900);
+  text-decoration: none;
+}
+.dt-gnav-link--active {
+  font-weight: var(--dt-w-semibold);
+  color: var(--dt-brand);
+  background: var(--dt-brand-light);
+}
+.dt-gnav-link--active:hover { background: var(--dt-brand-light); }
+
+.dt-gnav-spacer { flex: 1; }
+
+.dt-gnav-right { display: flex; align-items: center; gap: 8px; }
+
+/* Avatar */
+.dt-gnav-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--dt-brand-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--dt-f-sm);
+  font-weight: var(--dt-w-bold);
+  color: var(--dt-brand);
+  cursor: pointer;
+}
+
+/* Bell */
+.dt-gnav-bell {
+  cursor: pointer;
+  color: var(--dt-g400);
+  display: flex;
+  align-items: center;
+}
+.dt-gnav-bell:hover { color: var(--dt-g600); }
+
+/* ═══════════════════════════════════════════
+   PromoBar (dt-promo)
+   — Nav 상단 조건부 표시
+   ═══════════════════════════════════════════ */
+.dt-promo {
+  height: var(--dt-promo-h);
+  background: var(--dt-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--dt-white);
+  font-size: 13px;
+  font-weight: var(--dt-w-medium);
+  font-family: var(--dt-font);
+}
+.dt-promo-badge {
+  background: rgba(255,255,255,0.18);
+  padding: 2px 10px;
+  border-radius: var(--dt-r-full);
+  font-size: var(--dt-f-sm);
+  font-weight: var(--dt-w-semibold);
+}
+.dt-promo-cta {
+  background: var(--dt-white);
+  color: var(--dt-brand);
+  border: none;
+  border-radius: var(--dt-r-full);
+  padding: 4px 14px;
+  font-size: var(--dt-f-sm);
+  font-weight: var(--dt-w-bold);
+  cursor: pointer;
+  font-family: var(--dt-font);
+}
+.dt-promo-cta:hover { opacity: 0.9; }
+.dt-promo-close {
+  position: absolute;
+  right: 16px;
+  cursor: pointer;
+  opacity: 0.7;
+  background: none;
+  border: none;
+  color: var(--dt-white);
+  font-size: 14px;
+}
+.dt-promo-close:hover { opacity: 1; }
+
+/* ═══════════════════════════════════════════
+   유틸리티 클래스
+   ═══════════════════════════════════════════ */
+.dt-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.dt-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.dt-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.dt-flex { display: flex; }
+.dt-flex-col { display: flex; flex-direction: column; }
+.dt-gap-4 { gap: 4px; }
+.dt-gap-6 { gap: 6px; }
+.dt-gap-8 { gap: 8px; }
+.dt-gap-12 { gap: 12px; }
+.dt-gap-14 { gap: 14px; }
+.dt-gap-16 { gap: 16px; }
+.dt-items-center { align-items: center; }
+.dt-justify-between { justify-content: space-between; }
+.dt-mt-4 { margin-top: 4px; }
+.dt-mt-8 { margin-top: 8px; }
+.dt-mt-12 { margin-top: 12px; }
+.dt-mt-14 { margin-top: 14px; }
+.dt-mt-16 { margin-top: 16px; }
+.dt-mt-24 { margin-top: 24px; }
+
+/* ═══════════════════════════════════════════
+   반응형
+   ═══════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .dt-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .dt-grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .dt-gnav-menu { display: none; }
+  .dt-anchornav { padding: 0 12px; }
+  .dt-anchornav-item { padding: 10px 12px; font-size: var(--dt-f-sm); }
+}

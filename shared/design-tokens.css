@@ -1,0 +1,92 @@
+/* ═══════════════════════════════════════════════════════════════
+   DIDIM IP Center — Design Tokens (TDS 기반)
+   ★ Toss Design System 클론 + 커스텀 디자인 적용
+   ★ 모든 컴포넌트는 이 토큰만 참조 — 하드코딩 금지
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Brand ── */
+  --dt-brand: #1B64DA;
+  --dt-brand-hover: #1550B8;
+  --dt-brand-light: #EBF3FE;
+  --dt-brand-mid: #C9DFFE;
+  --dt-brand-pale: #F5F8FF;
+
+  /* ── Semantic ── */
+  --dt-success: #0F9D58;
+  --dt-success-light: #EAFBF2;
+  --dt-warning: #E88B00;
+  --dt-warning-light: #FFF7EA;
+  --dt-danger: #E5383B;
+  --dt-danger-light: #FEF0F0;
+
+  /* ── Gray Scale (12단계) ── */
+  --dt-g900: #191F28;
+  --dt-g800: #292E37;
+  --dt-g700: #333D4B;
+  --dt-g600: #4E5968;
+  --dt-g500: #6B7685;
+  --dt-g400: #8B95A1;
+  --dt-g300: #B0B8C1;
+  --dt-g200: #D1D6DB;
+  --dt-g150: #E5E8EB;
+  --dt-g100: #F2F4F6;
+  --dt-g50: #F7F8FA;
+  --dt-white: #FFFFFF;
+
+  /* ── Border Radius (6단계) ── */
+  --dt-r-xs: 4px;
+  --dt-r-sm: 6px;
+  --dt-r-md: 10px;
+  --dt-r-lg: 14px;
+  --dt-r-xl: 20px;
+  --dt-r-full: 999px;
+
+  /* ── Shadow (3단계) ── */
+  --dt-sh-sm: 0 1px 3px rgba(0,0,0,.06);
+  --dt-sh-md: 0 4px 14px rgba(0,0,0,.08);
+  --dt-sh-lg: 0 10px 36px rgba(0,0,0,.12);
+
+  /* ── Font ── */
+  --dt-font: 'Toss Product Sans', 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --dt-mono: 'DM Mono', 'JetBrains Mono', monospace;
+
+  /* ── Typography Scale (8단계) ── */
+  --dt-f-3xl: 28px;   /* 히어로 숫자 */
+  --dt-f-2xl: 22px;   /* 페이지 H1 */
+  --dt-f-xl: 17px;    /* 섹션 제목 */
+  --dt-f-lg: 15px;    /* 카드 서브제목 */
+  --dt-f-md: 13.5px;  /* Nav, 본문, Input */
+  --dt-f-sm: 12px;    /* 라벨, 캡션, 뱃지 */
+  --dt-f-xs: 11px;    /* 보조텍스트 */
+  --dt-f-micro: 10px; /* 뱃지 카운트, 최소 */
+
+  /* ── Font Weight (5단계만 허용) ── */
+  --dt-w-regular: 400;
+  --dt-w-medium: 500;
+  --dt-w-semibold: 600;
+  --dt-w-bold: 700;
+  --dt-w-extrabold: 800;
+
+  /* ── Layout ── */
+  --dt-nav-h: 56px;
+  --dt-promo-h: 40px;
+  --dt-max-w: 1120px;
+
+  /* ── Spacing (4px 기반) ── */
+  --dt-sp-1: 4px;
+  --dt-sp-2: 8px;
+  --dt-sp-3: 12px;
+  --dt-sp-4: 16px;
+  --dt-sp-5: 20px;
+  --dt-sp-6: 24px;
+  --dt-sp-8: 32px;
+  --dt-sp-10: 40px;
+  --dt-sp-12: 48px;
+
+  /* ── Transition ── */
+  --dt-ease-fast: 0.15s ease;
+  --dt-ease-normal: 0.2s ease;
+  --dt-ease-slow: 0.3s ease;
+  --dt-ease-spring: 0.35s cubic-bezier(.4,0,.2,1);
+}
