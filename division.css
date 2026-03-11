@@ -44,10 +44,12 @@
 
 /* ═══ 5. 상세 뷰 2패널 ═══ */
 .division-detail { display: flex; gap: 24px; align-items: flex-start; }
-.division-detail-left { flex: 0 0 50%; width: 50%; min-width: 320px; display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 200px); overflow-y: auto; padding-right: 8px; }
+.division-detail-left { flex: 0 0 55%; width: 55%; min-width: 320px; display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 220px); overflow-y: auto; overflow-x: hidden; padding-right: 8px; }
 .division-detail-left::-webkit-scrollbar { width: 5px; }
 .division-detail-left::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-.division-detail-right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.division-detail-right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 80px; max-height: calc(100vh - 220px); overflow-y: auto; padding-right: 4px; }
+.division-detail-right::-webkit-scrollbar { width: 4px; }
+.division-detail-right::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
 
 /* ═══ 6. 파일 업로드 행 ═══ */
 .division-file-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--color-divider); font-size: 13px; }
@@ -117,6 +119,47 @@
 .division-component-row.risk-caution { border-left: 3px solid var(--color-warning); background: #fffbeb; }
 .division-component-row.risk-danger { border-left: 3px solid var(--color-error); background: #fff5f5; }
 
+/* ═══ 11-1. 등록 청구항 / 비교 뷰 ═══ */
+.division-registered-claim { padding: 14px 16px; background: #fafbfc; border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 10px; }
+.division-registered-claim .claim-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; }
+.division-registered-claim .claim-header:hover { color: var(--color-primary); }
+.division-registered-claim .claim-text { font-size: 13px; line-height: 1.8; white-space: pre-wrap; max-height: 80px; overflow: hidden; transition: max-height 0.3s; }
+.division-registered-claim.expanded .claim-text { max-height: 2000px; }
+.division-registered-claim .claim-toggle { font-size: 11px; color: var(--color-primary); cursor: pointer; margin-top: 4px; display: inline-block; }
+
+/* 비교 뷰 (등록 vs 분할) */
+.division-compare { border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 16px; overflow: hidden; }
+.division-compare-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--color-bg-tertiary); border-bottom: 1px solid var(--color-border); font-weight: 700; font-size: 14px; }
+.division-compare-body { display: grid; grid-template-columns: 1fr 1fr; }
+.division-compare-col { padding: 14px 16px; font-size: 13px; line-height: 1.8; white-space: pre-wrap; }
+.division-compare-col:first-child { background: #fafbfc; border-right: 1px solid var(--color-border); }
+.division-compare-col:last-child { background: #fff; }
+.division-compare-col-title { font-size: 11px; font-weight: 700; padding: 6px 16px; text-transform: uppercase; letter-spacing: 0.5px; }
+.division-compare-col-title.original { background: #f1f5f9; color: #475569; border-right: 1px solid var(--color-border); }
+.division-compare-col-title.division { background: #eff6ff; color: #1e40af; }
+.division-compare-titles { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--color-border); }
+
+/* 비교 뷰 내 하이라이트 */
+.division-diff-added { background: #bbf7d0; border-radius: 2px; padding: 0 2px; }
+.division-diff-removed { background: #fecaca; border-radius: 2px; padding: 0 2px; text-decoration: line-through; opacity: 0.7; }
+.division-diff-changed { background: #fef3c7; border-radius: 2px; padding: 0 2px; }
+
+/* 청구항 미리보기 (접기/펼치기) */
+.division-claim-preview { margin-top: 8px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); font-size: 12px; line-height: 1.7; color: var(--color-text-secondary); white-space: pre-wrap; max-height: 100px; overflow: hidden; cursor: pointer; transition: max-height 0.3s; }
+.division-claim-preview.expanded { max-height: 2000px; }
+.division-claim-preview:hover { border-color: var(--color-primary); }
+.division-claim-preview-toggle { font-size: 11px; color: var(--color-primary); cursor: pointer; margin-top: 4px; display: inline-block; }
+.division-claim-preview-toggle:hover { text-decoration: underline; }
+
+/* 핵심 구성 태그 */
+.division-element-tag { display: inline-block; padding: 1px 6px; margin: 1px 2px; border-radius: var(--radius-full); font-size: 10px; font-weight: 600; background: #e0e7ff; color: #3730a3; }
+
+/* 상태 뱃지 (삭제/유지/정정) */
+.division-amd-badge { display: inline-block; padding: 1px 6px; border-radius: var(--radius-full); font-size: 10px; font-weight: 600; }
+.division-amd-badge.amd-amended { background: #fef3c7; color: #92400e; }
+.division-amd-badge.amd-deleted { background: #ffe4e6; color: #9f1239; }
+.division-amd-badge.amd-maintained { background: #d1fae5; color: #065f46; }
+
 /* ═══ 12. 구성 요약 그리드 ═══ */
 .division-summary-grid { display: flex; gap: 12px; }
 .division-summary-item { flex: 1; padding: 16px; background: var(--color-bg-tertiary); border-radius: var(--radius-md); text-align: center; }
@@ -165,6 +208,9 @@
   .division-sidebar { width: 100%; }
   .division-detail { flex-direction: column; }
   .division-detail-left { flex: none; width: 100%; min-width: 0; max-height: none; }
+  .division-detail-right { position: static; max-height: none; }
+  .division-compare-body { grid-template-columns: 1fr; }
+  .division-compare-titles { grid-template-columns: 1fr; }
   .division-pipeline { padding: 12px 10px; }
   .division-step-label { font-size: 10px; }
   .division-step-connector { width: 16px; }
