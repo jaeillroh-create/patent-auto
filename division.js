@@ -1901,7 +1901,49 @@ Division.confirmFinal = async function(){
     if(!confirm('발명의 명칭이 원출원과 다릅니다.\n명세서의 【발명의 명칭】, 【요약서】 등도 함께 수정해야 합니다.\n계속하시겠습니까?')) return;
   }
 
+  // 청구항 말미의 발명 명칭을 새 명칭으로 교체
+  var divClaims = Division.state.divisionClaims || [];
+  var oldTitles = [p.original_title_ko];
+  (p.title_candidates || []).forEach(function(tc){ if(tc.ko) oldTitles.push(tc.ko); });
+  oldTitles = oldTitles.filter(Boolean);
+
+  var claimUpdates = [];
+  divClaims.forEach(function(dc){
+    if(dc.claim_type !== 'independent') return;
+    var changed = false;
+    var newText = dc.claim_text || '';
+    var newHl = dc.claim_text_highlighted || '';
+    for(var ti = 0; ti < oldTitles.length; ti++){
+      var old = oldTitles[ti].replace(/\.$/, '');
+      if(newText.indexOf(old) >= 0){
+        newText = newText.replace(old, titleKo);
+        newHl = newHl.replace(old, titleKo);
+        changed = true; break;
+      }
+    }
+    // 말미 패턴 fallback: 마지막 ", " 또는 " " 뒤의 텍스트를 명칭으로 간주
+    if(!changed){
+      var endMatch = newText.match(/(,\s*|를\s+포함하는\s+)([^,.]+)\.\s*$/);
+      if(endMatch && endMatch[2].trim() !== titleKo){
+        var oldEnd = endMatch[2].trim();
+        newText = newText.replace(new RegExp(Division._escapeRegex(oldEnd) + '(\\.)\\s*$'), titleKo + '$1');
+        newHl = newHl.replace(new RegExp(Division._escapeRegex(oldEnd) + '(\\.)\\s*$'), titleKo + '$1');
+        changed = true;
+      }
+    }
+    if(changed) claimUpdates.push({ id: dc.id, claim_text: newText, claim_text_highlighted: newHl });
+  });
+
   try {
+    // 청구항 말미 명칭 DB 업데이트
+    for(var ui = 0; ui < claimUpdates.length; ui++){
+      var cu = claimUpdates[ui];
+      await sb.from('division_claims_output').update({ claim_text: cu.claim_text, claim_text_highlighted: cu.claim_text_highlighted }).eq('id', cu.id);
+      // 메모리 상태도 동기화
+      var memDc = divClaims.find(function(d){ return d.id === cu.id; });
+      if(memDc){ memDc.claim_text = cu.claim_text; memDc.claim_text_highlighted = cu.claim_text_highlighted; }
+    }
+
     await sb.from('division_projects').update({ status:'confirmed', title_ko:titleKo, title_en:titleEn, title_changed:titleChanged||false, updated_at:new Date().toISOString() }).eq('id',p.id);
     p.status='confirmed'; p.title_ko=titleKo; p.title_en=titleEn; p.title_changed=titleChanged||false;
     showToast('최종 확정 완료!');
@@ -1951,6 +1993,10 @@ Division.renderConfirm = function(left, right, p){
 // ═══════════════════════════════════════════
 // 18. 유틸리티
 // ═══════════════════════════════════════════
+Division._escapeRegex = function(str){
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
 Division.copyText = function(elementId){
   var el = document.getElementById(elementId); if(!el) return;
   navigator.clipboard.writeText(el.innerText||el.textContent).then(function(){ showToast('복사되었습니다'); }).catch(function(){ showToast('복사 실패','error'); });
