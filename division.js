@@ -1238,8 +1238,8 @@ Division._buildAnalyzePrompt = function(basisClaim, specText, excludedText, allC
     return '아래 등록 청구항과 명세서를 분석하여, 전략적 분할출원을 위한 새로운 독립항 후보 테마를 도출하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[전체 청구항]\n'+allClaimsText+'\n\n[명세서 전 단락]\n'+specText.substring(0,40000)+'\n\n[제외 대상 청구항]\n'+(excludedText||'(없음)')+'\n\n분석 규칙:\n1. 명세서에서 기존 청구항과 다른 관점/테마의 발명 개념을 식별\n2. 각 테마에 대해:\n   - 독립항을 구성할 수 있는 핵심 구성요소 나열\n   - 명세서 뒷받침 단락 매핑\n   - 기존 등록 청구항과의 차별점\n   - 등록 가능성 평가 (safe/caution/danger)\n3. 테마 예시: 다른 구성요소를 중심으로 한 독립항, 하위 시스템 단독 청구, 제조방법 관점 등\n4. 각 테마의 구성요소가 명세서에 충분히 뒷받침되는지 확인\n\n출력 JSON:\n{"themes":[{"theme_id":"T1","theme_name":"테마명","description":"테마 설명","key_elements":["구성요소1","구성요소2"],"spec_paragraphs":["0098","0102"],"differentiation":"기존 청구항과의 차별점","risk_level":"safe|caution|danger","risk_flags":[]}],"unused_components":[{"paragraph_number":"0098","content":"활용 가능한 구성","related_element":"관련 구성요소","limitation_type":"structural","risk_level":"safe","risk_flags":[],"insertion_point":"T1 테마에 활용","suggestion":""}]}\n\nJSON만 출력하라.';
   }
 
-  // merge (기본)
-  return '아래 등록 청구항과 명세서를 분석하여, 분할출원에 활용 가능한 미활용 구성을 추출하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[전체 청구항]\n'+allClaimsText+'\n\n[명세서 전 단락]\n'+specText.substring(0,40000)+'\n\n[제외 대상 청구항]\n'+(excludedText||'(없음)')+'\n\n규칙:\n1. 명세서 단락 중 어떤 청구항에도 기재되지 않은 구성을 추출\n2. 제외 대상 청구항의 구성과 중복되는 것은 제외\n3. 각 구성 분류: limitation_type(structural/material/shape/arrangement/functional), risk_level(safe:flag0/caution:flag1/danger:flag2+), risk_flags(금지어,추상적표현 등)\n4. insertion_point: 어느 구성요소 앞/뒤에 삽입할지\n\n출력 JSON:\n{"unused_components":[{"paragraph_number":"0098","content":"밀폐된 공간 구조를 형성하는","related_element":"장치 하우징","limitation_type":"structural","risk_level":"safe","risk_flags":[],"insertion_point":"장치 하우징 앞에 삽입","suggestion":""}]}\n\nJSON만 출력하라.';
+  // merge (기본) — 기존 등록 청구항을 구체화/한정/부가하는 구성만 탐색
+  return '아래 등록 청구항과 명세서를 분석하여, 기존 등록 청구항의 구성요소를 **구체화·한정·부가**할 수 있는 구성을 명세서에서 추출하라.\n\n★★★ 중요: 이것은 "청구항 병합형" 분할출원이다. 카테고리 변경(방법↔장치)이나 새로운 독립항 테마 제안은 절대 하지 마라. 기존 등록 청구항의 형태(방법/장치)를 그대로 유지하면서, 구성요소를 더 구체적으로 한정하거나, 명세서에 기재된 추가 구성을 부가하는 것이 목적이다. ★★★\n\n[등록 청구항 (basis) — 이 청구항 형태를 유지할 것]\n'+basisText+'\n\n[전체 등록 청구항]\n'+allClaimsText+'\n\n[명세서 전 단락]\n'+specText.substring(0,40000)+'\n\n[제외 대상 (삭제된 청구항)]\n'+(excludedText||'(없음)')+'\n\n추출 규칙:\n1. 등록 청구항의 각 구성요소에 대해, 명세서에서 해당 구성요소를 더 구체적으로 설명하는 내용을 찾아라\n   예: "장치 하우징" → 명세서에 "원통 형상의 장치 하우징"이라 기재 → content:"원통 형상의", insertion_point:"장치 하우징 앞에 형용구 삽입"\n2. 명세서에 기재되어 있지만 어떤 청구항에도 포함되지 않은 구조적 구성을 추출\n   예: 명세서에 "안전 잠금장치"가 기재되어 있지만 청구항에 없음 → 부가 가능\n3. 기존 종속항(미지적 항)의 내용 중 독립항에 병합 가능한 한정 사항\n4. limitation_type 분류:\n   - structural: 형상·구조 한정 (가장 안전, 우선 추출)\n   - material: 재질·소재 한정\n   - shape: 형태·치수 한정\n   - arrangement: 배치·위치 관계 한정\n   - functional: 기능·동작 한정 (기능적 기재 위험 주의)\n5. risk_level 판단:\n   - safe: 명세서에 명확히 기재, 구조적 한정, 추상적 표현 없음\n   - caution: 명세서 뒷받침이 간접적, 또는 기능적 표현 포함\n   - danger: 명세서에 뒷받침 부족, 추상적 표현, 신규사항 추가 위험\n6. risk_flags: ["추상적 표현","기능적 기재","뒷받침 부족","신규사항"] 등 해당 항목\n7. ★ 카테고리 변경 제안 금지: "방법→장치", "장치→방법" 등의 전환 제안을 하지 마라\n8. ★ 원 청구항의 구성요소 명칭을 그대로 사용하여 insertion_point를 기재\n\n출력 JSON:\n{"unused_components":[{"paragraph_number":"0098","content":"구체화/한정/부가할 내용","related_element":"원 청구항의 구성요소명","limitation_type":"structural|material|shape|arrangement|functional","risk_level":"safe|caution|danger","risk_flags":[],"insertion_point":"[구성요소명] 앞/뒤에 [어떻게] 삽입","suggestion":"완성된 청구항 내 예상 기재 형태"}]}\n\n★★★ JSON만 출력. ★★★';
 };
 
 // ═══════════════════════════════════════════
@@ -1258,7 +1258,10 @@ Division.renderAnalyze = function(left, right, p){
   var basisClaim = claims.find(function(c){ return c.division_role==='basis'; }) || claims.find(function(c){ return c.claim_type==='independent'; });
   if(basisClaim){
     var basisText = basisClaim.amended_text || basisClaim.original_text || '';
-    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:10px"><span class="tossface">📜</span> 원출원 등록 청구항 → 구체화 포인트</div>';
+    var sectionTitle = divType==='merge' ? '원출원 등록 청구항 → 구체화·한정·부가 포인트'
+      : divType==='category_change' ? '원출원 등록 청구항 → 카테고리 변환 대상'
+      : '원출원 등록 청구항 → 전략 분할 기준';
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:10px"><span class="tossface">📜</span> ' + sectionTitle + '</div>';
 
     // 구체화 포인트 매핑: 미활용 구성의 insertion_point → 원 청구항의 어떤 구성요소에 삽입되는지
     var insertionMap = [];
@@ -1283,10 +1286,15 @@ Division.renderAnalyze = function(left, right, p){
     // 삽입 포인트 범례
     if(insertionMap.length > 0){
       h += '<div style="margin-top:10px;font-size:11px;color:var(--color-text-tertiary)">';
-      h += '<div style="font-weight:600;margin-bottom:4px">📌 구체화 포인트 (' + insertionMap.filter(function(im){return im.selected;}).length + '/' + insertionMap.length + '건 선택)</div>';
+      var pointTitle = divType==='merge' ? '📌 구체화·한정·부가 포인트' : divType==='category_change' ? '📌 변환 대상 구성요소' : '📌 활용 구성 포인트';
+      h += '<div style="font-weight:600;margin-bottom:4px">' + pointTitle + ' (' + insertionMap.filter(function(im){return im.selected;}).length + '/' + insertionMap.length + '건 선택)</div>';
       insertionMap.forEach(function(im){
         var icon = im.selected ? (im.riskLevel==='safe'?'🟢':'🟡') : '⚪';
-        h += '<div style="padding:2px 0">' + icon + ' <strong>' + escapeHtml(im.target) + '</strong> ← ' + escapeHtml(im.content.substring(0,60)) + (im.content.length>60?'...':'') + ' ' + im.paragraph + '</div>';
+        var typeLabel = {structural:'구조한정',material:'재질한정',shape:'형상한정',arrangement:'배치한정',functional:'기능한정'}[im.type] || im.type;
+        h += '<div style="padding:3px 0">' + icon + ' <strong>' + escapeHtml(im.target) + '</strong>';
+        h += ' <span style="color:var(--color-primary);font-size:10px">['+typeLabel+']</span>';
+        h += ' ← ' + escapeHtml(im.content.substring(0,80)) + (im.content.length>80?'...':'');
+        h += ' <span style="color:var(--color-text-disabled)">' + im.paragraph + '</span></div>';
       });
       h += '</div>';
     }
@@ -1394,10 +1402,11 @@ Division.renderAnalyze = function(left, right, p){
   }
 
   // 공통: 미활용/변환 구성 목록 (모든 유형)
-  var compTitle = divType==='category_change' ? '변환 구성 후보' : divType==='strategic' ? '활용 가능 구성' : '미활용 구성 후보';
+  var compTitle = divType==='category_change' ? '변환 구성 후보' : divType==='strategic' ? '활용 가능 구성' : '구체화·한정·부가 구성 후보';
   ['safe','caution','danger'].forEach(function(level){
     var items = groups[level]; var info = Division.RISK_LABELS[level]; if(!items.length) return;
-    h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px">'+info.icon+' '+info.label+' ('+items.length+'건)</div>';
+    h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:4px">'+info.icon+' '+info.label+' ('+items.length+'건)</div>';
+    h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">' + compTitle + '</div>';
     items.forEach(function(uc){
       var isChecked = uc.user_selection==='selected'||(uc.user_selection==='pending'&&level==='safe');
       h += '<div class="division-component-row '+info.css+'" style="padding:12px">';
@@ -1406,7 +1415,8 @@ Division.renderAnalyze = function(left, right, p){
       h += '<div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">';
       h += '<span class="division-element-tag">【'+uc.paragraph_number+'】</span>';
       h += '<span class="division-element-tag">→ '+escapeHtml(uc.related_element)+'</span>';
-      h += '<span class="division-element-tag">'+uc.limitation_type+'</span>';
+      var limLabels = {structural:'구조한정',material:'재질한정',shape:'형상한정',arrangement:'배치한정',functional:'기능한정'};
+      h += '<span class="division-element-tag">'+(limLabels[uc.limitation_type]||uc.limitation_type)+'</span>';
       h += '</div>';
       // 삽입 위치 미리보기
       if(uc.insertion_point){
@@ -1416,7 +1426,7 @@ Division.renderAnalyze = function(left, right, p){
       }
       var ucFlags = Division._toArray(uc.risk_flags);
       if(ucFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:4px">⚠️ '+escapeHtml(ucFlags.join(', '))+'</div>';
-      if(uc.suggestion) h += '<div style="font-size:11px;color:var(--color-success);margin-top:2px">💡 '+escapeHtml(uc.suggestion)+'</div>';
+      if(uc.suggestion) h += '<div style="font-size:11px;color:var(--color-success);margin-top:2px">💡 예상 기재: '+escapeHtml(uc.suggestion)+'</div>';
       h += '</div></label></div>';
     });
     h += '</div>';
