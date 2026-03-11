@@ -7,11 +7,11 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/gh/toss/tossface/dist/tossface.css" rel="stylesheet" />
-  <link rel="stylesheet" href="common.css" />
-  <link rel="stylesheet" href="patent.css" />
-  <link rel="stylesheet" href="trademark.css" />
-  <link rel="stylesheet" href="opinion.css" />
-  <link rel="stylesheet" href="division.css" />
+  <link rel="stylesheet" href="shared/common.css" />
+  <link rel="stylesheet" href="patent/patent.css" />
+  <link rel="stylesheet" href="trademark/trademark.css" />
+  <link rel="stylesheet" href="opinion/opinion.css" />
+  <link rel="stylesheet" href="division/division.css" />
 </head>
 <body>
 <div id="toastContainer" class="toast-container"></div>
@@ -852,14 +852,14 @@
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="common.js?v=20260209b"></script>
-<script src="patent.js?v=20260209b"></script>
-<script src="opinion.js?v=20260209b"></script>
+<script src="shared/common.js?v=20260209b"></script>
+<script src="patent/patent.js?v=20260209b"></script>
+<script src="opinion/opinion.js?v=20260209b"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
   var _cv='?v='+Date.now();
-  fetch('trademark.js',{method:'HEAD'}).then(function(r){
-    if(r.ok){var s=document.createElement('script');s.src='trademark.js'+_cv;document.body.appendChild(s);}
+  fetch('trademark/trademark.js',{method:'HEAD'}).then(function(r){
+    if(r.ok){var s=document.createElement('script');s.src='trademark/trademark.js'+_cv;document.body.appendChild(s);}
   }).catch(function(){});
 </script>
 
@@ -946,6 +946,6 @@
   </div>
 </div>
 
-<script src="division.js"></script>
+<script src="division/division.js"></script>
 </body>
 </html>
