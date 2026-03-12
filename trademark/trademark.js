@@ -9037,7 +9037,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       const btn = document.querySelector('[data-action="tm-analyze-business"]');
       if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span class="tossface">⏳</span> AI 분석 중...';
+        btn.innerHTML = '<span class="tf">⏳</span> AI 분석 중...';
       }
       
       // ★★★ 새 분석 시 기존 선택 완전 초기화 ★★★
@@ -9134,7 +9134,7 @@ ${TM.PRACTICE_GUIDELINES}
   "searchKeywords": ["발레", "댄스", "의류", "레오타드", "판매"]
 }`;
 
-      if (btn) btn.innerHTML = '<span class="tossface">⏳</span> 사업 분석 중...';
+      if (btn) btn.innerHTML = '<span class="tf">⏳</span> 사업 분석 중...';
       
       console.log('[TM] LLM 기반 사업 분석 시작');
       // ★ Sonnet 직접 호출 (WithFallback은 Opus→Sonnet 이중 호출로 529 악화)
@@ -9235,7 +9235,7 @@ ${TM.PRACTICE_GUIDELINES}
         const paddedCode = String(classCode).padStart(2, '0');
         
         try {
-          if (btn) btn.innerHTML = `<span class="tossface">⏳</span> 제${classCode}류 분석 중...`;
+          if (btn) btn.innerHTML = `<span class="tf">⏳</span> 제${classCode}류 분석 중...`;
           
           // ★★★ 핵심 개선: 류당 API 1회만 호출 ★★★
           // 1. DB에서 후보 조회 (API 호출 X)

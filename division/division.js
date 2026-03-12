@@ -284,7 +284,7 @@ Division.renderList = function(){
 
   if(!ps.length){
     el.innerHTML = '<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--color-text-tertiary);font-size:13px">'
-      + '<div style="font-size:32px;margin-bottom:8px"><span class="tossface">📭</span></div>'
+      + '<div style="font-size:32px;margin-bottom:8px"><span class="tf">📭</span></div>'
       + '분할출원 프로젝트가 없습니다.<br><span style="font-size:12px">새 프로젝트를 만들어 분할출원 청구항을 작성하세요.</span></td></tr>';
     return;
   }
@@ -530,8 +530,8 @@ Division.renderUpload = function(left, right, p){
 
   // 모드 토글
   h += '<div class="division-mode-toggle">';
-  h += '<button class="division-mode-btn' + (inputMode==='full'?' active':'') + '" onclick="Division.switchInputMode(\'full\')"><span class="tossface">📋</span> 문서 업로드</button>';
-  h += '<button class="division-mode-btn' + (inputMode==='direct'?' active':'') + '" onclick="Division.switchInputMode(\'direct\')"><span class="tossface">✏️</span> 청구항 직접 입력</button>';
+  h += '<button class="division-mode-btn' + (inputMode==='full'?' active':'') + '" onclick="Division.switchInputMode(\'full\')"><span class="tf">📋</span> 문서 업로드</button>';
+  h += '<button class="division-mode-btn' + (inputMode==='direct'?' active':'') + '" onclick="Division.switchInputMode(\'direct\')"><span class="tf">✏️</span> 청구항 직접 입력</button>';
   h += '</div>';
 
   if(inputMode === 'full'){
@@ -542,10 +542,10 @@ Division.renderUpload = function(left, right, p){
     if(!allRequiredDone){
       h += '<div class="division-bulk-drop" id="divisionBulkDrop">';
       h += '<div class="division-bulk-drop-inner">';
-      h += '<div style="font-size:32px;margin-bottom:8px"><span class="tossface">📂</span></div>';
+      h += '<div style="font-size:32px;margin-bottom:8px"><span class="tf">📂</span></div>';
       h += '<div style="font-size:14px;font-weight:600;margin-bottom:4px">PDF 파일을 여기에 드래그하세요</div>';
       h += '<div style="font-size:12px;color:var(--color-text-tertiary)">출원서 · 통지서 · 의견서 · 보정서를 한번에 넣으면 자동 분류합니다</div>';
-      h += '<div style="margin-top:12px"><label class="btn btn-outline btn-sm" style="cursor:pointer"><span class="tossface">📄</span> 또는 파일 선택';
+      h += '<div style="margin-top:12px"><label class="btn btn-outline btn-sm" style="cursor:pointer"><span class="tf">📄</span> 또는 파일 선택';
       h += '<input type="file" accept=".pdf" multiple style="display:none" onchange="Division.handleBulkFiles(event)" />';
       h += '</label></div>';
       h += '</div></div>';
@@ -553,7 +553,7 @@ Division.renderUpload = function(left, right, p){
 
     // 분류된 파일 목록
     h += '<div class="card" style="padding:16px;' + (allRequiredDone ? '' : 'margin-top:12px') + '">';
-    h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📁</span> 파일 분류 결과</div>';
+    h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📁</span> 파일 분류 결과</div>';
 
     ['application','notification','opinion','amendment','prior_art','decision'].forEach(function(ft){
       var info = Division.FILE_TYPES[ft];
@@ -577,7 +577,7 @@ Division.renderUpload = function(left, right, p){
         h += '<div class="division-file-row-missing">';
         h += '<span class="division-file-icon" style="opacity:0.4">' + info.icon + '</span>';
         h += '<span class="division-file-label" style="color:var(--color-text-tertiary)">' + info.label + ' <span style="color:var(--color-error);font-size:10px">필수</span></span>';
-        h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="tossface">📄</span> 선택';
+        h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="tf">📄</span> 선택';
         h += '<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'' + ft + '\')" /></label>';
         h += '</div>';
       }
@@ -590,7 +590,7 @@ Division.renderUpload = function(left, right, p){
   } else {
     // ── 모드 B: 출원서 + 직접 입력 ──
     h += '<div class="card" style="padding:16px">';
-    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tossface">📄</span> 특허출원서</div>';
+    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tf">📄</span> 특허출원서</div>';
     h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">명세서 원문이 포함된 출원서 PDF</div>';
     var appFile = files.find(function(f){ return f.file_type === 'application'; });
     if(appFile){
@@ -600,29 +600,29 @@ Division.renderUpload = function(left, right, p){
       h += '<button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + appFile.id + '\')" style="font-size:10px;color:var(--color-error);padding:4px 8px">✕</button></div>';
     } else {
       h += '<div class="division-bulk-drop" id="divisionBulkDrop" style="padding:20px">';
-      h += '<div class="division-bulk-drop-inner"><span class="tossface" style="font-size:24px">📄</span> <span style="font-size:13px">출원서 PDF 드래그 또는 </span>';
+      h += '<div class="division-bulk-drop-inner"><span class="tf" style="font-size:24px">📄</span> <span style="font-size:13px">출원서 PDF 드래그 또는 </span>';
       h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px;margin-left:8px">선택<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'application\')" /></label>';
       h += '</div></div>';
     }
     h += '</div>';
 
     h += '<div class="card" style="padding:16px;margin-top:12px">';
-    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tossface">✏️</span> 최종 등록 청구항</div>';
+    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tf">✏️</span> 최종 등록 청구항</div>';
     h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">등록결정 시 확정된 청구항 전문을 붙여넣으세요.</div>';
     h += '<textarea class="textarea-field" id="divisionDirectClaims" rows="12" placeholder="【청구항 1】\n생두의 수분 함량을...\n\n【청구항 2】\n제1항에 있어서,\n..." style="font-size:13px;line-height:1.7">' + escapeHtml(p.direct_claims_text || '') + '</textarea>';
-    h += '<button class="btn btn-outline btn-sm" onclick="Division.saveDirectClaims()" style="margin-top:8px"><span class="tossface">💾</span> 저장</button>';
+    h += '<button class="btn btn-outline btn-sm" onclick="Division.saveDirectClaims()" style="margin-top:8px"><span class="tf">💾</span> 저장</button>';
     h += '</div>';
   }
 
   // 선택 파일 (공통)
   h += '<div class="card" style="padding:16px;margin-top:12px">';
-  h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📎</span> 선택 파일</div>';
+  h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📎</span> 선택 파일</div>';
   h += '<label class="checkbox-label" style="margin-bottom:8px"><input type="checkbox" ' + (p.include_prior_art?'checked':'') + ' onchange="Division.togglePriorArt(this.checked)" /><span>인용발명 대비 분석 포함</span></label>';
   if(p.include_prior_art){
     var priorFile = files.find(function(f){ return f.file_type==='prior_art'; });
     h += '<div class="division-file-row" style="margin-left:20px"><span class="division-file-icon">📚</span><span class="division-file-label">인용발명 PDF</span>';
     if(priorFile){ h += '<span class="division-file-status uploaded">✅</span><button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + priorFile.id + '\')" style="font-size:10px;color:var(--color-error)">삭제</button>'; }
-    else { h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="tossface">📄</span> 선택<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'prior_art\')" /></label>'; }
+    else { h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="tf">📄</span> 선택<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'prior_art\')" /></label>'; }
     h += '</div>';
   }
   h += '</div>';
@@ -647,7 +647,7 @@ Division.renderUpload = function(left, right, p){
   }
 
   var rh = '<div class="card" style="padding:20px">';
-  rh += '<div style="font-size:16px;font-weight:700;margin-bottom:12px"><span class="tossface">🔀</span> 분할출원 청구항 자동 작성</div>';
+  rh += '<div style="font-size:16px;font-weight:700;margin-bottom:12px"><span class="tf">🔀</span> 분할출원 청구항 자동 작성</div>';
   rh += '<div style="font-size:13px;line-height:1.7;color:var(--color-text-secondary);margin-bottom:16px">';
   rh += inputMode==='full' ? '원출원 문서를 업로드하면, AI가 자동 분류·파싱·분석하고<br>분할출원에 적합한 새 청구항을 조립합니다.'
     : '출원서와 최종 등록 청구항을 입력하면,<br>AI가 분할출원 청구항을 구성합니다.';
@@ -656,7 +656,7 @@ Division.renderUpload = function(left, right, p){
   rh += '<div style="font-size:12px;line-height:1.8;color:var(--color-text-secondary)">① 파싱 — 출원서·청구항 구조화<br>② 분석 — 미활용 구성 탐색 + 리스크 스크리닝<br>③ 조립 — 독립항/종속항 자동 구성<br>④ 검증 — 기재불비 + 형식 검증<br>⑤ 확정 — 발명 명칭 + 최종 출력</div></div>';
   rh += '<div id="divisionProgress" style="margin-top:12px"></div>';
   if(canParse){
-    rh += '<button class="btn btn-primary btn-full" id="btnDivisionParse" onclick="Division.runParse()" style="margin-top:16px;padding:14px;font-size:14px"><span class="tossface">🔍</span> 파싱 시작</button>';
+    rh += '<button class="btn btn-primary btn-full" id="btnDivisionParse" onclick="Division.runParse()" style="margin-top:16px;padding:14px;font-size:14px"><span class="tf">🔍</span> 파싱 시작</button>';
   } else {
     var uploadedTypes = files.map(function(f){ return f.file_type; });
     var missing = ['application','notification','opinion','amendment'].filter(function(ft){ return uploadedTypes.indexOf(ft)<0; });
@@ -745,13 +745,13 @@ Division.handleBulkFiles = function(e){
 Division._classifyAndUpload = async function(pdfFiles){
   var p = Division.state.current; if(!p) return;
   var statusEl = document.getElementById('divisionClassifyStatus');
-  if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tossface">🔍</span> ' + pdfFiles.length + '개 파일 분류 중...</div>';
+  if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tf">🔍</span> ' + pdfFiles.length + '개 파일 분류 중...</div>';
 
   var results = []; // {file, type, confidence}
 
   for(var i = 0; i < pdfFiles.length; i++){
     var file = pdfFiles[i];
-    if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tossface">🔍</span> ' + (i+1) + '/' + pdfFiles.length + ' 분류 중: ' + escapeHtml(file.name) + '</div>';
+    if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tf">🔍</span> ' + (i+1) + '/' + pdfFiles.length + ' 분류 중: ' + escapeHtml(file.name) + '</div>';
 
     try {
       // PDF 텍스트 추출 (첫 몇 페이지)
@@ -795,7 +795,7 @@ Division._classifyAndUpload = async function(pdfFiles){
   // 순차 업로드
   for(var k = 0; k < results.length; k++){
     var r = results[k];
-    if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tossface">📤</span> ' + (k+1) + '/' + results.length + ' 업로드 중: ' + escapeHtml(r.file.name) + '</div>';
+    if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tf">📤</span> ' + (k+1) + '/' + results.length + ' 업로드 중: ' + escapeHtml(r.file.name) + '</div>';
     await Division._doUpload(r.file, r.type);
   }
 
@@ -1062,7 +1062,7 @@ Division.renderParse = function(left, right, p){
   var claims = Division.state.claims;
 
   // === 왼쪽: 청구항 분류 매트릭스 + 등록 청구항 전문 ===
-  var h = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📊</span> 청구항 분류 매트릭스</div>';
+  var h = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📊</span> 청구항 분류 매트릭스</div>';
   if(claims.length === 0){ h += '<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)">파싱된 청구항이 없습니다.</div>'; }
   else {
     h += '<table class="division-matrix-table"><thead><tr><th>청구항</th><th>거절</th><th>보정</th><th>분할 역할</th></tr></thead><tbody>';
@@ -1088,7 +1088,7 @@ Division.renderParse = function(left, right, p){
   // 등록 청구항 전문 (삭제 제외, 전체 표시)
   var activeClaims = claims.filter(function(c){ return c.amendment_status !== 'deleted'; });
   if(activeClaims.length > 0){
-    h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📜</span> 최종 등록 청구항 전문 <span style="font-size:11px;font-weight:400;color:var(--color-text-tertiary)">(삭제항 제외 ' + activeClaims.length + '항)</span></div>';
+    h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📜</span> 최종 등록 청구항 전문 <span style="font-size:11px;font-weight:400;color:var(--color-text-tertiary)">(삭제항 제외 ' + activeClaims.length + '항)</span></div>';
     activeClaims.forEach(function(c, idx){
       var registeredText = c.amended_text || c.original_text || '';
       var isBasis = c.division_role === 'basis';
@@ -1118,7 +1118,7 @@ Division.renderParse = function(left, right, p){
 
   var rh = Division._renderTypeSwitch(p.division_type);
   rh += '<div class="card" style="padding:16px">';
-  rh += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">⭐</span> 분할출원 기초 청구항</div>';
+  rh += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">⭐</span> 분할출원 기초 청구항</div>';
   if(basisClaim){
     var regText = basisClaim.amended_text || basisClaim.original_text || '';
     rh += '<div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:8px">제' + basisClaim.claim_number + '항 | ' + (basisClaim.amended_text ? '보정 후 확정본' : '원출원 그대로') + '</div>';
@@ -1137,8 +1137,8 @@ Division.renderParse = function(left, right, p){
   rh += '</div></div>';
 
   rh += '<div style="display:flex;gap:8px;margin-top:12px">';
-  rh += '<button class="btn btn-ghost" onclick="Division.rerunParse()" style="flex:1;padding:12px"><span class="tossface">🔄</span> 재파싱</button>';
-  rh += '<button class="btn btn-primary" onclick="Division.confirmParse()" style="flex:1;padding:12px"><span class="tossface">✅</span> 파싱 승인 → 분석</button></div>';
+  rh += '<button class="btn btn-ghost" onclick="Division.rerunParse()" style="flex:1;padding:12px"><span class="tf">🔄</span> 재파싱</button>';
+  rh += '<button class="btn btn-primary" onclick="Division.confirmParse()" style="flex:1;padding:12px"><span class="tf">✅</span> 파싱 승인 → 분석</button></div>';
   rh += '<div style="margin-top:8px;padding:10px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm);font-size:12px;color:var(--color-text-tertiary)">⚠️ 파싱 결과가 정확한지 확인 후 승인을 눌러주세요. 역할은 드롭다운으로 수정 가능합니다.</div>';
   right.innerHTML = rh;
 };
@@ -1183,7 +1183,7 @@ Division.runAnalyze = async function(){
   var capturedId = p.id;
   Division.state._runningProjectId = capturedId;
   var right = document.getElementById('divisionDetailRight');
-  right.innerHTML = '<div class="card" style="padding:20px;text-align:center"><div style="font-size:32px;margin-bottom:12px"><span class="tossface">🔍</span></div><div style="font-size:14px;font-weight:600;margin-bottom:8px">분석 진행 중...</div><div id="divisionAnalyzeProgress"></div></div>';
+  right.innerHTML = '<div class="card" style="padding:20px;text-align:center"><div style="font-size:32px;margin-bottom:12px"><span class="tf">🔍</span></div><div style="font-size:14px;font-weight:600;margin-bottom:8px">분석 진행 중...</div><div id="divisionAnalyzeProgress"></div></div>';
   try {
     App.showProgress('divisionAnalyzeProgress','구성요소 분해 중...',1,4);
     var {data:paragraphs} = await sb.from('division_spec_paragraphs').select('*').eq('project_id',p.id).order('paragraph_number');
@@ -1309,7 +1309,7 @@ Division.renderAnalyze = function(left, right, p){
     var sectionTitle = divType==='merge' ? '원출원 등록 청구항 → 구체화·한정·부가 포인트'
       : divType==='category_change' ? '원출원 등록 청구항 → 카테고리 변환 대상'
       : '원출원 등록 청구항 → 전략 분할 기준';
-    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:10px"><span class="tossface">📜</span> ' + sectionTitle + '</div>';
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:10px"><span class="tf">📜</span> ' + sectionTitle + '</div>';
 
     // 구체화 포인트 매핑: 미활용 구성의 insertion_point → 원 청구항의 어떤 구성요소에 삽입되는지
     var insertionMap = [];
@@ -1360,7 +1360,7 @@ Division.renderAnalyze = function(left, right, p){
   // === 카테고리 변경형: 변환 방향 표시 ===
   if(divType === 'category_change'){
     var meta = p.analysis_meta || {};
-    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🔄</span> 카테고리 변환</div>';
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🔄</span> 카테고리 변환</div>';
     h += '<div class="division-info-box" style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;text-align:center">';
     h += '<span style="color:var(--color-primary)">' + (meta.original_category==='method'?'방법 청구항':'장치 청구항') + '</span>';
     h += ' <span style="font-size:18px;margin:0 12px">→</span> ';
@@ -1374,7 +1374,7 @@ Division.renderAnalyze = function(left, right, p){
     // basisClaim, basisText는 상위 스코프에서 이미 선언됨 — 재사용
     var strategicBasisText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
 
-    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🎯</span> 독립항 테마 후보</div>';
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🎯</span> 독립항 테마 후보</div>';
     if(!themes.length){ h += '<div style="font-size:13px;color:var(--color-text-tertiary);padding:8px">테마 후보가 없습니다.</div>'; }
     else { themes.forEach(function(t, tidx){
       var riskInfo = Division.RISK_LABELS[t.risk_level] || Division.RISK_LABELS.safe;
@@ -1438,7 +1438,7 @@ Division.renderAnalyze = function(left, right, p){
 
   // === 병합형 / 공통: 병합 청구항 + 미활용 구성 ===
   if(divType === 'merge'){
-    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🔧</span> 병합할 청구항</div>';
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🔧</span> 병합할 청구항</div>';
     var mergeCandidates = claims.filter(function(c){ return c.division_role==='merge_candidate'; });
     if(!mergeCandidates.length){ h += '<div style="font-size:13px;color:var(--color-text-tertiary);padding:8px">병합 후보 청구항이 없습니다.</div>'; }
     else { mergeCandidates.forEach(function(c){
@@ -1493,7 +1493,7 @@ Division.renderAnalyze = function(left, right, p){
   var selectedCount = unused.filter(function(uc){ return uc.user_selection==='selected'||(uc.user_selection==='pending'&&uc.risk_level==='safe'); }).length;
   var mergeCountForSummary = claims.filter(function(c){ return c.division_role==='merge_candidate'; }).length;
   var rh = Division._renderTypeSwitch(p.division_type);
-  rh += '<div class="card" style="padding:20px"><div style="font-size:16px;font-weight:700;margin-bottom:16px"><span class="tossface">📋</span> 구성 요약</div>';
+  rh += '<div class="card" style="padding:20px"><div style="font-size:16px;font-weight:700;margin-bottom:16px"><span class="tf">📋</span> 구성 요약</div>';
   rh += '<div class="division-summary-grid">';
   if(divType === 'strategic'){
     var summaryThemes = (p.analysis_meta && p.analysis_meta.themes) || [];
@@ -1506,7 +1506,7 @@ Division.renderAnalyze = function(left, right, p){
 
   // 청구항 구성 설정
   rh += '<div class="card" style="padding:16px;margin-top:12px">';
-  rh += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">⚙️</span> 청구항 구성</div>';
+  rh += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">⚙️</span> 청구항 구성</div>';
 
   // 독립항 수
   rh += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">';
@@ -1545,8 +1545,8 @@ Division.renderAnalyze = function(left, right, p){
   rh += '</div>';
 
   rh += '<div id="divisionAssembleProgress" style="margin-top:12px"></div>';
-  rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.rerunAnalyze()" style="flex:1;padding:12px"><span class="tossface">🔄</span> 재분석</button>';
-  rh += '<button class="btn btn-primary" id="btnDivisionAssemble" onclick="Division.runAssemble()" style="flex:1;padding:12px"><span class="tossface">🔧</span> 조립 실행</button></div>';
+  rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.rerunAnalyze()" style="flex:1;padding:12px"><span class="tf">🔄</span> 재분석</button>';
+  rh += '<button class="btn btn-primary" id="btnDivisionAssemble" onclick="Division.runAssemble()" style="flex:1;padding:12px"><span class="tf">🔧</span> 조립 실행</button></div>';
   right.innerHTML = rh;
 };
 
@@ -1698,7 +1698,7 @@ Division.renderAssemble = function(left, right, p){
       var diffResult = Division._wordDiff(registeredText, divText);
 
       h += '<div class="division-compare">';
-      h += '<div class="division-compare-header"><span class="tossface">⚖️</span> 청구항 ' + dc.claim_number + ' 비교 (독립항)';
+      h += '<div class="division-compare-header"><span class="tf">⚖️</span> 청구항 ' + dc.claim_number + ' 비교 (독립항)';
       h += '<span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--color-text-tertiary)">추가 ' + diffResult.addedCount + ' / 삭제 ' + diffResult.removedCount + '</span>';
       h += '</div>';
       h += '<div class="division-compare-titles">';
@@ -1714,7 +1714,7 @@ Division.renderAssemble = function(left, right, p){
     // 종속항 목록
     var divDeps = divClaims.filter(function(c){ return c.claim_type==='dependent'; });
     if(divDeps.length > 0){
-      h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📎</span> 종속항 (' + divDeps.length + '항)</div>';
+      h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📎</span> 종속항 (' + divDeps.length + '항)</div>';
       divDeps.forEach(function(dc){
         var divCleanText = (dc.claim_text || '').replace(/\*{2,3}/g, '');
 
@@ -1744,7 +1744,7 @@ Division.renderAssemble = function(left, right, p){
   var indepCnt = divClaims.filter(function(c){ return c.claim_type==='independent'; }).length;
   var depCnt = divClaims.filter(function(c){ return c.claim_type==='dependent'; }).length;
 
-  var rh = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">📊</span> 변경사항 요약</div>';
+  var rh = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📊</span> 변경사항 요약</div>';
   rh += '<div class="division-summary-grid">';
   rh += '<div class="division-summary-item"><div class="division-summary-num">' + indepCnt + '</div><div class="division-summary-label">독립항</div></div>';
   rh += '<div class="division-summary-item"><div class="division-summary-num">' + depCnt + '</div><div class="division-summary-label">종속항</div></div>';
@@ -1760,8 +1760,8 @@ Division.renderAssemble = function(left, right, p){
 
   rh += '<div id="divisionVerifyProgress" style="margin-top:12px"></div>';
   rh += '<div style="display:flex;gap:8px;margin-top:12px">';
-  rh += '<button class="btn btn-ghost" onclick="Division.goToStep(\'analyze\')" style="flex:1;padding:12px"><span class="tossface">🔄</span> 재조립 (구성 선택)</button>';
-  rh += '<button class="btn btn-primary" id="btnDivisionVerify" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tossface">✅</span> 검증 실행</button></div>';
+  rh += '<button class="btn btn-ghost" onclick="Division.goToStep(\'analyze\')" style="flex:1;padding:12px"><span class="tf">🔄</span> 재조립 (구성 선택)</button>';
+  rh += '<button class="btn btn-primary" id="btnDivisionVerify" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tf">✅</span> 검증 실행</button></div>';
   right.innerHTML = rh;
 };
 
@@ -1857,7 +1857,7 @@ Division.renderVerify = function(left, right, p){
   var passCount = results.filter(function(r){ return r.result==='pass'; }).length;
   var warnCount = results.filter(function(r){ return r.result==='warning'; }).length;
   var failCount = results.filter(function(r){ return r.result==='fail'; }).length;
-  var h = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">✅</span> 기재불비 검증 결과</div>';
+  var h = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">✅</span> 기재불비 검증 결과</div>';
   h += '<div class="division-val-summary"><div class="division-val-stat pass">✅ 통과 '+passCount+'</div><div class="division-val-stat warn">⚠️ 주의 '+warnCount+'</div><div class="division-val-stat fail">❌ 실패 '+failCount+'</div></div>';
   if(!results.length){ h += '<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)">검증 결과가 없습니다.</div>'; }
   else { results.forEach(function(vr){
@@ -1876,7 +1876,7 @@ Division.renderVerify = function(left, right, p){
   h += '</div>';
   left.innerHTML = h;
 
-  var rh = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🏷️</span> 발명의 명칭</div>';
+  var rh = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🏷️</span> 발명의 명칭</div>';
 
   // 원출원 명칭 표시
   if(p.original_title_ko){
@@ -1924,8 +1924,8 @@ Division.renderVerify = function(left, right, p){
   rh += '</div></div>';
   rh += '</div>';
   if(failCount > 0){ rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)">⚠️ 검증 실패 항목이 있습니다. 수정하거나 제외한 후 재검증하세요.<br>명세서 뒷받침이 부족한 구성은 제외하거나, 별도 명세서 보정이 필요합니다.</div>'; }
-  rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tossface">🔄</span> 재검증</button>';
-  rh += '<button class="btn btn-primary" onclick="Division.confirmFinal()" style="flex:1;padding:12px"><span class="tossface">🏁</span> 최종 확정</button></div>';
+  rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tf">🔄</span> 재검증</button>';
+  rh += '<button class="btn btn-primary" onclick="Division.confirmFinal()" style="flex:1;padding:12px"><span class="tf">🏁</span> 최종 확정</button></div>';
   right.innerHTML = rh;
   Division._bindTitleRadios();
 };
@@ -1993,14 +1993,14 @@ Division.renderConfirm = function(left, right, p){
   var divClaims = Division.state.divisionClaims;
   var plainText = divClaims.map(function(dc){ return '【청구항 '+dc.claim_number+'】\n'+(dc.claim_text||'').replace(/;\s*/g,';\n'); }).join('\n\n');
   var h = '<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
-  h += '<div style="font-size:14px;font-weight:700"><span class="tossface">📋</span> 청구항 전문</div>';
-  h += '<button class="btn btn-outline btn-sm" onclick="Division.copyText(\'divisionOutputText\')"><span class="tossface">📋</span> 전체 복사</button></div>';
+  h += '<div style="font-size:14px;font-weight:700"><span class="tf">📋</span> 청구항 전문</div>';
+  h += '<button class="btn btn-outline btn-sm" onclick="Division.copyText(\'divisionOutputText\')"><span class="tf">📋</span> 전체 복사</button></div>';
   h += '<div id="divisionOutputText" style="white-space:pre-wrap;font-size:13px;line-height:1.8;background:var(--color-bg-tertiary);padding:16px;border-radius:var(--radius-sm);max-height:60vh;overflow-y:auto">'+escapeHtml(plainText)+'</div></div>';
   left.innerHTML = h;
 
   var rh = '<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
-  rh += '<div style="font-size:14px;font-weight:700"><span class="tossface">🏷️</span> 발명의 명칭</div>';
-  rh += '<button class="btn btn-outline btn-sm" onclick="Division.copyText(\'divisionOutputTitle\')"><span class="tossface">📋</span> 복사</button></div>';
+  rh += '<div style="font-size:14px;font-weight:700"><span class="tf">🏷️</span> 발명의 명칭</div>';
+  rh += '<button class="btn btn-outline btn-sm" onclick="Division.copyText(\'divisionOutputTitle\')"><span class="tf">📋</span> 복사</button></div>';
   rh += '<div id="divisionOutputTitle" style="font-size:13px;line-height:1.7"><div><strong>【국문】</strong>'+escapeHtml(p.title_ko||'')+'</div>';
   rh += '<div style="margin-top:4px"><strong>【영문】</strong>'+escapeHtml(p.title_en||'')+'</div></div>';
   if(p.title_changed){
@@ -2011,7 +2011,7 @@ Division.renderConfirm = function(left, right, p){
     rh += '</div>';
   }
   rh += '</div>';
-  rh += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🖍️</span> 하이라이트 버전</div>';
+  rh += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🖍️</span> 하이라이트 버전</div>';
   rh += '<div style="font-size:13px;line-height:1.8">';
   divClaims.forEach(function(dc){
     var d = escapeHtml(dc.claim_text_highlighted||dc.claim_text);
@@ -2020,7 +2020,7 @@ Division.renderConfirm = function(left, right, p){
     rh += '<div style="margin-bottom:12px"><span style="font-weight:700;color:var(--color-primary)">【청구항 '+dc.claim_number+'】</span><br>'+d+'</div>';
   });
   rh += '</div></div>';
-  rh += '<button class="btn btn-ghost btn-full" onclick="Division.backToList()" style="margin-top:12px;padding:12px"><span class="tossface">←</span> 목록으로</button>';
+  rh += '<button class="btn btn-ghost btn-full" onclick="Division.backToList()" style="margin-top:12px;padding:12px"><span class="tf">←</span> 목록으로</button>';
   right.innerHTML = rh;
 };
 
