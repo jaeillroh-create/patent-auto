@@ -337,7 +337,7 @@ Opinion.renderList = function(){
   if(!el)return;
   var ps=Opinion.state.projects;
   if(cnt) cnt.textContent='총 '+ps.length+'건';
-  if(!ps.length){ el.innerHTML='<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--color-text-tertiary);font-size:13px"><div style="font-size:32px;margin-bottom:8px"><span class="tossface">📭</span></div>의견서 대응 프로젝트가 없습니다.<br><span style="font-size:12px">새 프로젝트를 만들어 의견제출통지서에 대응하세요.</span></td></tr>'; return; }
+  if(!ps.length){ el.innerHTML='<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--color-text-tertiary);font-size:13px"><div style="font-size:32px;margin-bottom:8px"><span class="tf">📭</span></div>의견서 대응 프로젝트가 없습니다.<br><span style="font-size:12px">새 프로젝트를 만들어 의견제출통지서에 대응하세요.</span></td></tr>'; return; }
   el.innerHTML=ps.map(function(p){
     var t=Opinion.TYPES[p.rejection_type]||{code:'?',label:'미정',css:'type-unknown',icon:'❓'};
     var s=Opinion.STATUS[p.status]||{label:p.status,css:'status-created'};
@@ -532,25 +532,25 @@ Opinion.renderNavBar = function(currentStepKey) {
   // 이전 단계 보기
   if(prevClickable) {
     h+='<button class="btn btn-ghost btn-sm" onclick="Opinion.goToStep(\''+prevStep.key+'\')" style="font-size:12px">'
-      +'<span class="tossface">←</span> '+prevStep.label+'</button>';
+      +'<span class="tf">←</span> '+prevStep.label+'</button>';
   }
 
   // 현재 단계로 돌아가기 (과거 뷰일 때만)
   if(isViewingPast) {
     h+='<button class="btn btn-primary btn-sm" onclick="Opinion.goToCurrent()" style="font-size:12px">'
-      +'<span class="tossface">▶</span> 현재 단계로</button>';
+      +'<span class="tf">▶</span> 현재 단계로</button>';
   }
 
   // 이 단계로 되돌리기 (과거 뷰일 때, 해당 단계부터 다시 시작)
   if(isViewingPast && si < ci) {
     h+='<button class="btn btn-outline btn-sm" onclick="Opinion.rollbackToStep(\''+currentStepKey+'\')" style="font-size:12px;color:var(--color-warning);border-color:var(--color-warning)">'
-      +'<span class="tossface">↩️</span> 여기서 다시 시작</button>';
+      +'<span class="tf">↩️</span> 여기서 다시 시작</button>';
   }
 
   // 파일 추가 (어느 단계에서든 파일 업로드 단계로 되돌릴 수 있음)
   if(!isViewingPast && currentStepKey !== 'upload' && si > 0) {
     h+='<button class="btn btn-ghost btn-sm" onclick="Opinion.rollbackToStep(\'upload\')" style="font-size:11px;margin-left:auto">'
-      +'<span class="tossface">📎</span> 파일 추가/재업로드</button>';
+      +'<span class="tf">📎</span> 파일 추가/재업로드</button>';
   }
 
   h+='</div>';
@@ -601,16 +601,16 @@ Opinion.renderUpload = function(L,R){
   if(!Opinion.state.files) Opinion.state.files=[];
   // 기존 파일 유지 (재진입 시 초기화 방지)
 
-  L.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📁</span> 파일 업로드</div></div>'
+  L.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tf">📁</span> 파일 업로드</div></div>'
     +'<div class="opinion-upload-zone" id="opinionUploadZone" onclick="document.getElementById(\'opinionFileInput\').click()" ondragover="event.preventDefault();this.classList.add(\'dragover\')" ondragleave="this.classList.remove(\'dragover\')" ondrop="event.preventDefault();this.classList.remove(\'dragover\');Opinion.handleDrop(event)">'
-    +'<div style="font-size:36px;margin-bottom:8px"><span class="tossface">📎</span></div>'
+    +'<div style="font-size:36px;margin-bottom:8px"><span class="tf">📎</span></div>'
     +'<div style="font-size:13px;color:var(--color-text-secondary)">클릭 또는 드래그하여 파일 업로드<br><span style="font-size:11px;color:var(--color-text-tertiary)">PDF, DOCX, TXT (HWP는 텍스트 복사 후 붙여넣기)</span></div></div>'
     +'<input type="file" id="opinionFileInput" multiple accept=".pdf,.docx,.doc,.txt" style="display:none" onchange="Opinion.handleFiles(event)" />'
     +'<div id="opinionFileList" class="opinion-file-list"></div>'
 
     // 수동 텍스트 입력 (PDF 인식 실패 시)
     +'<div style="margin-top:12px;border-top:1px solid var(--color-border);padding-top:12px">'
-    +'<details id="opinionManualInput"><summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--color-text-secondary)"><span class="tossface">✏️</span> PDF 인식이 안 될 때: 직접 텍스트 붙여넣기</summary>'
+    +'<details id="opinionManualInput"><summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--color-text-secondary)"><span class="tf">✏️</span> PDF 인식이 안 될 때: 직접 텍스트 붙여넣기</summary>'
     +'<div style="margin-top:8px">'
     +'<textarea class="textarea-field" id="opinionManualText" rows="8" placeholder="의견제출통지서, 명세서 등의 텍스트를 직접 붙여넣으세요.&#10;&#10;예: 특허출원 제10-2025-0128349호에 대하여 다음과 같이 의견제출통지합니다..." style="font-size:12px;line-height:1.6"></textarea>'
     +'<p style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px">💡 PDF를 열어서 전체 선택(Ctrl+A) → 복사(Ctrl+C) → 여기 붙여넣기(Ctrl+V)</p>'
@@ -618,7 +618,7 @@ Opinion.renderUpload = function(L,R){
 
     +'</div>' // card 닫기
 
-    +'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">ℹ️</span> 필수 파일 (역할 지정 필수)</div></div>'
+    +'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">ℹ️</span> 필수 파일 (역할 지정 필수)</div></div>'
     +'<div style="font-size:12px;line-height:1.7;color:var(--color-text-secondary)">'
     +'<div style="margin-bottom:6px;padding:6px 10px;border-left:3px solid #ef4444;background:#fff5f5;border-radius:0 6px 6px 0"><b>📋 의견제출통지서</b> — 심사관이 보낸 통지서 (필수)</div>'
     +'<div style="margin-bottom:6px;padding:6px 10px;border-left:3px solid #3182f6;background:#eff6ff;border-radius:0 6px 6px 0"><b>📑 출원 명세서</b> — 우리 특허 (본원발명) (필수)</div>'
@@ -628,9 +628,9 @@ Opinion.renderUpload = function(L,R){
     +'⚠️ <b>본원 명세서와 인용발명을 반드시 올바르게 지정해 주세요.</b> 잘못 지정하면 분석·의견서 전체가 틀어집니다.'
     +'</div></div>'
     +'<div id="opinionParseProgress" style="margin-top:8px"></div>'
-    +'<button class="btn btn-primary btn-full" id="btnOpinionParse" onclick="Opinion.startParsing()" disabled><span class="tossface">🔍</span> 문서 파싱 시작</button>';
+    +'<button class="btn btn-primary btn-full" id="btnOpinionParse" onclick="Opinion.startParsing()" disabled><span class="tf">🔍</span> 문서 파싱 시작</button>';
 
-  R.innerHTML='<div class="card" style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:12px"><span class="tossface">📋</span></div><h3 style="font-size:16px;font-weight:600;margin-bottom:8px">의견제출통지서를 업로드하세요</h3><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6;max-width:400px;margin:0 auto">통지서를 업로드하면 AI가 자동으로 거절이유를 분석하고,<br>보정 전략 → 청구항 초안 → 검증 → 의견서 생성까지 안내합니다.</p>'
+  R.innerHTML='<div class="card" style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:12px"><span class="tf">📋</span></div><h3 style="font-size:16px;font-weight:600;margin-bottom:8px">의견제출통지서를 업로드하세요</h3><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6;max-width:400px;margin:0 auto">통지서를 업로드하면 AI가 자동으로 거절이유를 분석하고,<br>보정 전략 → 청구항 초안 → 검증 → 의견서 생성까지 안내합니다.</p>'
     +'<div style="margin-top:20px;padding:14px;background:var(--color-bg-tertiary);border-radius:8px;text-align:left;font-size:12px;color:var(--color-text-secondary);line-height:1.6">'
     +'<b>💡 팁:</b> PDF에서 텍스트가 추출되지 않으면(이미지 스캔본),<br>왼쪽 "직접 텍스트 붙여넣기"를 이용하세요.'
     +'</div></div>';
@@ -683,7 +683,7 @@ Opinion.usage = { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
 Opinion.updateUsageDisplay = function() {
   var el = document.getElementById('opinionUsage');
   if (!el) return;
-  el.innerHTML = '<span class="tossface">🔢</span> API: ' + Opinion.usage.calls + '회';
+  el.innerHTML = '<span class="tf">🔢</span> API: ' + Opinion.usage.calls + '회';
 };
 
 // ═══ 파일 역할 상수 ═══
@@ -865,8 +865,8 @@ Opinion.startParsing = async function(){
 // 7. 유형 판별 (Phase 2)
 // ═══════════════════════════════════════════
 Opinion.renderParsed = function(L,R){
-  L.innerHTML=Opinion.renderNavBar('parse')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">✅</span> 파싱 완료</div></div><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">문서 파싱이 완료되었습니다.<br>결과를 확인한 후 유형을 판별합니다.</p><button class="btn btn-primary btn-full" id="btnOpinionType" onclick="Opinion.determineType()" style="margin-top:12px"><span class="tossface">🔍</span> 유형 판별 시작</button></div>';
-  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📋</span> 파싱 결과</div></div><div id="opinionParsedContent" style="font-size:13px;color:var(--color-text-secondary);padding:4px 0">로딩 중...</div></div>';
+  L.innerHTML=Opinion.renderNavBar('parse')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">✅</span> 파싱 완료</div></div><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">문서 파싱이 완료되었습니다.<br>결과를 확인한 후 유형을 판별합니다.</p><button class="btn btn-primary btn-full" id="btnOpinionType" onclick="Opinion.determineType()" style="margin-top:12px"><span class="tf">🔍</span> 유형 판별 시작</button></div>';
+  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tf">📋</span> 파싱 결과</div></div><div id="opinionParsedContent" style="font-size:13px;color:var(--color-text-secondary);padding:4px 0">로딩 중...</div></div>';
   Opinion.loadParsed();
 };
 Opinion.loadParsed = async function(){
@@ -900,7 +900,7 @@ Opinion.renderParsedUI = function(el, pd) {
 
   // 거절이유
   if(pd.rejection_reasons&&pd.rejection_reasons.length) {
-    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tossface">⚠️</span> 거절이유</div>';
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tf">⚠️</span> 거절이유</div>';
     pd.rejection_reasons.forEach(function(rr) {
       h+='<div style="padding:10px 14px;border:1px solid var(--color-border);border-radius:8px;margin-bottom:6px;background:#fff">'
         +'<div style="font-size:13px;font-weight:600;color:var(--color-error)">'+escapeHtml(rr.article||'')+'<span style="font-weight:400;color:var(--color-text-secondary);margin-left:8px">'+escapeHtml(rr.reason||'')+'</span></div>'
@@ -913,7 +913,7 @@ Opinion.renderParsedUI = function(el, pd) {
 
   // 인용문헌
   if(pd.cited_references&&pd.cited_references.length) {
-    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tossface">📄</span> 인용문헌</div>';
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tf">📄</span> 인용문헌</div>';
     pd.cited_references.forEach(function(ref) {
       h+='<div style="padding:8px 12px;background:var(--color-bg-tertiary);border-radius:6px;margin-bottom:4px;font-size:12px">'
         +'<span style="font-weight:600">'+escapeHtml('인용문헌 '+(ref.ref_no||''))+'</span> '
@@ -925,7 +925,7 @@ Opinion.renderParsedUI = function(el, pd) {
 
   // 청구항
   if(pd.claims&&pd.claims.length) {
-    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tossface">📑</span> 청구항 ('+pd.claims.length+'개)</div>';
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tf">📑</span> 청구항 ('+pd.claims.length+'개)</div>';
     h+='<details><summary style="cursor:pointer;font-size:12px;color:var(--color-primary);font-weight:500">청구항 펼치기</summary><div style="margin-top:8px">';
     pd.claims.forEach(function(c) {
       h+='<div style="padding:8px 12px;border-left:3px solid var(--color-primary-light);margin-bottom:6px;font-size:12px;line-height:1.6;background:var(--color-bg-tertiary);border-radius:0 6px 6px 0">'
@@ -938,7 +938,7 @@ Opinion.renderParsedUI = function(el, pd) {
 
   // 대비표
   if(pd.comparison_table&&pd.comparison_table.length) {
-    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tossface">⚖️</span> 구성요소 대비표</div>';
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tf">⚖️</span> 구성요소 대비표</div>';
     h+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--color-bg-tertiary)"><th style="padding:8px;text-align:left;border-bottom:1px solid var(--color-border)">구성요소</th><th style="padding:8px;text-align:left;border-bottom:1px solid var(--color-border)">본원</th><th style="padding:8px;text-align:left;border-bottom:1px solid var(--color-border)">인용발명</th></tr></thead><tbody>';
     pd.comparison_table.forEach(function(row) {
       h+='<tr><td style="padding:6px 8px;border-bottom:1px solid var(--color-divider);font-weight:600">❶ '+(row.element_no||'')+'</td>'
@@ -971,20 +971,20 @@ Opinion.determineType = async function(){
 
 Opinion.renderTypeView = function(L,R){
   var p=Opinion.state.current, t=Opinion.TYPES[p.rejection_type]||Opinion.TYPES.inventive_step, tr=Opinion.state.typeResult||{}, conf=Math.round((tr.confidence||0.5)*100);
-  L.innerHTML=Opinion.renderNavBar('type')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">🔍</span> 유형 판별 결과</div></div>'
+  L.innerHTML=Opinion.renderNavBar('type')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">🔍</span> 유형 판별 결과</div></div>'
     +'<div class="opinion-type-result"><div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:8px">AI 분석 결과</div>'
     +'<div class="opinion-type-determined '+t.css+'">'+t.icon+' '+t.code+'. '+t.label+'</div>'
     +'<div style="font-size:12px;color:var(--color-text-tertiary)">신뢰도: '+conf+'% <div class="opinion-confidence-bar"><div class="opinion-confidence-fill" style="width:'+conf+'%"></div></div></div>'
     +(tr.reasoning?'<p style="font-size:12px;color:var(--color-text-secondary);text-align:left;line-height:1.6;margin-top:12px;padding:10px;background:var(--color-bg-tertiary);border-radius:8px">'+escapeHtml(tr.reasoning)+'</p>':'')
     +'</div><div style="margin-top:16px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">이 판별이 맞습니까?</div>'
-    +'<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="Opinion.confirmType()"><span class="tossface">✅</span> 맞습니다</button><button class="btn btn-outline" style="flex:1" onclick="document.getElementById(\'opinionTypeOverride\').style.display=\'block\'"><span class="tossface">✏️</span> 유형 변경</button></div>'
+    +'<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="Opinion.confirmType()"><span class="tf">✅</span> 맞습니다</button><button class="btn btn-outline" style="flex:1" onclick="document.getElementById(\'opinionTypeOverride\').style.display=\'block\'"><span class="tf">✏️</span> 유형 변경</button></div>'
     +'<div id="opinionTypeOverride" style="display:none;margin-top:12px"><div class="opinion-type-selector">'
     +'<div class="opinion-type-option'+(p.rejection_type==='inventive_step'?' selected':'')+'" onclick="Opinion.selectType(this,\'inventive_step\')">⚖️ A. 진보성</div>'
     +'<div class="opinion-type-option'+(p.rejection_type==='description_deficiency'?' selected':'')+'" onclick="Opinion.selectType(this,\'description_deficiency\')">📝 B. 기재불비</div>'
     +'<div class="opinion-type-option'+(p.rejection_type==='partial_rejection'?' selected':'')+'" onclick="Opinion.selectType(this,\'partial_rejection\')">📋 C. 일부거절</div>'
     +'</div><button class="btn btn-primary btn-full" style="margin-top:10px" onclick="Opinion.confirmType()">변경 후 진행</button></div></div></div>';
   var cs=tr.claim_summary||{}, tot=cs.total_claims||0, rej=cs.rejected_claims||[], alw=cs.no_rejection_claims||[];
-  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📊</span> 청구항별 현황</div></div>'
+  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tf">📊</span> 청구항별 현황</div></div>'
     +(tot>0?Array.from({length:tot},function(_,i){var n=i+1,isR=rej.indexOf(n)>=0,isA=alw.indexOf(n)>=0;return '<div class="opinion-claim-row '+(isA?'allowable':isR?'rejected':'')+'"><span class="claim-no">청구항 '+n+'</span><span>'+(isA?'✅':isR?'❌':'⬜')+'</span><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">'+(isA?'등록가능 후보':isR?'거절':'미확인')+'</span></div>';}).join(''):'<p style="padding:20px;text-align:center;color:var(--color-text-tertiary)">청구항 정보 없음</p>')+'</div>';
 };
 Opinion.selectType=function(el,type){document.querySelectorAll('.opinion-type-option').forEach(function(o){o.classList.remove('selected');});el.classList.add('selected');Opinion.state.current.rejection_type=type;};
@@ -1121,7 +1121,7 @@ Opinion.showRevisionModal = function(gateNo, callback) {
   modal.className = 'modal-overlay';
   modal.style.display = 'flex';
   modal.innerHTML = '<div class="modal-content" style="max-width:500px;padding:24px">'
-    +'<div class="modal-title" style="font-size:16px;margin-bottom:4px"><span class="tossface">✏️</span> Gate '+gateNo+' 수정 요청</div>'
+    +'<div class="modal-title" style="font-size:16px;margin-bottom:4px"><span class="tf">✏️</span> Gate '+gateNo+' 수정 요청</div>'
     +'<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:16px">수정이 필요한 부분을 구체적으로 작성해 주세요. AI가 이 지시에 따라 해당 단계를 재실행합니다.</p>'
     +'<textarea id="opinionRevisionText" class="textarea-field" rows="5" placeholder="예: 구성요소 ❸의 차이점 논증을 더 강화해 주세요. 【0088】의 구체적 예시를 인용하세요." style="font-size:13px;line-height:1.6"></textarea>'
     +'<div style="display:flex;gap:12px;margin-top:4px;font-size:11px;color:var(--color-text-tertiary);flex-wrap:wrap">'
@@ -1131,7 +1131,7 @@ Opinion.showRevisionModal = function(gateNo, callback) {
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:16px">'
     +'<button class="btn btn-ghost" style="flex:1;padding:10px" onclick="document.getElementById(\'opinionRevisionModal\').remove()">취소</button>'
-    +'<button class="btn btn-primary" style="flex:1;padding:10px" id="btnRevisionSubmit"><span class="tossface">✏️</span> 수정 요청</button>'
+    +'<button class="btn btn-primary" style="flex:1;padding:10px" id="btnRevisionSubmit"><span class="tf">✏️</span> 수정 요청</button>'
     +'</div></div>';
   document.body.appendChild(modal);
 
@@ -1184,10 +1184,10 @@ Opinion.renderAnalysis = function(L,R,status){
   }
 
   L.innerHTML=Opinion.renderNavBar('gate1')
-    +'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 1: '+gLabel+'</div>'
+    +'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tf">🚦</span> Gate 1: '+gLabel+'</div>'
     +'<p style="font-size:13px;color:var(--color-text-secondary)">분석 결과를 검토하고 확정해 주세요.</p>'
     +stratHtml
-    +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.backToList()">나중에</button><button class="btn btn-primary" id="btnGate1Approve" onclick="Opinion.approveGate(1)"><span class="tossface">✅</span> 확정</button></div></div>';
+    +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.backToList()">나중에</button><button class="btn btn-primary" id="btnGate1Approve" onclick="Opinion.approveGate(1)"><span class="tf">✅</span> 확정</button></div></div>';
 
   R.innerHTML = Opinion.renderAnalysisUI(type, a, extracted);
 };
@@ -1195,7 +1195,7 @@ Opinion.renderAnalysis = function(L,R,status){
 // 분석 결과 구조화 렌더링
 Opinion.renderAnalysisUI = function(type, a, extracted) {
   if (!extracted) extracted = Opinion.extractAnalysisFields(a);
-  var h = '<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📊</span> 분석 결과</div></div>';
+  var h = '<div class="card"><div class="card-header"><div class="card-title"><span class="tf">📊</span> 분석 결과</div></div>';
   var hasContent = false;
 
   if (type === 'inventive_step') {
@@ -1294,7 +1294,7 @@ Opinion.renderAnalysisUI = function(type, a, extracted) {
     h += '<div style="padding:16px;background:var(--color-warning-light);border-radius:8px;margin-bottom:12px;border-left:3px solid var(--color-warning)">'
       +'<div style="font-weight:600;font-size:12px;color:#92400e;margin-bottom:6px">⚠️ 분석 결과를 구조화하지 못했습니다</div>'
       +'<div style="font-size:12px;color:#92400e;line-height:1.5">AI가 서술형으로 응답했습니다. 재분석하면 구조화된 결과를 얻을 수 있습니다.</div>'
-      +'<button class="btn btn-outline btn-sm" onclick="Opinion.retryAnalysis()" style="margin-top:8px;font-size:12px"><span class="tossface">🔄</span> 재분석</button>'
+      +'<button class="btn btn-outline btn-sm" onclick="Opinion.retryAnalysis()" style="margin-top:8px;font-size:12px"><span class="tf">🔄</span> 재분석</button>'
       +'</div>';
     h += '<details><summary style="cursor:pointer;font-size:12px;font-weight:500;color:var(--color-text-secondary)">원본 데이터 보기</summary>'
       +'<pre style="white-space:pre-wrap;word-break:break-all;font-size:11px;background:var(--color-bg-tertiary);padding:12px;border-radius:8px;max-height:400px;overflow-y:auto;margin-top:8px;line-height:1.5">'
@@ -1456,9 +1456,9 @@ Opinion.startValidation=async function(){
 Opinion.renderValidation=function(L,R,status){
   var p=Opinion.state.current,v=Opinion.state.validation||{},sm=v.summary||{},ready=['validated','correction_validated','merge_validated'].indexOf(status)>=0;
   var nav=Opinion.renderNavBar('gate2');
-  L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 2: 청구항 확정</div><p style="font-size:13px;color:var(--color-text-secondary)">검증 보고서를 검토하고 확정해 주세요.</p><div style="margin-top:12px"><div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ 통과 '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ 주의 '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ 실패 '+(sm.fail||0)+'</div></div></div><div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(2)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate2Approve" onclick="Opinion.approveGate(2)"><span class="tossface">✅</span> 확정</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">검증 중...</div></div>');
+  L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tf">🚦</span> Gate 2: 청구항 확정</div><p style="font-size:13px;color:var(--color-text-secondary)">검증 보고서를 검토하고 확정해 주세요.</p><div style="margin-top:12px"><div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ 통과 '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ 주의 '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ 실패 '+(sm.fail||0)+'</div></div></div><div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(2)"><span class="tf">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate2Approve" onclick="Opinion.approveGate(2)"><span class="tf">✅</span> 확정</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">검증 중...</div></div>');
   var items=v.elements||v.results||[];
-  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">🔬</span> 검증 보고서</div></div>'
+  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tf">🔬</span> 검증 보고서</div></div>'
     +(items.length?items.map(function(e,i){
       var r=e.overall_result||e.result||'pass';
       var checks=e.checks||[];
@@ -1616,9 +1616,9 @@ Opinion.renderOpinion=function(L,R,status){
       +'<p style="font-size:11px;color:var(--color-text-secondary);margin-top:6px">의견서 내용이 현재 사건이 아닌 참고 양식의 사건 정보를 포함할 수 있습니다. 해당 부분을 확인해 주세요.</p>'
       +'</div>';
   }
-  L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">🚦</span> Gate 3: 최종 승인</div><p style="font-size:13px;color:var(--color-text-secondary)">의견서를 검토하고 승인하면 보정서+의견서가 생성됩니다.</p>'
+  L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tf">🚦</span> Gate 3: 최종 승인</div><p style="font-size:13px;color:var(--color-text-secondary)">의견서를 검토하고 승인하면 보정서+의견서가 생성됩니다.</p>'
     +contamHtml
-    +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(3)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate3Approve" onclick="Opinion.approveGate(3)"><span class="tossface">✅</span> 승인</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">의견서 작성 중...</div></div>');
+    +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(3)"><span class="tf">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate3Approve" onclick="Opinion.approveGate(3)"><span class="tf">✅</span> 승인</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">의견서 작성 중...</div></div>');
   var secs=o.sections||[];
   var opinionHtml = '';
   if (secs.length) {
@@ -1637,7 +1637,7 @@ Opinion.renderOpinion=function(L,R,status){
   } else {
     opinionHtml = '<p style="color:var(--color-text-tertiary);text-align:center;padding:40px">의견서 미생성</p>';
   }
-  R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="tossface">📝</span> '+escapeHtml(o.title||'의견서')+'</span></div><div class="opinion-preview-body">'+opinionHtml+'</div></div>';
+  R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="tf">📝</span> '+escapeHtml(o.title||'의견서')+'</span></div><div class="opinion-preview-body">'+opinionHtml+'</div></div>';
 };
 
 // ═══ Output + DOCX Download ═══
@@ -1646,12 +1646,12 @@ Opinion.startOutput=async function(){var p=Opinion.state.current;if(!p)return;aw
 Opinion.renderOutput=function(L,R,status){
   var done=status==='completed' || status==='approved';  // approved도 완료로 취급 (generating_docs는 즉시 완료됨)
   var nav=Opinion.renderNavBar('output');
-  L.innerHTML=nav+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📥</span> 출력물</div></div><div style="display:flex;flex-direction:column;gap:8px">'
-    +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadDocx(\'opinion\')"'+(done?'':' disabled')+'><span class="tossface">📝</span> 의견서 (Word)</button>'
-    +'<button class="btn btn-outline btn-full" onclick="Opinion.downloadDocx(\'all\')"'+(done?'':' disabled')+'><span class="tossface">📋</span> 전체 (의견서+검증보고서)</button>'
-    +'<button class="btn btn-ghost btn-full" onclick="Opinion.copyOpinionText()"'+(done?'':' disabled')+'><span class="tossface">📋</span> 텍스트 복사</button>'
+  L.innerHTML=nav+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">📥</span> 출력물</div></div><div style="display:flex;flex-direction:column;gap:8px">'
+    +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadDocx(\'opinion\')"'+(done?'':' disabled')+'><span class="tf">📝</span> 의견서 (Word)</button>'
+    +'<button class="btn btn-outline btn-full" onclick="Opinion.downloadDocx(\'all\')"'+(done?'':' disabled')+'><span class="tf">📋</span> 전체 (의견서+검증보고서)</button>'
+    +'<button class="btn btn-ghost btn-full" onclick="Opinion.copyOpinionText()"'+(done?'':' disabled')+'><span class="tf">📋</span> 텍스트 복사</button>'
     +'</div></div>';
-  R.innerHTML='<div class="card" style="text-align:center;padding:40px">'+(done?'<div style="font-size:48px;margin-bottom:12px"><span class="tossface">🎉</span></div><h3 style="font-size:18px;font-weight:700;color:var(--color-success);margin-bottom:8px">의견서 대응 완료!</h3><p style="font-size:13px;color:var(--color-text-secondary)">다운로드 후 특허로에 제출하세요.</p>':'<div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">출력물 생성 중...</div>')+'</div>';
+  R.innerHTML='<div class="card" style="text-align:center;padding:40px">'+(done?'<div style="font-size:48px;margin-bottom:12px"><span class="tf">🎉</span></div><h3 style="font-size:18px;font-weight:700;color:var(--color-success);margin-bottom:8px">의견서 대응 완료!</h3><p style="font-size:13px;color:var(--color-text-secondary)">다운로드 후 특허로에 제출하세요.</p>':'<div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">출력물 생성 중...</div>')+'</div>';
 };
 
 // 의견서 텍스트 조합 (JSON sections 형식 + raw string 형식 모두 지원)
@@ -1771,13 +1771,13 @@ Opinion.downloadDocx = async function(type) {
 Opinion.renderFailed=function(L,R){
   var detail = Opinion.state.parseFailDetail || '파일에서 텍스트를 추출할 수 없었습니다.';
   L.innerHTML='<div class="card" style="padding:24px">'
-    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><span class="tossface" style="font-size:32px">⚠️</span><div><h3 style="font-size:16px;font-weight:600;color:var(--color-error);margin-bottom:2px">파싱 실패</h3><p style="font-size:12px;color:var(--color-text-secondary)">텍스트 추출에 문제가 있습니다</p></div></div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><span class="tf" style="font-size:32px">⚠️</span><div><h3 style="font-size:16px;font-weight:600;color:var(--color-error);margin-bottom:2px">파싱 실패</h3><p style="font-size:12px;color:var(--color-text-secondary)">텍스트 추출에 문제가 있습니다</p></div></div>'
     +'<pre style="white-space:pre-wrap;font-size:12px;background:var(--color-bg-tertiary);padding:14px;border-radius:8px;line-height:1.6;color:var(--color-text-secondary);max-height:200px;overflow-y:auto">'+escapeHtml(detail)+'</pre>'
     +'<div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">'
-    +'<button class="btn btn-primary btn-full" onclick="Opinion.resetToUpload()"><span class="tossface">📁</span> 파일 추가/변경 후 재시도</button>'
-    +'<button class="btn btn-outline btn-full" onclick="Opinion.resetToUploadWithManual()"><span class="tossface">✏️</span> 직접 텍스트 입력으로 전환</button>'
+    +'<button class="btn btn-primary btn-full" onclick="Opinion.resetToUpload()"><span class="tf">📁</span> 파일 추가/변경 후 재시도</button>'
+    +'<button class="btn btn-outline btn-full" onclick="Opinion.resetToUploadWithManual()"><span class="tf">✏️</span> 직접 텍스트 입력으로 전환</button>'
     +'</div></div>';
-  R.innerHTML='<div class="card" style="padding:24px"><div style="font-weight:600;font-size:13px;margin-bottom:12px"><span class="tossface">💡</span> PDF 인식이 안 되는 경우</div>'
+  R.innerHTML='<div class="card" style="padding:24px"><div style="font-weight:600;font-size:13px;margin-bottom:12px"><span class="tf">💡</span> PDF 인식이 안 되는 경우</div>'
     +'<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.8">'
     +'<p><b>원인 1: 이미지 스캔 PDF</b><br>특허청에서 발송한 PDF가 텍스트가 아닌 이미지로 된 경우입니다. Adobe Acrobat이나 한글 뷰어에서 열어 텍스트를 복사해서 붙여넣어 주세요.</p>'
     +'<p style="margin-top:10px"><b>원인 2: 암호화된 PDF</b><br>비밀번호가 걸린 PDF는 텍스트 추출이 불가능합니다. PDF 비밀번호를 해제한 후 다시 업로드하세요.</p>'

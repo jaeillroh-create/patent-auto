@@ -1,57 +1,57 @@
 /* ═══════════════════════════════════════════════════════
-   특허명세서 자동 생성 v5.3 — Common Design System
-   전체 너비 최적화 버전
+   특허명세서 자동 생성 v6.0 — DT Design System 통합
+   design-tokens.css 기반 전면 리스타일
    ═══════════════════════════════════════════════════════ */
 
-/* ── Design Tokens ── */
+/* ── Legacy → DT 토큰 브릿지 ── */
 :root {
-  --color-primary: #3182F6;
-  --color-primary-hover: #1B64DA;
-  --color-primary-pressed: #1957C2;
-  --color-primary-light: #E8F3FF;
-  --color-success: #34C759;
-  --color-success-light: #E8FAE8;
-  --color-warning: #FF9F0A;
-  --color-warning-light: #FFF4E0;
-  --color-error: #FF3B30;
-  --color-error-light: #FFE8E6;
-  --color-text-primary: #191F28;
-  --color-text-secondary: #6B7684;
-  --color-text-tertiary: #8B95A1;
-  --color-text-disabled: #B0B8C1;
-  --color-text-on-color: #FFFFFF;
-  --color-bg-primary: #FFFFFF;
-  --color-bg-secondary: #F2F4F6;
-  --color-bg-tertiary: #F9FAFB;
-  --color-border: #E5E8EB;
-  --color-border-focus: #3182F6;
-  --color-divider: #F2F4F6;
-  --font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif;
-  --font-size-display: 28px;
-  --font-size-headline: 22px;
-  --font-size-title: 17px;
-  --font-size-body: 15px;
-  --font-size-caption: 13px;
-  --font-size-small: 11px;
-  --font-weight-bold: 700;
-  --font-weight-semibold: 600;
-  --font-weight-medium: 500;
-  --font-weight-regular: 400;
+  --color-primary: var(--dt-brand);
+  --color-primary-hover: var(--dt-brand-hover);
+  --color-primary-pressed: #1550B8;
+  --color-primary-light: var(--dt-brand-light);
+  --color-success: var(--dt-success);
+  --color-success-light: var(--dt-success-light);
+  --color-warning: var(--dt-warning);
+  --color-warning-light: var(--dt-warning-light);
+  --color-error: var(--dt-danger);
+  --color-error-light: var(--dt-danger-light);
+  --color-text-primary: var(--dt-g900);
+  --color-text-secondary: var(--dt-g500);
+  --color-text-tertiary: var(--dt-g400);
+  --color-text-disabled: var(--dt-g300);
+  --color-text-on-color: var(--dt-white);
+  --color-bg-primary: var(--dt-white);
+  --color-bg-secondary: var(--dt-g100);
+  --color-bg-tertiary: var(--dt-g50);
+  --color-border: var(--dt-g150);
+  --color-border-focus: var(--dt-brand);
+  --color-divider: var(--dt-g100);
+  --font-family: var(--dt-font);
+  --font-size-display: var(--dt-f-3xl);
+  --font-size-headline: var(--dt-f-2xl);
+  --font-size-title: var(--dt-f-xl);
+  --font-size-body: var(--dt-f-lg);
+  --font-size-caption: var(--dt-f-md);
+  --font-size-small: var(--dt-f-xs);
+  --font-weight-bold: var(--dt-w-bold);
+  --font-weight-semibold: var(--dt-w-semibold);
+  --font-weight-medium: var(--dt-w-medium);
+  --font-weight-regular: var(--dt-w-regular);
   --line-height-tight: 1.3;
   --line-height-normal: 1.5;
   --line-height-relaxed: 1.7;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --radius-full: 9999px;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
-  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+  --radius-sm: var(--dt-r-sm);
+  --radius-md: var(--dt-r-md);
+  --radius-lg: var(--dt-r-lg);
+  --radius-xl: var(--dt-r-xl);
+  --radius-full: var(--dt-r-full);
+  --shadow-sm: var(--dt-sh-sm);
+  --shadow-md: var(--dt-sh-md);
+  --shadow-lg: var(--dt-sh-lg);
   --shadow-modal: 0 8px 32px rgba(0,0,0,0.12);
-  --transition-fast: 0.15s ease;
-  --transition-normal: 0.2s ease;
-  --transition-slow: 0.3s ease;
+  --transition-fast: var(--dt-ease-fast);
+  --transition-normal: var(--dt-ease-normal);
+  --transition-slow: var(--dt-ease-slow);
   --spacing-2: 2px; --spacing-4: 4px; --spacing-6: 6px; --spacing-8: 8px;
   --spacing-12: 12px; --spacing-16: 16px; --spacing-20: 20px; --spacing-24: 24px;
   --spacing-32: 32px; --spacing-40: 40px;
@@ -59,7 +59,7 @@
 
 /* ── Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: var(--font-family); font-size: var(--font-size-body); color: var(--color-text-primary); background: var(--color-bg-secondary); line-height: var(--line-height-normal); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body { font-family: var(--font-family); font-size: var(--dt-f-lg); color: var(--dt-g900); background: var(--dt-g50); line-height: var(--line-height-normal); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 a { color: var(--color-primary); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
@@ -88,107 +88,110 @@ a:hover { text-decoration: underline; }
   padding: 0 24px 40px;
 }
 
-/* ── Auth (로그인만 중앙 정렬) ── */
-.auth-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+/* ── Auth (DT 스타일) ── */
+.auth-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; background: var(--dt-g50); }
 .auth-logo { margin-bottom: 32px; }
 .logo-img { width: 160px; height: auto; }
 .auth-card { max-width: 400px; width: 100%; }
-.auth-tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 1px solid var(--color-border); }
-.auth-tab { flex: 1; padding: 12px; border: none; background: none; font-family: var(--font-family); font-size: var(--font-size-body); font-weight: var(--font-weight-semibold); color: var(--color-text-tertiary); cursor: pointer; border-bottom: 2px solid transparent; transition: all var(--transition-fast); }
-.auth-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
-.auth-footer { margin-top: 24px; font-size: var(--font-size-caption); color: var(--color-text-tertiary); }
+.auth-tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 1px solid var(--dt-g150); }
+.auth-tab { flex: 1; padding: 13px; border: none; background: none; font-family: var(--font-family); font-size: var(--dt-f-md); font-weight: var(--dt-w-medium); color: var(--dt-g500); cursor: pointer; border-bottom: 2px solid transparent; transition: all var(--dt-ease-fast); }
+.auth-tab.active { color: var(--dt-brand); border-bottom-color: var(--dt-brand); font-weight: var(--dt-w-bold); }
+.auth-footer { margin-top: 24px; font-size: var(--dt-f-sm); color: var(--dt-g400); }
 
-/* ── App Header ── */
-.app-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; margin-bottom: 8px; position: sticky; top: 0; background: var(--color-bg-secondary); z-index: 100; }
-.header-left { display: flex; align-items: center; gap: var(--spacing-8); }
+/* ── App Header (DT 스타일) ── */
+.app-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; margin-bottom: 8px; position: sticky; top: 0; background: var(--dt-white); z-index: 100; border-bottom: 1px solid var(--dt-g150); }
+.header-left { display: flex; align-items: center; gap: 8px; }
 .header-logo { height: 28px; width: auto; }
-.header-title { font-size: var(--font-size-title); font-weight: var(--font-weight-bold); }
-.header-right { display: flex; align-items: center; gap: var(--spacing-6); }
-.header-user { font-size: var(--font-size-caption); color: var(--color-text-secondary); }
+.header-title { font-size: 16px; font-weight: var(--dt-w-extrabold); color: var(--dt-g900); letter-spacing: -0.3px; }
+.header-right { display: flex; align-items: center; gap: 6px; }
+.header-user { font-size: var(--dt-f-sm); color: var(--dt-g500); }
 
-/* ── Button ── */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-6); padding: 12px 20px; border-radius: var(--radius-md); border: none; font-family: var(--font-family); font-size: var(--font-size-caption); font-weight: var(--font-weight-semibold); cursor: pointer; transition: all var(--transition-fast); white-space: nowrap; line-height: 1; }
-.btn-primary { background: var(--color-primary); color: var(--color-text-on-color); }
-.btn-primary:hover { background: var(--color-primary-hover); }
-.btn-primary:active { background: var(--color-primary-pressed); transform: scale(0.98); }
-.btn-secondary { background: var(--color-bg-secondary); color: var(--color-text-primary); }
-.btn-secondary:hover { background: #E8EBED; }
-.btn-outline { background: #f8fafc; color: var(--color-text-primary); border: 2px solid #d1d5db; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-.btn-outline:hover { background: #e8f3ff; border-color: var(--color-primary); color: var(--color-primary); }
-.btn-ghost { background: transparent; color: var(--color-text-secondary); }
-.btn-ghost:hover { background: var(--color-bg-secondary); }
-.btn-sm { padding: 8px 14px; font-size: var(--font-size-small); }
-.btn-lg { padding: 16px 28px; font-size: var(--font-size-body); }
+/* ── Button (DT 스타일) ── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: none; font-family: var(--font-family); border-radius: var(--dt-r-sm); white-space: nowrap; cursor: pointer; transition: all var(--dt-ease-fast); line-height: 1; outline: none; height: 36px; padding: 0 14px; font-size: 13px; font-weight: var(--dt-w-semibold); }
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn-primary { background: var(--dt-brand); color: var(--dt-white); }
+.btn-primary:hover:not(:disabled) { background: var(--dt-brand-hover); }
+.btn-secondary { background: var(--dt-white); color: var(--dt-brand); border: 1.5px solid var(--dt-brand); }
+.btn-secondary:hover:not(:disabled) { background: var(--dt-brand-pale); }
+.btn-outline { background: var(--dt-white); color: var(--dt-brand); border: 1.5px solid var(--dt-brand); }
+.btn-outline:hover:not(:disabled) { background: var(--dt-brand-pale); }
+.btn-ghost { background: transparent; color: var(--dt-g600); border: 1px solid var(--dt-g200); }
+.btn-ghost:hover:not(:disabled) { background: var(--dt-g50); }
+.btn-sm { height: 28px; padding: 0 10px; font-size: 11.5px; }
+.btn-lg { height: 44px; padding: 0 20px; font-size: 14px; }
 .btn-full { width: 100%; }
-.btn:disabled { background: var(--color-bg-secondary) !important; color: var(--color-text-disabled) !important; cursor: not-allowed; transform: none !important; border-color: var(--color-border) !important; }
+.btn:disabled { background: var(--dt-g100) !important; color: var(--dt-g300) !important; border: 1.5px solid var(--dt-g150) !important; cursor: not-allowed; transform: none !important; }
 .btn-loading { position: relative; color: transparent !important; pointer-events: none; }
-.btn-loading::after { content: ''; position: absolute; width: 16px; height: 16px; border: 2px solid var(--color-text-on-color); border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; }
+.btn-loading::after { content: ''; position: absolute; width: 14px; height: 14px; border: 2px solid var(--dt-white); border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; }
 
-/* ── Card ── */
-.card { background: var(--color-bg-primary); border-radius: var(--radius-lg); padding: var(--spacing-24); margin-bottom: var(--spacing-16); box-shadow: var(--shadow-sm); border: 1px solid var(--color-border); transition: border-color var(--transition-normal); }
-.card-active { border-color: var(--color-primary); box-shadow: var(--shadow-md); }
+/* ── Card (DT 스타일) ── */
+.card { background: var(--dt-white); border-radius: var(--dt-r-lg); padding: var(--spacing-24); margin-bottom: var(--spacing-16); box-shadow: var(--dt-sh-sm); border: 1px solid var(--dt-g150); transition: box-shadow var(--dt-ease-normal); }
+.card:hover { box-shadow: var(--dt-sh-md); }
+.card-active { border-color: var(--dt-brand); box-shadow: var(--dt-sh-md); }
 .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-16); }
-.card-title { font-size: var(--font-size-title); font-weight: var(--font-weight-bold); color: var(--color-text-primary); display: flex; align-items: center; gap: var(--spacing-8); }
-.card-description { font-size: var(--font-size-caption); color: var(--color-text-secondary); margin-top: var(--spacing-4); line-height: var(--line-height-normal); }
+.card-title { font-size: 14.5px; font-weight: var(--dt-w-bold); color: var(--dt-g900); display: flex; align-items: center; gap: 7px; }
+.card-description { font-size: var(--dt-f-md); color: var(--dt-g500); margin-top: var(--spacing-4); line-height: var(--line-height-normal); }
 
-/* ── Input / Textarea ── */
-.input-field, .textarea-field { width: 100%; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--color-border); font-family: var(--font-family); font-size: var(--font-size-body); color: var(--color-text-primary); background: var(--color-bg-primary); transition: border-color var(--transition-fast), box-shadow var(--transition-fast); line-height: var(--line-height-relaxed); resize: vertical; outline: none; }
-.input-field:focus, .textarea-field:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(49,130,246,0.12); }
-.input-field::placeholder, .textarea-field::placeholder { color: var(--color-text-tertiary); }
+/* ── Input / Textarea (DT 스타일) ── */
+.input-field, .textarea-field { width: 100%; padding: 10px 12px; border-radius: var(--dt-r-sm); border: 1.5px solid var(--dt-g150); font-family: var(--font-family); font-size: var(--dt-f-md); color: var(--dt-g900); background: var(--dt-white); transition: border-color var(--dt-ease-fast); line-height: var(--line-height-relaxed); resize: vertical; outline: none; }
+.input-field:focus, .textarea-field:focus { border-color: var(--dt-brand); }
+.input-field::placeholder, .textarea-field::placeholder { color: var(--dt-g400); }
 .input-sm { width: 80px; display: inline-block; padding: 8px 12px; text-align: center; }
-.input-hint { font-size: var(--font-size-small); color: var(--color-text-tertiary); margin-top: var(--spacing-6); }
-.input-highlight { border-color: var(--color-primary); background: var(--color-primary-light); }
+.input-hint { font-size: var(--dt-f-xs); color: var(--dt-g400); margin-top: var(--spacing-6); }
+.input-highlight { border-color: var(--dt-brand); background: var(--dt-brand-light); }
 
-/* ── Tabs ── */
-.tab-container { display: flex; gap: var(--spacing-4); margin-bottom: var(--spacing-20); overflow-x: auto; scrollbar-width: none; background: var(--color-bg-primary); padding: 6px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); }
+/* ── Tabs (DT 스타일) ── */
+.tab-container { display: flex; gap: 0; margin-bottom: var(--spacing-20); overflow-x: auto; scrollbar-width: none; background: var(--dt-white); padding: 0; border-radius: 0; border: none; border-bottom: 1px solid var(--dt-g150); }
 .tab-container::-webkit-scrollbar { display: none; }
-.tab-item { flex: 1; min-width: 80px; display: flex; flex-direction: column; align-items: center; gap: var(--spacing-4); padding: 12px 8px; border-radius: var(--radius-md); background: transparent; border: none; cursor: pointer; transition: all var(--transition-fast); user-select: none; font-family: var(--font-family); }
-.tab-item:hover { background: var(--color-bg-secondary); }
-.tab-item.active { background: var(--color-primary-light); }
+.tab-item { flex: 1; min-width: 80px; display: flex; flex-direction: column; align-items: center; gap: var(--spacing-4); padding: 13px 17px; border-radius: 0; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; transition: all var(--dt-ease-fast); user-select: none; font-family: var(--font-family); }
+.tab-item:hover { color: var(--dt-g700); }
+.tab-item.active { background: transparent; border-bottom-color: var(--dt-brand); }
 .tab-icon { font-size: 18px; line-height: 1; }
-.tab-label { font-size: var(--font-size-small); font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); }
-.tab-item.active .tab-label { color: var(--color-primary); }
+.tab-label { font-size: var(--dt-f-md); font-weight: var(--dt-w-medium); color: var(--dt-g500); }
+.tab-item.active .tab-label { color: var(--dt-brand); font-weight: var(--dt-w-bold); }
 
-/* ── Badge ── */
-.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-sm); font-size: var(--font-size-small); font-weight: var(--font-weight-medium); line-height: 1.4; }
-.badge-primary { background: var(--color-primary-light); color: var(--color-primary); }
-.badge-success { background: var(--color-success-light); color: #1B873B; }
-.badge-warning { background: var(--color-warning-light); color: #B36B00; }
-.badge-error { background: var(--color-error-light); color: #CC2D22; }
-.badge-neutral { background: var(--color-bg-secondary); color: var(--color-text-secondary); }
+/* ── Badge (DT 스타일) ── */
+.badge { display: inline-flex; align-items: center; gap: 3px; padding: 3px 10px; border-radius: var(--dt-r-full); font-size: 11.5px; font-weight: var(--dt-w-semibold); line-height: 1.3; font-family: var(--font-family); }
+.badge-primary { background: var(--dt-brand-light); color: var(--dt-brand); }
+.badge-success { background: var(--dt-success-light); color: var(--dt-success); }
+.badge-warning { background: var(--dt-warning-light); color: var(--dt-warning); }
+.badge-error { background: var(--dt-danger-light); color: var(--dt-danger); }
+.badge-neutral { background: var(--dt-g100); color: var(--dt-g600); }
 
-/* ── Modal ── */
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(25,31,40,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); animation: fadeIn 0.2s ease; }
-.modal-content { background: var(--color-bg-primary); border-radius: var(--radius-xl); padding: var(--spacing-32); max-width: 420px; width: calc(100% - 40px); box-shadow: var(--shadow-modal); animation: slideUp 0.25s ease; }
-.modal-title { font-size: var(--font-size-headline); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-8); }
-.modal-body { font-size: var(--font-size-body); color: var(--color-text-secondary); line-height: var(--line-height-normal); margin-bottom: var(--spacing-24); }
+/* ── Modal (DT 스타일) ── */
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(25,31,40,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(6px); animation: fadeIn 0.2s ease; }
+.modal-content { background: var(--dt-white); border-radius: var(--dt-r-xl); padding: var(--spacing-32); max-width: 420px; width: calc(100% - 40px); box-shadow: var(--dt-sh-lg); animation: slideUp 0.25s ease; }
+.modal-title { font-size: var(--dt-f-2xl); font-weight: var(--dt-w-bold); color: var(--dt-g900); margin-bottom: var(--spacing-8); }
+.modal-body { font-size: var(--dt-f-lg); color: var(--dt-g500); line-height: var(--line-height-normal); margin-bottom: var(--spacing-24); }
 
-/* ── Progress ── */
+/* ── Progress (DT 스타일) ── */
 .progress-container { margin: var(--spacing-12) 0; }
-.progress-label { display: flex; align-items: center; gap: var(--spacing-8); padding: 10px 14px; background: var(--color-primary-light); border-radius: var(--radius-md); font-size: var(--font-size-caption); font-weight: var(--font-weight-medium); color: var(--color-primary); margin-bottom: var(--spacing-8); }
-.progress-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-primary); animation: pulse 1s infinite; }
-.progress-bar-bg { background: var(--color-bg-secondary); border-radius: var(--radius-full); height: 6px; overflow: hidden; }
-.progress-bar-fill { background: linear-gradient(90deg, var(--color-primary), #64B5F6); height: 100%; border-radius: var(--radius-full); transition: width 0.4s ease; }
-.progress-info { display: flex; justify-content: space-between; margin-top: var(--spacing-6); font-size: var(--font-size-small); color: var(--color-text-tertiary); }
+.progress-label { display: flex; align-items: center; gap: var(--spacing-8); padding: 10px 14px; background: var(--dt-brand-light); border-radius: var(--dt-r-md); font-size: 12.5px; font-weight: var(--dt-w-medium); color: var(--dt-brand); margin-bottom: var(--spacing-8); }
+.progress-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dt-brand); animation: pulse 1s infinite; }
+.progress-bar-bg { background: var(--dt-g100); border-radius: 10px; height: 5px; overflow: hidden; }
+.progress-bar-fill { background: var(--dt-brand); height: 100%; border-radius: 10px; transition: width 0.8s cubic-bezier(.16,1,.3,1); }
+.progress-info { display: flex; justify-content: space-between; margin-top: var(--spacing-6); font-size: 12.5px; color: var(--dt-g400); }
+.progress-info span:last-child { font-weight: var(--dt-w-bold); color: var(--dt-g800); font-family: var(--dt-mono); }
 
-/* ── Toast ── */
-.toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; flex-direction: column; gap: var(--spacing-8); pointer-events: none; }
-.toast { display: flex; align-items: center; gap: var(--spacing-8); padding: 14px 20px; border-radius: var(--radius-md); background: var(--color-text-primary); color: var(--color-text-on-color); font-size: var(--font-size-caption); font-weight: var(--font-weight-medium); box-shadow: var(--shadow-lg); animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards; pointer-events: auto; max-width: 400px; }
+/* ── Toast (DT 스타일) ── */
+.toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toast { display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-radius: var(--dt-r-md); background: var(--dt-g900); color: var(--dt-white); font-size: var(--dt-f-md); font-weight: var(--dt-w-medium); box-shadow: var(--dt-sh-lg); animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards; pointer-events: auto; max-width: 400px; font-family: var(--font-family); }
 
-/* ── Accordion ── */
-.accordion-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: var(--font-size-caption); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); user-select: none; transition: background var(--transition-fast); margin-bottom: var(--spacing-4); margin-top: var(--spacing-8); }
-.accordion-header:hover { background: var(--color-bg-secondary); }
-.accordion-header .arrow { transition: transform var(--transition-normal); color: var(--color-text-tertiary); }
-.accordion-header.open .arrow { transform: rotate(90deg); }
-.accordion-body { padding: 16px; border: 1px solid var(--color-border); border-top: none; border-radius: 0 0 var(--radius-md) var(--radius-md); margin-top: -6px; margin-bottom: var(--spacing-8); display: none; font-size: var(--font-size-caption); line-height: var(--line-height-relaxed); white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow-y: auto; }
-.accordion-body.open { display: block; }
+/* ── Accordion (DT 스타일) ── */
+.accordion-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px 14px; background: var(--dt-g50); border-bottom: 1px solid var(--dt-g150); cursor: pointer; font-size: var(--dt-f-lg); font-weight: var(--dt-w-bold); color: var(--dt-g900); user-select: none; transition: background var(--dt-ease-normal); margin-bottom: 0; margin-top: 0; border-radius: 0; border-left: none; border-right: none; border-top: none; }
+.accordion-header:hover { background: var(--dt-white); }
+.accordion-header .arrow { transition: transform 0.25s cubic-bezier(.4,0,.2,1); color: var(--dt-g400); }
+.accordion-header.open { background: var(--dt-white); }
+.accordion-header.open .arrow { transform: rotate(180deg); }
+.accordion-body { padding: 0; border: none; margin-top: 0; margin-bottom: 0; display: none; font-size: var(--dt-f-md); line-height: var(--line-height-relaxed); white-space: pre-wrap; word-break: break-word; max-height: 2000px; overflow: hidden; border-radius: 0; }
+.accordion-body.open { display: block; padding: 6px 20px 16px; }
 
-/* ── Toggle Switch ── */
+/* ── Toggle Switch (DT 스타일) ── */
 .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
-.toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--color-border); border-radius: var(--radius-full); transition: var(--transition-normal); }
-.toggle-slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: var(--transition-normal); box-shadow: var(--shadow-sm); }
-.toggle-switch input:checked + .toggle-slider { background: var(--color-primary); }
+.toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--dt-g200); border-radius: var(--dt-r-full); transition: var(--dt-ease-normal); }
+.toggle-slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: var(--dt-ease-normal); box-shadow: var(--dt-sh-sm); }
+.toggle-switch input:checked + .toggle-slider { background: var(--dt-brand); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
 
 /* ── Option Row ── */
@@ -222,43 +225,41 @@ a:hover { text-decoration: underline; }
 /* ── Footer ── */
 .app-footer { text-align: center; padding: 24px 0; font-size: var(--font-size-small); color: var(--color-text-tertiary); }
 
-/* ═══ Service Tabs (특허 / 상표) ═══ */
+/* ═══ Service Tabs (DT 스타일) ═══ */
 .service-tab-nav {
   display: flex;
-  gap: 0;
-  background: var(--color-bg-tertiary);
-  border-bottom: 2px solid var(--color-border);
-  padding: 0 16px;
+  gap: 2px;
+  background: var(--dt-white);
+  border-bottom: 1px solid var(--dt-g150);
+  padding: 0 24px;
   margin-bottom: 16px;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 .service-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 14px 24px;
+  padding: 13px 17px;
   border: none;
   background: transparent;
-  font-size: 15px;
-  font-weight: var(--font-weight-medium);
+  font-size: var(--dt-f-md);
+  font-weight: var(--dt-w-medium);
   font-family: var(--font-family);
-  color: var(--color-text-tertiary);
+  color: var(--dt-g500);
   cursor: pointer;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
-  transition: all var(--transition-fast);
+  border-bottom: 2px solid transparent;
+  transition: all var(--dt-ease-fast);
+  white-space: nowrap;
 }
 
 .service-tab:hover {
-  color: var(--color-text-secondary);
-  background: var(--color-bg-secondary);
+  color: var(--dt-g700);
 }
 
 .service-tab.active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-  font-weight: var(--font-weight-semibold);
+  color: var(--dt-brand);
+  border-bottom-color: var(--dt-brand);
+  font-weight: var(--dt-w-bold);
 }
 
 .service-panel {
