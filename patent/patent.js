@@ -43,6 +43,7 @@ let beforeReviewText = '';
 let uploadedFiles = [];
 let diagramData = {};
 let stepUserCommands = {}; // v5.5: 각 스텝별 사용자 명령어
+let outputTimestamps = {};
 
 // ═══ Step 8 정형문 ═══
 const STEP8_PREFIX = `이하, 본 발명의 실시예를 첨부된 도면을 참조하여 상세하게 설명한다.
@@ -157,7 +158,7 @@ function clearAllState(){
 
 // ═══════════ DASHBOARD ═══════════
 async function loadDashboardProjects(){
-  const{data}=await App.sb.from('projects').select('id,title,project_number,invention_content,current_state_json,created_at,updated_at').eq('owner_user_id',currentUser.id).order('updated_at',{ascending:false});
+  const{data}=await App.sb.from('projects').select('id,title,project_number,invention_content,current_state_json,created_at,updated_at').eq('owner_user_id',currentUser.id).order('updated_at',{ascending:false}).limit(100);
   const el=document.getElementById('dashProjectList'),cnt=document.getElementById('dashProjectCount');
   const provEl=document.getElementById('dashProvisionalList');
   if(!data?.length){
@@ -831,15 +832,19 @@ function invalidateDownstream(changedStep){
   showCascadePanel(changedStep,mustDeps,shouldDeps);
 }
 
+// ═══ 산출물 미리보기 디바운스 (cascade 재생성 시 과도 호출 방지) ═══
+let _previewDebounceTimer=null;
+function _debouncedRenderPreview(){if(_previewDebounceTimer)clearTimeout(_previewDebounceTimer);_previewDebounceTimer=setTimeout(()=>{_previewDebounceTimer=null;renderPreview();},500);}
+
 // ═══ v10.1: Step 완료 시 stale 배지 + cascade 패널 갱신 ═══
 function onStepCompleted(sid){
   // 1. 해당 step의 stale-warning 배지 제거
   document.querySelectorAll(`.stale-warning[data-step="${sid}"]`).forEach(w=>w.remove());
   // 2. cascade 패널 업데이트
   _updateCascadePanelItem(sid,'done');
-  // 3. v10.2: 산출물 미리보기 자동 갱신 (현재 산출물 탭이 활성일 때)
+  // 3. v10.2: 산출물 미리보기 자동 갱신 (디바운스 적용)
   const previewTab=document.querySelector('.tab-item:nth-child(5)');
-  if(previewTab&&previewTab.classList.contains('active'))renderPreview();
+  if(previewTab&&previewTab.classList.contains('active'))_debouncedRenderPreview();
 }
 function _updateCascadePanelItem(sid,status){
   const panel=document.getElementById('cascadePanel');
@@ -1235,13 +1240,12 @@ function _trimDesignTextToExpectedFigures(text,expectedNums){
 }
 async function _cascadeRunMath(){
   const r=await App.callClaude(buildPrompt('step_09'));
-  const baseDesc=outputs.step_08||'';
+  const baseDesc=outputs.step_13_applied||outputs.step_08||'';
   outputs.step_09=insertMathBlocks(baseDesc,r.text);
   markOutputTimestamp('step_09');_cascadeRender('step_09',outputs.step_09);
 }
 
 // ═══ A1 fix: getLatestDescription — 타임스탬프 기반 최신본 (v5.5) ═══
-let outputTimestamps={};
 function markOutputTimestamp(sid){outputTimestamps[sid]=Date.now();}
 function getLatestDescription(){
   // v9.1: 장치 상세설명 우선순위: step_13_applied > step_09 > step_08
@@ -1489,39 +1493,44 @@ function extractBriefDescriptions(s07,s11){
 function stripKoreanParticles(w){if(!w||w.length<2)return w;const ps=['에서는','으로써','에서','으로','에게','부터','까지','에는','하는','되는','된','하여','있는','없는','같은','통하여','위한','대한','의한','를','을','이','가','은','는','에','의','와','과','로','도','든','인','적','로서'];for(const p of ps){if(w.endsWith(p)&&w.length>p.length+1)return w.slice(0,-p.length);}return w;}
 
 // ═══════════ FILE UPLOAD ═══════════
-async function handleFileUpload(event) {
-  const files = Array.from(event.target.files);if (!files.length) return;
-  const listEl = document.getElementById('fileList');
-  for (const file of files) {
-    if (uploadedFiles.find(f => f.name === file.name)) {App.showToast(`"${file.name}" 이미 추가됨`, 'info');continue;}
-    const item = document.createElement('div');item.className = 'file-upload-item';item.id = `file_${uploadedFiles.length}`;
-    item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:6px;font-size:13px';
-    item.innerHTML = `<span class="tossface">📄</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">추출 중...</span>`;
-    listEl.appendChild(item);
-    try {
-      const text = await App.extractTextFromFile(file);
-      if (text && text.trim()) {
-        uploadedFiles.push({ name: file.name, text: text.trim(), size: file.size });
-        const ta = document.getElementById('projectInput');const separator = ta.value.trim() ? '\n\n' : '';
-        ta.value += `${separator}[첨부: ${file.name}]\n${text.trim()}`;
-        item.innerHTML = `<span class="tossface">✅</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} · ${text.trim().length.toLocaleString()}자</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length - 1},'${App.escapeHtml(file.name).replace(/'/g, "\\'")}')">✕</button>`;
+// 공유 파일 처리 함수
+async function _processUploadedFiles(files){
+  const listEl=document.getElementById('fileList');
+  for(const file of files){
+    if(uploadedFiles.find(f=>f.name===file.name)){App.showToast(`"${file.name}" 이미 추가됨`,'info');continue;}
+    const item=document.createElement('div');item.className='file-upload-item';item.id=`file_${uploadedFiles.length}`;
+    item.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:6px;font-size:13px';
+    item.innerHTML=`<span class="tossface">📄</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">추출 중...</span>`;
+    if(listEl)listEl.appendChild(item);
+    try{
+      const text=await App.extractTextFromFile(file);
+      if(text&&text.trim()){
+        uploadedFiles.push({name:file.name,text:text.trim(),size:file.size});
+        const ta=document.getElementById('projectInput');const separator=ta.value.trim()?'\n\n':'';
+        ta.value+=`${separator}[첨부: ${file.name}]\n${text.trim()}`;
+        item.innerHTML=`<span class="tossface">✅</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} · ${text.trim().length.toLocaleString()}자</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length-1},'${App.escapeHtml(file.name).replace(/'/g, "\\'")}')">\u2715</button>`;
         App.showToast(`"${file.name}" 추출 완료`);
-      } else {
-        item.innerHTML = `<span class="tossface">⚠️</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">추출 불가</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+      }else{
+        item.innerHTML=`<span class="tossface">⚠️</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">추출 불가</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
       }
-    } catch (e) {
-      item.innerHTML = `<span class="tossface">❌</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+    }catch(e){
+      item.innerHTML=`<span class="tossface">❌</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
     }
   }
-  event.target.value = '';
-  // ═══ C5 fix: 디바운스 적용 (v5.5) — 연속 업로드 시 마지막만 API 호출 ═══
   if(uploadedFiles.length>0)debouncedGenerateInventionSummary();
 }
+async function handleFileUpload(event) {
+  const files = Array.from(event.target.files);if (!files.length) return;
+  await _processUploadedFiles(files);
+  event.target.value = '';
+}
 function removeUploadedFile(idx, name) {
-  const f = uploadedFiles[idx];if (!f) return;
+  const f = uploadedFiles.find(f=>f.name===name) || uploadedFiles[idx];if (!f) return;
   const ta = document.getElementById('projectInput');const marker = `[첨부: ${f.name}]`;const mIdx = ta.value.indexOf(marker);
   if (mIdx >= 0) {const nextMarker = ta.value.indexOf('\n\n[첨부:', mIdx + marker.length);const endIdx = nextMarker >= 0 ? nextMarker : ta.value.length;ta.value = (ta.value.slice(0, mIdx) + ta.value.slice(endIdx)).trim();}
-  uploadedFiles.splice(idx, 1);const el = document.getElementById(`file_${idx}`);if (el) el.remove();App.showToast(`"${name}" 제거됨`);
+  const realIdx = uploadedFiles.indexOf(f);
+  if (realIdx >= 0) uploadedFiles.splice(realIdx, 1);
+  const el = document.getElementById(`file_${idx}`);if (el) el.remove();App.showToast(`"${name}" 제거됨`);
 }
 // (File extraction functions are in common.js — App.extractTextFromFile, App.formatFileSize)
 
@@ -1555,30 +1564,7 @@ function setupDragDrop(){
   }
 }
 async function handleDroppedFiles(files){
-  const listEl=document.getElementById('fileList');
-  for(const file of files){
-    if(uploadedFiles.find(f=>f.name===file.name)){App.showToast(`"${file.name}" 이미 추가됨`,'info');continue;}
-    const item=document.createElement('div');item.className='file-upload-item';item.id=`file_${uploadedFiles.length}`;
-    item.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:6px;font-size:13px';
-    item.innerHTML=`<span class="tossface">📄</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">추출 중...</span>`;
-    if(listEl)listEl.appendChild(item);
-    try{
-      const text=await App.extractTextFromFile(file);
-      if(text&&text.trim()){
-        uploadedFiles.push({name:file.name,text:text.trim(),size:file.size});
-        const ta=document.getElementById('projectInput');const separator=ta.value.trim()?'\n\n':'';
-        ta.value+=`${separator}[첨부: ${file.name}]\n${text.trim()}`;
-        item.innerHTML=`<span class="tossface">✅</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} · ${text.trim().length.toLocaleString()}자</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length-1},'${App.escapeHtml(file.name).replace(/'/g,"\\\\'")}')">\u2715</button>`;
-        App.showToast(`"${file.name}" 추출 완료`);
-      }else{
-        item.innerHTML=`<span class="tossface">⚠️</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">추출 불가</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
-      }
-    }catch(e){
-      item.innerHTML=`<span class="tossface">❌</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
-    }
-  }
-  // ═══ C5 fix: 디바운스 적용 (v5.5) — 연속 업로드 시 마지막만 API 호출 ═══
-  if(uploadedFiles.length>0)debouncedGenerateInventionSummary();
+  await _processUploadedFiles(files);
 }
 
 // ═══ C5: 파일 업로드 자동 요약 디바운스 (v5.5) ═══
@@ -1802,6 +1788,53 @@ function getKiprisKey(){
   return '';// Edge Function이 자체 DEFAULT_API_KEY 사용
 }
 
+// ═══ 공유 도면 유틸리티 함수 (downloadPptx / downloadDiagramImages 공용) ═══
+function _sharedExtractRefNum(label,fallback){
+  const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
+  return match?match[1]:fallback;
+}
+function _sharedIsL1RefNum(ref){
+  if(!ref||String(ref).startsWith('S'))return false;
+  const s=String(ref);
+  if(s.startsWith('D')){const n=parseInt(s.slice(1));return !isNaN(n)&&n<10;}
+  const num=parseInt(s);
+  if(isNaN(num))return false;
+  if(num<10)return true;
+  if(num<100)return false;
+  if(num<1000)return num%100===0;
+  return false;
+}
+function _sharedFindImmediateParent(refNums){
+  const nums=refNums.filter(r=>r&&!String(r).startsWith('S')).map(r=>{const s=String(r);return s.startsWith('D')?parseInt(s.slice(1)):parseInt(s);}).filter(n=>!isNaN(n)&&n>0);
+  if(!nums.length)return null;
+  const l1s=nums.filter(n=>n>=100&&n<1000&&n%100===0);
+  const l2s=nums.filter(n=>n>=100&&n<1000&&n%10===0&&n%100!==0);
+  const l3s=nums.filter(n=>n>=100&&n<1000&&n%10!==0);
+  const l4s=nums.filter(n=>n>=1000&&n<10000);
+  const smalls=nums.filter(n=>n<100);
+  if(l4s.length>0){
+    if(l3s.length===1&&l2s.length===0&&l1s.length===0){if(l4s.every(n=>Math.floor(n/10)===l3s[0]))return l3s[0];}
+    if(l3s.length===0&&l2s.length===0&&l1s.length===0&&smalls.length===0){const p=[...new Set(l4s.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
+    return null;
+  }
+  if(l1s.length>0){
+    if(l1s.length===1&&(l2s.length>0||l3s.length>0)){const t=l1s[0];if(l2s.every(n=>Math.floor(n/100)*100===t)&&l3s.every(n=>Math.floor(n/100)*100===t))return t;}
+    return null;
+  }
+  if(l2s.length>0&&l3s.length===0){const p=[...new Set(l2s.map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;}
+  if(l2s.length>0&&l3s.length>0){
+    if(l2s.length===1&&l3s.every(n=>Math.floor(n/10)*10===l2s[0]))return l2s[0];
+    const p=[...new Set([...l2s,...l3s].map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;
+  }
+  if(l3s.length>0){const l2p=[...new Set(l3s.map(n=>Math.floor(n/10)*10))];if(l2p.length===1)return l2p[0];const l1p=[...new Set(l2p.map(p=>Math.floor(p/100)*100))];return l1p.length===1?l1p[0]:null;}
+  if(smalls.length>0){
+    const singles=smalls.filter(n=>n<10),doubles=smalls.filter(n=>n>=10);
+    if(singles.length===1&&doubles.length>0&&doubles.every(n=>Math.floor(n/10)===singles[0]))return singles[0];
+    if(singles.length===0&&doubles.length>0){const p=[...new Set(doubles.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
+  }
+  return null;
+}
+
 // 등록번호 포맷: 1020XXXXXXX → 10-20XXXXX
 function formatRegNumber(regNum){
   if(!regNum)return '';
@@ -1809,8 +1842,7 @@ function formatRegNumber(regNum){
   if(!cleaned)return regNum;
   if(cleaned.length>=10){
     let core=cleaned;
-    if(core.length===13&&core.endsWith('0000'))core=core.slice(0,-4);
-    else if(core.length===13)core=core.slice(0,-4);
+    if(core.length===13)core=core.slice(0,-4);
     if(core.startsWith('10'))return'10-'+core.substring(2);
     if(core.startsWith('20'))return'20-'+core.substring(2);
   }
@@ -1820,9 +1852,10 @@ function formatRegNumber(regNum){
 // 한국어 조사 제거 → 핵심 키워드 추출
 function extractPatentKeywords(title){
   return title
-    .replace(/[을를이가의에서로부터및과와은는에게으로]/g,' ')
+    .replace(/[및과와]/g,' ')
     .replace(/\s+/g,' ').trim()
     .split(' ')
+    .map(w=>stripKoreanParticles(w))
     .filter(w=>w.length>=2)
     .slice(0,4)
     .join(' ');
@@ -2883,8 +2916,8 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
       const deviceClaimsCtx=outputs.step_06||'';
       for(correctionRound=0;correctionRound<maxRounds;correctionRound++){
         App.showProgress('progressStep10',`기재불비 검증 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+1,maxRounds*2+1);
-        // 방법 청구항만 검증 (독립항 자동 감지)
-        const issues=validateClaims(corrected);
+        // 방법 청구항 검증 시 장치 청구항 컨텍스트도 참조
+        const issues=validateClaims(deviceClaimsCtx+'\n'+corrected);
         if(issues.length===0)break;
         App.showProgress('progressStep10',`기재불비 수정 중... (${correctionRound+1}/${maxRounds})`,correctionRound*2+2,maxRounds*2+1);
         const issueText=issues.map(i=>i.message).join('\n');
@@ -3749,10 +3782,6 @@ ${diagram}`,4096);
           const frameX=PAGE_MARGIN;
           const frameY=PAGE_MARGIN+TITLE_H;
           const frameW=PAGE_W-0.8;
-          const maxFrameH=Math.min(AVAILABLE_H, nodeCount*1.0+0.6);
-          // v8.0: tight-fit frame height
-          const frameH=batchNumRows*boxH+(batchNumRows>1?(batchNumRows-1)*PPTX_BOX_GAP_Y:0)+PPTX_FRAME_PAD_Y*2;
-          
           // 참조번호 추출 함수
           function extractRefNum(label,fallback){
             const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
@@ -3794,6 +3823,8 @@ ${diagram}`,4096);
             (pptxContentW-PPTX_BOX_GAP_X*2)/3;
           const batchNodeAreaW=batchMaxCols*batchBoxW+(batchMaxCols-1)*PPTX_BOX_GAP_X;
           const boxH=Math.min(0.65,(AVAILABLE_H-PPTX_FRAME_PAD_Y*2-PPTX_BOX_GAP_Y*(batchNumRows-1))/batchNumRows);
+          // v8.0: tight-fit frame height (선언 후 계산)
+          const frameH=batchNumRows*boxH+(batchNumRows>1?(batchNumRows-1)*PPTX_BOX_GAP_Y:0)+PPTX_FRAME_PAD_Y*2;
           const boxStartX=frameX+PPTX_FRAME_PAD_X;
           const boxStartY=frameY+PPTX_FRAME_PAD_Y;
           const batchColGap=PPTX_BOX_GAP_X;
@@ -5194,7 +5225,8 @@ function _canvasMultiLineLabel(ctx, cx, cy, label, maxWidth, baseFontSize, optio
     ctx.fillText(lines[0],cx,cy);
   }else{
     const lineH=fontSize+2;
-    const startY=cy-lineH/2;
+    const totalH=lines.length*lineH;
+    const startY=cy-(totalH/2)+lineH/2;
     lines.forEach((line,i)=>{
       ctx.fillText(line,cx,startY+i*lineH);
     });
@@ -5293,7 +5325,7 @@ ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
     saveProject(true);
     
     // Mermaid 변환
-    const mermaidPrompt=buildMermaidPrompt(stepId,r1.text);
+    const mermaidPrompt=buildMermaidPrompt(stepId);
     const r2=await App.callClaude(mermaidPrompt);
     outputs[stepId+'_mermaid']=r2.text;
     renderDiagrams(stepId,r2.text);
@@ -5676,8 +5708,9 @@ function parseMermaidGraph(code){
           if(e.to===id)e.to=origId;
         });
       }
+      const removedLabel=nodes[id]?.label||id;
       delete nodes[id];
-      console.warn(`[v9.0] 중복 참조번호(${ref}) 노드 제거: "${nodes[id]?.label||id}" → 원본 "${nodes[origId]?.label||origId}"로 리다이렉트`);
+      console.warn(`[v9.0] 중복 참조번호(${ref}) 노드 제거: "${removedLabel}" → 원본 "${nodes[origId]?.label||origId}"로 리다이렉트`);
     });
   });
   
@@ -5797,18 +5830,16 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   if(strategy==='TOPOLOGICAL'){
     // ── 위상 정렬: 입력→출력 방향 배치 ──
     // 양방향 edge가 있으면 참조번호 작은 쪽→큰 쪽으로 단방향화
+    const nodeMap=new Map(nodes.map(nd=>[nd.id,nd]));
+    const _refNum=id=>{return parseInt((nodeMap.get(id)?.label.match(/\((\d+)\)/)||[])[1])||9999;};
     const inDeg={};
     allIds.forEach(id=>{inDeg[id]=0;});
     allIds.forEach(id=>{(dirAdj[id]||new Set()).forEach(to=>{inDeg[to]=(inDeg[to]||0)+1;});});
-    
+
     const q=allIds.filter(id=>inDeg[id]===0);
     // 시작 노드가 여러개면 참조번호 오름차순 정렬
-    q.sort((a,b)=>{
-      const ra=parseInt((nodes.find(nd=>nd.id===a)?.label.match(/\((\d+)\)/)||[])[1])||9999;
-      const rb=parseInt((nodes.find(nd=>nd.id===b)?.label.match(/\((\d+)\)/)||[])[1])||9999;
-      return ra-rb;
-    });
-    
+    q.sort((a,b)=>_refNum(a)-_refNum(b));
+
     const topoOrder=[];
     const visited=new Set();
     while(q.length>0){
@@ -5817,11 +5848,7 @@ function computeDeviceLayout2D(nodes,edges,figNum){
       visited.add(cur);
       topoOrder.push(cur);
       // 이웃을 참조번호순으로 정렬하여 추가
-      const nexts=[...(dirAdj[cur]||new Set())].sort((a,b)=>{
-        const ra=parseInt((nodes.find(nd=>nd.id===a)?.label.match(/\((\d+)\)/)||[])[1])||9999;
-        const rb=parseInt((nodes.find(nd=>nd.id===b)?.label.match(/\((\d+)\)/)||[])[1])||9999;
-        return ra-rb;
-      });
+      const nexts=[...(dirAdj[cur]||new Set())].sort((a,b)=>_refNum(a)-_refNum(b));
       nexts.forEach(next=>{
         inDeg[next]--;
         if(inDeg[next]===0)q.push(next);
@@ -5876,14 +5903,28 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     const leaves=allIds.filter(id=>(adj[id]||new Set()).size<=1);
     const startNodes=leaves.length>0?leaves:allIds;
     
+    // BFS 기반 최장경로 (O(V+E) — 지수시간 탐색 방지)
     for(const startId of startNodes){
-      const stack=[[startId,[startId]]];
-      while(stack.length>0){
-        const[cur,path]=stack.pop();
-        if(path.length>longestPath.length)longestPath=[...path];
+      const dist={};const prev={};
+      dist[startId]=0;prev[startId]=null;
+      const bfsQ=[startId];const bfsVisited=new Set([startId]);
+      while(bfsQ.length>0){
+        const cur=bfsQ.shift();
         (adj[cur]||new Set()).forEach(next=>{
-          if(!path.includes(next))stack.push([next,[...path,next]]);
+          if(!bfsVisited.has(next)){
+            bfsVisited.add(next);
+            dist[next]=(dist[cur]||0)+1;
+            prev[next]=cur;
+            bfsQ.push(next);
+          }
         });
+      }
+      // 가장 먼 노드까지 경로 추적
+      let farthest=startId,maxDist=0;
+      for(const[nid,d]of Object.entries(dist)){if(d>maxDist){maxDist=d;farthest=nid;}}
+      if(maxDist+1>longestPath.length){
+        const p=[];let c=farthest;while(c!==null){p.unshift(c);c=prev[c];}
+        longestPath=p;
       }
     }
     
@@ -6087,10 +6128,10 @@ function _buildZRoutes(from,to,obstacles,dx,dy,routePad){
   // Z-route 1: 위쪽 우회 (from 위→수평→to 위)
   const topY=globalMinY-PAD;
   routes.push([
-    {x:from.cx, y:dy>0?from.y:from.y},
+    {x:from.cx, y:from.y},
     {x:from.cx, y:topY},
     {x:to.cx, y:topY},
-    {x:to.cx, y:dy>0?to.y:to.y}
+    {x:to.cx, y:to.y}
   ]);
   
   // Z-route 2: 아래쪽 우회
@@ -6189,12 +6230,13 @@ function staggerLeaderYPositions(leaderEntries,minGap){
   leaderEntries.forEach(le=>{
     const roundedY=Math.round(le.y*10)/10; // 소수점 1자리 반올림
     let matched=false;
-    Object.keys(yGroups).forEach(gy=>{
+    for(const gy of Object.keys(yGroups)){
       if(Math.abs(parseFloat(gy)-roundedY)<minGap*0.8){
         yGroups[gy].push(le);
         matched=true;
+        break; // 첫 매칭 그룹에만 추가
       }
-    });
+    }
     if(!matched)yGroups[roundedY]=[le];
   });
   
@@ -6731,8 +6773,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
         if(drawnEdges.has(key))return;
         drawnEdges.add(key);
         const fromDiamond=nodeMap[e.from]?.shape==='diamond';
-        const isNoLabel=e.label&&/아니오|아니오|No|N|아니요/i.test(e.label);
-        const isYesLabel=e.label&&/예|Yes|Y/i.test(e.label);
+        const isNoLabel=e.label&&/^(아니오|아니요|No|N)$/i.test(e.label.trim());
+        const isYesLabel=e.label&&/^(예|Yes|Y)$/i.test(e.label.trim());
         
         if(fromDiamond&&isNoLabel){
           // "아니오" 분기: 오른쪽으로 꺾어서 연결
@@ -6907,7 +6949,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
             if(push>0){
               b.sy+=push;
               nodeBoxes[b.id].y=b.sy;
-              nodeBoxes[b.id].cy=b.sy+b.sh/2;
+              nodeBoxes[b.id].cy=b.sy+nodeBoxes[b.id].h/2;
               nodeBoxes[b.id]._sy=b.sy;
               correctionApplied=true;
             }
@@ -6930,7 +6972,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     // box shape → 균일 높이 → 같은 행 = 같은 cy → 자연스러운 직선 연결
     const svgEdgesToDraw=uniqueEdges.length>0?uniqueEdges:
       (nodes.length>1?nodes.slice(0,-1).map((nd,i)=>({from:nd.id,to:nodes[i+1].id})):[]);
-    
+
+    // ★ v13.0 FIX: allBoxArr 루프 밖 호이스트 (SVG Fig1) ★
+    const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
     svgEdgesToDraw.forEach(e=>{
       const fb=nodeBoxes[e.from], tb=nodeBoxes[e.to];
       if(!fb||!tb)return;
@@ -6984,7 +7028,6 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       }
       
       // ★ 충돌 검사: route가 다른 shape을 관통하면 우회 ★
-      const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
       const excludeIds=new Set([e.from, e.to]);
       const collisions=_countRouteCollisions(route, allBoxArr, excludeIds);
       
@@ -7452,7 +7495,7 @@ function _postRenderValidateSvg(containerId, figNum){
   
   // 1c. 연결선 요소 (polyline with marker)
   const connectionLines=[];
-  svgEl.querySelectorAll('polyline[marker-end],line[marker-end]').forEach(el=>{
+  svgEl.querySelectorAll('polyline[marker-end],line[marker-end],path[marker-end]').forEach(el=>{
     try{
       const bbox=el.getBBox();
       // 연결선의 시작/끝점 추출
@@ -7463,6 +7506,15 @@ function _postRenderValidateSvg(containerId, figNum){
         }).filter(p=>!isNaN(p.x)&&!isNaN(p.y));
         if(pts.length>=2){
           connectionLines.push({el, start:pts[0], end:pts[pts.length-1], points:pts});
+        }
+      }else if(el.tagName==='path'){
+        // path 요소의 d 속성에서 좌표 추출
+        const d=el.getAttribute('d')||'';
+        const coords=[];
+        const re=/[ML]\s*([\d.e+-]+)[,\s]+([\d.e+-]+)/gi;
+        let m;while((m=re.exec(d))!==null)coords.push({x:parseFloat(m[1]),y:parseFloat(m[2])});
+        if(coords.length>=2){
+          connectionLines.push({el, start:coords[0], end:coords[coords.length-1], points:coords});
         }
       }
     }catch(e){}
@@ -7814,10 +7866,8 @@ function _autoFixRenderedSvg(containerId, issues, attempt){
       }
       
       case 'SHAPE_OVERLAP':{
-        const vbArr=(svgEl.getAttribute('viewBox')||'').split(/\s+/).map(Number);
-        vbArr[3]+=20;
-        svgEl.setAttribute('viewBox',vbArr.join(' '));
-        fixCount++;
+        // SHAPE_OVERLAP은 DOM 수정만으로는 해소 불가 — 재렌더링 단계에서 처리
+        // viewBox 확장은 겹침을 해소하지 않으므로 fixCount를 증가시키지 않음
         break;
       }
       
@@ -8272,16 +8322,8 @@ function validateDiagramRules(nodes,figNum,designText,edges){
     }
     
     // R10. 도면 품질 검증
-    // R10a. 도 2+ 내부 구성요소 수 검증 (최소 3개 권장)
-    if(figNum>1){
-      const allRefs=nodes.map(n=>{const m=n.label.match(/[(\s]?(\d+)[)\s]?$/);return m?parseInt(m[1]):0;}).filter(r=>r>0);
-      const l1Refs=allRefs.filter(r=>r%100===0);
-      const innerCount=allRefs.length-l1Refs.length;
-      if(innerCount>0&&innerCount<3){
-        issues.push({severity:'WARNING',rule:'R10a',message:`도 ${figNum}: 내부 구성요소 ${innerCount}개 — 최소 3개 이상 권장 (도면이 빈약함)`});
-      }
-    }
-    
+    // R10a는 R12와 중복되어 제거 (R12가 더 정확한 extractRef/isL1 사용)
+
     // R10b. 같은 행에 4개 이상 노드 검증
     if(edgeList.length>0){
       const layout=computeDeviceLayout2D(nodes,edgeList,figNum);
@@ -8350,7 +8392,10 @@ function postRenderValidation(sid){
     const figNum=autoFigNums[idx]||(idx+1);
     const numRefs=nodes.map(n=>{
       const m=(n.label||'').match(/[(\s]?(S?\d+)[)\s]?$/i);
-      return m?parseInt(m[1]):null;
+      if(!m)return null;
+      const val=m[1];
+      if(val.startsWith('S')||val.startsWith('s'))return null; // S-접두사 방법 참조는 별도 처리
+      return parseInt(val);
     }).filter(n=>n!==null&&!isNaN(n));
     
     const l1s=numRefs.filter(n=>n%100===0);
@@ -8705,54 +8750,10 @@ function downloadPptx(sid){
     const PAGE_MARGIN=0.6,PAGE_W=8.27-PAGE_MARGIN*2,PAGE_H=11.69-PAGE_MARGIN*2;
     const TITLE_H=0.5,AVAILABLE_H=PAGE_H-TITLE_H-0.3;
     
-    function extractRefNum(label,fallback){
-      const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
-      return match?match[1]:fallback;
-    }
-    
-    function isL1RefNum(ref){
-      if(!ref||String(ref).startsWith('S'))return false;
-      const s=String(ref);
-      if(s.startsWith('D')){const n=parseInt(s.slice(1));return !isNaN(n)&&n<10;}
-      const num=parseInt(s);
-      if(isNaN(num))return false;
-      if(num<10)return true;
-      if(num<100)return false;
-      if(num<1000)return num%100===0;
-      return false;
-    }
-    
-    function findImmediateParent(refNums){
-      const nums=refNums.filter(r=>r&&!String(r).startsWith('S')).map(r=>{const s=String(r);return s.startsWith('D')?parseInt(s.slice(1)):parseInt(s);}).filter(n=>!isNaN(n)&&n>0);
-      if(!nums.length)return null;
-      const l1s=nums.filter(n=>n>=100&&n<1000&&n%100===0);
-      const l2s=nums.filter(n=>n>=100&&n<1000&&n%10===0&&n%100!==0);
-      const l3s=nums.filter(n=>n>=100&&n<1000&&n%10!==0);
-      const l4s=nums.filter(n=>n>=1000&&n<10000);
-      const smalls=nums.filter(n=>n<100);
-      if(l4s.length>0){
-        if(l3s.length===1&&l2s.length===0&&l1s.length===0){if(l4s.every(n=>Math.floor(n/10)===l3s[0]))return l3s[0];}
-        if(l3s.length===0&&l2s.length===0&&l1s.length===0&&smalls.length===0){const p=[...new Set(l4s.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
-        return null;
-      }
-      if(l1s.length>0){
-        if(l1s.length===1&&(l2s.length>0||l3s.length>0)){const t=l1s[0];if(l2s.every(n=>Math.floor(n/100)*100===t)&&l3s.every(n=>Math.floor(n/100)*100===t))return t;}
-        return null;
-      }
-      if(l2s.length>0&&l3s.length===0){const p=[...new Set(l2s.map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;}
-      if(l2s.length>0&&l3s.length>0){
-        if(l2s.length===1&&l3s.every(n=>Math.floor(n/10)*10===l2s[0]))return l2s[0];
-        const p=[...new Set([...l2s,...l3s].map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;
-      }
-      if(l3s.length>0){const l2p=[...new Set(l3s.map(n=>Math.floor(n/10)*10))];if(l2p.length===1)return l2p[0];const l1p=[...new Set(l2p.map(p=>Math.floor(p/100)*100))];return l1p.length===1?l1p[0]:null;}
-      if(smalls.length>0){
-        const singles=smalls.filter(n=>n<10),doubles=smalls.filter(n=>n>=10);
-        if(singles.length===1&&doubles.length>0&&doubles.every(n=>Math.floor(n/10)===singles[0]))return singles[0];
-        if(singles.length===0&&doubles.length>0){const p=[...new Set(doubles.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
-      }
-      return null;
-    }
-    
+    const extractRefNum=_sharedExtractRefNum;
+    const isL1RefNum=_sharedIsL1RefNum;
+    const findImmediateParent=_sharedFindImmediateParent;
+
     // ═══ PPTX Icon Shape Helper ═══
     function addPptxIconShape(slide,type,x,y,w,h,lineW){
       const SO=SHADOW_OFFSET;
@@ -9091,6 +9092,7 @@ function downloadPptx(sid){
         (pptxRefData||[]).forEach(r=>{pNodeConnDir[r.id]={top:false,bottom:false,left:false,right:false};});
         edgesToDraw.forEach(e=>{
           const fb=nodeBoxes[e.from],tb=nodeBoxes[e.to];if(!fb||!tb)return;
+          if(!pNodeConnDir[e.from]||!pNodeConnDir[e.to])return;
           const dx=tb.cx-fb.cx,dy=tb.cy-fb.cy;
           if(Math.abs(dy)>=Math.abs(dx)){
             if(dy>0){pNodeConnDir[e.from].bottom=true;pNodeConnDir[e.to].top=true;}
@@ -9270,7 +9272,7 @@ function downloadPptx(sid){
       }
     });
     
-    const fileName=selectedTitle||selectedTitle||'도면';
+    const fileName=selectedTitle||selectedTitleEn||'도면';
     pptx.writeFile({fileName:`${fileName}_도면_${new Date().toISOString().slice(0,10)}.pptx`})
       .then(()=>App.showToast('PPTX 다운로드 완료'))
       .catch(err=>{
@@ -9304,59 +9306,10 @@ function downloadDiagramImages(sid, format='jpeg'){
   const figOffset=sid==='step_11'?getLastFigureNumber(outputs.step_07||''):0;
   const caseNum=selectedTitle||'도면';
   
-  function extractRefNum(label,fallback){
-    const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
-    return match?match[1]:fallback;
-  }
-  
-  function isL1RefNum(ref){
-    if(!ref||String(ref).startsWith('S'))return false;
-    const s=String(ref);
-    // D접두사: D2→최상위, D21→하위
-    if(s.startsWith('D')){const n=parseInt(s.slice(1));return !isNaN(n)&&n<10;}
-    const num=parseInt(s);
-    if(isNaN(num))return false;
-    // 소수(1~9): 최상위
-    if(num<10)return true;
-    // 2자리(10~99): 하위
-    if(num<100)return false;
-    // 3자리: L1=X00
-    if(num<1000)return num%100===0;
-    // 4자리: L4이므로 아님
-    return false;
-  }
-  
-  function findImmediateParent(refNums){
-    const nums=refNums.filter(r=>r&&!String(r).startsWith('S')).map(r=>{const s=String(r);return s.startsWith('D')?parseInt(s.slice(1)):parseInt(s);}).filter(n=>!isNaN(n)&&n>0);
-    if(!nums.length)return null;
-    const l1s=nums.filter(n=>n>=100&&n<1000&&n%100===0);
-    const l2s=nums.filter(n=>n>=100&&n<1000&&n%10===0&&n%100!==0);
-    const l3s=nums.filter(n=>n>=100&&n<1000&&n%10!==0);
-    const l4s=nums.filter(n=>n>=1000&&n<10000);
-    const smalls=nums.filter(n=>n<100);
-    if(l4s.length>0){
-      if(l3s.length===1&&l2s.length===0&&l1s.length===0){if(l4s.every(n=>Math.floor(n/10)===l3s[0]))return l3s[0];}
-      if(l3s.length===0&&l2s.length===0&&l1s.length===0&&smalls.length===0){const p=[...new Set(l4s.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
-      return null;
-    }
-    if(l1s.length>0){
-      if(l1s.length===1&&(l2s.length>0||l3s.length>0)){const t=l1s[0];if(l2s.every(n=>Math.floor(n/100)*100===t)&&l3s.every(n=>Math.floor(n/100)*100===t))return t;}
-      return null;
-    }
-    if(l2s.length>0&&l3s.length===0){const p=[...new Set(l2s.map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;}
-    if(l2s.length>0&&l3s.length>0){
-      if(l2s.length===1&&l3s.every(n=>Math.floor(n/10)*10===l2s[0]))return l2s[0];
-      const p=[...new Set([...l2s,...l3s].map(n=>Math.floor(n/100)*100))];return p.length===1?p[0]:null;
-    }
-    if(l3s.length>0){const l2p=[...new Set(l3s.map(n=>Math.floor(n/10)*10))];if(l2p.length===1)return l2p[0];const l1p=[...new Set(l2p.map(p=>Math.floor(p/100)*100))];return l1p.length===1?l1p[0]:null;}
-    if(smalls.length>0){
-      const singles=smalls.filter(n=>n<10),doubles=smalls.filter(n=>n>=10);
-      if(singles.length===1&&doubles.length>0&&doubles.every(n=>Math.floor(n/10)===singles[0]))return singles[0];
-      if(singles.length===0&&doubles.length>0){const p=[...new Set(doubles.map(n=>Math.floor(n/10)))];if(p.length===1)return p[0];}
-    }
-    return null;
-  }
-  
+  const extractRefNum=_sharedExtractRefNum;
+  const isL1RefNum=_sharedIsL1RefNum;
+  const findImmediateParent=_sharedFindImmediateParent;
+
   App.showToast(`도면 이미지 생성 중... (${data.length}개)`);
   
   // ★ ZIP 일괄 다운로드 ★
@@ -9524,7 +9477,7 @@ function downloadDiagramImages(sid, format='jpeg'){
             break;
           }
           case 'cloud':{
-            function cloudPath(cx,cy,ox,oy){
+            function cloudPath(ox,oy){
               ctx.beginPath();
               ctx.moveTo(ox+w*0.2,oy+h*0.82);
               ctx.bezierCurveTo(ox+w*0.02,oy+h*0.84,ox,oy+h*0.44,ox+w*0.18,oy+h*0.36);
@@ -9534,10 +9487,10 @@ function downloadDiagramImages(sid, format='jpeg'){
               ctx.closePath();
             }
             // Shadow
-            cloudPath(ctx,null,x+shadowOff,y+shadowOff);
+            cloudPath(x+shadowOff,y+shadowOff);
             ctx.fillStyle='#000000';ctx.fill();
             // Body
-            cloudPath(ctx,null,x,y);
+            cloudPath(x,y);
             ctx.fillStyle='#FFFFFF';ctx.fill();ctx.lineWidth=strokeW;ctx.stroke();
             break;
           }
@@ -9733,6 +9686,8 @@ function downloadDiagramImages(sid, format='jpeg'){
         }
         
         const edgesToDraw=uniqueEdges.length>0?uniqueEdges:nodes.slice(0,-1).map((n,i)=>({from:n.id,to:nodes[i+1].id}));
+        // ★ v13.0 FIX: allBoxArr 루프 밖 호이스트 (Canvas Fig1) ★
+        const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
         edgesToDraw.forEach(e=>{
           const fb=nodeBoxes[e.from],tb=nodeBoxes[e.to];if(!fb||!tb)return;
           const dx=tb.cx-fb.cx, dy=tb.cy-fb.cy;
@@ -9752,7 +9707,6 @@ function downloadDiagramImages(sid, format='jpeg'){
             else{const midY=(fromAnc.y+toAnc.y)/2;route=[fromAnc,{x:fromAnc.x,y:midY},{x:toAnc.x,y:midY},toAnc];}
           }
           // 충돌 검사
-          const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
           const excludeIds=new Set([e.from,e.to]);
           if(_countRouteCollisions(route,allBoxArr,excludeIds)>0){
             const fbA={...fb,id:e.from};const tbA={...tb,id:e.to};
@@ -9922,7 +9876,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           const textCy=_shapeTextCy(shapeType,by,sm.sh);
           const cLabelMaxW2=sm.sw*0.90;
           const cFit2=_fitLabelLines(displayLabel,cLabelMaxW2,fontSize,7);
-          const cLabelYOff2=cFit2.lines.length>1?-6:-6;
+          const cLabelYOff2=cFit2.lines.length>1?-6:0;
           _canvasMultiLineLabel(ctx,sx+sm.sw/2,textCy+cLabelYOff2,displayLabel,cLabelMaxW2,fontSize,{minFontSize:7});
           ctx.fillStyle='#444444';ctx.font=`${Math.max(fontSize-1,8)}px "맑은 고딕", sans-serif`;
           ctx.textAlign='center';ctx.textBaseline='middle';
@@ -10144,7 +10098,7 @@ function buildSpecification(){
   return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${getLatestMethodDescription()?'\n\n'+getLatestMethodDescription():''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${allClaims}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n')+extras;
 }
 function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
-function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();}
+function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 
 function downloadAsWord(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
@@ -10154,7 +10108,7 @@ function downloadAsWord(){
   const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,getLatestMethodDescription()].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:normal;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();App.showToast('Word 다운로드 완료');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);App.showToast('Word 다운로드 완료');
 }
 
 
