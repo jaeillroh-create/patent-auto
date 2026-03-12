@@ -64,7 +64,8 @@ Division.state = {
   unusedComponents: [],
   divisionClaims: [],
   validationResults: [],
-  specParagraphs: []
+  specParagraphs: [],
+  _runningProjectId: null  // AI 호출 중인 프로젝트 ID (레이스 컨디션 방지)
 };
 
 // ═══ Init ═══
@@ -87,9 +88,9 @@ Division.callAI = async function(prompt, maxTokens){
     if(res.status === 429) throw new Error('요청 과다. 30초 후 재시도');
     if(res.status >= 500) throw new Error('서버 오류 (' + res.status + ')');
     var d = await res.json(), parsed = App.parseAPIResponse(prov, d);
-    if(typeof usage !== 'undefined'){ usage.calls++; usage.inputTokens += parsed.it; usage.outputTokens += parsed.ot;
-      usage.cost += (parsed.it * mc.inputCost / 1e6) + (parsed.ot * mc.outputCost / 1e6); }
-    if(typeof updateStats === 'function') updateStats();
+    if(window.usage){ window.usage.calls++; window.usage.inputTokens += parsed.it; window.usage.outputTokens += parsed.ot;
+      window.usage.cost += (parsed.it * mc.inputCost / 1e6) + (parsed.ot * mc.outputCost / 1e6); }
+    if(typeof window.updateStats === 'function') window.updateStats();
     return { text: parsed.text, stopReason: parsed.stopReason };
   } catch(e) { clearTimeout(tout); if(e.name === 'AbortError') throw new Error('타임아웃(5분)'); throw e; }
 };
@@ -103,6 +104,19 @@ Division._toArray = function(val){
     catch(e){ return val.trim() ? [val] : []; }
   }
   return [String(val)];
+};
+
+// ═══ AI 호출 중 프로젝트 전환 감지 (레이스 컨디션 방지) ═══
+Division._checkProjectStale = function(capturedId){
+  var current = Division.state.current;
+  return !current || current.id !== capturedId;
+};
+
+// ═══ enum 값 정제 (DB 저장 전 유효한 값으로 변환) ═══
+Division._sanitizeEnum = function(val, validList, fallback){
+  if(!val) return fallback;
+  val = String(val).trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return validList.indexOf(val) >= 0 ? val : fallback;
 };
 
 // ═══ 청구항 텍스트를 구성요소별 줄바꿈 처리 ═══
@@ -126,30 +140,41 @@ Division._wordDiff = function(oldText, newText){
   var oldParts = oldText.split(/([;,.]|\s+)/).filter(function(s){return s.trim();});
   var newParts = newText.split(/([;,.]|\s+)/).filter(function(s){return s.trim();});
 
-  // LCS (Longest Common Subsequence) 기반 diff
+  // LCS (Longest Common Subsequence) 기반 diff — O(n) 메모리 최적화
   var m = oldParts.length, n = newParts.length;
+  // dp 테이블: 2행만 유지 (이전 행 + 현재 행)
+  var prev = new Array(n + 1).fill(0);
+  var curr = new Array(n + 1).fill(0);
+  for(var di = 1; di <= m; di++){
+    for(var dj = 1; dj <= n; dj++){
+      if(oldParts[di-1] === newParts[dj-1]) curr[dj] = prev[dj-1] + 1;
+      else curr[dj] = Math.max(prev[dj], curr[dj-1]);
+    }
+    var tmp = prev; prev = curr; curr = tmp;
+    curr.fill(0);
+  }
+  // Hirschberg 역추적을 위해 전체 dp 재구성 (backtrack 필요)
   var dp = [];
-  for(var i = 0; i <= m; i++){ dp[i] = []; for(var j = 0; j <= n; j++) dp[i][j] = 0; }
-  for(var i = 1; i <= m; i++){
-    for(var j = 1; j <= n; j++){
-      if(oldParts[i-1] === newParts[j-1]) dp[i][j] = dp[i-1][j-1] + 1;
-      else dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+  for(var di2 = 0; di2 <= m; di2++){ dp[di2] = new Array(n + 1).fill(0); }
+  for(var di3 = 1; di3 <= m; di3++){
+    for(var dj2 = 1; dj2 <= n; dj2++){
+      if(oldParts[di3-1] === newParts[dj2-1]) dp[di3][dj2] = dp[di3-1][dj2-1] + 1;
+      else dp[di3][dj2] = Math.max(dp[di3-1][dj2], dp[di3][dj2-1]);
     }
   }
 
   // Backtrack으로 diff 결과 생성
   var result = [];
-  var i = m, j = n;
-  while(i > 0 || j > 0){
-    if(i > 0 && j > 0 && oldParts[i-1] === newParts[j-1]){
-      result.unshift({ type:'same', text:oldParts[i-1] });
-      i--; j--;
-    } else if(j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])){
-      result.unshift({ type:'added', text:newParts[j-1] });
-      j--;
+  while(bi > 0 || bj > 0){
+    if(bi > 0 && bj > 0 && oldParts[bi-1] === newParts[bj-1]){
+      result.unshift({ type:'same', text:oldParts[bi-1] });
+      bi--; bj--;
+    } else if(bj > 0 && (bi === 0 || dp[bi][bj-1] >= dp[bi-1][bj])){
+      result.unshift({ type:'added', text:newParts[bj-1] });
+      bj--;
     } else {
-      result.unshift({ type:'removed', text:oldParts[i-1] });
-      i--;
+      result.unshift({ type:'removed', text:oldParts[bi-1] });
+      bi--;
     }
   }
 
@@ -209,18 +234,16 @@ Division._extractJSON = function(text){
       if(lastComplete === -1) lastComplete = repaired.lastIndexOf('}');
       if(lastComplete > 0){
         repaired = repaired.substring(0, lastComplete + 1);
-        // 남은 열린 괄호만큼 닫기
+        // 열린 배열([) 먼저 닫기
+        var openBrackets = (repaired.match(/\[/g)||[]).length - (repaired.match(/\]/g)||[]).length;
+        for(var bl = 0; bl < openBrackets; bl++) repaired += ']';
+        // 남은 열린 중괄호({) 닫기
         var remaining = 0;
         for(var j = 0; j < repaired.length; j++){
           if(repaired[j] === '{') remaining++;
           if(repaired[j] === '}') remaining--;
         }
-        for(var k = 0; k < remaining; k++){
-          // 열린 배열도 닫기
-          var openBrackets = (repaired.match(/\[/g)||[]).length - (repaired.match(/\]/g)||[]).length;
-          for(var l = 0; l < openBrackets; l++) repaired += ']';
-          repaired += '}';
-        }
+        for(var k = 0; k < remaining; k++) repaired += '}';
         repaired = repaired.replace(/,\s*([}\]])/g, '$1');
         try {
           console.log('[Division] 잘린 JSON 복구 시도...');
@@ -376,6 +399,12 @@ Division.loadData = async function(id){
     var {data:valResults} = await sb.from('division_validation_results').select('*').eq('project_id', id);
     Division.state.validationResults = valResults || [];
   } catch(e) { console.error('[Division] loadData:', e); }
+  // 저장된 청구항 개수 설정 복원
+  var p = Division.state.current;
+  if(p && p.analysis_meta){
+    if(p.analysis_meta.indep_count) Division.state.indepCount = p.analysis_meta.indep_count;
+    if(p.analysis_meta.dep_count) Division.state.depCount = p.analysis_meta.dep_count;
+  }
   Division.renderDetail();
 };
 
@@ -833,6 +862,17 @@ Division.removeFile = async function(fileId){
     if(file) await sb.storage.from('division-files').remove([file.storage_path]);
     await sb.from('division_files').delete().eq('id', fileId);
     Division.state.files = Division.state.files.filter(function(f){ return f.id !== fileId; });
+    // 파싱 이후 상태에서 파일 삭제 시 상태 역전이 — uploaded로 리셋
+    var p = Division.state.current;
+    if(p && p.status !== 'created' && p.status !== 'uploaded'){
+      await sb.from('division_projects').update({ status:'uploaded' }).eq('id', p.id);
+      p.status = 'uploaded';
+      // 파싱 결과도 초기화
+      await sb.from('division_claims_parsed').delete().eq('project_id', p.id);
+      await sb.from('division_spec_paragraphs').delete().eq('project_id', p.id);
+      Division.state.claims = [];
+      Division.state.specParagraphs = [];
+    }
     showToast('파일 삭제됨'); Division.renderStay();
   } catch(e) { showToast('삭제 실패', 'error'); }
 };
@@ -849,6 +889,8 @@ Division.togglePriorArt = async function(checked){
 Division.runParse = async function(){
   var p = Division.state.current; if(!p) return;
   if(!App.ensureApiKey()){ App.openProfileSettings(); return; }
+  var capturedId = p.id;
+  Division.state._runningProjectId = capturedId;
   try {
     App.setButtonLoading('btnDivisionParse', true);
     App.showProgress('divisionProgress', '파일 텍스트 추출 중...', 1, 5);
@@ -873,6 +915,9 @@ Division.runParse = async function(){
     var parsePrompt = Division._buildParsePrompt(fileTexts, p);
     var result = await Division.callAI(parsePrompt);
 
+    // 프로젝트 전환 감지
+    if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 파싱 중 프로젝트 전환됨 — 결과 폐기'); App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); return; }
+
     // 응답 잘림 감지
     if(result.stopReason === 'max_tokens'){
       console.warn('[Division] 파싱 응답이 max_tokens로 잘림. 응답 길이:', result.text.length);
@@ -895,7 +940,7 @@ Division.runParse = async function(){
     var VALID_REJ = ['rejected','not_rejected'];
     var VALID_AMD = ['amended','deleted','maintained'];
     var VALID_ROLE = ['basis','merge_candidate','dep_candidate','excluded','included_in_basis','product_claim'];
-    function sanitize(val, validList, fb){ if(!val) return fb; val=String(val).trim().toLowerCase().replace(/[\s-]+/g,'_'); return validList.indexOf(val)>=0?val:fb; }
+    var sanitize = Division._sanitizeEnum;
 
     var claimsSaved = false;
     if(parsed.claims && parsed.claims.length > 0){
@@ -1135,6 +1180,8 @@ Division.rerunParse = function(){
 Division.runAnalyze = async function(){
   var p = Division.state.current; if(!p) return;
   if(!App.ensureApiKey()){ App.openProfileSettings(); return; }
+  var capturedId = p.id;
+  Division.state._runningProjectId = capturedId;
   var right = document.getElementById('divisionDetailRight');
   right.innerHTML = '<div class="card" style="padding:20px;text-align:center"><div style="font-size:32px;margin-bottom:12px"><span class="tossface">🔍</span></div><div style="font-size:14px;font-weight:600;margin-bottom:8px">분석 진행 중...</div><div id="divisionAnalyzeProgress"></div></div>';
   try {
@@ -1156,6 +1203,7 @@ Division.runAnalyze = async function(){
     var excludedText = excludedClaims.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text); }).join('\n');
     var analyzePrompt = Division._buildAnalyzePrompt(basisClaim, specText, excludedText, claims);
     var result = await Division.callAI(analyzePrompt);
+    if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 분석 중 프로젝트 전환됨 — 결과 폐기'); App.clearProgress('divisionAnalyzeProgress'); return; }
     App.showProgress('divisionAnalyzeProgress','결과 저장 중...',3,4);
     var analyzed;
     try { analyzed = Division._extractJSON(result.text); }
@@ -1164,7 +1212,7 @@ Division.runAnalyze = async function(){
     // unused_components 저장 (enum 정제)
     var VALID_LIM = ['structural','material','shape','arrangement','functional'];
     var VALID_RISK = ['safe','caution','danger'];
-    function sEnum(v,list,fb){ if(!v) return fb; v=String(v).trim().toLowerCase().replace(/[\s-]+/g,'_'); return list.indexOf(v)>=0?v:fb; }
+    var sEnum = Division._sanitizeEnum;
 
     await sb.from('division_unused_components').delete().eq('project_id',p.id);
     if(analyzed.unused_components && analyzed.unused_components.length > 0){
@@ -1271,14 +1319,22 @@ Division.renderAnalyze = function(left, right, p){
       insertionMap.push({ target:uc.related_element, content:uc.content, paragraph:'【'+uc.paragraph_number+'】', type:uc.limitation_type, selected:isSelected, riskLevel:uc.risk_level });
     });
 
-    // 청구항 텍스트에서 구성요소명을 하이라이트
+    // 청구항 텍스트에서 구성요소명을 하이라이트 (플레이스홀더 치환으로 이중 치환 방지)
     var annotatedHtml = escapeHtml(Division._formatClaimText(basisText));
-    insertionMap.forEach(function(im){
+    var placeholders = [];
+    insertionMap.forEach(function(im, imIdx){
       if(!im.target) return;
       var escaped = escapeHtml(im.target);
       var color = im.selected ? (im.riskLevel==='safe'?'#059669':'#d97706') : '#9ca3af';
       var marker = '<span style="background:' + (im.selected?'#ecfdf5':'#f9fafb') + ';border-bottom:2px solid ' + color + ';padding:0 2px" title="' + escapeHtml(im.content) + '">' + escaped + ' <sup style="font-size:9px;color:' + color + '">+</sup></span>';
-      annotatedHtml = annotatedHtml.replace(new RegExp(escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), marker);
+      var placeholder = '\x00PH' + imIdx + '\x00';
+      placeholders.push({ placeholder:placeholder, marker:marker });
+      // 첫 번째 매치만 치환하여 중복 방지
+      annotatedHtml = annotatedHtml.replace(new RegExp(escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), placeholder);
+    });
+    // 플레이스홀더를 실제 마커로 복원
+    placeholders.forEach(function(ph){
+      annotatedHtml = annotatedHtml.replace(ph.placeholder, ph.marker);
     });
 
     h += '<div style="font-size:13px;line-height:2;white-space:pre-wrap;max-height:200px;overflow-y:auto;padding:10px;background:#fafbfc;border:1px solid var(--color-border);border-radius:var(--radius-sm)">' + annotatedHtml + '</div>';
@@ -1315,8 +1371,8 @@ Division.renderAnalyze = function(left, right, p){
   // === 전략적 분할: 테마 목록 + 등록 청구항 대비 diff ===
   if(divType === 'strategic'){
     var themes = (p.analysis_meta && p.analysis_meta.themes) || [];
-    var basisClaim = claims.find(function(c){ return c.division_role==='basis'; }) || claims.find(function(c){ return c.claim_type==='independent'; });
-    var basisText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
+    // basisClaim, basisText는 상위 스코프에서 이미 선언됨 — 재사용
+    var strategicBasisText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
 
     h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🎯</span> 독립항 테마 후보</div>';
     if(!themes.length){ h += '<div style="font-size:13px;color:var(--color-text-tertiary);padding:8px">테마 후보가 없습니다.</div>'; }
@@ -1353,9 +1409,9 @@ Division.renderAnalyze = function(left, right, p){
       h += '</div>';
 
       // 등록 청구항과 비교 diff (토글)
-      if(basisText && t.key_elements && t.key_elements.length){
-        var proposedText = t.key_elements.map(function(el,i){ return (i===0?'':'상기 ') + el + ';'; }).join(' ') + ' 을 포함하는 ' + t.theme_name + '.';
-        var diffResult = Division._wordDiff(basisText, proposedText);
+      if(strategicBasisText && t.key_elements && t.key_elements.length){
+        var proposedText = t.key_elements.map(function(el,elIdx){ return (elIdx===0?'':'상기 ') + el + ';'; }).join(' ') + ' 을 포함하는 ' + t.theme_name + '.';
+        var diffResult = Division._wordDiff(strategicBasisText, proposedText);
 
         h += '<details class="division-diff-details">';
         h += '<summary style="font-size:11px;color:var(--color-primary);cursor:pointer;margin-top:6px;font-weight:600">';
@@ -1435,15 +1491,15 @@ Division.renderAnalyze = function(left, right, p){
 
   // 오른쪽: 유형 전환 + 요약
   var selectedCount = unused.filter(function(uc){ return uc.user_selection==='selected'||(uc.user_selection==='pending'&&uc.risk_level==='safe'); }).length;
-  var mergeCandidates = claims.filter(function(c){ return c.division_role==='merge_candidate'; });
+  var mergeCountForSummary = claims.filter(function(c){ return c.division_role==='merge_candidate'; }).length;
   var rh = Division._renderTypeSwitch(p.division_type);
   rh += '<div class="card" style="padding:20px"><div style="font-size:16px;font-weight:700;margin-bottom:16px"><span class="tossface">📋</span> 구성 요약</div>';
   rh += '<div class="division-summary-grid">';
   if(divType === 'strategic'){
-    var themes = (p.analysis_meta && p.analysis_meta.themes) || [];
-    rh += '<div class="division-summary-item"><div class="division-summary-num">'+themes.length+'</div><div class="division-summary-label">테마 후보</div></div>';
+    var summaryThemes = (p.analysis_meta && p.analysis_meta.themes) || [];
+    rh += '<div class="division-summary-item"><div class="division-summary-num">'+summaryThemes.length+'</div><div class="division-summary-label">테마 후보</div></div>';
   } else if(divType === 'merge'){
-    rh += '<div class="division-summary-item"><div class="division-summary-num">'+mergeCandidates.length+'</div><div class="division-summary-label">병합 청구항</div></div>';
+    rh += '<div class="division-summary-item"><div class="division-summary-num">'+mergeCountForSummary+'</div><div class="division-summary-label">병합 청구항</div></div>';
   }
   rh += '<div class="division-summary-item"><div class="division-summary-num">'+selectedCount+'</div><div class="division-summary-label">선택된 구성</div></div>';
   rh += '</div></div>';
@@ -1502,14 +1558,28 @@ Division.toggleComponent = async function(cb){
 };
 Division.rerunAnalyze = function(){ Division.runAnalyze(); };
 
-// 청구항 개수 설정
-Division.setIndepCount = function(n){
+// 청구항 개수 설정 + DB 영속화
+Division.setIndepCount = async function(n){
   Division.state.indepCount = n;
-  Division.renderStay(); // 분석 화면 유지
+  var p = Division.state.current;
+  if(p){
+    var meta = p.analysis_meta || {};
+    meta.indep_count = n;
+    await sb.from('division_projects').update({ analysis_meta: meta }).eq('id', p.id);
+    p.analysis_meta = meta;
+  }
+  Division.renderStay();
 };
-Division.setDepCount = function(n){
+Division.setDepCount = async function(n){
   Division.state.depCount = n;
-  Division.renderStay(); // 분석 화면 유지
+  var p = Division.state.current;
+  if(p){
+    var meta = p.analysis_meta || {};
+    meta.dep_count = n;
+    await sb.from('division_projects').update({ analysis_meta: meta }).eq('id', p.id);
+    p.analysis_meta = meta;
+  }
+  Division.renderStay();
 };
 
 // ═══════════════════════════════════════════
@@ -1518,6 +1588,8 @@ Division.setDepCount = function(n){
 Division.runAssemble = async function(){
   var p = Division.state.current; if(!p) return;
   if(!App.ensureApiKey()){ App.openProfileSettings(); return; }
+  var capturedId = p.id;
+  Division.state._runningProjectId = capturedId;
   try {
     App.setButtonLoading('btnDivisionAssemble',true);
     App.showProgress('divisionAssembleProgress','청구항 조립 중...',1,3);
@@ -1542,6 +1614,7 @@ Division.runAssemble = async function(){
     var depCandidates = claims.filter(function(c){ return c.division_role==='dep_candidate'; });
     var assemblePrompt = Division._buildAssemblePrompt(basisClaim, selected, mergeClaims, depCandidates, Division.state.indepCount||1, Division.state.depCount);
     var result = await Division.callAI(assemblePrompt);
+    if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 조립 중 프로젝트 전환됨'); App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false); return; }
     App.showProgress('divisionAssembleProgress','결과 저장 중...',2,3);
     var assembled;
     try { assembled = Division._extractJSON(result.text); }
@@ -1645,8 +1718,8 @@ Division.renderAssemble = function(left, right, p){
       divDeps.forEach(function(dc){
         var divCleanText = (dc.claim_text || '').replace(/\*{2,3}/g, '');
 
-        // 원본 종속항 찾기 (같은 번호 또는 parent 기준)
-        var origDep = origClaims.find(function(oc){ return oc.claim_number === dc.claim_number; });
+        // 원본 종속항 찾기: 텍스트 유사도 기반 매칭 (번호 불일치 가능)
+        var origDep = Division._findBestOrigMatch(dc, origClaims);
 
         h += '<div class="division-claim-block">';
         h += '<div class="division-claim-header">';
@@ -1698,6 +1771,8 @@ Division.renderAssemble = function(left, right, p){
 Division.runVerify = async function(){
   var p = Division.state.current; if(!p) return;
   if(!App.ensureApiKey()){ App.openProfileSettings(); return; }
+  var capturedId = p.id;
+  Division.state._runningProjectId = capturedId;
   try {
     App.setButtonLoading('btnDivisionVerify',true);
     App.showProgress('divisionVerifyProgress','명세서 전문 추출 중...',1,4);
@@ -1735,6 +1810,7 @@ Division.runVerify = async function(){
     App.showProgress('divisionVerifyProgress','AI 검증 분석 중...',2,4);
     var verifyPrompt = Division._buildVerifyPrompt(claimsText, specText, origClaimsText);
     var result = await Division.callAI(verifyPrompt);
+    if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 검증 중 프로젝트 전환됨'); App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); return; }
     App.showProgress('divisionVerifyProgress','결과 저장 중...',3,4);
     var verified;
     try { verified = Division._extractJSON(result.text); }
@@ -1743,7 +1819,7 @@ Division.runVerify = async function(){
     // DB 저장 (enum 정제)
     var VALID_CHECK = ['abstract_expression','functional_limitation','support','overlap','format'];
     var VALID_RESULT = ['pass','warning','fail'];
-    function sEnum(v,list,fb){ if(!v) return fb; v=String(v).trim().toLowerCase().replace(/[\s-]+/g,'_'); return list.indexOf(v)>=0?v:fb; }
+    var sEnum = Division._sanitizeEnum;
 
     await sb.from('division_validation_results').delete().eq('project_id',p.id);
     if(verified.results && verified.results.length > 0){
@@ -1938,7 +2014,7 @@ Division.renderConfirm = function(left, right, p){
   rh += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tossface">🖍️</span> 하이라이트 버전</div>';
   rh += '<div style="font-size:13px;line-height:1.8">';
   divClaims.forEach(function(dc){
-    var d = dc.claim_text_highlighted||dc.claim_text;
+    var d = escapeHtml(dc.claim_text_highlighted||dc.claim_text);
     d = d.replace(/\*\*\*(.*?)\*\*\*/g,'<span class="division-hl-merge">$1</span>').replace(/\*\*(.*?)\*\*/g,'<span class="division-hl-added">$1</span>');
     d = d.replace(/;\s*/g,';<br>');
     rh += '<div style="margin-bottom:12px"><span style="font-weight:700;color:var(--color-primary)">【청구항 '+dc.claim_number+'】</span><br>'+d+'</div>';
@@ -1951,6 +2027,31 @@ Division.renderConfirm = function(left, right, p){
 // ═══════════════════════════════════════════
 // 18. 유틸리티
 // ═══════════════════════════════════════════
+
+// 분할출원 종속항에 대응하는 원출원 종속항 찾기 (텍스트 유사도 기반)
+Division._findBestOrigMatch = function(divClaim, origClaims){
+  if(!divClaim || !origClaims || !origClaims.length) return null;
+  var divText = (divClaim.claim_text || '').replace(/\*{2,3}/g, '').substring(0, 300);
+  if(!divText) return null;
+  var best = null, bestScore = 0;
+  origClaims.forEach(function(oc){
+    var origText = (oc.amended_text || oc.original_text || '').substring(0, 300);
+    if(!origText) return;
+    // 단어 집합 겹침 비율로 유사도 측정
+    var divWords = divText.split(/\s+/).filter(function(w){ return w.length > 1; });
+    var origWords = origText.split(/\s+/).filter(function(w){ return w.length > 1; });
+    if(!divWords.length || !origWords.length) return;
+    var origSet = {};
+    origWords.forEach(function(w){ origSet[w] = true; });
+    var overlap = 0;
+    divWords.forEach(function(w){ if(origSet[w]) overlap++; });
+    var score = overlap / Math.max(divWords.length, origWords.length);
+    if(score > bestScore){ bestScore = score; best = oc; }
+  });
+  // 최소 30% 이상 겹쳐야 매칭으로 인정
+  return bestScore >= 0.3 ? best : null;
+};
+
 Division.copyText = function(elementId){
   var el = document.getElementById(elementId); if(!el) return;
   navigator.clipboard.writeText(el.innerText||el.textContent).then(function(){ showToast('복사되었습니다'); }).catch(function(){ showToast('복사 실패','error'); });
