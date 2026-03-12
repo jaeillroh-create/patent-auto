@@ -440,7 +440,7 @@ Opinion.STEP_TO_RESET_STATUS = function(stepKey, type) {
     analyze:'type_determined',
     gate1: type==='description_deficiency'?'deficiency_analyzed':type==='partial_rejection'?'allowable_identified':'analyzed',
     draft: type==='description_deficiency'?'correction_confirmed':type==='partial_rejection'?'merge_confirmed':'strategy_confirmed',
-    validate: type==='description_deficiency'?'drafting_corrections':type==='partial_rejection'?'drafting_merge':'drafting_claims',
+    validate: type==='description_deficiency'?'corrections_drafted':type==='partial_rejection'?'merge_drafted':'claims_drafted',
     gate2: type==='description_deficiency'?'correction_validated':type==='partial_rejection'?'merge_validated':'validated',
     opinion:'claims_confirmed', gate3:'opinion_drafted', output:'approved'
   };
@@ -578,9 +578,13 @@ Opinion.renderMain = function(p){
   if(['validating','validated','correction_validated','merge_validated'].indexOf(s)>=0) return Opinion.renderValidation(L,R,s);
   if(['claims_confirmed','drafting_opinion','opinion_drafted'].indexOf(s)>=0) return Opinion.renderOpinion(L,R,s);
   if(['approved','generating_docs','completed'].indexOf(s)>=0) return Opinion.renderOutput(L,R,s);
-  // drafting states
-  if(['drafting_claims','claims_drafted','drafting_corrections','corrections_drafted','drafting_merge','merge_drafted'].indexOf(s)>=0) {
+  // drafting states (작성 중)
+  if(['drafting_claims','drafting_corrections','drafting_merge'].indexOf(s)>=0) {
     return Opinion.renderLoading(L,R,'청구항 작성 중...','AI가 초안을 생성하고 있습니다');
+  }
+  // drafted states (초안 완료 → 검증 대기)
+  if(['claims_drafted','corrections_drafted','merge_drafted'].indexOf(s)>=0) {
+    return Opinion.renderLoading(L,R,'검증 준비 중...','초안이 완료되었습니다. 잠시 후 자동 검증이 시작됩니다');
   }
   Opinion.renderUpload(L,R);
 };
@@ -600,8 +604,8 @@ Opinion.renderUpload = function(L,R){
   L.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📁</span> 파일 업로드</div></div>'
     +'<div class="opinion-upload-zone" id="opinionUploadZone" onclick="document.getElementById(\'opinionFileInput\').click()" ondragover="event.preventDefault();this.classList.add(\'dragover\')" ondragleave="this.classList.remove(\'dragover\')" ondrop="event.preventDefault();this.classList.remove(\'dragover\');Opinion.handleDrop(event)">'
     +'<div style="font-size:36px;margin-bottom:8px"><span class="tossface">📎</span></div>'
-    +'<div style="font-size:13px;color:var(--color-text-secondary)">클릭 또는 드래그하여 파일 업로드<br><span style="font-size:11px;color:var(--color-text-tertiary)">PDF, DOCX, HWP, TXT</span></div></div>'
-    +'<input type="file" id="opinionFileInput" multiple accept=".pdf,.docx,.doc,.hwp,.hwpx,.txt" style="display:none" onchange="Opinion.handleFiles(event)" />'
+    +'<div style="font-size:13px;color:var(--color-text-secondary)">클릭 또는 드래그하여 파일 업로드<br><span style="font-size:11px;color:var(--color-text-tertiary)">PDF, DOCX, TXT (HWP는 텍스트 복사 후 붙여넣기)</span></div></div>'
+    +'<input type="file" id="opinionFileInput" multiple accept=".pdf,.docx,.doc,.txt" style="display:none" onchange="Opinion.handleFiles(event)" />'
     +'<div id="opinionFileList" class="opinion-file-list"></div>'
 
     // 수동 텍스트 입력 (PDF 인식 실패 시)
@@ -674,14 +678,7 @@ Opinion.getCheckLabel = function(checkType) {
 Opinion.RESULT_LABELS = { pass: '통과', warn: '주의', fail: '실패' };
 Opinion.usage = { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
 
-// callForJSON 래퍼에 토큰 추적 추가
-Opinion._origCallForJSON = Opinion.callForJSON;
-Opinion.callForJSON = async function(prompt, schemaHint) {
-  var result = await Opinion._origCallForJSON(prompt, schemaHint);
-  Opinion.usage.calls++;
-  Opinion.updateUsageDisplay();
-  return result;
-};
+// updateUsageDisplay는 callForJSON 내부에서 호출됨 (line 1909+)
 
 Opinion.updateUsageDisplay = function() {
   var el = document.getElementById('opinionUsage');
@@ -699,7 +696,10 @@ Opinion.FILE_ROLES = {
 
 Opinion.addFile=function(f){
   var ext='.'+f.name.split('.').pop().toLowerCase();
-  if(['.pdf','.docx','.doc','.hwp','.hwpx','.txt'].indexOf(ext)<0){showToast('지원하지 않는 형식: '+ext,'error');return;}
+  if(['.pdf','.docx','.doc','.txt'].indexOf(ext)<0){
+    if(ext==='.hwp'||ext==='.hwpx'){showToast('HWP는 브라우저에서 읽을 수 없습니다. 한글에서 열어 텍스트를 복사한 뒤 "직접 텍스트 붙여넣기"를 이용해 주세요.','error');return;}
+    showToast('지원하지 않는 형식: '+ext,'error');return;
+  }
   if(Opinion.state.files.some(function(x){return x.name===f.name;})){return;}
   // 파일명으로 역할 자동 추측
   var role = 'other';
@@ -990,7 +990,16 @@ Opinion.renderTypeView = function(L,R){
 Opinion.selectType=function(el,type){document.querySelectorAll('.opinion-type-option').forEach(function(o){o.classList.remove('selected');});el.classList.add('selected');Opinion.state.current.rejection_type=type;};
 Opinion.confirmType=async function(){
   var p=Opinion.state.current;if(!p)return;
-  try{await sb.from('opinion_type_determinations').update({user_confirmed:true,user_override:p.rejection_type}).eq('project_id',p.id);await Opinion.startAnalysis();}catch(e){showToast('유형 확정 실패','error');}
+  try{
+    // typeResult.id가 있으면 특정 레코드만 업데이트 (동일 프로젝트에 여러 판정이 있을 수 있음)
+    var typeUpdateQuery = sb.from('opinion_type_determinations').update({user_confirmed:true,user_override:p.rejection_type});
+    if(Opinion.state.typeResult && Opinion.state.typeResult.id) typeUpdateQuery = typeUpdateQuery.eq('id',Opinion.state.typeResult.id);
+    else typeUpdateQuery = typeUpdateQuery.eq('project_id',p.id);
+    await typeUpdateQuery;
+    // 프로젝트 테이블에도 사용자가 확정한 유형 반영 (새로고침 시에도 유지)
+    await sb.from('opinion_projects').update({rejection_type:p.rejection_type}).eq('id',p.id);
+    await Opinion.startAnalysis();
+  }catch(e){showToast('유형 확정 실패','error');}
 };
 
 // ═══════════════════════════════════════════
@@ -1399,8 +1408,9 @@ Opinion.startDraft=async function(){
     Opinion.renderDetail(); // 업데이트 표시
     showToast('청구항 초안 완료 — 검증을 시작합니다');
 
-    // 짧은 지연 후 검증 시작 (UI가 업데이트될 시간 확보)
-    setTimeout(function(){ Opinion.startValidation(); }, 500);
+    // UI 렌더링 완료 후 검증 시작 (requestAnimationFrame으로 렌더 사이클 보장)
+    await new Promise(function(resolve){ requestAnimationFrame(function(){ requestAnimationFrame(resolve); }); });
+    await Opinion.startValidation();
 
   }catch(e){
     console.error('[Opinion] Draft error:', e);
@@ -1437,9 +1447,8 @@ Opinion.startValidation=async function(){
     console.error('[Opinion] Validation error:', e);
     showToast('검증 실패: '+e.message,'error');
     // 검증 실패 시 이전 상태로 복구 (Gate 2에서 재시도 가능)
-    var t=p.rejection_type;
-    var dd=t==='description_deficiency'?'corrections_drafted':t==='partial_rejection'?'merge_drafted':'claims_drafted';
-    await Opinion.setStatus(p.id,dd);
+    var fallback=t==='description_deficiency'?'corrections_drafted':t==='partial_rejection'?'merge_drafted':'claims_drafted';
+    await Opinion.setStatus(p.id,fallback);
     Opinion.renderDetail();
   }
 };
@@ -1517,7 +1526,7 @@ Opinion.startOpinionDraft=async function(){
 
     var prompt = Opinion.SYS_PROMPT + Opinion.TEMPLATE_GUARD + '\n\n' + ctx + revCtx + tpl[t];
     var r = await App.callClaude(prompt);
-    Opinion.usage.calls++;
+    Opinion.usage.calls++;  // callForJSON이 아닌 직접 호출이므로 수동 카운트
     Opinion.updateUsageDisplay();
 
     // ★ 섹션 마커 기반 파싱 (JSON 불필요) ★
@@ -1632,7 +1641,7 @@ Opinion.renderOpinion=function(L,R,status){
 };
 
 // ═══ Output + DOCX Download ═══
-Opinion.startOutput=async function(){var p=Opinion.state.current;if(!p)return;await Opinion.setStatus(p.id,'generating_docs');await Opinion.setStatus(p.id,'completed');Opinion.renderDetail();showToast('출력물 생성 완료');};
+Opinion.startOutput=async function(){var p=Opinion.state.current;if(!p)return;await Opinion.setStatus(p.id,'completed');Opinion.renderDetail();showToast('의견서 대응 완료 — 다운로드해 주세요');};
 
 Opinion.renderOutput=function(L,R,status){
   var done=status==='completed' || status==='approved';  // approved도 완료로 취급 (generating_docs는 즉시 완료됨)
@@ -1797,19 +1806,25 @@ Opinion.resetToUploadWithManual=async function(){
 // ═══ Utilities ═══
 Opinion.setStatus=async function(id,s){try{await sb.from('opinion_projects').update({status:s,updated_at:new Date().toISOString()}).eq('id',id);var p=Opinion.state.current;if(p&&p.id===id)p.status=s;Opinion.state.projects.forEach(function(x){if(x.id===id)x.status=s;});}catch(e){console.error('[Opinion] status:',e);}};
 Opinion.loadData=async function(id){try{
-  var{data:a}=await sb.from('opinion_issue_analyses').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+  // 5개 독립 쿼리를 병렬 실행
+  var results = await Promise.all([
+    sb.from('opinion_issue_analyses').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
+    sb.from('opinion_draft_claims').select('draft_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
+    sb.from('opinion_validation_results').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
+    sb.from('opinion_opinion_drafts').select('content').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
+    sb.from('opinion_type_determinations').select('*').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle()
+  ]);
+  var a=results[0].data, d=results[1].data, v=results[2].data, o=results[3].data, t=results[4].data;
+
   if(a && a.result_data) {
-    // _parse_failed 데이터 정리
     var ad = a.result_data;
     if (ad._parse_failed && ad.raw_text) {
-      // raw_text에서 JSON 재추출 시도
       var reparsed = Opinion.parseJSON(ad.raw_text);
       Opinion.state.analysis = reparsed._parse_failed ? ad : reparsed;
     } else {
       Opinion.state.analysis = ad;
     }
   }
-  var{data:d}=await sb.from('opinion_draft_claims').select('draft_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();
   if(d && d.draft_data) {
     var dd = d.draft_data;
     if (dd._parse_failed && dd.raw_text) {
@@ -1819,8 +1834,7 @@ Opinion.loadData=async function(id){try{
       Opinion.state.draftResult = dd;
     }
   }
-  var{data:v}=await sb.from('opinion_validation_results').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(v)Opinion.state.validation=v.result_data;
-  var{data:o}=await sb.from('opinion_opinion_drafts').select('content').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+  if(v) Opinion.state.validation=v.result_data;
   if(o && o.content) {
     var c = o.content;
     if (typeof c === 'string') {
@@ -1833,7 +1847,7 @@ Opinion.loadData=async function(id){try{
       Opinion.state.opinionDraft = c;
     }
   }
-  var{data:t}=await sb.from('opinion_type_determinations').select('*').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();if(t)Opinion.state.typeResult=t;
+  if(t) Opinion.state.typeResult=t;
 }catch(e){console.warn('[Opinion] loadData:',e);}Opinion.renderDetail();};
 // ═══ 강화된 JSON 파서 (5단계 추출 시도) ═══
 Opinion.parseJSON = function(text) {
@@ -1905,10 +1919,12 @@ Opinion.ensureJSON = async function(data, schemaHint) {
   return data;
 };
 
-// ═══ LLM 호출 + JSON 보장 래퍼 ═══
+// ═══ LLM 호출 + JSON 보장 래퍼 (usage 추적 포함) ═══
 Opinion.callForJSON = async function(prompt, schemaHint) {
   var jsonPrompt = prompt + '\n\n⚠️ 반드시 유효한 JSON만 출력하세요. 설명, 인사말, 마크다운(```) 없이 { 또는 [ 로 시작하여 } 또는 ] 로 끝나는 순수 JSON만.';
   var r = await App.callClaude(jsonPrompt);
+  Opinion.usage.calls++;
+  Opinion.updateUsageDisplay();
   var parsed = Opinion.parseJSON(r.text);
   if (parsed._parse_failed && schemaHint) {
     parsed = await Opinion.ensureJSON(parsed, schemaHint);
