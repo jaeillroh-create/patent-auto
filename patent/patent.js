@@ -2440,10 +2440,11 @@ ${!hasMethodClaims?`- 방법 청구항이 생성되지 않았으므로, 방법 �
   받침 있는 숫자 뒤 → "은" (예: 도 1은, 도 3은, 도 6은, 도 7은, 도 8은, 도 10은)
   받침 없는 숫자 뒤 → "는" (예: 도 2는, 도 4는, 도 5는, 도 9는)
 
-★ 분량 규칙:
-- 도면 1개당 ${dlCfg.charPerFig}(공백 포함)
+⛔⛔⛔ 분량 규칙 (엄격 준수 — 초과 시 기재불비) ⛔⛔⛔
+- 도면 1개당 ${dlCfg.charPerFig}(공백 포함) — 이 한도를 절대 초과하지 마라
 - 총 분량 ${dlCfg.total}(공백 포함). 본문 전후 정형문 글자수 제외.
 - ${dlCfg.extra}
+- ⛔ 총 분량을 초과하면 안 됨. 핵심 내용만 기술하고 불필요한 반복/나열을 금지한다.
 
 ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 — 42조 4항) ★★
 - 앵커 종속항(청구항 ${deviceAnchorStart}~${deviceAnchorStart+deviceAnchorDep-1})은 진보성 방어의 핵심이므로, 일반 종속항보다 2배 이상 상세하게 기술하라.
@@ -2458,8 +2459,13 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 앵커 종속항의 핵심 처리에 대해 1개 이상의 대안적 구현을 기술
 - 변형 실시예는 독립항의 보호범위를 뒷받침하는 방향이어야 한다
 
-★★★ 장치 도면(${figListStr})에 포함된 구성요소만 설명하라. 도면에 없는 내용을 임의로 추가하지 마라. ★★★
-★★★ 도면의 구성요소 명칭과 참조번호를 청구항 및 도면 설계와 동일하게 사용하라. ★★★
+★★★ 장치 도면(${figListStr})에 포함된 구성요소만 설명하라. 도면에 없는 참조번호를 임의로 추가하지 마라. ★★★
+★★★ 참조번호 명칭 통일 규칙 (기재불비 방지 — 핵심) ★★★
+- 하나의 참조번호에는 반드시 하나의 명칭만 사용하라. 동의어/약칭을 혼용하지 마라.
+  → 예: "추천부(114)"와 "추천 생성부(114)"를 혼용하면 기재불비. 하나로 통일하라.
+  → 예: "메모리(120)"와 "데이터베이스(120)"를 혼용하면 기재불비. 다른 구성요소이면 별도 참조번호를 부여하라.
+- 도면 설계에서 정의된 명칭을 우선으로 사용하라.
+- 청구항에서 사용한 명칭과 상세설명의 명칭이 일치해야 한다.
 ${_designCompStr}
 ${_userFigBlock?`\n${_userFigBlock}\n★ 사용자 도면도 "도 N을 참조하면," 형태로 도면 번호 순서에 맞게 설명을 포함하라.\n★ 사용자 도면의 설명은 발명 내용 및 청구범위와 정합되도록, 위 도면 설명을 기초로 기술적 의미를 보완하여 작성하라.`:''}
 
@@ -2738,6 +2744,10 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
 - 도면에 존재하는 구성요소가 상세설명에서 설명 없이 누락되지 않았는지 확인
 - 참조번호 계층 일관성: L1(X00) → L2(XY0) → L3(XYZ) 체계가 혼란 없이 사용되는지 확인
 - 불일치가 있으면 "상세설명의 참조번호 OOO(OOO)은 도면에 존재하지 않음" 형식으로 지적하라
+- ★ 참조번호 명칭 혼용 검토: 하나의 참조번호에 2개 이상의 명칭이 사용되고 있으면 반드시 지적하라
+  → 예: "추천부(114)" vs "추천 생성부(114)" 혼용, "메모리(120)" vs "데이터베이스(120)" 혼용
+  → 가장 빈도 높은 명칭으로 통일할 것을 제안하라
+- ★ 도면 미정의 참조번호 사용 검토: 도면에 정의되지 않은(존재하지 않는) 참조번호가 상세설명에서 사용되면 지적하라
 
 [11] 청구항 형식 검토
 - 독립항이 젭슨(Jepson) 형식("~에 있어서," 전환부 + "~을 특징으로 하는" 종결부)을 올바르게 따르는지 확인
@@ -2776,7 +2786,22 @@ ${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설�
 각 항목별로 평가 결과와 개선 제안을 작성하라.
 
 ${T}\n[전체 청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명 요약] ${(getLatestDescription()||'').slice(0,3000)}\n[발명 내용] ${inv.slice(0,2000)}`;
-    case 'step_16':return `발명의 효과. "본 발명에 따르면,"시작. 150자 이내.\n\n★ 과제-효과 1:1 대응 원칙 ★\n아래 [과제]에서 제기한 각 문제에 대해 1:1로 대응하는 효과를 기술하라.\n과제에서 "A가 문제"라고 했으면, 효과에서는 "A를 해결하여 B 이점이 있다"로 대응.\n\n마지막: "본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며, 언급되지 않은 또 다른 효과들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다."\n${T}\n[과제] ${outputs.step_05||''}\n[독립항] ${(outputs.step_06||'').match(/【청구항 1】[\\s\\S]*?(?=【청구항 2】|$)/)?.[0]||''}\n[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
+    case 'step_16':{
+      const hasTask=!!outputs.step_05;
+      return `발명의 효과를 작성하라. "본 발명에 따르면,"으로 시작. 각 효과를 문단 단위로 기술하되, 총 3~5개 효과 항목을 서술하라.
+
+${hasTask?`★ 과제-효과 1:1 대응 원칙 ★
+아래 [과제]에서 제기한 각 문제에 대해 1:1로 대응하는 효과를 기술하라.
+과제에서 "A가 문제"라고 했으면, 효과에서는 "A를 해결하여 B 이점이 있다"로 대응.`:`★ 청구항 기반 효과 도출 원칙 ★
+아래 [독립항]의 핵심 구성요소가 해결하는 기술적 과제를 파악하고, 각 구성요소가 제공하는 기술적 효과를 3~5개 기술하라.
+각 효과는 "본 발명에 따르면," 또는 "또한, 본 발명에 따르면,"으로 시작하라.`}
+
+마지막: "본 발명의 효과는 이상에서 언급한 효과로 제한되지 않으며, 언급되지 않은 또 다른 효과들은 아래의 기재로부터 당업자에게 명확하게 이해될 수 있을 것이다."
+${T}
+${hasTask?`[과제] ${outputs.step_05}`:''}
+[독립항] ${(outputs.step_06||'').match(/【청구항 1】[\s\S]*?(?=【청구항 2】|$)/)?.[0]||''}
+[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
+    }
     case 'step_17':return `과제의 해결 수단. 각 독립항 카테고리별로 요약하라.
 
 ★ 용어 규칙: 청구항에서 사용한 구성요소 명칭, 참조번호, 기술 용어를 그대로 사용하라. 동의어로 바꾸지 마라.
@@ -2788,32 +2813,43 @@ ${outputs.step_20?'"본 발명의 일 실시예에 따른 컴퓨터 판독 가�
 \n${T}\n[장치] ${outputs.step_06||''}\n[방법] ${outputs.step_10||'(없음)'}${outputs.step_20?'\n[기록매체/프로그램] '+outputs.step_20:''}${styleRef}`;
     case 'step_18':{
       const hasMethod=includeMethodClaims&&outputs.step_11;
+      // 본문·청구항·도면에서 참조번호(명칭) 전수 수집
+      const _refSources=[outputs.step_06,outputs.step_08,outputs.step_09,outputs.step_10,outputs.step_12,outputs.step_07,outputs.step_11].filter(Boolean).join('\n');
+      const _refMap=new Map();
+      // "명칭(참조번호)" 또는 "명칭 (참조번호)" 패턴 수집
+      const _refRe=/([가-힣a-zA-Z][가-힣a-zA-Z\s]{0,15}?)\s*\((\d{2,4}|S\d{2,4})\)/g;
+      let _rm;while((_rm=_refRe.exec(_refSources))!==null){
+        const name=_rm[1].replace(/^상기\s*/,'').trim();const num=_rm[2];
+        if(name.length>=2&&!_refMap.has(num))_refMap.set(num,name);
+      }
+      const _collectedRefs=[..._refMap.entries()].sort((a,b)=>{
+        const na=a[0].startsWith('S')?parseInt(a[0].slice(1))+10000:parseInt(a[0]);
+        const nb=b[0].startsWith('S')?parseInt(b[0].slice(1))+10000:parseInt(b[0]);
+        return na-nb;
+      }).map(([num,name])=>`${name} : ${num}`).join('\n');
       return `【부호의 설명】을 작성하라.
 
 형식: "구성요소 : 참조번호" (콜론 사용)
 정렬: 참조번호 오름차순
 
+★★★ 핵심 규칙: 본문에서 사용된 모든 참조번호를 빠짐없이 포함하라 ★★★
+- 본문(상세설명, 청구항, 도면설명)에서 "구성요소(XXX)" 형태로 사용된 모든 참조번호를 누락 없이 기재하라.
+- 하나의 참조번호에는 반드시 하나의 명칭만 사용하라 (동의어/약칭 혼용 금지).
+- 본문에서 가장 많이 사용된 명칭을 채택하라.
+
 [장치 구성요소 — 숫자만 사용]
 - 형식: 100, 110, 111, 200, 210...
 - 계층적 체계: L1(X00) → L2(XY0) → L3(XYZ)
-- 예시:
-  ${getDeviceSubject()} : 100
-  통신부 : 110
-  수신부 : 111
-  송신부 : 112
-  프로세서 : 120
-  사용자 단말 : 200
 
 ${hasMethod?`[방법 단계 — S+숫자 사용]
 - 형식: S401, S402, S403...
-- 예시:
-  데이터 수신 단계 : S401
-  패턴 분석 단계 : S402
-  결과 전송 단계 : S403
 
 ⚠️ 장치 구성요소(숫자)와 방법 단계(S숫자)를 반드시 구분하여 별도 섹션으로 작성하라.`:`⚠️ 장치 구성요소만 작성하라. 방법 단계(S100 등)는 포함하지 마라.`}
 
-${T}\n[장치 도면] ${outputs.step_07||''}${hasMethod?`\n[방법 도면] ${outputs.step_11||''}`:''}`}
+[본문에서 수집된 참조번호 목록 — 아래 목록의 모든 항목을 반드시 포함하라]
+${_collectedRefs||'(수집된 참조번호 없음 — 도면 및 청구항에서 직접 추출하라)'}
+
+${T}\n[장치 도면] ${outputs.step_07||''}${hasMethod?`\n[방법 도면] ${outputs.step_11||''}`:''}\n[장치 상세설명 발췌] ${(getLatestDescription()||'').slice(0,3000)}\n[장치 청구항] ${(outputs.step_06||'').slice(0,2000)}`}
     case 'step_19':return `요약서. 청구항1 기준 450자. \"본 발명은\"시작.\n출력:\n【요약】\n(본문)\n\n【대표도】\n도 1\n\n위 형식만.\n${T}\n[청구항1] ${(outputs.step_06||'').slice(0,1500)}${styleRef}`;
 
     // ═══ Step 20: 기록매체 / 컴퓨터 프로그램 독립항 (v5.5 신규) ═══
@@ -2858,7 +2894,13 @@ function setGlobalProcessing(on){
   // Also disable validation button and tab switches during processing
   document.querySelectorAll('.tab-item').forEach(t=>{if(on){t.style.pointerEvents='none';t.style.opacity='0.7';}else{t.style.pointerEvents='';t.style.opacity='';}});
 }
-function checkDependency(s){const inv=document.getElementById('projectInput').value.trim();const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저',step_20:()=>outputs.step_10?null:'방법 청구항 먼저'};return d[s]?d[s]():null;}
+function checkDependency(s){
+  const inv=document.getElementById('projectInput').value.trim();
+  // v5.6: 방법 청구항 비활성 시 관련 스텝 차단
+  const methodSteps=['step_10','step_11','step_12','step_20'];
+  if(!includeMethodClaims&&methodSteps.includes(s)){return '방법 청구항이 비활성화되어 있습니다';}
+  const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저',step_20:()=>outputs.step_10?null:'방법 청구항 먼저'};return d[s]?d[s]():null;
+}
 async function runStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13',step_14:'btnStep14',step_15:'btnStep15',step_20:'btnStep20'},bid=bm[sid];setGlobalProcessing(true);loadingState[sid]=true;if(bid)App.setButtonLoading(bid,true);
   try{
     // v6.0: 부분 수정 모드 표시
@@ -2947,8 +2989,47 @@ async function runLongStep(sid){if(globalProcessing)return;const dep=checkDepend
     // v8.1: step_08 도면 범위 초과 자동 교정
     if(sid==='step_08')t=sanitizeDescFigureRefs(t,'device');
     if(sid==='step_12')t=sanitizeDescFigureRefs(t,'method');
+    // v5.6: step_08 글자수 초과 검증 — 사용자 설정 대비 실제 분량 경고
+    if(sid==='step_08'){
+      const _bodyText=t.replace(/^[\s\S]*?(?=도 1)/,'').replace(/\n{2,}/g,'\n');
+      const _charCount=_bodyText.length;
+      const _figCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
+      const _dlCfg={compact:1000,standard:1500,detailed:2000,custom:customDetailChars||2000}[detailLevel]||1500;
+      const _targetTotal=_dlCfg*_figCount;
+      const _ratio=_charCount/_targetTotal;
+      if(_ratio>1.5){
+        App.showToast(`⚠️ 상세설명 ${_charCount.toLocaleString()}자 (목표 ${_targetTotal.toLocaleString()}자의 ${Math.round(_ratio*100)}%) — 과다 생성됨`,'warning');
+        console.warn(`[step_08] 글자수 초과: ${_charCount}자 / 목표 ${_targetTotal}자 (${Math.round(_ratio*100)}%)`);
+      }else if(_ratio<0.5){
+        App.showToast(`⚠️ 상세설명 ${_charCount.toLocaleString()}자 (목표 ${_targetTotal.toLocaleString()}자의 ${Math.round(_ratio*100)}%) — 과소 생성됨`,'warning');
+      }
+    }
     outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
-async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{const r=await App.callClaude(buildPrompt('step_09'));const baseDesc=outputs.step_08||'';outputs.step_09=insertMathBlocks(baseDesc,r.text);markOutputTimestamp('step_09');invalidateDownstream('step_09');renderOutput('step_09',outputs.step_09);onStepCompleted('step_09');saveProject(true);App.showToast('수학식 삽입 완료');}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
+async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{
+  const TARGET_MATH_COUNT=5;
+  let r=await App.callClaude(buildPrompt('step_09'));
+  // 수학식 블록 개수 검증
+  const mathBlocks=parseMathBlocks(r.text);
+  if(mathBlocks.length<TARGET_MATH_COUNT){
+    // 부족하면 추가 생성 요청
+    const missing=TARGET_MATH_COUNT-mathBlocks.length;
+    console.warn(`[step_09] 수학식 ${mathBlocks.length}개 생성됨 (목표 ${TARGET_MATH_COUNT}개) → ${missing}개 추가 생성`);
+    const addPrompt=`상세설명에 수학식 ${missing}개를 추가로 생성하라. 기존 수학식 번호(1~${mathBlocks.length})와 겹치지 않게 수학식 ${mathBlocks.length+1}번부터 시작하라.\n기존에 삽입된 수학식의 ANCHOR는 사용하지 마라.\n동일한 규칙을 따르되, 기존 수학식과 다른 알고리즘/계산 로직에 대해 작성하라.\n\n${buildPrompt('step_09')}`;
+    const r2=await App.callClaude(addPrompt);
+    r={text:r.text+'\n'+r2.text};
+    App.showToast(`수학식 ${mathBlocks.length}개→추가 생성 시도`,'info');
+  }
+  const baseDesc=outputs.step_13_applied||outputs.step_08||'';
+  outputs.step_09=insertMathBlocks(baseDesc,r.text);
+  // 삽입 후 실제 수학식 개수 검증
+  const insertedCount=(outputs.step_09.match(/【수학식\s*\d+】/g)||[]).length;
+  markOutputTimestamp('step_09');invalidateDownstream('step_09');renderOutput('step_09',outputs.step_09);onStepCompleted('step_09');saveProject(true);
+  if(insertedCount<TARGET_MATH_COUNT){
+    App.showToast(`⚠️ 수학식 ${insertedCount}/${TARGET_MATH_COUNT}개 삽입됨 (${TARGET_MATH_COUNT-insertedCount}개 ANCHOR 매칭 실패)`,'warning');
+  }else{
+    App.showToast(`수학식 ${insertedCount}개 삽입 완료`);
+  }
+}catch(e){App.showToast(e.message,'error');}finally{loadingState.step_09=false;App.setButtonLoading('btnStep09',false);setGlobalProcessing(false);}}
 
 // v10.2: 검토 결과를 장치/방법 범위로 필터링
 function filterReviewForScope(reviewText,scope){
@@ -3557,8 +3638,8 @@ async function runPhaseD(){
   const container=document.getElementById('resultsPhaseDChain');
   if(container)container.innerHTML='';
   
-  const steps=['step_17','step_05','step_16','step_03','step_02'];
-  const stepLabels={step_17:'D1. 해결 수단',step_05:'D2. 과제',step_16:'D3. 효과',step_03:'D4. 배경기술',step_02:'D5. 기술분야'};
+  const steps=['step_16','step_05','step_17','step_03','step_02'];
+  const stepLabels={step_16:'D1. 효과',step_05:'D2. 과제',step_17:'D3. 해결 수단',step_03:'D4. 배경기술',step_02:'D5. 기술분야'};
   
   try{
     for(let i=0;i<steps.length;i++){
@@ -3571,7 +3652,7 @@ async function runPhaseD(){
     }
     App.clearProgress('progressPhaseD');
     saveProject(true);
-    App.showToast('✅ 역설계 체인 완료 (D1→D5)');
+    App.showToast('✅ 역설계 체인 완료 (효과→과제→해결수단→배경→기술분야)');
   }catch(e){
     App.clearProgress('progressPhaseD');
     App.showToast(e.message,'error');
@@ -10067,7 +10148,85 @@ function validateClaims(text){
     KILLER_WORDS.forEach(kw=>{if(kw.pattern.test(ct))iss.push({severity:'HIGH',message:`청구항 ${num}: ${kw.msg}`});});
   });return iss;
 }
-function runValidation(){const all=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n');if(!all){App.showToast('검증할 청구항이 없어요','error');return;}const iss=validateClaims(all),el=document.getElementById('validationResults');if(!iss.length){el.innerHTML='<div class="issue-item issue-pass"><span class="tossface">🎉</span>모든 검증 통과</div>';return;}el.innerHTML=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tossface">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');}
+function runValidation(){
+  const all=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n');
+  if(!all){App.showToast('검증할 청구항이 없어요','error');return;}
+  const iss=validateClaims(all);
+  // v5.6: 참조번호 일관성 검증 추가
+  const refIssues=validateRefNumberConsistency();
+  const allIssues=[...iss,...refIssues];
+  const el=document.getElementById('validationResults');
+  if(!allIssues.length){el.innerHTML='<div class="issue-item issue-pass"><span class="tossface">🎉</span>모든 검증 통과</div>';return;}
+  el.innerHTML=allIssues.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':i.severity==='HIGH'?'issue-high':'issue-warning'}"><span class="tossface">${i.severity==='CRITICAL'?'🔴':i.severity==='HIGH'?'🟠':'🟡'}</span>${App.escapeHtml(i.message)}</div>`).join('');
+}
+
+// ═══ v5.6: 참조번호 일관성 검증 (명칭 불일치, 도면 미정의, 혼용) ═══
+function validateRefNumberConsistency(){
+  const issues=[];
+  const desc=getLatestDescription()||'';
+  const methodDesc=getLatestMethodDescription()||'';
+  const claims=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n');
+  const allText=desc+'\n'+methodDesc+'\n'+claims;
+  const signTable=outputs.step_18||'';
+
+  // 1. 본문에서 "명칭(참조번호)" 수집 → 참조번호별 명칭 빈도
+  const refNameMap=new Map(); // ref → Map<name, count>
+  const refRe=/([가-힣a-zA-Z][가-힣a-zA-Z\s]{0,12}?)\s*\((\d{2,4}|S\d{2,4})\)/g;
+  let m;while((m=refRe.exec(allText))!==null){
+    const name=m[1].replace(/^상기\s*/,'').trim();
+    const ref=m[2];
+    if(name.length<2)continue;
+    if(!refNameMap.has(ref))refNameMap.set(ref,new Map());
+    const nmap=refNameMap.get(ref);
+    nmap.set(name,(nmap.get(name)||0)+1);
+  }
+
+  // 2. 명칭 불일치 검출 (하나의 참조번호에 여러 명칭)
+  refNameMap.forEach((nmap,ref)=>{
+    if(nmap.size<=1)return;
+    const entries=[...nmap.entries()].sort((a,b)=>b[1]-a[1]);
+    const primary=entries[0];
+    const others=entries.slice(1).filter(e=>e[1]>=3); // 3회 이상 사용된 이름만
+    if(others.length>0){
+      issues.push({severity:'HIGH',message:`참조번호 ${ref} 명칭 불일치: "${primary[0]}"(${primary[1]}회) vs ${others.map(e=>`"${e[0]}"(${e[1]}회)`).join(', ')} — 명칭 통일 필요`});
+    }
+  });
+
+  // 3. 부호의 설명 대비 본문 참조번호 누락 검출
+  const signRefs=new Set();
+  const signRe=/:\s*(\d{2,4}|S\d{2,4})\s*$/gm;
+  let sm;while((sm=signRe.exec(signTable))!==null)signRefs.add(sm[1]);
+  const bodyRefs=new Set();
+  refNameMap.forEach((_,ref)=>bodyRefs.add(ref));
+  // 본문에서 사용되지만 부호의 설명에 없는 참조번호
+  bodyRefs.forEach(ref=>{
+    if(!signRefs.has(ref)){
+      const names=refNameMap.get(ref);
+      const primary=names?[...names.entries()].sort((a,b)=>b[1]-a[1])[0][0]:'?';
+      issues.push({severity:'MEDIUM',message:`부호의 설명 누락: ${primary}(${ref}) — 본문에서 사용되지만 부호의 설명에 미기재`});
+    }
+  });
+
+  // 4. 도면에 정의되지 않은 참조번호가 본문에 사용되는지 검출
+  const diagramRefs=new Set();
+  const diagramTexts=[outputs.step_07,outputs.step_11].filter(Boolean).join('\n');
+  const dRefRe=/\((\d{2,4}|S\d{2,4})\)/g;
+  let dm;while((dm=dRefRe.exec(diagramTexts))!==null)diagramRefs.add(dm[1]);
+  if(diagramRefs.size>0){
+    bodyRefs.forEach(ref=>{
+      if(!diagramRefs.has(ref)&&!ref.startsWith('S')){
+        const names=refNameMap.get(ref);
+        const primary=names?[...names.entries()].sort((a,b)=>b[1]-a[1])[0][0]:'?';
+        const count=[...names.values()].reduce((a,b)=>a+b,0);
+        if(count>=3){
+          issues.push({severity:'HIGH',message:`도면 미정의 참조번호: ${primary}(${ref}) — 본문에서 ${count}회 사용되지만 도면에 없음`});
+        }
+      }
+    });
+  }
+
+  return issues;
+}
 
 // ═══════════ OUTPUT ═══════════
 function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;document.getElementById('statCompleted').textContent=`${c}/20`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
