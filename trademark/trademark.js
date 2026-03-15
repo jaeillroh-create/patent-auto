@@ -6151,20 +6151,18 @@ ${criticalResults.slice(0, 5).map(r =>
 
       const response = await App.callClaudeSonnet(prompt, 1500);
       
-      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.text.match(/\{[\s\S]*?\}/);
       if (!jsonMatch) {
         throw new Error('AI 응답을 파싱할 수 없습니다.');
       }
-      
+
       const assessment = JSON.parse(jsonMatch[0]);
       assessment.assessedAt = new Date().toISOString();
-      
+
       p.riskAssessment = assessment;
-      
+
       // 프로젝트 상태 업데이트
-      if (assessment.level === 'low') {
-        p.status = 'documenting';
-      }
+      p.status = 'documenting';
       
       TM.renderCurrentStep();
       App.showToast('리스크 평가가 완료되었습니다.', 'success');
@@ -6187,68 +6185,6 @@ ${criticalResults.slice(0, 5).map(r =>
     }
   };
 
-  // ============================================================
-  // Step 6: 비용 산출
-  // ============================================================
-  
-  TM.renderStep6_Fee = function(container) {
-    const p = TM.currentProject;
-    const fee = p.feeCalculation || {};
-    
-    // 자동 계산
-    if (p.designatedGoods?.length > 0 && !fee.totalFee) {
-      TM.calculateFee();
-    }
-    
-    container.innerHTML = `
-      <div class="tm-step-header">
-        <h3>💰 비용 산출</h3>
-        <p>2026년 기준 관납료 및 예상 비용을 계산합니다. (상표 출원료는 감면 없음)</p>
-      </div>
-      
-      <!-- 우선심사 여부 -->
-      <div class="tm-form-section">
-        <label class="tm-checkbox-label">
-          <input type="checkbox" id="tm-priority-exam-enabled" 
-                 ${p.priorityExam?.enabled ? 'checked' : ''}
-                 onchange="TM.togglePriorityExam(this.checked)">
-          <span>우선심사 신청 (류당 160,000원 추가)</span>
-        </label>
-      </div>
-      
-      <!-- 비용 명세 -->
-      <div class="tm-fee-section">
-        <div class="tm-fee-header">
-          <h4>비용 명세</h4>
-          <div class="tm-fee-total">${TM.formatNumber(fee.totalFee || 0)}원</div>
-        </div>
-        
-        <div class="tm-fee-breakdown">
-          ${TM.renderFeeBreakdown(fee)}
-        </div>
-      </div>
-      
-      <!-- 비용 테이블 참고 -->
-      <details class="tm-accordion">
-        <summary>
-          <span>📋 2026년 관납료 기준표</span>
-        </summary>
-        <div class="tm-accordion-content">
-          <table class="tm-info-table">
-            <tr><th>항목</th><th>금액</th><th>비고</th></tr>
-            <tr><td>출원료 (전자+고시명칭)</td><td>46,000원/류</td><td>기본</td></tr>
-            <tr><td>출원료 (전자+비고시명칭)</td><td>52,000원/류</td><td>+6,000원</td></tr>
-            <tr><td>서면 출원 가산</td><td>10,000원</td><td>전자출원 권장</td></tr>
-            <tr><td>지정상품 가산료</td><td>2,000원/개</td><td>류당 10개 초과시</td></tr>
-            <tr><td>우선심사 신청료</td><td>160,000원/류</td><td>-</td></tr>
-            <tr><td>등록료 (10년)</td><td>211,000원/류</td><td>참고</td></tr>
-          </table>
-          <p style="margin-top: 12px; font-size: 13px; color: #6b7684;">※ 상표 출원료는 특허와 달리 감면 제도가 없습니다.</p>
-        </div>
-      </details>
-    `;
-  };
-  
   TM.renderFeeBreakdown = function(fee) {
     if (!fee || !fee.breakdown || fee.breakdown.length === 0) {
       return '<div class="tm-hint">지정상품을 선택하면 비용이 자동 계산됩니다.</div>';
@@ -6272,7 +6208,7 @@ ${criticalResults.slice(0, 5).map(r =>
     // 류별 출원료 계산
     if (p.designatedGoods && p.designatedGoods.length > 0) {
       p.designatedGoods.forEach(classData => {
-        const hasNonGazetted = classData.goods.some(g => !g.gazetted);
+        const hasNonGazetted = (classData.goods || []).some(g => !g.gazetted);
         const baseFee = hasNonGazetted ? TM.feeTable.applicationNonGazetted : TM.feeTable.applicationGazetted;
         
         breakdown.push({
@@ -6283,8 +6219,8 @@ ${criticalResults.slice(0, 5).map(r =>
         subtotal += baseFee;
         
         // 지정상품 가산료 (10개 초과)
-        if (classData.goods.length > 10) {
-          const excessCount = classData.goods.length - 10;
+        if ((classData.goods || []).length > 10) {
+          const excessCount = (classData.goods || []).length - 10;
           const excessFee = excessCount * TM.feeTable.excessGoods;
           breakdown.push({
             label: `  └ 제${classData.classCode}류 초과상품 ${excessCount}개`,
@@ -6334,6 +6270,7 @@ ${criticalResults.slice(0, 5).map(r =>
   
   TM.togglePriorityExam = function(enabled) {
     if (!TM.currentProject) return;
+    if (!TM.currentProject.priorityExam) TM.currentProject.priorityExam = {};
     TM.currentProject.priorityExam.enabled = enabled;
     TM.calculateFee();
   };
@@ -6403,27 +6340,27 @@ ${criticalResults.slice(0, 5).map(r =>
                 <div class="tm-form-grid-compact">
                   <div class="tm-field-compact">
                     <label>출원번호 *</label>
-                    <input type="text" id="tm-extract-applicationNumber" value="${pe.applicationNumber || ''}" placeholder="40-2024-0012345">
+                    <input type="text" id="tm-extract-applicationNumber" value="${TM.escapeHtml(pe.applicationNumber || '')}" placeholder="40-2024-0012345">
                   </div>
                   <div class="tm-field-compact">
                     <label>출원일 *</label>
-                    <input type="text" id="tm-extract-applicationDate" value="${pe.applicationDate || ''}" placeholder="2024.03.15">
+                    <input type="text" id="tm-extract-applicationDate" value="${TM.escapeHtml(pe.applicationDate || '')}" placeholder="2024.03.15">
                   </div>
                   <div class="tm-field-compact">
                     <label>출원인 *</label>
-                    <input type="text" id="tm-extract-applicantName" value="${pe.applicantName || ''}" placeholder="주식회사 OOO">
+                    <input type="text" id="tm-extract-applicantName" value="${TM.escapeHtml(pe.applicantName || '')}" placeholder="주식회사 OOO">
                   </div>
                   <div class="tm-field-compact">
                     <label>상표명</label>
-                    <input type="text" id="tm-extract-trademarkNameFromApp" value="${pe.trademarkNameFromApp || ''}" placeholder="상표명">
+                    <input type="text" id="tm-extract-trademarkNameFromApp" value="${TM.escapeHtml(pe.trademarkNameFromApp || '')}" placeholder="상표명">
                   </div>
                   <div class="tm-field-compact">
                     <label>상품류</label>
-                    <input type="text" id="tm-extract-classCode" value="${pe.classCode || ''}" placeholder="09">
+                    <input type="text" id="tm-extract-classCode" value="${TM.escapeHtml(pe.classCode || '')}" placeholder="09">
                   </div>
                   <div class="tm-field-compact tm-field-wide">
                     <label>지정상품</label>
-                    <input type="text" id="tm-extract-designatedGoodsFromApp" value="${pe.designatedGoodsFromApp || ''}" placeholder="지정상품 목록">
+                    <input type="text" id="tm-extract-designatedGoodsFromApp" value="${TM.escapeHtml(pe.designatedGoodsFromApp || '')}" placeholder="지정상품 목록">
                   </div>
                 </div>
               </div>
@@ -6496,7 +6433,7 @@ ${criticalResults.slice(0, 5).map(r =>
               `).join('')}
             </div>
           ` : `
-            <div class="tm-evidence-empty" 
+            <div class="tm-evidence-empty" id="tm-evidence-dropzone"
                  ondragover="TM.handleDragOver(event)"
                  ondragleave="TM.handleDragLeave(event)"
                  ondrop="TM.handleEvidenceDrop(event)"
@@ -6589,18 +6526,10 @@ ${criticalResults.slice(0, 5).map(r =>
     return labels[type] || type;
   };
   
-  TM.setPriorityExamEnabled = function(enabled) {
-    if (!TM.currentProject) return;
-    TM.currentProject.priorityExam.enabled = enabled;
-    TM.currentProject.priorityExam.userConfirmed = true; // 사용자가 명시적으로 선택
-    TM.hasUnsavedChanges = true;
-    TM.calculateFee(); // 비용 재계산
-    TM.renderCurrentStep();
-  };
-  
   // 우선심사 선택 카드 클릭
   TM.setPriorityChoice = function(enabled) {
     if (!TM.currentProject) return;
+    if (!TM.currentProject.priorityExam) TM.currentProject.priorityExam = {};
     TM.currentProject.priorityExam.enabled = enabled;
     TM.currentProject.priorityExam.userConfirmed = true;
     TM.hasUnsavedChanges = true;
@@ -6611,6 +6540,7 @@ ${criticalResults.slice(0, 5).map(r =>
   
   TM.updatePriorityReason = function(reason) {
     if (!TM.currentProject) return;
+    if (!TM.currentProject.priorityExam) TM.currentProject.priorityExam = {};
     TM.currentProject.priorityExam.reason = reason;
     TM.hasUnsavedChanges = true;
   };
@@ -7037,6 +6967,7 @@ ${text.substring(0, 2000)}
   // 추출 정보 초기화
   TM.clearExtractedInfo = function() {
     if (!TM.currentProject) return;
+    if (!TM.currentProject.priorityExam) TM.currentProject.priorityExam = {};
     TM.currentProject.priorityExam.extractedFromApplication = false;
     TM.currentProject.priorityExam.editMode = false;
     TM.currentProject.priorityExam.applicationNumber = null;
@@ -7060,6 +6991,7 @@ ${text.substring(0, 2000)}
   // 우선심사 사유 상세 업데이트
   TM.updatePriorityReasonDetail = function(detail) {
     if (!TM.currentProject) return;
+    if (!TM.currentProject.priorityExam) TM.currentProject.priorityExam = {};
     TM.currentProject.priorityExam.reasonDetail = detail;
     TM.hasUnsavedChanges = true;
   };
@@ -7067,21 +6999,20 @@ ${text.substring(0, 2000)}
   // 증거자료 수동 추가
   TM.addEvidenceManual = function() {
     const titleInput = document.getElementById('tm-evidence-title');
-    const descInput = document.getElementById('tm-evidence-desc');
-    
+
     const title = titleInput?.value?.trim();
     if (!title) {
       App.showToast('첨부자료 제목을 입력하세요.', 'warning');
       return;
     }
-    
+
     if (!TM.currentProject.priorityExam.evidences) {
       TM.currentProject.priorityExam.evidences = [];
     }
-    
+
     TM.currentProject.priorityExam.evidences.push({
       title: title,
-      description: descInput?.value?.trim() || '',
+      description: '',
       addedAt: new Date().toISOString()
     });
     
@@ -7410,11 +7341,11 @@ ${content.substring(0, 1200)}
     const p = TM.currentProject;
     const pe = p.priorityExam || {};
     
-    // 출원인 정보
-    const applicantName = pe.applicantName || p.applicantName || '[출원인명]';
-    const applicationNumber = pe.applicationNumber || '[출원번호]';
-    const applicationDate = pe.applicationDate || '[출원일]';
-    const trademarkName = pe.trademarkNameFromApp || p.trademarkName || '[상표명]';
+    // 출원인 정보 (HTML 이스케이프 적용)
+    const applicantName = TM.escapeHtml(pe.applicantName || p.applicantName || '[출원인명]');
+    const applicationNumber = TM.escapeHtml(pe.applicationNumber || '[출원번호]');
+    const applicationDate = TM.escapeHtml(pe.applicationDate || '[출원일]');
+    const trademarkName = TM.escapeHtml(pe.trademarkNameFromApp || p.trademarkName || '[상표명]');
     
     // 인라인 선택 값 적용
     const hasExtracted = pe.classCode || pe.designatedGoodsFromApp;
@@ -7530,7 +7461,7 @@ ${content.substring(0, 1200)}
           <div class="tm-doc-section">
             <h3>【증빙자료】</h3>
             <ul style="margin: 0; padding-left: 0; list-style: none;">
-              ${evidences.map((ev, idx) => `<li>첨부자료 ${idx + 1} : ${ev.title}</li>`).join('')}
+              ${evidences.map((ev, idx) => `<li>첨부자료 ${idx + 1} : ${TM.escapeHtml(ev.title)}</li>`).join('')}
             </ul>
           </div>
         ` : ''}
@@ -7922,19 +7853,23 @@ ${content.substring(0, 1200)}
     return blob;
   };
   
-  // 스크립트 동적 로드
+  // 스크립트 동적 로드 (중복 로드 방지)
+  TM._loadingScripts = {};
   TM.loadScript = function(src) {
-    return new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${src}"]`)) {
-        resolve();
-        return;
-      }
+    if (document.querySelector(`script[src="${src}"]`)) {
+      return Promise.resolve();
+    }
+    if (TM._loadingScripts[src]) {
+      return TM._loadingScripts[src];
+    }
+    TM._loadingScripts[src] = new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = src;
-      script.onload = resolve;
-      script.onerror = reject;
+      script.onload = () => { delete TM._loadingScripts[src]; resolve(); };
+      script.onerror = (e) => { delete TM._loadingScripts[src]; reject(e); };
       document.head.appendChild(script);
     });
+    return TM._loadingScripts[src];
   };
   
   TM.removeEvidence = async function(index) {
@@ -7942,17 +7877,17 @@ ${content.substring(0, 1200)}
     
     const evidence = TM.currentProject.priorityExam.evidences[index];
     
-    // Storage에서 파일 삭제
-    if (evidence.fileName) {
+    // Storage에서 파일 삭제 (storagePath가 있는 경우만)
+    if (evidence.storagePath) {
       try {
         await App.sb.storage
           .from('trademark-evidences')
-          .remove([evidence.fileName]);
+          .remove([evidence.storagePath]);
       } catch (e) {
         console.warn('[TM] 파일 삭제 실패:', e);
       }
     }
-    
+
     TM.currentProject.priorityExam.evidences.splice(index, 1);
     TM.renderCurrentStep();
     App.showToast('증거자료가 삭제되었습니다.', 'success');
@@ -8030,6 +7965,8 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
     const text = content.innerText;
     navigator.clipboard.writeText(text).then(() => {
       App.showToast('클립보드에 복사되었습니다.', 'success');
+    }).catch(() => {
+      App.showToast('클립보드 복사에 실패했습니다.', 'error');
     });
   };
   
@@ -9100,7 +9037,7 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       const btn = document.querySelector('[data-action="tm-analyze-business"]');
       if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span class="tossface">⏳</span> AI 분석 중...';
+        btn.innerHTML = '<span class="tf">⏳</span> AI 분석 중...';
       }
       
       // ★★★ 새 분석 시 기존 선택 완전 초기화 ★★★
@@ -9197,7 +9134,7 @@ ${TM.PRACTICE_GUIDELINES}
   "searchKeywords": ["발레", "댄스", "의류", "레오타드", "판매"]
 }`;
 
-      if (btn) btn.innerHTML = '<span class="tossface">⏳</span> 사업 분석 중...';
+      if (btn) btn.innerHTML = '<span class="tf">⏳</span> 사업 분석 중...';
       
       console.log('[TM] LLM 기반 사업 분석 시작');
       // ★ Sonnet 직접 호출 (WithFallback은 Opus→Sonnet 이중 호출로 529 악화)
@@ -9298,7 +9235,7 @@ ${TM.PRACTICE_GUIDELINES}
         const paddedCode = String(classCode).padStart(2, '0');
         
         try {
-          if (btn) btn.innerHTML = `<span class="tossface">⏳</span> 제${classCode}류 분석 중...`;
+          if (btn) btn.innerHTML = `<span class="tf">⏳</span> 제${classCode}류 분석 중...`;
           
           // ★★★ 핵심 개선: 류당 API 1회만 호출 ★★★
           // 1. DB에서 후보 조회 (API 호출 X)
