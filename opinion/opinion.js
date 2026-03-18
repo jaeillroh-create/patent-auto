@@ -774,6 +774,7 @@ Opinion.startParsing = async function(){
 
     // 2. 텍스트 추출 + 품질 검사 + 역할별 분리
     var textByRole = { notification:'', specification:'', cited_ref:'', other:'' };
+    var citedRefFiles = []; // 인용문헌 파일 목록 (개별 추적)
     var allText = '';
     var fileResults = [];
     var totalFiles = (Opinion.state.files||[]).length;
@@ -789,18 +790,23 @@ Opinion.startParsing = async function(){
 
       if(quality !== 'empty') {
         var roleLabel = (Opinion.FILE_ROLES[role]||{}).label || role;
-        var section = '=== [' + roleLabel + ': ' + ff.name + '] ===\n' + fileText + '\n\n';
+        // 인용문헌은 파일별로 번호를 부여하여 명확히 구분
+        if(role === 'cited_ref') {
+          citedRefFiles.push({ name: ff.name, text: fileText, index: citedRefFiles.length + 1 });
+          var section = '\n\n########## 인용문헌 ' + citedRefFiles.length + ' [파일: ' + ff.name + '] ##########\n' + fileText + '\n########## 인용문헌 ' + citedRefFiles.length + ' 끝 ##########\n\n';
+        } else {
+          var section = '=== [' + roleLabel + ': ' + ff.name + '] ===\n' + fileText + '\n\n';
+        }
         textByRole[role] += section;
         allText += section;
       }
     }
 
     if(manualText) {
-      allText += '=== [수동 입력 텍스트] ===\n' + manualText + '\n\n';
       fileResults.push({ name: '수동 입력', quality: 'good', length: manualText.length, role: 'other' });
     }
 
-    var effectiveText = allText.replace(/===\s*\[.*?\]\s*===/g,'').trim();
+    var effectiveText = allText.replace(/===\s*\[.*?\]\s*===/g,'').replace(/##########[^#]*##########/g,'').trim();
     var failedFiles = fileResults.filter(function(r){ return r.quality==='empty'; });
 
     if(effectiveText.length < 100) {
@@ -824,28 +830,50 @@ Opinion.startParsing = async function(){
       showToast(warnNames + ' 텍스트 추출 실패 (나머지 파일로 진행)', 'info');
     }
 
-    // 3. LLM 파싱
+    // 3. LLM 파싱 — 역할별 우선순위 배치 (통지서→인용문헌→명세서→기타)
+    // 통지서(거절이유)가 가장 중요하고, 인용문헌이 다음으로 중요
+    var orderedText = (textByRole.notification || '') + (textByRole.cited_ref || '') + (textByRole.specification || '') + (textByRole.other || '');
+    if(manualText) orderedText += '=== [수동 입력 텍스트] ===\n' + manualText + '\n\n';
+
+    // 인용문헌 파일 목록 안내 생성
+    var citedRefGuide = '';
+    if(citedRefFiles.length > 0) {
+      citedRefGuide = '\n\n⚠️ 인용문헌은 총 ' + citedRefFiles.length + '건이 업로드되었습니다. 각각 별도의 인용발명입니다:\n';
+      citedRefFiles.forEach(function(cr) {
+        citedRefGuide += '  - 인용문헌 ' + cr.index + ': ' + cr.name + '\n';
+      });
+      citedRefGuide += 'cited_references 배열에 반드시 ' + citedRefFiles.length + '개 항목을 포함하세요. 하나로 합치지 마세요.\n';
+    }
+
     showProgress('opinionParseProgress', 'AI 분석 중...', totalFiles+(manualText?1:0), totalFiles+(manualText?1:0));
     var parsed = await Opinion.callForJSON(
       Opinion.SYS_PROMPT+'\n\n아래 문서들을 분석하여 구조화해 주세요.\n'
       +'⚠️ 중요: 각 문서는 [📋 의견제출통지서], [📑 출원 명세서], [📄 인용발명] 으로 구분되어 있습니다.\n'
-      +'출원 명세서 = 본원발명(우리 특허). 인용발명 = 심사관이 인용한 선행기술(다른 특허). 이 둘을 절대 혼동하지 마세요.\n\n'
+      +'출원 명세서 = 본원발명(우리 특허). 인용발명 = 심사관이 인용한 선행기술(다른 특허). 이 둘을 절대 혼동하지 마세요.\n'
+      +citedRefGuide+'\n'
       +'추출할 항목:\n'
       +'1. application_no: 본원 출원번호\n'
       +'2. applicant: 본원 출원인\n'
       +'3. invention_title: 본원 발명의 명칭\n'
       +'4. rejection_reasons: [{claim_nos:[N], article:"§29②", reason:"진보성 위반", cited_refs:["인용문헌1"]}]\n'
-      +'5. cited_references: [{ref_no:N, title:"인용발명 제목", publication_no:"공개번호"}]\n'
+      +'5. cited_references: 인용문헌별 개별 항목 [{ref_no:N, title:"인용발명 제목", publication_no:"공개번호"}] — 파일별로 반드시 별도 항목\n'
       +'6. claims: 본원 청구항 [{no:N, text:"..."}]\n'
-      +'7. comparison_table: 심사관 대비표 [{element_no:N, applicant_feature:"본원 구성", cited_feature:"인용발명 구성"}]\n\n'
-      +'---\n'+allText.slice(0,30000),
-      '{"application_no":"10-...","applicant":"...","invention_title":"...","rejection_reasons":[...],"cited_references":[...],"claims":[...]}'
+      +'7. comparison_table: 심사관 대비표 [{element_no:N, applicant_feature:"본원 구성", cited_feature:"인용발명 구성", cited_ref_no:N}]\n\n'
+      +'---\n'+orderedText.slice(0,30000),
+      '{"application_no":"10-...","applicant":"...","invention_title":"...","rejection_reasons":[...],"cited_references":[{"ref_no":1,"title":"...","publication_no":"..."},{"ref_no":2,"title":"...","publication_no":"..."}],"claims":[...]}'
     );
     // 추출 품질 메타 저장
     parsed._file_results = fileResults;
     parsed._total_text_length = effectiveText.length;
 
-    await sb.from('opinion_parsed_documents').insert({project_id:p.id, raw_text:allText.slice(0,100000), parsed_data:parsed});
+    // 인용문헌 수 검증: 업로드 파일 수 vs LLM 파싱 결과 수 비교
+    var parsedCitedCount = (parsed.cited_references || []).length;
+    if(citedRefFiles.length > 0 && parsedCitedCount < citedRefFiles.length) {
+      console.warn('[Opinion] 인용문헌 수 불일치: 업로드 ' + citedRefFiles.length + '건, 파싱 ' + parsedCitedCount + '건');
+      showToast('인용문헌 ' + citedRefFiles.length + '건 중 ' + parsedCitedCount + '건만 인식됨 — 파싱 결과를 확인하세요', 'info');
+    }
+
+    await sb.from('opinion_parsed_documents').insert({project_id:p.id, raw_text:orderedText.slice(0,100000), parsed_data:parsed});
     clearProgress('opinionParseProgress');
     await Opinion.setStatus(p.id,'parsed');
     showToast('파싱 완료 ('+Math.round(effectiveText.length/1000)+'K자 추출)');
