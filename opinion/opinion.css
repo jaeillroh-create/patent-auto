@@ -118,7 +118,17 @@
 .opinion-claim-row.allowable { background: #f0fdf4; border-color: #bbf7d0; }
 .opinion-claim-row .claim-no { width: 70px; font-weight: 600; flex-shrink: 0; }
 
-/* ═══ 11. 반응형 ═══ */
+/* ═══ 11. 심사관·변리사 토론 형식 ═══ */
+.opinion-discussion { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }
+.opinion-chat-bubble { padding: 12px 14px; border-radius: 12px; font-size: 12px; line-height: 1.7; max-width: 100%; }
+.opinion-chat-bubble.examiner { background: #fff5f5; border-left: 3px solid var(--color-error); }
+.opinion-chat-bubble.attorney { background: #eff6ff; border-left: 3px solid var(--color-primary); }
+.opinion-chat-role { font-size: 11px; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
+.opinion-chat-bubble.examiner .opinion-chat-role { color: var(--color-error); }
+.opinion-chat-bubble.attorney .opinion-chat-role { color: var(--color-primary); }
+.opinion-chat-text { color: var(--color-text-secondary); }
+
+/* ═══ 12. 반응형 ═══ */
 @media (max-width: 768px) {
   .patent-sub-tab { padding: 8px 14px; font-size: 12px; }
   .opinion-dashboard { flex-direction: column; }
