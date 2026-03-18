@@ -720,6 +720,7 @@ Opinion.CHECK_TYPE_LABELS = {
   context_match: '문맥 일치 여부',
   combination_check: '조합 기재 여부',
   cited_ref_origin: '인용발명 유래 여부',
+  spec_support: '명세서 뒷받침 여부 (§42③)',
   within_scope: '최초 명세서 범위 내',
   within_original_scope: '최초 명세서 범위 내',
   resolved: '지적사항 해소 여부',
@@ -1607,22 +1608,40 @@ Opinion.startDraft=async function(){
         +'- 변리사가 보정안을 제시하면, 심사관이 인용발명 1~3 및 이들 조합으로 진보성을 극복할 수 있는지 재검토합니다.\n'
         +'- 변리사는 기재불비(특히 출원서에 기재된 사항에 의한 명확한 뒷받침) 여부도 검토합니다.\n'
         +'- 토론 결과를 "discussion" 배열에 기록하세요.\n\n'
-        +'★ 보정 원칙:\n'
+        +'★ 보정 원칙 (핵심 — 반드시 준수):\n'
         +'1. 독립 청구항 1항만 보정하세요. 독립항이 보정되면 종속항은 당연히 신규성/진보성이 인정되므로 종속항 보정은 불필요합니다.\n'
         +'2. 단, 종속항 중 거절이유에서 별도로 지적된 것이 있으면 그것만 추가 보정하세요.\n'
         +'3. 보정후 청구항 1항은 명확하고 간결하게 기재하되, 모든 인용발명과의 차이가 분명하도록 작성하세요.\n\n'
-        +'★ 명세서 뒷받침 교차검증 (자동 수행):\n'
-        +'1. 보정에 사용하는 모든 용어는 반드시 출원 명세서에 기재된 용어만 사용하세요.\n'
+        +'★★★ 보정 방법 (절대 규칙 — 단순 병합 금지):\n'
+        +'보정은 단순히 기존 종속항의 문언을 독립항에 병합하는 것이 아닙니다.\n'
+        +'반드시 아래 3가지 방법 중 하나 이상을 사용하여 보정하세요:\n'
+        +'  (1) 한정(限定): 명세서에 기재된 구체적 구성으로 기존 청구항의 상위 개념을 좁히는 것\n'
+        +'      예: "프로세서" → "명세서 【0035】에 기재된 바와 같이, 감정 분석 모듈과 추천 엔진을 포함하는 프로세서"\n'
+        +'  (2) 부가(附加): 명세서에 기재되어 있으나 기존 청구항에는 없던 구성요소를 추가하는 것\n'
+        +'      예: 명세서 【0042】에 기재된 "실시간 피드백 루프" 구성을 청구항에 새로 추가\n'
+        +'  (3) 구체화(具體化): 명세서에 기재된 구체적 실시예/수치/방법으로 추상적 표현을 구체화하는 것\n'
+        +'      예: "데이터를 처리하는 단계" → "명세서 【0058】에 기재된 바와 같이, N-gram 기반으로 텍스트를 토큰화하고 TF-IDF 가중치를 산출하는 단계"\n\n'
+        +'⚠️ 보정에 사용하는 모든 구성은 반드시 출원 명세서의 특정 단락에 기재된 것이어야 합니다.\n'
+        +'⚠️ 명세서에 없는 구성을 새로 창작하거나, 인용발명에만 있는 구성을 차용하면 기재불비(§42③) 위반입니다.\n'
+        +'⚠️ 기재불비 위반은 절대 허용되지 않습니다. 보정안의 모든 문언이 명세서에 의해 뒷받침되는지 반드시 확인하세요.\n\n'
+        +'★ 명세서 뒷받침 교차검증 (자동 수행 — 기재불비 방지):\n'
+        +'1. 보정에 사용하는 모든 용어·구성은 반드시 출원 명세서에 기재된 것만 사용하세요.\n'
         +'2. 인용발명에만 있는 용어(인용발명 고유 표현)는 절대 보정에 사용하지 마세요.\n'
         +'3. 각 보정 문언에 대해 근거가 되는 명세서 단락번호(【0001】형식)를 spec_basis에 반드시 명시하세요.\n'
-        +'4. 여러 구성요소를 조합하는 경우, 해당 조합이 명세서의 동일 단락에 기재되어 있는지 확인하세요.\n\n'
+        +'4. 여러 구성요소를 조합하는 경우, 해당 조합이 명세서의 동일 단락 또는 관련 단락에 기재되어 있는지 확인하세요.\n'
+        +'5. 명세서에 기재되지 않은 구성을 보정에 사용하면 기재불비(§42③) 위반이므로 절대 금지합니다.\n\n'
         +'★ 인용발명 극복 검토 (청구항 1항 보정 후):\n'
         +'1. 보정후 청구항 1항이 각 인용발명(전체)과 어떤 차이가 있는지 per_cited_ref_diff에 인용문헌별로 기재하세요.\n'
         +'2. 인용발명들의 결합에 의해서도 도달할 수 없는 구성을 포함하도록 하세요.\n'
         +'3. 인용발명 1, 2, 3 각각과의 대비, 그리고 이들의 조합(1+2, 1+3, 2+3, 1+2+3)에 대해 진보성을 극복할 수 있는지 기술적으로 검토하세요.\n\n'
         +'★ 뒷받침 검증 결과도 함께 반환:\n'
-        +'각 보정 구성요소에 대해 4중 검증: term_existence(용어존재), context_match(문맥일치), combination_check(결합체크), cited_ref_origin(인용발명 유래)\n\n'
-        +'JSON: {"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"amended_claims":[{"claim_no":1,"original":"원본 청구항 전문","amended":"보정후 청구항 전문","amendments_summary":"보정 사항 요약","spec_basis":["【0029】","【0035】"],"per_cited_ref_diff":[{"ref_no":1,"ref_title":"인용문헌1 제목","difference":"이 인용발명과의 구체적 차이점"}]}],\n"unchanged_claims":[2,3,4],"strategy_name":"적용된 전략명",\n"validation":{"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"보정된 문언","checks":[{"check_type":"term_existence","result":"pass|warn|fail","detail":"구체적 근거"}],"overall_result":"pass|warn|fail"}]}}',
+        +'각 보정 구성요소에 대해 5중 검증:\n'
+        +'  1. term_existence(용어존재) — 보정 문언의 용어가 명세서에 존재하는지\n'
+        +'  2. context_match(문맥일치) — 해당 맥락에서 명세서와 동일하게 사용되는지\n'
+        +'  3. combination_check(결합체크) — 조합된 구성이 명세서에서 함께 기재되어 있는지\n'
+        +'  4. cited_ref_origin(인용발명 유래) — 인용발명에서만 나오는 용어를 차용하지 않았는지\n'
+        +'  5. spec_support(명세서 뒷받침) — 보정된 각 구성이 명세서의 구체적 단락에 의해 명확히 뒷받침되는지 (기재불비 §42③ 위반 여부 최종 확인)\n\n'
+        +'JSON: {"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"amended_claims":[{"claim_no":1,"original":"원본 청구항 전문","amended":"보정후 청구항 전문","amendments_summary":"보정 사항 요약","amendment_methods":[{"method":"한정|부가|구체화","target":"보정 대상 구성","spec_paragraph":"【0035】","description":"명세서 기재에 근거한 구체적 보정 내용"}],"spec_basis":["【0029】","【0035】"],"per_cited_ref_diff":[{"ref_no":1,"ref_title":"인용문헌1 제목","difference":"이 인용발명과의 구체적 차이점"}]}],\n"unchanged_claims":[2,3,4],"strategy_name":"적용된 전략명",\n"validation":{"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"보정된 문언","checks":[{"check_type":"term_existence|context_match|combination_check|cited_ref_origin|spec_support","result":"pass|warn|fail","detail":"구체적 근거"}],"overall_result":"pass|warn|fail"}]}}',
       description_deficiency: '위 분석 결과의 각 지적사항을 반영한 수정 청구항을 생성하고 검증해 주세요.'+revCtx+'\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 검토하세요.\n'
         +'⚠️ 수정 문언은 반드시 최초 명세서 범위 내에서만 작성. 각 수정에 명세서 근거 단락을 명시.\n'
@@ -1635,7 +1654,7 @@ Opinion.startDraft=async function(){
         +'JSON: {"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"merged_claim":{"claim_no":1,"text":"병합된 전문","spec_basis":["【0001】"]},"remaining_claims":[{"old_no":N,"new_no":N,"text":"...","changed":bool}],"deleted_claims":[N],\n"validation":{"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"...","checks":[{"check_type":"merge_accuracy|dependency|new_matter|scope","result":"pass|warn|fail","detail":"..."}],"overall_result":"pass|warn|fail"}}}'
     };
     var schemaHints = {
-      inventive_step: '{"amended_claims":[{"claim_no":1,"original":"...","amended":"...","amendments_summary":"...","spec_basis":["【0029】"],"per_cited_ref_diff":[{"ref_no":1,"difference":"..."}]}],"unchanged_claims":[2,3],"strategy_name":"..."}',
+      inventive_step: '{"amended_claims":[{"claim_no":1,"original":"...","amended":"...","amendments_summary":"...","amendment_methods":[{"method":"한정","target":"...","spec_paragraph":"【0035】","description":"..."}],"spec_basis":["【0029】"],"per_cited_ref_diff":[{"ref_no":1,"difference":"..."}]}],"unchanged_claims":[2,3],"strategy_name":"..."}',
       description_deficiency: '{"corrected_claims":[{"claim_no":1,"original":"...","corrected":"...","spec_basis":["【0001】"]}]}',
       partial_rejection: '{"merged_claim":{"claim_no":1,"text":"...","spec_basis":["【0001】"]},"remaining_claims":[...]}'
     };
