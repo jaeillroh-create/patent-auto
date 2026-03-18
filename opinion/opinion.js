@@ -1053,10 +1053,19 @@ Opinion.startAnalysis = async function(){
     }
     var prompts={
       inventive_step:'위 의견제출통지서와 명세서를 분석하여 구성요소별 차이점과 보정 전략을 도출해 주세요.\n\n'
-        +'⚠️ 본원 명세서(출원인 특허) ≠ 인용발명(심사관이 인용한 선행기술). 이 둘을 절대 혼동하지 마세요.\n'
-        +'구성요소별 분석: 심사관이 대비한 각 구성요소에 대해, 본원 명세서의 실제 내용과 인용발명의 실제 내용을 비교하여 구체적 차이점을 서술하세요. 추상적 placeholder 금지.\n\n'
-        +'보정 전략: 각 전략에 대해 구체적으로 어떤 종속항을 병합하고 어떤 구성요소를 구체화할지, 그 근거와 위험도를 서술하세요.\n\n'
-        +'JSON:\n{"elements":[\n  {"element_id":"E1","claim_element":"실제 청구항 구성요소 문언","cited_ref":"인용문헌 N","cited_disclosure":"인용발명에 개시된 실제 내용","difference":"본원과의 구체적 차이점","strength":"strong|medium|weak","non_obviousness_argument":"진보성 주장 근거"}\n],\n"strategies":[\n  {"id":"S1","name":"전략명 (예: 종속항3 병합 + 감정엔진 구체화)","rationale":"이 전략의 근거와 기대 효과를 2~3문장으로","target_elements":["E3","E5"],"merge_claims":[3],"scope_impact":"narrow|moderate|broad","risk":"low|medium|high"}\n],\n"cited_references":[\n  {"ref_no":1,"title":"인용문헌 제목","key_features":"핵심 기술 요약"}\n]}',
+        +'⚠️ 본원 명세서(출원인 특허) ≠ 인용발명(심사관이 인용한 선행기술). 이 둘을 절대 혼동하지 마세요.\n\n'
+        +'[구성요소별 분석]\n'
+        +'심사관이 대비한 각 구성요소에 대해:\n'
+        +'- 각 구성요소가 어떤 인용문헌(cited_ref)과 대비되는지 명시하세요.\n'
+        +'- 본원 명세서의 실제 내용과 인용발명의 실제 내용을 비교하여 구체적 차이점을 서술하세요. 추상적 placeholder 금지.\n'
+        +'- 인용발명이 여러 건이면 각 인용문헌별로 별도 구성요소 항목(E1, E2, ...)을 생성하세요.\n\n'
+        +'[보정 전략]\n'
+        +'- 독립 청구항 1항을 보정하여 모든 인용발명들과의 차이를 확보하는 전략을 2~3개 제시하세요.\n'
+        +'- 각 전략에서 target_elements로 해당 전략이 활용하는 구성요소(E1, E2 등)를 명시하세요.\n'
+        +'- 보정 근거가 되는 명세서 단락번호(【0001】형식)를 spec_paragraphs로 제시하세요.\n'
+        +'- 종속항 병합이 필요한 경우 merge_claims에 해당 종속항 번호를 명시하세요.\n'
+        +'- 독립항 1항이 보정되면 종속항은 신규성/진보성이 인정되므로, 종속항 보정은 최소화하세요.\n\n'
+        +'JSON:\n{"elements":[\n  {"element_id":"E1","claim_element":"실제 청구항 구성요소 문언","cited_ref":"인용문헌 N","cited_disclosure":"인용발명에 개시된 실제 내용","difference":"본원과의 구체적 차이점","strength":"strong|medium|weak","non_obviousness_argument":"진보성 주장 근거"}\n],\n"strategies":[\n  {"id":"S1","name":"전략명 (예: 종속항3 병합 + 감정엔진 구체화)","rationale":"이 전략의 근거와 기대 효과를 2~3문장으로","target_elements":["E3","E5"],"merge_claims":[3],"spec_paragraphs":["【0029】","【0035】"],"scope_impact":"narrow|moderate|broad","risk":"low|medium|high"}\n],\n"cited_references":[\n  {"ref_no":1,"title":"인용문헌 제목","key_features":"핵심 기술 요약"}\n]}',
       description_deficiency:'위 의견제출통지서의 기재불비 지적사항을 분석하세요. 각 지적에 대해 실제 심사관 지적 내용과 명세서에서 대응 기재를 찾아 구체적 수정 방향을 제시하세요.\n\nJSON:\n[{"claim_no":N,"deficiency_type":"unclear|inconsistent|unsupported","examiner_comment":"심사관 지적 원문","spec_reference":"【0001】등 관련 단락","suggested_correction":"구체적 수정 문언 제안"}]',
       partial_rejection:'위 의견제출통지서에서 청구항별 거절 상태를 분석하고 등록가능 청구항을 식별하세요.\n\nJSON:\n{"rejected_claims":[{"claim_no":N,"reason":"진보성 위반 등 구체적 이유"}],"allowable_claims":[{"claim_no":N,"basis":"거절이유 미지적 등 근거"}],"merge_suggestion":{"target":1,"source":N,"rationale":"병합 이유와 기대 효과"}}'
     };
@@ -1189,6 +1198,9 @@ Opinion.renderAnalysis = function(L,R,status){
 
   // Gate 1 왼쪽
   var stratHtml = '';
+  // 전략 목록을 state에 캐시 (하이라이트 연동용)
+  Opinion.state._strategies = strategies;
+
   if (type==='inventive_step' && strategies.length) {
     stratHtml = '<div style="margin-top:12px">' + strategies.map(function(s,i){
       var name = s.name || s.strategy_name || ('전략 ' + (i+1));
@@ -1196,7 +1208,7 @@ Opinion.renderAnalysis = function(L,R,status){
       var risk = s.risk || s.위험도 || 'medium';
       var riskColor = risk==='low'?'var(--color-success)':risk==='high'?'var(--color-error)':'var(--color-warning)';
       return '<label style="display:flex;align-items:flex-start;gap:10px;padding:14px;border:2px solid var(--color-border);border-radius:10px;margin-bottom:8px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor=\'var(--color-primary)\'" onmouseout="this.style.borderColor=\'var(--color-border)\'">'
-        +'<input type="radio" name="opinionStrategy" value="'+i+'" '+(i===0?'checked':'')+' style="margin-top:4px" />'
+        +'<input type="radio" name="opinionStrategy" value="'+i+'" '+(i===0?'checked':'')+' style="margin-top:4px" onchange="Opinion.highlightStrategyElements('+i+')" />'
         +'<div style="flex:1">'
         +'<div style="font-size:14px;font-weight:600;color:var(--color-primary)">'+escapeHtml(name)+'</div>'
         +(rationale?'<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;line-height:1.6">'+escapeHtml(rationale)+'</div>':'')
@@ -1205,6 +1217,7 @@ Opinion.renderAnalysis = function(L,R,status){
         +(s.scope_impact?'<span style="padding:2px 8px;border-radius:10px;background:var(--color-bg-tertiary)">범위: '+escapeHtml(s.scope_impact)+'</span>':'')
         +(s.target_elements&&s.target_elements.length?'<span style="padding:2px 8px;border-radius:10px;background:var(--color-bg-tertiary)">대상: '+s.target_elements.join(', ')+'</span>':'')
         +(s.merge_claims&&s.merge_claims.length?'<span style="padding:2px 8px;border-radius:10px;background:var(--color-bg-tertiary)">병합: 청구항 '+s.merge_claims.join(', ')+'</span>':'')
+        +(s.spec_paragraphs&&s.spec_paragraphs.length?'<span style="padding:2px 8px;border-radius:10px;background:var(--color-bg-tertiary)">근거: '+s.spec_paragraphs.join(', ')+'</span>':'')
         +'</div></div></label>';
     }).join('') + '</div>';
   } else {
@@ -1218,6 +1231,33 @@ Opinion.renderAnalysis = function(L,R,status){
     +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.backToList()">나중에</button><button class="btn btn-primary" id="btnGate1Approve" onclick="Opinion.approveGate(1)"><span class="tf">✅</span> 확정</button></div></div>';
 
   R.innerHTML = Opinion.renderAnalysisUI(type, a, extracted);
+
+  // 첫 번째 전략 선택 시 하이라이트 초기화
+  if (type==='inventive_step' && strategies.length) {
+    Opinion.highlightStrategyElements(0);
+  }
+};
+
+// 전략 선택 시 해당 전략의 대상 구성요소를 하이라이트
+Opinion.highlightStrategyElements = function(strategyIndex) {
+  var strategies = Opinion.state._strategies;
+  if(!strategies || !strategies[strategyIndex]) return;
+  var targets = strategies[strategyIndex].target_elements || [];
+
+  document.querySelectorAll('.opinion-element-card').forEach(function(card) {
+    var eid = card.getAttribute('data-element-id');
+    if(targets.length === 0 || targets.indexOf(eid) >= 0) {
+      // 해당 전략의 대상 구성요소: 강조
+      card.style.borderColor = 'var(--color-primary)';
+      card.style.boxShadow = '0 0 0 1px var(--color-primary)';
+      card.style.opacity = '1';
+    } else {
+      // 비대상 구성요소: 흐리게
+      card.style.borderColor = 'var(--color-border)';
+      card.style.boxShadow = 'none';
+      card.style.opacity = '0.5';
+    }
+  });
 };
 
 // 분석 결과 구조화 렌더링
@@ -1240,7 +1280,7 @@ Opinion.renderAnalysisUI = function(type, a, extracted) {
         var cited = el.cited_disclosure || el.cited_ref_disclosure || el.인용발명내용 || '';
         var arg = el.non_obviousness_argument || el.진보성근거 || '';
 
-        h += '<div style="padding:14px;border:1px solid var(--color-border);border-radius:8px;margin-bottom:8px">'
+        h += '<div class="opinion-element-card" data-element-id="'+escapeHtml(elName)+'" style="padding:14px;border:1px solid var(--color-border);border-radius:8px;margin-bottom:8px;transition:border-color 0.2s,box-shadow 0.2s">'
           +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
           +'<span style="font-weight:600;font-size:13px">'+escapeHtml(elName)+'</span>'
           +'<span style="font-size:11px;font-weight:600;padding:2px 10px;border-radius:12px;background:'+strengthColor+'15;color:'+strengthColor+'">차이 '+strengthLabel+'</span></div>';
@@ -1335,7 +1375,17 @@ Opinion.renderAnalysisUI = function(type, a, extracted) {
 
 Opinion.approveGate = async function(gn){
   var p=Opinion.state.current;if(!p)return;var type=p.rejection_type,next;
-  if(gn===1){next=type==='description_deficiency'?'correction_confirmed':type==='partial_rejection'?'merge_confirmed':'strategy_confirmed';}
+  if(gn===1){
+    next=type==='description_deficiency'?'correction_confirmed':type==='partial_rejection'?'merge_confirmed':'strategy_confirmed';
+    // 선택된 전략 캡처
+    var radioEl = document.querySelector('input[name="opinionStrategy"]:checked');
+    if(radioEl && type==='inventive_step') {
+      var idx = parseInt(radioEl.value,10);
+      var extracted = Opinion.extractAnalysisFields(Opinion.state.analysis);
+      Opinion.state.selectedStrategy = extracted.strategies[idx] || null;
+      Opinion.state.selectedStrategyIndex = idx;
+    }
+  }
   else if(gn===2){next='claims_confirmed';}
   else if(gn===3){next='approved';}
   setButtonLoading('btnGate'+gn+'Approve',true);
@@ -1380,6 +1430,10 @@ Opinion.getContext = async function(sections) {
     }
     if(sections.indexOf('analysis')>=0 && Opinion.state.analysis) {
       ctx+='[분석 결과]\n'+JSON.stringify(Opinion.state.analysis,null,1).slice(0,4000)+'\n\n';
+      // 사용자가 선택한 전략 정보 추가
+      if(Opinion.state.selectedStrategy) {
+        ctx+='[사용자 선택 전략]\n'+JSON.stringify(Opinion.state.selectedStrategy,null,1)+'\n⚠️ 위 전략에 따라 보정안을 작성하세요. 다른 전략은 무시하세요.\n\n';
+      }
     }
     if(sections.indexOf('draft')>=0) {
       var{data:dr}=await sb.from('opinion_draft_claims').select('draft_data').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
@@ -1412,13 +1466,20 @@ Opinion.startDraft=async function(){
     Opinion.state.lastRevisionNote = ''; // 사용 후 초기화
 
     var prompts = {
-      inventive_step: '위 분석 결과를 기반으로 보정 청구항 대안 2~3개를 생성해 주세요.'+revCtx+'\n\n'
-        +'⚠️ 중요 — 명세서 뒷받침 교차검증:\n'
+      inventive_step: '[사용자 선택 전략]에 따라 보정 청구항을 생성해 주세요.'+revCtx+'\n\n'
+        +'★ 보정 원칙:\n'
+        +'1. 독립 청구항 1항만 보정하세요. 독립항이 보정되면 종속항은 당연히 신규성/진보성이 인정되므로 종속항 보정은 불필요합니다.\n'
+        +'2. 단, 종속항 중 거절이유에서 별도로 지적된 것이 있으면 그것만 추가 보정하세요.\n'
+        +'3. 보정후 청구항 1항은 명확하고 간결하게 기재하되, 모든 인용발명과의 차이가 분명하도록 작성하세요.\n\n'
+        +'★ 명세서 뒷받침 교차검증:\n'
         +'1. 보정에 사용하는 모든 용어는 반드시 출원 명세서에 기재된 용어만 사용하세요.\n'
         +'2. 인용발명에만 있는 용어(인용발명 고유 표현)는 절대 보정에 사용하지 마세요.\n'
-        +'3. 각 보정 문언에 대해 근거가 되는 명세서 단락번호(【0001】형식)를 spec_basis로 명시하세요.\n'
+        +'3. 각 보정 문언에 대해 근거가 되는 명세서 단락번호(【0001】형식)를 spec_basis에 반드시 명시하세요.\n'
         +'4. 여러 구성요소를 조합하는 경우, 해당 조합이 명세서의 동일 단락에 기재되어 있는지 확인하세요.\n\n'
-        +'JSON: {"alternatives":[{"id":"alt1","name":"전략명","claims_text":"보정 청구항 전문","amendments":"보정 사항 요약","scope":"broad|moderate|narrow","risk":"low|medium|high","spec_basis":["【0029】","【0035】"]}]}',
+        +'★ 인용발명 극복:\n'
+        +'1. 보정후 청구항 1항이 각 인용발명(전체)과 어떤 차이가 있는지 per_cited_ref_diff에 인용문헌별로 기재하세요.\n'
+        +'2. 인용발명들의 결합에 의해서도 도달할 수 없는 구성을 포함하도록 하세요.\n\n'
+        +'JSON: {"amended_claims":[{"claim_no":1,"original":"원본 청구항 전문","amended":"보정후 청구항 전문","amendments_summary":"보정 사항 요약","spec_basis":["【0029】","【0035】"],"per_cited_ref_diff":[{"ref_no":1,"ref_title":"인용문헌1 제목","difference":"이 인용발명과의 구체적 차이점"}]}],"unchanged_claims":[2,3,4],"strategy_name":"적용된 전략명"}',
       description_deficiency: '위 분석 결과의 각 지적사항을 반영한 수정 청구항을 생성해 주세요.'+revCtx+'\n\n'
         +'⚠️ 수정 문언은 반드시 최초 명세서 범위 내에서만 작성. 각 수정에 명세서 근거 단락을 명시.\n\n'
         +'JSON: {"corrected_claims":[{"claim_no":N,"original":"원문","corrected":"수정문","spec_basis":["【0001】"],"changes":[{"type":"...","detail":"..."}]}]}',
@@ -1426,9 +1487,14 @@ Opinion.startDraft=async function(){
         +'⚠️ 병합 시 종속항의 문언을 그대로 독립항에 통합. 새로운 표현 추가 금지.\n\n'
         +'JSON: {"merged_claim":{"claim_no":1,"text":"병합된 전문","spec_basis":["【0001】"]},"remaining_claims":[{"old_no":N,"new_no":N,"text":"...","changed":bool}],"deleted_claims":[N]}'
     };
+    var schemaHints = {
+      inventive_step: '{"amended_claims":[{"claim_no":1,"original":"...","amended":"...","amendments_summary":"...","spec_basis":["【0029】"],"per_cited_ref_diff":[{"ref_no":1,"difference":"..."}]}],"unchanged_claims":[2,3],"strategy_name":"..."}',
+      description_deficiency: '{"corrected_claims":[{"claim_no":1,"original":"...","corrected":"...","spec_basis":["【0001】"]}]}',
+      partial_rejection: '{"merged_claim":{"claim_no":1,"text":"...","spec_basis":["【0001】"]},"remaining_claims":[...]}'
+    };
     var dr = await Opinion.callForJSON(
       Opinion.SYS_PROMPT+'\n\n'+ctx+prompts[t],
-      '{"alternatives":[{"id":"alt1","name":"...","claims_text":"...","risk":"low"}]}'
+      schemaHints[t] || '{}'
     );
     await sb.from('opinion_draft_claims').insert({project_id:p.id,draft_type:t,draft_data:dr,status:'draft'});
     Opinion.state.draftResult=dr;
