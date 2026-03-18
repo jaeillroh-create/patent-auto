@@ -198,14 +198,18 @@
               </div>
 
               <div class="card" style="padding:12px;margin-top:12px">
-                <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px"><span class="tf">📎</span> 의견서 양식</div>
+                <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px"><span class="tossface">📎</span> 의견서 템플릿</div>
                 <div id="opinionTemplateStatus" style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px;line-height:1.4">
                   <span style="color:var(--color-primary)">📋 기본 양식 사용 중</span>
                   <br><span style="font-size:10px;color:var(--color-text-tertiary)">유형별 표준 구조가 자동 적용됩니다</span>
                 </div>
-                <label for="opinionRefUpload" class="btn btn-outline btn-sm btn-full" style="cursor:pointer;font-size:11px"><span class="tf">📄</span> 커스텀 양식 등록</label>
-                <input type="file" id="opinionRefUpload" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="Opinion.handleRefUpload(event)" />
-                <p style="font-size:10px;color:var(--color-text-tertiary);margin-top:6px;line-height:1.4">기존 의견서를 업로드하면 문체·구조를 자동 참고합니다. 한 번 등록하면 모든 프로젝트에 적용됩니다.</p>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <label for="opinionRefUploadInv" class="btn btn-outline btn-sm btn-full" style="cursor:pointer;font-size:11px;border-color:var(--color-primary)"><span class="tossface">⚖️</span> 진보성/신규성 템플릿</label>
+                  <input type="file" id="opinionRefUploadInv" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="Opinion.handleRefUpload(event,'inventive_step')" />
+                  <label for="opinionRefUploadDef" class="btn btn-outline btn-sm btn-full" style="cursor:pointer;font-size:11px;border-color:var(--color-warning)"><span class="tossface">📝</span> 기재불비 템플릿</label>
+                  <input type="file" id="opinionRefUploadDef" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="Opinion.handleRefUpload(event,'description_deficiency')" />
+                </div>
+                <p style="font-size:10px;color:var(--color-text-tertiary);margin-top:6px;line-height:1.4">유형별 의견서 템플릿을 업로드하면 문체·구조를 자동 참고합니다. 한 번 등록하면 해당 유형의 모든 프로젝트에 자동 적용됩니다.</p>
               </div>
             </div>
             <div class="opinion-main">
