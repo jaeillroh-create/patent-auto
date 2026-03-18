@@ -701,12 +701,14 @@ Opinion.addFile=function(f){
     showToast('지원하지 않는 형식: '+ext,'error');return;
   }
   if(Opinion.state.files.some(function(x){return x.name===f.name;})){return;}
-  // 파일명으로 역할 자동 추측
+  // 파일명으로 역할 자동 추측 (인용문헌 우선 판별 — '의견제출통지서_인용문헌1' 같은 패턴 대응)
   var role = 'other';
   var n = f.name.toLowerCase();
-  if(n.includes('통지') || n.includes('notification') || n.includes('oa') || n.includes('의견제출')) role='notification';
+  // 인용문헌 키워드가 있으면 최우선 (통지서 파일명에 '인용문헌' 이 포함될 수 있음)
+  if(n.includes('인용문헌') || n.includes('인용발명') || n.includes('cited') || n.match(/ref\d/) || n.match(/문헌\d/)) role='cited_ref';
+  else if(n.includes('통지') || n.includes('notification') || n.includes('의견제출')) role='notification';
   else if(n.includes('명세') || n.includes('출원') || n.includes('spec') || n.includes('특허출원서')) role='specification';
-  else if(n.includes('인용') || n.includes('cited') || n.includes('ref') || n.includes('문헌')) role='cited_ref';
+  else if(n.includes('인용') || n.includes('문헌')) role='cited_ref';
   f._role = role;
   Opinion.state.files.push(f); Opinion.renderFiles();
   Opinion.updateParseButton();
