@@ -8003,13 +8003,6 @@ ${content.substring(0, 1200)}
       goodsWithGroups = [];
     }
     
-    // 증거자료 목록
-    const evidences = pe.evidences || [];
-    
-    // 첨부자료 참조 문자열 생성
-    const evidence1Ref = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
-    const evidence2Ref = evidences.length > 1 ? `(첨부자료 2: ${evidences[1].title})` : '';
-    
     // 신청이유 선택에 따른 법조문 (1문단: 법조문 + 우선심사 신청)
     let reasonClause = '';
     if (pe.reason === 'using') {
