@@ -316,18 +316,27 @@
 
     <!-- ═══ 상표 대시보드 패널 ═══ -->
     <div id="trademark-dashboard-panel" class="service-panel">
-      <div class="trademark-placeholder">
-        <div style="font-size:56px;margin-bottom:16px"><span class="tf">🏷️</span></div>
-        <h2 style="font-size:22px;font-weight:700;color:var(--color-text-primary);margin-bottom:8px">상표 출원 기능 준비 중</h2>
-        <p style="font-size:14px;color:var(--color-text-secondary);line-height:1.6;max-width:400px;margin:0 auto">
-          상표 출원서 작성, 지정상품 분류 추천,<br>유사상표 검토 기능이 곧 추가됩니다.
-        </p>
-        <div style="margin-top:24px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-          <div class="trademark-feature-chip"><span class="tf">📝</span> 출원서 자동 작성</div>
-          <div class="trademark-feature-chip"><span class="tf">🔍</span> 유사상표 검토</div>
-          <div class="trademark-feature-chip"><span class="tf">📑</span> 지정상품 분류</div>
-        </div>
+
+      <!-- ★ 상표 서브탭 (상표 출원 / 우선심사) ★ -->
+      <nav class="trademark-sub-tab-nav">
+        <button class="trademark-sub-tab active" data-subtab="application" onclick="App.switchTrademarkSubTab('application')">
+          <span class="tf">🏷️</span> 상표 출원
+        </button>
+        <button class="trademark-sub-tab" data-subtab="priority" onclick="App.switchTrademarkSubTab('priority')">
+          <span class="tf">⚡</span> 우선심사
+        </button>
+      </nav>
+
+      <!-- ═══ 서브패널 1: 상표 출원 ═══ -->
+      <div id="trademark-sub-application" class="trademark-sub-panel active">
+        <!-- TM.renderDashboard()에서 동적 렌더링 -->
       </div>
+
+      <!-- ═══ 서브패널 2: 우선심사 ═══ -->
+      <div id="trademark-sub-priority" class="trademark-sub-panel">
+        <!-- TM.renderPriorityDashboard()에서 동적 렌더링 -->
+      </div>
+
     </div><!-- /trademark-dashboard-panel -->
 
   </div>
