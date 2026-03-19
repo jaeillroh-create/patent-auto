@@ -1208,7 +1208,7 @@
         // 사이드바 상표명도 갱신
         const sidebarName = document.querySelector('.tm-project-name');
         if (sidebarName) sidebarName.textContent = val || '(상표명 미입력)';
-        TM.scheduleSave();
+        TM.debounceSave();
       });
     }
 
@@ -1216,7 +1216,7 @@
       appNumInput.addEventListener('input', function() {
         if (!p.priorityExam) p.priorityExam = {};
         p.priorityExam.applicationNumber = this.value.trim();
-        TM.scheduleSave();
+        TM.debounceSave();
       });
     }
 
@@ -1225,7 +1225,7 @@
         p.title = this.value.trim();
         if (!p.priorityExam) p.priorityExam = {};
         p.priorityExam.caseNumber = this.value.trim();
-        TM.scheduleSave();
+        TM.debounceSave();
       });
     }
   };
@@ -7954,36 +7954,38 @@ ${content.substring(0, 1200)}
     const finalUseExtracted = useExtracted || pe.useExtractedGoods || false;
     let classCodeStr, designatedGoodsStr, goodsWithGroups;
     
-    if (finalUseExtracted && hasExtracted) {
-      // 추출 정보 사용
-      classCodeStr = pe.classCode ? `제 ${pe.classCode}류` : '[상품류]';
-      designatedGoodsStr = pe.designatedGoodsFromApp || '[지정상품]';
-      goodsWithGroups = pe.designatedGoodsFromApp ? 
-        pe.designatedGoodsFromApp.split(',').map(g => `『${g.trim()}』`) : [];
-    } else {
-      // 2단계 정보 사용 (기본)
-      const classGroups = {};
-      (p.designatedGoods || []).forEach(classData => {
-        if (!classGroups[classData.classCode]) {
-          classGroups[classData.classCode] = [];
-        }
-        (classData.goods || []).forEach(g => {
-          classGroups[classData.classCode].push({
-            name: g.name,
-            similarGroup: g.similarGroup || ''
-          });
+    // 2단계 정보 확인
+    const classGroups = {};
+    (p.designatedGoods || []).forEach(classData => {
+      if (!classGroups[classData.classCode]) {
+        classGroups[classData.classCode] = [];
+      }
+      (classData.goods || []).forEach(g => {
+        classGroups[classData.classCode].push({
+          name: g.name,
+          similarGroup: g.similarGroup || ''
         });
       });
-      
+    });
+    const hasStep2Goods = Object.keys(classGroups).length > 0;
+
+    if ((finalUseExtracted || !hasStep2Goods) && hasExtracted) {
+      // 추출 정보 사용 (명시적 선택 또는 2단계 정보 없을 때 폴백)
+      classCodeStr = pe.classCode ? `제 ${pe.classCode}류` : '[상품류]';
+      designatedGoodsStr = pe.designatedGoodsFromApp || '[지정상품]';
+      goodsWithGroups = pe.designatedGoodsFromApp ?
+        pe.designatedGoodsFromApp.split(',').map(g => `『${g.trim()}』`) : [];
+    } else if (hasStep2Goods) {
+      // 2단계 정보 사용 (기본)
       const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
-      classCodeStr = classCodeList.length > 0 ? classCodeList.map(c => '제 ' + c + '류').join(', ') : '[상품류]';
-      
+      classCodeStr = classCodeList.map(c => '제 ' + c + '류').join(', ');
+
       const goodsList = [];
       Object.values(classGroups).forEach(goods => {
         goods.forEach(g => goodsList.push(g.name));
       });
-      designatedGoodsStr = goodsList.length > 0 ? goodsList.join(', ') : '[지정상품]';
-      
+      designatedGoodsStr = goodsList.join(', ');
+
       goodsWithGroups = [];
       Object.entries(classGroups).forEach(([classCode, goods]) => {
         goods.forEach(g => {
@@ -7994,6 +7996,11 @@ ${content.substring(0, 1200)}
           }
         });
       });
+    } else {
+      // 둘 다 없는 경우
+      classCodeStr = '[상품류]';
+      designatedGoodsStr = '[지정상품]';
+      goodsWithGroups = [];
     }
     
     // 증거자료 목록
