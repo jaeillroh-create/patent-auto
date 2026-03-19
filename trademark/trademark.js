@@ -881,7 +881,7 @@
     try {
       const { data: projects, error } = await App.sb
         .from('trademark_projects')
-        .select('id, title, trademark_name, trademark_type, current_state_json, designated_goods, applicant_info, updated_at')
+        .select('id, title, trademark_name, trademark_type, current_state_json, updated_at')
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
@@ -912,7 +912,7 @@
               </p>
               <div style="display: flex; flex-direction: column; gap: 8px;">
                 ${sourceProjects.map(p => {
-                  const goods = p.designated_goods || p.current_state_json?.designatedGoods || [];
+                  const goods = p.current_state_json?.designatedGoods || [];
                   const goodsCount = goods.reduce((sum, g) => sum + (g.goods?.length || 0), 0);
                   const classCount = goods.length;
                   return `
@@ -961,8 +961,8 @@
       const srcTmName = stateJson.trademarkName || source.trademark_name || '';
       const srcTmNameEn = stateJson.trademarkNameEn || source.trademark_name_en || '';
       const srcTmType = stateJson.trademarkType || source.trademark_type || 'text';
-      const srcGoods = stateJson.designatedGoods || source.designated_goods || [];
-      const srcApplicant = stateJson.applicant || source.applicant_info || {};
+      const srcGoods = stateJson.designatedGoods || [];
+      const srcApplicant = stateJson.applicant || {};
 
       // 우선심사 프로젝트 데이터 구성
       const peData = JSON.parse(JSON.stringify(TM.defaultProjectData));
@@ -1000,15 +1000,12 @@
       const { data: newProject, error: insertErr } = await App.sb
         .from('trademark_projects')
         .insert({
-          user_id: App.currentUser.id,
+          owner_user_id: App.currentUser.id,
           title: title,
           trademark_name: peData.trademarkName,
           trademark_type: peData.trademarkType,
           status: 'documenting',
-          current_state_json: peData,
-          applicant_info: peData.applicant,
-          designated_goods: peData.designatedGoods,
-          priority_exam: peData.priorityExam
+          current_state_json: peData
         })
         .select()
         .single();
@@ -1056,13 +1053,12 @@
       const { data: newProject, error } = await App.sb
         .from('trademark_projects')
         .insert({
-          user_id: App.currentUser.id,
+          owner_user_id: App.currentUser.id,
           title: title,
           trademark_name: '',
           trademark_type: 'text',
           status: 'documenting',
-          current_state_json: peData,
-          priority_exam: peData.priorityExam
+          current_state_json: peData
         })
         .select()
         .single();
