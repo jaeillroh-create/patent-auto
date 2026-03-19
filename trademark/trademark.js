@@ -996,7 +996,7 @@
       };
 
       // DB에 새 프로젝트 생성
-      const title = source.title ? `PE-${source.title}` : `PE-${new Date().toISOString().slice(0, 10)}`;
+      const title = source.title ? `26T${source.title}` : `26T`;
       const { data: newProject, error: insertErr } = await App.sb
         .from('trademark_projects')
         .insert({
@@ -1049,7 +1049,7 @@
         generatedDocument: ''
       };
 
-      const title = `PE-${new Date().toISOString().slice(0, 10)}-${Date.now().toString(36).slice(-4)}`;
+      const title = `26T`;
       const { data: newProject, error } = await App.sb
         .from('trademark_projects')
         .insert({
@@ -1165,7 +1165,7 @@
               <label style="font-size: 11px; color: #92400e; font-weight: 600; display: block; margin-bottom: 4px;">📁 사건번호</label>
               <input type="text" id="tm-pe-case-number"
                      value="${TM.escapeHtml(pe.caseNumber || p.title || '')}"
-                     placeholder="예: TM-2025-001"
+                     placeholder="예: 26T0001"
                      style="width: 100%; padding: 8px 12px; border: 1px solid #d97706; border-radius: 6px; font-size: 13px; color: #78350f; background: rgba(255,255,255,0.7); box-sizing: border-box;">
             </div>
           </div>
@@ -1232,8 +1232,24 @@
 
   // 우선심사 정보 요약 배지 갱신
   TM.updatePrioritySummaryBadge = function() {
-    // 워크스페이스 전체를 다시 그리지 않고, 필요시 배지만 갱신
-    // (renderPriorityWorkspace가 매번 호출되면 스크롤 위치 등이 초기화되므로)
+    // 워크스페이스 전체를 다시 그리지 않고, 입력 필드 값만 갱신
+    const p = TM.priorityTab.currentProject || TM.currentProject;
+    if (!p) return;
+    const pe = p.priorityExam || {};
+
+    const nameInput = document.getElementById('tm-pe-trademark-name');
+    const appNumInput = document.getElementById('tm-pe-application-number');
+    const caseNumInput = document.getElementById('tm-pe-case-number');
+
+    if (nameInput && !nameInput.matches(':focus')) {
+      nameInput.value = pe.trademarkNameFromApp || p.trademarkName || '';
+    }
+    if (appNumInput && !appNumInput.matches(':focus')) {
+      appNumInput.value = pe.applicationNumber || '';
+    }
+    if (caseNumInput && !caseNumInput.matches(':focus')) {
+      caseNumInput.value = pe.caseNumber || p.title || '';
+    }
   };
 
   // 우선심사 프로젝트 저장 (공통 saveProject 위임)
@@ -7207,6 +7223,7 @@ ${criticalResults.slice(0, 5).map(r =>
             }
             if (!p.priorityExam.trademarkNameFromApp && extracted.trademarkName) {
               p.priorityExam.trademarkNameFromApp = extracted.trademarkName;
+              p.trademarkName = extracted.trademarkName; // 상위 프로젝트에도 반영
               totalExtracted++;
             }
             // 상품류와 지정상품은 출원서에서 추출된 값 우선 적용
@@ -8498,15 +8515,27 @@ ${content.substring(0, 1200)}
         other: '기타 긴급한 사유'
       };
       
+      // 지정상품: 출원서 추출 or 기존 사건 지정상품 결정
+      let goodsText = '미선택';
+      if (pe.useExtractedGoods && pe.designatedGoodsFromApp) {
+        goodsText = `제${pe.classCode || '?'}류 (${pe.designatedGoodsFromApp})`;
+      } else if (p.designatedGoods?.length > 0) {
+        goodsText = p.designatedGoods.map(g => '제' + g.classCode + '류 (' + g.goods.map(gg => gg.name).join(', ') + ')').join('; ');
+      } else if (pe.designatedGoodsFromApp) {
+        goodsText = `제${pe.classCode || '?'}류 (${pe.designatedGoodsFromApp})`;
+      }
+
       const prompt = `당신은 상표 우선심사 설명서 작성 전문가입니다. 다음 정보를 바탕으로 우선심사 설명서를 작성하세요.
 
 [상표 정보]
-- 상표명: ${p.trademarkName}
+- 상표명: ${pe.trademarkNameFromApp || p.trademarkName || '(미입력)'}
 - 상표 유형: ${TM.getTypeLabel(p.trademarkType)}
-- 지정상품: ${p.designatedGoods?.map(g => '제' + g.classCode + '류 (' + g.goods.map(gg => gg.name).join(', ') + ')').join('; ') || '미선택'}
+- 출원번호: ${pe.applicationNumber || '(미입력)'}
+- 사건번호: ${pe.caseNumber || p.title || '(미입력)'}
+- 지정상품: ${goodsText}
 
 [출원인 정보]
-- 출원인: ${p.applicant?.name || '(미입력)'}
+- 출원인: ${pe.applicantName || p.applicant?.name || '(미입력)'}
 - 유형: ${p.applicant?.type === 'corporation' ? '법인' : p.applicant?.type === 'sme' ? '중소기업' : '개인'}
 
 [우선심사 사유]
