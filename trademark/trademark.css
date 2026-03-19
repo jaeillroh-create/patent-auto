@@ -12,13 +12,53 @@
 }
 
 /* common.css의 grid 스타일을 flex로 강제 변경 */
-#trademark-dashboard-panel > div:first-child,
-#trademark-dashboard-panel > .tm-app-layout,
+#trademark-dashboard-panel .tm-app-layout,
 .tm-app-layout {
   display: flex !important;
   grid-template-columns: none !important;
   width: 100% !important;
   max-width: 100% !important;
+}
+
+/* ═══ 상표 서브탭 (상표 출원 / 우선심사) ═══ */
+.trademark-sub-tab-nav {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  margin-bottom: 0;
+  padding: 0 4px;
+}
+.trademark-sub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-family, 'Pretendard', sans-serif);
+  color: var(--color-text-tertiary, #9ca3af);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.15s;
+}
+.trademark-sub-tab:hover {
+  color: var(--color-text-secondary, #6b7280);
+  background: var(--color-bg-tertiary, #f9fafb);
+}
+.trademark-sub-tab.active {
+  color: var(--color-primary, #3182f6);
+  border-bottom-color: var(--color-primary, #3182f6);
+  font-weight: 600;
+}
+.trademark-sub-panel {
+  display: none;
+  width: 100%;
+}
+.trademark-sub-panel.active {
+  display: block;
 }
 
 /* ============================================================

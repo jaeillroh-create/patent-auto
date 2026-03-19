@@ -328,10 +328,39 @@ App.switchService = function(service) {
   history.replaceState(null, '', '#' + service);
 };
 
+// ═══ Trademark Sub-Tab Switching (상표 출원 / 우선심사) ═══
+App.switchTrademarkSubTab = function(sub) {
+  document.querySelectorAll('.trademark-sub-tab').forEach(function(t) {
+    t.classList.toggle('active', t.dataset.subtab === sub);
+  });
+  document.querySelectorAll('.trademark-sub-panel').forEach(function(p) {
+    p.classList.remove('active');
+  });
+  var el = document.getElementById('trademark-sub-' + sub);
+  if (el) el.classList.add('active');
+
+  // 우선심사 탭 초기화
+  if (sub === 'priority' && window.TM && typeof TM.initPriorityTab === 'function') {
+    TM.initPriorityTab();
+  }
+  // 상표 출원 탭 복귀 시 대시보드 갱신
+  if (sub === 'application' && window.TM && typeof TM.renderDashboard === 'function') {
+    TM.renderDashboard(true);
+  }
+
+  history.replaceState(null, '', '#trademark-' + sub);
+};
+
 App.initServiceTabs = function() {
   var hash = window.location.hash.replace('#', '');
-  if (hash === 'trademark') {
+  if (hash === 'trademark' || hash.startsWith('trademark-')) {
     App.switchService('trademark');
+    if (hash.startsWith('trademark-')) {
+      var tmSub = hash.replace('trademark-', '');
+      if (tmSub && typeof App.switchTrademarkSubTab === 'function') {
+        App.switchTrademarkSubTab(tmSub);
+      }
+    }
   } else if (hash.startsWith('patent-')) {
     App.switchService('patent');
     var subTab = hash.replace('patent-', '');

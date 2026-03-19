@@ -15,16 +15,21 @@
     currentProject: null,
     currentStep: 1,
     
-    // 워크플로우 단계 정의
+    // 워크플로우 단계 정의 (6단계 — 우선심사는 별도 서브탭으로 분리)
     steps: [
       { id: 1, name: '상표 정보', icon: '🏷️', key: 'trademark_info' },
       { id: 2, name: '지정상품', icon: '📦', key: 'designated_goods' },
       { id: 3, name: '선행상표 검색', icon: '🔍', key: 'prior_search' },
       { id: 4, name: '유사도 평가', icon: '⚖️', key: 'similarity' },
       { id: 5, name: '리스크 평가', icon: '📊', key: 'risk' },
-      { id: 6, name: '우선심사', icon: '⚡', key: 'priority_exam' },
-      { id: 7, name: '종합 요약', icon: '📋', key: 'summary' }
+      { id: 6, name: '종합 요약', icon: '📋', key: 'summary' }
     ],
+
+    // 우선심사 서브탭 상태
+    priorityTab: {
+      currentProject: null,  // 현재 열린 우선심사 프로젝트
+      initialized: false
+    },
     
     // 프로젝트 데이터 구조
     defaultProjectData: {
@@ -581,6 +586,29 @@
       case 'tm-replace-custom-term':
         TM.replaceCustomTerm(params.class, params.old, params.new);
         break;
+
+      // ─── 우선심사 서브탭 액션 ───
+      case 'tm-pe-new-from-project':
+        TM.showProjectImportModal();
+        break;
+      case 'tm-pe-new-from-upload':
+        TM.createPriorityFromUpload();
+        break;
+      case 'tm-pe-import-select':
+        TM.createPriorityFromProject(params.id);
+        break;
+      case 'tm-pe-open':
+        TM.openPriorityProject(params.id);
+        break;
+      case 'tm-pe-delete':
+        TM.deletePriorityProject(params.id);
+        break;
+      case 'tm-pe-back-to-list':
+        TM.renderPriorityDashboard();
+        break;
+      case 'tm-pe-save':
+        TM.savePriorityProject();
+        break;
     }
   };
   
@@ -619,15 +647,21 @@
   // ============================================================
   
   TM.renderDashboard = async function(skipHistory = false) {
-    const panel = document.getElementById('trademark-dashboard-panel');
+    const panel = document.getElementById('trademark-sub-application');
     if (!panel) return;
-    
+
+    // 서브탭 네비게이션 표시 복원
+    TM.showSubTabNav(true);
+
     // 히스토리 관리 (브라우저 뒤로가기 지원)
     if (!skipHistory && TM.currentProject) {
       // 프로젝트에서 대시보드로 전환할 때만 히스토리 추가
       history.pushState({ tmModule: true, view: 'dashboard' }, '', window.location.href);
     }
-    
+
+    // 프로젝트 상태 초기화
+    TM.currentProject = null;
+
     panel.innerHTML = `
       <div class="trademark-dashboard" style="max-width: 1400px; margin: 0 auto; padding: 40px 32px;">
         <!-- 좌측: 헤더 + 버튼 / 우측: 테이블 -->
@@ -685,9 +719,509 @@
   };
   
   // ============================================================
+  // 서브탭 네비게이션 표시/숨김
+  // ============================================================
+
+  TM.showSubTabNav = function(show) {
+    const nav = document.querySelector('.trademark-sub-tab-nav');
+    if (nav) nav.style.display = show ? '' : 'none';
+  };
+
+  // ============================================================
+  // 우선심사 서브탭 (Priority Exam Sub-Tab)
+  // ============================================================
+
+  TM.initPriorityTab = function() {
+    if (!TM.priorityTab) TM.priorityTab = { currentProject: null, initialized: false };
+    TM.renderPriorityDashboard();
+    TM.priorityTab.initialized = true;
+  };
+
+  // 우선심사 대시보드 렌더링
+  TM.renderPriorityDashboard = async function() {
+    const panel = document.getElementById('trademark-sub-priority');
+    if (!panel) return;
+
+    // 서브탭 네비게이션 표시 복원
+    TM.showSubTabNav(true);
+
+    // 우선심사 프로젝트 상태 초기화
+    TM.priorityTab.currentProject = null;
+
+    panel.innerHTML = `
+      <div class="trademark-dashboard" style="max-width: 1400px; margin: 0 auto; padding: 40px 32px;">
+        <div style="display: flex; gap: 40px; align-items: flex-start;">
+          <!-- 좌측 영역 -->
+          <div style="flex-shrink: 0; width: 260px;">
+            <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: #1f2937;">⚡ 우선심사 관리</h2>
+            <p style="margin: 0 0 24px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">
+              상표 우선심사 신청서를 작성합니다.<br>
+              기존 사건에서 정보를 불러오거나,<br>출원서를 직접 업로드할 수 있습니다.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <button class="btn btn-primary" data-action="tm-pe-new-from-project"
+                      style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap; cursor: pointer;">
+                <span style="font-size: 16px;">📂</span>
+                기존 사건에서 불러오기
+              </button>
+              <button class="btn btn-secondary" data-action="tm-pe-new-from-upload"
+                      style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; white-space: nowrap; cursor: pointer;">
+                <span style="font-size: 16px;">📄</span>
+                출원서 업로드로 시작
+              </button>
+            </div>
+
+            <!-- 안내 -->
+            <div style="margin-top: 20px; padding: 12px; background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px;">
+              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #92400e;">💡 우선심사란?</p>
+              <p style="margin: 0; font-size: 11px; color: #78350f; line-height: 1.5;">
+                일반 심사(12~14개월) 대비 2~3개월 내 심사가 진행됩니다.
+                류당 160,000원의 추가 비용이 발생합니다.
+              </p>
+            </div>
+          </div>
+
+          <!-- 우측: 우선심사 프로젝트 목록 -->
+          <div class="tm-project-list" id="tm-pe-project-list" style="flex: 1; min-width: 0;">
+            <div style="text-align: center; padding: 40px; color: #6b7280;">
+              <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
+              <p style="margin: 0;">우선심사 목록 로딩 중...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    await TM.loadPriorityProjectList();
+  };
+
+  // 우선심사 프로젝트 목록 로드 (trademark_projects에서 priorityExam.enabled = true이거나 pe_source_type 존재)
+  TM.loadPriorityProjectList = async function() {
+    const listEl = document.getElementById('tm-pe-project-list');
+    if (!listEl) return;
+
+    try {
+      const { data: projects, error } = await App.sb
+        .from('trademark_projects')
+        .select('id, title, status, trademark_name, trademark_type, current_state_json, created_at, updated_at')
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      // 우선심사 관련 프로젝트만 필터 (pe_source_type이 있는 것)
+      const peProjects = (projects || []).filter(p => {
+        const csj = p.current_state_json || {};
+        return csj.pe_source_type;
+      });
+
+      if (peProjects.length === 0) {
+        listEl.innerHTML = `
+          <div style="text-align: center; padding: 80px 20px; background: #f9fafb; border-radius: 16px; border: 2px dashed #d1d5db;">
+            <div style="font-size: 56px; margin-bottom: 20px;">⚡</div>
+            <h4 style="margin: 0 0 12px; font-size: 20px; color: #374151;">우선심사 프로젝트가 없습니다</h4>
+            <p style="margin: 0 0 24px; color: #6b7280; font-size: 15px;">기존 사건에서 불러오거나 출원서를 업로드하여 시작하세요.</p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+              <button class="btn btn-primary" data-action="tm-pe-new-from-project" style="padding: 12px 24px; font-size: 14px; border-radius: 10px;">📂 기존 사건에서 불러오기</button>
+              <button class="btn btn-secondary" data-action="tm-pe-new-from-upload" style="padding: 12px 24px; font-size: 14px; border-radius: 10px;">📄 출원서 업로드</button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      listEl.innerHTML = `
+        <div style="background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+          <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+            <thead>
+              <tr style="background: #f8fafc; border-bottom: 2px solid #e5e7eb;">
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">관리번호</th>
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">상표명</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px;">소스</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px;">수정일</th>
+                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 120px;">작업</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${peProjects.map(p => {
+                const csj = p.current_state_json || {};
+                const sourceLabel = csj.pe_source_type === 'project' ? '📂 사건연동' : '📄 업로드';
+                const updatedAt = new Date(p.updated_at).toLocaleDateString('ko-KR');
+                return `
+                  <tr style="border-bottom: 1px solid #f3f4f6; transition: background 0.15s;"
+                      onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='white'">
+                    <td style="padding: 12px 16px; font-size: 13px; color: #6b7280;">${TM.escapeHtml(p.title || '-')}</td>
+                    <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #1f2937;">${TM.escapeHtml(p.trademark_name || '-')}</td>
+                    <td style="padding: 12px; text-align: center; font-size: 12px;">${sourceLabel}</td>
+                    <td style="padding: 12px; text-align: center; font-size: 12px; color: #9ca3af;">${updatedAt}</td>
+                    <td style="padding: 12px 16px; text-align: center;">
+                      <button class="btn btn-sm btn-primary" data-action="tm-pe-open" data-id="${p.id}" style="padding: 6px 14px; font-size: 12px; border-radius: 6px;">열기</button>
+                      <button class="btn btn-sm btn-ghost" data-action="tm-pe-delete" data-id="${p.id}" style="padding: 6px 10px; font-size: 12px; color: #ef4444;">삭제</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top: 12px; text-align: right; color: #9ca3af; font-size: 12px;">총 ${peProjects.length}개 프로젝트</div>
+      `;
+    } catch (error) {
+      console.error('[TM] 우선심사 목록 로드 실패:', error);
+      listEl.innerHTML = `
+        <div style="text-align: center; padding: 40px; background: #fef2f2; border-radius: 12px; border: 1px solid #fecaca;">
+          <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
+          <p style="margin: 0; color: #dc2626;">${error.message}</p>
+        </div>
+      `;
+    }
+  };
+
+  // 기존 사건에서 우선심사 프로젝트 생성 — 사건 선택 모달
+  TM.showProjectImportModal = async function() {
+    try {
+      const { data: projects, error } = await App.sb
+        .from('trademark_projects')
+        .select('id, title, trademark_name, trademark_type, current_state_json, designated_goods, applicant_info, updated_at')
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      // 이미 우선심사인 프로젝트는 제외하되, 일반 상표 출원 프로젝트만 표시
+      const sourceProjects = (projects || []).filter(p => {
+        const csj = p.current_state_json || {};
+        return !csj.pe_source_type; // 우선심사 전용이 아닌 것만
+      });
+
+      if (sourceProjects.length === 0) {
+        App.showToast('불러올 수 있는 상표 출원 사건이 없습니다. 먼저 상표 출원 탭에서 사건을 생성하세요.', 'warning');
+        return;
+      }
+
+      const modal = document.createElement('div');
+      modal.id = 'tm-pe-import-modal';
+      modal.innerHTML = `
+        <div class="tm-modal-overlay" onclick="document.getElementById('tm-pe-import-modal')?.remove()">
+          <div class="tm-modal-content" onclick="event.stopPropagation()" style="max-width: 680px; max-height: 80vh; display: flex; flex-direction: column;">
+            <div class="tm-modal-header">
+              <h3 style="margin: 0; font-size: 18px; font-weight: 600;">📂 기존 사건에서 불러오기</h3>
+              <button class="tm-modal-close" onclick="document.getElementById('tm-pe-import-modal')?.remove()">✕</button>
+            </div>
+            <div class="tm-modal-body" style="padding: 16px 24px; overflow-y: auto; flex: 1;">
+              <p style="margin: 0 0 16px; font-size: 13px; color: #6b7280;">
+                아래 사건을 선택하면 상표명, 출원인, 지정상품 정보가 자동으로 입력됩니다.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${sourceProjects.map(p => {
+                  const goods = p.designated_goods || p.current_state_json?.designatedGoods || [];
+                  const goodsCount = goods.reduce((sum, g) => sum + (g.goods?.length || 0), 0);
+                  const classCount = goods.length;
+                  return `
+                    <div class="tm-pe-import-item" data-action="tm-pe-import-select" data-id="${p.id}"
+                         style="display: flex; align-items: center; gap: 16px; padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 10px; cursor: pointer; transition: all 0.15s;"
+                         onmouseover="this.style.borderColor='#3b82f6'; this.style.background='#f0f9ff'"
+                         onmouseout="this.style.borderColor='#e5e7eb'; this.style.background='white'">
+                      <div style="flex-shrink: 0; width: 40px; height: 40px; background: #dbeafe; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px;">🏷️</div>
+                      <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 15px; font-weight: 600; color: #1f2937;">${TM.escapeHtml(p.trademark_name || '(상표명 미입력)')}</div>
+                        <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">
+                          ${TM.escapeHtml(p.title || '(관리번호 없음)')}
+                          ${classCount > 0 ? ` · 제${goods.map(g => g.classCode).join(',')}류 · ${goodsCount}개 상품` : ''}
+                        </div>
+                      </div>
+                      <div style="flex-shrink: 0; font-size: 12px; color: #9ca3af;">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    } catch(error) {
+      console.error('[TM] 사건 목록 로드 실패:', error);
+      App.showToast('사건 목록을 불러올 수 없습니다.', 'error');
+    }
+  };
+
+  // 사건 선택 → 우선심사 프로젝트 생성
+  TM.createPriorityFromProject = async function(sourceProjectId) {
+    try {
+      // 소스 프로젝트 로드
+      const { data: source, error: loadErr } = await App.sb
+        .from('trademark_projects')
+        .select('*')
+        .eq('id', sourceProjectId)
+        .single();
+
+      if (loadErr) throw loadErr;
+
+      // current_state_json 또는 개별 컬럼에서 소스 데이터 읽기
+      const stateJson = source.current_state_json || {};
+      const srcTmName = stateJson.trademarkName || source.trademark_name || '';
+      const srcTmNameEn = stateJson.trademarkNameEn || source.trademark_name_en || '';
+      const srcTmType = stateJson.trademarkType || source.trademark_type || 'text';
+      const srcGoods = stateJson.designatedGoods || source.designated_goods || [];
+      const srcApplicant = stateJson.applicant || source.applicant_info || {};
+
+      // 우선심사 프로젝트 데이터 구성
+      const peData = JSON.parse(JSON.stringify(TM.defaultProjectData));
+      peData.pe_source_type = 'project';
+      peData.pe_source_project_id = sourceProjectId;
+
+      // 소스에서 정보 복사
+      peData.trademarkName = srcTmName;
+      peData.trademarkNameEn = srcTmNameEn;
+      peData.trademarkType = srcTmType;
+      peData.designatedGoods = srcGoods;
+      peData.applicant = srcApplicant;
+
+      // priorityExam 초기화 (소스에서 출원인/상표 정보 매핑)
+      peData.priorityExam = {
+        enabled: true,
+        userConfirmed: true,
+        reason: '',
+        reasonDetail: '',
+        applicationNumber: '',
+        applicationDate: '',
+        applicantName: srcApplicant.name || '',
+        trademarkNameFromApp: srcTmName,
+        classCode: srcGoods.map(g => g.classCode).join(', '),
+        designatedGoodsFromApp: srcGoods.flatMap(g => (g.goods || []).map(item => item.name)).join(', '),
+        extractedFromApplication: false,
+        editMode: false,
+        useExtractedGoods: false,
+        evidences: [],
+        generatedDocument: ''
+      };
+
+      // DB에 새 프로젝트 생성
+      const title = source.title ? `PE-${source.title}` : `PE-${new Date().toISOString().slice(0, 10)}`;
+      const { data: newProject, error: insertErr } = await App.sb
+        .from('trademark_projects')
+        .insert({
+          user_id: App.currentUser.id,
+          title: title,
+          trademark_name: peData.trademarkName,
+          trademark_type: peData.trademarkType,
+          status: 'documenting',
+          current_state_json: peData,
+          applicant_info: peData.applicant,
+          designated_goods: peData.designatedGoods,
+          priority_exam: peData.priorityExam
+        })
+        .select()
+        .single();
+
+      if (insertErr) throw insertErr;
+
+      // 모달 닫기
+      document.getElementById('tm-pe-import-modal')?.remove();
+
+      App.showToast(`우선심사 프로젝트가 생성되었습니다: ${TM.escapeHtml(peData.trademarkName)}`, 'success');
+
+      // 프로젝트 열기
+      TM.openPriorityProject(newProject.id);
+    } catch(error) {
+      console.error('[TM] 우선심사 프로젝트 생성 실패:', error);
+      App.showToast('프로젝트 생성 실패: ' + error.message, 'error');
+    }
+  };
+
+  // 업로드 기반 우선심사 프로젝트 생성
+  TM.createPriorityFromUpload = async function() {
+    try {
+      const peData = JSON.parse(JSON.stringify(TM.defaultProjectData));
+      peData.pe_source_type = 'upload';
+
+      peData.priorityExam = {
+        enabled: true,
+        userConfirmed: true,
+        reason: '',
+        reasonDetail: '',
+        applicationNumber: '',
+        applicationDate: '',
+        applicantName: '',
+        trademarkNameFromApp: '',
+        classCode: '',
+        designatedGoodsFromApp: '',
+        extractedFromApplication: false,
+        editMode: false,
+        useExtractedGoods: false,
+        evidences: [],
+        generatedDocument: ''
+      };
+
+      const title = `PE-${new Date().toISOString().slice(0, 10)}-${Date.now().toString(36).slice(-4)}`;
+      const { data: newProject, error } = await App.sb
+        .from('trademark_projects')
+        .insert({
+          user_id: App.currentUser.id,
+          title: title,
+          trademark_name: '',
+          trademark_type: 'text',
+          status: 'documenting',
+          current_state_json: peData,
+          priority_exam: peData.priorityExam
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      App.showToast('우선심사 프로젝트가 생성되었습니다. 출원서를 업로드하세요.', 'success');
+      TM.openPriorityProject(newProject.id);
+    } catch(error) {
+      console.error('[TM] 우선심사 프로젝트 생성 실패:', error);
+      App.showToast('프로젝트 생성 실패: ' + error.message, 'error');
+    }
+  };
+
+  // 우선심사 프로젝트 열기
+  TM.openPriorityProject = async function(projectId) {
+    try {
+      const { data, error } = await App.sb
+        .from('trademark_projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
+
+      if (error) throw error;
+
+      // openProject와 동일한 로딩 패턴
+      const merged = {
+        id: data.id,
+        title: data.title,
+        status: data.status,
+        ...JSON.parse(JSON.stringify(TM.defaultProjectData)),
+        ...(data.current_state_json || {})
+      };
+
+      // 기존 필드 매핑
+      if (data.trademark_name) merged.trademarkName = data.trademark_name;
+      if (data.trademark_name_en) merged.trademarkNameEn = data.trademark_name_en;
+      if (data.trademark_type) merged.trademarkType = data.trademark_type;
+      if (data.applicant_info) merged.applicant = { ...merged.applicant, ...data.applicant_info };
+      if (data.designated_goods) merged.designatedGoods = data.designated_goods;
+      if (data.search_results) merged.searchResults = { ...merged.searchResults, ...data.search_results };
+      if (data.fee_calculation) merged.feeCalculation = { ...merged.feeCalculation, ...data.fee_calculation };
+      if (data.priority_exam) merged.priorityExam = { ...merged.priorityExam, ...data.priority_exam };
+      if (data.ai_analysis) merged.aiAnalysis = { ...merged.aiAnalysis, ...data.ai_analysis };
+
+      TM.priorityTab.currentProject = merged;
+
+      // 서브탭 네비게이션 숨김
+      TM.showSubTabNav(false);
+
+      // 워크스페이스 렌더링
+      TM.renderPriorityWorkspace();
+    } catch(error) {
+      console.error('[TM] 우선심사 프로젝트 열기 실패:', error);
+      App.showToast('프로젝트 열기 실패: ' + error.message, 'error');
+    }
+  };
+
+  // 우선심사 워크스페이스 렌더링
+  TM.renderPriorityWorkspace = function() {
+    const panel = document.getElementById('trademark-sub-priority');
+    if (!panel || !TM.priorityTab.currentProject) return;
+
+    const p = TM.priorityTab.currentProject;
+    const pe = p.priorityExam || {};
+    const sourceLabel = p.pe_source_type === 'project' ? '📂 기존 사건 연동' : '📄 출원서 업로드';
+
+    panel.innerHTML = `
+      <div class="tm-pe-workspace" style="max-width: 1000px; margin: 0 auto; padding: 32px 24px;">
+        <!-- 헤더 -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <button class="btn btn-ghost" data-action="tm-pe-back-to-list" style="padding: 8px 12px; font-size: 13px;">← 목록으로</button>
+            <div>
+              <h2 style="margin: 0; font-size: 22px; font-weight: 700; color: #1f2937;">⚡ 우선심사 신청서</h2>
+              <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">
+                ${TM.escapeHtml(p.title || '')} · ${sourceLabel}
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary btn-sm" data-action="tm-pe-save" style="padding: 8px 16px; font-size: 13px;">💾 저장</button>
+          </div>
+        </div>
+
+        <!-- 정보 요약 배지 -->
+        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 20px;">🏷️</span>
+            <div>
+              <div style="font-size: 11px; color: #92400e; font-weight: 500;">상표명</div>
+              <div style="font-size: 14px; font-weight: 600; color: #78350f;">${TM.escapeHtml(pe.trademarkNameFromApp || p.trademarkName || '(미입력)')}</div>
+            </div>
+          </div>
+          ${pe.applicationNumber ? `
+          <div style="border-left: 2px solid #f59e0b; padding-left: 16px;">
+            <div style="font-size: 11px; color: #92400e; font-weight: 500;">출원번호</div>
+            <div style="font-size: 13px; color: #78350f; font-weight: 500;">${TM.escapeHtml(pe.applicationNumber)}</div>
+          </div>` : ''}
+          ${pe.applicantName ? `
+          <div style="border-left: 2px solid #f59e0b; padding-left: 16px;">
+            <div style="font-size: 11px; color: #92400e; font-weight: 500;">출원인</div>
+            <div style="font-size: 13px; color: #78350f;">${TM.escapeHtml(pe.applicantName)}</div>
+          </div>` : ''}
+        </div>
+
+        <!-- 메인 컨텐츠 -->
+        <div id="tm-pe-content">
+          <!-- renderStep7_PriorityExam이 여기에 렌더링 -->
+        </div>
+      </div>
+    `;
+
+    // currentProject를 우선심사 프로젝트로 설정하여 기존 함수들이 동작하도록 함
+    TM.currentProject = TM.priorityTab.currentProject;
+
+    // 우선심사 컨텐츠 렌더링 (기존 renderStep7_PriorityExam 재사용)
+    const contentEl = document.getElementById('tm-pe-content');
+    if (contentEl) {
+      TM.renderStep7_PriorityExam(contentEl);
+    }
+  };
+
+  // 우선심사 정보 요약 배지 갱신
+  TM.updatePrioritySummaryBadge = function() {
+    // 워크스페이스 전체를 다시 그리지 않고, 필요시 배지만 갱신
+    // (renderPriorityWorkspace가 매번 호출되면 스크롤 위치 등이 초기화되므로)
+  };
+
+  // 우선심사 프로젝트 저장 (공통 saveProject 위임)
+  TM.savePriorityProject = async function() {
+    if (!TM.priorityTab.currentProject) return;
+    // currentProject가 이미 priorityTab.currentProject를 가리키므로 saveProject 재사용
+    await TM.saveProject(false);
+  };
+
+  // 우선심사 프로젝트 삭제
+  TM.deletePriorityProject = async function(projectId) {
+    if (!confirm('이 우선심사 프로젝트를 삭제하시겠습니까?')) return;
+
+    try {
+      const { error } = await App.sb
+        .from('trademark_projects')
+        .delete()
+        .eq('id', projectId);
+
+      if (error) throw error;
+      App.showToast('삭제되었습니다.', 'success');
+      TM.renderPriorityDashboard();
+    } catch(error) {
+      console.error('[TM] 우선심사 프로젝트 삭제 실패:', error);
+      App.showToast('삭제 실패: ' + error.message, 'error');
+    }
+  };
+
+  // ============================================================
   // 설정 모달
   // ============================================================
-  
+
   TM.openSettings = function() {
     const currentApiKey = TM.kiprisConfig.apiKey || '';
     
@@ -1244,8 +1778,11 @@
   // ============================================================
   
   TM.renderWorkspace = function() {
-    const panel = document.getElementById('trademark-dashboard-panel');
+    const panel = document.getElementById('trademark-sub-application');
     if (!panel || !TM.currentProject) return;
+
+    // 프로젝트 편집 시 서브탭 네비게이션 숨김
+    TM.showSubTabNav(false);
     
     panel.innerHTML = `
       <div class="tm-app-layout">
@@ -1409,9 +1946,7 @@
         return TM.currentProject.similarityEvaluations && TM.currentProject.similarityEvaluations.length > 0;
       case 5: // 리스크 평가
         return !!(TM.currentProject.riskAssessment.level);
-      case 6: // 우선심사 - 사용자가 명시적으로 선택 여부를 결정해야 완료
-        return TM.currentProject.priorityExam.userConfirmed === true;
-      case 7: // 종합 요약
+      case 6: // 종합 요약
         return false; // 항상 미완료 (언제든 출력 가능)
       default:
         return false;
@@ -1471,6 +2006,15 @@
   };
   
   TM.renderCurrentStep = function() {
+    // 우선심사 서브탭 컨텍스트에서 호출된 경우, 우선심사 워크스페이스 갱신
+    const peContent = document.getElementById('tm-pe-content');
+    if (peContent && TM.priorityTab.currentProject && TM.currentProject === TM.priorityTab.currentProject) {
+      TM.renderStep7_PriorityExam(peContent);
+      // 요약 배지도 갱신
+      TM.updatePrioritySummaryBadge();
+      return;
+    }
+
     const stepEl = document.getElementById('tm-step-content');
     if (!stepEl) return;
     
@@ -1494,9 +2038,6 @@
         TM.renderStep5_Risk(stepEl);
         break;
       case 6:
-        TM.renderStep7_PriorityExam(stepEl);
-        break;
-      case 7:
         TM.renderStep7_Summary(stepEl);
         break;
     }
