@@ -8010,21 +8010,50 @@ ${content.substring(0, 1200)}
     const evidence1Ref = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
     const evidence2Ref = evidences.length > 1 ? `(첨부자료 2: ${evidences[1].title})` : '';
     
-    // 신청이유 선택에 따른 법조문
-    let reasonText = '';
-    if (pe.reason === 'using' || pe.reason === 'preparing') {
-      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로 우선심사를 신청합니다.`;
+    // 신청이유 선택에 따른 법조문 (1문단: 법조문 + 우선심사 신청)
+    let reasonClause = '';
+    if (pe.reason === 'using') {
+      reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용하고 있는 것이 명백하므로';
+    } else if (pe.reason === 'preparing') {
+      reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로';
     } else if (pe.reason === 'infringement') {
-      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 우선심사를 신청합니다.`;
+      reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 제3자의 무단사용을 저지하기 위해';
+    } else if (pe.reason === 'export') {
+      reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제3호의 "조약에 따른 우선권주장의 기초가 되는 출원에 관한 경우"에 해당하는 상표등록출원으로서, 수출을 위해 긴급하게 상표등록이 필요하므로';
     } else {
-      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라 우선심사를 신청합니다.`;
+      reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라';
     }
-    
+
+    // 증거자료 목록
+    const evidences = pe.evidences || [];
+
+    // 첨부자료 참조 문자열 생성 (다수개 지원)
+    const buildEvidenceRef = (indices) => {
+      if (indices.length === 0) return '';
+      return '(첨부자료 ' + indices.map(i => `${i + 1}: ${evidences[i].title}`).join(', 첨부자료 ') + ')';
+    };
+
+    // 첨부자료 1개일 때: (첨부자료 1: XXX), 다수일 때: (첨부자료 1: XXX, 첨부자료 2: YYY)
+    const allEvidenceRef = evidences.length > 0 ? buildEvidenceRef(evidences.map((_, i) => i)) : '';
+    const firstEvidenceRef = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
+
+    // 2번째 이후 첨부자료 참조 (2문단용)
+    let laterEvidenceRef = '';
+    if (evidences.length > 1) {
+      const laterIndices = evidences.slice(1).map((_, i) => i + 1);
+      laterEvidenceRef = '는 ' + buildEvidenceRef(laterIndices) + '과 같이';
+    } else {
+      laterEvidenceRef = '는';
+    }
+
+    // 사용/사용준비 표현
+    const usageText = pe.reason === 'using' ? '사용 중' : (pe.reason === 'preparing' ? '사용 및 사용 준비 중' : '사용 및 사용 준비 중');
+
     // HTML 형식의 미리보기
     return `
       <div class="tm-doc-preview-body">
         <h2 style="text-align: center; margin-bottom: 24px;">상표 우선심사 신청 설명서</h2>
-        
+
         <div class="tm-doc-section">
           <h3>【서지사항】</h3>
           <table class="tm-doc-table">
@@ -8033,44 +8062,44 @@ ${content.substring(0, 1200)}
             <tr><td><strong>【출원일】</strong></td><td>${applicationDate}</td></tr>
           </table>
         </div>
-        
+
         <div class="tm-doc-section">
           <h3>【상표견본】</h3>
           <p style="font-size: 18px; font-weight: bold;">${trademarkName}</p>
         </div>
-        
+
         <div class="tm-doc-section">
           <h3>【상품류】</h3>
           <p>${classCodeStr || '[상품류]'}</p>
         </div>
-        
+
         <div class="tm-doc-section">
           <h3>【지정상품】</h3>
           <p>${designatedGoodsStr || '[지정상품]'}</p>
         </div>
-        
+
         <div class="tm-doc-section">
           <h3>【우선심사 신청이유】</h3>
-          <p>${reasonText}</p>
+          <p>본 상표는 ${reasonClause} 우선심사를 신청합니다.</p>
           <p style="margin-top: 12px;">
-            본 출원인 "${applicantName}"는 본 신청서의 첨부자료${evidence1Ref}에 기재된 바와 같이, 
-            이건 출원상표가 표시된 ${goodsWithGroups.join(', ')}을 
-            사용 및 사용 준비 중입니다.
+            본 출원인 "${applicantName}"는 본 신청서의 첨부자료${firstEvidenceRef}에 기재된 바와 같이,
+            이건 출원상표가 표시된 ${goodsWithGroups.length > 0 ? goodsWithGroups.join(', ') : '[지정상품]'}을
+            ${usageText}입니다.
           </p>
           <p style="margin-top: 12px;">
-            따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 사용예정 중에 있습니다.
+            따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${pe.reason === 'using' ? '사용' : '사용예정'} 중에 있습니다.
           </p>
           <p style="margin-top: 12px;">
-            이건 출원인 "${applicantName}"${evidence2Ref}은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 
+            이건 출원인 "${applicantName}"${laterEvidenceRef} 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다.
             부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
           </p>
         </div>
-        
+
         ${evidences.length > 0 ? `
           <div class="tm-doc-section">
             <h3>【증빙자료】</h3>
             <ul style="margin: 0; padding-left: 0; list-style: none;">
-              ${evidences.map((ev, idx) => `<li>첨부자료 ${idx + 1} : ${TM.escapeHtml(ev.title)}</li>`).join('')}
+              ${evidences.map((ev, idx) => `<li>첨부자료 ${idx + 1} : ${TM.escapeHtml(ev.title)}${ev.description ? ' — ' + TM.escapeHtml(ev.description) : ''}</li>`).join('')}
             </ul>
           </div>
         ` : ''}
@@ -8113,36 +8142,38 @@ ${content.substring(0, 1200)}
       
       // 상품류 및 지정상품 - 선택에 따라 결정
       let classCodeStr, designatedGoodsStr, goodsWithGroups;
-      
-      if (finalUseExtracted && hasExtracted) {
-        // 7단계 추출 정보 사용
+
+      // 2단계 정보 확인
+      const classGroups = {};
+      (p.designatedGoods || []).forEach(classData => {
+        if (!classGroups[classData.classCode]) {
+          classGroups[classData.classCode] = [];
+        }
+        (classData.goods || []).forEach(g => {
+          classGroups[classData.classCode].push({
+            name: g.name,
+            similarGroup: g.similarGroup || ''
+          });
+        });
+      });
+      const hasStep2Goods = Object.keys(classGroups).length > 0;
+
+      if ((finalUseExtracted || !hasStep2Goods) && hasExtracted) {
+        // 추출 정보 사용 (명시적 선택 또는 2단계 정보 없을 때 폴백)
         classCodeStr = extractedClassCode ? `제 ${extractedClassCode}류` : '[상품류]';
         designatedGoodsStr = extractedGoodsStr || '[지정상품]';
         goodsWithGroups = extractedGoodsStr ? extractedGoodsStr.split(',').map(g => `『${g.trim()}』`) : [];
-      } else {
+      } else if (hasStep2Goods) {
         // 2단계 지정상품 정보 사용 (기본값)
-        const classGroups = {};
-        (p.designatedGoods || []).forEach(classData => {
-          if (!classGroups[classData.classCode]) {
-            classGroups[classData.classCode] = [];
-          }
-          (classData.goods || []).forEach(g => {
-            classGroups[classData.classCode].push({
-              name: g.name,
-              similarGroup: g.similarGroup || ''
-            });
-          });
-        });
-        
         const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
-        classCodeStr = classCodeList.length > 0 ? classCodeList.map(c => '제 ' + c + '류').join(', ') : '[상품류]';
-        
+        classCodeStr = classCodeList.map(c => '제 ' + c + '류').join(', ');
+
         const goodsList = [];
         Object.values(classGroups).forEach(goods => {
           goods.forEach(g => goodsList.push(g.name));
         });
-        designatedGoodsStr = goodsList.length > 0 ? goodsList.join(', ') : '[지정상품]';
-        
+        designatedGoodsStr = goodsList.join(', ');
+
         goodsWithGroups = [];
         Object.entries(classGroups).forEach(([classCode, goods]) => {
           goods.forEach(g => {
@@ -8153,30 +8184,50 @@ ${content.substring(0, 1200)}
             }
           });
         });
+      } else {
+        classCodeStr = '[상품류]';
+        designatedGoodsStr = '[지정상품]';
+        goodsWithGroups = [];
       }
-      
+
       // 증거자료 목록
       const evidences = pe.evidences || [];
-      
+
       // 신청이유 선택에 따른 법조문
-      let reasonText1 = '';
-      if (pe.reason === 'using' || pe.reason === 'preparing') {
-        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로 우선심사를 신청합니다.';
+      let reasonClause = '';
+      if (pe.reason === 'using') {
+        reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용하고 있는 것이 명백하므로';
+      } else if (pe.reason === 'preparing') {
+        reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로';
       } else if (pe.reason === 'infringement') {
-        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 우선심사를 신청합니다.';
+        reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 제3자의 무단사용을 저지하기 위해';
+      } else if (pe.reason === 'export') {
+        reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제3호의 "조약에 따른 우선권주장의 기초가 되는 출원에 관한 경우"에 해당하는 상표등록출원으로서, 수출을 위해 긴급하게 상표등록이 필요하므로';
       } else {
-        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라 우선심사를 신청합니다.';
+        reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라';
       }
-      
-      // 증거자료 참조 문자열 생성 (첨부자료 1, 2 개별 참조)
-      const evidence1Ref = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
-      const evidence2Ref = evidences.length > 1 ? `(첨부자료 2: ${evidences[1].title})` : '';
-      
-      const reasonText2 = `본 출원인 "${applicantName}"는 본 신청서의 첨부자료${evidence1Ref}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsWithGroups.join(', ')}을 사용 및 사용 준비 중입니다.`;
-      
-      const reasonText3 = '따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 사용예정 중에 있습니다.';
-      
-      const reasonText4 = `이건 출원인 "${applicantName}"${evidence2Ref}은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`;
+
+      // 첨부자료 참조 문자열 생성 (다수개 지원)
+      const buildEvidenceRef = (indices) => {
+        if (indices.length === 0) return '';
+        return '(첨부자료 ' + indices.map(i => `${i + 1}: ${evidences[i].title}`).join(', 첨부자료 ') + ')';
+      };
+      const firstEvidenceRef = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
+      let laterEvidenceRef = '';
+      if (evidences.length > 1) {
+        const laterIndices = evidences.slice(1).map((_, i) => i + 1);
+        laterEvidenceRef = '는 ' + buildEvidenceRef(laterIndices) + '과 같이';
+      } else {
+        laterEvidenceRef = '는';
+      }
+
+      const usageText = pe.reason === 'using' ? '사용 중' : (pe.reason === 'preparing' ? '사용 및 사용 준비 중' : '사용 및 사용 준비 중');
+      const goodsListStr = goodsWithGroups.length > 0 ? goodsWithGroups.join(', ') : '[지정상품]';
+
+      const reasonText1 = `본 상표는 ${reasonClause} 우선심사를 신청합니다.`;
+      const reasonText2 = `본 출원인 "${applicantName}"는 본 신청서의 첨부자료${firstEvidenceRef}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`;
+      const reasonText3 = `따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${pe.reason === 'using' ? '사용' : '사용예정'} 중에 있습니다.`;
+      const reasonText4 = `이건 출원인 "${applicantName}"${laterEvidenceRef} 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`;
       
       // Edge Function으로 Word 생성 요청
       const docData = {
@@ -8505,69 +8556,26 @@ ${content.substring(0, 1200)}
   TM.generatePriorityDocument = async function() {
     const p = TM.currentProject;
     const pe = p.priorityExam;
-    
+
     if (!pe.reason) {
       App.showToast('우선심사 사유를 선택하세요.', 'warning');
       return;
     }
-    
+
     try {
       App.showToast('설명서 생성 중...', 'info');
-      
-      const reasonLabels = {
-        using: '상표를 이미 사용 중인 경우',
-        preparing: '상표 사용 준비 중인 경우',
-        infringement: '제3자가 정당한 권한 없이 상표를 사용하고 있는 경우',
-        export: '수출을 위해 긴급하게 상표 등록이 필요한 경우',
-        other: '기타 긴급한 사유'
-      };
-      
-      // 지정상품: 출원서 추출 or 기존 사건 지정상품 결정
-      let goodsText = '미선택';
-      if (pe.useExtractedGoods && pe.designatedGoodsFromApp) {
-        goodsText = `제${pe.classCode || '?'}류 (${pe.designatedGoodsFromApp})`;
-      } else if (p.designatedGoods?.length > 0) {
-        goodsText = p.designatedGoods.map(g => '제' + g.classCode + '류 (' + g.goods.map(gg => gg.name).join(', ') + ')').join('; ');
-      } else if (pe.designatedGoodsFromApp) {
-        goodsText = `제${pe.classCode || '?'}류 (${pe.designatedGoodsFromApp})`;
-      }
 
-      const prompt = `당신은 상표 우선심사 설명서 작성 전문가입니다. 다음 정보를 바탕으로 우선심사 설명서를 작성하세요.
+      // 미리보기와 동일한 고정 양식 텍스트 생성 (LLM 불필요)
+      const docContent = TM.generatePriorityDocContent(pe.useExtractedGoods || false);
 
-[상표 정보]
-- 상표명: ${pe.trademarkNameFromApp || p.trademarkName || '(미입력)'}
-- 상표 유형: ${TM.getTypeLabel(p.trademarkType)}
-- 출원번호: ${pe.applicationNumber || '(미입력)'}
-- 사건번호: ${pe.caseNumber || p.title || '(미입력)'}
-- 지정상품: ${goodsText}
+      // HTML → 텍스트 변환
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = docContent;
+      pe.generatedDocument = tempDiv.innerText || tempDiv.textContent || '';
 
-[출원인 정보]
-- 출원인: ${pe.applicantName || p.applicant?.name || '(미입력)'}
-- 유형: ${p.applicant?.type === 'corporation' ? '법인' : p.applicant?.type === 'sme' ? '중소기업' : '개인'}
-
-[우선심사 사유]
-- 선택된 사유: ${reasonLabels[pe.reason]}
-- 첨부 증거: ${pe.evidences?.length || 0}건
-
-[증거자료 목록]
-${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTypeLabel(ev.type)})`).join('\n') || '증거자료 없음'}
-
-다음 구조로 우선심사 설명서를 작성하세요:
-
-1. 출원상표의 개요
-2. 우선심사 신청 사유
-3. 상표 사용 현황 및 증거 설명
-4. 결론 (우선심사 허여 요청)
-
-한국 특허청 형식에 맞게 공식적이고 설득력 있는 문체로 작성하세요.`;
-
-      const response = await App.callClaudeSonnet(prompt, 2000);
-      
-      pe.generatedDocument = response.text;
       TM.renderCurrentStep();
-      
       App.showToast('설명서가 생성되었습니다.', 'success');
-      
+
     } catch (error) {
       console.error('[TM] 설명서 생성 실패:', error);
       App.showToast('생성 실패: ' + error.message, 'error');
