@@ -1144,25 +1144,31 @@
           </div>
         </div>
 
-        <!-- 정보 요약 배지 -->
-        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 20px;">🏷️</span>
-            <div>
-              <div style="font-size: 11px; color: #92400e; font-weight: 500;">상표명</div>
-              <div style="font-size: 14px; font-weight: 600; color: #78350f;">${TM.escapeHtml(pe.trademarkNameFromApp || p.trademarkName || '(미입력)')}</div>
+        <!-- 기본 정보 입력 -->
+        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
+          <div style="display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1.5; min-width: 180px;">
+              <label style="font-size: 11px; color: #92400e; font-weight: 600; display: block; margin-bottom: 4px;">🏷️ 상표명</label>
+              <input type="text" id="tm-pe-trademark-name"
+                     value="${TM.escapeHtml(pe.trademarkNameFromApp || p.trademarkName || '')}"
+                     placeholder="상표명을 입력하세요"
+                     style="width: 100%; padding: 8px 12px; border: 1px solid #d97706; border-radius: 6px; font-size: 14px; font-weight: 600; color: #78350f; background: rgba(255,255,255,0.7); box-sizing: border-box;">
+            </div>
+            <div style="flex: 1; min-width: 150px;">
+              <label style="font-size: 11px; color: #92400e; font-weight: 600; display: block; margin-bottom: 4px;">📋 출원번호</label>
+              <input type="text" id="tm-pe-application-number"
+                     value="${TM.escapeHtml(pe.applicationNumber || '')}"
+                     placeholder="예: 40-2025-0012345"
+                     style="width: 100%; padding: 8px 12px; border: 1px solid #d97706; border-radius: 6px; font-size: 13px; color: #78350f; background: rgba(255,255,255,0.7); box-sizing: border-box;">
+            </div>
+            <div style="flex: 1; min-width: 150px;">
+              <label style="font-size: 11px; color: #92400e; font-weight: 600; display: block; margin-bottom: 4px;">📁 사건번호</label>
+              <input type="text" id="tm-pe-case-number"
+                     value="${TM.escapeHtml(pe.caseNumber || p.title || '')}"
+                     placeholder="예: TM-2025-001"
+                     style="width: 100%; padding: 8px 12px; border: 1px solid #d97706; border-radius: 6px; font-size: 13px; color: #78350f; background: rgba(255,255,255,0.7); box-sizing: border-box;">
             </div>
           </div>
-          ${pe.applicationNumber ? `
-          <div style="border-left: 2px solid #f59e0b; padding-left: 16px;">
-            <div style="font-size: 11px; color: #92400e; font-weight: 500;">출원번호</div>
-            <div style="font-size: 13px; color: #78350f; font-weight: 500;">${TM.escapeHtml(pe.applicationNumber)}</div>
-          </div>` : ''}
-          ${pe.applicantName ? `
-          <div style="border-left: 2px solid #f59e0b; padding-left: 16px;">
-            <div style="font-size: 11px; color: #92400e; font-weight: 500;">출원인</div>
-            <div style="font-size: 13px; color: #78350f;">${TM.escapeHtml(pe.applicantName)}</div>
-          </div>` : ''}
         </div>
 
         <!-- 메인 컨텐츠 -->
@@ -1179,6 +1185,48 @@
     const contentEl = document.getElementById('tm-pe-content');
     if (contentEl) {
       TM.renderStep7_PriorityExam(contentEl);
+    }
+
+    // 기본 정보 입력 필드 이벤트 바인딩
+    TM.bindPriorityInfoInputs();
+  };
+
+  // 우선심사 기본 정보 입력 필드 이벤트 바인딩
+  TM.bindPriorityInfoInputs = function() {
+    const nameInput = document.getElementById('tm-pe-trademark-name');
+    const appNumInput = document.getElementById('tm-pe-application-number');
+    const caseNumInput = document.getElementById('tm-pe-case-number');
+    const p = TM.priorityTab.currentProject;
+    if (!p) return;
+
+    if (nameInput) {
+      nameInput.addEventListener('input', function() {
+        const val = this.value.trim();
+        p.trademarkName = val;
+        if (!p.priorityExam) p.priorityExam = {};
+        p.priorityExam.trademarkNameFromApp = val;
+        // 사이드바 상표명도 갱신
+        const sidebarName = document.querySelector('.tm-project-name');
+        if (sidebarName) sidebarName.textContent = val || '(상표명 미입력)';
+        TM.scheduleSave();
+      });
+    }
+
+    if (appNumInput) {
+      appNumInput.addEventListener('input', function() {
+        if (!p.priorityExam) p.priorityExam = {};
+        p.priorityExam.applicationNumber = this.value.trim();
+        TM.scheduleSave();
+      });
+    }
+
+    if (caseNumInput) {
+      caseNumInput.addEventListener('input', function() {
+        p.title = this.value.trim();
+        if (!p.priorityExam) p.priorityExam = {};
+        p.priorityExam.caseNumber = this.value.trim();
+        TM.scheduleSave();
+      });
     }
   };
 
