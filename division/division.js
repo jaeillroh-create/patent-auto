@@ -1668,27 +1668,6 @@ Division.renderAnalyze = function(left, right, p){
     h += '</div>';
   }
 
-  // === 병합형 / 공통: 병합 청구항 + 미활용 구성 ===
-  if(divType === 'merge'){
-    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🔧</span> 병합할 청구항</div>';
-    var mergeCandidates = claims.filter(function(c){ return c.division_role==='merge_candidate'; });
-    if(!mergeCandidates.length){ h += '<div style="font-size:13px;color:var(--color-text-tertiary);padding:8px">병합 후보 청구항이 없습니다.</div>'; }
-    else { mergeCandidates.forEach(function(c){
-      var claimText = c.amended_text || c.original_text || '';
-      h += '<div class="division-component-row risk-safe" style="padding:12px">';
-      h += '<label class="checkbox-label" style="flex:1;align-items:flex-start"><input type="checkbox" checked data-merge-claim="'+c.claim_number+'" style="margin-top:4px" /><div style="flex:1">';
-      h += '<div style="font-weight:600;font-size:13px">제'+c.claim_number+'항 <span style="font-size:11px;color:var(--color-text-tertiary)">('+(c.claim_type==='independent'?'독립항':'종속항')+')</span></div>';
-      // 청구항 전문 미리보기
-      h += '<div class="division-claim-preview" onclick="this.classList.toggle(\'expanded\')">';
-      h += '<strong style="color:var(--color-primary)">【청구항 '+c.claim_number+'】</strong>\n';
-      h += escapeHtml(claimText.substring(0, 500)) + (claimText.length > 500 ? '...' : '');
-      h += '</div>';
-      if(claimText.length > 200) h += '<span class="division-claim-preview-toggle" onclick="this.previousElementSibling.classList.toggle(\'expanded\')">▼ 전문 보기</span>';
-      h += '</div></label></div>';
-    }); }
-    h += '</div>';
-  }
-
   // 공통: 미활용/변환 구성 목록 (모든 유형)
   var compTitle = divType==='category_change' ? '변환 구성 후보' : divType==='strategic' ? '활용 가능 구성' : '구체화·한정·부가 구성 후보';
   ['safe','caution','danger'].forEach(function(level){
@@ -1743,15 +1722,12 @@ Division.renderAnalyze = function(left, right, p){
 
   // 오른쪽: 유형 전환 + 요약
   var selectedCount = unused.filter(function(uc){ return uc.user_selection==='selected'||(uc.user_selection==='pending'&&uc.risk_level==='safe'); }).length;
-  var mergeCountForSummary = claims.filter(function(c){ return c.division_role==='merge_candidate'; }).length;
   var rh = Division._renderTypeSwitch(p.division_type);
   rh += '<div class="card" style="padding:20px"><div style="font-size:16px;font-weight:700;margin-bottom:16px"><span class="tf">📋</span> 구성 요약</div>';
   rh += '<div class="division-summary-grid">';
   if(divType === 'strategic'){
     var summaryThemes = (p.analysis_meta && p.analysis_meta.themes) || [];
     rh += '<div class="division-summary-item"><div class="division-summary-num">'+summaryThemes.length+'</div><div class="division-summary-label">테마 후보</div></div>';
-  } else if(divType === 'merge'){
-    rh += '<div class="division-summary-item"><div class="division-summary-num">'+mergeCountForSummary+'</div><div class="division-summary-label">병합 청구항</div></div>';
   }
   rh += '<div class="division-summary-item"><div class="division-summary-num">'+selectedCount+'</div><div class="division-summary-label">선택된 구성</div></div>';
   rh += '</div></div>';
@@ -1846,25 +1822,12 @@ Division.runAssemble = async function(){
     App.setButtonLoading('btnDivisionAssemble',true);
     App.showProgress('divisionAssembleProgress','청구항 조립 중...',1,3);
     var selected = Division.state.unusedComponents.filter(function(uc){ return uc.user_selection==='selected'||(uc.user_selection==='pending'&&uc.risk_level==='safe'); });
-    // 병합 청구항: DOM 체크박스 → 없으면 저장된 state → 없으면 merge_candidate 전부
-    var mergeNums = [];
-    var mergeCheckboxes = document.querySelectorAll('[data-merge-claim]:checked');
-    if(mergeCheckboxes.length > 0){
-      mergeCheckboxes.forEach(function(cb){ mergeNums.push(parseInt(cb.dataset.mergeClaim)); });
-    } else if(Division.state.selectedMergeNums && Division.state.selectedMergeNums.length > 0){
-      mergeNums = Division.state.selectedMergeNums;
-    } else {
-      Division.state.claims.forEach(function(c){ if(c.division_role==='merge_candidate') mergeNums.push(c.claim_number); });
-    }
-    Division.state.selectedMergeNums = mergeNums;
-    console.log('[Division] 병합 대상:', mergeNums.length, '항');
     var claims = Division.state.claims;
     var basisClaim = claims.find(function(c){ return c.division_role==='basis'; });
     if(!basisClaim) basisClaim = claims.find(function(c){ return c.claim_type==='independent'; });
     if(!basisClaim){ showToast('기초 청구항을 찾을 수 없습니다','error'); App.setButtonLoading('btnDivisionAssemble',false); return; }
-    var mergeClaims = claims.filter(function(c){ return mergeNums.indexOf(c.claim_number)>=0; });
     var depCandidates = claims.filter(function(c){ return c.division_role==='dep_candidate'; });
-    var assemblePrompt = Division._buildAssemblePrompt(basisClaim, selected, mergeClaims, depCandidates, Division.state.indepCount||1, Division.state.depCount);
+    var assemblePrompt = Division._buildAssemblePrompt(basisClaim, selected, depCandidates, Division.state.indepCount||1, Division.state.depCount);
     var result = await Division.callAI(assemblePrompt);
     if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 조립 중 프로젝트 전환됨'); App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false); return; }
     App.showProgress('divisionAssembleProgress','결과 저장 중...',2,3);
@@ -1898,7 +1861,7 @@ Division.runAssemble = async function(){
   } catch(e) { App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false); showToast('조립 실패: '+e.message,'error'); }
 };
 
-Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeClaims, depCandidates, indepCount, depCount){
+Division._buildAssemblePrompt = function(basisClaim, selectedComponents, depCandidates, indepCount, depCount){
   var basisText = basisClaim ? (basisClaim.amended_text||basisClaim.original_text||'') : '(기초 청구항 없음)';
   var compList = selectedComponents.map(function(uc){
     var cd = uc.component_data || {};
@@ -1923,7 +1886,7 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeCl
     '2. 기능적 기재 최소화: "~하기 위한 수단" → 구조적 표현\n' +
     '3. "상기" 일관 사용, 세미콜론(;), 말미 마침표(.)\n' +
     '4. claim_text에는 마크다운 없이 순수 텍스트만\n' +
-    '5. claim_text_highlighted에만 표시 (**부가**, ***병합***, **변환**)\n' +
+    '5. claim_text_highlighted에만 표시 (**부가**, **변환**)\n' +
     '6. 최종 점검: 조립된 청구항의 모든 구성이 원출원 명세서에 있는지 재확인\n' +
     '\n★★★ 원출원 명세서에 기재되지 않은 내용은 절대 포함하지 마라 ★★★\n';
 
@@ -1996,27 +1959,25 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeCl
       '\n★★★ JSON만 출력. ★★★\n\n출력: ' + outputSchema;
   }
 
-  // T9: 병합형 (merge)
-  var mergeList = mergeClaims.map(function(c){ return '제'+c.claim_number+'항: '+((c.amended_text||c.original_text||'').substring(0,2000)); }).join('\n\n');
+  // 병합형 (merge) — D의 출처는 오직 unused_components(명세서 기재 + 청구항 미기재)만
   return principles +
     '\n\n이것은 "병합형" 분할출원 조립이다.\n' +
-    '목적: 등록 청구항(A+B+C)을 그대로 유지하면서, 명세서에만 있고 기존 어떤\n' +
-    '청구항에도 없었던 구성(D)을 추가하여 A+B+C+D로 출원한다.\n' +
+    '목적: 등록 청구항(A+B+C)을 그대로 유지하면서, 명세서에만 기재되어 있고\n' +
+    '기존 어떤 청구항(종속항 포함)에도 없었던 구성(D)을 추가하여 A+B+C+D로 출원한다.\n' +
     '★★★ 등록결정 구성(A+B+C)은 한 글자도 수정·삭제하지 마라. ★★★\n' +
+    '★★★ D는 오직 아래 [선택된 부가 구성]에서만 가져온다. 기존 종속항의 내용을 독립항에 병합하지 마라. ★★★\n' +
     '\n[등록 청구항 (basis) — 이 구성을 한 글자도 변경하지 말 것]\n'+basisText+
-    '\n\n[선택된 부가 구성 (D)]\n'+(compList||'(없음)')+
-    '\n\n[병합 대상 청구항]\n'+(mergeList||'(없음)')+
+    '\n\n[선택된 부가 구성 (D) — 명세서에만 기재, 기존 청구항 미포함]\n'+(compList||'(없음)')+
     '\n\n[종속항 후보]\n'+(depList||'(없음)')+
     claimCountRule+
     '\n조립 규칙:\n' +
     '1. ★★★ basis 원문 보존: 등록 청구항(A+B+C)을 독립항 앞부분에 원문 그대로 기재. 절대 수정 금지.\n' +
     '2. D 삽입: structural→명칭앞 형용구, material→재질병기, shape→형상추가, functional→뒤에부가\n' +
-    '3. 병합: "제N항에있어서," 제거, 본문추출, 말미 앞 삽입\n' +
-    '4. 종속항: dep_candidate→"제1항에 있어서," 변환, 번호재매핑\n' +
-    '5. 명칭: 국문/영문 각 2개\n' +
-    '6. basis_preserved: basis 원문이 독립항에 그대로 포함되었는지 (true/false)\n' +
-    '7. added_components: 추가된 D 목록 (각각 content, paragraph_number, limitation_type 포함)\n' +
-    '8. new_matter_check: 모든 D의 명세서 뒷받침 확인 요약\n' +
+    '3. 종속항: dep_candidate→"제1항에 있어서," 변환, 번호재매핑\n' +
+    '4. 명칭: 국문/영문 각 2개\n' +
+    '5. basis_preserved: basis 원문이 독립항에 그대로 포함되었는지 (true/false)\n' +
+    '6. added_components: 추가된 D 목록 (각각 content, paragraph_number, limitation_type 포함)\n' +
+    '7. new_matter_check: 모든 D의 명세서 뒷받침 확인 요약\n' +
     qualityRules+
     '\n★★★ JSON만 출력. {로 시작 }로 끝. ★★★\n\n출력: ' + outputSchema;
 };
