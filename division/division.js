@@ -293,9 +293,9 @@ Division.loadProjects = async function(){
   var el = document.getElementById('divisionProjectList');
   if(!el) return;
   try {
-    // T15: 목록 조회 시 spec_full_text 제외 (대형 텍스트 컬럼 불필요한 로드 방지)
+    // T15: spec_full_text만 제외하고 전체 조회 (목록+상세 진입 시 필요한 컬럼이 많아 명시적 나열 대신 제외 방식 사용)
     var {data, error} = await sb.from('division_projects')
-      .select('id,user_id,name,reference_number,division_type,status,input_mode,direct_claims_text,include_prior_art,analysis_meta,title_ko,title_en,title_changed,created_at,updated_at')
+      .select('*')
       .eq('user_id', currentUser.id)
       .order('updated_at', {ascending:false});
     if(error) throw error;
