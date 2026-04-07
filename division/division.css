@@ -123,6 +123,23 @@
 .division-component-row.risk-caution { border-left: 3px solid var(--color-warning); background: #fffbeb; }
 .division-component-row.risk-danger { border-left: 3px solid var(--color-error); background: #fff5f5; }
 
+/* 구성 선택 카드 (개선) */
+.division-component-card {
+  padding: 14px; border-radius: var(--radius-md); margin-bottom: 10px;
+  border: 2px solid var(--color-border); transition: border-color 0.15s, box-shadow 0.15s;
+}
+.division-component-card:hover { box-shadow: var(--shadow-sm); }
+.division-component-card.risk-safe { border-color: var(--color-success); }
+.division-component-card.risk-caution { border-color: var(--color-warning); background: #fffbeb; }
+.division-component-card.risk-danger { border-color: var(--color-error); background: #fff5f5; }
+.division-component-card-header {
+  display: flex; align-items: flex-start; gap: 12px;
+}
+.division-comp-checkbox {
+  width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px;
+  cursor: pointer; accent-color: var(--color-primary);
+}
+
 /* ═══ 11-1. 등록 청구항 / 비교 뷰 ═══ */
 .division-registered-claim { padding: 14px 16px; background: #fafbfc; border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 10px; }
 .division-registered-claim .claim-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; }
