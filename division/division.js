@@ -1334,26 +1334,43 @@ Division.runAnalyze = async function(){
         };
         return row;
       });
-      // _meta는 메모리용 → DB INSERT 전에 제거
+      // _meta → DB component_data 저장 시도, 실패 시 메모리 폴백
       var metaMap = {};
+      compRows.forEach(function(r){ metaMap[r.paragraph_number + ':' + (r.content||'').substring(0,50)] = r._meta; });
+
+      // 1차: component_data 포함 INSERT 시도
       var dbRows = compRows.map(function(r){
-        metaMap[r.paragraph_number + ':' + (r.content||'').substring(0,50)] = r._meta;
         var copy = {}; Object.keys(r).forEach(function(k){ if(k !== '_meta') copy[k] = r[k]; });
+        copy.component_data = r._meta || {};
         return copy;
       });
       var {error:compErr} = await sb.from('division_unused_components').insert(dbRows);
-      if(compErr){
+      if(compErr && compErr.message && compErr.message.indexOf('component_data') >= 0){
+        // component_data 컬럼 미존재 → 제거 후 재시도
+        console.warn('[Division] component_data 컬럼 없음, 제거 후 재시도');
+        var fallbackRows = dbRows.map(function(r){ var c={}; Object.keys(r).forEach(function(k){if(k!=='component_data')c[k]=r[k];}); return c; });
+        var {error:compErr2} = await sb.from('division_unused_components').insert(fallbackRows);
+        if(compErr2){
+          console.error('[Division] 미활용 구성 저장 실패:', compErr2.message||compErr2.details);
+          var saved=0;
+          for(var ci=0;ci<fallbackRows.length;ci++){
+            var {error:re}=await sb.from('division_unused_components').insert(fallbackRows[ci]);
+            if(re) console.warn('[Division] 구성 행 '+ci+' 실패:', re.message);
+            else saved++;
+          }
+          if(saved>0) console.log('[Division] 미활용 구성 '+saved+'/'+fallbackRows.length+'건 저장');
+        }
+      } else if(compErr){
         console.error('[Division] 미활용 구성 저장 실패:', compErr.message||compErr.details);
-        // 행별 폴백
         var saved=0;
         for(var ci=0;ci<dbRows.length;ci++){
           var {error:re}=await sb.from('division_unused_components').insert(dbRows[ci]);
-          if(re) console.warn('[Division] 구성 행 '+ci+' 실패:', re.message, JSON.stringify(dbRows[ci]).substring(0,200));
+          if(re) console.warn('[Division] 구성 행 '+ci+' 실패:', re.message);
           else saved++;
         }
         if(saved>0) console.log('[Division] 미활용 구성 '+saved+'/'+dbRows.length+'건 저장');
       }
-      // _meta를 state에 보관 (UI 렌더링 시 component_data로 참조)
+      // 메모리에도 보관 (UI 렌더링 폴백)
       Division.state._componentMeta = metaMap;
     }
 
@@ -1930,14 +1947,27 @@ Division.runAssemble = async function(){
         var cleanText = (dc.claim_text||'').replace(/\*{2,3}/g,'');
         return { project_id:p.id, claim_number:dc.claim_number, claim_type:dc.claim_type||'independent', parent_claim_number:dc.parent_claim_number||null, claim_text:cleanText, claim_text_highlighted:dc.claim_text_highlighted||dc.claim_text||'', version:1 };
       });
-      // T9 데이터(basis_preserved, added_components)는 메모리에만 보관 — DB 컬럼 미존재
+      // T9 메타데이터를 메모리에 보관 (UI용)
       Division.state._assembledMeta = {
         claims: assembled.division_claims.map(function(dc){
           return { claim_number:dc.claim_number, basis_preserved:dc.basis_preserved, added_components:dc.added_components||[] };
         }),
         new_matter_check: assembled.new_matter_check || ''
       };
-      await sb.from('division_claims_output').insert(rows);
+      // draft_data 포함 INSERT 시도 → 실패 시 제거 후 재시도
+      var dbClaimRows = rows.map(function(r, ri){
+        var copy = {}; Object.keys(r).forEach(function(k){ copy[k] = r[k]; });
+        copy.draft_data = { basis_preserved: assembled.division_claims[ri].basis_preserved, added_components: assembled.division_claims[ri].added_components||[] };
+        return copy;
+      });
+      var {error:claimErr} = await sb.from('division_claims_output').insert(dbClaimRows);
+      if(claimErr && claimErr.message && claimErr.message.indexOf('draft_data') >= 0){
+        console.warn('[Division] draft_data 컬럼 없음, 제거 후 재시도');
+        await sb.from('division_claims_output').insert(rows);
+      } else if(claimErr){
+        console.error('[Division] 청구항 저장 실패:', claimErr.message);
+        await sb.from('division_claims_output').insert(rows);
+      }
     }
     var updateData = { status:'assembled', updated_at:new Date().toISOString() };
     // title_candidates는 JSONB 컬럼이 있으면 저장, 없으면 무시
