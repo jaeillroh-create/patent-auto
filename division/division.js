@@ -1699,21 +1699,34 @@ Division.renderAnalyze = function(left, right, p){
 
   // 공통: 미활용/변환 구성 목록 (모든 유형)
   var compTitle = divType==='category_change' ? '변환 구성 후보' : divType==='strategic' ? '활용 가능 구성' : '구체화·한정·부가 구성 후보';
+
+  // 일괄 선택 버튼
+  var totalComps = unused.length;
+  if(totalComps > 0){
+    h += '<div class="card" style="padding:12px;margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+    h += '<span style="font-size:13px;font-weight:600;margin-right:auto">' + compTitle + ' (' + totalComps + '건)</span>';
+    h += '<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="Division.bulkSelect(\'all\')">전체 선택</button>';
+    h += '<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="Division.bulkSelect(\'none\')">전체 해제</button>';
+    h += '<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;color:var(--color-success)" onclick="Division.bulkSelect(\'safe\')">✅ safe만 선택</button>';
+    h += '</div>';
+  }
+
   ['safe','caution','danger'].forEach(function(level){
     var items = groups[level]; var info = Division.RISK_LABELS[level]; if(!items.length) return;
     h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:4px">'+info.icon+' '+info.label+' ('+items.length+'건)</div>';
-    h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:10px">' + compTitle + '</div>';
     items.forEach(function(uc){
-      var isChecked = uc.user_selection==='selected'||(uc.user_selection==='pending'&&level==='safe');
-      h += '<div class="division-component-row '+info.css+'" style="padding:12px">';
-      h += '<label class="checkbox-label" style="flex:1;align-items:flex-start"><input type="checkbox" '+(isChecked?'checked':'')+' data-component-id="'+uc.id+'" onchange="Division.toggleComponent(this)" style="margin-top:4px" /><div style="flex:1">';
+      var isChecked = uc.user_selection==='selected';
+      h += '<div class="division-component-card '+info.css+'">';
+      h += '<div class="division-component-card-header">';
+      h += '<input type="checkbox" class="division-comp-checkbox" '+(isChecked?'checked':'')+' data-component-id="'+uc.id+'" data-risk-level="'+level+'" onchange="Division.toggleComponent(this)" />';
+      h += '<div style="flex:1;min-width:0">';
       h += '<div style="font-weight:600;font-size:13px">'+escapeHtml(uc.content)+'</div>';
-      h += '<div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">';
+      h += '<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">';
       h += '<span class="division-element-tag">【'+uc.paragraph_number+'】</span>';
       h += '<span class="division-element-tag">→ '+escapeHtml(uc.related_element)+'</span>';
       var limLabels = {structural:'구조한정',material:'재질한정',shape:'형상한정',arrangement:'배치한정',functional:'기능한정'};
       h += '<span class="division-element-tag">'+(limLabels[uc.limitation_type]||uc.limitation_type)+'</span>';
-      h += '</div>';
+      h += '</div></div></div>';
       // T16: 명세서 근거 원문 인용 표시
       var cd = uc.component_data || {};
       if(cd.spec_source_text){
@@ -1743,14 +1756,14 @@ Division.renderAnalyze = function(left, right, p){
       var ucFlags = Division._toArray(uc.risk_flags);
       if(ucFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:4px">⚠️ '+escapeHtml(ucFlags.join(', '))+'</div>';
       if(uc.suggestion) h += '<div style="font-size:11px;color:var(--color-success);margin-top:2px">💡 예상 기재: '+escapeHtml(uc.suggestion)+'</div>';
-      h += '</div></label></div>';
+      h += '</div>';
     });
     h += '</div>';
   });
   left.innerHTML = h;
 
   // 오른쪽: 유형 전환 + 요약
-  var selectedCount = unused.filter(function(uc){ return uc.user_selection==='selected'||(uc.user_selection==='pending'&&uc.risk_level==='safe'); }).length;
+  var selectedCount = unused.filter(function(uc){ return uc.user_selection==='selected'; }).length;
   var rh = Division._renderTypeSwitch(p.division_type);
   rh += '<div class="card" style="padding:20px"><div style="font-size:16px;font-weight:700;margin-bottom:16px"><span class="tf">📋</span> 구성 요약</div>';
   rh += '<div class="division-summary-grid">';
@@ -1758,7 +1771,7 @@ Division.renderAnalyze = function(left, right, p){
     var summaryThemes = (p.analysis_meta && p.analysis_meta.themes) || [];
     rh += '<div class="division-summary-item"><div class="division-summary-num">'+summaryThemes.length+'</div><div class="division-summary-label">테마 후보</div></div>';
   }
-  rh += '<div class="division-summary-item"><div class="division-summary-num">'+selectedCount+'</div><div class="division-summary-label">선택된 구성</div></div>';
+  rh += '<div class="division-summary-item"><div class="division-summary-num" id="divisionSelectedCount">'+selectedCount+'</div><div class="division-summary-label">선택된 구성</div></div>';
   rh += '</div></div>';
 
   // 청구항 구성 설정
@@ -1811,8 +1824,39 @@ Division.toggleComponent = async function(cb){
   var id=cb.dataset.componentId, val=cb.checked?'selected':'excluded';
   try { await sb.from('division_unused_components').update({user_selection:val}).eq('id',id);
     var c=Division.state.unusedComponents.find(function(x){return x.id===id;}); if(c) c.user_selection=val;
+    Division._updateSelectedCount();
   } catch(e) { showToast('변경 실패','error'); }
 };
+
+// 선택 카운트 실시간 갱신
+Division._updateSelectedCount = function(){
+  var checked = document.querySelectorAll('.division-comp-checkbox:checked').length;
+  var el = document.getElementById('divisionSelectedCount');
+  if(el) el.textContent = checked;
+};
+
+// 일괄 선택: 'all' | 'none' | 'safe'
+Division.bulkSelect = async function(mode){
+  var checkboxes = document.querySelectorAll('.division-comp-checkbox');
+  var updates = [];
+  checkboxes.forEach(function(cb){
+    var shouldCheck = mode==='all' || (mode==='safe' && cb.dataset.riskLevel==='safe');
+    cb.checked = shouldCheck;
+    var id = cb.dataset.componentId;
+    var val = shouldCheck ? 'selected' : 'excluded';
+    var c = Division.state.unusedComponents.find(function(x){return x.id===id;});
+    if(c) c.user_selection = val;
+    updates.push({ id:id, val:val });
+  });
+  Division._updateSelectedCount();
+  // DB 일괄 반영 (순차)
+  for(var i=0;i<updates.length;i++){
+    try { await sb.from('division_unused_components').update({user_selection:updates[i].val}).eq('id',updates[i].id); }
+    catch(e){ console.warn('[Division] 일괄 선택 DB 반영 실패:', updates[i].id); }
+  }
+  showToast(mode==='all'?'전체 선택됨':mode==='none'?'전체 해제됨':'safe 구성만 선택됨','info');
+};
+
 Division.rerunAnalyze = function(){ Division.runAnalyze(); };
 
 // 청구항 개수 설정 + DB 영속화
