@@ -196,6 +196,7 @@ Division._wordDiff = function(oldText, newText){
 
   // Backtrack으로 diff 결과 생성
   var result = [];
+  var bi = m, bj = n;
   while(bi > 0 || bj > 0){
     if(bi > 0 && bj > 0 && oldParts[bi-1] === newParts[bj-1]){
       result.unshift({ type:'same', text:oldParts[bi-1] });
