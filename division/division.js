@@ -1954,19 +1954,28 @@ Division.runAssemble = async function(){
         }),
         new_matter_check: assembled.new_matter_check || ''
       };
-      // draft_data 포함 INSERT 시도 → 실패 시 제거 후 재시도
-      var dbClaimRows = rows.map(function(r, ri){
-        var copy = {}; Object.keys(r).forEach(function(k){ copy[k] = r[k]; });
-        copy.draft_data = { basis_preserved: assembled.division_claims[ri].basis_preserved, added_components: assembled.division_claims[ri].added_components||[] };
-        return copy;
-      });
-      var {error:claimErr} = await sb.from('division_claims_output').insert(dbClaimRows);
-      if(claimErr && claimErr.message && claimErr.message.indexOf('draft_data') >= 0){
-        console.warn('[Division] draft_data 컬럼 없음, 제거 후 재시도');
-        await sb.from('division_claims_output').insert(rows);
-      } else if(claimErr){
-        console.error('[Division] 청구항 저장 실패:', claimErr.message);
-        await sb.from('division_claims_output').insert(rows);
+
+      // DB INSERT — 실제 테이블 컬럼만 사용
+      console.log('[Division] ── claims_output INSERT 디버그 ──');
+      console.log('[Division] INSERT 행 수:', rows.length);
+      console.log('[Division] INSERT 컬럼:', Object.keys(rows[0]));
+      console.log('[Division] 첫 행 샘플:', JSON.stringify(rows[0]).substring(0, 500));
+      rows.forEach(function(r,i){ console.log('[Division] 행'+i+' claim_number:'+r.claim_number+' type:'+r.claim_type+' text길이:'+(r.claim_text||'').length); });
+
+      var {error:claimErr} = await sb.from('division_claims_output').insert(rows);
+      if(claimErr){
+        console.error('[Division] claims_output INSERT 실패:', claimErr.message, claimErr.details, claimErr.code);
+        // 행별 폴백
+        var saved = 0;
+        for(var ci=0; ci<rows.length; ci++){
+          console.log('[Division] 행별 시도 '+ci+':', JSON.stringify(rows[ci]).substring(0, 300));
+          var {error:rowErr} = await sb.from('division_claims_output').insert(rows[ci]);
+          if(rowErr){ console.error('[Division] 행 '+ci+' 실패:', rowErr.message, rowErr.details); }
+          else { saved++; }
+        }
+        console.log('[Division] 행별 결과:', saved+'/'+rows.length+'건 성공');
+      } else {
+        console.log('[Division] claims_output INSERT 성공:', rows.length, '건');
       }
     }
     var updateData = { status:'assembled', updated_at:new Date().toISOString() };
