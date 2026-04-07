@@ -58,15 +58,25 @@ Division.DIVISION_PRINCIPLES = '\n' +
 
 // ═══ 신규사항 키워드 검증용 불용어 목록 (T3: 특허 문체 상용어 포함) ═══
 Division.STOPWORDS = [
-  '상기','있어서','포함하는','특징으로','하는','에서','으로','위한','의한','대한',
+  // 조사·접속
+  '상기','있어서','에서','으로','위한','의한','대한','따른','통해','대해',
+  '의해','관한','위해','것을','것인','것으로','또는','및','상기한','따르면',
+  // 청구항 문체
+  '포함하는','특징으로','하는','이상','이하','적어도','하나의','복수의','소정의',
+  // 동사형 서술어 (특허 문체 상용어)
   '구성되는','수행하는','이루어지는','형성되는','제공하는','생성하는','출력하는',
   '수신하는','전송하는','저장하는','처리하는','판단하는','설정하는','제어하는',
   '표시하는','입력하는','산출하는','변환하는','검출하는','측정하는',
-  '따른','통해','대해','의해','관한','위해','것을','것인','것으로',
-  '또는','및','이상','이하','적어도','하나의','복수의','소정의',
-  '상기한','따르면','실시예','본 발명','일 실시예'
+  '연산하는','추출하는','분류하는','매칭하는','비교하는','결합하는',
+  '배치되는','연결되는','장착되는','구비하는','탑재하는','내장하는',
+  '인가하는','인접하는','대응하는','작동하는','구동하는','실행하는',
+  '획득하는','산정하는','갱신하는','등록하는','할당하는','선택하는',
+  // 명사형 일반 표현
+  '실시예','본 발명','일 실시예','상기에서','따라서','그리고','경우에',
+  '이때','또한','나아가','한편','이에','이하에서','상세하게','구체적으로',
+  '바람직하게','선택적으로','예를들어','예컨대','다만','단지'
 ];
-Division.STATUS_TO_STEP = { created:0, uploaded:0, parsed:1, analyzed:2, assembled:3, verified:4, confirmed:5 };
+Division.STATUS_TO_STEP = { created:0, uploaded:0, parsed:1, analyzed:2, assembled:3, verified:4, re_verifying:4, confirmed:5 };
 
 Division.FILE_TYPES = {
   application:  { label:'특허출원서',       icon:'📄', required:true },
@@ -2335,14 +2345,38 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
   if(divisionType === 'merge'){
     divisionClaims.filter(function(c){ return c.claim_type === 'independent'; }).forEach(function(c){
       if(basisText && basisText.length > 20){
-        // basis 원문의 앞 100자가 분할 독립항에 포함되어 있는지
-        var checkLen = Math.min(100, basisText.length);
-        if(!c.claim_text.includes(basisText.substring(0, checkLen))){
-          issues.push({
-            severity: 'CRITICAL', check: 'basis_preservation',
-            message: '독립항 ' + c.claim_number + '에서 등록결정 구성(basis)이 변경된 것으로 보입니다',
-            detail: 'basis 앞 ' + checkLen + '자가 독립항에서 발견되지 않음: "' + basisText.substring(0, 50) + '..."'
+        // basis 핵심 구성요소(명사구+참조번호) 단위로 포함 여부 검사
+        // 1) 참조번호 패턴 추출: "제어부(110)", "프로세서(200)" 등
+        var refParts = basisText.match(/[가-힣a-zA-Z]+\s*[\(\(]\s*\d+\s*[\)\)]/g) || [];
+        // 2) 3음절 이상 명사구 추출 (불용어 제외)
+        var nouns = (basisText.match(/[가-힣]{3,}/g) || []).filter(function(kw){
+          return Division.STOPWORDS.indexOf(kw) < 0;
+        });
+        // 중복 제거
+        var checkItems = [];
+        var seen = {};
+        refParts.forEach(function(rp){ if(!seen[rp]){ seen[rp]=true; checkItems.push(rp.replace(/\s/g,'')); } });
+        nouns.forEach(function(n){ if(!seen[n]){ seen[n]=true; checkItems.push(n); } });
+
+        if(checkItems.length > 0){
+          var missing = checkItems.filter(function(item){
+            // 참조번호는 공백 무시하여 매칭
+            return c.claim_text.replace(/\s/g,'').indexOf(item.replace(/\s/g,'')) < 0;
           });
+          var ratio = 1 - (missing.length / checkItems.length);
+          if(ratio < 0.8){
+            issues.push({
+              severity: 'CRITICAL', check: 'basis_preservation',
+              message: '독립항 ' + c.claim_number + '에서 basis 핵심 구성요소 보존율 ' + Math.round(ratio*100) + '%',
+              detail: '미발견 구성(' + missing.length + '/' + checkItems.length + '): ' + missing.slice(0,5).join(', ') + (missing.length>5?' 외 '+(missing.length-5)+'개':'')
+            });
+          } else if(ratio < 0.95 && missing.length > 0){
+            issues.push({
+              severity: 'MEDIUM', check: 'basis_preservation',
+              message: '독립항 ' + c.claim_number + '에서 basis 일부 구성요소 변경 가능성 (보존율 ' + Math.round(ratio*100) + '%)',
+              detail: '미발견: ' + missing.join(', ')
+            });
+          }
         }
       }
     });
@@ -2658,16 +2692,28 @@ Division.renderVerify = function(left, right, p){
   rh += '</div></div>';
   rh += '</div>';
   // V2: 검증 상태별 안내 메시지 + 버튼 활성화 제어
-  if(failCount > 0){
-    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)">❌ 검증 실패 항목 '+failCount+'건 — 해당 구성을 제거하거나 문언을 수정한 후 재검증하세요.</div>';
-  } else if(warnCount > 0){
-    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-warning-light);border-radius:var(--radius-sm);font-size:13px;color:#92400e">⚠️ 주의 항목 '+warnCount+'건 — 각 항목을 검토하여 "수용" 또는 "수정"을 선택하세요. 모든 항목을 처리하면 최종 확정할 수 있습니다.</div>';
+  // Pass 1 CRITICAL/HIGH 이슈도 확인 대상에 포함
+  var autoCritical = autoIssues.filter(function(i){ return i.severity==='CRITICAL'; }).length;
+  var autoHigh = autoIssues.filter(function(i){ return i.severity==='HIGH'; }).length;
+  var hasAutoBlocking = autoCritical > 0 || autoHigh > 0;
+
+  if(failCount > 0 || autoCritical > 0){
+    var msgs = [];
+    if(failCount > 0) msgs.push('AI 검증 실패 '+failCount+'건');
+    if(autoCritical > 0) msgs.push('자동 검증 CRITICAL '+autoCritical+'건');
+    if(autoHigh > 0) msgs.push('자동 검증 HIGH '+autoHigh+'건');
+    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)">❌ '+msgs.join(' / ')+' — 각 항목을 검토하여 수정하거나 구성을 제거한 후 재검증하세요.</div>';
+  } else if(warnCount > 0 || autoHigh > 0){
+    var wMsgs = [];
+    if(warnCount > 0) wMsgs.push('AI 주의 '+warnCount+'건');
+    if(autoHigh > 0) wMsgs.push('자동 검증 HIGH '+autoHigh+'건');
+    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-warning-light);border-radius:var(--radius-sm);font-size:13px;color:#92400e">⚠️ '+wMsgs.join(' / ')+' — 각 항목을 검토하여 "수용" 또는 "수정"을 선택하세요.</div>';
   } else {
     rh += '<div style="margin-top:12px;padding:12px;background:#d1fae5;border-radius:var(--radius-sm);font-size:13px;color:#065f46">✅ 모든 검증 통과 — 최종 확정할 수 있습니다.</div>';
   }
   rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tf">🔄</span> 재검증</button>';
-  var canConfirm = failCount === 0;
-  rh += '<button class="btn btn-primary" onclick="Division.confirmFinal()" style="flex:1;padding:12px'+(canConfirm?'':';opacity:0.5')+'"'+(canConfirm?'':' title="fail 항목을 먼저 해결하세요"')+'><span class="tf">🏁</span> 최종 확정</button></div>';
+  var canConfirm = failCount === 0 && !hasAutoBlocking;
+  rh += '<button class="btn btn-primary" onclick="'+(canConfirm ? 'Division.confirmFinal()' : 'showToast(\'CRITICAL/HIGH 이슈를 먼저 해결하세요\',\'error\')')+'" style="flex:1;padding:12px'+(canConfirm?'':';opacity:0.5;cursor:not-allowed')+'"><span class="tf">🏁</span> 최종 확정</button></div>';
   right.innerHTML = rh;
   Division._bindTitleRadios();
 };
