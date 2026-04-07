@@ -212,6 +212,57 @@
 .division-val-row.vr-warn { border-left: 3px solid var(--color-warning); }
 .division-val-row.vr-fail { border-left: 3px solid var(--color-error); }
 
+/* ═══ T16: 분석 결과 카드 — 근거·overlap·전략 표시 ═══ */
+.division-source-citation {
+  margin-top: 6px; padding: 6px 10px;
+  background: #f0fdf4; border-left: 3px solid var(--color-success);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 11px; color: #065f46;
+}
+.division-source-citation .citation-text {
+  margin-top: 2px; color: #047857; font-style: italic; line-height: 1.5;
+}
+.division-overlap-warning {
+  margin-top: 4px; padding: 4px 8px;
+  background: var(--color-error-light); border-radius: var(--radius-sm);
+  font-size: 11px; color: var(--color-error); font-weight: var(--font-weight-semibold);
+}
+.division-no-overlap {
+  margin-top: 4px; font-size: 11px; color: var(--color-success);
+}
+.division-reg-strategy {
+  margin-top: 2px; font-size: 11px; color: var(--color-primary);
+}
+
+/* ═══ T17: 검증 결과 — 2-Pass 통합 표시 ═══ */
+.division-autocheck-section {
+  padding: 16px; margin-bottom: 12px;
+}
+.division-autocheck-item {
+  padding: 10px; margin-bottom: 8px;
+  background: #fafbfc; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.division-autocheck-item.severity-CRITICAL { border-left: 3px solid var(--color-error); }
+.division-autocheck-item.severity-HIGH { border-left: 3px solid #ea580c; }
+.division-autocheck-item.severity-MEDIUM { border-left: 3px solid var(--color-warning); }
+.division-autocheck-header {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+}
+.division-severity-badge {
+  font-size: 12px; font-weight: var(--font-weight-bold);
+}
+.division-severity-badge.severity-CRITICAL { color: var(--color-error); }
+.division-severity-badge.severity-HIGH { color: #ea580c; }
+.division-severity-badge.severity-MEDIUM { color: #ca8a04; }
+.division-check-tag {
+  font-size: 11px; color: var(--color-text-tertiary);
+  padding: 1px 6px; background: var(--color-border); border-radius: 10px;
+}
+.division-autocheck-pass {
+  padding: 12px; background: #f0fdf4; border-radius: var(--radius-sm);
+  color: var(--color-success); font-size: 13px;
+}
+
 /* ═══ 14. 명칭 선택 라디오 ═══ */
 .division-title-option { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); margin-bottom: 8px; cursor: pointer; }
 .division-title-option:hover { background: var(--color-bg-tertiary); }
@@ -249,6 +300,8 @@
   .division-step-connector { width: 16px; }
   .division-summary-grid { flex-direction: column; }
   .division-val-summary { flex-wrap: wrap; }
+  .division-source-citation .citation-text { font-size: 10px; }
+  .division-autocheck-item { padding: 8px; }
   .division-mode-toggle { flex-direction: column; }
   .division-mode-btn:first-child { border-right: none; border-bottom: 1px solid var(--color-border); }
   .division-drop-zone { flex-wrap: wrap; }
