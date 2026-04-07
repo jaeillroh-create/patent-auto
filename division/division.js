@@ -1876,12 +1876,19 @@ Division.runAssemble = async function(){
       var rows = assembled.division_claims.map(function(dc){
         // ** 마크다운 마커 제거 — claim_text는 순수 텍스트만
         var cleanText = (dc.claim_text||'').replace(/\*{2,3}/g,'');
-        return { project_id:p.id, claim_number:dc.claim_number, claim_type:dc.claim_type||'independent', parent_claim_number:dc.parent_claim_number||null, claim_text:cleanText, claim_text_highlighted:dc.claim_text_highlighted||dc.claim_text||'', version:1 };
+        // T9: draft_data에 basis_preserved, added_components 저장
+        var draftData = {
+          basis_preserved: dc.basis_preserved !== undefined ? !!dc.basis_preserved : null,
+          added_components: Array.isArray(dc.added_components) ? dc.added_components : []
+        };
+        return { project_id:p.id, claim_number:dc.claim_number, claim_type:dc.claim_type||'independent', parent_claim_number:dc.parent_claim_number||null, claim_text:cleanText, claim_text_highlighted:dc.claim_text_highlighted||dc.claim_text||'', version:1, draft_data:draftData };
       });
       await sb.from('division_claims_output').insert(rows);
     }
     var updateData = { status:'assembled', updated_at:new Date().toISOString() };
     if(assembled.title_candidates) updateData.title_candidates = assembled.title_candidates;
+    // T9: new_matter_check 저장
+    if(assembled.new_matter_check) updateData.new_matter_check = assembled.new_matter_check;
     await sb.from('division_projects').update(updateData).eq('id',p.id);
     p.status = 'assembled'; if(assembled.title_candidates) p.title_candidates = assembled.title_candidates;
     App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false);
@@ -1893,22 +1900,66 @@ Division.runAssemble = async function(){
 
 Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeClaims, depCandidates, indepCount, depCount){
   var basisText = basisClaim ? (basisClaim.amended_text||basisClaim.original_text||'') : '(기초 청구항 없음)';
-  var compList = selectedComponents.map(function(uc){ return '- 내용: '+uc.content+'\n  삽입위치: '+uc.insertion_point+'\n  유형: '+uc.limitation_type; }).join('\n');
+  var compList = selectedComponents.map(function(uc){
+    var cd = uc.component_data || {};
+    return '- 내용: '+uc.content+'\n  삽입위치: '+uc.insertion_point+'\n  유형: '+uc.limitation_type +
+      '\n  근거단락: 【'+uc.paragraph_number+'】' +
+      (cd.spec_source_text ? '\n  명세서원문: "'+cd.spec_source_text.substring(0,200)+'"' : '');
+  }).join('\n');
   var depList = depCandidates.map(function(c){ return '제'+c.claim_number+'항: '+((c.amended_text||c.original_text||'').substring(0,1000)); }).join('\n\n');
   var p = Division.state.current;
   var divType = p ? p.division_type : 'merge';
   indepCount = indepCount || 1;
   var depInstr = depCount === 0 ? '종속항 없이 독립항만 작성' : depCount > 0 ? '각 독립항에 종속항 '+depCount+'개씩 작성' : '각 독립항에 적절한 수의 종속항을 자동 구성 (원출원 종속항 후보 활용)';
 
+  // T3: 공통 원칙 주입
+  var principles = Division.DIVISION_PRINCIPLES;
+
   var claimCountRule = '\n\n★★★ 청구항 구성 지시 ★★★\n- 독립항: 정확히 ' + indepCount + '개 작성\n- 종속항: ' + depInstr + '\n- 청구항 번호는 1부터 연번\n';
 
-  var qualityRules = '\n\n품질 규칙 (필수 준수):\n- 추상적 표현 금지: "신속하게","효과적으로","최적의" 등 → 구체적 수치/구조로 대체\n- 기능적 기재 최소화: "~하기 위한 수단" → 구조적 표현으로 기재\n- 구성요소 명칭 통일: "상기" 일관 사용\n- 형식: 각 구성 끝에 세미콜론(;), 말미 마침표(.)\n- claim_text에는 마크다운(**) 없이 순수 텍스트만. claim_text_highlighted에만 변경부분 표시.\n';
+  // T9/T10/T11: 3유형 공통 품질 규칙 (명세서 기반 검증 강화)
+  var qualityRules = '\n\n[품질 규칙 — 3유형 공통]\n' +
+    '1. 추상적 표현 금지: "신속하게","효과적으로","최적의" → 구체적 수치/구조로 대체\n' +
+    '2. 기능적 기재 최소화: "~하기 위한 수단" → 구조적 표현\n' +
+    '3. "상기" 일관 사용, 세미콜론(;), 말미 마침표(.)\n' +
+    '4. claim_text에는 마크다운 없이 순수 텍스트만\n' +
+    '5. claim_text_highlighted에만 표시 (**부가**, ***병합***, **변환**)\n' +
+    '6. 최종 점검: 조립된 청구항의 모든 구성이 원출원 명세서에 있는지 재확인\n' +
+    '\n★★★ 원출원 명세서에 기재되지 않은 내용은 절대 포함하지 마라 ★★★\n';
 
+  // T9/T10/T11: 공통 출력 스키마 — basis_preserved, added_components, new_matter_check 추가
+  var outputSchema = '{"division_claims":[{"claim_number":1,"claim_type":"independent|dependent",' +
+    '"parent_claim_number":null,"claim_text":"순수텍스트","claim_text_highlighted":"변경표시",' +
+    '"basis_preserved":true,"added_components":[{"content":"추가된 D 내용","paragraph_number":"0098","limitation_type":"structural"}]}],' +
+    '"new_matter_check":"신규사항 확인 결과 요약 (모든 구성의 명세서 뒷받침 여부)",' +
+    '"title_candidates":[{"ko":"","en":""}]}';
+
+  // T10: 카테고리변경형
   if(divType === 'category_change'){
     var meta = p.analysis_meta || {};
-    return '아래 등록 청구항을 카테고리 변경하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis) — '+(meta.original_category==='method'?'방법':'장치')+']\n'+basisText+'\n\n[변환 방향]\n'+(meta.original_category==='method'?'방법 → 장치':'장치 → 방법')+'\n\n[변환에 활용할 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 방법→장치: "~하는 단계"→"~하는 ~부/수단", 말미 "~을 포함하는 [장치명]."\n2. 장치→방법: "~부/수단"→"~하는 단계", 말미 "~을 포함하는 방법."\n3. 명칭: 국문/영문 각 2개'+qualityRules+'\n★★★ JSON만 출력. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"순수텍스트","claim_text_highlighted":"**변환부분**"}],"title_candidates":[{"ko":"","en":""}]}';
+    return principles +
+      '\n\n이것은 "카테고리 변경형" 분할출원 조립이다.\n' +
+      '목적: 등록 청구항의 기술적 내용(A+B+C)을 보존하면서, 방법↔장치 카테고리를 전환한다.\n' +
+      '★ 변환 시 명세서에 없는 구성요소명(~부, ~수단)을 임의로 생성하지 마라.\n' +
+      '★ 변환된 각 구성요소명이 명세서에 실제 기재되어 있어야 한다.\n' +
+      '★ A+B+C의 기술적 내용을 보존하라 (형태만 방법↔장치 전환).\n' +
+      '\n[등록 청구항 (basis) — '+(meta.original_category==='method'?'방법':'장치')+']\n'+basisText+
+      '\n\n[변환 방향]\n'+(meta.original_category==='method'?'방법 → 장치':'장치 → 방법')+
+      '\n\n[변환에 활용할 구성]\n'+(compList||'(없음)')+
+      '\n\n[종속항 후보]\n'+(depList||'(없음)')+
+      claimCountRule+
+      '\n조립 규칙:\n' +
+      '1. 방법→장치: "~하는 단계"→"~하는 ~부/수단" (명세서 기재 구성요소명만 사용), 말미 "~을 포함하는 [장치명]."\n' +
+      '2. 장치→방법: "~부/수단"→"~하는 단계", 말미 "~을 포함하는 방법."\n' +
+      '3. ★ 변환 시 추가되는 구성요소명은 반드시 명세서에 기재된 것만 사용\n' +
+      '4. 명칭: 국문/영문 각 2개\n' +
+      '5. basis_preserved: 기술적 내용 보존 여부 (true/false)\n' +
+      '6. added_components: 변환 과정에서 추가된 구성 (각각 명세서 단락번호 포함)\n' +
+      qualityRules+
+      '\n★★★ JSON만 출력. ★★★\n\n출력: ' + outputSchema;
   }
 
+  // T11: 전략형
   if(divType === 'strategic'){
     var themes = (p.analysis_meta && p.analysis_meta.themes) || [];
     var selectedThemes = [];
@@ -1916,14 +1967,58 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, mergeCl
       themeCheckboxes.forEach(function(cb){ var tid=cb.dataset.themeId; var t=themes.find(function(x){return x.theme_id===tid;}); if(t) selectedThemes.push(t); });
     } catch(e){}
     if(!selectedThemes.length && themes.length > 0) selectedThemes = themes.slice(0, indepCount);
-    var themesDesc = selectedThemes.map(function(t){ return '테마: '+t.theme_name+'\n설명: '+t.description+'\n핵심: '+(t.key_elements||[]).join(', '); }).join('\n\n');
+    var themesDesc = selectedThemes.map(function(t){
+      return '테마: '+t.theme_name+'\n설명: '+t.description+
+        '\n핵심: '+(t.key_elements||[]).join(', ')+
+        '\n근거단락: '+(t.spec_paragraphs||[]).map(function(s){return '【'+s+'】';}).join(' ');
+    }).join('\n\n');
 
-    return '등록 청구항과 테마를 기반으로 전략적 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 테마]\n'+(themesDesc||'(없음)')+'\n\n[활용 구성]\n'+(compList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n조립 규칙:\n1. 테마별 새 독립항 (기존과 다른 관점)\n2. 명세서 뒷받침 범위 내\n3. 명칭: 국문/영문 각 2개'+qualityRules+'\n★★★ JSON만 출력. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"순수텍스트","claim_text_highlighted":"**신규부분**"}],"title_candidates":[{"ko":"","en":""}]}';
+    return principles +
+      '\n\n이것은 "전략형" 분할출원 조립이다.\n' +
+      '목적: 등록 청구항과 다른 관점의 새로운 독립항을 명세서 범위 내에서 작성한다.\n' +
+      '★ 신규사항 추가 위험이 가장 높은 유형이다.\n' +
+      '★ 새 독립항의 모든 구성요소에 명세서 단락번호 1:1 대응이 필수이다.\n' +
+      '★ 명세서에 기재되지 않은 구성은 절대 포함하지 마라.\n' +
+      '\n[등록 청구항 (basis — 참고용)]\n'+basisText+
+      '\n\n[선택된 테마]\n'+(themesDesc||'(없음)')+
+      '\n\n[활용 구성]\n'+(compList||'(없음)')+
+      '\n\n[종속항 후보]\n'+(depList||'(없음)')+
+      claimCountRule+
+      '\n조립 규칙:\n' +
+      '1. 테마별 새 독립항 — 기존 등록 청구항과 다른 관점으로 작성\n' +
+      '2. ★ 모든 구성요소에 명세서 단락번호 대응 필수 (added_components에 paragraph_number 기재)\n' +
+      '3. ★ basis를 참고하되 직접 복사하지 않음 — "원출원 범위 내" 확인\n' +
+      '4. 명칭: 국문/영문 각 2개\n' +
+      '5. basis_preserved: 전략형은 false (새 독립항이므로)\n' +
+      '6. added_components: 독립항의 모든 구성요소를 나열 (각각 명세서 단락번호 포함)\n' +
+      '7. new_matter_check: 각 구성의 명세서 뒷받침 여부를 요약\n' +
+      qualityRules+
+      '\n★★★ JSON만 출력. ★★★\n\n출력: ' + outputSchema;
   }
 
-  // merge
+  // T9: 병합형 (merge)
   var mergeList = mergeClaims.map(function(c){ return '제'+c.claim_number+'항: '+((c.amended_text||c.original_text||'').substring(0,2000)); }).join('\n\n');
-  return '등록 청구항에 부가 구성을 삽입하고 병합 청구항을 결합하여 분할출원 청구항을 조립하라.\n\n[등록 청구항 (basis)]\n'+basisText+'\n\n[선택된 부가 구성]\n'+(compList||'(없음)')+'\n\n[병합 대상 청구항]\n'+(mergeList||'(없음)')+'\n\n[종속항 후보]\n'+(depList||'(없음)')+claimCountRule+'\n\n조립 규칙:\n1. 독립항: structural→명칭앞형용구, material→재질병기, shape→형상추가, functional→뒤에부가\n2. 병합: "제N항에있어서,"제거, 본문추출, 말미앞삽입\n3. 종속항: dep_candidate→"제1항에있어서,"변환, 번호재매핑\n4. 명칭: 국문/영문 각 2개\n\n품질 규칙 (필수 준수):\n5. 추상적 표현 금지: "신속하게","효과적으로","최적의" 등 → 구체적 수치/구조로 대체. 명세서에 기재된 표현을 그대로 사용.\n6. 기능적 기재 최소화: "~하기 위한 수단" → 구조적 표현("~을 포함하는 ~부")으로 기재.\n7. 원출원 구성 그대로 유지: 등록 청구항의 구성요소 명칭·표현을 수정하지 말 것. 부가/병합 부분만 추가.\n8. 구성요소 명칭 통일: "상기" 일관 사용, 참조부호 유지.\n9. 형식: 각 구성 끝에 세미콜론(;), 말미 마침표(.).\n10. claim_text에는 마크다운(**) 없이 순수 텍스트만. claim_text_highlighted에만 변경부분 **표시**.\n\n★★★ JSON만 출력. {로 시작 }로 끝. ★★★\n\n출력: {"division_claims":[{"claim_number":1,"claim_type":"independent|dependent","parent_claim_number":null,"claim_text":"순수텍스트","claim_text_highlighted":"원본유지 **부가** ***병합***"}],"title_candidates":[{"ko":"","en":""}]}';
+  return principles +
+    '\n\n이것은 "병합형" 분할출원 조립이다.\n' +
+    '목적: 등록 청구항(A+B+C)을 그대로 유지하면서, 명세서에만 있고 기존 어떤\n' +
+    '청구항에도 없었던 구성(D)을 추가하여 A+B+C+D로 출원한다.\n' +
+    '★★★ 등록결정 구성(A+B+C)은 한 글자도 수정·삭제하지 마라. ★★★\n' +
+    '\n[등록 청구항 (basis) — 이 구성을 한 글자도 변경하지 말 것]\n'+basisText+
+    '\n\n[선택된 부가 구성 (D)]\n'+(compList||'(없음)')+
+    '\n\n[병합 대상 청구항]\n'+(mergeList||'(없음)')+
+    '\n\n[종속항 후보]\n'+(depList||'(없음)')+
+    claimCountRule+
+    '\n조립 규칙:\n' +
+    '1. ★★★ basis 원문 보존: 등록 청구항(A+B+C)을 독립항 앞부분에 원문 그대로 기재. 절대 수정 금지.\n' +
+    '2. D 삽입: structural→명칭앞 형용구, material→재질병기, shape→형상추가, functional→뒤에부가\n' +
+    '3. 병합: "제N항에있어서," 제거, 본문추출, 말미 앞 삽입\n' +
+    '4. 종속항: dep_candidate→"제1항에 있어서," 변환, 번호재매핑\n' +
+    '5. 명칭: 국문/영문 각 2개\n' +
+    '6. basis_preserved: basis 원문이 독립항에 그대로 포함되었는지 (true/false)\n' +
+    '7. added_components: 추가된 D 목록 (각각 content, paragraph_number, limitation_type 포함)\n' +
+    '8. new_matter_check: 모든 D의 명세서 뒷받침 확인 요약\n' +
+    qualityRules+
+    '\n★★★ JSON만 출력. {로 시작 }로 끝. ★★★\n\n출력: ' + outputSchema;
 };
 
 // ═══════════════════════════════════════════
