@@ -19,7 +19,8 @@ Division.STATUS = {
   parsed:    { label:'파싱완료',   css:'dstatus-parsed',    step:2 },
   analyzed:  { label:'분석완료',   css:'dstatus-analyzed',  step:3 },
   assembled: { label:'조립완료',   css:'dstatus-assembled', step:4 },
-  verified:  { label:'검증완료',   css:'dstatus-verified',  step:5 },
+  verified:      { label:'검증완료',   css:'dstatus-verified',      step:5 },
+  re_verifying:  { label:'재검증중',   css:'dstatus-verified',      step:5 },
   confirmed: { label:'확정',       css:'dstatus-confirmed', step:6 },
   error:     { label:'오류',       css:'dstatus-error',     step:-1 }
 };
@@ -2276,7 +2277,7 @@ Division.runVerify = async function(){
     catch(e) { showToast('검증 결과 해석 실패: ' + e.message.substring(0,80),'error'); App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); return; }
 
     // T14: DB 저장 — Pass 1 (auto_verify_issues) + Pass 2 (result_data) 통합
-    var VALID_CHECK = ['new_matter','basis_scope','double_patenting','support','format','abstract_expression','functional_limitation','overlap'];
+    var VALID_CHECK = ['new_matter','basis_scope','double_patenting','spec_support','support','format','abstract_expression','functional_limitation','overlap'];
     var VALID_RESULT = ['pass','warning','fail'];
     var sEnum = Division._sanitizeEnum;
 
@@ -2472,8 +2473,34 @@ Division._buildVerifyPrompt = function(claimsText, specText, origClaimsText){
       '- 원출원 범위를 초과하는 신규사항이 없는지 특히 엄격하게 확인\n';
   }
 
+  // V9: 실질적 뒷받침 판단 기준
+  var supportGuidelines =
+    '\n[뒷받침 판단 기준 — 실무 수준]\n\n' +
+    '"뒷받침된다"는 것은 동일한 단어가 명세서에 있다는 것이 아니다.\n' +
+    '명세서의 기술적 내용이 해당 청구항 구성을 실질적으로 설명하고 있으면 뒷받침이 인정된다.\n\n' +
+    '판단 절차:\n' +
+    '1. 청구항의 각 구성요소를 분리한다\n' +
+    '2. 각 구성요소에 대해 명세서에서 대응하는 기술적 설명을 찾는다\n' +
+    '3. 대응 관계를 판단한다:\n' +
+    '   - "direct" (직접 기재): 명세서에 동일/거의 동일한 표현 있음 → pass\n' +
+    '   - "substantial" (실질적 뒷받침): 표현은 다르지만 동일 기술적 개념 → pass\n' +
+    '     (근거 단락번호 + 대응 설명 기재)\n' +
+    '   - "derivable" (자명한 도출): 명세서 내용에서 당업자가 도출 가능 → warning\n' +
+    '     (근거 단락번호 + 도출 논리 기재)\n' +
+    '   - "none" (근거 없음): 명세서에 대응하는 기술적 내용 없음 → fail\n\n' +
+    '예시:\n' +
+    '- 청구항 "정합성 검증부" vs 명세서 "무결성 확인 모듈"\n' +
+    '  → pass (substantial, 동일 기술적 개념)\n' +
+    '- 청구항 "딥러닝 기반 분석부" vs 명세서 "기계학습 모델을 활용한 분석"\n' +
+    '  → warning (derivable, 딥러닝⊂기계학습이지만 명세서가 딥러닝을 특정하지 않음)\n' +
+    '- 청구항 "블록체인 인증 모듈" vs 명세서에 블록체인 언급 없음\n' +
+    '  → fail (none, 신규사항)\n\n' +
+    '★ 단순 키워드 매칭으로 "용어가 다르다"고 바로 fail 처리하면 안 됨\n' +
+    '★ 명세서에서 동일한 기술적 개념을 다른 표현으로 설명하는 경우를 반드시 인식하라\n';
+
   return principles +
     typeSpecific +
+    supportGuidelines +
     '\n아래 분할출원 청구항에 대해 검증을 수행하라.\n' +
     '\n[분할출원 청구항]\n'+claimsText+
     '\n\n[원출원 등록 청구항 (중복 체크 대상)]\n'+(origClaimsText||'(없음)')+
@@ -2490,9 +2517,10 @@ Division._buildVerifyPrompt = function(claimsText, specText, origClaimsText){
     '3순위 [HIGH] double_patenting (이중 특허 방지):\n' +
     '  - 분할 독립항이 원출원 등록 청구항과 실질적으로 동일하면 안 됨\n' +
     '  - 추가/변환/신규 부분이 실질적 차이를 만드는지 확인\n' +
-    '4순위 [HIGH] support (뒷받침 검증):\n' +
-    '  - 각 구성요소의 명세서 뒷받침 단락 특정 (직접기재/간접기재 구분)\n' +
-    '  - 간접적 뒷받침인 경우 더 구체적인 단락 권장\n' +
+    '4순위 [HIGH] spec_support (뒷받침 검증):\n' +
+    '  - 위의 [뒷받침 판단 기준]을 적용하여 각 구성요소를 검증\n' +
+    '  - support_type을 반드시 기재 (direct/substantial/derivable/none)\n' +
+    '  - spec_quote로 명세서 원문 30자 이내 발췌\n' +
     '5순위 [MEDIUM] format (형식 검증):\n' +
     '  - 마침표(.) 누락, "상기" 일관성, 종속항 인용 정확성\n' +
     '  - 추상적 표현, 기능적 기재 존재 여부\n' +
@@ -2500,12 +2528,14 @@ Division._buildVerifyPrompt = function(claimsText, specText, origClaimsText){
     '★ 각 결과에 명세서 근거 단락번호(spec_paragraph_number)를 반드시 포함하라.\n' +
     '\n★★★ JSON만 출력. ★★★\n\n출력 JSON:\n' +
     '{"overall":"pass|warning|fail","results":[{' +
-    '"check_type":"new_matter|basis_scope|double_patenting|support|format",' +
-    '"target_text":"문제가 되는 구절",' +
+    '"check_type":"new_matter|basis_scope|double_patenting|spec_support|format",' +
+    '"target_text":"검증 대상 청구항 구절",' +
     '"result":"pass|warning|fail",' +
     '"detail":"구체적 분석 (명세서 단락 인용 포함)",' +
     '"suggestion":"수정 제안",' +
-    '"spec_paragraph_number":"관련 명세서 단락번호"}]}';
+    '"spec_paragraph_number":"근거 명세서 단락번호",' +
+    '"spec_quote":"명세서 근거 원문 30자 이내 발췌",' +
+    '"support_type":"direct|substantial|derivable|none"}]}';
 };
 
 // ═══════════════════════════════════════════
@@ -2548,7 +2578,7 @@ Division.renderVerify = function(left, right, p){
   var failCount = results.filter(function(r){ return r.result==='fail'; }).length;
   h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🤖</span> AI 검증 (LLM)</div>';
   h += '<div class="division-val-summary"><div class="division-val-stat pass">✅ 통과 '+passCount+'</div><div class="division-val-stat warn">⚠️ 주의 '+warnCount+'</div><div class="division-val-stat fail">❌ 실패 '+failCount+'</div></div>';
-  var typeLabels = {new_matter:'신규사항',basis_scope:'basis 보존/원출원 범위',double_patenting:'이중 특허',support:'명세서 뒷받침',format:'형식',abstract_expression:'추상적 표현',functional_limitation:'기능적 기재',overlap:'구성 중복'};
+  var typeLabels = {new_matter:'신규사항',basis_scope:'basis 보존/원출원 범위',double_patenting:'이중 특허',spec_support:'명세서 뒷받침',support:'명세서 뒷받침',format:'형식',abstract_expression:'추상적 표현',functional_limitation:'기능적 기재',overlap:'구성 중복'};
   if(!results.length){ h += '<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)">검증 결과가 없습니다.</div>'; }
   else { results.forEach(function(vr){
     var resultCss = vr.result==='pass'?'vr-pass':vr.result==='warning'?'vr-warn':'vr-fail';
@@ -2560,7 +2590,8 @@ Division.renderVerify = function(left, right, p){
     if(vr.target_text) h += '<div style="margin-bottom:6px"><strong>대상:</strong> '+escapeHtml(vr.target_text)+'</div>';
     if(vr.detail) h += '<div style="margin-bottom:6px">'+escapeHtml(vr.detail)+'</div>';
     if(vr.suggestion) h += '<div style="padding:8px;background:var(--color-primary-light);border-radius:var(--radius-sm);border-left:3px solid var(--color-primary)">💡 '+escapeHtml(vr.suggestion)+'</div>';
-    if(vr.spec_paragraph_number) h += '<div style="margin-top:4px;font-size:11px;color:var(--color-text-tertiary)">근거: 【'+vr.spec_paragraph_number+'】</div>';
+    if(vr.spec_paragraph_number) h += '<div style="margin-top:4px;font-size:11px;color:var(--color-text-tertiary)">근거: 【'+vr.spec_paragraph_number+'】'+(vr.spec_quote?' — "'+escapeHtml(vr.spec_quote)+'"':'')+'</div>';
+    if(vr.support_type){ var stLabels={direct:'직접 기재',substantial:'실질적 뒷받침',derivable:'자명한 도출',none:'근거 없음'}; var stColors={direct:'var(--color-success)',substantial:'var(--color-success)',derivable:'var(--color-warning)',none:'var(--color-error)'}; h+='<div style="margin-top:2px;font-size:11px;color:'+stColors[vr.support_type]+'">뒷받침: '+(stLabels[vr.support_type]||vr.support_type)+'</div>'; }
     h += '</div></div>';
   }); }
   h += '</div>';
