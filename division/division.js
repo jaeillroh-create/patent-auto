@@ -2162,33 +2162,60 @@ Division.runVerify = async function(){
       return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text||'').substring(0,1000);
     }).join('\n');
 
-    App.showProgress('divisionVerifyProgress','AI 검증 분석 중...',2,4);
+    // T14: Pass 1 — 코드 레벨 자동 검증
+    App.showProgress('divisionVerifyProgress','자동 검증 (Pass 1) 실행 중...',2,5);
+    var basisClaim = Division.state.claims.find(function(c){ return c.division_role==='basis'; }) ||
+      Division.state.claims.find(function(c){ return c.claim_type==='independent'; });
+    var autoIssues = Division.runAutoVerify(divClaims, basisClaim, Division.state.claims, specText, p.division_type);
+    console.log('[Division] Pass 1 완료:', autoIssues.length, '건');
+
+    // T14: Pass 2 — LLM 의미 검증 (Pass 1 결과와 무관하게 항상 실행)
+    App.showProgress('divisionVerifyProgress','AI 검증 (Pass 2) 분석 중...',3,5);
     var verifyPrompt = Division._buildVerifyPrompt(claimsText, specText, origClaimsText);
     var result = await Division.callAI(verifyPrompt);
     if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 검증 중 프로젝트 전환됨'); App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); return; }
-    App.showProgress('divisionVerifyProgress','결과 저장 중...',3,4);
+    App.showProgress('divisionVerifyProgress','결과 저장 중...',4,5);
     var verified;
     try { verified = Division._extractJSON(result.text); }
     catch(e) { showToast('검증 결과 해석 실패: ' + e.message.substring(0,80),'error'); App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); return; }
 
-    // DB 저장 (enum 정제)
-    var VALID_CHECK = ['abstract_expression','functional_limitation','support','overlap','format'];
+    // T14: DB 저장 — Pass 1 (auto_verify_issues) + Pass 2 (result_data) 통합
+    var VALID_CHECK = ['new_matter','basis_scope','double_patenting','support','format','abstract_expression','functional_limitation','overlap'];
     var VALID_RESULT = ['pass','warning','fail'];
     var sEnum = Division._sanitizeEnum;
 
     await sb.from('division_validation_results').delete().eq('project_id',p.id);
     if(verified.results && verified.results.length > 0){
       var rows = verified.results.map(function(vr){
-        return { project_id:p.id, check_type:sEnum(vr.check_type,VALID_CHECK,'format'), target_text:(vr.target_text||'').substring(0,5000), result:sEnum(vr.result,VALID_RESULT,'pass'), detail:(vr.detail||'').substring(0,5000), suggestion:(vr.suggestion||'').substring(0,5000), spec_paragraph_number:vr.spec_paragraph_number ? String(vr.spec_paragraph_number).substring(0,20) : null };
+        return {
+          project_id:p.id,
+          check_type:sEnum(vr.check_type,VALID_CHECK,'format'),
+          target_text:(vr.target_text||'').substring(0,5000),
+          result:sEnum(vr.result,VALID_RESULT,'pass'),
+          detail:(vr.detail||'').substring(0,5000),
+          suggestion:(vr.suggestion||'').substring(0,5000),
+          spec_paragraph_number:vr.spec_paragraph_number ? String(vr.spec_paragraph_number).substring(0,20) : null,
+          // T14: Pass 1 결과를 첫 번째 행의 auto_verify_issues에 저장
+          auto_verify_issues: rows ? undefined : autoIssues
+        };
       });
+      // auto_verify_issues는 첫 번째 행에만 저장
+      if(rows.length > 0) rows[0].auto_verify_issues = autoIssues;
       var {error:valErr} = await sb.from('division_validation_results').insert(rows);
       if(valErr){
         console.error('[Division] 검증 결과 저장 실패:', valErr.message);
-        // 행별 폴백
         for(var vi=0;vi<rows.length;vi++){
           var {error:re}=await sb.from('division_validation_results').insert(rows[vi]);
           if(re) console.warn('[Division] 검증 행 '+vi+' 실패:', re.message);
         }
+      }
+    } else {
+      // Pass 2 결과가 없어도 Pass 1 결과는 저장
+      if(autoIssues.length > 0){
+        await sb.from('division_validation_results').insert({
+          project_id:p.id, check_type:'format', result:'pass', detail:'LLM 검증 결과 없음',
+          auto_verify_issues: autoIssues
+        });
       }
     }
     await sb.from('division_projects').update({status:'verified', updated_at:new Date().toISOString()}).eq('id',p.id);
@@ -2200,8 +2227,191 @@ Division.runVerify = async function(){
   } catch(e) { App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); showToast('검증 실패: '+e.message,'error'); }
 };
 
+// ═══ T12: Pass 1 — 코드 레벨 자동 검증 (LLM 호출 전) ═══
+/**
+ * 3유형 공통으로 사용. divisionType에 따라 일부 검증 항목 분기.
+ * @returns {Array} issues [{severity, check, message, detail}]
+ */
+Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims, specFullText, divisionType){
+  var issues = [];
+  var basisText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
+
+  // ─── [검증 1] basis 보존 확인 (병합형·카테고리변경형) ───
+  if(divisionType === 'merge'){
+    divisionClaims.filter(function(c){ return c.claim_type === 'independent'; }).forEach(function(c){
+      if(basisText && basisText.length > 20){
+        // basis 원문의 앞 100자가 분할 독립항에 포함되어 있는지
+        var checkLen = Math.min(100, basisText.length);
+        if(!c.claim_text.includes(basisText.substring(0, checkLen))){
+          issues.push({
+            severity: 'CRITICAL', check: 'basis_preservation',
+            message: '독립항 ' + c.claim_number + '에서 등록결정 구성(basis)이 변경된 것으로 보입니다',
+            detail: 'basis 앞 ' + checkLen + '자가 독립항에서 발견되지 않음: "' + basisText.substring(0, 50) + '..."'
+          });
+        }
+      }
+    });
+  }
+
+  if(divisionType === 'category_change'){
+    // 카테고리변경형: 기술적 내용 보존 확인 — basis 키워드의 80% 이상이 분할항에 존재해야 함
+    divisionClaims.filter(function(c){ return c.claim_type === 'independent'; }).forEach(function(c){
+      if(basisText){
+        var basisKw = (basisText.match(/[가-힣]{3,}/g) || []).filter(function(kw){
+          return Division.STOPWORDS.indexOf(kw) < 0;
+        });
+        if(basisKw.length > 0){
+          var preserved = basisKw.filter(function(kw){ return c.claim_text.indexOf(kw) >= 0; });
+          var ratio = preserved.length / basisKw.length;
+          if(ratio < 0.6){
+            issues.push({
+              severity: 'HIGH', check: 'basis_preservation',
+              message: '독립항 ' + c.claim_number + '의 기술적 내용 보존율이 ' + Math.round(ratio*100) + '%로 낮음',
+              detail: '카테고리 변환 시 기술적 내용의 60% 이상이 보존되어야 합니다'
+            });
+          }
+        }
+      }
+    });
+  }
+
+  // ─── [검증 2] 이중 특허 방지 (3유형 공통) ───
+  divisionClaims.forEach(function(dc){
+    allOriginalClaims.forEach(function(oc){
+      var ocText = oc.amended_text || oc.original_text || '';
+      var sim = Division._lcsRatio(dc.claim_text, ocText);
+      if(sim > 0.95){
+        issues.push({
+          severity: 'HIGH', check: 'double_patenting',
+          message: '분할 청구항 ' + dc.claim_number + '이 원출원 청구항 ' + oc.claim_number + '과 ' + Math.round(sim*100) + '% 동일',
+          detail: '이중 특허 위험 — 추가 구성(D)이 충분히 차별화되지 않았습니다'
+        });
+      }
+    });
+  });
+
+  // ─── [검증 3] 신규사항 위험 — 키워드 기반 (3유형 공통) ───
+  if(specFullText && specFullText.length > 100){
+    divisionClaims.forEach(function(dc){
+      var keywords = (dc.claim_text.match(/[가-힣]{2,}/g) || []);
+      var meaningful = keywords.filter(function(kw){ return Division.STOPWORDS.indexOf(kw) < 0 && kw.length >= 3; });
+      var missing = meaningful.filter(function(kw){ return specFullText.indexOf(kw) < 0; });
+      if(missing.length > 3){
+        issues.push({
+          severity: 'HIGH', check: 'new_matter_risk',
+          message: '청구항 ' + dc.claim_number + '에 명세서 미발견 용어 ' + missing.length + '개',
+          detail: '미발견: ' + missing.slice(0, 5).join(', ') + (missing.length > 5 ? ' 외 ' + (missing.length-5) + '개' : '')
+        });
+      }
+    });
+  } else {
+    issues.push({
+      severity: 'MEDIUM', check: 'spec_missing',
+      message: '명세서 전문이 없거나 너무 짧아 신규사항 키워드 검사를 수행할 수 없습니다',
+      detail: 'spec_full_text 길이: ' + (specFullText ? specFullText.length : 0) + '자'
+    });
+  }
+
+  // ─── [검증 4] 추가 구성(D) 교차 확인 (draft_data.added_components 있을 때) ───
+  divisionClaims.forEach(function(dc){
+    var dd = dc.draft_data || {};
+    if(dd.added_components && dd.added_components.length){
+      dd.added_components.forEach(function(comp){
+        allOriginalClaims.forEach(function(oc){
+          var ocText = oc.amended_text || oc.original_text || '';
+          var sim = Division._lcsRatio(comp.content || '', ocText);
+          if(sim > 0.7){
+            issues.push({
+              severity: 'MEDIUM', check: 'component_overlap',
+              message: '추가 구성 "' + (comp.content||'').slice(0,20) + '..."이 기존 청구항 ' + oc.claim_number + '과 ' + Math.round(sim*100) + '% 유사',
+              detail: '이중 특허 위험 검토 필요'
+            });
+          }
+        });
+      });
+    }
+  });
+
+  // ─── [검증 5] 종속항 인용 관계 검사 (3유형 공통) ───
+  var claimNums = divisionClaims.map(function(c){ return c.claim_number; });
+  divisionClaims.forEach(function(dc){
+    if(dc.claim_type === 'dependent'){
+      if(!dc.parent_claim_number){
+        issues.push({
+          severity: 'MEDIUM', check: 'dependency_format',
+          message: '종속항 ' + dc.claim_number + '의 인용 청구항 번호가 없습니다',
+          detail: 'parent_claim_number가 null'
+        });
+      } else if(claimNums.indexOf(dc.parent_claim_number) < 0){
+        issues.push({
+          severity: 'HIGH', check: 'dependency_format',
+          message: '종속항 ' + dc.claim_number + '이 존재하지 않는 청구항 ' + dc.parent_claim_number + '을 인용',
+          detail: '유효한 청구항 번호: ' + claimNums.join(', ')
+        });
+      }
+    }
+  });
+
+  console.log('[Division] Pass 1 자동 검증 완료:', issues.length, '건 이슈');
+  return issues;
+};
+
+// ═══ T13: Pass 2 — LLM 검증 프롬프트 강화 ═══
 Division._buildVerifyPrompt = function(claimsText, specText, origClaimsText){
-  return '아래 분할출원 청구항에 대해 기재불비 검증을 수행하라.\n\n[분할출원 청구항]\n'+claimsText+'\n\n[원출원 등록 청구항 (중복 체크 대상)]\n'+(origClaimsText||'(없음)')+'\n\n[명세서 전문]\n'+(specText||'(없음)').substring(0,50000)+'\n\n검증 항목:\n1. support (명세서 뒷받침): 분할출원 청구항의 각 구성요소가 명세서에 기재되어 있는지 확인. 명세서 단락번호 매핑. 뒷받침 없는 구성은 fail.\n2. abstract_expression (추상적 표현): "신속하게", "효과적으로", "최적의" 등 구체적 수치/구조가 없는 추상적 표현. 명확한 수치/구조로 대체 제안.\n3. functional_limitation (기능적 기재): "~하기 위한", "~에 의해" 등 기능만 기재하고 구조가 불명확한 경우. 구조적 표현으로 대체 제안.\n4. overlap (원출원 중복): 분할출원 독립항이 원출원 등록 청구항과 동일 범위이면 안 됨. 부가/병합/변환된 부분이 실질적 차이를 만드는지 확인.\n5. format (형식): 마침표(.) 누락, "상기" 일관성, 종속항 인용 정확성, 구성요소 명칭 통일.\n\n★ 명세서 전문이 제공된 경우 반드시 해당 내용으로 뒷받침 여부를 판단하라.\n★ 검증은 반드시 구체적 target_text(해당 구절)를 포함하여 어디가 문제인지 특정하라.\n\n★★★ JSON만 출력. ★★★\n\n출력 JSON:\n{"overall":"pass|warning|fail","results":[{"check_type":"support|abstract_expression|functional_limitation|overlap|format","target_text":"문제가 되는 구절","result":"pass|warning|fail","detail":"구체적 분석","suggestion":"수정 제안","spec_paragraph_number":"관련 명세서 단락번호 또는 N/A"}]}';
+  var principles = Division.DIVISION_PRINCIPLES;
+  var p = Division.state.current;
+  var divType = p ? p.division_type : 'merge';
+
+  // 유형별 추가 검증 지시
+  var typeSpecific = '';
+  if(divType === 'merge'){
+    typeSpecific = '\n[유형별 검증 — 병합형]\n' +
+      '- basis 보존: 등록결정 청구항(A+B+C)이 독립항에 원문 그대로 포함되었는지 확인\n' +
+      '- 추가 구성(D)만 명세서 뒷받침 여부 중점 확인\n';
+  } else if(divType === 'category_change'){
+    typeSpecific = '\n[유형별 검증 — 카테고리변경형]\n' +
+      '- 변환 구성요소명(~부, ~수단)이 명세서에 실제 기재되어 있는지 확인\n' +
+      '- A+B+C의 기술적 내용이 변환 후에도 보존되었는지 확인\n';
+  } else if(divType === 'strategic'){
+    typeSpecific = '\n[유형별 검증 — 전략형]\n' +
+      '- 새 독립항의 모든 구성요소에 명세서 단락번호 1:1 대응이 있는지 확인\n' +
+      '- 원출원 범위를 초과하는 신규사항이 없는지 특히 엄격하게 확인\n';
+  }
+
+  return principles +
+    typeSpecific +
+    '\n아래 분할출원 청구항에 대해 검증을 수행하라.\n' +
+    '\n[분할출원 청구항]\n'+claimsText+
+    '\n\n[원출원 등록 청구항 (중복 체크 대상)]\n'+(origClaimsText||'(없음)')+
+    '\n\n[명세서 전문]\n'+(specText||'(없음)').substring(0,40000)+
+    '\n\n검증 항목 — 우선순위순 (3유형 공통):\n' +
+    '1순위 [CRITICAL] new_matter (신규사항 검증):\n' +
+    '  - 분할 청구항의 모든 구성이 원출원 명세서에 직접 기재된 사항인지 확인\n' +
+    '  - 명세서에 없는 용어/개념이 포함되어 있으면 fail\n' +
+    '  - 각 구성에 대해 해당 명세서 단락번호를 특정하라\n' +
+    '2순위 [CRITICAL] basis_scope (basis 보존 / 원출원 범위 내 검증):\n' +
+    '  - 병합형: basis 원문이 독립항에 그대로 보존되었는지\n' +
+    '  - 카테고리변경형: 기술적 내용이 보존되었는지\n' +
+    '  - 전략형: 모든 구성이 원출원 명세서 범위 내인지\n' +
+    '3순위 [HIGH] double_patenting (이중 특허 방지):\n' +
+    '  - 분할 독립항이 원출원 등록 청구항과 실질적으로 동일하면 안 됨\n' +
+    '  - 추가/변환/신규 부분이 실질적 차이를 만드는지 확인\n' +
+    '4순위 [HIGH] support (뒷받침 검증):\n' +
+    '  - 각 구성요소의 명세서 뒷받침 단락 특정 (직접기재/간접기재 구분)\n' +
+    '  - 간접적 뒷받침인 경우 더 구체적인 단락 권장\n' +
+    '5순위 [MEDIUM] format (형식 검증):\n' +
+    '  - 마침표(.) 누락, "상기" 일관성, 종속항 인용 정확성\n' +
+    '  - 추상적 표현, 기능적 기재 존재 여부\n' +
+    '\n★ 검증은 반드시 구체적 target_text(해당 구절)를 포함하여 어디가 문제인지 특정하라.\n' +
+    '★ 각 결과에 명세서 근거 단락번호(spec_paragraph_number)를 반드시 포함하라.\n' +
+    '\n★★★ JSON만 출력. ★★★\n\n출력 JSON:\n' +
+    '{"overall":"pass|warning|fail","results":[{' +
+    '"check_type":"new_matter|basis_scope|double_patenting|support|format",' +
+    '"target_text":"문제가 되는 구절",' +
+    '"result":"pass|warning|fail",' +
+    '"detail":"구체적 분석 (명세서 단락 인용 포함)",' +
+    '"suggestion":"수정 제안",' +
+    '"spec_paragraph_number":"관련 명세서 단락번호"}]}';
 };
 
 // ═══════════════════════════════════════════
@@ -2209,16 +2419,47 @@ Division._buildVerifyPrompt = function(claimsText, specText, origClaimsText){
 // ═══════════════════════════════════════════
 Division.renderVerify = function(left, right, p){
   var results = Division.state.validationResults;
+  var h = '';
+
+  // T14: Pass 1 (코드 자동 검증) 결과 추출
+  var autoIssues = [];
+  results.forEach(function(r){ if(r.auto_verify_issues && r.auto_verify_issues.length) autoIssues = autoIssues.concat(r.auto_verify_issues); });
+
+  // ─── Pass 1: 자동 검증 (코드) ───
+  var severityColors = {CRITICAL:'#dc2626',HIGH:'#ea580c',MEDIUM:'#ca8a04'};
+  var severityIcons = {CRITICAL:'🔴',HIGH:'🟠',MEDIUM:'🟡'};
+  h += '<div class="card" style="padding:16px;margin-bottom:12px">';
+  h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🔍</span> 자동 검증 (코드)</div>';
+  if(!autoIssues.length){
+    h += '<div style="padding:12px;background:#f0fdf4;border-radius:var(--radius-sm);color:#059669;font-size:13px">✅ 코드 레벨 검증 통과 — 자동 감지된 이슈 없음</div>';
+  } else {
+    autoIssues.forEach(function(issue){
+      var color = severityColors[issue.severity] || '#ca8a04';
+      var icon = severityIcons[issue.severity] || '🟡';
+      h += '<div style="padding:10px;margin-bottom:8px;border-left:3px solid '+color+';background:#fafbfc;border-radius:0 var(--radius-sm) var(--radius-sm) 0">';
+      h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">';
+      h += '<span>'+icon+'</span><span style="font-size:12px;font-weight:700;color:'+color+'">'+issue.severity+'</span>';
+      h += '<span style="font-size:11px;color:var(--color-text-tertiary);padding:1px 6px;background:var(--color-border);border-radius:10px">'+escapeHtml(issue.check)+'</span>';
+      h += '</div>';
+      h += '<div style="font-size:13px;font-weight:500">'+escapeHtml(issue.message)+'</div>';
+      if(issue.detail) h += '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px">'+escapeHtml(issue.detail)+'</div>';
+      h += '</div>';
+    });
+  }
+  h += '</div>';
+
+  // ─── Pass 2: AI 검증 (LLM) ───
   var passCount = results.filter(function(r){ return r.result==='pass'; }).length;
   var warnCount = results.filter(function(r){ return r.result==='warning'; }).length;
   var failCount = results.filter(function(r){ return r.result==='fail'; }).length;
-  var h = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">✅</span> 기재불비 검증 결과</div>';
+  h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🤖</span> AI 검증 (LLM)</div>';
   h += '<div class="division-val-summary"><div class="division-val-stat pass">✅ 통과 '+passCount+'</div><div class="division-val-stat warn">⚠️ 주의 '+warnCount+'</div><div class="division-val-stat fail">❌ 실패 '+failCount+'</div></div>';
+  var typeLabels = {new_matter:'신규사항',basis_scope:'basis 보존/원출원 범위',double_patenting:'이중 특허',support:'명세서 뒷받침',format:'형식',abstract_expression:'추상적 표현',functional_limitation:'기능적 기재',overlap:'구성 중복'};
   if(!results.length){ h += '<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)">검증 결과가 없습니다.</div>'; }
   else { results.forEach(function(vr){
     var resultCss = vr.result==='pass'?'vr-pass':vr.result==='warning'?'vr-warn':'vr-fail';
     var resultIcon = vr.result==='pass'?'✅':vr.result==='warning'?'⚠️':'❌';
-    var typeLabel = {abstract_expression:'추상적 표현',functional_limitation:'기능적 기재',support:'명세서 뒷받침',overlap:'구성 중복',format:'형식'}[vr.check_type]||vr.check_type;
+    var typeLabel = typeLabels[vr.check_type]||vr.check_type;
     h += '<div class="division-val-row '+resultCss+'" onclick="this.classList.toggle(\'expanded\')">';
     h += '<div class="division-val-row-header"><span>'+resultIcon+'</span><span style="font-weight:500;flex:1">'+typeLabel+'</span><span class="division-val-result-badge '+resultCss+'">'+vr.result+'</span></div>';
     h += '<div class="division-val-row-body">';
