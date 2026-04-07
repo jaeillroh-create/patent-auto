@@ -34,6 +34,37 @@ Division.PIPELINE = [
 ];
 
 Division.STEP_TO_STATUS = { upload:'uploaded', parse:'parsed', analyze:'analyzed', assemble:'assembled', verify:'verified', confirm:'confirmed' };
+
+// ═══ 분할출원 공통 절대 원칙 (T3: 3유형 공통, 프롬프트 주입용 상수) ═══
+Division.DIVISION_PRINCIPLES = '\n' +
+'★★★ 분할출원 절대 원칙 (3유형 공통) ★★★\n\n' +
+'[원칙 1] 신규사항 추가 금지 (특허법 제52조 + 제47조)\n' +
+'- 분할출원 청구항의 모든 구성은 원출원의 최초 명세서(발명의 상세한 설명)에\n' +
+'  직접적으로 기재된 사항이어야 한다.\n' +
+'- 원출원 명세서에 없는 구성, 용어, 개념을 포함하면 신규사항 추가로 거절된다.\n' +
+'- AI는 "당업자의 자명한 도출"을 사용하지 말 것. 직접 기재 사항만 사용하라.\n\n' +
+'[원칙 2] 등록결정 구성(basis) 절대 보존\n' +
+'- 등록결정된 청구항의 구성(A+B+C)은 한 글자도 수정·삭제하지 않는다.\n' +
+'- 이 구성은 이미 심사관이 등록을 인정한 것이므로, 변경하면 등록 전례의\n' +
+'  이점을 잃고 새로운 거절이유가 발생할 수 있다.\n\n' +
+'[원칙 3] 추가 구성(D)의 출처 제한\n' +
+'- D는 반드시 원출원 "발명의 상세한 설명"에 기재되어 있으면서,\n' +
+'  원출원의 어떤 등록 청구항에도 포함되지 않았던 구성이어야 한다.\n' +
+'- D가 기존 종속항에 이미 있으면 이중 특허(double patenting) 위험이 있다.\n\n' +
+'[원칙 4] 바로 등록결정 전략\n' +
+'- A+B+C(등록 전례) + D(명세서 뒷받침, 추가 한정) = 거절이유 없음 → 바로 등록\n' +
+'- D 선택 시 "심사관이 거절하기 어려운" 구체적·구조적 한정을 우선 추천하라.\n';
+
+// ═══ 신규사항 키워드 검증용 불용어 목록 (T3: 특허 문체 상용어 포함) ═══
+Division.STOPWORDS = [
+  '상기','있어서','포함하는','특징으로','하는','에서','으로','위한','의한','대한',
+  '구성되는','수행하는','이루어지는','형성되는','제공하는','생성하는','출력하는',
+  '수신하는','전송하는','저장하는','처리하는','판단하는','설정하는','제어하는',
+  '표시하는','입력하는','산출하는','변환하는','검출하는','측정하는',
+  '따른','통해','대해','의해','관한','위해','것을','것인','것으로',
+  '또는','및','이상','이하','적어도','하나의','복수의','소정의',
+  '상기한','따르면','실시예','본 발명','일 실시예'
+];
 Division.STATUS_TO_STEP = { created:0, uploaded:0, parsed:1, analyzed:2, assembled:3, verified:4, confirmed:5 };
 
 Division.FILE_TYPES = {
@@ -262,8 +293,9 @@ Division.loadProjects = async function(){
   var el = document.getElementById('divisionProjectList');
   if(!el) return;
   try {
+    // T15: 목록 조회 시 spec_full_text 제외 (대형 텍스트 컬럼 불필요한 로드 방지)
     var {data, error} = await sb.from('division_projects')
-      .select('*')
+      .select('id,user_id,name,reference_number,division_type,status,input_mode,direct_claims_text,include_prior_art,analysis_meta,title_ko,title_en,title_changed,created_at,updated_at')
       .eq('user_id', currentUser.id)
       .order('updated_at', {ascending:false});
     if(error) throw error;
@@ -1028,6 +1060,20 @@ Division.runParse = async function(){
       showToast('파싱된 청구항이 없습니다. 문서를 확인해 주세요.', 'error');
       App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false); return;
     }
+
+    // T2: 명세서 전문(spec_full_text) 1회 저장 — 이후 분석·조립·검증에서 재사용
+    var specFullText = fileTexts['application'] || fileTexts['specification'] || '';
+    if(!specFullText){
+      // 출원서 파일이 없으면 모든 파일 텍스트를 합산
+      Object.keys(fileTexts).forEach(function(k){ if(k !== '_direct_claims' && fileTexts[k]) specFullText += fileTexts[k] + '\n'; });
+    }
+    if(specFullText){
+      var {error:specErr} = await sb.from('division_projects').update({spec_full_text: specFullText}).eq('id', p.id);
+      if(specErr) console.warn('[Division] spec_full_text 저장 실패 (무시):', specErr.message);
+      else console.log('[Division] spec_full_text 저장 완료:', specFullText.length, '글자');
+      p.spec_full_text = specFullText;
+    }
+
     await sb.from('division_projects').update({status:'parsed', updated_at: new Date().toISOString()}).eq('id', p.id);
     p.status = 'parsed';
     App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false);
@@ -1198,7 +1244,16 @@ Division.runAnalyze = async function(){
       showToast('독립항을 찾을 수 없습니다. 청구항을 확인해 주세요.','error'); return;
     }
     App.showProgress('divisionAnalyzeProgress','미활용 구성 탐색 중...',2,4);
-    var specText = (paragraphs||[]).map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
+    // T2: spec_full_text 우선 사용, 없으면 DB 단락 폴백
+    var specText = p.spec_full_text || '';
+    if(!specText || specText.length < 500){
+      var {data:projSpec} = await sb.from('division_projects').select('spec_full_text').eq('id', p.id).single();
+      specText = (projSpec && projSpec.spec_full_text) || '';
+      if(specText) p.spec_full_text = specText;
+    }
+    if(!specText || specText.length < 500){
+      specText = (paragraphs||[]).map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
+    }
     var excludedClaims = claims.filter(function(c){ return c.division_role==='excluded'; });
     var excludedText = excludedClaims.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text); }).join('\n');
     var analyzePrompt = Division._buildAnalyzePrompt(basisClaim, specText, excludedText, claims);
@@ -1781,25 +1836,33 @@ Division.runVerify = async function(){
     var divClaims = Division.state.divisionClaims;
     var claimsText = divClaims.map(function(dc){ return '【청구항 '+dc.claim_number+'】\n'+dc.claim_text; }).join('\n\n');
 
-    // 2) 명세서 전문: 업로드된 출원서 PDF에서 직접 추출 (DB 단락은 200자 요약이므로 부족)
-    var specText = '';
-    var appFile = Division.state.files.find(function(f){ return f.file_type === 'application'; });
-    if(appFile){
-      try {
-        var {data:blob, error:dlErr} = await sb.storage.from('division-files').download(appFile.storage_path);
-        if(!dlErr && blob){
-          var buf = await blob.arrayBuffer();
-          specText = await App.extractPdfText(buf);
-          console.log('[Division] 검증용 명세서 추출 완료:', specText.length, '글자');
-        }
-      } catch(e){ console.warn('[Division] 명세서 PDF 추출 실패:', e); }
-    }
-
-    // 폴백: DB 단락 사용
+    // 2) 명세서 전문: spec_full_text(T2에서 파싱 시 저장)에서 우선 조회
+    var specText = p.spec_full_text || '';
     if(!specText || specText.length < 500){
+      // spec_full_text가 없으면 DB에서 조회 시도
+      var {data:projData} = await sb.from('division_projects').select('spec_full_text').eq('id', p.id).single();
+      specText = (projData && projData.spec_full_text) || '';
+      if(specText) { p.spec_full_text = specText; console.log('[Division] 검증용 spec_full_text DB 조회:', specText.length, '글자'); }
+    }
+    if(!specText || specText.length < 500){
+      // 폴백 1: PDF 재추출
+      var appFile = Division.state.files.find(function(f){ return f.file_type === 'application'; });
+      if(appFile){
+        try {
+          var {data:blob, error:dlErr} = await sb.storage.from('division-files').download(appFile.storage_path);
+          if(!dlErr && blob){
+            var buf = await blob.arrayBuffer();
+            specText = await App.extractPdfText(buf);
+            console.log('[Division] 검증용 PDF 추출 폴백:', specText.length, '글자');
+          }
+        } catch(e){ console.warn('[Division] 명세서 PDF 추출 실패:', e); }
+      }
+    }
+    if(!specText || specText.length < 500){
+      // 폴백 2: DB 단락 사용
       var {data:paragraphs} = await sb.from('division_spec_paragraphs').select('*').eq('project_id',p.id);
       specText = (paragraphs||[]).map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
-      console.log('[Division] 검증용 DB 단락 사용:', specText.length, '글자');
+      console.log('[Division] 검증용 DB 단락 폴백:', specText.length, '글자');
     }
 
     // 3) 등록 청구항 (원본 대비 중복 체크용)
