@@ -1706,12 +1706,12 @@ Division.renderAnalyze = function(left, right, p){
       var limLabels = {structural:'구조한정',material:'재질한정',shape:'형상한정',arrangement:'배치한정',functional:'기능한정'};
       h += '<span class="division-element-tag">'+(limLabels[uc.limitation_type]||uc.limitation_type)+'</span>';
       h += '</div>';
-      // T8: 명세서 근거 원문 인용 표시
+      // T16: 명세서 근거 원문 인용 표시
       var cd = uc.component_data || {};
       if(cd.spec_source_text){
-        h += '<div style="margin-top:6px;padding:6px 10px;background:#f0fdf4;border-left:3px solid #059669;border-radius:4px;font-size:11px;color:#065f46">';
+        h += '<div class="division-source-citation">';
         h += '📄 근거 단락: 【'+uc.paragraph_number+'】';
-        h += '<div style="margin-top:2px;color:#047857;font-style:italic">"' + escapeHtml(cd.spec_source_text.substring(0,200)) + (cd.spec_source_text.length>200?'...':'') + '"</div>';
+        h += '<div class="citation-text">"' + escapeHtml(cd.spec_source_text.substring(0,200)) + (cd.spec_source_text.length>200?'...':'') + '"</div>';
         h += '</div>';
       }
       // 삽입 위치 미리보기
@@ -1720,17 +1720,17 @@ Division.renderAnalyze = function(left, right, p){
         h += '📌 삽입: ' + escapeHtml(uc.insertion_point);
         h += '</div>';
       }
-      // T8: overlap 경고 표시
+      // T16: overlap 경고 표시
       if(cd.overlap_warning){
-        h += '<div style="margin-top:4px;padding:4px 8px;background:#fef2f2;border-radius:4px;font-size:11px;color:#dc2626;font-weight:600">';
+        h += '<div class="division-overlap-warning">';
         h += '🔴 중복 경고: ' + escapeHtml(cd.overlap_detail || '기존 청구항과 유사 구성') + ' — 이중특허 위험 검토 필요';
         h += '</div>';
       } else if(cd.spec_source_text) {
-        h += '<div style="margin-top:4px;font-size:11px;color:#059669">✅ 기존 청구항 미포함 확인</div>';
+        h += '<div class="division-no-overlap">✅ 기존 청구항 미포함 확인</div>';
       }
-      // T8: 등록 전략 근거 표시
+      // T16: 등록 전략 근거 표시
       if(cd.registration_strategy){
-        h += '<div style="margin-top:2px;font-size:11px;color:var(--color-primary)">💡 ' + escapeHtml(cd.registration_strategy.substring(0,150)) + '</div>';
+        h += '<div class="division-reg-strategy">💡 ' + escapeHtml(cd.registration_strategy.substring(0,150)) + '</div>';
       }
       var ucFlags = Division._toArray(uc.risk_flags);
       if(ucFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:4px">⚠️ '+escapeHtml(ucFlags.join(', '))+'</div>';
@@ -2425,21 +2425,19 @@ Division.renderVerify = function(left, right, p){
   var autoIssues = [];
   results.forEach(function(r){ if(r.auto_verify_issues && r.auto_verify_issues.length) autoIssues = autoIssues.concat(r.auto_verify_issues); });
 
-  // ─── Pass 1: 자동 검증 (코드) ───
-  var severityColors = {CRITICAL:'#dc2626',HIGH:'#ea580c',MEDIUM:'#ca8a04'};
+  // ─── T17: Pass 1 — 자동 검증 (코드) ───
   var severityIcons = {CRITICAL:'🔴',HIGH:'🟠',MEDIUM:'🟡'};
-  h += '<div class="card" style="padding:16px;margin-bottom:12px">';
+  h += '<div class="card division-autocheck-section">';
   h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🔍</span> 자동 검증 (코드)</div>';
   if(!autoIssues.length){
-    h += '<div style="padding:12px;background:#f0fdf4;border-radius:var(--radius-sm);color:#059669;font-size:13px">✅ 코드 레벨 검증 통과 — 자동 감지된 이슈 없음</div>';
+    h += '<div class="division-autocheck-pass">✅ 코드 레벨 검증 통과 — 자동 감지된 이슈 없음</div>';
   } else {
     autoIssues.forEach(function(issue){
-      var color = severityColors[issue.severity] || '#ca8a04';
       var icon = severityIcons[issue.severity] || '🟡';
-      h += '<div style="padding:10px;margin-bottom:8px;border-left:3px solid '+color+';background:#fafbfc;border-radius:0 var(--radius-sm) var(--radius-sm) 0">';
-      h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">';
-      h += '<span>'+icon+'</span><span style="font-size:12px;font-weight:700;color:'+color+'">'+issue.severity+'</span>';
-      h += '<span style="font-size:11px;color:var(--color-text-tertiary);padding:1px 6px;background:var(--color-border);border-radius:10px">'+escapeHtml(issue.check)+'</span>';
+      h += '<div class="division-autocheck-item severity-'+issue.severity+'">';
+      h += '<div class="division-autocheck-header">';
+      h += '<span>'+icon+'</span><span class="division-severity-badge severity-'+issue.severity+'">'+issue.severity+'</span>';
+      h += '<span class="division-check-tag">'+escapeHtml(issue.check)+'</span>';
       h += '</div>';
       h += '<div style="font-size:13px;font-weight:500">'+escapeHtml(issue.message)+'</div>';
       if(issue.detail) h += '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px">'+escapeHtml(issue.detail)+'</div>';
