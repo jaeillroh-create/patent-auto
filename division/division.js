@@ -19,7 +19,8 @@ Division.STATUS = {
   parsed:    { label:'파싱완료',   css:'dstatus-parsed',    step:2 },
   analyzed:  { label:'분석완료',   css:'dstatus-analyzed',  step:3 },
   assembled: { label:'조립완료',   css:'dstatus-assembled', step:4 },
-  verified:  { label:'검증완료',   css:'dstatus-verified',  step:5 },
+  verified:      { label:'검증완료',   css:'dstatus-verified',      step:5 },
+  re_verifying:  { label:'재검증중',   css:'dstatus-verified',      step:5 },
   confirmed: { label:'확정',       css:'dstatus-confirmed', step:6 },
   error:     { label:'오류',       css:'dstatus-error',     step:-1 }
 };
@@ -2276,7 +2277,7 @@ Division.runVerify = async function(){
     catch(e) { showToast('검증 결과 해석 실패: ' + e.message.substring(0,80),'error'); App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); return; }
 
     // T14: DB 저장 — Pass 1 (auto_verify_issues) + Pass 2 (result_data) 통합
-    var VALID_CHECK = ['new_matter','basis_scope','double_patenting','support','format','abstract_expression','functional_limitation','overlap'];
+    var VALID_CHECK = ['new_matter','basis_scope','double_patenting','spec_support','support','format','abstract_expression','functional_limitation','overlap'];
     var VALID_RESULT = ['pass','warning','fail'];
     var sEnum = Division._sanitizeEnum;
 
@@ -2472,8 +2473,34 @@ Division._buildVerifyPrompt = function(claimsText, specText, origClaimsText){
       '- 원출원 범위를 초과하는 신규사항이 없는지 특히 엄격하게 확인\n';
   }
 
+  // V9: 실질적 뒷받침 판단 기준
+  var supportGuidelines =
+    '\n[뒷받침 판단 기준 — 실무 수준]\n\n' +
+    '"뒷받침된다"는 것은 동일한 단어가 명세서에 있다는 것이 아니다.\n' +
+    '명세서의 기술적 내용이 해당 청구항 구성을 실질적으로 설명하고 있으면 뒷받침이 인정된다.\n\n' +
+    '판단 절차:\n' +
+    '1. 청구항의 각 구성요소를 분리한다\n' +
+    '2. 각 구성요소에 대해 명세서에서 대응하는 기술적 설명을 찾는다\n' +
+    '3. 대응 관계를 판단한다:\n' +
+    '   - "direct" (직접 기재): 명세서에 동일/거의 동일한 표현 있음 → pass\n' +
+    '   - "substantial" (실질적 뒷받침): 표현은 다르지만 동일 기술적 개념 → pass\n' +
+    '     (근거 단락번호 + 대응 설명 기재)\n' +
+    '   - "derivable" (자명한 도출): 명세서 내용에서 당업자가 도출 가능 → warning\n' +
+    '     (근거 단락번호 + 도출 논리 기재)\n' +
+    '   - "none" (근거 없음): 명세서에 대응하는 기술적 내용 없음 → fail\n\n' +
+    '예시:\n' +
+    '- 청구항 "정합성 검증부" vs 명세서 "무결성 확인 모듈"\n' +
+    '  → pass (substantial, 동일 기술적 개념)\n' +
+    '- 청구항 "딥러닝 기반 분석부" vs 명세서 "기계학습 모델을 활용한 분석"\n' +
+    '  → warning (derivable, 딥러닝⊂기계학습이지만 명세서가 딥러닝을 특정하지 않음)\n' +
+    '- 청구항 "블록체인 인증 모듈" vs 명세서에 블록체인 언급 없음\n' +
+    '  → fail (none, 신규사항)\n\n' +
+    '★ 단순 키워드 매칭으로 "용어가 다르다"고 바로 fail 처리하면 안 됨\n' +
+    '★ 명세서에서 동일한 기술적 개념을 다른 표현으로 설명하는 경우를 반드시 인식하라\n';
+
   return principles +
     typeSpecific +
+    supportGuidelines +
     '\n아래 분할출원 청구항에 대해 검증을 수행하라.\n' +
     '\n[분할출원 청구항]\n'+claimsText+
     '\n\n[원출원 등록 청구항 (중복 체크 대상)]\n'+(origClaimsText||'(없음)')+
@@ -2490,9 +2517,10 @@ Division._buildVerifyPrompt = function(claimsText, specText, origClaimsText){
     '3순위 [HIGH] double_patenting (이중 특허 방지):\n' +
     '  - 분할 독립항이 원출원 등록 청구항과 실질적으로 동일하면 안 됨\n' +
     '  - 추가/변환/신규 부분이 실질적 차이를 만드는지 확인\n' +
-    '4순위 [HIGH] support (뒷받침 검증):\n' +
-    '  - 각 구성요소의 명세서 뒷받침 단락 특정 (직접기재/간접기재 구분)\n' +
-    '  - 간접적 뒷받침인 경우 더 구체적인 단락 권장\n' +
+    '4순위 [HIGH] spec_support (뒷받침 검증):\n' +
+    '  - 위의 [뒷받침 판단 기준]을 적용하여 각 구성요소를 검증\n' +
+    '  - support_type을 반드시 기재 (direct/substantial/derivable/none)\n' +
+    '  - spec_quote로 명세서 원문 30자 이내 발췌\n' +
     '5순위 [MEDIUM] format (형식 검증):\n' +
     '  - 마침표(.) 누락, "상기" 일관성, 종속항 인용 정확성\n' +
     '  - 추상적 표현, 기능적 기재 존재 여부\n' +
@@ -2500,12 +2528,14 @@ Division._buildVerifyPrompt = function(claimsText, specText, origClaimsText){
     '★ 각 결과에 명세서 근거 단락번호(spec_paragraph_number)를 반드시 포함하라.\n' +
     '\n★★★ JSON만 출력. ★★★\n\n출력 JSON:\n' +
     '{"overall":"pass|warning|fail","results":[{' +
-    '"check_type":"new_matter|basis_scope|double_patenting|support|format",' +
-    '"target_text":"문제가 되는 구절",' +
+    '"check_type":"new_matter|basis_scope|double_patenting|spec_support|format",' +
+    '"target_text":"검증 대상 청구항 구절",' +
     '"result":"pass|warning|fail",' +
     '"detail":"구체적 분석 (명세서 단락 인용 포함)",' +
     '"suggestion":"수정 제안",' +
-    '"spec_paragraph_number":"관련 명세서 단락번호"}]}';
+    '"spec_paragraph_number":"근거 명세서 단락번호",' +
+    '"spec_quote":"명세서 근거 원문 30자 이내 발췌",' +
+    '"support_type":"direct|substantial|derivable|none"}]}';
 };
 
 // ═══════════════════════════════════════════
@@ -2548,19 +2578,33 @@ Division.renderVerify = function(left, right, p){
   var failCount = results.filter(function(r){ return r.result==='fail'; }).length;
   h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🤖</span> AI 검증 (LLM)</div>';
   h += '<div class="division-val-summary"><div class="division-val-stat pass">✅ 통과 '+passCount+'</div><div class="division-val-stat warn">⚠️ 주의 '+warnCount+'</div><div class="division-val-stat fail">❌ 실패 '+failCount+'</div></div>';
-  var typeLabels = {new_matter:'신규사항',basis_scope:'basis 보존/원출원 범위',double_patenting:'이중 특허',support:'명세서 뒷받침',format:'형식',abstract_expression:'추상적 표현',functional_limitation:'기능적 기재',overlap:'구성 중복'};
+  var typeLabels = {new_matter:'신규사항',basis_scope:'basis 보존/원출원 범위',double_patenting:'이중 특허',spec_support:'명세서 뒷받침',support:'명세서 뒷받침',format:'형식',abstract_expression:'추상적 표현',functional_limitation:'기능적 기재',overlap:'구성 중복'};
   if(!results.length){ h += '<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)">검증 결과가 없습니다.</div>'; }
-  else { results.forEach(function(vr){
+  else { results.forEach(function(vr, vrIdx){
     var resultCss = vr.result==='pass'?'vr-pass':vr.result==='warning'?'vr-warn':'vr-fail';
     var resultIcon = vr.result==='pass'?'✅':vr.result==='warning'?'⚠️':'❌';
     var typeLabel = typeLabels[vr.check_type]||vr.check_type;
-    h += '<div class="division-val-row '+resultCss+'" onclick="this.classList.toggle(\'expanded\')">';
+    h += '<div class="division-val-row '+resultCss+'" id="divValRow'+vrIdx+'" onclick="this.classList.toggle(\'expanded\')">';
     h += '<div class="division-val-row-header"><span>'+resultIcon+'</span><span style="font-weight:500;flex:1">'+typeLabel+'</span><span class="division-val-result-badge '+resultCss+'">'+vr.result+'</span></div>';
     h += '<div class="division-val-row-body">';
     if(vr.target_text) h += '<div style="margin-bottom:6px"><strong>대상:</strong> '+escapeHtml(vr.target_text)+'</div>';
     if(vr.detail) h += '<div style="margin-bottom:6px">'+escapeHtml(vr.detail)+'</div>';
     if(vr.suggestion) h += '<div style="padding:8px;background:var(--color-primary-light);border-radius:var(--radius-sm);border-left:3px solid var(--color-primary)">💡 '+escapeHtml(vr.suggestion)+'</div>';
-    if(vr.spec_paragraph_number) h += '<div style="margin-top:4px;font-size:11px;color:var(--color-text-tertiary)">근거: 【'+vr.spec_paragraph_number+'】</div>';
+    if(vr.spec_paragraph_number) h += '<div style="margin-top:4px;font-size:11px;color:var(--color-text-tertiary)">근거: 【'+vr.spec_paragraph_number+'】'+(vr.spec_quote?' — "'+escapeHtml(vr.spec_quote)+'"':'')+'</div>';
+    if(vr.support_type){ var stLabels={direct:'직접 기재',substantial:'실질적 뒷받침',derivable:'자명한 도출',none:'근거 없음'}; var stColors={direct:'var(--color-success)',substantial:'var(--color-success)',derivable:'var(--color-warning)',none:'var(--color-error)'}; h+='<div style="margin-top:2px;font-size:11px;color:'+stColors[vr.support_type]+'">뒷받침: '+(stLabels[vr.support_type]||vr.support_type)+'</div>'; }
+    // V2: 액션 버튼 (warning/fail 항목에만)
+    if(vr.result === 'warning' || vr.result === 'fail'){
+      h += '<div class="division-val-actions" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--color-divider);display:flex;gap:6px;flex-wrap:wrap">';
+      if(vr.result === 'warning'){
+        h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.acceptWarning('+vrIdx+')" title="실질적 뒷받침 인정">✅ 수용</button>';
+      }
+      if(vr.result === 'fail'){
+        h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px;color:var(--color-error)" onclick="event.stopPropagation();Division.removeFailedComponent('+vrIdx+')" title="해당 구성 제거 후 분석 화면으로 이동">🗑️ 구성 제거</button>';
+      }
+      h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.editClaimText('+vrIdx+')" title="청구항 문언 직접 수정">✏️ 수정</button>';
+      h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.specifyBasis('+vrIdx+')" title="뒷받침 근거 단락 지정">📄 근거 지정</button>';
+      h += '</div>';
+    }
     h += '</div></div>';
   }); }
   h += '</div>';
@@ -2613,11 +2657,379 @@ Division.renderVerify = function(left, right, p){
   rh += '명칭 변경은 분할출원의 권리범위 해석에 영향을 줄 수 있으므로 신중히 결정하세요.';
   rh += '</div></div>';
   rh += '</div>';
-  if(failCount > 0){ rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)">⚠️ 검증 실패 항목이 있습니다. 수정하거나 제외한 후 재검증하세요.<br>명세서 뒷받침이 부족한 구성은 제외하거나, 별도 명세서 보정이 필요합니다.</div>'; }
+  // V2: 검증 상태별 안내 메시지 + 버튼 활성화 제어
+  if(failCount > 0){
+    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)">❌ 검증 실패 항목 '+failCount+'건 — 해당 구성을 제거하거나 문언을 수정한 후 재검증하세요.</div>';
+  } else if(warnCount > 0){
+    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-warning-light);border-radius:var(--radius-sm);font-size:13px;color:#92400e">⚠️ 주의 항목 '+warnCount+'건 — 각 항목을 검토하여 "수용" 또는 "수정"을 선택하세요. 모든 항목을 처리하면 최종 확정할 수 있습니다.</div>';
+  } else {
+    rh += '<div style="margin-top:12px;padding:12px;background:#d1fae5;border-radius:var(--radius-sm);font-size:13px;color:#065f46">✅ 모든 검증 통과 — 최종 확정할 수 있습니다.</div>';
+  }
   rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tf">🔄</span> 재검증</button>';
-  rh += '<button class="btn btn-primary" onclick="Division.confirmFinal()" style="flex:1;padding:12px"><span class="tf">🏁</span> 최종 확정</button></div>';
+  var canConfirm = failCount === 0;
+  rh += '<button class="btn btn-primary" onclick="Division.confirmFinal()" style="flex:1;padding:12px'+(canConfirm?'':';opacity:0.5')+'"'+(canConfirm?'':' title="fail 항목을 먼저 해결하세요"')+'><span class="tf">🏁</span> 최종 확정</button></div>';
   right.innerHTML = rh;
   Division._bindTitleRadios();
+};
+
+// ═══════════════════════════════════════════
+// 15-1. 검증 결과 액션 (V3/V4 + V5/V6 스텁)
+// ═══════════════════════════════════════════
+
+// V3: warning 수용 — pass로 전환 + 사유 기록
+Division.acceptWarning = async function(vrIdx){
+  var results = Division.state.validationResults;
+  var vr = results[vrIdx];
+  if(!vr || vr.result !== 'warning'){ showToast('수용할 수 없는 항목입니다','error'); return; }
+
+  var reason = prompt('수용 사유를 입력하세요 (예: 실질적 뒷받침 인정, 동일 기술적 개념)');
+  if(!reason) return;
+
+  // DB 업데이트: result → pass
+  try {
+    await sb.from('division_validation_results').update({ result:'pass' }).eq('id', vr.id);
+    vr.result = 'pass';
+    console.log('[Division] V3 수용: 항목', vrIdx, '→ pass, 사유:', reason);
+
+    // user_accepted_warnings 기록 시도 (컬럼 있을 때만)
+    try {
+      var accepted = vr.user_accepted_warnings || [];
+      accepted.push({ check_index:vrIdx, reason:reason, timestamp:new Date().toISOString() });
+      await sb.from('division_validation_results').update({ user_accepted_warnings:accepted }).eq('id', vr.id);
+    } catch(e){ console.warn('[Division] user_accepted_warnings 저장 실패 (컬럼 미존재?):', e.message); }
+
+    showToast('항목을 수용했습니다 (pass로 전환)', 'success');
+    Division.renderStay();
+  } catch(e){ showToast('수용 처리 실패: '+e.message, 'error'); }
+};
+
+// V4: 구성 제거 — 해당 구성 선택 해제 + 분석 화면으로 복귀
+Division.removeFailedComponent = async function(vrIdx){
+  var results = Division.state.validationResults;
+  var vr = results[vrIdx];
+  if(!vr){ showToast('항목을 찾을 수 없습니다','error'); return; }
+
+  var targetText = vr.target_text || vr.detail || '';
+  if(!confirm('이 구성을 제거하고 분석 화면으로 돌아가시겠습니까?\n\n대상: ' + targetText.substring(0,100))) return;
+
+  // target_text와 매칭되는 unused_component 찾아서 선택 해제
+  var unused = Division.state.unusedComponents;
+  var matched = null;
+  if(targetText){
+    for(var i=0; i<unused.length; i++){
+      if(unused[i].content && targetText.indexOf(unused[i].content.substring(0,30)) >= 0){
+        matched = unused[i]; break;
+      }
+      if(unused[i].insertion_point && targetText.indexOf(unused[i].insertion_point.substring(0,30)) >= 0){
+        matched = unused[i]; break;
+      }
+    }
+  }
+
+  if(matched){
+    try {
+      await sb.from('division_unused_components').update({user_selection:'excluded'}).eq('id', matched.id);
+      matched.user_selection = 'excluded';
+      console.log('[Division] V4 구성 제거:', matched.content.substring(0,50));
+    } catch(e){ console.warn('[Division] 구성 해제 실패:', e.message); }
+  }
+
+  // 분석 화면으로 복귀 — 사용자가 다른 D를 선택할 수 있도록
+  var p = Division.state.current;
+  if(p){
+    await sb.from('division_projects').update({status:'analyzed', updated_at:new Date().toISOString()}).eq('id', p.id);
+    p.status = 'analyzed';
+  }
+  Division.state.currentStepKey = 'analyze';
+  showToast('구성이 제거되었습니다. 다른 구성을 선택하고 재조립하세요.', 'info');
+  Division.renderStay();
+};
+
+// ═══ V5: 청구항 문언 직접 수정 ═══
+Division.editClaimText = function(vrIdx){
+  var results = Division.state.validationResults;
+  var vr = results[vrIdx];
+  if(!vr){ showToast('항목을 찾을 수 없습니다','error'); return; }
+
+  // 문제가 된 청구항 찾기 — target_text로 매칭
+  var divClaims = Division.state.divisionClaims;
+  var targetClaim = null;
+  if(vr.target_text){
+    for(var i=0; i<divClaims.length; i++){
+      if(divClaims[i].claim_text && divClaims[i].claim_text.indexOf(vr.target_text.substring(0,30)) >= 0){
+        targetClaim = divClaims[i]; break;
+      }
+    }
+  }
+  if(!targetClaim && divClaims.length > 0) targetClaim = divClaims[0]; // 폴백: 첫 번째 청구항
+
+  var rowEl = document.getElementById('divValRow'+vrIdx);
+  if(!rowEl) return;
+  // 이미 편집 중이면 무시
+  if(rowEl.querySelector('.division-edit-area')) return;
+  rowEl.classList.add('expanded');
+
+  var bodyEl = rowEl.querySelector('.division-val-row-body');
+  if(!bodyEl) return;
+
+  var claimText = targetClaim ? targetClaim.claim_text : '';
+  var editHtml = '<div class="division-edit-area" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--color-divider)">';
+  editHtml += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">✏️ 청구항 '+((targetClaim&&targetClaim.claim_number)||'?')+' 문언 수정</div>';
+  editHtml += '<textarea id="divEditClaim'+vrIdx+'" style="width:100%;min-height:120px;font-size:12px;line-height:1.7;padding:10px;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-family:var(--font-family);resize:vertical">'+escapeHtml(claimText)+'</textarea>';
+  editHtml += '<div style="display:flex;gap:6px;margin-top:8px">';
+  editHtml += '<button class="btn btn-primary" style="font-size:11px;padding:6px 14px" onclick="Division._submitClaimEdit('+vrIdx+',\''+((targetClaim&&targetClaim.id)||'')+'\')">재검증 실행</button>';
+  editHtml += '<button class="btn btn-ghost" style="font-size:11px;padding:6px 14px" onclick="this.closest(\'.division-edit-area\').remove()">취소</button>';
+  editHtml += '</div></div>';
+  bodyEl.insertAdjacentHTML('beforeend', editHtml);
+};
+
+Division._submitClaimEdit = async function(vrIdx, claimId){
+  var textarea = document.getElementById('divEditClaim'+vrIdx);
+  if(!textarea){ showToast('편집 영역을 찾을 수 없습니다','error'); return; }
+  var newText = textarea.value.trim();
+  if(!newText){ showToast('청구항 내용을 입력하세요','error'); return; }
+
+  // 수정 전 텍스트 저장
+  var dc = Division.state.divisionClaims.find(function(c){ return c.id === claimId; });
+  var beforeText = dc ? dc.claim_text : '';
+
+  // DB 업데이트
+  if(claimId){
+    try {
+      await sb.from('division_claims_output').update({ claim_text:newText, claim_text_highlighted:newText }).eq('id', claimId);
+      if(dc) dc.claim_text = newText;
+    } catch(e){ showToast('청구항 저장 실패: '+e.message,'error'); return; }
+  }
+
+  // 수정 이력을 메모리에 보관
+  if(!Division.state._revisionHistory) Division.state._revisionHistory = [];
+  Division.state._revisionHistory.push({
+    round: Division.state._revisionHistory.length + 1,
+    action: 'edit_claim',
+    before: beforeText.substring(0,500),
+    after: newText.substring(0,500),
+    reason: '문언 직접 수정 (검증 항목 '+vrIdx+')',
+    timestamp: new Date().toISOString()
+  });
+
+  showToast('청구항이 수정되었습니다. 재검증을 실행합니다...', 'info');
+  // V8: 재검증 실행
+  Division.runReVerify({ beforeText:beforeText, afterText:newText, reason:'문언 직접 수정' });
+};
+
+// ═══ V6: 뒷받침 근거 단락 지정 ═══
+Division.specifyBasis = function(vrIdx){
+  var results = Division.state.validationResults;
+  var vr = results[vrIdx];
+  if(!vr){ showToast('항목을 찾을 수 없습니다','error'); return; }
+
+  var rowEl = document.getElementById('divValRow'+vrIdx);
+  if(!rowEl) return;
+  if(rowEl.querySelector('.division-basis-area')) return;
+  rowEl.classList.add('expanded');
+
+  var bodyEl = rowEl.querySelector('.division-val-row-body');
+  if(!bodyEl) return;
+
+  // 명세서 단락 목록
+  var paragraphs = Division.state.specParagraphs || [];
+  var basisHtml = '<div class="division-basis-area" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--color-divider)">';
+  basisHtml += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">📄 근거 단락 지정</div>';
+  basisHtml += '<input type="text" id="divBasisSearch'+vrIdx+'" placeholder="단락번호 또는 내용으로 검색..." style="width:100%;padding:6px 10px;font-size:12px;border:1px solid var(--color-border);border-radius:var(--radius-sm);margin-bottom:8px;font-family:var(--font-family)" oninput="Division._filterBasisList('+vrIdx+')" />';
+  basisHtml += '<div id="divBasisList'+vrIdx+'" style="max-height:200px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">';
+  if(!paragraphs.length){
+    basisHtml += '<div style="padding:12px;font-size:12px;color:var(--color-text-tertiary)">명세서 단락이 없습니다. 파싱을 먼저 실행해 주세요.</div>';
+  } else {
+    paragraphs.forEach(function(para){
+      basisHtml += '<label class="division-basis-item" style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-bottom:1px solid var(--color-divider);cursor:pointer;font-size:12px" data-para-num="'+para.paragraph_number+'" data-para-content="'+escapeHtml((para.content||'').substring(0,100)).toLowerCase()+'">';
+      basisHtml += '<input type="checkbox" data-basis-para="'+para.paragraph_number+'" style="margin-top:2px;flex-shrink:0" />';
+      basisHtml += '<div><strong>【'+para.paragraph_number+'】</strong> '+escapeHtml((para.content||'').substring(0,150))+(para.content&&para.content.length>150?'...':'')+'</div>';
+      basisHtml += '</label>';
+    });
+  }
+  basisHtml += '</div>';
+  basisHtml += '<div style="display:flex;gap:6px;margin-top:8px">';
+  basisHtml += '<button class="btn btn-primary" style="font-size:11px;padding:6px 14px" onclick="Division._submitBasisSpec('+vrIdx+')">이 단락으로 재검증</button>';
+  basisHtml += '<button class="btn btn-ghost" style="font-size:11px;padding:6px 14px" onclick="this.closest(\'.division-basis-area\').remove()">취소</button>';
+  basisHtml += '</div></div>';
+  bodyEl.insertAdjacentHTML('beforeend', basisHtml);
+};
+
+Division._filterBasisList = function(vrIdx){
+  var input = document.getElementById('divBasisSearch'+vrIdx);
+  var query = (input ? input.value : '').toLowerCase();
+  var items = document.querySelectorAll('#divBasisList'+vrIdx+' .division-basis-item');
+  items.forEach(function(item){
+    var num = item.dataset.paraNum || '';
+    var content = item.dataset.paraContent || '';
+    item.style.display = (num.indexOf(query) >= 0 || content.indexOf(query) >= 0) ? '' : 'none';
+  });
+};
+
+Division._submitBasisSpec = async function(vrIdx){
+  var checked = document.querySelectorAll('#divBasisList'+vrIdx+' input[data-basis-para]:checked');
+  if(!checked.length){ showToast('근거 단락을 1개 이상 선택하세요','error'); return; }
+
+  var selectedParas = [];
+  var paragraphs = Division.state.specParagraphs || [];
+  checked.forEach(function(cb){
+    var num = cb.dataset.basisPara;
+    var para = paragraphs.find(function(p){ return p.paragraph_number === num; });
+    selectedParas.push({ number:num, content: para ? para.content : '' });
+  });
+
+  // 수정 이력
+  if(!Division.state._revisionHistory) Division.state._revisionHistory = [];
+  Division.state._revisionHistory.push({
+    round: Division.state._revisionHistory.length + 1,
+    action: 'add_basis',
+    before: '',
+    after: selectedParas.map(function(p){ return '【'+p.number+'】'; }).join(', '),
+    reason: '근거 단락 지정 (검증 항목 '+vrIdx+')',
+    timestamp: new Date().toISOString()
+  });
+
+  showToast('근거 단락이 지정되었습니다. 재검증을 실행합니다...', 'info');
+  Division.runReVerify({
+    userSpecifiedParagraphs: selectedParas,
+    reason: '사용자가 근거 단락을 지정함: ' + selectedParas.map(function(p){ return '【'+p.number+'】'; }).join(', ')
+  });
+};
+
+// ═══ V7: 재검증 프롬프트 ═══
+Division._buildReVerifyPrompt = function(claimsText, specText, origClaimsText, editContext){
+  var principles = Division.DIVISION_PRINCIPLES;
+
+  var contextBlock = '';
+  if(editContext.beforeText && editContext.afterText){
+    contextBlock += '\n[수정 전 청구항]\n' + editContext.beforeText +
+      '\n\n[수정 후 청구항]\n' + editContext.afterText +
+      '\n\n[수정 사유]\n' + (editContext.reason||'문언 수정');
+  }
+  if(editContext.userSpecifiedParagraphs && editContext.userSpecifiedParagraphs.length > 0){
+    contextBlock += '\n\n[사용자 지정 근거 단락]\n';
+    editContext.userSpecifiedParagraphs.forEach(function(p){
+      contextBlock += '【'+p.number+'】 '+p.content+'\n';
+    });
+    contextBlock += '\n→ 위 단락이 해당 구성을 실질적으로 뒷받침하는지 집중 검토하라.';
+  }
+
+  return principles +
+    '\n\n아래 분할출원 청구항이 수정되었다. 수정 전후를 비교하고,\n' +
+    '수정 후 청구항이 원출원 명세서에 의해 뒷받침되는지 재검증하라.\n' +
+    contextBlock +
+    '\n\n[현재 분할출원 청구항]\n' + claimsText +
+    '\n\n[원출원 등록 청구항]\n' + (origClaimsText||'(없음)') +
+    '\n\n[명세서 전문]\n' + (specText||'(없음)').substring(0,40000) +
+    '\n\n[뒷받침 판단 기준]\n' +
+    '"뒷받침된다"는 것은 동일한 단어가 명세서에 있다는 것이 아니다.\n' +
+    '명세서의 기술적 내용이 해당 청구항 구성을 실질적으로 설명하고 있으면 뒷받침이 인정된다.\n' +
+    '- "direct": 동일 표현 → pass\n' +
+    '- "substantial": 다른 표현이나 동일 기술적 개념 → pass\n' +
+    '- "derivable": 당업자 도출 가능 → warning\n' +
+    '- "none": 근거 없음 → fail\n' +
+    '\n검증 항목: 신규사항 → basis 보존 → 이중특허 → 뒷받침 → 형식\n' +
+    '\n★★★ JSON만 출력. ★★★\n\n출력 JSON:\n' +
+    '{"overall":"pass|warning|fail","results":[{' +
+    '"check_type":"new_matter|basis_scope|double_patenting|spec_support|format",' +
+    '"target_text":"구절","result":"pass|warning|fail",' +
+    '"detail":"분석","suggestion":"제안",' +
+    '"spec_paragraph_number":"단락번호",' +
+    '"spec_quote":"원문 30자","support_type":"direct|substantial|derivable|none"}]}';
+};
+
+// ═══ V8: 재검증 실행 흐름 ═══
+Division.runReVerify = async function(editContext){
+  var p = Division.state.current; if(!p) return;
+  if(!App.ensureApiKey()){ App.openProfileSettings(); return; }
+  var capturedId = p.id;
+  Division.state._runningProjectId = capturedId;
+
+  try {
+    // 상태 전이: re_verifying
+    await sb.from('division_projects').update({status:'re_verifying', updated_at:new Date().toISOString()}).eq('id', p.id);
+    p.status = 're_verifying';
+
+    var right = document.getElementById('divisionDetailRight');
+    if(right) right.innerHTML = '<div class="card" style="padding:20px;text-align:center"><div style="font-size:32px;margin-bottom:12px"><span class="tf">🔄</span></div><div style="font-size:14px;font-weight:600;margin-bottom:8px">재검증 진행 중...</div><div id="divisionReVerifyProgress"></div></div>';
+
+    // 1) 청구항 텍스트
+    App.showProgress('divisionReVerifyProgress','재검증 준비 중...',1,5);
+    var divClaims = Division.state.divisionClaims;
+    var claimsText = divClaims.map(function(dc){ return '【청구항 '+dc.claim_number+'】\n'+dc.claim_text; }).join('\n\n');
+
+    // 2) 명세서 전문
+    App.showProgress('divisionReVerifyProgress','명세서 로드 중...',2,5);
+    var specText = p.spec_full_text || '';
+    if(!specText || specText.length < 500){
+      try {
+        var {data:projSpec} = await sb.from('division_projects').select('spec_full_text').eq('id', p.id).single();
+        specText = (projSpec && projSpec.spec_full_text) || '';
+        if(specText) p.spec_full_text = specText;
+      } catch(e){ console.warn('[Division] spec_full_text 조회 실패:', e.message); }
+    }
+    if(!specText || specText.length < 500){
+      var paras = Division.state.specParagraphs || [];
+      specText = paras.map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
+    }
+
+    // 3) 원출원 청구항
+    var origClaimsText = Division.state.claims.map(function(c){
+      return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text||'').substring(0,1000);
+    }).join('\n');
+
+    // 4) Pass 1: 코드 레벨 자동 검증
+    App.showProgress('divisionReVerifyProgress','자동 검증 (Pass 1)...',3,5);
+    var basisClaim = Division.state.claims.find(function(c){ return c.division_role==='basis'; }) ||
+      Division.state.claims.find(function(c){ return c.claim_type==='independent'; });
+    var autoIssues = Division.runAutoVerify(divClaims, basisClaim, Division.state.claims, specText, p.division_type);
+    Division.state._autoVerifyIssues = autoIssues;
+
+    // 5) Pass 2: LLM 재검증
+    App.showProgress('divisionReVerifyProgress','AI 재검증 (Pass 2)...',4,5);
+    var reVerifyPrompt = Division._buildReVerifyPrompt(claimsText, specText, origClaimsText, editContext || {});
+    var result = await Division.callAI(reVerifyPrompt);
+    if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 재검증 중 프로젝트 전환됨'); App.clearProgress('divisionReVerifyProgress'); return; }
+
+    App.showProgress('divisionReVerifyProgress','결과 저장 중...',5,5);
+    var verified;
+    try { verified = Division._extractJSON(result.text); }
+    catch(e) { showToast('재검증 결과 해석 실패: '+e.message.substring(0,80),'error'); App.clearProgress('divisionReVerifyProgress'); return; }
+
+    // DB 저장
+    var VALID_CHECK = ['new_matter','basis_scope','double_patenting','spec_support','support','format','abstract_expression','functional_limitation','overlap'];
+    var VALID_RESULT = ['pass','warning','fail'];
+    var sEnum = Division._sanitizeEnum;
+
+    await sb.from('division_validation_results').delete().eq('project_id',p.id);
+    if(verified.results && verified.results.length > 0){
+      var rows = verified.results.map(function(vr){
+        return {
+          project_id:p.id,
+          check_type:sEnum(vr.check_type,VALID_CHECK,'format'),
+          target_text:(vr.target_text||'').substring(0,5000),
+          result:sEnum(vr.result,VALID_RESULT,'pass'),
+          detail:(vr.detail||'').substring(0,5000),
+          suggestion:(vr.suggestion||'').substring(0,5000),
+          spec_paragraph_number:vr.spec_paragraph_number ? String(vr.spec_paragraph_number).substring(0,20) : null
+        };
+      });
+      await sb.from('division_validation_results').insert(rows);
+    }
+
+    // 상태: verified로 복귀
+    await sb.from('division_projects').update({status:'verified', updated_at:new Date().toISOString()}).eq('id', p.id);
+    p.status = 'verified';
+    App.clearProgress('divisionReVerifyProgress');
+    showToast('재검증 완료!');
+    Division.state.currentStepKey = 'verify';
+    await Division.loadData(p.id);
+  } catch(e) {
+    App.clearProgress('divisionReVerifyProgress');
+    // 에러 시 verified 상태로 복귀
+    try { await sb.from('division_projects').update({status:'verified'}).eq('id', p.id); p.status='verified'; } catch(e2){}
+    showToast('재검증 실패: '+e.message,'error');
+  }
 };
 
 // ═══════════════════════════════════════════
