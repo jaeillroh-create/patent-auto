@@ -1247,9 +1247,11 @@ Division.runAnalyze = async function(){
     // T2: spec_full_text 우선 사용, 없으면 DB 단락 폴백
     var specText = p.spec_full_text || '';
     if(!specText || specText.length < 500){
-      var {data:projSpec} = await sb.from('division_projects').select('spec_full_text').eq('id', p.id).single();
-      specText = (projSpec && projSpec.spec_full_text) || '';
-      if(specText) p.spec_full_text = specText;
+      try {
+        var {data:projSpec} = await sb.from('division_projects').select('spec_full_text').eq('id', p.id).single();
+        specText = (projSpec && projSpec.spec_full_text) || '';
+        if(specText) p.spec_full_text = specText;
+      } catch(e){ console.warn('[Division] spec_full_text 조회 실패 (컬럼 미존재?):', e.message); }
     }
     if(!specText || specText.length < 500){
       specText = (paragraphs||[]).map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
@@ -1311,7 +1313,7 @@ Division.runAnalyze = async function(){
         // risk_flags: 배열이 아니면 빈 배열로
         var flags = uc.risk_flags;
         if(!Array.isArray(flags)) flags = flags ? [String(flags)] : [];
-        return {
+        var row = {
           project_id: p.id,
           paragraph_number: String(uc.paragraph_number||'0000').substring(0,20),
           content: String(uc.content||'').substring(0,50000),
@@ -1321,28 +1323,38 @@ Division.runAnalyze = async function(){
           risk_flags: flags, // JSONB — 배열 직접 전달 (stringify 금지)
           insertion_point: String(uc.insertion_point||'').substring(0,5000),
           suggestion: String(uc.suggestion||'').substring(0,5000),
-          user_selection: 'pending',
-          // T4/T8: 새 JSONB 필드 — component_data에 포함
-          component_data: {
-            spec_source_text: String(uc.spec_source_text||'').substring(0,5000),
-            overlap_warning: !!uc.overlap_warning,
-            overlap_detail: String(uc.overlap_detail||'').substring(0,500),
-            registration_strategy: String(uc.registration_strategy||'').substring(0,2000)
-          }
+          user_selection: 'pending'
         };
+        // T4/T8 메타데이터는 메모리에만 보관 (UI 렌더링용)
+        row._meta = {
+          spec_source_text: String(uc.spec_source_text||'').substring(0,5000),
+          overlap_warning: !!uc.overlap_warning,
+          overlap_detail: String(uc.overlap_detail||'').substring(0,500),
+          registration_strategy: String(uc.registration_strategy||'').substring(0,2000)
+        };
+        return row;
       });
-      var {error:compErr} = await sb.from('division_unused_components').insert(compRows);
+      // _meta는 메모리용 → DB INSERT 전에 제거
+      var metaMap = {};
+      var dbRows = compRows.map(function(r){
+        metaMap[r.paragraph_number + ':' + (r.content||'').substring(0,50)] = r._meta;
+        var copy = {}; Object.keys(r).forEach(function(k){ if(k !== '_meta') copy[k] = r[k]; });
+        return copy;
+      });
+      var {error:compErr} = await sb.from('division_unused_components').insert(dbRows);
       if(compErr){
         console.error('[Division] 미활용 구성 저장 실패:', compErr.message||compErr.details);
         // 행별 폴백
         var saved=0;
-        for(var ci=0;ci<compRows.length;ci++){
-          var {error:re}=await sb.from('division_unused_components').insert(compRows[ci]);
-          if(re) console.warn('[Division] 구성 행 '+ci+' 실패:', re.message, JSON.stringify(compRows[ci]).substring(0,200));
+        for(var ci=0;ci<dbRows.length;ci++){
+          var {error:re}=await sb.from('division_unused_components').insert(dbRows[ci]);
+          if(re) console.warn('[Division] 구성 행 '+ci+' 실패:', re.message, JSON.stringify(dbRows[ci]).substring(0,200));
           else saved++;
         }
-        if(saved>0) console.log('[Division] 미활용 구성 '+saved+'/'+compRows.length+'건 저장');
+        if(saved>0) console.log('[Division] 미활용 구성 '+saved+'/'+dbRows.length+'건 저장');
       }
+      // _meta를 state에 보관 (UI 렌더링 시 component_data로 참조)
+      Division.state._componentMeta = metaMap;
     }
 
     // 프로젝트 상태 + analysis_meta 저장
@@ -1727,8 +1739,12 @@ Division.renderAnalyze = function(left, right, p){
       var limLabels = {structural:'구조한정',material:'재질한정',shape:'형상한정',arrangement:'배치한정',functional:'기능한정'};
       h += '<span class="division-element-tag">'+(limLabels[uc.limitation_type]||uc.limitation_type)+'</span>';
       h += '</div></div></div>';
-      // T16: 명세서 근거 원문 인용 표시
+      // T16: 명세서 근거 원문 인용 표시 (component_data DB 컬럼 또는 메모리 _meta)
       var cd = uc.component_data || {};
+      if(!cd.spec_source_text && Division.state._componentMeta){
+        var metaKey = uc.paragraph_number + ':' + (uc.content||'').substring(0,50);
+        cd = Division.state._componentMeta[metaKey] || cd;
+      }
       if(cd.spec_source_text){
         h += '<div class="division-source-citation">';
         h += '📄 근거 단락: 【'+uc.paragraph_number+'】';
@@ -1912,19 +1928,25 @@ Division.runAssemble = async function(){
       var rows = assembled.division_claims.map(function(dc){
         // ** 마크다운 마커 제거 — claim_text는 순수 텍스트만
         var cleanText = (dc.claim_text||'').replace(/\*{2,3}/g,'');
-        // T9: draft_data에 basis_preserved, added_components 저장
-        var draftData = {
-          basis_preserved: dc.basis_preserved !== undefined ? !!dc.basis_preserved : null,
-          added_components: Array.isArray(dc.added_components) ? dc.added_components : []
-        };
-        return { project_id:p.id, claim_number:dc.claim_number, claim_type:dc.claim_type||'independent', parent_claim_number:dc.parent_claim_number||null, claim_text:cleanText, claim_text_highlighted:dc.claim_text_highlighted||dc.claim_text||'', version:1, draft_data:draftData };
+        return { project_id:p.id, claim_number:dc.claim_number, claim_type:dc.claim_type||'independent', parent_claim_number:dc.parent_claim_number||null, claim_text:cleanText, claim_text_highlighted:dc.claim_text_highlighted||dc.claim_text||'', version:1 };
       });
+      // T9 데이터(basis_preserved, added_components)는 메모리에만 보관 — DB 컬럼 미존재
+      Division.state._assembledMeta = {
+        claims: assembled.division_claims.map(function(dc){
+          return { claim_number:dc.claim_number, basis_preserved:dc.basis_preserved, added_components:dc.added_components||[] };
+        }),
+        new_matter_check: assembled.new_matter_check || ''
+      };
       await sb.from('division_claims_output').insert(rows);
     }
     var updateData = { status:'assembled', updated_at:new Date().toISOString() };
-    if(assembled.title_candidates) updateData.title_candidates = assembled.title_candidates;
-    // T9: new_matter_check 저장
-    if(assembled.new_matter_check) updateData.new_matter_check = assembled.new_matter_check;
+    // title_candidates는 JSONB 컬럼이 있으면 저장, 없으면 무시
+    if(assembled.title_candidates){
+      try {
+        await sb.from('division_projects').update({ title_candidates:assembled.title_candidates }).eq('id',p.id);
+        p.title_candidates = assembled.title_candidates;
+      } catch(e){ console.warn('[Division] title_candidates 저장 실패 (컬럼 미존재?):', e.message); p.title_candidates = assembled.title_candidates; }
+    }
     await sb.from('division_projects').update(updateData).eq('id',p.id);
     p.status = 'assembled'; if(assembled.title_candidates) p.title_candidates = assembled.title_candidates;
     App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false);
@@ -2218,6 +2240,9 @@ Division.runVerify = async function(){
     var VALID_RESULT = ['pass','warning','fail'];
     var sEnum = Division._sanitizeEnum;
 
+    // Pass 1 결과를 메모리에 보관 (UI 렌더링용)
+    Division.state._autoVerifyIssues = autoIssues;
+
     await sb.from('division_validation_results').delete().eq('project_id',p.id);
     if(verified.results && verified.results.length > 0){
       var rows = verified.results.map(function(vr){
@@ -2228,13 +2253,9 @@ Division.runVerify = async function(){
           result:sEnum(vr.result,VALID_RESULT,'pass'),
           detail:(vr.detail||'').substring(0,5000),
           suggestion:(vr.suggestion||'').substring(0,5000),
-          spec_paragraph_number:vr.spec_paragraph_number ? String(vr.spec_paragraph_number).substring(0,20) : null,
-          // T14: Pass 1 결과를 첫 번째 행의 auto_verify_issues에 저장
-          auto_verify_issues: rows ? undefined : autoIssues
+          spec_paragraph_number:vr.spec_paragraph_number ? String(vr.spec_paragraph_number).substring(0,20) : null
         };
       });
-      // auto_verify_issues는 첫 번째 행에만 저장
-      if(rows.length > 0) rows[0].auto_verify_issues = autoIssues;
       var {error:valErr} = await sb.from('division_validation_results').insert(rows);
       if(valErr){
         console.error('[Division] 검증 결과 저장 실패:', valErr.message);
@@ -2244,11 +2265,10 @@ Division.runVerify = async function(){
         }
       }
     } else {
-      // Pass 2 결과가 없어도 Pass 1 결과는 저장
+      // Pass 2 결과가 없을 때 빈 결과 저장
       if(autoIssues.length > 0){
         await sb.from('division_validation_results').insert({
-          project_id:p.id, check_type:'format', result:'pass', detail:'LLM 검증 결과 없음',
-          auto_verify_issues: autoIssues
+          project_id:p.id, check_type:'format', result:'pass', detail:'LLM 검증 결과 없음'
         });
       }
     }
@@ -2455,9 +2475,11 @@ Division.renderVerify = function(left, right, p){
   var results = Division.state.validationResults;
   var h = '';
 
-  // T14: Pass 1 (코드 자동 검증) 결과 추출
-  var autoIssues = [];
-  results.forEach(function(r){ if(r.auto_verify_issues && r.auto_verify_issues.length) autoIssues = autoIssues.concat(r.auto_verify_issues); });
+  // T14: Pass 1 (코드 자동 검증) 결과 — 메모리 또는 DB에서 추출
+  var autoIssues = Division.state._autoVerifyIssues || [];
+  if(!autoIssues.length){
+    results.forEach(function(r){ if(r.auto_verify_issues && r.auto_verify_issues.length) autoIssues = autoIssues.concat(r.auto_verify_issues); });
+  }
 
   // ─── T17: Pass 1 — 자동 검증 (코드) ───
   var severityIcons = {CRITICAL:'🔴',HIGH:'🟠',MEDIUM:'🟡'};
