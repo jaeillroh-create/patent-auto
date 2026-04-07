@@ -1257,12 +1257,41 @@ Division.runAnalyze = async function(){
     var excludedClaims = claims.filter(function(c){ return c.division_role==='excluded'; });
     var excludedText = excludedClaims.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text); }).join('\n');
     var analyzePrompt = Division._buildAnalyzePrompt(basisClaim, specText, excludedText, claims);
+
+    // 디버그: 분석 입력 상태 로깅
+    console.log('[Division] ── 분석 프롬프트 디버그 ──');
+    console.log('[Division] specText 출처:', p.spec_full_text ? 'spec_full_text (DB)' : (paragraphs && paragraphs.length ? 'DB 단락 폴백' : '없음'));
+    console.log('[Division] specText 길이:', specText.length, '글자');
+    console.log('[Division] specText 앞 300자:', specText.substring(0, 300));
+    console.log('[Division] basisClaim:', basisClaim.claim_number, '— 길이:', (basisClaim.amended_text||basisClaim.original_text||'').length);
+    console.log('[Division] 전체 청구항:', claims.length, '건, 제외:', excludedClaims.length, '건');
+    console.log('[Division] 분석 프롬프트 전체 길이:', analyzePrompt.length, '글자');
+    console.log('[Division] 프롬프트 앞 500자:', analyzePrompt.substring(0, 500));
+
     var result = await Division.callAI(analyzePrompt);
     if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 분석 중 프로젝트 전환됨 — 결과 폐기'); App.clearProgress('divisionAnalyzeProgress'); return; }
+
+    // 디버그: LLM 응답 로깅
+    console.log('[Division] ── LLM 응답 디버그 ──');
+    console.log('[Division] 응답 전체 길이:', result.text ? result.text.length : 0, '글자');
+    console.log('[Division] stopReason:', result.stopReason);
+    console.log('[Division] 응답 앞 1000자:', (result.text||'').substring(0, 1000));
+
     App.showProgress('divisionAnalyzeProgress','결과 저장 중...',3,4);
     var analyzed;
     try { analyzed = Division._extractJSON(result.text); }
     catch(e) { showToast('분석 결과 해석 실패: ' + e.message.substring(0,80),'error'); return; }
+
+    // 디버그: 파싱된 JSON 구조 로깅
+    console.log('[Division] ── 파싱 결과 디버그 ──');
+    console.log('[Division] 파싱된 키:', Object.keys(analyzed));
+    console.log('[Division] unused_components 수:', analyzed.unused_components ? analyzed.unused_components.length : '키 없음');
+    if(analyzed.unused_components && analyzed.unused_components.length > 0){
+      console.log('[Division] 첫 번째 구성 샘플:', JSON.stringify(analyzed.unused_components[0]).substring(0, 500));
+    } else {
+      console.log('[Division] ⚠️ unused_components가 비어 있음! 전체 파싱 결과:', JSON.stringify(analyzed).substring(0, 2000));
+    }
+    if(analyzed.themes) console.log('[Division] themes 수:', analyzed.themes.length);
 
     // unused_components 저장 (enum 정제)
     var VALID_LIM = ['structural','material','shape','arrangement','functional'];
