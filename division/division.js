@@ -2580,11 +2580,11 @@ Division.renderVerify = function(left, right, p){
   h += '<div class="division-val-summary"><div class="division-val-stat pass">✅ 통과 '+passCount+'</div><div class="division-val-stat warn">⚠️ 주의 '+warnCount+'</div><div class="division-val-stat fail">❌ 실패 '+failCount+'</div></div>';
   var typeLabels = {new_matter:'신규사항',basis_scope:'basis 보존/원출원 범위',double_patenting:'이중 특허',spec_support:'명세서 뒷받침',support:'명세서 뒷받침',format:'형식',abstract_expression:'추상적 표현',functional_limitation:'기능적 기재',overlap:'구성 중복'};
   if(!results.length){ h += '<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)">검증 결과가 없습니다.</div>'; }
-  else { results.forEach(function(vr){
+  else { results.forEach(function(vr, vrIdx){
     var resultCss = vr.result==='pass'?'vr-pass':vr.result==='warning'?'vr-warn':'vr-fail';
     var resultIcon = vr.result==='pass'?'✅':vr.result==='warning'?'⚠️':'❌';
     var typeLabel = typeLabels[vr.check_type]||vr.check_type;
-    h += '<div class="division-val-row '+resultCss+'" onclick="this.classList.toggle(\'expanded\')">';
+    h += '<div class="division-val-row '+resultCss+'" id="divValRow'+vrIdx+'" onclick="this.classList.toggle(\'expanded\')">';
     h += '<div class="division-val-row-header"><span>'+resultIcon+'</span><span style="font-weight:500;flex:1">'+typeLabel+'</span><span class="division-val-result-badge '+resultCss+'">'+vr.result+'</span></div>';
     h += '<div class="division-val-row-body">';
     if(vr.target_text) h += '<div style="margin-bottom:6px"><strong>대상:</strong> '+escapeHtml(vr.target_text)+'</div>';
@@ -2592,6 +2592,19 @@ Division.renderVerify = function(left, right, p){
     if(vr.suggestion) h += '<div style="padding:8px;background:var(--color-primary-light);border-radius:var(--radius-sm);border-left:3px solid var(--color-primary)">💡 '+escapeHtml(vr.suggestion)+'</div>';
     if(vr.spec_paragraph_number) h += '<div style="margin-top:4px;font-size:11px;color:var(--color-text-tertiary)">근거: 【'+vr.spec_paragraph_number+'】'+(vr.spec_quote?' — "'+escapeHtml(vr.spec_quote)+'"':'')+'</div>';
     if(vr.support_type){ var stLabels={direct:'직접 기재',substantial:'실질적 뒷받침',derivable:'자명한 도출',none:'근거 없음'}; var stColors={direct:'var(--color-success)',substantial:'var(--color-success)',derivable:'var(--color-warning)',none:'var(--color-error)'}; h+='<div style="margin-top:2px;font-size:11px;color:'+stColors[vr.support_type]+'">뒷받침: '+(stLabels[vr.support_type]||vr.support_type)+'</div>'; }
+    // V2: 액션 버튼 (warning/fail 항목에만)
+    if(vr.result === 'warning' || vr.result === 'fail'){
+      h += '<div class="division-val-actions" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--color-divider);display:flex;gap:6px;flex-wrap:wrap">';
+      if(vr.result === 'warning'){
+        h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.acceptWarning('+vrIdx+')" title="실질적 뒷받침 인정">✅ 수용</button>';
+      }
+      if(vr.result === 'fail'){
+        h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px;color:var(--color-error)" onclick="event.stopPropagation();Division.removeFailedComponent('+vrIdx+')" title="해당 구성 제거 후 분석 화면으로 이동">🗑️ 구성 제거</button>';
+      }
+      h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.editClaimText('+vrIdx+')" title="청구항 문언 직접 수정">✏️ 수정</button>';
+      h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.specifyBasis('+vrIdx+')" title="뒷받침 근거 단락 지정">📄 근거 지정</button>';
+      h += '</div>';
+    }
     h += '</div></div>';
   }); }
   h += '</div>';
@@ -2644,11 +2657,102 @@ Division.renderVerify = function(left, right, p){
   rh += '명칭 변경은 분할출원의 권리범위 해석에 영향을 줄 수 있으므로 신중히 결정하세요.';
   rh += '</div></div>';
   rh += '</div>';
-  if(failCount > 0){ rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)">⚠️ 검증 실패 항목이 있습니다. 수정하거나 제외한 후 재검증하세요.<br>명세서 뒷받침이 부족한 구성은 제외하거나, 별도 명세서 보정이 필요합니다.</div>'; }
+  // V2: 검증 상태별 안내 메시지 + 버튼 활성화 제어
+  if(failCount > 0){
+    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)">❌ 검증 실패 항목 '+failCount+'건 — 해당 구성을 제거하거나 문언을 수정한 후 재검증하세요.</div>';
+  } else if(warnCount > 0){
+    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-warning-light);border-radius:var(--radius-sm);font-size:13px;color:#92400e">⚠️ 주의 항목 '+warnCount+'건 — 각 항목을 검토하여 "수용" 또는 "수정"을 선택하세요. 모든 항목을 처리하면 최종 확정할 수 있습니다.</div>';
+  } else {
+    rh += '<div style="margin-top:12px;padding:12px;background:#d1fae5;border-radius:var(--radius-sm);font-size:13px;color:#065f46">✅ 모든 검증 통과 — 최종 확정할 수 있습니다.</div>';
+  }
   rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tf">🔄</span> 재검증</button>';
-  rh += '<button class="btn btn-primary" onclick="Division.confirmFinal()" style="flex:1;padding:12px"><span class="tf">🏁</span> 최종 확정</button></div>';
+  var canConfirm = failCount === 0;
+  rh += '<button class="btn btn-primary" onclick="Division.confirmFinal()" style="flex:1;padding:12px'+(canConfirm?'':';opacity:0.5')+'"'+(canConfirm?'':' title="fail 항목을 먼저 해결하세요"')+'><span class="tf">🏁</span> 최종 확정</button></div>';
   right.innerHTML = rh;
   Division._bindTitleRadios();
+};
+
+// ═══════════════════════════════════════════
+// 15-1. 검증 결과 액션 (V3/V4 + V5/V6 스텁)
+// ═══════════════════════════════════════════
+
+// V3: warning 수용 — pass로 전환 + 사유 기록
+Division.acceptWarning = async function(vrIdx){
+  var results = Division.state.validationResults;
+  var vr = results[vrIdx];
+  if(!vr || vr.result !== 'warning'){ showToast('수용할 수 없는 항목입니다','error'); return; }
+
+  var reason = prompt('수용 사유를 입력하세요 (예: 실질적 뒷받침 인정, 동일 기술적 개념)');
+  if(!reason) return;
+
+  // DB 업데이트: result → pass
+  try {
+    await sb.from('division_validation_results').update({ result:'pass' }).eq('id', vr.id);
+    vr.result = 'pass';
+    console.log('[Division] V3 수용: 항목', vrIdx, '→ pass, 사유:', reason);
+
+    // user_accepted_warnings 기록 시도 (컬럼 있을 때만)
+    try {
+      var accepted = vr.user_accepted_warnings || [];
+      accepted.push({ check_index:vrIdx, reason:reason, timestamp:new Date().toISOString() });
+      await sb.from('division_validation_results').update({ user_accepted_warnings:accepted }).eq('id', vr.id);
+    } catch(e){ console.warn('[Division] user_accepted_warnings 저장 실패 (컬럼 미존재?):', e.message); }
+
+    showToast('항목을 수용했습니다 (pass로 전환)', 'success');
+    Division.renderStay();
+  } catch(e){ showToast('수용 처리 실패: '+e.message, 'error'); }
+};
+
+// V4: 구성 제거 — 해당 구성 선택 해제 + 분석 화면으로 복귀
+Division.removeFailedComponent = async function(vrIdx){
+  var results = Division.state.validationResults;
+  var vr = results[vrIdx];
+  if(!vr){ showToast('항목을 찾을 수 없습니다','error'); return; }
+
+  var targetText = vr.target_text || vr.detail || '';
+  if(!confirm('이 구성을 제거하고 분석 화면으로 돌아가시겠습니까?\n\n대상: ' + targetText.substring(0,100))) return;
+
+  // target_text와 매칭되는 unused_component 찾아서 선택 해제
+  var unused = Division.state.unusedComponents;
+  var matched = null;
+  if(targetText){
+    for(var i=0; i<unused.length; i++){
+      if(unused[i].content && targetText.indexOf(unused[i].content.substring(0,30)) >= 0){
+        matched = unused[i]; break;
+      }
+      if(unused[i].insertion_point && targetText.indexOf(unused[i].insertion_point.substring(0,30)) >= 0){
+        matched = unused[i]; break;
+      }
+    }
+  }
+
+  if(matched){
+    try {
+      await sb.from('division_unused_components').update({user_selection:'excluded'}).eq('id', matched.id);
+      matched.user_selection = 'excluded';
+      console.log('[Division] V4 구성 제거:', matched.content.substring(0,50));
+    } catch(e){ console.warn('[Division] 구성 해제 실패:', e.message); }
+  }
+
+  // 분석 화면으로 복귀 — 사용자가 다른 D를 선택할 수 있도록
+  var p = Division.state.current;
+  if(p){
+    await sb.from('division_projects').update({status:'analyzed', updated_at:new Date().toISOString()}).eq('id', p.id);
+    p.status = 'analyzed';
+  }
+  Division.state.currentStepKey = 'analyze';
+  showToast('구성이 제거되었습니다. 다른 구성을 선택하고 재조립하세요.', 'info');
+  Division.renderStay();
+};
+
+// V5 스텁: 청구항 문언 직접 수정 (세션 8에서 구현)
+Division.editClaimText = function(vrIdx){
+  showToast('문언 수정 기능은 준비 중입니다', 'info');
+};
+
+// V6 스텁: 뒷받침 근거 단락 지정 (세션 8에서 구현)
+Division.specifyBasis = function(vrIdx){
+  showToast('근거 단락 지정 기능은 준비 중입니다', 'info');
 };
 
 // ═══════════════════════════════════════════
