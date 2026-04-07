@@ -2745,14 +2745,291 @@ Division.removeFailedComponent = async function(vrIdx){
   Division.renderStay();
 };
 
-// V5 스텁: 청구항 문언 직접 수정 (세션 8에서 구현)
+// ═══ V5: 청구항 문언 직접 수정 ═══
 Division.editClaimText = function(vrIdx){
-  showToast('문언 수정 기능은 준비 중입니다', 'info');
+  var results = Division.state.validationResults;
+  var vr = results[vrIdx];
+  if(!vr){ showToast('항목을 찾을 수 없습니다','error'); return; }
+
+  // 문제가 된 청구항 찾기 — target_text로 매칭
+  var divClaims = Division.state.divisionClaims;
+  var targetClaim = null;
+  if(vr.target_text){
+    for(var i=0; i<divClaims.length; i++){
+      if(divClaims[i].claim_text && divClaims[i].claim_text.indexOf(vr.target_text.substring(0,30)) >= 0){
+        targetClaim = divClaims[i]; break;
+      }
+    }
+  }
+  if(!targetClaim && divClaims.length > 0) targetClaim = divClaims[0]; // 폴백: 첫 번째 청구항
+
+  var rowEl = document.getElementById('divValRow'+vrIdx);
+  if(!rowEl) return;
+  // 이미 편집 중이면 무시
+  if(rowEl.querySelector('.division-edit-area')) return;
+  rowEl.classList.add('expanded');
+
+  var bodyEl = rowEl.querySelector('.division-val-row-body');
+  if(!bodyEl) return;
+
+  var claimText = targetClaim ? targetClaim.claim_text : '';
+  var editHtml = '<div class="division-edit-area" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--color-divider)">';
+  editHtml += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">✏️ 청구항 '+((targetClaim&&targetClaim.claim_number)||'?')+' 문언 수정</div>';
+  editHtml += '<textarea id="divEditClaim'+vrIdx+'" style="width:100%;min-height:120px;font-size:12px;line-height:1.7;padding:10px;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-family:var(--font-family);resize:vertical">'+escapeHtml(claimText)+'</textarea>';
+  editHtml += '<div style="display:flex;gap:6px;margin-top:8px">';
+  editHtml += '<button class="btn btn-primary" style="font-size:11px;padding:6px 14px" onclick="Division._submitClaimEdit('+vrIdx+',\''+((targetClaim&&targetClaim.id)||'')+'\')">재검증 실행</button>';
+  editHtml += '<button class="btn btn-ghost" style="font-size:11px;padding:6px 14px" onclick="this.closest(\'.division-edit-area\').remove()">취소</button>';
+  editHtml += '</div></div>';
+  bodyEl.insertAdjacentHTML('beforeend', editHtml);
 };
 
-// V6 스텁: 뒷받침 근거 단락 지정 (세션 8에서 구현)
+Division._submitClaimEdit = async function(vrIdx, claimId){
+  var textarea = document.getElementById('divEditClaim'+vrIdx);
+  if(!textarea){ showToast('편집 영역을 찾을 수 없습니다','error'); return; }
+  var newText = textarea.value.trim();
+  if(!newText){ showToast('청구항 내용을 입력하세요','error'); return; }
+
+  // 수정 전 텍스트 저장
+  var dc = Division.state.divisionClaims.find(function(c){ return c.id === claimId; });
+  var beforeText = dc ? dc.claim_text : '';
+
+  // DB 업데이트
+  if(claimId){
+    try {
+      await sb.from('division_claims_output').update({ claim_text:newText, claim_text_highlighted:newText }).eq('id', claimId);
+      if(dc) dc.claim_text = newText;
+    } catch(e){ showToast('청구항 저장 실패: '+e.message,'error'); return; }
+  }
+
+  // 수정 이력을 메모리에 보관
+  if(!Division.state._revisionHistory) Division.state._revisionHistory = [];
+  Division.state._revisionHistory.push({
+    round: Division.state._revisionHistory.length + 1,
+    action: 'edit_claim',
+    before: beforeText.substring(0,500),
+    after: newText.substring(0,500),
+    reason: '문언 직접 수정 (검증 항목 '+vrIdx+')',
+    timestamp: new Date().toISOString()
+  });
+
+  showToast('청구항이 수정되었습니다. 재검증을 실행합니다...', 'info');
+  // V8: 재검증 실행
+  Division.runReVerify({ beforeText:beforeText, afterText:newText, reason:'문언 직접 수정' });
+};
+
+// ═══ V6: 뒷받침 근거 단락 지정 ═══
 Division.specifyBasis = function(vrIdx){
-  showToast('근거 단락 지정 기능은 준비 중입니다', 'info');
+  var results = Division.state.validationResults;
+  var vr = results[vrIdx];
+  if(!vr){ showToast('항목을 찾을 수 없습니다','error'); return; }
+
+  var rowEl = document.getElementById('divValRow'+vrIdx);
+  if(!rowEl) return;
+  if(rowEl.querySelector('.division-basis-area')) return;
+  rowEl.classList.add('expanded');
+
+  var bodyEl = rowEl.querySelector('.division-val-row-body');
+  if(!bodyEl) return;
+
+  // 명세서 단락 목록
+  var paragraphs = Division.state.specParagraphs || [];
+  var basisHtml = '<div class="division-basis-area" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--color-divider)">';
+  basisHtml += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">📄 근거 단락 지정</div>';
+  basisHtml += '<input type="text" id="divBasisSearch'+vrIdx+'" placeholder="단락번호 또는 내용으로 검색..." style="width:100%;padding:6px 10px;font-size:12px;border:1px solid var(--color-border);border-radius:var(--radius-sm);margin-bottom:8px;font-family:var(--font-family)" oninput="Division._filterBasisList('+vrIdx+')" />';
+  basisHtml += '<div id="divBasisList'+vrIdx+'" style="max-height:200px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">';
+  if(!paragraphs.length){
+    basisHtml += '<div style="padding:12px;font-size:12px;color:var(--color-text-tertiary)">명세서 단락이 없습니다. 파싱을 먼저 실행해 주세요.</div>';
+  } else {
+    paragraphs.forEach(function(para){
+      basisHtml += '<label class="division-basis-item" style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-bottom:1px solid var(--color-divider);cursor:pointer;font-size:12px" data-para-num="'+para.paragraph_number+'" data-para-content="'+escapeHtml((para.content||'').substring(0,100)).toLowerCase()+'">';
+      basisHtml += '<input type="checkbox" data-basis-para="'+para.paragraph_number+'" style="margin-top:2px;flex-shrink:0" />';
+      basisHtml += '<div><strong>【'+para.paragraph_number+'】</strong> '+escapeHtml((para.content||'').substring(0,150))+(para.content&&para.content.length>150?'...':'')+'</div>';
+      basisHtml += '</label>';
+    });
+  }
+  basisHtml += '</div>';
+  basisHtml += '<div style="display:flex;gap:6px;margin-top:8px">';
+  basisHtml += '<button class="btn btn-primary" style="font-size:11px;padding:6px 14px" onclick="Division._submitBasisSpec('+vrIdx+')">이 단락으로 재검증</button>';
+  basisHtml += '<button class="btn btn-ghost" style="font-size:11px;padding:6px 14px" onclick="this.closest(\'.division-basis-area\').remove()">취소</button>';
+  basisHtml += '</div></div>';
+  bodyEl.insertAdjacentHTML('beforeend', basisHtml);
+};
+
+Division._filterBasisList = function(vrIdx){
+  var input = document.getElementById('divBasisSearch'+vrIdx);
+  var query = (input ? input.value : '').toLowerCase();
+  var items = document.querySelectorAll('#divBasisList'+vrIdx+' .division-basis-item');
+  items.forEach(function(item){
+    var num = item.dataset.paraNum || '';
+    var content = item.dataset.paraContent || '';
+    item.style.display = (num.indexOf(query) >= 0 || content.indexOf(query) >= 0) ? '' : 'none';
+  });
+};
+
+Division._submitBasisSpec = async function(vrIdx){
+  var checked = document.querySelectorAll('#divBasisList'+vrIdx+' input[data-basis-para]:checked');
+  if(!checked.length){ showToast('근거 단락을 1개 이상 선택하세요','error'); return; }
+
+  var selectedParas = [];
+  var paragraphs = Division.state.specParagraphs || [];
+  checked.forEach(function(cb){
+    var num = cb.dataset.basisPara;
+    var para = paragraphs.find(function(p){ return p.paragraph_number === num; });
+    selectedParas.push({ number:num, content: para ? para.content : '' });
+  });
+
+  // 수정 이력
+  if(!Division.state._revisionHistory) Division.state._revisionHistory = [];
+  Division.state._revisionHistory.push({
+    round: Division.state._revisionHistory.length + 1,
+    action: 'add_basis',
+    before: '',
+    after: selectedParas.map(function(p){ return '【'+p.number+'】'; }).join(', '),
+    reason: '근거 단락 지정 (검증 항목 '+vrIdx+')',
+    timestamp: new Date().toISOString()
+  });
+
+  showToast('근거 단락이 지정되었습니다. 재검증을 실행합니다...', 'info');
+  Division.runReVerify({
+    userSpecifiedParagraphs: selectedParas,
+    reason: '사용자가 근거 단락을 지정함: ' + selectedParas.map(function(p){ return '【'+p.number+'】'; }).join(', ')
+  });
+};
+
+// ═══ V7: 재검증 프롬프트 ═══
+Division._buildReVerifyPrompt = function(claimsText, specText, origClaimsText, editContext){
+  var principles = Division.DIVISION_PRINCIPLES;
+
+  var contextBlock = '';
+  if(editContext.beforeText && editContext.afterText){
+    contextBlock += '\n[수정 전 청구항]\n' + editContext.beforeText +
+      '\n\n[수정 후 청구항]\n' + editContext.afterText +
+      '\n\n[수정 사유]\n' + (editContext.reason||'문언 수정');
+  }
+  if(editContext.userSpecifiedParagraphs && editContext.userSpecifiedParagraphs.length > 0){
+    contextBlock += '\n\n[사용자 지정 근거 단락]\n';
+    editContext.userSpecifiedParagraphs.forEach(function(p){
+      contextBlock += '【'+p.number+'】 '+p.content+'\n';
+    });
+    contextBlock += '\n→ 위 단락이 해당 구성을 실질적으로 뒷받침하는지 집중 검토하라.';
+  }
+
+  return principles +
+    '\n\n아래 분할출원 청구항이 수정되었다. 수정 전후를 비교하고,\n' +
+    '수정 후 청구항이 원출원 명세서에 의해 뒷받침되는지 재검증하라.\n' +
+    contextBlock +
+    '\n\n[현재 분할출원 청구항]\n' + claimsText +
+    '\n\n[원출원 등록 청구항]\n' + (origClaimsText||'(없음)') +
+    '\n\n[명세서 전문]\n' + (specText||'(없음)').substring(0,40000) +
+    '\n\n[뒷받침 판단 기준]\n' +
+    '"뒷받침된다"는 것은 동일한 단어가 명세서에 있다는 것이 아니다.\n' +
+    '명세서의 기술적 내용이 해당 청구항 구성을 실질적으로 설명하고 있으면 뒷받침이 인정된다.\n' +
+    '- "direct": 동일 표현 → pass\n' +
+    '- "substantial": 다른 표현이나 동일 기술적 개념 → pass\n' +
+    '- "derivable": 당업자 도출 가능 → warning\n' +
+    '- "none": 근거 없음 → fail\n' +
+    '\n검증 항목: 신규사항 → basis 보존 → 이중특허 → 뒷받침 → 형식\n' +
+    '\n★★★ JSON만 출력. ★★★\n\n출력 JSON:\n' +
+    '{"overall":"pass|warning|fail","results":[{' +
+    '"check_type":"new_matter|basis_scope|double_patenting|spec_support|format",' +
+    '"target_text":"구절","result":"pass|warning|fail",' +
+    '"detail":"분석","suggestion":"제안",' +
+    '"spec_paragraph_number":"단락번호",' +
+    '"spec_quote":"원문 30자","support_type":"direct|substantial|derivable|none"}]}';
+};
+
+// ═══ V8: 재검증 실행 흐름 ═══
+Division.runReVerify = async function(editContext){
+  var p = Division.state.current; if(!p) return;
+  if(!App.ensureApiKey()){ App.openProfileSettings(); return; }
+  var capturedId = p.id;
+  Division.state._runningProjectId = capturedId;
+
+  try {
+    // 상태 전이: re_verifying
+    await sb.from('division_projects').update({status:'re_verifying', updated_at:new Date().toISOString()}).eq('id', p.id);
+    p.status = 're_verifying';
+
+    var right = document.getElementById('divisionDetailRight');
+    if(right) right.innerHTML = '<div class="card" style="padding:20px;text-align:center"><div style="font-size:32px;margin-bottom:12px"><span class="tf">🔄</span></div><div style="font-size:14px;font-weight:600;margin-bottom:8px">재검증 진행 중...</div><div id="divisionReVerifyProgress"></div></div>';
+
+    // 1) 청구항 텍스트
+    App.showProgress('divisionReVerifyProgress','재검증 준비 중...',1,5);
+    var divClaims = Division.state.divisionClaims;
+    var claimsText = divClaims.map(function(dc){ return '【청구항 '+dc.claim_number+'】\n'+dc.claim_text; }).join('\n\n');
+
+    // 2) 명세서 전문
+    App.showProgress('divisionReVerifyProgress','명세서 로드 중...',2,5);
+    var specText = p.spec_full_text || '';
+    if(!specText || specText.length < 500){
+      try {
+        var {data:projSpec} = await sb.from('division_projects').select('spec_full_text').eq('id', p.id).single();
+        specText = (projSpec && projSpec.spec_full_text) || '';
+        if(specText) p.spec_full_text = specText;
+      } catch(e){ console.warn('[Division] spec_full_text 조회 실패:', e.message); }
+    }
+    if(!specText || specText.length < 500){
+      var paras = Division.state.specParagraphs || [];
+      specText = paras.map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
+    }
+
+    // 3) 원출원 청구항
+    var origClaimsText = Division.state.claims.map(function(c){
+      return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text||'').substring(0,1000);
+    }).join('\n');
+
+    // 4) Pass 1: 코드 레벨 자동 검증
+    App.showProgress('divisionReVerifyProgress','자동 검증 (Pass 1)...',3,5);
+    var basisClaim = Division.state.claims.find(function(c){ return c.division_role==='basis'; }) ||
+      Division.state.claims.find(function(c){ return c.claim_type==='independent'; });
+    var autoIssues = Division.runAutoVerify(divClaims, basisClaim, Division.state.claims, specText, p.division_type);
+    Division.state._autoVerifyIssues = autoIssues;
+
+    // 5) Pass 2: LLM 재검증
+    App.showProgress('divisionReVerifyProgress','AI 재검증 (Pass 2)...',4,5);
+    var reVerifyPrompt = Division._buildReVerifyPrompt(claimsText, specText, origClaimsText, editContext || {});
+    var result = await Division.callAI(reVerifyPrompt);
+    if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 재검증 중 프로젝트 전환됨'); App.clearProgress('divisionReVerifyProgress'); return; }
+
+    App.showProgress('divisionReVerifyProgress','결과 저장 중...',5,5);
+    var verified;
+    try { verified = Division._extractJSON(result.text); }
+    catch(e) { showToast('재검증 결과 해석 실패: '+e.message.substring(0,80),'error'); App.clearProgress('divisionReVerifyProgress'); return; }
+
+    // DB 저장
+    var VALID_CHECK = ['new_matter','basis_scope','double_patenting','spec_support','support','format','abstract_expression','functional_limitation','overlap'];
+    var VALID_RESULT = ['pass','warning','fail'];
+    var sEnum = Division._sanitizeEnum;
+
+    await sb.from('division_validation_results').delete().eq('project_id',p.id);
+    if(verified.results && verified.results.length > 0){
+      var rows = verified.results.map(function(vr){
+        return {
+          project_id:p.id,
+          check_type:sEnum(vr.check_type,VALID_CHECK,'format'),
+          target_text:(vr.target_text||'').substring(0,5000),
+          result:sEnum(vr.result,VALID_RESULT,'pass'),
+          detail:(vr.detail||'').substring(0,5000),
+          suggestion:(vr.suggestion||'').substring(0,5000),
+          spec_paragraph_number:vr.spec_paragraph_number ? String(vr.spec_paragraph_number).substring(0,20) : null
+        };
+      });
+      await sb.from('division_validation_results').insert(rows);
+    }
+
+    // 상태: verified로 복귀
+    await sb.from('division_projects').update({status:'verified', updated_at:new Date().toISOString()}).eq('id', p.id);
+    p.status = 'verified';
+    App.clearProgress('divisionReVerifyProgress');
+    showToast('재검증 완료!');
+    Division.state.currentStepKey = 'verify';
+    await Division.loadData(p.id);
+  } catch(e) {
+    App.clearProgress('divisionReVerifyProgress');
+    // 에러 시 verified 상태로 복귀
+    try { await sb.from('division_projects').update({status:'verified'}).eq('id', p.id); p.status='verified'; } catch(e2){}
+    showToast('재검증 실패: '+e.message,'error');
+  }
 };
 
 // ═══════════════════════════════════════════
