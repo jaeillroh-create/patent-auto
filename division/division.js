@@ -76,7 +76,20 @@ Division.STOPWORDS = [
   '이때','또한','나아가','한편','이에','이하에서','상세하게','구체적으로',
   '바람직하게','선택적으로','예를들어','예컨대','다만','단지'
 ];
-Division.STATUS_TO_STEP = { created:0, uploaded:0, parsed:1, analyzed:2, assembled:3, verified:4, re_verifying:4, confirmed:5 };
+Division.STATUS_TO_STEP = { created:0, uploaded:0, parsed:1, analyzed:2, assembled:3, verified:4, re_verifying:4, confirmed:5, error:-1 };
+
+// ═══ 검증 임계값 상수 ═══
+Division.THRESHOLDS = {
+  COMPONENT_MISSING_KW: 2,   // 개별 구성 키워드 미발견 임계값 (validateUnusedComponents)
+  COMPONENT_DANGER_KW: 5,    // 개별 구성 danger 에스컬레이션 임계값
+  CLAIM_MISSING_KW: 3,       // 전체 청구항 키워드 미발견 임계값 (runAutoVerify)
+  OVERLAP_WARNING: 0.7,      // 기존 청구항 유사도 overlap 경고 임계값
+  DOUBLE_PATENTING: 0.95,    // 이중 특허 경고 임계값
+  BASIS_PRESERVATION: 0.8,   // basis 보존율 CRITICAL 임계값
+  BASIS_WARN: 0.95,          // basis 보존율 MEDIUM 경고 임계값
+  CATEGORY_PRESERVATION: 0.6,// 카테고리변경 기술적 내용 보존율 임계값
+  COMPONENT_OVERLAP: 0.7     // 추가 구성 D 중복 경고 임계값
+};
 
 Division.FILE_TYPES = {
   application:  { label:'특허출원서',       icon:'📄', required:true },
@@ -95,6 +108,10 @@ Division.RISK_LABELS = {
 
 Division.SYS_PROMPT = '너는 대한민국 특허청(KIPO) 분할출원 실무에 정통한 15년 차 수석 변리사이다.\n원칙:\n1. 한국 특허법 제52조(분할출원)에 근거\n2. 원출원 명세서 범위 내에서만 청구항 구성\n3. 기재불비(§42③④) 회피를 최우선\n4. 특허청 표준 서식과 문체\n5. 구조화된 JSON 반환';
 
+// ═══ Debug ═══
+Division.DEBUG = false;
+Division._log = function(){ if(Division.DEBUG) console.log.apply(console, arguments); };
+
 // ═══ State ═══
 Division.state = {
   projects: [],
@@ -102,7 +119,6 @@ Division.state = {
   view: 'list',
   files: [],
   claims: [],
-  claimComponents: [],
   unusedComponents: [],
   divisionClaims: [],
   validationResults: [],
@@ -112,7 +128,7 @@ Division.state = {
 
 // ═══ Init ═══
 Division.init = function(){
-  console.log('[Division] init');
+  Division._log('[Division] init');
   Division.loadProjects();
 };
 
@@ -239,8 +255,8 @@ Division._wordDiff = function(oldText, newText){
 Division._extractJSON = function(text){
   if(!text) throw new Error('빈 응답');
   // 디버그: 원본 응답 앞 500자 콘솔 출력
-  console.log('[Division] API 응답 (앞 500자):', text.substring(0, 500));
-  console.log('[Division] API 응답 길이:', text.length, '글자');
+  Division._log('[Division] API 응답 (앞 500자):', text.substring(0, 500));
+  Division._log('[Division] API 응답 길이:', text.length, '글자');
 
   // 1차: ```json ... ``` 블록 추출
   var fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -289,7 +305,7 @@ Division._extractJSON = function(text){
         for(var k = 0; k < remaining; k++) repaired += '}';
         repaired = repaired.replace(/,\s*([}\]])/g, '$1');
         try {
-          console.log('[Division] 잘린 JSON 복구 시도...');
+          Division._log('[Division] 잘린 JSON 복구 시도...');
           return JSON.parse(repaired);
         } catch(e2) { /* 복구 실패 — 원본 에러 throw */ }
       }
@@ -305,9 +321,9 @@ Division.loadProjects = async function(){
   var el = document.getElementById('divisionProjectList');
   if(!el) return;
   try {
-    // T15: spec_full_text만 제외하고 전체 조회 (목록+상세 진입 시 필요한 컬럼이 많아 명시적 나열 대신 제외 방식 사용)
+    // T15: spec_full_text 제외 — 대용량 텍스트 컬럼은 분석/조립/검증 시에만 개별 조회
     var {data, error} = await sb.from('division_projects')
-      .select('*')
+      .select('id, user_id, name, reference_number, application_number, division_type, status, analysis_meta, title_candidates, created_at, updated_at')
       .eq('user_id', currentUser.id)
       .order('updated_at', {ascending:false});
     if(error) throw error;
@@ -825,7 +841,7 @@ Division._classifyAndUpload = async function(pdfFiles){
       }
 
       results.push({ file:file, type:classified });
-      console.log('[Division] 자동 분류:', file.name, '→', classified);
+      Division._log('[Division] 자동 분류:', file.name, '→', classified);
     } catch(e){
       console.warn('[Division] 분류 실패:', file.name, e);
       results.push({ file:file, type:'prior_art' }); // 실패하면 인용발명으로
@@ -1017,14 +1033,14 @@ Division.runParse = async function(){
         for(var bi = 0; bi < claimRows.length; bi++){
           if(claimRows[bi].claim_type === 'independent'){
             claimRows[bi].division_role = 'basis';
-            console.log('[Division] 기초 청구항 자동 지정: 제' + claimRows[bi].claim_number + '항');
+            Division._log('[Division] 기초 청구항 자동 지정: 제' + claimRows[bi].claim_number + '항');
             break;
           }
         }
       }
 
-      console.log('[Division] 저장할 청구항:', claimRows.length, '건');
-      console.log('[Division] 첫 행 샘플:', JSON.stringify(claimRows[0]).substring(0, 300));
+      Division._log('[Division] 저장할 청구항:', claimRows.length, '건');
+      Division._log('[Division] 첫 행 샘플:', JSON.stringify(claimRows[0]).substring(0, 300));
 
       // 4) DB 저장 (배치 → 실패 시 행별 폴백)
       await sb.from('division_claims_parsed').delete().eq('project_id', p.id);
@@ -1082,7 +1098,7 @@ Division.runParse = async function(){
     if(specFullText){
       var {error:specErr} = await sb.from('division_projects').update({spec_full_text: specFullText}).eq('id', p.id);
       if(specErr) console.warn('[Division] spec_full_text 저장 실패 (무시):', specErr.message);
-      else console.log('[Division] spec_full_text 저장 완료:', specFullText.length, '글자');
+      else Division._log('[Division] spec_full_text 저장 완료:', specFullText.length, '글자');
       p.spec_full_text = specFullText;
     }
 
@@ -1093,7 +1109,7 @@ Division.runParse = async function(){
       if(!titleMatch) titleMatch = specFullText.match(/발명의\s*명칭\s*[:\s]\s*([^\n]{5,80})/);
       if(titleMatch){
         var extractedTitle = titleMatch[1].trim().replace(/\s+/g,' ');
-        console.log('[Division] 원출원 명칭 추출:', extractedTitle);
+        Division._log('[Division] 원출원 명칭 추출:', extractedTitle);
         try {
           await sb.from('division_projects').update({original_title_ko: extractedTitle}).eq('id', p.id);
           p.original_title_ko = extractedTitle;
@@ -1273,31 +1289,20 @@ Division.runAnalyze = async function(){
       showToast('독립항을 찾을 수 없습니다. 청구항을 확인해 주세요.','error'); return;
     }
     App.showProgress('divisionAnalyzeProgress','미활용 구성 탐색 중...',2,4);
-    // T2: spec_full_text 우선 사용, 없으면 DB 단락 폴백
-    var specText = p.spec_full_text || '';
-    if(!specText || specText.length < 500){
-      try {
-        var {data:projSpec} = await sb.from('division_projects').select('spec_full_text').eq('id', p.id).single();
-        specText = (projSpec && projSpec.spec_full_text) || '';
-        if(specText) p.spec_full_text = specText;
-      } catch(e){ console.warn('[Division] spec_full_text 조회 실패 (컬럼 미존재?):', e.message); }
-    }
-    if(!specText || specText.length < 500){
-      specText = (paragraphs||[]).map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
-    }
+    var specText = await Division._loadSpecText(p, paragraphs);
     var excludedClaims = claims.filter(function(c){ return c.division_role==='excluded'; });
     var excludedText = excludedClaims.map(function(c){ return '제'+c.claim_number+'항: '+(c.amended_text||c.original_text); }).join('\n');
     var analyzePrompt = Division._buildAnalyzePrompt(basisClaim, specText, excludedText, claims);
 
     // 디버그: 분석 입력 상태 로깅
-    console.log('[Division] ── 분석 프롬프트 디버그 ──');
-    console.log('[Division] specText 출처:', p.spec_full_text ? 'spec_full_text (DB)' : (paragraphs && paragraphs.length ? 'DB 단락 폴백' : '없음'));
-    console.log('[Division] specText 길이:', specText.length, '글자');
-    console.log('[Division] specText 앞 300자:', specText.substring(0, 300));
-    console.log('[Division] basisClaim:', basisClaim.claim_number, '— 길이:', (basisClaim.amended_text||basisClaim.original_text||'').length);
-    console.log('[Division] 전체 청구항:', claims.length, '건, 제외:', excludedClaims.length, '건');
-    console.log('[Division] 분석 프롬프트 전체 길이:', analyzePrompt.length, '글자');
-    console.log('[Division] 프롬프트 앞 500자:', analyzePrompt.substring(0, 500));
+    Division._log('[Division] ── 분석 프롬프트 디버그 ──');
+    Division._log('[Division] specText 출처:', p.spec_full_text ? 'spec_full_text (DB)' : (paragraphs && paragraphs.length ? 'DB 단락 폴백' : '없음'));
+    Division._log('[Division] specText 길이:', specText.length, '글자');
+    Division._log('[Division] specText 앞 300자:', specText.substring(0, 300));
+    Division._log('[Division] basisClaim:', basisClaim.claim_number, '— 길이:', (basisClaim.amended_text||basisClaim.original_text||'').length);
+    Division._log('[Division] 전체 청구항:', claims.length, '건, 제외:', excludedClaims.length, '건');
+    Division._log('[Division] 분석 프롬프트 전체 길이:', analyzePrompt.length, '글자');
+    Division._log('[Division] 프롬프트 앞 500자:', analyzePrompt.substring(0, 500));
 
     var result = await Division.callAI(analyzePrompt);
     // max_tokens 잘림 시 이어쓰기 시도
@@ -1307,15 +1312,15 @@ Division.runAnalyze = async function(){
       var contPrompt = '이전 응답이 잘렸다. 아래 JSON을 이어서 완성하라. 중복 없이 잘린 지점부터 이어쓰라.\n\n' + result.text.substring(result.text.length - 500);
       var cont = await Division.callAI(contPrompt);
       result.text = result.text + (cont.text || '');
-      console.log('[Division] 이어쓰기 후 총 길이:', result.text.length);
+      Division._log('[Division] 이어쓰기 후 총 길이:', result.text.length);
     }
     if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 분석 중 프로젝트 전환됨 — 결과 폐기'); App.clearProgress('divisionAnalyzeProgress'); return; }
 
     // 디버그: LLM 응답 로깅
-    console.log('[Division] ── LLM 응답 디버그 ──');
-    console.log('[Division] 응답 전체 길이:', result.text ? result.text.length : 0, '글자');
-    console.log('[Division] stopReason:', result.stopReason);
-    console.log('[Division] 응답 앞 1000자:', (result.text||'').substring(0, 1000));
+    Division._log('[Division] ── LLM 응답 디버그 ──');
+    Division._log('[Division] 응답 전체 길이:', result.text ? result.text.length : 0, '글자');
+    Division._log('[Division] stopReason:', result.stopReason);
+    Division._log('[Division] 응답 앞 1000자:', (result.text||'').substring(0, 1000));
 
     App.showProgress('divisionAnalyzeProgress','결과 저장 중...',3,4);
     var analyzed;
@@ -1323,15 +1328,15 @@ Division.runAnalyze = async function(){
     catch(e) { showToast('분석 결과 해석 실패: ' + e.message.substring(0,80),'error'); return; }
 
     // 디버그: 파싱된 JSON 구조 로깅
-    console.log('[Division] ── 파싱 결과 디버그 ──');
-    console.log('[Division] 파싱된 키:', Object.keys(analyzed));
-    console.log('[Division] unused_components 수:', analyzed.unused_components ? analyzed.unused_components.length : '키 없음');
+    Division._log('[Division] ── 파싱 결과 디버그 ──');
+    Division._log('[Division] 파싱된 키:', Object.keys(analyzed));
+    Division._log('[Division] unused_components 수:', analyzed.unused_components ? analyzed.unused_components.length : '키 없음');
     if(analyzed.unused_components && analyzed.unused_components.length > 0){
-      console.log('[Division] 첫 번째 구성 샘플:', JSON.stringify(analyzed.unused_components[0]).substring(0, 500));
+      Division._log('[Division] 첫 번째 구성 샘플:', JSON.stringify(analyzed.unused_components[0]).substring(0, 500));
     } else {
-      console.log('[Division] ⚠️ unused_components가 비어 있음! 전체 파싱 결과:', JSON.stringify(analyzed).substring(0, 2000));
+      Division._log('[Division] ⚠️ unused_components가 비어 있음! 전체 파싱 결과:', JSON.stringify(analyzed).substring(0, 2000));
     }
-    if(analyzed.themes) console.log('[Division] themes 수:', analyzed.themes.length);
+    if(analyzed.themes) Division._log('[Division] themes 수:', analyzed.themes.length);
 
     // unused_components 저장 (enum 정제)
     var VALID_LIM = ['structural','material','shape','arrangement','functional'];
@@ -1342,7 +1347,7 @@ Division.runAnalyze = async function(){
     if(analyzed.unused_components && analyzed.unused_components.length > 0){
       var crossVerifySpec = p.spec_full_text || specText || '';
       analyzed.unused_components = Division.validateUnusedComponents(analyzed.unused_components, claims, crossVerifySpec);
-      console.log('[Division] T8 교차검증 완료:', analyzed.unused_components.length, '건');
+      Division._log('[Division] T8 교차검증 완료:', analyzed.unused_components.length, '건');
     }
 
     await sb.from('division_unused_components').delete().eq('project_id',p.id);
@@ -1396,7 +1401,7 @@ Division.runAnalyze = async function(){
             if(re) console.warn('[Division] 구성 행 '+ci+' 실패:', re.message);
             else saved++;
           }
-          if(saved>0) console.log('[Division] 미활용 구성 '+saved+'/'+fallbackRows.length+'건 저장');
+          if(saved>0) Division._log('[Division] 미활용 구성 '+saved+'/'+fallbackRows.length+'건 저장');
         }
       } else if(compErr){
         console.error('[Division] 미활용 구성 저장 실패:', compErr.message||compErr.details);
@@ -1406,7 +1411,7 @@ Division.runAnalyze = async function(){
           if(re) console.warn('[Division] 구성 행 '+ci+' 실패:', re.message);
           else saved++;
         }
-        if(saved>0) console.log('[Division] 미활용 구성 '+saved+'/'+dbRows.length+'건 저장');
+        if(saved>0) Division._log('[Division] 미활용 구성 '+saved+'/'+dbRows.length+'건 저장');
       }
       // 메모리에도 보관 (UI 렌더링 폴백)
       Division.state._componentMeta = metaMap;
@@ -1466,6 +1471,49 @@ Division._lcsRatio = function(a, b){
 };
 
 /**
+ * 명세서 전문 로드 유틸리티 — 메모리 → DB → PDF → 단락 폴백
+ * @param {object} project - 현재 프로젝트 객체 (spec_full_text 캐시용)
+ * @param {Array} [fallbackParagraphs] - 단락 배열 (이미 로드된 경우)
+ * @returns {string} specText
+ */
+Division._loadSpecText = async function(project, fallbackParagraphs){
+  var specText = project.spec_full_text || '';
+  // 1) DB에서 spec_full_text 조회
+  if(!specText || specText.length < 500){
+    try {
+      var {data:projSpec} = await sb.from('division_projects').select('spec_full_text').eq('id', project.id).single();
+      specText = (projSpec && projSpec.spec_full_text) || '';
+      if(specText) project.spec_full_text = specText;
+    } catch(e){ /* spec_full_text 컬럼 미존재 무시 */ }
+  }
+  // 2) PDF 재추출 폴백
+  if(!specText || specText.length < 500){
+    var appFile = (Division.state.files || []).find(function(f){ return f.file_type === 'application'; });
+    if(appFile){
+      try {
+        var {data:blob, error:dlErr} = await sb.storage.from('division-files').download(appFile.storage_path);
+        if(!dlErr && blob){
+          var buf = await blob.arrayBuffer();
+          specText = await App.extractPdfText(buf);
+        }
+      } catch(e){ /* PDF 추출 실패 무시 */ }
+    }
+  }
+  // 3) DB 단락 폴백
+  if(!specText || specText.length < 500){
+    var paragraphs = fallbackParagraphs;
+    if(!paragraphs || !paragraphs.length){
+      try {
+        var {data:paras} = await sb.from('division_spec_paragraphs').select('*').eq('project_id', project.id);
+        paragraphs = paras || [];
+      } catch(e){ paragraphs = []; }
+    }
+    specText = paragraphs.map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
+  }
+  return specText;
+};
+
+/**
  * T7: 분석 결과 교차 검증 — LLM 출력의 unused_components를 기존 청구항과 대조
  * @param {Array} components - LLM이 추출한 unused_components
  * @param {Array} allClaims - 원출원 전체 청구항
@@ -1484,7 +1532,7 @@ Division.validateUnusedComponents = function(components, allClaims, specFullText
       var sim = Division._lcsRatio(comp.content || '', cText);
       if(sim > maxSim){ maxSim = sim; overlapClaim = c.claim_number; }
     });
-    if(maxSim > 0.7){
+    if(maxSim > Division.THRESHOLDS.OVERLAP_WARNING){
       comp.overlap_warning = true;
       comp.overlap_detail = '기존 청구항 ' + overlapClaim + '에 ' + Math.round(maxSim*100) + '% 유사 구성';
       if(!Array.isArray(comp.risk_flags)) comp.risk_flags = [];
@@ -1498,12 +1546,15 @@ Division.validateUnusedComponents = function(components, allClaims, specFullText
       var keywords = (comp.content.match(/[가-힣]{2,}/g) || []);
       var meaningful = keywords.filter(function(kw){ return stopwords.indexOf(kw) < 0 && kw.length >= 3; });
       var missing = meaningful.filter(function(kw){ return specFullText.indexOf(kw) < 0; });
-      if(missing.length > 2){
+      if(missing.length > Division.THRESHOLDS.COMPONENT_MISSING_KW){
         // 명세서 미발견 키워드 다수 → risk_level 상향
-        if(comp.risk_level === 'safe') comp.risk_level = 'caution';
+        if(missing.length > Division.THRESHOLDS.COMPONENT_DANGER_KW){
+          comp.risk_level = 'danger';
+        } else if(comp.risk_level === 'safe'){
+          comp.risk_level = 'caution';
+        }
         if(!Array.isArray(comp.risk_flags)) comp.risk_flags = [];
         if(comp.risk_flags.indexOf('신규사항 위험') < 0) comp.risk_flags.push('신규사항 위험');
-        console.log('[Division] 교차검증 — 미발견 키워드:', missing.join(', '), '→ risk 상향');
       }
     }
 
@@ -2052,6 +2103,12 @@ Division.runAssemble = async function(){
     App.setButtonLoading('btnDivisionAssemble',true);
     App.showProgress('divisionAssembleProgress','청구항 조립 중...',1,3);
     var selected = Division.state.unusedComponents.filter(function(uc){ return uc.user_selection==='selected'||(uc.user_selection==='pending'&&uc.risk_level==='safe'); });
+    // S1: 단락번호 미지정 구성 경고
+    var noSource = selected.filter(function(uc){ return !uc.paragraph_number || String(uc.paragraph_number).trim() === ''; });
+    if(noSource.length > 0){
+      var names = noSource.map(function(uc){ return '"'+(uc.content||'').substring(0,30)+'..."'; }).join(', ');
+      showToast('⚠️ 명세서 단락번호가 없는 구성 '+noSource.length+'건: '+names+' — 신규사항 위험에 주의하세요.', 'info');
+    }
     var claims = Division.state.claims;
     var basisClaim = claims.find(function(c){ return c.division_role==='basis'; });
     if(!basisClaim) basisClaim = claims.find(function(c){ return c.claim_type==='independent'; });
@@ -2087,11 +2144,11 @@ Division.runAssemble = async function(){
       };
 
       // DB INSERT — 실제 테이블 컬럼만 사용
-      console.log('[Division] ── claims_output INSERT 디버그 ──');
-      console.log('[Division] INSERT 행 수:', rows.length);
-      console.log('[Division] INSERT 컬럼:', Object.keys(rows[0]));
-      console.log('[Division] 첫 행 샘플:', JSON.stringify(rows[0]).substring(0, 500));
-      rows.forEach(function(r,i){ console.log('[Division] 행'+i+' claim_number:'+r.claim_number+' type:'+r.claim_type+' text길이:'+(r.claim_text||'').length); });
+      Division._log('[Division] ── claims_output INSERT 디버그 ──');
+      Division._log('[Division] INSERT 행 수:', rows.length);
+      Division._log('[Division] INSERT 컬럼:', Object.keys(rows[0]));
+      Division._log('[Division] 첫 행 샘플:', JSON.stringify(rows[0]).substring(0, 500));
+      rows.forEach(function(r,i){ Division._log('[Division] 행'+i+' claim_number:'+r.claim_number+' type:'+r.claim_type+' text길이:'+(r.claim_text||'').length); });
 
       var {error:claimErr} = await sb.from('division_claims_output').insert(rows);
       if(claimErr){
@@ -2099,14 +2156,14 @@ Division.runAssemble = async function(){
         // 행별 폴백
         var saved = 0;
         for(var ci=0; ci<rows.length; ci++){
-          console.log('[Division] 행별 시도 '+ci+':', JSON.stringify(rows[ci]).substring(0, 300));
+          Division._log('[Division] 행별 시도 '+ci+':', JSON.stringify(rows[ci]).substring(0, 300));
           var {error:rowErr} = await sb.from('division_claims_output').insert(rows[ci]);
           if(rowErr){ console.error('[Division] 행 '+ci+' 실패:', rowErr.message, rowErr.details); }
           else { saved++; }
         }
-        console.log('[Division] 행별 결과:', saved+'/'+rows.length+'건 성공');
+        Division._log('[Division] 행별 결과:', saved+'/'+rows.length+'건 성공');
       } else {
-        console.log('[Division] claims_output INSERT 성공:', rows.length, '건');
+        Division._log('[Division] claims_output INSERT 성공:', rows.length, '건');
       }
     }
     var updateData = { status:'assembled', updated_at:new Date().toISOString() };
@@ -2369,34 +2426,8 @@ Division.runVerify = async function(){
     var divClaims = Division.state.divisionClaims;
     var claimsText = divClaims.map(function(dc){ return '【청구항 '+dc.claim_number+'】\n'+dc.claim_text; }).join('\n\n');
 
-    // 2) 명세서 전문: spec_full_text(T2에서 파싱 시 저장)에서 우선 조회
-    var specText = p.spec_full_text || '';
-    if(!specText || specText.length < 500){
-      // spec_full_text가 없으면 DB에서 조회 시도
-      var {data:projData} = await sb.from('division_projects').select('spec_full_text').eq('id', p.id).single();
-      specText = (projData && projData.spec_full_text) || '';
-      if(specText) { p.spec_full_text = specText; console.log('[Division] 검증용 spec_full_text DB 조회:', specText.length, '글자'); }
-    }
-    if(!specText || specText.length < 500){
-      // 폴백 1: PDF 재추출
-      var appFile = Division.state.files.find(function(f){ return f.file_type === 'application'; });
-      if(appFile){
-        try {
-          var {data:blob, error:dlErr} = await sb.storage.from('division-files').download(appFile.storage_path);
-          if(!dlErr && blob){
-            var buf = await blob.arrayBuffer();
-            specText = await App.extractPdfText(buf);
-            console.log('[Division] 검증용 PDF 추출 폴백:', specText.length, '글자');
-          }
-        } catch(e){ console.warn('[Division] 명세서 PDF 추출 실패:', e); }
-      }
-    }
-    if(!specText || specText.length < 500){
-      // 폴백 2: DB 단락 사용
-      var {data:paragraphs} = await sb.from('division_spec_paragraphs').select('*').eq('project_id',p.id);
-      specText = (paragraphs||[]).map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
-      console.log('[Division] 검증용 DB 단락 폴백:', specText.length, '글자');
-    }
+    // 2) 명세서 전문 로드 (유틸 함수 사용)
+    var specText = await Division._loadSpecText(p);
 
     // 3) 등록 청구항 (원본 대비 중복 체크용)
     var origClaimsText = Division.state.claims.map(function(c){
@@ -2408,7 +2439,7 @@ Division.runVerify = async function(){
     var basisClaim = Division.state.claims.find(function(c){ return c.division_role==='basis'; }) ||
       Division.state.claims.find(function(c){ return c.claim_type==='independent'; });
     var autoIssues = Division.runAutoVerify(divClaims, basisClaim, Division.state.claims, specText, p.division_type);
-    console.log('[Division] Pass 1 완료:', autoIssues.length, '건');
+    Division._log('[Division] Pass 1 완료:', autoIssues.length, '건');
 
     // T14: Pass 2 — LLM 의미 검증 (Pass 1 결과와 무관하게 항상 실행)
     App.showProgress('divisionVerifyProgress','AI 검증 (Pass 2) 분석 중...',3,5);
@@ -2434,6 +2465,7 @@ Division.runVerify = async function(){
     // Pass 1 결과를 메모리에 보관 (UI 렌더링용)
     Division.state._autoVerifyIssues = autoIssues;
 
+    var VALID_SUPPORT = ['direct','substantial','derivable','none'];
     await sb.from('division_validation_results').delete().eq('project_id',p.id);
     if(verified.results && verified.results.length > 0){
       var rows = verified.results.map(function(vr){
@@ -2444,7 +2476,9 @@ Division.runVerify = async function(){
           result:sEnum(vr.result,VALID_RESULT,'pass'),
           detail:(vr.detail||'').substring(0,5000),
           suggestion:(vr.suggestion||'').substring(0,5000),
-          spec_paragraph_number:vr.spec_paragraph_number ? String(vr.spec_paragraph_number).substring(0,20) : null
+          spec_paragraph_number:vr.spec_paragraph_number ? String(vr.spec_paragraph_number).substring(0,20) : null,
+          spec_quote:vr.spec_quote ? String(vr.spec_quote).substring(0,200) : null,
+          support_type:vr.support_type ? sEnum(vr.support_type,VALID_SUPPORT,null) : null
         };
       });
       var {error:valErr} = await sb.from('division_validation_results').insert(rows);
@@ -2498,12 +2532,12 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
             return c.claim_text.replace(/\s/g,'').indexOf(item.replace(/\s/g,'')) < 0;
           });
           var ratio = 1 - (missing.length / checkItems.length);
-          if(ratio < 0.8){
+          if(ratio < Division.THRESHOLDS.BASIS_PRESERVATION){
             issues.push({ severity:'CRITICAL', check:'basis_preservation',
               message:'독립항 '+c.claim_number+'에서 basis 핵심 구성요소 보존율 '+Math.round(ratio*100)+'%',
               detail:'미발견('+missing.length+'/'+checkItems.length+'): '+missing.slice(0,5).join(', ')+(missing.length>5?' 외 '+(missing.length-5)+'개':'')
             });
-          } else if(ratio < 0.95 && missing.length > 0){
+          } else if(ratio < Division.THRESHOLDS.BASIS_WARN && missing.length > 0){
             issues.push({ severity:'MEDIUM', check:'basis_preservation',
               message:'독립항 '+c.claim_number+'에서 basis 일부 변경 가능성 (보존율 '+Math.round(ratio*100)+'%)',
               detail:'미발견: '+missing.join(', ')
@@ -2524,10 +2558,10 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
         if(basisKw.length > 0){
           var preserved = basisKw.filter(function(kw){ return c.claim_text.indexOf(kw) >= 0; });
           var ratio = preserved.length / basisKw.length;
-          if(ratio < 0.6){
+          if(ratio < Division.THRESHOLDS.CATEGORY_PRESERVATION){
             issues.push({ severity:'HIGH', check:'basis_preservation',
               message:'독립항 '+c.claim_number+'의 기술적 내용 보존율 '+Math.round(ratio*100)+'%',
-              detail:'카테고리 변환 시 기술적 내용의 60% 이상이 보존되어야 합니다'
+              detail:'카테고리 변환 시 기술적 내용의 '+Math.round(Division.THRESHOLDS.CATEGORY_PRESERVATION*100)+'% 이상이 보존되어야 합니다'
             });
           }
         }
@@ -2542,8 +2576,8 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
         return Division.STOPWORDS.indexOf(kw) < 0;
       });
       var missing = keywords.filter(function(kw){ return specFullText.indexOf(kw) < 0; });
-      // 전략형은 더 엄격: 미발견 2개 이상이면 경고
-      if(missing.length > 2){
+      // 전략형은 더 엄격: 미발견 임계값 이상이면 경고
+      if(missing.length > Division.THRESHOLDS.COMPONENT_MISSING_KW){
         issues.push({ severity:'HIGH', check:'spec_scope_strategic',
           message:'전략형 청구항 '+dc.claim_number+'에 명세서 미발견 용어 '+missing.length+'개',
           detail:'미발견: '+missing.slice(0,5).join(', ')+(missing.length>5?' 외 '+(missing.length-5)+'개':'')
@@ -2557,7 +2591,7 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
     allOriginalClaims.forEach(function(oc){
       var ocText = oc.amended_text || oc.original_text || '';
       var sim = Division._lcsRatio(dc.claim_text, ocText);
-      if(sim > 0.95){
+      if(sim > Division.THRESHOLDS.DOUBLE_PATENTING){
         issues.push({
           severity: 'HIGH', check: 'double_patenting',
           message: '분할 청구항 ' + dc.claim_number + '이 원출원 청구항 ' + oc.claim_number + '과 ' + Math.round(sim*100) + '% 동일',
@@ -2573,7 +2607,7 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
       var keywords = (dc.claim_text.match(/[가-힣]{2,}/g) || []);
       var meaningful = keywords.filter(function(kw){ return Division.STOPWORDS.indexOf(kw) < 0 && kw.length >= 3; });
       var missing = meaningful.filter(function(kw){ return specFullText.indexOf(kw) < 0; });
-      if(missing.length > 3){
+      if(missing.length > Division.THRESHOLDS.CLAIM_MISSING_KW){
         issues.push({
           severity: 'HIGH', check: 'new_matter_risk',
           message: '청구항 ' + dc.claim_number + '에 명세서 미발견 용어 ' + missing.length + '개',
@@ -2597,7 +2631,7 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
         allOriginalClaims.forEach(function(oc){
           var ocText = oc.amended_text || oc.original_text || '';
           var sim = Division._lcsRatio(comp.content || '', ocText);
-          if(sim > 0.7){
+          if(sim > Division.THRESHOLDS.COMPONENT_OVERLAP){
             issues.push({
               severity: 'MEDIUM', check: 'component_overlap',
               message: '추가 구성 "' + (comp.content||'').slice(0,20) + '..."이 기존 청구항 ' + oc.claim_number + '과 ' + Math.round(sim*100) + '% 유사',
@@ -2629,7 +2663,7 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
     }
   });
 
-  console.log('[Division] Pass 1 자동 검증 완료:', issues.length, '건 이슈');
+  Division._log('[Division] Pass 1 자동 검증 완료:', issues.length, '건 이슈');
   return issues;
 };
 
@@ -2932,7 +2966,7 @@ Division.acceptWarning = async function(vrIdx){
   try {
     await sb.from('division_validation_results').update({ result:'pass' }).eq('id', vr.id);
     vr.result = 'pass';
-    console.log('[Division] V3 수용: 항목', vrIdx, '→ pass, 사유:', reason);
+    Division._log('[Division] V3 수용: 항목', vrIdx, '→ pass, 사유:', reason);
 
     // user_accepted_warnings 기록 시도 (컬럼 있을 때만)
     try {
@@ -2958,7 +2992,7 @@ Division.acceptAutoIssue = function(aiIdx){
 
   issue._accepted = true;
   issue._acceptReason = reason;
-  console.log('[Division] Pass 1 이슈 수용:', aiIdx, issue.check, '사유:', reason);
+  Division._log('[Division] Pass 1 이슈 수용:', aiIdx, issue.check, '사유:', reason);
   showToast('자동 검증 항목을 수용했습니다', 'success');
   Division.renderStay();
 };
@@ -2990,7 +3024,7 @@ Division.removeFailedComponent = async function(vrIdx){
     try {
       await sb.from('division_unused_components').update({user_selection:'excluded'}).eq('id', matched.id);
       matched.user_selection = 'excluded';
-      console.log('[Division] V4 구성 제거:', matched.content.substring(0,50));
+      Division._log('[Division] V4 구성 제거:', matched.content.substring(0,50));
     } catch(e){ console.warn('[Division] 구성 해제 실패:', e.message); }
   }
 
@@ -3056,8 +3090,8 @@ Division._submitClaimEdit = async function(vrIdx, claimId){
   // DB 업데이트
   if(claimId){
     try {
-      await sb.from('division_claims_output').update({ claim_text:newText, claim_text_highlighted:newText }).eq('id', claimId);
-      if(dc) dc.claim_text = newText;
+      await sb.from('division_claims_output').update({ claim_text:newText }).eq('id', claimId);
+      if(dc){ dc.claim_text = newText; dc.claim_text_highlighted = dc.claim_text_highlighted || newText; }
     } catch(e){ showToast('청구항 저장 실패: '+e.message,'error'); return; }
   }
 
@@ -3218,20 +3252,9 @@ Division.runReVerify = async function(editContext){
     var divClaims = Division.state.divisionClaims;
     var claimsText = divClaims.map(function(dc){ return '【청구항 '+dc.claim_number+'】\n'+dc.claim_text; }).join('\n\n');
 
-    // 2) 명세서 전문
+    // 2) 명세서 전문 로드 (유틸 함수 사용)
     App.showProgress('divisionReVerifyProgress','명세서 로드 중...',2,5);
-    var specText = p.spec_full_text || '';
-    if(!specText || specText.length < 500){
-      try {
-        var {data:projSpec} = await sb.from('division_projects').select('spec_full_text').eq('id', p.id).single();
-        specText = (projSpec && projSpec.spec_full_text) || '';
-        if(specText) p.spec_full_text = specText;
-      } catch(e){ console.warn('[Division] spec_full_text 조회 실패:', e.message); }
-    }
-    if(!specText || specText.length < 500){
-      var paras = Division.state.specParagraphs || [];
-      specText = paras.map(function(para){ return '【'+para.paragraph_number+'】 '+para.content; }).join('\n');
-    }
+    var specText = await Division._loadSpecText(p, Division.state.specParagraphs);
 
     // 3) 원출원 청구항
     var origClaimsText = Division.state.claims.map(function(c){
@@ -3261,6 +3284,7 @@ Division.runReVerify = async function(editContext){
     var VALID_RESULT = ['pass','warning','fail'];
     var sEnum = Division._sanitizeEnum;
 
+    var VALID_SUPPORT = ['direct','substantial','derivable','none'];
     await sb.from('division_validation_results').delete().eq('project_id',p.id);
     if(verified.results && verified.results.length > 0){
       var rows = verified.results.map(function(vr){
@@ -3271,7 +3295,9 @@ Division.runReVerify = async function(editContext){
           result:sEnum(vr.result,VALID_RESULT,'pass'),
           detail:(vr.detail||'').substring(0,5000),
           suggestion:(vr.suggestion||'').substring(0,5000),
-          spec_paragraph_number:vr.spec_paragraph_number ? String(vr.spec_paragraph_number).substring(0,20) : null
+          spec_paragraph_number:vr.spec_paragraph_number ? String(vr.spec_paragraph_number).substring(0,20) : null,
+          spec_quote:vr.spec_quote ? String(vr.spec_quote).substring(0,200) : null,
+          support_type:vr.support_type ? sEnum(vr.support_type,VALID_SUPPORT,null) : null
         };
       });
       await sb.from('division_validation_results').insert(rows);
