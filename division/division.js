@@ -1738,74 +1738,92 @@ Division.renderAnalyze = function(left, right, p){
     h += '</div>';
   }
 
-  // 공통: 미활용/변환 구성 목록 (모든 유형)
+  // ═══ 공통: 명칭 미리보기 + 구성 목록 (모든 유형) ═══
   var compTitle = divType==='category_change' ? '변환 구성 후보' : divType==='strategic' ? '활용 가능 구성' : '구체화·한정·부가 구성 후보';
-
-  // 일괄 선택 버튼
   var totalComps = unused.length;
+  var selectedCount0 = unused.filter(function(uc){ return uc.user_selection==='selected'; }).length;
+
+  // 1. 명칭 미리보기 (원출원 명칭 + 선택된 구성의 키워드)
+  var origTitle = p.original_title_ko || '(원출원 명칭 없음)';
+  h += '<div class="card" style="padding:14px;margin-top:12px" id="divisionTitlePreview">';
+  h += '<div style="font-size:13px;font-weight:700;margin-bottom:8px"><span class="tf">🏷️</span> 명칭 미리보기</div>';
+  h += '<div id="divisionTitlePreviewText" style="font-size:13px;line-height:1.6;padding:8px 10px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm)">';
+  h += escapeHtml(origTitle);
+  h += '</div>';
+  h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px">구성을 선택하면 명칭이 자동 갱신됩니다</div>';
+  h += '</div>';
+
+  // 2. 선택 요약 바 (sticky)
   if(totalComps > 0){
-    h += '<div class="card" style="padding:12px;margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
-    h += '<span style="font-size:13px;font-weight:600;margin-right:auto">' + compTitle + ' (' + totalComps + '건)</span>';
-    h += '<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="Division.bulkSelect(\'all\')">전체 선택</button>';
-    h += '<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="Division.bulkSelect(\'none\')">전체 해제</button>';
-    h += '<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;color:var(--color-success)" onclick="Division.bulkSelect(\'safe\')">✅ safe만 선택</button>';
-    h += '</div>';
+    h += '<div class="division-comp-toolbar">';
+    h += '<span style="font-size:13px;font-weight:600"><span id="divisionSelectedCount2">'+selectedCount0+'</span>/'+totalComps+'건 선택</span>';
+    h += '<span style="margin-left:auto;display:flex;gap:6px">';
+    h += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="Division.bulkSelect(\'all\')">전체 선택</button>';
+    h += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="Division.bulkSelect(\'none\')">전체 해제</button>';
+    h += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;color:var(--color-success)" onclick="Division.bulkSelect(\'safe\')">✅ safe만</button>';
+    h += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="Division.toggleAllCards(true)">펼치기</button>';
+    h += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="Division.toggleAllCards(false)">접기</button>';
+    h += '</span></div>';
   }
 
+  // 3. 구성 카드 목록 (스크롤 영역, risk별 그룹핑: safe→caution→danger)
+  h += '<div class="division-comp-scroll">';
   ['safe','caution','danger'].forEach(function(level){
     var items = groups[level]; var info = Division.RISK_LABELS[level]; if(!items.length) return;
-    h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:4px">'+info.icon+' '+info.label+' ('+items.length+'건)</div>';
+    h += '<div style="padding:8px 0 4px;font-size:12px;font-weight:700;color:var(--color-text-secondary)">'+info.icon+' '+info.label+' ('+items.length+'건)</div>';
     items.forEach(function(uc){
       var isChecked = uc.user_selection==='selected';
-      h += '<div class="division-component-card '+info.css+'">';
-      h += '<div class="division-component-card-header">';
-      h += '<input type="checkbox" class="division-comp-checkbox" '+(isChecked?'checked':'')+' data-component-id="'+uc.id+'" data-risk-level="'+level+'" onchange="Division.toggleComponent(this)" />';
-      h += '<div style="flex:1;min-width:0">';
-      h += '<div style="font-weight:600;font-size:13px">'+escapeHtml(uc.content)+'</div>';
-      h += '<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">';
-      h += '<span class="division-element-tag">【'+uc.paragraph_number+'】</span>';
-      h += '<span class="division-element-tag">→ '+escapeHtml(uc.related_element)+'</span>';
-      var limLabels = {structural:'구조한정',material:'재질한정',shape:'형상한정',arrangement:'배치한정',functional:'기능한정'};
-      h += '<span class="division-element-tag">'+(limLabels[uc.limitation_type]||uc.limitation_type)+'</span>';
-      h += '</div></div></div>';
-      // T16: 명세서 근거 원문 인용 표시 (component_data DB 컬럼 또는 메모리 _meta)
       var cd = uc.component_data || {};
       if(!cd.spec_source_text && Division.state._componentMeta){
         var metaKey = uc.paragraph_number + ':' + (uc.content||'').substring(0,50);
         cd = Division.state._componentMeta[metaKey] || cd;
       }
+      var hasDanger = level==='danger' || cd.overlap_warning;
+      // 카드: 기본 접힘, danger/overlap만 기본 펼침
+      h += '<div class="division-component-card '+info.css+(hasDanger?' expanded':'')+'" onclick="this.classList.toggle(\'expanded\')">';
+      // 헤더 (항상 표시)
+      h += '<div class="division-component-card-header">';
+      h += '<input type="checkbox" class="division-comp-checkbox" '+(isChecked?'checked':'')+' data-component-id="'+uc.id+'" data-risk-level="'+level+'" data-related="'+escapeHtml(uc.related_element||'')+'" onclick="event.stopPropagation()" onchange="Division.toggleComponent(this)" />';
+      h += '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+      h += '<span style="font-weight:600;font-size:13px">'+escapeHtml(uc.content.substring(0,60))+(uc.content.length>60?'...':'')+'</span>';
+      var limLabels = {structural:'구조',material:'재질',shape:'형상',arrangement:'배치',functional:'기능'};
+      h += '<span class="division-element-tag" style="font-size:10px">'+(limLabels[uc.limitation_type]||uc.limitation_type)+'</span>';
+      if(cd.overlap_warning) h += '<span style="font-size:10px;color:var(--color-error);font-weight:600">🔴 overlap</span>';
+      h += '</div>';
+      h += '<span style="font-size:18px;color:var(--color-text-disabled);transition:transform 0.2s" class="division-card-chevron">▾</span>';
+      h += '</div>';
+      // 상세 (접힌 상태에서 숨김)
+      h += '<div class="division-card-body">';
+      h += '<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">';
+      h += '<span class="division-element-tag">【'+uc.paragraph_number+'】</span>';
+      h += '<span class="division-element-tag">→ '+escapeHtml(uc.related_element)+'</span>';
+      h += '</div>';
       if(cd.spec_source_text){
         h += '<div class="division-source-citation">';
-        h += '📄 근거 단락: 【'+uc.paragraph_number+'】';
-        h += '<div class="citation-text">"' + escapeHtml(cd.spec_source_text.substring(0,200)) + (cd.spec_source_text.length>200?'...':'') + '"</div>';
+        h += '📄 근거: 【'+uc.paragraph_number+'】';
+        h += '<div class="citation-text">"'+escapeHtml(cd.spec_source_text.substring(0,200))+(cd.spec_source_text.length>200?'...':'')+'"</div>';
         h += '</div>';
       }
-      // 삽입 위치 미리보기
       if(uc.insertion_point){
-        h += '<div style="margin-top:6px;padding:6px 10px;background:#f0f7ff;border-radius:4px;font-size:11px;color:var(--color-primary)">';
-        h += '📌 삽입: ' + escapeHtml(uc.insertion_point);
-        h += '</div>';
+        h += '<div style="margin-top:6px;padding:6px 10px;background:#f0f7ff;border-radius:4px;font-size:11px;color:var(--color-primary)">📌 삽입: '+escapeHtml(uc.insertion_point)+'</div>';
       }
-      // T16: overlap 경고 표시
       if(cd.overlap_warning){
-        h += '<div class="division-overlap-warning">';
-        h += '🔴 중복 경고: ' + escapeHtml(cd.overlap_detail || '기존 청구항과 유사 구성') + ' — 이중특허 위험 검토 필요';
-        h += '</div>';
-      } else if(cd.spec_source_text) {
-        h += '<div class="division-no-overlap">✅ 기존 청구항 미포함 확인</div>';
+        h += '<div class="division-overlap-warning">🔴 '+escapeHtml(cd.overlap_detail||'기존 청구항과 유사')+'</div>';
+      } else if(cd.spec_source_text){
+        h += '<div class="division-no-overlap">✅ 기존 청구항 미포함</div>';
       }
-      // T16: 등록 전략 근거 표시
-      if(cd.registration_strategy){
-        h += '<div class="division-reg-strategy">💡 ' + escapeHtml(cd.registration_strategy.substring(0,150)) + '</div>';
-      }
+      if(cd.registration_strategy) h += '<div class="division-reg-strategy">💡 '+escapeHtml(cd.registration_strategy.substring(0,150))+'</div>';
       var ucFlags = Division._toArray(uc.risk_flags);
       if(ucFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:4px">⚠️ '+escapeHtml(ucFlags.join(', '))+'</div>';
-      if(uc.suggestion) h += '<div style="font-size:11px;color:var(--color-success);margin-top:2px">💡 예상 기재: '+escapeHtml(uc.suggestion)+'</div>';
-      h += '</div>';
+      if(uc.suggestion) h += '<div style="font-size:11px;color:var(--color-success);margin-top:2px">💡 '+escapeHtml(uc.suggestion)+'</div>';
+      h += '</div>'; // card-body
+      h += '</div>'; // card
     });
-    h += '</div>';
   });
+  h += '</div>'; // scroll
   left.innerHTML = h;
+  // 명칭 미리보기 초기 갱신
+  Division._updateTitlePreview();
 
   // 오른쪽: 유형 전환 + 요약
   var selectedCount = unused.filter(function(uc){ return uc.user_selection==='selected'; }).length;
@@ -1870,14 +1888,51 @@ Division.toggleComponent = async function(cb){
   try { await sb.from('division_unused_components').update({user_selection:val}).eq('id',id);
     var c=Division.state.unusedComponents.find(function(x){return x.id===id;}); if(c) c.user_selection=val;
     Division._updateSelectedCount();
+    Division._updateTitlePreview();
   } catch(e) { showToast('변경 실패','error'); }
 };
 
-// 선택 카운트 실시간 갱신
+// 선택 카운트 + 명칭 미리보기 실시간 갱신
 Division._updateSelectedCount = function(){
   var checked = document.querySelectorAll('.division-comp-checkbox:checked').length;
   var el = document.getElementById('divisionSelectedCount');
   if(el) el.textContent = checked;
+  var el2 = document.getElementById('divisionSelectedCount2');
+  if(el2) el2.textContent = checked;
+};
+
+// 명칭 미리보기: 선택된 구성의 related_element 키워드를 원출원 명칭 앞에 결합
+Division._updateTitlePreview = function(){
+  var el = document.getElementById('divisionTitlePreviewText');
+  if(!el) return;
+  var p = Division.state.current;
+  var origTitle = (p && p.original_title_ko) || '(원출원 명칭 없음)';
+
+  // 선택된 체크박스에서 related_element 추출
+  var keywords = [];
+  var cbs = document.querySelectorAll('.division-comp-checkbox:checked');
+  cbs.forEach(function(cb){ var rel = cb.dataset.related; if(rel && keywords.indexOf(rel) < 0) keywords.push(rel); });
+
+  var preview = origTitle;
+  if(keywords.length > 0){
+    // 핵심 키워드 2~3개를 명칭 앞에 "~을 포함하는" 형태로 결합
+    var kws = keywords.slice(0, 3);
+    var prefix = kws.join(' 및 ') + '을 포함하는 ';
+    preview = prefix + origTitle;
+  }
+  el.textContent = preview;
+
+  // suggestedTitles에 저장
+  Division.state.suggestedTitles = [{ ko: preview, en: '', reason: '구성 선택 기반 자동 생성' }];
+};
+
+// 카드 전체 펼치기/접기
+Division.toggleAllCards = function(expand){
+  var cards = document.querySelectorAll('.division-component-card');
+  cards.forEach(function(card){
+    if(expand) card.classList.add('expanded');
+    else card.classList.remove('expanded');
+  });
 };
 
 // 일괄 선택: 'all' | 'none' | 'safe'
@@ -1894,6 +1949,7 @@ Division.bulkSelect = async function(mode){
     updates.push({ id:id, val:val });
   });
   Division._updateSelectedCount();
+  Division._updateTitlePreview();
   // DB 일괄 반영 (순차)
   for(var i=0;i<updates.length;i++){
     try { await sb.from('division_unused_components').update({user_selection:updates[i].val}).eq('id',updates[i].id); }
@@ -1993,6 +2049,8 @@ Division.runAssemble = async function(){
     var updateData = { status:'assembled', updated_at:new Date().toISOString() };
     // title_candidates는 JSONB 컬럼이 있으면 저장, 없으면 무시
     if(assembled.title_candidates){
+      // suggestedTitles에 저장 — 이후 재조립/검증 화면에서 활용
+      Division.state.suggestedTitles = assembled.title_candidates;
       try {
         await sb.from('division_projects').update({ title_candidates:assembled.title_candidates }).eq('id',p.id);
         p.title_candidates = assembled.title_candidates;
@@ -2041,6 +2099,14 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, depCand
     '- 각 후보에 reason(제안 근거)과 based_on_element(독립항 내 해당 표현 원문 인용)를 포함하라\n' +
     '\n★★★ 원출원 명세서에 기재되지 않은 내용은 절대 포함하지 마라 ★★★\n';
 
+  // 이전 조립에서 생성된 명칭 후보가 있으면 참고 정보로 전달
+  var suggestedBlock = '';
+  var suggested = Division.state.suggestedTitles;
+  if(suggested && suggested.length > 0){
+    suggestedBlock = '\n[이전 명칭 후보 — 참고용]\n사용자가 이전에 검토한 명칭 후보이다. 이 명칭과 일관된 title_candidates를 생성하라:\n';
+    suggested.forEach(function(t){ suggestedBlock += '- ' + t.ko + ' / ' + t.en + '\n'; });
+  }
+
   // T9/T10/T11: 공통 출력 스키마 — basis_preserved, added_components, new_matter_check 추가
   var outputSchema = '{"division_claims":[{"claim_number":1,"claim_type":"independent|dependent",' +
     '"parent_claim_number":null,"claim_text":"순수텍스트","claim_text_highlighted":"변경표시",' +
@@ -2069,7 +2135,7 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, depCand
       '4. 명칭: [명칭 규칙] 참조 — reason + based_on_element 필수\n' +
       '5. basis_preserved: 기술적 내용 보존 여부 (true/false)\n' +
       '6. added_components: 변환 과정에서 추가된 구성 (각각 명세서 단락번호 포함)\n' +
-      qualityRules+
+      qualityRules+ suggestedBlock +
       '\n★★★ JSON만 출력. ★★★\n\n출력: ' + outputSchema;
   }
 
@@ -2106,7 +2172,7 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, depCand
       '5. basis_preserved: 전략형은 false (새 독립항이므로)\n' +
       '6. added_components: 독립항의 모든 구성요소를 나열 (각각 명세서 단락번호 포함)\n' +
       '7. new_matter_check: 각 구성의 명세서 뒷받침 여부를 요약\n' +
-      qualityRules+
+      qualityRules+ suggestedBlock +
       '\n★★★ JSON만 출력. ★★★\n\n출력: ' + outputSchema;
   }
 
@@ -2129,7 +2195,7 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, depCand
     '5. basis_preserved: basis 원문이 독립항에 그대로 포함되었는지 (true/false)\n' +
     '6. added_components: 추가된 D 목록 (각각 content, paragraph_number, limitation_type 포함)\n' +
     '7. new_matter_check: 모든 D의 명세서 뒷받침 확인 요약\n' +
-    qualityRules+
+    qualityRules+ suggestedBlock +
     '\n★★★ JSON만 출력. {로 시작 }로 끝. ★★★\n\n출력: ' + outputSchema;
 };
 
@@ -2670,6 +2736,19 @@ Division.renderVerify = function(left, right, p){
     rh += '</div></label>';
   }
 
+  // 구성 선택 시 생성된 suggestedTitles (최상단 표시)
+  var suggested = Division.state.suggestedTitles || [];
+  if(suggested.length > 0){
+    suggested.forEach(function(st, si){
+      if(!st.ko) return;
+      rh += '<label class="division-title-option" style="border-color:var(--color-primary);background:var(--color-primary-light)"><input type="radio" name="divisionTitle" value="suggested_'+si+'"'+(si===0 && !p.original_title_ko?' checked':'')+' /><div>';
+      rh += '<div style="font-size:13px;font-weight:500">'+escapeHtml(st.ko)+'</div>';
+      if(st.en) rh += '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">'+escapeHtml(st.en)+'</div>';
+      rh += '<div style="font-size:11px;color:var(--color-primary);margin-top:2px">🏷️ 구성 선택 기반 제안</div>';
+      rh += '</div></label>';
+    });
+  }
+
   // 옵션 1~N: AI 제안 — reason, based_on_element, 교차확인 표시
   var candidates = p.title_candidates || [];
   // 독립항 텍스트 (교차확인용)
@@ -3135,6 +3214,10 @@ Division.confirmFinal = async function(){
     } else if(sel.value === 'custom'){
       titleKo = (document.getElementById('divisionCustomTitle')?.value || '').trim();
       titleEn = (document.getElementById('divisionCustomTitleEn')?.value || '').trim();
+    } else if(sel.value.indexOf('suggested_') === 0){
+      var si = parseInt(sel.value.replace('suggested_',''));
+      var suggested = Division.state.suggestedTitles || [];
+      if(suggested[si]){ titleKo = suggested[si].ko; titleEn = suggested[si].en || ''; }
     } else {
       var idx = parseInt(sel.value);
       if(candidates[idx]){ titleKo = candidates[idx].ko; titleEn = candidates[idx].en; }
