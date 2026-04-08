@@ -1743,14 +1743,10 @@ Division.renderAnalyze = function(left, right, p){
   var totalComps = unused.length;
   var selectedCount0 = unused.filter(function(uc){ return uc.user_selection==='selected'; }).length;
 
-  // 1. 명칭 미리보기 (원출원 명칭 + 선택된 구성의 키워드)
-  var origTitle = p.original_title_ko || '(원출원 명칭 없음)';
+  // 1. 명칭 미리보기 (선택된 구성 키워드 기반 자동 생성)
   h += '<div class="card" style="padding:14px;margin-top:12px" id="divisionTitlePreview">';
   h += '<div style="font-size:13px;font-weight:700;margin-bottom:8px"><span class="tf">🏷️</span> 명칭 미리보기</div>';
-  h += '<div id="divisionTitlePreviewText" style="font-size:13px;line-height:1.6;padding:8px 10px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm)">';
-  h += escapeHtml(origTitle);
-  h += '</div>';
-  h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px">구성을 선택하면 명칭이 자동 갱신됩니다</div>';
+  h += '<div id="divisionTitlePreviewText" style="font-size:13px;line-height:1.6;padding:8px 10px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm);color:var(--color-text-tertiary)">구성을 선택하면 명칭이 자동 생성됩니다</div>';
   h += '</div>';
 
   // 2. 선택 요약 바 (sticky)
@@ -1778,9 +1774,8 @@ Division.renderAnalyze = function(left, right, p){
         var metaKey = uc.paragraph_number + ':' + (uc.content||'').substring(0,50);
         cd = Division.state._componentMeta[metaKey] || cd;
       }
-      var hasDanger = level==='danger' || cd.overlap_warning;
-      // 카드: 기본 접힘, danger/overlap만 기본 펼침
-      h += '<div class="division-component-card '+info.css+(hasDanger?' expanded':'')+'" onclick="this.classList.toggle(\'expanded\')">';
+      // 카드: 기본 접힘 (클릭하면 펼침)
+      h += '<div class="division-component-card '+info.css+'" onclick="this.classList.toggle(\'expanded\')">';
       // 헤더 (항상 표시)
       h += '<div class="division-component-card-header">';
       h += '<input type="checkbox" class="division-comp-checkbox" '+(isChecked?'checked':'')+' data-component-id="'+uc.id+'" data-risk-level="'+level+'" data-related="'+escapeHtml(uc.related_element||'')+'" onclick="event.stopPropagation()" onchange="Division.toggleComponent(this)" />';
@@ -1901,29 +1896,47 @@ Division._updateSelectedCount = function(){
   if(el2) el2.textContent = checked;
 };
 
-// 명칭 미리보기: 선택된 구성의 related_element 키워드를 원출원 명칭 앞에 결합
+// 명칭 미리보기: 선택된 구성의 키워드 + 등록 청구항 카테고리 기반 자동 생성
 Division._updateTitlePreview = function(){
   var el = document.getElementById('divisionTitlePreviewText');
   if(!el) return;
   var p = Division.state.current;
-  var origTitle = (p && p.original_title_ko) || '(원출원 명칭 없음)';
 
-  // 선택된 체크박스에서 related_element 추출
+  // 선택된 체크박스에서 related_element + content 핵심 키워드 추출
   var keywords = [];
   var cbs = document.querySelectorAll('.division-comp-checkbox:checked');
-  cbs.forEach(function(cb){ var rel = cb.dataset.related; if(rel && keywords.indexOf(rel) < 0) keywords.push(rel); });
+  cbs.forEach(function(cb){
+    var rel = (cb.dataset.related || '').trim();
+    if(rel && keywords.indexOf(rel) < 0) keywords.push(rel);
+  });
 
-  var preview = origTitle;
-  if(keywords.length > 0){
-    // 핵심 키워드 2~3개를 명칭 앞에 "~을 포함하는" 형태로 결합
-    var kws = keywords.slice(0, 3);
-    var prefix = kws.join(' 및 ') + '을 포함하는 ';
-    preview = prefix + origTitle;
+  if(keywords.length === 0){
+    el.textContent = '구성을 선택하면 명칭이 자동 생성됩니다';
+    el.style.color = 'var(--color-text-tertiary)';
+    Division.state.suggestedTitles = [];
+    return;
   }
+
+  // 등록 청구항에서 카테고리 판별 (장치/방법/시스템)
+  var basisClaim = (Division.state.claims || []).find(function(c){ return c.division_role==='basis'; }) ||
+    (Division.state.claims || []).find(function(c){ return c.claim_type==='independent'; });
+  var basisText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
+  var category = '장치'; // 기본값
+  if(basisText.indexOf('방법') >= 0 && basisText.indexOf('단계') >= 0) category = '방법';
+  else if(basisText.indexOf('시스템') >= 0) category = '시스템';
+  else if(basisText.indexOf('서버') >= 0) category = '서버';
+  else if(basisText.indexOf('프로그램') >= 0) category = '컴퓨터 프로그램';
+
+  // 키워드 조합 → 명칭 생성 (최대 3개)
+  var kws = keywords.slice(0, 3);
+  var featurePart = kws.join(' 및 ');
+  var preview = featurePart + ' 기능을 포함하는 ' + category;
+
   el.textContent = preview;
+  el.style.color = 'var(--color-text-primary)';
 
   // suggestedTitles에 저장
-  Division.state.suggestedTitles = [{ ko: preview, en: '', reason: '구성 선택 기반 자동 생성' }];
+  Division.state.suggestedTitles = [{ ko: preview, en: '', reason: '구성 선택 기반: ' + kws.join(', ') }];
 };
 
 // 카드 전체 펼치기/접기
