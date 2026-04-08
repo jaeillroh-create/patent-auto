@@ -1086,6 +1086,23 @@ Division.runParse = async function(){
       p.spec_full_text = specFullText;
     }
 
+    // 원출원 발명의 명칭 추출 → original_title_ko 저장
+    if(!p.original_title_ko && specFullText){
+      var titleMatch = specFullText.match(/【발명의\s*명칭】\s*([^\n【]+)/);
+      if(!titleMatch) titleMatch = specFullText.match(/\[발명의\s*명칭\]\s*([^\n\[]+)/);
+      if(!titleMatch) titleMatch = specFullText.match(/발명의\s*명칭\s*[:\s]\s*([^\n]{5,80})/);
+      if(titleMatch){
+        var extractedTitle = titleMatch[1].trim().replace(/\s+/g,' ');
+        console.log('[Division] 원출원 명칭 추출:', extractedTitle);
+        try {
+          await sb.from('division_projects').update({original_title_ko: extractedTitle}).eq('id', p.id);
+          p.original_title_ko = extractedTitle;
+        } catch(e){ console.warn('[Division] original_title_ko 저장 실패:', e.message); p.original_title_ko = extractedTitle; }
+      } else {
+        console.warn('[Division] 원출원 명칭 추출 실패 — 【발명의 명칭】 패턴 미발견');
+      }
+    }
+
     await sb.from('division_projects').update({status:'parsed', updated_at: new Date().toISOString()}).eq('id', p.id);
     p.status = 'parsed';
     App.clearProgress('divisionProgress'); App.setButtonLoading('btnDivisionParse', false);
@@ -1641,11 +1658,13 @@ Division.renderAnalyze = function(left, right, p){
 
     h += '<div style="font-size:13px;line-height:2;white-space:pre-wrap;max-height:200px;overflow-y:auto;padding:10px;background:#fafbfc;border:1px solid var(--color-border);border-radius:var(--radius-sm)">' + annotatedHtml + '</div>';
 
-    // 삽입 포인트 범례
+    // 삽입 포인트 범례 (접기/펼치기 + 스크롤 제한)
     if(insertionMap.length > 0){
-      h += '<div style="margin-top:10px;font-size:11px;color:var(--color-text-tertiary)">';
-      var pointTitle = divType==='merge' ? '📌 구체화·한정·부가 포인트' : divType==='category_change' ? '📌 변환 대상 구성요소' : '📌 활용 구성 포인트';
-      h += '<div style="font-weight:600;margin-bottom:4px">' + pointTitle + ' (' + insertionMap.filter(function(im){return im.selected;}).length + '/' + insertionMap.length + '건 선택)</div>';
+      var pointTitle = divType==='merge' ? '구체화·한정·부가 포인트' : divType==='category_change' ? '변환 대상 구성요소' : '활용 구성 포인트';
+      var pointSelectedCount = insertionMap.filter(function(im){return im.selected;}).length;
+      h += '<details style="margin-top:10px;font-size:11px;color:var(--color-text-tertiary)">';
+      h += '<summary style="font-weight:600;cursor:pointer;padding:6px 0;user-select:none">📌 ' + pointTitle + ' (' + pointSelectedCount + '/' + insertionMap.length + '건 선택) ▾</summary>';
+      h += '<div style="max-height:250px;overflow-y:auto;padding:4px 0">';
       insertionMap.forEach(function(im){
         var icon = im.selected ? (im.riskLevel==='safe'?'🟢':'🟡') : '⚪';
         var typeLabel = {structural:'구조한정',material:'재질한정',shape:'형상한정',arrangement:'배치한정',functional:'기능한정'}[im.type] || im.type;
@@ -1654,7 +1673,7 @@ Division.renderAnalyze = function(left, right, p){
         h += ' ← ' + escapeHtml(im.content.substring(0,80)) + (im.content.length>80?'...':'');
         h += ' <span style="color:var(--color-text-disabled)">' + im.paragraph + '</span></div>';
       });
-      h += '</div>';
+      h += '</div></details>';
     }
     h += '</div>';
   }
@@ -1774,8 +1793,9 @@ Division.renderAnalyze = function(left, right, p){
         var metaKey = uc.paragraph_number + ':' + (uc.content||'').substring(0,50);
         cd = Division.state._componentMeta[metaKey] || cd;
       }
-      // 카드: 기본 접힘 (클릭하면 펼침)
-      h += '<div class="division-component-card '+info.css+'" onclick="this.classList.toggle(\'expanded\')">';
+      // 카드: 기본 접힘, danger/overlap만 기본 펼침
+      var hasDanger = level==='danger' || cd.overlap_warning;
+      h += '<div class="division-component-card '+info.css+(hasDanger?' expanded':'')+'" onclick="this.classList.toggle(\'expanded\')">';
       // 헤더 (항상 표시)
       h += '<div class="division-component-card-header">';
       h += '<input type="checkbox" class="division-comp-checkbox" '+(isChecked?'checked':'')+' data-component-id="'+uc.id+'" data-risk-level="'+level+'" data-related="'+escapeHtml(uc.related_element||'')+'" onclick="event.stopPropagation()" onchange="Division.toggleComponent(this)" />';
@@ -1913,9 +1933,15 @@ Division._updateTitlePreview = function(){
   // 원출원 명칭 (original_title_ko)
   var origTitle = (p && p.original_title_ko) || '';
 
+  if(!origTitle){
+    el.innerHTML = '<span style="color:var(--color-error)">⚠️ 원출원 명칭을 추출할 수 없습니다. 파싱을 다시 실행해 주세요.</span>';
+    Division.state.suggestedTitles = [];
+    return;
+  }
+
   if(keywords.length === 0){
-    el.textContent = origTitle || '구성을 선택하면 명칭이 자동 생성됩니다';
-    el.style.color = origTitle ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)';
+    el.textContent = origTitle;
+    el.style.color = 'var(--color-text-primary)';
     Division.state.suggestedTitles = [];
     return;
   }
