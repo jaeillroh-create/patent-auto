@@ -133,12 +133,33 @@
 .division-component-card.risk-caution { border-color: var(--color-warning); background: #fffbeb; }
 .division-component-card.risk-danger { border-color: var(--color-error); background: #fff5f5; }
 .division-component-card-header {
-  display: flex; align-items: flex-start; gap: 12px;
+  display: flex; align-items: flex-start; gap: 12px; cursor: pointer;
 }
+.division-card-body {
+  display: none; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--color-divider);
+}
+.division-component-card.expanded .division-card-body { display: block; }
+.division-component-card.expanded .division-card-chevron { transform: rotate(180deg); }
+.division-card-chevron { flex-shrink: 0; }
 .division-comp-checkbox {
   width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px;
   cursor: pointer; accent-color: var(--color-primary);
 }
+
+/* 선택 요약 바 (sticky) */
+.division-comp-toolbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 14px; margin-top: 12px;
+  background: var(--color-bg-secondary); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-sm);
+}
+/* 구성 목록 스크롤 영역 */
+.division-comp-scroll {
+  max-height: 500px; overflow-y: auto; padding: 4px 0;
+}
+.division-comp-scroll::-webkit-scrollbar { width: 5px; }
+.division-comp-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
 
 /* ═══ 11-1. 등록 청구항 / 비교 뷰 ═══ */
 .division-registered-claim { padding: 14px 16px; background: #fafbfc; border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 10px; }
