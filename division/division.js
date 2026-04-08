@@ -2034,6 +2034,11 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, depCand
     '4. claim_text에는 마크다운 없이 순수 텍스트만\n' +
     '5. claim_text_highlighted에만 표시 (**부가**, **변환**)\n' +
     '6. 최종 점검: 조립된 청구항의 모든 구성이 원출원 명세서에 있는지 재확인\n' +
+    '\n[명칭 규칙]\n' +
+    '- 명칭에 포함하는 기술적 특징은 반드시 조립된 독립항에 실제로 기재된 표현이어야 한다\n' +
+    '- 청구항에 없는 특징을 명칭에 넣지 마라\n' +
+    '- 국문/영문 각 2개 후보 제안\n' +
+    '- 각 후보에 reason(제안 근거)과 based_on_element(독립항 내 해당 표현 원문 인용)를 포함하라\n' +
     '\n★★★ 원출원 명세서에 기재되지 않은 내용은 절대 포함하지 마라 ★★★\n';
 
   // T9/T10/T11: 공통 출력 스키마 — basis_preserved, added_components, new_matter_check 추가
@@ -2041,7 +2046,7 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, depCand
     '"parent_claim_number":null,"claim_text":"순수텍스트","claim_text_highlighted":"변경표시",' +
     '"basis_preserved":true,"added_components":[{"content":"추가된 D 내용","paragraph_number":"0098","limitation_type":"structural"}]}],' +
     '"new_matter_check":"신규사항 확인 결과 요약 (모든 구성의 명세서 뒷받침 여부)",' +
-    '"title_candidates":[{"ko":"","en":""}]}';
+    '"title_candidates":[{"ko":"국문명칭","en":"English Title","reason":"이 명칭을 제안한 근거","based_on_element":"명칭의 근거가 된 청구항 내 표현 원문 인용"}]}';
 
   // T10: 카테고리변경형
   if(divType === 'category_change'){
@@ -2061,7 +2066,7 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, depCand
       '1. 방법→장치: "~하는 단계"→"~하는 ~부/수단" (명세서 기재 구성요소명만 사용), 말미 "~을 포함하는 [장치명]."\n' +
       '2. 장치→방법: "~부/수단"→"~하는 단계", 말미 "~을 포함하는 방법."\n' +
       '3. ★ 변환 시 추가되는 구성요소명은 반드시 명세서에 기재된 것만 사용\n' +
-      '4. 명칭: 국문/영문 각 2개\n' +
+      '4. 명칭: [명칭 규칙] 참조 — reason + based_on_element 필수\n' +
       '5. basis_preserved: 기술적 내용 보존 여부 (true/false)\n' +
       '6. added_components: 변환 과정에서 추가된 구성 (각각 명세서 단락번호 포함)\n' +
       qualityRules+
@@ -2097,7 +2102,7 @@ Division._buildAssemblePrompt = function(basisClaim, selectedComponents, depCand
       '1. 테마별 새 독립항 — 기존 등록 청구항과 다른 관점으로 작성\n' +
       '2. ★ 모든 구성요소에 명세서 단락번호 대응 필수 (added_components에 paragraph_number 기재)\n' +
       '3. ★ basis를 참고하되 직접 복사하지 않음 — "원출원 범위 내" 확인\n' +
-      '4. 명칭: 국문/영문 각 2개\n' +
+      '4. 명칭: [명칭 규칙] 참조 — reason + based_on_element 필수\n' +
       '5. basis_preserved: 전략형은 false (새 독립항이므로)\n' +
       '6. added_components: 독립항의 모든 구성요소를 나열 (각각 명세서 단락번호 포함)\n' +
       '7. new_matter_check: 각 구성의 명세서 뒷받침 여부를 요약\n' +
@@ -2665,13 +2670,34 @@ Division.renderVerify = function(left, right, p){
     rh += '</div></label>';
   }
 
-  // 옵션 1~N: AI 제안
+  // 옵션 1~N: AI 제안 — reason, based_on_element, 교차확인 표시
   var candidates = p.title_candidates || [];
+  // 독립항 텍스트 (교차확인용)
+  var indepClaimTexts = (Division.state.divisionClaims || []).filter(function(c){ return c.claim_type==='independent'; }).map(function(c){ return c.claim_text||''; });
+  var allClaimText = indepClaimTexts.join(' ');
+
   if(candidates.length > 0){
     candidates.forEach(function(tc,i){
-      rh += '<label class="division-title-option"><input type="radio" name="divisionTitle" value="'+i+'"' + (!p.original_title_ko && i===0 ? ' checked' : '') + ' /><div>';
+      rh += '<label class="division-title-option" style="flex-direction:column;align-items:stretch"><div style="display:flex;align-items:flex-start;gap:10px">';
+      rh += '<input type="radio" name="divisionTitle" value="'+i+'"' + (!p.original_title_ko && i===0 ? ' checked' : '') + ' style="margin-top:4px;flex-shrink:0" />';
+      rh += '<div style="flex:1">';
       rh += '<div style="font-size:13px;font-weight:500">'+escapeHtml(tc.ko)+'</div>';
-      rh += '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">'+escapeHtml(tc.en)+'</div></div></label>';
+      rh += '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">'+escapeHtml(tc.en)+'</div>';
+      // reason
+      if(tc.reason){
+        rh += '<div style="font-size:11px;color:var(--color-primary);margin-top:4px">💡 근거: '+escapeHtml(tc.reason)+'</div>';
+      }
+      // based_on_element + 교차확인
+      if(tc.based_on_element){
+        var elementText = tc.based_on_element;
+        // 교차확인: based_on_element가 독립항에 실제 포함되는지
+        var found = allClaimText.indexOf(elementText.substring(0, Math.min(20, elementText.length))) >= 0;
+        rh += '<div style="font-size:11px;margin-top:2px;padding:4px 8px;border-radius:var(--radius-sm);background:'+(found?'#f0fdf4':'#fef2f2')+'">';
+        rh += '<span style="color:'+(found?'var(--color-success)':'var(--color-error)')+'">📌 청구항 포함 확인: '+(found?'✅':'⚠️ 미포함')+'</span>';
+        rh += '<div style="color:var(--color-text-secondary);margin-top:2px">"'+escapeHtml(elementText.substring(0,120))+(elementText.length>120?'...':'')+'"</div>';
+        rh += '</div>';
+      }
+      rh += '</div></div></label>';
     });
   }
 
