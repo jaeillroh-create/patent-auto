@@ -1300,6 +1300,15 @@ Division.runAnalyze = async function(){
     console.log('[Division] 프롬프트 앞 500자:', analyzePrompt.substring(0, 500));
 
     var result = await Division.callAI(analyzePrompt);
+    // max_tokens 잘림 시 이어쓰기 시도
+    if(result.stopReason === 'max_tokens'){
+      console.warn('[Division] 분석 응답 max_tokens 잘림, 이어쓰기 시도');
+      showToast('응답이 잘려 이어쓰기 중...', 'info');
+      var contPrompt = '이전 응답이 잘렸다. 아래 JSON을 이어서 완성하라. 중복 없이 잘린 지점부터 이어쓰라.\n\n' + result.text.substring(result.text.length - 500);
+      var cont = await Division.callAI(contPrompt);
+      result.text = result.text + (cont.text || '');
+      console.log('[Division] 이어쓰기 후 총 길이:', result.text.length);
+    }
     if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 분석 중 프로젝트 전환됨 — 결과 폐기'); App.clearProgress('divisionAnalyzeProgress'); return; }
 
     // 디버그: LLM 응답 로깅
@@ -2050,6 +2059,13 @@ Division.runAssemble = async function(){
     var depCandidates = claims.filter(function(c){ return c.division_role==='dep_candidate'; });
     var assemblePrompt = Division._buildAssemblePrompt(basisClaim, selected, depCandidates, Division.state.indepCount||1, Division.state.depCount);
     var result = await Division.callAI(assemblePrompt);
+    if(result.stopReason === 'max_tokens'){
+      console.warn('[Division] 조립 응답 max_tokens 잘림, 이어쓰기 시도');
+      showToast('응답이 잘려 이어쓰기 중...', 'info');
+      var contPrompt = '이전 응답이 잘렸다. 아래 JSON을 이어서 완성하라. 중복 없이 잘린 지점부터 이어쓰라.\n\n' + result.text.substring(result.text.length - 500);
+      var cont = await Division.callAI(contPrompt);
+      result.text = result.text + (cont.text || '');
+    }
     if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 조립 중 프로젝트 전환됨'); App.clearProgress('divisionAssembleProgress'); App.setButtonLoading('btnDivisionAssemble',false); return; }
     App.showProgress('divisionAssembleProgress','결과 저장 중...',2,3);
     var assembled;
@@ -2398,6 +2414,12 @@ Division.runVerify = async function(){
     App.showProgress('divisionVerifyProgress','AI 검증 (Pass 2) 분석 중...',3,5);
     var verifyPrompt = Division._buildVerifyPrompt(claimsText, specText, origClaimsText);
     var result = await Division.callAI(verifyPrompt);
+    if(result.stopReason === 'max_tokens'){
+      console.warn('[Division] 검증 응답 max_tokens 잘림, 이어쓰기 시도');
+      var contPrompt = '이전 응답이 잘렸다. 아래 JSON을 이어서 완성하라.\n\n' + result.text.substring(result.text.length - 500);
+      var cont = await Division.callAI(contPrompt);
+      result.text = result.text + (cont.text || '');
+    }
     if(Division._checkProjectStale(capturedId)){ console.warn('[Division] 검증 중 프로젝트 전환됨'); App.clearProgress('divisionVerifyProgress'); App.setButtonLoading('btnDivisionVerify',false); return; }
     App.showProgress('divisionVerifyProgress','결과 저장 중...',4,5);
     var verified;
@@ -2459,40 +2481,32 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
   var issues = [];
   var basisText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
 
-  // ─── [검증 1] basis 보존 확인 (병합형·카테고리변경형) ───
+  // ─── [검증 1] basis 보존 확인 (유형별 분기) ───
+  // 병합형: A+B+C 절대 보존 (CRITICAL)
   if(divisionType === 'merge'){
     divisionClaims.filter(function(c){ return c.claim_type === 'independent'; }).forEach(function(c){
       if(basisText && basisText.length > 20){
-        // basis 핵심 구성요소(명사구+참조번호) 단위로 포함 여부 검사
-        // 1) 참조번호 패턴 추출: "제어부(110)", "프로세서(200)" 등
         var refParts = basisText.match(/[가-힣a-zA-Z]+\s*[\(\(]\s*\d+\s*[\)\)]/g) || [];
-        // 2) 3음절 이상 명사구 추출 (불용어 제외)
         var nouns = (basisText.match(/[가-힣]{3,}/g) || []).filter(function(kw){
           return Division.STOPWORDS.indexOf(kw) < 0;
         });
-        // 중복 제거
-        var checkItems = [];
-        var seen = {};
+        var checkItems = [], seen = {};
         refParts.forEach(function(rp){ if(!seen[rp]){ seen[rp]=true; checkItems.push(rp.replace(/\s/g,'')); } });
         nouns.forEach(function(n){ if(!seen[n]){ seen[n]=true; checkItems.push(n); } });
-
         if(checkItems.length > 0){
           var missing = checkItems.filter(function(item){
-            // 참조번호는 공백 무시하여 매칭
             return c.claim_text.replace(/\s/g,'').indexOf(item.replace(/\s/g,'')) < 0;
           });
           var ratio = 1 - (missing.length / checkItems.length);
           if(ratio < 0.8){
-            issues.push({
-              severity: 'CRITICAL', check: 'basis_preservation',
-              message: '독립항 ' + c.claim_number + '에서 basis 핵심 구성요소 보존율 ' + Math.round(ratio*100) + '%',
-              detail: '미발견 구성(' + missing.length + '/' + checkItems.length + '): ' + missing.slice(0,5).join(', ') + (missing.length>5?' 외 '+(missing.length-5)+'개':'')
+            issues.push({ severity:'CRITICAL', check:'basis_preservation',
+              message:'독립항 '+c.claim_number+'에서 basis 핵심 구성요소 보존율 '+Math.round(ratio*100)+'%',
+              detail:'미발견('+missing.length+'/'+checkItems.length+'): '+missing.slice(0,5).join(', ')+(missing.length>5?' 외 '+(missing.length-5)+'개':'')
             });
           } else if(ratio < 0.95 && missing.length > 0){
-            issues.push({
-              severity: 'MEDIUM', check: 'basis_preservation',
-              message: '독립항 ' + c.claim_number + '에서 basis 일부 구성요소 변경 가능성 (보존율 ' + Math.round(ratio*100) + '%)',
-              detail: '미발견: ' + missing.join(', ')
+            issues.push({ severity:'MEDIUM', check:'basis_preservation',
+              message:'독립항 '+c.claim_number+'에서 basis 일부 변경 가능성 (보존율 '+Math.round(ratio*100)+'%)',
+              detail:'미발견: '+missing.join(', ')
             });
           }
         }
@@ -2500,8 +2514,8 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
     });
   }
 
+  // 카테고리변경형: 기술적 내용 보존 (키워드 보존율, HIGH)
   if(divisionType === 'category_change'){
-    // 카테고리변경형: 기술적 내용 보존 확인 — basis 키워드의 80% 이상이 분할항에 존재해야 함
     divisionClaims.filter(function(c){ return c.claim_type === 'independent'; }).forEach(function(c){
       if(basisText){
         var basisKw = (basisText.match(/[가-힣]{3,}/g) || []).filter(function(kw){
@@ -2511,13 +2525,29 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
           var preserved = basisKw.filter(function(kw){ return c.claim_text.indexOf(kw) >= 0; });
           var ratio = preserved.length / basisKw.length;
           if(ratio < 0.6){
-            issues.push({
-              severity: 'HIGH', check: 'basis_preservation',
-              message: '독립항 ' + c.claim_number + '의 기술적 내용 보존율이 ' + Math.round(ratio*100) + '%로 낮음',
-              detail: '카테고리 변환 시 기술적 내용의 60% 이상이 보존되어야 합니다'
+            issues.push({ severity:'HIGH', check:'basis_preservation',
+              message:'독립항 '+c.claim_number+'의 기술적 내용 보존율 '+Math.round(ratio*100)+'%',
+              detail:'카테고리 변환 시 기술적 내용의 60% 이상이 보존되어야 합니다'
             });
           }
         }
+      }
+    });
+  }
+
+  // 전략형: basis 보존 검사 비적용 — 대신 원출원 명세서 범위 내 검사 강화
+  if(divisionType === 'strategic' && specFullText && specFullText.length > 100){
+    divisionClaims.forEach(function(dc){
+      var keywords = (dc.claim_text.match(/[가-힣]{3,}/g) || []).filter(function(kw){
+        return Division.STOPWORDS.indexOf(kw) < 0;
+      });
+      var missing = keywords.filter(function(kw){ return specFullText.indexOf(kw) < 0; });
+      // 전략형은 더 엄격: 미발견 2개 이상이면 경고
+      if(missing.length > 2){
+        issues.push({ severity:'HIGH', check:'spec_scope_strategic',
+          message:'전략형 청구항 '+dc.claim_number+'에 명세서 미발견 용어 '+missing.length+'개',
+          detail:'미발견: '+missing.slice(0,5).join(', ')+(missing.length>5?' 외 '+(missing.length-5)+'개':'')
+        });
       }
     });
   }
@@ -2710,17 +2740,30 @@ Division.renderVerify = function(left, right, p){
   if(!autoIssues.length){
     h += '<div class="division-autocheck-pass">✅ 코드 레벨 검증 통과 — 자동 감지된 이슈 없음</div>';
   } else {
-    autoIssues.forEach(function(issue){
+    autoIssues.forEach(function(issue, aiIdx){
+      if(issue._accepted){ return; } // 수용된 항목은 숨김
       var icon = severityIcons[issue.severity] || '🟡';
-      h += '<div class="division-autocheck-item severity-'+issue.severity+'">';
+      h += '<div class="division-autocheck-item severity-'+issue.severity+'" id="divAutoIssue'+aiIdx+'">';
       h += '<div class="division-autocheck-header">';
       h += '<span>'+icon+'</span><span class="division-severity-badge severity-'+issue.severity+'">'+issue.severity+'</span>';
       h += '<span class="division-check-tag">'+escapeHtml(issue.check)+'</span>';
       h += '</div>';
       h += '<div style="font-size:13px;font-weight:500">'+escapeHtml(issue.message)+'</div>';
       if(issue.detail) h += '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px">'+escapeHtml(issue.detail)+'</div>';
+      // 수용/수정 버튼 (CRITICAL 제외 — CRITICAL은 수용 불가, 수정만 가능)
+      h += '<div style="margin-top:8px;display:flex;gap:6px">';
+      if(issue.severity !== 'CRITICAL'){
+        h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.acceptAutoIssue('+aiIdx+')">✅ 수용</button>';
+      }
+      h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.editClaimText('+aiIdx+')">✏️ 수정</button>';
+      h += '</div>';
       h += '</div>';
     });
+    // 수용된 항목이 있으면 요약 표시
+    var acceptedCount = autoIssues.filter(function(i){return i._accepted;}).length;
+    if(acceptedCount > 0){
+      h += '<div style="padding:6px 10px;font-size:11px;color:var(--color-text-tertiary)">✅ 수용 처리됨: '+acceptedCount+'건</div>';
+    }
   }
   h += '</div>';
 
@@ -2843,29 +2886,31 @@ Division.renderVerify = function(left, right, p){
   rh += '명칭 변경은 분할출원의 권리범위 해석에 영향을 줄 수 있으므로 신중히 결정하세요.';
   rh += '</div></div>';
   rh += '</div>';
-  // V2: 검증 상태별 안내 메시지 + 버튼 활성화 제어
-  // Pass 1 CRITICAL/HIGH 이슈도 확인 대상에 포함
-  var autoCritical = autoIssues.filter(function(i){ return i.severity==='CRITICAL'; }).length;
-  var autoHigh = autoIssues.filter(function(i){ return i.severity==='HIGH'; }).length;
-  var hasAutoBlocking = autoCritical > 0 || autoHigh > 0;
+  // 최종확정 활성화 판단 — 미처리 이슈 기반
+  // Pass 1: CRITICAL은 수용 불가(반드시 수정), HIGH/MEDIUM은 수용 가능
+  var unhandledCritical = autoIssues.filter(function(i){ return i.severity==='CRITICAL' && !i._accepted; }).length;
+  var unhandledHigh = autoIssues.filter(function(i){ return (i.severity==='HIGH'||i.severity==='MEDIUM') && !i._accepted; }).length;
+  // Pass 2: fail은 미처리, warning 중 수용 안 된 것
+  var unhandledFail = failCount;
+  var unhandledWarn = warnCount; // warning은 수용하면 pass로 전환되므로 남은 것이 미처리
 
-  if(failCount > 0 || autoCritical > 0){
+  var totalBlocking = unhandledCritical + unhandledFail;
+  var totalWarning = unhandledHigh + unhandledWarn;
+
+  if(totalBlocking > 0){
     var msgs = [];
-    if(failCount > 0) msgs.push('AI 검증 실패 '+failCount+'건');
-    if(autoCritical > 0) msgs.push('자동 검증 CRITICAL '+autoCritical+'건');
-    if(autoHigh > 0) msgs.push('자동 검증 HIGH '+autoHigh+'건');
-    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)">❌ '+msgs.join(' / ')+' — 각 항목을 검토하여 수정하거나 구성을 제거한 후 재검증하세요.</div>';
-  } else if(warnCount > 0 || autoHigh > 0){
-    var wMsgs = [];
-    if(warnCount > 0) wMsgs.push('AI 주의 '+warnCount+'건');
-    if(autoHigh > 0) wMsgs.push('자동 검증 HIGH '+autoHigh+'건');
-    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-warning-light);border-radius:var(--radius-sm);font-size:13px;color:#92400e">⚠️ '+wMsgs.join(' / ')+' — 각 항목을 검토하여 "수용" 또는 "수정"을 선택하세요.</div>';
+    if(unhandledFail > 0) msgs.push('AI 검증 실패 '+unhandledFail+'건');
+    if(unhandledCritical > 0) msgs.push('자동 검증 CRITICAL '+unhandledCritical+'건');
+    if(totalWarning > 0) msgs.push('주의 '+totalWarning+'건');
+    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)">❌ '+msgs.join(' / ')+' — 수정하거나 구성을 제거한 후 재검증하세요.</div>';
+  } else if(totalWarning > 0){
+    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-warning-light);border-radius:var(--radius-sm);font-size:13px;color:#92400e">⚠️ 주의 '+totalWarning+'건 — "수용" 또는 "수정"을 선택하면 최종 확정할 수 있습니다.</div>';
   } else {
     rh += '<div style="margin-top:12px;padding:12px;background:#d1fae5;border-radius:var(--radius-sm);font-size:13px;color:#065f46">✅ 모든 검증 통과 — 최종 확정할 수 있습니다.</div>';
   }
   rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tf">🔄</span> 재검증</button>';
-  var canConfirm = failCount === 0 && !hasAutoBlocking;
-  rh += '<button class="btn btn-primary" onclick="'+(canConfirm ? 'Division.confirmFinal()' : 'showToast(\'CRITICAL/HIGH 이슈를 먼저 해결하세요\',\'error\')')+'" style="flex:1;padding:12px'+(canConfirm?'':';opacity:0.5;cursor:not-allowed')+'"><span class="tf">🏁</span> 최종 확정</button></div>';
+  var canConfirm = totalBlocking === 0 && totalWarning === 0;
+  rh += '<button class="btn btn-primary" onclick="'+(canConfirm ? 'Division.confirmFinal()' : 'showToast(\'미처리 이슈를 먼저 해결하세요\',\'error\')')+'" style="flex:1;padding:12px'+(canConfirm?'':';opacity:0.5;cursor:not-allowed')+'"><span class="tf">🏁</span> 최종 확정</button></div>';
   right.innerHTML = rh;
   Division._bindTitleRadios();
 };
@@ -2899,6 +2944,23 @@ Division.acceptWarning = async function(vrIdx){
     showToast('항목을 수용했습니다 (pass로 전환)', 'success');
     Division.renderStay();
   } catch(e){ showToast('수용 처리 실패: '+e.message, 'error'); }
+};
+
+// Pass 1 이슈 수용 — _accepted 플래그로 표시, UI 갱신
+Division.acceptAutoIssue = function(aiIdx){
+  var autoIssues = Division.state._autoVerifyIssues || [];
+  var issue = autoIssues[aiIdx];
+  if(!issue){ showToast('항목을 찾을 수 없습니다','error'); return; }
+  if(issue.severity === 'CRITICAL'){ showToast('CRITICAL 항목은 수용할 수 없습니다','error'); return; }
+
+  var reason = prompt('수용 사유를 입력하세요 (예: AI 검증에서 pass 확인됨)');
+  if(!reason) return;
+
+  issue._accepted = true;
+  issue._acceptReason = reason;
+  console.log('[Division] Pass 1 이슈 수용:', aiIdx, issue.check, '사유:', reason);
+  showToast('자동 검증 항목을 수용했습니다', 'success');
+  Division.renderStay();
 };
 
 // V4: 구성 제거 — 해당 구성 선택 해제 + 분석 화면으로 복귀
