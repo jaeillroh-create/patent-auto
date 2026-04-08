@@ -1902,7 +1902,7 @@ Division._updateTitlePreview = function(){
   if(!el) return;
   var p = Division.state.current;
 
-  // 선택된 체크박스에서 related_element + content 핵심 키워드 추출
+  // 선택된 체크박스에서 related_element 키워드 추출
   var keywords = [];
   var cbs = document.querySelectorAll('.division-comp-checkbox:checked');
   cbs.forEach(function(cb){
@@ -1910,27 +1910,35 @@ Division._updateTitlePreview = function(){
     if(rel && keywords.indexOf(rel) < 0) keywords.push(rel);
   });
 
+  // 원출원 명칭 (original_title_ko)
+  var origTitle = (p && p.original_title_ko) || '';
+
   if(keywords.length === 0){
-    el.textContent = '구성을 선택하면 명칭이 자동 생성됩니다';
-    el.style.color = 'var(--color-text-tertiary)';
+    el.textContent = origTitle || '구성을 선택하면 명칭이 자동 생성됩니다';
+    el.style.color = origTitle ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)';
     Division.state.suggestedTitles = [];
     return;
   }
 
-  // 등록 청구항에서 카테고리 판별 (장치/방법/시스템)
-  var basisClaim = (Division.state.claims || []).find(function(c){ return c.division_role==='basis'; }) ||
-    (Division.state.claims || []).find(function(c){ return c.claim_type==='independent'; });
-  var basisText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
-  var category = '장치'; // 기본값
-  if(basisText.indexOf('방법') >= 0 && basisText.indexOf('단계') >= 0) category = '방법';
-  else if(basisText.indexOf('시스템') >= 0) category = '시스템';
-  else if(basisText.indexOf('서버') >= 0) category = '서버';
-  else if(basisText.indexOf('프로그램') >= 0) category = '컴퓨터 프로그램';
-
-  // 키워드 조합 → 명칭 생성 (최대 3개)
+  // D 키워드 조합 (최대 3개)
   var kws = keywords.slice(0, 3);
-  var featurePart = kws.join(' 및 ');
-  var preview = featurePart + ' 기능을 포함하는 ' + category;
+  var dPrefix = kws.join(' 및 ') + ' 기반의 ';
+  var preview;
+
+  if(origTitle){
+    // 원출원 명칭 앞에 D 키워드 삽입 — 말미 형태 보존
+    preview = dPrefix + origTitle;
+  } else {
+    // 원출원 명칭 없으면 등록 청구항 카테고리에서 말미 추론
+    var basisClaim = (Division.state.claims || []).find(function(c){ return c.division_role==='basis'; }) ||
+      (Division.state.claims || []).find(function(c){ return c.claim_type==='independent'; });
+    var basisText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
+    var suffix = '장치';
+    if(basisText.indexOf('방법') >= 0 && basisText.indexOf('단계') >= 0) suffix = '방법';
+    else if(basisText.indexOf('시스템') >= 0) suffix = '시스템';
+    else if(basisText.indexOf('서버') >= 0) suffix = '서버';
+    preview = dPrefix + suffix;
+  }
 
   el.textContent = preview;
   el.style.color = 'var(--color-text-primary)';
