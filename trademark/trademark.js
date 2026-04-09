@@ -7768,13 +7768,25 @@ ${text.substring(0, 2000)}
       console.log('[TM] 출원일자:', result.applicationDate);
     }
     
-    // 출원인: 한글 사이 공백 제거하여 회사명 추출
-    const companyMatch = t.match(/([가-힣\s]{2,20})\s*주\s*식\s*회\s*사|주\s*식\s*회\s*사\s*([가-힣\s]{2,20})/);
-    if (companyMatch) {
-      let name = (companyMatch[1] || companyMatch[2] || '').replace(/\s/g, '');
-      if (name && name.length >= 2) {
-        result.applicantName = name + ' 주식회사';
-        console.log('[TM] 출원인:', result.applicantName);
+    // 출원인: 1순위 【명칭】필드 직접 파싱, 2순위 "주식회사" 전후 매칭
+    const nameFieldMatch = t.match(/명\s*칭[】\]\s]+([가-힣A-Za-z\s()（）]{2,30}?)(?=\s*【|\s*특허고객|\s*대리인|\s*$)/);
+    if (nameFieldMatch) {
+      result.applicantName = nameFieldMatch[1].replace(/\s+/g, ' ').trim();
+      console.log('[TM] 출원인(명칭필드):', result.applicantName);
+    } else {
+      const corpAfter = t.match(/주\s*식\s*회\s*사\s+([가-힣A-Za-z]{2,15})/);
+      if (corpAfter) {
+        result.applicantName = '주식회사 ' + corpAfter[1].replace(/\s/g, '');
+        console.log('[TM] 출원인(주식회사+):', result.applicantName);
+      } else {
+        const corpBefore = t.match(/([가-힣]{2,15})\s*주\s*식\s*회\s*사/);
+        if (corpBefore) {
+          const name = corpBefore[1].replace(/\s/g, '');
+          if (!['명칭', '출원인', '신청인', '권리자'].includes(name)) {
+            result.applicantName = name + ' 주식회사';
+            console.log('[TM] 출원인(+주식회사):', result.applicantName);
+          }
+        }
       }
     }
     
