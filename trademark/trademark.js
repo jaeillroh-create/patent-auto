@@ -6765,7 +6765,7 @@ ${criticalResults.slice(0, 5).map(r =>
 
       const response = await App.callClaudeSonnet(prompt, 1500);
       
-      const jsonMatch = response.text.match(/\{[\s\S]*?\}/);
+      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('AI 응답을 파싱할 수 없습니다.');
       }
@@ -7579,7 +7579,7 @@ ${criticalResults.slice(0, 5).map(r =>
     const w = srcCanvas.width, h = srcCanvas.height;
     const data = ctx.getImageData(0, 0, w, h).data;
 
-    const isWhite = (r, g, b) => r > 240 && g > 240 && b > 240;
+    const isWhite = (r, g, b) => r > 250 && g > 250 && b > 250;
     let top = 0, bottom = h - 1, left = 0, right = w - 1;
 
     // 상단
