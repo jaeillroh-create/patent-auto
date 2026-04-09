@@ -7426,7 +7426,22 @@ ${criticalResults.slice(0, 5).map(r =>
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
-        if (imgObj instanceof HTMLImageElement || imgObj instanceof ImageBitmap) {
+        if (imgObj.bitmap && typeof imgObj.bitmap.width === 'number') {
+          // {bitmap: ImageBitmap} 래퍼
+          canvas.width = imgObj.bitmap.width;
+          canvas.height = imgObj.bitmap.height;
+          ctx.drawImage(imgObj.bitmap, 0, 0);
+        } else if (imgObj instanceof HTMLCanvasElement) {
+          // HTMLCanvasElement 직접
+          canvas.width = imgObj.width;
+          canvas.height = imgObj.height;
+          ctx.drawImage(imgObj, 0, 0);
+        } else if (imgObj.canvas instanceof HTMLCanvasElement) {
+          // {canvas: HTMLCanvasElement} 래퍼
+          canvas.width = imgObj.canvas.width;
+          canvas.height = imgObj.canvas.height;
+          ctx.drawImage(imgObj.canvas, 0, 0);
+        } else if (imgObj instanceof HTMLImageElement || (typeof ImageBitmap !== 'undefined' && imgObj instanceof ImageBitmap)) {
           // JPEG 이미지 (브라우저가 디코딩)
           canvas.width = imgObj.width;
           canvas.height = imgObj.height;
