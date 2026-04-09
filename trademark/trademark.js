@@ -7255,8 +7255,8 @@ ${criticalResults.slice(0, 5).map(r =>
               p.priorityExam.designatedGoodsFromApp = extracted.designatedGoods;
               totalExtracted++;
             }
-            // 상표견본 이미지
-            if (extracted.specimenImage) {
+            // 상표견본 이미지 (기존에 추출된 것이 없을 때만 적용)
+            if (extracted.specimenImage && !p.priorityExam.specimenImageDataUrl) {
               p.priorityExam.specimenImageDataUrl = extracted.specimenImage;
               totalExtracted++;
               console.log('[TM] 상표견본 이미지 추출 완료');
@@ -7366,10 +7366,10 @@ ${criticalResults.slice(0, 5).map(r =>
       if (targetPageNum > 0) break;
     }
 
-    // 폴백: 텍스트를 못 찾으면 마지막 페이지 사용
+    // 【상표견본】 텍스트가 없는 PDF는 출원서가 아님 → 추출 안함
     if (targetPageNum < 0) {
-      console.log('[TM] 【상표견본】 텍스트 없음, 마지막 페이지 사용');
-      targetPageNum = pdf.numPages;
+      console.log('[TM] 【상표견본】 텍스트 없음 — 출원서가 아닌 문서, 건너뜀');
+      return null;
     }
 
     // 2단계: 해당 페이지를 고해상도로 렌더링
