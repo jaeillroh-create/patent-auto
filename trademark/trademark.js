@@ -7352,11 +7352,10 @@ ${criticalResults.slice(0, 5).map(r =>
   TM.extractSpecimenImage = async function(pdf) {
     // 1단계: 【상표견본】 텍스트가 있는 페이지 찾기 (마지막 페이지부터 역순)
     let targetPageNum = -1;
-
     for (let pageNum = pdf.numPages; pageNum >= 1; pageNum--) {
       const page = await pdf.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      for (const item of textContent.items) {
+      const tc = await page.getTextContent();
+      for (const item of tc.items) {
         if (item.str.replace(/\s/g, '').includes('상표견본')) {
           targetPageNum = pageNum;
           console.log('[TM] 【상표견본】 텍스트 발견: 페이지', pageNum);
@@ -7365,17 +7364,16 @@ ${criticalResults.slice(0, 5).map(r =>
       }
       if (targetPageNum > 0) break;
     }
-
-    // 【상표견본】 텍스트가 없는 PDF는 출원서가 아님 → 추출 안함
     if (targetPageNum < 0) {
       console.log('[TM] 【상표견본】 텍스트 없음 — 출원서가 아닌 문서, 건너뜀');
       return null;
     }
 
-    // 2단계: 해당 페이지를 고해상도로 렌더링
     const page = await pdf.getPage(targetPageNum);
     const scale = 3.0;
     const vp = page.getViewport({ scale });
+
+    // 2단계: 페이지 렌더링
     const canvas = document.createElement('canvas');
     canvas.width = vp.width;
     canvas.height = vp.height;
@@ -7383,115 +7381,127 @@ ${criticalResults.slice(0, 5).map(r =>
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, vp.width, vp.height);
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    console.log('[TM] 페이지 렌더링:', vp.width, 'x', vp.height);
 
-    console.log('[TM] 페이지 렌더링 완료:', vp.width, 'x', vp.height);
+    // === 전략 A: 텍스트 위치 + 폰트 크기 분석 ===
+    // 상표견본 아래에서 가장 큰 폰트 = 상표 콘텐츠
+    try {
+      const tc = await page.getTextContent();
+      let specimenCanvasY = -1;
+      const textItems = [];
 
-    // 3단계: 행별 비백색 픽셀 수 계산
-    const imgData = ctx.getImageData(0, 0, vp.width, vp.height);
-    const px = imgData.data;
-    const W = vp.width, H = vp.height;
+      for (const item of tc.items) {
+        if (item.str.trim().length === 0) continue;
+        // viewport.convertToViewportPoint()로 정확한 캔버스 좌표 변환
+        const [cx, cy] = vp.convertToViewportPoint(item.transform[4], item.transform[5]);
+        const fontSize = Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2);
+        textItems.push({ str: item.str.trim(), cx, cy, fontSize });
 
-    const rowDensity = new Uint32Array(H);
-    for (let y = 0; y < H; y++) {
-      let count = 0;
-      for (let x = 0; x < W; x++) {
-        const i = (y * W + x) * 4;
-        if (px[i] < 240 || px[i+1] < 240 || px[i+2] < 240) count++;
+        if (item.str.replace(/\s/g, '').includes('상표견본') && specimenCanvasY < 0) {
+          specimenCanvasY = cy;
+        }
       }
-      rowDensity[y] = count;
-    }
 
-    // 4단계: 콘텐츠 블록을 gap(빈 행) 기준으로 분리
-    // 테두리 선(좌우 경계선)만 있는 행은 빈 행으로 취급해야 함
-    // 테두리 선: 행당 ~6-12px (1-2pt 선 × 좌우 2개 × scale 3)
-    // 텍스트 행: 행당 30px 이상
-    const minPixels = Math.max(25, Math.floor(W * 0.015)); // 폭의 1.5% 이상이어야 콘텐츠 행
-    const gapThreshold = 10;   // 10행 이상 비콘텐츠 행이면 블록 분리
-    console.log('[TM] minPixels 임계값:', minPixels, '(W=' + W + ')');
-    const blocks = [];
-    let bStart = -1;
-    let gapCount = 0;
+      console.log('[TM] 텍스트 아이템:', textItems.length, ', 상표견본 canvas Y:', specimenCanvasY);
 
-    for (let y = 0; y < H; y++) {
-      if (rowDensity[y] >= minPixels) {
-        if (bStart < 0) bStart = y;
-        gapCount = 0;
-      } else {
-        if (bStart >= 0) {
-          gapCount++;
-          if (gapCount >= gapThreshold) {
-            const bEnd = y - gapCount;
-            if (bEnd - bStart >= 5) {
-              // 블록의 총 픽셀 밀도 계산
-              let totalPx = 0;
-              for (let by = bStart; by <= bEnd; by++) totalPx += rowDensity[by];
-              blocks.push({ start: bStart, end: bEnd, height: bEnd - bStart + 1, totalPx });
+      if (specimenCanvasY >= 0 && textItems.length > 0) {
+        // 상표견본 텍스트 아래에 있는 텍스트들
+        const belowTexts = textItems.filter(t =>
+          t.cy > specimenCanvasY + 5 &&
+          !t.str.replace(/\s/g, '').includes('상표견본')
+        );
+
+        if (belowTexts.length > 0) {
+          // 가장 큰 폰트 크기 = 상표 콘텐츠
+          const maxFont = Math.max(...belowTexts.map(t => t.fontSize));
+          // 헤더 텍스트(날짜 등) 제외: 폰트 크기가 최대값의 60% 이상인 것만
+          const tmTexts = belowTexts.filter(t => t.fontSize >= maxFont * 0.6);
+
+          console.log('[TM] 전략A: 아래 텍스트', belowTexts.length, '개, 최대 폰트:', maxFont.toFixed(1),
+            ', 상표 텍스트:', tmTexts.map(t => t.str).join(' '));
+
+          if (tmTexts.length > 0 && maxFont > 0) {
+            const fontPx = maxFont * scale;
+            const minCY = Math.min(...tmTexts.map(t => t.cy));
+            const maxCY = Math.max(...tmTexts.map(t => t.cy));
+
+            // 상표 텍스트 영역: 기준선 위 1.5배 ~ 아래 0.8배 (한글 고려)
+            const cropTop = Math.max(0, Math.floor(minCY - fontPx * 1.5));
+            const cropBottom = Math.min(vp.height, Math.ceil(maxCY + fontPx * 0.8));
+
+            if (cropBottom - cropTop > 20) {
+              console.log('[TM] 전략A 크롭: y=', cropTop, '~', cropBottom);
+              const cropCanvas = document.createElement('canvas');
+              cropCanvas.width = vp.width;
+              cropCanvas.height = cropBottom - cropTop;
+              cropCanvas.getContext('2d').drawImage(
+                canvas, 0, cropTop, vp.width, cropBottom - cropTop,
+                0, 0, vp.width, cropBottom - cropTop
+              );
+              return TM.autoCropCanvas(cropCanvas);
             }
-            bStart = -1;
-            gapCount = 0;
           }
         }
       }
-    }
-    // 마지막 블록
-    if (bStart >= 0) {
-      const bEnd = H - 1 - gapCount;
-      if (bEnd - bStart >= 5) {
-        let totalPx = 0;
-        for (let by = bStart; by <= bEnd; by++) totalPx += rowDensity[by];
-        blocks.push({ start: bStart, end: bEnd, height: bEnd - bStart + 1, totalPx });
-      }
+    } catch (e) {
+      console.warn('[TM] 전략A 실패:', e);
     }
 
-    console.log('[TM] 분리된 블록 수:', blocks.length, blocks.map(b => `[y${b.start}-${b.end}, h=${b.height}, px=${b.totalPx}]`).join(', '));
+    // === 전략 B: PDF 임베디드 이미지 직접 추출 ===
+    // 상표가 이미지로 삽입된 경우 (도형상표 등)
+    try {
+      const ops = await page.getOperatorList();
+      let bestImgName = null, bestImgSize = 0;
 
-    // 5단계: 가장 밀도가 높은 블록 = 상표 이미지
-    // (헤더 텍스트는 작고 가벼운 블록, 상표 이미지는 크고 밀도가 높은 블록)
-    let bestBlock = null;
-    if (blocks.length >= 2) {
-      // 여러 블록이면 totalPx가 가장 큰 블록 선택 (상표 이미지)
-      bestBlock = blocks.reduce((a, b) => a.totalPx > b.totalPx ? a : b);
-    } else if (blocks.length === 1) {
-      bestBlock = blocks[0];
-    }
-
-    if (!bestBlock) {
-      console.log('[TM] 블록 없음, 전체 페이지 autoCrop');
-      return TM.autoCropCanvas(canvas);
-    }
-
-    console.log('[TM] 선택 블록: y=', bestBlock.start, '-', bestBlock.end, ', h=', bestBlock.height, ', totalPx=', bestBlock.totalPx);
-
-    // 6단계: 선택된 블록 영역의 좌우 바운딩 박스 계산
-    let minX = W, maxX = 0;
-    for (let y = bestBlock.start; y <= bestBlock.end; y++) {
-      for (let x = 0; x < W; x++) {
-        const i = (y * W + x) * 4;
-        if (px[i] < 240 || px[i+1] < 240 || px[i+2] < 240) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
+      for (let i = 0; i < ops.fnArray.length; i++) {
+        if (ops.fnArray[i] === pdfjsLib.OPS.paintImageXObject ||
+            ops.fnArray[i] === pdfjsLib.OPS.paintJpegXObject) {
+          const name = ops.argsArray[i][0];
+          try {
+            const img = page.objs.get(name);
+            if (img && img.width && img.height) {
+              const size = img.width * img.height;
+              if (size > bestImgSize) {
+                bestImgSize = size;
+                bestImgName = name;
+              }
+            }
+          } catch (e) { /* 로드 안된 객체 무시 */ }
         }
       }
+
+      if (bestImgName && bestImgSize > 500) {
+        const img = page.objs.get(bestImgName);
+        const ic = document.createElement('canvas');
+        ic.width = img.width;
+        ic.height = img.height;
+        const ictx = ic.getContext('2d');
+        const id = ictx.createImageData(img.width, img.height);
+        const src = img.data, dst = id.data;
+
+        if (img.kind === 3) { // RGBA
+          dst.set(src);
+        } else if (img.kind === 2) { // RGB
+          for (let p = 0, d = 0; p < src.length; p += 3, d += 4) {
+            dst[d] = src[p]; dst[d+1] = src[p+1]; dst[d+2] = src[p+2]; dst[d+3] = 255;
+          }
+        } else { // Grayscale
+          for (let p = 0, d = 0; p < src.length; p++, d += 4) {
+            dst[d] = dst[d+1] = dst[d+2] = src[p]; dst[d+3] = 255;
+          }
+        }
+
+        ictx.putImageData(id, 0, 0);
+        console.log('[TM] 전략B: 임베디드 이미지 추출 성공:', img.width, 'x', img.height);
+        return TM.autoCropCanvas(ic);
+      }
+    } catch (e) {
+      console.warn('[TM] 전략B 실패:', e);
     }
 
-    const pad = 15;
-    const cropX = Math.max(0, minX - pad);
-    const cropY = Math.max(0, bestBlock.start - pad);
-    const cropW = Math.min(W, maxX + pad + 1) - cropX;
-    const cropH = Math.min(H, bestBlock.end + pad + 1) - cropY;
-
-    if (cropW < 20 || cropH < 20) {
-      return TM.autoCropCanvas(canvas);
-    }
-
-    console.log('[TM] 최종 크롭: (', cropX, ',', cropY, ')', cropW, 'x', cropH);
-
-    const cropCanvas = document.createElement('canvas');
-    cropCanvas.width = cropW;
-    cropCanvas.height = cropH;
-    cropCanvas.getContext('2d').drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-
-    return cropCanvas.toDataURL('image/png');
+    // === 전략 C: 전체 페이지 autoCrop (최종 폴백) ===
+    console.log('[TM] 전략A/B 모두 실패, 전체 페이지 autoCrop');
+    return TM.autoCropCanvas(canvas);
   };
 
   // 캔버스 자동 크롭 — 흰색 여백 제거
