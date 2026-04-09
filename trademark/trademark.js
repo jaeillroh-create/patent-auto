@@ -7402,9 +7402,12 @@ ${criticalResults.slice(0, 5).map(r =>
     }
 
     // 4단계: 콘텐츠 블록을 gap(빈 행) 기준으로 분리
-    // 연속된 비백색 행들을 하나의 블록으로, 빈 행이 일정 이상 이어지면 블록 분리
-    const minPixels = 3;       // 행에 최소 3px 비백색이 있어야 콘텐츠 행
-    const gapThreshold = 15;   // 15행(=5px@scale3) 이상 빈 행이면 블록 분리
+    // 테두리 선(좌우 경계선)만 있는 행은 빈 행으로 취급해야 함
+    // 테두리 선: 행당 ~6-12px (1-2pt 선 × 좌우 2개 × scale 3)
+    // 텍스트 행: 행당 30px 이상
+    const minPixels = Math.max(25, Math.floor(W * 0.015)); // 폭의 1.5% 이상이어야 콘텐츠 행
+    const gapThreshold = 10;   // 10행 이상 비콘텐츠 행이면 블록 분리
+    console.log('[TM] minPixels 임계값:', minPixels, '(W=' + W + ')');
     const blocks = [];
     let bStart = -1;
     let gapCount = 0;
