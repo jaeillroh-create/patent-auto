@@ -1641,22 +1641,35 @@
         designated_goods: TM.currentProject.designatedGoods,
         search_results: TM.currentProject.searchResults,
         fee_calculation: TM.currentProject.feeCalculation,
-        priority_exam: TM.currentProject.priorityExam,
+        priority_exam: (() => {
+          const pe = TM.currentProject.priorityExam;
+          if (pe && pe.specimenImageDataUrl) { const copy = { ...pe }; delete copy.specimenImageDataUrl; return copy; }
+          return pe;
+        })(),
         ai_analysis: TM.currentProject.aiAnalysis,
-        current_state_json: {
-          trademarkName: TM.currentProject.trademarkName,
-          trademarkNameEn: TM.currentProject.trademarkNameEn,
-          trademarkType: TM.currentProject.trademarkType,
-          applicant: TM.currentProject.applicant,
-          designatedGoods: TM.currentProject.designatedGoods,
-          gazettedOnly: TM.currentProject.gazettedOnly,
-          searchResults: TM.currentProject.searchResults,
-          similarityEvaluations: TM.currentProject.similarityEvaluations,
-          riskAssessment: TM.currentProject.riskAssessment,
-          feeCalculation: TM.currentProject.feeCalculation,
-          priorityExam: TM.currentProject.priorityExam,
-          aiAnalysis: TM.currentProject.aiAnalysis
-        },
+        current_state_json: (() => {
+          // specimenImageDataUrl은 큰 base64이므로 DB 저장에서 제외
+          const pe = TM.currentProject.priorityExam;
+          let peForSave = pe;
+          if (pe && pe.specimenImageDataUrl) {
+            peForSave = { ...pe };
+            delete peForSave.specimenImageDataUrl;
+          }
+          return {
+            trademarkName: TM.currentProject.trademarkName,
+            trademarkNameEn: TM.currentProject.trademarkNameEn,
+            trademarkType: TM.currentProject.trademarkType,
+            applicant: TM.currentProject.applicant,
+            designatedGoods: TM.currentProject.designatedGoods,
+            gazettedOnly: TM.currentProject.gazettedOnly,
+            searchResults: TM.currentProject.searchResults,
+            similarityEvaluations: TM.currentProject.similarityEvaluations,
+            riskAssessment: TM.currentProject.riskAssessment,
+            feeCalculation: TM.currentProject.feeCalculation,
+            priorityExam: peForSave,
+            aiAnalysis: TM.currentProject.aiAnalysis
+          };
+        })(),
         updated_at: new Date().toISOString()
       };
       
@@ -6964,10 +6977,17 @@ ${criticalResults.slice(0, 5).map(r =>
                     <input type="text" id="tm-extract-designatedGoodsFromApp" value="${TM.escapeHtml(pe.designatedGoodsFromApp || '')}" placeholder="지정상품 목록">
                   </div>
                 </div>
+                ${pe.specimenImageDataUrl ? `
+                  <div style="margin-top: 10px; padding: 8px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <label style="font-size: 11px; color: #6b7280; font-weight: 600; display: block; margin-bottom: 6px;">상표견본 (추출됨)</label>
+                    <img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 200px; max-height: 120px; border: 1px solid #d1d5db; border-radius: 4px; display: block;">
+                  </div>
+                ` : ''}
               </div>
             ` : `
               <div class="tm-extracted-summary">
                 <span><strong>${pe.applicationNumber || '-'}</strong> | ${pe.applicationDate || '-'} | ${pe.applicantName || '-'}</span>
+                ${pe.specimenImageDataUrl ? `<img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 80px; max-height: 50px; vertical-align: middle; margin-left: 8px; border: 1px solid #d1d5db; border-radius: 3px;">` : ''}
               </div>
             `}
           </div>
@@ -7235,7 +7255,13 @@ ${criticalResults.slice(0, 5).map(r =>
               p.priorityExam.designatedGoodsFromApp = extracted.designatedGoods;
               totalExtracted++;
             }
-            
+            // 상표견본 이미지
+            if (extracted.specimenImage) {
+              p.priorityExam.specimenImageDataUrl = extracted.specimenImage;
+              totalExtracted++;
+              console.log('[TM] 상표견본 이미지 추출 완료');
+            }
+
           } catch (pdfError) {
             console.error(`[TM] ${file.name} 추출 실패:`, pdfError);
           }
@@ -7309,9 +7335,184 @@ ${criticalResults.slice(0, 5).map(r =>
     
     // Claude API로 정보 추출
     App.showToast('AI가 텍스트 분석 중...', 'info');
-    return await TM.parseApplicationText(fullText);
+    const parsed = await TM.parseApplicationText(fullText);
+
+    // 상표견본 이미지 추출 시도
+    try {
+      App.showToast('상표견본 이미지 추출 중...', 'info');
+      parsed.specimenImage = await TM.extractSpecimenImage(pdf);
+    } catch (imgErr) {
+      console.warn('[TM] 상표견본 이미지 추출 실패:', imgErr);
+    }
+
+    return parsed;
   };
   
+  // PDF에서 상표견본 이미지 추출 (첫 페이지의 가장 큰 임베디드 이미지를 상표견본으로 추정)
+  TM.extractSpecimenImage = async function(pdf) {
+    const page = await pdf.getPage(1);
+    const ops = await page.getOperatorList();
+    const viewport = page.getViewport({ scale: 1.0 });
+
+    let bestImage = null;
+    let bestArea = 0;
+
+    // PDF 오퍼레이터에서 이미지 찾기
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      const fn = ops.fnArray[i];
+      // OPS.paintImageXObject = 85, OPS.paintJpegXObject = 82
+      if (fn === 85 || fn === 82) {
+        try {
+          const imgName = ops.argsArray[i][0];
+          const imgObj = await new Promise((resolve, reject) => {
+            page.objs.get(imgName, (obj) => {
+              if (obj) resolve(obj); else reject(new Error('No image'));
+            });
+          });
+
+          if (!imgObj || !imgObj.width || !imgObj.height) continue;
+
+          const area = imgObj.width * imgObj.height;
+          // 너무 작은 이미지(아이콘 등)는 무시, 최소 50x50
+          if (imgObj.width < 50 || imgObj.height < 50) continue;
+
+          if (area > bestArea) {
+            bestArea = area;
+            bestImage = imgObj;
+          }
+        } catch (e) {
+          // 이미지 로드 실패 무시
+        }
+      }
+    }
+
+    if (bestImage) {
+      console.log('[TM] 상표견본 이미지 발견:', bestImage.width, 'x', bestImage.height);
+      return TM.imageObjToDataUrl(bestImage);
+    }
+
+    // 임베디드 이미지 없으면, 페이지를 렌더링하여 상표견본 영역 크롭
+    console.log('[TM] 임베디드 이미지 없음 — 페이지 렌더링으로 폴백');
+    return await TM.renderSpecimenCrop(page, viewport);
+  };
+
+  // PDF.js 이미지 객체 → data URL 변환
+  TM.imageObjToDataUrl = function(imgObj) {
+    const canvas = document.createElement('canvas');
+    canvas.width = imgObj.width;
+    canvas.height = imgObj.height;
+    const ctx = canvas.getContext('2d');
+
+    // imgObj.data는 RGBA 또는 RGB
+    let imgData;
+    if (imgObj.data && imgObj.data.length === imgObj.width * imgObj.height * 4) {
+      imgData = new ImageData(new Uint8ClampedArray(imgObj.data), imgObj.width, imgObj.height);
+    } else if (imgObj.data && imgObj.data.length === imgObj.width * imgObj.height * 3) {
+      // RGB → RGBA 변환
+      const rgba = new Uint8ClampedArray(imgObj.width * imgObj.height * 4);
+      for (let j = 0; j < imgObj.width * imgObj.height; j++) {
+        rgba[j * 4] = imgObj.data[j * 3];
+        rgba[j * 4 + 1] = imgObj.data[j * 3 + 1];
+        rgba[j * 4 + 2] = imgObj.data[j * 3 + 2];
+        rgba[j * 4 + 3] = 255;
+      }
+      imgData = new ImageData(rgba, imgObj.width, imgObj.height);
+    } else if (imgObj.bitmap) {
+      // ImageBitmap인 경우
+      ctx.drawImage(imgObj.bitmap, 0, 0);
+      return canvas.toDataURL('image/png');
+    } else {
+      return null;
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+
+    // 자동 크롭 (여백 제거)
+    return TM.autoCropCanvas(canvas);
+  };
+
+  // 캔버스 자동 크롭 — 흰색 여백 제거
+  TM.autoCropCanvas = function(srcCanvas) {
+    const ctx = srcCanvas.getContext('2d');
+    const w = srcCanvas.width, h = srcCanvas.height;
+    const data = ctx.getImageData(0, 0, w, h).data;
+
+    const isWhite = (r, g, b) => r > 240 && g > 240 && b > 240;
+    let top = 0, bottom = h - 1, left = 0, right = w - 1;
+
+    // 상단
+    outer1: for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (!isWhite(data[i], data[i+1], data[i+2])) { top = y; break outer1; }
+      }
+    }
+    // 하단
+    outer2: for (let y = h - 1; y >= top; y--) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (!isWhite(data[i], data[i+1], data[i+2])) { bottom = y; break outer2; }
+      }
+    }
+    // 좌측
+    outer3: for (let x = 0; x < w; x++) {
+      for (let y = top; y <= bottom; y++) {
+        const i = (y * w + x) * 4;
+        if (!isWhite(data[i], data[i+1], data[i+2])) { left = x; break outer3; }
+      }
+    }
+    // 우측
+    outer4: for (let x = w - 1; x >= left; x--) {
+      for (let y = top; y <= bottom; y++) {
+        const i = (y * w + x) * 4;
+        if (!isWhite(data[i], data[i+1], data[i+2])) { right = x; break outer4; }
+      }
+    }
+
+    // 여유 패딩 (5px)
+    const pad = 5;
+    top = Math.max(0, top - pad);
+    bottom = Math.min(h - 1, bottom + pad);
+    left = Math.max(0, left - pad);
+    right = Math.min(w - 1, right + pad);
+
+    const cw = right - left + 1;
+    const ch = bottom - top + 1;
+    if (cw < 10 || ch < 10) return srcCanvas.toDataURL('image/png');
+
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = cw;
+    cropCanvas.height = ch;
+    cropCanvas.getContext('2d').drawImage(srcCanvas, left, top, cw, ch, 0, 0, cw, ch);
+    return cropCanvas.toDataURL('image/png');
+  };
+
+  // 폴백: 페이지 렌더링 후 상표견본 영역 크롭 (대략 상단 40~70% 영역의 중앙)
+  TM.renderSpecimenCrop = async function(page, viewport) {
+    const scale = 2.0;
+    const sv = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = sv.width;
+    canvas.height = sv.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport: sv }).promise;
+
+    // 출원서에서 상표견본은 보통 페이지 상단 30~60% 영역, 중앙에 위치
+    const cropTop = Math.floor(sv.height * 0.25);
+    const cropBottom = Math.floor(sv.height * 0.55);
+    const cropLeft = Math.floor(sv.width * 0.15);
+    const cropRight = Math.floor(sv.width * 0.85);
+    const cw = cropRight - cropLeft;
+    const ch = cropBottom - cropTop;
+
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = cw;
+    cropCanvas.height = ch;
+    cropCanvas.getContext('2d').drawImage(canvas, cropLeft, cropTop, cw, ch, 0, 0, cw, ch);
+
+    return TM.autoCropCanvas(cropCanvas);
+  };
+
   // PDF를 이미지로 렌더링 후 OCR
   TM.ocrPDF = async function(pdf) {
     // Tesseract.js 로드
@@ -8104,7 +8305,10 @@ ${content.substring(0, 1200)}
 
         <div class="tm-doc-section">
           <h3>【상표견본】</h3>
-          <p style="font-size: 18px; font-weight: bold;">${trademarkName}</p>
+          ${pe.specimenImageDataUrl
+            ? `<img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 280px; max-height: 180px; border: 1px solid #d1d5db; display: block;">`
+            : `<p style="font-size: 18px; font-weight: bold;">${trademarkName}</p>`
+          }
         </div>
 
         <div class="tm-doc-section">
@@ -8275,9 +8479,31 @@ ${content.substring(0, 1200)}
         goodsWithGroups,
         evidences,
         reasonText1,
-        reasonParagraphs
+        reasonParagraphs,
+        specimenImageDataUrl: pe.specimenImageDataUrl || null
       };
       
+      // 상표견본 이미지를 ArrayBuffer로 변환 (Word용)
+      if (docData.specimenImageDataUrl) {
+        try {
+          const dataUrl = docData.specimenImageDataUrl;
+          const base64 = dataUrl.split(',')[1];
+          const binaryStr = atob(base64);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+          docData._specimenImageBuffer = bytes.buffer;
+          // 이미지 크기 계산 (원본 비율 유지, 최대 200px 너비)
+          const img = new Image();
+          await new Promise((resolve) => { img.onload = resolve; img.src = dataUrl; });
+          const maxW = 200;
+          const ratio = Math.min(maxW / img.width, 1);
+          docData._specimenImgWidth = Math.round(img.width * ratio);
+          docData._specimenImgHeight = Math.round(img.height * ratio);
+        } catch (imgErr) {
+          console.warn('[TM] Word 이미지 변환 실패:', imgErr);
+        }
+      }
+
       // Supabase Edge Function 호출 또는 클라이언트 사이드 생성
       const blob = await TM.createPriorityDocBlob(docData);
       
@@ -8423,7 +8649,7 @@ ${content.substring(0, 1200)}
       console.log('[TM] docx 라이브러리 로드 완료');
     }
     
-    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, 
+    const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell,
             AlignmentType, WidthType, BorderStyle, HeadingLevel } = window.docx;
     
     // 테이블 스타일
@@ -8477,11 +8703,21 @@ ${content.substring(0, 1200)}
             spacing: { before: 200, after: 100 },
             children: [new TextRun({ text: '【상표견본】', bold: true, size: 24 })]
           }),
-          new Paragraph({
-            spacing: { after: 200 },
-            children: [new TextRun({ text: data.trademarkName, bold: true, size: 28 })]
-          }),
-          
+          ...(data._specimenImageBuffer ? [
+            new Paragraph({
+              spacing: { after: 200 },
+              children: [new ImageRun({
+                data: data._specimenImageBuffer,
+                transformation: { width: data._specimenImgWidth || 200, height: data._specimenImgHeight || 100 }
+              })]
+            })
+          ] : [
+            new Paragraph({
+              spacing: { after: 200 },
+              children: [new TextRun({ text: data.trademarkName, bold: true, size: 28 })]
+            })
+          ]),
+
           // 상품류
           new Paragraph({
             spacing: { before: 200, after: 100 },
