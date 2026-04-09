@@ -7529,46 +7529,69 @@ ${criticalResults.slice(0, 5).map(r =>
     }
 
     // === 전략 C: 다운샘플링으로 큰 콘텐츠만 감지 ===
-    // 페이지를 1/15로 축소하면 작은 텍스트·테두리는 사라지고 큰 상표만 남음
+    // 썸네일 행 밀도 분석: 테두리 선은 매 행 일정 밀도, 상표는 특정 행에서만 높은 밀도
     try {
       const W = vp.width, H = vp.height;
-      const ds = 15; // 다운샘플 배율
+      const ds = 12;
       const tw = Math.floor(W / ds), th = Math.floor(H / ds);
       const thumbCanvas = document.createElement('canvas');
       thumbCanvas.width = tw;
       thumbCanvas.height = th;
       thumbCanvas.getContext('2d').drawImage(canvas, 0, 0, tw, th);
-
       const thumbData = thumbCanvas.getContext('2d').getImageData(0, 0, tw, th).data;
 
-      // 축소된 이미지에서 진한 픽셀(모든 채널 < 200) 바운딩 박스 찾기
-      // 축소 시 작은 텍스트는 ~230+으로 희미해지고, 큰 굵은 텍스트만 < 200
-      let minX = tw, maxX = 0, minY = th, maxY = 0;
-      let darkCount = 0;
-
+      // 각 행의 진한 픽셀 수 계산 (threshold 230)
+      const rowCounts = new Uint32Array(th);
       for (let y = 0; y < th; y++) {
+        let cnt = 0;
         for (let x = 0; x < tw; x++) {
           const i = (y * tw + x) * 4;
-          if (thumbData[i] < 215 && thumbData[i+1] < 215 && thumbData[i+2] < 215) {
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-            darkCount++;
-          }
+          if (thumbData[i] < 230 && thumbData[i+1] < 230 && thumbData[i+2] < 230) cnt++;
+        }
+        rowCounts[y] = cnt;
+      }
+
+      // 평균 행 밀도 (0이 아닌 행만)
+      let sumDensity = 0, nonZeroRows = 0;
+      for (let y = 0; y < th; y++) {
+        if (rowCounts[y] > 0) { sumDensity += rowCounts[y]; nonZeroRows++; }
+      }
+      const meanDensity = nonZeroRows > 0 ? sumDensity / nonZeroRows : 0;
+
+      // 평균의 2배 이상인 행 = 상표 콘텐츠 행 (테두리·소문자 제외)
+      const contentThreshold = Math.max(meanDensity * 2, 3);
+      let contentMinY = th, contentMaxY = 0;
+      for (let y = 0; y < th; y++) {
+        if (rowCounts[y] >= contentThreshold) {
+          if (y < contentMinY) contentMinY = y;
+          if (y > contentMaxY) contentMaxY = y;
         }
       }
 
-      console.log('[TM] 전략C: 썸네일', tw, 'x', th, ', 진한 픽셀:', darkCount,
-        ', 영역: (', minX, ',', minY, ')-(', maxX, ',', maxY, ')');
+      console.log('[TM] 전략C: 썸네일', tw, 'x', th,
+        ', 평균밀도:', meanDensity.toFixed(1), ', 임계값:', contentThreshold.toFixed(1),
+        ', 콘텐츠 Y:', contentMinY, '~', contentMaxY,
+        ', 샘플 행밀도:', Array.from(rowCounts).slice(0, 10).join(','));
 
-      if (darkCount > 0 && maxX > minX && maxY > minY) {
+      if (contentMaxY > contentMinY) {
+        // 해당 행 범위에서 좌우 바운딩 박스 (썸네일 좌표)
+        let contentMinX = tw, contentMaxX = 0;
+        for (let y = contentMinY; y <= contentMaxY; y++) {
+          for (let x = 0; x < tw; x++) {
+            const i = (y * tw + x) * 4;
+            if (thumbData[i] < 230 && thumbData[i+1] < 230 && thumbData[i+2] < 230) {
+              if (x < contentMinX) contentMinX = x;
+              if (x > contentMaxX) contentMaxX = x;
+            }
+          }
+        }
+
         // 원본 좌표로 변환 + 패딩
-        const pad = 2; // 썸네일 2px = 원본 30px
-        const cropX = Math.max(0, (minX - pad) * ds);
-        const cropY = Math.max(0, (minY - pad) * ds);
-        const cropR = Math.min(W, (maxX + pad + 1) * ds);
-        const cropB = Math.min(H, (maxY + pad + 1) * ds);
+        const pad = 2;
+        const cropX = Math.max(0, (contentMinX - pad) * ds);
+        const cropY = Math.max(0, (contentMinY - pad) * ds);
+        const cropR = Math.min(W, (contentMaxX + pad + 1) * ds);
+        const cropB = Math.min(H, (contentMaxY + pad + 1) * ds);
         const cropW = cropR - cropX;
         const cropH = cropB - cropY;
 
