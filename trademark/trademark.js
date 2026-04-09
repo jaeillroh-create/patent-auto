@@ -7348,87 +7348,82 @@ ${criticalResults.slice(0, 5).map(r =>
     return parsed;
   };
   
-  // PDF에서 상표견본 이미지 추출 (첫 페이지의 가장 큰 임베디드 이미지를 상표견본으로 추정)
+  // PDF에서 상표견본 이미지 추출 — 마지막 페이지부터 역순으로【상표견본】텍스트를 찾고 그 아래 영역 캡처
   TM.extractSpecimenImage = async function(pdf) {
-    const page = await pdf.getPage(1);
-    const ops = await page.getOperatorList();
-    const viewport = page.getViewport({ scale: 1.0 });
+    // 마지막 페이지부터 역순 탐색 (상표견본은 보통 마지막 페이지)
+    for (let pageNum = pdf.numPages; pageNum >= 1; pageNum--) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const viewport = page.getViewport({ scale: 1.0 });
 
-    let bestImage = null;
-    let bestArea = 0;
-
-    // PDF 오퍼레이터에서 이미지 찾기
-    for (let i = 0; i < ops.fnArray.length; i++) {
-      const fn = ops.fnArray[i];
-      // OPS.paintImageXObject = 85, OPS.paintJpegXObject = 82
-      if (fn === 85 || fn === 82) {
-        try {
-          const imgName = ops.argsArray[i][0];
-          const imgObj = await new Promise((resolve, reject) => {
-            page.objs.get(imgName, (obj) => {
-              if (obj) resolve(obj); else reject(new Error('No image'));
-            });
-          });
-
-          if (!imgObj || !imgObj.width || !imgObj.height) continue;
-
-          const area = imgObj.width * imgObj.height;
-          // 너무 작은 이미지(아이콘 등)는 무시, 최소 50x50
-          if (imgObj.width < 50 || imgObj.height < 50) continue;
-
-          if (area > bestArea) {
-            bestArea = area;
-            bestImage = imgObj;
-          }
-        } catch (e) {
-          // 이미지 로드 실패 무시
+      // 【상표견본】 텍스트 위치 찾기
+      let specimenY = -1;
+      for (const item of textContent.items) {
+        const text = item.str.replace(/\s/g, '');
+        if (text.includes('상표견본')) {
+          // PDF 좌표계는 좌하단 원점 — transform[5]가 y 위치
+          specimenY = item.transform[5];
+          console.log('[TM] 【상표견본】 텍스트 발견: 페이지', pageNum, ', PDF y좌표:', specimenY);
+          break;
         }
       }
-    }
 
-    if (bestImage) {
-      console.log('[TM] 상표견본 이미지 발견:', bestImage.width, 'x', bestImage.height);
-      return TM.imageObjToDataUrl(bestImage);
-    }
+      if (specimenY < 0) continue; // 이 페이지에 없으면 이전 페이지 탐색
 
-    // 임베디드 이미지 없으면, 페이지를 렌더링하여 상표견본 영역 크롭
-    console.log('[TM] 임베디드 이미지 없음 — 페이지 렌더링으로 폴백');
-    return await TM.renderSpecimenCrop(page, viewport);
-  };
+      // 페이지를 고해상도로 렌더링
+      const scale = 2.5;
+      const sv = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = sv.width;
+      canvas.height = sv.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport: sv }).promise;
 
-  // PDF.js 이미지 객체 → data URL 변환
-  TM.imageObjToDataUrl = function(imgObj) {
-    const canvas = document.createElement('canvas');
-    canvas.width = imgObj.width;
-    canvas.height = imgObj.height;
-    const ctx = canvas.getContext('2d');
+      // PDF y좌표(좌하단 원점) → canvas y좌표(좌상단 원점) 변환
+      // canvas_y = (viewport.height - pdf_y) * scale
+      // 【상표견본】 텍스트 바로 아래부터 캡처 (텍스트 높이 약 15pt 고려)
+      const textBottomPdfY = specimenY - 20; // 텍스트 아래쪽
+      const cropTopCanvas = Math.max(0, Math.floor((viewport.height - textBottomPdfY) * scale));
 
-    // imgObj.data는 RGBA 또는 RGB
-    let imgData;
-    if (imgObj.data && imgObj.data.length === imgObj.width * imgObj.height * 4) {
-      imgData = new ImageData(new Uint8ClampedArray(imgObj.data), imgObj.width, imgObj.height);
-    } else if (imgObj.data && imgObj.data.length === imgObj.width * imgObj.height * 3) {
-      // RGB → RGBA 변환
-      const rgba = new Uint8ClampedArray(imgObj.width * imgObj.height * 4);
-      for (let j = 0; j < imgObj.width * imgObj.height; j++) {
-        rgba[j * 4] = imgObj.data[j * 3];
-        rgba[j * 4 + 1] = imgObj.data[j * 3 + 1];
-        rgba[j * 4 + 2] = imgObj.data[j * 3 + 2];
-        rgba[j * 4 + 3] = 255;
+      // 그 아래의 다음 섹션 텍스트(【, 끝) 찾기 — 상표견본 영역 하한
+      let nextSectionY = 0; // PDF 좌표 (0 = 페이지 최하단)
+      let foundNext = false;
+      for (const item of textContent.items) {
+        const text = item.str.replace(/\s/g, '');
+        const itemY = item.transform[5];
+        // 상표견본보다 아래에 있는 【로 시작하는 다음 섹션
+        if (itemY < specimenY - 30 && text.startsWith('【') && !text.includes('상표견본')) {
+          nextSectionY = itemY + 10; // 약간 위 여유
+          foundNext = true;
+          break;
+        }
       }
-      imgData = new ImageData(rgba, imgObj.width, imgObj.height);
-    } else if (imgObj.bitmap) {
-      // ImageBitmap인 경우
-      ctx.drawImage(imgObj.bitmap, 0, 0);
-      return canvas.toDataURL('image/png');
-    } else {
-      return null;
+
+      const cropBottomCanvas = foundNext
+        ? Math.min(sv.height, Math.floor((viewport.height - nextSectionY) * scale))
+        : Math.min(sv.height, cropTopCanvas + Math.floor(sv.height * 0.5)); // 폴백: 하단 50%
+
+      // 좌우 여백 제거 (페이지 양쪽 10% 잘라냄)
+      const marginX = Math.floor(sv.width * 0.08);
+      const cropLeft = marginX;
+      const cropRight = sv.width - marginX;
+      const cw = cropRight - cropLeft;
+      const ch = Math.max(50, cropBottomCanvas - cropTopCanvas);
+
+      console.log('[TM] 상표견본 크롭 영역: top=', cropTopCanvas, 'bottom=', cropBottomCanvas, 'w=', cw, 'h=', ch);
+
+      if (cw < 30 || ch < 30) continue;
+
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = cw;
+      cropCanvas.height = ch;
+      cropCanvas.getContext('2d').drawImage(canvas, cropLeft, cropTopCanvas, cw, ch, 0, 0, cw, ch);
+
+      return TM.autoCropCanvas(cropCanvas);
     }
 
-    ctx.putImageData(imgData, 0, 0);
-
-    // 자동 크롭 (여백 제거)
-    return TM.autoCropCanvas(canvas);
+    console.warn('[TM] 모든 페이지에서 【상표견본】을 찾지 못함');
+    return null;
   };
 
   // 캔버스 자동 크롭 — 흰색 여백 제거
@@ -7485,32 +7480,6 @@ ${criticalResults.slice(0, 5).map(r =>
     cropCanvas.height = ch;
     cropCanvas.getContext('2d').drawImage(srcCanvas, left, top, cw, ch, 0, 0, cw, ch);
     return cropCanvas.toDataURL('image/png');
-  };
-
-  // 폴백: 페이지 렌더링 후 상표견본 영역 크롭 (대략 상단 40~70% 영역의 중앙)
-  TM.renderSpecimenCrop = async function(page, viewport) {
-    const scale = 2.0;
-    const sv = page.getViewport({ scale });
-    const canvas = document.createElement('canvas');
-    canvas.width = sv.width;
-    canvas.height = sv.height;
-    const ctx = canvas.getContext('2d');
-    await page.render({ canvasContext: ctx, viewport: sv }).promise;
-
-    // 출원서에서 상표견본은 보통 페이지 상단 30~60% 영역, 중앙에 위치
-    const cropTop = Math.floor(sv.height * 0.25);
-    const cropBottom = Math.floor(sv.height * 0.55);
-    const cropLeft = Math.floor(sv.width * 0.15);
-    const cropRight = Math.floor(sv.width * 0.85);
-    const cw = cropRight - cropLeft;
-    const ch = cropBottom - cropTop;
-
-    const cropCanvas = document.createElement('canvas');
-    cropCanvas.width = cw;
-    cropCanvas.height = ch;
-    cropCanvas.getContext('2d').drawImage(canvas, cropLeft, cropTop, cw, ch, 0, 0, cw, ch);
-
-    return TM.autoCropCanvas(cropCanvas);
   };
 
   // PDF를 이미지로 렌더링 후 OCR
