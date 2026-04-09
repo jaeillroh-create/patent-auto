@@ -7318,7 +7318,14 @@ ${criticalResults.slice(0, 5).map(r =>
       console.log('[TM] 페이지', i, '텍스트 아이템 수:', textContent.items.length);
       
       const pageText = textContent.items.map(item => item.str).join(' ');
-      fullText += pageText + '\n';
+      // KIPO 출원서 꼬리말 제거: 쪽번호(3-1), 날짜(2026-03-24) 등
+      const cleanedPageText = pageText
+        .replace(/\s+\d{1,2}-\d{1,2}\s+/g, ' ')           // 쪽번호 (3-1, 3-2 등)
+        .replace(/\s+\d{4}-\d{2}-\d{2}\s*/g, ' ')          // 날짜 (2026-03-24 등)
+        .replace(/\s+\d{4}\.\d{2}\.\d{2}\s*/g, ' ')        // 날짜 (2026.03.24 등)
+        .replace(/\s{2,}/g, ' ')                            // 연속 공백 정리
+        .trim();
+      fullText += cleanedPageText + '\n';
     }
     
     // 텍스트가 거의 없으면 이미지 기반 PDF -> OCR 시도
@@ -7582,8 +7589,9 @@ ${criticalResults.slice(0, 5).map(r =>
         if (!isWhite(data[i], data[i+1], data[i+2])) { top = y; break outer1; }
       }
     }
-    // 하단
-    outer2: for (let y = h - 1; y >= top; y--) {
+    // 하단 (하위 5%는 꼬리말 영역으로 제외)
+    const bottomLimit = Math.floor(h * 0.95);
+    outer2: for (let y = bottomLimit; y >= top; y--) {
       for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4;
         if (!isWhite(data[i], data[i+1], data[i+2])) { bottom = y; break outer2; }
@@ -7740,7 +7748,9 @@ ${text.substring(0, 2000)}
       designatedGoods: ''
     };
     
-    let t = text.replace(/\s+/g, ' ');
+    let t = text
+      .replace(/\d{1,2}-\d{1,2}\s+\d{4}[-./]\d{2}[-./]\d{2}/g, ' ')  // 쪽번호+날짜 연속 패턴
+      .replace(/\s+/g, ' ');
     
     console.log('[TM] 정규식 폴백 파싱 시작');
     
@@ -7758,13 +7768,25 @@ ${text.substring(0, 2000)}
       console.log('[TM] 출원일자:', result.applicationDate);
     }
     
-    // 출원인: 한글 사이 공백 제거하여 회사명 추출
-    const companyMatch = t.match(/([가-힣\s]{2,20})\s*주\s*식\s*회\s*사|주\s*식\s*회\s*사\s*([가-힣\s]{2,20})/);
-    if (companyMatch) {
-      let name = (companyMatch[1] || companyMatch[2] || '').replace(/\s/g, '');
-      if (name && name.length >= 2) {
-        result.applicantName = name + ' 주식회사';
-        console.log('[TM] 출원인:', result.applicantName);
+    // 출원인: 1순위 【명칭】필드 직접 파싱, 2순위 "주식회사" 전후 매칭
+    const nameFieldMatch = t.match(/명\s*칭[】\]\s]+([가-힣A-Za-z\s()（）]{2,30}?)(?=\s*【|\s*특허고객|\s*대리인|\s*$)/);
+    if (nameFieldMatch) {
+      result.applicantName = nameFieldMatch[1].replace(/\s+/g, ' ').trim();
+      console.log('[TM] 출원인(명칭필드):', result.applicantName);
+    } else {
+      const corpAfter = t.match(/주\s*식\s*회\s*사\s+([가-힣A-Za-z]{2,15})/);
+      if (corpAfter) {
+        result.applicantName = '주식회사 ' + corpAfter[1].replace(/\s/g, '');
+        console.log('[TM] 출원인(주식회사+):', result.applicantName);
+      } else {
+        const corpBefore = t.match(/([가-힣]{2,15})\s*주\s*식\s*회\s*사/);
+        if (corpBefore) {
+          const name = corpBefore[1].replace(/\s/g, '');
+          if (!['명칭', '출원인', '신청인', '권리자'].includes(name)) {
+            result.applicantName = name + ' 주식회사';
+            console.log('[TM] 출원인(+주식회사):', result.applicantName);
+          }
+        }
       }
     }
     
