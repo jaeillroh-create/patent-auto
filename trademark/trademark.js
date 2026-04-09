@@ -7649,8 +7649,8 @@ ${text.substring(0, 2000)}
       const file = files[i];
       
       // 파일 크기 체크 (10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        App.showToast(`${file.name}: 파일 크기 초과 (10MB 이하)`, 'warning');
+      if (file.size > 30 * 1024 * 1024) {
+        App.showToast(`${file.name}: 파일 크기 초과 (30MB 이하)`, 'warning');
         continue;
       }
       
