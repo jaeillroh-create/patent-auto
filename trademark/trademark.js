@@ -7386,87 +7386,80 @@ ${criticalResults.slice(0, 5).map(r =>
 
     console.log('[TM] 페이지 렌더링 완료:', vp.width, 'x', vp.height);
 
-    // 3단계: 렌더링된 캔버스에서 행(row)별 비백색 픽셀 밀도 분석
-    // 텍스트 행(얇은 줄)과 이미지 영역(두꺼운 블록)을 구분
+    // 3단계: 행별 비백색 픽셀 수 계산
     const imgData = ctx.getImageData(0, 0, vp.width, vp.height);
     const px = imgData.data;
     const W = vp.width, H = vp.height;
 
-    // 각 행의 비백색 픽셀 수 계산
     const rowDensity = new Uint32Array(H);
     for (let y = 0; y < H; y++) {
       let count = 0;
       for (let x = 0; x < W; x++) {
         const i = (y * W + x) * 4;
-        if (px[i] < 240 || px[i+1] < 240 || px[i+2] < 240) {
-          count++;
-        }
+        if (px[i] < 240 || px[i+1] < 240 || px[i+2] < 240) count++;
       }
       rowDensity[y] = count;
     }
 
-    // 4단계: 이미지 블록 찾기
-    // 이미지 영역 = 연속된 행들에서 비백색 픽셀이 넓게 분포하는 구간
-    // 텍스트 행은 보통 페이지 폭의 30% 미만, 이미지는 그 이상
-    const minImageWidth = Math.floor(W * 0.05); // 최소 5% 폭의 콘텐츠가 있어야 함
-    const minBlockHeight = 30; // 최소 30px 높이
+    // 4단계: 콘텐츠 블록을 gap(빈 행) 기준으로 분리
+    // 연속된 비백색 행들을 하나의 블록으로, 빈 행이 일정 이상 이어지면 블록 분리
+    const minPixels = 3;       // 행에 최소 3px 비백색이 있어야 콘텐츠 행
+    const gapThreshold = 15;   // 15행(=5px@scale3) 이상 빈 행이면 블록 분리
+    const blocks = [];
+    let bStart = -1;
+    let gapCount = 0;
 
-    // 콘텐츠가 있는 행 블록 찾기
-    let blocks = [];
-    let blockStart = -1;
     for (let y = 0; y < H; y++) {
-      if (rowDensity[y] >= minImageWidth) {
-        if (blockStart < 0) blockStart = y;
+      if (rowDensity[y] >= minPixels) {
+        if (bStart < 0) bStart = y;
+        gapCount = 0;
       } else {
-        if (blockStart >= 0 && y - blockStart >= minBlockHeight) {
-          blocks.push({ start: blockStart, end: y - 1, height: y - blockStart });
+        if (bStart >= 0) {
+          gapCount++;
+          if (gapCount >= gapThreshold) {
+            const bEnd = y - gapCount;
+            if (bEnd - bStart >= 5) {
+              // 블록의 총 픽셀 밀도 계산
+              let totalPx = 0;
+              for (let by = bStart; by <= bEnd; by++) totalPx += rowDensity[by];
+              blocks.push({ start: bStart, end: bEnd, height: bEnd - bStart + 1, totalPx });
+            }
+            bStart = -1;
+            gapCount = 0;
+          }
         }
-        blockStart = -1;
       }
     }
-    if (blockStart >= 0 && H - blockStart >= minBlockHeight) {
-      blocks.push({ start: blockStart, end: H - 1, height: H - blockStart });
+    // 마지막 블록
+    if (bStart >= 0) {
+      const bEnd = H - 1 - gapCount;
+      if (bEnd - bStart >= 5) {
+        let totalPx = 0;
+        for (let by = bStart; by <= bEnd; by++) totalPx += rowDensity[by];
+        blocks.push({ start: bStart, end: bEnd, height: bEnd - bStart + 1, totalPx });
+      }
     }
 
-    console.log('[TM] 콘텐츠 블록 수:', blocks.length, blocks.map(b => `[${b.start}-${b.end}, h=${b.height}]`).join(', '));
+    console.log('[TM] 분리된 블록 수:', blocks.length, blocks.map(b => `[y${b.start}-${b.end}, h=${b.height}, px=${b.totalPx}]`).join(', '));
 
-    // 가장 큰 블록이 이미지일 가능성이 높음
-    // 단, 텍스트 블록(높이가 작고 밀도가 낮은)은 제외
-    // 블록 중 가장 큰 것 선택
+    // 5단계: 가장 밀도가 높은 블록 = 상표 이미지
+    // (헤더 텍스트는 작고 가벼운 블록, 상표 이미지는 크고 밀도가 높은 블록)
     let bestBlock = null;
-    if (blocks.length > 0) {
-      // 높이가 가장 큰 블록 선택
-      blocks.sort((a, b) => b.height - a.height);
-
-      // 텍스트 전용 블록 필터: 블록 내 평균 밀도가 낮으면 텍스트
-      for (const block of blocks) {
-        let totalDensity = 0;
-        for (let y = block.start; y <= block.end; y++) {
-          totalDensity += rowDensity[y];
-        }
-        const avgDensity = totalDensity / block.height;
-        block.avgDensity = avgDensity;
-
-        // 이미지 블록: 평균 밀도가 페이지 폭의 5% 이상이고, 높이가 충분히 큼
-        if (avgDensity >= W * 0.05 && block.height >= minBlockHeight) {
-          bestBlock = block;
-          break;
-        }
-      }
-
-      // 필터링 후 없으면 가장 큰 블록 사용
-      if (!bestBlock) bestBlock = blocks[0];
+    if (blocks.length >= 2) {
+      // 여러 블록이면 totalPx가 가장 큰 블록 선택 (상표 이미지)
+      bestBlock = blocks.reduce((a, b) => a.totalPx > b.totalPx ? a : b);
+    } else if (blocks.length === 1) {
+      bestBlock = blocks[0];
     }
 
     if (!bestBlock) {
-      // 블록 분석 실패 시 전체 페이지를 autoCropCanvas로 처리
-      console.log('[TM] 블록 분석 실패, 전체 페이지 autoCrop 사용');
+      console.log('[TM] 블록 없음, 전체 페이지 autoCrop');
       return TM.autoCropCanvas(canvas);
     }
 
-    console.log('[TM] 선택된 블록: y=', bestBlock.start, '-', bestBlock.end, ', 높이=', bestBlock.height, ', 평균밀도=', Math.round(bestBlock.avgDensity));
+    console.log('[TM] 선택 블록: y=', bestBlock.start, '-', bestBlock.end, ', h=', bestBlock.height, ', totalPx=', bestBlock.totalPx);
 
-    // 5단계: 선택된 블록 영역에서 좌우 콘텐츠 바운딩 박스 계산
+    // 6단계: 선택된 블록 영역의 좌우 바운딩 박스 계산
     let minX = W, maxX = 0;
     for (let y = bestBlock.start; y <= bestBlock.end; y++) {
       for (let x = 0; x < W; x++) {
@@ -7478,46 +7471,24 @@ ${criticalResults.slice(0, 5).map(r =>
       }
     }
 
-    // 패딩 추가
-    const pad = 10;
+    const pad = 15;
     const cropX = Math.max(0, minX - pad);
     const cropY = Math.max(0, bestBlock.start - pad);
     const cropW = Math.min(W, maxX + pad + 1) - cropX;
     const cropH = Math.min(H, bestBlock.end + pad + 1) - cropY;
 
     if (cropW < 20 || cropH < 20) {
-      console.log('[TM] 크롭 영역 너무 작음, 전체 페이지 autoCrop 사용');
       return TM.autoCropCanvas(canvas);
     }
 
-    console.log('[TM] 최종 크롭 영역: (', cropX, ',', cropY, ') 크기:', cropW, 'x', cropH);
+    console.log('[TM] 최종 크롭: (', cropX, ',', cropY, ')', cropW, 'x', cropH);
 
     const cropCanvas = document.createElement('canvas');
     cropCanvas.width = cropW;
     cropCanvas.height = cropH;
     cropCanvas.getContext('2d').drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
-    // 6단계: 이중 크롭 — 테두리/프레임 제거 후 실제 콘텐츠만 추출
-    // 1차 autoCrop: 외부 여백 제거 (테두리 라인까지)
-    const firstCropUrl = TM.autoCropCanvas(cropCanvas);
-    const firstImg = await new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.src = firstCropUrl;
-    });
-
-    // 2차: 테두리(얇은 선)를 건너뛰기 위해 각 변에서 안쪽으로 인셋
-    const inset = Math.max(8, Math.floor(Math.min(firstImg.width, firstImg.height) * 0.03));
-    const innerW = Math.max(10, firstImg.width - inset * 2);
-    const innerH = Math.max(10, firstImg.height - inset * 2);
-
-    const innerCanvas = document.createElement('canvas');
-    innerCanvas.width = innerW;
-    innerCanvas.height = innerH;
-    innerCanvas.getContext('2d').drawImage(firstImg, inset, inset, innerW, innerH, 0, 0, innerW, innerH);
-
-    // 3차 autoCrop: 내부 여백 제거 → 실제 콘텐츠만 타이트하게 추출
-    return TM.autoCropCanvas(innerCanvas);
+    return cropCanvas.toDataURL('image/png');
   };
 
   // 캔버스 자동 크롭 — 흰색 여백 제거
