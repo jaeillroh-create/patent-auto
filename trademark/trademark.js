@@ -7357,69 +7357,124 @@ ${criticalResults.slice(0, 5).map(r =>
       const viewport = page.getViewport({ scale: 1.0 });
 
       // 【상표견본】 텍스트 위치 찾기
-      let specimenY = -1;
+      let specimenPdfY = -1;
+      let specimenFontHeight = 12;
       for (const item of textContent.items) {
         const text = item.str.replace(/\s/g, '');
         if (text.includes('상표견본')) {
-          // PDF 좌표계는 좌하단 원점 — transform[5]가 y 위치
-          specimenY = item.transform[5];
-          console.log('[TM] 【상표견본】 텍스트 발견: 페이지', pageNum, ', PDF y좌표:', specimenY);
+          specimenPdfY = item.transform[5]; // PDF y좌표 (좌하단 원점)
+          specimenFontHeight = item.height || 12;
+          console.log('[TM] 【상표견본】 텍스트 발견: 페이지', pageNum, ', PDF y좌표:', specimenPdfY, ', 높이:', specimenFontHeight);
           break;
         }
       }
 
-      if (specimenY < 0) continue; // 이 페이지에 없으면 이전 페이지 탐색
+      if (specimenPdfY < 0) continue; // 이 페이지에 없으면 이전 페이지 탐색
 
       // 페이지를 고해상도로 렌더링
-      const scale = 2.5;
+      const scale = 3.0;
       const sv = page.getViewport({ scale });
       const canvas = document.createElement('canvas');
       canvas.width = sv.width;
       canvas.height = sv.height;
       const ctx = canvas.getContext('2d');
+
+      // 흰색 배경 먼저 채우기 (투명 배경 방지)
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, sv.width, sv.height);
       await page.render({ canvasContext: ctx, viewport: sv }).promise;
 
-      // PDF y좌표(좌하단 원점) → canvas y좌표(좌상단 원점) 변환
+      // === 순수 픽셀 기반 접근: 전체 페이지에서 비백색 콘텐츠 영역 탐색 ===
+      // 【상표견본】 텍스트 위치를 canvas 좌표로 변환
+      // PDF 좌표계: 좌하단 원점, canvas 좌표계: 좌상단 원점
       // canvas_y = (viewport.height - pdf_y) * scale
-      // 【상표견본】 텍스트 바로 아래부터 캡처 (텍스트 높이 약 15pt 고려)
-      const textBottomPdfY = specimenY - 20; // 텍스트 아래쪽
-      const cropTopCanvas = Math.max(0, Math.floor((viewport.height - textBottomPdfY) * scale));
+      const textTopCanvasY = Math.floor((viewport.height - specimenPdfY) * scale);
+      // 텍스트 라인 아래부터 탐색 시작 (텍스트 높이 + 여유)
+      const searchStartY = Math.min(sv.height, textTopCanvasY + Math.floor(specimenFontHeight * scale) + 10);
 
-      // 그 아래의 다음 섹션 텍스트(【, 끝) 찾기 — 상표견본 영역 하한
-      let nextSectionY = 0; // PDF 좌표 (0 = 페이지 최하단)
-      let foundNext = false;
-      for (const item of textContent.items) {
-        const text = item.str.replace(/\s/g, '');
-        const itemY = item.transform[5];
-        // 상표견본보다 아래에 있는 【로 시작하는 다음 섹션
-        if (itemY < specimenY - 30 && text.startsWith('【') && !text.includes('상표견본')) {
-          nextSectionY = itemY + 10; // 약간 위 여유
-          foundNext = true;
-          break;
+      console.log('[TM] 캔버스 크기:', sv.width, 'x', sv.height, ', 텍스트 canvas Y:', textTopCanvasY, ', 탐색 시작 Y:', searchStartY);
+
+      // 전체 캔버스 픽셀 데이터 가져오기
+      const imageData = ctx.getImageData(0, 0, sv.width, sv.height);
+      const pixels = imageData.data;
+      const cw = sv.width;
+      const ch = sv.height;
+
+      // 비백색 판정 (밝은 회색 테두리, 연한 배경색도 허용하기 위해 약간 여유)
+      const isContent = (r, g, b, a) => {
+        if (a < 128) return false; // 투명
+        return (r < 230 || g < 230 || b < 230); // 밝은 회색보다 어두운 것
+      };
+
+      // searchStartY 아래 영역에서 비백색 픽셀의 바운딩 박스 찾기
+      let minX = cw, maxX = 0, minY = ch, maxY = 0;
+      let pixelCount = 0;
+
+      // 좌우 페이지 여백 무시 (양쪽 5%)
+      const pageMarginX = Math.floor(cw * 0.05);
+
+      for (let y = searchStartY; y < ch; y++) {
+        for (let x = pageMarginX; x < cw - pageMarginX; x++) {
+          const i = (y * cw + x) * 4;
+          if (isContent(pixels[i], pixels[i+1], pixels[i+2], pixels[i+3])) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+            pixelCount++;
+          }
         }
       }
 
-      const cropBottomCanvas = foundNext
-        ? Math.min(sv.height, Math.floor((viewport.height - nextSectionY) * scale))
-        : Math.min(sv.height, cropTopCanvas + Math.floor(sv.height * 0.5)); // 폴백: 하단 50%
+      console.log('[TM] 상표견본 픽셀 탐색 결과: 콘텐츠 픽셀 수=', pixelCount, ', 영역: (', minX, ',', minY, ')-(', maxX, ',', maxY, ')');
 
-      // 좌우 여백 제거 (페이지 양쪽 10% 잘라냄)
-      const marginX = Math.floor(sv.width * 0.08);
-      const cropLeft = marginX;
-      const cropRight = sv.width - marginX;
-      const cw = cropRight - cropLeft;
-      const ch = Math.max(50, cropBottomCanvas - cropTopCanvas);
+      // 콘텐츠가 너무 적으면 (텍스트만 있는 경우 등) 다른 접근 시도
+      if (pixelCount < 100 || maxX - minX < 20 || maxY - minY < 20) {
+        console.log('[TM] 텍스트 아래 콘텐츠 부족, 페이지 전체에서 가장 큰 이미지 영역 탐색...');
+        // 폴백: 페이지 전체에서 탐색 (텍스트 영역 제외하고 이미지 블록 찾기)
+        minX = cw; maxX = 0; minY = ch; maxY = 0;
+        pixelCount = 0;
+        // 페이지 상단 10%와 하단 5%를 제외하고 탐색
+        const topSkip = Math.floor(ch * 0.1);
+        const botSkip = Math.floor(ch * 0.95);
+        for (let y = topSkip; y < botSkip; y++) {
+          for (let x = pageMarginX; x < cw - pageMarginX; x++) {
+            const i = (y * cw + x) * 4;
+            if (isContent(pixels[i], pixels[i+1], pixels[i+2], pixels[i+3])) {
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+              pixelCount++;
+            }
+          }
+        }
+        console.log('[TM] 전체 페이지 탐색 결과: 콘텐츠 픽셀 수=', pixelCount, ', 영역: (', minX, ',', minY, ')-(', maxX, ',', maxY, ')');
+      }
 
-      console.log('[TM] 상표견본 크롭 영역: top=', cropTopCanvas, 'bottom=', cropBottomCanvas, 'w=', cw, 'h=', ch);
+      if (pixelCount < 50 || maxX - minX < 10 || maxY - minY < 10) {
+        console.warn('[TM] 페이지', pageNum, '에서 이미지 콘텐츠를 찾지 못함');
+        continue;
+      }
 
-      if (cw < 30 || ch < 30) continue;
+      // 패딩 추가
+      const pad = 10;
+      minX = Math.max(0, minX - pad);
+      minY = Math.max(0, minY - pad);
+      maxX = Math.min(cw - 1, maxX + pad);
+      maxY = Math.min(ch - 1, maxY + pad);
+
+      const cropW = maxX - minX + 1;
+      const cropH = maxY - minY + 1;
+
+      console.log('[TM] 최종 크롭 영역: (', minX, ',', minY, ') 크기:', cropW, 'x', cropH);
 
       const cropCanvas = document.createElement('canvas');
-      cropCanvas.width = cw;
-      cropCanvas.height = ch;
-      cropCanvas.getContext('2d').drawImage(canvas, cropLeft, cropTopCanvas, cw, ch, 0, 0, cw, ch);
+      cropCanvas.width = cropW;
+      cropCanvas.height = cropH;
+      cropCanvas.getContext('2d').drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
 
-      return TM.autoCropCanvas(cropCanvas);
+      return cropCanvas.toDataURL('image/png');
     }
 
     console.warn('[TM] 모든 페이지에서 【상표견본】을 찾지 못함');
