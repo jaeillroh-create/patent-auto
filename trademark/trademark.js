@@ -7497,7 +7497,27 @@ ${criticalResults.slice(0, 5).map(r =>
     cropCanvas.height = cropH;
     cropCanvas.getContext('2d').drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
-    return cropCanvas.toDataURL('image/png');
+    // 6단계: 이중 크롭 — 테두리/프레임 제거 후 실제 콘텐츠만 추출
+    // 1차 autoCrop: 외부 여백 제거 (테두리 라인까지)
+    const firstCropUrl = TM.autoCropCanvas(cropCanvas);
+    const firstImg = await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.src = firstCropUrl;
+    });
+
+    // 2차: 테두리(얇은 선)를 건너뛰기 위해 각 변에서 안쪽으로 인셋
+    const inset = Math.max(8, Math.floor(Math.min(firstImg.width, firstImg.height) * 0.03));
+    const innerW = Math.max(10, firstImg.width - inset * 2);
+    const innerH = Math.max(10, firstImg.height - inset * 2);
+
+    const innerCanvas = document.createElement('canvas');
+    innerCanvas.width = innerW;
+    innerCanvas.height = innerH;
+    innerCanvas.getContext('2d').drawImage(firstImg, inset, inset, innerW, innerH, 0, 0, innerW, innerH);
+
+    // 3차 autoCrop: 내부 여백 제거 → 실제 콘텐츠만 타이트하게 추출
+    return TM.autoCropCanvas(innerCanvas);
   };
 
   // 캔버스 자동 크롭 — 흰색 여백 제거
