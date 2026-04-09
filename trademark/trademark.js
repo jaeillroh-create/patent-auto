@@ -7318,7 +7318,14 @@ ${criticalResults.slice(0, 5).map(r =>
       console.log('[TM] 페이지', i, '텍스트 아이템 수:', textContent.items.length);
       
       const pageText = textContent.items.map(item => item.str).join(' ');
-      fullText += pageText + '\n';
+      // KIPO 출원서 꼬리말 제거: 쪽번호(3-1), 날짜(2026-03-24) 등
+      const cleanedPageText = pageText
+        .replace(/\s+\d{1,2}-\d{1,2}\s+/g, ' ')           // 쪽번호 (3-1, 3-2 등)
+        .replace(/\s+\d{4}-\d{2}-\d{2}\s*/g, ' ')          // 날짜 (2026-03-24 등)
+        .replace(/\s+\d{4}\.\d{2}\.\d{2}\s*/g, ' ')        // 날짜 (2026.03.24 등)
+        .replace(/\s{2,}/g, ' ')                            // 연속 공백 정리
+        .trim();
+      fullText += cleanedPageText + '\n';
     }
     
     // 텍스트가 거의 없으면 이미지 기반 PDF -> OCR 시도
@@ -7582,8 +7589,9 @@ ${criticalResults.slice(0, 5).map(r =>
         if (!isWhite(data[i], data[i+1], data[i+2])) { top = y; break outer1; }
       }
     }
-    // 하단
-    outer2: for (let y = h - 1; y >= top; y--) {
+    // 하단 (하위 5%는 꼬리말 영역으로 제외)
+    const bottomLimit = Math.floor(h * 0.95);
+    outer2: for (let y = bottomLimit; y >= top; y--) {
       for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4;
         if (!isWhite(data[i], data[i+1], data[i+2])) { bottom = y; break outer2; }
@@ -7740,7 +7748,9 @@ ${text.substring(0, 2000)}
       designatedGoods: ''
     };
     
-    let t = text.replace(/\s+/g, ' ');
+    let t = text
+      .replace(/\d{1,2}-\d{1,2}\s+\d{4}[-./]\d{2}[-./]\d{2}/g, ' ')  // 쪽번호+날짜 연속 패턴
+      .replace(/\s+/g, ' ');
     
     console.log('[TM] 정규식 폴백 파싱 시작');
     
