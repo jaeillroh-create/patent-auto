@@ -10723,36 +10723,110 @@ ${groupList}
     return selectedCodes;
   };
 
-  // 선택된 유사군의 상품 조회
-  TM.fetchGoodsInGroups = async function(classCode, groupCodes) {
+  // 선택된 유사군의 상품 조회 — 500건 이하 전체 포함, 초과 시 LLM 페이지 스캔
+  TM.fetchGoodsInGroups = async function(classCode, groupCodes, businessContext) {
     const paddedCode = String(classCode).padStart(2, '0');
+    const PAGE_LIMIT = 500;
     let allGoods = [];
-    const CHUNK_SIZE = 20;
-    const PAGE_SIZE = 1000;
 
-    for (let i = 0; i < groupCodes.length; i += CHUNK_SIZE) {
-      const chunk = groupCodes.slice(i, i + CHUNK_SIZE);
-      let offset = 0;
-      let hasMore = true;
+    for (const groupCode of groupCodes) {
+      const { count } = await App.sb
+        .from('gazetted_goods_cache')
+        .select('*', { count: 'exact', head: true })
+        .eq('class_code', paddedCode)
+        .eq('similar_group_code', groupCode);
 
-      while (hasMore) {
-        const { data, error } = await App.sb
-          .from('gazetted_goods_cache')
-          .select('goods_name, similar_group_code, similar_group_name')
-          .eq('class_code', paddedCode)
-          .in('similar_group_code', chunk)
-          .order('similar_group_code')
-          .range(offset, offset + PAGE_SIZE - 1);
-
-        if (error) throw error;
-        if (data) allGoods.push(...data);
-        hasMore = data && data.length === PAGE_SIZE;
-        offset += PAGE_SIZE;
+      if (count <= PAGE_LIMIT) {
+        let groupGoods = [];
+        const PAGE_SIZE = 1000;
+        for (let offset = 0; offset < count; offset += PAGE_SIZE) {
+          const { data } = await App.sb
+            .from('gazetted_goods_cache')
+            .select('goods_name, similar_group_code, similar_group_name')
+            .eq('class_code', paddedCode)
+            .eq('similar_group_code', groupCode)
+            .order('goods_name')
+            .range(offset, Math.min(offset + PAGE_SIZE - 1, count - 1));
+          if (data) groupGoods.push(...data);
+        }
+        allGoods.push(...groupGoods);
+        console.log(`[TM] ${groupCode}: ${count}건 전체 포함`);
+      } else {
+        console.log(`[TM] ${groupCode}: ${count}건 → 페이지별 LLM 스캔`);
+        const pickedGoods = await TM.scanLargeGroup(classCode, paddedCode, groupCode, count, businessContext);
+        allGoods.push(...pickedGoods);
+        console.log(`[TM] ${groupCode}: ${count}건 중 ${pickedGoods.length}건 LLM 선택`);
       }
     }
 
-    console.log(`[TM] 제${classCode}류 유사군 ${groupCodes.length}개 → 상품 ${allGoods.length}건`);
+    console.log(`[TM] 제${classCode}류 총 후보: ${allGoods.length}건 (유사군 ${groupCodes.length}개)`);
     return allGoods;
+  };
+
+  // 대형 유사군(500건 초과) 페이지별 LLM 전수 스캔
+  TM.scanLargeGroup = async function(classCode, paddedCode, groupCode, totalCount, businessContext) {
+    const PAGE_SIZE = 500;
+    const allPicked = [];
+    const seen = new Set();
+
+    const coreProducts = (businessContext.coreProducts || []).join(', ');
+    const coreServices = (businessContext.coreServices || []).join(', ');
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+    for (let page = 0; page < totalPages; page++) {
+      const offset = page * PAGE_SIZE;
+
+      const { data, error } = await App.sb
+        .from('gazetted_goods_cache')
+        .select('goods_name, similar_group_code, similar_group_name')
+        .eq('class_code', paddedCode)
+        .eq('similar_group_code', groupCode)
+        .order('goods_name')
+        .range(offset, Math.min(offset + PAGE_SIZE - 1, totalCount - 1));
+
+      if (error || !data || data.length === 0) continue;
+
+      const numberedList = data.map((item, i) => `[${i+1}] ${item.goods_name}`).join('\n');
+
+      const prompt = `아래 상품 목록에서 이 사업과 관련 있는 상품의 번호만 선택하세요.
+관련 없는 상품은 무시. 관련 있는 상품이 없으면 빈 배열.
+
+【사업 내용】${businessContext.summary}
+【핵심 상품】${coreProducts || '없음'}
+【핵심 서비스】${coreServices || '없음'}
+
+【상품 목록 (${data.length}건, 페이지 ${page+1}/${totalPages})】
+${numberedList}
+
+【JSON으로만 응답】
+{"picks":[1,5,12,23]}`;
+
+      try {
+        const response = await App.callClaudeSonnet(prompt, 500);
+        const jsonMatch = (response.text || '').match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const result = JSON.parse(jsonMatch[0]);
+          const picks = result.picks || [];
+          for (const no of picks) {
+            if (no >= 1 && no <= data.length) {
+              const item = data[no - 1];
+              if (!seen.has(item.goods_name)) {
+                seen.add(item.goods_name);
+                allPicked.push(item);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[TM] ${groupCode} 페이지 ${page+1} 스캔 실패:`, e.message);
+      }
+
+      if (page < totalPages - 1) {
+        await new Promise(r => setTimeout(r, 800));
+      }
+    }
+
+    return allPicked;
   };
 
   // LLM이 10개 선택
@@ -11052,7 +11126,7 @@ ${need}개를 추가 선택하세요.
       if (!selectedGroupCodes || selectedGroupCodes.length === 0) return [];
 
       // Step 3: 해당 유사군 상품 조회 (DB)
-      const allCandidates = await TM.fetchGoodsInGroups(classCode, selectedGroupCodes);
+      const allCandidates = await TM.fetchGoodsInGroups(classCode, selectedGroupCodes, businessContext);
       if (!allCandidates || allCandidates.length === 0) return [];
 
       // Step 4: 초기 10개 선택 (API 1회)
