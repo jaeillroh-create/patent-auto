@@ -7669,23 +7669,23 @@ ${criticalResults.slice(0, 5).map(r =>
   
   // 텍스트에서 출원 정보 파싱 (Claude API 사용)
   TM.parseApplicationText = async function(text) {
-    const result = {
-      applicationNumber: '',
-      applicationDate: '',
-      applicantName: '',
-      trademarkName: '',
-      classCode: '',
-      designatedGoods: ''
-    };
-    
     if (!text || text.trim().length < 10) {
       console.log('[TM] 텍스트가 너무 짧음');
-      return result;
+      return { applicationNumber: '', applicationDate: '', applicantName: '', trademarkName: '', classCode: '', designatedGoods: '' };
     }
-    
-    console.log('[TM] Claude API로 텍스트 분석 시작');
+
     console.log('[TM] 원본 텍스트:', text.substring(0, 800));
-    
+
+    // 정규식 우선 실행 — 출원서는 형식이 정해져 있으므로 대부분 충분
+    const regexResult = TM.parseApplicationTextRegex(text);
+    const hasEssentials = regexResult.applicationNumber && regexResult.classCode;
+    if (hasEssentials) {
+      console.log('[TM] 정규식만으로 핵심 필드 추출 완료:', regexResult);
+      return regexResult;
+    }
+
+    // 핵심 필드 부족 시에만 Claude API 호출
+    console.log('[TM] 정규식 부족 (applicationNumber:', regexResult.applicationNumber, ', classCode:', regexResult.classCode, ') → Claude API 보완');
     try {
       const prompt = `다음은 상표 출원번호통지서 또는 출원서를 OCR한 텍스트입니다. 띄어쓰기가 잘못되어 있거나 글자가 누락되었을 수 있습니다.
 
@@ -7706,33 +7706,27 @@ ${text.substring(0, 2000)}
 
       const response = await App.callClaudeSonnet(prompt, 800);
       const responseText = response.text || '';
-      
       console.log('[TM] Claude 응답:', responseText);
-      
-      // JSON 추출
+
       const startIdx = responseText.indexOf('{');
       const endIdx = responseText.lastIndexOf('}');
-      
+
       if (startIdx !== -1 && endIdx > startIdx) {
-        const jsonStr = responseText.substring(startIdx, endIdx + 1);
-        const parsed = JSON.parse(jsonStr);
-        
-        if (parsed.applicationNumber) result.applicationNumber = parsed.applicationNumber;
-        if (parsed.applicationDate) result.applicationDate = parsed.applicationDate;
-        if (parsed.applicantName) result.applicantName = parsed.applicantName;
-        if (parsed.trademarkName) result.trademarkName = parsed.trademarkName;
-        if (parsed.classCode) result.classCode = parsed.classCode;
-        if (parsed.designatedGoods) result.designatedGoods = parsed.designatedGoods;
-        
-        console.log('[TM] Claude 파싱 결과:', result);
-        return result;
+        const parsed = JSON.parse(responseText.substring(startIdx, endIdx + 1));
+        // 정규식 결과에 Claude 결과를 병합 (정규식 값 우선, 빈 값만 Claude로 보완)
+        const merged = { ...regexResult };
+        for (const key of ['applicationNumber', 'applicationDate', 'applicantName', 'trademarkName', 'classCode', 'designatedGoods']) {
+          if (!merged[key] && parsed[key]) merged[key] = parsed[key];
+        }
+        console.log('[TM] 병합 결과:', merged);
+        return merged;
       }
     } catch (error) {
-      console.error('[TM] Claude 분석 실패, 정규식 폴백:', error);
+      console.error('[TM] Claude 분석 실패:', error);
     }
-    
-    // 정규식 폴백
-    return TM.parseApplicationTextRegex(text);
+
+    // Claude도 실패 시 정규식 결과 반환
+    return regexResult;
   };
   
   // 정규식 기반 파싱 (폴백용)
@@ -8248,6 +8242,78 @@ ${content.substring(0, 1200)}
     previewEl.style.display = 'block';
   };
   
+  // 증거자료 제목에 따른 도입 표현 차별화
+  TM.getEvidenceIntroPhrase = function(title) {
+    const t = (title || '').toLowerCase();
+    const mappings = [
+      [['사업자등록', '사업자'], '사업자등록 정보에서 확인되는 바와 같이,'],
+      [['계약서', '계약', '협약', 'mou', '양해각서'], '계약 내용에서 확인되는 바와 같이,'],
+      [['홈페이지', '웹사이트', 'url', '도메인', '블로그', 'sns', '인스타', '유튜브', '네이버'], '온라인 사용 현황에서 확인되는 바와 같이,'],
+      [['광고', '마케팅', '홍보', '프로모션', '캠페인', '전단', '배너', '리플렛'], '광고·홍보 자료에서 확인되는 바와 같이,'],
+      [['매출', '거래', '세금계산서', '영수증', '인보이스', '매입', '결제', '정산'], '거래 실적에서 확인되는 바와 같이,'],
+      [['사진', '간판', '포장', '패키지', '제품', '라벨', '스티커', '명함'], '실제 사용 모습에서 확인되는 바와 같이,'],
+      [['검색', '검색결과', '포털', '구글', '키워드'], '검색 결과에서 확인되는 바와 같이,'],
+      [['사업계획', '사업계획서', 'ir', '투자', '제안서', '기획서'], '사업 계획 내용에서 확인되는 바와 같이,'],
+      [['사업수행', '수행계획', '과제', '연구', 'r&d', '개발'], '사업 수행 내용에서 확인되는 바와 같이,'],
+      [['발표', '프레젠테이션', 'pt', '슬라이드', 'ppt'], '발표 자료에서 확인되는 바와 같이,'],
+      [['카탈로그', '브로슈어', '소개서', '회사소개'], '소개 자료에서 확인되는 바와 같이,'],
+      [['특허', '출원', '등록', '인증', '허가', '신고'], '관련 등록·인증 내용에서 확인되는 바와 같이,'],
+      [['기사', '보도', '뉴스', '언론', '미디어'], '보도 내용에서 확인되는 바와 같이,'],
+      [['앱', '어플', '애플리케이션', '스토어', '플레이스토어', '앱스토어'], '앱 서비스 현황에서 확인되는 바와 같이,'],
+    ];
+    for (const [keywords, phrase] of mappings) {
+      if (keywords.some(kw => t.includes(kw))) return phrase;
+    }
+    return '에서 직접 확인할 수 있는 바와 같이,';
+  };
+
+  // 신청이유에 따른 법조문 텍스트 반환
+  TM.buildReasonClause = function(reason) {
+    if (reason === 'using') {
+      return '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용하고 있는 것이 명백하므로';
+    } else if (reason === 'preparing') {
+      return '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로';
+    } else if (reason === 'infringement') {
+      return '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 제3자의 무단사용을 저지하기 위해';
+    } else if (reason === 'export') {
+      return '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제3호의 "조약에 따른 우선권주장의 기초가 되는 출원에 관한 경우"에 해당하는 상표등록출원으로서, 수출을 위해 긴급하게 상표등록이 필요하므로';
+    }
+    return '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라';
+  };
+
+  // 사용/사용준비 표현 반환
+  TM.buildUsageText = function(reason) {
+    return reason === 'using' ? '사용 중' : '사용 및 사용 준비 중';
+  };
+
+  // 증거자료 문단 배열 생성 (미리보기/Word 공용)
+  TM.buildEvidenceParagraphs = function({ applicantName, goodsListStr, usageText, usageStatus, evidences }) {
+    const paragraphs = [];
+
+    if (evidences.length === 0) {
+      paragraphs.push(`본 출원인 "${applicantName}"는 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
+      paragraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
+      paragraphs.push(`이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
+    } else if (evidences.length === 1) {
+      const evRef = `첨부자료 1(${evidences[0].title})`;
+      paragraphs.push(`본 출원인 "${applicantName}"는 본 신청서의 ${evRef}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
+      paragraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
+      paragraphs.push(`부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
+    } else {
+      const firstRef = `첨부자료 1(${evidences[0].title})`;
+      paragraphs.push(`본 출원인 "${applicantName}"는 본 신청서의 ${firstRef}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
+      paragraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
+      for (let i = 1; i < evidences.length; i++) {
+        const evRef = `첨부자료 ${i + 1}(${evidences[i].title})`;
+        const introPhrase = TM.getEvidenceIntroPhrase(evidences[i].title);
+        paragraphs.push(`또한, ${evRef}의 ${introPhrase} 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 실제 사용하고 있습니다.`);
+      }
+      paragraphs.push(`이상과 같이, 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
+    }
+
+    return paragraphs;
+  };
+
   // 우선심사 설명서 내용 생성
   TM.generatePriorityDocContent = function(useExtracted = false) {
     const p = TM.currentProject;
@@ -8313,90 +8379,15 @@ ${content.substring(0, 1200)}
       goodsWithGroups = [];
     }
     
-    // 신청이유 선택에 따른 법조문 (1문단: 법조문 + 우선심사 신청)
-    let reasonClause = '';
-    if (pe.reason === 'using') {
-      reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용하고 있는 것이 명백하므로';
-    } else if (pe.reason === 'preparing') {
-      reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로';
-    } else if (pe.reason === 'infringement') {
-      reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 제3자의 무단사용을 저지하기 위해';
-    } else if (pe.reason === 'export') {
-      reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제3호의 "조약에 따른 우선권주장의 기초가 되는 출원에 관한 경우"에 해당하는 상표등록출원으로서, 수출을 위해 긴급하게 상표등록이 필요하므로';
-    } else {
-      reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라';
-    }
-
-    // 증거자료 목록
+    const reasonClause = TM.buildReasonClause(pe.reason);
     const evidences = pe.evidences || [];
-
-    // 사용/사용준비 표현
-    const usageText = pe.reason === 'using' ? '사용 중' : (pe.reason === 'preparing' ? '사용 및 사용 준비 중' : '사용 및 사용 준비 중');
+    const usageText = TM.buildUsageText(pe.reason);
     const goodsListStr = goodsWithGroups.length > 0 ? goodsWithGroups.join(', ') : '[지정상품]';
+    const usageStatus = pe.reason === 'using' ? '사용' : '사용예정';
 
-    // 첨부자료별 맥락 문장 생성
-    const buildEvidenceParagraphs = () => {
-      if (evidences.length === 0) {
-        // 첨부자료 없을 때 기본 문장
-        return `
-          <p style="margin-top: 12px;">
-            본 출원인 "${applicantName}"는 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.
-          </p>
-          <p style="margin-top: 12px;">
-            따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${pe.reason === 'using' ? '사용' : '사용예정'} 중에 있습니다.
-          </p>
-          <p style="margin-top: 12px;">
-            이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다.
-            부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
-          </p>`;
-      }
-
-      if (evidences.length === 1) {
-        // 첨부자료 1개
-        const ev = evidences[0];
-        const evRef = `첨부자료 1(${ev.title})`;
-        return `
-          <p style="margin-top: 12px;">
-            본 출원인 "${applicantName}"는 본 신청서의 ${evRef}에 기재된 바와 같이,
-            이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.
-          </p>
-          <p style="margin-top: 12px;">
-            따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${pe.reason === 'using' ? '사용' : '사용예정'} 중에 있습니다.
-          </p>
-          <p style="margin-top: 12px;">
-            부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
-          </p>`;
-      }
-
-      // 첨부자료 다수개: 첫 번째 자료로 도입 + 나머지 자료별 맥락 문장
-      const firstEv = evidences[0];
-      const firstRef = `첨부자료 1(${firstEv.title})`;
-      let html = `
-        <p style="margin-top: 12px;">
-          본 출원인 "${applicantName}"는 본 신청서의 ${firstRef}에 기재된 바와 같이,
-          이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.
-        </p>
-        <p style="margin-top: 12px;">
-          따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${pe.reason === 'using' ? '사용' : '사용예정'} 중에 있습니다.
-        </p>`;
-
-      // 2번째 이후 자료별 맥락 문장
-      for (let i = 1; i < evidences.length; i++) {
-        const ev = evidences[i];
-        const evRef = `첨부자료 ${i + 1}(${ev.title})`;
-        html += `
-        <p style="margin-top: 12px;">
-          또한, ${evRef}에서 직접 확인할 수 있는 바와 같이, 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 실제 사용하고 있습니다.
-        </p>`;
-      }
-
-      html += `
-        <p style="margin-top: 12px;">
-          이상과 같이, 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다.
-          부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
-        </p>`;
-      return html;
-    };
+    const evidenceParagraphs = TM.buildEvidenceParagraphs({ applicantName, goodsListStr, usageText, usageStatus, evidences });
+    const buildEvidenceParagraphsHtml = () => evidenceParagraphs.map(p => `
+          <p style="margin-top: 12px;">${p}</p>`).join('');
 
     // HTML 형식의 미리보기
     return `
@@ -8433,7 +8424,7 @@ ${content.substring(0, 1200)}
         <div class="tm-doc-section">
           <h3>【우선심사 신청이유】</h3>
           <p>본 상표는 ${reasonClause} 우선심사를 신청합니다.</p>
-          ${buildEvidenceParagraphs()}
+          ${buildEvidenceParagraphsHtml()}
         </div>
 
         ${evidences.length > 0 ? `
@@ -8531,50 +8522,14 @@ ${content.substring(0, 1200)}
         goodsWithGroups = [];
       }
 
-      // 증거자료 목록
       const evidences = pe.evidences || [];
-
-      // 신청이유 선택에 따른 법조문
-      let reasonClause = '';
-      if (pe.reason === 'using') {
-        reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용하고 있는 것이 명백하므로';
-      } else if (pe.reason === 'preparing') {
-        reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로';
-      } else if (pe.reason === 'infringement') {
-        reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 제3자의 무단사용을 저지하기 위해';
-      } else if (pe.reason === 'export') {
-        reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제3호의 "조약에 따른 우선권주장의 기초가 되는 출원에 관한 경우"에 해당하는 상표등록출원으로서, 수출을 위해 긴급하게 상표등록이 필요하므로';
-      } else {
-        reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라';
-      }
-
-      const usageText = pe.reason === 'using' ? '사용 중' : (pe.reason === 'preparing' ? '사용 및 사용 준비 중' : '사용 및 사용 준비 중');
+      const reasonClause = TM.buildReasonClause(pe.reason);
+      const usageText = TM.buildUsageText(pe.reason);
       const goodsListStr = goodsWithGroups.length > 0 ? goodsWithGroups.join(', ') : '[지정상품]';
       const usageStatus = pe.reason === 'using' ? '사용' : '사용예정';
 
-      // 첨부자료별 맥락 문장 배열 생성 (Word용)
       const reasonText1 = `본 상표는 ${reasonClause} 우선심사를 신청합니다.`;
-      const reasonParagraphs = [];
-
-      if (evidences.length === 0) {
-        reasonParagraphs.push(`본 출원인 "${applicantName}"는 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
-        reasonParagraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
-        reasonParagraphs.push(`이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
-      } else if (evidences.length === 1) {
-        const evRef = `첨부자료 1(${evidences[0].title})`;
-        reasonParagraphs.push(`본 출원인 "${applicantName}"는 본 신청서의 ${evRef}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
-        reasonParagraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
-        reasonParagraphs.push(`부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
-      } else {
-        const firstRef = `첨부자료 1(${evidences[0].title})`;
-        reasonParagraphs.push(`본 출원인 "${applicantName}"는 본 신청서의 ${firstRef}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
-        reasonParagraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
-        for (let i = 1; i < evidences.length; i++) {
-          const evRef = `첨부자료 ${i + 1}(${evidences[i].title})`;
-          reasonParagraphs.push(`또한, ${evRef}에서 직접 확인할 수 있는 바와 같이, 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 실제 사용하고 있습니다.`);
-        }
-        reasonParagraphs.push(`이상과 같이, 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
-      }
+      const reasonParagraphs = TM.buildEvidenceParagraphs({ applicantName, goodsListStr, usageText, usageStatus, evidences });
       
       // Edge Function으로 Word 생성 요청
       const docData = {
