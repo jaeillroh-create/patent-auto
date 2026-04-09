@@ -7255,8 +7255,8 @@ ${criticalResults.slice(0, 5).map(r =>
               p.priorityExam.designatedGoodsFromApp = extracted.designatedGoods;
               totalExtracted++;
             }
-            // 상표견본 이미지 (기존에 추출된 것이 없을 때만 적용)
-            if (extracted.specimenImage && !p.priorityExam.specimenImageDataUrl) {
+            // 상표견본 이미지 (출원서에서 추출된 경우 항상 갱신)
+            if (extracted.specimenImage) {
               p.priorityExam.specimenImageDataUrl = extracted.specimenImage;
               totalExtracted++;
               console.log('[TM] 상표견본 이미지 추출 완료');
@@ -7549,7 +7549,7 @@ ${criticalResults.slice(0, 5).map(r =>
       for (let y = 0; y < th; y++) {
         for (let x = 0; x < tw; x++) {
           const i = (y * tw + x) * 4;
-          if (thumbData[i] < 200 && thumbData[i+1] < 200 && thumbData[i+2] < 200) {
+          if (thumbData[i] < 215 && thumbData[i+1] < 215 && thumbData[i+2] < 215) {
             if (x < minX) minX = x;
             if (x > maxX) maxX = x;
             if (y < minY) minY = y;
