@@ -3489,25 +3489,7 @@
         searchKeywords: allKeywords
       };
       
-      let selectedGoods = [];
-      const fetchResult = await TM.fetchAllCandidates(classCode, businessCtx);
-      if (fetchResult && fetchResult.candidates.length > 0) {
-        try {
-          const oneshotResult = await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessCtx);
-          if (oneshotResult && oneshotResult.length > 0) selectedGoods = oneshotResult;
-        } catch (e) { console.warn(`[TM] addClass oneshot 실패:`, e.message); }
-        
-        // 부족분 DB 패딩 (API 호출 X)
-        if (selectedGoods.length < 10) {
-          const usedNames = new Set(selectedGoods.map(g => g.name));
-          for (const c of fetchResult.candidates) {
-            if (selectedGoods.length >= 10) break;
-            if (usedNames.has(c.goods_name)) continue;
-            usedNames.add(c.goods_name);
-            selectedGoods.push({ name: c.goods_name, similarGroup: c.similar_group_code || '', isCore: false });
-          }
-        }
-      }
+      const selectedGoods = await TM.selectGoodsTwoStage(classCode, businessCtx);
       
       // 추천 결과 저장
       if (p.aiAnalysis) {
@@ -3938,27 +3920,7 @@
               searchKeywords: allKeywords
             };
             
-            let selectedGoods = null;
-            const fetchResult2 = await TM.fetchAllCandidates(classCode, businessCtx2);
-            if (fetchResult2 && fetchResult2.candidates.length > 0) {
-              selectedGoods = await TM.selectGoodsOneshot(classCode, fetchResult2.candidates, businessCtx2);
-            }
-            
-            // fallback
-            if (!selectedGoods || selectedGoods.length < 10) {
-              const candidates = await TM.fetchOptimalCandidates(paddedCode, allKeywords, analysis);
-              console.log(`[TM] 추가 추천 제${classCode}류 fallback 후보: ${candidates.length}건`);
-              if (candidates.length > 0) {
-                selectedGoods = await TM.selectOptimalGoods(
-                  classCode, candidates,
-                  businessInput || p.aiAnalysis.businessAnalysis, analysis
-                );
-              }
-              if (!selectedGoods) selectedGoods = [];
-            }
-            
-            // ★ 10개 보장
-            selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods, businessInput || p.aiAnalysis.businessAnalysis || '');
+            let selectedGoods = await TM.selectGoodsTwoStage(classCode, businessCtx2);
             p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
             console.log(`[TM] 추가 추천 제${classCode}류 최종: ${selectedGoods.length}건`);
             
@@ -10240,51 +10202,7 @@ ${TM.PRACTICE_GUIDELINES}
             searchKeywords: allKeywords
           };
           
-          const fetchResult = await TM.fetchAllCandidates(classCode, businessCtx);
-          let selectedGoods = [];
-          
-          if (fetchResult && fetchResult.candidates.length > 0) {
-            console.log(`[TM] 제${classCode}류 후보: ${fetchResult.candidates.length}건 (${fetchResult.strategy})`);
-            
-            // 2. LLM으로 최적 10개 선택 (API 1회 - 유일한 호출)
-            try {
-              const oneshotResult = await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessCtx);
-              if (oneshotResult && oneshotResult.length > 0) {
-                selectedGoods = oneshotResult;
-              }
-            } catch (oneshotErr) {
-              console.warn(`[TM] 제${classCode}류 LLM 선택 실패:`, oneshotErr.message);
-            }
-            
-            // 3. 부족분은 DB 후보로 패딩 (API 호출 X)
-            if (selectedGoods.length < 10) {
-              console.log(`[TM] 제${classCode}류 ${selectedGoods.length}개 → DB 패딩으로 보충`);
-              const usedNames = new Set(selectedGoods.map(g => g.name));
-              for (const c of fetchResult.candidates) {
-                if (selectedGoods.length >= 10) break;
-                if (usedNames.has(c.goods_name)) continue;
-                usedNames.add(c.goods_name);
-                selectedGoods.push({
-                  name: c.goods_name,
-                  similarGroup: c.similar_group_code || '',
-                  isCore: false
-                });
-              }
-            }
-          } else {
-            // DB 후보가 아예 없는 경우만 LLM 생성 (드문 케이스)
-            console.log(`[TM] 제${classCode}류 DB 후보 없음 → LLM 생성`);
-            try {
-              const genPrompt = `제${classCode}류의 고시명칭(지정상품/서비스) 중 아래 사업 관련 10개를 JSON 배열로만 응답.\n사업: "${businessInput}"\n["상품명1", "상품명2", ..., "상품명10"]`;
-              const genResponse = await App.callClaudeSonnet(genPrompt, 500);
-              const nameArray = JSON.parse((genResponse.text || '').match(/\[[\s\S]*\]/)?.[0] || '[]');
-              selectedGoods = nameArray.slice(0, 10).map(name => ({
-                name, similarGroup: '', isCore: false, isLlmGenerated: true
-              }));
-            } catch (genErr) {
-              console.warn(`[TM] 제${classCode}류 LLM 생성 실패:`, genErr.message);
-            }
-          }
+          const selectedGoods = await TM.selectGoodsTwoStage(classCode, businessCtx);
           
           p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
           console.log(`[TM] 제${classCode}류 최종: ${selectedGoods.length}건`);
@@ -10730,7 +10648,447 @@ JSON 배열로만 응답: ["상품명1", "상품명2"]`;
   };
 
   // ================================================================
-  // ★ Phase 1: 개선된 상품 선택 — 원샷 방식 (모수 극대화)
+  // ★ Phase 2: 유사군 기반 2단계 + 교차검증 + 보충 루프
+  // ================================================================
+
+  // 유사군 목록 조회
+  TM.fetchSimilarGroups = async function(classCode) {
+    const paddedCode = String(classCode).padStart(2, '0');
+
+    // RPC 우선 시도
+    try {
+      const { data, error } = await App.sb.rpc('get_similar_groups', { p_class_code: paddedCode });
+      if (!error && data && data.length > 0) {
+        console.log(`[TM] 제${classCode}류 유사군: ${data.length}개 (RPC)`);
+        return data;
+      }
+    } catch (e) { /* RPC 없으면 폴백 */ }
+
+    // 폴백: 전체 조회 후 JS 그룹핑
+    const { data, error } = await App.sb
+      .from('gazetted_goods_cache')
+      .select('similar_group_code, similar_group_name')
+      .eq('class_code', paddedCode)
+      .order('similar_group_code');
+
+    if (error) throw error;
+
+    const groupMap = new Map();
+    for (const item of data) {
+      const code = item.similar_group_code;
+      if (!groupMap.has(code)) {
+        groupMap.set(code, { code, name: item.similar_group_name || '', count: 0 });
+      }
+      groupMap.get(code).count++;
+    }
+
+    const groups = Array.from(groupMap.values());
+    console.log(`[TM] 제${classCode}류 유사군: ${groups.length}개 (JS)`);
+    return groups;
+  };
+
+  // LLM이 관련 유사군 선택
+  TM.selectRelevantGroups = async function(classCode, groups, businessContext) {
+    const groupList = groups.map(g => `${g.code} | ${g.name} | ${g.count}건`).join('\n');
+
+    const prompt = `당신은 상표 출원 전문 변리사입니다.
+
+【사업 내용】${businessContext.summary}
+【핵심 상품】${(businessContext.coreProducts || []).join(', ') || '없음'}
+【핵심 서비스】${(businessContext.coreServices || []).join(', ') || '없음'}
+【판매 채널】${businessContext.salesChannels?.details || '미정'}
+【확장 가능성】${(businessContext.expansionPotential || []).join(', ') || '미정'}
+
+【제${classCode}류 유사군 목록 (${groups.length}개)】
+유사군코드 | 유사군명 | 상품수
+${groupList}
+
+위 사업과 관련 있는 유사군을 모두 선택하세요.
+
+★★★ 핵심 원칙: 누락 방지 최우선.
+- 이 사업에 필수적인 상품/서비스가 속한 유사군은 반드시 포함
+- 과소 선택(누락)보다 과다 선택이 훨씬 낫다
+- 사업과 완전히 무관한 유사군만 제외
+
+【JSON으로만 응답】
+{"selected":["G3501","G3504","G3509"]}`;
+
+    const response = await App.callClaudeSonnet(prompt, 1000);
+    const jsonMatch = (response.text || '').match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('유사군 선택 파싱 실패');
+
+    const result = JSON.parse(jsonMatch[0]);
+    const selectedCodes = result.selected || [];
+    console.log(`[TM] 제${classCode}류 관련 유사군: ${selectedCodes.length}개 / ${groups.length}개`);
+    return selectedCodes;
+  };
+
+  // 선택된 유사군의 상품 조회
+  TM.fetchGoodsInGroups = async function(classCode, groupCodes) {
+    const paddedCode = String(classCode).padStart(2, '0');
+    let allGoods = [];
+    const CHUNK_SIZE = 20;
+    const PAGE_SIZE = 1000;
+
+    for (let i = 0; i < groupCodes.length; i += CHUNK_SIZE) {
+      const chunk = groupCodes.slice(i, i + CHUNK_SIZE);
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await App.sb
+          .from('gazetted_goods_cache')
+          .select('goods_name, similar_group_code, similar_group_name')
+          .eq('class_code', paddedCode)
+          .in('similar_group_code', chunk)
+          .order('similar_group_code')
+          .range(offset, offset + PAGE_SIZE - 1);
+
+        if (error) throw error;
+        if (data) allGoods.push(...data);
+        hasMore = data && data.length === PAGE_SIZE;
+        offset += PAGE_SIZE;
+      }
+    }
+
+    console.log(`[TM] 제${classCode}류 유사군 ${groupCodes.length}개 → 상품 ${allGoods.length}건`);
+    return allGoods;
+  };
+
+  // LLM이 10개 선택
+  TM.selectInitialGoods = async function(classCode, goods, businessContext) {
+    const TARGET_COUNT = 10;
+
+    // 유사군별 그룹핑
+    const groupedMap = new Map();
+    for (const g of goods) {
+      const code = g.similar_group_code || 'UNKNOWN';
+      if (!groupedMap.has(code)) groupedMap.set(code, []);
+      groupedMap.get(code).push(g);
+    }
+
+    let numberedList = '';
+    let globalIdx = 0;
+    for (const [code, items] of groupedMap) {
+      const groupName = items[0]?.similar_group_name || '';
+      numberedList += `\n── ${code} ${groupName} (${items.length}건) ──\n`;
+      for (const item of items) {
+        globalIdx++;
+        numberedList += `[${globalIdx}] ${item.goods_name}\n`;
+      }
+    }
+
+    const coreProducts = (businessContext.coreProducts || []).join(', ');
+    const coreServices = (businessContext.coreServices || []).join(', ');
+
+    const prompt = `당신은 상표 출원 전문 변리사입니다.
+
+【사업 내용】${businessContext.summary}
+【핵심 상품】${coreProducts || '없음'}
+【핵심 서비스】${coreServices || '없음'}
+【판매 채널】${businessContext.salesChannels?.details || '미정'}
+
+【제${classCode}류 후보 (유사군별 정리, 총 ${goods.length}건)】
+${numberedList}
+
+정확히 ${TARGET_COUNT}개를 선택하세요.
+
+【선택 기준】
+1. ★★★ 필수 상품 포함 최우선: 이 사업을 영위하는 데 반드시 필요한 지정상품을 빠짐없이 포함
+   핵심 상품 [${coreProducts}] 각각에 대응하는 지정상품 최소 1개씩
+   핵심 서비스 [${coreServices}] 각각에 대응하는 지정상품 최소 1개씩
+2. 상위 개념 상품 우선 (더 넓은 보호 범위)
+3. 유사군코드 분산은 보조적 기준 — 필수 상품이 한 유사군에 집중되어도 무방
+4. 혼동 방지: 동음이의어, 부분 문자열 매칭으로 무관한 상품 제외
+
+【JSON으로만 응답 — 정확히 ${TARGET_COUNT}개】
+{"selected":[{"no":1,"name":"상품명","group":"유사군코드","reason":"선택이유"}]}`;
+
+    const response = await App.callClaudeSonnet(prompt, 2000);
+    const jsonMatch = (response.text || '').match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('상품 선택 파싱 실패');
+
+    const cleaned = jsonMatch[0]
+      .replace(/[\x00-\x1F\x7F]/g, ' ')
+      .replace(/,(\s*[}\]])/g, '$1')
+      .replace(/\n/g, ' ');
+    const result = JSON.parse(cleaned);
+
+    const selectedItems = result.selected || [];
+    const finalGoods = [];
+    const usedNames = new Set();
+
+    for (const item of selectedItems) {
+      let matched = null;
+      if (item.no >= 1 && item.no <= goods.length) {
+        matched = goods[item.no - 1];
+      }
+      if (!matched && item.name) {
+        matched = goods.find(g => g.goods_name === item.name);
+      }
+      if (matched && !usedNames.has(matched.goods_name)) {
+        usedNames.add(matched.goods_name);
+        finalGoods.push({
+          name: matched.goods_name,
+          similarGroup: matched.similar_group_code || '',
+          reason: item.reason || ''
+        });
+      }
+    }
+
+    console.log(`[TM] 제${classCode}류 초기 선택: ${finalGoods.length}개`);
+    return finalGoods;
+  };
+
+  // 교차검증
+  TM.crossValidateGoods = async function(classCode, selectedGoods, allCandidates, businessContext) {
+    const goodsList = selectedGoods.map((g, i) =>
+      `${i+1}. ${g.name} (${g.similarGroup}) — ${g.reason}`
+    ).join('\n');
+
+    const coreProducts = (businessContext.coreProducts || []).join(', ');
+    const coreServices = (businessContext.coreServices || []).join(', ');
+
+    const prompt = `당신은 상표 출원 품질 검증 전문가입니다. (선택한 변리사와 다른 사람)
+다른 변리사가 선택한 지정상품을 독립적으로 검증하세요.
+
+【사업 내용】${businessContext.summary}
+【핵심 상품】${coreProducts || '없음'}
+【핵심 서비스】${coreServices || '없음'}
+【판매 채널】${businessContext.salesChannels?.details || '미정'}
+
+【제${classCode}류에서 선택된 지정상품 ${selectedGoods.length}개】
+${goodsList}
+
+【검증 과제】
+1. 부적합 상품 식별: 이 사업과 실제로 관련 없는 상품이 포함되었는가?
+   - 동음이의어 오류
+   - 업종 불일치
+   - 과도한 확대 해석
+
+2. 누락 영역 식별: 이 사업에 필수적인데 대응하는 지정상품이 빠진 영역이 있는가?
+   - 핵심 상품 [${coreProducts}] 각각 커버 여부
+   - 핵심 서비스 [${coreServices}] 각각 커버 여부
+   - 판매 채널 커버 여부
+
+【JSON으로만 응답】
+{
+  "inappropriate": [
+    {"index": 3, "name": "부적합상품명", "reason": "무관한 이유"}
+  ],
+  "missing": [
+    {"businessArea": "누락된 사업 영역", "suggestedKeyword": "검색 키워드"}
+  ],
+  "score": 85,
+  "comment": "전체 평가"
+}
+inappropriate/missing이 없으면 빈 배열 [].`;
+
+    const response = await App.callClaudeSonnet(prompt, 1500);
+    const jsonMatch = (response.text || '').match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('검증 파싱 실패');
+
+    const cleaned = jsonMatch[0]
+      .replace(/[\x00-\x1F\x7F]/g, ' ')
+      .replace(/,(\s*[}\]])/g, '$1')
+      .replace(/\n/g, ' ');
+
+    const result = JSON.parse(cleaned);
+    console.log(`[TM] 제${classCode}류 교차검증: 점수=${result.score}, 부적합=${(result.inappropriate||[]).length}건, 누락=${(result.missing||[]).length}건`);
+    return result;
+  };
+
+  // 부적합 제거 + 보충 루프
+  TM.fillMissingGoods = async function(classCode, currentGoods, validation, allCandidates, businessContext) {
+    const TARGET_COUNT = 10;
+    let goods = [...currentGoods];
+    const usedNames = new Set(goods.map(g => g.name));
+
+    // 1. 부적합 상품 제거
+    const inappropriate = validation.inappropriate || [];
+    if (inappropriate.length > 0) {
+      const removeNames = new Set(inappropriate.map(item => item.name));
+      goods = goods.filter(g => !removeNames.has(g.name));
+      console.log(`[TM] 제${classCode}류 부적합 ${inappropriate.length}개 제거 → ${goods.length}개`);
+      usedNames.clear();
+      goods.forEach(g => usedNames.add(g.name));
+    }
+
+    // 2. 이미 10개 이상이면 완료
+    if (goods.length >= TARGET_COUNT) {
+      return goods.slice(0, TARGET_COUNT);
+    }
+
+    // 3. 보충 루프 (최대 3회)
+    const missing = validation.missing || [];
+    console.log(`[TM] 제${classCode}류 보충 필요: ${TARGET_COUNT - goods.length}개 (누락 영역: ${missing.length}개)`);
+
+    let loopCount = 0;
+    const MAX_LOOPS = 3;
+
+    while (goods.length < TARGET_COUNT && loopCount < MAX_LOOPS) {
+      loopCount++;
+      console.log(`[TM] 제${classCode}류 보충 루프 ${loopCount}/${MAX_LOOPS}`);
+
+      const currentList = goods.map((g, i) => `${i+1}. ${g.name} (${g.similarGroup})`).join('\n');
+      const missingInfo = missing.length > 0
+        ? missing.map(m => `- ${m.businessArea}: "${m.suggestedKeyword}" 관련`).join('\n')
+        : '- 사업 전반에서 추가 커버 필요';
+
+      const remaining = allCandidates.filter(c => !usedNames.has(c.goods_name));
+
+      // 유사군별 그룹핑
+      const groupedMap = new Map();
+      for (const g of remaining) {
+        const code = g.similar_group_code || 'UNKNOWN';
+        if (!groupedMap.has(code)) groupedMap.set(code, []);
+        groupedMap.get(code).push(g);
+      }
+
+      let remainingList = '';
+      const remainingFlat = [];
+      let idx = 0;
+      for (const [code, items] of groupedMap) {
+        remainingList += `\n── ${code} ${items[0]?.similar_group_name || ''} ──\n`;
+        for (const item of items.slice(0, 30)) {
+          idx++;
+          remainingList += `[${idx}] ${item.goods_name}\n`;
+          remainingFlat.push(item);
+        }
+      }
+
+      const need = TARGET_COUNT - goods.length;
+
+      const prompt = `당신은 상표 출원 전문 변리사입니다.
+
+【사업 내용】${businessContext.summary}
+
+【현재 선택된 지정상품 ${goods.length}개】
+${currentList}
+
+【누락된 사업 영역】
+${missingInfo}
+
+【제${classCode}류 남은 후보 상품】
+${remainingList}
+
+${need}개를 추가 선택하세요.
+누락된 사업 영역을 우선 커버하고, 이 사업에 필수적인 상품을 선택하세요.
+
+【JSON으로만 응답 — 정확히 ${need}개】
+{"fill":[{"no":1,"name":"상품명","group":"유사군코드","reason":"보충 이유"}]}`;
+
+      try {
+        const response = await App.callClaudeSonnet(prompt, 1500);
+        const jsonMatch = (response.text || '').match(/\{[\s\S]*\}/);
+        if (!jsonMatch) break;
+
+        const cleaned = jsonMatch[0]
+          .replace(/[\x00-\x1F\x7F]/g, ' ')
+          .replace(/,(\s*[}\]])/g, '$1')
+          .replace(/\n/g, ' ');
+        const result = JSON.parse(cleaned);
+        const fillItems = result.fill || [];
+
+        for (const item of fillItems) {
+          if (goods.length >= TARGET_COUNT) break;
+          let matched = null;
+          if (item.no >= 1 && item.no <= remainingFlat.length) {
+            matched = remainingFlat[item.no - 1];
+          }
+          if (!matched && item.name) {
+            matched = remaining.find(c => c.goods_name === item.name);
+          }
+          if (matched && !usedNames.has(matched.goods_name)) {
+            usedNames.add(matched.goods_name);
+            goods.push({
+              name: matched.goods_name,
+              similarGroup: matched.similar_group_code || '',
+              reason: item.reason || '보충'
+            });
+          }
+        }
+
+        console.log(`[TM] 보충 루프 ${loopCount} → ${goods.length}개`);
+      } catch (e) {
+        console.error(`[TM] 보충 루프 ${loopCount} 실패:`, e.message);
+        break;
+      }
+
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // 4. 그래도 부족하면 DB 후보에서 자동 패딩
+    if (goods.length < TARGET_COUNT) {
+      console.log(`[TM] 제${classCode}류 LLM 보충 후에도 ${goods.length}개 — DB 자동 패딩`);
+      for (const c of allCandidates) {
+        if (goods.length >= TARGET_COUNT) break;
+        if (!usedNames.has(c.goods_name)) {
+          usedNames.add(c.goods_name);
+          goods.push({
+            name: c.goods_name,
+            similarGroup: c.similar_group_code || '',
+            reason: '자동 보충'
+          });
+        }
+      }
+    }
+
+    return goods.slice(0, TARGET_COUNT);
+  };
+
+  // 통합 함수: 2단계 상품 선택
+  TM.selectGoodsTwoStage = async function(classCode, businessContext) {
+    const TARGET_COUNT = 10;
+    console.log(`[TM] ════ 2단계 상품 선택: 제${classCode}류 ════`);
+
+    try {
+      // Step 1: 유사군 목록 (DB)
+      const groups = await TM.fetchSimilarGroups(classCode);
+      if (!groups || groups.length === 0) return [];
+
+      // Step 2: 관련 유사군 선택 (API 1회)
+      const selectedGroupCodes = await TM.selectRelevantGroups(classCode, groups, businessContext);
+      if (!selectedGroupCodes || selectedGroupCodes.length === 0) return [];
+
+      // Step 3: 해당 유사군 상품 조회 (DB)
+      const allCandidates = await TM.fetchGoodsInGroups(classCode, selectedGroupCodes);
+      if (!allCandidates || allCandidates.length === 0) return [];
+
+      // Step 4: 초기 10개 선택 (API 1회)
+      let selectedGoods = await TM.selectInitialGoods(classCode, allCandidates, businessContext);
+
+      // Step 5: 교차검증 (API 1회)
+      const validation = await TM.crossValidateGoods(classCode, selectedGoods, allCandidates, businessContext);
+
+      // Step 6: 부적합 제거 + 보충 루프 (10개 보장)
+      if ((validation.inappropriate?.length > 0) || selectedGoods.length < TARGET_COUNT) {
+        selectedGoods = await TM.fillMissingGoods(classCode, selectedGoods, validation, allCandidates, businessContext);
+      }
+
+      // isCore 플래그
+      selectedGoods.forEach((g, i) => { g.isCore = i < 3; });
+
+      console.log(`[TM] ════ 완료: 제${classCode}류 → ${selectedGoods.length}개 ════`);
+      return selectedGoods;
+
+    } catch (e) {
+      console.error(`[TM] 2단계 실패 (제${classCode}류):`, e.message);
+      console.log(`[TM] 기존 방식으로 폴백`);
+      try {
+        const fetchResult = await TM.fetchAllCandidates(classCode, businessContext);
+        if (fetchResult && fetchResult.candidates.length > 0) {
+          return await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessContext) || [];
+        }
+      } catch (fe) {
+        console.error(`[TM] 폴백도 실패:`, fe.message);
+      }
+      return [];
+    }
+  };
+
+  // ================================================================
+  // ★ Phase 1: 개선된 상품 선택 — 원샷 방식 (모수 극대화) [폴백용 유지]
   // ================================================================
 
   // DB에서 후보 전체 조회 또는 필터링 조회
@@ -11288,30 +11646,7 @@ ${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
             searchKeywords: allKeywords
           };
           
-          const fetchResult = await TM.fetchAllCandidates(classCode, businessCtx);
-          let selectedGoods = null;
-          
-          if (fetchResult && fetchResult.candidates.length > 0) {
-            selectedGoods = await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessCtx);
-          }
-          
-          if (!selectedGoods || selectedGoods.length < 10) {
-            const paddedCode = String(classCode).padStart(2, '0');
-            const analysisCtx = {
-              businessSummary: aiAnalysis.businessAnalysis,
-              businessTypes: aiAnalysis.businessTypes,
-              coreProducts: aiAnalysis.coreProducts,
-              coreServices: aiAnalysis.coreServices,
-              salesChannels: aiAnalysis.salesChannels,
-              expansionPotential: aiAnalysis.expansionPotential,
-              searchKeywords: allKeywords
-            };
-            const candidates = await TM.fetchOptimalCandidates(paddedCode, allKeywords, analysisCtx);
-            if (candidates.length > 0) {
-              selectedGoods = await TM.selectOptimalGoods(classCode, candidates, aiAnalysis.businessAnalysis || '', analysisCtx);
-            }
-            selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods || [], aiAnalysis.businessAnalysis || '');
-          }
+          let selectedGoods = await TM.selectGoodsTwoStage(classCode, businessCtx);
           
           // ★ BUG-5 FIX: undefined 방어
           if (!aiAnalysis.recommendedGoods) aiAnalysis.recommendedGoods = {};
