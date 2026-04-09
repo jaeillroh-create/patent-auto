@@ -7348,9 +7348,12 @@ ${criticalResults.slice(0, 5).map(r =>
     return parsed;
   };
   
-  // PDF에서 상표견본 이미지 추출 — 마지막 페이지부터 역순으로【상표견본】텍스트를 찾고 그 아래 영역 캡처
+  // PDF에서 상표견본 이미지 추출 — 임베딩된 이미지 객체를 직접 추출 (페이지 래스터라이즈 없음)
+  // PyMuPDF의 page.get_images() + fitz.Pixmap(doc, xref)와 동일한 접근:
+  // PDF.js의 getOperatorList()로 paintImageXObject 오퍼레이션을 찾고,
+  // page.objs.get()으로 실제 이미지 데이터를 직접 추출
   TM.extractSpecimenImage = async function(pdf) {
-    // 1단계: 【상표견본】 텍스트가 있는 페이지 찾기 (마지막 페이지부터 역순)
+    // 1단계: 【상표견본】텍스트가 있는 페이지 찾기 (마지막부터 역순)
     let targetPageNum = -1;
     for (let pageNum = pdf.numPages; pageNum >= 1; pageNum--) {
       const page = await pdf.getPage(pageNum);
@@ -7358,258 +7361,208 @@ ${criticalResults.slice(0, 5).map(r =>
       for (const item of tc.items) {
         if (item.str.replace(/\s/g, '').includes('상표견본')) {
           targetPageNum = pageNum;
-          console.log('[TM] 【상표견본】 텍스트 발견: 페이지', pageNum);
           break;
         }
       }
       if (targetPageNum > 0) break;
     }
     if (targetPageNum < 0) {
-      console.log('[TM] 【상표견본】 텍스트 없음 — 출원서가 아닌 문서, 건너뜀');
+      console.log('[TM] 【상표견본】 텍스트를 찾을 수 없음');
       return null;
     }
 
+    console.log('[TM] 【상표견본】 페이지:', targetPageNum);
     const page = await pdf.getPage(targetPageNum);
+
+    // 2단계: operator list에서 임베딩된 이미지 객체 참조 추출
+    const opList = await page.getOperatorList();
+    const imageRefs = [];
+
+    for (let i = 0; i < opList.fnArray.length; i++) {
+      const fn = opList.fnArray[i];
+      // paintImageXObject(85): 디코딩된 픽셀 데이터 이미지
+      // paintJpegImageXObject(82): JPEG 이미지 (HTMLImageElement)
+      // paintImageMaskXObject(83): 마스크 이미지
+      if (fn === pdfjsLib.OPS.paintImageXObject ||
+          fn === pdfjsLib.OPS.paintJpegImageXObject ||
+          fn === pdfjsLib.OPS.paintImageMaskXObject) {
+        const name = opList.argsArray[i][0];
+        if (!imageRefs.some(r => r.name === name)) {
+          imageRefs.push({ name, op: fn });
+        }
+      }
+    }
+
+    console.log('[TM] 임베딩 이미지 참조:', imageRefs.length, '개');
+
+    if (imageRefs.length === 0) {
+      console.warn('[TM] 임베딩 이미지 없음 → 렌더링 폴백');
+      return await TM.extractSpecimenByRendering(pdf, targetPageNum);
+    }
+
+    // 3단계: 각 이미지 객체 로드 → 가장 큰 이미지 선택
+    let bestCanvas = null;
+    let bestArea = 0;
+
+    for (const ref of imageRefs) {
+      try {
+        const imgObj = await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('timeout')), 5000);
+          page.objs.get(ref.name, (obj) => {
+            clearTimeout(timeout);
+            resolve(obj);
+          });
+        });
+
+        if (!imgObj) continue;
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (imgObj instanceof HTMLImageElement || imgObj instanceof ImageBitmap) {
+          // JPEG 이미지 (브라우저가 디코딩)
+          canvas.width = imgObj.width;
+          canvas.height = imgObj.height;
+          ctx.drawImage(imgObj, 0, 0);
+        } else if (imgObj.data) {
+          // Raw 픽셀 데이터
+          const w = imgObj.width;
+          const h = imgObj.height;
+          if (!w || !h) continue;
+          canvas.width = w;
+          canvas.height = h;
+
+          const pixelCount = w * h;
+          const kind = imgObj.kind || 0;
+
+          if (kind === 3 || imgObj.data.length === pixelCount * 4) {
+            // RGBA (32bpp)
+            const clamped = (imgObj.data instanceof Uint8ClampedArray)
+              ? imgObj.data
+              : new Uint8ClampedArray(imgObj.data.buffer ? imgObj.data.buffer : imgObj.data);
+            const imgData = new ImageData(clamped, w, h);
+            ctx.putImageData(imgData, 0, 0);
+          } else if (kind === 2 || imgObj.data.length === pixelCount * 3) {
+            // RGB (24bpp) → RGBA 변환
+            const imgData = ctx.createImageData(w, h);
+            const src = imgObj.data, dst = imgData.data;
+            for (let s = 0, d = 0; s < src.length; s += 3, d += 4) {
+              dst[d] = src[s]; dst[d + 1] = src[s + 1]; dst[d + 2] = src[s + 2]; dst[d + 3] = 255;
+            }
+            ctx.putImageData(imgData, 0, 0);
+          } else if (kind === 1 || imgObj.data.length === pixelCount) {
+            // Grayscale (8bpp) → RGBA 변환
+            const imgData = ctx.createImageData(w, h);
+            const src = imgObj.data, dst = imgData.data;
+            for (let i = 0; i < src.length; i++) {
+              const d = i * 4;
+              dst[d] = src[i]; dst[d + 1] = src[i]; dst[d + 2] = src[i]; dst[d + 3] = 255;
+            }
+            ctx.putImageData(imgData, 0, 0);
+          } else if (imgObj.data.length === Math.ceil(pixelCount / 8)) {
+            // 1bpp 마스크 → RGBA 변환
+            const imgData = ctx.createImageData(w, h);
+            const src = imgObj.data, dst = imgData.data;
+            for (let i = 0; i < pixelCount; i++) {
+              const byteIdx = Math.floor(i / 8);
+              const bitIdx = 7 - (i % 8);
+              const bit = (src[byteIdx] >> bitIdx) & 1;
+              const d = i * 4;
+              const v = bit ? 0 : 255; // 1=검정, 0=흰색
+              dst[d] = v; dst[d + 1] = v; dst[d + 2] = v; dst[d + 3] = 255;
+            }
+            ctx.putImageData(imgData, 0, 0);
+          } else {
+            console.warn('[TM] 알 수 없는 이미지 포맷:', ref.name, 'kind:', kind, 'dataLen:', imgObj.data.length, 'expected:', pixelCount);
+            continue;
+          }
+        } else if (imgObj.src) {
+          // src 속성이 있는 이미지 객체
+          const img = new Image();
+          await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = imgObj.src; });
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+        } else {
+          console.warn('[TM] 이미지 객체 형식 미지원:', ref.name, typeof imgObj);
+          continue;
+        }
+
+        const area = canvas.width * canvas.height;
+        console.log('[TM] 이미지:', ref.name, canvas.width, 'x', canvas.height, '(' + area + 'px)');
+
+        // 너무 작은 이미지 (아이콘, 도장 등) 무시 — 최소 30x30
+        if (canvas.width < 30 || canvas.height < 30) continue;
+
+        if (area > bestArea) {
+          bestArea = area;
+          bestCanvas = canvas;
+        }
+      } catch (e) {
+        console.warn('[TM] 이미지 로드 실패:', ref.name, e.message);
+      }
+    }
+
+    if (bestCanvas) {
+      console.log('[TM] 최종 선택 이미지:', bestCanvas.width, 'x', bestCanvas.height);
+      return TM.autoCropCanvas(bestCanvas);
+    }
+
+    // 임베딩 이미지 추출 실패 시 렌더링 폴백
+    console.warn('[TM] 이미지 객체 추출 실패 → 렌더링 폴백');
+    return await TM.extractSpecimenByRendering(pdf, targetPageNum);
+  };
+
+  // 폴백: 페이지 렌더링 후 텍스트 gap 기반 크롭
+  TM.extractSpecimenByRendering = async function(pdf, pageNum) {
+    const page = await pdf.getPage(pageNum);
     const scale = 3.0;
     const vp = page.getViewport({ scale });
-
-    // 2단계: 페이지 렌더링
     const canvas = document.createElement('canvas');
     canvas.width = vp.width;
     canvas.height = vp.height;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, vp.width, vp.height);
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
-    console.log('[TM] 페이지 렌더링:', vp.width, 'x', vp.height);
 
-    // === 전략 A: 텍스트 위치 + 폰트 크기 분석 ===
-    // 상표견본 아래에서 가장 큰 폰트 = 상표 콘텐츠
-    try {
-      const tc = await page.getTextContent();
-      let specimenCanvasY = -1;
-      const textItems = [];
+    const tc = await page.getTextContent();
+    const texts = [];
+    for (const item of tc.items) {
+      if (item.str.trim().length === 0) continue;
+      const [cx, cy] = vp.convertToViewportPoint(item.transform[4], item.transform[5]);
+      const fs = Math.abs(item.transform[0]);
+      texts.push({ str: item.str.trim(), cy, fs });
+    }
+    texts.sort((a, b) => a.cy - b.cy);
 
-      for (const item of tc.items) {
-        if (item.str.trim().length === 0) continue;
-        // viewport.convertToViewportPoint()로 정확한 캔버스 좌표 변환
-        const [cx, cy] = vp.convertToViewportPoint(item.transform[4], item.transform[5]);
-        const fontSize = Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2);
-        textItems.push({ str: item.str.trim(), cx, cy, fontSize });
-
-        if (item.str.replace(/\s/g, '').includes('상표견본') && specimenCanvasY < 0) {
-          specimenCanvasY = cy;
-        }
+    // 텍스트 사이 가장 큰 gap 찾기
+    let gapTop = 0, gapBottom = vp.height, biggestGap = 0;
+    if (texts.length >= 2) {
+      for (let i = 0; i < texts.length - 1; i++) {
+        const curBottom = texts[i].cy + texts[i].fs * scale * 0.5;
+        const nextTop = texts[i + 1].cy - texts[i + 1].fs * scale * 1.2;
+        const gap = nextTop - curBottom;
+        if (gap > biggestGap) { biggestGap = gap; gapTop = curBottom; gapBottom = nextTop; }
       }
-
-      console.log('[TM] 텍스트 아이템:', textItems.length, ', 상표견본 canvas Y:', specimenCanvasY);
-
-      if (specimenCanvasY >= 0 && textItems.length > 0) {
-        // 상표견본 텍스트 아래에 있는 텍스트들
-        const belowTexts = textItems.filter(t =>
-          t.cy > specimenCanvasY + 5 &&
-          !t.str.replace(/\s/g, '').includes('상표견본')
-        );
-
-        // 메타 텍스트 필터링 (페이지번호, 날짜 등 비상표 콘텐츠)
-        const isMetaText = (s) => {
-          const t = s.replace(/\s/g, '');
-          if (/^\d{1,3}[-\/]\d{1,3}$/.test(t)) return true;  // 3-3, 1/3 등 페이지번호
-          if (/^\d{4}[-.]?\d{2}[-.]?\d{2}$/.test(t)) return true; // 날짜
-          if (/^\d{1,4}$/.test(t)) return true; // 순수 숫자
-          if (t.length <= 1) return true; // 단일 문자
-          return false;
-        };
-
-        const candidateTexts = belowTexts.filter(t => !isMetaText(t.str));
-
-        console.log('[TM] 전략A: 아래 텍스트', belowTexts.length, '개',
-          ', 메타 제외:', candidateTexts.length, '개',
-          ', 내용:', candidateTexts.map(t => `"${t.str}"(f=${t.fontSize.toFixed(1)})`).join(', '));
-
-        if (candidateTexts.length > 0) {
-          // 가장 큰 폰트 크기 = 상표 콘텐츠
-          const maxFont = Math.max(...candidateTexts.map(t => t.fontSize));
-          const tmTexts = candidateTexts.filter(t => t.fontSize >= maxFont * 0.6);
-
-          if (tmTexts.length > 0 && maxFont > 0) {
-            const fontPx = maxFont * scale;
-            const minCY = Math.min(...tmTexts.map(t => t.cy));
-            const maxCY = Math.max(...tmTexts.map(t => t.cy));
-
-            // 상표 텍스트 영역: 기준선 위 1.5배 ~ 아래 0.8배 (한글 고려)
-            const cropTop = Math.max(0, Math.floor(minCY - fontPx * 1.5));
-            const cropBottom = Math.min(vp.height, Math.ceil(maxCY + fontPx * 0.8));
-
-            if (cropBottom - cropTop > 20) {
-              console.log('[TM] 전략A 크롭: y=', cropTop, '~', cropBottom);
-              const cropCanvas = document.createElement('canvas');
-              cropCanvas.width = vp.width;
-              cropCanvas.height = cropBottom - cropTop;
-              cropCanvas.getContext('2d').drawImage(
-                canvas, 0, cropTop, vp.width, cropBottom - cropTop,
-                0, 0, vp.width, cropBottom - cropTop
-              );
-              return TM.autoCropCanvas(cropCanvas);
-            }
-          }
-        }
-        // candidateTexts가 비어있으면 → 상표가 이미지일 가능성 → 전략B로
-        console.log('[TM] 전략A: 유효한 상표 텍스트 없음 (이미지 상표일 수 있음)');
-      }
-    } catch (e) {
-      console.warn('[TM] 전략A 실패:', e);
+      const lastBottom = texts[texts.length - 1].cy + texts[texts.length - 1].fs * scale;
+      if (vp.height - lastBottom > biggestGap) { biggestGap = vp.height - lastBottom; gapTop = lastBottom; gapBottom = vp.height; }
     }
 
-    // === 전략 B: PDF 임베디드 이미지 직접 추출 ===
-    // 상표가 이미지로 삽입된 경우 (도형상표 등)
-    try {
-      const ops = await page.getOperatorList();
-      let bestImgName = null, bestImgSize = 0;
-
-      for (let i = 0; i < ops.fnArray.length; i++) {
-        if (ops.fnArray[i] === pdfjsLib.OPS.paintImageXObject ||
-            ops.fnArray[i] === pdfjsLib.OPS.paintJpegXObject) {
-          const name = ops.argsArray[i][0];
-          try {
-            const img = page.objs.get(name);
-            if (img && img.width && img.height) {
-              const size = img.width * img.height;
-              if (size > bestImgSize) {
-                bestImgSize = size;
-                bestImgName = name;
-              }
-            }
-          } catch (e) { /* 로드 안된 객체 무시 */ }
-        }
+    if (biggestGap > 50) {
+      const m = 15;
+      const cropTop = Math.max(0, Math.floor(gapTop - m));
+      const cropBottom = Math.min(vp.height, Math.ceil(gapBottom + m));
+      const cropH = cropBottom - cropTop;
+      if (cropH > 30) {
+        const gapCanvas = document.createElement('canvas');
+        gapCanvas.width = vp.width;
+        gapCanvas.height = cropH;
+        gapCanvas.getContext('2d').drawImage(canvas, 0, cropTop, vp.width, cropH, 0, 0, vp.width, cropH);
+        return TM.autoCropCanvas(gapCanvas);
       }
-
-      if (bestImgName && bestImgSize > 500) {
-        const img = page.objs.get(bestImgName);
-        const ic = document.createElement('canvas');
-
-        // ImageBitmap인 경우 (최신 브라우저)
-        if (typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap) {
-          ic.width = img.width;
-          ic.height = img.height;
-          ic.getContext('2d').drawImage(img, 0, 0);
-          console.log('[TM] 전략B: ImageBitmap 추출 성공:', img.width, 'x', img.height);
-          return TM.autoCropCanvas(ic);
-        }
-
-        // raw pixel data인 경우
-        if (img.data && img.width && img.height) {
-          ic.width = img.width;
-          ic.height = img.height;
-          const ictx = ic.getContext('2d');
-          const id = ictx.createImageData(img.width, img.height);
-          const src = img.data, dst = id.data;
-
-          if (img.kind === 3) { // RGBA
-            dst.set(src);
-          } else if (img.kind === 2) { // RGB
-            for (let p = 0, d = 0; p < src.length; p += 3, d += 4) {
-              dst[d] = src[p]; dst[d+1] = src[p+1]; dst[d+2] = src[p+2]; dst[d+3] = 255;
-            }
-          } else { // Grayscale
-            for (let p = 0, d = 0; p < src.length; p++, d += 4) {
-              dst[d] = dst[d+1] = dst[d+2] = src[p]; dst[d+3] = 255;
-            }
-          }
-
-          ictx.putImageData(id, 0, 0);
-          console.log('[TM] 전략B: 픽셀 데이터 추출 성공:', img.width, 'x', img.height);
-          return TM.autoCropCanvas(ic);
-        }
-
-        console.log('[TM] 전략B: 이미지 객체 형식 알 수 없음:', typeof img, Object.keys(img || {}));
-      }
-    } catch (e) {
-      console.warn('[TM] 전략B 실패:', e);
     }
 
-    // === 전략 C: 다운샘플링으로 큰 콘텐츠만 감지 ===
-    // 썸네일 행 밀도 분석: 테두리 선은 매 행 일정 밀도, 상표는 특정 행에서만 높은 밀도
-    try {
-      const W = vp.width, H = vp.height;
-      const ds = 12;
-      const tw = Math.floor(W / ds), th = Math.floor(H / ds);
-      const thumbCanvas = document.createElement('canvas');
-      thumbCanvas.width = tw;
-      thumbCanvas.height = th;
-      thumbCanvas.getContext('2d').drawImage(canvas, 0, 0, tw, th);
-      const thumbData = thumbCanvas.getContext('2d').getImageData(0, 0, tw, th).data;
-
-      // 각 행의 진한 픽셀 수 계산 (threshold 230)
-      const rowCounts = new Uint32Array(th);
-      for (let y = 0; y < th; y++) {
-        let cnt = 0;
-        for (let x = 0; x < tw; x++) {
-          const i = (y * tw + x) * 4;
-          if (thumbData[i] < 230 && thumbData[i+1] < 230 && thumbData[i+2] < 230) cnt++;
-        }
-        rowCounts[y] = cnt;
-      }
-
-      // 평균 행 밀도 (0이 아닌 행만)
-      let sumDensity = 0, nonZeroRows = 0;
-      for (let y = 0; y < th; y++) {
-        if (rowCounts[y] > 0) { sumDensity += rowCounts[y]; nonZeroRows++; }
-      }
-      const meanDensity = nonZeroRows > 0 ? sumDensity / nonZeroRows : 0;
-
-      // 평균의 2배 이상인 행 = 상표 콘텐츠 행 (테두리·소문자 제외)
-      const contentThreshold = Math.max(meanDensity * 2, 3);
-      let contentMinY = th, contentMaxY = 0;
-      for (let y = 0; y < th; y++) {
-        if (rowCounts[y] >= contentThreshold) {
-          if (y < contentMinY) contentMinY = y;
-          if (y > contentMaxY) contentMaxY = y;
-        }
-      }
-
-      console.log('[TM] 전략C: 썸네일', tw, 'x', th,
-        ', 평균밀도:', meanDensity.toFixed(1), ', 임계값:', contentThreshold.toFixed(1),
-        ', 콘텐츠 Y:', contentMinY, '~', contentMaxY,
-        ', 샘플 행밀도:', Array.from(rowCounts).slice(0, 10).join(','));
-
-      if (contentMaxY > contentMinY) {
-        // 해당 행 범위에서 좌우 바운딩 박스 (썸네일 좌표)
-        let contentMinX = tw, contentMaxX = 0;
-        for (let y = contentMinY; y <= contentMaxY; y++) {
-          for (let x = 0; x < tw; x++) {
-            const i = (y * tw + x) * 4;
-            if (thumbData[i] < 230 && thumbData[i+1] < 230 && thumbData[i+2] < 230) {
-              if (x < contentMinX) contentMinX = x;
-              if (x > contentMaxX) contentMaxX = x;
-            }
-          }
-        }
-
-        // 원본 좌표로 변환 + 패딩
-        const pad = 2;
-        const cropX = Math.max(0, (contentMinX - pad) * ds);
-        const cropY = Math.max(0, (contentMinY - pad) * ds);
-        const cropR = Math.min(W, (contentMaxX + pad + 1) * ds);
-        const cropB = Math.min(H, (contentMaxY + pad + 1) * ds);
-        const cropW = cropR - cropX;
-        const cropH = cropB - cropY;
-
-        if (cropW > 20 && cropH > 20) {
-          console.log('[TM] 전략C 크롭: (', cropX, ',', cropY, ')', cropW, 'x', cropH);
-          const cropCanvas = document.createElement('canvas');
-          cropCanvas.width = cropW;
-          cropCanvas.height = cropH;
-          cropCanvas.getContext('2d').drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-          return TM.autoCropCanvas(cropCanvas);
-        }
-      }
-    } catch (e) {
-      console.warn('[TM] 전략C 실패:', e);
-    }
-
-    // === 전략 D: 전체 페이지 autoCrop (최종 폴백) ===
-    console.log('[TM] 모든 전략 실패, 전체 페이지 autoCrop');
     return TM.autoCropCanvas(canvas);
   };
 
