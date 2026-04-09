@@ -8020,27 +8020,73 @@ ${content.substring(0, 1200)}
     // 증거자료 목록
     const evidences = pe.evidences || [];
 
-    // 첨부자료 참조 문자열 생성 (다수개 지원)
-    const buildEvidenceRef = (indices) => {
-      if (indices.length === 0) return '';
-      return '(첨부자료 ' + indices.map(i => `${i + 1}: ${evidences[i].title}`).join(', 첨부자료 ') + ')';
-    };
-
-    // 첨부자료 1개일 때: (첨부자료 1: XXX), 다수일 때: (첨부자료 1: XXX, 첨부자료 2: YYY)
-    const allEvidenceRef = evidences.length > 0 ? buildEvidenceRef(evidences.map((_, i) => i)) : '';
-    const firstEvidenceRef = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
-
-    // 2번째 이후 첨부자료 참조 (2문단용)
-    let laterEvidenceRef = '';
-    if (evidences.length > 1) {
-      const laterIndices = evidences.slice(1).map((_, i) => i + 1);
-      laterEvidenceRef = '는 ' + buildEvidenceRef(laterIndices) + '과 같이';
-    } else {
-      laterEvidenceRef = '는';
-    }
-
     // 사용/사용준비 표현
     const usageText = pe.reason === 'using' ? '사용 중' : (pe.reason === 'preparing' ? '사용 및 사용 준비 중' : '사용 및 사용 준비 중');
+    const goodsListStr = goodsWithGroups.length > 0 ? goodsWithGroups.join(', ') : '[지정상품]';
+
+    // 첨부자료별 맥락 문장 생성
+    const buildEvidenceParagraphs = () => {
+      if (evidences.length === 0) {
+        // 첨부자료 없을 때 기본 문장
+        return `
+          <p style="margin-top: 12px;">
+            본 출원인 "${applicantName}"는 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.
+          </p>
+          <p style="margin-top: 12px;">
+            따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${pe.reason === 'using' ? '사용' : '사용예정'} 중에 있습니다.
+          </p>
+          <p style="margin-top: 12px;">
+            이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다.
+            부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
+          </p>`;
+      }
+
+      if (evidences.length === 1) {
+        // 첨부자료 1개
+        const ev = evidences[0];
+        const evRef = `첨부자료 1(${ev.title})`;
+        return `
+          <p style="margin-top: 12px;">
+            본 출원인 "${applicantName}"는 본 신청서의 ${evRef}에 기재된 바와 같이,
+            이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.
+          </p>
+          <p style="margin-top: 12px;">
+            따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${pe.reason === 'using' ? '사용' : '사용예정'} 중에 있습니다.
+          </p>
+          <p style="margin-top: 12px;">
+            부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
+          </p>`;
+      }
+
+      // 첨부자료 다수개: 첫 번째 자료로 도입 + 나머지 자료별 맥락 문장
+      const firstEv = evidences[0];
+      const firstRef = `첨부자료 1(${firstEv.title})`;
+      let html = `
+        <p style="margin-top: 12px;">
+          본 출원인 "${applicantName}"는 본 신청서의 ${firstRef}에 기재된 바와 같이,
+          이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.
+        </p>
+        <p style="margin-top: 12px;">
+          따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${pe.reason === 'using' ? '사용' : '사용예정'} 중에 있습니다.
+        </p>`;
+
+      // 2번째 이후 자료별 맥락 문장
+      for (let i = 1; i < evidences.length; i++) {
+        const ev = evidences[i];
+        const evRef = `첨부자료 ${i + 1}(${ev.title})`;
+        html += `
+        <p style="margin-top: 12px;">
+          또한, ${evRef}에서 직접 확인할 수 있는 바와 같이, 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 실제 사용하고 있습니다.
+        </p>`;
+      }
+
+      html += `
+        <p style="margin-top: 12px;">
+          이상과 같이, 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다.
+          부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
+        </p>`;
+      return html;
+    };
 
     // HTML 형식의 미리보기
     return `
@@ -8074,18 +8120,7 @@ ${content.substring(0, 1200)}
         <div class="tm-doc-section">
           <h3>【우선심사 신청이유】</h3>
           <p>본 상표는 ${reasonClause} 우선심사를 신청합니다.</p>
-          <p style="margin-top: 12px;">
-            본 출원인 "${applicantName}"는 본 신청서의 첨부자료${firstEvidenceRef}에 기재된 바와 같이,
-            이건 출원상표가 표시된 ${goodsWithGroups.length > 0 ? goodsWithGroups.join(', ') : '[지정상품]'}을
-            ${usageText}입니다.
-          </p>
-          <p style="margin-top: 12px;">
-            따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${pe.reason === 'using' ? '사용' : '사용예정'} 중에 있습니다.
-          </p>
-          <p style="margin-top: 12px;">
-            이건 출원인 "${applicantName}"${laterEvidenceRef} 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다.
-            부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
-          </p>
+          ${buildEvidenceParagraphs()}
         </div>
 
         ${evidences.length > 0 ? `
@@ -8200,27 +8235,33 @@ ${content.substring(0, 1200)}
         reasonClause = '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라';
       }
 
-      // 첨부자료 참조 문자열 생성 (다수개 지원)
-      const buildEvidenceRef = (indices) => {
-        if (indices.length === 0) return '';
-        return '(첨부자료 ' + indices.map(i => `${i + 1}: ${evidences[i].title}`).join(', 첨부자료 ') + ')';
-      };
-      const firstEvidenceRef = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
-      let laterEvidenceRef = '';
-      if (evidences.length > 1) {
-        const laterIndices = evidences.slice(1).map((_, i) => i + 1);
-        laterEvidenceRef = '는 ' + buildEvidenceRef(laterIndices) + '과 같이';
-      } else {
-        laterEvidenceRef = '는';
-      }
-
       const usageText = pe.reason === 'using' ? '사용 중' : (pe.reason === 'preparing' ? '사용 및 사용 준비 중' : '사용 및 사용 준비 중');
       const goodsListStr = goodsWithGroups.length > 0 ? goodsWithGroups.join(', ') : '[지정상품]';
+      const usageStatus = pe.reason === 'using' ? '사용' : '사용예정';
 
+      // 첨부자료별 맥락 문장 배열 생성 (Word용)
       const reasonText1 = `본 상표는 ${reasonClause} 우선심사를 신청합니다.`;
-      const reasonText2 = `본 출원인 "${applicantName}"는 본 신청서의 첨부자료${firstEvidenceRef}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`;
-      const reasonText3 = `따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${pe.reason === 'using' ? '사용' : '사용예정'} 중에 있습니다.`;
-      const reasonText4 = `이건 출원인 "${applicantName}"${laterEvidenceRef} 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`;
+      const reasonParagraphs = [];
+
+      if (evidences.length === 0) {
+        reasonParagraphs.push(`본 출원인 "${applicantName}"는 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
+        reasonParagraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
+        reasonParagraphs.push(`이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
+      } else if (evidences.length === 1) {
+        const evRef = `첨부자료 1(${evidences[0].title})`;
+        reasonParagraphs.push(`본 출원인 "${applicantName}"는 본 신청서의 ${evRef}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
+        reasonParagraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
+        reasonParagraphs.push(`부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
+      } else {
+        const firstRef = `첨부자료 1(${evidences[0].title})`;
+        reasonParagraphs.push(`본 출원인 "${applicantName}"는 본 신청서의 ${firstRef}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
+        reasonParagraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
+        for (let i = 1; i < evidences.length; i++) {
+          const evRef = `첨부자료 ${i + 1}(${evidences[i].title})`;
+          reasonParagraphs.push(`또한, ${evRef}에서 직접 확인할 수 있는 바와 같이, 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 실제 사용하고 있습니다.`);
+        }
+        reasonParagraphs.push(`이상과 같이, 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
+      }
       
       // Edge Function으로 Word 생성 요청
       const docData = {
@@ -8234,9 +8275,7 @@ ${content.substring(0, 1200)}
         goodsWithGroups,
         evidences,
         reasonText1,
-        reasonText2,
-        reasonText3,
-        reasonText4
+        reasonParagraphs
       };
       
       // Supabase Edge Function 호출 또는 클라이언트 사이드 생성
@@ -8472,18 +8511,12 @@ ${content.substring(0, 1200)}
             spacing: { after: 150 },
             children: [new TextRun({ text: data.reasonText1, size: 22 })]
           }),
-          new Paragraph({
-            spacing: { after: 150 },
-            children: [new TextRun({ text: data.reasonText2, size: 22 })]
-          }),
-          new Paragraph({
-            spacing: { after: 150 },
-            children: [new TextRun({ text: data.reasonText3, size: 22 })]
-          }),
-          new Paragraph({
-            spacing: { after: 200 },
-            children: [new TextRun({ text: data.reasonText4, size: 22 })]
-          }),
+          ...(data.reasonParagraphs || []).map((text, i, arr) =>
+            new Paragraph({
+              spacing: { after: i === arr.length - 1 ? 200 : 150 },
+              children: [new TextRun({ text: text, size: 22 })]
+            })
+          ),
           
           // 증빙자료
           ...(data.evidences.length > 0 ? [
