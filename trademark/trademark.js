@@ -7411,14 +7411,26 @@ ${criticalResults.slice(0, 5).map(r =>
           !t.str.replace(/\s/g, '').includes('상표견본')
         );
 
-        if (belowTexts.length > 0) {
-          // 가장 큰 폰트 크기 = 상표 콘텐츠
-          const maxFont = Math.max(...belowTexts.map(t => t.fontSize));
-          // 헤더 텍스트(날짜 등) 제외: 폰트 크기가 최대값의 60% 이상인 것만
-          const tmTexts = belowTexts.filter(t => t.fontSize >= maxFont * 0.6);
+        // 메타 텍스트 필터링 (페이지번호, 날짜 등 비상표 콘텐츠)
+        const isMetaText = (s) => {
+          const t = s.replace(/\s/g, '');
+          if (/^\d{1,3}[-\/]\d{1,3}$/.test(t)) return true;  // 3-3, 1/3 등 페이지번호
+          if (/^\d{4}[-.]?\d{2}[-.]?\d{2}$/.test(t)) return true; // 날짜
+          if (/^\d{1,4}$/.test(t)) return true; // 순수 숫자
+          if (t.length <= 1) return true; // 단일 문자
+          return false;
+        };
 
-          console.log('[TM] 전략A: 아래 텍스트', belowTexts.length, '개, 최대 폰트:', maxFont.toFixed(1),
-            ', 상표 텍스트:', tmTexts.map(t => t.str).join(' '));
+        const candidateTexts = belowTexts.filter(t => !isMetaText(t.str));
+
+        console.log('[TM] 전략A: 아래 텍스트', belowTexts.length, '개',
+          ', 메타 제외:', candidateTexts.length, '개',
+          ', 내용:', candidateTexts.map(t => `"${t.str}"(f=${t.fontSize.toFixed(1)})`).join(', '));
+
+        if (candidateTexts.length > 0) {
+          // 가장 큰 폰트 크기 = 상표 콘텐츠
+          const maxFont = Math.max(...candidateTexts.map(t => t.fontSize));
+          const tmTexts = candidateTexts.filter(t => t.fontSize >= maxFont * 0.6);
 
           if (tmTexts.length > 0 && maxFont > 0) {
             const fontPx = maxFont * scale;
@@ -7442,6 +7454,8 @@ ${criticalResults.slice(0, 5).map(r =>
             }
           }
         }
+        // candidateTexts가 비어있으면 → 상표가 이미지일 가능성 → 전략B로
+        console.log('[TM] 전략A: 유효한 상표 텍스트 없음 (이미지 상표일 수 있음)');
       }
     } catch (e) {
       console.warn('[TM] 전략A 실패:', e);
@@ -7473,27 +7487,42 @@ ${criticalResults.slice(0, 5).map(r =>
       if (bestImgName && bestImgSize > 500) {
         const img = page.objs.get(bestImgName);
         const ic = document.createElement('canvas');
-        ic.width = img.width;
-        ic.height = img.height;
-        const ictx = ic.getContext('2d');
-        const id = ictx.createImageData(img.width, img.height);
-        const src = img.data, dst = id.data;
 
-        if (img.kind === 3) { // RGBA
-          dst.set(src);
-        } else if (img.kind === 2) { // RGB
-          for (let p = 0, d = 0; p < src.length; p += 3, d += 4) {
-            dst[d] = src[p]; dst[d+1] = src[p+1]; dst[d+2] = src[p+2]; dst[d+3] = 255;
-          }
-        } else { // Grayscale
-          for (let p = 0, d = 0; p < src.length; p++, d += 4) {
-            dst[d] = dst[d+1] = dst[d+2] = src[p]; dst[d+3] = 255;
-          }
+        // ImageBitmap인 경우 (최신 브라우저)
+        if (typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap) {
+          ic.width = img.width;
+          ic.height = img.height;
+          ic.getContext('2d').drawImage(img, 0, 0);
+          console.log('[TM] 전략B: ImageBitmap 추출 성공:', img.width, 'x', img.height);
+          return TM.autoCropCanvas(ic);
         }
 
-        ictx.putImageData(id, 0, 0);
-        console.log('[TM] 전략B: 임베디드 이미지 추출 성공:', img.width, 'x', img.height);
-        return TM.autoCropCanvas(ic);
+        // raw pixel data인 경우
+        if (img.data && img.width && img.height) {
+          ic.width = img.width;
+          ic.height = img.height;
+          const ictx = ic.getContext('2d');
+          const id = ictx.createImageData(img.width, img.height);
+          const src = img.data, dst = id.data;
+
+          if (img.kind === 3) { // RGBA
+            dst.set(src);
+          } else if (img.kind === 2) { // RGB
+            for (let p = 0, d = 0; p < src.length; p += 3, d += 4) {
+              dst[d] = src[p]; dst[d+1] = src[p+1]; dst[d+2] = src[p+2]; dst[d+3] = 255;
+            }
+          } else { // Grayscale
+            for (let p = 0, d = 0; p < src.length; p++, d += 4) {
+              dst[d] = dst[d+1] = dst[d+2] = src[p]; dst[d+3] = 255;
+            }
+          }
+
+          ictx.putImageData(id, 0, 0);
+          console.log('[TM] 전략B: 픽셀 데이터 추출 성공:', img.width, 'x', img.height);
+          return TM.autoCropCanvas(ic);
+        }
+
+        console.log('[TM] 전략B: 이미지 객체 형식 알 수 없음:', typeof img, Object.keys(img || {}));
       }
     } catch (e) {
       console.warn('[TM] 전략B 실패:', e);
