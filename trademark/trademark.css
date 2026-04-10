@@ -3973,6 +3973,86 @@
   background: #fef2f2;
 }
 
+/* 문서 분석 전략 패널 */
+.tm-strategy-panel {
+  border: 1px solid #bfdbfe;
+  background: #f0f7ff;
+}
+
+.tm-strategy-panel .tm-panel-header {
+  background: #eff6ff;
+}
+
+.tm-badge-info {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+.tm-strategy-section {
+  margin-bottom: 14px;
+}
+
+.tm-strategy-section:last-child {
+  margin-bottom: 0;
+}
+
+.tm-strategy-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e40af;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.tm-strategy-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tm-strategy-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  background: #dbeafe;
+  color: #1e40af;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tm-strategy-findings {
+  margin: 0;
+  padding-left: 18px;
+  list-style: none;
+}
+
+.tm-strategy-findings li {
+  position: relative;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.5;
+  padding: 2px 0;
+}
+
+.tm-strategy-findings li::before {
+  content: '▸';
+  position: absolute;
+  left: -16px;
+  color: #3b82f6;
+  font-weight: bold;
+}
+
+.tm-strategy-text {
+  font-size: 13px;
+  color: #1e3a5f;
+  line-height: 1.6;
+  padding: 10px 14px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
 /* 추출 정보 컴팩트 */
 .tm-extracted-info-compact {
   margin-top: 12px;
