@@ -2519,7 +2519,40 @@
                 ` : ''}
               </div>
             </div>
-            
+
+            ${p.aiAnalysis.fileAnalysisInsights ? `
+            <div class="tm-panel tm-strategy-panel">
+              <div class="tm-panel-header">
+                <h3>📑 문서 분석 전략</h3>
+                <span class="tm-badge tm-badge-info">파일 기반</span>
+              </div>
+              <div class="tm-panel-body">
+                ${p.aiAnalysis.fileAnalysisInsights.documentTypes?.length > 0 ? `
+                <div class="tm-strategy-section">
+                  <div class="tm-strategy-label">분석 문서</div>
+                  <div class="tm-strategy-tags">
+                    ${p.aiAnalysis.fileAnalysisInsights.documentTypes.map(t => `<span class="tm-strategy-tag">${TM.escapeHtml(t)}</span>`).join('')}
+                  </div>
+                </div>
+                ` : ''}
+                ${p.aiAnalysis.fileAnalysisInsights.keyFindings?.length > 0 ? `
+                <div class="tm-strategy-section">
+                  <div class="tm-strategy-label">핵심 발견사항</div>
+                  <ul class="tm-strategy-findings">
+                    ${p.aiAnalysis.fileAnalysisInsights.keyFindings.map(f => `<li>${TM.escapeHtml(f)}</li>`).join('')}
+                  </ul>
+                </div>
+                ` : ''}
+                ${p.aiAnalysis.fileAnalysisInsights.goodsSearchStrategy ? `
+                <div class="tm-strategy-section">
+                  <div class="tm-strategy-label">지정상품 탐색 전략</div>
+                  <div class="tm-strategy-text">${TM.escapeHtml(p.aiAnalysis.fileAnalysisInsights.goodsSearchStrategy)}</div>
+                </div>
+                ` : ''}
+              </div>
+            </div>
+            ` : ''}
+
             <div class="tm-panel">
               <div class="tm-panel-header">
                 <h3>🎯 추천 상품류</h3>
@@ -10235,6 +10268,11 @@ ${TM.PRACTICE_GUIDELINES}
     "details": "온라인 자사몰 운영"
   },
   "expansionPotential": ["댄스 용품", "스포츠 의류", "댄스 교육"],
+  "fileAnalysisInsights": {
+    "documentTypes": ["사업계획서", "제품 카탈로그"],
+    "keyFindings": ["주요 발견사항 1", "주요 발견사항 2", "주요 발견사항 3"],
+    "goodsSearchStrategy": "이 문서에서 확인된 핵심 제품/서비스를 기반으로 ... 전략으로 지정상품을 탐색합니다"
+  },
   "classRecommendations": {
     "core": [
       {"class": "25", "reason": "발레 의류, 댄스복 - 핵심 상품", "priority": 1}
@@ -10250,7 +10288,11 @@ ${TM.PRACTICE_GUIDELINES}
     ]
   },
   "searchKeywords": ["발레", "댄스", "의류", "레오타드", "판매"]
-}`;
+}
+★ fileAnalysisInsights는 업로드된 문서가 있을 때만 포함. 없으면 생략.
+  - documentTypes: 문서의 종류 (사업계획서, IR자료, 제품 카탈로그, 계약서, 홈페이지 등)
+  - keyFindings: 문서에서 파악한 핵심 사업 정보 (제품/서비스, 타겟 시장, 수익 모델 등) 3~5개
+  - goodsSearchStrategy: 이 문서 분석을 바탕으로 어떤 전략으로 지정상품을 찾을 것인지 2~3문장`;
 
       if (btn) btn.innerHTML = '<span class="tf">⏳</span> 사업 분석 중...';
       
@@ -10320,6 +10362,8 @@ ${TM.PRACTICE_GUIDELINES}
         salesChannels: analysis.salesChannels || {},
         expansionPotential: analysis.expansionPotential || [],
         coreActivity: (analysis.coreProducts?.[0] || '') + ' ' + (analysis.coreServices?.[0] || ''),
+        // ★ 파일 분석 전략 (파일 업로드 시에만)
+        fileAnalysisInsights: analysis.fileAnalysisInsights || null,
         // ★ 3단계 추천 구조
         classRecommendations: {
           core: coreClasses,
@@ -10819,16 +10863,7 @@ JSON 배열로만 응답: ["상품명1", "상품명2"]`;
   TM.fetchSimilarGroups = async function(classCode) {
     const paddedCode = String(classCode).padStart(2, '0');
 
-    // RPC 우선 시도
-    try {
-      const { data, error } = await App.sb.rpc('get_similar_groups', { p_class_code: paddedCode });
-      if (!error && data && data.length > 0) {
-        console.log(`[TM] 제${classCode}류 유사군: ${data.length}개 (RPC)`);
-        return data;
-      }
-    } catch (e) { /* RPC 없으면 폴백 */ }
-
-    // 폴백: 전체 조회 후 JS 그룹핑
+    // DB 직접 조회 후 JS 그룹핑
     const { data, error } = await App.sb
       .from('gazetted_goods_cache')
       .select('similar_group_code, similar_group_name')
