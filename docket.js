@@ -7,11 +7,42 @@ var Docket = {};
 
 Docket.config = {
   recipient: 'docket@didimip.com',
-  senderName: '노재일',
-  defaultDB: '노재일',
-  bankAccount: '기업은행 : 257-155360-01-013',
-  bankHolder: '노재일(특허그룹디딤)',
   emailFunctionUrl: '',
+};
+
+// ── 담당 변리사(DB) 프로필 ──
+// 보내는 사람 선택 시 계좌번호·예금주·이름 자동 입력
+Docket.attorneys = {
+  '노재일': {
+    name: '노재일',
+    bankAccount: '기업은행 : 257-155360-01-013',
+    bankHolder: '노재일(특허그룹디딤)',
+  },
+  // 변리사 추가 시 여기에 항목 추가
+  // '홍길동': {
+  //   name: '홍길동',
+  //   bankAccount: '신한은행 : 110-xxx-xxxxxx',
+  //   bankHolder: '홍길동(특허그룹디딤)',
+  // },
+};
+Docket.defaultAttorney = '노재일';
+
+// 현재 선택된 변리사 정보를 반환
+Docket.getAttorney = function() {
+  var sel = document.getElementById('dkt-attorney');
+  var name = sel ? sel.value : Docket.defaultAttorney;
+  return Docket.attorneys[name] || Docket.attorneys[Docket.defaultAttorney];
+};
+
+// 변리사 선택 시 자동 채움
+Docket.onAttorneyChange = function() {
+  var att = Docket.getAttorney();
+  // 할인란 변리사명 동기화
+  var discEl = document.getElementById('dkt-discount-attorney');
+  if (discEl) discEl.value = att.name;
+  // 계좌 정보 표시
+  var bankEl = document.getElementById('dkt-bank-display');
+  if (bankEl) bankEl.textContent = att.bankAccount + ' (예금주: ' + att.bankHolder + ')';
 };
 
 // ── 사건 유형별 수수료 템플릿 ──
@@ -148,6 +179,19 @@ Docket.init = function() {
   }
   var dateField = document.getElementById('dkt-date');
   if (dateField && !dateField.value) dateField.value = new Date().toISOString().split('T')[0];
+
+  // 담당 변리사 드롭다운 채우기
+  var attSel = document.getElementById('dkt-attorney');
+  if (attSel && attSel.options.length <= 1) {
+    attSel.innerHTML = '';
+    Object.keys(Docket.attorneys).forEach(function(name) {
+      var opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      if (name === Docket.defaultAttorney) opt.selected = true;
+      attSel.appendChild(opt);
+    });
+  }
+  Docket.onAttorneyChange();
   Docket.renderFeeTable();
 };
 
@@ -255,6 +299,7 @@ Docket.collectData = function() {
     govItems.push({ name: tr.querySelector('[data-field="name"]').value, unitPrice: parseInt(tr.querySelector('[data-field="unitPrice"]').value)||0, qty: parseInt(tr.querySelector('[data-field="qty"]').value)||1, note: tr.querySelector('[data-field="note"]').value });
   });
 
+  var att = Docket.getAttorney();
   return {
     templateKey: tmplKey, template: tmpl,
     caseNumber: v('dkt-case-number'), date: v('dkt-date') || new Date().toISOString().split('T')[0],
@@ -263,8 +308,9 @@ Docket.collectData = function() {
     feeItems: feeItems, govItems: govItems,
     discountAmount: parseInt(v('dkt-discount-amount')) || 0,
     discountQty: parseInt(v('dkt-discount-qty')) || 1,
-    discountAttorney: v('dkt-discount-attorney') || Docket.config.senderName,
+    discountAttorney: v('dkt-discount-attorney') || att.name,
     notes: tmpl.notes,
+    attorney: att,
   };
 };
 
@@ -348,8 +394,8 @@ Docket.generateExcel = function(data) {
   // 상세
   set(r,1,'3. 상세'); r++;
   data.notes.forEach(function(n){ set(r,1,n); merge(r,1,r,9); r++; }); r++;
-  set(r,1,'4. 결제계좌 (예금주: '+Docket.config.bankHolder+')'); r++;
-  set(r,1,'     '+Docket.config.bankAccount);
+  set(r,1,'4. 결제계좌 (예금주: '+data.attorney.bankHolder+')'); r++;
+  set(r,1,'     '+data.attorney.bankAccount);
 
   ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:r,c:11}});
   ws['!merges'] = merges;
@@ -383,8 +429,9 @@ Docket.sendEmail = async function() {
   var govTotal=0; data.govItems.forEach(function(i){govTotal+=i.unitPrice*i.qty;});
   var grand=feeSub+govTotal;
 
+  var senderName = data.attorney.name;
   var html = '<div style="font-family:Malgun Gothic,sans-serif;font-size:14px;line-height:1.8">';
-  html += '<p>안녕하세요, '+Docket.config.senderName+' 변리사입니다.</p>';
+  html += '<p>안녕하세요, '+senderName+' 변리사입니다.</p>';
   html += '<p>'+data.subject+'에 대한 견적서를 첨부드립니다.</p><br/>';
   html += '<table style="border-collapse:collapse;font-size:13px">';
   html += '<tr><td style="padding:4px 12px;font-weight:bold">수신</td><td>'+data.clientName+'</td></tr>';
@@ -393,7 +440,7 @@ Docket.sendEmail = async function() {
   if (disc!==0) html += '<tr><td style="padding:4px 12px;font-weight:bold">할인</td><td style="color:#FF3B30">'+data.discountAttorney+' 변리사 담당 우대 ('+Docket.fmt(disc)+'원)</td></tr>';
   html += '</table><br/>';
   html += '<p>상세 내역은 첨부된 견적서를 확인해 주시기 바랍니다.</p>';
-  html += '<p>감사합니다.<br/>'+Docket.config.senderName+' 드림</p></div>';
+  html += '<p>감사합니다.<br/>'+senderName+' 드림</p></div>';
 
   var btn = document.getElementById('dkt-send-btn');
   btn.disabled = true; btn.innerHTML = '<span class="tossface">⏳</span> 발송 중...';
@@ -426,7 +473,7 @@ Docket.sendEmail = async function() {
     App.showToast('발송 실패: '+err.message, 'error');
     if (confirm('자동 발송 실패.\nGmail 작성창으로 대체하시겠습니까?\n(견적서 파일은 별도 다운로드됩니다)')) {
       Docket.downloadExcel();
-      var url = 'https://mail.google.com/mail/?view=cm&to='+encodeURIComponent(data.recipient)+'&su='+encodeURIComponent('[특허그룹 디딤] '+data.subject)+'&body='+encodeURIComponent('안녕하세요, '+Docket.config.senderName+' 변리사입니다.\n\n견적서를 첨부드립니다.\n\n감사합니다.\n'+Docket.config.senderName+' 드림');
+      var url = 'https://mail.google.com/mail/?view=cm&to='+encodeURIComponent(data.recipient)+'&su='+encodeURIComponent('[특허그룹 디딤] '+data.subject)+'&body='+encodeURIComponent('안녕하세요, '+senderName+' 변리사입니다.\n\n견적서를 첨부드립니다.\n\n감사합니다.\n'+senderName+' 드림');
       window.open(url, '_blank');
     }
   } finally {

@@ -355,6 +355,20 @@
           <input type="email" class="input-field" id="dkt-recipient" value="docket@didimip.com" />
         </div>
 
+        <!-- 담당 변리사 선택 -->
+        <div class="dkt-attorney-bar">
+          <div>
+            <label>👤 담당 변리사 (DB)</label>
+            <select id="dkt-attorney" class="input-field" onchange="Docket.onAttorneyChange()">
+              <!-- Docket.init()에서 동적 생성 -->
+            </select>
+          </div>
+          <div class="dkt-bank-info">
+            <label>🏦 결제계좌</label>
+            <span id="dkt-bank-display">-</span>
+          </div>
+        </div>
+
         <!-- 상단 메타 정보 -->
         <div class="dkt-meta-grid">
           <div>

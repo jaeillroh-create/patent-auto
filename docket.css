@@ -42,6 +42,13 @@
 .dkt-recipient-bar label { font-size: 12px; font-weight: 600; color: var(--color-primary); white-space: nowrap; }
 .dkt-recipient-bar .input-field { flex: 1; padding: 6px 10px; font-size: 13px; }
 
+/* 담당 변리사 선택 바 */
+.dkt-attorney-bar { display: flex; align-items: flex-end; gap: 20px; padding: 14px 16px; background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 12px; margin-bottom: 20px; }
+.dkt-attorney-bar label { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 4px; }
+.dkt-attorney-bar select { font-size: 13px; padding: 8px 12px; }
+.dkt-bank-info { flex: 1; }
+.dkt-bank-info span { display: block; font-size: 13px; font-weight: 500; color: var(--color-text-primary); padding: 8px 0; }
+
 /* 하단 버튼 */
 .dkt-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
 .dkt-actions .btn { min-width: 130px; padding: 12px 20px; font-size: 14px; font-weight: 600; }
