@@ -324,6 +324,11 @@ App.switchService = function(service) {
     TM.init();
   }
 
+  // 사건등록 모듈 초기화
+  if (service === 'docket' && window.Docket && typeof Docket.init === 'function') {
+    Docket.init();
+  }
+
   // URL 해시 업데이트
   history.replaceState(null, '', '#' + service);
 };
@@ -353,7 +358,9 @@ App.switchTrademarkSubTab = function(sub) {
 
 App.initServiceTabs = function() {
   var hash = window.location.hash.replace('#', '');
-  if (hash === 'trademark' || hash.startsWith('trademark-')) {
+  if (hash === 'docket') {
+    App.switchService('docket');
+  } else if (hash === 'trademark' || hash.startsWith('trademark-')) {
     App.switchService('trademark');
     if (hash.startsWith('trademark-')) {
       var tmSub = hash.replace('trademark-', '');
