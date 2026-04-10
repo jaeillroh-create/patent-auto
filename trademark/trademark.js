@@ -1667,7 +1667,9 @@
             riskAssessment: TM.currentProject.riskAssessment,
             feeCalculation: TM.currentProject.feeCalculation,
             priorityExam: peForSave,
-            aiAnalysis: TM.currentProject.aiAnalysis
+            aiAnalysis: TM.currentProject.aiAnalysis,
+            businessFiles: TM.currentProject.businessFiles,
+            businessFileTexts: TM.currentProject.businessFileTexts
           };
         })(),
         updated_at: new Date().toISOString()
@@ -2410,11 +2412,39 @@
               <span class="tm-badge tm-badge-primary">추천</span>
             </div>
             <div class="tm-panel-body">
-              <p class="tm-hint">사업 내용을 입력하면 AI가 상품류와 지정상품을 추천합니다.</p>
-              <div class="tm-field" style="margin-bottom: 16px;">
-                <input type="text" class="tm-input" id="tm-business-url" 
+              <p class="tm-hint">사업 내용을 입력하거나 파일을 업로드하면 AI가 상품류와 지정상품을 추천합니다.</p>
+              <div class="tm-field" style="margin-bottom: 12px;">
+                <input type="text" class="tm-input" id="tm-business-url"
                        value="${TM.escapeHtml(p.businessDescription || '')}"
                        placeholder="예: 소프트웨어 개발, 특허 출원 대행">
+              </div>
+              <!-- 사업 분석 파일 업로드 -->
+              <div class="tm-business-file-area" style="margin-bottom: 16px;">
+                <div class="tm-dropzone-compact tm-business-dropzone" id="tm-business-dropzone"
+                     onclick="document.getElementById('tm-business-file-input').click()"
+                     ondragover="event.preventDefault(); this.classList.add('dragover')"
+                     ondragleave="this.classList.remove('dragover')"
+                     ondrop="event.preventDefault(); this.classList.remove('dragover'); TM.handleBusinessFileUpload(event.dataTransfer.files)">
+                  <span class="tm-dropzone-compact-icon">📎</span>
+                  <span class="tm-dropzone-compact-text">사업 관련 파일 업로드 <strong>(클릭 또는 드래그)</strong></span>
+                  <span class="tm-dropzone-compact-formats">PDF, DOCX, XLSX, TXT, HWP 등</span>
+                </div>
+                <input type="file" id="tm-business-file-input"
+                       accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.rtf,.xlsx,.xls,.pptx,.hwp,.hwpx"
+                       multiple style="display:none"
+                       onchange="TM.handleBusinessFileUpload(this.files); this.value=''">
+                ${(p.businessFiles && p.businessFiles.length > 0) ? `
+                <div class="tm-business-file-list" id="tm-business-file-list">
+                  ${p.businessFiles.map((f, i) => `
+                    <div class="tm-business-file-item">
+                      <span class="tm-business-file-icon">${TM.getFileIcon(f.name)}</span>
+                      <span class="tm-business-file-name" title="${TM.escapeHtml(f.name)}">${TM.escapeHtml(f.name)}</span>
+                      <span class="tm-business-file-size">${TM.formatFileSize(f.size)}</span>
+                      <button class="tm-business-file-remove" onclick="TM.removeBusinessFile(${i})" title="삭제">✕</button>
+                    </div>
+                  `).join('')}
+                </div>
+                ` : ''}
               </div>
               <button class="btn btn-primary btn-block" data-action="tm-analyze-business" style="padding: 12px;">🔍 분석</button>
             </div>
@@ -8032,7 +8062,126 @@ ${text.substring(0, 2000)}
     TM.renderCurrentStep();
     App.showToast(`${files.length}개 증거자료가 추가되었습니다.`, 'success');
   };
-  
+
+  // ============================================================
+  // 사업 분석용 파일 업로드 처리
+  // ============================================================
+
+  TM.getFileIcon = function(filename) {
+    const ext = (filename || '').split('.').pop().toLowerCase();
+    const icons = { pdf: '📕', doc: '📘', docx: '📘', hwp: '📗', hwpx: '📗', xls: '📊', xlsx: '📊', pptx: '📙', ppt: '📙', txt: '📄', csv: '📄', md: '📄', json: '📄' };
+    return icons[ext] || '📎';
+  };
+
+  TM.formatFileSize = function(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
+  };
+
+  TM.handleBusinessFileUpload = async function(files) {
+    if (!files || files.length === 0) return;
+
+    const p = TM.currentProject;
+    if (!p.businessFiles) p.businessFiles = [];
+    if (!p.businessFileTexts) p.businessFileTexts = [];
+
+    const dropzone = document.getElementById('tm-business-dropzone');
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      // 파일 크기 체크 (30MB)
+      if (file.size > 30 * 1024 * 1024) {
+        App.showToast(`${file.name}: 파일 크기 초과 (30MB 이하)`, 'warning');
+        continue;
+      }
+
+      // 로딩 표시
+      if (dropzone) {
+        dropzone.innerHTML = `
+          <div class="tm-dropzone-loading">
+            <div class="tm-spinner"></div>
+            <div>파일 분석 중... (${i + 1}/${files.length}) ${file.name}</div>
+          </div>
+        `;
+      }
+
+      try {
+        // App.extractTextFromFile로 텍스트 추출
+        let extractedText = '';
+        try {
+          extractedText = await App.extractTextFromFile(file);
+        } catch (extractError) {
+          console.warn('[TM] 사업분석 파일 텍스트 추출 실패:', extractError.message);
+          // 폴백: trademark.js 내부 추출 함수 시도
+          const ext = file.name.toLowerCase().split('.').pop();
+          try {
+            if (ext === 'pdf') {
+              extractedText = await TM.extractTextFromPDF(file);
+            } else if (ext === 'doc' || ext === 'docx') {
+              extractedText = await TM.extractTextFromWord(file);
+            }
+          } catch (fallbackError) {
+            console.warn('[TM] 폴백 추출도 실패:', fallbackError.message);
+          }
+        }
+
+        if (!extractedText || extractedText.trim().length < 10) {
+          App.showToast(`${file.name}: 텍스트를 추출할 수 없습니다. 다른 형식으로 시도해주세요.`, 'warning');
+          continue;
+        }
+
+        // 파일 정보 + 추출된 텍스트 저장
+        p.businessFiles.push({
+          name: file.name,
+          size: file.size,
+          type: file.type || file.name.split('.').pop(),
+          addedAt: new Date().toISOString()
+        });
+        p.businessFileTexts.push({
+          name: file.name,
+          text: extractedText.substring(0, 50000) // 최대 5만자
+        });
+
+        console.log(`[TM] 사업분석 파일 추가: ${file.name} (${extractedText.length}자 추출)`);
+
+      } catch (error) {
+        console.error('[TM] 사업분석 파일 처리 실패:', error);
+        App.showToast(`${file.name}: 파일 처리 실패`, 'error');
+      }
+    }
+
+    // 드롭존 원상복구
+    if (dropzone) {
+      dropzone.innerHTML = `
+        <span class="tm-dropzone-compact-icon">📎</span>
+        <span class="tm-dropzone-compact-text">사업 관련 파일 업로드 <strong>(클릭 또는 드래그)</strong></span>
+        <span class="tm-dropzone-compact-formats">PDF, DOCX, XLSX, TXT, HWP 등</span>
+      `;
+    }
+
+    TM.hasUnsavedChanges = true;
+    TM.renderCurrentStep();
+
+    if (p.businessFiles.length > 0) {
+      App.showToast(`${files.length}개 파일이 추가되었습니다. 분석 버튼을 눌러주세요.`, 'success');
+    }
+  };
+
+  TM.removeBusinessFile = function(index) {
+    const p = TM.currentProject;
+    if (!p.businessFiles) return;
+
+    const removed = p.businessFiles.splice(index, 1);
+    if (p.businessFileTexts) p.businessFileTexts.splice(index, 1);
+
+    console.log('[TM] 사업분석 파일 제거:', removed[0]?.name);
+    TM.hasUnsavedChanges = true;
+    TM.renderCurrentStep();
+  };
+
   // PDF에서 텍스트 추출 (증거자료용)
   TM.extractTextFromPDF = async function(file) {
     if (!window.pdfjsLib) {
@@ -9975,13 +10124,17 @@ ${content.substring(0, 1200)}
       return;
     }
     TM._analyzingBusiness = true;
-    
+
     const p = TM.currentProject;
     const businessInput = document.getElementById('tm-business-url')?.value?.trim();
-    
-    if (!businessInput && !p.trademarkName) {
+
+    // 업로드된 파일 텍스트 결합
+    const fileTexts = (p.businessFileTexts || []).map(f => f.text).filter(Boolean);
+    const hasFileContent = fileTexts.length > 0;
+
+    if (!businessInput && !hasFileContent && !p.trademarkName) {
       TM._analyzingBusiness = false;
-      App.showToast('상표명 또는 사업 내용을 입력하세요.', 'warning');
+      App.showToast('상표명, 사업 내용 또는 파일을 입력하세요.', 'warning');
       return;
     }
     
@@ -10005,12 +10158,23 @@ ${content.substring(0, 1200)}
       // - 하드코딩된 규칙 대신 LLM이 사업 특성을 분석하여 판단
       // - 실무 지식을 프롬프트에 포함하여 정확도 향상
       // ================================================================
+      // 파일 내용을 프롬프트에 포함 (최대 30,000자로 제한)
+      let fileContentSection = '';
+      if (hasFileContent) {
+        let combinedFileText = fileTexts.join('\n\n---\n\n');
+        if (combinedFileText.length > 30000) {
+          combinedFileText = combinedFileText.substring(0, 30000) + '\n... (이하 생략)';
+        }
+        const fileNames = (p.businessFiles || []).map(f => f.name).join(', ');
+        fileContentSection = `\n\n【업로드된 사업 관련 문서】\n파일: ${fileNames}\n\n${combinedFileText}\n\n★ 위 문서 내용을 정밀하게 분석하여 사업의 핵심 제품/서비스, 판매 채널, 사업 모델을 파악하세요.\n★ 문서에 나타난 구체적인 상품/서비스를 기반으로 상품류를 추천하세요.`;
+      }
+
       const analysisPrompt = `당신은 10년 이상 경력의 상표 출원 전문 변리사입니다.
 고객의 사업을 심층 분석하여 최적의 상품류를 추천하세요.
 
 【고객 정보】
 - 상표명: ${p.trademarkName || '미정'}
-- 사업 내용: ${businessInput || '미입력'}
+- 사업 내용: ${businessInput || '미입력'}${fileContentSection}
 
 ${TM.PRACTICE_GUIDELINES}
 
