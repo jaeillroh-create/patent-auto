@@ -406,9 +406,202 @@ Docket.resetNotes = function() {
   Docket.updateNotesTextarea();
 };
 
+// ═══════════════════════════════════════════════════════════════
+// 폼 데이터 수집 + 이메일 본문 생성
+// ═══════════════════════════════════════════════════════════════
+
+// 폼에서 모든 입력값을 수집하여 data 객체로 반환
+Docket.collectData = function() {
+  var v = function(id) { var el = document.getElementById(id); return el ? (el.value || '').trim() : ''; };
+  var radio = function(name) { var el = document.querySelector('input[name="'+name+'"]:checked'); return el ? el.value : ''; };
+
+  var right = v('dkt-right');
+  var stage = v('dkt-stage');
+  var tmpl = (Docket.feeSchedule[right] || {})[stage];
+  var cnt = parseInt(v('dkt-case-count')) || 1;
+  var db = v('dkt-db') || Docket.defaultDB;
+  var dbCfg = Docket.dbConfig[db] || Docket.dbConfig[Docket.defaultDB];
+
+  // 수가표 기반 금액 계산
+  var listedTotal = tmpl ? tmpl.fees.reduce(function(s,i){return s+i.unitPrice*cnt;}, 0) : 0;
+  var govTotal = tmpl ? tmpl.gov.reduce(function(s,i){return s+i.unitPrice*cnt;}, 0) : 0;
+  var actualInput = parseInt(v('dkt-actual-fee')) || 0;
+  var vatIncluded = radio('dkt-vat-included') === 'yes';
+  var govIncluded = radio('dkt-gov-included') === 'yes';
+  var actualFee = vatIncluded ? Math.round(actualInput / 1.1) : actualInput;
+  var discount = listedTotal - actualFee;
+  var vat = Math.round(actualFee * 0.1);
+  var grand = actualFee + vat + govTotal;
+
+  // 심사형태 라벨
+  var examType = stage === '출원_우선' ? '우선'
+                : stage === '출원_일반' ? '일반'
+                : (tmpl ? tmpl.label : stage);
+
+  return {
+    // 사건종류
+    right: right,
+    stage: stage,
+    stageLabel: tmpl ? tmpl.label : stage,
+    examType: examType,
+    caseCount: cnt,
+
+    // 출원인
+    clientCompany: v('dkt-client-company'),
+    clientType: radio('dkt-client-type'),
+    contactName: v('dkt-contact-name'),
+    contactEmail: v('dkt-contact-email'),
+    contactPhone: v('dkt-contact-phone'),
+    contactCc: v('dkt-contact-cc'),
+
+    // 관계자
+    inventor: v('dkt-inventor'),
+    worker: v('dkt-worker'),
+    mandator: v('dkt-mandator'),
+    db: db,
+    dbConfig: dbCfg,
+    introducer: v('dkt-introducer'),
+
+    // 비용
+    listedTotal: listedTotal,
+    actualInput: actualInput,
+    actualFee: actualFee,
+    discount: discount,
+    vat: vat,
+    govTotal: govTotal,
+    grand: grand,
+    vatIncluded: vatIncluded,
+    govIncluded: govIncluded,
+
+    // 견적서 raw (수가표 원본 복사)
+    feeItems: tmpl ? tmpl.fees.map(function(i){return {name:i.name, unitPrice:i.unitPrice, qty:cnt};}) : [],
+    govItems: tmpl ? tmpl.gov.map(function(i){return {name:i.name, unitPrice:i.unitPrice, qty:cnt};}) : [],
+
+    // 기타
+    announcements: v('dkt-announcements'),
+    caseContent: v('dkt-case-content'),
+    priorityExam: v('dkt-priority-exam'),
+    draftDate: v('dkt-draft-date'),
+    mustCheck: v('dkt-must-check'),
+
+    // 상세 조항 (견적서용)
+    notes: v('dkt-notes').split(/\r?\n/).map(function(s){return s.trim();}).filter(Boolean),
+
+    // 수신인
+    recipient: v('dkt-recipient') || Docket.config.recipient,
+
+    // 견적서 엑셀용 파생 필드
+    date: new Date().toISOString().split('T')[0],
+    caseNumber: '',
+    clientName: v('dkt-client-company'),
+    caseTitle: v('dkt-case-content'),
+    subject: right + '(' + examType + ') ' + cnt + '건에 대한 비용견적의 건',
+    discountAmount: -Math.abs(discount), // 엑셀에는 음수로 표기
+    discountQty: 1,
+    discountAttorney: db,
+  };
+};
+
+// 이메일 제목
+Docket.buildEmailSubject = function(data) {
+  return '[사건등록][의뢰인: ' + (data.clientCompany || '-') + '][' + data.right + ' 총 ' + data.caseCount + '건]';
+};
+
+// 이메일 본문 HTML (워드 양식 표 재현)
+Docket.generateEmailBodyHtml = function(data) {
+  var esc = function(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  };
+  var row = function(label, value) {
+    return '<tr>'
+      + '<td style="font-weight:bold;padding:6px 14px;border:1px solid #ddd;vertical-align:top;white-space:nowrap;background:#f7f7f8">'+esc(label)+'</td>'
+      + '<td style="padding:6px 14px;border:1px solid #ddd;vertical-align:top">'+value+'</td>'
+      + '</tr>';
+  };
+
+  var clientLabel = data.clientType === 'new' ? '신규고객'
+                  : data.clientType === 'existing' ? '기존고객' : '';
+  var clientField = esc(data.clientCompany) + (clientLabel ? ' <span style="color:#666">['+clientLabel+']</span>' : '');
+
+  var contactLines = [];
+  if (data.contactName)  contactLines.push('담당자&amp;수신: ' + esc(data.contactName));
+  if (data.contactEmail) contactLines.push('이메일: ' + esc(data.contactEmail));
+  if (data.contactPhone) contactLines.push('전화번호: ' + esc(data.contactPhone));
+  if (data.contactCc)    contactLines.push('참조: ' + esc(data.contactCc));
+  var clientCell = clientField + (contactLines.length ? '<br>' + contactLines.join('<br>') : '');
+
+  var costLines = [
+    '대리인 수수료 ' + Docket.fmtMan(data.actualFee) + '만',
+    '<span style="color:#666">(수가표 ' + Docket.fmtMan(data.listedTotal) + '만: ' + esc(data.db) + ' 변리사 담당 우대 반영 후 ' + Docket.fmtMan(data.actualFee) + '만)</span>',
+    '부가세 포함여부: ' + (data.vatIncluded ? 'O' : 'X'),
+    '관납료 포함여부: ' + (data.govIncluded ? 'O' : 'X'),
+  ].join('<br>');
+
+  var h = '<div style="font-family:\'Malgun Gothic\',\'Apple SD Gothic Neo\',sans-serif;font-size:14px;line-height:1.7;color:#222">';
+  h += '<p>안녕하세요 ' + esc(data.db) + ' 변리사입니다.</p>';
+  h += '<p>사건등록 해주세요.</p>';
+  h += '<table style="border-collapse:collapse;font-size:13px;margin-top:12px;min-width:520px">';
+  h += row('사건종류', esc(data.right) + '(' + esc(data.examType) + ') ' + data.caseCount + '건');
+  h += row('출원인', clientCell);
+  h += row('발명자', esc(data.inventor) || '-');
+  h += row('실무자', esc(data.worker) || '-');
+  h += row('수임자', esc(data.mandator) || '-');
+  h += row('DB', esc(data.db));
+  h += row('소개자', esc(data.introducer) || '-');
+  h += row('비용', costLines);
+  h += row('출원안내', esc(data.announcements).replace(/\n/g,'<br>') || '-');
+  h += row('사건내용', esc(data.caseContent) || '-');
+  h += row('우선심사', esc(data.priorityExam) || '-');
+  h += row('초안발송', esc(data.draftDate) || '-');
+  h += row('필수확인', esc(data.mustCheck).replace(/\n/g,'<br>') || '-');
+  h += '</table>';
+  h += '<p style="margin-top:18px">감사합니다.<br>' + esc(data.db) + ' 드림</p>';
+  h += '</div>';
+  return h;
+};
+
+// 이메일 본문 plain text (Gmail fallback용)
+Docket.generateEmailBodyText = function(data) {
+  var pad = function(s, w) {
+    var n = w - [].concat.call([], s).length;
+    return s + (n > 0 ? ' '.repeat(n) : '');
+  };
+  var lines = [];
+  lines.push('[사건등록][의뢰인: ' + (data.clientCompany || '-') + '][' + data.right + ' 총 ' + data.caseCount + '건]');
+  lines.push('');
+  lines.push('안녕하세요 ' + data.db + ' 변리사입니다.');
+  lines.push('사건등록 해주세요.');
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  lines.push('사건종류 | ' + data.right + '(' + data.examType + ') ' + data.caseCount + '건');
+  var clientLabel = data.clientType === 'new' ? '신규고객' : data.clientType === 'existing' ? '기존고객' : '';
+  lines.push('출원인   | ' + (data.clientCompany || '-') + (clientLabel ? ' [' + clientLabel + ']' : ''));
+  if (data.contactName)  lines.push('         | 담당자&수신: ' + data.contactName);
+  if (data.contactEmail) lines.push('         | 이메일: ' + data.contactEmail);
+  if (data.contactPhone) lines.push('         | 전화번호: ' + data.contactPhone);
+  if (data.contactCc)    lines.push('         | 참조: ' + data.contactCc);
+  lines.push('발명자   | ' + (data.inventor || '-'));
+  lines.push('실무자   | ' + (data.worker || '-'));
+  lines.push('수임자   | ' + (data.mandator || '-'));
+  lines.push('DB       | ' + data.db);
+  lines.push('소개자   | ' + (data.introducer || '-'));
+  lines.push('비용     | 대리인 수수료 ' + Docket.fmtMan(data.actualFee) + '만');
+  lines.push('         | (수가표 ' + Docket.fmtMan(data.listedTotal) + '만: ' + data.db + ' 변리사 담당 우대 반영 후 ' + Docket.fmtMan(data.actualFee) + '만)');
+  lines.push('         | 부가세 포함여부: ' + (data.vatIncluded ? 'O' : 'X'));
+  lines.push('         | 관납료 포함여부: ' + (data.govIncluded ? 'O' : 'X'));
+  lines.push('출원안내 | ' + (data.announcements || '-').replace(/\n/g, '\n         | '));
+  lines.push('사건내용 | ' + (data.caseContent || '-'));
+  lines.push('우선심사 | ' + (data.priorityExam || '-'));
+  lines.push('초안발송 | ' + (data.draftDate || '-'));
+  lines.push('필수확인 | ' + (data.mustCheck || '-').replace(/\n/g, '\n         | '));
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  lines.push('감사합니다.');
+  lines.push(data.db + ' 드림');
+  return lines.join('\n');
+};
+
 // ═══ Stub 함수들 (후속 단계에서 구현) ═══
-Docket.collectData = function() { return {}; };
-Docket.generateEmailBodyHtml = function() { return ''; };
 Docket.generateFromTemplate = async function() { return null; };
 Docket.downloadExcel = function() {};
 Docket.sendEmail = async function() {};
