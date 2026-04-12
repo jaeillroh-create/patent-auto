@@ -1,76 +1,74 @@
-/* ═══ 사건등록 (Docket) v2.0 ═══ */
-#docket-dashboard-panel { max-width: 900px; margin: 0 auto; }
+/* ═══ 사건등록 (Docket) v3.0 ═══ */
+#docket-dashboard-panel { max-width: 980px; margin: 0 auto; }
 
 .dkt-card { background: var(--color-bg-primary); border: 1px solid var(--color-border); border-radius: 16px; padding: 28px; }
 .dkt-card-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
 .dkt-card-desc { font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 20px; line-height: 1.5; }
-
-/* 상단 메타 정보 */
-.dkt-meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
-.dkt-meta-grid label { font-size: 11px; font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 4px; }
-.dkt-meta-grid .input-field, .dkt-meta-grid select { font-size: 13px; padding: 8px 10px; }
-
-/* 수수료 편집 테이블 */
-.dkt-edit-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 8px; }
-.dkt-edit-table th { background: var(--color-bg-secondary); padding: 8px 10px; text-align: left; font-weight: 600; color: var(--color-text-secondary); border: 1px solid var(--color-border); font-size: 11px; }
-.dkt-edit-table td { padding: 4px 6px; border: 1px solid var(--color-border); vertical-align: middle; }
-.dkt-edit-table td .input-field { border: none; padding: 6px 8px; font-size: 12px; background: transparent; width: 100%; box-sizing: border-box; }
-.dkt-edit-table td .input-field:focus { background: var(--color-primary-light); border-radius: 4px; outline: none; }
-.dkt-edit-table td.fee-amount { text-align: right; font-weight: 600; font-size: 12px; padding-right: 10px; color: var(--color-text-primary); white-space: nowrap; }
-.dkt-edit-table td:last-child { width: 36px; text-align: center; }
-.dkt-edit-table input[type="number"] { text-align: right; }
-
-/* 섹션 제목 */
-.dkt-section-title { font-size: 13px; font-weight: 700; color: var(--color-text-primary); margin: 20px 0 8px; display: flex; align-items: center; justify-content: space-between; }
-.dkt-section-title .btn { font-size: 11px; padding: 4px 10px; }
-
-/* 할인 영역 */
-.dkt-discount-box { background: var(--color-warning-light); border: 1px solid var(--color-warning); border-radius: 10px; padding: 14px 16px; margin: 16px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.dkt-discount-box label { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); white-space: nowrap; }
-.dkt-discount-box .input-field { width: 120px; font-size: 13px; padding: 6px 10px; }
-.dkt-discount-box .input-field[type="number"] { width: 80px; text-align: right; }
-
-/* 합계 영역 */
-.dkt-totals { background: var(--color-bg-secondary); border-radius: 12px; padding: 16px 20px; margin: 16px 0; }
-.dkt-totals-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: var(--color-text-secondary); }
-.dkt-totals-row.discount { color: var(--color-error); }
-.dkt-totals-row.grand { font-size: 16px; font-weight: 700; color: var(--color-text-primary); border-top: 2px solid var(--color-border); padding-top: 10px; margin-top: 8px; }
-.dkt-totals-korean { font-size: 12px; color: var(--color-text-tertiary); text-align: right; margin-top: 4px; }
 
 /* 수신인 바 */
 .dkt-recipient-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--color-primary-light); border-radius: 10px; margin-bottom: 20px; }
 .dkt-recipient-bar label { font-size: 12px; font-weight: 600; color: var(--color-primary); white-space: nowrap; }
 .dkt-recipient-bar .input-field { flex: 1; padding: 6px 10px; font-size: 13px; }
 
+/* 섹션 제목 */
+.dkt-section-title { font-size: 13px; font-weight: 700; color: var(--color-text-primary); margin: 20px 0 8px; display: flex; align-items: center; justify-content: space-between; }
+.dkt-section-title .btn { font-size: 11px; padding: 4px 10px; }
+
+/* 폼 그리드 레이아웃 */
+.dkt-row { display: grid; gap: 12px; margin-bottom: 14px; }
+.dkt-row-1 { grid-template-columns: 1fr; }
+.dkt-row-2 { grid-template-columns: 1fr 1fr; }
+.dkt-row-4 { grid-template-columns: repeat(4, 1fr); }
+.dkt-row label { font-size: 11px; font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 4px; }
+.dkt-row .input-field, .dkt-row select, .dkt-row textarea { font-size: 13px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
+.dkt-row textarea { resize: vertical; font-family: inherit; }
+
+/* 라디오 그룹 */
+.dkt-radio-group { display: flex; gap: 14px; align-items: center; padding: 8px 0; }
+.dkt-radio-group label { font-size: 13px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 0; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.dkt-radio-group input[type="radio"] { accent-color: var(--color-primary); cursor: pointer; }
+
+/* 비용 영역 — 좌: 수가표 요약, 우: 입력 + 계산 결과 */
+.dkt-fee-info { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; margin-bottom: 8px; }
+.dkt-fee-summary-wrap { background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 12px; padding: 14px 16px; }
+.dkt-fee-input-wrap { display: flex; flex-direction: column; gap: 10px; }
+.dkt-fee-sub-title { font-size: 12px; font-weight: 700; color: var(--color-text-secondary); margin-bottom: 6px; }
+
+/* 수가표 요약 테이블 (읽기 전용) */
+.dkt-summary-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dkt-summary-table th { background: var(--color-bg-tertiary); padding: 6px 8px; text-align: left; font-weight: 600; color: var(--color-text-secondary); border: 1px solid var(--color-border); font-size: 10px; }
+.dkt-summary-table td { padding: 5px 8px; border: 1px solid var(--color-border); font-size: 12px; color: var(--color-text-primary); }
+.dkt-summary-table td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dkt-summary-table tr.total td { background: var(--color-primary-light); font-weight: 700; }
+
+/* 비용 입력 필드 */
+.dkt-field { display: flex; flex-direction: column; gap: 4px; }
+.dkt-field label { font-size: 11px; font-weight: 600; color: var(--color-text-secondary); }
+.dkt-field .input-field { padding: 8px 10px; font-size: 13px; }
+
+/* 계산 결과 박스 */
+.dkt-calc-box { background: var(--color-bg-secondary); border-radius: 12px; padding: 12px 16px; margin-top: 6px; }
+.dkt-calc-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; color: var(--color-text-secondary); }
+.dkt-calc-row strong { font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+.dkt-calc-row.discount { color: var(--color-error); }
+.dkt-calc-row.discount strong { color: var(--color-error); }
+.dkt-calc-row.grand { font-size: 15px; font-weight: 700; color: var(--color-text-primary); border-top: 2px solid var(--color-border); padding-top: 8px; margin-top: 6px; }
+
 /* 상세 조항 textarea */
-.dkt-notes-area { width: 100%; font-size: 12px; line-height: 1.6; padding: 12px 14px; font-family: inherit; resize: vertical; min-height: 140px; box-sizing: border-box; }
+.dkt-notes-area { width: 100%; font-size: 12px; line-height: 1.6; padding: 12px 14px; font-family: inherit; resize: vertical; min-height: 160px; box-sizing: border-box; }
 
 /* 하단 버튼 */
 .dkt-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
-.dkt-actions .btn { min-width: 130px; padding: 12px 20px; font-size: 14px; font-weight: 600; }
-
-/* ═══ 미리보기 모달 ═══ */
-.dkt-pv-header { text-align: center; margin-bottom: 16px; }
-.dkt-pv-title { font-size: 20px; font-weight: 800; letter-spacing: 8px; }
-.dkt-pv-meta { font-size: 11px; color: var(--color-text-tertiary); margin-top: 4px; }
-.dkt-pv-info { font-size: 13px; line-height: 1.8; margin-bottom: 12px; padding: 12px; background: var(--color-bg-secondary); border-radius: 8px; }
-.dkt-pv-amount { font-size: 14px; padding: 10px 14px; background: var(--color-primary-light); border-radius: 8px; margin-bottom: 16px; text-align: center; }
-
-.dkt-pv-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
-.dkt-pv-table th { background: var(--color-bg-secondary); padding: 6px 8px; text-align: left; border: 1px solid var(--color-border); font-weight: 600; }
-.dkt-pv-table td { padding: 5px 8px; border: 1px solid var(--color-border); }
-.dkt-pv-table td.n { text-align: right; font-variant-numeric: tabular-nums; }
-.dkt-pv-table tr.dr td { color: var(--color-error); }
-.dkt-pv-table tr.st td { background: var(--color-bg-tertiary); }
-.dkt-pv-table tr.tt td { background: var(--color-primary-light); font-weight: 700; }
-.dkt-pv-recv { font-size: 12px; color: var(--color-text-tertiary); text-align: right; margin-top: 8px; }
+.dkt-actions .btn { min-width: 150px; padding: 12px 20px; font-size: 14px; font-weight: 600; }
 
 /* 반응형 */
+@media (max-width: 820px) {
+  .dkt-fee-info { grid-template-columns: 1fr; }
+}
 @media (max-width: 640px) {
   .dkt-card { padding: 16px; }
-  .dkt-meta-grid { grid-template-columns: 1fr; }
-  .dkt-discount-box { flex-direction: column; align-items: stretch; }
-  .dkt-discount-box .input-field { width: 100%; }
+  .dkt-row-4 { grid-template-columns: 1fr 1fr; }
+  .dkt-row-2 { grid-template-columns: 1fr; }
   .dkt-actions { flex-direction: column; }
   .dkt-actions .btn { min-width: auto; width: 100%; }
 }
