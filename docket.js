@@ -245,13 +245,168 @@ Docket.defaultNotes = {
 Docket.fmt = function(n) { return (n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
 Docket.fmtMan = function(n) { return Math.round((n || 0) / 10000).toLocaleString(); };
 
+// ═══════════════════════════════════════════════════════════════
+// UI 렌더링 및 이벤트 핸들러
+// ═══════════════════════════════════════════════════════════════
+
+Docket.init = function() {
+  if (window.App && App.supabaseUrl) {
+    Docket.config.emailFunctionUrl = App.supabaseUrl + '/functions/v1/send-docket-email';
+  }
+
+  // DB 드롭다운 채우기
+  var dbSel = document.getElementById('dkt-db');
+  if (dbSel) {
+    dbSel.innerHTML = '';
+    Object.keys(Docket.dbConfig).forEach(function(name) {
+      var opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      dbSel.appendChild(opt);
+    });
+    dbSel.value = Docket.defaultDB;
+  }
+
+  // 권리유형 드롭다운 채우기
+  var rightSel = document.getElementById('dkt-right');
+  if (rightSel) {
+    rightSel.innerHTML = '';
+    Object.keys(Docket.rightStages).forEach(function(name) {
+      var opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      rightSel.appendChild(opt);
+    });
+    rightSel.value = '특허';
+  }
+
+  Docket.onRightChange();
+};
+
+// 권리유형 변경 → 가능한 사건단계 목록 재구성
+Docket.onRightChange = function() {
+  var right = document.getElementById('dkt-right').value;
+  var stageSel = document.getElementById('dkt-stage');
+  if (!stageSel) return;
+  var currentStage = stageSel.value;
+  stageSel.innerHTML = '';
+  Docket.rightStages[right].forEach(function(key) {
+    var tmpl = Docket.feeSchedule[right][key];
+    var opt = document.createElement('option');
+    opt.value = key; opt.textContent = tmpl.label;
+    stageSel.appendChild(opt);
+  });
+  // 기존 선택 유지 시도
+  if (currentStage && Docket.feeSchedule[right][currentStage]) {
+    stageSel.value = currentStage;
+  }
+  Docket.onStageChange();
+};
+
+// 사건단계/건수 변경 → 수가표 재렌더 + 재계산
+Docket.onStageChange = function() {
+  Docket.renderFeeTable();
+  Docket.updateNotesTextarea();
+  Docket.recalc();
+};
+
+// DB 변경 (특별한 폼 업데이트 없음 — 템플릿/할인은 엑셀 생성 시점에 적용)
+Docket.onDBChange = function() {
+  // noop: DB별 고정값은 collectData/generateFromTemplate에서 자동 적용
+};
+
+// 수가표(읽기 전용) 테이블 렌더링
+Docket.renderFeeTable = function() {
+  var right = document.getElementById('dkt-right').value;
+  var stage = document.getElementById('dkt-stage').value;
+  var tmpl = Docket.feeSchedule[right] && Docket.feeSchedule[right][stage];
+  if (!tmpl) return;
+  var cnt = parseInt(document.getElementById('dkt-case-count').value) || 1;
+
+  // 대리인수수료 수가표
+  var feeBody = document.getElementById('dkt-fee-summary');
+  if (feeBody) {
+    feeBody.innerHTML = '';
+    var feeTotal = 0;
+    tmpl.fees.forEach(function(item) {
+      var amt = item.unitPrice * cnt;
+      feeTotal += amt;
+      feeBody.innerHTML += '<tr><td>'+item.name+'</td><td class="n">'+Docket.fmt(item.unitPrice)+'</td><td class="n">'+cnt+'</td><td class="n">'+Docket.fmt(amt)+'</td></tr>';
+    });
+    feeBody.innerHTML += '<tr class="total"><td colspan="3"><strong>수가표 합계</strong></td><td class="n"><strong>'+Docket.fmt(feeTotal)+'</strong></td></tr>';
+  }
+
+  // 특허청관납료 수가표
+  var govBody = document.getElementById('dkt-gov-summary');
+  if (govBody) {
+    govBody.innerHTML = '';
+    if (tmpl.gov.length === 0) {
+      govBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999">관납료 없음</td></tr>';
+    } else {
+      var govTotal = 0;
+      tmpl.gov.forEach(function(item) {
+        var amt = item.unitPrice * cnt;
+        govTotal += amt;
+        govBody.innerHTML += '<tr><td>'+item.name+'</td><td class="n">'+Docket.fmt(item.unitPrice)+'</td><td class="n">'+cnt+'</td><td class="n">'+Docket.fmt(amt)+'</td></tr>';
+      });
+      govBody.innerHTML += '<tr class="total"><td colspan="3"><strong>관납료 합계</strong></td><td class="n"><strong>'+Docket.fmt(govTotal)+'</strong></td></tr>';
+    }
+  }
+};
+
+// 상세 조항 textarea 자동 입력 (권리유형 → 카테고리)
+Docket.updateNotesTextarea = function() {
+  var area = document.getElementById('dkt-notes');
+  if (!area || area.dataset.userEdited) return;
+  var right = document.getElementById('dkt-right').value;
+  var category = right === '상표' ? 'trademark' : 'patent';
+  area.value = (Docket.defaultNotes[category] || []).join('\n');
+};
+
+// 실제 청구금액 입력 → 할인 자동 계산
+Docket.recalc = function() {
+  var right = document.getElementById('dkt-right').value;
+  var stage = document.getElementById('dkt-stage').value;
+  var tmpl = Docket.feeSchedule[right] && Docket.feeSchedule[right][stage];
+  if (!tmpl) return;
+  var cnt = parseInt(document.getElementById('dkt-case-count').value) || 1;
+
+  // 수가표 합계
+  var listedTotal = tmpl.fees.reduce(function(s, i) { return s + i.unitPrice * cnt; }, 0);
+  var govTotal = tmpl.gov.reduce(function(s, i) { return s + i.unitPrice * cnt; }, 0);
+
+  // 실제 청구금액 입력 (사용자)
+  var actualInput = parseInt(document.getElementById('dkt-actual-fee').value) || 0;
+  var vatRadio = document.querySelector('input[name="dkt-vat-included"]:checked');
+  var vatIncluded = vatRadio ? vatRadio.value === 'yes' : false;
+
+  // 부가세 포함 여부에 따라 실제수수료 산출
+  // vatIncluded=true  → 실제수수료 = round(actual / 1.1)
+  // vatIncluded=false → 실제수수료 = actual
+  var actualFee = vatIncluded ? Math.round(actualInput / 1.1) : actualInput;
+
+  // 할인 = 수가표 - 실제수수료 (양수 = 우대, 음수 = 프리미엄)
+  var discount = listedTotal - actualFee;
+  var vat = Math.round(actualFee * 0.1);
+  var grand = actualFee + vat + govTotal;
+
+  // DOM 업데이트
+  var set = function(id, val) { var el = document.getElementById(id); if (el) el.textContent = Docket.fmt(val); };
+  set('dkt-listed-total', listedTotal);
+  set('dkt-actual-fee-display', actualFee);
+  set('dkt-discount-display', discount);
+  set('dkt-vat-display', vat);
+  set('dkt-gov-total-display', govTotal);
+  set('dkt-grand-total', grand);
+};
+
+// 상세 조항 기본값 복원
+Docket.resetNotes = function() {
+  var area = document.getElementById('dkt-notes');
+  if (!area) return;
+  delete area.dataset.userEdited;
+  Docket.updateNotesTextarea();
+};
+
 // ═══ Stub 함수들 (후속 단계에서 구현) ═══
-Docket.init = function() {};
-Docket.onRightChange = function() {};
-Docket.onStageChange = function() {};
-Docket.onDBChange = function() {};
-Docket.renderFeeTable = function() {};
-Docket.recalc = function() {};
 Docket.collectData = function() { return {}; };
 Docket.generateEmailBodyHtml = function() { return ''; };
 Docket.generateFromTemplate = async function() { return null; };
@@ -260,4 +415,3 @@ Docket.sendEmail = async function() {};
 Docket.preview = function() {};
 Docket.closePreview = function() {};
 Docket.resetForm = function() {};
-Docket.resetNotes = function() {};
