@@ -57,7 +57,7 @@ Docket.feeSchedule = {
     ],
   },
   // 상표 관납료 매핑 (DOCKET_SPEC_FINAL §5 상표):
-  //   출원착수금 → 출원료 52,000 (비고시명칭 기준, 고시명칭은 46,000)
+  //   출원착수금 → 출원료 (비고시명칭 52,000 / 고시명칭 46,000, dkt-trademark-term 라디오로 선택)
   //   성사금(등록) → 등록료 210,120
   //   우선심사 → 우선심사료 160,000
   //   중간사건 → 보정료 4,000
@@ -186,6 +186,10 @@ Docket.init = function() {
 Docket.onRightChange = function() {
   Docket.renderFeeCheckboxes();
   Docket.updateNotesTextarea();
+  // 상표 상품명 유형 토글 표시/숨김
+  var right = document.getElementById('dkt-right').value;
+  var tmToggle = document.getElementById('dkt-trademark-term-wrap');
+  if (tmToggle) tmToggle.style.display = (right === '상표') ? '' : 'none';
   Docket.recalc();
 };
 
@@ -265,6 +269,27 @@ Docket._computeFees = function(listedTotal, govTotal, actualInput, vatIncluded, 
   };
 };
 
+// 상표 상품명 유형 (비고시명칭 / 고시명칭) — 출원료 관납료 단가 결정
+//   non-gazetted: 52,000원 (기본값)
+//   gazetted:     46,000원
+Docket.getTrademarkTermType = function() {
+  var el = document.querySelector('input[name="dkt-trademark-term"]:checked');
+  return el ? el.value : 'non-gazetted';
+};
+
+// 특정 수수료 항목에 대한 실제 연동 관납료 반환 (상표 출원착수금은 term type에 따라 variant 교체)
+Docket._resolveLinkedGov = function(right, item) {
+  var linkedGov = item.linkedGov || [];
+  if (right === '상표' && item.key === 'application') {
+    var termType = Docket.getTrademarkTermType();
+    if (termType === 'gazetted') {
+      return [{ name: '출원료(고시명칭)', unitPrice: 46000 }];
+    }
+    return [{ name: '출원료(비고시명칭)', unitPrice: 52000 }];
+  }
+  return linkedGov;
+};
+
 // 체크된 수수료 항목 + 연동 관납료를 반환 (recalc/collectData 공용)
 Docket._selection = function() {
   var right = document.getElementById('dkt-right').value;
@@ -282,7 +307,8 @@ Docket._selection = function() {
     schedule.items.forEach(function(item) {
       if (!checkedKeys[item.key]) return;
       feeItems.push({ name: item.name, unitPrice: item.unitPrice, qty: cnt });
-      (item.linkedGov || []).forEach(function(g) {
+      var linkedGov = Docket._resolveLinkedGov(right, item);
+      linkedGov.forEach(function(g) {
         govItems.push({ name: g.name, unitPrice: g.unitPrice, qty: cnt });
       });
     });

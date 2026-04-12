@@ -431,6 +431,15 @@
         <div class="dkt-section-title"><span>💰 수수료 항목 선택</span></div>
         <div class="dkt-fee-info">
           <div class="dkt-fee-summary-wrap">
+            <!-- 상표 상품명 유형 토글 (상표 선택 시에만 표시) -->
+            <div id="dkt-trademark-term-wrap" style="display:none;margin-bottom:12px;padding:10px 12px;background:var(--color-primary-light);border-radius:8px">
+              <div class="dkt-fee-sub-title" style="margin-bottom:6px">상표 출원료 기준 (지정상품)</div>
+              <div class="dkt-radio-group">
+                <label><input type="radio" name="dkt-trademark-term" value="non-gazetted" checked onchange="Docket.recalc()" /> 비고시명칭 (52,000원)</label>
+                <label><input type="radio" name="dkt-trademark-term" value="gazetted" onchange="Docket.recalc()" /> 고시명칭 (46,000원)</label>
+              </div>
+            </div>
+
             <div class="dkt-fee-sub-title">대리인수수료 — 체크한 항목만 견적에 포함</div>
             <div id="dkt-fee-checkboxes" class="dkt-fee-checkboxes"></div>
             <div class="dkt-fee-sub-title" style="margin-top:14px">특허청관납료 (체크된 수수료에 자동 연동)</div>
