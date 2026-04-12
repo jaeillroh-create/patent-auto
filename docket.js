@@ -34,6 +34,11 @@ Docket.defaultDB = '노재일';
 //   items[i] = { key, name, unitPrice, defaultChecked, linkedGov[] }
 //   linkedGov = 이 수수료 항목 체크 시 자동 포함되는 특허청관납료 항목
 Docket.feeSchedule = {
+  // 특허 관납료 매핑 (DOCKET_SPEC_FINAL §5 특허):
+  //   출원착수금 → 출원료 109,500
+  //   성사금(등록) → 등록료 44,100
+  //   우선심사 → 우선심사료 200,000
+  //   중간사건 → 보정료 4,000
   '특허': {
     notesCategory: 'patent',
     items: [
@@ -51,11 +56,16 @@ Docket.feeSchedule = {
         linkedGov: [] },
     ],
   },
+  // 상표 관납료 매핑 (DOCKET_SPEC_FINAL §5 상표):
+  //   출원착수금 → 출원료 52,000 (비고시명칭 기준, 고시명칭은 46,000)
+  //   성사금(등록) → 등록료 210,120
+  //   우선심사 → 우선심사료 160,000
+  //   중간사건 → 보정료 4,000
   '상표': {
     notesCategory: 'trademark',
     items: [
       { key: 'application', name: '출원착수금', unitPrice: 300000, defaultChecked: true,
-        linkedGov: [{ name: '출원료', unitPrice: 52000 }] },
+        linkedGov: [{ name: '출원료(비고시명칭)', unitPrice: 52000 }] },
       { key: 'registration', name: '성사금(등록)', unitPrice: 300000, defaultChecked: false,
         linkedGov: [{ name: '등록료', unitPrice: 210120 }] },
       { key: 'priority', name: '우선심사', unitPrice: 300000, defaultChecked: false,
@@ -68,6 +78,12 @@ Docket.feeSchedule = {
         linkedGov: [] },
     ],
   },
+  // 디자인 관납료 매핑 (DOCKET_SPEC_FINAL §5 디자인):
+  //   출원착수금 → 출원료 28,200
+  //   성사금(등록) → 등록료 22,500
+  //   우선심사 → 우선심사료 70,000
+  //   중간사건 → 보정료 4,000
+  //   도면작성료: 연동 관납료 없음
   '디자인': {
     notesCategory: 'patent',
     items: [
@@ -83,6 +99,11 @@ Docket.feeSchedule = {
         linkedGov: [{ name: '보정료', unitPrice: 4000 }] },
     ],
   },
+  // 실용신안 관납료 매핑 (DOCKET_SPEC_FINAL §5 실용신안):
+  //   출원착수금 → 출원료 44,400
+  //   성사금(등록) → 등록료 20,000
+  //   우선심사 → 우선심사료 100,000
+  //   중간사건 → 보정료 4,000
   '실용신안': {
     notesCategory: 'patent',
     items: [
@@ -490,9 +511,65 @@ Docket.generateEmailBodyText = function(data) {
 // 템플릿의 로고/테두리/이미지/서식을 100% 보존.
 // FEE/GOV/NOTES 범위는 bottom-up 순서로 duplicateRow 확장.
 
+// xlsx 내부의 drawings/media 파일을 제거하여 ExcelJS 이미지 파싱 버그를 우회
+// 입력: ArrayBuffer (xlsx 원본) → 출력: ArrayBuffer (drawings 제거됨)
+Docket._stripDrawings = async function(arrayBuffer) {
+  var zip = await JSZip.loadAsync(arrayBuffer);
+
+  // 1) drawings/media 파일 전체 삭제
+  var toRemove = [];
+  zip.forEach(function(path, file) {
+    if (path.indexOf('xl/drawings/') === 0 || path.indexOf('xl/media/') === 0) {
+      toRemove.push(path);
+    }
+  });
+  toRemove.forEach(function(p) { zip.remove(p); });
+
+  // 2) 각 sheet XML에서 <drawing .../>, <legacyDrawing .../>, <oleObjects> 요소 제거
+  //    주의: 속성값에 URL이 포함(예: xmlns:r="http://...")되므로 `/`가 아닌 `>`를 경계로 사용
+  var sheetFiles = Object.keys(zip.files).filter(function(p) {
+    return /^xl\/worksheets\/sheet\d+\.xml$/.test(p);
+  });
+  for (var i = 0; i < sheetFiles.length; i++) {
+    var sp = sheetFiles[i];
+    var xml = await zip.file(sp).async('string');
+    xml = xml.replace(/<drawing\s[^>]*\/>/g, '');
+    xml = xml.replace(/<legacyDrawing\s[^>]*\/>/g, '');
+    xml = xml.replace(/<picture\s[^>]*\/>/g, '');
+    xml = xml.replace(/<oleObjects>[\s\S]*?<\/oleObjects>/g, '');
+    zip.file(sp, xml);
+  }
+
+  // 3) sheet rels 파일에서 drawing 관계 제거
+  var relsFiles = Object.keys(zip.files).filter(function(p) {
+    return /^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(p);
+  });
+  for (var j = 0; j < relsFiles.length; j++) {
+    var rp = relsFiles[j];
+    var rxml = await zip.file(rp).async('string');
+    // Type에 drawing 또는 vmlDrawing이 포함된 Relationship 엘리먼트 제거
+    rxml = rxml.replace(/<Relationship[^>]*Type="[^"]*(?:drawing|vmlDrawing|oleObject|image)[^"]*"[^>]*\/>/g, '');
+    zip.file(rp, rxml);
+  }
+
+  // 4) [Content_Types].xml에서 drawing Override 제거
+  var ctFile = zip.file('[Content_Types].xml');
+  if (ctFile) {
+    var ct = await ctFile.async('string');
+    ct = ct.replace(/<Override[^>]*PartName="[^"]*drawings?[^"]*"[^>]*\/>/g, '');
+    ct = ct.replace(/<Override[^>]*PartName="[^"]*media[^"]*"[^>]*\/>/g, '');
+    zip.file('[Content_Types].xml', ct);
+  }
+
+  return await zip.generateAsync({ type: 'arraybuffer' });
+};
+
 Docket.generateFromTemplate = async function(data) {
   if (typeof ExcelJS === 'undefined') {
     throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다');
+  }
+  if (typeof JSZip === 'undefined') {
+    throw new Error('JSZip 라이브러리가 로드되지 않았습니다');
   }
 
   var cfg = data.dbConfig || Docket.dbConfig[Docket.defaultDB];
@@ -504,6 +581,16 @@ Docket.generateFromTemplate = async function(data) {
   var res = await fetch(templatePath);
   if (!res.ok) throw new Error('템플릿 로드 실패: ' + templatePath + ' (HTTP ' + res.status + ')');
   var buf = await res.arrayBuffer();
+
+  // 1-1) ExcelJS가 템플릿 내부의 이미지(drawings)를 파싱하다가
+  //      "Cannot read properties of undefined (reading 'anchors')" 에러를 발생시키는
+  //      알려진 버그를 우회하기 위해, 로드 전 JSZip으로 drawings/media를 제거한다.
+  //      트레이드오프: 로고/이미지는 출력에서 사라지지만 테두리·셀 서식·폰트는 보존됨.
+  try {
+    buf = await Docket._stripDrawings(buf);
+  } catch (e) {
+    console.warn('drawings 스트리핑 실패, 원본으로 진행합니다:', e);
+  }
 
   var wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
@@ -632,6 +719,20 @@ Docket.generateFromTemplate = async function(data) {
       discRow.getCell(7).value = disc;
     }
   }
+
+  // 6) 최종 cleanup: 병합 셀에서 duplicateRow가 마커 값을 복제하는 버그를 우회.
+  //    셀 값이 순수 {{MARKER}} 패턴이면 null로 치환.
+  ws.eachRow({includeEmpty: false}, function(row) {
+    row.eachCell({includeEmpty: false}, function(cell) {
+      var v = cell.value;
+      if (typeof v === 'object' && v && v.richText) {
+        v = v.richText.map(function(r){return r.text;}).join('');
+      }
+      if (typeof v === 'string' && /^\s*\{\{[A-Z_]+\}\}\s*$/.test(v)) {
+        cell.value = null;
+      }
+    });
+  });
 
   return wb;
 };
