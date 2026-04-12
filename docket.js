@@ -30,194 +30,74 @@ Docket.dbConfig = {
 Docket.defaultDB = '노재일';
 
 // ── 수가표 (2025-05-01, 부가세·관납료 별도) ──
-// 구조: feeSchedule[권리유형][사건단계_심사형태] = { label, notesCategory, fees[], gov[] }
+// 구조: feeSchedule[권리유형] = { notesCategory, items[] }
+//   items[i] = { key, name, unitPrice, defaultChecked, linkedGov[] }
+//   linkedGov = 이 수수료 항목 체크 시 자동 포함되는 특허청관납료 항목
 Docket.feeSchedule = {
   '특허': {
-    '출원_일반': {
-      label: '출원(일반)', notesCategory: 'patent',
-      fees: [
-        { name: '착수금', unitPrice: 1800000 },
-        { name: '성사금', unitPrice: 1800000 },
-        { name: '중간사건', unitPrice: 400000 },
-      ],
-      gov: [
-        { name: '출원', unitPrice: 109500 },
-        { name: '보정', unitPrice: 4000 },
-      ],
-    },
-    '출원_우선': {
-      label: '출원(우선)', notesCategory: 'patent',
-      fees: [
-        { name: '착수금', unitPrice: 1800000 },
-        { name: '성사금', unitPrice: 1800000 },
-        { name: '우선심사', unitPrice: 600000 },
-        { name: '중간사건', unitPrice: 400000 },
-      ],
-      gov: [
-        { name: '출원', unitPrice: 109500 },
-        { name: '우선심사', unitPrice: 200000 },
-        { name: '보정', unitPrice: 4000 },
-      ],
-    },
-    'OA대응': {
-      label: 'OA대응', notesCategory: 'patent',
-      fees: [{ name: '의견서', unitPrice: 400000 }],
-      gov: [{ name: '보정', unitPrice: 4000 }],
-    },
-    '정보제공': {
-      label: '정보제공', notesCategory: 'patent',
-      fees: [{ name: '정보제공서', unitPrice: 600000 }],
-      gov: [],
-    },
-    '등록': {
-      label: '등록', notesCategory: 'patent',
-      fees: [{ name: '등록성사금', unitPrice: 1800000 }],
-      gov: [{ name: '등록', unitPrice: 44100 }],
-    },
+    notesCategory: 'patent',
+    items: [
+      { key: 'application', name: '출원착수금', unitPrice: 1800000, defaultChecked: true,
+        linkedGov: [{ name: '출원료', unitPrice: 109500 }] },
+      { key: 'registration', name: '성사금(등록)', unitPrice: 1800000, defaultChecked: false,
+        linkedGov: [{ name: '등록료', unitPrice: 44100 }] },
+      { key: 'priority', name: '우선심사', unitPrice: 600000, defaultChecked: false,
+        linkedGov: [{ name: '우선심사료', unitPrice: 200000 }] },
+      { key: 'oa', name: '중간사건', unitPrice: 400000, defaultChecked: false,
+        linkedGov: [{ name: '보정료', unitPrice: 4000 }] },
+      { key: 'consulting', name: 'IP창출컨설팅', unitPrice: 1000000, defaultChecked: false,
+        linkedGov: [] },
+      { key: 'interview', name: '심사관면담', unitPrice: 400000, defaultChecked: false,
+        linkedGov: [] },
+    ],
   },
   '상표': {
-    '출원_일반': {
-      label: '출원(일반)', notesCategory: 'trademark',
-      fees: [
-        { name: '착수금', unitPrice: 300000 },
-        { name: '성사금', unitPrice: 300000 },
-        { name: '중간사건', unitPrice: 500000 },
-      ],
-      gov: [
-        { name: '출원', unitPrice: 52000 },
-        { name: '보정', unitPrice: 4000 },
-        { name: '등록', unitPrice: 210120 },
-      ],
-    },
-    '출원_우선': {
-      label: '출원(우선)', notesCategory: 'trademark',
-      fees: [
-        { name: '착수금', unitPrice: 300000 },
-        { name: '성사금', unitPrice: 300000 },
-        { name: '우선심사', unitPrice: 300000 },
-        { name: '중간사건', unitPrice: 500000 },
-      ],
-      gov: [
-        { name: '출원', unitPrice: 52000 },
-        { name: '우선심사', unitPrice: 160000 },
-        { name: '보정', unitPrice: 4000 },
-        { name: '등록', unitPrice: 210120 },
-      ],
-    },
-    'OA대응': {
-      label: 'OA대응', notesCategory: 'trademark',
-      fees: [{ name: '의견서', unitPrice: 500000 }],
-      gov: [{ name: '보정', unitPrice: 4000 }],
-    },
-    '이의신청': {
-      label: '이의신청', notesCategory: 'trademark',
-      fees: [{ name: '답변서', unitPrice: 1500000 }],
-      gov: [],
-    },
-    '정보제공': {
-      label: '정보제공', notesCategory: 'trademark',
-      fees: [{ name: '정보제공서', unitPrice: 600000 }],
-      gov: [],
-    },
-    '등록': {
-      label: '등록', notesCategory: 'trademark',
-      fees: [{ name: '등록성사금', unitPrice: 300000 }],
-      gov: [{ name: '등록', unitPrice: 210120 }],
-    },
+    notesCategory: 'trademark',
+    items: [
+      { key: 'application', name: '출원착수금', unitPrice: 300000, defaultChecked: true,
+        linkedGov: [{ name: '출원료', unitPrice: 52000 }] },
+      { key: 'registration', name: '성사금(등록)', unitPrice: 300000, defaultChecked: false,
+        linkedGov: [{ name: '등록료', unitPrice: 210120 }] },
+      { key: 'priority', name: '우선심사', unitPrice: 300000, defaultChecked: false,
+        linkedGov: [{ name: '우선심사료', unitPrice: 160000 }] },
+      { key: 'oa', name: '중간사건', unitPrice: 500000, defaultChecked: false,
+        linkedGov: [{ name: '보정료', unitPrice: 4000 }] },
+      { key: 'opposition', name: '이의신청대응', unitPrice: 1500000, defaultChecked: false,
+        linkedGov: [] },
+      { key: 'info', name: '정보제공', unitPrice: 600000, defaultChecked: false,
+        linkedGov: [] },
+    ],
   },
   '디자인': {
-    '출원_일반': {
-      label: '출원(일반)', notesCategory: 'patent',
-      fees: [
-        { name: '착수금', unitPrice: 350000 },
-        { name: '성사금', unitPrice: 350000 },
-        { name: '도면', unitPrice: 60000 },
-        { name: '중간사건', unitPrice: 300000 },
-      ],
-      gov: [
-        { name: '출원', unitPrice: 28200 },
-        { name: '보정', unitPrice: 4000 },
-        { name: '등록', unitPrice: 22500 },
-      ],
-    },
-    '출원_우선': {
-      label: '출원(우선)', notesCategory: 'patent',
-      fees: [
-        { name: '착수금', unitPrice: 350000 },
-        { name: '성사금', unitPrice: 350000 },
-        { name: '도면', unitPrice: 60000 },
-        { name: '우선심사', unitPrice: 300000 },
-        { name: '중간사건', unitPrice: 300000 },
-      ],
-      gov: [
-        { name: '출원', unitPrice: 28200 },
-        { name: '우선심사', unitPrice: 70000 },
-        { name: '보정', unitPrice: 4000 },
-        { name: '등록', unitPrice: 22500 },
-      ],
-    },
-    'OA대응': {
-      label: 'OA대응', notesCategory: 'patent',
-      fees: [{ name: '의견서', unitPrice: 300000 }],
-      gov: [{ name: '보정', unitPrice: 4000 }],
-    },
-    '등록': {
-      label: '등록', notesCategory: 'patent',
-      fees: [{ name: '등록성사금', unitPrice: 350000 }],
-      gov: [{ name: '등록', unitPrice: 22500 }],
-    },
+    notesCategory: 'patent',
+    items: [
+      { key: 'application', name: '출원착수금', unitPrice: 350000, defaultChecked: true,
+        linkedGov: [{ name: '출원료', unitPrice: 28200 }] },
+      { key: 'registration', name: '성사금(등록)', unitPrice: 350000, defaultChecked: false,
+        linkedGov: [{ name: '등록료', unitPrice: 22500 }] },
+      { key: 'drawing', name: '도면작성료', unitPrice: 60000, defaultChecked: false,
+        linkedGov: [] },
+      { key: 'priority', name: '우선심사', unitPrice: 300000, defaultChecked: false,
+        linkedGov: [{ name: '우선심사료', unitPrice: 70000 }] },
+      { key: 'oa', name: '중간사건', unitPrice: 300000, defaultChecked: false,
+        linkedGov: [{ name: '보정료', unitPrice: 4000 }] },
+    ],
   },
   '실용신안': {
-    '출원_일반': {
-      label: '출원(일반)', notesCategory: 'patent',
-      fees: [
-        { name: '착수금', unitPrice: 1200000 },
-        { name: '성사금', unitPrice: 1200000 },
-        { name: '중간사건', unitPrice: 400000 },
-      ],
-      gov: [
-        { name: '출원', unitPrice: 44400 },
-        { name: '보정', unitPrice: 4000 },
-      ],
-    },
-    '출원_우선': {
-      label: '출원(우선)', notesCategory: 'patent',
-      fees: [
-        { name: '착수금', unitPrice: 1200000 },
-        { name: '성사금', unitPrice: 1200000 },
-        { name: '우선심사', unitPrice: 600000 },
-        { name: '중간사건', unitPrice: 400000 },
-      ],
-      gov: [
-        { name: '출원', unitPrice: 44400 },
-        { name: '우선심사', unitPrice: 100000 },
-        { name: '보정', unitPrice: 4000 },
-      ],
-    },
-    'OA대응': {
-      label: 'OA대응', notesCategory: 'patent',
-      fees: [{ name: '의견서', unitPrice: 400000 }],
-      gov: [{ name: '보정', unitPrice: 4000 }],
-    },
-    '정보제공': {
-      label: '정보제공', notesCategory: 'patent',
-      fees: [{ name: '정보제공서', unitPrice: 600000 }],
-      gov: [],
-    },
-    '등록': {
-      label: '등록', notesCategory: 'patent',
-      fees: [{ name: '등록성사금', unitPrice: 1200000 }],
-      gov: [{ name: '등록', unitPrice: 20000 }],
-    },
+    notesCategory: 'patent',
+    items: [
+      { key: 'application', name: '출원착수금', unitPrice: 1200000, defaultChecked: true,
+        linkedGov: [{ name: '출원료', unitPrice: 44400 }] },
+      { key: 'registration', name: '성사금(등록)', unitPrice: 1200000, defaultChecked: false,
+        linkedGov: [{ name: '등록료', unitPrice: 20000 }] },
+      { key: 'priority', name: '우선심사', unitPrice: 600000, defaultChecked: false,
+        linkedGov: [{ name: '우선심사료', unitPrice: 100000 }] },
+      { key: 'oa', name: '중간사건', unitPrice: 400000, defaultChecked: false,
+        linkedGov: [{ name: '보정료', unitPrice: 4000 }] },
+      { key: 'consulting', name: 'IP창출컨설팅', unitPrice: 1000000, defaultChecked: false,
+        linkedGov: [] },
+    ],
   },
-};
-
-// ── 권리유형별 가능한 사건단계 목록 ──
-Docket.rightStages = {
-  '특허':    ['출원_일반', '출원_우선', 'OA대응', '정보제공', '등록'],
-  '상표':    ['출원_일반', '출원_우선', 'OA대응', '이의신청', '정보제공', '등록'],
-  '디자인':  ['출원_일반', '출원_우선', 'OA대응', '등록'],
-  '실용신안': ['출원_일반', '출원_우선', 'OA대응', '정보제공', '등록'],
 };
 
 // ── 견적서 상세 조항 표준 텍스트 (특허/실용/디자인 공통, 상표 별도) ──
@@ -270,7 +150,7 @@ Docket.init = function() {
   var rightSel = document.getElementById('dkt-right');
   if (rightSel) {
     rightSel.innerHTML = '';
-    Object.keys(Docket.rightStages).forEach(function(name) {
+    Object.keys(Docket.feeSchedule).forEach(function(name) {
       var opt = document.createElement('option');
       opt.value = name; opt.textContent = name;
       rightSel.appendChild(opt);
@@ -281,29 +161,9 @@ Docket.init = function() {
   Docket.onRightChange();
 };
 
-// 권리유형 변경 → 가능한 사건단계 목록 재구성
+// 권리유형 변경 → 체크박스 리스트 재렌더 + 상세 조항 업데이트 + 재계산
 Docket.onRightChange = function() {
-  var right = document.getElementById('dkt-right').value;
-  var stageSel = document.getElementById('dkt-stage');
-  if (!stageSel) return;
-  var currentStage = stageSel.value;
-  stageSel.innerHTML = '';
-  Docket.rightStages[right].forEach(function(key) {
-    var tmpl = Docket.feeSchedule[right][key];
-    var opt = document.createElement('option');
-    opt.value = key; opt.textContent = tmpl.label;
-    stageSel.appendChild(opt);
-  });
-  // 기존 선택 유지 시도
-  if (currentStage && Docket.feeSchedule[right][currentStage]) {
-    stageSel.value = currentStage;
-  }
-  Docket.onStageChange();
-};
-
-// 사건단계/건수 변경 → 수가표 재렌더 + 재계산
-Docket.onStageChange = function() {
-  Docket.renderFeeTable();
+  Docket.renderFeeCheckboxes();
   Docket.updateNotesTextarea();
   Docket.recalc();
 };
@@ -313,77 +173,95 @@ Docket.onDBChange = function() {
   // noop: DB별 고정값은 collectData/generateFromTemplate에서 자동 적용
 };
 
-// 수가표(읽기 전용) 테이블 렌더링
-Docket.renderFeeTable = function() {
+// 수수료 체크박스 리스트 렌더링 (권리유형 변경 시 호출)
+Docket.renderFeeCheckboxes = function() {
   var right = document.getElementById('dkt-right').value;
-  var stage = document.getElementById('dkt-stage').value;
-  var tmpl = Docket.feeSchedule[right] && Docket.feeSchedule[right][stage];
-  if (!tmpl) return;
-  var cnt = parseInt(document.getElementById('dkt-case-count').value) || 1;
+  var schedule = Docket.feeSchedule[right];
+  var container = document.getElementById('dkt-fee-checkboxes');
+  if (!container || !schedule) return;
 
-  // 대리인수수료 수가표
-  var feeBody = document.getElementById('dkt-fee-summary');
-  if (feeBody) {
-    feeBody.innerHTML = '';
-    var feeTotal = 0;
-    tmpl.fees.forEach(function(item) {
-      var amt = item.unitPrice * cnt;
-      feeTotal += amt;
-      feeBody.innerHTML += '<tr><td>'+item.name+'</td><td class="n">'+Docket.fmt(item.unitPrice)+'</td><td class="n">'+cnt+'</td><td class="n">'+Docket.fmt(amt)+'</td></tr>';
-    });
-    feeBody.innerHTML += '<tr class="total"><td colspan="3"><strong>수가표 합계</strong></td><td class="n"><strong>'+Docket.fmt(feeTotal)+'</strong></td></tr>';
-  }
-
-  // 특허청관납료 수가표
-  var govBody = document.getElementById('dkt-gov-summary');
-  if (govBody) {
-    govBody.innerHTML = '';
-    if (tmpl.gov.length === 0) {
-      govBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999">관납료 없음</td></tr>';
-    } else {
-      var govTotal = 0;
-      tmpl.gov.forEach(function(item) {
-        var amt = item.unitPrice * cnt;
-        govTotal += amt;
-        govBody.innerHTML += '<tr><td>'+item.name+'</td><td class="n">'+Docket.fmt(item.unitPrice)+'</td><td class="n">'+cnt+'</td><td class="n">'+Docket.fmt(amt)+'</td></tr>';
-      });
-      govBody.innerHTML += '<tr class="total"><td colspan="3"><strong>관납료 합계</strong></td><td class="n"><strong>'+Docket.fmt(govTotal)+'</strong></td></tr>';
-    }
-  }
+  container.innerHTML = '';
+  schedule.items.forEach(function(item) {
+    var row = document.createElement('label');
+    row.className = 'dkt-fee-cb-row';
+    row.innerHTML =
+      '<input type="checkbox" data-key="' + item.key + '"' +
+      (item.defaultChecked ? ' checked' : '') +
+      ' onchange="Docket.recalc()" />' +
+      '<span class="name">' + item.name + '</span>' +
+      '<span class="price">' + Docket.fmt(item.unitPrice) + '</span>';
+    container.appendChild(row);
+  });
 };
 
-// 상세 조항 textarea 자동 입력 (권리유형 → 카테고리)
+// 상세 조항 textarea 자동 입력 (권리유형 → notesCategory)
 Docket.updateNotesTextarea = function() {
   var area = document.getElementById('dkt-notes');
   if (!area || area.dataset.userEdited) return;
   var right = document.getElementById('dkt-right').value;
-  var category = right === '상표' ? 'trademark' : 'patent';
+  var schedule = Docket.feeSchedule[right];
+  var category = (schedule && schedule.notesCategory) || 'patent';
   area.value = (Docket.defaultNotes[category] || []).join('\n');
 };
 
-// 실제 청구금액 입력 → 할인 자동 계산
-Docket.recalc = function() {
+// 체크된 수수료 항목 + 연동 관납료를 반환 (recalc/collectData 공용)
+Docket._selection = function() {
   var right = document.getElementById('dkt-right').value;
-  var stage = document.getElementById('dkt-stage').value;
-  var tmpl = Docket.feeSchedule[right] && Docket.feeSchedule[right][stage];
-  if (!tmpl) return;
+  var schedule = Docket.feeSchedule[right];
   var cnt = parseInt(document.getElementById('dkt-case-count').value) || 1;
 
-  // 수가표 합계
-  var listedTotal = tmpl.fees.reduce(function(s, i) { return s + i.unitPrice * cnt; }, 0);
-  var govTotal = tmpl.gov.reduce(function(s, i) { return s + i.unitPrice * cnt; }, 0);
+  var checkedKeys = {};
+  document.querySelectorAll('#dkt-fee-checkboxes input[type="checkbox"]:checked').forEach(function(cb) {
+    checkedKeys[cb.dataset.key] = true;
+  });
 
-  // 실제 청구금액 입력 (사용자)
+  var feeItems = [];
+  var govItems = [];
+  if (schedule) {
+    schedule.items.forEach(function(item) {
+      if (!checkedKeys[item.key]) return;
+      feeItems.push({ name: item.name, unitPrice: item.unitPrice, qty: cnt });
+      (item.linkedGov || []).forEach(function(g) {
+        govItems.push({ name: g.name, unitPrice: g.unitPrice, qty: cnt });
+      });
+    });
+  }
+
+  return { right: right, cnt: cnt, feeItems: feeItems, govItems: govItems, checkedKeys: checkedKeys };
+};
+
+// 체크박스 변경 / 실제 청구금액 입력 → 할인 자동 계산
+Docket.recalc = function() {
+  var sel = Docket._selection();
+  var feeItems = sel.feeItems;
+  var govItems = sel.govItems;
+
+  // 합계 계산
+  var listedTotal = feeItems.reduce(function(s, i) { return s + i.unitPrice * i.qty; }, 0);
+  var govTotal = govItems.reduce(function(s, i) { return s + i.unitPrice * i.qty; }, 0);
+
+  // 연동 관납료 테이블 렌더링
+  var govBody = document.getElementById('dkt-gov-summary');
+  if (govBody) {
+    govBody.innerHTML = '';
+    if (govItems.length === 0) {
+      govBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;padding:12px">선택된 수수료 항목이 없거나 연동 관납료가 없습니다</td></tr>';
+    } else {
+      govItems.forEach(function(g) {
+        var amt = g.unitPrice * g.qty;
+        govBody.innerHTML += '<tr><td>' + g.name + '</td><td class="n">' + Docket.fmt(g.unitPrice) + '</td><td class="n">' + g.qty + '</td><td class="n">' + Docket.fmt(amt) + '</td></tr>';
+      });
+      govBody.innerHTML += '<tr class="total"><td colspan="3"><strong>관납료 합계</strong></td><td class="n"><strong>' + Docket.fmt(govTotal) + '</strong></td></tr>';
+    }
+  }
+
+  // 실제 청구금액 + 부가세 포함 여부
   var actualInput = parseInt(document.getElementById('dkt-actual-fee').value) || 0;
   var vatRadio = document.querySelector('input[name="dkt-vat-included"]:checked');
   var vatIncluded = vatRadio ? vatRadio.value === 'yes' : false;
-
-  // 부가세 포함 여부에 따라 실제수수료 산출
-  // vatIncluded=true  → 실제수수료 = round(actual / 1.1)
-  // vatIncluded=false → 실제수수료 = actual
   var actualFee = vatIncluded ? Math.round(actualInput / 1.1) : actualInput;
 
-  // 할인 = 수가표 - 실제수수료 (양수 = 우대, 음수 = 프리미엄)
+  // 할인 = 수가표 - 실제수수료
   var discount = listedTotal - actualFee;
   var vat = Math.round(actualFee * 0.1);
   var grand = actualFee + vat + govTotal;
@@ -415,16 +293,17 @@ Docket.collectData = function() {
   var v = function(id) { var el = document.getElementById(id); return el ? (el.value || '').trim() : ''; };
   var radio = function(name) { var el = document.querySelector('input[name="'+name+'"]:checked'); return el ? el.value : ''; };
 
-  var right = v('dkt-right');
-  var stage = v('dkt-stage');
-  var tmpl = (Docket.feeSchedule[right] || {})[stage];
-  var cnt = parseInt(v('dkt-case-count')) || 1;
+  var sel = Docket._selection();
+  var right = sel.right;
+  var cnt = sel.cnt;
+  var feeItems = sel.feeItems;
+  var govItems = sel.govItems;
   var db = v('dkt-db') || Docket.defaultDB;
   var dbCfg = Docket.dbConfig[db] || Docket.dbConfig[Docket.defaultDB];
 
-  // 수가표 기반 금액 계산
-  var listedTotal = tmpl ? tmpl.fees.reduce(function(s,i){return s+i.unitPrice*cnt;}, 0) : 0;
-  var govTotal = tmpl ? tmpl.gov.reduce(function(s,i){return s+i.unitPrice*cnt;}, 0) : 0;
+  // 수가표 기반 금액 계산 (체크된 항목만)
+  var listedTotal = feeItems.reduce(function(s,i){return s+i.unitPrice*i.qty;}, 0);
+  var govTotal = govItems.reduce(function(s,i){return s+i.unitPrice*i.qty;}, 0);
   var actualInput = parseInt(v('dkt-actual-fee')) || 0;
   var vatIncluded = radio('dkt-vat-included') === 'yes';
   var govIncluded = radio('dkt-gov-included') === 'yes';
@@ -433,18 +312,19 @@ Docket.collectData = function() {
   var vat = Math.round(actualFee * 0.1);
   var grand = actualFee + vat + govTotal;
 
-  // 심사형태 라벨
-  var examType = stage === '출원_우선' ? '우선'
-                : stage === '출원_일반' ? '일반'
-                : (tmpl ? tmpl.label : stage);
+  // 심사형태: 우선심사 체크 여부로 결정
+  var examType = sel.checkedKeys['priority'] ? '우선' : '일반';
+
+  // 선택된 항목 라벨 (이메일 표시용)
+  var selectedItemsLabel = feeItems.map(function(i){return i.name;}).join(', ');
 
   return {
     // 사건종류
     right: right,
-    stage: stage,
-    stageLabel: tmpl ? tmpl.label : stage,
     examType: examType,
     caseCount: cnt,
+    selectedItemsLabel: selectedItemsLabel,
+    checkedKeys: sel.checkedKeys,
 
     // 출원인
     clientCompany: v('dkt-client-company'),
@@ -473,9 +353,9 @@ Docket.collectData = function() {
     vatIncluded: vatIncluded,
     govIncluded: govIncluded,
 
-    // 견적서 raw (수가표 원본 복사)
-    feeItems: tmpl ? tmpl.fees.map(function(i){return {name:i.name, unitPrice:i.unitPrice, qty:cnt};}) : [],
-    govItems: tmpl ? tmpl.gov.map(function(i){return {name:i.name, unitPrice:i.unitPrice, qty:cnt};}) : [],
+    // 견적서 raw (체크된 항목만)
+    feeItems: feeItems,
+    govItems: govItems,
 
     // 기타
     announcements: v('dkt-announcements'),
@@ -542,6 +422,7 @@ Docket.generateEmailBodyHtml = function(data) {
   h += '<p>사건등록 해주세요.</p>';
   h += '<table style="border-collapse:collapse;font-size:13px;margin-top:12px;min-width:520px">';
   h += row('사건종류', esc(data.right) + '(' + esc(data.examType) + ') ' + data.caseCount + '건');
+  if (data.selectedItemsLabel) h += row('수수료항목', esc(data.selectedItemsLabel));
   h += row('출원인', clientCell);
   h += row('발명자', esc(data.inventor) || '-');
   h += row('실무자', esc(data.worker) || '-');
@@ -574,6 +455,7 @@ Docket.generateEmailBodyText = function(data) {
   lines.push('');
   lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   lines.push('사건종류 | ' + data.right + '(' + data.examType + ') ' + data.caseCount + '건');
+  if (data.selectedItemsLabel) lines.push('수수료항목 | ' + data.selectedItemsLabel);
   var clientLabel = data.clientType === 'new' ? '신규고객' : data.clientType === 'existing' ? '기존고객' : '';
   lines.push('출원인   | ' + (data.clientCompany || '-') + (clientLabel ? ' [' + clientLabel + ']' : ''));
   if (data.contactName)  lines.push('         | 담당자&수신: ' + data.contactName);
@@ -807,8 +689,8 @@ Docket.workbookToBase64 = async function(wb) {
 Docket.downloadExcel = async function() {
   try {
     var data = Docket.collectData();
-    if (!Docket.feeSchedule[data.right] || !Docket.feeSchedule[data.right][data.stage]) {
-      App.showToast('사건종류를 먼저 선택해 주세요', 'error'); return;
+    if (!data.feeItems || data.feeItems.length === 0) {
+      App.showToast('수수료 항목을 1개 이상 선택해 주세요', 'error'); return;
     }
     var wb = await Docket.generateFromTemplate(data);
     var blob = await Docket.workbookToBlob(wb);
@@ -831,9 +713,10 @@ Docket.sendEmail = async function() {
   var data = Docket.collectData();
 
   // 필수 필드 검증
-  if (!data.clientCompany) { App.showToast('회사명을 입력해 주세요', 'error'); return; }
-  if (!data.recipient)     { App.showToast('수신인 이메일을 입력해 주세요', 'error'); return; }
-  if (!data.actualInput)   { App.showToast('실제 청구금액을 입력해 주세요', 'error'); return; }
+  if (!data.clientCompany)              { App.showToast('회사명을 입력해 주세요', 'error'); return; }
+  if (!data.recipient)                  { App.showToast('수신인 이메일을 입력해 주세요', 'error'); return; }
+  if (!data.feeItems.length)            { App.showToast('수수료 항목을 1개 이상 선택해 주세요', 'error'); return; }
+  if (!data.actualInput)                { App.showToast('실제 청구금액을 입력해 주세요', 'error'); return; }
 
   // 견적서 엑셀 생성
   var wbout, fileName;
@@ -904,8 +787,9 @@ Docket.sendEmail = async function() {
 Docket.preview = function() {
   var data = Docket.collectData();
 
-  if (!data.clientCompany) { App.showToast('회사명을 입력해 주세요', 'error'); return; }
-  if (!data.actualInput)   { App.showToast('실제 청구금액을 입력해 주세요', 'error'); return; }
+  if (!data.clientCompany)   { App.showToast('회사명을 입력해 주세요', 'error'); return; }
+  if (!data.feeItems.length) { App.showToast('수수료 항목을 1개 이상 선택해 주세요', 'error'); return; }
+  if (!data.actualInput)     { App.showToast('실제 청구금액을 입력해 주세요', 'error'); return; }
 
   var subject = Docket.buildEmailSubject(data);
   var html = Docket.generateEmailBodyHtml(data);
@@ -952,6 +836,6 @@ Docket.resetForm = function() {
   var notesArea = document.getElementById('dkt-notes');
   if (notesArea) { delete notesArea.dataset.userEdited; notesArea.value = ''; }
 
-  Docket.onStageChange();
+  Docket.onRightChange();
   App.showToast('초기화되었습니다', 'info');
 };

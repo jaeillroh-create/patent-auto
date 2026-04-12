@@ -18,6 +18,7 @@
 .dkt-row { display: grid; gap: 12px; margin-bottom: 14px; }
 .dkt-row-1 { grid-template-columns: 1fr; }
 .dkt-row-2 { grid-template-columns: 1fr 1fr; }
+.dkt-row-3 { grid-template-columns: repeat(3, 1fr); }
 .dkt-row-4 { grid-template-columns: repeat(4, 1fr); }
 .dkt-row label { font-size: 11px; font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 4px; }
 .dkt-row .input-field, .dkt-row select, .dkt-row textarea { font-size: 13px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
@@ -33,6 +34,37 @@
 .dkt-fee-summary-wrap { background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 12px; padding: 14px 16px; }
 .dkt-fee-input-wrap { display: flex; flex-direction: column; gap: 10px; }
 .dkt-fee-sub-title { font-size: 12px; font-weight: 700; color: var(--color-text-secondary); margin-bottom: 6px; }
+
+/* 수수료 체크박스 리스트 */
+.dkt-fee-checkboxes { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.dkt-fee-cb-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-primary);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.dkt-fee-cb-row:hover { background: var(--color-bg-tertiary); }
+.dkt-fee-cb-row:has(input:checked) { background: var(--color-primary-light); border-color: var(--color-primary); }
+.dkt-fee-cb-row input[type="checkbox"] {
+  width: 16px; height: 16px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+  margin: 0;
+}
+.dkt-fee-cb-row .name { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+.dkt-fee-cb-row .price {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dkt-fee-cb-row:has(input:checked) .price { color: var(--color-primary); font-weight: 600; }
 
 /* 수가표 요약 테이블 (읽기 전용) */
 .dkt-summary-table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -68,6 +100,7 @@
 @media (max-width: 640px) {
   .dkt-card { padding: 16px; }
   .dkt-row-4 { grid-template-columns: 1fr 1fr; }
+  .dkt-row-3 { grid-template-columns: 1fr 1fr; }
   .dkt-row-2 { grid-template-columns: 1fr; }
   .dkt-actions { flex-direction: column; }
   .dkt-actions .btn { min-width: auto; width: 100%; }
