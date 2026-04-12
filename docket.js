@@ -601,8 +601,205 @@ Docket.generateEmailBodyText = function(data) {
   return lines.join('\n');
 };
 
+// ═══════════════════════════════════════════════════════════════
+// 견적서 엑셀 생성 (ExcelJS + 템플릿 마커 교체)
+// ═══════════════════════════════════════════════════════════════
+// templates/quote-template-{DB}.xlsx 를 로드하여 마커 치환.
+// 템플릿의 로고/테두리/이미지/서식을 100% 보존.
+// FEE/GOV/NOTES 범위는 bottom-up 순서로 duplicateRow 확장.
+
+Docket.generateFromTemplate = async function(data) {
+  if (typeof ExcelJS === 'undefined') {
+    throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다');
+  }
+
+  var cfg = data.dbConfig || Docket.dbConfig[Docket.defaultDB];
+  var templatePath = cfg.template.replace(/([^\/]+)$/, function(m) {
+    return encodeURIComponent(m);
+  });
+
+  // 1) 템플릿 로드
+  var res = await fetch(templatePath);
+  if (!res.ok) throw new Error('템플릿 로드 실패: ' + templatePath + ' (HTTP ' + res.status + ')');
+  var buf = await res.arrayBuffer();
+
+  var wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  var ws = wb.worksheets[0];
+
+  // 2) 금액 계산
+  var feeTotal = 0; data.feeItems.forEach(function(i){feeTotal+=i.unitPrice*i.qty;});
+  var disc = (data.discountAmount || 0) * (data.discountQty || 1);
+  var afterDisc = feeTotal + disc;
+  var vat = Math.round(afterDisc * 0.1);
+  var feeSub = afterDisc + vat;
+  var govTotal = 0; data.govItems.forEach(function(i){govTotal+=i.unitPrice*i.qty;});
+  var grand = feeSub + govTotal;
+
+  // 3) 마커 스캔
+  var markers = {};
+  ws.eachRow({includeEmpty: true}, function(row, rowNum) {
+    row.eachCell({includeEmpty: false}, function(cell, colNum) {
+      var val = cell.value;
+      if (val && typeof val === 'object' && val.richText) {
+        val = val.richText.map(function(r){return r.text;}).join('');
+      }
+      if (typeof val === 'string') {
+        var re = /\{\{([A-Z_]+)\}\}/g, m;
+        while ((m = re.exec(val)) !== null) {
+          if (!markers[m[1]]) markers[m[1]] = [];
+          markers[m[1]].push({ row: rowNum, col: colNum });
+        }
+      }
+    });
+  });
+
+  // 4) 단순 마커 치환
+  var simple = {
+    CASE_NUMBER: data.caseNumber || '',
+    DATE: data.date || '',
+    CLIENT_NAME: data.clientName || '',
+    SUBJECT: data.subject || '',
+    CASE_TITLE: data.caseTitle || '',
+    TOTAL_KOREAN: Docket.toKorean(grand) + ' 원정',
+    TOTAL_AMOUNT: grand,
+    FEE_SUBTOTAL: feeTotal,
+    VAT: vat,
+    FEE_WITH_VAT: feeSub,
+    GOV_SUBTOTAL: govTotal,
+    GRAND_TOTAL: grand,
+  };
+  Object.keys(simple).forEach(function(key) {
+    (markers[key] || []).forEach(function(pos) {
+      ws.getCell(pos.row, pos.col).value = simple[key];
+    });
+  });
+
+  // 5) 범위 마커 처리 — bottom-up (NOTES → GOV → FEE)
+
+  // ── NOTES 영역
+  if (markers.NOTES_START && markers.NOTE_TEXT) {
+    var noteRow = markers.NOTE_TEXT[0].row;
+    var noteCol = markers.NOTE_TEXT[0].col;
+    var notes = data.notes || [];
+    var nInsert = Math.max(0, notes.length - 1);
+    if (nInsert > 0) {
+      try { ws.duplicateRow(noteRow, nInsert, true); } catch (e) { console.warn('NOTES duplicateRow 실패:', e); }
+    }
+    var nsCol = (markers.NOTES_START && markers.NOTES_START[0]) ? markers.NOTES_START[0].col : null;
+    for (var i = 0; i < notes.length; i++) {
+      var row = ws.getRow(noteRow + i);
+      if (nsCol) row.getCell(nsCol).value = null;
+      row.getCell(noteCol).value = notes[i];
+    }
+    if (markers.NOTES_END && markers.NOTES_END[0]) {
+      var endRowNum = markers.NOTES_END[0].row + nInsert;
+      ws.getCell(endRowNum, markers.NOTES_END[0].col).value = null;
+    }
+  }
+
+  // ── GOV 영역
+  if (markers.GOV_START && markers.GOV_ITEM_NAME) {
+    var govRow = markers.GOV_START[0].row;
+    var govItems = data.govItems || [];
+    var nInsertG = Math.max(0, govItems.length - 1);
+    if (nInsertG > 0) {
+      try { ws.duplicateRow(govRow, nInsertG, true); } catch (e) { console.warn('GOV duplicateRow 실패:', e); }
+    }
+    for (var i2 = 0; i2 < govItems.length; i2++) {
+      var gitem = govItems[i2];
+      var grow = ws.getRow(govRow + i2);
+      grow.getCell(markers.GOV_START[0].col).value = null;
+      grow.getCell(markers.GOV_ITEM_NAME[0].col).value = gitem.name;
+      grow.getCell(4).value = gitem.unitPrice;
+      grow.getCell(5).value = gitem.qty;
+      grow.getCell(7).value = gitem.unitPrice * gitem.qty;
+      if (gitem.note) grow.getCell(10).value = gitem.note;
+    }
+    if (markers.GOV_END && markers.GOV_END[0]) {
+      var govEndRow = markers.GOV_END[0].row + nInsertG;
+      ws.getCell(govEndRow, markers.GOV_END[0].col).value = null;
+    }
+  }
+
+  // ── FEE 영역
+  if (markers.FEE_START && markers.FEE_ITEM_NAME) {
+    var feeRow = markers.FEE_START[0].row;
+    var feeItems = data.feeItems || [];
+    var nInsertF = Math.max(0, feeItems.length - 1);
+    if (nInsertF > 0) {
+      try { ws.duplicateRow(feeRow, nInsertF, true); } catch (e) { console.warn('FEE duplicateRow 실패:', e); }
+    }
+    for (var i3 = 0; i3 < feeItems.length; i3++) {
+      var fitem = feeItems[i3];
+      var frow = ws.getRow(feeRow + i3);
+      frow.getCell(markers.FEE_START[0].col).value = null;
+      frow.getCell(markers.FEE_ITEM_NAME[0].col).value = fitem.name;
+      frow.getCell(4).value = fitem.unitPrice;
+      frow.getCell(5).value = fitem.qty;
+      frow.getCell(7).value = fitem.unitPrice * fitem.qty;
+      if (fitem.note) frow.getCell(10).value = fitem.note;
+    }
+    // 할인 행 (FEE_END)
+    if (markers.FEE_END && markers.FEE_END[0]) {
+      var discRowNum = markers.FEE_END[0].row + nInsertF;
+      var discRow = ws.getRow(discRowNum);
+      discRow.getCell(markers.FEE_END[0].col).value = null;
+      discRow.getCell(4).value = data.discountAmount;
+      discRow.getCell(5).value = data.discountQty;
+      discRow.getCell(7).value = disc;
+    }
+  }
+
+  return wb;
+};
+
+// 숫자 → 한글 (예: 5857600 → "오백팔십오만칠천육백")
+Docket.toKorean = function(num) {
+  if (num === 0 || !num) return '영';
+  num = Math.round(num);
+  var d = ['','일','이','삼','사','오','육','칠','팔','구'];
+  var u = ['','만','억','조'];
+  var s = ['','십','백','천'];
+  var r = '', neg = num < 0;
+  if (neg) num = -num;
+  var ui = 0;
+  while (num > 0) {
+    var chunk = num % 10000;
+    if (chunk > 0) {
+      var cs = '';
+      for (var i = 0; chunk > 0; i++) {
+        var dd = chunk % 10;
+        if (dd > 0) cs = (dd === 1 && i > 0 ? '' : d[dd]) + s[i] + cs;
+        chunk = Math.floor(chunk / 10);
+      }
+      r = cs + u[ui] + r;
+    }
+    num = Math.floor(num / 10000);
+    ui++;
+  }
+  return (neg ? '마이너스 ' : '') + r;
+};
+
+// workbook → Blob
+Docket.workbookToBlob = async function(wb) {
+  var buffer = await wb.xlsx.writeBuffer();
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
+
+// workbook → base64 (이메일 첨부용)
+Docket.workbookToBase64 = async function(wb) {
+  var buffer = await wb.xlsx.writeBuffer();
+  var bytes = new Uint8Array(buffer);
+  var bin = '';
+  var chunkSize = 8192;
+  for (var i = 0; i < bytes.byteLength; i += chunkSize) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(bin);
+};
+
 // ═══ Stub 함수들 (후속 단계에서 구현) ═══
-Docket.generateFromTemplate = async function() { return null; };
 Docket.downloadExcel = function() {};
 Docket.sendEmail = async function() {};
 Docket.preview = function() {};
