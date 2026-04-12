@@ -440,6 +440,25 @@
               </div>
             </div>
 
+            <!-- 특허·실용신안 관납료 감면 계산 패널 (해당 권리유형 선택 시에만 표시) -->
+            <div id="dkt-patent-options-wrap" style="display:none;margin-bottom:12px;padding:10px 12px;background:var(--color-primary-light);border-radius:8px">
+              <div class="dkt-fee-sub-title" style="margin-bottom:6px">관납료 감면 계산 (특허·실용신안)</div>
+              <div style="display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center">
+                <label style="font-size:12px;font-weight:600">청구항 수</label>
+                <input type="number" id="dkt-patent-claims" value="3" min="1" max="99" oninput="Docket.recalc()" class="input-field" style="max-width:120px" />
+                <label style="font-size:12px;font-weight:600">기업 규모</label>
+                <div class="dkt-radio-group" style="flex-wrap:wrap;gap:10px">
+                  <label><input type="radio" name="dkt-reduction" value="small" checked onchange="Docket.recalc()" /> 중소/개인/벤처 (70%↓)</label>
+                  <label><input type="radio" name="dkt-reduction" value="medium" onchange="Docket.recalc()" /> 중견 (50%↓)</label>
+                  <label><input type="radio" name="dkt-reduction" value="large" onchange="Docket.recalc()" /> 대기업 (감면X)</label>
+                </div>
+              </div>
+              <div style="font-size:10px;color:var(--color-text-tertiary);margin-top:6px;line-height:1.4">
+                ※ 2024년 전자출원 기준 단가로 계산. 청구항 수·기업 규모 변경 시 관납료가 자동 재계산됩니다.
+                보정료는 감면 대상이 아닙니다.
+              </div>
+            </div>
+
             <div class="dkt-fee-sub-title">대리인수수료 — 체크한 항목만 견적에 포함</div>
             <div id="dkt-fee-checkboxes" class="dkt-fee-checkboxes"></div>
             <div class="dkt-fee-sub-title" style="margin-top:14px">특허청관납료 (체크된 수수료에 자동 연동)</div>
