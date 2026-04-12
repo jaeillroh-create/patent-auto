@@ -10,45 +10,65 @@ Docket.config = {
   emailFunctionUrl: '',
 };
 
-// ── 담당 변리사(DB) 프로필 ──
-// 보내는 사람 선택 시 계좌번호·예금주·이름 자동 입력
-Docket.attorneys = {
-  '노재일': {
-    name: '노재일',
-    bankAccount: '기업은행 : 257-155360-01-013',
-    bankHolder: '노재일(특허그룹디딤)',
-  },
-  // 변리사 추가 시 여기에 항목 추가
-  // '홍길동': {
-  //   name: '홍길동',
-  //   bankAccount: '신한은행 : 110-xxx-xxxxxx',
-  //   bankHolder: '홍길동(특허그룹디딤)',
-  // },
-};
-Docket.defaultAttorney = '노재일';
-
-// 현재 선택된 변리사 정보를 반환
-Docket.getAttorney = function() {
-  var sel = document.getElementById('dkt-attorney');
-  var name = sel ? sel.value : Docket.defaultAttorney;
-  return Docket.attorneys[name] || Docket.attorneys[Docket.defaultAttorney];
+// ── DB(담당 변리사) 목록 ──
+// 각 DB에 대응하는 템플릿 파일이 templates/ 폴더에 존재해야 함
+// 계좌/예금주/할인 비고는 템플릿 xlsx 내에 고정값으로 기재됨
+Docket.dbList = ['노재일', '이용환'];
+Docket.defaultDB = '노재일';
+Docket.getTemplatePath = function(dbName) {
+  return 'templates/quote-template-' + encodeURIComponent(dbName) + '.xlsx';
 };
 
-// 변리사 선택 시 자동 채움
-Docket.onAttorneyChange = function() {
-  var att = Docket.getAttorney();
-  // 할인란 변리사명 동기화
+// ── 상세 조항 표준 텍스트 (특허/상표) ──
+Docket.defaultNotes = {
+  patent: [
+    '1) 대리인 수수료는 변리사 수임료이며, 특허청 관납료는 대리인 수수료와 무관한 특허청에 납부하는 금액입니다.',
+    '2) 특허청 출원관납료에 포함된 심사청구료 및 가산료는 청구항의 수에 따라 청구됩니다. 본 견적에는 3개항으로 견적하였으며, 실제 청구항수에 따라 가감될 수 있습니다.',
+    '3) 중소기업기본법 제2조에 따라 중소기업·벤처기업에 해당할 경우, 출원료·심사청구료·최초 3년분 등록료의 70% 감면 혜택이 적용됩니다. (증빙서류 제출 필수)',
+    '4) 본 특허의 등록 시에는 출원착수금의 100%가 성공보수금으로 청구됩니다. (부가세·특허청 등록관납료 별도) 의견제출통지서 1회 대응 비용이 포함되어 있으며, 2회 이상 및 거절결정 대응 비용은 미포함입니다.',
+    '5) 부가세 포함 대리인수수료에 대하여는 세금계산서(또는 현금영수증 택1)를 발급드리며, 특허청관납료는 서류제출 후 발생되는 납부확인증으로 입금증빙 처리됩니다.',
+    '6) 본 견적의 유효기간은 발행일로부터 30일입니다.',
+    '7) 상기 금액은 견적 내용이며, 문의사항이 있으시면 연락 주시기 바랍니다.',
+  ],
+  trademark: [
+    '1) 대리인 수수료는 상표출원에 대한 금액이며, 특허청 관납료는 대리인 수수료와 별개의 특허청 납부 금액입니다.',
+    '2) 본 상표의 등록 시에는 대리인수수료의 100%가 성공보수금으로 청구됩니다. (부가세·특허청 등록관납료 별도)',
+    '3) 부가세 포함 대리인수수료에 대하여는 세금계산서(현금영수증 택1)를 발급드리며, 특허청관납료는 서류제출 후 발생되는 납부확인증으로 입금증빙 처리됩니다. 입금 시 사업자등록증 사본을 회신 부탁드립니다.',
+    '4) 지정상품 추가 시 상품류별 관납료가 추가될 수 있습니다.',
+    '5) 본 견적의 유효기간은 발행일로부터 30일입니다.',
+    '6) 상기 금액은 견적 내용이며, 문의사항이 있으시면 연락 주시기 바랍니다.',
+  ],
+};
+
+// 현재 선택된 DB 반환
+Docket.getDB = function() {
+  var sel = document.getElementById('dkt-db');
+  return sel ? sel.value : Docket.defaultDB;
+};
+
+// DB 변경 시 할인란 변리사명 동기화
+Docket.onDBChange = function() {
+  var db = Docket.getDB();
   var discEl = document.getElementById('dkt-discount-attorney');
-  if (discEl) discEl.value = att.name;
-  // 계좌 정보 표시
-  var bankEl = document.getElementById('dkt-bank-display');
-  if (bankEl) bankEl.textContent = att.bankAccount + ' (예금주: ' + att.bankHolder + ')';
+  if (discEl) discEl.value = db;
+};
+
+// 상세 조항 기본값 복원
+Docket.resetNotes = function() {
+  var area = document.getElementById('dkt-notes');
+  if (!area) return;
+  var tmplKey = document.getElementById('dkt-case-template').value;
+  var tmpl = Docket.caseTemplates[tmplKey];
+  var category = (tmpl && tmpl.notesCategory) || 'patent';
+  area.value = Docket.defaultNotes[category].join('\n');
+  delete area.dataset.userEdited;
 };
 
 // ── 사건 유형별 수수료 템플릿 ──
 Docket.caseTemplates = {
   'patent-priority': {
     label: '우선 특허출원 + 중간사건', subject: '우선 특허 출원 및 중간사건 {count}건에 대한 비용견적의 건',
+    notesCategory: 'patent',
     feeItems: [
       { name: '출원착수금', unitPrice: 1800000, qty: 1 },
       { name: '우선심사신청', unitPrice: 600000, qty: 1 },
@@ -59,10 +79,10 @@ Docket.caseTemplates = {
       { name: '우선심사신청료', unitPrice: 200000, qty: 1 },
       { name: '보정료(중간사건)', unitPrice: 4000, qty: 1, note: '■ 의견제출통지서 대응에 따른 특허청 보정관납료' },
     ],
-    notes: ['1) 대리인 수수료는 변리사 수임료이며, 특허청 관납료는 대리인 수수료와 무관한 특허청에 납부하는 금액입니다.','2) 특허청 출원관납료에 포함된 심사청구료 및 가산료는 청구항의 수로 청구됩니다. 본 견적에는 3개항으로 견적하였으며, 특허출원서에 기재된 청구항수에 따라 가감청구 될 수 있음을 알려드립니다.','3) 중소기업기본법 제2조에 따라 중소기업, 벤처기업에 해당 할 경우, 관납료의 70% 감면 혜택을 받으실 수 있습니다. (증빙서류 제출 필수)','4) 본 특허의 등록 시에는 상기 출원착수금의 100%가 성공보수금으로 청구됩니다. (부가세, 특허청 등록관납료 별도)','5) 상기 금액은 견적 내용이며, 문의 내용이 있으시면 연락 주시기 바랍니다.','6) 부가세 포함 대리인수수료에 대하여는 세금계산서(또는 현금영수증 택1) 발급드릴 예정입니다.'],
   },
   'patent-priority-guarantee': {
     label: '우선 특허출원 등록보장', subject: '우선 특허출원 등록보장 {count}건에 대한 비용견적의 건',
+    notesCategory: 'patent',
     feeItems: [
       { name: '출원착수금', unitPrice: 1800000, qty: 1 },
       { name: '우선심사신청', unitPrice: 600000, qty: 1 },
@@ -77,10 +97,10 @@ Docket.caseTemplates = {
       { name: '보정료(중간사건)', unitPrice: 4000, qty: 1, note: '■ 의견제출통지서 대응에 따른 특허청 보정관납료' },
       { name: '등록료', unitPrice: 44100, qty: 1, note: '■ 청구항 3항, 70% 감면적용' },
     ],
-    notes: ['1) 대리인 수수료는 변리사 수임료이며, 특허청 관납료는 대리인 수수료와 무관한 특허청에 납부하는 금액입니다.','2) 특허청 관납료는 청구항수에 따라 가감청구 될 수 있습니다.','3) 중소기업, 벤처기업 해당 시 관납료 70% 감면 혜택이 적용됩니다. (증빙서류 제출 필수)','4) 등록 시 출원착수금의 100%가 성공보수금(부가세 별도)으로 청구됩니다. 의견제출통지서 2회 이상 및 거절결정 대응 비용은 미포함입니다.','5) 상기 금액은 견적 내용이며, 문의 내용이 있으시면 연락 주시기 바랍니다.','6) 부가세 포함 대리인수수료에 대하여는 세금계산서(또는 현금영수증 택1) 발급드릴 예정입니다.'],
   },
   'patent-division-priority': {
     label: '분할출원 (우선)', subject: '국내 특허(분할) 출원 총 {count}건에 대한 비용견적의 건',
+    notesCategory: 'patent',
     feeItems: [
       { name: '특허 분할출원', unitPrice: 800000, qty: 1 },
       { name: '특허 분할등록', unitPrice: 800000, qty: 1 },
@@ -91,10 +111,10 @@ Docket.caseTemplates = {
       { name: '특허 등록 관납료', unitPrice: 22500, qty: 1 },
       { name: '특허 우선심사 관납료', unitPrice: 200000, qty: 1 },
     ],
-    notes: ['1) 대리인 수수료는 변리사 수임료이며, 특허청 관납료는 대리인 수수료와 무관한 특허청에 납부하는 금액입니다.','2) 관납료는 청구항수에 따라 가감 될 수 있습니다.','3) 중소기업, 벤처기업 해당 시 관납료 70% 감면 혜택이 적용됩니다. (증빙서류 제출 필수)','4) 상기 금액은 견적 내용이며, 문의 내용이 있으시면 연락 주시기 바랍니다.'],
   },
   'patent-division-general': {
     label: '분할출원 (일반)', subject: '국내 특허(분할) 출원 총 {count}건에 대한 비용견적의 건',
+    notesCategory: 'patent',
     feeItems: [
       { name: '특허 분할출원', unitPrice: 800000, qty: 1 },
       { name: '특허 분할등록', unitPrice: 800000, qty: 1 },
@@ -104,16 +124,16 @@ Docket.caseTemplates = {
       { name: '특허 등록 관납료', unitPrice: 22500, qty: 1 },
       { name: '특허 우선심사 관납료', unitPrice: 200000, qty: 1 },
     ],
-    notes: ['1) 대리인 수수료는 변리사 수임료이며, 특허청 관납료는 별개입니다.','2) 상기 금액은 견적 내용이며, 문의 내용이 있으시면 연락 주시기 바랍니다.'],
   },
   'tm-general': {
     label: '일반 상표출원', subject: '일반 상표 출원 {count}건에 대한 비용견적의 건',
+    notesCategory: 'trademark',
     feeItems: [{ name: '출원착수금', unitPrice: 300000, qty: 1 }],
     govItems: [{ name: '출원료', unitPrice: 52000, qty: 1, note: '■ 1상품류마다 10개의 지정상품' }],
-    notes: ['1) 대리인 수수료는 상표출원에 대한 금액이며, 특허청 관납료는 별개입니다.','2) 등록 시 대리인수수료의 100%가 성공보수금(부가세 및 등록관납료 별도)으로 청구됩니다.','3) 상기 금액은 견적 내용이며, 문의 내용이 있으시면 연락 주시기 바랍니다.','4) 부가세 포함 대리인수수료에 대하여는 세금계산서 발급드릴 예정입니다. 입금시 사업자등록증 사본을 부탁드립니다.'],
   },
   'tm-priority': {
     label: '우선 상표출원 + 중간사건', subject: '우선 상표 출원 및 중간사건 {count}건에 대한 비용견적의 건',
+    notesCategory: 'trademark',
     feeItems: [
       { name: '출원착수금', unitPrice: 300000, qty: 1 },
       { name: '우선심사신청', unitPrice: 300000, qty: 1 },
@@ -124,10 +144,10 @@ Docket.caseTemplates = {
       { name: '우선심사신청료', unitPrice: 160000, qty: 1 },
       { name: '보정료', unitPrice: 4000, qty: 1, note: '■ 의견제출통지서 대응 특허청관납료' },
     ],
-    notes: ['1) 대리인 수수료는 변리사 수임료이며, 특허청 관납료는 별개입니다.','2) 등록 시 출원착수금의 100%가 성공보수금으로 청구됩니다. 의견제출통지서 2회 이상 및 거절결정 대응시 별도 청구됩니다.','3) 상기 금액은 견적 내용이며, 문의 내용이 있으시면 연락 주시기 바랍니다.','4) 부가세 포함 대리인수수료에 대하여는 세금계산서 발급드릴 예정입니다.'],
   },
   'tm-priority-reg': {
     label: '우선 상표출원 + 중간 + 등록', subject: '우선 상표 출원 및 중간사건 {count}건에 대한 비용견적의 건',
+    notesCategory: 'trademark',
     feeItems: [
       { name: '출원착수금', unitPrice: 300000, qty: 1 },
       { name: '우선심사신청', unitPrice: 300000, qty: 1 },
@@ -140,22 +160,22 @@ Docket.caseTemplates = {
       { name: '보정료', unitPrice: 4000, qty: 1, note: '■ 의견제출통지서 대응 특허청관납료' },
       { name: '등록료', unitPrice: 210120, qty: 1, note: '■ 1상품류마다 10개의 지정상품' },
     ],
-    notes: ['1) 대리인 수수료는 변리사 수임료이며, 특허청 관납료는 별개입니다.','2) 등록 시 출원착수금의 100%가 성공보수금으로 청구됩니다. 의견제출통지서 2회 이상 및 거절결정 대응시 별도 청구됩니다.','3) 상기 금액은 견적 내용이며, 문의 내용이 있으시면 연락 주시기 바랍니다.','4) 부가세 포함 대리인수수료에 대하여는 세금계산서 발급드릴 예정입니다.'],
   },
   'tm-oa': {
     label: '상표 중간사건 (의견서 대응)', subject: '상표 중간사건 의견서 대응 {count}건에 대한 비용견적의 건',
+    notesCategory: 'trademark',
     feeItems: [{ name: '의견서 작성 및 제출', unitPrice: 600000, qty: 1 }],
     govItems: [{ name: '보정서', unitPrice: 4000, qty: 1 }],
-    notes: ['1) 대리인 수수료는 의견제출통지서 대응 금액이며, 특허청 관납료는 별개입니다.','2) 등록 시 등록성사금, 부가세, 특허청 등록관납료가 발생됩니다.','3) 상기 금액은 견적 내용이며, 문의 내용이 있으시면 연락 주시기 바랍니다.'],
   },
   'tm-cancel-trial': {
     label: '취소심판', subject: '취소심판 {count}건에 대한 비용견적의 건',
+    notesCategory: 'trademark',
     feeItems: [{ name: '심판착수금', unitPrice: 1000000, qty: 1 }],
     govItems: [{ name: '심판청구료', unitPrice: 240000, qty: 1 }],
-    notes: ['1) 대리인 수수료는 심판 수임료이며, 특허청 관납료는 별개입니다.','2) 성공 시 대리인수수료의 100%가 성공보수금으로 청구됩니다.','3) 상기 금액은 견적 내용이며, 문의 내용이 있으시면 연락 주시기 바랍니다.','4) 부가세 포함 대리인수수료에 대하여는 세금계산서 발급드릴 예정입니다.'],
   },
   'patent-pct': {
     label: 'PCT 출원', subject: '가출원, 본출원 및 PCT출원에 대한 비용견적의 건',
+    notesCategory: 'patent',
     feeItems: [
       { name: '가출원 착수금', unitPrice: 300000, qty: 1 },
       { name: '본출원 착수금', unitPrice: 6000000, qty: 1 },
@@ -169,7 +189,6 @@ Docket.caseTemplates = {
       { name: 'PCT_송달료', unitPrice: 45000, qty: 1 },
       { name: 'PCT_송금수수료', unitPrice: 1500, qty: 1 },
     ],
-    notes: ['1) 대리인 수수료는 특허출원에 대한 금액이며, 특허청 관납료는 별개입니다.','2) 본 견적서는 성공보수금이 포함된 금액입니다.','3) 상기 금액은 견적 내용이며, 문의 내용이 있으시면 연락 주시기 바랍니다.','4) 부가세 포함 대리인수수료에 대하여는 세금계산서 발급드릴 예정입니다.','5) PCT 출원서 30면 기준이며, 초과 1면당 CHF 15.00(약 26,500원)씩 가산됩니다. 환율에 따라 변동될 수 있습니다.'],
   },
 };
 
@@ -180,18 +199,11 @@ Docket.init = function() {
   var dateField = document.getElementById('dkt-date');
   if (dateField && !dateField.value) dateField.value = new Date().toISOString().split('T')[0];
 
-  // 담당 변리사 드롭다운 채우기
-  var attSel = document.getElementById('dkt-attorney');
-  if (attSel && attSel.options.length <= 1) {
-    attSel.innerHTML = '';
-    Object.keys(Docket.attorneys).forEach(function(name) {
-      var opt = document.createElement('option');
-      opt.value = name; opt.textContent = name;
-      if (name === Docket.defaultAttorney) opt.selected = true;
-      attSel.appendChild(opt);
-    });
-  }
-  Docket.onAttorneyChange();
+  // DB 선택 기본값 적용
+  var dbSel = document.getElementById('dkt-db');
+  if (dbSel && !dbSel.value) dbSel.value = Docket.defaultDB;
+  Docket.onDBChange();
+
   Docket.renderFeeTable();
 };
 
@@ -200,6 +212,13 @@ Docket.renderFeeTable = function() {
   var tmpl = Docket.caseTemplates[tmplKey];
   if (!tmpl) return;
   var cnt = parseInt(document.getElementById('dkt-case-count').value) || 1;
+
+  // 상세 조항 자동 입력 (사용자가 편집하지 않은 경우에만)
+  var notesArea = document.getElementById('dkt-notes');
+  if (notesArea && !notesArea.dataset.userEdited) {
+    var category = tmpl.notesCategory || 'patent';
+    notesArea.value = (Docket.defaultNotes[category] || []).join('\n');
+  }
 
   var feeBody = document.getElementById('dkt-fee-items');
   feeBody.innerHTML = '';
@@ -299,7 +318,18 @@ Docket.collectData = function() {
     govItems.push({ name: tr.querySelector('[data-field="name"]').value, unitPrice: parseInt(tr.querySelector('[data-field="unitPrice"]').value)||0, qty: parseInt(tr.querySelector('[data-field="qty"]').value)||1, note: tr.querySelector('[data-field="note"]').value });
   });
 
-  var att = Docket.getAttorney();
+  var db = Docket.getDB();
+
+  // 상세 조항: textarea 내용 → 배열 (빈 줄 제거)
+  var notesRaw = v('dkt-notes');
+  var notes;
+  if (notesRaw) {
+    notes = notesRaw.split(/\r?\n/).map(function(s){return s.trim();}).filter(Boolean);
+  } else {
+    var category = tmpl.notesCategory || 'patent';
+    notes = Docket.defaultNotes[category] || [];
+  }
+
   return {
     templateKey: tmplKey, template: tmpl,
     caseNumber: v('dkt-case-number'), date: v('dkt-date') || new Date().toISOString().split('T')[0],
@@ -308,21 +338,31 @@ Docket.collectData = function() {
     feeItems: feeItems, govItems: govItems,
     discountAmount: parseInt(v('dkt-discount-amount')) || 0,
     discountQty: parseInt(v('dkt-discount-qty')) || 1,
-    discountAttorney: v('dkt-discount-attorney') || att.name,
-    notes: tmpl.notes,
-    attorney: att,
+    discountAttorney: v('dkt-discount-attorney') || db,
+    notes: notes,
+    db: db,
   };
 };
 
-// ═══ 엑셀 생성 (SheetJS) ═══
-Docket.generateExcel = function(data) {
-  if (typeof XLSX === 'undefined') { App.showToast('SheetJS 로딩 중...', 'error'); return null; }
-  var wb = XLSX.utils.book_new();
-  var ws = {}, merges = [], r = 0;
-  var set = function(row, col, val) { ws[XLSX.utils.encode_cell({r:row,c:col})] = { v: val, t: typeof val === 'number' ? 'n' : 's' }; };
-  var merge = function(r1,c1,r2,c2) { merges.push({s:{r:r1,c:c1},e:{r:r2,c:c2}}); };
+// ═══ 엑셀 생성 (ExcelJS + 템플릿) ═══
+// templates/quote-template-{DB}.xlsx 를 로드하여 마커를 치환.
+// FEE/GOV/NOTES 범위는 bottom-up 순서로 행을 복제하여 확장한다.
+Docket.generateFromTemplate = async function(data) {
+  if (typeof ExcelJS === 'undefined') {
+    throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다');
+  }
 
-  // 금액 계산
+  // 1) 템플릿 로드
+  var templatePath = Docket.getTemplatePath(data.db);
+  var res = await fetch(templatePath);
+  if (!res.ok) throw new Error('템플릿 로드 실패: ' + templatePath + ' (HTTP ' + res.status + ')');
+  var buf = await res.arrayBuffer();
+
+  var wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  var ws = wb.worksheets[0];
+
+  // 2) 금액 계산
   var feeTotal = 0; data.feeItems.forEach(function(i){feeTotal+=i.unitPrice*i.qty;});
   var disc = data.discountAmount * data.discountQty;
   var afterDisc = feeTotal + disc;
@@ -331,85 +371,164 @@ Docket.generateExcel = function(data) {
   var govTotal = 0; data.govItems.forEach(function(i){govTotal+=i.unitPrice*i.qty;});
   var grand = feeSub + govTotal;
 
-  // 헤더
-  set(1,8,'견  적  서'); merge(1,8,3,9);
-  merge(4,0,4,9);
-  set(6,8,'당소번호:'); set(6,9,data.caseNumber||'');
-  set(7,8,'날     짜:'); set(7,9,data.date);
-
-  set(10,1,'수      신 :'); set(10,2,data.clientName); merge(10,2,10,3);
-  set(11,1,'제      목 :'); set(11,2,data.subject); merge(11,2,11,9);
-  set(12,1,'명      칭 :'); set(12,2,data.caseTitle||''); merge(12,2,12,9);
-  set(15,1,'   표제의 건에 대한 비용을 다음과 같이 견적하오니 참고하여 주시기 바랍니다.'); merge(15,1,15,9);
-  set(17,2,'       -   다      음  -'); merge(17,2,17,6);
-
-  // 견적금액
-  set(19,1,'1. 견적금액 : '); set(19,2,Docket.toKorean(grand)); merge(19,2,19,3);
-  set(19,4,'원정'); set(19,5,'('); set(19,6,grand); merge(19,6,19,8); set(19,9,')');
-  set(21,1,'2. 내역');
-
-  // 테이블 헤더
-  r = 23;
-  set(r,1,'항    목'); merge(r,1,r,2); set(r,3,'단가'); set(r,4,'수량'); merge(r,4,r,5);
-  set(r,6,'금       액'); merge(r,6,r,8); set(r,9,'비  고');
-
-  // 대리인수수료
-  r = 24; var feeStart = r;
-  data.feeItems.forEach(function(item,i) {
-    if (i===0) set(r,1,'대리인수수료');
-    set(r,2,item.name); set(r,3,item.unitPrice); set(r,4,item.qty); merge(r,4,r,5);
-    set(r,6,item.unitPrice*item.qty); merge(r,6,r,8);
-    if (item.note) set(r,9,item.note);
-    r++;
+  // 3) 마커 스캔 (셀 값에서 {{NAME}} 패턴 추출)
+  var markers = {}; // name → [{row, col}, ...]
+  ws.eachRow({includeEmpty: true}, function(row, rowNum) {
+    row.eachCell({includeEmpty: false}, function(cell, colNum) {
+      var val = cell.value;
+      if (typeof val === 'object' && val && val.richText) {
+        val = val.richText.map(function(r){return r.text;}).join('');
+      }
+      if (typeof val === 'string') {
+        var re = /\{\{([A-Z_]+)\}\}/g, m;
+        while ((m = re.exec(val)) !== null) {
+          if (!markers[m[1]]) markers[m[1]] = [];
+          markers[m[1]].push({ row: rowNum, col: colNum });
+        }
+      }
+    });
   });
 
-  // 할인
-  if (disc !== 0) {
-    set(r,3,data.discountAmount); set(r,4,data.discountQty); merge(r,4,r,5);
-    set(r,6,disc); merge(r,6,r,8);
-    set(r,9,data.discountAttorney+' 변리사 담당 우대');
-    r++;
+  // 4) 단순 마커 치환 (값이 곧 셀 값)
+  var simple = {
+    CASE_NUMBER: data.caseNumber || '',
+    DATE: data.date || '',
+    CLIENT_NAME: data.clientName || '',
+    SUBJECT: data.subject || '',
+    CASE_TITLE: data.caseTitle || '',
+    TOTAL_KOREAN: Docket.toKorean(grand) + ' 원정',
+    TOTAL_AMOUNT: grand,
+    FEE_SUBTOTAL: feeTotal,
+    VAT: vat,
+    FEE_WITH_VAT: feeSub,
+    GOV_SUBTOTAL: govTotal,
+    GRAND_TOTAL: grand,
+  };
+  Object.keys(simple).forEach(function(key) {
+    (markers[key] || []).forEach(function(pos) {
+      ws.getCell(pos.row, pos.col).value = simple[key];
+    });
+  });
+
+  // 5) 범위 마커 처리 — bottom-up 순서 (NOTES → GOV → FEE)
+  //    이렇게 하면 아래쪽 행 삽입이 위쪽 마커 위치에 영향을 주지 않음.
+
+  // ── NOTES 영역: row 40 (sample), row 41 (end)
+  if (markers.NOTES_START && markers.NOTE_TEXT) {
+    var noteRow = markers.NOTE_TEXT[0].row;
+    var noteCol = markers.NOTE_TEXT[0].col;
+    var notes = data.notes || [];
+    var nInsert = Math.max(0, notes.length - 1);
+    if (nInsert > 0) {
+      try { ws.duplicateRow(noteRow, nInsert, true); } catch (e) { console.warn('NOTES duplicateRow 실패:', e); }
+    }
+    var nsCol = (markers.NOTES_START && markers.NOTES_START[0]) ? markers.NOTES_START[0].col : null;
+    for (var i = 0; i < notes.length; i++) {
+      var row = ws.getRow(noteRow + i);
+      // NOTES_START 마커 셀 클리어 (모든 확장 행에서)
+      if (nsCol) row.getCell(nsCol).value = null;
+      row.getCell(noteCol).value = notes[i];
+    }
+    // NOTES_END 마커 클리어 (확장된 만큼 행 번호 이동)
+    if (markers.NOTES_END && markers.NOTES_END[0]) {
+      var endRowNum = markers.NOTES_END[0].row + nInsert;
+      ws.getCell(endRowNum, markers.NOTES_END[0].col).value = null;
+    }
   }
-  if (r - feeStart > 1) merge(feeStart,1,r-1,1);
 
-  // 부가세 + 소계
-  set(r,1,'부가가치세'); merge(r,1,r,2); set(r,4,1); merge(r,4,r,5); set(r,6,vat); merge(r,6,r,8); r++;
-  set(r,1,'소           계'); merge(r,1,r,5); set(r,6,feeSub); merge(r,6,r,8); r++;
+  // ── GOV 영역: row 32 (sample), row 34 (end, 지불 비어있을 수 있음)
+  if (markers.GOV_START && markers.GOV_ITEM_NAME) {
+    var govRow = markers.GOV_START[0].row;
+    var govItems = data.govItems || [];
+    var nInsertG = Math.max(0, govItems.length - 1);
+    if (nInsertG > 0) {
+      try { ws.duplicateRow(govRow, nInsertG, true); } catch (e) { console.warn('GOV duplicateRow 실패:', e); }
+    }
+    for (var i = 0; i < govItems.length; i++) {
+      var item = govItems[i];
+      var row = ws.getRow(govRow + i);
+      // A열(GOV_START 마커) 클리어
+      row.getCell(markers.GOV_START[0].col).value = null;
+      // C열(GOV_ITEM_NAME) — 항목명
+      row.getCell(markers.GOV_ITEM_NAME[0].col).value = item.name;
+      // D열(단가), E열(수량), G열(금액) — 템플릿 레이아웃 기준
+      row.getCell(4).value = item.unitPrice;
+      row.getCell(5).value = item.qty;
+      row.getCell(7).value = item.unitPrice * item.qty;
+      if (item.note) row.getCell(10).value = item.note; // J열 비고
+    }
+    // GOV_END 마커 클리어
+    if (markers.GOV_END && markers.GOV_END[0]) {
+      var govEndRow = markers.GOV_END[0].row + nInsertG;
+      ws.getCell(govEndRow, markers.GOV_END[0].col).value = null;
+    }
+  }
 
-  // 관납료
-  var govStart = r;
-  data.govItems.forEach(function(item,i) {
-    if (i===0) set(r,1,'특허청관납료');
-    set(r,2,item.name); set(r,3,item.unitPrice); set(r,4,item.qty); merge(r,4,r,5);
-    set(r,6,item.unitPrice*item.qty); merge(r,6,r,8);
-    if (item.note) set(r,9,item.note);
-    r++;
-  });
-  if (r - govStart > 1) merge(govStart,1,r-1,1);
+  // ── FEE 영역: row 25 (sample), row 26 (discount row, FEE_END)
+  if (markers.FEE_START && markers.FEE_ITEM_NAME) {
+    var feeRow = markers.FEE_START[0].row;
+    var feeItems = data.feeItems || [];
+    var nInsertF = Math.max(0, feeItems.length - 1);
+    if (nInsertF > 0) {
+      try { ws.duplicateRow(feeRow, nInsertF, true); } catch (e) { console.warn('FEE duplicateRow 실패:', e); }
+    }
+    for (var i = 0; i < feeItems.length; i++) {
+      var item = feeItems[i];
+      var row = ws.getRow(feeRow + i);
+      row.getCell(markers.FEE_START[0].col).value = null;
+      row.getCell(markers.FEE_ITEM_NAME[0].col).value = item.name;
+      row.getCell(4).value = item.unitPrice;
+      row.getCell(5).value = item.qty;
+      row.getCell(7).value = item.unitPrice * item.qty;
+      if (item.note) row.getCell(10).value = item.note;
+    }
+    // 할인 행 (FEE_END) — nInsertF만큼 아래로 이동
+    if (markers.FEE_END && markers.FEE_END[0]) {
+      var discRowNum = markers.FEE_END[0].row + nInsertF;
+      var discRow = ws.getRow(discRowNum);
+      discRow.getCell(markers.FEE_END[0].col).value = null;
+      discRow.getCell(4).value = data.discountAmount;
+      discRow.getCell(5).value = data.discountQty;
+      discRow.getCell(7).value = disc;
+    }
+  }
 
-  set(r,1,'소           계'); merge(r,1,r,5); set(r,6,govTotal); merge(r,6,r,8); r++;
-  set(r,1,' 총           계'); merge(r,1,r,5); set(r,6,grand); merge(r,6,r,8); r+=2;
-  set(r,1,'견  적  금  액'); merge(r,1,r,5); set(r,6,grand); merge(r,6,r,8); r+=2;
-
-  // 상세
-  set(r,1,'3. 상세'); r++;
-  data.notes.forEach(function(n){ set(r,1,n); merge(r,1,r,9); r++; }); r++;
-  set(r,1,'4. 결제계좌 (예금주: '+data.attorney.bankHolder+')'); r++;
-  set(r,1,'     '+data.attorney.bankAccount);
-
-  ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:r,c:11}});
-  ws['!merges'] = merges;
-  ws['!cols'] = [{wch:3},{wch:8},{wch:18},{wch:12},{wch:5},{wch:5},{wch:14},{wch:3},{wch:3},{wch:30}];
-  XLSX.utils.book_append_sheet(wb, ws, data.caseNumber || 'Sheet1');
   return wb;
 };
 
-Docket.downloadExcel = function() {
-  var data = Docket.collectData();
-  var wb = Docket.generateExcel(data);
-  if (!wb) return;
-  XLSX.writeFile(wb, '[특허그룹 디딤] ' + data.subject + '.xlsx');
-  App.showToast('견적서가 다운로드되었습니다', 'success');
+// workbook → Blob 변환
+Docket.workbookToBlob = async function(wb) {
+  var buffer = await wb.xlsx.writeBuffer();
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
+
+// workbook → base64 (이메일 첨부용)
+Docket.workbookToBase64 = async function(wb) {
+  var buffer = await wb.xlsx.writeBuffer();
+  // ArrayBuffer → base64
+  var bytes = new Uint8Array(buffer);
+  var bin = '';
+  for (var i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+};
+
+Docket.downloadExcel = async function() {
+  try {
+    var data = Docket.collectData();
+    var wb = await Docket.generateFromTemplate(data);
+    var blob = await Docket.workbookToBlob(wb);
+    var fileName = '[특허그룹 디딤] ' + data.subject + '.xlsx';
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 500);
+    App.showToast('견적서가 다운로드되었습니다', 'success');
+  } catch (err) {
+    console.error('downloadExcel error:', err);
+    App.showToast('견적서 생성 실패: ' + err.message, 'error');
+  }
 };
 
 // ═══ 이메일 발송 ═══
@@ -418,10 +537,16 @@ Docket.sendEmail = async function() {
   if (!data.clientName) { App.showToast('수신(고객사명)을 입력해 주세요', 'error'); return; }
   if (!data.recipient) { App.showToast('수신인 이메일을 입력해 주세요', 'error'); return; }
 
-  var wb = Docket.generateExcel(data);
-  if (!wb) return;
-  var wbout = XLSX.write(wb, { bookType:'xlsx', type:'base64' });
-  var fileName = '[특허그룹 디딤] ' + data.subject + '.xlsx';
+  var wb, wbout, fileName;
+  try {
+    wb = await Docket.generateFromTemplate(data);
+    wbout = await Docket.workbookToBase64(wb);
+    fileName = '[특허그룹 디딤] ' + data.subject + '.xlsx';
+  } catch (err) {
+    console.error('generateFromTemplate error:', err);
+    App.showToast('견적서 생성 실패: ' + err.message, 'error');
+    return;
+  }
 
   var feeTotal=0; data.feeItems.forEach(function(i){feeTotal+=i.unitPrice*i.qty;});
   var disc = data.discountAmount*data.discountQty;
@@ -429,7 +554,7 @@ Docket.sendEmail = async function() {
   var govTotal=0; data.govItems.forEach(function(i){govTotal+=i.unitPrice*i.qty;});
   var grand=feeSub+govTotal;
 
-  var senderName = data.attorney.name;
+  var senderName = data.db;
   var html = '<div style="font-family:Malgun Gothic,sans-serif;font-size:14px;line-height:1.8">';
   html += '<p>안녕하세요, '+senderName+' 변리사입니다.</p>';
   html += '<p>'+data.subject+'에 대한 견적서를 첨부드립니다.</p><br/>';
@@ -472,7 +597,7 @@ Docket.sendEmail = async function() {
     console.error('Email error:', err);
     App.showToast('발송 실패: '+err.message, 'error');
     if (confirm('자동 발송 실패.\nGmail 작성창으로 대체하시겠습니까?\n(견적서 파일은 별도 다운로드됩니다)')) {
-      Docket.downloadExcel();
+      await Docket.downloadExcel();
       var url = 'https://mail.google.com/mail/?view=cm&to='+encodeURIComponent(data.recipient)+'&su='+encodeURIComponent('[특허그룹 디딤] '+data.subject)+'&body='+encodeURIComponent('안녕하세요, '+senderName+' 변리사입니다.\n\n견적서를 첨부드립니다.\n\n감사합니다.\n'+senderName+' 드림');
       window.open(url, '_blank');
     }
@@ -524,6 +649,9 @@ Docket.resetForm = function() {
   document.getElementById('dkt-discount-amount').value = '0';
   document.getElementById('dkt-discount-qty').value = '1';
   document.getElementById('dkt-case-count').value = '1';
+  // 상세 조항 userEdited 플래그 해제 → 다음 renderFeeTable에서 기본값 재주입
+  var notesArea = document.getElementById('dkt-notes');
+  if (notesArea) { delete notesArea.dataset.userEdited; notesArea.value = ''; }
   Docket.renderFeeTable();
   App.showToast('초기화되었습니다', 'info');
 };

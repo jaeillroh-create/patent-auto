@@ -355,22 +355,15 @@
           <input type="email" class="input-field" id="dkt-recipient" value="docket@didimip.com" />
         </div>
 
-        <!-- 담당 변리사 선택 -->
-        <div class="dkt-attorney-bar">
-          <div>
-            <label>👤 담당 변리사 (DB)</label>
-            <select id="dkt-attorney" class="input-field" onchange="Docket.onAttorneyChange()">
-              <!-- Docket.init()에서 동적 생성 -->
-            </select>
-          </div>
-          <div class="dkt-bank-info">
-            <label>🏦 결제계좌</label>
-            <span id="dkt-bank-display">-</span>
-          </div>
-        </div>
-
         <!-- 상단 메타 정보 -->
         <div class="dkt-meta-grid">
+          <div>
+            <label>DB (담당 변리사)</label>
+            <select id="dkt-db" class="input-field" onchange="Docket.onDBChange()">
+              <option value="노재일">노재일</option>
+              <option value="이용환">이용환</option>
+            </select>
+          </div>
           <div>
             <label>사건 유형</label>
             <select id="dkt-case-template" class="input-field" onchange="Docket.renderFeeTable()">
@@ -445,6 +438,14 @@
           </thead>
           <tbody id="dkt-gov-items"></tbody>
         </table>
+
+        <!-- 상세 조항 -->
+        <div class="dkt-section-title">
+          <span>📝 상세 조항</span>
+          <button class="btn btn-outline btn-sm" onclick="Docket.resetNotes()">기본값 복원</button>
+        </div>
+        <textarea class="input-field dkt-notes-area" id="dkt-notes" rows="8"
+          oninput="this.dataset.userEdited='true'"></textarea>
 
         <!-- 합계 -->
         <div class="dkt-totals">
@@ -1012,6 +1013,7 @@
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260312"></script>
 <script src="patent/patent.js?v=20260312"></script>
