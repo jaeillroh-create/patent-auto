@@ -277,6 +277,9 @@ Docket.recalc = function() {
   }
 
   // 실제 청구금액 + 부가세 포함 여부
+  //   vatIncluded=true  → actualInput이 VAT 포함 금액 → actualFee = actualInput / 1.1
+  //   vatIncluded=false → actualInput이 VAT 별도 금액 → actualFee = actualInput
+  //   VAT는 actualFee(수수료)에만 적용, 관납료(govTotal)에는 적용하지 않음
   var actualInput = parseInt(document.getElementById('dkt-actual-fee').value) || 0;
   var vatRadio = document.querySelector('input[name="dkt-vat-included"]:checked');
   var vatIncluded = vatRadio ? vatRadio.value === 'yes' : false;
@@ -285,7 +288,8 @@ Docket.recalc = function() {
   // 할인 = 수가표 - 실제수수료
   var discount = listedTotal - actualFee;
   var vat = Math.round(actualFee * 0.1);
-  var grand = actualFee + vat + govTotal;
+  var feeWithVat = actualFee + vat;
+  var grand = feeWithVat + govTotal;
 
   // DOM 업데이트
   var set = function(id, val) { var el = document.getElementById(id); if (el) el.textContent = Docket.fmt(val); };
@@ -293,6 +297,7 @@ Docket.recalc = function() {
   set('dkt-actual-fee-display', actualFee);
   set('dkt-discount-display', discount);
   set('dkt-vat-display', vat);
+  set('dkt-fee-with-vat-display', feeWithVat);
   set('dkt-gov-total-display', govTotal);
   set('dkt-grand-total', grand);
 };
@@ -624,6 +629,11 @@ Docket.generateFromTemplate = async function(data) {
   });
 
   // 4) 단순 마커 치환
+  // FEE_SUBTOTAL = afterDisc (할인 후 순수수료, pre-VAT)
+  //   템플릿 레이아웃: [items] → [discount row] → [FEE_SUBTOTAL] → [VAT] → [FEE_WITH_VAT]
+  //   이 순서에서 FEE_SUBTOTAL은 할인 행 이후의 소계이므로 afterDisc가 옳음.
+  //   VAT는 FEE_SUBTOTAL의 10% (afterDisc × 0.1), 관납료에는 적용하지 않음.
+  //   FEE_WITH_VAT = FEE_SUBTOTAL + VAT = afterDisc + VAT
   var simple = {
     CASE_NUMBER: data.caseNumber || '',
     DATE: data.date || '',
@@ -632,7 +642,7 @@ Docket.generateFromTemplate = async function(data) {
     CASE_TITLE: data.caseTitle || '',
     TOTAL_KOREAN: Docket.toKorean(grand) + ' 원정',
     TOTAL_AMOUNT: grand,
-    FEE_SUBTOTAL: feeTotal,
+    FEE_SUBTOTAL: afterDisc,
     VAT: vat,
     FEE_WITH_VAT: feeSub,
     GOV_SUBTOTAL: govTotal,
