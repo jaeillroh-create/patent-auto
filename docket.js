@@ -225,6 +225,46 @@ Docket.updateNotesTextarea = function() {
   area.value = (Docket.defaultNotes[category] || []).join('\n');
 };
 
+// 실제 청구금액을 4가지 시나리오(부가세/관납료 × 별도/포함)에 따라 분해.
+// 반환: { actualFee(순수수료), vat, feeSub(수수료+VAT), govTotal, grand, discount }
+//
+// 시나리오:
+//   A) 별도/별도: 입력=순수수료, grand = 입력 + VAT + 관납료
+//   B) 포함/별도: 입력=수수료+VAT, grand = 입력 + 관납료
+//   C) 별도/포함: 입력=수수료+관납료, grand = 입력 + VAT
+//   D) 포함/포함: 입력=수수료+VAT+관납료, grand = 입력 (불변)
+//
+// 계산 절차:
+//   1. govIncluded → actualInput에서 관납료 제거 → withoutGov
+//   2. vatIncluded → withoutGov에서 VAT 제거 → fee; vat = withoutGov - fee (반올림 보정)
+//   3. grand = fee + vat + govTotal (항상 동일 공식)
+Docket._computeFees = function(listedTotal, govTotal, actualInput, vatIncluded, govIncluded) {
+  var withoutGov = govIncluded ? (actualInput - govTotal) : actualInput;
+  var fee, vat;
+  if (vatIncluded) {
+    fee = Math.round(withoutGov / 1.1);
+    vat = withoutGov - fee; // 나누기 후 차감으로 반올림 오차 제거
+  } else {
+    fee = withoutGov;
+    vat = Math.round(fee * 0.1);
+  }
+  var feeSub = fee + vat;
+  var grand = feeSub + govTotal;
+  var discount = listedTotal - fee;
+  return {
+    listedTotal: listedTotal,
+    actualInput: actualInput,
+    actualFee: fee,
+    vat: vat,
+    feeSub: feeSub,
+    govTotal: govTotal,
+    grand: grand,
+    discount: discount,
+    vatIncluded: vatIncluded,
+    govIncluded: govIncluded,
+  };
+};
+
 // 체크된 수수료 항목 + 연동 관납료를 반환 (recalc/collectData 공용)
 Docket._selection = function() {
   var right = document.getElementById('dkt-right').value;
@@ -276,30 +316,24 @@ Docket.recalc = function() {
     }
   }
 
-  // 실제 청구금액 + 부가세 포함 여부
-  //   vatIncluded=true  → actualInput이 VAT 포함 금액 → actualFee = actualInput / 1.1
-  //   vatIncluded=false → actualInput이 VAT 별도 금액 → actualFee = actualInput
-  //   VAT는 actualFee(수수료)에만 적용, 관납료(govTotal)에는 적용하지 않음
+  // 실제 청구금액 + 부가세/관납료 포함여부 옵션으로 할인·VAT 분해
   var actualInput = parseInt(document.getElementById('dkt-actual-fee').value) || 0;
   var vatRadio = document.querySelector('input[name="dkt-vat-included"]:checked');
+  var govRadio = document.querySelector('input[name="dkt-gov-included"]:checked');
   var vatIncluded = vatRadio ? vatRadio.value === 'yes' : false;
-  var actualFee = vatIncluded ? Math.round(actualInput / 1.1) : actualInput;
+  var govIncluded = govRadio ? govRadio.value === 'yes' : false;
 
-  // 할인 = 수가표 - 실제수수료
-  var discount = listedTotal - actualFee;
-  var vat = Math.round(actualFee * 0.1);
-  var feeWithVat = actualFee + vat;
-  var grand = feeWithVat + govTotal;
+  var calc = Docket._computeFees(listedTotal, govTotal, actualInput, vatIncluded, govIncluded);
 
   // DOM 업데이트
   var set = function(id, val) { var el = document.getElementById(id); if (el) el.textContent = Docket.fmt(val); };
-  set('dkt-listed-total', listedTotal);
-  set('dkt-actual-fee-display', actualFee);
-  set('dkt-discount-display', discount);
-  set('dkt-vat-display', vat);
-  set('dkt-fee-with-vat-display', feeWithVat);
-  set('dkt-gov-total-display', govTotal);
-  set('dkt-grand-total', grand);
+  set('dkt-listed-total', calc.listedTotal);
+  set('dkt-actual-fee-display', calc.actualFee);
+  set('dkt-discount-display', calc.discount);
+  set('dkt-vat-display', calc.vat);
+  set('dkt-fee-with-vat-display', calc.feeSub);
+  set('dkt-gov-total-display', calc.govTotal);
+  set('dkt-grand-total', calc.grand);
 };
 
 // 상세 조항 기본값 복원
@@ -327,16 +361,18 @@ Docket.collectData = function() {
   var db = v('dkt-db') || Docket.defaultDB;
   var dbCfg = Docket.dbConfig[db] || Docket.dbConfig[Docket.defaultDB];
 
-  // 수가표 기반 금액 계산 (체크된 항목만)
+  // 수가표 기반 금액 계산 (체크된 항목만) — 헬퍼로 중앙화
   var listedTotal = feeItems.reduce(function(s,i){return s+i.unitPrice*i.qty;}, 0);
   var govTotal = govItems.reduce(function(s,i){return s+i.unitPrice*i.qty;}, 0);
   var actualInput = parseInt(v('dkt-actual-fee')) || 0;
   var vatIncluded = radio('dkt-vat-included') === 'yes';
   var govIncluded = radio('dkt-gov-included') === 'yes';
-  var actualFee = vatIncluded ? Math.round(actualInput / 1.1) : actualInput;
-  var discount = listedTotal - actualFee;
-  var vat = Math.round(actualFee * 0.1);
-  var grand = actualFee + vat + govTotal;
+  var calc = Docket._computeFees(listedTotal, govTotal, actualInput, vatIncluded, govIncluded);
+  var actualFee = calc.actualFee;
+  var discount = calc.discount;
+  var vat = calc.vat;
+  var feeSub = calc.feeSub;
+  var grand = calc.grand;
 
   // 심사형태: 우선심사 체크 여부로 결정
   var examType = sel.checkedKeys['priority'] ? '우선' : '일반';
@@ -368,12 +404,13 @@ Docket.collectData = function() {
     dbConfig: dbCfg,
     introducer: v('dkt-introducer'),
 
-    // 비용
+    // 비용 (모두 _computeFees 결과)
     listedTotal: listedTotal,
     actualInput: actualInput,
     actualFee: actualFee,
     discount: discount,
     vat: vat,
+    feeSub: feeSub,
     govTotal: govTotal,
     grand: grand,
     vatIncluded: vatIncluded,
@@ -601,14 +638,14 @@ Docket.generateFromTemplate = async function(data) {
   await wb.xlsx.load(buf);
   var ws = wb.worksheets[0];
 
-  // 2) 금액 계산
+  // 2) 금액 — collectData에서 _computeFees로 이미 계산된 값 사용 (UI/엑셀 일치 보장)
   var feeTotal = 0; data.feeItems.forEach(function(i){feeTotal+=i.unitPrice*i.qty;});
   var disc = (data.discountAmount || 0) * (data.discountQty || 1);
-  var afterDisc = feeTotal + disc;
-  var vat = Math.round(afterDisc * 0.1);
-  var feeSub = afterDisc + vat;
-  var govTotal = 0; data.govItems.forEach(function(i){govTotal+=i.unitPrice*i.qty;});
-  var grand = feeSub + govTotal;
+  var afterDisc = data.actualFee;  // = feeTotal + disc
+  var vat = data.vat;
+  var feeSub = data.feeSub;         // = afterDisc + vat
+  var govTotal = data.govTotal;
+  var grand = data.grand;
 
   // 3) 마커 스캔
   var markers = {};

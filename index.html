@@ -442,8 +442,12 @@
 
           <div class="dkt-fee-input-wrap">
             <div class="dkt-field">
-              <label>실제 청구금액 (대리인수수료)</label>
-              <input type="number" id="dkt-actual-fee" class="input-field" oninput="Docket.recalc()" placeholder="4090000" />
+              <label>실제 청구금액</label>
+              <input type="number" id="dkt-actual-fee" class="input-field" oninput="Docket.recalc()" placeholder="4000000" />
+              <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px;line-height:1.4">
+                아래 옵션(부가세/관납료 포함여부)에 따라 입력값이 해석됩니다.<br>
+                예) 둘 다 '포함' 선택 시 입력값 = 총 지불액(부가세 및 관납료 포함)
+              </div>
             </div>
             <div class="dkt-field">
               <label>부가세 포함여부</label>
@@ -455,8 +459,8 @@
             <div class="dkt-field">
               <label>관납료 포함여부</label>
               <div class="dkt-radio-group">
-                <label><input type="radio" name="dkt-gov-included" value="no" checked /> 별도</label>
-                <label><input type="radio" name="dkt-gov-included" value="yes" /> 포함</label>
+                <label><input type="radio" name="dkt-gov-included" value="no" checked onchange="Docket.recalc()" /> 별도</label>
+                <label><input type="radio" name="dkt-gov-included" value="yes" onchange="Docket.recalc()" /> 포함</label>
               </div>
             </div>
 
