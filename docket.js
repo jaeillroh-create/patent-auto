@@ -686,21 +686,31 @@ Docket.generateEmailBodyText = function(data) {
 // FEE/GOV/NOTES 범위는 bottom-up 순서로 duplicateRow 확장.
 
 // xlsx 내부의 drawings/media 파일을 제거하여 ExcelJS 이미지 파싱 버그를 우회
-// 입력: ArrayBuffer (xlsx 원본) → 출력: ArrayBuffer (drawings 제거됨)
+// 입력: ArrayBuffer (xlsx 원본) → 출력: ArrayBuffer (drawings 완전 제거됨)
+//
+// 중요: 아래 단계를 모두 수행하지 않으면 Excel에서 "통합 문서 내용에 문제"가 발생함.
+//   (1) xl/drawings/, xl/media/, xl/embeddings/ 파일 삭제
+//   (2) 각 sheet XML에서 <drawing/>, <legacyDrawing/>, <picture/>, <oleObjects> 요소 제거
+//   (3) sheet rels에서 drawing/image/vmlDrawing/oleObject Relationship 제거
+//   (4) [Content_Types].xml에서 drawing/media 관련 Override 및 orphan Default 제거
+//       ← 이 단계가 누락되면 Excel이 content type mismatch로 파일을 거부함
 Docket._stripDrawings = async function(arrayBuffer) {
   var zip = await JSZip.loadAsync(arrayBuffer);
 
-  // 1) drawings/media 파일 전체 삭제
+  // 1) drawings/media/embeddings 파일 전체 삭제
   var toRemove = [];
   zip.forEach(function(path, file) {
-    if (path.indexOf('xl/drawings/') === 0 || path.indexOf('xl/media/') === 0) {
+    if (path.indexOf('xl/drawings/')   === 0 ||
+        path.indexOf('xl/media/')      === 0 ||
+        path.indexOf('xl/embeddings/') === 0 ||
+        path.indexOf('xl/activeX/')    === 0) {
       toRemove.push(path);
     }
   });
   toRemove.forEach(function(p) { zip.remove(p); });
 
-  // 2) 각 sheet XML에서 <drawing .../>, <legacyDrawing .../>, <oleObjects> 요소 제거
-  //    주의: 속성값에 URL이 포함(예: xmlns:r="http://...")되므로 `/`가 아닌 `>`를 경계로 사용
+  // 2) 각 sheet XML에서 drawing/legacyDrawing/picture/oleObjects 요소 제거
+  //    주의: 속성값에 URL이 포함되므로 `[^>]` 경계 사용 (`[^\/]`는 URL의 '/'에 걸림)
   var sheetFiles = Object.keys(zip.files).filter(function(p) {
     return /^xl\/worksheets\/sheet\d+\.xml$/.test(p);
   });
@@ -711,31 +721,43 @@ Docket._stripDrawings = async function(arrayBuffer) {
     xml = xml.replace(/<legacyDrawing\s[^>]*\/>/g, '');
     xml = xml.replace(/<picture\s[^>]*\/>/g, '');
     xml = xml.replace(/<oleObjects>[\s\S]*?<\/oleObjects>/g, '');
+    xml = xml.replace(/<controls>[\s\S]*?<\/controls>/g, '');
     zip.file(sp, xml);
   }
 
-  // 3) sheet rels 파일에서 drawing 관계 제거
+  // 3) sheet rels 파일에서 drawing/image/vml/oleObject 관계 제거
   var relsFiles = Object.keys(zip.files).filter(function(p) {
     return /^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(p);
   });
   for (var j = 0; j < relsFiles.length; j++) {
     var rp = relsFiles[j];
     var rxml = await zip.file(rp).async('string');
-    // Type에 drawing 또는 vmlDrawing이 포함된 Relationship 엘리먼트 제거
-    rxml = rxml.replace(/<Relationship[^>]*Type="[^"]*(?:drawing|vmlDrawing|oleObject|image)[^"]*"[^>]*\/>/g, '');
+    rxml = rxml.replace(/<Relationship[^>]*Type="[^"]*(?:drawing|vmlDrawing|oleObject|image|control)[^"]*"[^>]*\/>/g, '');
     zip.file(rp, rxml);
   }
 
-  // 4) [Content_Types].xml에서 drawing Override 제거
+  // 4) [Content_Types].xml — Override(실존 파일 지정) + orphan Default(확장자 매핑) 모두 제거
+  //    Default 매핑은 실제 파일이 없어도 Excel이 content type 검증에서 실패시킬 수 있음.
   var ctFile = zip.file('[Content_Types].xml');
   if (ctFile) {
     var ct = await ctFile.async('string');
+    // drawing/media/image 관련 Override 제거
     ct = ct.replace(/<Override[^>]*PartName="[^"]*drawings?[^"]*"[^>]*\/>/g, '');
     ct = ct.replace(/<Override[^>]*PartName="[^"]*media[^"]*"[^>]*\/>/g, '');
+    ct = ct.replace(/<Override[^>]*PartName="[^"]*embeddings?[^"]*"[^>]*\/>/g, '');
+    // orphan Default Extension 제거 (이미지 파일이 제거되었으므로 매핑도 제거)
+    ct = ct.replace(/<Default[^>]*Extension="vml"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="png"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="jpe?g"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="gif"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="bmp"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="tiff?"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="emf"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="wmf"[^>]*\/>/g, '');
     zip.file('[Content_Types].xml', ct);
   }
 
-  return await zip.generateAsync({ type: 'arraybuffer' });
+  return await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
 };
 
 Docket.generateFromTemplate = async function(data) {
@@ -943,16 +965,88 @@ Docket.toKorean = function(num) {
   return (neg ? '마이너스 ' : '') + r;
 };
 
-// workbook → Blob
-Docket.workbookToBlob = async function(wb) {
-  var buffer = await wb.xlsx.writeBuffer();
-  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+// xlsx 출력 후 post-processing: ExcelJS writeBuffer가 다시 추가한 orphan 참조를 제거
+//   ExcelJS는 workbook 내부 defaults를 기반으로 Content Types를 재구성하는데,
+//   이 과정에서 vml/png/jpeg 같은 orphan Default Extension이 다시 등장할 수 있음.
+//   Excel은 이런 orphan 참조를 엄격히 검증하므로 파일 손상 에러 발생.
+Docket._postProcessXlsx = async function(buffer) {
+  var zip = await JSZip.loadAsync(buffer);
+
+  // 1) 출력 zip에 혹시 다시 생긴 drawings/media 파일 제거 (방어적 클린업)
+  var toRemove = [];
+  zip.forEach(function(path) {
+    if (path.indexOf('xl/drawings/')   === 0 ||
+        path.indexOf('xl/media/')      === 0 ||
+        path.indexOf('xl/embeddings/') === 0 ||
+        path.indexOf('xl/activeX/')    === 0) {
+      toRemove.push(path);
+    }
+  });
+  toRemove.forEach(function(p) { zip.remove(p); });
+
+  // 2) sheet XML에서 잔존할 수 있는 drawing/legacyDrawing/picture/oleObjects/controls 재제거
+  var sheetFiles = Object.keys(zip.files).filter(function(p) {
+    return /^xl\/worksheets\/sheet\d+\.xml$/.test(p);
+  });
+  for (var i = 0; i < sheetFiles.length; i++) {
+    var sp = sheetFiles[i];
+    var xml = await zip.file(sp).async('string');
+    xml = xml.replace(/<drawing\s[^>]*\/>/g, '');
+    xml = xml.replace(/<legacyDrawing\s[^>]*\/>/g, '');
+    xml = xml.replace(/<picture\s[^>]*\/>/g, '');
+    xml = xml.replace(/<oleObjects>[\s\S]*?<\/oleObjects>/g, '');
+    xml = xml.replace(/<controls>[\s\S]*?<\/controls>/g, '');
+    zip.file(sp, xml);
+  }
+
+  // 3) sheet rels에서 orphan drawing/image 관계 재제거
+  var relsFiles = Object.keys(zip.files).filter(function(p) {
+    return /^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(p);
+  });
+  for (var j = 0; j < relsFiles.length; j++) {
+    var rp = relsFiles[j];
+    var rxml = await zip.file(rp).async('string');
+    rxml = rxml.replace(/<Relationship[^>]*Type="[^"]*(?:drawing|vmlDrawing|oleObject|image|control)[^"]*"[^>]*\/>/g, '');
+    zip.file(rp, rxml);
+  }
+
+  // 4) [Content_Types].xml — orphan Default/Override 재제거 (ExcelJS가 재추가한 것)
+  var ctFile = zip.file('[Content_Types].xml');
+  if (ctFile) {
+    var ct = await ctFile.async('string');
+    ct = ct.replace(/<Override[^>]*PartName="[^"]*drawings?[^"]*"[^>]*\/>/g, '');
+    ct = ct.replace(/<Override[^>]*PartName="[^"]*media[^"]*"[^>]*\/>/g, '');
+    ct = ct.replace(/<Override[^>]*PartName="[^"]*embeddings?[^"]*"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="vml"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="png"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="jpe?g"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="gif"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="bmp"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="tiff?"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="emf"[^>]*\/>/g, '');
+    ct = ct.replace(/<Default[^>]*Extension="wmf"[^>]*\/>/g, '');
+    zip.file('[Content_Types].xml', ct);
+  }
+
+  return await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
 };
 
-// workbook → base64 (이메일 첨부용)
+// workbook → Blob (post-processing 포함)
+Docket.workbookToBlob = async function(wb) {
+  var buffer = await wb.xlsx.writeBuffer();
+  var cleaned;
+  try { cleaned = await Docket._postProcessXlsx(buffer); }
+  catch (e) { console.warn('post-process 실패, 원본 사용:', e); cleaned = buffer; }
+  return new Blob([cleaned], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
+
+// workbook → base64 (이메일 첨부용, post-processing 포함)
 Docket.workbookToBase64 = async function(wb) {
   var buffer = await wb.xlsx.writeBuffer();
-  var bytes = new Uint8Array(buffer);
+  var cleaned;
+  try { cleaned = await Docket._postProcessXlsx(buffer); }
+  catch (e) { console.warn('post-process 실패, 원본 사용:', e); cleaned = buffer; }
+  var bytes = new Uint8Array(cleaned);
   var bin = '';
   var chunkSize = 8192;
   for (var i = 0; i < bytes.byteLength; i += chunkSize) {
