@@ -6,9 +6,10 @@
 var Docket = {};
 
 // ── 기본 설정 ──
+// Supabase URL은 하드코딩 (common.js의 App.supabaseUrl 로드 타이밍 문제 회피)
 Docket.config = {
   recipient: 'docket@didimip.com',
-  emailFunctionUrl: '',
+  emailFunctionUrl: 'https://uvrzwhfjtzqujawmscca.supabase.co/functions/v1/send-docket-email',
 };
 
 // ── DB(담당 변리사)별 고정값 ──
@@ -162,6 +163,8 @@ Docket.fmtMan = function(n) { return Math.round((n || 0) / 10000).toLocaleString
 // ═══════════════════════════════════════════════════════════════
 
 Docket.init = function() {
+  // Supabase URL은 Docket.config에 이미 하드코딩되어 있음 (로드 타이밍 문제 회피).
+  // 만약 App.supabaseUrl이 다른 값으로 설정되어 있으면 그걸로 교체 (선택적 override).
   if (window.App && App.supabaseUrl) {
     Docket.config.emailFunctionUrl = App.supabaseUrl + '/functions/v1/send-docket-email';
   }
