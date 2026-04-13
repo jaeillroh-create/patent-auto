@@ -870,6 +870,107 @@ Docket._findRowWithText = function(xml, searchText) {
   return { rowNum: parseInt(numMatch[1]), startIdx: rowStart, endIdx: rowEnd, xml: rowXml };
 };
 
+// 지정된 행 범위의 B~J열 셀에 full thin border를 적용.
+//   - 각 셀의 현재 xf를 복제하여 borderId만 full-thin으로 교체 (font/alignment/fill 보존)
+//   - 동일한 xf가 여러 번 나타나면 캐시 재사용
+//   - styles.xml에 full-thin border가 없으면 새로 추가
+// 반환: 수정된 sheetXml
+Docket._applyTableBorders = async function(zip, sheetXml, startRow, endRow) {
+  var stylesFile = zip.file('xl/styles.xml');
+  if (!stylesFile) return sheetXml;
+  var stylesXml = await stylesFile.async('string');
+
+  // 1) full thin border 찾기 또는 추가
+  var bordersRe = /<borders count="(\d+)">([\s\S]*?)<\/borders>/;
+  var bMatch = bordersRe.exec(stylesXml);
+  if (!bMatch) return sheetXml;
+  var borderCount = parseInt(bMatch[1]);
+  var borderBody = bMatch[2];
+  var borders = [];
+  var borderIterRe = /<border\b[^>]*?(?:\/>|>[\s\S]*?<\/border>)/g;
+  var bm;
+  while ((bm = borderIterRe.exec(borderBody)) !== null) {
+    borders.push(bm[0]);
+  }
+
+  var fullThinBorderId = -1;
+  for (var i = 0; i < borders.length; i++) {
+    var b = borders[i];
+    if (/<left[^/]*style="thin"/.test(b) && /<right[^/]*style="thin"/.test(b) &&
+        /<top[^/]*style="thin"/.test(b) && /<bottom[^/]*style="thin"/.test(b)) {
+      fullThinBorderId = i;
+      break;
+    }
+  }
+
+  if (fullThinBorderId < 0) {
+    var newBorder = '<border><left style="thin"><color indexed="64"/></left><right style="thin"><color indexed="64"/></right><top style="thin"><color indexed="64"/></top><bottom style="thin"><color indexed="64"/></bottom><diagonal/></border>';
+    fullThinBorderId = borderCount;
+    stylesXml = stylesXml.replace(bordersRe, '<borders count="' + (borderCount + 1) + '">' + borderBody + newBorder + '</borders>');
+  }
+
+  // 2) cellXfs 파싱
+  var cellXfsRe = /<cellXfs count="(\d+)">([\s\S]*?)<\/cellXfs>/;
+  var cMatch = cellXfsRe.exec(stylesXml);
+  if (!cMatch) { zip.file('xl/styles.xml', stylesXml); return sheetXml; }
+  var xfCount = parseInt(cMatch[1]);
+  var xfBody = cMatch[2];
+  var xfs = [];
+  var xfIterRe = /<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g;
+  var xm;
+  while ((xm = xfIterRe.exec(xfBody)) !== null) {
+    xfs.push(xm[0]);
+  }
+
+  // 3) 캐시: old xf idx → new xf idx (borderId를 full thin으로 교체)
+  var xfCloneMap = {};
+  var newXfsToAppend = [];
+  function getBorderedXfIdx(oldIdx) {
+    if (xfCloneMap[oldIdx] != null) return xfCloneMap[oldIdx];
+    if (oldIdx >= xfs.length) return oldIdx;
+    var oldXf = xfs[oldIdx];
+    var newXf;
+    if (/borderId="\d+"/.test(oldXf)) {
+      newXf = oldXf.replace(/borderId="\d+"/, 'borderId="' + fullThinBorderId + '"');
+    } else {
+      newXf = oldXf.replace(/<xf\b/, '<xf borderId="' + fullThinBorderId + '"');
+    }
+    if (!/applyBorder="1"/.test(newXf)) {
+      newXf = newXf.replace(/<xf\b/, '<xf applyBorder="1"');
+    }
+    var newIdx = xfCount + newXfsToAppend.length;
+    newXfsToAppend.push(newXf);
+    xfCloneMap[oldIdx] = newIdx;
+    return newIdx;
+  }
+
+  // 4) 대상 범위의 각 행에 대해 B~J 셀의 s 속성 업데이트
+  for (var rn = startRow; rn <= endRow; rn++) {
+    var rowRe = new RegExp('<row r="' + rn + '"[^>]*>[\\s\\S]*?<\\/row>');
+    sheetXml = sheetXml.replace(rowRe, function(rowMatch) {
+      return rowMatch.replace(/<c r="([A-Z]+)(\d+)"([^>]*?)(\/?)>/g, function(cellMatch, col, rr, attrs, selfClose) {
+        if (col < 'B' || col > 'J') return cellMatch;
+        if (parseInt(rr) !== rn) return cellMatch;
+        var sMatch = attrs.match(/s="(\d+)"/);
+        if (!sMatch) return cellMatch;
+        var oldIdx = parseInt(sMatch[1]);
+        var newIdx = getBorderedXfIdx(oldIdx);
+        if (newIdx === oldIdx) return cellMatch;
+        var newAttrs = attrs.replace(/s="\d+"/, 's="' + newIdx + '"');
+        return '<c r="' + col + rr + '"' + newAttrs + selfClose + '>';
+      });
+    });
+  }
+
+  // 5) 새 xfs append + cellXfs count 갱신 + 저장
+  if (newXfsToAppend.length > 0) {
+    var newXfCount = xfCount + newXfsToAppend.length;
+    stylesXml = stylesXml.replace(cellXfsRe, '<cellXfs count="' + newXfCount + '">' + xfBody + newXfsToAppend.join('') + '</cellXfs>');
+  }
+  zip.file('xl/styles.xml', stylesXml);
+  return sheetXml;
+};
+
 // styles.xml에 wrapText 속성이 있는 새 xf(cellXf)를 추가하고 그 인덱스를 반환
 // cloneXfIdx가 지정되면 해당 xf를 복제해서 alignment만 수정 (font/border 유지)
 Docket._addWrapTextXf = async function(zip, cloneXfIdx) {
@@ -1206,6 +1307,11 @@ Docket.generateFromTemplate = async function(data) {
     if (noteCellMatch) noteCellStyleIdx = parseInt(noteCellMatch[1]);
   }
   var wrapStyleIdx = await Docket._addWrapTextXf(zip, noteCellStyleIdx);
+
+  // 3-3) 내역 테이블 범위(rows 24-38: 헤더 ~ 견적금액)의 B~J 셀에 full thin border 적용
+  //      확장 전에 수행 → 복제되는 FEE/GOV 행도 자동으로 border 상속
+  //      NOTES 영역(row 40+)은 제외 (상세 조항은 표 밖)
+  xml = await Docket._applyTableBorders(zip, xml, 24, 38);
 
   // 4) sheet1.xml 조작 (범위 확장 + 마커 치환 + wrapText 스타일 적용)
   data._wrapStyleIdx = wrapStyleIdx;
