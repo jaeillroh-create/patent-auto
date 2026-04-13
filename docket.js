@@ -1034,6 +1034,20 @@ Docket._expandRange = function(xml, markerName, items, fillFn) {
 
 // sheet1.xml 전체 처리 (범위 확장 + 단순 마커 치환)
 Docket._processSheetXml = function(xml, data) {
+  // 0) NOTES source 행에 B:J 병합 주입 (템플릿에 없으면 추가)
+  //    wrapText가 효과를 발휘하려면 노트 셀이 B~J열 전체 폭으로 병합되어야 함.
+  //    _expandRange의 horizontal merge 복제 로직이 이 병합을 각 복제 행에 자동 반영.
+  var noteSrcForMerge = Docket._findRowWithMarker(xml, 'NOTE_TEXT');
+  if (noteSrcForMerge) {
+    var r = noteSrcForMerge.rowNum;
+    var newMerge = '<mergeCell ref="B' + r + ':J' + r + '"/>';
+    if (xml.indexOf(newMerge) < 0) {
+      xml = xml.replace('</mergeCells>', newMerge + '</mergeCells>');
+      var newCount = (xml.match(/<mergeCell /g) || []).length;
+      xml = xml.replace(/<mergeCells count="\d+"/, '<mergeCells count="' + newCount + '"');
+    }
+  }
+
   // 1) 범위 확장: NOTES → GOV → FEE (bottom-up)
   //    NOTES 셀에 wrapText 스타일 적용 + 텍스트 길이에 따라 행 높이 자동 조정
   //    B~J 병합 셀 폭 기준 한 줄 약 85자, 줄당 15pt, 최소 15pt
@@ -1178,6 +1192,11 @@ Docket.generateFromTemplate = async function(data) {
   if (feeSrcInfo && feeCount > 1) drawingShifts.push({ threshold: feeSrcInfo.rowNum + 1, amount: feeCount - 1 });
   if (govSrcInfo && govCount > 1) drawingShifts.push({ threshold: govSrcInfo.rowNum + 1, amount: govCount - 1 });
   if (notesSrcInfo && notesCount > 1) drawingShifts.push({ threshold: notesSrcInfo.rowNum + 1, amount: notesCount - 1 });
+
+  // 푸터 이미지 추가 offset: 결제계좌 행 위에 덮이지 않도록 3행 아래로 밀어냄.
+  //   threshold=20은 로고(row 1-7 또는 0-6)보다는 크고 푸터(row 42+)보다는 작아서
+  //   로고에는 영향 없이 푸터 앵커만 3 rows 내려감.
+  drawingShifts.push({ threshold: 20, amount: 3 });
 
   // 3-2) NOTES 셀에 wrapText를 적용할 새 cellXf를 styles.xml에 추가
   //      (기존 NOTE_TEXT 셀의 스타일을 복제해서 alignment에 wrapText 추가)
