@@ -874,8 +874,9 @@ Docket._findRowWithText = function(xml, searchText) {
 //   - 각 셀의 현재 xf를 복제하여 borderId만 full-thin으로 교체 (font/alignment/fill 보존)
 //   - 동일한 xf가 여러 번 나타나면 캐시 재사용
 //   - styles.xml에 full-thin border가 없으면 새로 추가
+//   - skipRows: 건너뛸 행 번호 배열 (얇은 spacer row 등)
 // 반환: 수정된 sheetXml
-Docket._applyTableBorders = async function(zip, sheetXml, startRow, endRow) {
+Docket._applyTableBorders = async function(zip, sheetXml, startRow, endRow, skipRows) {
   var stylesFile = zip.file('xl/styles.xml');
   if (!stylesFile) return sheetXml;
   var stylesXml = await stylesFile.async('string');
@@ -945,7 +946,10 @@ Docket._applyTableBorders = async function(zip, sheetXml, startRow, endRow) {
   }
 
   // 4) 대상 범위의 각 행에 대해 B~J 셀의 s 속성 업데이트
+  var skipSet = {};
+  (skipRows || []).forEach(function(r) { skipSet[r] = true; });
   for (var rn = startRow; rn <= endRow; rn++) {
+    if (skipSet[rn]) continue;
     var rowRe = new RegExp('<row r="' + rn + '"[^>]*>[\\s\\S]*?<\\/row>');
     sheetXml = sheetXml.replace(rowRe, function(rowMatch) {
       return rowMatch.replace(/<c r="([A-Z]+)(\d+)"([^>]*?)(\/?)>/g, function(cellMatch, col, rr, attrs, selfClose) {
@@ -1311,7 +1315,8 @@ Docket.generateFromTemplate = async function(data) {
   // 3-3) 내역 테이블 범위(rows 24-38: 헤더 ~ 견적금액)의 B~J 셀에 full thin border 적용
   //      확장 전에 수행 → 복제되는 FEE/GOV 행도 자동으로 border 상속
   //      NOTES 영역(row 40+)은 제외 (상세 조항은 표 밖)
-  xml = await Docket._applyTableBorders(zip, xml, 24, 38);
+  //      Row 37은 '총계'(36)와 '견적금액'(38) 사이 얇은 spacer(ht=9.75)이므로 skip
+  xml = await Docket._applyTableBorders(zip, xml, 24, 38, [37]);
 
   // 4) sheet1.xml 조작 (범위 확장 + 마커 치환 + wrapText 스타일 적용)
   data._wrapStyleIdx = wrapStyleIdx;
