@@ -679,263 +679,18 @@ Docket.generateEmailBodyText = function(data) {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// 견적서 엑셀 생성 (ExcelJS + 템플릿 마커 교체)
+// 견적서 엑셀 생성 (JSZip + sheet1.xml 직접 조작)
 // ═══════════════════════════════════════════════════════════════
-// templates/quote-template-{DB}.xlsx 를 로드하여 마커 치환.
-// 템플릿의 로고/테두리/이미지/서식을 100% 보존.
-// FEE/GOV/NOTES 범위는 bottom-up 순서로 duplicateRow 확장.
+// ExcelJS는 이미지 포함 xlsx 템플릿을 재구성할 때 서식/로고를 손상시키고
+// orphan Content Type을 만들어 Excel 호환성 문제를 일으키므로, 템플릿을
+// zip으로 직접 열어 xl/worksheets/sheet1.xml 만 string 조작한다.
+// 장점: 로고/푸터/이미지/서식/병합이 byte 단위로 완전 보존됨.
 
-// xlsx 내부의 drawings/media 파일을 제거하여 ExcelJS 이미지 파싱 버그를 우회
-// 입력: ArrayBuffer (xlsx 원본) → 출력: ArrayBuffer (drawings 완전 제거됨)
-//
-// 중요: 아래 단계를 모두 수행하지 않으면 Excel에서 "통합 문서 내용에 문제"가 발생함.
-//   (1) xl/drawings/, xl/media/, xl/embeddings/ 파일 삭제
-//   (2) 각 sheet XML에서 <drawing/>, <legacyDrawing/>, <picture/>, <oleObjects> 요소 제거
-//   (3) sheet rels에서 drawing/image/vmlDrawing/oleObject Relationship 제거
-//   (4) [Content_Types].xml에서 drawing/media 관련 Override 및 orphan Default 제거
-//       ← 이 단계가 누락되면 Excel이 content type mismatch로 파일을 거부함
-Docket._stripDrawings = async function(arrayBuffer) {
-  var zip = await JSZip.loadAsync(arrayBuffer);
-
-  // 1) drawings/media/embeddings 파일 전체 삭제
-  var toRemove = [];
-  zip.forEach(function(path, file) {
-    if (path.indexOf('xl/drawings/')   === 0 ||
-        path.indexOf('xl/media/')      === 0 ||
-        path.indexOf('xl/embeddings/') === 0 ||
-        path.indexOf('xl/activeX/')    === 0) {
-      toRemove.push(path);
-    }
-  });
-  toRemove.forEach(function(p) { zip.remove(p); });
-
-  // 2) 각 sheet XML에서 drawing/legacyDrawing/picture/oleObjects 요소 제거
-  //    주의: 속성값에 URL이 포함되므로 `[^>]` 경계 사용 (`[^\/]`는 URL의 '/'에 걸림)
-  var sheetFiles = Object.keys(zip.files).filter(function(p) {
-    return /^xl\/worksheets\/sheet\d+\.xml$/.test(p);
-  });
-  for (var i = 0; i < sheetFiles.length; i++) {
-    var sp = sheetFiles[i];
-    var xml = await zip.file(sp).async('string');
-    xml = xml.replace(/<drawing\s[^>]*\/>/g, '');
-    xml = xml.replace(/<legacyDrawing\s[^>]*\/>/g, '');
-    xml = xml.replace(/<picture\s[^>]*\/>/g, '');
-    xml = xml.replace(/<oleObjects>[\s\S]*?<\/oleObjects>/g, '');
-    xml = xml.replace(/<controls>[\s\S]*?<\/controls>/g, '');
-    zip.file(sp, xml);
-  }
-
-  // 3) sheet rels 파일에서 drawing/image/vml/oleObject 관계 제거
-  var relsFiles = Object.keys(zip.files).filter(function(p) {
-    return /^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(p);
-  });
-  for (var j = 0; j < relsFiles.length; j++) {
-    var rp = relsFiles[j];
-    var rxml = await zip.file(rp).async('string');
-    rxml = rxml.replace(/<Relationship[^>]*Type="[^"]*(?:drawing|vmlDrawing|oleObject|image|control)[^"]*"[^>]*\/>/g, '');
-    zip.file(rp, rxml);
-  }
-
-  // 4) [Content_Types].xml — Override(실존 파일 지정) + orphan Default(확장자 매핑) 모두 제거
-  //    Default 매핑은 실제 파일이 없어도 Excel이 content type 검증에서 실패시킬 수 있음.
-  var ctFile = zip.file('[Content_Types].xml');
-  if (ctFile) {
-    var ct = await ctFile.async('string');
-    // drawing/media/image 관련 Override 제거
-    ct = ct.replace(/<Override[^>]*PartName="[^"]*drawings?[^"]*"[^>]*\/>/g, '');
-    ct = ct.replace(/<Override[^>]*PartName="[^"]*media[^"]*"[^>]*\/>/g, '');
-    ct = ct.replace(/<Override[^>]*PartName="[^"]*embeddings?[^"]*"[^>]*\/>/g, '');
-    // orphan Default Extension 제거 (이미지 파일이 제거되었으므로 매핑도 제거)
-    ct = ct.replace(/<Default[^>]*Extension="vml"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="png"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="jpe?g"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="gif"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="bmp"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="tiff?"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="emf"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="wmf"[^>]*\/>/g, '');
-    zip.file('[Content_Types].xml', ct);
-  }
-
-  return await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-};
-
-Docket.generateFromTemplate = async function(data) {
-  if (typeof ExcelJS === 'undefined') {
-    throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다');
-  }
-  if (typeof JSZip === 'undefined') {
-    throw new Error('JSZip 라이브러리가 로드되지 않았습니다');
-  }
-
-  var cfg = data.dbConfig || Docket.dbConfig[Docket.defaultDB];
-  var templatePath = cfg.template.replace(/([^\/]+)$/, function(m) {
-    return encodeURIComponent(m);
-  });
-
-  // 1) 템플릿 로드
-  var res = await fetch(templatePath);
-  if (!res.ok) throw new Error('템플릿 로드 실패: ' + templatePath + ' (HTTP ' + res.status + ')');
-  var buf = await res.arrayBuffer();
-
-  // 1-1) ExcelJS가 템플릿 내부의 이미지(drawings)를 파싱하다가
-  //      "Cannot read properties of undefined (reading 'anchors')" 에러를 발생시키는
-  //      알려진 버그를 우회하기 위해, 로드 전 JSZip으로 drawings/media를 제거한다.
-  //      트레이드오프: 로고/이미지는 출력에서 사라지지만 테두리·셀 서식·폰트는 보존됨.
-  try {
-    buf = await Docket._stripDrawings(buf);
-  } catch (e) {
-    console.warn('drawings 스트리핑 실패, 원본으로 진행합니다:', e);
-  }
-
-  var wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buf);
-  var ws = wb.worksheets[0];
-
-  // 2) 금액 — collectData에서 _computeFees로 이미 계산된 값 사용 (UI/엑셀 일치 보장)
-  var feeTotal = 0; data.feeItems.forEach(function(i){feeTotal+=i.unitPrice*i.qty;});
-  var disc = (data.discountAmount || 0) * (data.discountQty || 1);
-  var afterDisc = data.actualFee;  // = feeTotal + disc
-  var vat = data.vat;
-  var feeSub = data.feeSub;         // = afterDisc + vat
-  var govTotal = data.govTotal;
-  var grand = data.grand;
-
-  // 3) 마커 스캔
-  var markers = {};
-  ws.eachRow({includeEmpty: true}, function(row, rowNum) {
-    row.eachCell({includeEmpty: false}, function(cell, colNum) {
-      var val = cell.value;
-      if (val && typeof val === 'object' && val.richText) {
-        val = val.richText.map(function(r){return r.text;}).join('');
-      }
-      if (typeof val === 'string') {
-        var re = /\{\{([A-Z_]+)\}\}/g, m;
-        while ((m = re.exec(val)) !== null) {
-          if (!markers[m[1]]) markers[m[1]] = [];
-          markers[m[1]].push({ row: rowNum, col: colNum });
-        }
-      }
-    });
-  });
-
-  // 4) 단순 마커 치환
-  // FEE_SUBTOTAL = afterDisc (할인 후 순수수료, pre-VAT)
-  //   템플릿 레이아웃: [items] → [discount row] → [FEE_SUBTOTAL] → [VAT] → [FEE_WITH_VAT]
-  //   이 순서에서 FEE_SUBTOTAL은 할인 행 이후의 소계이므로 afterDisc가 옳음.
-  //   VAT는 FEE_SUBTOTAL의 10% (afterDisc × 0.1), 관납료에는 적용하지 않음.
-  //   FEE_WITH_VAT = FEE_SUBTOTAL + VAT = afterDisc + VAT
-  var simple = {
-    CASE_NUMBER: data.caseNumber || '',
-    DATE: data.date || '',
-    CLIENT_NAME: data.clientName || '',
-    SUBJECT: data.subject || '',
-    CASE_TITLE: data.caseTitle || '',
-    TOTAL_KOREAN: Docket.toKorean(grand) + ' 원정',
-    TOTAL_AMOUNT: grand,
-    FEE_SUBTOTAL: afterDisc,
-    VAT: vat,
-    FEE_WITH_VAT: feeSub,
-    GOV_SUBTOTAL: govTotal,
-    GRAND_TOTAL: grand,
-  };
-  Object.keys(simple).forEach(function(key) {
-    (markers[key] || []).forEach(function(pos) {
-      ws.getCell(pos.row, pos.col).value = simple[key];
-    });
-  });
-
-  // 5) 범위 마커 처리 — bottom-up (NOTES → GOV → FEE)
-
-  // ── NOTES 영역
-  if (markers.NOTES_START && markers.NOTE_TEXT) {
-    var noteRow = markers.NOTE_TEXT[0].row;
-    var noteCol = markers.NOTE_TEXT[0].col;
-    var notes = data.notes || [];
-    var nInsert = Math.max(0, notes.length - 1);
-    if (nInsert > 0) {
-      try { ws.duplicateRow(noteRow, nInsert, true); } catch (e) { console.warn('NOTES duplicateRow 실패:', e); }
-    }
-    var nsCol = (markers.NOTES_START && markers.NOTES_START[0]) ? markers.NOTES_START[0].col : null;
-    for (var i = 0; i < notes.length; i++) {
-      var row = ws.getRow(noteRow + i);
-      if (nsCol) row.getCell(nsCol).value = null;
-      row.getCell(noteCol).value = notes[i];
-    }
-    if (markers.NOTES_END && markers.NOTES_END[0]) {
-      var endRowNum = markers.NOTES_END[0].row + nInsert;
-      ws.getCell(endRowNum, markers.NOTES_END[0].col).value = null;
-    }
-  }
-
-  // ── GOV 영역
-  if (markers.GOV_START && markers.GOV_ITEM_NAME) {
-    var govRow = markers.GOV_START[0].row;
-    var govItems = data.govItems || [];
-    var nInsertG = Math.max(0, govItems.length - 1);
-    if (nInsertG > 0) {
-      try { ws.duplicateRow(govRow, nInsertG, true); } catch (e) { console.warn('GOV duplicateRow 실패:', e); }
-    }
-    for (var i2 = 0; i2 < govItems.length; i2++) {
-      var gitem = govItems[i2];
-      var grow = ws.getRow(govRow + i2);
-      grow.getCell(markers.GOV_START[0].col).value = null;
-      grow.getCell(markers.GOV_ITEM_NAME[0].col).value = gitem.name;
-      grow.getCell(4).value = gitem.unitPrice;
-      grow.getCell(5).value = gitem.qty;
-      grow.getCell(7).value = gitem.unitPrice * gitem.qty;
-      if (gitem.note) grow.getCell(10).value = gitem.note;
-    }
-    if (markers.GOV_END && markers.GOV_END[0]) {
-      var govEndRow = markers.GOV_END[0].row + nInsertG;
-      ws.getCell(govEndRow, markers.GOV_END[0].col).value = null;
-    }
-  }
-
-  // ── FEE 영역
-  if (markers.FEE_START && markers.FEE_ITEM_NAME) {
-    var feeRow = markers.FEE_START[0].row;
-    var feeItems = data.feeItems || [];
-    var nInsertF = Math.max(0, feeItems.length - 1);
-    if (nInsertF > 0) {
-      try { ws.duplicateRow(feeRow, nInsertF, true); } catch (e) { console.warn('FEE duplicateRow 실패:', e); }
-    }
-    for (var i3 = 0; i3 < feeItems.length; i3++) {
-      var fitem = feeItems[i3];
-      var frow = ws.getRow(feeRow + i3);
-      frow.getCell(markers.FEE_START[0].col).value = null;
-      frow.getCell(markers.FEE_ITEM_NAME[0].col).value = fitem.name;
-      frow.getCell(4).value = fitem.unitPrice;
-      frow.getCell(5).value = fitem.qty;
-      frow.getCell(7).value = fitem.unitPrice * fitem.qty;
-      if (fitem.note) frow.getCell(10).value = fitem.note;
-    }
-    // 할인 행 (FEE_END)
-    if (markers.FEE_END && markers.FEE_END[0]) {
-      var discRowNum = markers.FEE_END[0].row + nInsertF;
-      var discRow = ws.getRow(discRowNum);
-      discRow.getCell(markers.FEE_END[0].col).value = null;
-      discRow.getCell(4).value = data.discountAmount;
-      discRow.getCell(5).value = data.discountQty;
-      discRow.getCell(7).value = disc;
-    }
-  }
-
-  // 6) 최종 cleanup: 병합 셀에서 duplicateRow가 마커 값을 복제하는 버그를 우회.
-  //    셀 값이 순수 {{MARKER}} 패턴이면 null로 치환.
-  ws.eachRow({includeEmpty: false}, function(row) {
-    row.eachCell({includeEmpty: false}, function(cell) {
-      var v = cell.value;
-      if (typeof v === 'object' && v && v.richText) {
-        v = v.richText.map(function(r){return r.text;}).join('');
-      }
-      if (typeof v === 'string' && /^\s*\{\{[A-Z_]+\}\}\s*$/.test(v)) {
-        cell.value = null;
-      }
-    });
-  });
-
-  return wb;
+// XML 이스케이프
+Docket._escapeXml = function(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 };
 
 // 숫자 → 한글 (예: 5857600 → "오백팔십오만칠천육백")
@@ -965,88 +720,272 @@ Docket.toKorean = function(num) {
   return (neg ? '마이너스 ' : '') + r;
 };
 
-// xlsx 출력 후 post-processing: ExcelJS writeBuffer가 다시 추가한 orphan 참조를 제거
-//   ExcelJS는 workbook 내부 defaults를 기반으로 Content Types를 재구성하는데,
-//   이 과정에서 vml/png/jpeg 같은 orphan Default Extension이 다시 등장할 수 있음.
-//   Excel은 이런 orphan 참조를 엄격히 검증하므로 파일 손상 에러 발생.
-Docket._postProcessXlsx = async function(buffer) {
-  var zip = await JSZip.loadAsync(buffer);
+// 행 XML에서 특정 컬럼 셀의 값을 숫자로 설정 (inlineStr → t="n" 변환)
+Docket._setCellNum = function(rowXml, col, value) {
+  var re = new RegExp('<c r="' + col + '\\d+"[^>]*(?:\\/>|>[\\s\\S]*?<\\/c>)');
+  return rowXml.replace(re, function(match) {
+    var openRe = /^<c r="([A-Z]+\d+)"([^\/>]*)/;
+    var m = openRe.exec(match);
+    if (!m) return match;
+    var ref = m[1];
+    var attrs = (m[2] || '').replace(/\s*t="[^"]*"/g, '');
+    return '<c r="' + ref + '"' + attrs + ' t="n"><v>' + value + '</v></c>';
+  });
+};
 
-  // 1) 출력 zip에 혹시 다시 생긴 drawings/media 파일 제거 (방어적 클린업)
-  var toRemove = [];
-  zip.forEach(function(path) {
-    if (path.indexOf('xl/drawings/')   === 0 ||
-        path.indexOf('xl/media/')      === 0 ||
-        path.indexOf('xl/embeddings/') === 0 ||
-        path.indexOf('xl/activeX/')    === 0) {
-      toRemove.push(path);
+// 행 XML에서 특정 컬럼 셀의 값을 inlineStr로 설정
+Docket._setCellStr = function(rowXml, col, value) {
+  var escaped = Docket._escapeXml(value);
+  var re = new RegExp('<c r="' + col + '\\d+"[^>]*(?:\\/>|>[\\s\\S]*?<\\/c>)');
+  return rowXml.replace(re, function(match) {
+    var openRe = /^<c r="([A-Z]+\d+)"([^\/>]*)/;
+    var m = openRe.exec(match);
+    if (!m) return match;
+    var ref = m[1];
+    var attrs = (m[2] || '').replace(/\s*t="[^"]*"/g, '');
+    return '<c r="' + ref + '"' + attrs + ' t="inlineStr"><is><t>' + escaped + '</t></is></c>';
+  });
+};
+
+// 행 XML 복제 시 row/cell 번호 이동 (oldNum → newNum)
+Docket._shiftRowXml = function(rowXml, oldNum, newNum) {
+  var oldStr = String(oldNum), newStr = String(newNum);
+  var out = rowXml.replace(new RegExp('(<row r=")' + oldStr + '(")'), '$1' + newStr + '$2');
+  out = out.replace(new RegExp('(<c r="[A-Z]+)' + oldStr + '(")', 'g'), '$1' + newStr + '$2');
+  return out;
+};
+
+// XML 내의 모든 row/cell/merge 참조를 threshold 이상이면 amount만큼 이동
+// 병합 셀은 span/shift를 적절히 처리 (앞쪽 경계는 유지, 뒤쪽만 증가 → vertical merge 확장)
+Docket._shiftXmlRefs = function(xml, threshold, amount) {
+  // <row r="N">
+  var out = xml.replace(/(<row r=")(\d+)(")/g, function(m, pre, n, post) {
+    var num = parseInt(n);
+    return num >= threshold ? pre + (num + amount) + post : m;
+  });
+  // <c r="ColN">
+  out = out.replace(/(<c r=")([A-Z]+)(\d+)(")/g, function(m, pre, col, n, post) {
+    var num = parseInt(n);
+    return num >= threshold ? pre + col + (num + amount) + post : m;
+  });
+  // <mergeCell ref="C1R1:C2R2"/>
+  out = out.replace(/(<mergeCell ref=")([A-Z]+)(\d+)(:)([A-Z]+)(\d+)(")/g, function(m, p1, c1, r1, sep, c2, r2, p2) {
+    var rn1 = parseInt(r1), rn2 = parseInt(r2);
+    var nr1 = rn1 >= threshold ? rn1 + amount : rn1;
+    var nr2 = rn2 >= threshold ? rn2 + amount : rn2;
+    return p1 + c1 + nr1 + sep + c2 + nr2 + p2;
+  });
+  // <dimension ref="C1R1:C2R2"/> — 하단만 확장
+  out = out.replace(/(<dimension ref=")([A-Z]+)(\d+)(:)([A-Z]+)(\d+)(")/g, function(m, p1, c1, r1, sep, c2, r2, p2) {
+    var rn2 = parseInt(r2);
+    var nr2 = rn2 >= threshold ? rn2 + amount : rn2;
+    return p1 + c1 + r1 + sep + c2 + nr2 + p2;
+  });
+  return out;
+};
+
+// 마커 이름을 포함한 행을 찾아 { rowNum, startIdx, endIdx, xml } 반환
+Docket._findRowWithMarker = function(xml, markerName) {
+  var mIdx = xml.search(new RegExp('\\{\\{' + markerName + '\\}\\}'));
+  if (mIdx < 0) return null;
+  var rowStart = xml.lastIndexOf('<row ', mIdx);
+  if (rowStart < 0) return null;
+  var rowEnd = xml.indexOf('</row>', mIdx);
+  if (rowEnd < 0) return null;
+  rowEnd += '</row>'.length;
+  var rowXml = xml.substring(rowStart, rowEnd);
+  var numMatch = rowXml.match(/^<row r="(\d+)"/);
+  if (!numMatch) return null;
+  return { rowNum: parseInt(numMatch[1]), startIdx: rowStart, endIdx: rowEnd, xml: rowXml };
+};
+
+// 범위 확장: source 행을 items.length번 복제하고 각 복제본에 item 데이터를 채움
+// 이후 뒤쪽 행/셀/병합 참조를 shift만큼 이동하고 source 행의 horizontal merge를 복제
+Docket._expandRange = function(xml, markerName, items, fillFn) {
+  if (!items || items.length === 0) return xml;
+  var src = Docket._findRowWithMarker(xml, markerName);
+  if (!src) return xml;
+
+  var sourceRow = src.rowNum;
+  var shift = items.length - 1;
+
+  // 복제된 행 XML 생성
+  var newRows = '';
+  for (var i = 0; i < items.length; i++) {
+    var rowXml = src.xml;
+    if (i > 0) rowXml = Docket._shiftRowXml(rowXml, sourceRow, sourceRow + i);
+    rowXml = fillFn(rowXml, items[i], i);
+    newRows += rowXml;
+  }
+
+  // 원본 행의 horizontal merge 수집 (복제된 행들에 복사해야 함)
+  var horizontalMerges = [];
+  var mRe = /<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/g;
+  var mm;
+  while ((mm = mRe.exec(xml)) !== null) {
+    var r1 = parseInt(mm[2]), r2 = parseInt(mm[4]);
+    if (r1 === sourceRow && r2 === sourceRow) {
+      horizontalMerges.push({ c1: mm[1], c2: mm[3] });
     }
-  });
-  toRemove.forEach(function(p) { zip.remove(p); });
-
-  // 2) sheet XML에서 잔존할 수 있는 drawing/legacyDrawing/picture/oleObjects/controls 재제거
-  var sheetFiles = Object.keys(zip.files).filter(function(p) {
-    return /^xl\/worksheets\/sheet\d+\.xml$/.test(p);
-  });
-  for (var i = 0; i < sheetFiles.length; i++) {
-    var sp = sheetFiles[i];
-    var xml = await zip.file(sp).async('string');
-    xml = xml.replace(/<drawing\s[^>]*\/>/g, '');
-    xml = xml.replace(/<legacyDrawing\s[^>]*\/>/g, '');
-    xml = xml.replace(/<picture\s[^>]*\/>/g, '');
-    xml = xml.replace(/<oleObjects>[\s\S]*?<\/oleObjects>/g, '');
-    xml = xml.replace(/<controls>[\s\S]*?<\/controls>/g, '');
-    zip.file(sp, xml);
   }
 
-  // 3) sheet rels에서 orphan drawing/image 관계 재제거
-  var relsFiles = Object.keys(zip.files).filter(function(p) {
-    return /^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(p);
-  });
-  for (var j = 0; j < relsFiles.length; j++) {
-    var rp = relsFiles[j];
-    var rxml = await zip.file(rp).async('string');
-    rxml = rxml.replace(/<Relationship[^>]*Type="[^"]*(?:drawing|vmlDrawing|oleObject|image|control)[^"]*"[^>]*\/>/g, '');
-    zip.file(rp, rxml);
+  // 원본 행을 newRows로 치환
+  xml = xml.substring(0, src.startIdx) + newRows + xml.substring(src.endIdx);
+
+  // 뒤쪽 섹션을 shift만큼 이동 (병합 참조 포함)
+  if (shift > 0) {
+    var afterStart = src.startIdx + newRows.length;
+    var before = xml.substring(0, afterStart);
+    var after = xml.substring(afterStart);
+    after = Docket._shiftXmlRefs(after, sourceRow + 1, shift);
+    xml = before + after;
+
+    // 복제된 행들에 새 horizontal merge 생성
+    if (horizontalMerges.length > 0) {
+      var newMergeXml = '';
+      horizontalMerges.forEach(function(hm) {
+        for (var k = 1; k <= shift; k++) {
+          newMergeXml += '<mergeCell ref="' + hm.c1 + (sourceRow + k) + ':' + hm.c2 + (sourceRow + k) + '"/>';
+        }
+      });
+      xml = xml.replace('</mergeCells>', newMergeXml + '</mergeCells>');
+      // mergeCells count 갱신
+      var newCount = (xml.match(/<mergeCell /g) || []).length;
+      xml = xml.replace(/<mergeCells count="\d+"/, '<mergeCells count="' + newCount + '"');
+    }
   }
 
-  // 4) [Content_Types].xml — orphan Default/Override 재제거 (ExcelJS가 재추가한 것)
-  var ctFile = zip.file('[Content_Types].xml');
-  if (ctFile) {
-    var ct = await ctFile.async('string');
-    ct = ct.replace(/<Override[^>]*PartName="[^"]*drawings?[^"]*"[^>]*\/>/g, '');
-    ct = ct.replace(/<Override[^>]*PartName="[^"]*media[^"]*"[^>]*\/>/g, '');
-    ct = ct.replace(/<Override[^>]*PartName="[^"]*embeddings?[^"]*"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="vml"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="png"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="jpe?g"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="gif"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="bmp"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="tiff?"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="emf"[^>]*\/>/g, '');
-    ct = ct.replace(/<Default[^>]*Extension="wmf"[^>]*\/>/g, '');
-    zip.file('[Content_Types].xml', ct);
-  }
-
-  return await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  return xml;
 };
 
-// workbook → Blob (post-processing 포함)
-Docket.workbookToBlob = async function(wb) {
-  var buffer = await wb.xlsx.writeBuffer();
-  var cleaned;
-  try { cleaned = await Docket._postProcessXlsx(buffer); }
-  catch (e) { console.warn('post-process 실패, 원본 사용:', e); cleaned = buffer; }
-  return new Blob([cleaned], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+// sheet1.xml 전체 처리 (범위 확장 + 단순 마커 치환)
+Docket._processSheetXml = function(xml, data) {
+  // 1) 범위 확장: NOTES → GOV → FEE (bottom-up)
+  xml = Docket._expandRange(xml, 'NOTE_TEXT', (data.notes || []).map(function(n){return {text:n};}),
+    function(rowXml, item) {
+      rowXml = rowXml.replace(/\{\{NOTES_START\}\}/g, '');
+      rowXml = rowXml.replace(/\{\{NOTE_TEXT\}\}/g, Docket._escapeXml(item.text));
+      return rowXml;
+    });
+
+  xml = Docket._expandRange(xml, 'GOV_ITEM_NAME', (data.govItems || []),
+    function(rowXml, item) {
+      rowXml = rowXml.replace(/\{\{GOV_START\}\}/g, '');
+      rowXml = Docket._setCellStr(rowXml, 'C', item.name);
+      rowXml = Docket._setCellNum(rowXml, 'D', item.unitPrice);
+      rowXml = Docket._setCellNum(rowXml, 'E', item.qty);
+      rowXml = Docket._setCellNum(rowXml, 'G', item.unitPrice * item.qty);
+      return rowXml;
+    });
+
+  xml = Docket._expandRange(xml, 'FEE_ITEM_NAME', (data.feeItems || []),
+    function(rowXml, item) {
+      rowXml = rowXml.replace(/\{\{FEE_START\}\}/g, '');
+      rowXml = Docket._setCellStr(rowXml, 'C', item.name);
+      rowXml = Docket._setCellNum(rowXml, 'D', item.unitPrice);
+      rowXml = Docket._setCellNum(rowXml, 'E', item.qty);
+      rowXml = Docket._setCellNum(rowXml, 'G', item.unitPrice * item.qty);
+      return rowXml;
+    });
+
+  // 2) FEE_END (할인 행) 처리 — FEE 확장 후 아래로 밀려 있음
+  var feeEndInfo = Docket._findRowWithMarker(xml, 'FEE_END');
+  if (feeEndInfo) {
+    var discRow = feeEndInfo.xml;
+    discRow = discRow.replace(/\{\{FEE_END\}\}/g, '');
+    var dAmt = data.discountAmount || 0;
+    var dQty = data.discountQty || 1;
+    discRow = Docket._setCellNum(discRow, 'D', dAmt);
+    discRow = Docket._setCellNum(discRow, 'E', dQty);
+    discRow = Docket._setCellNum(discRow, 'G', dAmt * dQty);
+    xml = xml.substring(0, feeEndInfo.startIdx) + discRow + xml.substring(feeEndInfo.endIdx);
+  }
+
+  // 3) 잔여 NOTES_END / GOV_END 마커 클린업
+  xml = xml.replace(/\{\{NOTES_END\}\}/g, '');
+  xml = xml.replace(/\{\{GOV_END\}\}/g, '');
+
+  // 4) 단순 마커
+  var grand = data.grand || 0;
+
+  // 텍스트 마커: {{MARKER}} → 값 (셀 구조 유지)
+  var textMarkers = {
+    CASE_NUMBER:  data.caseNumber || '',
+    DATE:         data.date || '',
+    CLIENT_NAME:  data.clientName || '',
+    SUBJECT:      data.subject || '',
+    CASE_TITLE:   data.caseTitle || '',
+    TOTAL_KOREAN: Docket.toKorean(grand) + ' 원정',
+  };
+  Object.keys(textMarkers).forEach(function(key) {
+    var val = Docket._escapeXml(textMarkers[key]);
+    xml = xml.replace(new RegExp('\\{\\{' + key + '\\}\\}', 'g'), val);
+  });
+
+  // 숫자 마커: <c ... t="inlineStr"><is><t>{{MARKER}}</t></is></c> → <c ... t="n"><v>숫자</v></c>
+  var numMarkers = {
+    TOTAL_AMOUNT:  grand,
+    FEE_SUBTOTAL:  data.actualFee || 0,
+    VAT:           data.vat || 0,
+    FEE_WITH_VAT:  data.feeSub || 0,
+    GOV_SUBTOTAL:  data.govTotal || 0,
+    GRAND_TOTAL:   grand,
+  };
+  Object.keys(numMarkers).forEach(function(key) {
+    var re = new RegExp('<c([^>]*?)\\s*t="inlineStr"([^>]*?)>\\s*<is>\\s*<t[^>]*>\\{\\{' + key + '\\}\\}</t>\\s*</is>\\s*</c>', 'g');
+    xml = xml.replace(re, function(match, before, after) {
+      var combined = (before + after).replace(/\s+/g, ' ').replace(/\s*$/, '');
+      return '<c' + combined + ' t="n"><v>' + numMarkers[key] + '</v></c>';
+    });
+  });
+
+  return xml;
 };
 
-// workbook → base64 (이메일 첨부용, post-processing 포함)
-Docket.workbookToBase64 = async function(wb) {
-  var buffer = await wb.xlsx.writeBuffer();
-  var cleaned;
-  try { cleaned = await Docket._postProcessXlsx(buffer); }
-  catch (e) { console.warn('post-process 실패, 원본 사용:', e); cleaned = buffer; }
-  var bytes = new Uint8Array(cleaned);
+// 템플릿 기반 견적서 엑셀 생성 (JSZip 직접 조작)
+// 반환: ArrayBuffer
+Docket.generateFromTemplate = async function(data) {
+  if (typeof JSZip === 'undefined') {
+    throw new Error('JSZip 라이브러리가 로드되지 않았습니다');
+  }
+
+  // 1) 템플릿 로드
+  var templatePath = Docket.getTemplatePath(data.db);
+  var res = await fetch(templatePath);
+  if (!res.ok) throw new Error('템플릿 로드 실패: ' + templatePath + ' (HTTP ' + res.status + ')');
+  var buf = await res.arrayBuffer();
+
+  // 2) zip으로 열기
+  var zip = await JSZip.loadAsync(buf);
+  var sheetPath = 'xl/worksheets/sheet1.xml';
+  var sheetFile = zip.file(sheetPath);
+  if (!sheetFile) throw new Error('템플릿에 ' + sheetPath + '이 없습니다');
+  var xml = await sheetFile.async('string');
+
+  // 3) XML 조작 (범위 확장 + 마커 치환)
+  xml = Docket._processSheetXml(xml, data);
+
+  // 4) 수정된 XML을 zip에 다시 씀 (다른 파일은 건드리지 않음 → 이미지/서식 보존)
+  zip.file(sheetPath, xml);
+
+  // 5) zip을 ArrayBuffer로 재패킹 (DEFLATE 압축)
+  return await zip.generateAsync({
+    type: 'arraybuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
+};
+
+// ArrayBuffer → Blob (다운로드용)
+Docket.workbookToBlob = async function(bufOrPromise) {
+  var buffer = bufOrPromise instanceof ArrayBuffer ? bufOrPromise : await bufOrPromise;
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
+
+// ArrayBuffer → base64 (이메일 첨부용)
+Docket.workbookToBase64 = async function(bufOrPromise) {
+  var buffer = bufOrPromise instanceof ArrayBuffer ? bufOrPromise : await bufOrPromise;
+  var bytes = new Uint8Array(buffer);
   var bin = '';
   var chunkSize = 8192;
   for (var i = 0; i < bytes.byteLength; i += chunkSize) {
