@@ -6,10 +6,12 @@
 var Docket = {};
 
 // ── 기본 설정 ──
-// Supabase URL은 하드코딩 (common.js의 App.supabaseUrl 로드 타이밍 문제 회피)
+// Supabase URL/anon key는 하드코딩 (common.js 로드 타이밍 문제 회피).
+// anon key는 브라우저에 이미 노출되므로 민감정보 아님 (Supabase anon은 RLS로 보호).
 Docket.config = {
   recipient: 'docket@didimip.com',
   emailFunctionUrl: 'https://uvrzwhfjtzqujawmscca.supabase.co/functions/v1/send-docket-email',
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cnp3aGZqdHpxdWphd21zY2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTEwNDgsImV4cCI6MjA4NTUyNzA0OH0.JSSPMPIHsXfbNm6pgRzCTGH7aNQATl-okIkcXHl7Mkk',
 };
 
 // ── DB(담당 변리사)별 고정값 ──
@@ -1285,20 +1287,22 @@ Docket.sendEmail = async function() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="tossface">⏳</span> 발송 중...'; }
 
   try {
-    // Edge Function URL은 Docket.config.emailFunctionUrl에 하드코딩됨 (동적 참조 없음)
+    // Edge Function URL + anon key는 Docket.config에 하드코딩됨
     var fnUrl = Docket.config.emailFunctionUrl;
     if (!fnUrl) throw new Error('Edge Function URL 미설정');
 
-    // Supabase 인증 토큰 (세션이 있을 때만 첨부, 없으면 빈 문자열)
-    var token = '';
-    if (window.App && App.supabase) {
-      var sess = await App.supabase.auth.getSession();
-      if (sess.data && sess.data.session) token = sess.data.session.access_token;
-    }
+    // Supabase Edge Function은 Authorization + apikey 헤더 모두 anon key 필요.
+    // window.SUPABASE_ANON_KEY가 있으면 우선 사용, 없으면 Docket.config 값 사용.
+    var anonKey = (typeof window !== 'undefined' && window.SUPABASE_ANON_KEY) || Docket.config.supabaseAnonKey;
+    if (!anonKey) throw new Error('Supabase anon key 미설정');
 
     var res = await fetch(fnUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + anonKey,
+        'apikey': anonKey,
+      },
       body: JSON.stringify({
         to: data.recipient,
         subject: subject,
