@@ -29,6 +29,17 @@ Docket.dbConfig = {
 };
 Docket.defaultDB = '노재일';
 
+// DB별 템플릿 파일 경로 반환
+// 인자: dbName (string) — 생략 시 dkt-db 라디오에서 현재 선택된 DB 사용
+Docket.getTemplatePath = function(dbName) {
+  if (!dbName) {
+    var sel = document.getElementById('dkt-db');
+    dbName = sel ? sel.value : Docket.defaultDB;
+  }
+  var cfg = Docket.dbConfig[dbName] || Docket.dbConfig[Docket.defaultDB];
+  return cfg.template;
+};
+
 // ── 수가표 (2025-05-01, 부가세·관납료 별도) ──
 // 구조: feeSchedule[권리유형] = { notesCategory, items[] }
 //   items[i] = { key, name, unitPrice, defaultChecked, linkedGov[] }
