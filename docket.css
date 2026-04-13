@@ -34,6 +34,11 @@
 .dkt-priority-reason-list label { font-size: 12px; font-weight: 500; color: var(--color-text-primary); display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 2px 0; }
 .dkt-priority-reason-list input[type="checkbox"] { accent-color: var(--color-primary); cursor: pointer; width: 14px; height: 14px; }
 
+/* 출원안내/견적서/위임계약서 체크박스 */
+.dkt-guide-checkboxes { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 6px; }
+.dkt-guide-checkboxes label { font-size: 13px; font-weight: 500; color: var(--color-text-primary); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.dkt-guide-checkboxes input[type="checkbox"] { accent-color: var(--color-primary); cursor: pointer; width: 15px; height: 15px; }
+
 /* 비용 영역 — 좌: 수가표 요약, 우: 입력 + 계산 결과 */
 .dkt-fee-info { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; margin-bottom: 8px; }
 .dkt-fee-summary-wrap { background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 12px; padding: 14px 16px; }

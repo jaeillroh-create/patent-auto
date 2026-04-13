@@ -542,7 +542,12 @@
         <div class="dkt-row dkt-row-1">
           <div>
             <label>출원안내메일 / 견적서 / 위임계약서</label>
-            <textarea id="dkt-announcements" class="input-field" rows="2"></textarea>
+            <div class="dkt-guide-checkboxes">
+              <label><input type="checkbox" id="dkt-need-guide-mail" /> 출원안내메일</label>
+              <label><input type="checkbox" id="dkt-need-quote" /> 견적서</label>
+              <label><input type="checkbox" id="dkt-need-contract" /> 위임계약서</label>
+            </div>
+            <input type="text" class="input-field" id="dkt-guide-note" placeholder="특이사항 (예: 국가지원금용 견적서 발송 등)" />
           </div>
         </div>
         <div class="dkt-row dkt-row-1">

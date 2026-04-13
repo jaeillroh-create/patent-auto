@@ -585,7 +585,19 @@ Docket.collectData = function() {
     govItems: govItems,
 
     // 기타
-    announcements: v('dkt-announcements'),
+    announcements: (function() {
+      // 3개 체크박스 + 특이사항 텍스트 → 구조화 문자열
+      var cb = function(id) { var el = document.getElementById(id); return el && el.checked; };
+      var parts = [
+        '출원안내메일: ' + (cb('dkt-need-guide-mail') ? '필요' : '불필요'),
+        '견적서: ' + (cb('dkt-need-quote') ? '필요' : '불필요'),
+        '위임계약서: ' + (cb('dkt-need-contract') ? '필요' : '불필요'),
+      ];
+      var note = v('dkt-guide-note');
+      var joined = parts.join(' / ');
+      if (note) joined += '\n※ ' + note;
+      return joined;
+    })(),
     caseContent: v('dkt-case-content'),
     priorityExam: (function() {
       // O/X 라디오 + 사유 체크박스 조합 → 문자열로 반환
@@ -1501,9 +1513,15 @@ Docket.resetForm = function() {
     'dkt-client-company','dkt-contact-name','dkt-contact-email','dkt-contact-phone','dkt-contact-cc',
     'dkt-inventor','dkt-worker','dkt-mandator','dkt-introducer',
     'dkt-case-content','dkt-draft-date','dkt-priority-reason-etc',
-    'dkt-announcements','dkt-must-check','dkt-actual-fee',
+    'dkt-guide-note','dkt-must-check','dkt-actual-fee',
   ];
   textIds.forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
+
+  // 출원안내/견적서/위임계약서 체크박스 해제
+  ['dkt-need-guide-mail','dkt-need-quote','dkt-need-contract'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.checked = false;
+  });
 
   // 우선심사 사유 체크박스 초기화
   document.querySelectorAll('input[name="dkt-priority-reason"]').forEach(function(cb) { cb.checked = false; });
