@@ -821,6 +821,91 @@ Docket._shiftDrawingRows = function(drawingXml, shifts) {
   });
 };
 
+// 특정 컬럼의 셀 s(style) 속성 값을 새 인덱스로 교체
+Docket._setCellStyleInRow = function(rowXml, col, styleIdx) {
+  var re = new RegExp('<c r="' + col + '\\d+"[^>]*>');
+  return rowXml.replace(re, function(match) {
+    if (/\ss="[^"]*"/.test(match)) {
+      return match.replace(/\ss="[^"]*"/, ' s="' + styleIdx + '"');
+    }
+    return match.replace(/(\/?>)$/, ' s="' + styleIdx + '"$1');
+  });
+};
+
+// 특정 텍스트를 포함한 행을 찾아 { rowNum, startIdx, endIdx, xml } 반환
+Docket._findRowWithText = function(xml, searchText) {
+  var mIdx = xml.indexOf(searchText);
+  if (mIdx < 0) return null;
+  var rowStart = xml.lastIndexOf('<row ', mIdx);
+  if (rowStart < 0) return null;
+  var rowEnd = xml.indexOf('</row>', mIdx);
+  if (rowEnd < 0) return null;
+  rowEnd += '</row>'.length;
+  var rowXml = xml.substring(rowStart, rowEnd);
+  var numMatch = rowXml.match(/^<row r="(\d+)"/);
+  if (!numMatch) return null;
+  return { rowNum: parseInt(numMatch[1]), startIdx: rowStart, endIdx: rowEnd, xml: rowXml };
+};
+
+// styles.xml에 wrapText 속성이 있는 새 xf(cellXf)를 추가하고 그 인덱스를 반환
+// cloneXfIdx가 지정되면 해당 xf를 복제해서 alignment만 수정 (font/border 유지)
+Docket._addWrapTextXf = async function(zip, cloneXfIdx) {
+  var stylesFile = zip.file('xl/styles.xml');
+  if (!stylesFile) return null;
+  var xml = await stylesFile.async('string');
+
+  var cellXfsRe = /<cellXfs count="(\d+)">([\s\S]*?)<\/cellXfs>/;
+  var match = cellXfsRe.exec(xml);
+  if (!match) return null;
+
+  var count = parseInt(match[1]);
+  var body = match[2];
+
+  // Parse existing xf elements (self-closing + nested 모두 지원)
+  var xfRe = /<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g;
+  var xfs = [];
+  var xm;
+  while ((xm = xfRe.exec(body)) !== null) {
+    xfs.push(xm[0]);
+  }
+
+  // 복제 대상 xf (지정 인덱스 또는 기본값)
+  var srcXf = (cloneXfIdx != null && xfs[cloneXfIdx]) ? xfs[cloneXfIdx] :
+              '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" applyAlignment="1" xfId="0"><alignment vertical="top"/></xf>';
+
+  // applyAlignment="1" 속성 보장
+  if (!/applyAlignment="1"/.test(srcXf)) {
+    srcXf = srcXf.replace(/<xf\b/, '<xf applyAlignment="1"');
+  }
+
+  var newXf = srcXf;
+  // alignment 속성 수정: vertical="top" + wrapText="1"
+  if (/<alignment[^>]*\/>/.test(newXf)) {
+    newXf = newXf.replace(/<alignment([^>]*)\/>/, function(m, attrs) {
+      var cleaned = attrs.replace(/\s*wrapText="[^"]*"/g, '').replace(/\s*vertical="[^"]*"/g, '');
+      return '<alignment' + cleaned + ' vertical="top" wrapText="1"/>';
+    });
+  } else if (/<alignment[^>]*>/.test(newXf)) {
+    newXf = newXf.replace(/<alignment([^>]*)>/, function(m, attrs) {
+      var cleaned = attrs.replace(/\s*wrapText="[^"]*"/g, '').replace(/\s*vertical="[^"]*"/g, '');
+      return '<alignment' + cleaned + ' vertical="top" wrapText="1">';
+    });
+  } else {
+    // alignment 엘리먼트 없음 → 추가
+    if (/<\/xf>$/.test(newXf)) {
+      newXf = newXf.replace(/<\/xf>$/, '<alignment vertical="top" wrapText="1"/></xf>');
+    } else if (/\/>$/.test(newXf)) {
+      newXf = newXf.replace(/\/>$/, '><alignment vertical="top" wrapText="1"/></xf>');
+    }
+  }
+
+  // cellXfs 뒤에 추가 + count 갱신
+  var newIndex = count;
+  xml = xml.replace(cellXfsRe, '<cellXfs count="' + (count + 1) + '">' + body + newXf + '</cellXfs>');
+  zip.file('xl/styles.xml', xml);
+  return newIndex;
+};
+
 // XML 내의 모든 row/cell/merge 참조를 threshold 이상이면 amount만큼 이동
 // 병합 셀은 span/shift를 적절히 처리 (앞쪽 경계는 유지, 뒤쪽만 증가 → vertical merge 확장)
 Docket._shiftXmlRefs = function(xml, threshold, amount) {
@@ -927,17 +1012,31 @@ Docket._expandRange = function(xml, markerName, items, fillFn) {
 // sheet1.xml 전체 처리 (범위 확장 + 단순 마커 치환)
 Docket._processSheetXml = function(xml, data) {
   // 1) 범위 확장: NOTES → GOV → FEE (bottom-up)
-  //    NOTES는 텍스트 길이에 따라 행 높이 자동 조정
-  //    한 줄 약 80자 기준, 줄당 15pt, 최소 15pt
+  //    NOTES 셀에 wrapText 스타일 적용 + 텍스트 길이에 따라 행 높이 자동 조정
+  //    B~J 병합 셀 폭 기준 한 줄 약 85자, 줄당 15pt, 최소 15pt
+  var wrapIdx = data._wrapStyleIdx;
   xml = Docket._expandRange(xml, 'NOTE_TEXT', (data.notes || []).map(function(n){return {text:n};}),
     function(rowXml, item) {
       rowXml = rowXml.replace(/\{\{NOTES_START\}\}/g, '');
       rowXml = rowXml.replace(/\{\{NOTE_TEXT\}\}/g, Docket._escapeXml(item.text));
+      // wrapText 스타일 적용 (B 셀이 B:J 병합의 top-left)
+      if (wrapIdx != null) {
+        rowXml = Docket._setCellStyleInRow(rowXml, 'B', wrapIdx);
+      }
+      // 행 높이: 85자 기준, 줄당 15pt, 최소 15pt
       var txt = item.text || '';
-      var height = Math.max(15, Math.ceil(txt.length / 80) * 15);
+      var height = Math.max(15, Math.ceil(txt.length / 85) * 15);
       rowXml = Docket._setRowHeight(rowXml, height);
       return rowXml;
     });
+
+  // 1-2) "3. 상세" 제목 행 높이를 15pt로 고정 (템플릿 기본 4.5pt는 너무 작음)
+  //      XML 내 인코딩: "3. &#49345;&#49464;"
+  var detailTitleInfo = Docket._findRowWithText(xml, '3. &#49345;&#49464;');
+  if (detailTitleInfo) {
+    var titleRow = Docket._setRowHeight(detailTitleInfo.xml, 15);
+    xml = xml.substring(0, detailTitleInfo.startIdx) + titleRow + xml.substring(detailTitleInfo.endIdx);
+  }
 
   xml = Docket._expandRange(xml, 'GOV_ITEM_NAME', (data.govItems || []),
     function(rowXml, item) {
@@ -1057,7 +1156,17 @@ Docket.generateFromTemplate = async function(data) {
   if (govSrcInfo && govCount > 1) drawingShifts.push({ threshold: govSrcInfo.rowNum + 1, amount: govCount - 1 });
   if (notesSrcInfo && notesCount > 1) drawingShifts.push({ threshold: notesSrcInfo.rowNum + 1, amount: notesCount - 1 });
 
-  // 4) sheet1.xml 조작 (범위 확장 + 마커 치환)
+  // 3-2) NOTES 셀에 wrapText를 적용할 새 cellXf를 styles.xml에 추가
+  //      (기존 NOTE_TEXT 셀의 스타일을 복제해서 alignment에 wrapText 추가)
+  var noteCellStyleIdx = null;
+  if (notesSrcInfo) {
+    var noteCellMatch = notesSrcInfo.xml.match(/<c r="B\d+"[^>]*\ss="(\d+)"[^>]*>\s*<is><t[^>]*>\{\{NOTE_TEXT\}\}/);
+    if (noteCellMatch) noteCellStyleIdx = parseInt(noteCellMatch[1]);
+  }
+  var wrapStyleIdx = await Docket._addWrapTextXf(zip, noteCellStyleIdx);
+
+  // 4) sheet1.xml 조작 (범위 확장 + 마커 치환 + wrapText 스타일 적용)
+  data._wrapStyleIdx = wrapStyleIdx;
   xml = Docket._processSheetXml(xml, data);
   zip.file(sheetPath, xml);
 
