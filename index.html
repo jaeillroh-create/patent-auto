@@ -515,7 +515,24 @@
         <div class="dkt-row dkt-row-2">
           <div>
             <label>우선심사 진행여부</label>
-            <input type="text" id="dkt-priority-exam" class="input-field" />
+            <div class="dkt-radio-group">
+              <label><input type="radio" name="dkt-priority-exam" value="O" onchange="Docket.onPriorityExamChange()" /> O (진행)</label>
+              <label><input type="radio" name="dkt-priority-exam" value="X" checked onchange="Docket.onPriorityExamChange()" /> X</label>
+            </div>
+            <div id="dkt-priority-reasons-wrap" style="display:none;margin-top:8px;padding:10px 12px;background:var(--color-primary-light);border-radius:8px">
+              <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);margin-bottom:6px">우선심사 사유 (복수 선택 가능)</div>
+              <div class="dkt-priority-reason-list">
+                <label><input type="checkbox" name="dkt-priority-reason" value="실시 또는 실시준비 중" /> 실시 또는 실시준비 중</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="벤처기업" /> 벤처기업</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="직무발명보상 우수기업" /> 직무발명보상 우수기업</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="기술혁신형 중소기업(INNO-BIZ)" /> 기술혁신형 중소기업(INNO-BIZ)</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="국가연구개발사업 결과물" /> 국가연구개발사업 결과물</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="선행기술조사 의뢰" /> 선행기술조사 의뢰</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="조약 우선권 주장" /> 조약 우선권 주장</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="녹색기술" /> 녹색기술</label>
+              </div>
+              <input type="text" id="dkt-priority-reason-etc" class="input-field" placeholder="기타 사유 (직접 입력)" style="margin-top:6px;font-size:12px;padding:6px 10px" />
+            </div>
           </div>
           <div>
             <label>초안 발송일 설정여부</label>

@@ -215,6 +215,14 @@ Docket.onDBChange = function() {
   // noop: DB별 고정값은 collectData/generateFromTemplate에서 자동 적용
 };
 
+// 우선심사 O/X 라디오 변경 → 사유 선택 박스 표시/숨김
+Docket.onPriorityExamChange = function() {
+  var sel = document.querySelector('input[name="dkt-priority-exam"]:checked');
+  var wrap = document.getElementById('dkt-priority-reasons-wrap');
+  if (!wrap) return;
+  wrap.style.display = (sel && sel.value === 'O') ? '' : 'none';
+};
+
 // 수수료 체크박스 리스트 렌더링 (권리유형 변경 시 호출)
 Docket.renderFeeCheckboxes = function() {
   var right = document.getElementById('dkt-right').value;
@@ -580,7 +588,20 @@ Docket.collectData = function() {
     // 기타
     announcements: v('dkt-announcements'),
     caseContent: v('dkt-case-content'),
-    priorityExam: v('dkt-priority-exam'),
+    priorityExam: (function() {
+      // O/X 라디오 + 사유 체크박스 조합 → 문자열로 반환
+      var radio = document.querySelector('input[name="dkt-priority-exam"]:checked');
+      var val = radio ? radio.value : 'X';
+      if (val !== 'O') return val;
+      // 체크된 사유 수집
+      var reasons = [];
+      document.querySelectorAll('input[name="dkt-priority-reason"]:checked').forEach(function(cb) {
+        reasons.push(cb.value);
+      });
+      var etc = v('dkt-priority-reason-etc');
+      if (etc) reasons.push(etc);
+      return reasons.length ? 'O (' + reasons.join(', ') + ')' : 'O';
+    })(),
     draftDate: v('dkt-draft-date'),
     mustCheck: v('dkt-must-check'),
 
@@ -1349,10 +1370,13 @@ Docket.resetForm = function() {
   var textIds = [
     'dkt-client-company','dkt-contact-name','dkt-contact-email','dkt-contact-phone','dkt-contact-cc',
     'dkt-inventor','dkt-worker','dkt-mandator','dkt-introducer',
-    'dkt-case-content','dkt-priority-exam','dkt-draft-date',
+    'dkt-case-content','dkt-draft-date','dkt-priority-reason-etc',
     'dkt-announcements','dkt-must-check','dkt-actual-fee',
   ];
   textIds.forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
+
+  // 우선심사 사유 체크박스 초기화
+  document.querySelectorAll('input[name="dkt-priority-reason"]').forEach(function(cb) { cb.checked = false; });
 
   var cntEl = document.getElementById('dkt-case-count'); if (cntEl) cntEl.value = '1';
 
@@ -1361,6 +1385,8 @@ Docket.resetForm = function() {
   r('dkt-client-type', 'new');
   r('dkt-vat-included', 'no');
   r('dkt-gov-included', 'no');
+  r('dkt-priority-exam', 'X');
+  Docket.onPriorityExamChange();
 
   // 상세 조항 재주입
   var notesArea = document.getElementById('dkt-notes');
