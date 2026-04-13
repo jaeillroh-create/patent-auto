@@ -805,6 +805,22 @@ Docket._setRowHidden = function(rowXml) {
   });
 };
 
+// drawing1.xml의 <row>N</row> 앵커 참조를 shifts 배열에 따라 보정
+//   shifts = [{ threshold, amount }, ...] — 원본 행 번호 기준
+//   각 앵커 row에 대해, original >= threshold인 모든 shift의 amount를 합산하여 이동
+//   이로써 행 삽입 시 푸터/로고 이미지가 올바른 위치로 따라가고 세로 stretch 방지
+Docket._shiftDrawingRows = function(drawingXml, shifts) {
+  if (!shifts || shifts.length === 0) return drawingXml;
+  return drawingXml.replace(/<row>(\d+)<\/row>/g, function(match, numStr) {
+    var num = parseInt(numStr);
+    var newNum = num;
+    shifts.forEach(function(s) {
+      if (num >= s.threshold) newNum += s.amount;
+    });
+    return '<row>' + newNum + '</row>';
+  });
+};
+
 // XML 내의 모든 row/cell/merge 참조를 threshold 이상이면 amount만큼 이동
 // 병합 셀은 span/shift를 적절히 처리 (앞쪽 경계는 유지, 뒤쪽만 증가 → vertical merge 확장)
 Docket._shiftXmlRefs = function(xml, threshold, amount) {
@@ -911,15 +927,15 @@ Docket._expandRange = function(xml, markerName, items, fillFn) {
 // sheet1.xml 전체 처리 (범위 확장 + 단순 마커 치환)
 Docket._processSheetXml = function(xml, data) {
   // 1) 범위 확장: NOTES → GOV → FEE (bottom-up)
-  //    NOTES는 텍스트 길이에 따라 행 높이 자동 조정 (한글 기준 약 45자/줄, 15pt/줄)
+  //    NOTES는 텍스트 길이에 따라 행 높이 자동 조정
+  //    한 줄 약 80자 기준, 줄당 15pt, 최소 15pt
   xml = Docket._expandRange(xml, 'NOTE_TEXT', (data.notes || []).map(function(n){return {text:n};}),
     function(rowXml, item) {
       rowXml = rowXml.replace(/\{\{NOTES_START\}\}/g, '');
       rowXml = rowXml.replace(/\{\{NOTE_TEXT\}\}/g, Docket._escapeXml(item.text));
-      // 텍스트 길이 기반 행 높이 계산 (최소 15pt)
       var txt = item.text || '';
-      var lines = Math.max(1, Math.ceil(txt.length / 45));
-      rowXml = Docket._setRowHeight(rowXml, lines * 15);
+      var height = Math.max(15, Math.ceil(txt.length / 80) * 15);
+      rowXml = Docket._setRowHeight(rowXml, height);
       return rowXml;
     });
 
@@ -1026,13 +1042,38 @@ Docket.generateFromTemplate = async function(data) {
   if (!sheetFile) throw new Error('템플릿에 ' + sheetPath + '이 없습니다');
   var xml = await sheetFile.async('string');
 
-  // 3) XML 조작 (범위 확장 + 마커 치환)
-  xml = Docket._processSheetXml(xml, data);
+  // 3) 원본 sheet에서 source 행 위치를 스캔 (drawing 앵커 보정용)
+  //    FEE/GOV/NOTES 각 source row의 원본 번호를 구한다
+  var feeSrcInfo = Docket._findRowWithMarker(xml, 'FEE_ITEM_NAME');
+  var govSrcInfo = Docket._findRowWithMarker(xml, 'GOV_ITEM_NAME');
+  var notesSrcInfo = Docket._findRowWithMarker(xml, 'NOTE_TEXT');
 
-  // 4) 수정된 XML을 zip에 다시 씀 (다른 파일은 건드리지 않음 → 이미지/서식 보존)
+  var feeCount = (data.feeItems || []).length;
+  var govCount = (data.govItems || []).length;
+  var notesCount = (data.notes || []).length;
+
+  var drawingShifts = [];
+  if (feeSrcInfo && feeCount > 1) drawingShifts.push({ threshold: feeSrcInfo.rowNum + 1, amount: feeCount - 1 });
+  if (govSrcInfo && govCount > 1) drawingShifts.push({ threshold: govSrcInfo.rowNum + 1, amount: govCount - 1 });
+  if (notesSrcInfo && notesCount > 1) drawingShifts.push({ threshold: notesSrcInfo.rowNum + 1, amount: notesCount - 1 });
+
+  // 4) sheet1.xml 조작 (범위 확장 + 마커 치환)
+  xml = Docket._processSheetXml(xml, data);
   zip.file(sheetPath, xml);
 
-  // 5) zip을 ArrayBuffer로 재패킹 (DEFLATE 압축)
+  // 5) 행 삽입으로 밀려난 drawing 앵커 좌표 보정
+  //    푸터 이미지가 엉뚱한 위치에 표시되거나 세로로 늘어나는 것 방지
+  if (drawingShifts.length > 0) {
+    var drawingPath = 'xl/drawings/drawing1.xml';
+    var drawingFile = zip.file(drawingPath);
+    if (drawingFile) {
+      var drawingXml = await drawingFile.async('string');
+      drawingXml = Docket._shiftDrawingRows(drawingXml, drawingShifts);
+      zip.file(drawingPath, drawingXml);
+    }
+  }
+
+  // 6) zip을 ArrayBuffer로 재패킹 (DEFLATE 압축)
   return await zip.generateAsync({
     type: 'arraybuffer',
     compression: 'DEFLATE',
