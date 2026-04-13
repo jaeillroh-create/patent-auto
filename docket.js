@@ -257,6 +257,25 @@ Docket.updateNotesTextarea = function() {
 //   2. vatIncluded → withoutGov에서 VAT 제거 → fee; vat = withoutGov - fee (반올림 보정)
 //   3. grand = fee + vat + govTotal (항상 동일 공식)
 Docket._computeFees = function(listedTotal, govTotal, actualInput, vatIncluded, govIncluded) {
+  // 실제 청구금액 미입력(또는 0 이하) → 수가표 기준가를 그대로 사용 (할인 없음)
+  //   actualFee = listedTotal, discount = 0
+  //   할인 행은 엑셀 생성 시 숨김 처리됨
+  if (!actualInput || actualInput <= 0) {
+    var vat0 = Math.round(listedTotal * 0.1);
+    return {
+      listedTotal: listedTotal,
+      actualInput: 0,
+      actualFee: listedTotal,
+      vat: vat0,
+      feeSub: listedTotal + vat0,
+      govTotal: govTotal,
+      grand: listedTotal + vat0 + govTotal,
+      discount: 0,
+      vatIncluded: vatIncluded,
+      govIncluded: govIncluded,
+    };
+  }
+
   var withoutGov = govIncluded ? (actualInput - govTotal) : actualInput;
   var fee, vat;
   if (vatIncluded) {
@@ -766,6 +785,26 @@ Docket._shiftRowXml = function(rowXml, oldNum, newNum) {
   return out;
 };
 
+// 행 XML의 <row ...> 열기 태그에 ht/customHeight 속성 설정 (기존 값 있으면 교체)
+// 주의: \s+ (0이 아닌 1+ 공백)를 요구해야 customHeight="1" 내부의 ht="1" 부분문자열과
+//       충돌하지 않음 (\s*는 0공백도 허용 → customHeig[ht="1"] 파편 발생)
+Docket._setRowHeight = function(rowXml, heightPt) {
+  return rowXml.replace(/^<row r="(\d+)"([^>]*)>/, function(match, num, attrs) {
+    var cleaned = attrs
+      .replace(/\s+ht="[^"]*"/g, '')
+      .replace(/\s+customHeight="[^"]*"/g, '');
+    return '<row r="' + num + '" ht="' + heightPt + '" customHeight="1"' + cleaned + '>';
+  });
+};
+
+// 행 XML의 <row ...> 열기 태그에 hidden="1" 속성 설정
+Docket._setRowHidden = function(rowXml) {
+  return rowXml.replace(/^<row r="(\d+)"([^>]*)>/, function(match, num, attrs) {
+    var cleaned = attrs.replace(/\s+hidden="[^"]*"/g, '');
+    return '<row r="' + num + '" hidden="1"' + cleaned + '>';
+  });
+};
+
 // XML 내의 모든 row/cell/merge 참조를 threshold 이상이면 amount만큼 이동
 // 병합 셀은 span/shift를 적절히 처리 (앞쪽 경계는 유지, 뒤쪽만 증가 → vertical merge 확장)
 Docket._shiftXmlRefs = function(xml, threshold, amount) {
@@ -872,10 +911,15 @@ Docket._expandRange = function(xml, markerName, items, fillFn) {
 // sheet1.xml 전체 처리 (범위 확장 + 단순 마커 치환)
 Docket._processSheetXml = function(xml, data) {
   // 1) 범위 확장: NOTES → GOV → FEE (bottom-up)
+  //    NOTES는 텍스트 길이에 따라 행 높이 자동 조정 (한글 기준 약 45자/줄, 15pt/줄)
   xml = Docket._expandRange(xml, 'NOTE_TEXT', (data.notes || []).map(function(n){return {text:n};}),
     function(rowXml, item) {
       rowXml = rowXml.replace(/\{\{NOTES_START\}\}/g, '');
       rowXml = rowXml.replace(/\{\{NOTE_TEXT\}\}/g, Docket._escapeXml(item.text));
+      // 텍스트 길이 기반 행 높이 계산 (최소 15pt)
+      var txt = item.text || '';
+      var lines = Math.max(1, Math.ceil(txt.length / 45));
+      rowXml = Docket._setRowHeight(rowXml, lines * 15);
       return rowXml;
     });
 
@@ -900,15 +944,24 @@ Docket._processSheetXml = function(xml, data) {
     });
 
   // 2) FEE_END (할인 행) 처리 — FEE 확장 후 아래로 밀려 있음
+  //    할인 금액이 0이면 행을 숨김 처리 (실제 청구금액 미입력 시)
   var feeEndInfo = Docket._findRowWithMarker(xml, 'FEE_END');
   if (feeEndInfo) {
     var discRow = feeEndInfo.xml;
     discRow = discRow.replace(/\{\{FEE_END\}\}/g, '');
     var dAmt = data.discountAmount || 0;
     var dQty = data.discountQty || 1;
-    discRow = Docket._setCellNum(discRow, 'D', dAmt);
-    discRow = Docket._setCellNum(discRow, 'E', dQty);
-    discRow = Docket._setCellNum(discRow, 'G', dAmt * dQty);
+
+    if (dAmt !== 0) {
+      // 할인 있음 → 값 주입
+      discRow = Docket._setCellNum(discRow, 'D', dAmt);
+      discRow = Docket._setCellNum(discRow, 'E', dQty);
+      discRow = Docket._setCellNum(discRow, 'G', dAmt * dQty);
+    } else {
+      // 할인 없음 → 행 숨김 (hidden="1"); 셀 값은 건드리지 않음
+      discRow = Docket._setRowHidden(discRow);
+    }
+
     xml = xml.substring(0, feeEndInfo.startIdx) + discRow + xml.substring(feeEndInfo.endIdx);
   }
 
