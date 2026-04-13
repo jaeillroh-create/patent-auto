@@ -163,11 +163,8 @@ Docket.fmtMan = function(n) { return Math.round((n || 0) / 10000).toLocaleString
 // ═══════════════════════════════════════════════════════════════
 
 Docket.init = function() {
-  // Supabase URL은 Docket.config에 이미 하드코딩되어 있음 (로드 타이밍 문제 회피).
-  // 만약 App.supabaseUrl이 다른 값으로 설정되어 있으면 그걸로 교체 (선택적 override).
-  if (window.App && App.supabaseUrl) {
-    Docket.config.emailFunctionUrl = App.supabaseUrl + '/functions/v1/send-docket-email';
-  }
+  // Edge Function URL은 Docket.config.emailFunctionUrl에 하드코딩됨.
+  // 동적 재설정 로직은 제거: App.supabaseUrl 의존성 없이 안정적으로 동작.
 
   // DB 드롭다운 채우기
   var dbSel = document.getElementById('dkt-db');
@@ -1288,12 +1285,11 @@ Docket.sendEmail = async function() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="tossface">⏳</span> 발송 중...'; }
 
   try {
+    // Edge Function URL은 Docket.config.emailFunctionUrl에 하드코딩됨 (동적 참조 없음)
     var fnUrl = Docket.config.emailFunctionUrl;
-    if (!fnUrl && window.App && App.supabase) {
-      fnUrl = App.supabase.supabaseUrl + '/functions/v1/send-docket-email';
-    }
     if (!fnUrl) throw new Error('Edge Function URL 미설정');
 
+    // Supabase 인증 토큰 (세션이 있을 때만 첨부, 없으면 빈 문자열)
     var token = '';
     if (window.App && App.supabase) {
       var sess = await App.supabase.auth.getSession();
