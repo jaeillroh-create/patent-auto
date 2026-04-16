@@ -1924,6 +1924,17 @@ function getKiprisKey(){
   return '';// Edge Function이 자체 DEFAULT_API_KEY 사용
 }
 
+// ═══ 통일된 폰트 크기 계산 (v14) ═══
+// 모든 도면 렌더링(SVG/PPTX/Canvas)에서 동일한 폰트 크기 반환
+function _computeDiagramFontSize(boxW,boxH,labelLength){
+  const safeWidth=boxW*0.85;
+  const charWidthFactor=0.58;
+  const maxByWidth=Math.floor(safeWidth/(Math.max(labelLength,2)*charWidthFactor));
+  const maxByHeight=Math.floor(boxH*0.35);
+  return Math.max(10,Math.min(13,maxByWidth,maxByHeight));
+}
+const REF_NUM_FONT_SIZE=11;
+
 // ═══ 공유 도면 유틸리티 함수 (downloadPptx / downloadDiagramImages 공용) ═══
 function _sharedExtractRefNum(label,fallback){
   const match=label.match(/[(\s]?((?:S|D)?\d+)[)\s]?$/i);
@@ -4352,7 +4363,7 @@ ${diagram}`,4096);
           // ★ 프레임 참조번호만 외부 리더라인으로 표시 ★
           const batchFrameLeaderY=frameY+frameH/2;
           slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:batchFrameLeaderY,w:0.25,h:0,line:{color:'000000',width:LINE_ARROW}});
-          slide.addText(String(frameRefNum),{x:refLabelX+0.25,y:batchFrameLeaderY-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+          slide.addText(String(frameRefNum),{x:refLabelX+0.25,y:batchFrameLeaderY-0.12,w:0.5,h:0.24,fontSize:REF_NUM_FONT_SIZE,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           
           // ★ Edge 기반 연결선 ★
           const batchEdges=batchUniqueEdges.length>0?batchUniqueEdges:nodes.slice(0,-1).map((n,i)=>({from:n.id,to:nodes[i+1].id}));
@@ -6004,7 +6015,7 @@ function renderDiagramFromJSON(containerId,figData,figNum){
   svg+=`<text x="${PW/2}" y="30" text-anchor="middle" font-size="14" font-weight="bold" fill="#333">【도 ${figNum}】</text>`;
   if(figData.frame){const f=figData.frame;svg+=`<rect x="${f.x*PX}" y="${f.y*PX}" width="${f.w*PX}" height="${f.h*PX}" fill="none" stroke="#000" stroke-width="2" rx="4"/>`;svg+=`<text x="${(f.x+f.w/2)*PX}" y="${(f.y-0.08)*PX}" text-anchor="middle" font-size="12" fill="#000">${f.label||''}</text>`;}
   (figData.connections||[]).forEach(conn=>{if(!conn.route||conn.route.length<2)return;const pts=conn.route.map(p=>`${p.x*PX},${p.y*PX}`).join(' ');const mid=`arr_${figNum}_${conn.from}_${conn.to}`;svg+=`<defs><marker id="${mid}" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#000"/></marker></defs>`;let ma='';if(conn.arrow==='end'||conn.arrow==='both')ma+=` marker-end="url(#${mid})"`;if(conn.arrow==='start'||conn.arrow==='both')ma+=` marker-start="url(#${mid})"`;svg+=`<polyline points="${pts}" fill="none" stroke="#000" stroke-width="1.2"${ma}/>`; });
-  (figData.blocks||[]).forEach(block=>{const bx=block.x*PX,by=block.y*PX,bw=block.w*PX,bh=block.h*PX;if(block.shape==='diamond'){const cx=bx+bw/2,cy=by+bh/2;svg+=`<polygon points="${cx},${by} ${bx+bw},${cy} ${cx},${by+bh} ${bx},${cy}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;}else if(block.shape==='stadium'){svg+=`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="${bh/2}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;}else{svg+=`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="#fff" stroke="#000" stroke-width="1.5" rx="3"/>`;}const label=block.label||'';const fs=Math.min(12,Math.max(8,(bw-10)/Math.max(label.length,1)*1.5));svg+=`<text x="${bx+bw/2}" y="${by+bh/2+4}" text-anchor="middle" font-size="${fs}" fill="#000">${label}</text>`;if(block.refNum){let rl=block.refLeader;const pos=block.refNumPos||'right';if(!rl){if(pos==='right')rl={startX:block.x+block.w,startY:block.y+block.h/2,endX:block.x+block.w+0.4,endY:block.y+block.h/2};else if(pos==='left')rl={startX:block.x,startY:block.y+block.h/2,endX:block.x-0.4,endY:block.y+block.h/2};else if(pos==='top')rl={startX:block.x+block.w/2,startY:block.y,endX:block.x+block.w/2,endY:block.y-0.3};else rl={startX:block.x+block.w/2,startY:block.y+block.h,endX:block.x+block.w/2,endY:block.y+block.h+0.3};}svg+=`<line x1="${rl.startX*PX}" y1="${rl.startY*PX}" x2="${rl.endX*PX}" y2="${rl.endY*PX}" stroke="#000" stroke-width="0.8"/>`;const anc=pos==='left'?'end':'start';const rdx=pos==='left'?-4:4;svg+=`<text x="${rl.endX*PX+rdx}" y="${rl.endY*PX+4}" text-anchor="${anc}" font-size="11" fill="#000">${block.refNum}</text>`;}});
+  (figData.blocks||[]).forEach(block=>{const bx=block.x*PX,by=block.y*PX,bw=block.w*PX,bh=block.h*PX;if(block.shape==='diamond'){const cx=bx+bw/2,cy=by+bh/2;svg+=`<polygon points="${cx},${by} ${bx+bw},${cy} ${cx},${by+bh} ${bx},${cy}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;}else if(block.shape==='stadium'){svg+=`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="${bh/2}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;}else{svg+=`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="#fff" stroke="#000" stroke-width="1.5" rx="3"/>`;}const label=block.label||'';const fs=Math.min(12,Math.max(8,(bw-10)/Math.max(label.length,1)*1.5));svg+=`<text x="${bx+bw/2}" y="${by+bh/2+4}" text-anchor="middle" font-size="${fs}" fill="#000">${label}</text>`;if(block.refNum){let rl=block.refLeader;const pos=block.refNumPos||'right';if(!rl){if(pos==='right')rl={startX:block.x+block.w,startY:block.y+block.h/2,endX:block.x+block.w+0.4,endY:block.y+block.h/2};else if(pos==='left')rl={startX:block.x,startY:block.y+block.h/2,endX:block.x-0.4,endY:block.y+block.h/2};else if(pos==='top')rl={startX:block.x+block.w/2,startY:block.y,endX:block.x+block.w/2,endY:block.y-0.3};else rl={startX:block.x+block.w/2,startY:block.y+block.h,endX:block.x+block.w/2,endY:block.y+block.h+0.3};}svg+=`<line x1="${rl.startX*PX}" y1="${rl.startY*PX}" x2="${rl.endX*PX}" y2="${rl.endY*PX}" stroke="#000" stroke-width="0.8"/>`;const anc=pos==='left'?'end':'start';const rdx=pos==='left'?-4:4;svg+=`<text x="${rl.endX*PX+rdx}" y="${rl.endY*PX+4}" text-anchor="${anc}" font-size="${REF_NUM_FONT_SIZE}" fill="#000">${block.refNum}</text>`;}});
   svg+=`</svg>`;
   const el=document.getElementById(containerId);if(el)el.innerHTML+=`<div style="margin:12px 0">${svg}</div>`;
   return svg;
@@ -6018,7 +6029,7 @@ function generatePptxFromJSON(figDataArray,fileName){
     slide.addText('【도 '+fn+'】',{x:0.5,y:0.2,w:7.27,h:0.4,fontSize:14,bold:true,align:'center',fontFace:'맑은 고딕'});
     if(fig.frame){const f=fig.frame;slide.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:f.x,y:f.y,w:f.w,h:f.h,fill:{color:'FFFFFF'},line:{color:'000000',width:2},rectRadius:0.05});slide.addText(f.label||'',{x:f.x,y:f.y-0.25,w:f.w,h:0.25,fontSize:11,align:'center',fontFace:'맑은 고딕'});}
     (fig.connections||[]).forEach(conn=>{if(!conn.route||conn.route.length<2)return;for(let ri=0;ri<conn.route.length-1;ri++){const p1=conn.route[ri],p2=conn.route[ri+1];const lo={color:'000000',width:1.0};if(ri===conn.route.length-2&&(conn.arrow==='end'||conn.arrow==='both'))lo.endArrowType='triangle';if(ri===0&&(conn.arrow==='start'||conn.arrow==='both'))lo.beginArrowType='triangle';slide.addShape(pptx.shapes.LINE,{x:Math.min(p1.x,p2.x),y:Math.min(p1.y,p2.y),w:Math.max(0.001,Math.abs(p2.x-p1.x)||0.001),h:Math.max(0.001,Math.abs(p2.y-p1.y)||0.001),line:lo});}});
-    (fig.blocks||[]).forEach(block=>{const st=block.shape==='diamond'?pptx.shapes.DIAMOND:block.shape==='circle'?pptx.shapes.OVAL:pptx.shapes.ROUNDED_RECTANGLE;slide.addShape(st,{x:block.x,y:block.y,w:block.w,h:block.h,fill:{color:'FFFFFF'},line:{color:'000000',width:1.5},rectRadius:block.shape==='stadium'?0.35:0.05});slide.addText(block.label||'',{x:block.x+0.04,y:block.y,w:block.w-0.08,h:block.h,fontSize:Math.min(11,Math.max(7,block.w*5)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});if(block.refNum){let rl=block.refLeader;const pos=block.refNumPos||'right';if(!rl){if(pos==='right')rl={startX:block.x+block.w,startY:block.y+block.h/2,endX:block.x+block.w+0.35,endY:block.y+block.h/2};else if(pos==='left')rl={startX:block.x,startY:block.y+block.h/2,endX:block.x-0.35,endY:block.y+block.h/2};else if(pos==='top')rl={startX:block.x+block.w/2,startY:block.y,endX:block.x+block.w/2,endY:block.y-0.25};else rl={startX:block.x+block.w/2,startY:block.y+block.h,endX:block.x+block.w/2,endY:block.y+block.h+0.25};}slide.addShape(pptx.shapes.LINE,{x:Math.min(rl.startX,rl.endX),y:Math.min(rl.startY,rl.endY),w:Math.max(0.001,Math.abs(rl.endX-rl.startX)||0.001),h:Math.max(0.001,Math.abs(rl.endY-rl.startY)||0.001),line:{color:'000000',width:0.75}});slide.addText(block.refNum,{x:pos==='left'?rl.endX-0.4:rl.endX,y:rl.endY-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:pos==='left'?'right':'left'});}});
+    (fig.blocks||[]).forEach(block=>{const st=block.shape==='diamond'?pptx.shapes.DIAMOND:block.shape==='circle'?pptx.shapes.OVAL:pptx.shapes.ROUNDED_RECTANGLE;slide.addShape(st,{x:block.x,y:block.y,w:block.w,h:block.h,fill:{color:'FFFFFF'},line:{color:'000000',width:1.5},rectRadius:block.shape==='stadium'?0.35:0.05});slide.addText(block.label||'',{x:block.x+0.04,y:block.y,w:block.w-0.08,h:block.h,fontSize:Math.min(11,Math.max(7,block.w*5)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});if(block.refNum){let rl=block.refLeader;const pos=block.refNumPos||'right';if(!rl){if(pos==='right')rl={startX:block.x+block.w,startY:block.y+block.h/2,endX:block.x+block.w+0.35,endY:block.y+block.h/2};else if(pos==='left')rl={startX:block.x,startY:block.y+block.h/2,endX:block.x-0.35,endY:block.y+block.h/2};else if(pos==='top')rl={startX:block.x+block.w/2,startY:block.y,endX:block.x+block.w/2,endY:block.y-0.25};else rl={startX:block.x+block.w/2,startY:block.y+block.h,endX:block.x+block.w/2,endY:block.y+block.h+0.25};}slide.addShape(pptx.shapes.LINE,{x:Math.min(rl.startX,rl.endX),y:Math.min(rl.startY,rl.endY),w:Math.max(0.001,Math.abs(rl.endX-rl.startX)||0.001),h:Math.max(0.001,Math.abs(rl.endY-rl.startY)||0.001),line:{color:'000000',width:0.75}});slide.addText(block.refNum,{x:pos==='left'?rl.endX-0.4:rl.endX,y:rl.endY-0.12,w:0.5,h:0.24,fontSize:REF_NUM_FONT_SIZE,fontFace:'맑은 고딕',color:'000000',align:pos==='left'?'right':'left'});}});
   });
   pptx.writeFile({fileName:fileName||'patent_diagram_v14.pptx'});App.showToast('PPTX 다운로드 완료');
 }
@@ -6187,8 +6198,8 @@ function computeEdgeRoutes(edges,positions){
 // 같은 행/열의 노드끼리는 직선 연결, 다른 행+열이면 꺾임 발생
 function computeDeviceLayout2D(nodes,edges,figNum){
   const n=nodes.length;
-  if(n===0)return{grid:{},maxCols:1,numRows:0,uniqueEdges:[]};
-  if(n===1)return{grid:{[nodes[0].id]:{row:0,col:0,layerSize:1}},maxCols:1,numRows:1,uniqueEdges:[]};
+  if(n===0)return{grid:{},maxCols:1,numRows:0,uniqueEdges:[],biDirPairs:[]};
+  if(n===1)return{grid:{[nodes[0].id]:{row:0,col:0,layerSize:1}},maxCols:1,numRows:1,uniqueEdges:[],biDirPairs:[]};
   const MAX_COLS=3;
   figNum=figNum||1;
   
@@ -6201,10 +6212,14 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   };
   const edgePairSet=new Set();
   const deduplicatedEdges=[];
+  const biDirPairs=[]; // ★ FIX-3: 양방향 엣지 쌍 추적 ★
   edges.forEach(e=>{
     const k1=e.from+'|'+e.to, k2=e.to+'|'+e.from;
     if(edgePairSet.has(k2)){
       // 역방향이 이미 등록됨 → 중복 양방향 제거
+      // ★ FIX-3: 양방향 쌍 기록 (참조번호 작은 쪽 → 큰 쪽) ★
+      const[k2f,k2t]=k2.split('|');
+      biDirPairs.push(_nodeRefNum(k2f)<=_nodeRefNum(k2t)?{a:k2f,b:k2t}:{a:k2t,b:k2f});
       return;
     }
     edgePairSet.add(k1);
@@ -6250,7 +6265,7 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     const grid={};const rows=[];
     for(let i=0;i<n;i+=MAX_COLS){rows.push(sorted.slice(i,Math.min(i+MAX_COLS,n)).map(nd=>nd.id));}
     rows.forEach((row,ri)=>{row.forEach((id,ci)=>{grid[id]={row:ri,col:ci,layerSize:row.length};});});
-    return{grid,maxCols:Math.min(n,MAX_COLS),numRows:rows.length,uniqueEdges:[],layers:rows};
+    return{grid,maxCols:Math.min(n,MAX_COLS),numRows:rows.length,uniqueEdges:[],layers:rows,biDirPairs:[]};
   }
   
   // ═══ 순환 검출 (Kahn's algorithm) ═══
@@ -6329,7 +6344,23 @@ function computeDeviceLayout2D(nodes,edges,figNum){
       if(rowIdx%2===1)chunk.reverse();
       layers.push(chunk);
     }
-    
+
+    // ★ FIX-2a: 허브 노드 중앙열 정렬 — 스네이크 배치 후 행별 최고 차수 노드를 중앙으로 ★
+    layers.forEach(row=>{
+      if(row.length<=2)return;
+      let maxDegIdx=0,maxDegVal=(adj[row[0]]||new Set()).size;
+      for(let ci=1;ci<row.length;ci++){
+        const deg=(adj[row[ci]]||new Set()).size;
+        if(deg>maxDegVal){maxDegVal=deg;maxDegIdx=ci;}
+      }
+      if(maxDegVal>=3){
+        const centerIdx=Math.floor(row.length/2);
+        if(maxDegIdx!==centerIdx){
+          [row[maxDegIdx],row[centerIdx]]=[row[centerIdx],row[maxDegIdx]];
+        }
+      }
+    });
+
   }else if(strategy==='HUB_SPOKE'){
     // ── 허브 중심 배치 (도 1 전용) ──
     // ★ v12: 동점 허브 → 참조번호 작은 노드 우선 ★
@@ -6550,19 +6581,53 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   }
   
   // 수직 연결 열 정렬 재계산
-  Object.keys(alignCol).forEach(k=>delete alignCol[k]);
-  for(let ri=0;ri<layers.length-1;ri++){
-    const curRow=layers[ri];
-    const nextRow=layers[ri+1];
-    nextRow.forEach(nid=>{
-      const nbrs=[...(adj[nid]||new Set())];
-      for(const nbr of nbrs){
-        const nbrCI=curRow.indexOf(nbr);
-        if(nbrCI>=0){alignCol[nid]={col:nbrCI,layerSize:Math.max(curRow.length,nextRow.length)};break;}
-      }
-    });
+  function _recalcAlignCol(){
+    Object.keys(alignCol).forEach(k=>delete alignCol[k]);
+    for(let ri=0;ri<layers.length-1;ri++){
+      const curRow=layers[ri];
+      const nextRow=layers[ri+1];
+      nextRow.forEach(nid=>{
+        const nbrs=[...(adj[nid]||new Set())];
+        for(const nbr of nbrs){
+          const nbrCI=curRow.indexOf(nbr);
+          if(nbrCI>=0){alignCol[nid]={col:nbrCI,layerSize:Math.max(curRow.length,nextRow.length)};break;}
+        }
+      });
+    }
   }
-  
+  _recalcAlignCol();
+
+  // ★ FIX-2b: 수직 정렬 최적화 — countBends 검증 기반 행 내 스왑 ★
+  // 교차 행 엣지의 꺾임을 줄이기 위해 행 내 노드 쌍을 스왑하고 개선 여부를 검증
+  let vAlignImproved=true;
+  let vAlignRounds=0;
+  while(vAlignImproved&&vAlignRounds<3){
+    vAlignImproved=false;
+    vAlignRounds++;
+    for(let ri=0;ri<layers.length;ri++){
+      const row=layers[ri];
+      if(row.length<=1)continue;
+      for(let ci=0;ci<row.length;ci++){
+        for(let cj=ci+1;cj<row.length;cj++){
+          const beforeBends=countBends(layers,alignCol);
+          const beforeCross=countCrossings(layers);
+          const beforeCost=beforeCross*3+beforeBends;
+          [row[ci],row[cj]]=[row[cj],row[ci]];
+          _recalcAlignCol();
+          const afterBends=countBends(layers,alignCol);
+          const afterCross=countCrossings(layers);
+          const afterCost=afterCross*3+afterBends;
+          if(afterCost<beforeCost){
+            vAlignImproved=true;
+          }else{
+            [row[ci],row[cj]]=[row[cj],row[ci]];
+            _recalcAlignCol();
+          }
+        }
+      }
+    }
+  }
+
   const finalBends=countBends(layers,alignCol);
   const finalCrossings=countCrossings(layers);
   console.log(`[Layout v15] ${n}nodes → ${layers.length}rows, strategy=${strategy}, bends=${finalBends}, crossings=${finalCrossings}`);
@@ -6581,7 +6646,7 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     });
   });
   
-  return{grid,maxCols:Math.min(maxCols,MAX_COLS),numRows:layers.length,uniqueEdges,layers};
+  return{grid,maxCols:Math.min(maxCols,MAX_COLS),numRows:layers.length,uniqueEdges,layers,biDirPairs};
 }
 
 // ── Strict Orthogonal Router v4.0 ──
@@ -7296,7 +7361,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
         if(refNum){
           const leaderEndX=centerX+normalBoxW/2+0.3*PX+branchOffset/2;
           svg+=`<line x1="${cx+dw}" y1="${cy}" x2="${leaderEndX}" y2="${cy}" stroke="#000" stroke-width="1"/>`;
-          svg+=`<text x="${leaderEndX+8}" y="${cy+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+          svg+=`<text x="${leaderEndX+8}" y="${cy+4}" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
         }
       }else{
         // 사각형/스타디움 렌더링 (기존 코드)
@@ -7311,7 +7376,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
           const leaderEndX=centerX+normalBoxW/2+0.3*PX+branchOffset/2;
           const leaderY=by+boxH/2;
           svg+=`<line x1="${bx+boxW}" y1="${leaderY}" x2="${leaderEndX}" y2="${leaderY}" stroke="#000" stroke-width="1"/>`;
-          svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+          svg+=`<text x="${leaderEndX+8}" y="${leaderY+4}" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
         }
       }
     });
@@ -7396,7 +7461,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     // ═══ 도 1: 2D 토폴로지 블록도 v10.0 ═══
     // 렌더 순서: ①연결선 → ②Shape(위에 덮음) → ③참조번호(Shape 아래)
     const layout=computeDeviceLayout2D(nodes,edges,figNum);
-    const{grid,maxCols,numRows,uniqueEdges}=layout;
+    const{grid,maxCols,numRows,uniqueEdges,biDirPairs}=layout;
     
     // 열 수에 따른 박스 크기 조정
     const colGap=0.85*PX*_sm; // v10.1: 연결선 공간 확보 + v10.4: 조정 배율
@@ -7468,7 +7533,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       const shapeType=matchIconShape(nd.label);
       const sm=_shapeMetrics(shapeType,boxW2D,boxH);
       // 텍스트 너비 기반 최소 shape 너비
-      const fontSize=maxCols>2?10:maxCols>1?11:12;
+      const fontSize=_computeDiagramFontSize(boxW2D,boxH,displayLabel.length);
       const textW=_estimateTextWidth(displayLabel,fontSize);
       const minShapeW=textW+20;
       if(sm.sw<minShapeW){
@@ -7524,6 +7589,58 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       }
     }
     
+    // ── Phase 1.7: 양방향 엣지 동일행 강제 ── ★ FIX-3 ★
+    // 양방향으로 연결된 노드 쌍이 다른 행에 있으면 한쪽을 이동하여 같은 행으로 맞춤
+    if(biDirPairs&&biDirPairs.length>0){
+      biDirPairs.forEach(pair=>{
+        const nbA=nodeBoxes[pair.a], nbB=nodeBoxes[pair.b];
+        if(!nbA||!nbB)return;
+        const ndA=nodeData.find(d=>d.id===pair.a);
+        const ndB=nodeData.find(d=>d.id===pair.b);
+        if(!ndA||!ndB||ndA.row===ndB.row)return; // 이미 같은 행
+        // 연결 수가 적은 쪽을 이동 대상으로 선택
+        const degA=uniqueEdges.filter(e=>e.from===pair.a||e.to===pair.a).length;
+        const degB=uniqueEdges.filter(e=>e.from===pair.b||e.to===pair.b).length;
+        const[mover,target]=degA<=degB?[ndA,ndB]:[ndB,ndA];
+        const moverBox=nodeBoxes[mover.id], targetBox=nodeBoxes[target.id];
+        // mover를 target의 Y 위치로 이동
+        const dy=targetBox.y-moverBox.y;
+        moverBox.y+=dy; moverBox.cy+=dy;
+        moverBox._sy=mover.sy+dy;
+        mover.sy+=dy;
+        mover.row=target.row;
+        console.log(`[FIX-3] 양방향 엣지: ${mover.id}→${target.id} 동일행 강제 (dy=${dy.toFixed(1)})`);
+      });
+      // 겹침 재검증
+      let biOverlapFix=true;
+      let biOverlapRounds=0;
+      while(biOverlapFix&&biOverlapRounds<5){
+        biOverlapFix=false;
+        biOverlapRounds++;
+        for(let i=0;i<nodeData.length;i++){
+          const a=nodeData[i];
+          for(let j=i+1;j<nodeData.length;j++){
+            const b=nodeData[j];
+            const hOverlap=!(a.sx+a.sw+8<b.sx||b.sx+b.sw+8<a.sx);
+            const vOverlap=!(a.sy+a.sh+REF_PADDING+MIN_GAP<b.sy||b.sy+b.sh+REF_PADDING+MIN_GAP<a.sy);
+            if(hOverlap&&vOverlap){
+              // 수직으로 분리: 위쪽 노드는 유지, 아래쪽을 밀어냄
+              const upper=a.sy<=b.sy?a:b;
+              const lower=a.sy<=b.sy?b:a;
+              const push=upper.sy+upper.sh+REF_PADDING+MIN_GAP-lower.sy;
+              if(push>0){
+                lower.sy+=push;
+                nodeBoxes[lower.id].y+=push;
+                nodeBoxes[lower.id].cy=nodeBoxes[lower.id].y+nodeBoxes[lower.id].h/2;
+                nodeBoxes[lower.id]._sy=lower.sy;
+                biOverlapFix=true;
+              }
+            }
+          }
+        }
+      }
+    }
+
     // SVG 높이 재계산
     let maxBottom=0;
     nodeData.forEach(nd=>{
@@ -7532,7 +7649,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     });
     const correctedSvgH=Math.max(svgH,maxBottom+marginY);
     svg=svg.replace(/viewBox="0 0 [^"]*"/,`viewBox="0 0 ${svgW} ${correctedSvgH}"`);
-    
+
     // ── Phase 2: 연결선 — ★ 실제 shape anchor 기반 라우팅 ★ ──
     // 원칙: 모든 연결은 각 shape의 실제 변 중앙(edge center)에서 시작/끝
     // box shape → 균일 높이 → 같은 행 = 같은 cy → 자연스러운 직선 연결
@@ -7723,25 +7840,25 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
         const labelBlockH=labelFit.lines.length*lineH;
         // 참조번호: 아이콘 실제 하단 + 라벨 텍스트 높이 + 간격
         const refY=iconDrawBottom2+6+labelBlockH+labelFit.fontSize+4;
-        refSvg=`<text x="${sx+sw/2}" y="${refY}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+        refSvg=`<text x="${sx+sw/2}" y="${refY}" text-anchor="middle" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }else if(!dir.bottom){
         // 하단: 수직선 + 번호 — shape 정확한 하단 앵커에서 시작
         const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'bottom');
         const ly2=anc.py+12; // v10.2: 12px leader line (was 8)
         refSvg=`<line x1="${anc.px}" y1="${anc.py}" x2="${anc.px}" y2="${ly2}" stroke="#000" stroke-width="1"/>`;
-        refSvg+=`<text x="${anc.px}" y="${ly2+12}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+        refSvg+=`<text x="${anc.px}" y="${ly2+12}" text-anchor="middle" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }else if(!dir.right){
         // 우측: 수평선 + 번호 — shape 정확한 우측 앵커에서 시작
         const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'right');
         const lx2=anc.px+15; // v10.2: 15px leader (was 12)
         refSvg=`<line x1="${anc.px}" y1="${anc.py}" x2="${lx2}" y2="${anc.py}" stroke="#000" stroke-width="1"/>`;
-        refSvg+=`<text x="${lx2+4}" y="${anc.py+4}" text-anchor="start" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+        refSvg+=`<text x="${lx2+4}" y="${anc.py+4}" text-anchor="start" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }else if(!dir.left){
         // 좌측: 수평선 + 번호 — shape 정확한 좌측 앵커에서 시작
         const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'left');
         const lx2=anc.px-15; // v10.2: 15px leader (was 12)
         refSvg=`<line x1="${anc.px}" y1="${anc.py}" x2="${lx2}" y2="${anc.py}" stroke="#000" stroke-width="1"/>`;
-        refSvg+=`<text x="${lx2-4}" y="${anc.py+4}" text-anchor="end" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+        refSvg+=`<text x="${lx2-4}" y="${anc.py+4}" text-anchor="end" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }else{
         // 모든 방향 사용 중 → Shape 내부에 (참조번호) 표시
         const textCy2=_shapeTextCy(shapeType,sy,sh);
@@ -7933,7 +8050,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const frameLeaderEndX=frameX+frameW+0.3*PX;
     const frameLeaderY=frameY+frameH/2;
     svg+=`<line x1="${frameX+frameW}" y1="${frameLeaderY}" x2="${frameLeaderEndX}" y2="${frameLeaderY}" stroke="#000" stroke-width="1"/>`;
-    svg+=`<text x="${frameLeaderEndX+8}" y="${frameLeaderY+4}" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
+    svg+=`<text x="${frameLeaderEndX+8}" y="${frameLeaderY+4}" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${frameRefNum}</text>`;
     
     // 4. ★★ v10.5: 실제 앵커 기반 연결선 + 충돌 검사 (Fig 2+) ★★
     const innerEdgesToDraw2=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
@@ -9604,13 +9721,13 @@ function downloadPptx(sid){
           const opts={x:bx,y:by,w:boxW,h:boxH,fill:{color:'FFFFFF'},line:{color:'000000',width:isStartEnd?LINE_FRAME:LINE_BOX}};
           if(isStartEnd)opts.rectRadius=boxH*0.5*72;
           slide.addShape(pptx.shapes.ROUNDED_RECTANGLE||pptx.shapes.RECTANGLE,opts);
-          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:isStartEnd?10:Math.min(12,Math.max(9,13-nodeCount*0.3)),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+          slide.addText(cleanLabel,{x:bx+0.08,y:by,w:boxW-0.16,h:boxH,fontSize:isStartEnd?10:_computeDiagramFontSize(boxW*72,boxH*72,cleanLabel.length),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
           // 리더라인 (시작/종료 제외)
           if(refNum&&!isStartEnd){
             const leaderEndX=PAGE_MARGIN+0.3+normalBoxW;
             slide.addShape(pptx.shapes.LINE,{x:bx+boxW,y:by+boxH/2,w:leaderEndX-(bx+boxW)+0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(refNum),{x:leaderEndX+0.35,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+            slide.addText(String(refNum),{x:leaderEndX+0.35,y:by+boxH/2-0.12,w:0.5,h:0.24,fontSize:REF_NUM_FONT_SIZE,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           }
           
           // ★ 화살표: 중앙선 직선 ★
@@ -9677,7 +9794,7 @@ function downloadPptx(sid){
           const sy=by+Math.max(0,(_rowCellH-sm.sh)/2);
 
           addPptxIconShape(slide,shapeType,sx,sy,sm.sw,sm.sh,LINE_FRAME);
-          const fontSize=Math.min(maxCols>1?10:12,Math.max(8,13-nodeCount*0.3));
+          const fontSize=_computeDiagramFontSize(sm.sw*72,sm.sh*72,pptxDisplayLabel.length);
           // ★ v13.0 FIX: 아이콘 shape 텍스트를 아이콘 하단 아래에 배치 (SVG와 동일 로직) ★
           if(_isIconShape(shapeType)){
             // sensor/antenna/camera/speaker: 아이콘이 전체 영역 차지 → 텍스트를 아이콘 아래에
@@ -9826,15 +9943,15 @@ function downloadPptx(sid){
           if(!dir.bottom){
             const anc=_shapeAnchor(st,_sx,_sy,_sw,_sh,'bottom');
             slide.addShape(pptx.shapes.LINE,{x:anc.px,y:anc.py,w:0,h:0.12,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(r.refNum),{x:anc.px-0.3,y:anc.py+0.12,w:0.6,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'top'});
+            slide.addText(String(r.refNum),{x:anc.px-0.3,y:anc.py+0.12,w:0.6,h:0.2,fontSize:REF_NUM_FONT_SIZE,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'top'});
           }else if(!dir.right){
             const anc=_shapeAnchor(st,_sx,_sy,_sw,_sh,'right');
             slide.addShape(pptx.shapes.LINE,{x:anc.px,y:anc.py,w:0.15,h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(r.refNum),{x:anc.px+0.15,y:anc.py-0.1,w:0.5,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+            slide.addText(String(r.refNum),{x:anc.px+0.15,y:anc.py-0.1,w:0.5,h:0.2,fontSize:REF_NUM_FONT_SIZE,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
           }else if(!dir.left){
             const anc=_shapeAnchor(st,_sx,_sy,_sw,_sh,'left');
             slide.addShape(pptx.shapes.LINE,{x:anc.px-0.15,y:anc.py,w:0.15,h:0,line:{color:'000000',width:LINE_ARROW}});
-            slide.addText(String(r.refNum),{x:anc.px-0.65,y:anc.py-0.1,w:0.5,h:0.2,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'right',valign:'middle'});
+            slide.addText(String(r.refNum),{x:anc.px-0.65,y:anc.py-0.1,w:0.5,h:0.2,fontSize:REF_NUM_FONT_SIZE,fontFace:'맑은 고딕',color:'000000',align:'right',valign:'middle'});
           }else{
             // 모든 방향 사용 중 → 내부 표시는 slide.addText로 2줄
             slide.addText('('+r.refNum+')',{x:_sx,y:_sy+_sh*0.55,w:_sw,h:0.2,fontSize:9,fontFace:'맑은 고딕',color:'444444',align:'center',valign:'top'});
@@ -9888,7 +10005,7 @@ function downloadPptx(sid){
           
           addPptxIconShape(slide,shapeType,sx,by,sm.sw,sm.sh,LINE_BOX);
           const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
-          const fontSize=Math.min(innerMaxCols>1?9:11,Math.max(8,12-dCount*0.3));
+          const fontSize=_computeDiagramFontSize(sm.sw*72,sm.sh*72,cleanLabel.length);
           slide.addText([{text:cleanLabel,options:{fontSize,breakType:'none'}},{text:'\n('+refNum+')',options:{fontSize:Math.max(fontSize-1,7),color:'444444'}}],{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           
           innerNodeBoxes[nd.id]={x:sx,y:by,w:sm.sw,h:sm.sh,cx:sx+sm.sw/2,cy:by+sm.sh/2,
@@ -9897,7 +10014,7 @@ function downloadPptx(sid){
         
         const frameLeaderY=frameY+frameH/2;
         slide.addShape(pptx.shapes.LINE,{x:frameX+frameW,y:frameLeaderY,w:0.3,h:0,line:{color:'000000',width:LINE_ARROW}});
-        slide.addText(String(frameRefNum),{x:refLabelX+0.3,y:frameLeaderY-0.12,w:0.5,h:0.24,fontSize:10,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
+        slide.addText(String(frameRefNum),{x:refLabelX+0.3,y:frameLeaderY-0.12,w:0.5,h:0.24,fontSize:REF_NUM_FONT_SIZE,fontFace:'맑은 고딕',color:'000000',align:'left',valign:'middle'});
         
         // ★ Edge 기반 연결선 (fan 오프셋 겹침 방지) ★
         const innerEdgesToDraw=innerUniqueEdges.length>0?innerUniqueEdges:(hasEdges&&displayNodes.length>1?displayNodes.slice(0,-1).map((n,i)=>({from:n.id,to:displayNodes[i+1].id})):[]);
@@ -10459,7 +10576,7 @@ function downloadDiagramImages(sid, format='jpeg'){
           drawCanvasShape(ctx,shapeType,sx,sy,sw,sh,SHADOW,2);
           // ★ v10.4: 도 1은 축약 라벨 사용 ★
           const displayLabel=isFig1?_shortenFig1Label(nd.label||cleanLabel):cleanLabel;
-          let fontSize=maxCols>2?10:maxCols>1?11:12;
+          let fontSize=_computeDiagramFontSize(sw,sh,displayLabel.length);
           const cDir=nodeConnDir[id]||{};
           const cRefInside=cDir.top&&cDir.bottom&&cDir.left&&cDir.right;
           const cLabelMaxW=sw*0.90;
