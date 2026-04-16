@@ -5864,13 +5864,38 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   const MAX_COLS=3;
   figNum=figNum||1;
   
+  // ═══ v15 FIX-B: 양방향 edge 단방향화 전처리 ═══
+  // A-->B와 B-->A가 동시에 있으면 참조번호 작은 쪽→큰 쪽으로 정규화
+  // → 가짜 순환 제거 → TOPOLOGICAL 전략 정상 적용
+  const _nodeRefNum=id=>{
+    const nd=nodes.find(n=>n.id===id);
+    return parseInt((nd?.label.match(/\((\d+)\)/)||[])[1])||9999;
+  };
+  const edgePairSet=new Set();
+  const deduplicatedEdges=[];
+  edges.forEach(e=>{
+    const k1=e.from+'|'+e.to, k2=e.to+'|'+e.from;
+    if(edgePairSet.has(k2)){
+      // 역방향이 이미 등록됨 → 중복 양방향 제거
+      return;
+    }
+    edgePairSet.add(k1);
+    // 참조번호 기준으로 방향 정규화 (작은 → 큰)
+    if(_nodeRefNum(e.from)>_nodeRefNum(e.to)){
+      deduplicatedEdges.push({from:e.to,to:e.from,label:e.label});
+    }else{
+      deduplicatedEdges.push(e);
+    }
+  });
+
   // ═══ 공통: 인접 리스트 + 방향 그래프 구축 ═══
   const adj={};        // 양방향 (탐색용)
   const dirAdj={};     // 단방향 (위상 정렬용)
   const dirAdjRev={};  // 역방향
   nodes.forEach(nd=>{adj[nd.id]=new Set();dirAdj[nd.id]=new Set();dirAdjRev[nd.id]=new Set();});
   const edgeSet=new Set();
-  edges.forEach(e=>{
+  // ★ 단방향화된 deduplicatedEdges로 그래프 구축 ★
+  deduplicatedEdges.forEach(e=>{
     const k1=e.from+'|'+e.to, k2=e.to+'|'+e.from;
     if(!edgeSet.has(k1)&&!edgeSet.has(k2))edgeSet.add(k1);
     if(adj[e.from])adj[e.from].add(e.to);
@@ -5878,7 +5903,13 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     if(dirAdj[e.from])dirAdj[e.from].add(e.to);
     if(dirAdjRev[e.to])dirAdjRev[e.to].add(e.from);
   });
-  const uniqueEdges=[...edgeSet].map(k=>{const[f,t]=k.split('|');return{from:f,to:t};});
+  // ★ uniqueEdges는 원본 edges 기반 — 렌더링 시 모든 연결 표시 ★
+  const origEdgeSet=new Set();
+  edges.forEach(e=>{
+    const k1=e.from+'|'+e.to, k2=e.to+'|'+e.from;
+    if(!origEdgeSet.has(k1)&&!origEdgeSet.has(k2))origEdgeSet.add(k1);
+  });
+  const uniqueEdges=[...origEdgeSet].map(k=>{const[f,t]=k.split('|');return{from:f,to:t};});
   const allIds=nodes.map(nd=>nd.id);
   
   // ═══ edge 없음 → 참조번호 오름차순 그리드 ═══
@@ -5916,17 +5947,18 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   const isFig1=(figNum===1);
   
   let strategy;
-  if(isFig1&&hasHub){
-    strategy='HUB_SPOKE';      // 도 1 + 허브 있음 → 허브 중심
+  // ★ v15 FIX-A: 허브 있으면 도 1/도 2+ 모두 HUB_SPOKE 적용 ★
+  if(hasHub){
+    strategy='HUB_SPOKE';        // 허브 있음 → 허브 중심 (fig1/fig2+ 공통)
   }else if(isFig1){
     strategy='CHAIN_FIRST';     // 도 1 + 허브 없음 → 체인 기반
   }else if(!hasCycle&&edges.length>0){
-    strategy='TOPOLOGICAL';     // 도 2+ + DAG → 위상 정렬 (핵심 개선)
+    strategy='TOPOLOGICAL';     // 도 2+ + DAG + 허브 없음 → 위상 정렬
   }else{
     strategy='CHAIN_FIRST';     // 순환 그래프 → 체인 기반 폴백
   }
   
-  console.log(`[Layout v12] figNum=${figNum}, n=${n}, strategy=${strategy}, hasCycle=${hasCycle}, maxDeg=${maxDeg}`);
+  console.log(`[Layout v15] figNum=${figNum}, n=${n}, strategy=${strategy}, hasCycle=${hasCycle}, maxDeg=${maxDeg}, dedup=${edges.length}→${deduplicatedEdges.length}`);
   
   // ═══ 전략별 레이어 생성 ═══
   let layers=[];
