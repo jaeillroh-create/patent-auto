@@ -4062,7 +4062,7 @@ ${diagram}`,4096);
 
 // ═══════════ PARSERS ═══════════
 function parseTitleCandidates(t){const c=[];let m;const re=/\[(\d+)\]\s*국문:\s*(.+?)\s*[/／]\s*영문:\s*(.+)/g;while((m=re.exec(t))!==null)c.push({num:m[1],korean:m[2].trim(),english:m[3].trim()});return c;}
-function parseClaimStats(t){const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,c={};let m;while((m=cp.exec(t))!==null)c[parseInt(m[1])]=m[2].trim();const tot=Object.keys(c).length;let dep=0;Object.values(c).forEach(x=>{if(/(?:청구항|제)\s*\d+\s*(?:항\s*)?에\s*있어서|(?:청구항|제)\s*\d+\s*(?:항\s*)?에\s*따른/.test(x))dep++;});return{total:tot,independent:tot-dep,dependent:dep,claims:c};}
+function parseClaimStats(t){const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,c={};let m;while((m=cp.exec(t))!==null)c[parseInt(m[1])]=m[2].trim();const tot=Object.keys(c).length;let dep=0;Object.values(c).forEach(x=>{if(/(?:청구항|제)\s*\d+\s*(?:항\s*)?에\s*(?:있어서|따른|의한)/.test(x))dep++;});return{total:tot,independent:tot-dep,dependent:dep,claims:c};}
 function extractMermaidBlocks(t){return(t.match(/```mermaid\n([\s\S]*?)```/g)||[]).map(b=>b.replace(/```mermaid\n/,'').replace(/```/,'').trim());}
 function parseMathBlocks(t){const b=[];let m;const re=/---MATH_BLOCK_\d+---\s*\nANCHOR:\s*(.+)\s*\nFORMULA:\s*\n([\s\S]*?)(?=---MATH_BLOCK_|\s*$)/g;while((m=re.exec(t))!==null)b.push({anchor:m[1].trim(),formula:_sanitizeMathFormula(m[2].trim())});return b;}
 
