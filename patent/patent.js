@@ -5335,6 +5335,13 @@ async function regenerateDiagramWithFeedback(sid){
   // 방법/장치 분기
   const isMethod=stepId==='step_11';
   
+  // ★ v15: 에러 유형별 타겟 피드백 생성 ★
+  const errStr=typeof errors==='string'?errors:JSON.stringify(errors);
+  const hasRefNumErr=/부호|참조번호|계층|L[1-4]|R[1-6]/.test(errStr);
+  const hasConnectionErr=/연결|화살표|순환|방향|교차/.test(errStr);
+  const hasLayoutErr=/배치|레이아웃|겹침|위치|overlap/i.test(errStr);
+  const hasFigCountErr=/도면\s*수|불일치|count/.test(errStr);
+
   // 피드백 프롬프트 생성
   const feedbackPrompt=`이전에 생성한 ${isMethod?'방법':'장치'} 도면 설계에 규칙 위반이 발견되었습니다. 아래 오류를 수정하여 다시 생성하세요.
 
@@ -5354,13 +5361,29 @@ ${isMethod?`[방법 도면 규칙]
      - 내부가 L2(110,120,130)이면 최외곽은 L1(100)
      - 내부가 L3(111,112,113)이면 최외곽은 L2(110)
      - 내부가 L4(1211,1212)이면 최외곽은 L3(121)`}
-     
+
 ★★ 연결관계 규칙 ★★
 - 데이터/정보 도면: 정보 항목은 ${getDeviceSubject()} 입력용이므로 상호 간 화살표 연결 부적절 → 병렬 배치
 - 장치 블록도: 기술적 데이터 흐름이 있으면 화살표 연결
 - 상위+하위 구성이 같은 레벨에 표현 금지 → 하위는 상위 내부에 포함
 - ★ 순환 연결(A→B→C→A) 금지 — 데이터 흐름은 단방향이어야 함
 - ★ 도 2+: 데이터 흐름의 입력측→처리→출력측 순서로 구성요소를 배치하라
+${hasConnectionErr?`
+★★ [연결관계 오류 집중 수정 지침] ★★
+- 각 구성요소 간 데이터 흐름 방향을 재검토하라
+- 양방향 화살표가 있으면 주(主) 데이터 흐름 방향만 남겨라
+- 허브 노드(가장 많은 연결)는 중앙에 배치하여 교차를 줄여라
+- 구성요소 간 관계가 없으면 화살표를 제거하라 (병렬 배치)`:''}
+${hasRefNumErr?`
+★★ [참조번호/계층 오류 집중 수정 지침] ★★
+- 각 도면의 구성요소 참조번호가 올바른 계층에 있는지 재확인하라
+- 도 1은 반드시 L1(100,200,300...) 장치만 포함
+- 도 2+는 하나의 상위 장치를 상세화: 상위 L1 → 내부 L2(110,120,...)`:''}
+${hasLayoutErr?`
+★★ [배치 최적화 지침] ★★
+- 연결이 많은 구성요소를 중앙에 배치하라
+- 연결된 구성요소끼리 인접하게 배치하라
+- 데이터 흐름: 왼쪽→오른쪽 또는 위→아래 방향으로 자연스럽게 배치`:''}
 
 ═══ 이전 도면 설계 (오류 포함) ═══
 ${prevDesign.slice(0,2000)}
@@ -6046,8 +6069,81 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     }
   }
   
-  // ═══ 공통 후처리: 빈 행 제거 + 꺾임 최소화 ═══
+  // ═══ 공통 후처리: 빈 행 제거 + 꺾임·교차 최소화 ═══
   layers=layers.filter(r=>r.length>0);
+
+  // ★ v15: 엣지 교차 카운트 함수 ★
+  function countCrossings(lyrs){
+    // 인접 행 쌍 간 엣지 교차 수 계산 (Sugiyama 스타일)
+    let crossings=0;
+    for(let ri=0;ri<lyrs.length-1;ri++){
+      const upper=lyrs[ri], lower=lyrs[ri+1];
+      // 이 두 행을 연결하는 엣지 수집
+      const interEdges=[];
+      uniqueEdges.forEach(e=>{
+        const ui=upper.indexOf(e.from), li=lower.indexOf(e.to);
+        if(ui>=0&&li>=0){interEdges.push({u:ui,l:li});return;}
+        const ui2=upper.indexOf(e.to), li2=lower.indexOf(e.from);
+        if(ui2>=0&&li2>=0){interEdges.push({u:ui2,l:li2});}
+      });
+      // 교차 카운트: 두 엣지 (u1,l1), (u2,l2)가 교차 ⟺ (u1-u2)*(l1-l2)<0
+      for(let i=0;i<interEdges.length;i++){
+        for(let j=i+1;j<interEdges.length;j++){
+          if((interEdges[i].u-interEdges[j].u)*(interEdges[i].l-interEdges[j].l)<0)crossings++;
+        }
+      }
+    }
+    return crossings;
+  }
+
+  // ★ v15: Barycenter 순서 + 인접 스왑으로 교차 최소화 ★
+  function barycenterOrder(lyrs,ri,fixedRi){
+    // fixedRi 행을 기준으로 ri 행 노드를 barycenter 순으로 정렬
+    const fixed=lyrs[fixedRi];
+    const movable=[...lyrs[ri]];
+    const bary={};
+    movable.forEach(nid=>{
+      const nbrs=[...(adj[nid]||new Set())];
+      const positions=nbrs.map(nb=>fixed.indexOf(nb)).filter(i=>i>=0);
+      bary[nid]=positions.length>0?(positions.reduce((s,v)=>s+v,0)/positions.length):fixed.length/2;
+    });
+    movable.sort((a,b)=>bary[a]-bary[b]);
+    return movable;
+  }
+
+  // Phase 1: Barycenter ordering (2-pass sweep)
+  for(let pass=0;pass<2;pass++){
+    // 하향 스윕
+    for(let ri=1;ri<layers.length;ri++){
+      if(layers[ri].length<=1)continue;
+      layers[ri]=barycenterOrder(layers,ri,ri-1);
+    }
+    // 상향 스윕
+    for(let ri=layers.length-2;ri>=0;ri--){
+      if(layers[ri].length<=1)continue;
+      layers[ri]=barycenterOrder(layers,ri,ri+1);
+    }
+  }
+
+  // Phase 2: Adjacent swap (교차 수 감소할 때까지 반복)
+  let improved=true;
+  let swapRounds=0;
+  while(improved&&swapRounds<5){
+    improved=false;
+    swapRounds++;
+    for(let ri=0;ri<layers.length;ri++){
+      if(layers[ri].length<=2)continue;
+      const row=layers[ri];
+      for(let ci=0;ci<row.length-1;ci++){
+        const before=countCrossings(layers);
+        // 인접 노드 스왑
+        [row[ci],row[ci+1]]=[row[ci+1],row[ci]];
+        const after=countCrossings(layers);
+        if(after<before){improved=true;}
+        else{[row[ci],row[ci+1]]=[row[ci+1],row[ci]];} // 원복
+      }
+    }
+  }
   
   // 꺾임 수 계산 함수
   function countBends(lyrs,ac){
@@ -6065,18 +6161,30 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     return bends;
   }
   
-  // 행 내 순서 최적화 — 순열 탐색
+  // ★ v15: 행 내 순서 최적화 — 순열 탐색 + 교차·꺾임 통합 비용 ★
   for(let ri=0;ri<layers.length;ri++){
     if(layers[ri].length<=1)continue;
     const row=layers[ri];
-    const perms=row.length<=2?[row,[row[1],row[0]]]:
-      row.length===3?[[row[0],row[1],row[2]],[row[0],row[2],row[1]],[row[1],row[0],row[2]],[row[1],row[2],row[0]],[row[2],row[0],row[1]],[row[2],row[1],row[0]]]:
-      [row];
-    let bestPerm=row, bestBends=countBends(layers,alignCol);
+    // ★ v15 FIX: 4개 이하 → 전수 순열, 5개 이상 → barycenter+스왑(이미 적용됨) ★
+    let perms;
+    if(row.length===2)perms=[row,[row[1],row[0]]];
+    else if(row.length===3)perms=[[row[0],row[1],row[2]],[row[0],row[2],row[1]],[row[1],row[0],row[2]],[row[1],row[2],row[0]],[row[2],row[0],row[1]],[row[2],row[1],row[0]]];
+    else if(row.length===4){
+      // 4개 노드: 24가지 순열 전수 탐색
+      perms=[];
+      for(let a=0;a<4;a++)for(let b=0;b<4;b++){if(b===a)continue;
+        for(let c=0;c<4;c++){if(c===a||c===b)continue;
+          const d=6-a-b-c; perms.push([row[a],row[b],row[c],row[d]]);
+        }
+      }
+    }else{perms=[row];} // 5개 이상: barycenter+스왑으로 이미 최적화됨
+    let bestPerm=[...row];
+    // 통합 비용: 교차 × 3 + 꺾임 (교차가 더 시각적 영향 큼)
+    let bestCost=countCrossings(layers)*3+countBends(layers,alignCol);
     for(const perm of perms){
       layers[ri]=perm;
-      const b=countBends(layers,{...alignCol});
-      if(b<bestBends){bestBends=b;bestPerm=[...perm];}
+      const cost=countCrossings(layers)*3+countBends(layers,{...alignCol});
+      if(cost<bestCost){bestCost=cost;bestPerm=[...perm];}
     }
     layers[ri]=bestPerm;
   }
@@ -6096,7 +6204,8 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   }
   
   const finalBends=countBends(layers,alignCol);
-  console.log(`[Layout v12] ${n}nodes → ${layers.length}rows, strategy=${strategy}, bends=${finalBends}`);
+  const finalCrossings=countCrossings(layers);
+  console.log(`[Layout v15] ${n}nodes → ${layers.length}rows, strategy=${strategy}, bends=${finalBends}, crossings=${finalCrossings}`);
   
   // Grid 생성
   const grid={};let maxCols=1;
@@ -8812,15 +8921,16 @@ async function runAIDiagramReview(sid){
     App.showToast('검증할 도면이 없습니다.','error');
     return;
   }
-  
+
   const resultEl=document.getElementById(`aiReviewResult_${sid}`);
   if(resultEl)resultEl.innerHTML='<div style="padding:12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a">🤖 AI 연결관계 검증 중...</div>';
-  
+
   const autoFigNums=getAutoFigNums(sid);
   const designText=outputs[sid]||'';
-  
-  // 각 도면의 구조 정보 수집
+
+  // ★ v15: 각 도면의 구조 정보 + 레이아웃 통계 수집 ★
   let diagramSummary='';
+  const figStats=[];
   data.forEach(({nodes,edges},idx)=>{
     const figNum=autoFigNums[idx]||(idx+1);
     const nodeList=nodes.map(n=>{
@@ -8831,48 +8941,120 @@ async function runAIDiagramReview(sid){
     const edgeList=(edges||[]).map(e=>{
       const fromLabel=nodes.find(n=>n.id===e.from)?.label||e.from;
       const toLabel=nodes.find(n=>n.id===e.to)?.label||e.to;
-      return `${fromLabel} → ${toLabel}`;
+      return `${_safeCleanLabel(fromLabel)} → ${_safeCleanLabel(toLabel)}`;
     }).join(', ');
-    diagramSummary+=`\n도 ${figNum}:\n  구성요소: ${nodeList}\n  연결관계: ${edgeList||'없음 (병렬 배치)'}\n`;
+    // 연결 통계
+    const degreeMap={};
+    nodes.forEach(n=>{degreeMap[n.id]=0;});
+    (edges||[]).forEach(e=>{degreeMap[e.from]=(degreeMap[e.from]||0)+1;degreeMap[e.to]=(degreeMap[e.to]||0)+1;});
+    const maxDeg=Math.max(0,...Object.values(degreeMap));
+    const hubNode=nodes.find(n=>degreeMap[n.id]===maxDeg);
+    const isolatedNodes=nodes.filter(n=>degreeMap[n.id]===0);
+    // 순환 감지
+    const hasCycle=(()=>{
+      const visited=new Set(),inStack=new Set();
+      const adjMap={};
+      (edges||[]).forEach(e=>{if(!adjMap[e.from])adjMap[e.from]=[];adjMap[e.from].push(e.to);});
+      function dfs(nid){
+        if(inStack.has(nid))return true;
+        if(visited.has(nid))return false;
+        visited.add(nid);inStack.add(nid);
+        for(const next of(adjMap[nid]||[])){if(dfs(next))return true;}
+        inStack.delete(nid);return false;
+      }
+      return nodes.some(n=>dfs(n.id));
+    })();
+    figStats.push({figNum,nodeCount:nodes.length,edgeCount:(edges||[]).length,maxDeg,hubNode:hubNode?_safeCleanLabel(hubNode.label):'',isolatedCount:isolatedNodes.length,hasCycle});
+    diagramSummary+=`\n도 ${figNum}: (노드 ${nodes.length}개, 엣지 ${(edges||[]).length}개${hasCycle?', ⚠️순환감지':''}${isolatedNodes.length>0?`, 고립노드 ${isolatedNodes.length}개`:''})\n  구성요소: ${nodeList}\n  연결관계: ${edgeList||'없음 (병렬 배치)'}\n  허브: ${hubNode?_safeCleanLabel(hubNode.label)+'(연결 '+maxDeg+')':'-'}\n`;
   });
-  
-  const prompt=`당신은 특허 도면 전문가입니다. 아래 도면의 연결관계가 기술적으로 적절한지 정성적으로 평가하세요.
+
+  const prompt=`당신은 15년 경력의 한국 특허 도면 전문가입니다. 아래 도면의 연결관계가 기술적으로 적절한지 평가하고 구체적 개선안을 제시하세요.
 
 ═══ 평가 기준 ═══
-1. **데이터/정보 도면**: 정보 항목(~정보, ~데이터)은 ${getDeviceSubject()}로 입력되는 것이므로 상호 간 화살표 연결이 부적절함. 병렬 배치가 적절.
-2. **장치 블록도**: 하드웨어 구성요소 간 데이터 흐름이 있으면 화살표 연결 적절. 단, 메모리/저장부처럼 수동적 구성은 다른 구성에서 접근하는 방향만 적절.
-3. **계층 일관성**: 상위 구성과 하위 구성이 같은 레벨에 표현되면 안 됨. 하위는 상위 내부에 포함되어야 함.
-4. **방법 흐름도**: 단계 간 순서가 논리적이어야 함.
+1. **데이터/정보 도면**: 정보 항목(~정보, ~데이터)은 ${getDeviceSubject()}로 입력되는 것이므로 상호 간 화살표 연결 부적절 → 병렬 배치 적절
+2. **장치 블록도**: 하드웨어 구성요소 간 데이터 흐름이 있으면 화살표 연결 적절. 메모리/저장부 같은 수동적 구성은 다른 구성에서 접근하는 방향만 적절
+3. **계층 일관성**: 상위+하위 구성이 같은 레벨에 표현 금지 → 하위는 상위 내부에 포함
+4. **방법 흐름도**: 단계 간 순서가 논리적이어야 함
+5. **연결 효율성**: 불필요한 연결이 많으면 교차가 증가하여 가독성 저하. 핵심 데이터 흐름만 연결
+6. **순환 금지**: A→B→C→A 같은 순환 연결은 데이터 흐름이 아님
+7. **고립 노드**: 연결 없는 구성요소가 있으면 연결 누락인지 병렬 배치가 맞는지 판단
 
 ═══ 도면 설계 ═══
-${designText.slice(0,2000)}
+${designText.slice(0,3000)}
 
 ═══ 실제 도면 구조 ═══
 ${diagramSummary}
 
-═══ 출력 형식 ═══
-각 도면에 대해:
-도 N: ✅ 적절 / ⚠️ 부적절
-- (이유 한 줄)
+═══ 출력 형식 (반드시 준수) ═══
+각 도면에 대해 아래 형식으로:
 
-마지막에 전체 요약 한 줄.`;
+[도 N]
+판정: ✅ 적절 / ⚠️ 부적절
+사유: (구체적 이유)
+${'{'}개선안${'}'}:
+- (수정할 연결: "A → B 연결 제거" 또는 "A → B 연결 추가" 형식)
+- (배치 변경: "A를 중앙 허브로 배치" 형식)
+
+[전체 요약]
+(전체 도면의 연결관계 적절성 한 줄 요약)`;
 
   try{
     const r=await App.callClaude(prompt);
     const reviewText=r.text||'';
-    
-    if(resultEl){
-      resultEl.innerHTML=`<div style="padding:12px;background:#f3e5f5;border:1px solid #ce93d8;border-radius:8px;margin-top:8px">
-        <div style="font-weight:600;color:#6a1b9a;margin-bottom:8px">🤖 AI 연결관계 검증 결과</div>
-        <pre style="font-size:12px;white-space:pre-wrap;margin:0;color:#4a148c;line-height:1.6">${App.escapeHtml(reviewText)}</pre>
-      </div>`;
+
+    // ★ v15: 구조화된 결과 파싱 ★
+    const figResults=[];
+    const figBlocks=reviewText.split(/\[도\s*(\d+)\]/g);
+    for(let i=1;i<figBlocks.length;i+=2){
+      const figNum=parseInt(figBlocks[i]);
+      const block=figBlocks[i+1]||'';
+      const isOk=/적절/.test(block)&&!/부적절/.test(block);
+      const reason=(block.match(/사유[:：]\s*(.+)/)||[])[1]||'';
+      // 개선안 추출
+      const suggestions=[];
+      const sugMatch=block.match(/개선안[\s\S]*?(?=\[도|\[전체|$)/);
+      if(sugMatch){
+        sugMatch[0].split('\n').forEach(line=>{
+          const trimmed=line.replace(/^[-•*]\s*/,'').trim();
+          if(trimmed&&!/개선안/.test(trimmed))suggestions.push(trimmed);
+        });
+      }
+      figResults.push({figNum,pass:isOk,reason,suggestions});
     }
-    
-    // 부적절 항목이 있으면 window._diagramErrors에 추가
-    if(reviewText.includes('부적절')||reviewText.includes('⚠️')){
-      window._aiDiagramReview={sid,review:reviewText};
+
+    // 결과 표시
+    if(resultEl){
+      let html='<div style="padding:12px;background:#f3e5f5;border:1px solid #ce93d8;border-radius:8px;margin-top:8px">';
+      html+='<div style="font-weight:600;color:#6a1b9a;margin-bottom:8px">🤖 AI 연결관계 검증 결과</div>';
+      if(figResults.length>0){
+        figResults.forEach(fr=>{
+          const icon=fr.pass?'✅':'⚠️';
+          html+=`<div style="margin-bottom:8px;padding:8px;background:${fr.pass?'#e8f5e9':'#fff3e0'};border-radius:6px">`;
+          html+=`<div style="font-weight:600;font-size:13px">${icon} 도 ${fr.figNum}</div>`;
+          if(fr.reason)html+=`<div style="font-size:12px;color:#555;margin-top:2px">${App.escapeHtml(fr.reason)}</div>`;
+          if(fr.suggestions.length>0){
+            html+='<div style="font-size:11px;color:#6a1b9a;margin-top:4px">';
+            fr.suggestions.forEach(s=>{html+=`<div>→ ${App.escapeHtml(s)}</div>`;});
+            html+='</div>';
+          }
+          html+='</div>';
+        });
+      }else{
+        html+=`<pre style="font-size:12px;white-space:pre-wrap;margin:0;color:#4a148c;line-height:1.6">${App.escapeHtml(reviewText)}</pre>`;
+      }
+      html+='</div>';
+      resultEl.innerHTML=html;
+    }
+
+    // ★ v15: 부적절 항목 감지 — 구조화된 파싱 우선, 폴백으로 키워드 매칭 ★
+    const hasIssues=figResults.length>0?figResults.some(fr=>!fr.pass):(reviewText.includes('부적절')||reviewText.includes('⚠️'));
+    if(hasIssues){
+      // 개선안을 포함한 상세 리뷰 저장
+      const issueDetails=figResults.filter(fr=>!fr.pass).map(fr=>`도 ${fr.figNum}: ${fr.reason}${fr.suggestions.length>0?'\n  '+fr.suggestions.join('\n  '):''}`).join('\n');
+      window._aiDiagramReview={sid,review:issueDetails||reviewText,figResults};
       App.showToast('AI 검증: 일부 도면 연결관계 수정 권장','warning');
     }else{
+      window._aiDiagramReview=null;
       App.showToast('AI 검증: 모든 도면 연결관계 적절 ✅');
     }
   }catch(e){
