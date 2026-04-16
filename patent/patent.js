@@ -6286,7 +6286,8 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   // ═══ 그래프 유형 분류 ═══
   const degrees=allIds.map(id=>(adj[id]||new Set()).size);
   const maxDeg=Math.max(...degrees);
-  const hasHub=maxDeg>=Math.max(3, Math.ceil(n*0.35));
+  // ★ v16 FIX-B: 과반수 이상 연결을 허브로 감지 (n-1의 50%) ★
+  const hasHub=maxDeg>=Math.max(3, Math.ceil((n-1)*0.5));
   const isFig1=(figNum===1);
   
   let strategy;
