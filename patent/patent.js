@@ -4062,7 +4062,7 @@ ${diagram}`,4096);
 
 // ═══════════ PARSERS ═══════════
 function parseTitleCandidates(t){const c=[];let m;const re=/\[(\d+)\]\s*국문:\s*(.+?)\s*[/／]\s*영문:\s*(.+)/g;while((m=re.exec(t))!==null)c.push({num:m[1],korean:m[2].trim(),english:m[3].trim()});return c;}
-function parseClaimStats(t){const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,c={};let m;while((m=cp.exec(t))!==null)c[parseInt(m[1])]=m[2].trim();const tot=Object.keys(c).length;let dep=0;Object.values(c).forEach(x=>{if(/있어서|따른/.test(x))dep++;});return{total:tot,independent:tot-dep,dependent:dep,claims:c};}
+function parseClaimStats(t){const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,c={};let m;while((m=cp.exec(t))!==null)c[parseInt(m[1])]=m[2].trim();const tot=Object.keys(c).length;let dep=0;Object.values(c).forEach(x=>{if(/(?:청구항|제)\s*\d+\s*(?:항\s*)?에\s*있어서|(?:청구항|제)\s*\d+\s*(?:항\s*)?에\s*따른/.test(x))dep++;});return{total:tot,independent:tot-dep,dependent:dep,claims:c};}
 function extractMermaidBlocks(t){return(t.match(/```mermaid\n([\s\S]*?)```/g)||[]).map(b=>b.replace(/```mermaid\n/,'').replace(/```/,'').trim());}
 function parseMathBlocks(t){const b=[];let m;const re=/---MATH_BLOCK_\d+---\s*\nANCHOR:\s*(.+)\s*\nFORMULA:\s*\n([\s\S]*?)(?=---MATH_BLOCK_|\s*$)/g;while((m=re.exec(t))!==null)b.push({anchor:m[1].trim(),formula:_sanitizeMathFormula(m[2].trim())});return b;}
 
@@ -10086,13 +10086,15 @@ const KILLER_WORDS=[{pattern:/반드시/,msg:'"반드시" — 제한적 표현'}
 // v5.1: Get ONLY cited claim chain text (follows "청구항 N에 있어서" references upward)
 // Does NOT include unrelated claims — only the direct citation path
 function getCitedChainText(claimNum, claims){
-  const rm=claims[claimNum]?.match(/청구항\s*(\d+)에\s*있어서/);
+  const ct=claims[claimNum];
+  if(!ct)return '';
+  const rm=ct.match(/(?:청구항|제)\s*(\d+)\s*(?:항\s*)?에\s*있어서/);
   if(!rm)return '';
   let text='',current=parseInt(rm[1]);const visited=new Set();
   while(current&&!visited.has(current)){
     visited.add(current);
     if(claims[current])text+=' '+claims[current];
-    const rm2=claims[current]?.match(/청구항\s*(\d+)에\s*있어서/);
+    const rm2=claims[current]?.match(/(?:청구항|제)\s*(\d+)\s*(?:항\s*)?에\s*있어서/);
     current=rm2?parseInt(rm2[1]):null;
   }
   return text;
@@ -10109,7 +10111,7 @@ function validateClaims(text){
   // 독립항 판별: "N항에 있어서"가 없는 청구항 = 독립항
   const independentClaims=claimNums.filter(n=>{
     const ct=claims[n];
-    return !/청구항\s*\d+에\s*있어서/.test(ct)&&!/제\s*\d+\s*항에\s*있어서/.test(ct);
+    return !/청구항\s*\d+\s*에\s*있어서/.test(ct)&&!/제\s*\d+\s*항에\s*있어서/.test(ct);
   });
   
   if(independentClaims.length===0){
