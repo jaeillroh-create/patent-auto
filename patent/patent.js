@@ -6290,9 +6290,9 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   const isFig1=(figNum===1);
   
   let strategy;
-  // ★ v15 FIX-A: 허브 있으면 도 1/도 2+ 모두 HUB_SPOKE 적용 ★
+  // ★ v16 FIX-A: 허브가 있으면 도 번호와 무관하게 허브 중심 배치 ★
   if(hasHub){
-    strategy='HUB_SPOKE';        // 허브 있음 → 허브 중심 (fig1/fig2+ 공통)
+    strategy='HUB_SPOKE';        // 허브 있음 → 도 1/도 2+ 공통 허브 중심
   }else if(isFig1){
     strategy='CHAIN_FIRST';     // 도 1 + 허브 없음 → 체인 기반
   }else if(!hasCycle&&edges.length>0){
@@ -6344,22 +6344,6 @@ function computeDeviceLayout2D(nodes,edges,figNum){
       if(rowIdx%2===1)chunk.reverse();
       layers.push(chunk);
     }
-
-    // ★ FIX-2a: 허브 노드 중앙열 정렬 — 스네이크 배치 후 행별 최고 차수 노드를 중앙으로 ★
-    layers.forEach(row=>{
-      if(row.length<=2)return;
-      let maxDegIdx=0,maxDegVal=(adj[row[0]]||new Set()).size;
-      for(let ci=1;ci<row.length;ci++){
-        const deg=(adj[row[ci]]||new Set()).size;
-        if(deg>maxDegVal){maxDegVal=deg;maxDegIdx=ci;}
-      }
-      if(maxDegVal>=3){
-        const centerIdx=Math.floor(row.length/2);
-        if(maxDegIdx!==centerIdx){
-          [row[maxDegIdx],row[centerIdx]]=[row[centerIdx],row[maxDegIdx]];
-        }
-      }
-    });
 
   }else if(strategy==='HUB_SPOKE'){
     // ── 허브 중심 배치 (도 1 전용) ──
