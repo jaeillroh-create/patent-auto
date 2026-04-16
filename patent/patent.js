@@ -6193,9 +6193,11 @@ function computeEdgeRoutes(edges,positions){
   }).filter(Boolean);
 }
 
-// ═══ 2D Layout Engine v3.0: Hub-Spoke (꺾임 최소화) ═══
-// 핵심: 허브를 중앙에, 이웃 노드를 상하좌우에 배치 → 직선 연결 극대화
-// 같은 행/열의 노드끼리는 직선 연결, 다른 행+열이면 꺾임 발생
+// ═══ 2D Layout Engine v4.0: Hub-Centered + 제약 기반 배치 ═══
+// 원칙 1: 허브는 반드시 중앙 열
+// 원칙 2: 허브 이웃은 허브와 같은 행 또는 같은 열
+// 원칙 3: 고립 노드는 별도 행 (다른 노드 자리 침범 금지)
+// 원칙 4: 행 너비 통일 (null 슬롯으로 균형)
 function computeDeviceLayout2D(nodes,edges,figNum){
   const n=nodes.length;
   if(n===0)return{grid:{},maxCols:1,numRows:0,uniqueEdges:[],biDirPairs:[]};
@@ -6289,26 +6291,32 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   }
   const hasCycle=_detectCycle();
   
-  // ═══ 그래프 유형 분류 ═══
-  const degrees=allIds.map(id=>(adj[id]||new Set()).size);
-  const maxDeg=Math.max(...degrees);
-  // ★ v16 FIX-B: 과반수 이상 연결을 허브로 감지 (n-1의 50%) ★
-  const hasHub=maxDeg>=Math.max(3, Math.ceil((n-1)*0.5));
-  const isFig1=(figNum===1);
-  
+  // ═══ 그래프 유형 분류 (v17 — 허브 중심 통합) ═══
+  const degrees={};
+  allIds.forEach(id=>{degrees[id]=(adj[id]||new Set()).size;});
+  const degreeValues=Object.values(degrees);
+  const maxDeg=Math.max(...degreeValues, 0);
+  const isolatedNodes=allIds.filter(id=>degrees[id]===0);
+  const connectedNodes=allIds.filter(id=>degrees[id]>0);
+
+  // 허브: 연결된 노드 중 가장 많이 연결된 노드
+  const hubCandidates=connectedNodes.filter(id=>degrees[id]===maxDeg);
+  // 허브 판정: max degree ≥ 2 AND (전체 edge의 40% 이상 차지 OR degree ≥ 3)
+  const hubEdgeRatio=maxDeg/Math.max(deduplicatedEdges.length,1);
+  const hasStrongHub=maxDeg>=2&&(hubEdgeRatio>=0.4||maxDeg>=3);
+
   let strategy;
-  // ★ v16 FIX-A: 허브가 있으면 도 번호와 무관하게 허브 중심 배치 ★
-  if(hasHub){
-    strategy='HUB_SPOKE';        // 허브 있음 → 도 1/도 2+ 공통 허브 중심
-  }else if(isFig1){
-    strategy='CHAIN_FIRST';     // 도 1 + 허브 없음 → 체인 기반
-  }else if(!hasCycle&&edges.length>0){
-    strategy='TOPOLOGICAL';     // 도 2+ + DAG + 허브 없음 → 위상 정렬
+  if(hasStrongHub){
+    strategy='HUB_CENTERED';     // 허브 강함 → 도 번호 무관 허브 중심
+  }else if(deduplicatedEdges.length===0||connectedNodes.length<=1){
+    strategy='SIMPLE_GRID';      // edge 없음/연결 1개 → 단순 격자
+  }else if(!hasCycle){
+    strategy='TOPOLOGICAL';      // DAG → 위상 정렬
   }else{
-    strategy='CHAIN_FIRST';     // 순환 그래프 → 체인 기반 폴백
+    strategy='CHAIN_FIRST';      // 순환 → 체인 기반 폴백
   }
-  
-  console.log(`[Layout v15] figNum=${figNum}, n=${n}, strategy=${strategy}, hasCycle=${hasCycle}, maxDeg=${maxDeg}, dedup=${edges.length}→${deduplicatedEdges.length}`);
+
+  console.log(`[Layout v17] figNum=${figNum}, n=${n}, strategy=${strategy}, maxDeg=${maxDeg}, hubRatio=${hubEdgeRatio.toFixed(2)}, isolated=${isolatedNodes.length}`);
   
   // ═══ 전략별 레이어 생성 ═══
   let layers=[];
@@ -6317,15 +6325,17 @@ function computeDeviceLayout2D(nodes,edges,figNum){
 
   if(strategy==='TOPOLOGICAL'){
     // ── 위상 정렬: 입력→출력 방향 배치 ──
-    // 양방향 edge가 있으면 참조번호 작은 쪽→큰 쪽으로 단방향화
+    // ★ v17: 고립 노드를 먼저 분리 → 끝에 별도 행 ★
+    const connectedForTopo=allIds.filter(id=>degrees[id]>0);
+    const isolatedForTopo=allIds.filter(id=>degrees[id]===0);
+
     const nodeMap=new Map(nodes.map(nd=>[nd.id,nd]));
     const _refNum=id=>{return parseInt((nodeMap.get(id)?.label.match(/\((\d+)\)/)||[])[1])||9999;};
     const inDeg={};
-    allIds.forEach(id=>{inDeg[id]=0;});
-    allIds.forEach(id=>{(dirAdj[id]||new Set()).forEach(to=>{inDeg[to]=(inDeg[to]||0)+1;});});
+    connectedForTopo.forEach(id=>{inDeg[id]=0;});
+    connectedForTopo.forEach(id=>{(dirAdj[id]||new Set()).forEach(to=>{if(inDeg[to]!==undefined)inDeg[to]=(inDeg[to]||0)+1;});});
 
-    const q=allIds.filter(id=>inDeg[id]===0);
-    // 시작 노드가 여러개면 참조번호 오름차순 정렬
+    const q=connectedForTopo.filter(id=>inDeg[id]===0);
     q.sort((a,b)=>_refNum(a)-_refNum(b));
 
     const topoOrder=[];
@@ -6335,16 +6345,15 @@ function computeDeviceLayout2D(nodes,edges,figNum){
       if(visited.has(cur))continue;
       visited.add(cur);
       topoOrder.push(cur);
-      // 이웃을 참조번호순으로 정렬하여 추가
-      const nexts=[...(dirAdj[cur]||new Set())].sort((a,b)=>_refNum(a)-_refNum(b));
+      const nexts=[...(dirAdj[cur]||new Set())].filter(id=>inDeg[id]!==undefined).sort((a,b)=>_refNum(a)-_refNum(b));
       nexts.forEach(next=>{
         inDeg[next]--;
         if(inDeg[next]===0)q.push(next);
       });
     }
-    // 위상 정렬에서 빠진 노드(고립) 추가
-    allIds.forEach(id=>{if(!visited.has(id))topoOrder.push(id);});
-    
+    // 위상 정렬에서 빠진 연결 노드 추가
+    connectedForTopo.forEach(id=>{if(!visited.has(id))topoOrder.push(id);});
+
     // 위상 순서를 MAX_COLS씩 스네이크 배치
     for(let i=0;i<topoOrder.length;i+=MAX_COLS){
       const chunk=topoOrder.slice(i,Math.min(i+MAX_COLS,topoOrder.length));
@@ -6353,55 +6362,172 @@ function computeDeviceLayout2D(nodes,edges,figNum){
       layers.push(chunk);
     }
 
-  }else if(strategy==='HUB_SPOKE'){
-    // ── ★ v16 FIX-C: 허브 중심 배치 (도 1/도 2+ 공통) ★ ──
-    // 참조번호 작은 노드 우선하여 허브 선택
-    const hubId=allIds.reduce((best,id)=>{
-      const degA=(adj[id]||new Set()).size, degB=(adj[best]||new Set()).size;
-      if(degA!==degB)return degA>degB?id:best;
-      const ra=parseInt((nodes.find(nd=>nd.id===id)?.label.match(/\((\d+)\)/)||[])[1])||9999;
-      const rb=parseInt((nodes.find(nd=>nd.id===best)?.label.match(/\((\d+)\)/)||[])[1])||9999;
-      return ra<rb?id:best;
-    },allIds[0]);
-    _hubId=hubId;
-
-    // 이웃 노드들을 참조번호 순으로 정렬
-    const hubNbrs=[...(adj[hubId]||new Set())].sort((a,b)=>{
-      const ra=parseInt((nodes.find(nd=>nd.id===a)?.label.match(/\((\d+)\)/)||[])[1])||9999;
-      const rb=parseInt((nodes.find(nd=>nd.id===b)?.label.match(/\((\d+)\)/)||[])[1])||9999;
-      return ra-rb;
-    });
-
-    // 이웃을 위/아래 행으로 균등 분배
-    const half=Math.ceil(hubNbrs.length/2);
-    const topNbrs=hubNbrs.slice(0,Math.min(MAX_COLS,half));
-    const botNbrs=hubNbrs.slice(topNbrs.length, topNbrs.length+MAX_COLS);
-    const extraNbrs=hubNbrs.slice(topNbrs.length+botNbrs.length);
-
-    // 허브는 단독 행 — 최적화 후 null 패딩으로 중앙 배치 (FIX-D)
-    if(topNbrs.length>0)layers.push(topNbrs);
-    layers.push([hubId]);
-    if(botNbrs.length>0)layers.push(botNbrs);
-    for(let ei=0;ei<extraNbrs.length;ei+=MAX_COLS){
-      layers.push(extraNbrs.slice(ei,Math.min(ei+MAX_COLS,extraNbrs.length)));
+    // 고립 노드를 별도 행으로 추가 (마지막)
+    if(isolatedForTopo.length>0){
+      isolatedForTopo.sort((a,b)=>_refNum(a)-_refNum(b));
+      for(let ii=0;ii<isolatedForTopo.length;ii+=MAX_COLS){
+        layers.push(isolatedForTopo.slice(ii,ii+MAX_COLS));
+      }
     }
 
-    // 허브 이웃이 아닌 고립 노드 추가
-    const placed2=new Set([hubId,...hubNbrs]);
-    allIds.filter(id=>!placed2.has(id)).forEach(id=>{
-      let added=false;
-      for(const lyr of layers){
-        if(lyr.length<MAX_COLS&&!lyr.includes(hubId)){lyr.push(id);added=true;break;}
-      }
-      if(!added)layers.push([id]);
+  }else if(strategy==='HUB_CENTERED'){
+    // ── ★ v17: 허브 중심 제약 기반 배치 ★ ──
+    // 원칙 1: 허브는 반드시 중앙 열
+    // 원칙 2: 허브 이웃은 허브와 같은 행 또는 같은 열
+    // 원칙 3: 고립 노드는 별도 행 (다른 노드 자리 침범 금지)
+    // 원칙 4: 행 너비는 통일 (null 슬롯으로 균형)
+    const _refNum=id=>{
+      const nd=nodes.find(n=>n.id===id);
+      return parseInt((nd?.label.match(/\((\d+)\)/)||[])[1])||9999;
+    };
+    // 허브 선택: maxDeg 중 참조번호 최소
+    const hubId=hubCandidates.sort((a,b)=>_refNum(a)-_refNum(b))[0];
+    _hubId=hubId;
+    const hubNbrs=[...(adj[hubId]||new Set())].sort((a,b)=>_refNum(a)-_refNum(b));
+    const hubRef=_refNum(hubId);
+
+    // ━━━ 이웃을 upstream(위)/downstream(아래)로 분류 ━━━
+    // 우선순위: edge 방향 > 참조번호
+    const upstream=[];    // 허브 위쪽 (입력)
+    const downstream=[];  // 허브 아래쪽 (출력)
+    hubNbrs.forEach(nid=>{
+      const ref=_refNum(nid);
+      const hasIncoming=(dirAdj[nid]||new Set()).has(hubId); // nid→hub
+      const hasOutgoing=(dirAdj[hubId]||new Set()).has(nid); // hub→nid
+      if(hasIncoming&&!hasOutgoing)upstream.push(nid);
+      else if(hasOutgoing&&!hasIncoming)downstream.push(nid);
+      else if(ref<hubRef)upstream.push(nid);
+      else downstream.push(nid);
     });
+
+    // ━━━ 균형 조정: 한쪽이 너무 많으면 반대쪽으로 ━━━
+    while(upstream.length>3&&downstream.length<upstream.length-1){
+      downstream.unshift(upstream.pop());
+    }
+    while(downstream.length>3&&upstream.length<downstream.length-1){
+      upstream.push(downstream.shift());
+    }
+
+    // ━━━ 헬퍼: 행을 지정 너비로 중앙 정렬 (null 패딩) ━━━
+    function _padRowCentered(items, targetWidth){
+      if(items.length>=targetWidth)return items.slice(0, targetWidth);
+      const padding=targetWidth-items.length;
+      const leftPad=Math.floor(padding/2);
+      const row=[];
+      for(let i=0;i<leftPad;i++)row.push(null);
+      items.forEach(it=>row.push(it));
+      while(row.length<targetWidth)row.push(null);
+      return row;
+    }
+
+    // ━━━ 특수 케이스: upstream ≤ 1 AND downstream ≥ 2 ━━━
+    // → 허브와 downstream을 같은 행에 수평 배치 (꺾임 최소화)
+    if(upstream.length<=1&&downstream.length>=2&&downstream.length<=MAX_COLS-1){
+      const hubRowWidth=1+downstream.length; // 허브 + downstream
+      // upstream 행 (있으면)
+      if(upstream.length===1){
+        const upRow=new Array(hubRowWidth).fill(null);
+        // upstream을 허브 예정 위치와 같은 열에 배치
+        const hubColIdx=Math.floor(hubRowWidth/2);
+        upRow[hubColIdx]=upstream[0];
+        layers.push(upRow);
+      }
+      // 허브 + downstream 같은 행
+      // 허브를 중앙에 배치, downstream을 좌우에
+      const hubDsRow=[];
+      const hubPos=Math.floor(hubRowWidth/2);
+      for(let ci=0;ci<hubRowWidth;ci++){
+        if(ci===hubPos)hubDsRow.push(hubId);
+        else hubDsRow.push(null);
+      }
+      // downstream을 빈 슬롯에 채움
+      let dsIdx=0;
+      for(let ci=0;ci<hubDsRow.length;ci++){
+        if(hubDsRow[ci]===null&&dsIdx<downstream.length){
+          hubDsRow[ci]=downstream[dsIdx++];
+        }
+      }
+      layers.push(hubDsRow);
+    }else{
+      // ━━━ 일반 케이스: upstream / hub / downstream 3행 구조 ━━━
+      const rowWidth=Math.max(upstream.length, downstream.length, 1);
+
+      if(upstream.length>0){
+        layers.push(_padRowCentered(upstream, rowWidth));
+      }
+      // 허브 행: 중앙에 허브, 나머지 null
+      const hubRow=new Array(rowWidth).fill(null);
+      hubRow[Math.floor(rowWidth/2)]=hubId;
+      layers.push(hubRow);
+
+      if(downstream.length>0){
+        layers.push(_padRowCentered(downstream, rowWidth));
+      }
+    }
+
+    // ━━━ 2차 이웃 + 고립 노드 배치 ━━━
+    const placed=new Set([hubId, ...hubNbrs]);
+    const remaining=allIds.filter(id=>!placed.has(id));
+    const secondary=[];
+    const isolatedRemaining=[];
+    remaining.forEach(id=>{
+      const nbrs=[...(adj[id]||new Set())];
+      if(nbrs.some(nb=>placed.has(nb)))secondary.push(id);
+      else isolatedRemaining.push(id);
+    });
+
+    // 2차 이웃: 연결된 허브 이웃의 행 기준으로 새 행 추가
+    const hubRowIdx=layers.findIndex(r=>r.indexOf(hubId)>=0);
+    secondary.sort((a,b)=>_refNum(a)-_refNum(b));
+    secondary.forEach(id=>{
+      const nbrs=[...(adj[id]||new Set())];
+      const parentNbr=nbrs.find(nb=>placed.has(nb)&&nb!==hubId)||nbrs.find(nb=>placed.has(nb));
+      if(!parentNbr){isolatedRemaining.push(id);return;}
+      let parentRow=-1;
+      for(let ri=0;ri<layers.length;ri++){
+        if(layers[ri].indexOf(parentNbr)>=0){parentRow=ri;break;}
+      }
+      if(parentRow<0){isolatedRemaining.push(id);return;}
+      const isAbove=parentRow<hubRowIdx;
+      const targetRow=isAbove?0:layers.length;
+      if(targetRow>=layers.length)layers.push([]);
+      else if(targetRow===0)layers.unshift([]);
+      const tRow=targetRow===0?0:layers.length-1;
+      const nullIdx=layers[tRow].indexOf(null);
+      if(nullIdx>=0)layers[tRow][nullIdx]=id;
+      else layers[tRow].push(id);
+      placed.add(id);
+    });
+
+    // 고립 노드는 마지막에 별도 행 (원칙 3)
+    if(isolatedRemaining.length>0){
+      isolatedRemaining.sort((a,b)=>_refNum(a)-_refNum(b));
+      for(let ii=0;ii<isolatedRemaining.length;ii+=MAX_COLS){
+        layers.push(isolatedRemaining.slice(ii, ii+MAX_COLS));
+      }
+    }
+
+  }else if(strategy==='SIMPLE_GRID'){
+    // ── ★ v17: 단순 격자 (edge 없음/연결 1개) ★ ──
+    const _refNum=id=>{
+      const nd=nodes.find(n=>n.id===id);
+      return parseInt((nd?.label.match(/\((\d+)\)/)||[])[1])||9999;
+    };
+    const sorted=allIds.slice().sort((a,b)=>_refNum(a)-_refNum(b));
+    for(let i=0;i<sorted.length;i+=MAX_COLS){
+      layers.push(sorted.slice(i, i+MAX_COLS));
+    }
 
   }else{
     // ── 체인 기반 (기존 v10.6 알고리즘) ──
+    // ★ v17: 고립 노드를 먼저 분리 → 끝에 별도 행 ★
+    const connectedForChain=allIds.filter(id=>degrees[id]>0);
+    const isolatedForChain=allIds.filter(id=>degrees[id]===0);
+
     let longestPath=[];
-    const leaves=allIds.filter(id=>(adj[id]||new Set()).size<=1);
-    const startNodes=leaves.length>0?leaves:allIds;
-    
+    const leaves=connectedForChain.filter(id=>(adj[id]||new Set()).size<=1);
+    const startNodes=leaves.length>0?leaves:connectedForChain;
+
     // BFS 기반 최장경로 (O(V+E) — 지수시간 탐색 방지)
     for(const startId of startNodes){
       const dist={};const prev={};
@@ -6418,25 +6544,24 @@ function computeDeviceLayout2D(nodes,edges,figNum){
           }
         });
       }
-      // 가장 먼 노드까지 경로 추적
-      let farthest=startId,maxDist=0;
-      for(const[nid,d]of Object.entries(dist)){if(d>maxDist){maxDist=d;farthest=nid;}}
-      if(maxDist+1>longestPath.length){
+      let farthest=startId,maxDist2=0;
+      for(const[nid,d]of Object.entries(dist)){if(d>maxDist2){maxDist2=d;farthest=nid;}}
+      if(maxDist2+1>longestPath.length){
         const p=[];let c=farthest;while(c!==null){p.unshift(c);c=prev[c];}
         longestPath=p;
       }
     }
-    
+
     for(let i=0;i<longestPath.length;i+=MAX_COLS){
       const chunk=longestPath.slice(i,Math.min(i+MAX_COLS,longestPath.length));
       const rowIdx=Math.floor(i/MAX_COLS);
       if(rowIdx%2===1)chunk.reverse();
       layers.push(chunk);
     }
-    
-    // 나머지 노드 배치
+
+    // 나머지 연결 노드 배치
     const placed=new Set(longestPath);
-    const remaining=allIds.filter(id=>!placed.has(id));
+    const remaining=connectedForChain.filter(id=>!placed.has(id));
     const remQueue=[...remaining];
     let remIter=0;
     while(remQueue.length>0&&remIter<remaining.length*3){
@@ -6459,6 +6584,15 @@ function computeDeviceLayout2D(nodes,edges,figNum){
         let added=false;
         for(let li=0;li<layers.length;li++){if(layers[li].length<MAX_COLS){layers[li].push(id);placed.add(id);added=true;break;}}
         if(!added){layers.push([id]);placed.add(id);}
+      }
+    }
+
+    // 고립 노드를 별도 행으로 추가 (마지막)
+    if(isolatedForChain.length>0){
+      const _refNumC=id=>{const nd=nodes.find(n=>n.id===id);return parseInt((nd?.label.match(/\((\d+)\)/)||[])[1])||9999;};
+      isolatedForChain.sort((a,b)=>_refNumC(a)-_refNumC(b));
+      for(let ii=0;ii<isolatedForChain.length;ii+=MAX_COLS){
+        layers.push(isolatedForChain.slice(ii,ii+MAX_COLS));
       }
     }
   }
@@ -6505,6 +6639,8 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     return movable;
   }
 
+  // ★ v17: HUB_CENTERED는 이미 제약 기반 배치 → 최적화 스킵 ★
+  if(strategy!=='HUB_CENTERED'){
   // Phase 1: Barycenter ordering (2-pass sweep)
   for(let pass=0;pass<2;pass++){
     // 하향 스윕
@@ -6530,57 +6666,32 @@ function computeDeviceLayout2D(nodes,edges,figNum){
       const row=layers[ri];
       for(let ci=0;ci<row.length-1;ci++){
         const before=countCrossings(layers);
-        // 인접 노드 스왑
         [row[ci],row[ci+1]]=[row[ci+1],row[ci]];
         const after=countCrossings(layers);
         if(after<before){improved=true;}
-        else{[row[ci],row[ci+1]]=[row[ci+1],row[ci]];} // 원복
+        else{[row[ci],row[ci+1]]=[row[ci+1],row[ci]];}
       }
     }
   }
+  } // end HUB_CENTERED guard
   
-  // 꺾임 수 계산 함수
+  // 꺾임 수 계산 함수 (v17: null 슬롯 안전)
   function countBends(lyrs,ac){
     let bends=0;
     uniqueEdges.forEach(e=>{
       let fr=-1,fc=-1,tr=-1,tc=-1;
       for(let ri=0;ri<lyrs.length;ri++){
-        let ci=lyrs[ri].indexOf(e.from);
-        if(ci>=0){fr=ri;fc=ac[e.from]?ac[e.from].col:ci;}
-        ci=lyrs[ri].indexOf(e.to);
-        if(ci>=0){tr=ri;tc=ac[e.to]?ac[e.to].col:ci;}
+        const fi=lyrs[ri].indexOf(e.from);
+        if(fi>=0){fr=ri;fc=ac[e.from]?ac[e.from].col:fi;}
+        const ti=lyrs[ri].indexOf(e.to);
+        if(ti>=0){tr=ri;tc=ac[e.to]?ac[e.to].col:ti;}
       }
-      if(fr>=0&&tr>=0&&fr!==tr&&fc!==tc)bends++;
+      if(fr<0||tr<0)return;
+      // 같은 행이거나 같은 열이면 꺾임 없음 (직선)
+      if(fr===tr||fc===tc)return;
+      bends++;
     });
     return bends;
-  }
-  
-  // ★ v15: 행 내 순서 최적화 — 순열 탐색 + 교차·꺾임 통합 비용 ★
-  for(let ri=0;ri<layers.length;ri++){
-    if(layers[ri].length<=1)continue;
-    const row=layers[ri];
-    // ★ v15 FIX: 4개 이하 → 전수 순열, 5개 이상 → barycenter+스왑(이미 적용됨) ★
-    let perms;
-    if(row.length===2)perms=[row,[row[1],row[0]]];
-    else if(row.length===3)perms=[[row[0],row[1],row[2]],[row[0],row[2],row[1]],[row[1],row[0],row[2]],[row[1],row[2],row[0]],[row[2],row[0],row[1]],[row[2],row[1],row[0]]];
-    else if(row.length===4){
-      // 4개 노드: 24가지 순열 전수 탐색
-      perms=[];
-      for(let a=0;a<4;a++)for(let b=0;b<4;b++){if(b===a)continue;
-        for(let c=0;c<4;c++){if(c===a||c===b)continue;
-          const d=6-a-b-c; perms.push([row[a],row[b],row[c],row[d]]);
-        }
-      }
-    }else{perms=[row];} // 5개 이상: barycenter+스왑으로 이미 최적화됨
-    let bestPerm=[...row];
-    // 통합 비용: 교차 × 3 + 꺾임 (교차가 더 시각적 영향 큼)
-    let bestCost=countCrossings(layers)*3+countBends(layers,alignCol);
-    for(const perm of perms){
-      layers[ri]=perm;
-      const cost=countCrossings(layers)*3+countBends(layers,{...alignCol});
-      if(cost<bestCost){bestCost=cost;bestPerm=[...perm];}
-    }
-    layers[ri]=bestPerm;
   }
   
   // 수직 연결 열 정렬 재계산
@@ -6590,6 +6701,7 @@ function computeDeviceLayout2D(nodes,edges,figNum){
       const curRow=layers[ri];
       const nextRow=layers[ri+1];
       nextRow.forEach(nid=>{
+        if(nid===null)return; // ★ v17: null 슬롯 건너뛰기 ★
         const nbrs=[...(adj[nid]||new Set())];
         for(const nbr of nbrs){
           const nbrCI=curRow.indexOf(nbr);
@@ -6598,10 +6710,38 @@ function computeDeviceLayout2D(nodes,edges,figNum){
       });
     }
   }
+
+  // ★ v17: HUB_CENTERED는 순열 탐색·수직 정렬 최적화 스킵 ★
+  if(strategy!=='HUB_CENTERED'){
+  // 행 내 순서 최적화 — 순열 탐색 + 교차·꺾임 통합 비용
+  for(let ri=0;ri<layers.length;ri++){
+    if(layers[ri].length<=1)continue;
+    if(layers[ri].indexOf(null)>=0)continue; // null 행 스킵
+    const row=layers[ri];
+    let perms;
+    if(row.length===2)perms=[row,[row[1],row[0]]];
+    else if(row.length===3)perms=[[row[0],row[1],row[2]],[row[0],row[2],row[1]],[row[1],row[0],row[2]],[row[1],row[2],row[0]],[row[2],row[0],row[1]],[row[2],row[1],row[0]]];
+    else if(row.length===4){
+      perms=[];
+      for(let a=0;a<4;a++)for(let b=0;b<4;b++){if(b===a)continue;
+        for(let c=0;c<4;c++){if(c===a||c===b)continue;
+          const d=6-a-b-c; perms.push([row[a],row[b],row[c],row[d]]);
+        }
+      }
+    }else{perms=[row];}
+    let bestPerm=[...row];
+    let bestCost=countCrossings(layers)*3+countBends(layers,alignCol);
+    for(const perm of perms){
+      layers[ri]=perm;
+      const cost=countCrossings(layers)*3+countBends(layers,{...alignCol});
+      if(cost<bestCost){bestCost=cost;bestPerm=[...perm];}
+    }
+    layers[ri]=bestPerm;
+  }
+
   _recalcAlignCol();
 
-  // ★ FIX-2b: 수직 정렬 최적화 — countBends 검증 기반 행 내 스왑 ★
-  // 교차 행 엣지의 꺾임을 줄이기 위해 행 내 노드 쌍을 스왑하고 개선 여부를 검증
+  // 수직 정렬 최적화 — countBends 검증 기반 행 내 스왑
   let vAlignImproved=true;
   let vAlignRounds=0;
   while(vAlignImproved&&vAlignRounds<3){
@@ -6610,6 +6750,7 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     for(let ri=0;ri<layers.length;ri++){
       const row=layers[ri];
       if(row.length<=1)continue;
+      if(row.indexOf(null)>=0)continue; // null 행 스킵
       for(let ci=0;ci<row.length;ci++){
         for(let cj=ci+1;cj<row.length;cj++){
           const beforeBends=countBends(layers,alignCol);
@@ -6630,27 +6771,14 @@ function computeDeviceLayout2D(nodes,edges,figNum){
       }
     }
   }
+  } // end HUB_CENTERED guard for permutation/vertical alignment
+
+  _recalcAlignCol();
 
   const finalBends=countBends(layers,alignCol);
   const finalCrossings=countCrossings(layers);
 
-  // ★ v16 FIX-D: HUB_SPOKE 허브 행 null 패딩 — 최적화 완료 후 삽입 ★
-  // 최적화 코드는 null 없는 layers에서 동작 → 완료 후 null 패딩 → grid에 반영
-  let _maxLayerLen=1;
-  layers.forEach(lyr=>{_maxLayerLen=Math.max(_maxLayerLen,lyr.length);});
-  if(strategy==='HUB_SPOKE'&&_hubId&&_maxLayerLen>1){
-    for(let ri=0;ri<layers.length;ri++){
-      if(layers[ri].length===1&&layers[ri][0]===_hubId){
-        // 허브 행을 이웃 행과 동일 너비로 패딩, 허브를 중앙에 배치
-        const padded=new Array(_maxLayerLen).fill(null);
-        padded[Math.floor(_maxLayerLen/2)]=_hubId;
-        layers[ri]=padded;
-        break;
-      }
-    }
-  }
-
-  console.log(`[Layout v16] ${n}nodes → ${layers.length}rows, strategy=${strategy}, bends=${finalBends}, crossings=${finalCrossings}${_hubId?', hub='+_hubId:''}`);
+  console.log(`[Layout v17] ${n}nodes → ${layers.length}rows, strategy=${strategy}, bends=${finalBends}, crossings=${finalCrossings}${_hubId?', hub='+_hubId:''}`);
 
   // Grid 생성
   const grid={};let maxCols=1;
