@@ -6941,6 +6941,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     
     // ★ v10.5: 행별 실제 Shape 높이 계산 (아이콘 복원 → shape별 높이 반영) ★
     const rowMaxH={};
+    // ★ v14 FIX: 행별 최대 실제 shape 높이 (텍스트 영역 제외, 라우팅 셀 높이용) ★
+    const rowMaxShapeH={};
     nodes.forEach(nd=>{
       const gp=grid[nd.id]; if(!gp)return;
       const st=matchIconShape(nd.label);
@@ -6948,14 +6950,20 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);
       const h=Math.max(vb.bottom, boxH)+refNumH; // boxH 최소 보장
       if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;
+      // 라우팅용: 실제 shape 높이만 (텍스트 영역/refNum 제외)
+      const shapeH=Math.max(sm.sh, boxH);
+      if(!rowMaxShapeH[gp.row]||shapeH>rowMaxShapeH[gp.row])rowMaxShapeH[gp.row]=shapeH;
     });
     
     // 행별 Y시작 좌표 (누적)
+    // ★ v14 FIX: 큰 아이콘 shape(cloud/database/server 등) 행에 추가 간격 ★
     const rowY={};
     let accY=marginY;
     for(let r=0;r<numRows;r++){
       rowY[r]=accY;
-      accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase;
+      // 행에 비-rect/stadium shape가 있으면 추가 간격
+      const _rowExtraGap=((rowMaxShapeH[r]||boxH)>boxH)?((rowMaxShapeH[r]-boxH)*0.5):0;
+      accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase+_rowExtraGap;
     }
     const totalH=accY-rowGapBase+marginY;
     
@@ -6998,13 +7006,17 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
         sm.sw=Math.min(minShapeW,boxW2D*0.90);
         sm.dx=(boxW2D-sm.sw)/2;
       }
-      const sx=bx+sm.dx, sy=by;
-      
-      // ★ 라우팅용 nodeBox = 셀 기반 (균일 크기) ★
-      // 연결선은 셀 테두리 중앙에서 출발/도착 → 같은 행 = 같은 cy
+      // ★ v14 FIX: 행별 실제 shape 높이를 라우팅 셀 높이에 반영 ★
+      const _rowCellH=rowMaxShapeH[gp.row]||boxH;
+      const sx=bx+sm.dx;
+      // shape를 셀 내부에 수직 중앙 정렬 (렌더링용)
+      const sy=by+Math.max(0,(_rowCellH-sm.sh)/2);
+
+      // ★ 라우팅용 nodeBox — 행별 실제 shape 높이 반영 ★
+      // 같은 행 노드 = 동일 _rowCellH → 동일 cy → 직선 연결 보장
       nodeBoxes[nd.id]={
-        x:bx, y:by, w:boxW2D, h:boxH,
-        cx:bx+boxW2D/2, cy:by+boxH/2,
+        x:bx, y:by, w:boxW2D, h:_rowCellH,
+        cx:bx+boxW2D/2, cy:by+_rowCellH/2,
         _shapeType:shapeType, _sx:sx, _sy:sy, _sw:sm.sw, _sh:sm.sh
       };
       nodeData.push({id:nd.id, sx, sy, sw:sm.sw, sh:sm.sh,
@@ -7012,7 +7024,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
         row:gp.row, col:gp.col});
     });
     
-    // ── Phase 1.5: 겹침 검증 (간소화 — 모든 box 동일 높이) ──
+    // ── Phase 1.5: 겹침 검증 (실제 shape 높이 기반) ──
     const REF_PADDING=refNumH+6;
     const MIN_GAP=12;
     let correctionApplied=true;
@@ -7032,8 +7044,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
             const push=aBottom+MIN_GAP-b.sy;
             if(push>0){
               b.sy+=push;
-              nodeBoxes[b.id].y=b.sy;
-              nodeBoxes[b.id].cy=b.sy+nodeBoxes[b.id].h/2;
+              // ★ v14 FIX: 셀 y도 동일 push 이동 (centering offset 유지) ★
+              nodeBoxes[b.id].y+=push;
+              nodeBoxes[b.id].cy=nodeBoxes[b.id].y+nodeBoxes[b.id].h/2;
               nodeBoxes[b.id]._sy=b.sy;
               correctionApplied=true;
             }
@@ -7971,13 +7984,53 @@ function _autoFixRenderedSvg(containerId, issues, attempt){
       }
       
       case 'SHAPE_OVERLAP':{
-        // SHAPE_OVERLAP은 DOM 수정만으로는 해소 불가 — 재렌더링 단계에서 처리
-        // viewBox 확장은 겹침을 해소하지 않으므로 fixCount를 증가시키지 않음
+        // ★ v14 FIX: 겹침 방향으로 viewBox 확장 + 재렌더링 간격 배율 산출 ★
+        const [ovA,ovB]=issue.elements;
+        if(!ovA||!ovB)break;
+        const overlapX=Math.max(0,Math.min(ovA.x+ovA.w,ovB.x+ovB.w)-Math.max(ovA.x,ovB.x));
+        const overlapY=Math.max(0,Math.min(ovA.y+ovA.h,ovB.y+ovB.h)-Math.max(ovA.y,ovB.y));
+        // viewBox 확장: 겹침 방향에 여유 공간 추가
+        const ovVb=(svgEl.getAttribute('viewBox')||'').split(/\s+/).map(Number);
+        if(ovVb.length===4){
+          if(overlapY>=overlapX){ovVb[3]+=overlapY+20;}
+          else{ovVb[2]+=overlapX+20;}
+          svgEl.setAttribute('viewBox',ovVb.join(' '));
+        }
+        // 재렌더링 시 필요한 간격 배율 저장 (최대 겹침 기준)
+        const curOvMult=parseFloat(svgEl.dataset.overlapSpacingMult||'1');
+        const maxOvDim=Math.max(overlapX,overlapY);
+        const newOvMult=1+maxOvDim/(Math.max(ovVb[2]||600,ovVb[3]||400))*2;
+        svgEl.dataset.overlapSpacingMult=String(Math.max(curOvMult,newOvMult).toFixed(2));
+        fixCount++;
         break;
       }
-      
+
       case 'CONN_OFF_CENTER':{
-        // 연결선 접점 중앙 미정렬 — DOM 수정으로는 어려움 (재렌더링 필요)
+        // ★ v14 FIX: 연결선 접점을 shape 변 중앙으로 스냅 시도 ★
+        const cPt=issue.point, cSb=issue.shape;
+        if(!cPt||!cSb)break;
+        const sCx=cSb.x+cSb.w/2, sCy=cSb.y+cSb.h/2;
+        // 접점이 어느 변에 가까운지 판정
+        const dL=Math.abs(cPt.x-cSb.x), dR=Math.abs(cPt.x-(cSb.x+cSb.w));
+        const dT=Math.abs(cPt.y-cSb.y), dB=Math.abs(cPt.y-(cSb.y+cSb.h));
+        const minD=Math.min(dL,dR,dT,dB);
+        // 가장 가까운 변의 중앙 좌표 계산
+        let snapX=cPt.x, snapY=cPt.y;
+        if(dL<=minD+1||dR<=minD+1){snapY=sCy;} // 좌/우 변 → Y를 중앙으로
+        else{snapX=sCx;} // 상/하 변 → X를 중앙으로
+        // SVG 내 모든 polyline/line 요소에서 해당 점 찾아서 스냅
+        const tolerance=3;
+        svgEl.querySelectorAll('polyline').forEach(pl=>{
+          const pts=pl.getAttribute('points');if(!pts)return;
+          const parsed=pts.split(/\s+/).map(p=>{const[x,y]=p.split(',').map(Number);return{x,y};});
+          let changed=false;
+          [0,parsed.length-1].forEach(idx=>{
+            if(Math.abs(parsed[idx].x-cPt.x)<tolerance&&Math.abs(parsed[idx].y-cPt.y)<tolerance){
+              parsed[idx].x=snapX;parsed[idx].y=snapY;changed=true;
+            }
+          });
+          if(changed){pl.setAttribute('points',parsed.map(p=>`${p.x},${p.y}`).join(' '));fixCount++;}
+        });
         break;
       }
       
@@ -8099,37 +8152,46 @@ function _postRenderValidationLoop(containerId, figNum, maxAttempts, renderInfo)
     const hasBends=lastResult.issues.filter(i=>i.type==='UNNECESSARY_BEND'||i.type==='EXCESSIVE_BENDS').length;
     const hasPierce=lastResult.issues.filter(i=>i.type==='ROUTE_PIERCE').length;
     const hasFontIssue=lastResult.issues.filter(i=>i.type==='FONT_INCONSISTENT'||i.type==='FONT_TOO_SMALL').length;
-    const needsRerender=hasErrors||hasPierce>0||hasBends>1||hasFontIssue>0;
-    
+    // ★ v14 FIX: SHAPE_OVERLAP, CONN_OFF_CENTER도 재렌더링 트리거에 포함 ★
+    const hasOverlap=lastResult.issues.filter(i=>i.type==='SHAPE_OVERLAP').length;
+    const hasOffCenter=lastResult.issues.filter(i=>i.type==='CONN_OFF_CENTER').length;
+    const needsRerender=hasErrors||hasPierce>0||hasBends>1||hasFontIssue>0||hasOverlap>0||hasOffCenter>1;
+
     if(needsRerender){
-      console.warn(`[PostRender] 도 ${figNum}: DOM 보정 불충분 → 재렌더링 시도 (ERR:${hasErrors?'Y':'N'} BEND:${hasBends} PIERCE:${hasPierce} FONT:${hasFontIssue})`);
-      
+      console.warn(`[PostRender] 도 ${figNum}: DOM 보정 불충분 → 재렌더링 시도 (ERR:${hasErrors?'Y':'N'} BEND:${hasBends} PIERCE:${hasPierce} FONT:${hasFontIssue} OVERLAP:${hasOverlap} OFFCENTER:${hasOffCenter})`);
+
+      // ★ v14 FIX: 1단계 DOM 보정에서 산출한 overlapSpacingMult 반영 ★
+      const container=document.getElementById(containerId);
+      const svgEl=container?.querySelector('svg');
+      const overlapMult=parseFloat(svgEl?.dataset?.overlapSpacingMult||'1');
+
       // 간격 확대 + 폰트 조정으로 재렌더링
+      const baseSpacing=hasPierce>0?1.25:hasOverlap>0?1.20:1.15;
       const adjustments={
-        spacingMult: hasPierce>0?1.25:1.15,  // 관통 시 더 넓게
-        fontOffset: hasFontIssue>0?1:-1,      // 폰트 문제 시 확대, 아니면 축소
-        boxWidthMult: 1.05,
-        boxHeightMult: 1.05
+        spacingMult: Math.max(baseSpacing, overlapMult),
+        fontOffset: hasFontIssue>0?1:-1,
+        boxWidthMult: hasOverlap>0?1.08:1.05,
+        boxHeightMult: hasOverlap>0?1.10:1.05
       };
-      
+
       try{
-        renderDiagramSvg(containerId, renderInfo.nodes, renderInfo.edges, 
+        renderDiagramSvg(containerId, renderInfo.nodes, renderInfo.edges,
           renderInfo.positions, figNum, adjustments);
-        
+
         // 재렌더링 후 검증
         const result2=_postRenderValidateSvg(containerId, figNum);
         lastResult=result2;
-        
+
         if(result2.pass){
           console.log(`[PostRender] 도 ${figNum}: 재렌더링 후 통과 ✅`);
         }else{
           // 한 번 더 시도 — 더 큰 조정
           console.warn(`[PostRender] 도 ${figNum}: 재렌더링 후에도 ${result2.issues.length}개 문제 → 2차 재렌더링`);
-          const adj2={spacingMult:1.30, fontOffset:-2, boxWidthMult:1.10, boxHeightMult:1.10};
+          const adj2={spacingMult:Math.max(1.30,overlapMult*1.15), fontOffset:-2, boxWidthMult:1.10, boxHeightMult:1.12};
           renderDiagramSvg(containerId, renderInfo.nodes, renderInfo.edges,
             renderInfo.positions, figNum, adj2);
           lastResult=_postRenderValidateSvg(containerId, figNum);
-          
+
           if(lastResult.pass){
             console.log(`[PostRender] 도 ${figNum}: 2차 재렌더링 후 통과 ✅`);
           }else{
@@ -9046,10 +9108,13 @@ function downloadPptx(sid){
         
         // ★ v10.5: 행별 실제 Shape 높이 (아이콘 복원, PPTX) ★
         const rowMaxH={};
-        nodes.forEach(n=>{const gp=grid[n.id];if(!gp)return;const st=matchIconShape(n.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=Math.max(vb.bottom,boxH)+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
+        // ★ v14 FIX: 행별 최대 실제 shape 높이 (PPTX 라우팅용) ★
+        const rowMaxShapeH={};
+        nodes.forEach(n=>{const gp=grid[n.id];if(!gp)return;const st=matchIconShape(n.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=Math.max(vb.bottom,boxH)+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;const shapeH=Math.max(sm.sh,boxH);if(!rowMaxShapeH[gp.row]||shapeH>rowMaxShapeH[gp.row])rowMaxShapeH[gp.row]=shapeH;});
         const rowY={};let accY=boxStartY;
-        for(let r=0;r<numRows;r++){rowY[r]=accY;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase;}
-        
+        // ★ v14 FIX: 큰 아이콘 shape 행에 추가 간격 (PPTX) ★
+        for(let r=0;r<numRows;r++){rowY[r]=accY;const _rxg=((rowMaxShapeH[r]||boxH)>boxH)?((rowMaxShapeH[r]-boxH)*0.5):0;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase+_rxg;}
+
         // ★ v10.5: 이중 좌표 — 셀 기반 라우팅 + 실제 shape 렌더링 (PPTX) ★
         const nodeBoxes={};
         nodes.forEach(n=>{
@@ -9064,32 +9129,35 @@ function downloadPptx(sid){
           // 실제 shape 복원
           const shapeType=matchIconShape(n.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
+          // ★ v14 FIX: 행별 실제 shape 높이 반영 (PPTX) ★
+          const _rowCellH=rowMaxShapeH[gp.row]||boxH;
           const sx=bx+sm.dx;
-          
-          addPptxIconShape(slide,shapeType,sx,by,sm.sw,sm.sh,LINE_FRAME);
+          const sy=by+Math.max(0,(_rowCellH-sm.sh)/2);
+
+          addPptxIconShape(slide,shapeType,sx,sy,sm.sw,sm.sh,LINE_FRAME);
           const fontSize=Math.min(maxCols>1?10:12,Math.max(8,13-nodeCount*0.3));
           // ★ v13.0 FIX: 아이콘 shape 텍스트를 아이콘 하단 아래에 배치 (SVG와 동일 로직) ★
           if(_isIconShape(shapeType)){
             // sensor/antenna/camera/speaker: 아이콘이 전체 영역 차지 → 텍스트를 아이콘 아래에
-            const iconBottomY=by+sm.sh;
+            const iconBottomY=sy+sm.sh;
             slide.addText(pptxDisplayLabel,{x:sx,y:iconBottomY+0.03,w:sm.sw,h:0.25,fontSize:Math.max(fontSize-1,8),fontFace:'맑은 고딕',color:'000000',align:'center',valign:'top'});
           }else{
             const textH=shapeType==='monitor'?sm.sh*0.72:sm.sh;
-            slide.addText(pptxDisplayLabel,{x:sx+0.04,y:by,w:sm.sw-0.08,h:textH,fontSize,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
+            slide.addText(pptxDisplayLabel,{x:sx+0.04,y:sy,w:sm.sw-0.08,h:textH,fontSize,fontFace:'맑은 고딕',color:'000000',align:'center',valign:'middle'});
           }
-          
-          // 셀 기반 nodeBox (라우팅용) — 균일 크기
-          nodeBoxes[n.id]={x:bx, y:by, w:boxW2D, h:boxH, cx:bx+boxW2D/2, cy:by+boxH/2,
-            _sx:sx, _sy:by, _sw:sm.sw, _sh:sm.sh, _shapeType:shapeType};
+
+          // ★ v14 FIX: 라우팅 nodeBox — 행별 실제 shape 높이 반영 (PPTX) ★
+          nodeBoxes[n.id]={x:bx, y:by, w:boxW2D, h:_rowCellH, cx:bx+boxW2D/2, cy:by+_rowCellH/2,
+            _sx:sx, _sy:sy, _sw:sm.sw, _sh:sm.sh, _shapeType:shapeType};
         });
         
-        // refNum 데이터 수집
+        // refNum 데이터 수집 — ★ v14 FIX: 실제 shape 위치 기반 ★
         const pptxRefData=[];
         nodes.forEach(n=>{
           const gp=grid[n.id];if(!gp)return;
           const refNum=extractRefNum(n.label,String((parseInt(n.id.replace(/\D/g,''))||1)*100));
           const nb=nodeBoxes[n.id];if(!nb)return;
-          pptxRefData.push({id:n.id,refNum,sx:nb.x,by:nb.y,sw:nb.w,sh:nb.h});
+          pptxRefData.push({id:n.id,refNum,sx:nb._sx,by:nb._sy,sw:nb._sw,sh:nb._sh});
         });
         
         // ★ v10.5: Phase 2 — 실제 앵커 기반 edge 라우팅 (PPTX) ★
@@ -9734,10 +9802,13 @@ function downloadDiagramImages(sid, format='jpeg'){
         
         // ★ v10.5: 행별 실제 Shape 높이 (아이콘 복원) ★
         const rowMaxH={};
-        nodes.forEach(nd=>{const gp=grid[nd.id];if(!gp)return;const st=matchIconShape(nd.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=Math.max(vb.bottom,boxH)+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;});
+        // ★ v14 FIX: 행별 최대 실제 shape 높이 (Canvas 라우팅용) ★
+        const rowMaxShapeH={};
+        nodes.forEach(nd=>{const gp=grid[nd.id];if(!gp)return;const st=matchIconShape(nd.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=Math.max(vb.bottom,boxH)+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;const shapeH=Math.max(sm.sh,boxH);if(!rowMaxShapeH[gp.row]||shapeH>rowMaxShapeH[gp.row])rowMaxShapeH[gp.row]=shapeH;});
         const rowY={};let accY=boxStartY;
-        for(let r=0;r<numRows;r++){rowY[r]=accY;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase;}
-        
+        // ★ v14 FIX: 큰 아이콘 shape 행에 추가 간격 (Canvas) ★
+        for(let r=0;r<numRows;r++){rowY[r]=accY;const _rxg=((rowMaxShapeH[r]||boxH)>boxH)?((rowMaxShapeH[r]-boxH)*0.5):0;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase+_rxg;}
+
         // ★ v10.5: Phase 1 — 이중 좌표: 셀 기반 라우팅 + 실제 shape 렌더링 ★
         const nodeBoxes={};
         const nodeData=[];
@@ -9752,16 +9823,19 @@ function downloadDiagramImages(sid, format='jpeg'){
           const cDisplayLabel=isFig1?_shortenFig1Label(nd.label):cleanLabel;
           const shapeType=matchIconShape(nd.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
+          // ★ v14 FIX: 행별 실제 shape 높이 반영 (Canvas) ★
+          const _rowCellH=rowMaxShapeH[gp.row]||boxH;
           const sx=bx+sm.dx;
-          // 셀 기반 nodeBox (라우팅용)
-          nodeBoxes[nd.id]={x:bx, y:by, w:boxW2D, h:boxH,
-            cx:bx+boxW2D/2, cy:by+boxH/2,
-            _shapeType:shapeType, _sx:sx, _sy:by, _sw:sm.sw, _sh:sm.sh};
-          nodeData.push({id:nd.id, sx, sy:by, sw:sm.sw, sh:sm.sh,
+          const sy=by+Math.max(0,(_rowCellH-sm.sh)/2);
+          // 라우팅 nodeBox — 행별 실제 shape 높이 반영
+          nodeBoxes[nd.id]={x:bx, y:by, w:boxW2D, h:_rowCellH,
+            cx:bx+boxW2D/2, cy:by+_rowCellH/2,
+            _shapeType:shapeType, _sx:sx, _sy:sy, _sw:sm.sw, _sh:sm.sh};
+          nodeData.push({id:nd.id, sx, sy, sw:sm.sw, sh:sm.sh,
             shapeType, cleanLabel:cDisplayLabel, refNum, row:gp.row, col:gp.col});
         });
         
-        // Phase 1.5: 겹침 검증 (균일 box — 간소화)
+        // Phase 1.5: 겹침 검증 (실제 shape 높이 기반)
         const REF_PAD=refNumH+4, MIN_GAP=6;
         let fixApplied=true, fixRounds=0;
         while(fixApplied&&fixRounds<10){fixApplied=false;fixRounds++;
@@ -9770,7 +9844,8 @@ function downloadDiagramImages(sid, format='jpeg'){
               if(a.row===b.row)continue;
               const hOvl=!(a.sx+a.sw+6<b.sx||b.sx+b.sw+6<a.sx);
               if(hOvl&&b.sy<aBot+MIN_GAP&&b.sy>=a.sy){const push=aBot+MIN_GAP-b.sy;
-                if(push>0){b.sy+=push;nodeBoxes[b.id].y=b.sy;nodeBoxes[b.id].cy=b.sy+b.sh/2;nodeBoxes[b.id]._sy=b.sy;fixApplied=true;}}
+                // ★ v14 FIX: 셀 y도 동일 push 이동 (centering offset 유지) ★
+                if(push>0){b.sy+=push;nodeBoxes[b.id].y+=push;nodeBoxes[b.id].cy=nodeBoxes[b.id].y+nodeBoxes[b.id].h/2;nodeBoxes[b.id]._sy=b.sy;fixApplied=true;}}
         }}}
         
         // Phase 2: 연결선 — 실제 shape anchor 기반 라우팅
