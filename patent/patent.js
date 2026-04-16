@@ -1281,23 +1281,41 @@ ${prompt.slice(0,2000)}`;
 
 // v11.0: 연쇄 재생성용 예시도 실행
 async function _cascadeRunConceptDiagram(){
-  const claims=outputs.step_06||'';
-  const title=selectedTitle||'본 발명';
   const cFigNums=getAutoFigNums('step_07c');
+  const count=conceptDiagramTypes.length;
+  const figNums=cFigNums.slice(0,count);
+  const typeDescs=conceptDiagramTypes.map((ct,i)=>{const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${figNums[i]||'?'}: ${td.label}`;}).join(', ');
+
+  const prompt=`특허 도면 전문가로서, 아래 발명의 예시도/개념도를 SVG 코드로 직접 생성하라.
+⛔ 블록도/플로우차트 형태 절대 금지. "~부" 박스 라벨 금지. 흑색 선만 사용.
+✅ 시각적 장면: 스틱 피겨, UI 화면, 테이블, 디바이스 외관 등
+SVG 규칙: viewBox="0 0 680 500", stroke="#000", fill="none"(필요시 "#fff"), font-family="Malgun Gothic,sans-serif", 참조번호 31~79.
+발명의 명칭: ${selectedTitle}
+도면: ${count}개 (${figNums.map(n=>'도 '+n).join(', ')}), 유형: ${typeDescs}
+청구범위(참고): ${outputs.step_06?.slice(0,1500)||''}
+출력 형식: ${figNums.map(n=>'---CONCEPT_FIG_'+n+'---\\n<svg>...</svg>\\n---BRIEF_DESC---\\n도 '+n+'은 ...를 나타내는 예시도이다.').join('\\n')}`;
+
+  const r=await App.callClaude(prompt,16384);
+  const fullText=r.text||'';
+
   for(let i=0;i<conceptDiagramTypes.length;i++){
     const ct=conceptDiagramTypes[i];
-    const figNum=cFigNums[i]||'?';
-    const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type,desc:''};
-    const refRange=typeDef.refRange||[31,99];
-    const prompt=`한국 특허 명세서 도면 전문가로서, "${typeDef.label}" 예시도(도 ${figNum})를 SVG로 생성하라.\n【발명의 명칭】${title}\n【장치 청구범위】\n${claims.slice(0,3000)}\nSVG 규칙: viewBox="0 0 800 600", 배경 흰색, 참조번호 ${refRange[0]}~${refRange[1]}, font-family="Malgun Gothic, sans-serif", 하단 캡션 "도 ${figNum}". SVG 외 텍스트 금지.`;
-    const r=await App.callClaude(prompt,8192);
-    let svgText=r.text||'';
-    const svgMatch=svgText.match(/<svg[\s\S]*?<\/svg>/i);
-    svgText=svgMatch?svgMatch[0]:`<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg"><rect width="800" height="600" fill="#fff"/><text x="400" y="300" text-anchor="middle" fill="#999">SVG 생성 실패</text></svg>`;
-    const refNums=[...new Set([...svgText.matchAll(/\((\d+)\)/g)].map(m=>parseInt(m[1])))].sort((a,b)=>a-b);
-    ct.svgContent=svgText;ct.figNum=figNum;ct.refNums=refNums;
+    const figNum=figNums[i]||'?';
+    const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
+    const marker=`---CONCEPT_FIG_${figNum}---`;
+    const nextMarker=i<count-1?`---CONCEPT_FIG_${figNums[i+1]}---`:null;
+    let segment='';
+    const mIdx=fullText.indexOf(marker);
+    if(mIdx>=0){const after=fullText.slice(mIdx+marker.length);segment=nextMarker?after.slice(0,after.indexOf(nextMarker)):after;}
+    else{const allSvgs=[...fullText.matchAll(/<svg[\s\S]*?<\/svg>/gi)];if(allSvgs[i])segment=allSvgs[i][0];}
+    const svgMatch=segment.match(/<svg[\s\S]*?<\/svg>/i);
+    const svgText=svgMatch?svgMatch[0]:`<svg viewBox="0 0 680 500" xmlns="http://www.w3.org/2000/svg"><rect width="680" height="500" fill="#fff"/><text x="340" y="250" text-anchor="middle" fill="#999">SVG 생성 실패</text></svg>`;
+    const briefMatch=segment.match(/---BRIEF_DESC---\s*\n?(도\s*\d+[은는]\s+.+)/);
+    ct.briefDesc=briefMatch?briefMatch[1].trim():`도 ${figNum}은 ${selectedTitle}의 ${typeDef.label}을 나타내는 예시도이다.`;
+    ct.svgContent=svgText;ct.figNum=figNum;
+    ct.refNums=[...new Set([...svgText.matchAll(/\((\d+)\)/g)].map(m=>parseInt(m[1])))].filter(n=>n>=31&&n<=79).sort((a,b)=>a-b);
   }
-  outputs.step_07c=conceptDiagramTypes.map((ct,i)=>{const fn=cFigNums[i]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `[도 ${fn}] ${td.label} 예시도\n참조번호: ${ct.refNums.join(', ')}`;}).join('\n\n');
+  outputs.step_07c=conceptDiagramTypes.map((ct,i)=>{const fn=figNums[i]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `[도 ${fn}] ${td.label} 예시도\n참조번호: ${ct.refNums.join(', ')}\n${ct.briefDesc||''}`;}).join('\n\n');
   markOutputTimestamp('step_07c');
   renderConceptDiagramCards();
 }
@@ -3744,59 +3762,130 @@ async function runConceptDiagramStep(){
   loadingState.step_07c=true;App.setButtonLoading(bid,true);
 
   try{
-    const claims=outputs.step_06||'';
-    const title=selectedTitle||'본 발명';
     const cFigNums=getAutoFigNums('step_07c');
+    const count=conceptDiagramTypes.length;
+    const figNums=cFigNums.slice(0,count);
+    const typeDescs=conceptDiagramTypes.map((ct,i)=>{
+      const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
+      return `도 ${figNums[i]||'?'}: ${td.label}`;
+    }).join(', ');
 
+    App.showProgress('progressStep07c','예시도 생성 중...',1,2);
+
+    const prompt=`특허 도면 전문가로서, 아래 발명의 예시도/개념도를 SVG 코드로 직접 생성하라.
+
+⛔⛔⛔ 절대 금지 사항 (위반 시 도면 전체 거부) ⛔⛔⛔
+1. 박스(사각형) + 화살표로 구성된 블록도/플로우차트 형태 절대 금지
+2. "~부", "~모듈", "~엔진" 같은 기능 구성요소명을 박스 라벨로 사용 금지
+3. 색상 사용 금지 — 오직 흑색 선(stroke="#000" 또는 "#333")만 허용
+4. 영문자 접미사가 붙은 참조번호(83a, 92b 등) 금지
+5. 장치 블록도(도 1~N)와 동일한 구성을 반복 금지
+
+✅ 예시도가 반드시 가져야 할 요소 (유형별)
+- 화면 구성도: 실제 모바일/PC 화면 모양(둥근 모서리 사각형에 UI 요소들)
+- 사용 시나리오도: 스틱 피겨(사람), 말풍선, 손 제스처, 물리적 장면
+- 장치 외관도: 디바이스의 물리적 외형(스마트폰, 웨어러블, 센서 등)
+- 동작 설명도: 물리적 메타포(깔때기, 저울, 바구니, 타임라인 등)
+- 데이터 구조도: 테이블 형식(행/열), 필드명과 예시값
+
+═══ 시각적 어휘 (반드시 이 중에서 선택) ═══
+□ 사람: 원(머리) + 선(몸/팔/다리)으로 스틱 피겨
+□ 화면: 둥근 사각형(rx=8) + 내부 UI 요소(버튼, 리스트, 입력창)
+□ 말풍선: 둥근 사각형 + 삼각형 꼬리
+□ 디바이스: 스마트폰(세로 둥근 사각형), 스피커(원통), 센서(작은 원)
+□ 데이터 테이블: 격자(행+열), 헤더 강조
+□ 화살표: 동작의 방향이나 데이터 이동 (최소 사용)
+□ 아이콘: 원 안의 간단한 기호 (♪, ♡, ⚙, 📷 등의 기하학적 표현)
+
+═══ SVG 기술 규칙 ═══
+1. viewBox="0 0 680 500" (너비 680 고정)
+2. 배경 투명, stroke="#000" fill="none" (필요시 fill="#fff" 허용)
+3. stroke-width: 본체 0.8~1.5, 리더라인 0.5
+4. 폰트: font-family="Malgun Gothic,sans-serif"
+5. 텍스트: 제목 14px, 라벨 12px, 참조번호 11px
+6. 참조번호 표기: 리더라인(얇은 선) + 숫자 (예시도 전용: 31~79 범위)
+7. 제목: 【도 N】을 상단 중앙에 표기
+8. 마커(화살표)는 최소한만 사용 — 시각적 장면이 핵심
+
+═══ 유형별 구체 지시 ═══
+
+[화면 구성도 선택 시]
+- 스마트폰 외곽(세로 둥근 사각형 320×500 등) 그리고 내부에 화면 구성
+- 상단바, 앱 타이틀, 메인 콘텐츠 영역, 하단 탭바 등
+- 버튼/입력창/리스트는 실제 UI처럼 그려라
+- 블록도처럼 "기능 박스"를 나열하지 마라
+
+[사용 시나리오도 선택 시]
+- 스틱 피겨 사용자 1~2명
+- 디바이스(스마트폰/스피커 등)
+- 말풍선이나 동작 표현(점선 화살표, 파동선)
+- 장면이 하나의 "순간"을 보여줘야 함
+
+[데이터 구조도 선택 시]
+- 격자 형태의 테이블
+- 헤더: "필드명" / 바디: "예시값"
+- 여러 레코드 예시 표시
+
+═══ 발명 정보 ═══
+발명의 명칭: ${selectedTitle}
+
+═══ 도면 요청 ═══
+도면 수: ${count}개 (${figNums.map(n=>'도 '+n).join(', ')})
+유형: ${typeDescs}
+
+═══ 청구범위 (참고만 — 블록 복제 금지) ═══
+${outputs.step_06?.slice(0,2000)||''}
+
+═══ 출력 형식 (정확히 따르라) ═══
+---CONCEPT_FIG_${figNums[0]}---
+<svg viewBox="0 0 680 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- 절대 블록+화살표 구조 금지, 시각적 장면 그려라 -->
+</svg>
+---BRIEF_DESC---
+도 ${figNums[0]}은 ...를 나타내는 예시도이다.
+${figNums.length>1?figNums.slice(1).map(n=>'\n---CONCEPT_FIG_'+n+'---\n<svg>...</svg>\n---BRIEF_DESC---\n도 '+n+'은 ...를 나타내는 예시도이다.').join(''):''}
+
+⛔ 자체 검증 — SVG 출력 전 아래를 확인하라:
+1. stroke에 "#" 뒤에 0, 3 이외의 숫자가 있는가? → 있으면 흑백으로 수정
+2. <rect>가 5개 이상이고 텍스트가 "~부"로 끝나는가? → 블록도임, 다시 그려라
+3. 참조번호에 a, b, c, d, e가 포함되는가? → 제거하고 순수 숫자만 사용
+4. 이 도면이 step_07 블록도와 차별화되는가? → 아니면 다시 그려라`;
+
+    const r=await App.callClaude(prompt,16384);
+    const fullText=r.text||'';
+
+    App.showProgress('progressStep07c','예시도 파싱 중...',2,2);
+
+    // 마커 기반 SVG/Brief 파싱
     for(let i=0;i<conceptDiagramTypes.length;i++){
       const ct=conceptDiagramTypes[i];
-      const figNum=cFigNums[i]||'?';
-      const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type,desc:''};
-      const refRange=typeDef.refRange||[31,99];
+      const figNum=figNums[i]||'?';
+      const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
+      const marker=`---CONCEPT_FIG_${figNum}---`;
+      const nextMarker=i<conceptDiagramTypes.length-1?`---CONCEPT_FIG_${figNums[i+1]}---`:null;
 
-      App.showProgress('progressStep07c',`예시도 생성 중 (${i+1}/${conceptDiagramTypes.length})`,i+1,conceptDiagramTypes.length);
-
-      const prompt=`당신은 한국 특허 명세서 도면 전문가입니다. 아래 발명에 대한 "${typeDef.label}" 예시도(도 ${figNum})를 SVG로 직접 생성하라.
-
-【발명의 명칭】${title}
-
-【장치 청구범위】
-${claims.slice(0,3000)}
-
-═══ 예시도 유형: ${typeDef.label} ═══
-${typeDef.desc}
-
-═══ SVG 생성 규칙 ═══
-1. 반드시 <svg> 태그로 시작하고 </svg>로 끝나는 완전한 SVG를 출력하라.
-2. viewBox="0 0 800 600" 사용. 배경은 흰색(#FFFFFF).
-3. 참조번호 범위: ${refRange[0]}~${refRange[1]} (예: 표시부(${refRange[0]}), 입력창(${refRange[0]+1}))
-4. 한글 텍스트 사용. font-family="Malgun Gothic, sans-serif"
-5. 선: stroke="#333", 채움: fill="#E3F2FD"(파랑 계열) 또는 fill="#FFF3E0"(주황 계열)
-6. 각 구성요소에 참조번호를 괄호로 표기하라: "표시부(${refRange[0]})"
-7. 도면 하단에 "도 ${figNum}" 캡션을 넣어라.
-8. SVG 외에 다른 텍스트는 출력하지 마라. 설명 금지.
-
-${ct.type==='ui_screen'?'스마트폰 또는 PC 화면 형태로 UI 요소(버튼, 텍스트필드, 리스트 등)를 배치하라.':''}
-${ct.type==='user_scenario'?'사용자-시스템 간 시퀀스 다이어그램 또는 이용 시나리오를 흐름으로 표현하라.':''}
-${ct.type==='data_structure'?'테이블 구조 또는 데이터 모델을 ER 다이어그램 형태로 표현하라.':''}
-${ct.type==='device_appearance'?'기기의 외관을 개략적으로 표현하라 (전면도/측면도).':''}
-${ct.type==='process_scene'?'처리 과정의 장면을 시각적으로 표현하라 (인포그래픽 스타일).':''}`;
-
-      const r=await App.callClaude(prompt,8192);
-      let svgText=r.text||'';
-
-      // SVG 추출: <svg...>...</svg> 부분만
-      const svgMatch=svgText.match(/<svg[\s\S]*?<\/svg>/i);
-      if(svgMatch){
-        svgText=svgMatch[0];
+      let segment='';
+      const markerIdx=fullText.indexOf(marker);
+      if(markerIdx>=0){
+        const afterMarker=fullText.slice(markerIdx+marker.length);
+        segment=nextMarker?afterMarker.slice(0,afterMarker.indexOf(nextMarker)):afterMarker;
       }else{
-        console.warn('[runConceptDiagramStep] SVG 추출 실패:', ct.type);
-        svgText=`<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg"><rect width="800" height="600" fill="#fff" stroke="#ccc"/><text x="400" y="300" text-anchor="middle" font-size="20" fill="#999">SVG 생성 실패 — 재시도하세요</text></svg>`;
+        // 마커 없으면 전체 텍스트에서 i번째 SVG 추출 시도
+        const allSvgs=[...fullText.matchAll(/<svg[\s\S]*?<\/svg>/gi)];
+        if(allSvgs[i])segment=allSvgs[i][0];
       }
 
+      // SVG 추출
+      const svgMatch=segment.match(/<svg[\s\S]*?<\/svg>/i);
+      let svgText=svgMatch?svgMatch[0]:`<svg viewBox="0 0 680 500" xmlns="http://www.w3.org/2000/svg"><rect width="680" height="500" fill="#fff" stroke="#ccc"/><text x="340" y="250" text-anchor="middle" font-size="18" fill="#999">SVG 생성 실패 — 재시도하세요</text></svg>`;
+
+      // Brief description 추출
+      const briefMatch=segment.match(/---BRIEF_DESC---\s*\n?(도\s*\d+[은는]\s+.+)/);
+      if(briefMatch)ct.briefDesc=briefMatch[1].trim();
+      else ct.briefDesc=`도 ${figNum}은 ${selectedTitle}의 ${typeDef.label}을 나타내는 예시도이다.`;
+
       // 참조번호 추출
-      const refMatches=[...svgText.matchAll(/\((\d+)\)/g)];
-      const refNums=[...new Set(refMatches.map(m=>parseInt(m[1])))].sort((a,b)=>a-b);
+      const refNums=[...new Set([...svgText.matchAll(/\((\d+)\)/g)].map(m=>parseInt(m[1])))].filter(n=>n>=31&&n<=79).sort((a,b)=>a-b);
 
       ct.svgContent=svgText;
       ct.figNum=figNum;
@@ -3805,9 +3894,9 @@ ${ct.type==='process_scene'?'처리 과정의 장면을 시각적으로 표현�
 
     // 결과 저장
     outputs.step_07c=conceptDiagramTypes.map((ct,i)=>{
-      const figNum=cFigNums[i]||'?';
+      const figNum=figNums[i]||'?';
       const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
-      return `[도 ${figNum}] ${typeDef.label} 예시도\n참조번호: ${ct.refNums.join(', ')}`;
+      return `[도 ${figNum}] ${typeDef.label} 예시도\n참조번호: ${ct.refNums.join(', ')}\n${ct.briefDesc||''}`;
     }).join('\n\n');
     markOutputTimestamp('step_07c');
     invalidateDownstream('step_07c');
@@ -10589,8 +10678,55 @@ function layoutGraphForPatent(nodes,edges){
 }
 function downloadPptxAll(){if(diagramData.step_07||outputs.step_07_mermaid)downloadPptx('step_07');else App.showToast('도면 없음','error');}
 
+// ═══ v11.0: 예시도/개념도 PPTX 다운로드 ═══
+function downloadConceptPptx(){
+  const generated=conceptDiagramTypes.filter(ct=>ct.svgContent);
+  if(!generated.length){App.showToast('예시도 없음','error');return;}
+  if(typeof PptxGenJS==='undefined'){App.showToast('PptxGenJS 미로드','error');return;}
+  const cFigNums=getAutoFigNums('step_07c');
+  const caseNum=selectedTitle||'도면';
+  const pptx=new PptxGenJS();
+  pptx.layout='LAYOUT_WIDE';
+
+  let completed=0;
+  const total=generated.length;
+
+  function processSlide(idx){
+    if(idx>=total){
+      pptx.writeFile({fileName:`${caseNum}_예시도.pptx`}).then(()=>{
+        App.showToast(`예시도 PPTX 다운로드 완료 (${total}슬라이드)`);
+      }).catch(e=>App.showToast('PPTX 생성 실패: '+e.message,'error'));
+      return;
+    }
+    const ct=generated[idx];
+    const figNum=cFigNums[conceptDiagramTypes.indexOf(ct)]||idx+1;
+    const svgStr=ct.svgContent;
+
+    // SVG→Canvas→PNG base64→PPTX slide
+    const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement('canvas');
+      canvas.width=1360;canvas.height=1000;
+      const ctx2=canvas.getContext('2d');
+      ctx2.fillStyle='#FFFFFF';ctx2.fillRect(0,0,1360,1000);
+      ctx2.drawImage(img,0,0,1360,1000);
+      const dataUrl=canvas.toDataURL('image/png');
+      const slide=pptx.addSlide();
+      slide.addText(`도 ${figNum}`,{x:0.3,y:0.15,fontSize:18,fontFace:'맑은 고딕',bold:true});
+      slide.addImage({data:dataUrl,x:0.5,y:0.6,w:12.33,h:6.5});
+      URL.revokeObjectURL(url);
+      processSlide(idx+1);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);processSlide(idx+1);};
+    img.src=url;
+  }
+  processSlide(0);
+}
+
 // ═══ v11.0: 예시도/개념도 이미지 다운로드 ═══
-function downloadConceptDiagramImages(format='jpeg'){
+function downloadConceptImages(format='jpeg'){
   const generated=conceptDiagramTypes.filter(ct=>ct.svgContent);
   if(!generated.length){App.showToast('예시도 없음','error');return;}
   const cFigNums=getAutoFigNums('step_07c');
@@ -10623,10 +10759,10 @@ function downloadConceptDiagramImages(format='jpeg'){
     const img=new Image();
     img.onload=()=>{
       const canvas=document.createElement('canvas');
-      canvas.width=800;canvas.height=600;
+      canvas.width=1360;canvas.height=1000;
       const ctx2=canvas.getContext('2d');
-      ctx2.fillStyle='#FFFFFF';ctx2.fillRect(0,0,800,600);
-      ctx2.drawImage(img,0,0,800,600);
+      ctx2.fillStyle='#FFFFFF';ctx2.fillRect(0,0,1360,1000);
+      ctx2.drawImage(img,0,0,1360,1000);
       canvas.toBlob(b=>{
         if(b){
           const fname=`도${figNum}_예시도.${format==='tif'?'png':format}`;
