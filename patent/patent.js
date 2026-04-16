@@ -4062,7 +4062,7 @@ ${diagram}`,4096);
 
 // ═══════════ PARSERS ═══════════
 function parseTitleCandidates(t){const c=[];let m;const re=/\[(\d+)\]\s*국문:\s*(.+?)\s*[/／]\s*영문:\s*(.+)/g;while((m=re.exec(t))!==null)c.push({num:m[1],korean:m[2].trim(),english:m[3].trim()});return c;}
-function parseClaimStats(t){const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,c={};let m;while((m=cp.exec(t))!==null)c[parseInt(m[1])]=m[2].trim();const tot=Object.keys(c).length;let dep=0;Object.values(c).forEach(x=>{if(/있어서|따른/.test(x))dep++;});return{total:tot,independent:tot-dep,dependent:dep,claims:c};}
+function parseClaimStats(t){const cp=/【청구항\s*(\d+)】\s*([\s\S]*?)(?=【청구항\s*\d+】|$)/g,c={};let m;while((m=cp.exec(t))!==null)c[parseInt(m[1])]=m[2].trim();const tot=Object.keys(c).length;let dep=0;Object.values(c).forEach(x=>{if(/(?:청구항|제)\s*\d+\s*(?:항\s*)?에\s*있어서|(?:청구항|제)\s*\d+\s*(?:항\s*)?에\s*따른/.test(x))dep++;});return{total:tot,independent:tot-dep,dependent:dep,claims:c};}
 function extractMermaidBlocks(t){return(t.match(/```mermaid\n([\s\S]*?)```/g)||[]).map(b=>b.replace(/```mermaid\n/,'').replace(/```/,'').trim());}
 function parseMathBlocks(t){const b=[];let m;const re=/---MATH_BLOCK_\d+---\s*\nANCHOR:\s*(.+)\s*\nFORMULA:\s*\n([\s\S]*?)(?=---MATH_BLOCK_|\s*$)/g;while((m=re.exec(t))!==null)b.push({anchor:m[1].trim(),formula:_sanitizeMathFormula(m[2].trim())});return b;}
 
@@ -5837,6 +5837,7 @@ function computeEdgeRoutes(edges,positions){
 function computeDeviceLayout2D(nodes,edges,figNum){
   const n=nodes.length;
   if(n===0)return{grid:{},maxCols:1,numRows:0,uniqueEdges:[]};
+  if(n===1)return{grid:{[nodes[0].id]:{row:0,col:0,layerSize:1}},maxCols:1,numRows:1,uniqueEdges:[]};
   const MAX_COLS=3;
   figNum=figNum||1;
   
@@ -6809,14 +6810,16 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
         svg+=`<polygon points="${cx+SO},${cy-dh+SO} ${cx+dw+SO},${cy+SO} ${cx+SO},${cy+dh+SO} ${cx-dw+SO},${cy+SO}" fill="#000"/>`;
         // 본체
         svg+=`<polygon points="${cx},${cy-dh} ${cx+dw},${cy} ${cx},${cy+dh} ${cx-dw},${cy}" fill="#fff" stroke="#000" stroke-width="1.5"/>`;
-        // 텍스트 (여러 줄 지원)
-        const maxChars=16;
-        if(displayLabel.length>maxChars){
+        // 텍스트 (v10.6 FIX: 마름모 가용폭 기반 동적 줄바꿈 — 고정 maxChars 제거)
+        const _diamUsableW=diamondW*0.70; // 마름모 중앙부 가용 너비 (~70%)
+        const _dtw=_estimateTextWidth(displayLabel,11);
+        if(_dtw>_diamUsableW){
+          const _dfs=_dtw>_diamUsableW*2?9:11; // 2줄로도 넘치면 폰트 축소
           const mid=Math.ceil(displayLabel.length/2);
           const sp=displayLabel.lastIndexOf(' ',mid);
           const bp=sp>0?sp:mid;
-          svg+=`<text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel.slice(0,bp))}</text>`;
-          svg+=`<text x="${cx}" y="${cy+10}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel.slice(bp).trim())}</text>`;
+          svg+=`<text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="${_dfs}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel.slice(0,bp))}</text>`;
+          svg+=`<text x="${cx}" y="${cy+_dfs-1}" text-anchor="middle" font-size="${_dfs}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel.slice(bp).trim())}</text>`;
         }else{
           svg+=`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(displayLabel)}</text>`;
         }
@@ -7056,6 +7059,21 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
 
     // ★ v13.0 FIX: allBoxArr 루프 밖 호이스트 (SVG Fig1) ★
     const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
+    // ★ v10.6 FIX: 허브 노드 다중 엣지 앵커 offset (같은 면 출구 분산) ★
+    const _exitCounts={};
+    svgEdgesToDraw.forEach(e=>{
+      const _fb=nodeBoxes[e.from],_tb=nodeBoxes[e.to];
+      if(!_fb||!_tb)return;
+      const _dx=_tb.cx-_fb.cx,_dy=_tb.cy-_fb.cy;
+      const _isH=Math.abs(_dx)>=Math.abs(_dy);
+      const _fDir=_isH?(_dx>0?'R':'L'):(_dy>0?'B':'T');
+      const _tDir=_isH?(_dx>0?'L':'R'):(_dy>0?'T':'B');
+      const _fk=e.from+'_'+_fDir,_tk=e.to+'_'+_tDir;
+      if(!_exitCounts[_fk])_exitCounts[_fk]={total:0,idx:0};
+      if(!_exitCounts[_tk])_exitCounts[_tk]={total:0,idx:0};
+      _exitCounts[_fk].total++;
+      _exitCounts[_tk].total++;
+    });
     svgEdgesToDraw.forEach(e=>{
       const fb=nodeBoxes[e.from], tb=nodeBoxes[e.to];
       if(!fb||!tb)return;
@@ -7069,13 +7087,17 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       if(isHorizontal){
         // 수평 연결: from의 right/left → to의 left/right
         const goRight=dx>0;
+        const _hfk=e.from+'_'+(goRight?'R':'L');
+        const _htk=e.to+'_'+(goRight?'L':'R');
+        const _hfOff=_exitCounts[_hfk]&&_exitCounts[_hfk].total>1?(_exitCounts[_hfk].idx++-(_exitCounts[_hfk].total-1)/2)*8:0;
+        const _htOff=_exitCounts[_htk]&&_exitCounts[_htk].total>1?(_exitCounts[_htk].idx++-(_exitCounts[_htk].total-1)/2)*8:0;
         const fromAnc={
           x: goRight ? fb.x+fb.w : fb.x,
-          y: fb.cy
+          y: fb.cy+_hfOff
         };
         const toAnc={
           x: goRight ? tb.x : tb.x+tb.w,
-          y: tb.cy
+          y: tb.cy+_htOff
         };
         
         if(Math.abs(fromAnc.y-toAnc.y)<3){
@@ -7089,12 +7111,16 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       }else{
         // 수직 연결: from의 bottom/top → to의 top/bottom
         const goDown=dy>0;
+        const _vfk=e.from+'_'+(goDown?'B':'T');
+        const _vtk=e.to+'_'+(goDown?'T':'B');
+        const _vfOff=_exitCounts[_vfk]&&_exitCounts[_vfk].total>1?(_exitCounts[_vfk].idx++-(_exitCounts[_vfk].total-1)/2)*8:0;
+        const _vtOff=_exitCounts[_vtk]&&_exitCounts[_vtk].total>1?(_exitCounts[_vtk].idx++-(_exitCounts[_vtk].total-1)/2)*8:0;
         const fromAnc={
-          x: fb.cx,
+          x: fb.cx+_vfOff,
           y: goDown ? fb.y+fb.h : fb.y
         };
         const toAnc={
-          x: tb.cx,
+          x: tb.cx+_vtOff,
           y: goDown ? tb.y : tb.y+tb.h
         };
         
@@ -7161,15 +7187,13 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       const refInside=dir.top&&dir.bottom&&dir.left&&dir.right;
       const labelMaxW=sw*0.90;
       
-      // ★ v10.4: 아이콘 shape는 텍스트를 아이콘 아래에 배치 (겹침 방지) ★
+      // ★ v10.6 FIX: 아이콘 shape 텍스트를 아이콘 실제 드로잉 하단에 배치 ★
       if(_isIconShape(shapeType)){
-        // 아이콘 shape: 전체 영역이 그림 → 텍스트를 아래 별도 공간에 배치
-        // iconBottom = shape의 실제 하단 경계 (visual bounds 기준)
+        // vb.bottom은 라우팅 충돌 방지용 (텍스트 예약 영역 포함) — 텍스트 배치에는 아이콘 실제 하단 사용
         const vb=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
-        const iconVisualBottom=vb.bottom;
-        // 아이콘 하단에서 충분한 간격(8px)을 두고 텍스트 시작
-        const labelStartY=iconVisualBottom+8;
-        // 텍스트는 이 지점을 TOP으로 사용 (중앙정렬 아님 — 상단 정렬)
+        const _iconReserve=shapeType==='sensor'?42:22;
+        const iconDrawBottom=vb.bottom-_iconReserve;
+        const labelStartY=iconDrawBottom+6;
         const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize,7);
         const lineH=labelFit.fontSize+2;
         let labelSvg='';
@@ -7177,7 +7201,6 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
           labelSvg+=`<text x="${sx+sw/2}" y="${labelStartY+li*lineH+labelFit.fontSize}" text-anchor="middle" font-size="${labelFit.fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(line)}</text>`;
         });
         svg+=labelSvg;
-        console.log(`[Fig1 Icon] "${displayLabel}" shape=${shapeType}: iconBottom=${Math.round(iconVisualBottom)}, textY=${Math.round(labelStartY+labelFit.fontSize)}, fs=${labelFit.fontSize}`);
       }else if(shapeType==='server'){
         // ★ v10.4: 서버 shape — 텍스트를 전체 중앙에 배치 + 흰색 배경으로 가로선 가림 ★
         const textCy2=_shapeTextCy(shapeType,sy,sh);
@@ -7211,12 +7234,13 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       // 아이콘 shape는 참조번호도 아이콘 아래 (라벨 아래)에 배치
       if(_isIconShape(shapeType)){
         const vb=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
-        const iconVisualBottom=vb.bottom;
+        const _iconReserve2=shapeType==='sensor'?42:22;
+        const iconDrawBottom2=vb.bottom-_iconReserve2;
         const labelFit=_fitLabelLines(displayLabel,sw*0.90,fontSize,7);
         const lineH=labelFit.fontSize+2;
         const labelBlockH=labelFit.lines.length*lineH;
-        // 참조번호: 아이콘 하단 + 라벨 텍스트 높이 + 간격
-        const refY=iconVisualBottom+8+labelBlockH+labelFit.fontSize+4;
+        // 참조번호: 아이콘 실제 하단 + 라벨 텍스트 높이 + 간격
+        const refY=iconDrawBottom2+6+labelBlockH+labelFit.fontSize+4;
         refSvg=`<text x="${sx+sw/2}" y="${refY}" text-anchor="middle" font-size="11" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
       }else if(!dir.bottom){
         // 하단: 수직선 + 번호 — shape 정확한 하단 앵커에서 시작
@@ -10062,13 +10086,15 @@ const KILLER_WORDS=[{pattern:/반드시/,msg:'"반드시" — 제한적 표현'}
 // v5.1: Get ONLY cited claim chain text (follows "청구항 N에 있어서" references upward)
 // Does NOT include unrelated claims — only the direct citation path
 function getCitedChainText(claimNum, claims){
-  const rm=claims[claimNum]?.match(/청구항\s*(\d+)에\s*있어서/);
+  const ct=claims[claimNum];
+  if(!ct)return '';
+  const rm=ct.match(/(?:청구항|제)\s*(\d+)\s*(?:항\s*)?에\s*있어서/);
   if(!rm)return '';
   let text='',current=parseInt(rm[1]);const visited=new Set();
   while(current&&!visited.has(current)){
     visited.add(current);
     if(claims[current])text+=' '+claims[current];
-    const rm2=claims[current]?.match(/청구항\s*(\d+)에\s*있어서/);
+    const rm2=claims[current]?.match(/(?:청구항|제)\s*(\d+)\s*(?:항\s*)?에\s*있어서/);
     current=rm2?parseInt(rm2[1]):null;
   }
   return text;
@@ -10085,7 +10111,7 @@ function validateClaims(text){
   // 독립항 판별: "N항에 있어서"가 없는 청구항 = 독립항
   const independentClaims=claimNums.filter(n=>{
     const ct=claims[n];
-    return !/청구항\s*\d+에\s*있어서/.test(ct)&&!/제\s*\d+\s*항에\s*있어서/.test(ct);
+    return !/청구항\s*\d+\s*에\s*있어서/.test(ct)&&!/제\s*\d+\s*항에\s*있어서/.test(ct);
   });
   
   if(independentClaims.length===0){
