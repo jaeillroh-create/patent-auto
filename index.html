@@ -657,6 +657,30 @@
           <button class="btn btn-primary btn-full" id="btnStep07" onclick="runDiagramStep('step_07')"><span class="tf">🤖</span> 장치 도면 설계</button>
         </div>
 
+        <!-- Step 7c 예시도/개념도 -->
+        <div class="card" id="conceptDiagramCard">
+          <div class="card-header"><div class="card-title"><span class="tf">🎨</span> Step 7c: 예시도/개념도</div></div>
+          <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:8px;padding:6px 8px;background:var(--color-bg-secondary);border-radius:6px">
+            UI 화면, 시나리오, 데이터 구조 등 개념도를 추가합니다. 청구항 분석 후 자동 추천되거나 수동 추가할 수 있습니다.
+          </div>
+          <div id="conceptDiagramTypesList"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <select class="input-field" id="selConceptType" style="flex:1;min-width:120px">
+              <option value="">-- 유형 선택 --</option>
+              <option value="ui_screen">UI 화면</option>
+              <option value="user_scenario">사용자 시나리오</option>
+              <option value="data_structure">데이터 구조</option>
+              <option value="device_appearance">장치 외관</option>
+              <option value="process_scene">프로세스 장면</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="addConceptDiagramType()">+ 추가</button>
+          </div>
+          <div id="progressStep07c" style="margin:8px 0"></div>
+          <div style="margin-top:10px">
+            <button class="btn btn-primary btn-full" id="btnStep07c" onclick="runConceptDiagramStep()"><span class="tf">🤖</span> 예시도 생성</button>
+          </div>
+        </div>
+
         <!-- Step 8 상세설명 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="tf">📝</span> Step 8: 상세설명</div></div>
@@ -729,6 +753,17 @@
               <button class="btn btn-outline" onclick="downloadPptxV14('step_07')" style="flex:1;min-width:90px"><span class="tf">📊</span> PPTX</button>
               <button class="btn btn-outline" onclick="downloadDiagramImages('step_07','jpeg')" style="flex:1;min-width:90px"><span class="tf">🖼️</span> JPEG</button>
               <button class="btn btn-outline" onclick="downloadDiagramImages('step_07','tif')" style="flex:1;min-width:90px"><span class="tf">📄</span> TIF</button>
+            </div>
+          </div>
+        </div>
+        <div class="result-card" id="resultCard07c" style="display:none">
+          <div class="card-header"><div class="card-title"><span class="tf">🎨</span> Step 7c 결과: 예시도/개념도</div></div>
+          <div id="conceptDiagramsArea" style="padding:0 16px 16px"></div>
+          <div id="conceptDiagramDownload" style="padding:0 16px 16px;display:none">
+            <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;font-weight:600">예시도 다운로드</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-outline" onclick="downloadConceptDiagramImages('jpeg')" style="flex:1;min-width:90px"><span class="tf">🖼️</span> JPEG</button>
+              <button class="btn btn-outline" onclick="downloadConceptDiagramImages('tif')" style="flex:1;min-width:90px"><span class="tf">📄</span> TIF</button>
             </div>
           </div>
         </div>
