@@ -6247,12 +6247,18 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     if(dirAdjRev[e.to])dirAdjRev[e.to].add(e.from);
   });
   // ★ uniqueEdges는 원본 edges 기반 — 렌더링 시 모든 연결 표시 ★
+  // ★ v16 FIX-E: _wasBidirectional 플래그로 양방향 화살표 정보 보존 ★
+  const biDirPairSet=new Set(biDirPairs.map(p=>[p.a,p.b].sort().join('|')));
   const origEdgeSet=new Set();
   edges.forEach(e=>{
     const k1=e.from+'|'+e.to, k2=e.to+'|'+e.from;
     if(!origEdgeSet.has(k1)&&!origEdgeSet.has(k2))origEdgeSet.add(k1);
   });
-  const uniqueEdges=[...origEdgeSet].map(k=>{const[f,t]=k.split('|');return{from:f,to:t};});
+  const uniqueEdges=[...origEdgeSet].map(k=>{
+    const[f,t]=k.split('|');
+    const sortedKey=[f,t].sort().join('|');
+    return{from:f,to:t,_wasBidirectional:biDirPairSet.has(sortedKey)};
+  });
   const allIds=nodes.map(nd=>nd.id);
   
   // ═══ edge 없음 → 참조번호 오름차순 그리드 ═══
@@ -6832,8 +6838,10 @@ function _segmentIntersectsBox(p1,p2,box,pad){
 }
 
 // SVG orthogonal path renderer (H/V 세그먼트만 허용)
-function svgOrthogonalEdge(route,mkId){
+// ★ v16 FIX-E: bidir 파라미터 — true이면 양방향 화살표, false이면 단방향 ★
+function svgOrthogonalEdge(route,mkId,bidir){
   if(!route||route.length<2)return'';
+  const startMarker=bidir?` marker-start="url(#${mkId})"`:''  ;
   // ★ 안전 검증: 2점 경로에서 X,Y 모두 다르면 L-shape로 변환 ★
   if(route.length===2){
     const p0=route[0],p1=route[1];
@@ -6843,11 +6851,11 @@ function svgOrthogonalEdge(route,mkId){
     }
   }
   if(route.length===2){
-    return`<line x1="${route[0].x}" y1="${route[0].y}" x2="${route[1].x}" y2="${route[1].y}" stroke="#000" stroke-width="1" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
+    return`<line x1="${route[0].x}" y1="${route[0].y}" x2="${route[1].x}" y2="${route[1].y}" stroke="#000" stroke-width="1"${startMarker} marker-end="url(#${mkId})"/>`;
   }
   let d=`M${route[0].x},${route[0].y}`;
   for(let i=1;i<route.length;i++)d+=` L${route[i].x},${route[i].y}`;
-  return`<path d="${d}" fill="none" stroke="#000" stroke-width="1" marker-start="url(#${mkId})" marker-end="url(#${mkId})"/>`;
+  return`<path d="${d}" fill="none" stroke="#000" stroke-width="1"${startMarker} marker-end="url(#${mkId})"/>`;
 }
 
 // Stagger leader line Y-positions to prevent reference number overlap
@@ -7762,7 +7770,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
         }
       }
       
-      if(route)svg+=svgOrthogonalEdge(route,mkId);
+      if(route)svg+=svgOrthogonalEdge(route,mkId,!!e._wasBidirectional);
     });
     // ── Phase 3: Shape + 지능형 참조번호 배치 (연결 방향 회피) ──
     // 3a. 각 노드의 연결 방향 분석
@@ -8146,7 +8154,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
           }
         }
       }
-      if(route)svg+=svgOrthogonalEdge(route,mkId);
+      if(route)svg+=svgOrthogonalEdge(route,mkId,!!e._wasBidirectional);
     });
     
     svg+='</svg>';
