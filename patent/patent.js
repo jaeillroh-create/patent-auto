@@ -44,6 +44,10 @@ let uploadedFiles = [];
 let diagramData = {};
 let stepUserCommands = {}; // v5.5: 각 스텝별 사용자 명령어
 let outputTimestamps = {};
+// ═══ v11.0: 예시도/개념도 ═══
+let conceptDiagramEnabled = false;
+let conceptDiagramCount = 0;
+let conceptDiagramTypes = []; // [{type:'ui_screen',title:'...',figNum:N,svgContent:'',refNums:[]}]
 
 // ═══ Step 8 정형문 ═══
 const STEP8_PREFIX = `이하, 본 발명의 실시예를 첨부된 도면을 참조하여 상세하게 설명한다.
@@ -59,9 +63,17 @@ const STEP8_SUFFIX = `본 발명에 따른 방법들은 다양한 컴퓨터 수�
 컴퓨터 판독 가능 매체의 예에는 롬(ROM), 램(RAM), 플래시 메모리(flash memory) 등과 같이 프로그램 명령을 저장하고 수행하도록 특별히 구성된 하드웨어 장치가 포함될 수 있다. 프로그램 명령의 예에는 컴파일러(compiler)에 의해 만들어지는 것과 같은 기계어 코드뿐만 아니라 인터프리터(interpreter) 등을 사용해서 컴퓨터에 의해 실행될 수 있는 고급 언어 코드를 포함할 수 있다. 상술한 하드웨어 장치는 본 발명의 동작을 수행하기 위해 적어도 하나의 소프트웨어 모듈로 작동하도록 구성될 수 있으며, 그 역도 마찬가지이다.
 또한, 상술한 방법 또는 장치는 그 구성이나 기능의 전부 또는 일부가 결합되어 구현되거나, 분리되어 구현될 수 있다.
 상기에서는 본 발명의 바람직한 실시예를 참조하여 설명하였지만, 해당 기술 분야의 숙련된 당업자는 하기의 특허 청구의 범위에 기재된 본 발명의 사상 및 필드로부터 벗어나지 않는 범위 내에서 본 발명을 다양하게 수정 및 변경시킬 수 있음을 이해할 수 있을 것이다.`;
-const STEP_NAMES={step_01:'A1. 발명의 명칭',step_02:'D5. 기술분야',step_03:'D4. 배경기술',step_04:'E2. 선행기술 검색',step_05:'D2. 해결하고자 하는 과제',step_06:'A2. 장치 청구항',step_07:'B1. 장치 도면',step_08:'C1. 장치 상세설명',step_09:'C2. 수학식',step_10:'A3. 방법 청구항',step_11:'B2. 방법 도면',step_12:'C3. 방법 상세설명',step_13:'E1. AI 검토',step_14:'E4. 대안 청구항',step_15:'E3. 특허성 검토',step_16:'D3. 발명의 효과',step_17:'D1. 과제의 해결 수단',step_18:'F1. 부호의 설명',step_19:'F2. 요약서',step_20:'A4. 기록매체/프로그램 청구항'};
+// ═══ v11.0: 예시도/개념도 유형 ═══
+const CONCEPT_DIAGRAM_TYPES={
+  ui_screen:{label:'UI 화면',desc:'사용자 인터페이스 스크린 예시',refRange:[31,50]},
+  user_scenario:{label:'사용자 시나리오',desc:'사용자 이용 시나리오 흐름',refRange:[51,60]},
+  data_structure:{label:'데이터 구조',desc:'테이블/데이터 구조 예시',refRange:[61,70]},
+  device_appearance:{label:'장치 외관',desc:'기기 외관 개략도',refRange:[71,80]},
+  process_scene:{label:'프로세스 장면',desc:'처리 과정 시각화',refRange:[81,99]}
+};
+const STEP_NAMES={step_01:'A1. 발명의 명칭',step_02:'D5. 기술분야',step_03:'D4. 배경기술',step_04:'E2. 선행기술 검색',step_05:'D2. 해결하고자 하는 과제',step_06:'A2. 장치 청구항',step_07:'B1. 장치 도면',step_07c:'B1c. 예시도/개념도',step_08:'C1. 장치 상세설명',step_09:'C2. 수학식',step_10:'A3. 방법 청구항',step_11:'B2. 방법 도면',step_12:'C3. 방법 상세설명',step_13:'E1. AI 검토',step_14:'E4. 대안 청구항',step_15:'E3. 특허성 검토',step_16:'D3. 발명의 효과',step_17:'D1. 과제의 해결 수단',step_18:'F1. 부호의 설명',step_19:'F2. 요약서',step_20:'A4. 기록매체/프로그램 청구항'};
 // Phase 없는 순수 이름 (프롬프트 내부용)
-const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술 검색',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'장치 도면',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'AI 검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서',step_20:'기록매체/프로그램 청구항'};
+const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술 검색',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'장치 도면',step_07c:'예시도/개념도',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'AI 검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서',step_20:'기록매체/프로그램 청구항'};
 
 // ═══ v9.0: callClaudeWithContinuation 오버라이드 ═══
 // 근본 원인: common.js의 이어쓰기 프롬프트가 원본 규칙을 전부 소실시킴
@@ -135,6 +147,7 @@ function clearAllState(){
   currentProjectId=null;outputs={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
   usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};beforeReviewText='';uploadedFiles=[];diagramData={};
   projectRefStyleText='';requiredFigures=[];outputTimestamps={};stepUserCommands={};
+  conceptDiagramEnabled=false;conceptDiagramCount=0;conceptDiagramTypes=[];
   // Claim defaults
   deviceCategory='server';deviceGeneralDep=5;deviceAnchorDep=4;deviceAnchorStart=7;
   anchorThemeMode='auto';selectedAnchorThemes=[];
@@ -146,7 +159,7 @@ function clearAllState(){
   for(let i=1;i<=19;i++){const e=document.getElementById(`resultStep${String(i).padStart(2,'0')}`);if(e)e.innerHTML='';}
   // v5.5: Clear step user command inputs
   document.querySelectorAll('[id^="userCmd_"]').forEach(el=>{el.value='';});
-  ['resultsBatch25','resultsBatchFinish','validationResults','previewArea','diagramsStep07','diagramsStep11','fileList','requiredFiguresList','resultStep20'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
+  ['resultsBatch25','resultsBatchFinish','validationResults','previewArea','diagramsStep07','diagramsStep11','conceptDiagramsArea','fileList','requiredFiguresList','resultStep20'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
   ['btnApplyReview','diagramDownload07','diagramDownload11','reviewApplyResult'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   document.querySelectorAll('.tab-item').forEach((t,i)=>{t.classList.toggle('active',i===0);t.setAttribute('aria-selected',i===0);});
   document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('active',i===0));
@@ -373,6 +386,9 @@ async function openProject(pid){
   diagramData=s.diagramData||{};
   outputTimestamps=s.outputTimestamps||{};
   stepUserCommands=s.stepUserCommands||{};
+  conceptDiagramEnabled=s.conceptDiagramEnabled||false;
+  conceptDiagramCount=s.conceptDiagramCount||0;
+  conceptDiagramTypes=s.conceptDiagramTypes||[];
   // FIX: Ensure API_KEY is loaded (use ensureApiKey instead of raw assignment)
   if(!API_KEY){App.ensureApiKey();}
   // Restore UI
@@ -387,6 +403,8 @@ async function openProject(pid){
   // Restore diagrams and show download buttons
   if(outputs.step_07_mermaid){renderDiagrams('step_07',outputs.step_07_mermaid);const dl07=document.getElementById('diagramDownload07');if(dl07)dl07.style.display='block';}
   if(outputs.step_11_mermaid){renderDiagrams('step_11',outputs.step_11_mermaid);const dl11=document.getElementById('diagramDownload11');if(dl11)dl11.style.display='block';}
+  // v11.0: 예시도/개념도 복원
+  if(conceptDiagramTypes.length>0)renderConceptDiagramCards();
   document.getElementById('headerProjectName').textContent=data.title;document.getElementById('headerUserName').textContent=currentProfile?.display_name||currentUser?.email||'';
   if(currentProfile?.role==='admin')document.getElementById('btnAdmin').style.display='inline-flex';
   updateStats();
@@ -417,7 +435,7 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands}}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes}}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===4)renderPreview();}
@@ -608,6 +626,70 @@ function renderRequiredFiguresList(){
   }).join('');
 }
 
+// ═══ v11.0: 예시도/개념도 UI 관리 ═══
+function addConceptDiagramType(){
+  const sel=document.getElementById('selConceptType');
+  const typeKey=sel?.value;
+  if(!typeKey){App.showToast('유형을 선택하세요','error');return;}
+  if(conceptDiagramTypes.find(t=>t.type===typeKey)){App.showToast('이미 추가된 유형입니다','error');return;}
+  const typeDef=CONCEPT_DIAGRAM_TYPES[typeKey];
+  if(!typeDef)return;
+  conceptDiagramTypes.push({type:typeKey,title:typeDef.label,figNum:0,svgContent:'',refNums:[]});
+  conceptDiagramCount=conceptDiagramTypes.length;
+  sel.value='';
+  renderConceptDiagramTypesList();
+  saveProject(true);
+  App.showToast(`${typeDef.label} 예시도 추가됨`);
+}
+function removeConceptDiagramType(typeKey){
+  conceptDiagramTypes=conceptDiagramTypes.filter(t=>t.type!==typeKey);
+  conceptDiagramCount=conceptDiagramTypes.length;
+  renderConceptDiagramTypesList();
+  saveProject(true);
+}
+function renderConceptDiagramTypesList(){
+  const el=document.getElementById('conceptDiagramTypesList');if(!el)return;
+  if(!conceptDiagramTypes.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--color-text-tertiary);text-align:center;padding:8px">추가된 예시도가 없습니다</div>';
+    return;
+  }
+  const cFigNums=getAutoFigNums('step_07c');
+  el.innerHTML=conceptDiagramTypes.map((ct,i)=>{
+    const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type,desc:''};
+    const figNum=cFigNums[i]||'?';
+    const statusBadge=ct.svgContent?'<span class="badge badge-success">생성됨</span>':'<span class="badge" style="background:var(--color-bg-tertiary)">대기</span>';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:4px;font-size:13px">
+      <span class="badge badge-primary" style="min-width:40px;text-align:center">도 ${figNum}</span>
+      <span style="flex:1">${App.escapeHtml(typeDef.label)} <span style="color:var(--color-text-tertiary);font-size:11px">${App.escapeHtml(typeDef.desc)}</span></span>
+      ${statusBadge}
+      <button class="btn btn-ghost btn-sm" onclick="removeConceptDiagramType('${ct.type}')" title="삭제">✕</button>
+    </div>`;
+  }).join('');
+}
+function renderConceptDiagramCards(){
+  const area=document.getElementById('conceptDiagramsArea');if(!area)return;
+  const card=document.getElementById('resultCard07c');
+  if(!conceptDiagramTypes.length||!conceptDiagramTypes.some(ct=>ct.svgContent)){
+    if(card)card.style.display='none';
+    area.innerHTML='';
+    return;
+  }
+  if(card)card.style.display='';
+  const cFigNums=getAutoFigNums('step_07c');
+  area.innerHTML=conceptDiagramTypes.map((ct,i)=>{
+    if(!ct.svgContent)return '';
+    const figNum=cFigNums[i]||'?';
+    const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
+    return `<div style="margin-bottom:16px">
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">도 ${figNum} — ${App.escapeHtml(typeDef.label)}</div>
+      <div style="border:1px solid var(--color-border);border-radius:8px;padding:12px;background:#fff;overflow:auto;max-height:500px">${ct.svgContent}</div>
+    </div>`;
+  }).filter(Boolean).join('');
+  const dl=document.getElementById('conceptDiagramDownload');
+  if(dl)dl.style.display=conceptDiagramTypes.some(ct=>ct.svgContent)?'':'none';
+  renderConceptDiagramTypesList();
+}
+
 // ═══ Project Reference Document ═══
 async function handleProjectRefUpload(event){
   const file=event.target.files[0];if(!file)return;
@@ -741,9 +823,10 @@ function injectAllUserCommandUIs(){
 const STEP_DEPENDENCIES={
   // ═══ v14: 역설계 체인 반영 ═══
   step_01:{MUST:['step_06'],SHOULD:[]},                    // 명칭 → 청구항 (직행)
-  step_06:{MUST:['step_10','step_07','step_17'],SHOULD:['step_08','step_11','step_14','step_15','step_19','step_20']}, // 장치청구 → 방법,도면,해결수단
+  step_06:{MUST:['step_10','step_07','step_07c','step_17'],SHOULD:['step_08','step_11','step_14','step_15','step_19','step_20']}, // 장치청구 → 방법,도면,개념도,해결수단
   step_10:{MUST:['step_11','step_12','step_17','step_20'],SHOULD:['step_14','step_15','step_18']}, // 방법청구 → 방법도면,상세,해결수단,기록매체
   step_07:{MUST:['step_08','step_18'],SHOULD:['step_09','step_13']},     // 장치도면 → 상세설명, 부호
+  step_07c:{MUST:['step_08','step_18'],SHOULD:[]},                       // 예시도 → 상세설명, 부호
   step_08:{MUST:['step_09','step_13'],SHOULD:['step_12','step_14','step_15']}, // 상세설명 → 수학식, 검토
   step_09:{MUST:[],SHOULD:['step_13']},                    // 수학식 → 검토
   step_11:{MUST:['step_12','step_18'],SHOULD:['step_13']},  // 방법도면 → 방법상세, 부호
@@ -765,7 +848,7 @@ const STEP_DEPENDENCIES={
 // 각 step의 실행 함수 매핑 (연쇄 재생성용)
 const STEP_RUNNERS={
   step_01:'runStep',step_02:'runStep',step_03:'runStep',step_04:'runStep',step_05:'runStep',
-  step_06:'runStep',step_07:'runDiagramStep',step_08:'runLongStep',step_09:'runMathInsertion',
+  step_06:'runStep',step_07:'runDiagramStep',step_07c:'runConceptDiagramStep',step_08:'runLongStep',step_09:'runMathInsertion',
   step_10:'runStep',step_11:'runDiagramStep',step_12:'runLongStep',step_13:'runStep',
   step_14:'runStep',step_15:'runStep',step_16:'runStep',step_17:'runStep',
   step_18:'runStep',step_19:'runStep',step_20:'runStep',
@@ -1055,6 +1138,7 @@ async function runCascadeRegeneration(sourceStep){
       if(runner==='runLongStep')await _cascadeRunLong(sid);
       else if(runner==='runDiagramStep')await _cascadeRunDiagram(sid);
       else if(runner==='runMathInsertion')await _cascadeRunMath();
+      else if(runner==='runConceptDiagramStep'){if(conceptDiagramTypes.length)await _cascadeRunConceptDiagram();}
       else await _cascadeRunShort(sid);
 
       completed++;
@@ -1174,7 +1258,7 @@ ${prompt.slice(0,2000)}`;
   if(sid==='step_11'){
     const methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
     const devCount=diagramData.step_07?.length||0;
-    const figNums=computeFigNums(devCount,methFigCount);
+    const figNums=computeFigNums(devCount,methFigCount,conceptDiagramTypes.length);
     const expectedNums=figNums.method;
     
     const preIssues=validateDiagramDesignText(designText,methFigCount,expectedNums);
@@ -1193,6 +1277,29 @@ ${prompt.slice(0,2000)}`;
   const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
   outputs[sid+'_mermaid']=mr.text;
   renderDiagramsV14(sid,mr.text);
+}
+
+// v11.0: 연쇄 재생성용 예시도 실행
+async function _cascadeRunConceptDiagram(){
+  const claims=outputs.step_06||'';
+  const title=selectedTitle||'본 발명';
+  const cFigNums=getAutoFigNums('step_07c');
+  for(let i=0;i<conceptDiagramTypes.length;i++){
+    const ct=conceptDiagramTypes[i];
+    const figNum=cFigNums[i]||'?';
+    const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type,desc:''};
+    const refRange=typeDef.refRange||[31,99];
+    const prompt=`한국 특허 명세서 도면 전문가로서, "${typeDef.label}" 예시도(도 ${figNum})를 SVG로 생성하라.\n【발명의 명칭】${title}\n【장치 청구범위】\n${claims.slice(0,3000)}\nSVG 규칙: viewBox="0 0 800 600", 배경 흰색, 참조번호 ${refRange[0]}~${refRange[1]}, font-family="Malgun Gothic, sans-serif", 하단 캡션 "도 ${figNum}". SVG 외 텍스트 금지.`;
+    const r=await App.callClaude(prompt,8192);
+    let svgText=r.text||'';
+    const svgMatch=svgText.match(/<svg[\s\S]*?<\/svg>/i);
+    svgText=svgMatch?svgMatch[0]:`<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg"><rect width="800" height="600" fill="#fff"/><text x="400" y="300" text-anchor="middle" fill="#999">SVG 생성 실패</text></svg>`;
+    const refNums=[...new Set([...svgText.matchAll(/\((\d+)\)/g)].map(m=>parseInt(m[1])))].sort((a,b)=>a-b);
+    ct.svgContent=svgText;ct.figNum=figNum;ct.refNums=refNums;
+  }
+  outputs.step_07c=conceptDiagramTypes.map((ct,i)=>{const fn=cFigNums[i]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `[도 ${fn}] ${td.label} 예시도\n참조번호: ${ct.refNums.join(', ')}`;}).join('\n\n');
+  markOutputTimestamp('step_07c');
+  renderConceptDiagramCards();
 }
 
 // v10.3: 설계 텍스트에서 초과 도면 제거
@@ -1480,6 +1587,14 @@ function extractBriefDescriptions(s07,s11){
   // 2b. 방법 도면 폴백
   methodData.forEach((md,i)=>{const fn=String(methAutoNums[i]||(devData.length+i+1));if(seen.has(fn))return;
     const n=parseInt(fn);d.push(`도 ${fn}${figParticle(n)} ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});
+  // 2b-2. v11.0: 예시도/개념도 간단한 설명 추가
+  const conceptAutoNums=getAutoFigNums('step_07c');
+  conceptDiagramTypes.forEach((ct,i)=>{
+    const fn=String(conceptAutoNums[i]||'?');if(seen.has(fn))return;
+    const n=parseInt(fn);const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
+    d.push(`도 ${fn}${figParticle(n)} ${title}의 ${typeDef.label}을 나타내는 예시도이다.`);
+    seen.add(fn);
+  });
   // 2c. diagramData 없을 때 텍스트 기반 폴백
   if(!devData.length&&s07){const figs=s07.match(/도\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];const n=parseInt(fn);
     if(fn==='1'){d.push(`도 1${figParticle(1)} ${title}의 전체 구성을 나타내는 블록도이다.`);}
@@ -1645,23 +1760,26 @@ function getRequiredFiguresInstruction(){
   const list=requiredFigures.map(f=>`- 도 ${f.num}: ${f.description}`).join('\n');
   return `\n\n[사용자 도면 — 아래 도면은 사용자가 이미 보유하고 있다. 이 번호들은 건너뛰고 나머지 도면만 새로 생성하라. 단, 도면의 간단한 설명에는 사용자 도면도 모두 포함하라.]\n${list}`;
 }
-// ═══ v10.0: 사용자 도면 번호 스킵 — 자동 도면 번호 산출 ═══
-// devCount/methCount: 자동 생성할 장치/방법 도면 수
-function computeFigNums(devCount,methCount){
+// ═══ v10.0/v11.0: 사용자 도면 번호 스킵 — 자동 도면 번호 산출 ═══
+// devCount/methCount/conceptCount: 자동 생성할 장치/방법/개념도 도면 수
+function computeFigNums(devCount,methCount,conceptCount){
+  conceptCount=conceptCount||0;
   const userNums=new Set(requiredFigures.map(f=>f.num));
-  const devNums=[],methNums=[];
+  const devNums=[],conceptNums=[],methNums=[];
   let c=1;
   for(let i=0;i<devCount;i++){while(userNums.has(c))c++;devNums.push(c);c++;}
-  const lastDeviceFig=devNums.length?devNums[devNums.length-1]:0;
+  for(let i=0;i<conceptCount;i++){while(userNums.has(c))c++;conceptNums.push(c);c++;}
+  const lastDeviceFig=conceptNums.length?conceptNums[conceptNums.length-1]:(devNums.length?devNums[devNums.length-1]:0);
   for(let i=0;i<methCount;i++){while(userNums.has(c))c++;methNums.push(c);c++;}
-  return{device:devNums,method:methNums,lastDeviceFig,lastFig:c-1};
+  return{device:devNums,concept:conceptNums,method:methNums,lastDeviceFig,lastFig:c-1};
 }
 // 렌더링용: diagramData 기반 자동 도면 번호
 function getAutoFigNums(sid){
   const devCount=diagramData.step_07?.length||0;
   const methCount=diagramData.step_11?.length||0;
-  const r=computeFigNums(devCount,methCount);
-  return sid==='step_07'?r.device:r.method;
+  const cCount=conceptDiagramTypes.length||0;
+  const r=computeFigNums(devCount,methCount,cCount);
+  return sid==='step_07'?r.device:sid==='step_07c'?r.concept:r.method;
 }
 // 사용자 도면 설명을 Step 8/12 프롬프트에 삽입하는 헬퍼
 function getUserFiguresPromptBlock(){
@@ -2334,10 +2452,11 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
       // v10.3: 실제 도면 설계 텍스트에서 도면 번호 목록 추출
       const designText=outputs.step_07||'';
       const actualFigNums=_extractFigureNumbersFromDesign(designText);
-      // 사용자 도면 번호도 포함
-      const allFigNumsRaw=[...new Set([...actualFigNums,...requiredFigures.map(f=>f.num)])].sort((a,b)=>a-b);
-      // ★ Safety: UI 설정 도면 수 초과 방지 ★
-      const expectedTotalFig=deviceFigCount;
+      // 사용자 도면 + 예시도 번호도 포함
+      const _conceptFigNums=getAutoFigNums('step_07c');
+      const allFigNumsRaw=[...new Set([...actualFigNums,...requiredFigures.map(f=>f.num),..._conceptFigNums])].sort((a,b)=>a-b);
+      // ★ Safety: UI 설정 도면 수 + 예시도 수 반영 ★
+      const expectedTotalFig=deviceFigCount+conceptDiagramTypes.length;
       // ★ v10.4 fix: 도면 번호 목록이 비어있으면 computeFigNums로 순차 번호 생성
       // (step_07 미생성 시 빈 목록으로 인해 LLM이 존재하지 않는 도면을 참조하는 버그 방지)
       const _fallbackFigNums=allFigNumsRaw.length===0?computeFigNums(Math.max(deviceFigCount-requiredFigures.length,0),0).device.concat(requiredFigures.map(f=>f.num)).sort((a,b)=>a-b):allFigNumsRaw;
@@ -2468,6 +2587,7 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 청구항에서 사용한 명칭과 상세설명의 명칭이 일치해야 한다.
 ${_designCompStr}
 ${_userFigBlock?`\n${_userFigBlock}\n★ 사용자 도면도 "도 N을 참조하면," 형태로 도면 번호 순서에 맞게 설명을 포함하라.\n★ 사용자 도면의 설명은 발명 내용 및 청구범위와 정합되도록, 위 도면 설명을 기초로 기술적 의미를 보완하여 작성하라.`:''}
+${conceptDiagramTypes.length?`\n★★★ 예시도/개념도 (참조번호 31~99) ★★★\n${conceptDiagramTypes.map((ct,ci)=>{const fn=_conceptFigNums[ci]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${fn}: ${td.label} (참조번호: ${ct.refNums.join(', ')||'미정'})`;}).join('\n')}\n- 예시도도 도면 번호 순서에 맞게 "도 N을 참조하면," 형태로 설명하라.\n- 예시도의 참조번호(31~99)는 장치 참조번호(100~999)와 구분된다.\n`:''}
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
 
@@ -2557,7 +2677,7 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
       const methCount=parseInt(f);
       // v10.0: 사용자 도면 스킵 반영한 방법 도면 번호 계산
       const devAutoCount=Math.max((parseInt(document.getElementById('optDeviceFigures')?.value||4))-requiredFigures.length,0);
-      const _mfn=computeFigNums(devAutoCount,methCount);
+      const _mfn=computeFigNums(devAutoCount,methCount,conceptDiagramTypes.length);
       const lf=_mfn.lastDeviceFig||getLastFigureNumber(outputs.step_07||'');
       const methAutoNums=_mfn.method;
       const firstMeth=methAutoNums[0]||(lf+1);
@@ -2949,6 +3069,8 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
       setTimeout(()=>App.clearProgress('progressStep06'),2000);
       if(finalIssues.length===0)App.showToast(`장치 청구항 완료 (기재불비 없음, ${correctionRound}회 수정)`);
       else App.showToast(`장치 청구항 완료 (${correctionRound}회 수정, ${finalIssues.length}건 잔여 — 경미한 사항)`, 'info');
+      // v11.0: 예시도 자동 감지
+      if(!conceptDiagramTypes.length)autoDetectConceptDiagrams();
     }
     // Step 10: auto-validation + multi-round correction (v5.2)
     else if(sid==='step_10'){
@@ -3547,7 +3669,7 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
     if(sid==='step_11'){
       const _methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
       const _devCount=diagramData.step_07?.length||0;
-      const _figNums=computeFigNums(_devCount,_methFigCount);
+      const _figNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.length);
       const _expectedNums=_figNums.method;
       
       const preIssues=validateDiagramDesignText(designText,_methFigCount,_expectedNums);
@@ -3587,6 +3709,123 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
     setGlobalProcessing(false);
   }
 }
+// ═══ v11.0: 예시도/개념도 자동 감지 ═══
+function autoDetectConceptDiagrams(){
+  const claims=outputs.step_06||'';
+  if(!claims)return;
+  const detected=[];
+  // UI/화면 관련 키워드
+  if(/디스플레이|표시부|화면|인터페이스|터치\s*스크린|GUI|사용자\s*인터페이스/i.test(claims)&&!conceptDiagramTypes.find(t=>t.type==='ui_screen'))
+    detected.push('ui_screen');
+  // 시나리오 키워드
+  if(/사용자|단말|클라이언트|요청|응답|전송|수신/i.test(claims)&&!conceptDiagramTypes.find(t=>t.type==='user_scenario'))
+    detected.push('user_scenario');
+  // 데이터 구조 키워드
+  if(/데이터베이스|테이블|스키마|레코드|필드|저장부|DB|메모리/i.test(claims)&&!conceptDiagramTypes.find(t=>t.type==='data_structure'))
+    detected.push('data_structure');
+  if(detected.length>0){
+    detected.forEach(typeKey=>{
+      const typeDef=CONCEPT_DIAGRAM_TYPES[typeKey];
+      conceptDiagramTypes.push({type:typeKey,title:typeDef.label,figNum:0,svgContent:'',refNums:[]});
+    });
+    conceptDiagramCount=conceptDiagramTypes.length;
+    renderConceptDiagramTypesList();
+    App.showToast(`예시도 ${detected.length}종 자동 추천: ${detected.map(k=>CONCEPT_DIAGRAM_TYPES[k].label).join(', ')}`,'info');
+  }
+}
+
+// ═══ v11.0: 예시도/개념도 AI 생성 ═══
+async function runConceptDiagramStep(){
+  if(!conceptDiagramTypes.length){App.showToast('예시도 유형을 추가하세요','error');return;}
+  if(!outputs.step_06){App.showToast('장치 청구항(Step 6)을 먼저 생성하세요','error');return;}
+  if(globalProcessing)return;
+  setGlobalProcessing(true);
+  const bid='btnStep07c';
+  loadingState.step_07c=true;App.setButtonLoading(bid,true);
+
+  try{
+    const claims=outputs.step_06||'';
+    const title=selectedTitle||'본 발명';
+    const cFigNums=getAutoFigNums('step_07c');
+
+    for(let i=0;i<conceptDiagramTypes.length;i++){
+      const ct=conceptDiagramTypes[i];
+      const figNum=cFigNums[i]||'?';
+      const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type,desc:''};
+      const refRange=typeDef.refRange||[31,99];
+
+      App.showProgress('progressStep07c',`예시도 생성 중 (${i+1}/${conceptDiagramTypes.length})`,i+1,conceptDiagramTypes.length);
+
+      const prompt=`당신은 한국 특허 명세서 도면 전문가입니다. 아래 발명에 대한 "${typeDef.label}" 예시도(도 ${figNum})를 SVG로 직접 생성하라.
+
+【발명의 명칭】${title}
+
+【장치 청구범위】
+${claims.slice(0,3000)}
+
+═══ 예시도 유형: ${typeDef.label} ═══
+${typeDef.desc}
+
+═══ SVG 생성 규칙 ═══
+1. 반드시 <svg> 태그로 시작하고 </svg>로 끝나는 완전한 SVG를 출력하라.
+2. viewBox="0 0 800 600" 사용. 배경은 흰색(#FFFFFF).
+3. 참조번호 범위: ${refRange[0]}~${refRange[1]} (예: 표시부(${refRange[0]}), 입력창(${refRange[0]+1}))
+4. 한글 텍스트 사용. font-family="Malgun Gothic, sans-serif"
+5. 선: stroke="#333", 채움: fill="#E3F2FD"(파랑 계열) 또는 fill="#FFF3E0"(주황 계열)
+6. 각 구성요소에 참조번호를 괄호로 표기하라: "표시부(${refRange[0]})"
+7. 도면 하단에 "도 ${figNum}" 캡션을 넣어라.
+8. SVG 외에 다른 텍스트는 출력하지 마라. 설명 금지.
+
+${ct.type==='ui_screen'?'스마트폰 또는 PC 화면 형태로 UI 요소(버튼, 텍스트필드, 리스트 등)를 배치하라.':''}
+${ct.type==='user_scenario'?'사용자-시스템 간 시퀀스 다이어그램 또는 이용 시나리오를 흐름으로 표현하라.':''}
+${ct.type==='data_structure'?'테이블 구조 또는 데이터 모델을 ER 다이어그램 형태로 표현하라.':''}
+${ct.type==='device_appearance'?'기기의 외관을 개략적으로 표현하라 (전면도/측면도).':''}
+${ct.type==='process_scene'?'처리 과정의 장면을 시각적으로 표현하라 (인포그래픽 스타일).':''}`;
+
+      const r=await App.callClaude(prompt,8192);
+      let svgText=r.text||'';
+
+      // SVG 추출: <svg...>...</svg> 부분만
+      const svgMatch=svgText.match(/<svg[\s\S]*?<\/svg>/i);
+      if(svgMatch){
+        svgText=svgMatch[0];
+      }else{
+        console.warn('[runConceptDiagramStep] SVG 추출 실패:', ct.type);
+        svgText=`<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg"><rect width="800" height="600" fill="#fff" stroke="#ccc"/><text x="400" y="300" text-anchor="middle" font-size="20" fill="#999">SVG 생성 실패 — 재시도하세요</text></svg>`;
+      }
+
+      // 참조번호 추출
+      const refMatches=[...svgText.matchAll(/\((\d+)\)/g)];
+      const refNums=[...new Set(refMatches.map(m=>parseInt(m[1])))].sort((a,b)=>a-b);
+
+      ct.svgContent=svgText;
+      ct.figNum=figNum;
+      ct.refNums=refNums;
+    }
+
+    // 결과 저장
+    outputs.step_07c=conceptDiagramTypes.map((ct,i)=>{
+      const figNum=cFigNums[i]||'?';
+      const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
+      return `[도 ${figNum}] ${typeDef.label} 예시도\n참조번호: ${ct.refNums.join(', ')}`;
+    }).join('\n\n');
+    markOutputTimestamp('step_07c');
+    invalidateDownstream('step_07c');
+    onStepCompleted('step_07c');
+
+    renderConceptDiagramCards();
+    saveProject(true);
+    App.clearProgress('progressStep07c');
+    App.showToast(`예시도 ${conceptDiagramTypes.length}종 생성 완료`);
+  }catch(e){
+    App.showToast(e.message,'error');
+  }finally{
+    loadingState.step_07c=false;
+    App.setButtonLoading(bid,false);
+    setGlobalProcessing(false);
+  }
+}
+
 async function runBatch25(){
   if(globalProcessing)return;
   if(!selectedTitle){App.showToast('명칭 먼저 확정','error');return;}
@@ -5415,7 +5654,7 @@ ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
     }else if(stepId==='step_11'){
       const _methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
       const _devCount=diagramData.step_07?.length||0;
-      const _figNums=computeFigNums(_devCount,_methFigCount);
+      const _figNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.length);
       const _expectedNums=_figNums.method;
       const postIssues=validateDiagramDesignText(regenDesign,_methFigCount,_expectedNums);
       if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
@@ -5864,13 +6103,38 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   const MAX_COLS=3;
   figNum=figNum||1;
   
+  // ═══ v15 FIX-B: 양방향 edge 단방향화 전처리 ═══
+  // A-->B와 B-->A가 동시에 있으면 참조번호 작은 쪽→큰 쪽으로 정규화
+  // → 가짜 순환 제거 → TOPOLOGICAL 전략 정상 적용
+  const _nodeRefNum=id=>{
+    const nd=nodes.find(n=>n.id===id);
+    return parseInt((nd?.label.match(/\((\d+)\)/)||[])[1])||9999;
+  };
+  const edgePairSet=new Set();
+  const deduplicatedEdges=[];
+  edges.forEach(e=>{
+    const k1=e.from+'|'+e.to, k2=e.to+'|'+e.from;
+    if(edgePairSet.has(k2)){
+      // 역방향이 이미 등록됨 → 중복 양방향 제거
+      return;
+    }
+    edgePairSet.add(k1);
+    // 참조번호 기준으로 방향 정규화 (작은 → 큰)
+    if(_nodeRefNum(e.from)>_nodeRefNum(e.to)){
+      deduplicatedEdges.push({from:e.to,to:e.from,label:e.label});
+    }else{
+      deduplicatedEdges.push(e);
+    }
+  });
+
   // ═══ 공통: 인접 리스트 + 방향 그래프 구축 ═══
   const adj={};        // 양방향 (탐색용)
   const dirAdj={};     // 단방향 (위상 정렬용)
   const dirAdjRev={};  // 역방향
   nodes.forEach(nd=>{adj[nd.id]=new Set();dirAdj[nd.id]=new Set();dirAdjRev[nd.id]=new Set();});
   const edgeSet=new Set();
-  edges.forEach(e=>{
+  // ★ 단방향화된 deduplicatedEdges로 그래프 구축 ★
+  deduplicatedEdges.forEach(e=>{
     const k1=e.from+'|'+e.to, k2=e.to+'|'+e.from;
     if(!edgeSet.has(k1)&&!edgeSet.has(k2))edgeSet.add(k1);
     if(adj[e.from])adj[e.from].add(e.to);
@@ -5878,7 +6142,13 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     if(dirAdj[e.from])dirAdj[e.from].add(e.to);
     if(dirAdjRev[e.to])dirAdjRev[e.to].add(e.from);
   });
-  const uniqueEdges=[...edgeSet].map(k=>{const[f,t]=k.split('|');return{from:f,to:t};});
+  // ★ uniqueEdges는 원본 edges 기반 — 렌더링 시 모든 연결 표시 ★
+  const origEdgeSet=new Set();
+  edges.forEach(e=>{
+    const k1=e.from+'|'+e.to, k2=e.to+'|'+e.from;
+    if(!origEdgeSet.has(k1)&&!origEdgeSet.has(k2))origEdgeSet.add(k1);
+  });
+  const uniqueEdges=[...origEdgeSet].map(k=>{const[f,t]=k.split('|');return{from:f,to:t};});
   const allIds=nodes.map(nd=>nd.id);
   
   // ═══ edge 없음 → 참조번호 오름차순 그리드 ═══
@@ -5916,17 +6186,18 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   const isFig1=(figNum===1);
   
   let strategy;
-  if(isFig1&&hasHub){
-    strategy='HUB_SPOKE';      // 도 1 + 허브 있음 → 허브 중심
+  // ★ v15 FIX-A: 허브 있으면 도 1/도 2+ 모두 HUB_SPOKE 적용 ★
+  if(hasHub){
+    strategy='HUB_SPOKE';        // 허브 있음 → 허브 중심 (fig1/fig2+ 공통)
   }else if(isFig1){
     strategy='CHAIN_FIRST';     // 도 1 + 허브 없음 → 체인 기반
   }else if(!hasCycle&&edges.length>0){
-    strategy='TOPOLOGICAL';     // 도 2+ + DAG → 위상 정렬 (핵심 개선)
+    strategy='TOPOLOGICAL';     // 도 2+ + DAG + 허브 없음 → 위상 정렬
   }else{
     strategy='CHAIN_FIRST';     // 순환 그래프 → 체인 기반 폴백
   }
   
-  console.log(`[Layout v12] figNum=${figNum}, n=${n}, strategy=${strategy}, hasCycle=${hasCycle}, maxDeg=${maxDeg}`);
+  console.log(`[Layout v15] figNum=${figNum}, n=${n}, strategy=${strategy}, hasCycle=${hasCycle}, maxDeg=${maxDeg}, dedup=${edges.length}→${deduplicatedEdges.length}`);
   
   // ═══ 전략별 레이어 생성 ═══
   let layers=[];
@@ -8753,7 +9024,7 @@ function renderDiagrams(sid,mt){
   // v10.0: 사용자 도면 스킵 반영 — 블록 수 기반 도면 번호 미리 계산
   const _devC=sid==='step_07'?blocks.length:(diagramData.step_07?.length||0);
   const _methC=sid==='step_11'?blocks.length:0;
-  const _cfn=computeFigNums(_devC,_methC);
+  const _cfn=computeFigNums(_devC,_methC,conceptDiagramTypes.length);
   const autoFigNums=sid==='step_07'?_cfn.device:_cfn.method;
   
   // 도면 설계 텍스트 (R7 검증용)
@@ -10318,6 +10589,61 @@ function layoutGraphForPatent(nodes,edges){
 }
 function downloadPptxAll(){if(diagramData.step_07||outputs.step_07_mermaid)downloadPptx('step_07');else App.showToast('도면 없음','error');}
 
+// ═══ v11.0: 예시도/개념도 이미지 다운로드 ═══
+function downloadConceptDiagramImages(format='jpeg'){
+  const generated=conceptDiagramTypes.filter(ct=>ct.svgContent);
+  if(!generated.length){App.showToast('예시도 없음','error');return;}
+  const cFigNums=getAutoFigNums('step_07c');
+  const caseNum=selectedTitle||'도면';
+  const zip=typeof JSZip!=='undefined'?new JSZip():null;
+  const images=[];
+  let idx=0;
+
+  function processNext(){
+    if(idx>=generated.length){
+      if(zip&&images.length){
+        images.forEach(f=>zip.file(f.name,f.blob));
+        zip.generateAsync({type:'blob'}).then(blob=>{
+          const a=document.createElement('a');
+          a.download=`${caseNum}_예시도_${format}.zip`;
+          a.href=URL.createObjectURL(blob);
+          a.click();
+          URL.revokeObjectURL(a.href);
+          App.showToast(`예시도 ${images.length}개 ZIP 다운로드 완료`);
+        });
+      }
+      return;
+    }
+    const ct=generated[idx];
+    const figNum=cFigNums[conceptDiagramTypes.indexOf(ct)]||idx+1;
+    // SVG→Canvas→Image
+    const svgStr=ct.svgContent;
+    const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement('canvas');
+      canvas.width=800;canvas.height=600;
+      const ctx2=canvas.getContext('2d');
+      ctx2.fillStyle='#FFFFFF';ctx2.fillRect(0,0,800,600);
+      ctx2.drawImage(img,0,0,800,600);
+      canvas.toBlob(b=>{
+        if(b){
+          const fname=`도${figNum}_예시도.${format==='tif'?'png':format}`;
+          if(zip)images.push({name:fname,blob:b});
+          else{const a=document.createElement('a');a.download=fname;a.href=URL.createObjectURL(b);a.click();URL.revokeObjectURL(a.href);}
+        }
+        URL.revokeObjectURL(url);
+        idx++;
+        processNext();
+      },format==='tif'?'image/png':`image/${format}`,0.95);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);idx++;processNext();};
+    img.src=url;
+  }
+  processNext();
+}
+
 // ═══════════ RENDERERS ═══════════
 function renderOutput(sid,text){const cid=`result${sid.charAt(0).toUpperCase()+sid.slice(1).replace('_','')}`;const el=document.getElementById(cid);if(!el)return;if(sid==='step_01')renderTitleCards(el,text);else if(sid==='step_06'||sid==='step_10'||sid==='step_20')renderClaimResult(el,sid,text);else renderEditableResult(el,sid,text);
 }
@@ -10512,7 +10838,7 @@ function validateRefNumberConsistency(){
 }
 
 // ═══════════ OUTPUT ═══════════
-function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;document.getElementById('statCompleted').textContent=`${c}/20`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
+function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;const totalSteps=conceptDiagramTypes.length>0?21:20;document.getElementById('statCompleted').textContent=`${c}/${totalSteps}`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
 function renderPreview(){const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow">▶</span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('');}
 function buildSpecification(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
