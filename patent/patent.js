@@ -2373,13 +2373,32 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   ✅ 도 2 이후 내부 블록도: 데이터 흐름 방향에 따라 입력측→처리→출력측 순서로 배치
   ✅ 흐름 방향이 명확하지 않으면 참조번호 오름차순으로 배치
 
-★★★ 점진적 구체화 원칙 (Progressive Detail) ★★★
-  - 도면 번호가 증가할수록 더 구체적인 내용을 표현해야 한다
-  - 도 1: 전체 시스템 개요 (L1 장치 간 관계)
-  - 도 2: 핵심 장치의 내부 구성 (독립항의 주 청구 대상을 가장 먼저 상세화)
-  - 도 3: 도 2에서 가장 중요한 구성요소를 다시 상세화
-  - 도 4+: 부수적 장치 또는 더 깊은 계층의 상세화
-  - 순서 결정 기준: 청구항에서 가장 많이 언급되고, 발명의 핵심인 구성요소를 먼저 상세화
+⛔⛔⛔ 점진적 구체화 원칙 (한 단계씩만 깊어진다 — 절대 규칙) ⛔⛔⛔
+
+  ■ 레벨 정의
+    L1 = 100,200,300… (100의 자리, 끝 2자리가 00)
+    L2 = 110,120,130… (10의 자리, 끝 1자리가 0)
+    L3 = 111,112,121… (1의 자리)
+    L4 = 1111,1112…   (4자리)
+
+  ■ 도 1 → L1만 사용 (장치 간 관계)
+  ■ 도 2 → 가장 핵심인 L1 장치를 선택 → 그 내부를 L2로만 상세화
+    ⛔ 도 2에서 L3(111,112…)를 쓰면 "레벨 건너뛰기" 위반
+  ■ 도 3 → 도 2에서 가장 중요한 L2를 선택 → 그 내부를 L3으로만 상세화
+    ⛔ 도 3에서 L4(1111,1112…)를 쓰면 위반
+  ■ 도 4+ → 다른 L1 장치의 L2 상세화 또는, 도 3에서 남은 L2 상세화
+
+  ■ 위반 패턴 예시
+    ❌ 도 2 내부에 프로세서(120) + 정보수신부(121) + 알림산출부(122)
+       → 120은 L2, 121/122는 L3 → 같은 도면에 L2+L3 혼재 → NG
+    ✅ 도 2 내부에 프로세서(120) + 메모리(130) + 통신부(110)
+       → 모두 L2 → OK
+    ✅ 도 3 최외곽 프로세서(120) 내부에 정보수신부(121) + 알림산출부(122)
+       → 모두 L3 → OK
+
+  ■ 검증 공식: 한 도면 내부 참조번호의 "레벨"이 모두 동일해야 한다
+    level(ref) = ref < 100 ? 'small' : ref%100===0 ? 'L1' : ref%10===0 ? 'L2' : ref<1000 ? 'L3' : 'L4'
+    ⛔ 내부 노드 중 level이 2종류 이상이면 레벨 건너뛰기 위반
 
 ⛔⛔⛔ 참조번호 고유성 규칙 (절대 위반 금지) ⛔⛔⛔
   - 모든 참조번호는 전체 도면세트 내에서 고유해야 한다. 동일 번호 재사용 불가.
@@ -3734,16 +3753,16 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
     // 4. 렌더링 + 최종 검증
     renderDiagrams(sid,mr.text);
 
-    // ★ v17 FIX-4: R13/R13b (명칭 중복) 오류 시 자동 재생성 1회 시도 ★
+    // ★ v17 FIX-4: R13a/R13b/R14 (명칭 중복/레벨 혼재) 오류 시 자동 재생성 1회 시도 ★
     if(window._diagramErrors&&window._diagramErrors.sid===sid
-       &&/\[R13[b]?\]/.test(window._diagramErrors.errors)
+       &&/\[R13[ab]?\]|\[R14\]/.test(window._diagramErrors.errors)
        &&!window._r13AutoRetried){
       window._r13AutoRetried=true;
       App.showToast('명칭 중복 감지 — 자동 재생성','warning');
       try{
         await regenerateDiagramWithFeedback(sid);
       }catch(e2){
-        console.warn('[runDiagramStep] R13 자동 재생성 실패:',e2);
+        console.warn('[runDiagramStep] R13a/R14 자동 재생성 실패:',e2);
       }
     }else if(!window._diagramErrors||window._diagramErrors.sid!==sid){
       window._r13AutoRetried=false; // 오류 없으면 플래그 리셋
@@ -4969,37 +4988,39 @@ function _safeCleanLabel(label){
   return cleaned||label;
 }
 
-// ★ v10.4: 도 1 전용 라벨 축약 — 발명 명칭이 아닌 구성 유형만 표시 ★
-// "스타일 프로파일 자동 전환 서버" → "서버"
-// "실내 환경 정보 기반 조명 스타일 자동 변경 서버" → "서버"  
-// "사용자 단말" → "사용자 단말" (이미 짧으므로 유지)
 function _shortenFig1Label(label){
   if(!label)return '';
   const clean=_safeCleanLabel(label);
-  // 이미 짧으면(4글자 이하) 그대로
-  if(clean.length<=4)return clean;
-  
-  // 핵심 구성 유형 접미사 목록 (긴 것부터 매칭)
+  if(clean.length<=6)return clean;
+
   const typeSuffixes=[
     '서버 장치','센서 장치','조명 장치','촬영 장치','통신 장치','제어 장치','단말 장치',
-    '사용자 단말','클라이언트 단말','모바일 단말','휴대 단말',
-    '데이터베이스','네트워크','클라우드','스토리지',
+    '사용자 단말','클라이언트 단말','모바일 단말','휴대 단말','관리 서버','인증 서버',
+    '데이터베이스','네트워크','클라우드','스토리지','게이트웨이','라우터',
     '서버','단말','장치','모듈','시스템','센서','카메라','스피커','안테나','모니터','디스플레이'
   ];
-  
+
   for(const sfx of typeSuffixes){
     if(clean.endsWith(sfx)){
+      const words=clean.split(/\s+/);
+      const sfxWords=sfx.split(/\s+/);
+      if(sfxWords.length>=2)return sfx;
+      if(words.length>=2){
+        const last2=words.slice(-2).join(' ');
+        if(last2.length<=10)return last2;
+      }
       return sfx;
     }
   }
-  
-  // 접미사 매칭 실패 시 마지막 2-3 단어만 사용
+
   const words=clean.split(/\s+/);
-  if(words.length>2){
-    // 마지막 2단어 추출
-    const short=words.slice(-2).join(' ');
-    if(short.length<=8)return short;
-    return words[words.length-1]; // 마지막 1단어
+  if(words.length>=3){
+    const last2=words.slice(-2).join(' ');
+    if(last2.length<=10)return last2;
+    return words[words.length-1];
+  }
+  if(words.length===2&&clean.length>10){
+    return words[words.length-1];
   }
   return clean;
 }
@@ -9119,7 +9140,7 @@ function validateDiagramRules(nodes,figNum,designText,edges){
     issues.push({severity:'ERROR',rule:'R4',message:`참조번호 중복: ${[...new Set(dupRefs)].join(', ')}`});
   }
 
-  // ═══ R13. 명칭 중복 — 같은 이름에 다른 참조번호 (기재불비) ═══
+  // ═══ R13a. 명칭 중복 — 같은 이름에 다른 참조번호 (기재불비) ═══
   const labelToRefs={};
   nodes.forEach(n=>{
     const ref=extractRef(n.label);
@@ -9135,7 +9156,7 @@ function validateDiagramRules(nodes,figNum,designText,edges){
       if(uniqueRefs.length>1){
         issues.push({
           severity:'ERROR',
-          rule:'R13',
+          rule:'R13a',
           message:`명칭 "${label}"이 서로 다른 참조번호(${uniqueRefs.join(', ')})로 중복 사용 — 기재불비(特42조④)`
         });
       }
@@ -9619,20 +9640,60 @@ function runDiagramValidation(sid){
       reportHtml+=`<div style="margin:4px 0;color:#2e7d32"><b>도 ${figNum}:</b> ✅ 통과 ${infos.map(i=>`(${i.message})`).join(' ')}</div>`;
     }
   });
-  
+
+  // ═══ R14. 레벨 건너뛰기(L2-skip) — 전체 도면 세트 교차 검증 ═══
+  {
+    const _extractRef=label=>{
+      const m=(label||'').match(/[(\s]?(S?\d+)[)\s]?$/i);
+      return m?m[1]:null;
+    };
+    const _refLevel=r=>{
+      if(!r||String(r).startsWith('S'))return null;
+      const s=String(r);
+      const n=s.startsWith('D')?parseInt(s.slice(1)):parseInt(s);
+      if(isNaN(n))return null;
+      if(n<100)return 'small';
+      if(n%100===0)return 'L1';
+      if(n%10===0)return 'L2';
+      if(n<1000)return 'L3';
+      return 'L4';
+    };
+    data.forEach(({nodes},idx)=>{
+      const figNum=autoFigNums[idx]||(idx+1);
+      if(figNum===1)return;
+      const innerNodes=nodes.filter(n=>{
+        const ref=_extractRef(n.label);
+        if(!ref)return false;
+        if(String(ref).startsWith('S'))return false;
+        return !_isL1RefNum(ref);
+      });
+      const levels=new Set();
+      innerNodes.forEach(n=>{
+        const ref=_extractRef(n.label);
+        const lv=_refLevel(ref);
+        if(lv&&lv!=='small')levels.add(lv);
+      });
+      if(levels.size>1){
+        const mixed=[...levels].sort().join('+');
+        totalErrors++;
+        reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> <span style="color:#c62828;font-size:11px">❌ [R14] 레벨 혼재(${mixed}) — 한 도면 내부는 동일 레벨이어야 함</span></div>`;
+      }
+    });
+  }
+
   const resultEl=document.getElementById(`validationResult_${sid}`);
   if(resultEl){
     if(totalErrors===0&&totalWarnings===0){
       resultEl.innerHTML=`<span style="color:#2e7d32;font-weight:600">✅ 전체 검증 통과 (${data.length}개 도면)</span>`;
     }else{
       resultEl.innerHTML=`<div>
-        <span style="color:#c62828;font-weight:600">❌ 오류 ${totalErrors}건</span>, 
+        <span style="color:#c62828;font-weight:600">❌ 오류 ${totalErrors}건</span>,
         <span style="color:#f57c00">⚠️ 경고 ${totalWarnings}건</span>
         <div style="margin-top:6px;font-size:11px">${reportHtml}</div>
       </div>`;
     }
   }
-  
+
   if(totalErrors>0){
     App.showToast(`도면 검증: 오류 ${totalErrors}건 발견. 재생성 권장.`,'error');
   }else if(totalWarnings>0){
