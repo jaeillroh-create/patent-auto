@@ -2328,7 +2328,17 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   → 청구항에 하위 구성요소가 2개뿐이면, 기능적으로 분리하여 3~4개로 확장하라.
   → 구성요소를 억지로 세분화하여 수를 늘리지 마라. 청구항에 명시된 핵심 구성만 사용하라.
   ⛔ 절대 금지: 하나의 도면에 6개 이상의 내부 블록을 배치하는 것
-  
+
+  ★★★ 동일 프레임 반복 최소화 규칙 ★★★
+  - 동일 참조번호의 프레임이 2개 이상 도면에 반복되는 것은 최소화하라.
+  - 하위 구성요소가 5개를 초과하여 분할하는 경우에만 허용한다.
+  - 분할 시, 첫 도면에 5개(상한), 다음 도면에 나머지를 넣어라.
+    ❌ 잘못된 분할: 도 2에 4개 + 도 3에 3개 + 도 4에 1개 (3개 도면)
+    ✅ 올바른 분할: 도 2에 5개 + 도 3에 3개 (2개 도면으로 충분)
+  - 한 도면에 1~2개만 남으면, 이전 도면에 병합하여 도면 수를 줄여라.
+    ⛔ 내부 구성요소 1개인 도면 = 절대 금지 (R12 위반)
+  - 도면 수를 줄이는 것이 빈약한 도면을 만드는 것보다 낫다.
+
   ✅ 올바른 예 (도 2: ${getDeviceSubject()} 상세):
   최외곽=${getDeviceSubject()}(100), 내부=L2 4개: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)
   → 4개 구성요소가 프레임 안에 2행 배치, 참조번호가 겹치지 않음
@@ -3753,16 +3763,16 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
     // 4. 렌더링 + 최종 검증
     renderDiagrams(sid,mr.text);
 
-    // ★ v17 FIX-4: R13a/R13b/R14 (명칭 중복/레벨 혼재) 오류 시 자동 재생성 1회 시도 ★
+    // ★ v17 FIX-4: R12/R13a/R13b/R14 오류 시 자동 재생성 1회 시도 ★
     if(window._diagramErrors&&window._diagramErrors.sid===sid
-       &&/\[R13[ab]?\]|\[R14\]/.test(window._diagramErrors.errors)
+       &&/\[R1[234][ab]?\]/.test(window._diagramErrors.errors)
        &&!window._r13AutoRetried){
       window._r13AutoRetried=true;
-      App.showToast('명칭 중복 감지 — 자동 재생성','warning');
+      App.showToast('도면 규칙 위반 감지 — 자동 재생성','warning');
       try{
         await regenerateDiagramWithFeedback(sid);
       }catch(e2){
-        console.warn('[runDiagramStep] R13a/R14 자동 재생성 실패:',e2);
+        console.warn('[runDiagramStep] R12/R13a/R14 자동 재생성 실패:',e2);
       }
     }else if(!window._diagramErrors||window._diagramErrors.sid!==sid){
       window._r13AutoRetried=false; // 오류 없으면 플래그 리셋
@@ -6250,6 +6260,8 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   if(n===1)return{grid:{[nodes[0].id]:{row:0,col:0,layerSize:1}},maxCols:1,numRows:1,uniqueEdges:[],biDirPairs:[]};
   const MAX_COLS=3;
   figNum=figNum||1;
+  // ★ P2-FIX: self-loop 제거 (동일 노드 연결은 도면에 표현 불가) ★
+  edges=edges.filter(e=>e.from!==e.to);
   
   // ═══ v15 FIX-B: 양방향 edge 단방향화 전처리 ═══
   // A-->B와 B-->A가 동시에 있으면 참조번호 작은 쪽→큰 쪽으로 정규화
@@ -6321,7 +6333,37 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     rows.forEach((row,ri)=>{row.forEach((id,ci)=>{grid[id]={row:ri,col:ci,layerSize:row.length};});});
     return{grid,maxCols:Math.min(n,MAX_COLS),numRows:rows.length,uniqueEdges:[],layers:rows,biDirPairs:[]};
   }
-  
+
+  // ★ P4-FIX: 3개 이하 노드는 무조건 1행 가로 배치 ★
+  if(n<=MAX_COLS&&n>=2){
+    const sorted=[...nodes].sort((a,b)=>{
+      const ra=parseInt((a.label.match(/\((\d+)\)/)||[])[1])||9999;
+      const rb=parseInt((b.label.match(/\((\d+)\)/)||[])[1])||9999;
+      return ra-rb;
+    });
+    // 허브가 있으면 중앙에 배치 (CK-8)
+    const _adjLocal={};
+    nodes.forEach(nd=>{_adjLocal[nd.id]=new Set();});
+    deduplicatedEdges.forEach(e=>{
+      if(_adjLocal[e.from])_adjLocal[e.from].add(e.to);
+      if(_adjLocal[e.to])_adjLocal[e.to].add(e.from);
+    });
+    const _degLocal={};
+    sorted.forEach(nd=>{_degLocal[nd.id]=(_adjLocal[nd.id]||new Set()).size;});
+    const _maxDegLocal=Math.max(...Object.values(_degLocal),0);
+    if(_maxDegLocal>=2){
+      const hubIdx=sorted.findIndex(nd=>_degLocal[nd.id]===_maxDegLocal);
+      if(hubIdx>=0){
+        const hub=sorted.splice(hubIdx,1)[0];
+        const center=Math.floor(sorted.length/2);
+        sorted.splice(center,0,hub);
+      }
+    }
+    const grid={};
+    sorted.forEach((nd,ci)=>{grid[nd.id]={row:0,col:ci,layerSize:n};});
+    return{grid,maxCols:n,numRows:1,uniqueEdges,layers:[sorted.map(nd=>nd.id)],biDirPairs};
+  }
+
   // ═══ 순환 검출 (Kahn's algorithm) ═══
   function _detectCycle(){
     const inDeg={};
@@ -7699,8 +7741,18 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       rowY[r]=accY;
       accY+=globalRowH+rowGapBase;
     }
-    const totalH=accY-rowGapBase+marginY;
-    
+    // ★ P1-FIX: 마지막 노드 실제 하단 기반 viewBox 높이 — 빈 공백 제거 ★
+    let maxNodeBottom=0;
+    nodes.forEach(nd=>{
+      const gp=grid[nd.id];if(!gp)return;
+      const by=rowY[gp.row];
+      const st=matchIconShape(nd.label);
+      const sm=_shapeMetrics(st,boxW2D,boxH);
+      const bottom=by+sm.sh+refNumH+10;
+      if(bottom>maxNodeBottom)maxNodeBottom=bottom;
+    });
+    const totalH=maxNodeBottom+marginY*0.5;
+
     const leaderMargin=0.5*PX;
     const svgW=marginX+maxNodeAreaW+leaderMargin;
     const svgH=totalH;
@@ -7899,8 +7951,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     // ── Phase 2: 연결선 — ★ 실제 shape anchor 기반 라우팅 ★ ──
     // 원칙: 모든 연결은 각 shape의 실제 변 중앙(edge center)에서 시작/끝
     // box shape → 균일 높이 → 같은 행 = 같은 cy → 자연스러운 직선 연결
-    const svgEdgesToDraw=uniqueEdges.length>0?uniqueEdges:
-      (nodes.length>1?nodes.slice(0,-1).map((nd,i)=>({from:nd.id,to:nodes[i+1].id})):[]);
+    const svgEdgesToDraw=(uniqueEdges.length>0?uniqueEdges:
+      (nodes.length>1?nodes.slice(0,-1).map((nd,i)=>({from:nd.id,to:nodes[i+1].id})):[]))
+      .filter(e=>e.from!==e.to); // ★ P2-FIX: self-loop 제거 ★
 
     // ★ v13.0 FIX: allBoxArr 루프 밖 호이스트 (SVG Fig1) ★
     const allBoxArr=Object.entries(nodeBoxes).map(([k,v])=>({...v,id:k}));
@@ -8177,7 +8230,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     // ★ v10.4: 박스 너비 확대 — 한글 라벨 잘림 방지 + 조정 배율 ★
     // ★ v17 FIX-1: 1열일 때 너무 크지 않도록 상한 적용 (도 1과 시각적 일관성) ★
     const _rawInnerBoxW=(innerMaxCols<=1?4.5*PX:innerMaxCols===2?3.2*PX:2.4*PX)*_bwm;
-    const MAX_INNER_BOX_W=3.8*PX*_bwm; // 도 1 3열 블록(3.0*PX) 대비 1.27배 이내
+    const MAX_INNER_BOX_W=3.5*PX*_bwm; // ★ P7-FIX: 도 1 대비 과대 방지 ★
     const innerBoxW=Math.min(_rawInnerBoxW, MAX_INNER_BOX_W);
     const boxH2=(innerMaxCols>=3?1.05*PX:0.95*PX)*_bhm; // v10.4: 높이 증가 (멀티라인 수용)
     const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
@@ -9418,9 +9471,12 @@ function validateDiagramRules(nodes,figNum,designText,edges){
     if(_innerCount>5){
       issues.push({severity:'ERROR',rule:'R12',
         message:`도 ${figNum}: 내부 구성요소 ${_innerCount}개 (최대 5개 초과). 핵심 3~5개만 남기고 나머지는 다음 도면으로 분리 필요.`});
-    }else if(_innerCount>0&&_innerCount<3){
+    }else if(_innerCount===1){
+      issues.push({severity:'ERROR',rule:'R12',
+        message:`도 ${figNum}: 내부 구성요소 1개 — 최소 3개 필요. 다른 도면과 병합하라.`});
+    }else if(_innerCount===2){
       issues.push({severity:'WARNING',rule:'R12',
-        message:`도 ${figNum}: 내부 구성요소 ${_innerCount}개 (최소 3개 권장). 기능 분리하여 3~4개로 확장 권장.`});
+        message:`도 ${figNum}: 내부 구성요소 2개 (최소 3개 권장). 기능 분리하여 확장 권장.`});
     }
   }
   
@@ -10309,7 +10365,8 @@ function downloadPptx(sid){
         
         const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
-        const innerBoxW=innerMaxCols<=1?(PAGE_W-1.6):innerMaxCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
+        const _rawPptxInnerBoxW=innerMaxCols<=1?(PAGE_W-1.6):innerMaxCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
+        const innerBoxW=Math.min(_rawPptxInnerBoxW, 2.8); // ★ P7-FIX: PPTX 내부 블록 너비 상한 ★
         const pBoxH=Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
         
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
@@ -10960,7 +11017,8 @@ function downloadDiagramImages(sid, format='jpeg'){
 
         const SHADOW_PX=2;
         const LEADER_W=35, REF_LABEL_W=50;
-        const cInnerBoxW=innerMaxCols<=1?350:innerMaxCols===2?210:155;
+        const _rawCInnerBoxW=innerMaxCols<=1?350:innerMaxCols===2?210:155;
+        const cInnerBoxW=Math.min(_rawCInnerBoxW, 250); // ★ P7-FIX: Canvas 내부 블록 너비 상한 ★
         const cBoxH=Math.min(55,Math.max(40,(750-60)/Math.max(innerNumRows,1)));
         
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
