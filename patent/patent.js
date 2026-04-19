@@ -5757,7 +5757,25 @@ async function regenerateDiagramWithFeedback(sid){
     return;
   }
   
-  // 에러 정보 (있으면 사용, 없으면 일반 재생성)
+  // ★ v18: 검증이 안 됐으면 자동 실행 후 에러 수집 ★
+  if(!window._diagramErrors||window._diagramErrors.sid!==sid){
+    const data=diagramData[sid];
+    if(data&&data.length){
+      const autoFigNums=getAutoFigNums(sid);
+      const designText=outputs[sid]||'';
+      const autoErrors=[];
+      data.forEach(({nodes,edges},idx)=>{
+        const figNum=autoFigNums[idx]||(idx+1);
+        const issues=validateDiagramRules(nodes,figNum,designText,edges);
+        issues.filter(i=>i.severity==='ERROR'||i.severity==='WARNING').forEach(i=>{
+          autoErrors.push(`도 ${figNum}: [${i.rule}] ${i.message}`);
+        });
+      });
+      if(autoErrors.length){
+        window._diagramErrors={sid, errors:autoErrors.join('\n')};
+      }
+    }
+  }
   const errors=window._diagramErrors&&window._diagramErrors.sid===sid?window._diagramErrors.errors:'사용자 요청에 의한 재생성';
   const aiReview=window._aiDiagramReview&&window._aiDiagramReview.sid===sid?window._aiDiagramReview.review:'';
   
@@ -8093,12 +8111,33 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       const collisions=_countRouteCollisions(route, allBoxArr, excludeIds);
       
       if(collisions>0){
-        // 관통 시 직교 라우터로 폴백 (더 정교한 우회)
         const fbA={...fb, id:e.from};
         const tbA={...tb, id:e.to};
         const altRoute=getOrthogonalRoute(fbA, tbA, allBoxArr);
         if(altRoute){
-          route=_snapRouteToShapeAnchors(altRoute, fb, tb, 0, 0, allBoxArr);
+          const snapped=_snapRouteToShapeAnchors(altRoute, fb, tb, 0, 0, allBoxArr);
+          if(_countRouteCollisions(snapped, allBoxArr, excludeIds)===0){
+            route=snapped;
+          }else{
+            // ★ v18: 직교 라우터도 관통 → 외곽 우회 ★
+            const allLeft=Math.min(...allBoxArr.map(b=>b.x))-25;
+            const allRight=Math.max(...allBoxArr.map(b=>b.x+b.w))+25;
+            const fromAnc2=route[0], toAnc2=route[route.length-1];
+            const detourX=Math.abs(fromAnc2.x-allLeft)<Math.abs(fromAnc2.x-allRight)?allLeft:allRight;
+            const extRoute=[
+              fromAnc2,
+              {x:fromAnc2.x,y:fromAnc2.y+10},
+              {x:detourX,y:fromAnc2.y+10},
+              {x:detourX,y:toAnc2.y-10},
+              {x:toAnc2.x,y:toAnc2.y-10},
+              toAnc2
+            ];
+            if(_countRouteCollisions(extRoute,allBoxArr,excludeIds)<_countRouteCollisions(snapped,allBoxArr,excludeIds)){
+              route=extRoute;
+            }else{
+              route=snapped;
+            }
+          }
         }
       }
       
@@ -8486,7 +8525,26 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
               const hitsR=_countRouteCollisions(detourR,allBoxArr,excludeIds);
               if(hitsR<bestHits){bestHits=hitsR;bestDetour=detourR;}
             }
-            if(bestDetour)route=bestDetour;
+            if(bestDetour){
+              route=bestDetour;
+              // ★ v18: 3차 — 개별 장애물 우회도 관통하면 전체 외곽 우회 ★
+              if(bestHits>0){
+                const allLeft=Math.min(...allBoxArr.map(b=>b.x))-25;
+                const allRight=Math.max(...allBoxArr.map(b=>b.x+b.w))+25;
+                const detourX=Math.abs(fromAnc2.x-allLeft)<Math.abs(fromAnc2.x-allRight)?allLeft:allRight;
+                const extRoute=[
+                  fromAnc2,
+                  {x:fromAnc2.x,y:fromAnc2.y+(dy>0?10:-10)},
+                  {x:detourX,y:fromAnc2.y+(dy>0?10:-10)},
+                  {x:detourX,y:toAnc2.y+(dy>0?-10:10)},
+                  {x:toAnc2.x,y:toAnc2.y+(dy>0?-10:10)},
+                  toAnc2
+                ];
+                if(_countRouteCollisions(extRoute,allBoxArr,excludeIds)<bestHits){
+                  route=extRoute;
+                }
+              }
+            }
           }
         }
       }
@@ -9692,14 +9750,17 @@ function renderDiagrams(sid,mt){
     </div>`+html;
   }
   
-  // 도면 검증 버튼 항상 추가
-  html+=`<div style="margin-top:12px;padding:12px;background:var(--color-bg-secondary);border-radius:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <button onclick="runDiagramValidation('${sid}')" style="background:#43a047;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">✅ 도면 검증</button>
-    <button onclick="runAIDiagramReview('${sid}')" style="background:#7b1fa2;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">🤖 AI 연결관계 검증</button>
-    <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1565c0;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px">🔄 재생성</button>
-    <span id="validationResult_${sid}" style="font-size:12px;color:var(--color-text-secondary)"></span>
-  </div>
-  <div id="aiReviewResult_${sid}" style="margin-top:8px"></div>`;
+  html+=`<div style="margin-top:12px;padding:12px;background:var(--color-bg-secondary);border-radius:8px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button onclick="runDiagramValidation('${sid}')" style="background:#43a047;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="R0~R14 규칙 검증 + 시각적 겹침/잘림 검사">✅ 검증</button>
+      <span style="color:var(--color-text-tertiary);font-size:11px">\u2192</span>
+      <button onclick="runAIDiagramReview('${sid}')" style="background:#7b1fa2;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="AI가 연결관계의 기술적 적절성을 평가">🤖 AI 검증</button>
+      <span style="color:var(--color-text-tertiary);font-size:11px">\u2192</span>
+      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1565c0;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="검증 결과를 반영하여 도면 재생성 (검증 미실행 시 자동 실행)">🔄 재생성</button>
+      <span id="validationResult_${sid}" style="font-size:12px;color:var(--color-text-secondary);margin-left:4px"></span>
+    </div>
+    <div id="aiReviewResult_${sid}" style="margin-top:8px"></div>
+  </div>`;
   
   el.innerHTML=html;
   
@@ -9836,6 +9897,33 @@ function runDiagramValidation(sid){
       }
     }
   }catch(e){console.error('[PostRender validation error]',e);}
+
+  // ★ v18: 검증 결과를 window._diagramErrors에 저장 — 재생성 시 참조 ★
+  if(totalErrors>0||totalWarnings>0){
+    const allErrorSummary=[];
+    data.forEach(({nodes,edges},idx)=>{
+      const figNum=autoFigNums[idx]||(idx+1);
+      const issues=validateDiagramRules(nodes,figNum,designText,edges);
+      issues.filter(i=>i.severity==='ERROR'||i.severity==='WARNING').forEach(i=>{
+        allErrorSummary.push(`도 ${figNum}: [${i.rule}] ${i.message}`);
+      });
+    });
+    try{
+      const prResult=_runPostRenderValidation(sid, autoFigNums);
+      if(prResult){
+        prResult.reports.forEach(r=>{
+          r.issues.filter(i=>i.severity==='ERROR').forEach(i=>{
+            allErrorSummary.push(`도 ${r.figNum}: [시각적] ${i.msg}`);
+          });
+        });
+      }
+    }catch(e){}
+    window._diagramErrors={sid, errors:allErrorSummary.join('\n')};
+  }else{
+    if(window._diagramErrors&&window._diagramErrors.sid===sid){
+      window._diagramErrors=null;
+    }
+  }
 }
 
 // ═══ AI 정성적 도면 검증 (연결관계 적절성 평가) ═══
