@@ -8323,28 +8323,30 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
 
     // ═══ v9.0: 공통 레이아웃 엔진 호출 (연결선 우회 공간 확보) ═══
-    // ★ v10.4: 박스 너비 확대 — 한글 라벨 잘림 방지 + 조정 배율 ★
-    // ★ v17 FIX-1: 1열일 때 너무 크지 않도록 상한 적용 (도 1과 시각적 일관성) ★
-    const _rawInnerBoxW=(innerMaxCols<=1?4.5*PX:innerMaxCols===2?3.2*PX:2.4*PX)*_bwm;
-    const MAX_INNER_BOX_W=3.5*PX*_bwm; // ★ P7-FIX: 도 1 대비 과대 방지 ★
+    // ★ v18: 1열 블록 크기를 도 1과 동등하게 축소 (4.5→3.0 PX) ★
+    const _rawInnerBoxW=(innerMaxCols<=1?3.0*PX:innerMaxCols===2?3.2*PX:2.4*PX)*_bwm;
+    const MAX_INNER_BOX_W=3.5*PX*_bwm;
     const innerBoxW=Math.min(_rawInnerBoxW, MAX_INNER_BOX_W);
-    const boxH2=(innerMaxCols>=3?1.05*PX:0.95*PX)*_bhm; // v10.4: 높이 증가 (멀티라인 수용)
+    const boxH2=(innerMaxCols>=3?1.05*PX:innerMaxCols===2?0.95*PX:0.7*PX)*_bhm;
+    const _fig2ColGap=(innerMaxCols<=1?0.7:1.0)*PX*_sm;
+    const _fig2RowGap=(innerMaxCols<=1?0.7:1.1)*PX*_sm;
+    const _fig2FramePad=(innerMaxCols<=1?0.6:0.9)*PX*_sm;
     const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
       boxBaseW:innerBoxW, boxBaseH:boxH2,
-      colGap:1.0*PX*_sm,    // v9.0: 연결선 우회 공간 확보 + v10.4: 조정 배율
-      rowGap:1.1*PX*_sm,    // v9.0 + v10.4: 조정 배율
-      framePad:0.9*PX*_sm,   // v9.0 + v10.4: 조정 배율
+      colGap:_fig2ColGap,
+      rowGap:_fig2RowGap,
+      framePad:_fig2FramePad,
       shadowSize:SHADOW_OFFSET,
       scale:PX
     });
-    
+
     const frameX=0.5*PX, frameY=0.5*PX;
     const frameW=fig2Layout.frameW;
     const frameH=fig2Layout.frameH;
     const leaderMargin=0.8*PX;
     const svgW=frameX+frameW+leaderMargin;
     const svgH=frameY+frameH+0.5*PX;
-    const maxW=innerMaxCols<=1?550:innerMaxCols===2?700:800; // v17 FIX-1: 도 1/도 2+ 일관성
+    const maxW=innerMaxCols<=1?450:innerMaxCols===2?700:800;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
@@ -10511,15 +10513,18 @@ function downloadPptx(sid){
         const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
         _fixSingleColumnLayout(innerLayout, displayNodes, figNum);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
-        const _rawPptxInnerBoxW=innerMaxCols<=1?(PAGE_W-1.6):innerMaxCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
-        const innerBoxW=Math.min(_rawPptxInnerBoxW, 2.8); // ★ P7-FIX: PPTX 내부 블록 너비 상한 ★
-        const pBoxH=Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
-        
+        // ★ v18: 1열 블록 크기 축소 (도 1과 시각적 일관성) ★
+        const _rawPptxInnerBoxW=innerMaxCols<=1?(PAGE_W-2.4):innerMaxCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
+        const innerBoxW=Math.min(_rawPptxInnerBoxW, 2.8);
+        const pBoxH=innerMaxCols<=1?Math.min(0.50,(AVAILABLE_H-0.7-0.20*(innerNumRows-1))/innerNumRows):Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
+
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:innerBoxW, boxBaseH:pBoxH,
-          colGap:0.55, rowGap:0.50, framePad:0.55,
+          colGap:innerMaxCols<=1?0.35:0.55,
+          rowGap:innerMaxCols<=1?0.35:0.50,
+          framePad:innerMaxCols<=1?0.40:0.55,
           shadowSize:SHADOW_OFFSET, scale:1,
-          routePad:PPTX_PAD  // ★ v12: inch 단위 패딩 (15px→0.08inch) ★
+          routePad:PPTX_PAD
         });
         
         const frameX=PAGE_MARGIN,frameY=PAGE_MARGIN+TITLE_H;
@@ -11164,13 +11169,16 @@ function downloadDiagramImages(sid, format='jpeg'){
 
         const SHADOW_PX=2;
         const LEADER_W=35, REF_LABEL_W=50;
-        const _rawCInnerBoxW=innerMaxCols<=1?350:innerMaxCols===2?210:155;
-        const cInnerBoxW=Math.min(_rawCInnerBoxW, 250); // ★ P7-FIX: Canvas 내부 블록 너비 상한 ★
-        const cBoxH=Math.min(55,Math.max(40,(750-60)/Math.max(innerNumRows,1)));
-        
+        // ★ v18: 1열 블록 크기 축소 (도 1과 시각적 일관성) ★
+        const _rawCInnerBoxW=innerMaxCols<=1?210:innerMaxCols===2?210:155;
+        const cInnerBoxW=Math.min(_rawCInnerBoxW, 250);
+        const cBoxH=innerMaxCols<=1?Math.min(42,Math.max(35,(750-40)/Math.max(innerNumRows,1))):Math.min(55,Math.max(40,(750-60)/Math.max(innerNumRows,1)));
+
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:cInnerBoxW, boxBaseH:cBoxH,
-          colGap:60, rowGap:60, framePad:60,
+          colGap:innerMaxCols<=1?35:60,
+          rowGap:innerMaxCols<=1?35:60,
+          framePad:innerMaxCols<=1?35:60,
           shadowSize:SHADOW_PX, scale:1
         });
         
