@@ -2278,6 +2278,16 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   - 동일 도면세트 내 번호 중복 금지
   - 레벨 혼합 금지: L2에 111 같은 번호 사용 금지
 
+⛔⛔⛔ 명칭 고유성 규칙 (기재불비 — 절대 위반 금지) ⛔⛔⛔
+- 서로 다른 참조번호에는 반드시 서로 다른 명칭을 사용하라.
+  ❌ 금지: 서버(100)와 서버(300) — 같은 이름에 다른 번호
+  ✅ 올바른: 통합 서버(100)와 벤더 서버(300) — 구별 가능한 이름
+- 서로 같은 참조번호에는 반드시 동일한 명칭을 사용하라.
+  ❌ 금지: 도 1에서 "처리부(110)", 도 2에서 "분석부(110)"
+  ✅ 올바른: 모든 도면에서 "처리부(110)"으로 통일
+- L1 장치명은 발명 명칭에서 유래하거나, 역할이 명확히 구분되는 명칭을 사용하라.
+  예: "기업용 인공지능 통합 서버(100)", "사용자 단말(200)", "벤더 서버(300)"
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [R2] 박스 소속(Ownership) 규칙
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3723,11 +3733,26 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
     
     // 4. 렌더링 + 최종 검증
     renderDiagrams(sid,mr.text);
-    
+
+    // ★ v17 FIX-4: R13/R13b (명칭 중복) 오류 시 자동 재생성 1회 시도 ★
+    if(window._diagramErrors&&window._diagramErrors.sid===sid
+       &&/\[R13[b]?\]/.test(window._diagramErrors.errors)
+       &&!window._r13AutoRetried){
+      window._r13AutoRetried=true;
+      App.showToast('명칭 중복 감지 — 자동 재생성','warning');
+      try{
+        await regenerateDiagramWithFeedback(sid);
+      }catch(e2){
+        console.warn('[runDiagramStep] R13 자동 재생성 실패:',e2);
+      }
+    }else if(!window._diagramErrors||window._diagramErrors.sid!==sid){
+      window._r13AutoRetried=false; // 오류 없으면 플래그 리셋
+    }
+
     const dlId=sid==='step_07'?'diagramDownload07':'diagramDownload11';
     const dlEl=document.getElementById(dlId);
     if(dlEl)dlEl.style.display='block';
-    
+
     saveProject(true);
     App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
   }catch(e){
@@ -7624,38 +7649,41 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const refNumH=30*_sm; // v10.1: (28→30) 참조번호 + 여유 공간
     const rowGapBase=0.85*PX*_sm; // v10.1: 행 간격 확대 + v10.4: 조정 배율
     
-    // ★ v10.5: 행별 실제 Shape 높이 계산 (아이콘 복원 → shape별 높이 반영) ★
-    const rowMaxH={};
-    // ★ v14 FIX: 행별 최대 실제 shape 높이 (텍스트 영역 제외, 라우팅 셀 높이용) ★
+    // ═══ v17: 전역 행 높이 통일 — 간격 균등화 ═══
+    // 전체 도면에서 가장 큰 shape 기준으로 행 높이 통일
+    let globalRowH=boxH+refNumH;
+    // ★ v14 FIX: 행별 최대 실제 shape 높이 (라우팅 셀 높이용) ★
     const rowMaxShapeH={};
     nodes.forEach(nd=>{
       const gp=grid[nd.id]; if(!gp)return;
       const st=matchIconShape(nd.label);
       const sm=_shapeMetrics(st,boxW2D,boxH);
       const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);
-      const h=Math.max(vb.bottom, boxH)+refNumH; // boxH 최소 보장
-      if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;
-      // 라우팅용: 실제 shape 높이만 (텍스트 영역/refNum 제외)
+      const h=Math.max(vb.bottom, boxH)+refNumH;
+      if(h>globalRowH)globalRowH=h;
       const shapeH=Math.max(sm.sh, boxH);
       if(!rowMaxShapeH[gp.row]||shapeH>rowMaxShapeH[gp.row])rowMaxShapeH[gp.row]=shapeH;
     });
-    
-    // 행별 Y시작 좌표 (누적)
-    // ★ v14 FIX: 큰 아이콘 shape(cloud/database/server 등) 행에 추가 간격 ★
+    // 제한: 최대 boxH+refNumH의 1.3배까지
+    globalRowH=Math.min(globalRowH, (boxH+refNumH)*1.3);
+    // 전역 최대 shape 높이 (라우팅 셀 기준)
+    let globalShapeH=boxH;
+    Object.values(rowMaxShapeH).forEach(h=>{if(h>globalShapeH)globalShapeH=h;});
+    globalShapeH=Math.min(globalShapeH, boxH*1.3);
+
+    // 행별 Y시작 좌표 — 모든 행 동일 높이
     const rowY={};
     let accY=marginY;
     for(let r=0;r<numRows;r++){
       rowY[r]=accY;
-      // 행에 비-rect/stadium shape가 있으면 추가 간격
-      const _rowExtraGap=((rowMaxShapeH[r]||boxH)>boxH)?((rowMaxShapeH[r]-boxH)*0.5):0;
-      accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase+_rowExtraGap;
+      accY+=globalRowH+rowGapBase;
     }
     const totalH=accY-rowGapBase+marginY;
     
     const leaderMargin=0.5*PX;
     const svgW=marginX+maxNodeAreaW+leaderMargin;
     const svgH=totalH;
-    const maxW=maxCols<=1?650:maxCols===2?850:950;
+    const maxW=maxCols<=1?550:maxCols===2?700:800; // v17 FIX-1: 도 1/도 2+ 일관성
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
@@ -7691,14 +7719,13 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
         sm.sw=Math.min(minShapeW,boxW2D*0.90);
         sm.dx=(boxW2D-sm.sw)/2;
       }
-      // ★ v14 FIX: 행별 실제 shape 높이를 라우팅 셀 높이에 반영 ★
-      const _rowCellH=rowMaxShapeH[gp.row]||boxH;
+      // ★ v17: 전역 통일 shape 높이 → 모든 행 동일 라우팅 셀 ★
+      const _rowCellH=globalShapeH;
       const sx=bx+sm.dx;
       // shape를 셀 내부에 수직 중앙 정렬 (렌더링용)
       const sy=by+Math.max(0,(_rowCellH-sm.sh)/2);
 
-      // ★ 라우팅용 nodeBox — 행별 실제 shape 높이 반영 ★
-      // 같은 행 노드 = 동일 _rowCellH → 동일 cy → 직선 연결 보장
+      // ★ 라우팅용 nodeBox — 전역 통일 shape 높이 → 동일 cy → 직선 연결 ★
       nodeBoxes[nd.id]={
         x:bx, y:by, w:boxW2D, h:_rowCellH,
         cx:bx+boxW2D/2, cy:by+_rowCellH/2,
@@ -7792,7 +7819,54 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       }
     }
 
-    // SVG 높이 재계산
+    // ═══ v17 FIX-2: 겹침 보정 후 행 간격 균등화 재적용 ═══
+    // _autoCorrectOverlaps/양방향 동일행 강제가 일부 노드를 밀어냈을 수 있음
+    // → 각 행의 노드를 rowY[row] 기준으로 재정렬
+    nodeData.forEach(nd=>{
+      const expectedY=rowY[nd.row];
+      if(Math.abs(nd.sy-expectedY)>2){
+        nd.sy=expectedY+Math.max(0,(globalShapeH-nd.sh)/2);
+        nodeBoxes[nd.id].y=expectedY;
+        nodeBoxes[nd.id].cy=expectedY+nodeBoxes[nd.id].h/2;
+        nodeBoxes[nd.id]._sy=nd.sy;
+      }
+    });
+    // 복원 후 겹침 재검증 (최대 3회)
+    let reEqRounds=0;
+    while(reEqRounds<3){
+      let hasOverlap=false;
+      for(let i=0;i<nodeData.length&&!hasOverlap;i++){
+        const a=nodeData[i];
+        for(let j=i+1;j<nodeData.length;j++){
+          const b=nodeData[j];
+          if(a.row===b.row)continue;
+          const hOvl=!(a.sx+a.sw+8<b.sx||b.sx+b.sw+8<a.sx);
+          const aBot=a.sy+a.sh+REF_PADDING+MIN_GAP;
+          const bBot=b.sy+b.sh+REF_PADDING+MIN_GAP;
+          if(hOvl&&((b.sy<aBot&&b.sy>=a.sy)||(a.sy<bBot&&a.sy>=b.sy))){
+            hasOverlap=true;break;
+          }
+        }
+      }
+      if(!hasOverlap)break;
+      // 겹침 발생 → globalRowH 증가 + rowY 재계산
+      globalRowH+=20;
+      let reAccY=marginY;
+      for(let r=0;r<numRows;r++){
+        rowY[r]=reAccY;
+        reAccY+=globalRowH+rowGapBase;
+      }
+      nodeData.forEach(nd=>{
+        const ey=rowY[nd.row];
+        nd.sy=ey+Math.max(0,(globalShapeH-nd.sh)/2);
+        nodeBoxes[nd.id].y=ey;
+        nodeBoxes[nd.id].cy=ey+nodeBoxes[nd.id].h/2;
+        nodeBoxes[nd.id]._sy=nd.sy;
+      });
+      reEqRounds++;
+    }
+
+    // ═══ v17 FIX-3: 최종 nodeData 위치 기반 정확한 viewBox ═══
     let maxBottom=0;
     nodeData.forEach(nd=>{
       const bottom=nd.sy+nd.sh+REF_PADDING+10;
@@ -8080,7 +8154,10 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     
     // ═══ v9.0: 공통 레이아웃 엔진 호출 (연결선 우회 공간 확보) ═══
     // ★ v10.4: 박스 너비 확대 — 한글 라벨 잘림 방지 + 조정 배율 ★
-    const innerBoxW=(innerMaxCols<=1?4.5*PX:innerMaxCols===2?3.2*PX:2.4*PX)*_bwm;
+    // ★ v17 FIX-1: 1열일 때 너무 크지 않도록 상한 적용 (도 1과 시각적 일관성) ★
+    const _rawInnerBoxW=(innerMaxCols<=1?4.5*PX:innerMaxCols===2?3.2*PX:2.4*PX)*_bwm;
+    const MAX_INNER_BOX_W=3.8*PX*_bwm; // 도 1 3열 블록(3.0*PX) 대비 1.27배 이내
+    const innerBoxW=Math.min(_rawInnerBoxW, MAX_INNER_BOX_W);
     const boxH2=(innerMaxCols>=3?1.05*PX:0.95*PX)*_bhm; // v10.4: 높이 증가 (멀티라인 수용)
     const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
       boxBaseW:innerBoxW, boxBaseH:boxH2,
@@ -8097,7 +8174,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const leaderMargin=0.8*PX;
     const svgW=frameX+frameW+leaderMargin;
     const svgH=frameY+frameH+0.5*PX;
-    const maxW=innerMaxCols<=1?650:innerMaxCols===2?850:1000; // v10.4: 확대 (박스 너비 증가 반영)
+    const maxW=innerMaxCols<=1?550:innerMaxCols===2?700:800; // v17 FIX-1: 도 1/도 2+ 일관성
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
@@ -9041,7 +9118,51 @@ function validateDiagramRules(nodes,figNum,designText,edges){
   if(dupRefs.length){
     issues.push({severity:'ERROR',rule:'R4',message:`참조번호 중복: ${[...new Set(dupRefs)].join(', ')}`});
   }
-  
+
+  // ═══ R13. 명칭 중복 — 같은 이름에 다른 참조번호 (기재불비) ═══
+  const labelToRefs={};
+  nodes.forEach(n=>{
+    const ref=extractRef(n.label);
+    if(!ref)return;
+    const clean=(_safeCleanLabel(n.label)||'').trim();
+    if(!clean||clean.length<2)return;
+    if(!labelToRefs[clean])labelToRefs[clean]=[];
+    labelToRefs[clean].push(ref);
+  });
+  Object.entries(labelToRefs).forEach(([label,refs])=>{
+    if(refs.length>1){
+      const uniqueRefs=[...new Set(refs)];
+      if(uniqueRefs.length>1){
+        issues.push({
+          severity:'ERROR',
+          rule:'R13',
+          message:`명칭 "${label}"이 서로 다른 참조번호(${uniqueRefs.join(', ')})로 중복 사용 — 기재불비(特42조④)`
+        });
+      }
+    }
+  });
+
+  // ═══ R13b. 참조번호 중복 — 같은 번호에 다른 명칭 (기재불비) ═══
+  const refToLabels={};
+  nodes.forEach(n=>{
+    const ref=extractRef(n.label);
+    if(!ref)return;
+    const clean=(_safeCleanLabel(n.label)||'').trim();
+    if(!clean||clean.length<2)return;
+    if(!refToLabels[ref])refToLabels[ref]=[];
+    if(!refToLabels[ref].includes(clean))refToLabels[ref].push(clean);
+  });
+  Object.entries(refToLabels).forEach(([ref,labels])=>{
+    if(labels.length>1){
+      issues.push({
+        severity:'ERROR',
+        rule:'R13b',
+        message:`참조번호 ${ref}에 서로 다른 명칭("${labels.join('", "')}") — 기재불비(特42조④)`
+      });
+    }
+  });
+
+
   const numRefs=allRefs.filter(r=>!r.startsWith('S')&&!r.startsWith('D')).map(r=>parseInt(r)).filter(n=>!isNaN(n));
   const dRefs=allRefs.filter(r=>r.startsWith('D')).map(r=>({full:r,num:parseInt(r.slice(1))}));
   const l1Refs=numRefs.filter(n=>n>=100&&n<1000&&n%100===0);
@@ -9917,14 +10038,16 @@ function downloadPptx(sid){
         const refNumH=0.25;
         const rowGapBase=0.25;
         
-        // ★ v10.5: 행별 실제 Shape 높이 (아이콘 복원, PPTX) ★
-        const rowMaxH={};
-        // ★ v14 FIX: 행별 최대 실제 shape 높이 (PPTX 라우팅용) ★
+        // ═══ v17: 전역 행 높이 통일 (PPTX) ═══
+        let globalRowH=boxH+refNumH;
         const rowMaxShapeH={};
-        nodes.forEach(n=>{const gp=grid[n.id];if(!gp)return;const st=matchIconShape(n.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=Math.max(vb.bottom,boxH)+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;const shapeH=Math.max(sm.sh,boxH);if(!rowMaxShapeH[gp.row]||shapeH>rowMaxShapeH[gp.row])rowMaxShapeH[gp.row]=shapeH;});
+        nodes.forEach(n=>{const gp=grid[n.id];if(!gp)return;const st=matchIconShape(n.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=Math.max(vb.bottom,boxH)+refNumH;if(h>globalRowH)globalRowH=h;const shapeH=Math.max(sm.sh,boxH);if(!rowMaxShapeH[gp.row]||shapeH>rowMaxShapeH[gp.row])rowMaxShapeH[gp.row]=shapeH;});
+        globalRowH=Math.min(globalRowH,(boxH+refNumH)*1.3);
+        let globalShapeH=boxH;
+        Object.values(rowMaxShapeH).forEach(h=>{if(h>globalShapeH)globalShapeH=h;});
+        globalShapeH=Math.min(globalShapeH,boxH*1.3);
         const rowY={};let accY=boxStartY;
-        // ★ v14 FIX: 큰 아이콘 shape 행에 추가 간격 (PPTX) ★
-        for(let r=0;r<numRows;r++){rowY[r]=accY;const _rxg=((rowMaxShapeH[r]||boxH)>boxH)?((rowMaxShapeH[r]-boxH)*0.5):0;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase+_rxg;}
+        for(let r=0;r<numRows;r++){rowY[r]=accY;accY+=globalRowH+rowGapBase;}
 
         // ★ v10.5: 이중 좌표 — 셀 기반 라우팅 + 실제 shape 렌더링 (PPTX) ★
         const nodeBoxes={};
@@ -9940,8 +10063,8 @@ function downloadPptx(sid){
           // 실제 shape 복원
           const shapeType=matchIconShape(n.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
-          // ★ v14 FIX: 행별 실제 shape 높이 반영 (PPTX) ★
-          const _rowCellH=rowMaxShapeH[gp.row]||boxH;
+          // ★ v17: 전역 통일 shape 높이 (PPTX) ★
+          const _rowCellH=globalShapeH;
           const sx=bx+sm.dx;
           const sy=by+Math.max(0,(_rowCellH-sm.sh)/2);
 
@@ -10611,14 +10734,16 @@ function downloadDiagramImages(sid, format='jpeg'){
         const refNumH=22;
         const rowGapBase=25;
         
-        // ★ v10.5: 행별 실제 Shape 높이 (아이콘 복원) ★
-        const rowMaxH={};
-        // ★ v14 FIX: 행별 최대 실제 shape 높이 (Canvas 라우팅용) ★
+        // ═══ v17: 전역 행 높이 통일 (Canvas) ═══
+        let globalRowH=boxH+refNumH;
         const rowMaxShapeH={};
-        nodes.forEach(nd=>{const gp=grid[nd.id];if(!gp)return;const st=matchIconShape(nd.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=Math.max(vb.bottom,boxH)+refNumH;if(!rowMaxH[gp.row]||h>rowMaxH[gp.row])rowMaxH[gp.row]=h;const shapeH=Math.max(sm.sh,boxH);if(!rowMaxShapeH[gp.row]||shapeH>rowMaxShapeH[gp.row])rowMaxShapeH[gp.row]=shapeH;});
+        nodes.forEach(nd=>{const gp=grid[nd.id];if(!gp)return;const st=matchIconShape(nd.label);const sm=_shapeMetrics(st,boxW2D,boxH);const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);const h=Math.max(vb.bottom,boxH)+refNumH;if(h>globalRowH)globalRowH=h;const shapeH=Math.max(sm.sh,boxH);if(!rowMaxShapeH[gp.row]||shapeH>rowMaxShapeH[gp.row])rowMaxShapeH[gp.row]=shapeH;});
+        globalRowH=Math.min(globalRowH,(boxH+refNumH)*1.3);
+        let globalShapeH=boxH;
+        Object.values(rowMaxShapeH).forEach(h=>{if(h>globalShapeH)globalShapeH=h;});
+        globalShapeH=Math.min(globalShapeH,boxH*1.3);
         const rowY={};let accY=boxStartY;
-        // ★ v14 FIX: 큰 아이콘 shape 행에 추가 간격 (Canvas) ★
-        for(let r=0;r<numRows;r++){rowY[r]=accY;const _rxg=((rowMaxShapeH[r]||boxH)>boxH)?((rowMaxShapeH[r]-boxH)*0.5):0;accY+=(rowMaxH[r]||boxH+refNumH)+rowGapBase+_rxg;}
+        for(let r=0;r<numRows;r++){rowY[r]=accY;accY+=globalRowH+rowGapBase;}
 
         // ★ v10.5: Phase 1 — 이중 좌표: 셀 기반 라우팅 + 실제 shape 렌더링 ★
         const nodeBoxes={};
@@ -10634,8 +10759,8 @@ function downloadDiagramImages(sid, format='jpeg'){
           const cDisplayLabel=isFig1?_shortenFig1Label(nd.label):cleanLabel;
           const shapeType=matchIconShape(nd.label);
           const sm=_shapeMetrics(shapeType,boxW2D,boxH);
-          // ★ v14 FIX: 행별 실제 shape 높이 반영 (Canvas) ★
-          const _rowCellH=rowMaxShapeH[gp.row]||boxH;
+          // ★ v17: 전역 통일 shape 높이 (Canvas) ★
+          const _rowCellH=globalShapeH;
           const sx=bx+sm.dx;
           const sy=by+Math.max(0,(_rowCellH-sm.sh)/2);
           // 라우팅 nodeBox — 행별 실제 shape 높이 반영
