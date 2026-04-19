@@ -2278,6 +2278,16 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   - 동일 도면세트 내 번호 중복 금지
   - 레벨 혼합 금지: L2에 111 같은 번호 사용 금지
 
+⛔⛔⛔ 명칭 고유성 규칙 (기재불비 — 절대 위반 금지) ⛔⛔⛔
+- 서로 다른 참조번호에는 반드시 서로 다른 명칭을 사용하라.
+  ❌ 금지: 서버(100)와 서버(300) — 같은 이름에 다른 번호
+  ✅ 올바른: 통합 서버(100)와 벤더 서버(300) — 구별 가능한 이름
+- 서로 같은 참조번호에는 반드시 동일한 명칭을 사용하라.
+  ❌ 금지: 도 1에서 "처리부(110)", 도 2에서 "분석부(110)"
+  ✅ 올바른: 모든 도면에서 "처리부(110)"으로 통일
+- L1 장치명은 발명 명칭에서 유래하거나, 역할이 명확히 구분되는 명칭을 사용하라.
+  예: "기업용 인공지능 통합 서버(100)", "사용자 단말(200)", "벤더 서버(300)"
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [R2] 박스 소속(Ownership) 규칙
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3723,11 +3733,26 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
     
     // 4. 렌더링 + 최종 검증
     renderDiagrams(sid,mr.text);
-    
+
+    // ★ v17 FIX-4: R13/R13b (명칭 중복) 오류 시 자동 재생성 1회 시도 ★
+    if(window._diagramErrors&&window._diagramErrors.sid===sid
+       &&/\[R13[b]?\]/.test(window._diagramErrors.errors)
+       &&!window._r13AutoRetried){
+      window._r13AutoRetried=true;
+      App.showToast('명칭 중복 감지 — 자동 재생성','warning');
+      try{
+        await regenerateDiagramWithFeedback(sid);
+      }catch(e2){
+        console.warn('[runDiagramStep] R13 자동 재생성 실패:',e2);
+      }
+    }else if(!window._diagramErrors||window._diagramErrors.sid!==sid){
+      window._r13AutoRetried=false; // 오류 없으면 플래그 리셋
+    }
+
     const dlId=sid==='step_07'?'diagramDownload07':'diagramDownload11';
     const dlEl=document.getElementById(dlId);
     if(dlEl)dlEl.style.display='block';
-    
+
     saveProject(true);
     App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
   }catch(e){
@@ -7658,7 +7683,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const leaderMargin=0.5*PX;
     const svgW=marginX+maxNodeAreaW+leaderMargin;
     const svgH=totalH;
-    const maxW=maxCols<=1?650:maxCols===2?850:950;
+    const maxW=maxCols<=1?550:maxCols===2?700:800; // v17 FIX-1: 도 1/도 2+ 일관성
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
@@ -8129,7 +8154,10 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     
     // ═══ v9.0: 공통 레이아웃 엔진 호출 (연결선 우회 공간 확보) ═══
     // ★ v10.4: 박스 너비 확대 — 한글 라벨 잘림 방지 + 조정 배율 ★
-    const innerBoxW=(innerMaxCols<=1?4.5*PX:innerMaxCols===2?3.2*PX:2.4*PX)*_bwm;
+    // ★ v17 FIX-1: 1열일 때 너무 크지 않도록 상한 적용 (도 1과 시각적 일관성) ★
+    const _rawInnerBoxW=(innerMaxCols<=1?4.5*PX:innerMaxCols===2?3.2*PX:2.4*PX)*_bwm;
+    const MAX_INNER_BOX_W=3.8*PX*_bwm; // 도 1 3열 블록(3.0*PX) 대비 1.27배 이내
+    const innerBoxW=Math.min(_rawInnerBoxW, MAX_INNER_BOX_W);
     const boxH2=(innerMaxCols>=3?1.05*PX:0.95*PX)*_bhm; // v10.4: 높이 증가 (멀티라인 수용)
     const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
       boxBaseW:innerBoxW, boxBaseH:boxH2,
@@ -8146,7 +8174,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const leaderMargin=0.8*PX;
     const svgW=frameX+frameW+leaderMargin;
     const svgH=frameY+frameH+0.5*PX;
-    const maxW=innerMaxCols<=1?650:innerMaxCols===2?850:1000; // v10.4: 확대 (박스 너비 증가 반영)
+    const maxW=innerMaxCols<=1?550:innerMaxCols===2?700:800; // v17 FIX-1: 도 1/도 2+ 일관성
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
@@ -9090,7 +9118,51 @@ function validateDiagramRules(nodes,figNum,designText,edges){
   if(dupRefs.length){
     issues.push({severity:'ERROR',rule:'R4',message:`참조번호 중복: ${[...new Set(dupRefs)].join(', ')}`});
   }
-  
+
+  // ═══ R13. 명칭 중복 — 같은 이름에 다른 참조번호 (기재불비) ═══
+  const labelToRefs={};
+  nodes.forEach(n=>{
+    const ref=extractRef(n.label);
+    if(!ref)return;
+    const clean=(_safeCleanLabel(n.label)||'').trim();
+    if(!clean||clean.length<2)return;
+    if(!labelToRefs[clean])labelToRefs[clean]=[];
+    labelToRefs[clean].push(ref);
+  });
+  Object.entries(labelToRefs).forEach(([label,refs])=>{
+    if(refs.length>1){
+      const uniqueRefs=[...new Set(refs)];
+      if(uniqueRefs.length>1){
+        issues.push({
+          severity:'ERROR',
+          rule:'R13',
+          message:`명칭 "${label}"이 서로 다른 참조번호(${uniqueRefs.join(', ')})로 중복 사용 — 기재불비(特42조④)`
+        });
+      }
+    }
+  });
+
+  // ═══ R13b. 참조번호 중복 — 같은 번호에 다른 명칭 (기재불비) ═══
+  const refToLabels={};
+  nodes.forEach(n=>{
+    const ref=extractRef(n.label);
+    if(!ref)return;
+    const clean=(_safeCleanLabel(n.label)||'').trim();
+    if(!clean||clean.length<2)return;
+    if(!refToLabels[ref])refToLabels[ref]=[];
+    if(!refToLabels[ref].includes(clean))refToLabels[ref].push(clean);
+  });
+  Object.entries(refToLabels).forEach(([ref,labels])=>{
+    if(labels.length>1){
+      issues.push({
+        severity:'ERROR',
+        rule:'R13b',
+        message:`참조번호 ${ref}에 서로 다른 명칭("${labels.join('", "')}") — 기재불비(特42조④)`
+      });
+    }
+  });
+
+
   const numRefs=allRefs.filter(r=>!r.startsWith('S')&&!r.startsWith('D')).map(r=>parseInt(r)).filter(n=>!isNaN(n));
   const dRefs=allRefs.filter(r=>r.startsWith('D')).map(r=>({full:r,num:parseInt(r.slice(1))}));
   const l1Refs=numRefs.filter(n=>n>=100&&n<1000&&n%100===0);
