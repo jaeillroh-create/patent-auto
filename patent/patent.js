@@ -3793,16 +3793,16 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
     // 4. 렌더링 + 최종 검증
     renderDiagrams(sid,mr.text);
 
-    // ★ v17 FIX-4: R12/R13a/R13b/R14 오류 시 자동 재생성 1회 시도 ★
+    // ★ v18: R6b/R6e/R12/R13a/R13b/R14 오류 시 자동 재생성 1회 시도 ★
     if(window._diagramErrors&&window._diagramErrors.sid===sid
-       &&/\[R1[234][ab]?\]/.test(window._diagramErrors.errors)
+       &&/\[R(?:6[be]|1[234][ab]?)\]/.test(window._diagramErrors.errors)
        &&!window._r13AutoRetried){
       window._r13AutoRetried=true;
       App.showToast('도면 규칙 위반 감지 — 자동 재생성','warning');
       try{
         await regenerateDiagramWithFeedback(sid);
       }catch(e2){
-        console.warn('[runDiagramStep] R12/R13a/R14 자동 재생성 실패:',e2);
+        console.warn('[runDiagramStep] 도면 규칙 위반 자동 재생성 실패:',e2);
       }
     }else if(!window._diagramErrors||window._diagramErrors.sid!==sid){
       window._r13AutoRetried=false; // 오류 없으면 플래그 리셋
@@ -6290,6 +6290,9 @@ function computeEdgeRoutes(edges,positions){
 // 원칙 4: 행 너비 통일 (null 슬롯으로 균형)
 function computeDeviceLayout2D(nodes,edges,figNum){
   const n=nodes.length;
+  console.log(`[Layout] input: n=${n}, edges=${edges.length}, figNum=${figNum}`);
+  console.log(`[Layout] nodes:`,nodes.map(nd=>nd.id+':'+nd.label.slice(0,20)));
+  console.log(`[Layout] edges:`,edges.map(e=>e.from+'→'+e.to));
   if(n===0)return{grid:{},maxCols:1,numRows:0,uniqueEdges:[],biDirPairs:[]};
   if(n===1)return{grid:{[nodes[0].id]:{row:0,col:0,layerSize:1}},maxCols:1,numRows:1,uniqueEdges:[],biDirPairs:[]};
   const MAX_COLS=3;
@@ -6720,6 +6723,7 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   }
   
   // ═══ 공통 후처리: 빈 행 제거 + 꺾임·교차 최소화 ═══
+  console.log(`[Layout] layers before optimize:`,layers.map((r,i)=>'행'+i+':'+JSON.stringify(r)));
   layers=layers.filter(r=>r.length>0);
 
   // ★ v15: 엣지 교차 카운트 함수 ★
@@ -6918,6 +6922,24 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   });
   
   return{grid,maxCols:Math.min(maxCols,MAX_COLS),numRows:layers.length,uniqueEdges,layers,biDirPairs};
+}
+
+function _fixSingleColumnLayout(layout, displayNodes, figNum){
+  if(layout.maxCols!==1||displayNodes.length<3)return;
+  console.warn(`[Layout] 도 ${figNum}: ${displayNodes.length}개 노드가 1열 → 강제 다열 재배치`);
+  const sorted=[...displayNodes].sort((a,b)=>{
+    const ra=parseInt((a.label.match(/\((\d+)\)/)||[])[1])||9999;
+    const rb=parseInt((b.label.match(/\((\d+)\)/)||[])[1])||9999;
+    return ra-rb;
+  });
+  const forcedMaxCols=Math.min(3,Math.ceil(displayNodes.length/2));
+  const forcedGrid={};const forcedLayers=[];
+  for(let i=0;i<sorted.length;i+=forcedMaxCols){
+    const row=sorted.slice(i,i+forcedMaxCols);
+    forcedLayers.push(row.map(nd=>nd.id));
+    row.forEach((nd,ci)=>{forcedGrid[nd.id]={row:forcedLayers.length-1,col:ci,layerSize:row.length};});
+  }
+  Object.assign(layout,{grid:forcedGrid,maxCols:forcedMaxCols,numRows:forcedLayers.length,layers:forcedLayers});
 }
 
 // ── Strict Orthogonal Router v4.0 ──
@@ -8258,8 +8280,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     
     // 내부 노드 2D 레이아웃 계산
     const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
+    _fixSingleColumnLayout(innerLayout, displayNodes, figNum);
     const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
-    
+
     // ═══ v9.0: 공통 레이아웃 엔진 호출 (연결선 우회 공간 확보) ═══
     // ★ v10.4: 박스 너비 확대 — 한글 라벨 잘림 방지 + 조정 배율 ★
     // ★ v17 FIX-1: 1열일 때 너무 크지 않도록 상한 적용 (도 1과 시각적 일관성) ★
@@ -10398,6 +10421,7 @@ function downloadPptx(sid){
         const dCount=displayNodes.length;
         
         const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
+        _fixSingleColumnLayout(innerLayout, displayNodes, figNum);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
         const _rawPptxInnerBoxW=innerMaxCols<=1?(PAGE_W-1.6):innerMaxCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
         const innerBoxW=Math.min(_rawPptxInnerBoxW, 2.8); // ★ P7-FIX: PPTX 내부 블록 너비 상한 ★
@@ -11047,6 +11071,7 @@ function downloadDiagramImages(sid, format='jpeg'){
         const displayNodes=innerNodes.length>0?innerNodes:nodes;
         
         const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
+        _fixSingleColumnLayout(innerLayout, displayNodes, figNum);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
 
         const SHADOW_PX=2;
