@@ -1799,6 +1799,11 @@ function getAutoFigNums(sid){
   const r=computeFigNums(devCount,methCount,cCount);
   return sid==='step_07'?r.device:sid==='step_07c'?r.concept:r.method;
 }
+function _getConceptCount(){
+  return (typeof conceptDiagramEnabled!=='undefined'&&conceptDiagramEnabled)
+    ?(diagramData.step_07c?.length||conceptDiagramCount||0)
+    :0;
+}
 // 사용자 도면 설명을 Step 8/12 프롬프트에 삽입하는 헬퍼
 function getUserFiguresPromptBlock(){
   if(!requiredFigures.length)return '';
@@ -2227,8 +2232,9 @@ ${T}${getFullInvention()}${styleRef}`;}
 
     // ═══ Step 7: 도면 설계 (도면 규칙 v4.0) ═══
     case 'step_07':{
-      const f=document.getElementById('optDeviceFigures').value;
-      const totalFig=parseInt(f);
+      console.log('[buildPrompt step_07] outputs.step_06 length=',(outputs.step_06||'').length);
+      const f=document.getElementById('optDeviceFigures')?.value||'4';
+      const totalFig=parseInt(f)||4;
       const reqInst=getRequiredFiguresInstruction();
       const genCount=totalFig-requiredFigures.length;
       const figNums=computeFigNums(Math.max(genCount,0),0);
@@ -3687,9 +3693,26 @@ async function runDiagramStep(sid){
   App.setButtonLoading(bid,true);
   
   try{
+    console.log('[runDiagramStep] sid=',sid,'starting...');
     // 1. 도면 설계 생성
-    let r=await App.callClaude(buildPrompt(sid));
+    let prompt;
+    try{
+      prompt=buildPrompt(sid);
+      console.log('[runDiagramStep] prompt built OK, length=',prompt.length);
+    }catch(promptErr){
+      console.error('[runDiagramStep] buildPrompt ERROR:',promptErr);
+      App.showToast('프롬프트 생성 오류: '+promptErr.message,'error');
+      return;
+    }
+    let r=await App.callClaude(prompt);
     let designText=r.text;
+
+    // ★ 방어: 빈 응답 감지 ★
+    if(!designText||designText.trim().length<50){
+      console.error('[runDiagramStep] AI returned empty/short response:',designText);
+      App.showToast('도면 설계 생성 실패 — AI 응답이 비었습니다. 다시 시도해 주세요.','error');
+      throw new Error('도면 설계 AI 응답 비어있음 ('+(designText?designText.length:0)+'자)');
+    }
     
     // 2. 도면 설계 텍스트 사전 검증 (도면 수 + 규칙 검증)
     if(sid==='step_07'){
@@ -3757,7 +3780,14 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
     renderOutput(sid,designText);
     
     // 3. Mermaid 변환
-    const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
+    const mermaidPrompt=buildMermaidPrompt(sid);
+    console.log('[runDiagramStep] mermaid prompt length=',mermaidPrompt.length);
+    const mr=await App.callClaude(mermaidPrompt,4096);
+    if(!mr.text||mr.text.trim().length<10){
+      console.error('[runDiagramStep] Mermaid 변환 실패 — 빈 응답');
+      App.showToast('Mermaid 변환 실패 — 다시 시도해 주세요.','error');
+      throw new Error('Mermaid 변환 AI 응답 비어있음');
+    }
     outputs[sid+'_mermaid']=mr.text;
     
     // 4. 렌더링 + 최종 검증
@@ -4836,6 +4866,10 @@ function insertMathBlocks(s08,s09){
 
 function buildMermaidPrompt(sid){
   const src=outputs[sid]||'';
+  if(!src||src.trim().length<20){
+    console.error('[buildMermaidPrompt] 도면 설계 텍스트가 비었음, sid=',sid,'length=',src.length);
+    return '도면 설계 텍스트가 비어있어 Mermaid 변환 불가. "장치 도면 설계" 버튼을 다시 눌러주세요.';
+  }
   const isDevice=sid==='step_07';
   const isMethod=sid==='step_11';
   
