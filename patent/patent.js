@@ -8323,14 +8323,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
 
     // ═══ v9.0: 공통 레이아웃 엔진 호출 (연결선 우회 공간 확보) ═══
-    // ★ v18: 1열 블록 크기를 도 1과 동등하게 축소 (4.5→3.0 PX) ★
-    const _rawInnerBoxW=(innerMaxCols<=1?3.0*PX:innerMaxCols===2?3.2*PX:2.4*PX)*_bwm;
+    // ★ v18.1: 1열 블록을 도 1 3열과 동일 크기(2.4 PX)로 통일 ★
+    const _rawInnerBoxW=(innerMaxCols<=1?2.4*PX:innerMaxCols===2?3.2*PX:2.4*PX)*_bwm;
     const MAX_INNER_BOX_W=3.5*PX*_bwm;
     const innerBoxW=Math.min(_rawInnerBoxW, MAX_INNER_BOX_W);
-    const boxH2=(innerMaxCols>=3?1.05*PX:innerMaxCols===2?0.95*PX:0.7*PX)*_bhm;
-    const _fig2ColGap=(innerMaxCols<=1?0.7:1.0)*PX*_sm;
-    const _fig2RowGap=(innerMaxCols<=1?0.7:1.1)*PX*_sm;
-    const _fig2FramePad=(innerMaxCols<=1?0.6:0.9)*PX*_sm;
+    const boxH2=(innerMaxCols>=3?1.05*PX:innerMaxCols===2?0.95*PX:0.65*PX)*_bhm;
+    const _fig2ColGap=(innerMaxCols<=1?0.55:1.0)*PX*_sm;
+    const _fig2RowGap=(innerMaxCols<=1?0.55:1.1)*PX*_sm;
+    const _fig2FramePad=(innerMaxCols<=1?0.5:0.9)*PX*_sm;
     const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
       boxBaseW:innerBoxW, boxBaseH:boxH2,
       colGap:_fig2ColGap,
@@ -8346,7 +8346,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const leaderMargin=0.8*PX;
     const svgW=frameX+frameW+leaderMargin;
     const svgH=frameY+frameH+0.5*PX;
-    const maxW=innerMaxCols<=1?450:innerMaxCols===2?700:800;
+    const _targetMaxW=innerMaxCols<=1?400:innerMaxCols===2?700:800;
+    const maxW=Math.min(_targetMaxW, svgW);
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
@@ -10513,16 +10514,16 @@ function downloadPptx(sid){
         const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
         _fixSingleColumnLayout(innerLayout, displayNodes, figNum);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
-        // ★ v18: 1열 블록 크기 축소 (도 1과 시각적 일관성) ★
-        const _rawPptxInnerBoxW=innerMaxCols<=1?(PAGE_W-2.4):innerMaxCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
+        // ★ v18.1: 1열 블록을 3열과 동일 크기로 통일 ★
+        const _rawPptxInnerBoxW=innerMaxCols<=1?(PAGE_W-1.6-0.35*2)/3:innerMaxCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
         const innerBoxW=Math.min(_rawPptxInnerBoxW, 2.8);
-        const pBoxH=innerMaxCols<=1?Math.min(0.50,(AVAILABLE_H-0.7-0.20*(innerNumRows-1))/innerNumRows):Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
+        const pBoxH=innerMaxCols<=1?Math.min(0.45,(AVAILABLE_H-0.7-0.15*(innerNumRows-1))/innerNumRows):Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
 
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:innerBoxW, boxBaseH:pBoxH,
-          colGap:innerMaxCols<=1?0.35:0.55,
-          rowGap:innerMaxCols<=1?0.35:0.50,
-          framePad:innerMaxCols<=1?0.40:0.55,
+          colGap:innerMaxCols<=1?0.25:0.55,
+          rowGap:innerMaxCols<=1?0.25:0.50,
+          framePad:innerMaxCols<=1?0.30:0.55,
           shadowSize:SHADOW_OFFSET, scale:1,
           routePad:PPTX_PAD
         });
@@ -11169,16 +11170,16 @@ function downloadDiagramImages(sid, format='jpeg'){
 
         const SHADOW_PX=2;
         const LEADER_W=35, REF_LABEL_W=50;
-        // ★ v18: 1열 블록 크기 축소 (도 1과 시각적 일관성) ★
-        const _rawCInnerBoxW=innerMaxCols<=1?210:innerMaxCols===2?210:155;
+        // ★ v18.1: 1열 블록을 3열과 동일 크기(155px)로 통일 ★
+        const _rawCInnerBoxW=innerMaxCols<=1?155:innerMaxCols===2?210:155;
         const cInnerBoxW=Math.min(_rawCInnerBoxW, 250);
-        const cBoxH=innerMaxCols<=1?Math.min(42,Math.max(35,(750-40)/Math.max(innerNumRows,1))):Math.min(55,Math.max(40,(750-60)/Math.max(innerNumRows,1)));
+        const cBoxH=innerMaxCols<=1?Math.min(38,Math.max(30,(750-30)/Math.max(innerNumRows,1))):Math.min(55,Math.max(40,(750-60)/Math.max(innerNumRows,1)));
 
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:cInnerBoxW, boxBaseH:cBoxH,
-          colGap:innerMaxCols<=1?35:60,
-          rowGap:innerMaxCols<=1?35:60,
-          framePad:innerMaxCols<=1?35:60,
+          colGap:innerMaxCols<=1?25:60,
+          rowGap:innerMaxCols<=1?25:60,
+          framePad:innerMaxCols<=1?25:60,
           shadowSize:SHADOW_PX, scale:1
         });
         
