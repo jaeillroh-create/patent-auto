@@ -8322,15 +8322,15 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     _fixSingleColumnLayout(innerLayout, displayNodes, figNum);
     const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
 
-    // ═══ v9.0: 공통 레이아웃 엔진 호출 (연결선 우회 공간 확보) ═══
-    // ★ v18.1: 1열 블록을 도 1 3열과 동일 크기(2.4 PX)로 통일 ★
-    const _rawInnerBoxW=(innerMaxCols<=1?2.4*PX:innerMaxCols===2?3.2*PX:2.4*PX)*_bwm;
+    // ═══ v18.2: 전체 도면 세트 기준 블록 크기 통일 ═══
+    const _effectiveCols=Math.max(innerMaxCols, window._globalMaxInnerCols||innerMaxCols);
+    const _rawInnerBoxW=(_effectiveCols<=1?2.4*PX:_effectiveCols===2?3.2*PX:2.4*PX)*_bwm;
     const MAX_INNER_BOX_W=3.5*PX*_bwm;
     const innerBoxW=Math.min(_rawInnerBoxW, MAX_INNER_BOX_W);
-    const boxH2=(innerMaxCols>=3?1.05*PX:innerMaxCols===2?0.95*PX:0.65*PX)*_bhm;
-    const _fig2ColGap=(innerMaxCols<=1?0.55:1.0)*PX*_sm;
-    const _fig2RowGap=(innerMaxCols<=1?0.55:1.1)*PX*_sm;
-    const _fig2FramePad=(innerMaxCols<=1?0.5:0.9)*PX*_sm;
+    const boxH2=(_effectiveCols>=3?1.05*PX:_effectiveCols===2?0.95*PX:0.65*PX)*_bhm;
+    const _fig2ColGap=(_effectiveCols<=1?0.55:1.0)*PX*_sm;
+    const _fig2RowGap=(_effectiveCols<=1?0.55:1.1)*PX*_sm;
+    const _fig2FramePad=(_effectiveCols<=1?0.5:0.9)*PX*_sm;
     const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
       boxBaseW:innerBoxW, boxBaseH:boxH2,
       colGap:_fig2ColGap,
@@ -8346,7 +8346,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const leaderMargin=0.8*PX;
     const svgW=frameX+frameW+leaderMargin;
     const svgH=frameY+frameH+0.5*PX;
-    const _targetMaxW=innerMaxCols<=1?400:innerMaxCols===2?700:800;
+    const _targetMaxW=_effectiveCols<=1?400:_effectiveCols===2?700:800;
     const maxW=Math.min(_targetMaxW, svgW);
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
@@ -8359,7 +8359,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     
     // 2. 내부 노드 렌더링 — 레이아웃 엔진에서 계산된 좌표 사용
     // ★ v10.4: 도면 내 균일 폰트 크기 — 전체 shape 중 최소 높이 기준 ★
-    const fig2BaseFontSize=Math.max(7,(innerMaxCols>2?9:innerMaxCols>1?10:11)+_fo);
+    const fig2BaseFontSize=Math.max(7,(_effectiveCols>2?9:_effectiveCols>1?10:11)+_fo);
     const fig2ShapeHeights=fig2Layout.objects.map(obj=>{
       const nd=displayNodes.find(n=>n.id===obj.id);
       if(!nd)return obj.h;
@@ -8384,7 +8384,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
       const cleanLabel=_safeCleanLabel(nd.label);
       // ★ v10.4: 잘림("…") 완전 제거 — 전체 라벨 표시 ★
       const displayLabel=cleanLabel;
-      const fontSize2=innerMaxCols>2?9:innerMaxCols>1?10:11;
+      const fontSize2=_effectiveCols>2?9:_effectiveCols>1?10:11;
       const textW2=_estimateTextWidth(displayLabel,fontSize2);
       const minSw2=textW2+16;
       if(sm.sw<minSw2&&shapeType!=='box'){
@@ -9766,7 +9766,30 @@ function renderDiagrams(sid,mt){
   </div>`;
   
   el.innerHTML=html;
-  
+
+  // ★ v18.2: 전체 도면 세트에서 최대 열 수 사전 계산 — 블록 크기 통일 ★
+  let globalMaxInnerCols=1;
+  blocks.forEach((code,i)=>{
+    const figNum=autoFigNums[i]||(figOffset+i+1);
+    const{nodes,edges}=diagramData[sid][i];
+    const allL1=nodes.every(n=>_sharedIsL1RefNum(_sharedExtractRefNum(n.label,'')));
+    const isFig1=figNum===1||allL1;
+    if(isFig1)return;
+    const innerNodes=nodes.filter(n=>{
+      const ref=_sharedExtractRefNum(n.label,'');
+      if(!ref)return true;
+      const num=parseInt(ref);
+      if(isNaN(num))return true;
+      if(_sharedIsL1RefNum(ref))return false;
+      return true;
+    });
+    if(innerNodes.length===0)return;
+    const layout=computeDeviceLayout2D(innerNodes,edges,figNum);
+    if(layout.maxCols>globalMaxInnerCols)globalMaxInnerCols=layout.maxCols;
+  });
+  window._globalMaxInnerCols=globalMaxInnerCols;
+  console.log(`[v18.2] globalMaxInnerCols=${globalMaxInnerCols}`);
+
   // SVG 렌더링
   blocks.forEach((code,i)=>{
     const{nodes,edges,positions}=diagramData[sid][i];
@@ -10217,11 +10240,23 @@ function downloadPptx(sid){
       }
     }
     
+    // ★ v18.2: 전체 도면 세트에서 최대 열 수 사전 계산 (PPTX) ★
+    let _pptxGlobalMaxCols=1;
+    data.forEach(({nodes,edges},idx)=>{
+      const figNum=autoFigNums[idx]||(figOffset+idx+1);
+      const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
+      if(figNum===1||allL1)return;
+      const innerNodes=nodes.filter(n=>{const ref=extractRefNum(n.label,'');if(!ref)return true;if(isL1RefNum(ref))return false;return true;});
+      if(!innerNodes.length)return;
+      const layout=computeDeviceLayout2D(innerNodes,edges,figNum);
+      if(layout.maxCols>_pptxGlobalMaxCols)_pptxGlobalMaxCols=layout.maxCols;
+    });
+
     data.forEach(({nodes,edges},idx)=>{
       const slide=pptx.addSlide({bkgd:'FFFFFF'});
       const figNum=autoFigNums[idx]||(figOffset+idx+1);
       const hasEdges=edges&&edges.length>0;
-      
+
       slide.addText(`도 ${figNum}`,{
         x:PAGE_MARGIN,y:PAGE_MARGIN,w:2,h:TITLE_H,
         fontSize:14,bold:true,fontFace:'맑은 고딕',color:'000000'
@@ -10514,16 +10549,17 @@ function downloadPptx(sid){
         const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
         _fixSingleColumnLayout(innerLayout, displayNodes, figNum);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
-        // ★ v18.1: 1열 블록을 3열과 동일 크기로 통일 ★
-        const _rawPptxInnerBoxW=innerMaxCols<=1?(PAGE_W-1.6-0.35*2)/3:innerMaxCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
+        // ★ v18.2: 전체 도면 세트 기준 블록 크기 통일 (PPTX) ★
+        const _pEffCols=Math.max(innerMaxCols, _pptxGlobalMaxCols);
+        const _rawPptxInnerBoxW=_pEffCols<=1?(PAGE_W-1.6-0.35*2)/3:_pEffCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
         const innerBoxW=Math.min(_rawPptxInnerBoxW, 2.8);
-        const pBoxH=innerMaxCols<=1?Math.min(0.45,(AVAILABLE_H-0.7-0.15*(innerNumRows-1))/innerNumRows):Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
+        const pBoxH=_pEffCols<=1?Math.min(0.45,(AVAILABLE_H-0.7-0.15*(innerNumRows-1))/innerNumRows):Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
 
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:innerBoxW, boxBaseH:pBoxH,
-          colGap:innerMaxCols<=1?0.25:0.55,
-          rowGap:innerMaxCols<=1?0.25:0.50,
-          framePad:innerMaxCols<=1?0.30:0.55,
+          colGap:_pEffCols<=1?0.25:0.55,
+          rowGap:_pEffCols<=1?0.25:0.50,
+          framePad:_pEffCols<=1?0.30:0.55,
           shadowSize:SHADOW_OFFSET, scale:1,
           routePad:PPTX_PAD
         });
@@ -10688,7 +10724,19 @@ function downloadDiagramImages(sid, format='jpeg'){
   const findImmediateParent=_sharedFindImmediateParent;
 
   App.showToast(`도면 이미지 생성 중... (${data.length}개)`);
-  
+
+  // ★ v18.2: 전체 도면 세트에서 최대 열 수 사전 계산 (Canvas) ★
+  let _canvasGlobalMaxCols=1;
+  data.forEach(({nodes,edges},idx)=>{
+    const figNum=autoFigNums[idx]||(figOffset+idx+1);
+    const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
+    if(figNum===1||allL1)return;
+    const innerNodes=nodes.filter(n=>{const ref=extractRefNum(n.label,'');if(!ref)return true;if(isL1RefNum(ref))return false;return true;});
+    if(!innerNodes.length)return;
+    const layout=computeDeviceLayout2D(innerNodes,edges,figNum);
+    if(layout.maxCols>_canvasGlobalMaxCols)_canvasGlobalMaxCols=layout.maxCols;
+  });
+
   // ★ ZIP 일괄 다운로드 ★
   const zip=typeof JSZip!=='undefined'?new JSZip():null;
   const imageFiles=[];
@@ -11170,16 +11218,17 @@ function downloadDiagramImages(sid, format='jpeg'){
 
         const SHADOW_PX=2;
         const LEADER_W=35, REF_LABEL_W=50;
-        // ★ v18.1: 1열 블록을 3열과 동일 크기(155px)로 통일 ★
-        const _rawCInnerBoxW=innerMaxCols<=1?155:innerMaxCols===2?210:155;
+        // ★ v18.2: 전체 도면 세트 기준 블록 크기 통일 (Canvas) ★
+        const _cEffCols=Math.max(innerMaxCols, _canvasGlobalMaxCols);
+        const _rawCInnerBoxW=_cEffCols<=1?155:_cEffCols===2?210:155;
         const cInnerBoxW=Math.min(_rawCInnerBoxW, 250);
-        const cBoxH=innerMaxCols<=1?Math.min(38,Math.max(30,(750-30)/Math.max(innerNumRows,1))):Math.min(55,Math.max(40,(750-60)/Math.max(innerNumRows,1)));
+        const cBoxH=_cEffCols<=1?Math.min(38,Math.max(30,(750-30)/Math.max(innerNumRows,1))):Math.min(55,Math.max(40,(750-60)/Math.max(innerNumRows,1)));
 
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:cInnerBoxW, boxBaseH:cBoxH,
-          colGap:innerMaxCols<=1?25:60,
-          rowGap:innerMaxCols<=1?25:60,
-          framePad:innerMaxCols<=1?25:60,
+          colGap:_cEffCols<=1?25:60,
+          rowGap:_cEffCols<=1?25:60,
+          framePad:_cEffCols<=1?25:60,
           shadowSize:SHADOW_PX, scale:1
         });
         
