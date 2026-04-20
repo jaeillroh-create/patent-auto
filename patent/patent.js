@@ -7208,7 +7208,10 @@ function getConnectionPoints(fromBox,toBox){
 function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNumRows, innerUniqueEdges, frameRefNum, opts){
   const{boxBaseW, boxBaseH, colGap, rowGap, framePad, shadowSize, scale}=opts;
   // scale: SVG=72(PX), Canvas=1(px), PPTX=1(inch)
-  
+
+  // ★ v19: 전체 열 영역 너비 사전 계산 — 프레임 너비 통일 기준 ★
+  const totalAreaW=innerMaxCols*boxBaseW+(innerMaxCols-1)*colGap;
+
   // Phase 1: 각 노드를 객체(Rect)로 변환
   const objects=[];
   displayNodes.forEach(nd=>{
@@ -7216,7 +7219,6 @@ function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNu
     if(!gp)return;
     // 행 내 노드 수에 따른 중앙 정렬
     const rowNodeAreaW=gp.layerSize*boxBaseW+(gp.layerSize-1)*colGap;
-    const totalAreaW=innerMaxCols*boxBaseW+(innerMaxCols-1)*colGap;
     const rowOffsetX=(totalAreaW-rowNodeAreaW)/2;
     const localX=rowOffsetX+gp.col*(boxBaseW+colGap);
     const localY=gp.row*(boxBaseH+rowGap);
@@ -7269,15 +7271,19 @@ function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNu
     maxY=Math.max(maxY,o.y+o.h+shadowSize+2);
   });
   if(!objects.length){minX=0;minY=0;maxX=boxBaseW;maxY=boxBaseH;}
-  const contentW=maxX-minX;
+  const actualContentW=maxX-minX;
   const contentH=maxY-minY;
-  
+  // ★ v19: 프레임 너비를 전체 열 영역 기준으로 통일 — 1열도 3열과 동일 폭 ★
+  const minContentW=totalAreaW+shadowSize+2;
+  const contentW=Math.max(actualContentW, minContentW);
+
   // Phase 4: 프레임 좌표 (content + padding)
   const frameW=contentW+framePad*2;
   const frameH=contentH+framePad*2;
-  
-  // Phase 5: 객체 좌표를 프레임 내부 좌표로 재배치 (원점 보정)
-  const offsetX=framePad-minX;
+
+  // Phase 5: 객체 좌표를 프레임 내부 좌표로 재배치 (원점 보정 + 중앙 정렬)
+  const extraW=contentW-actualContentW;
+  const offsetX=framePad-minX+extraW/2;
   const offsetY=framePad-minY;
   objects.forEach(o=>{o.x+=offsetX;o.y+=offsetY;});
   
@@ -7760,8 +7766,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     
     // 열 수에 따른 박스 크기 조정
     const colGap=0.85*PX*_sm; // v10.1: 연결선 공간 확보 + v10.4: 조정 배율
-    // v10.3: 셀 너비 확대 (한글 텍스트 수용)
-    const boxW2D=(maxCols<=1?5.5*PX:maxCols===2?4.2*PX:3.0*PX)*_bwm;
+    // v10.3+v19: 셀 너비 확대 (icon shape 65% 비율 보상 — 도 2+ 블록과 시각적 크기 일치)
+    const boxW2D=(maxCols<=1?5.5*PX:maxCols===2?4.5*PX:3.8*PX)*_bwm;
     const maxNodeAreaW=maxCols*boxW2D+(maxCols-1)*colGap;
     const marginX=0.8*PX*_sm;
     const marginY=0.8*PX*_sm;
@@ -7812,7 +7818,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const leaderMargin=0.5*PX;
     const svgW=marginX+maxNodeAreaW+leaderMargin;
     const svgH=totalH;
-    const maxW=maxCols<=1?550:maxCols===2?700:800; // v17 FIX-1: 도 1/도 2+ 일관성
+    const maxW=maxCols<=1?550:maxCols===2?800:950; // v19: 도 1 icon shape 크기 보상
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
