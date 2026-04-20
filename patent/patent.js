@@ -2326,6 +2326,10 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   ⛔⛔ 핵심: 한 도면에는 반드시 "한 레벨"만 표시 ⛔⛔
   최외곽 박스 = 상위 장치
   내부 박스 = 그 상위 장치의 직계 자식 레벨만
+  단, 서브 프레임을 사용한 중첩은 허용:
+  ✅ 허용: 100 프레임 → L2(110 서브프레임[111,112,113 내부] + 120 독립블록)
+     → 110이 서브 프레임(점선)으로 그려지고 내부에 L3이 포함된 구조
+  ⛔ 금지: 100 프레임 → 110 + 120 + 111 + 112 (서브 프레임 없이 L2·L3 혼합 나열)
   
   ⛔⛔⛔ 내부 구성요소 수량 규칙 (절대 준수) ⛔⛔⛔
   ★★ 최소: 3개 이상 (2개만으로는 도면이 빈약) ★★
@@ -4900,10 +4904,6 @@ graph TD
 - 연결은 --> 만 사용 (양방향은 A --> B와 B --> A 두 줄로)
 
 ★★★ 노드 정의 순서 = 렌더링 배치에 직접 영향 ★★★
-- 도 1: 허브 노드(가장 많은 연결)를 가장 먼저 정의하라
-- 도 2+: 데이터 흐름의 입력측(in-degree가 낮은 노드)을 먼저 정의하라
-  → 입력→처리→출력 순서로 노드를 정의
-  → 참조번호 작은 순서 아님! 데이터 흐름 순서!
 - 같은 처리 단계의 노드는 연속 정의하라
 - 연결 방향: 데이터/정보 흐름 방향과 일치시키라
   수집부→분석부→결정부→전송부 순이면 A-->B-->C-->D
@@ -6942,24 +6942,6 @@ function computeDeviceLayout2D(nodes,edges,figNum){
   return{grid,maxCols:Math.min(maxCols,MAX_COLS),numRows:layers.length,uniqueEdges,layers,biDirPairs};
 }
 
-function _fixSingleColumnLayout(layout, displayNodes, figNum){
-  if(layout.maxCols!==1||displayNodes.length<3)return;
-  console.warn(`[Layout] 도 ${figNum}: ${displayNodes.length}개 노드가 1열 → 강제 다열 재배치`);
-  const sorted=[...displayNodes].sort((a,b)=>{
-    const ra=parseInt((a.label.match(/\((\d+)\)/)||[])[1])||9999;
-    const rb=parseInt((b.label.match(/\((\d+)\)/)||[])[1])||9999;
-    return ra-rb;
-  });
-  const forcedMaxCols=Math.min(3,Math.ceil(displayNodes.length/2));
-  const forcedGrid={};const forcedLayers=[];
-  for(let i=0;i<sorted.length;i+=forcedMaxCols){
-    const row=sorted.slice(i,i+forcedMaxCols);
-    forcedLayers.push(row.map(nd=>nd.id));
-    row.forEach((nd,ci)=>{forcedGrid[nd.id]={row:forcedLayers.length-1,col:ci,layerSize:row.length};});
-  }
-  Object.assign(layout,{grid:forcedGrid,maxCols:forcedMaxCols,numRows:forcedLayers.length,layers:forcedLayers});
-}
-
 // ── Strict Orthogonal Router v4.0 ──
 // 모든 세그먼트가 수평(H) 또는 수직(V)만 허용. 사선 절대 불가.
 // ★ 핵심 변경: 모든 경로(직선 포함)에 충돌 검사 적용 + Z-shape 우회 ★
@@ -8319,19 +8301,18 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     
     // 내부 노드 2D 레이아웃 계산
     const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
-    _fixSingleColumnLayout(innerLayout, displayNodes, figNum);
     const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
 
     // ═══ v18.2: 전체 도면 세트 기준 블록 크기 통일 ═══
     const _effectiveCols=Math.max(innerMaxCols, window._globalMaxInnerCols||innerMaxCols);
-    const _rawInnerBoxW=(_effectiveCols<=1?2.4*PX:_effectiveCols===2?3.2*PX:2.4*PX)*_bwm;
+    const _rawInnerBoxW=(_effectiveCols===2?3.2*PX:2.4*PX)*_bwm;
     const MAX_INNER_BOX_W=3.5*PX*_bwm;
     const innerBoxW=Math.min(_rawInnerBoxW, MAX_INNER_BOX_W);
     const boxH2=(_effectiveCols>=3?1.05*PX:_effectiveCols===2?0.95*PX:0.65*PX)*_bhm;
     const _fig2ColGap=(_effectiveCols<=1?0.55:1.0)*PX*_sm;
     const _fig2RowGap=(_effectiveCols<=1?0.55:1.1)*PX*_sm;
     const _fig2FramePad=(_effectiveCols<=1?0.5:0.9)*PX*_sm;
-    const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
+    const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,_effectiveCols,innerNumRows,innerUniqueEdges,frameRefNum,{
       boxBaseW:innerBoxW, boxBaseH:boxH2,
       colGap:_fig2ColGap,
       rowGap:_fig2RowGap,
@@ -9396,9 +9377,25 @@ function validateDiagramRules(nodes,figNum,designText,edges){
       if(badL2.length) issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L2(${badL2.join(',')})가 L1(${theL1})의 하위 아님`});
       if(badL3.length) issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L3(${badL3.join(',')})가 L1(${theL1})의 하위 아님`});
       
-      // ★ 레벨 혼합 검출: L1 프레임 안에 L2+L3 동시 존재 ★
+      // ★ v18.2: L2+L3 혼합 — 서브 프레임 중첩 허용 ★
       if(l2Refs.length>0&&l3Refs.length>0){
-        issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L2(${l2Refs.join(',')})와 L3(${l3Refs.join(',')})가 한 도면에 혼합됨. 한 도면에는 한 레벨만! L2 도면과 L3 도면을 분리해야 함.`});
+        const l3ParentL2s=[...new Set(l3Refs.map(n=>Math.floor(n/10)*10))];
+        const allParentsPresent=l3ParentL2s.every(p=>l2Refs.includes(p));
+        const singleParent=l3ParentL2s.length===1;
+
+        if(allParentsPresent&&singleParent){
+          const parentL2=l3ParentL2s[0];
+          const otherL2=l2Refs.filter(r=>r!==parentL2);
+          issues.push({severity:'INFO',rule:'R6b',
+            message:`도 ${figNum}: 중첩 블록도 — ${parentL2}이 서브 프레임(내부 L3: ${l3Refs.join(',')}), 독립 L2: ${otherL2.join(',')||'없음'}`});
+        }else if(allParentsPresent&&!singleParent){
+          issues.push({severity:'WARNING',rule:'R6b',
+            message:`도 ${figNum}: 복수 L2(${l3ParentL2s.join(',')}) 서브 프레임 — 도면 분할 권장`});
+        }else{
+          const orphanL3=l3Refs.filter(n=>!l2Refs.includes(Math.floor(n/10)*10));
+          issues.push({severity:'ERROR',rule:'R6b',
+            message:`도 ${figNum}: L3(${orphanL3.join(',')})의 부모 L2가 이 도면에 없음 — 레벨 혼합 오류`});
+        }
       }else if(!badL2.length&&!badL3.length&&(l2Refs.length>0||l3Refs.length>0)){
         issues.push({severity:'INFO',rule:'R6b',message:`도 ${figNum} 최외곽: ${theL1} (L1 자체가 프레임)`});
       }
@@ -9775,11 +9772,16 @@ function renderDiagrams(sid,mt){
     const allL1=nodes.every(n=>_sharedIsL1RefNum(_sharedExtractRefNum(n.label,'')));
     const isFig1=figNum===1||allL1;
     if(isFig1)return;
+    const allRefsPC=nodes.map(n=>_sharedExtractRefNum(n.label,'')).filter(Boolean);
+    let pcFrameRef=_sharedFindImmediateParent(allRefsPC);
+    if(!pcFrameRef&&allRefsPC.length>0){const fr=parseInt(allRefsPC[0])||100;pcFrameRef=Math.floor(fr/100)*100;}
+    if(!pcFrameRef)pcFrameRef=100;
     const innerNodes=nodes.filter(n=>{
       const ref=_sharedExtractRefNum(n.label,'');
       if(!ref)return true;
       const num=parseInt(ref);
       if(isNaN(num))return true;
+      if(num===pcFrameRef)return false;
       if(_sharedIsL1RefNum(ref))return false;
       return true;
     });
@@ -10246,7 +10248,11 @@ function downloadPptx(sid){
       const figNum=autoFigNums[idx]||(figOffset+idx+1);
       const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
       if(figNum===1||allL1)return;
-      const innerNodes=nodes.filter(n=>{const ref=extractRefNum(n.label,'');if(!ref)return true;if(isL1RefNum(ref))return false;return true;});
+      const pRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
+      let pFrameRef=findImmediateParent(pRefs);
+      if(!pFrameRef&&pRefs.length>0){const fr=parseInt(pRefs[0])||100;pFrameRef=Math.floor(fr/100)*100;}
+      if(!pFrameRef)pFrameRef=100;
+      const innerNodes=nodes.filter(n=>{const ref=extractRefNum(n.label,'');if(!ref)return true;const num=parseInt(ref);if(num===pFrameRef)return false;if(isL1RefNum(ref))return false;return true;});
       if(!innerNodes.length)return;
       const layout=computeDeviceLayout2D(innerNodes,edges,figNum);
       if(layout.maxCols>_pptxGlobalMaxCols)_pptxGlobalMaxCols=layout.maxCols;
@@ -10547,15 +10553,14 @@ function downloadPptx(sid){
         const dCount=displayNodes.length;
         
         const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
-        _fixSingleColumnLayout(innerLayout, displayNodes, figNum);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
         // ★ v18.2: 전체 도면 세트 기준 블록 크기 통일 (PPTX) ★
         const _pEffCols=Math.max(innerMaxCols, _pptxGlobalMaxCols);
-        const _rawPptxInnerBoxW=_pEffCols<=1?(PAGE_W-1.6-0.35*2)/3:_pEffCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
+        const _rawPptxInnerBoxW=_pEffCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
         const innerBoxW=Math.min(_rawPptxInnerBoxW, 2.8);
         const pBoxH=_pEffCols<=1?Math.min(0.45,(AVAILABLE_H-0.7-0.15*(innerNumRows-1))/innerNumRows):Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
 
-        const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
+        const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,_pEffCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:innerBoxW, boxBaseH:pBoxH,
           colGap:_pEffCols<=1?0.25:0.55,
           rowGap:_pEffCols<=1?0.25:0.50,
@@ -10731,7 +10736,11 @@ function downloadDiagramImages(sid, format='jpeg'){
     const figNum=autoFigNums[idx]||(figOffset+idx+1);
     const allL1=nodes.every(n=>isL1RefNum(extractRefNum(n.label,'')));
     if(figNum===1||allL1)return;
-    const innerNodes=nodes.filter(n=>{const ref=extractRefNum(n.label,'');if(!ref)return true;if(isL1RefNum(ref))return false;return true;});
+    const cRefs=nodes.map(n=>extractRefNum(n.label,'')).filter(Boolean);
+    let cFrameRef=findImmediateParent(cRefs);
+    if(!cFrameRef&&cRefs.length>0){const fr=parseInt(cRefs[0])||100;cFrameRef=Math.floor(fr/100)*100;}
+    if(!cFrameRef)cFrameRef=100;
+    const innerNodes=nodes.filter(n=>{const ref=extractRefNum(n.label,'');if(!ref)return true;const num=parseInt(ref);if(num===cFrameRef)return false;if(isL1RefNum(ref))return false;return true;});
     if(!innerNodes.length)return;
     const layout=computeDeviceLayout2D(innerNodes,edges,figNum);
     if(layout.maxCols>_canvasGlobalMaxCols)_canvasGlobalMaxCols=layout.maxCols;
@@ -11213,18 +11222,17 @@ function downloadDiagramImages(sid, format='jpeg'){
         const displayNodes=innerNodes.length>0?innerNodes:nodes;
         
         const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
-        _fixSingleColumnLayout(innerLayout, displayNodes, figNum);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
 
         const SHADOW_PX=2;
         const LEADER_W=35, REF_LABEL_W=50;
         // ★ v18.2: 전체 도면 세트 기준 블록 크기 통일 (Canvas) ★
         const _cEffCols=Math.max(innerMaxCols, _canvasGlobalMaxCols);
-        const _rawCInnerBoxW=_cEffCols<=1?155:_cEffCols===2?210:155;
+        const _rawCInnerBoxW=_cEffCols===2?210:155;
         const cInnerBoxW=Math.min(_rawCInnerBoxW, 250);
         const cBoxH=_cEffCols<=1?Math.min(38,Math.max(30,(750-30)/Math.max(innerNumRows,1))):Math.min(55,Math.max(40,(750-60)/Math.max(innerNumRows,1)));
 
-        const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,innerMaxCols,innerNumRows,innerUniqueEdges,frameRefNum,{
+        const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,_cEffCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:cInnerBoxW, boxBaseH:cBoxH,
           colGap:_cEffCols<=1?25:60,
           rowGap:_cEffCols<=1?25:60,
