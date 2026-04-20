@@ -5524,7 +5524,7 @@ function _shapeAnchor(type,x,y,w,h,dir){
 // 기존: server=boxW*0.85(너비)×sw*0.80(높이) → boxH의 5배 가능 → 심각한 비율 불균형
 // v13: 모든 shape의 높이를 boxH 기준 1.0~1.15배로 통일
 function _shapeMetrics(type,boxW,boxH){
-  const SHAPE_W=boxW*0.65;   // 셀 너비의 65% (모든 shape 동일)
+  const SHAPE_W=boxW*0.80;   // v19: 셀 너비의 80% (기존 65% → Fig 1/Fig 2+ 크기 통일)
   const MAX_SH=boxH*1.15;    // 셀 높이의 최대 115%
   switch(type){
     case 'database':{
@@ -7766,8 +7766,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     
     // 열 수에 따른 박스 크기 조정
     const colGap=0.85*PX*_sm; // v10.1: 연결선 공간 확보 + v10.4: 조정 배율
-    // v10.3+v19: 셀 너비 확대 (icon shape 65% 비율 보상 — 도 2+ 블록과 시각적 크기 일치)
-    const boxW2D=(maxCols<=1?5.5*PX:maxCols===2?4.5*PX:3.8*PX)*_bwm;
+    // v19: 셀 너비 정규화 (SHAPE_W 80% 기준, 도 2+ 블록과 시각적 크기 일치)
+    const boxW2D=(maxCols<=1?5.0*PX:maxCols===2?3.5*PX:3.0*PX)*_bwm;
     const maxNodeAreaW=maxCols*boxW2D+(maxCols-1)*colGap;
     const marginX=0.8*PX*_sm;
     const marginY=0.8*PX*_sm;
@@ -7818,7 +7818,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const leaderMargin=0.5*PX;
     const svgW=marginX+maxNodeAreaW+leaderMargin;
     const svgH=totalH;
-    const maxW=maxCols<=1?550:maxCols===2?800:950; // v19: 도 1 icon shape 크기 보상
+    const maxW=800; // v19: 모든 도면 통일 표시 폭
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
@@ -8309,16 +8309,15 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
     const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
 
-    // ═══ v18.2: 전체 도면 세트 기준 블록 크기 통일 ═══
+    // ═══ v19: 전체 도면 세트 기준 블록 크기 통일 (정규화) ═══
     const _effectiveCols=Math.max(innerMaxCols, globalMaxInnerCols||innerMaxCols);
-    const _rawInnerBoxW=(_effectiveCols===2?3.2*PX:2.4*PX)*_bwm;
-    const MAX_INNER_BOX_W=3.5*PX*_bwm;
-    const innerBoxW=Math.min(_rawInnerBoxW, MAX_INNER_BOX_W);
-    console.log(`[Size v16] 도 ${figNum}: effective=${_effectiveCols} inner=${innerMaxCols} global=${globalMaxInnerCols} boxW=${innerBoxW.toFixed(0)}`);
-    const boxH2=(_effectiveCols>=3?1.05*PX:_effectiveCols===2?0.95*PX:0.65*PX)*_bhm;
-    const _fig2ColGap=(_effectiveCols<=1?0.55:1.0)*PX*_sm;
-    const _fig2RowGap=(_effectiveCols<=1?0.55:1.1)*PX*_sm;
-    const _fig2FramePad=(_effectiveCols<=1?0.5:0.9)*PX*_sm;
+    const _rawInnerBoxW=(_effectiveCols===2?3.2:2.4)*PX*_bwm;
+    const innerBoxW=Math.min(_rawInnerBoxW, 3.5*PX*_bwm);
+    console.log(`[v19] 도 ${figNum}: effCols=${_effectiveCols} inner=${innerMaxCols} global=${globalMaxInnerCols} boxW=${innerBoxW.toFixed(0)}`);
+    const boxH2=(_effectiveCols===2?0.95:1.05)*PX*_bhm;
+    const _fig2ColGap=1.0*PX*_sm;
+    const _fig2RowGap=1.1*PX*_sm;
+    const _fig2FramePad=0.9*PX*_sm;
     const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,_effectiveCols,innerNumRows,innerUniqueEdges,frameRefNum,{
       boxBaseW:innerBoxW, boxBaseH:boxH2,
       colGap:_fig2ColGap,
@@ -8334,7 +8333,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const leaderMargin=0.8*PX;
     const svgW=frameX+frameW+leaderMargin;
     const svgH=frameY+frameH+0.5*PX;
-    const _targetMaxW=_effectiveCols<=1?400:_effectiveCols===2?700:800;
+    const _targetMaxW=800; // v19: 모든 도면 통일 표시 폭
     const maxW=Math.min(_targetMaxW, svgW);
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
@@ -10560,17 +10559,15 @@ function downloadPptx(sid){
         
         const innerLayout=computeDeviceLayout2D(displayNodes,edges,figNum);
         const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
-        // ★ v18.2: 전체 도면 세트 기준 블록 크기 통일 (PPTX) ★
+        // ★ v19: 전체 도면 세트 기준 블록 크기 통일 (PPTX, 정규화) ★
         const _pEffCols=Math.max(innerMaxCols, _pptxGlobalMaxCols);
         const _rawPptxInnerBoxW=_pEffCols===2?(PAGE_W-1.6-0.35)/2:(PAGE_W-1.6-0.35*2)/3;
         const innerBoxW=Math.min(_rawPptxInnerBoxW, 2.8);
-        const pBoxH=_pEffCols<=1?Math.min(0.45,(AVAILABLE_H-0.7-0.15*(innerNumRows-1))/innerNumRows):Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
+        const pBoxH=Math.min(0.65,(AVAILABLE_H-0.7-0.30*(innerNumRows-1))/innerNumRows);
 
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,_pEffCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:innerBoxW, boxBaseH:pBoxH,
-          colGap:_pEffCols<=1?0.25:0.55,
-          rowGap:_pEffCols<=1?0.25:0.50,
-          framePad:_pEffCols<=1?0.30:0.55,
+          colGap:0.55, rowGap:0.50, framePad:0.55,
           shadowSize:SHADOW_OFFSET, scale:1,
           routePad:PPTX_PAD
         });
@@ -11232,17 +11229,15 @@ function downloadDiagramImages(sid, format='jpeg'){
 
         const SHADOW_PX=2;
         const LEADER_W=35, REF_LABEL_W=50;
-        // ★ v18.2: 전체 도면 세트 기준 블록 크기 통일 (Canvas) ★
+        // ★ v19: 전체 도면 세트 기준 블록 크기 통일 (Canvas, 정규화) ★
         const _cEffCols=Math.max(innerMaxCols, _canvasGlobalMaxCols);
         const _rawCInnerBoxW=_cEffCols===2?210:155;
         const cInnerBoxW=Math.min(_rawCInnerBoxW, 250);
-        const cBoxH=_cEffCols<=1?Math.min(38,Math.max(30,(750-30)/Math.max(innerNumRows,1))):Math.min(55,Math.max(40,(750-60)/Math.max(innerNumRows,1)));
+        const cBoxH=Math.min(55,Math.max(40,(750-60)/Math.max(innerNumRows,1)));
 
         const fig2L=computeFig2Layout(displayNodes,edges,innerGrid,_cEffCols,innerNumRows,innerUniqueEdges,frameRefNum,{
           boxBaseW:cInnerBoxW, boxBaseH:cBoxH,
-          colGap:_cEffCols<=1?25:60,
-          rowGap:_cEffCols<=1?25:60,
-          framePad:_cEffCols<=1?25:60,
+          colGap:60, rowGap:60, framePad:60,
           shadowSize:SHADOW_PX, scale:1
         });
         
