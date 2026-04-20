@@ -7473,7 +7473,7 @@ function _simplifyRoute(route, obstacles, fromBox, toBox, coordTol){
   return r;
 }
 
-function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
+function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,globalMaxInnerCols){
   // ═══ KIPO 특허 도면 규칙 v4.1 (직계 부모 일치) ═══
   // ★ v10.4: adjustments 파라미터 — 포스트 렌더 검증 실패 시 재렌더링용 ★
   // adjustments: {spacingMult:1.0, fontOffset:0, boxWidthMult:1.0, boxHeightMult:1.0}
@@ -8304,10 +8304,11 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments){
     const{grid:innerGrid,maxCols:innerMaxCols,numRows:innerNumRows,uniqueEdges:innerUniqueEdges}=innerLayout;
 
     // ═══ v18.2: 전체 도면 세트 기준 블록 크기 통일 ═══
-    const _effectiveCols=Math.max(innerMaxCols, window._globalMaxInnerCols||innerMaxCols);
+    const _effectiveCols=Math.max(innerMaxCols, globalMaxInnerCols||innerMaxCols);
     const _rawInnerBoxW=(_effectiveCols===2?3.2*PX:2.4*PX)*_bwm;
     const MAX_INNER_BOX_W=3.5*PX*_bwm;
     const innerBoxW=Math.min(_rawInnerBoxW, MAX_INNER_BOX_W);
+    console.log(`[Size v16] 도 ${figNum}: effective=${_effectiveCols} inner=${innerMaxCols} global=${globalMaxInnerCols} boxW=${innerBoxW.toFixed(0)}`);
     const boxH2=(_effectiveCols>=3?1.05*PX:_effectiveCols===2?0.95*PX:0.65*PX)*_bhm;
     const _fig2ColGap=(_effectiveCols<=1?0.55:1.0)*PX*_sm;
     const _fig2RowGap=(_effectiveCols<=1?0.55:1.1)*PX*_sm;
@@ -9789,13 +9790,12 @@ function renderDiagrams(sid,mt){
     const layout=computeDeviceLayout2D(innerNodes,edges,figNum);
     if(layout.maxCols>globalMaxInnerCols)globalMaxInnerCols=layout.maxCols;
   });
-  window._globalMaxInnerCols=globalMaxInnerCols;
   console.log(`[v18.2] globalMaxInnerCols=${globalMaxInnerCols}`);
 
   // SVG 렌더링
   blocks.forEach((code,i)=>{
     const{nodes,edges,positions}=diagramData[sid][i];
-    renderDiagramSvg(`diagram_${sid}_${i}`,nodes,edges,positions,autoFigNums[i]||(figOffset+i+1));
+    renderDiagramSvg(`diagram_${sid}_${i}`,nodes,edges,positions,autoFigNums[i]||(figOffset+i+1),null,globalMaxInnerCols);
   });
   
   // ★ v10.4: 포스트 렌더 검증 — SVG DOM 기반 겹침/잘림/연결 자동 검증+보정 ★
