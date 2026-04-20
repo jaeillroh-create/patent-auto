@@ -2326,6 +2326,10 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   ⛔⛔ 핵심: 한 도면에는 반드시 "한 레벨"만 표시 ⛔⛔
   최외곽 박스 = 상위 장치
   내부 박스 = 그 상위 장치의 직계 자식 레벨만
+  단, 서브 프레임을 사용한 중첩은 허용:
+  ✅ 허용: 100 프레임 → L2(110 서브프레임[111,112,113 내부] + 120 독립블록)
+     → 110이 서브 프레임(점선)으로 그려지고 내부에 L3이 포함된 구조
+  ⛔ 금지: 100 프레임 → 110 + 120 + 111 + 112 (서브 프레임 없이 L2·L3 혼합 나열)
   
   ⛔⛔⛔ 내부 구성요소 수량 규칙 (절대 준수) ⛔⛔⛔
   ★★ 최소: 3개 이상 (2개만으로는 도면이 빈약) ★★
@@ -9396,9 +9400,25 @@ function validateDiagramRules(nodes,figNum,designText,edges){
       if(badL2.length) issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L2(${badL2.join(',')})가 L1(${theL1})의 하위 아님`});
       if(badL3.length) issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L3(${badL3.join(',')})가 L1(${theL1})의 하위 아님`});
       
-      // ★ 레벨 혼합 검출: L1 프레임 안에 L2+L3 동시 존재 ★
+      // ★ v18.2: L2+L3 혼합 — 서브 프레임 중첩 허용 ★
       if(l2Refs.length>0&&l3Refs.length>0){
-        issues.push({severity:'ERROR',rule:'R6b',message:`도 ${figNum}: L2(${l2Refs.join(',')})와 L3(${l3Refs.join(',')})가 한 도면에 혼합됨. 한 도면에는 한 레벨만! L2 도면과 L3 도면을 분리해야 함.`});
+        const l3ParentL2s=[...new Set(l3Refs.map(n=>Math.floor(n/10)*10))];
+        const allParentsPresent=l3ParentL2s.every(p=>l2Refs.includes(p));
+        const singleParent=l3ParentL2s.length===1;
+
+        if(allParentsPresent&&singleParent){
+          const parentL2=l3ParentL2s[0];
+          const otherL2=l2Refs.filter(r=>r!==parentL2);
+          issues.push({severity:'INFO',rule:'R6b',
+            message:`도 ${figNum}: 중첩 블록도 — ${parentL2}이 서브 프레임(내부 L3: ${l3Refs.join(',')}), 독립 L2: ${otherL2.join(',')||'없음'}`});
+        }else if(allParentsPresent&&!singleParent){
+          issues.push({severity:'WARNING',rule:'R6b',
+            message:`도 ${figNum}: 복수 L2(${l3ParentL2s.join(',')}) 서브 프레임 — 도면 분할 권장`});
+        }else{
+          const orphanL3=l3Refs.filter(n=>!l2Refs.includes(Math.floor(n/10)*10));
+          issues.push({severity:'ERROR',rule:'R6b',
+            message:`도 ${figNum}: L3(${orphanL3.join(',')})의 부모 L2가 이 도면에 없음 — 레벨 혼합 오류`});
+        }
       }else if(!badL2.length&&!badL3.length&&(l2Refs.length>0||l3Refs.length>0)){
         issues.push({severity:'INFO',rule:'R6b',message:`도 ${figNum} 최외곽: ${theL1} (L1 자체가 프레임)`});
       }
