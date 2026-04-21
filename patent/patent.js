@@ -75,24 +75,28 @@ const STEP_NAMES={step_01:'A1. 발명의 명칭',step_02:'D5. 기술분야',step
 // Phase 없는 순수 이름 (프롬프트 내부용)
 const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술 검색',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'장치 도면',step_07c:'예시도/개념도',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'AI 검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서',step_20:'기록매체/프로그램 청구항'};
 
-// ═══ v9.0: callClaudeWithContinuation 오버라이드 ═══
-// 근본 원인: common.js의 이어쓰기 프롬프트가 원본 규칙을 전부 소실시킴
-// → LLM이 "특허명세서 전체"를 완성하려고 시도 → 중복 출력/구조 재시작 발생
-// 수정: 이어쓰기 시 원본 프롬프트 규칙 + 현재 진행 상황을 전달
+// ═══ v9.0/v20: callClaudeWithContinuation 오버라이드 ═══
 (function(){
-  const _origContinuation = App.callClaudeWithContinuation;
+  // 두 문자열 간 겹침(overlap) 길이 계산: a의 끝부분과 b의 시작부분이 동일한 최장 길이
+  function _findOverlap(a, b, maxCheck){
+    maxCheck=maxCheck||300;
+    const aEnd=a.slice(-maxCheck);
+    let best=0;
+    for(let len=10;len<=aEnd.length;len++){
+      if(b.startsWith(aEnd.slice(-len)))best=len;
+    }
+    return best;
+  }
   App.callClaudeWithContinuation = async function(prompt, pid){
     let full = '', r = await App.callClaude(prompt), a = 0;
     full = r.text;
-    
+
     while(a < 6 && r.stopReason === 'max_tokens'){
       a++;
       App.showProgress(pid, `이어서 작성 중... (${a}/6)`, a, 6);
-      
-      // ★ 원본 프롬프트에서 핵심 규칙 추출 (첫 800자 = 역할/형식/금지사항) ★
+
       const rulesCtx = prompt.slice(0, 800);
-      
-      // 현재까지 작성된 도면/단계 진행 상황 추적
+
       const figRefs = [...full.matchAll(/도\s+(\d+)[을를]\s*참조하면/g)];
       const stepRefs = [...full.matchAll(/단계\s*\(?(S\d+)\)?/g)];
       let progressInfo = '';
@@ -100,15 +104,20 @@ const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_0
         progressInfo = `\n※ 현재까지 작성 완료: ${figRefs.map(m=>'도 '+m[1]).join(', ')} 설명`;
       }
       if(stepRefs.length > 0){
-        const lastStep = stepRefs[stepRefs.length-1][1];
-        progressInfo += `\n※ 마지막 단계: ${lastStep}`;
+        progressInfo += `\n※ 마지막 단계: ${stepRefs[stepRefs.length-1][1]}`;
       }
-      
+
+      // v20: 마지막 부분 컨텍스트 준비 — 불완전 문장도 포함하여 정확한 이어쓰기 유도
+      const tail = full.slice(-2000);
+
       const contPrompt = `[원본 작성 규칙 — 이어쓰기에서도 동일하게 적용]
 ${rulesCtx}
 
 [이어쓰기 지시]
-아래 [마지막 부분]에서 잘린 곳의 다음 문장부터 자연스럽게 이어서 작성하라.
+아래 [마지막 부분]의 텍스트가 중간에 잘려 있다. 잘린 지점의 바로 다음부터 이어서 작성하라.
+- 마지막 단어가 불완전하면 해당 단어의 나머지 글자부터 시작하라.
+- 마지막 문장이 불완전하면 해당 문장의 나머지부터 시작하라.
+- [마지막 부분]의 내용을 절대 반복하지 마라. 오직 잘린 다음부터만 작성하라.
 ${progressInfo}
 
 ⛔ 이어쓰기 금지사항:
@@ -118,23 +127,65 @@ ${progressInfo}
 - 현재 작성 중인 항목의 나머지만 이어서 작성하라
 
 [마지막 부분]
-${full.slice(-2000)}`;
-      
+${tail}`;
+
       r = await App.callClaude(contPrompt);
-      
-      // 이어쓰기 결과에서 중복 시작점 감지 & 제거
-      const newText = r.text;
-      // "도 1을 참조하면"이 이미 full에 있는데 다시 나타나면 → 해당 위치 이전 제거
-      if(full.includes('도 1') && /도\s+1[을를]\s*참조하면/.test(newText)){
-        const dupIdx = newText.search(/도\s+1[을를]\s*참조하면/);
-        if(dupIdx > 50){ // 50자 이상의 프리앰블 후 중복 시작 → 프리앰블만 사용
-          full += '\n' + newText.substring(0, dupIdx).trim();
-          console.warn(`[v9.0] 이어쓰기 중복 감지: "도 1을 참조하면" 재시작 차단 (${newText.length - dupIdx}자 제거)`);
-          break; // 중복 시작이면 이어쓰기 중단
+      let newText = r.text;
+
+      // ★ v20: 겹침(overlap) 감지 — full 끝부분과 newText 시작부분이 동일하면 제거 ★
+      const overlap = _findOverlap(full, newText, 500);
+      if(overlap > 10){
+        newText = newText.slice(overlap);
+        console.log(`[v20 이어쓰기] 겹침 ${overlap}자 제거`);
+      }
+
+      // ★ v20: 대규모 중복 감지 — 이미 작성된 문장이 newText에서 반복되면 제거 ★
+      const fullTail = full.slice(-1000);
+      // 마지막 300자에서 완전한 문장 추출하여 newText에서 중복 검색
+      const tailSentences = fullTail.match(/[^.]*[다함됨임]\.(?:\s|$)/g) || [];
+      for(const sent of tailSentences){
+        const trimmed = sent.trim();
+        if(trimmed.length < 30) continue;
+        const dupPos = newText.indexOf(trimmed);
+        if(dupPos >= 0 && dupPos < 200){
+          newText = newText.slice(dupPos + trimmed.length);
+          console.log(`[v20 이어쓰기] 중복 문장 제거: "${trimmed.slice(0,40)}..." (${trimmed.length}자)`);
+          break;
         }
       }
-      
-      full += '\n' + newText;
+
+      // ★ v20: "도 N을 참조하면" 재시작 감지 — 이미 작성된 도면을 다시 시작하면 해당 부분 제거 ★
+      if(figRefs.length > 0){
+        const writtenFigs = new Set(figRefs.map(m => m[1]));
+        const newFigStart = newText.match(/도\s+(\d+)[을를]\s*참조하면/);
+        if(newFigStart && writtenFigs.has(newFigStart[1])){
+          const cutAt = newFigStart.index;
+          if(cutAt > 20){
+            newText = newText.substring(0, cutAt).trim();
+            console.warn(`[v20 이어쓰기] 도 ${newFigStart[1]} 재시작 차단 — ${cutAt}자까지만 사용`);
+          } else {
+            console.warn(`[v20 이어쓰기] 도 ${newFigStart[1]} 재시작 감지 — 이어쓰기 중단`);
+            break;
+          }
+        }
+      }
+
+      if(!newText.trim()){
+        console.warn('[v20 이어쓰기] 유효 텍스트 없음 — 중단');
+        break;
+      }
+
+      // v20: 이어붙이기 — 마지막 문자가 한글/영문이고 newText 첫 문자도 한글/영문이면 공백 없이 직접 연결 (단어 이어쓰기)
+      const lastChar = full.slice(-1);
+      const firstChar = newText[0] || '';
+      const isKorOrAlpha = c => /[가-힯ㄱ-ㆎa-zA-Z0-9]/.test(c);
+
+      if(isKorOrAlpha(lastChar) && isKorOrAlpha(firstChar)){
+        // 단어가 잘려서 이어지는 경우 — 공백/줄바꿈 없이 직접 연결
+        full += newText;
+      } else {
+        full += '\n' + newText;
+      }
     }
     App.clearProgress(pid);
     return full;
