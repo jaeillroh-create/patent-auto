@@ -85,10 +85,18 @@ Division.KO_SUFFIXES = [
   // 어미 (긴 것)
   '하였다','되었다','하였으며','되었으며','하였고','되었고','하였던','되었던',
   '하였을','되었을','하였는지','되었는지','하였기','되었기','하였음','되었음',
+  // 연결어미
+  '되도록','하도록','되므로','하므로','되지만','하지만','되더라도','하더라도',
+  '됨으로써','함으로써','되었는데','하였는데','되는데','하는데','되면서','하면서',
+  '되거나','하거나','되든지','하든지','되어도','하여도','되어서','하여서',
+  // 기본 어미
   '하며','하고','하여','해서','하되','하면','하기','하지','하는','하였','한다','하다',
   '되며','되고','되어','되되','되면','되기','되지','되는','되었','된다','되다',
   '시키','시키는','시키며','시키고','시켜서','시킨다','시킨','시킬',
   '이다','이고','이며','이면','이되','이나','이란','인지','인가',
+  // 관형형·명사형
+  '하는','되는','하던','되던','하였던','되었던','하게','되게',
+  '함에','됨에','함을','됨을','함과','됨과','함이','됨이',
   // 접사 + 조사
   '들을','들이','들의','들에','들과','들은','들도','들만','들로','들로부터',
   // 단일 조사
@@ -115,15 +123,25 @@ Division._stripKoreanSuffix = function(kw){
 };
 
 /**
- * 키워드가 명세서에 존재하는지 확인 (조사/어미 무시).
+ * 키워드가 명세서에 존재하는지 확인.
  * 1) 완전 일치 → pass
  * 2) 어근 일치 → pass
+ * 3) 공백 무시 매칭 → pass (PDF 추출 시 복합명사 공백 분리 보상)
+ * @param {string} kw - 검색 키워드
+ * @param {string} specText - 명세서 원문
+ * @param {string} [specNoSpace] - 공백 제거된 명세서 (선택, 미전달 시 내부 생성)
  */
-Division._isKeywordInSpec = function(kw, specText){
+Division._isKeywordInSpec = function(kw, specText, specNoSpace){
   if(!kw || !specText) return false;
   if(specText.indexOf(kw) >= 0) return true;
   var stem = Division._stripKoreanSuffix(kw);
   if(stem !== kw && stem.length >= 2 && specText.indexOf(stem) >= 0) return true;
+  // 공백 무시 매칭 — PDF 추출 시 "고객 생애 가치" vs "고객생애가치" 보상
+  if(kw.length >= 4){
+    if(!specNoSpace) specNoSpace = specText.replace(/\s/g, '');
+    if(specNoSpace.indexOf(kw) >= 0) return true;
+    if(stem !== kw && stem.length >= 2 && specNoSpace.indexOf(stem) >= 0) return true;
+  }
   return false;
 };
 
@@ -1574,6 +1592,7 @@ Division._loadSpecText = async function(project, fallbackParagraphs){
 Division.validateUnusedComponents = function(components, allClaims, specFullText){
   if(!components || !components.length) return components;
   var stopwords = Division.STOPWORDS;
+  var specNoSpace = specFullText ? specFullText.replace(/\s/g, '') : '';
 
   components.forEach(function(comp){
     // [검증 1] 기존 청구항과 유사도 검사 → overlap_warning
@@ -1603,7 +1622,7 @@ Division.validateUnusedComponents = function(components, allClaims, specFullText
         meaningfulSet[stem] = true;
       });
       var meaningful = Object.keys(meaningfulSet);
-      var missing = meaningful.filter(function(kw){ return !Division._isKeywordInSpec(kw, specFullText); });
+      var missing = meaningful.filter(function(kw){ return !Division._isKeywordInSpec(kw, specFullText, specNoSpace); });
       if(missing.length > Division.THRESHOLDS.COMPONENT_MISSING_KW){
         // 명세서 미발견 키워드 다수 → risk_level 상향
         if(missing.length > Division.THRESHOLDS.COMPONENT_DANGER_KW){
@@ -2587,6 +2606,7 @@ Division.runVerify = async function(){
 Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims, specFullText, divisionType){
   var issues = [];
   var basisText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
+  var specNoSpace = specFullText ? specFullText.replace(/\s/g, '') : '';
 
   // ─── [검증 1] basis 보존 확인 (유형별 분기) ───
   // 병합형: A+B+C 절대 보존 (CRITICAL)
@@ -2667,7 +2687,7 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
         stemSet[stem] = true;
       });
       var meaningful = Object.keys(stemSet);
-      var missing = meaningful.filter(function(kw){ return !Division._isKeywordInSpec(kw, specFullText); });
+      var missing = meaningful.filter(function(kw){ return !Division._isKeywordInSpec(kw, specFullText, specNoSpace); });
       // 전략형은 더 엄격: 미발견 임계값 이상이면 경고
       if(missing.length > Division.THRESHOLDS.COMPONENT_MISSING_KW){
         issues.push({ severity:'HIGH', check:'spec_scope_strategic',
@@ -2705,7 +2725,7 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
         stemSet[stem] = true;
       });
       var meaningful = Object.keys(stemSet);
-      var missing = meaningful.filter(function(kw){ return !Division._isKeywordInSpec(kw, specFullText); });
+      var missing = meaningful.filter(function(kw){ return !Division._isKeywordInSpec(kw, specFullText, specNoSpace); });
       if(missing.length > Division.THRESHOLDS.CLAIM_MISSING_KW){
         issues.push({
           severity: 'HIGH', check: 'new_matter_risk',
