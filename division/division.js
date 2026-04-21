@@ -76,6 +76,57 @@ Division.STOPWORDS = [
   '이때','또한','나아가','한편','이에','이하에서','상세하게','구체적으로',
   '바람직하게','선택적으로','예를들어','예컨대','다만','단지'
 ];
+
+// ═══ 한국어 조사/어미 접미사 (긴 것부터 — 최장 일치) ═══
+Division.KO_SUFFIXES = [
+  // 복합 조사
+  '이라고','라고','로부터','으로부터','에서는','에서도','에서의','에서부터',
+  '으로서','으로써','로서','로써','에게서','에게는','에게도',
+  // 어미 (긴 것)
+  '하였다','되었다','하였으며','되었으며','하였고','되었고','하였던','되었던',
+  '하였을','되었을','하였는지','되었는지','하였기','되었기','하였음','되었음',
+  '하며','하고','하여','해서','하되','하면','하기','하지','하는','하였','한다','하다',
+  '되며','되고','되어','되되','되면','되기','되지','되는','되었','된다','되다',
+  '시키','시키는','시키며','시키고','시켜서','시킨다','시킨','시킬',
+  '이다','이고','이며','이면','이되','이나','이란','인지','인가',
+  // 접사 + 조사
+  '들을','들이','들의','들에','들과','들은','들도','들만','들로','들로부터',
+  // 단일 조사
+  '에서','에게','에는','에도','에만','으로','이나','이라',
+  '부터','까지','마저','조차','한테','께서',
+  '을','를','이','가','은','는','의','도','만','와','과','로','에','께'
+];
+
+/**
+ * 한국어 키워드에서 조사/어미를 제거해 어근 추출.
+ * 예: "분류하되" → "분류", "명령어들을" → "명령어", "거부율을" → "거부율"
+ * 어근이 2자 미만이면 원본 반환 (과도한 삭제 방지).
+ */
+Division._stripKoreanSuffix = function(kw){
+  if(!kw || kw.length < 3) return kw;
+  for(var i = 0; i < Division.KO_SUFFIXES.length; i++){
+    var suf = Division.KO_SUFFIXES[i];
+    if(kw.length > suf.length + 1 && kw.substring(kw.length - suf.length) === suf){
+      var stem = kw.substring(0, kw.length - suf.length);
+      if(stem.length >= 2) return stem;
+    }
+  }
+  return kw;
+};
+
+/**
+ * 키워드가 명세서에 존재하는지 확인 (조사/어미 무시).
+ * 1) 완전 일치 → pass
+ * 2) 어근 일치 → pass
+ */
+Division._isKeywordInSpec = function(kw, specText){
+  if(!kw || !specText) return false;
+  if(specText.indexOf(kw) >= 0) return true;
+  var stem = Division._stripKoreanSuffix(kw);
+  if(stem !== kw && stem.length >= 2 && specText.indexOf(stem) >= 0) return true;
+  return false;
+};
+
 Division.STATUS_TO_STEP = { created:0, uploaded:0, parsed:1, analyzed:2, assembled:3, verified:4, re_verifying:4, confirmed:5, error:-1 };
 
 // ═══ 검증 임계값 상수 ═══
@@ -1541,11 +1592,18 @@ Division.validateUnusedComponents = function(components, allClaims, specFullText
       if(comp.overlap_warning === undefined) comp.overlap_warning = false;
     }
 
-    // [검증 2] 명세서 키워드 존재 검사 → 신규사항 위험 감지
+    // [검증 2] 명세서 키워드 존재 검사 → 신규사항 위험 감지 (조사/어미 무시 + 중복 제거)
     if(specFullText && comp.content){
       var keywords = (comp.content.match(/[가-힣]{2,}/g) || []);
-      var meaningful = keywords.filter(function(kw){ return stopwords.indexOf(kw) < 0 && kw.length >= 3; });
-      var missing = meaningful.filter(function(kw){ return specFullText.indexOf(kw) < 0; });
+      var meaningfulSet = {};
+      keywords.forEach(function(kw){
+        if(stopwords.indexOf(kw) >= 0 || kw.length < 3) return;
+        var stem = Division._stripKoreanSuffix(kw);
+        if(stem.length < 2 || stopwords.indexOf(stem) >= 0) return;
+        meaningfulSet[stem] = true;
+      });
+      var meaningful = Object.keys(meaningfulSet);
+      var missing = meaningful.filter(function(kw){ return !Division._isKeywordInSpec(kw, specFullText); });
       if(missing.length > Division.THRESHOLDS.COMPONENT_MISSING_KW){
         // 명세서 미발견 키워드 다수 → risk_level 상향
         if(missing.length > Division.THRESHOLDS.COMPONENT_DANGER_KW){
@@ -2483,10 +2541,25 @@ Division.runVerify = async function(){
       });
       var {error:valErr} = await sb.from('division_validation_results').insert(rows);
       if(valErr){
-        console.error('[Division] 검증 결과 저장 실패:', valErr.message);
-        for(var vi=0;vi<rows.length;vi++){
-          var {error:re}=await sb.from('division_validation_results').insert(rows[vi]);
-          if(re) console.warn('[Division] 검증 행 '+vi+' 실패:', re.message);
+        // spec_quote/support_type 컬럼 미존재 폴백
+        var isColumnErr = /column.*does not exist|Could not find.*column|schema cache/i.test(valErr.message||'');
+        if(isColumnErr){
+          console.warn('[Division] spec_quote/support_type 컬럼 미존재 — 폴백 재시도');
+          var legacyRows = rows.map(function(r){ var c = Object.assign({}, r); delete c.spec_quote; delete c.support_type; return c; });
+          var {error:legacyErr} = await sb.from('division_validation_results').insert(legacyRows);
+          if(legacyErr){
+            console.error('[Division] 검증 결과 저장 실패 (폴백):', legacyErr.message);
+            for(var vi=0;vi<legacyRows.length;vi++){
+              var {error:re}=await sb.from('division_validation_results').insert(legacyRows[vi]);
+              if(re) console.warn('[Division] 검증 행 '+vi+' 실패:', re.message);
+            }
+          }
+        } else {
+          console.error('[Division] 검증 결과 저장 실패:', valErr.message);
+          for(var vi=0;vi<rows.length;vi++){
+            var {error:re}=await sb.from('division_validation_results').insert(rows[vi]);
+            if(re) console.warn('[Division] 검증 행 '+vi+' 실패:', re.message);
+          }
         }
       }
     } else {
@@ -2525,11 +2598,19 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
           return Division.STOPWORDS.indexOf(kw) < 0;
         });
         var checkItems = [], seen = {};
-        refParts.forEach(function(rp){ if(!seen[rp]){ seen[rp]=true; checkItems.push(rp.replace(/\s/g,'')); } });
-        nouns.forEach(function(n){ if(!seen[n]){ seen[n]=true; checkItems.push(n); } });
+        refParts.forEach(function(rp){
+          var key = rp.replace(/\s/g,'');
+          if(!seen[key]){ seen[key]=true; checkItems.push(key); }
+        });
+        nouns.forEach(function(n){
+          var stem = Division._stripKoreanSuffix(n);
+          if(stem.length < 2) return;
+          if(!seen[stem]){ seen[stem]=true; checkItems.push(stem); }
+        });
         if(checkItems.length > 0){
+          var claimTextNoSpace = c.claim_text.replace(/\s/g,'');
           var missing = checkItems.filter(function(item){
-            return c.claim_text.replace(/\s/g,'').indexOf(item.replace(/\s/g,'')) < 0;
+            return claimTextNoSpace.indexOf(item) < 0;
           });
           var ratio = 1 - (missing.length / checkItems.length);
           if(ratio < Division.THRESHOLDS.BASIS_PRESERVATION){
@@ -2548,13 +2629,18 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
     });
   }
 
-  // 카테고리변경형: 기술적 내용 보존 (키워드 보존율, HIGH)
+  // 카테고리변경형: 기술적 내용 보존 (키워드 보존율, HIGH) — 조사/어미 무시
   if(divisionType === 'category_change'){
     divisionClaims.filter(function(c){ return c.claim_type === 'independent'; }).forEach(function(c){
       if(basisText){
-        var basisKw = (basisText.match(/[가-힣]{3,}/g) || []).filter(function(kw){
-          return Division.STOPWORDS.indexOf(kw) < 0;
+        var stemMap = {};
+        (basisText.match(/[가-힣]{3,}/g) || []).forEach(function(kw){
+          if(Division.STOPWORDS.indexOf(kw) >= 0) return;
+          var stem = Division._stripKoreanSuffix(kw);
+          if(stem.length < 2 || Division.STOPWORDS.indexOf(stem) >= 0) return;
+          stemMap[stem] = true;
         });
+        var basisKw = Object.keys(stemMap);
         if(basisKw.length > 0){
           var preserved = basisKw.filter(function(kw){ return c.claim_text.indexOf(kw) >= 0; });
           var ratio = preserved.length / basisKw.length;
@@ -2569,13 +2655,19 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
     });
   }
 
-  // 전략형: basis 보존 검사 비적용 — 대신 원출원 명세서 범위 내 검사 강화
+  // 전략형: basis 보존 검사 비적용 — 대신 원출원 명세서 범위 내 검사 강화 (조사/어미 무시 + 중복 제거)
   if(divisionType === 'strategic' && specFullText && specFullText.length > 100){
     divisionClaims.forEach(function(dc){
-      var keywords = (dc.claim_text.match(/[가-힣]{3,}/g) || []).filter(function(kw){
-        return Division.STOPWORDS.indexOf(kw) < 0;
+      var rawKw = (dc.claim_text.match(/[가-힣]{3,}/g) || []);
+      var stemSet = {};
+      rawKw.forEach(function(kw){
+        if(Division.STOPWORDS.indexOf(kw) >= 0) return;
+        var stem = Division._stripKoreanSuffix(kw);
+        if(stem.length < 2 || Division.STOPWORDS.indexOf(stem) >= 0) return;
+        stemSet[stem] = true;
       });
-      var missing = keywords.filter(function(kw){ return specFullText.indexOf(kw) < 0; });
+      var meaningful = Object.keys(stemSet);
+      var missing = meaningful.filter(function(kw){ return !Division._isKeywordInSpec(kw, specFullText); });
       // 전략형은 더 엄격: 미발견 임계값 이상이면 경고
       if(missing.length > Division.THRESHOLDS.COMPONENT_MISSING_KW){
         issues.push({ severity:'HIGH', check:'spec_scope_strategic',
@@ -2601,12 +2693,19 @@ Division.runAutoVerify = function(divisionClaims, basisClaim, allOriginalClaims,
     });
   });
 
-  // ─── [검증 3] 신규사항 위험 — 키워드 기반 (3유형 공통) ───
+  // ─── [검증 3] 신규사항 위험 — 키워드 기반 (조사/어미 무시 + 중복 제거) ───
   if(specFullText && specFullText.length > 100){
     divisionClaims.forEach(function(dc){
       var keywords = (dc.claim_text.match(/[가-힣]{2,}/g) || []);
-      var meaningful = keywords.filter(function(kw){ return Division.STOPWORDS.indexOf(kw) < 0 && kw.length >= 3; });
-      var missing = meaningful.filter(function(kw){ return specFullText.indexOf(kw) < 0; });
+      var stemSet = {};
+      keywords.forEach(function(kw){
+        if(Division.STOPWORDS.indexOf(kw) >= 0 || kw.length < 3) return;
+        var stem = Division._stripKoreanSuffix(kw);
+        if(stem.length < 2 || Division.STOPWORDS.indexOf(stem) >= 0) return;
+        stemSet[stem] = true;
+      });
+      var meaningful = Object.keys(stemSet);
+      var missing = meaningful.filter(function(kw){ return !Division._isKeywordInSpec(kw, specFullText); });
       if(missing.length > Division.THRESHOLDS.CLAIM_MISSING_KW){
         issues.push({
           severity: 'HIGH', check: 'new_matter_risk',
@@ -3300,7 +3399,12 @@ Division.runReVerify = async function(editContext){
           support_type:vr.support_type ? sEnum(vr.support_type,VALID_SUPPORT,null) : null
         };
       });
-      await sb.from('division_validation_results').insert(rows);
+      var {error:reVerr} = await sb.from('division_validation_results').insert(rows);
+      if(reVerr && /column.*does not exist|Could not find.*column|schema cache/i.test(reVerr.message||'')){
+        console.warn('[Division] spec_quote/support_type 컬럼 미존재 — 폴백 재시도');
+        var legacyRows = rows.map(function(r){ var c = Object.assign({}, r); delete c.spec_quote; delete c.support_type; return c; });
+        await sb.from('division_validation_results').insert(legacyRows);
+      }
     }
 
     // 상태: verified로 복귀
