@@ -7231,6 +7231,26 @@ function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNu
     });
   });
   
+  // ★ v20: Phase 1.5 — 행별 중앙 정렬 (gp.layerSize 보정) ★
+  // computeDeviceLayout2D가 alignCol에서 layerSize를 인접 행 최대치로 설정하므로
+  // 노드 수가 적은 행이 좌측에 치우침 → 실제 노드 수 기준으로 재중앙 정렬
+  const _rowGroups={};
+  objects.forEach(o=>{
+    const gp=innerGrid[o.id];
+    if(!gp)return;
+    if(!_rowGroups[gp.row])_rowGroups[gp.row]=[];
+    _rowGroups[gp.row].push(o);
+  });
+  Object.values(_rowGroups).forEach(rowObjs=>{
+    if(rowObjs.length>0&&rowObjs.length<innerMaxCols){
+      const minRX=Math.min(...rowObjs.map(o=>o.x));
+      const maxRX=Math.max(...rowObjs.map(o=>o.x+o.w));
+      const rowW=maxRX-minRX;
+      const shift=(totalAreaW-rowW)/2-minRX;
+      rowObjs.forEach(o=>{o.x+=shift;});
+    }
+  });
+
   // Phase 2: 충돌 감지 & 자동 보정 (최대 20라운드)
   // v9.0: 연결선 라우팅 공간을 확보하기 위해 MIN_SEP 대폭 증가
   // ★ v12 CRITICAL FIX: ROUTE_PAD(15px) → opts.routePad로 좌표계 독립화 ★
@@ -7765,14 +7785,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const{grid,maxCols,numRows,uniqueEdges,biDirPairs}=layout;
     
     // 열 수에 따른 박스 크기 조정
-    const colGap=0.85*PX*_sm; // v10.1: 연결선 공간 확보 + v10.4: 조정 배율
-    // v19: 셀 너비 정규화 (SHAPE_W 80% 기준, 도 2+ 블록과 시각적 크기 일치)
+    // ★ v20: 간격 축소 — svgW 감소 → 컨테이너 내 1:1 표시 비율 확보 ★
+    const colGap=0.65*PX*_sm;
     const boxW2D=(maxCols<=1?5.0*PX:maxCols===2?3.5*PX:3.0*PX)*_bwm;
     const maxNodeAreaW=maxCols*boxW2D+(maxCols-1)*colGap;
-    const marginX=0.8*PX*_sm;
-    const marginY=0.8*PX*_sm;
-    const refNumH=30*_sm; // v10.1: (28→30) 참조번호 + 여유 공간
-    const rowGapBase=0.85*PX*_sm; // v10.1: 행 간격 확대 + v10.4: 조정 배율
+    const marginX=0.5*PX*_sm;
+    const marginY=0.6*PX*_sm;
+    const refNumH=30*_sm;
+    const rowGapBase=0.7*PX*_sm;
     
     // ═══ v17: 전역 행 높이 통일 — 간격 균등화 ═══
     // 전체 도면에서 가장 큰 shape 기준으로 행 높이 통일
@@ -7815,10 +7835,11 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     });
     const totalH=maxNodeBottom+marginY*0.5;
 
-    const leaderMargin=0.5*PX;
+    const leaderMargin=0.3*PX;
     const svgW=marginX+maxNodeAreaW+leaderMargin;
     const svgH=totalH;
-    const maxW=800; // v19: 모든 도면 통일 표시 폭
+    // ★ v20: maxW=svgW — 인위적 축소 제거, 컨테이너가 자연스럽게 제약 ★
+    const maxW=svgW;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
@@ -8318,9 +8339,10 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const innerBoxW=Math.min(_rawInnerBoxW, 3.5*PX*_bwm);
     console.log(`[v19] 도 ${figNum}: effCols=${_effectiveCols} inner=${innerMaxCols} global=${globalMaxInnerCols} boxW=${innerBoxW.toFixed(0)}`);
     const boxH2=(_effectiveCols===2?0.95:1.05)*PX*_bhm;
-    const _fig2ColGap=1.0*PX*_sm;
-    const _fig2RowGap=1.1*PX*_sm;
-    const _fig2FramePad=0.9*PX*_sm;
+    // ★ v20: 간격 축소 — svgW 감소 → 도면 간 표시 크기 통일 ★
+    const _fig2ColGap=0.8*PX*_sm;
+    const _fig2RowGap=1.0*PX*_sm;
+    const _fig2FramePad=0.7*PX*_sm;
     const fig2Layout=computeFig2Layout(displayNodes,edges,innerGrid,_effectiveCols,innerNumRows,innerUniqueEdges,frameRefNum,{
       boxBaseW:innerBoxW, boxBaseH:boxH2,
       colGap:_fig2ColGap,
@@ -8333,11 +8355,11 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const frameX=0.5*PX, frameY=0.5*PX;
     const frameW=fig2Layout.frameW;
     const frameH=fig2Layout.frameH;
-    const leaderMargin=0.8*PX;
+    const leaderMargin=0.6*PX;
     const svgW=frameX+frameW+leaderMargin;
     const svgH=frameY+frameH+0.5*PX;
-    const _targetMaxW=800; // v19: 모든 도면 통일 표시 폭
-    const maxW=Math.min(_targetMaxW, svgW);
+    // ★ v20: maxW=svgW — 인위적 축소 제거, 도면 간 블록 크기 통일 ★
+    const maxW=svgW;
     
     let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${maxW}px;background:white;border-radius:8px">`;
     const mkId=`ah_${containerId}`;
