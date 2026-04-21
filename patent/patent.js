@@ -8097,7 +8097,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       // ★ 충돌 검사: route가 다른 shape을 관통하면 우회 ★
       const excludeIds=new Set([e.from, e.to]);
       const collisions=_countRouteCollisions(route, allBoxArr, excludeIds);
-      
+
       if(collisions>0){
         const fbA={...fb, id:e.from};
         const tbA={...tb, id:e.to};
@@ -8127,6 +8127,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
             }
           }
         }
+      }else{
+        // ★ v20: 충돌 없어도 shape 앵커에 스냅 — 라우팅 박스가 아닌 실제 shape 경계에 연결 ★
+        route=_snapRouteToShapeAnchors(route, fb, tb, 0, 0, allBoxArr);
       }
       
       if(route)svg+=svgOrthogonalEdge(route,mkId,!!e._wasBidirectional);
@@ -8421,11 +8424,20 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       
       // 패딩 추가
       const sfPad=12;
-      const sfX=minX-sfPad;
-      const sfY=minY-sfPad-16; // 상단에 라벨 공간
-      const sfW=(maxX-minX)+sfPad*2;
-      const sfH=(maxY-minY)+sfPad*2+16;
-      
+      let sfX=minX-sfPad;
+      let sfY=minY-sfPad-16; // 상단에 라벨 공간
+      let sfW=(maxX-minX)+sfPad*2;
+      let sfH=(maxY-minY)+sfPad*2+16;
+
+      // ★ v20: 서브 프레임이 외곽 프레임과 겹치지 않도록 최소 간격 확보 ★
+      const sfMinGap=6;
+      const sfFrameL=frameX+sfMinGap, sfFrameT=frameY+sfMinGap;
+      const sfFrameR=frameX+frameW-sfMinGap, sfFrameB=frameY+frameH-sfMinGap;
+      if(sfX<sfFrameL){sfW-=(sfFrameL-sfX);sfX=sfFrameL;}
+      if(sfY<sfFrameT){sfH-=(sfFrameT-sfY);sfY=sfFrameT;}
+      if(sfX+sfW>sfFrameR){sfW=sfFrameR-sfX;}
+      if(sfY+sfH>sfFrameB){sfH=sfFrameB-sfY;}
+
       // 서브 프레임 그리기 (점선)
       svg+=`<rect x="${sfX}" y="${sfY}" width="${sfW}" height="${sfH}" fill="none" stroke="#666" stroke-width="1" stroke-dasharray="6,3" rx="3"/>`;
       
