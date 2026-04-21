@@ -1619,6 +1619,13 @@ function extractBriefDescriptions(s07,s11){
     else{d.push(`도 ${fn}${figParticle(n)} ${title}의 세부 구성을 나타내는 블록도이다.`);}seen.add(fn);});}
   if(!methodData.length&&s11){const figs=s11.match(/도\s*(\d+)\s*:/g)||[];figs.forEach(f=>{const m=f.match(/(\d+)/);if(!m||seen.has(m[1]))return;const fn=m[1];const n=parseInt(fn);
     d.push(`도 ${fn}${figParticle(n)} ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});}
+  // 2d. 실제 생성된 도면 번호만 유지 (LLM 텍스트의 초과 도면 설명 제거)
+  const validFigNums=new Set();
+  devAutoNums.forEach(n=>validFigNums.add(String(n)));
+  methAutoNums.forEach(n=>validFigNums.add(String(n)));
+  conceptAutoNums.forEach(n=>validFigNums.add(String(n)));
+  requiredFigures.forEach(rf=>validFigNums.add(String(rf.num)));
+  if(validFigNums.size>0){for(let i=d.length-1;i>=0;i--){const fm=d[i].match(/도\s*(\d+)/);if(fm&&!validFigNums.has(fm[1]))d.splice(i,1);}}
   // 3. 정렬
   d.sort((a,b)=>{const na=parseInt(a.match(/도\s*(\d+)/)?.[1]||0),nb=parseInt(b.match(/도\s*(\d+)/)?.[1]||0);return na-nb;});
   return d.join('\n');
