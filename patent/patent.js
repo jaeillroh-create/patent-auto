@@ -4401,8 +4401,7 @@ ${diagram}`,4096);
           const batchColGap=PPTX_BOX_GAP_X;
           const refLabelX=frameX+frameW+0.1;
           
-          // 그림자 + 외곽 본체
-          slide.addShape(pptx.shapes.RECTANGLE,{x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,fill:{color:'000000'},line:{width:0}});
+          // 외곽 프레임 (테두리만)
           slide.addShape(pptx.shapes.RECTANGLE,{x:frameX,y:frameY,w:frameW,h:frameH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
           // 프레임 리더라인은 내부 노드와 함께 겹침 보정 후 렌더링
           
@@ -10674,7 +10673,7 @@ function downloadPptx(sid){
         const frameH=fig2L.frameH;
         const refLabelX=frameX+frameW+0.1;
         
-        slide.addShape(pptx.shapes.RECTANGLE,{x:frameX+SHADOW_OFFSET,y:frameY+SHADOW_OFFSET,w:frameW,h:frameH,fill:{color:'000000'},line:{width:0}});
+        // 외곽 프레임 (테두리만)
         slide.addShape(pptx.shapes.RECTANGLE,{x:frameX,y:frameY,w:frameW,h:frameH,fill:{color:'FFFFFF'},line:{color:'000000',width:LINE_FRAME}});
         
         const innerNodeBoxes={};
