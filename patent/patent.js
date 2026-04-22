@@ -3457,16 +3457,20 @@ function applyEditInstructions(originalText,edits){
     }
     
     switch(edit.action){
-      case 'ADD_AFTER':
-        result=result.slice(0,sentenceEnd)+' '+edit.content+result.slice(sentenceEnd);
+      case 'ADD_AFTER':{
+        const _afterChar=result[sentenceEnd]||'';
+        const _trailSep=/[\s\n]/.test(_afterChar)?'':' ';
+        result=result.slice(0,sentenceEnd)+' '+edit.content+_trailSep+result.slice(sentenceEnd);
         appliedCount++;
         console.log(`[applyEditInstructions] ADD_AFTER 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." 뒤에 ${edit.content.length}자 추가`);
-        break;
-      case 'ADD_BEFORE':
-        result=result.slice(0,anchorStart)+edit.content+' '+result.slice(anchorStart);
+        break;}
+      case 'ADD_BEFORE':{
+        const _beforeChar=anchorStart>0?result[anchorStart-1]:'';
+        const _leadSep=/[\s\n]/.test(_beforeChar)?'':' ';
+        result=result.slice(0,anchorStart)+_leadSep+edit.content+' '+result.slice(anchorStart);
         appliedCount++;
         console.log(`[applyEditInstructions] ADD_BEFORE 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." 앞에 ${edit.content.length}자 추가`);
-        break;
+        break;}
       case 'MODIFY':
         if(exactIdx>=0){
           result=result.slice(0,exactIdx)+edit.content+result.slice(exactIdx+edit.anchor.length);
@@ -4651,10 +4655,11 @@ function extractExistingMathBlocks(text){
   let m;
   while((m=re.exec(text))!==null){
     const formula=m[1].trim();
-    // 수학식 직전 문장을 앵커로 사용 (최대 100자)
     const before=text.substring(Math.max(0,m.index-200),m.index);
-    const sentences=before.split(/[.。]\s*/);
-    const anchor=sentences.length>1?sentences[sentences.length-2].trim():'';
+    // 소수점(3.14 등)을 보호한 후 문장 분리 — 소수점에서 잘리는 앵커 방지
+    const _safeBefore=before.replace(/(\d)\.(\d)/g,'$1�$2');
+    const sentences=_safeBefore.split(/[.。]\s*/);
+    const anchor=(sentences.length>1?sentences[sentences.length-2]:'').replace(/�/g,'.').trim();
     if(anchor.length>=10)blocks.push({anchor,formula});
   }
   return blocks;
@@ -4745,8 +4750,20 @@ function findSentenceEndAfterAnchor(text,anchorStart,anchor){
     }
   }
   
+  // Step 1.5: actualEnd 직전(~3자)에 문장 종결 마침표가 있으면 그것을 사용
+  // (정규화 오차로 actualEnd가 마침표 직후를 넘어간 경우 보정)
+  for(let pos=Math.min(actualEnd,text.length-1);pos>=Math.max(0,actualEnd-3);pos--){
+    if(text[pos]==='.'){
+      const _b4=text.slice(Math.max(0,pos-4),pos);
+      const _pc=pos>0?text[pos-1]:'';
+      const _nx=pos+1<text.length?text[pos+1]:'';
+      if(/\d/.test(_pc)&&/\d/.test(_nx))continue;
+      if(/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다)$/.test(_b4))return pos+1;
+      if((!_nx||_nx===' '||_nx==='\n'||_nx==='\r')&&/[가-힣)]/.test(_pc))return pos+1;
+    }
+  }
+
   // Step 2: actualEnd부터 한국어 문장 종결 패턴(~다.) 찾기
-  // 한국어 서술문 종결: ~한다. ~된다. ~있다. ~이다. ~같다. ~높다. ~낮다. ~않다.
   for(let pos=actualEnd;pos<text.length;pos++){
     if(text[pos]==='.'){
       // 마침표 앞 2~3자가 한국어 종결어미인지 확인
