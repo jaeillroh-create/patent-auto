@@ -1294,7 +1294,7 @@ ${prompt.slice(0,2000)}`;
   if(sid==='step_11'){
     const methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
     const devCount=diagramData.step_07?.length||0;
-    const figNums=computeFigNums(devCount,methFigCount,conceptDiagramTypes.length);
+    const figNums=computeFigNums(devCount,methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length);
     const expectedNums=figNums.method;
     
     const preIssues=validateDiagramDesignText(designText,methFigCount,expectedNums);
@@ -1641,9 +1641,10 @@ function extractBriefDescriptions(s07,s11){
   // 2b. 방법 도면 폴백
   methodData.forEach((md,i)=>{const fn=String(methAutoNums[i]||(devData.length+i+1));if(seen.has(fn))return;
     const n=parseInt(fn);d.push(`도 ${fn}${figParticle(n)} ${title}에 의해 수행되는 방법을 나타내는 순서도이다.`);seen.add(fn);});
-  // 2b-2. v11.0: 예시도/개념도 간단한 설명 추가
+  // 2b-2. v11.0: 예시도/개념도 간단한 설명 추가 (실제 생성된 것만)
   const conceptAutoNums=getAutoFigNums('step_07c');
   conceptDiagramTypes.forEach((ct,i)=>{
+    if(!ct.svgContent)return;
     const fn=String(conceptAutoNums[i]||'?');if(seen.has(fn))return;
     const n=parseInt(fn);const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
     d.push(`도 ${fn}${figParticle(n)} ${title}의 ${typeDef.label}을 나타내는 예시도이다.`);
@@ -1659,7 +1660,7 @@ function extractBriefDescriptions(s07,s11){
   const _uiDevCount=Math.max(parseInt(document.getElementById('optDeviceFigures')?.value||4)-requiredFigures.length,0);
   const _hasMeth=!!(methodData.length||outputs.step_11);
   const _uiMethCount=_hasMeth?parseInt(document.getElementById('optMethodFigures')?.value||2):0;
-  const _uiConcCount=conceptDiagramTypes.length;
+  const _uiConcCount=conceptDiagramTypes.filter(ct=>ct.svgContent).length;
   const _uiFigNums=computeFigNums(_uiDevCount,_uiMethCount,_uiConcCount);
   const validFigNums=new Set();
   _uiFigNums.device.forEach(n=>validFigNums.add(String(n)));
@@ -2580,9 +2581,10 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
       const actualFigNums=_extractFigureNumbersFromDesign(designText);
       // 사용자 도면 + 예시도 번호도 포함
       const _conceptFigNums=getAutoFigNums('step_07c');
-      const allFigNumsRaw=[...new Set([...actualFigNums,...requiredFigures.map(f=>f.num),..._conceptFigNums])].sort((a,b)=>a-b);
-      // ★ Safety: UI 설정 도면 수 + 예시도 수 반영 ★
-      const expectedTotalFig=deviceFigCount+conceptDiagramTypes.length;
+      const _genConceptFigNums=_conceptFigNums.filter((_,i)=>conceptDiagramTypes[i]?.svgContent);
+      const allFigNumsRaw=[...new Set([...actualFigNums,...requiredFigures.map(f=>f.num),..._genConceptFigNums])].sort((a,b)=>a-b);
+      // ★ Safety: UI 설정 도면 수 + 생성된 예시도 수 반영 ★
+      const expectedTotalFig=deviceFigCount+_genConceptFigNums.length;
       // ★ v10.4 fix: 도면 번호 목록이 비어있으면 computeFigNums로 순차 번호 생성
       // (step_07 미생성 시 빈 목록으로 인해 LLM이 존재하지 않는 도면을 참조하는 버그 방지)
       const _fallbackFigNums=allFigNumsRaw.length===0?computeFigNums(Math.max(deviceFigCount-requiredFigures.length,0),0).device.concat(requiredFigures.map(f=>f.num)).sort((a,b)=>a-b):allFigNumsRaw;
@@ -2713,7 +2715,7 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 청구항에서 사용한 명칭과 상세설명의 명칭이 일치해야 한다.
 ${_designCompStr}
 ${_userFigBlock?`\n${_userFigBlock}\n★ 사용자 도면도 "도 N을 참조하면," 형태로 도면 번호 순서에 맞게 설명을 포함하라.\n★ 사용자 도면의 설명은 발명 내용 및 청구범위와 정합되도록, 위 도면 설명을 기초로 기술적 의미를 보완하여 작성하라.`:''}
-${conceptDiagramTypes.length?`\n★★★ 예시도/개념도 (참조번호 31~99) ★★★\n${conceptDiagramTypes.map((ct,ci)=>{const fn=_conceptFigNums[ci]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${fn}: ${td.label} (참조번호: ${ct.refNums.join(', ')||'미정'})`;}).join('\n')}\n- 예시도도 도면 번호 순서에 맞게 "도 N을 참조하면," 형태로 설명하라.\n- 예시도의 참조번호(31~99)는 장치 참조번호(100~999)와 구분된다.\n`:''}
+${conceptDiagramTypes.some(ct=>ct.svgContent)?`\n★★★ 예시도/개념도 (참조번호 31~99) ★★★\n${conceptDiagramTypes.filter(ct=>ct.svgContent).map(ct=>{const fn=_conceptFigNums[conceptDiagramTypes.indexOf(ct)]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${fn}: ${td.label} (참조번호: ${ct.refNums.join(', ')||'미정'})`;}).join('\n')}\n- 예시도도 도면 번호 순서에 맞게 "도 N을 참조하면," 형태로 설명하라.\n- 예시도의 참조번호(31~99)는 장치 참조번호(100~999)와 구분된다.\n`:''}
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
 
@@ -2803,7 +2805,7 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
       const methCount=parseInt(f);
       // v10.0: 사용자 도면 스킵 반영한 방법 도면 번호 계산
       const devAutoCount=Math.max((parseInt(document.getElementById('optDeviceFigures')?.value||4))-requiredFigures.length,0);
-      const _mfn=computeFigNums(devAutoCount,methCount,conceptDiagramTypes.length);
+      const _mfn=computeFigNums(devAutoCount,methCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length);
       const lf=_mfn.lastDeviceFig||getLastFigureNumber(outputs.step_07||'');
       const methAutoNums=_mfn.method;
       const firstMeth=methAutoNums[0]||(lf+1);
@@ -3455,16 +3457,20 @@ function applyEditInstructions(originalText,edits){
     }
     
     switch(edit.action){
-      case 'ADD_AFTER':
-        result=result.slice(0,sentenceEnd)+' '+edit.content+result.slice(sentenceEnd);
+      case 'ADD_AFTER':{
+        const _afterChar=result[sentenceEnd]||'';
+        const _trailSep=/[\s\n]/.test(_afterChar)?'':' ';
+        result=result.slice(0,sentenceEnd)+' '+edit.content+_trailSep+result.slice(sentenceEnd);
         appliedCount++;
         console.log(`[applyEditInstructions] ADD_AFTER 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." 뒤에 ${edit.content.length}자 추가`);
-        break;
-      case 'ADD_BEFORE':
-        result=result.slice(0,anchorStart)+edit.content+' '+result.slice(anchorStart);
+        break;}
+      case 'ADD_BEFORE':{
+        const _beforeChar=anchorStart>0?result[anchorStart-1]:'';
+        const _leadSep=/[\s\n]/.test(_beforeChar)?'':' ';
+        result=result.slice(0,anchorStart)+_leadSep+edit.content+' '+result.slice(anchorStart);
         appliedCount++;
         console.log(`[applyEditInstructions] ADD_BEFORE 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." 앞에 ${edit.content.length}자 추가`);
-        break;
+        break;}
       case 'MODIFY':
         if(exactIdx>=0){
           result=result.slice(0,exactIdx)+edit.content+result.slice(exactIdx+edit.anchor.length);
@@ -3812,9 +3818,9 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
     if(sid==='step_11'){
       const _methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
       const _devCount=diagramData.step_07?.length||0;
-      const _figNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.length);
+      const _figNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length);
       const _expectedNums=_figNums.method;
-      
+
       const preIssues=validateDiagramDesignText(designText,_methFigCount,_expectedNums);
       if(preIssues.some(i=>i.severity==='ERROR')){
         const fb=`도면 설계 오류:\n${preIssues.map(i=>i.message).join('\n')}\n도면을 정확히 ${_methFigCount}개만 생성하라: ${_expectedNums.map(n=>'도 '+n).join(', ')}\n원래 요청: ${buildPrompt(sid).slice(0,1500)}`;
@@ -4649,10 +4655,11 @@ function extractExistingMathBlocks(text){
   let m;
   while((m=re.exec(text))!==null){
     const formula=m[1].trim();
-    // 수학식 직전 문장을 앵커로 사용 (최대 100자)
     const before=text.substring(Math.max(0,m.index-200),m.index);
-    const sentences=before.split(/[.。]\s*/);
-    const anchor=sentences.length>1?sentences[sentences.length-2].trim():'';
+    // 소수점(3.14 등)을 보호한 후 문장 분리 — 소수점에서 잘리는 앵커 방지
+    const _safeBefore=before.replace(/(\d)\.(\d)/g,'$1�$2');
+    const sentences=_safeBefore.split(/[.。]\s*/);
+    const anchor=(sentences.length>1?sentences[sentences.length-2]:'').replace(/�/g,'.').trim();
     if(anchor.length>=10)blocks.push({anchor,formula});
   }
   return blocks;
@@ -4743,8 +4750,20 @@ function findSentenceEndAfterAnchor(text,anchorStart,anchor){
     }
   }
   
+  // Step 1.5: actualEnd 직전(~3자)에 문장 종결 마침표가 있으면 그것을 사용
+  // (정규화 오차로 actualEnd가 마침표 직후를 넘어간 경우 보정)
+  for(let pos=Math.min(actualEnd,text.length-1);pos>=Math.max(0,actualEnd-3);pos--){
+    if(text[pos]==='.'){
+      const _b4=text.slice(Math.max(0,pos-4),pos);
+      const _pc=pos>0?text[pos-1]:'';
+      const _nx=pos+1<text.length?text[pos+1]:'';
+      if(/\d/.test(_pc)&&/\d/.test(_nx))continue;
+      if(/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다)$/.test(_b4))return pos+1;
+      if((!_nx||_nx===' '||_nx==='\n'||_nx==='\r')&&/[가-힣)]/.test(_pc))return pos+1;
+    }
+  }
+
   // Step 2: actualEnd부터 한국어 문장 종결 패턴(~다.) 찾기
-  // 한국어 서술문 종결: ~한다. ~된다. ~있다. ~이다. ~같다. ~높다. ~낮다. ~않다.
   for(let pos=actualEnd;pos<text.length;pos++){
     if(text[pos]==='.'){
       // 마침표 앞 2~3자가 한국어 종결어미인지 확인
@@ -5909,7 +5928,7 @@ ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
     }else if(stepId==='step_11'){
       const _methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
       const _devCount=diagramData.step_07?.length||0;
-      const _figNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.length);
+      const _figNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length);
       const _expectedNums=_figNums.method;
       const postIssues=validateDiagramDesignText(regenDesign,_methFigCount,_expectedNums);
       if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
@@ -9782,7 +9801,7 @@ function renderDiagrams(sid,mt){
   // v10.0: 사용자 도면 스킵 반영 — 블록 수 기반 도면 번호 미리 계산
   const _devC=sid==='step_07'?blocks.length:(diagramData.step_07?.length||0);
   const _methC=sid==='step_11'?blocks.length:0;
-  const _cfn=computeFigNums(_devC,_methC,conceptDiagramTypes.length);
+  const _cfn=computeFigNums(_devC,_methC,conceptDiagramTypes.filter(ct=>ct.svgContent).length);
   const autoFigNums=sid==='step_07'?_cfn.device:_cfn.method;
   
   // 도면 설계 텍스트 (R7 검증용)
