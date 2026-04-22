@@ -3551,7 +3551,13 @@ function applyEditInstructions(originalText,edits){
         break;
     }
   }
-  
+
+  // v10.4: 전체 편집 완료 후 — 마침표 뒤 띄어쓰기 누락 교정
+  // "한다.이러한" → "한다. 이러한" (한글.한글 패턴, 소수점 제외)
+  result=result.replace(/([가-힣)\]])\.\s*([가-힣(【])/g,(m,p,n)=>{
+    return p+'. '+n;
+  });
+
   console.log(`[applyEditInstructions] 총 ${edits.length}개 중 ${appliedCount}개 적용 완료`);
   return result;
 }
@@ -4841,8 +4847,10 @@ function findSentenceEndAfterAnchor(text,anchorStart,anchor){
       const _pc=pos>0?text[pos-1]:'';
       const _nx=pos+1<text.length?text[pos+1]:'';
       if(/\d/.test(_pc)&&/\d/.test(_nx))continue;
-      if(/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다|난다|진다|낸다|넓다|깊다|길다)$/.test(_b4))return pos+1;
+      if(/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다|난다|진다|낸다|넓다|깊다|길다|는다)$/.test(_b4))return pos+1;
       if((!_nx||_nx===' '||_nx==='\n'||_nx==='\r')&&/[가-힣)]/.test(_pc))return pos+1;
+      // v10.4: 한글.한글 — 띄어쓰기 누락된 문장 경계 (소수점은 위에서 이미 제외됨)
+      if(/[가-힣)]/.test(_pc)&&/[가-힣(]/.test(_nx))return pos+1;
     }
   }
 
@@ -4857,16 +4865,21 @@ function findSentenceEndAfterAnchor(text,anchorStart,anchor){
       if(/\d/.test(prevChar)&&/\d/.test(next))continue;
 
       // 한국어 문장 종결 패턴
-      const isKoreanSentEnd=/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다|난다|진다|낸다|넓다|깊다|길다)$/.test(before);
+      const isKoreanSentEnd=/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다|난다|진다|낸다|넓다|깊다|길다|는다)$/.test(before);
       // "~수 있다." "~할 수 있다." 패턴
       const isCanPattern=/있다$/.test(before)&&/수\s*있다/.test(text.slice(Math.max(0,pos-10),pos));
-      
+
       if(isKoreanSentEnd||isCanPattern){
         return pos+1;
       }
-      
+
       // 마침표 다음이 공백/줄바꿈/EOF이고, 앞 글자가 한글이면 문장 끝 가능
       if((!next||next===' '||next==='\n'||next==='\r')&&/[가-힣)]/.test(prevChar)){
+        return pos+1;
+      }
+
+      // v10.4: 한글.한글 — 띄어쓰기 누락된 문장 경계 (소수점은 위에서 이미 제외됨)
+      if(/[가-힣)]/.test(prevChar)&&/[가-힣(]/.test(next)){
         return pos+1;
       }
     }
