@@ -1492,8 +1492,9 @@ function sanitizeDescFigureRefs(text,type){
     // 【수학식 N】 블록 및 관련 수식/변수 설명 전체 제거
     // "여기서," "예를 들어," 등은 수학식 직후에 나오는 설명이므로 함께 제거
     text=text.replace(/【수학식\s*\d+】[^\n]*(?:\n(?!도\s+\d|이러한|한편|또한|구체적|상기)[^\n]*)*/g,'').trim();
-    // "수학식 N에 따르면" 등 수학식 참조 문장 제거
-    text=text.replace(/[^\n]*수학식\s*\d+[^\n]*\n?/g,'').trim();
+    // v10.5: "수학식 N" 참조 제거 — 【수학식 N】 헤더 잔여만 제거 (본문 참조 문장은 보존)
+    // 기존: [^\n]*수학식\s*\d+[^\n]* → 본문의 "수학식 1에 따르면..." 설명 문장까지 삭제
+    text=text.replace(/^\s*【?수학식\s*\d+】?\s*$/gm,'').trim();
     text=text.replace(/\n{3,}/g,'\n\n');
   }
   
@@ -3520,28 +3521,6 @@ function applyEditInstructions(originalText,edits){
       if(edit.content.length<5){console.warn(`[applyEditInstructions] 재정제 후 내용 부족 → 건너뜀`);continue;}
     }
     
-    // v10.4: CONTENT 단어 잘림 복원 — CONTENT 시작부가 주변 원문의 단어 중간과 일치하면 누락 접두사 복원
-    // 예: 원문 "구체적으로" + CONTENT "적으로,..." → "구체" 복원 → "구체���으로,..."
-    const _surStart=Math.max(0,anchorStart-10);
-    const _surEnd=Math.min(result.length,sentenceEnd+30);
-    const _surText=result.slice(_surStart,_surEnd);
-    const _cHead=edit.content.slice(0,Math.min(8,edit.content.length));
-    if(_cHead.length>=2&&/[가-힣]/.test(_cHead[0])){
-      const _hIdx=_surText.indexOf(_cHead);
-      if(_hIdx>0){
-        const _cb=_surText[_hIdx-1];
-        if(/[가-힣]/.test(_cb)){
-          let _ws=_hIdx-1;
-          while(_ws>0&&/[가-힣]/.test(_surText[_ws-1]))_ws--;
-          const _missing=_surText.slice(_ws,_hIdx);
-          if(_missing.length>0&&_missing.length<=4&&!/\s/.test(_missing)){
-            console.warn(`[applyEditInstructions] 단어 잘림 복원: "${_missing}" + "${edit.content.slice(0,20)}..."`);
-            edit.content=_missing+edit.content;
-          }
-        }
-      }
-    }
-
     // v10.3: 중복 삽입 방지 — 이미 동일 내용이 근처에 있으면 건너뜀
     const nearbyRegion=result.slice(Math.max(0,anchorStart-200),Math.min(result.length,anchorStart+edit.anchor.length+500));
     if(edit.action!=='MODIFY'&&nearbyRegion.includes(edit.content.slice(0,50))){
@@ -3566,9 +3545,30 @@ function applyEditInstructions(originalText,edits){
         break;}
       case 'MODIFY':
         if(exactIdx>=0){
-          result=result.slice(0,exactIdx)+edit.content+result.slice(exactIdx+edit.anchor.length);
+          // v10.5: MODIFY 후 결합 부위 검증 — 마침표/공백 보정
+          let _finalContent=edit.content;
+          let _afterMod=result.slice(exactIdx+edit.anchor.length);
+          // (1) 콘텐츠 끝에 마침표가 없는데 앵커는 마침표로 끝났다면 → 마침표 복원
+          if(/[.。]$/.test(edit.anchor.trim())&&!/[.。]$/.test(_finalContent.trim())){
+            _finalContent=_finalContent.trimEnd()+'.';
+          }
+          // (2) 콘텐츠가 마침표로 끝나고, 뒤에도 마침표로 시작하면 → 이중 마침표 방지
+          if(/[.。]$/.test(_finalContent.trim())&&/^\s*[.。]/.test(_afterMod)){
+            _afterMod=_afterMod.replace(/^\s*[.。]\s*/,' ');
+          }
+          // (3) 콘텐츠가 마침표로 끝나고 뒤에 한글이 바로 오면 공백 보장
+          const _nxt=_afterMod[0]||'';
+          if(/[.。]$/.test(_finalContent.trimEnd())&&/[가-힣(]/.test(_nxt)){
+            _finalContent=_finalContent.trimEnd()+' ';
+            _afterMod=_afterMod.replace(/^\s+/,'');
+          }
+          // (4) 콘텐츠가 마침표 없이 끝나고 뒤에 한글이 바로 오면 (마침표도 없고 공백도 없음) → 공백 보장
+          if(!/[.。\s]$/.test(_finalContent)&&/^[가-힣(]/.test(_afterMod)){
+            _finalContent=_finalContent+' ';
+          }
+          result=result.slice(0,exactIdx)+_finalContent+_afterMod;
           appliedCount++;
-          console.log(`[applyEditInstructions] MODIFY 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." → "${edit.content.slice(0,30)}..."`);
+          console.log(`[applyEditInstructions] MODIFY 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." → "${_finalContent.slice(0,30)}..."`);
         }
         break;
     }
