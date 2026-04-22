@@ -1521,17 +1521,25 @@ function sanitizeDescFigureRefs(text,type){
     }
   }
   // 허용 도면 범위 결정
+  // v10.5 fix: getLastFigureNumber 대신 _extractFigureNumbersFromDesign 사용
+  // (getLastFigureNumber는 "도 N" 패턴을 텍스트 전체에서 매칭하여, 교차참조/비도면 숫자도 잡아 maxAllowed를 과대 산정)
   let maxAllowed;
   if(type==='device'){
     const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
-    const _devMax=getLastFigureNumber(outputs.step_07||'')||deviceFigCount;
+    const _headerFigs=_extractFigureNumbersFromDesign(outputs.step_07||'');
+    const _userFigMax=requiredFigures.length>0?Math.max(...requiredFigures.map(f=>f.num)):0;
+    const _devMax=_headerFigs.length>0?Math.max(Math.max(..._headerFigs),_userFigMax):(getLastFigureNumber(outputs.step_07||'')||deviceFigCount);
     const _concCount=conceptDiagramTypes.filter(ct=>ct.svgContent).length;
     maxAllowed=_devMax+_concCount;
   }else{
     // 방법: 장치 마지막 도면 + 방법 도면
-    const deviceMax=getLastFigureNumber(outputs.step_07||'')||parseInt(document.getElementById('optDeviceFigures')?.value||4);
-    const methodMax=getLastFigureNumber(outputs.step_11||'');
-    maxAllowed=methodMax||deviceMax+parseInt(document.getElementById('optMethodFigures')?.value||2);
+    const _devHeaders=_extractFigureNumbersFromDesign(outputs.step_07||'');
+    const _devUserMax=requiredFigures.length>0?Math.max(...requiredFigures.map(f=>f.num)):0;
+    const deviceMax=_devHeaders.length>0?Math.max(Math.max(..._devHeaders),_devUserMax):(getLastFigureNumber(outputs.step_07||'')||parseInt(document.getElementById('optDeviceFigures')?.value||4));
+    const _methHeaders=_extractFigureNumbersFromDesign(outputs.step_11||'');
+    const methodMax=_methHeaders.length>0?Math.max(..._methHeaders):getLastFigureNumber(outputs.step_11||'');
+    const _concCount=conceptDiagramTypes.filter(ct=>ct.svgContent).length;
+    maxAllowed=methodMax||(deviceMax+_concCount+parseInt(document.getElementById('optMethodFigures')?.value||2));
   }
   
   // 모든 "도 N" 참조 추출
@@ -2212,10 +2220,28 @@ function buildPrompt(stepId){
   // v6.0: 기존 내용 존재 시 부분 수정 모드
   const userCmd=getStepUserCommand(stepId);
   if(userCmd&&outputs[stepId]){
+    // v10.5 fix: step_08/step_12 부분 수정 시 도면 범위 제약 명시 (재실행 시 없는 도면 참조 방지)
+    let _pmFigConstraint='';
+    if(stepId==='step_08'){
+      const _pmDesign=outputs.step_07||'';
+      const _pmActual=_extractFigureNumbersFromDesign(_pmDesign);
+      const _pmCFN=getAutoFigNums('step_07c').filter((_,i)=>conceptDiagramTypes[i]?.svgContent);
+      const _pmAll=[...new Set([..._pmActual,...requiredFigures.map(f=>f.num),..._pmCFN])].sort((a,b)=>a-b);
+      if(_pmAll.length>0){
+        const _pmMax=Math.max(..._pmAll);
+        _pmFigConstraint=`\n⛔⛔⛔ 도면 범위 제한 (위반 시 전체 무효) ⛔⛔⛔\n- 이 발명의 장치 도면: ${_pmAll.map(n=>'도 '+n).join(', ')} (총 ${_pmAll.length}개)\n- 위 목록에 없는 도면 번호를 절대 참조하지 마라.\n- 도 ${_pmMax+1} 이후 도면 참조/설명 금지.\n`;
+      }
+    }else if(stepId==='step_12'){
+      const _pmMeth=_extractFigureNumbersFromDesign(outputs.step_11||'');
+      if(_pmMeth.length>0){
+        const _pmMax=Math.max(..._pmMeth);
+        _pmFigConstraint=`\n⛔⛔⛔ 도면 범위 제한 (위반 시 전체 무효) ⛔⛔⛔\n- 이 발명의 방법 도면: ${_pmMeth.map(n=>'도 '+n).join(', ')} (총 ${_pmMeth.length}개)\n- 위 목록에 없는 방법 도면 번호를 절대 참조하지 마라.\n- 도 ${_pmMax+1} 이후 도면 참조/설명 금지.\n`;
+      }
+    }
     // 기존 내용 + 추가 지시 → 부분 수정 프롬프트
     return `아래 [기존 작성 내용]을 바탕으로, [수정 지시사항]에 해당하는 부분만 수정하고 나머지는 그대로 유지하여 전체 내용을 출력하라.
 수정 지시와 무관한 부분은 원문 그대로 유지해야 한다. 전체 재작성 금지.
-
+${_pmFigConstraint}
 [수정 지시사항]
 ${userCmd}
 
@@ -2586,13 +2612,13 @@ ${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 �
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(0,1500)}`;}
 
     case 'step_08':{
+      const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
       const dlCfg={
         compact:{charPerFig:'약 1,000자',total:'약 3,000~4,000자',extra:'핵심 구성요소 중심으로 간결하게 기술하라. 변형 실시예는 1개만.'},
         standard:{charPerFig:'약 1,500자',total:'약 5,000~7,000자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 주요 구성요소에 변형 실시예 포함.'},
         detailed:{charPerFig:'약 2,000자 이상',total:'8,000~10,000자',extra:'각 도면마다 구성요소의 기능, 동작 원리, 데이터 흐름, 상호 연동 관계를 상세히 설명하라. 변형 실시예를 통해 다양한 구현 방식을 기술하라. 절대 축약하지 마라.'},
-        custom:{charPerFig:'약 '+customDetailChars+'자',total:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 변형 실시예를 포함하라.'}
+        custom:{charPerFig:'약 '+customDetailChars+'자',total:null,extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 변형 실시예를 포함하라.'}
       }[detailLevel];
-      const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
       
       // v10.3: 실제 도면 설계 텍스트에서 도면 번호 목록 추출
       const designText=outputs.step_07||'';
@@ -2601,12 +2627,12 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
       const _conceptFigNums=getAutoFigNums('step_07c');
       const _genConceptFigNums=_conceptFigNums.filter((_,i)=>conceptDiagramTypes[i]?.svgContent);
       const allFigNumsRaw=[...new Set([...actualFigNums,...requiredFigures.map(f=>f.num),..._genConceptFigNums])].sort((a,b)=>a-b);
-      // ★ Safety: UI 설정 도면 수 + 생성된 예시도 수 반영 ★
+      // ★ v10.5 fix: 실제 도면 데이터가 있으면 그대로 사용 (UI 값 변경으로 인한 도면 누락/초과 방지) ★
+      // step_07 미생성 시에만 computeFigNums 폴백 사용
       const expectedTotalFig=deviceFigCount+_genConceptFigNums.length;
-      // ★ v10.4 fix: 도면 번호 목록이 비어있으면 computeFigNums로 순차 번호 생성
-      // (step_07 미생성 시 빈 목록으로 인해 LLM이 존재하지 않는 도면을 참조하는 버그 방지)
-      const _fallbackFigNums=allFigNumsRaw.length===0?computeFigNums(Math.max(deviceFigCount-requiredFigures.length,0),0).device.concat(requiredFigures.map(f=>f.num)).sort((a,b)=>a-b):allFigNumsRaw;
-      const allFigNums=_fallbackFigNums.length>expectedTotalFig?_fallbackFigNums.slice(0,expectedTotalFig):_fallbackFigNums;
+      const allFigNums=allFigNumsRaw.length>0?allFigNumsRaw:computeFigNums(Math.max(deviceFigCount-requiredFigures.length,0),0).device.concat(requiredFigures.map(f=>f.num)).sort((a,b)=>a-b).slice(0,expectedTotalFig);
+      // v10.5: custom 모드 총 분량을 실제 도면 수 기준으로 산출
+      if(!dlCfg.total)dlCfg.total='약 '+(customDetailChars*allFigNums.length)+'자';
       const lastDeviceFig=allFigNums.length>0?Math.max(...allFigNums):1;
       const figListStr=allFigNums.map(n=>'도 '+n).join(', ');
       
@@ -3263,9 +3289,10 @@ async function runLongStep(sid){if(globalProcessing)return;const dep=checkDepend
     if(sid==='step_08'){
       const _bodyText=t.replace(/^[\s\S]*?(?=도 1)/,'').replace(/\n{2,}/g,'\n');
       const _charCount=_bodyText.length;
-      const _figCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
+      // v10.5: 실제 도면 수 기준 (UI 값 변경 시에도 정확한 경고)
+      const _actualFigCount=_extractFigureNumbersFromDesign(outputs.step_07||'').length||parseInt(document.getElementById('optDeviceFigures')?.value||4);
       const _dlCfg={compact:1000,standard:1500,detailed:2000,custom:customDetailChars||2000}[detailLevel]||1500;
-      const _targetTotal=_dlCfg*_figCount;
+      const _targetTotal=_dlCfg*_actualFigCount;
       const _ratio=_charCount/_targetTotal;
       if(_ratio>1.5){
         App.showToast(`⚠️ 상세설명 ${_charCount.toLocaleString()}자 (목표 ${_targetTotal.toLocaleString()}자의 ${Math.round(_ratio*100)}%) — 과다 생성됨`,'warning');
