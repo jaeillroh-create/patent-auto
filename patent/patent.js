@@ -3520,13 +3520,35 @@ function applyEditInstructions(originalText,edits){
       if(edit.content.length<5){console.warn(`[applyEditInstructions] 재정제 후 내용 부족 → 건너뜀`);continue;}
     }
     
+    // v10.4: CONTENT 단어 잘림 복원 — CONTENT 시작부가 주변 원문의 단어 중간과 일치하면 누락 접두사 복원
+    // 예: 원문 "구체적으로" + CONTENT "적으로,..." → "구체" 복원 → "구체���으로,..."
+    const _surStart=Math.max(0,anchorStart-10);
+    const _surEnd=Math.min(result.length,sentenceEnd+30);
+    const _surText=result.slice(_surStart,_surEnd);
+    const _cHead=edit.content.slice(0,Math.min(8,edit.content.length));
+    if(_cHead.length>=2&&/[가-힣]/.test(_cHead[0])){
+      const _hIdx=_surText.indexOf(_cHead);
+      if(_hIdx>0){
+        const _cb=_surText[_hIdx-1];
+        if(/[가-힣]/.test(_cb)){
+          let _ws=_hIdx-1;
+          while(_ws>0&&/[가-힣]/.test(_surText[_ws-1]))_ws--;
+          const _missing=_surText.slice(_ws,_hIdx);
+          if(_missing.length>0&&_missing.length<=4&&!/\s/.test(_missing)){
+            console.warn(`[applyEditInstructions] 단어 잘림 복원: "${_missing}" + "${edit.content.slice(0,20)}..."`);
+            edit.content=_missing+edit.content;
+          }
+        }
+      }
+    }
+
     // v10.3: 중복 삽입 방지 — 이미 동일 내용이 근처에 있으면 건너뜀
     const nearbyRegion=result.slice(Math.max(0,anchorStart-200),Math.min(result.length,anchorStart+edit.anchor.length+500));
     if(edit.action!=='MODIFY'&&nearbyRegion.includes(edit.content.slice(0,50))){
       console.warn(`[applyEditInstructions] 중복 감지 → 건너뜀: "${edit.content.slice(0,30)}..."`);
       continue;
     }
-    
+
     switch(edit.action){
       case 'ADD_AFTER':{
         const _afterChar=result[sentenceEnd]||'';
