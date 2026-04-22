@@ -1492,8 +1492,9 @@ function sanitizeDescFigureRefs(text,type){
     // 【수학식 N】 블록 및 관련 수식/변수 설명 전체 제거
     // "여기서," "예를 들어," 등은 수학식 직후에 나오는 설명이므로 함께 제거
     text=text.replace(/【수학식\s*\d+】[^\n]*(?:\n(?!도\s+\d|이러한|한편|또한|구체적|상기)[^\n]*)*/g,'').trim();
-    // "수학식 N에 따르면" 등 수학식 참조 문장 제거
-    text=text.replace(/[^\n]*수학식\s*\d+[^\n]*\n?/g,'').trim();
+    // v10.5: "수학식 N" 참조 제거 — 【수학식 N】 헤더 잔여만 제거 (본문 참조 문장은 보존)
+    // 기존: [^\n]*수학식\s*\d+[^\n]* → 본문의 "수학식 1에 따르면..." 설명 문장까지 삭제
+    text=text.replace(/^\s*【?수학식\s*\d+】?\s*$/gm,'').trim();
     text=text.replace(/\n{3,}/g,'\n\n');
   }
   
@@ -3520,28 +3521,6 @@ function applyEditInstructions(originalText,edits){
       if(edit.content.length<5){console.warn(`[applyEditInstructions] 재정제 후 내용 부족 → 건너뜀`);continue;}
     }
     
-    // v10.4: CONTENT 단어 잘림 복원 — CONTENT 시작부가 주변 원문의 단어 중간과 일치하면 누락 접두사 복원
-    // 예: 원문 "구체적으로" + CONTENT "적으로,..." → "구체" 복원 → "구체���으로,..."
-    const _surStart=Math.max(0,anchorStart-10);
-    const _surEnd=Math.min(result.length,sentenceEnd+30);
-    const _surText=result.slice(_surStart,_surEnd);
-    const _cHead=edit.content.slice(0,Math.min(8,edit.content.length));
-    if(_cHead.length>=2&&/[가-힣]/.test(_cHead[0])){
-      const _hIdx=_surText.indexOf(_cHead);
-      if(_hIdx>0){
-        const _cb=_surText[_hIdx-1];
-        if(/[가-힣]/.test(_cb)){
-          let _ws=_hIdx-1;
-          while(_ws>0&&/[가-힣]/.test(_surText[_ws-1]))_ws--;
-          const _missing=_surText.slice(_ws,_hIdx);
-          if(_missing.length>0&&_missing.length<=4&&!/\s/.test(_missing)){
-            console.warn(`[applyEditInstructions] 단어 잘림 복원: "${_missing}" + "${edit.content.slice(0,20)}..."`);
-            edit.content=_missing+edit.content;
-          }
-        }
-      }
-    }
-
     // v10.3: 중복 삽입 방지 — 이미 동일 내용이 근처에 있으면 건너뜀
     const nearbyRegion=result.slice(Math.max(0,anchorStart-200),Math.min(result.length,anchorStart+edit.anchor.length+500));
     if(edit.action!=='MODIFY'&&nearbyRegion.includes(edit.content.slice(0,50))){
@@ -3566,9 +3545,30 @@ function applyEditInstructions(originalText,edits){
         break;}
       case 'MODIFY':
         if(exactIdx>=0){
-          result=result.slice(0,exactIdx)+edit.content+result.slice(exactIdx+edit.anchor.length);
+          // v10.5: MODIFY 후 결합 부위 검증 — 마침표/공백 보정
+          let _finalContent=edit.content;
+          let _afterMod=result.slice(exactIdx+edit.anchor.length);
+          // (1) 콘텐츠 끝에 마침표가 없는데 앵커는 마침표로 끝났다면 → 마침표 복원
+          if(/[.。]$/.test(edit.anchor.trim())&&!/[.。]$/.test(_finalContent.trim())){
+            _finalContent=_finalContent.trimEnd()+'.';
+          }
+          // (2) 콘텐츠가 마침표로 끝나고, 뒤에도 마침표로 시작하면 → 이중 마침표 방지
+          if(/[.。]$/.test(_finalContent.trim())&&/^\s*[.。]/.test(_afterMod)){
+            _afterMod=_afterMod.replace(/^\s*[.。]\s*/,' ');
+          }
+          // (3) 콘텐츠가 마침표로 끝나고 뒤에 한글이 바로 오면 공백 보장
+          const _nxt=_afterMod[0]||'';
+          if(/[.。]$/.test(_finalContent.trimEnd())&&/[가-힣(]/.test(_nxt)){
+            _finalContent=_finalContent.trimEnd()+' ';
+            _afterMod=_afterMod.replace(/^\s+/,'');
+          }
+          // (4) 콘텐츠가 마침표 없이 끝나고 뒤에 한글이 바로 오면 (마침표도 없고 공백도 없음) → 공백 보장
+          if(!/[.。\s]$/.test(_finalContent)&&/^[가-힣(]/.test(_afterMod)){
+            _finalContent=_finalContent+' ';
+          }
+          result=result.slice(0,exactIdx)+_finalContent+_afterMod;
           appliedCount++;
-          console.log(`[applyEditInstructions] MODIFY 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." → "${edit.content.slice(0,30)}..."`);
+          console.log(`[applyEditInstructions] MODIFY 적용 (${edit.reason||''}): "${edit.anchor.slice(0,30)}..." → "${_finalContent.slice(0,30)}..."`);
         }
         break;
     }
@@ -3576,7 +3576,7 @@ function applyEditInstructions(originalText,edits){
 
   // v10.4: 전체 편집 완료 후 — 마침표 뒤 띄어쓰기 누락 교정
   // "한다.이러한" → "한다. 이러한" (한글.한글 패턴, 소수점 제외)
-  result=result.replace(/([가-힣)\]])\.\s*([가-힣(【])/g,(m,p,n)=>{
+  result=result.replace(/([가-힣)\]])\.[ \t]*([가-힣(【])/g,(m,p,n)=>{
     return p+'. '+n;
   });
 
@@ -3742,9 +3742,10 @@ ${baseDesc}`);
           const i=fuzzyFindAnchor(finalDesc,x.anchor);
           if(i>=0&&!inserted.has(x.anchor)){
             inserted.add(x.anchor);
-            // v10.3: 정확한 문장 끝 위치에 삽입
             const ip=findSentenceEndAfterAnchor(finalDesc,i,x.anchor);
-            finalDesc=finalDesc.slice(0,ip)+'\n\n'+x.formula+'\n\n'+finalDesc.slice(ip);
+            // v10.5: 삽입 지점 검증 — 단어 중간이면 가장 가까운 문장 경계로 보정
+            const validIp=_validateInsertionPoint(finalDesc,ip);
+            finalDesc=finalDesc.slice(0,validIp)+'\n\n'+x.formula+'\n\n'+finalDesc.slice(validIp);
             successCount++;
           }
         }
@@ -3760,6 +3761,11 @@ ${baseDesc}`);
         finalDesc=insertMathBlocks(finalDesc,mathR.text);
       }
     }
+    // v10.5: 최종 띄어쓰기 보정 — 수학식 재삽입/중복제거 후 "한다.이러한" 패턴 교정
+    // 줄바꿈은 보존 (수학식 블록 구조 보호), 같은 줄의 띄어쓰기만 교정
+    finalDesc=finalDesc.replace(/([가-힣)\]])\.[ \t]*([가-힣(])/g,(m,p,n)=>{
+      return p+'. '+n;
+    });
     outputs.step_13_applied=finalDesc;
     markOutputTimestamp('step_13_applied');
 
@@ -4713,10 +4719,18 @@ function stripMathBlocks(text){
   let r=text.replace(/\n*【수학식\s*\d+】[\s\S]*?(?=\n(?:도\s|이때|또한|한편|다음|여기서|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}(?:서버|시스템|장치|단말)|\n|$))/g,'');
   // Pattern 2: Standalone math block headers that might remain
   r=r.replace(/\n*【수학식\s*\d+】[^\n]*\n/g,'\n');
-  // Pattern 3: Remove "여기서," blocks — 수학식 직후 잔여물만 제거 (일반 서술 보호)
-  r=r.replace(/\n여기서,\s*\n[A-Z_a-z\s(]+[=:][^\n]*(?:\n(?![가-힣])[^\n]*)*/g,'');
-  // Pattern 4: Remove math example blocks — 수학식 변수 설명 패턴만 제거
-  r=r.replace(/\n(?:예시 대입:|일 예로,|구체적 예시로,)[\s\S]*?(?=\n\n)/g,'');
+  // Pattern 3: Remove "여기서," blocks — 한국어+영문 변수 설명 모두 제거
+  // 기존: Latin-only [A-Z_a-z] → 한국어 파라미터 누락 ("Wk는 ...", "비용한도로서, ...")
+  // 수정: 여기서, 이후 빈 줄(\n\n) 또는 일반 서술문 시작까지 전체 제거
+  r=r.replace(/\n여기서,?\s*\n[\s\S]*?(?=\n\n(?:도\s|이때|또한|한편|다음|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}(?:서버|시스템|장치|단말))|\n\n\n|$)/g,'');
+  // Pattern 3b: 인라인 "여기서," (줄바꿈 없이 수학식 뒤 이어지는 경우)
+  r=r.replace(/여기서,?\s+[A-Z_a-z가-힣][^\n]*(?:\n(?!\n)[^\n]*)*/g,(m,off,src)=>{
+    const before=src.slice(Math.max(0,off-50),off);
+    if(/【수학식\s*\d+】/.test(before)||/[=+\-×÷∑∫]/.test(before))return '';
+    return m;
+  });
+  // Pattern 4: Remove math example blocks — 확장된 예시 키워드 (예를 들어, 예:, 예컨대, 다음은, 등)
+  r=r.replace(/\n(?:예시 대입:|일 예로,|구체적 예시로,|예를 들어,?|예컨대,?|다음은|예:)[\s\S]*?(?=\n\n(?:도\s|이때|또한|한편|다음(?!은)|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}(?:서버|시스템|장치|단말))|\n\n\n|$)/g,'');
   // Clean up multiple newlines
   r=r.replace(/\n{3,}/g,'\n\n');
   return r.trim();
@@ -4860,7 +4874,16 @@ function findSentenceEndAfterAnchor(text,anchorStart,anchor){
       actualEnd=anchorStart+origPos;
     }
   }
-  
+
+  // v10.5: actualEnd가 단어 중간이면 보정 — 앞쪽 단어 경계(공백/마침표)로 이동
+  if(actualEnd>0&&actualEnd<text.length&&
+     /[가-힣]/.test(text[actualEnd-1]||'')&&/[가-힣]/.test(text[actualEnd]||'')){
+    // 앵커 끝이 단어 중간 → 뒤쪽으로 단어 끝까지 진행
+    let wordEnd=actualEnd;
+    while(wordEnd<text.length&&/[가-힣]/.test(text[wordEnd])&&text[wordEnd]!=='.')wordEnd++;
+    actualEnd=wordEnd;
+  }
+
   // Step 1.5: actualEnd 직전(~6자)에 문장 종결 마침표가 있으면 그것을 사용
   // (정규화 오차로 actualEnd가 마침표 직후를 넘어간 경우 보정)
   for(let pos=Math.min(actualEnd,text.length-1);pos>=Math.max(0,actualEnd-6);pos--){
@@ -4913,6 +4936,39 @@ function findSentenceEndAfterAnchor(text,anchorStart,anchor){
   
   return text.length;
 }
+
+// v10.5: 삽입 지점이 단어/문장 중간이 아닌지 검증 + 보정
+function _validateInsertionPoint(text,ip){
+  if(ip<=0||ip>=text.length)return ip;
+  const before=text[ip-1]||'';
+  const after=text[ip]||'';
+  // 이미 마침표 뒤이거나 줄바꿈이면 OK
+  if(before==='.'||before==='\n'||after==='\n'||after===' ')return ip;
+  // 한글+한글 연속 = 단어 중간 → 가장 가까운 마침표+공백 또는 줄바꿈을 찾아 보정
+  if(/[가-힣]/.test(before)&&/[가-힣]/.test(after)){
+    // 뒤쪽으로 마침표 찾기 (최대 80자)
+    for(let p=ip;p<Math.min(ip+80,text.length);p++){
+      if(text[p]==='.'){
+        const pc=p>0?text[p-1]:'';
+        const nc=p+1<text.length?text[p+1]:'';
+        if(/\d/.test(pc)&&/\d/.test(nc))continue;
+        if(/[가-힣)]/.test(pc))return p+1;
+      }
+      if(text[p]==='\n')return p;
+    }
+    // 앞쪽으로 마침표 찾기 (최대 40자)
+    for(let p=ip-1;p>=Math.max(0,ip-40);p--){
+      if(text[p]==='.'){
+        const pc=p>0?text[p-1]:'';
+        const nc=p+1<text.length?text[p+1]:'';
+        if(/\d/.test(pc)&&/\d/.test(nc))continue;
+        if(/[가-힣)]/.test(pc))return p+1;
+      }
+    }
+  }
+  return ip;
+}
+
 // v10.3: 수학식 삽입 후 문장/절 중복 감지/제거
 // 패턴 1: 마침표 문장 중복 (수학식 블록 사이에 같은 문장)
 // 패턴 2: 쉼표 절 중복 (긴 문장의 일부 절이 수학식 앞/뒤에 중복)
@@ -5006,10 +5062,19 @@ function _deduplicateSentences(text){
     for(const rm of toRemove){
       let start=rm.start;
       let end=rm.end;
-      // 앞뒤 공백/쉼표 정리
-      while(start>0&&' \n,'.includes(result[start-1]))start--;
+      // v10.5: 단어 중간 절단 방지 — 제거 범위가 한글 단어를 자르는지 확인
+      if(start>0&&/[가-힣]/.test(result[start-1])&&/[가-힣]/.test(result[start])){
+        // 제거 범위 시작이 단어 중간 → 앞쪽 마침표/공백까지 확장
+        while(start>0&&/[가-힣]/.test(result[start-1])&&result[start-1]!=='.')start--;
+      }
+      // 앞뒤 공백 정리 (쉼표는 문장 구조이므로 보존)
+      while(start>0&&' \n'.includes(result[start-1]))start--;
       while(end<result.length&&' \n'.includes(result[end]))end++;
-      result=result.slice(0,start)+result.slice(end);
+      // 제거 후 앞뒤 글자가 한글+한글이면 공백 삽입
+      const bChar=start>0?result[start-1]:'';
+      const aChar=end<result.length?result[end]:'';
+      const needSpace=/[가-힣)]/.test(bChar)&&/[가-힣(]/.test(aChar);
+      result=result.slice(0,start)+(needSpace?' ':'')+result.slice(end);
       removedCount++;
       console.log(`[_deduplicateSentences] 중복 제거: "${rm.text.slice(0,50)}..."`);
     }
@@ -5035,9 +5100,9 @@ function insertMathBlocks(s08,s09){
     const i=fuzzyFindAnchor(r,x.anchor);
     if(i>=0 && !inserted.has(x.anchor)){
       inserted.add(x.anchor);
-      // v10.3: 앵커의 실제 끝 위치 → 해당 문장 마침표 뒤에 삽입
       const ip=findSentenceEndAfterAnchor(r,i,x.anchor);
-      r=r.slice(0,ip)+'\n\n'+x.formula+'\n\n'+r.slice(ip);
+      const validIp=_validateInsertionPoint(r,ip);
+      r=r.slice(0,validIp)+'\n\n'+x.formula+'\n\n'+r.slice(validIp);
       successCount++;
     }else{
       failCount++;
