@@ -27,7 +27,7 @@ const CATEGORY_ENDINGS = {
 };
 
 // ═══ Patent State ═══
-let outputs={},selectedTitle='',selectedTitleEn='',selectedTitleType='',includeMethodClaims=true;
+let outputs={},outputHistory={},selectedTitle='',selectedTitleEn='',selectedTitleType='',includeMethodClaims=true;
 let usage={calls:0,inputTokens:0,outputTokens:0,cost:0},loadingState={};
 let detailLevel='standard';
 let customDetailChars=2000;
@@ -39,11 +39,12 @@ let methodAnchorThemeMode='auto', selectedMethodAnchorThemes=[];
 let requiredFigures=[];
 let globalRefStyleText='';
 let projectRefStyleText='';
-let beforeReviewText = '';
 let uploadedFiles = [];
 let diagramData = {};
 let stepUserCommands = {}; // v5.5: 각 스텝별 사용자 명령어
 let outputTimestamps = {};
+// [P-C1] invention_scope: 발명 범위 기준선
+let inventionScope = null;
 // ═══ v11.0: 예시도/개념도 ═══
 let conceptDiagramEnabled = false;
 let conceptDiagramCount = 0;
@@ -189,10 +190,47 @@ ${tail}`;
 })();
 
 
+// ═══════════ [P-C1] OUTPUT HISTORY ═══════════
+const OUTPUT_HISTORY_MAX = 10;
+const OUTPUT_HISTORY_VALUE_MAX = 10000;
+function pushOutputHistory(sid, origin, triggeredBy) {
+  if (!outputs[sid]) return;
+  if (!outputHistory[sid]) outputHistory[sid] = [];
+  outputHistory[sid].push({
+    value: outputs[sid].length > OUTPUT_HISTORY_VALUE_MAX ? outputs[sid].slice(0, OUTPUT_HISTORY_VALUE_MAX) : outputs[sid],
+    timestamp: new Date().toISOString(),
+    origin,
+    triggered_by: triggeredBy
+  });
+  if (outputHistory[sid].length > OUTPUT_HISTORY_MAX) {
+    outputHistory[sid] = outputHistory[sid].slice(-OUTPUT_HISTORY_MAX);
+  }
+}
+function getLastHistoryByOrigin(sid, origin) {
+  if (!outputHistory[sid]) return null;
+  const matches = outputHistory[sid].filter(h => h.origin === origin);
+  return matches.length ? matches[matches.length - 1] : null;
+}
+
+// ═══════════ [P-C1] INVENTION SCOPE CONSTANTS ═══════════
+const INVENTION_SCOPE_SYSTEM_PROMPT = `당신은 15년 경력의 변리사 출신 발명 분석가이다.
+입력된 발명 설명에서 본질적 구성요소와 기능을 추출한다.
+원칙: 텍스트에 명시된 내용만 추출. 추론·추측·상식 추가 금지.
+애매한 경우 제외.`;
+
+const INVENTION_SCOPE_SCHEMA_INSTRUCTION = `아래 JSON 스키마로만 응답하라. 설명·prefix·markdown 금지. 순수 JSON만 출력.
+{
+  "core_components": [{"id":"c1","name":"구성요소명","role":"역할 설명","aliases":["별칭"]}],
+  "core_functions":  [{"id":"f1","desc":"기능 설명","component_refs":["c1"]}],
+  "problem_space": "해결과제 요약 200자 이내",
+  "solution_space": "해결수단 요약 200자 이내",
+  "explicit_nonscope": ["명시적으로 제외된 요소 (있는 경우만)"]
+}`;
+
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
-  currentProjectId=null;outputs={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
-  usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};beforeReviewText='';uploadedFiles=[];diagramData={};
+  currentProjectId=null;outputs={};outputHistory={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
+  usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};uploadedFiles=[];diagramData={};inventionScope=null;
   projectRefStyleText='';requiredFigures=[];outputTimestamps={};stepUserCommands={};
   conceptDiagramEnabled=false;conceptDiagramCount=0;conceptDiagramTypes=[];
   // Claim defaults
@@ -433,6 +471,8 @@ async function openProject(pid){
   diagramData=s.diagramData||{};
   outputTimestamps=s.outputTimestamps||{};
   stepUserCommands=s.stepUserCommands||{};
+  outputHistory=s.outputHistory||{};
+  inventionScope=s.inventionScope||null;
   conceptDiagramEnabled=s.conceptDiagramEnabled||false;
   conceptDiagramCount=s.conceptDiagramCount||0;
   conceptDiagramTypes=s.conceptDiagramTypes||[];
@@ -447,6 +487,8 @@ async function openProject(pid){
   Object.keys(outputs).forEach(k=>{if(outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied'))_cascadeRender(k,outputs[k]);});
   // v5.5: 스텝별 사용자 명령어 UI 주입
   injectAllUserCommandUIs();
+  // [P-C1] 발명 범위 패널 복원
+  renderInventionScopePanel();
   // Restore diagrams and show download buttons
   if(outputs.step_07_mermaid){renderDiagrams('step_07',outputs.step_07_mermaid);const dl07=document.getElementById('diagramDownload07');if(dl07)dl07.style.display='block';}
   if(outputs.step_11_mermaid){renderDiagrams('step_11',outputs.step_11_mermaid);const dl11=document.getElementById('diagramDownload11');if(dl11)dl11.style.display='block';}
@@ -482,7 +524,108 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes}}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,outputHistory,inventionScope,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes}}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+
+// ═══════════ [P-C1] INVENTION SCOPE ═══════════
+function _parseJSONSafe(text) {
+  try { return JSON.parse(text); } catch(e) {}
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced) try { return JSON.parse(fenced[1].trim()); } catch(e) {}
+  const braceMatch = text.match(/\{[\s\S]*\}/);
+  if (braceMatch) try { return JSON.parse(braceMatch[0]); } catch(e) {}
+  return null;
+}
+
+async function extractInventionScope() {
+  const input = document.getElementById('projectInput')?.value || '';
+  if (input.trim().length < 50) {
+    App.showToast('발명 설명이 너무 짧습니다 (최소 50자)', 'error');
+    return;
+  }
+  if (globalProcessing) return;
+  setGlobalProcessing(true);
+  try {
+    const prompt = `${INVENTION_SCOPE_SCHEMA_INSTRUCTION}\n\n<invention_description>\n${input}\n</invention_description>`;
+    const resp = await App.callClaudeSonnet(prompt, 4096);
+    const parsed = _parseJSONSafe(resp.text);
+    if (!parsed || !parsed.core_components) {
+      App.showToast('발명 범위 추출 실패: JSON 파싱 불가', 'error');
+      return;
+    }
+    inventionScope = {
+      locked_at: new Date().toISOString(),
+      locked_by: App.currentUser?.id || 'unknown',
+      source_text_hash: input.length + '_' + input.slice(0, 20),
+      baseline: parsed,
+      approved_expansions: [],
+      audit_log: [],
+      _previous_versions: inventionScope?._previous_versions || []
+    };
+    saveProject(true);
+    renderInventionScopePanel();
+    App.showToast('발명 범위가 확정되었습니다', 'success');
+  } catch (e) {
+    App.showToast('발명 범위 추출 실패: ' + e.message, 'error');
+  } finally {
+    setGlobalProcessing(false);
+  }
+}
+
+function unlockInventionScope() {
+  if (!inventionScope) return;
+  if (!confirm('발명 범위를 재확정하시겠습니까? 이전 범위 이력은 보관됩니다.')) return;
+  inventionScope._previous_versions = inventionScope._previous_versions || [];
+  const archived = Object.assign({}, inventionScope, { archived_at: new Date().toISOString() });
+  delete archived._previous_versions;
+  inventionScope._previous_versions.push(archived);
+  inventionScope.locked_at = null;
+  inventionScope.baseline = null;
+  saveProject(true);
+  renderInventionScopePanel();
+}
+
+function renderInventionScopePanel() {
+  const panel = document.getElementById('invention-scope-panel');
+  if (!panel) return;
+  if (!inventionScope || !inventionScope.locked_at) {
+    panel.className = 'scope-panel';
+    panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between">
+      <div><span class="tf">🔍</span> <strong style="font-size:13px">발명 범위</strong>
+      <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:6px">범위를 확정하면 이후 스텝에서 범위 초과 여부를 검증합니다.</span></div>
+      <button class="btn btn-outline btn-sm" onclick="extractInventionScope()">범위 확정</button>
+    </div>`;
+    return;
+  }
+  const b = inventionScope.baseline;
+  const lockedDate = new Date(inventionScope.locked_at).toLocaleDateString('ko-KR');
+  const comps = (b.core_components || []).map(c =>
+    `<span class="scope-chip">${App.escapeHtml(c.name)}<span style="color:var(--color-text-tertiary);margin-left:4px;font-size:10px">${App.escapeHtml(c.role||'')}</span></span>`
+  ).join('');
+  const funcs = (b.core_functions || []).map(f =>
+    `<li style="font-size:12px;margin-bottom:2px">${App.escapeHtml(f.desc)} <span style="color:var(--color-text-tertiary)">[${(f.component_refs||[]).join(',')}]</span></li>`
+  ).join('');
+  const nonscope = (b.explicit_nonscope || []).length
+    ? `<div style="margin-top:6px;font-size:11px;color:var(--color-text-tertiary)">제외: ${b.explicit_nonscope.map(n => App.escapeHtml(n)).join(', ')}</div>` : '';
+  const prevCount = (inventionScope._previous_versions || []).length;
+  const prevBadge = prevCount ? `<span class="badge badge-neutral" style="margin-left:6px;font-size:10px">이��� ${prevCount}건</span>` : '';
+
+  panel.className = 'scope-panel locked';
+  panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div><span class="tf">🔒</span> <strong style="font-size:13px">발명 ��위 확정됨</strong>
+    <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:6px">${lockedDate}</span>${prevBadge}</div>
+    <button class="btn btn-ghost btn-sm" onclick="unlockInventionScope()">재확정</button>
+  </div>
+  <div class="baseline-summary">
+    <div style="margin-bottom:4px"><strong>과제:</strong> ${App.escapeHtml(b.problem_space || '')}</div>
+    <div><strong>해결:</strong> ${App.escapeHtml(b.solution_space || '')}</div>
+  </div>
+  <div class="scope-components">${comps}</div>
+  <details style="margin-top:8px">
+    <summary style="font-size:12px;cursor:pointer;color:var(--color-text-secondary)">핵심 기능 (${(b.core_functions||[]).length}건)</summary>
+    <ul style="margin:4px 0 0 16px;padding:0">${funcs}</ul>
+    ${nonscope}
+  </details>`;
+}
 
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===4)renderPreview();}
@@ -1227,12 +1370,14 @@ async function _cascadeRunShort(sid){
   // step_04는 KIPRIS API 검색 (buildPrompt 없음)
   if(sid==='step_04'){
     const sr=await searchPriorArt(selectedTitle);
-    outputs.step_04=sr?sr.formatted:'【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';
+    pushOutputHistory('step_04','cascade','_cascadeRunShort');
+    outputs.step_04=sr?sr.formatted:'【특허문헌】\n(관련 선행특허��� 검색하지 못하였습니다)';
     markOutputTimestamp('step_04');_cascadeRender('step_04',outputs.step_04);
     return;
   }
   const prompt=buildPrompt(sid);
   if(!prompt)return;
+  pushOutputHistory(sid,'cascade','_cascadeRunShort');
   if(sid==='step_13'){
     const text=await App.callClaudeWithContinuation(prompt,'progressStep13');
     outputs[sid]=text;
@@ -1251,6 +1396,7 @@ async function _cascadeRunShort(sid){
       const fixR=await App.callClaude(`청구범위 기재불비를 수정하라.\n[지적사항]\n${issueText}\n[원본]\n${corrected}`);
       corrected=fixR.text;
     }
+    pushOutputHistory(sid,'cascade','_cascadeRunShort.correction');
     outputs[sid]=corrected;markOutputTimestamp(sid);_cascadeRender(sid,corrected);
   }
 }
@@ -1261,6 +1407,7 @@ async function _cascadeRunLong(sid){
   // v8.1: 도면 범위 초과 자동 교정
   if(sid==='step_08')t=sanitizeDescFigureRefs(t,'device');
   if(sid==='step_12')t=sanitizeDescFigureRefs(t,'method');
+  pushOutputHistory(sid,'cascade','_cascadeRunLong');
   outputs[sid]=t;markOutputTimestamp(sid);_cascadeRender(sid,t);
 }
 async function _cascadeRunDiagram(sid){
@@ -1325,6 +1472,7 @@ ${prompt.slice(0,2000)}`;
     }
   }
   
+  pushOutputHistory(sid,'cascade','_cascadeRunDiagram');
   outputs[sid]=designText;markOutputTimestamp(sid);_cascadeRender(sid,designText);
   const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
   outputs[sid+'_mermaid']=mr.text;
@@ -1367,6 +1515,7 @@ SVG 규칙: viewBox="0 0 680 500", stroke="#000", fill="none"(필요시 "#fff"),
     ct.svgContent=svgText;ct.figNum=figNum;
     ct.refNums=[...new Set([...svgText.matchAll(/\((\d+)\)/g)].map(m=>parseInt(m[1])))].filter(n=>n>=31&&n<=79).sort((a,b)=>a-b);
   }
+  pushOutputHistory('step_07c','cascade','_cascadeRunConceptDiagram');
   outputs.step_07c=conceptDiagramTypes.map((ct,i)=>{const fn=figNums[i]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `[도 ${fn}] ${td.label} 예시도\n참조번호: ${ct.refNums.join(', ')}\n${ct.briefDesc||''}`;}).join('\n\n');
   markOutputTimestamp('step_07c');
   renderConceptDiagramCards();
@@ -1418,6 +1567,7 @@ function _trimDesignTextToExpectedFigures(text,expectedNums){
 async function _cascadeRunMath(){
   const r=await App.callClaude(buildPrompt('step_09'));
   const baseDesc=getLatestDescription()||'';
+  pushOutputHistory('step_09','cascade','_cascadeRunMath');
   outputs.step_09=insertMathBlocks(baseDesc,r.text);
   markOutputTimestamp('step_09');_cascadeRender('step_09',outputs.step_09);
 }
@@ -1452,6 +1602,7 @@ function insertBoilerplate(){
   if(!cur){App.showToast('상세설명이 없습니다. 먼저 Step 8을 생성하세요.','error');return;}
   // Check if already has boilerplate
   if(hasBoilerplate(cur)){App.showToast('이미 정형문이 삽입되어 있습니다.','info');return;}
+  pushOutputHistory('step_08','llm','insertBoilerplate');
   outputs.step_08=STEP8_PREFIX+'\n\n'+cur+'\n\n'+STEP8_SUFFIX;
   renderOutput('step_08',outputs.step_08);
   // Also update step_09 and step_13_applied if they exist
@@ -3205,6 +3356,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     // Step 04: KIPRIS API 실시간 검색
     if(sid==='step_04'){
       const sr=await searchPriorArt(selectedTitle);
+      pushOutputHistory('step_04','llm','runStep');
       if(sr){outputs.step_04=sr.formatted;renderOutput('step_04',sr.formatted);}
       else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderOutput('step_04',outputs.step_04);}
       markOutputTimestamp('step_04');
@@ -3213,6 +3365,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     }
     // Step 13: use continuation for long review
     let r;
+    pushOutputHistory(sid,'llm','runStep');
     if(sid==='step_13'){
       App.showProgress('progressStep13','AI 검토 생성 중...',0,1);
       const text=await App.callClaudeWithContinuation(buildPrompt(sid),'progressStep13');
@@ -3237,6 +3390,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
         const fixPrompt=`아래 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 상위항(독립항 포함)에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 상위항에 추가할 때는 독립항의 범위가 과도하게 좁아지지 않도록 주의\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${corrected}`;
         const fixR=await App.callClaude(fixPrompt);corrected=fixR.text;
       }
+      pushOutputHistory(sid,'llm','runStep.step_06_correction');
       outputs[sid]=corrected;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,corrected);
       const finalIssues=validateClaims(corrected);
       App.showProgress('progressStep06',`완료 (수정 ${correctionRound}회)`,maxRounds*2+1,maxRounds*2+1);
@@ -3263,6 +3417,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
         const fixPrompt=`아래 방법 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n⛔⛔ 절대 금지: 청구항 번호를 변경하지 마라! 방법 독립항은 반드시 【청구항 ${firstClaimNum}】을 유지해야 한다. 절대로 【청구항 1】로 변경 금지! ⛔⛔\n\n수정 규칙:\n- 【청구항 N】형식 유지 — 번호 변경 금지\n- \"상기\" 선행기재 누락: 방법 독립항(청구항 ${firstClaimNum}) 내에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위 — 번호 유지!]\n${corrected}`;
         const fixR=await App.callClaude(fixPrompt);corrected=fixR.text;
       }
+      pushOutputHistory(sid,'llm','runStep.step_10_correction');
       outputs[sid]=corrected;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,corrected);
       const finalIssues=validateClaims(corrected);
       App.showProgress('progressStep10',`완료 (수정 ${correctionRound}회)`,maxRounds*2+1,maxRounds*2+1);
@@ -3301,6 +3456,7 @@ async function runLongStep(sid){if(globalProcessing)return;const dep=checkDepend
         App.showToast(`⚠️ 상세설명 ${_charCount.toLocaleString()}자 (목표 ${_targetTotal.toLocaleString()}자의 ${Math.round(_ratio*100)}%) — 과소 생성됨`,'warning');
       }
     }
+    pushOutputHistory(sid,'llm','runLongStep');
     outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
 async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{
   const TARGET_MATH_COUNT=5;
@@ -3317,6 +3473,7 @@ async function runMathInsertion(){if(globalProcessing)return;const dep=checkDepe
     App.showToast(`수학식 ${mathBlocks.length}개→추가 생성 시도`,'info');
   }
   const baseDesc=getLatestDescription()||'';
+  pushOutputHistory('step_09','llm','runMathInsertion');
   outputs.step_09=insertMathBlocks(baseDesc,r.text);
   // 삽입 후 실제 수학식 개수 검증
   const insertedCount=(outputs.step_09.match(/【수학식\s*\d+】/g)||[]).length;
@@ -3679,7 +3836,9 @@ async function applyReview(){
   const cur=getLatestDescription();if(!cur){App.showToast('상세설명 없음','error');return;}
   const hasMethodDesc=!!(outputs.step_12&&includeMethodClaims);
   const totalSteps=hasMethodDesc?3:2;
-  beforeReviewText=cur;setGlobalProcessing(true);loadingState.applyReview=true;App.setButtonLoading('btnApplyReview',true);
+  pushOutputHistory('step_08','pre_review','applyReview');
+  if(outputs.step_12)pushOutputHistory('step_12','pre_review','applyReview');
+  setGlobalProcessing(true);loadingState.applyReview=true;App.setButtonLoading('btnApplyReview',true);
   try{
     // ═══════════════════════════════════════════════════════════════
     // v10.3: 편집 지시 기반 아키텍처 (전문 재작성 → 편집 지시 + 코드 적용)
@@ -3793,6 +3952,7 @@ ${baseDesc}`);
     finalDesc=finalDesc.replace(/([가-힣)\]])\.[ \t]*([가-힣(])/g,(m,p,n)=>{
       return p+'. '+n;
     });
+    pushOutputHistory('step_13_applied','llm','applyReview');
     outputs.step_13_applied=finalDesc;
     markOutputTimestamp('step_13_applied');
 
@@ -3827,6 +3987,7 @@ ${baseMethod}`);
       const methodEdits=parseEditInstructions(methodEditInstructions.text);
       console.log(`[applyReview] 방법 편집 지시 ${methodEdits.length}개 파싱`);
       const improvedMethod=applyEditInstructions(baseMethod,methodEdits);
+      pushOutputHistory('step_13_applied_method','llm','applyReview');
       outputs.step_13_applied_method=improvedMethod;
       markOutputTimestamp('step_13_applied_method');
     }
@@ -3842,11 +4003,13 @@ ${baseMethod}`);
 }
 function showReviewDiff(mode){
   const area=document.getElementById('reviewDiffArea'),bb=document.getElementById('btnDiffBefore'),ba=document.getElementById('btnDiffAfter');if(!area)return;
+  // [P-C1] beforeReviewText → outputHistory 기반 조회
+  const _preReview08=getLastHistoryByOrigin('step_08','pre_review');
+  const _preReviewText=_preReview08?_preReview08.value:'(없음)';
   if(mode==='before'){
-    const text=beforeReviewText||'(없음)';
+    const text=_preReviewText;
     area.value=text;
     if(bb)bb.className='btn btn-primary btn-sm';if(ba)ba.className='btn btn-outline btn-sm';
-    // v10.2: 글자수 표시
     if(bb)bb.innerHTML=`반영 전 <span class="badge badge-neutral" style="margin-left:4px;font-size:10px">${text.length.toLocaleString()}자</span>`;
     if(ba){
       let afterText=outputs.step_13_applied||'(없음)';
@@ -3855,15 +4018,13 @@ function showReviewDiff(mode){
     }
   }
   else{
-    // v9.1: 장치 + 방법 검토 반영본 모두 표시
     let afterText=outputs.step_13_applied||'(없음)';
     if(outputs.step_13_applied_method){
       afterText+='\n\n═══ [방법 상세설명 검토 반영본] ═══\n\n'+outputs.step_13_applied_method;
     }
     area.value=afterText;
     if(bb)bb.className='btn btn-outline btn-sm';if(ba)ba.className='btn btn-primary btn-sm';
-    // v10.2: 글자수 표시
-    const beforeText=beforeReviewText||'(없음)';
+    const beforeText=_preReviewText;
     if(bb)bb.innerHTML=`반영 전 <span class="badge badge-neutral" style="margin-left:4px;font-size:10px">${beforeText.length.toLocaleString()}자</span>`;
     if(ba)ba.innerHTML=`반영 후 <span class="badge badge-neutral" style="margin-left:4px;font-size:10px">${afterText.length.toLocaleString()}자</span>`;
     // v10.2: 분량 변화 안내
@@ -3973,6 +4134,7 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
       }
     }
     
+    pushOutputHistory(sid,'llm','runDiagramStep');
     outputs[sid]=designText;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);
     renderOutput(sid,designText);
     
@@ -4185,6 +4347,7 @@ ${figNums.length>1?figNums.slice(1).map(n=>'\n---CONCEPT_FIG_'+n+'---\n<svg>...<
     }
 
     // 결과 저장
+    pushOutputHistory('step_07c','llm','runConceptDiagramStep');
     outputs.step_07c=conceptDiagramTypes.map((ct,i)=>{
       const figNum=figNums[i]||'?';
       const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
@@ -4223,19 +4386,23 @@ async function runBatch25(){
       searchPriorArt(selectedTitle)
     ]);
     
+    pushOutputHistory('step_02','llm','runBatch25');
     outputs.step_02=r02.text;markOutputTimestamp('step_02');
     renderBatchResult('resultsBatch25','step_02',r02.text);
-    
+
+    pushOutputHistory('step_03','llm','runBatch25');
     outputs.step_03=r03.text;markOutputTimestamp('step_03');
     renderBatchResult('resultsBatch25','step_03',r03.text);
-    
+
+    pushOutputHistory('step_04','llm','runBatch25');
     if(r04){outputs.step_04=r04.formatted;renderBatchResult('resultsBatch25','step_04',r04.formatted);}
     else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderBatchResult('resultsBatch25','step_04',outputs.step_04);}
     markOutputTimestamp('step_04');
-    
+
     // step_05는 step_03에 의존하므로 순차 실행
     App.showProgress('progressBatch','해결하고자 하는 과제 (2/2)',2,2);
     const r05=await App.callClaude(buildPrompt('step_05'));
+    pushOutputHistory('step_05','llm','runBatch25');
     outputs.step_05=r05.text;markOutputTimestamp('step_05');
     renderBatchResult('resultsBatch25','step_05',r05.text);
     
@@ -4244,7 +4411,7 @@ async function runBatch25(){
   }catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}
   finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}
 }
-async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;markOutputTimestamp(steps[i]);renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
+async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));pushOutputHistory(steps[i],'llm','runBatchFinish');outputs[steps[i]]=r.text;markOutputTimestamp(steps[i]);renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
 
 // ═══ v14: Phase 기반 배치 실행 (역설계 체인) ═══
 
@@ -4266,6 +4433,7 @@ async function runPhaseD(){
       const sid=steps[i];
       App.showProgress('progressPhaseD',`${stepLabels[sid]} (${i+1}/${steps.length})`,i+1,steps.length);
       const r=await App.callClaude(buildPrompt(sid));
+      pushOutputHistory(sid,'llm','runPhaseD');
       outputs[sid]=r.text;
       markOutputTimestamp(sid);
       if(container)renderBatchResult('resultsPhaseDChain',sid,r.text);
@@ -4293,6 +4461,7 @@ async function runPhaseF(){
     for(let i=0;i<steps.length;i++){
       App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/${steps.length})`,i+1,steps.length);
       const r=await App.callClaude(buildPrompt(steps[i]));
+      pushOutputHistory(steps[i],'llm','runPhaseF');
       outputs[steps[i]]=r.text;markOutputTimestamp(steps[i]);
       renderBatchResult('resultsBatchFinish',steps[i],r.text);
     }
@@ -6151,6 +6320,7 @@ ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
       }
     }
     
+    pushOutputHistory(stepId,'llm','regenerateDiagramWithFeedback');
     outputs[stepId]=regenDesign;
     const resEl=document.getElementById(stepId==='step_07'?'resStep07':'resStep11');
     if(resEl)resEl.value=regenDesign;
@@ -11836,9 +12006,9 @@ function renderTitleCards(c,text){
   c.innerHTML='<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'+cs.map(x=>`<div class="title-candidate-row" onclick="selectTitle(this,\`${x.korean.replace(/\`/g,'')}\`,\`${x.english.replace(/\`/g,'')}\`)" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:2px solid var(--color-border);border-radius:10px;cursor:pointer;transition:all 0.15s;background:#fff" onmouseover="this.style.borderColor='var(--color-primary)';this.style.background='var(--color-primary-light)'" onmouseout="if(!this.classList.contains('selected')){this.style.borderColor='var(--color-border)';this.style.background='#fff'}"><div style="width:28px;height:28px;border-radius:50%;background:var(--color-primary-light);color:var(--color-primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${x.num}</div><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--color-text-primary)">${App.escapeHtml(x.korean)}</div><div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">${App.escapeHtml(x.english)}</div></div></div>`).join('')+'</div>';
   document.getElementById('titleConfirmArea').style.display='block';
 }
-function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tf">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tf">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
-function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral" id="charCount_${sid}">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="outputs['${sid}']=this.value;markOutputTimestamp('${sid}');saveProject(true);document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'" oninput="outputs['${sid}']=this.value;document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'">${App.escapeHtml(text)}</textarea></div>`;}
-function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tf">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
+function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tf">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tf">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="pushOutputHistory('${sid}','user_edit','renderClaimResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
+function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral" id="charCount_${sid}">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="pushOutputHistory('${sid}','user_edit','renderEditableResult');outputs['${sid}']=this.value;markOutputTimestamp('${sid}');saveProject(true);document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'" oninput="outputs['${sid}']=this.value;document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'">${App.escapeHtml(text)}</textarea></div>`;}
+function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tf">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="pushOutputHistory('${sid}','user_edit','renderBatchResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
 function toggleAccordion(h){h.classList.toggle('open');const b=h.nextElementSibling;if(b)b.classList.toggle('open');}
 
 // ═══════════ VALIDATION (v4.9 — full claim chain + relaxed matching) ═══════════
