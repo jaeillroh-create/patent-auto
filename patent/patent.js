@@ -110,7 +110,18 @@ const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_0
       // v20: 마지막 부분 컨텍스트 준비 — 불완전 문장도 포함하여 정확한 이어쓰기 유도
       const tail = full.slice(-2000);
 
-      const contPrompt = `[원본 작성 규칙 — 이어쓰기에서도 동일하게 적용]
+      // step_13(검토)은 검토 항목 이어쓰기, 그 외(상세설명)는 기존 로직
+      const _isReview = pid && /step.?13/i.test(pid);
+      const contPrompt = _isReview
+        ? `아래 [마지막 부분]의 검토 텍스트가 중간에 잘려 있다. 잘린 지점의 바로 다음부터 이어서 작성하라.
+- 마지막 문장이 불완전하면 해당 문장의 나머지부터 시작하라.
+- [마지막 부분]의 내용을 절대 반복하지 마라. 오직 잘린 다음부터만 작성하라.
+- 검토 항목 번호([1]~[11])와 출력 형식(✅/⚠️)을 이어서 유지하라.
+- 보완/수정 제안에서 "기재 누락"인 경우에도 반드시 수정 문장(추가할 문장)을 함께 제시하라.
+
+[마지막 부분]
+${tail}`
+        : `[원본 작성 규칙 — 이어쓰기에서도 동일하게 적용]
 ${rulesCtx}
 
 [이어쓰기 지시]
@@ -139,8 +150,8 @@ ${tail}`;
         console.log(`[v20 이어쓰기] 겹침 ${overlap}자 제거`);
       }
 
-      // ★ v20: "도 N을 참조하면" 재시작 감지 — 이미 작성된 도면을 다시 시작하면 해당 부분 제거 ★
-      if(figRefs.length > 0){
+      // ★ v20: "도 N을 참조하면" 재시작 감지 — 상세설명에서만 적용 (검토는 제외) ★
+      if(!_isReview && figRefs.length > 0){
         const writtenFigs = new Set(figRefs.map(m => m[1]));
         const newFigStart = newText.match(/도\s+(\d+)[을를]\s*참조하면/);
         if(newFigStart && writtenFigs.has(newFigStart[1])){
@@ -897,12 +908,17 @@ function invalidateDownstream(changedStep){
   const shouldDeps=(depObj.SHOULD||[]).filter(d=>d!=='step_13_applied'&&d!=='step_13_applied_method'&&outputs[d]);
   
   // ★ v9.1: 원본 step 재생성 시 검토 반영본 무효화 ★
-  // step_08 또는 step_09 변경 → 장치 검토 반영본 무효화
-  if(changedStep==='step_08'||changedStep==='step_09'){
+  // step_08, step_09, step_13 변경 → 장치 검토 반영본 무효화
+  if(changedStep==='step_08'||changedStep==='step_09'||changedStep==='step_13'){
     if(outputs.step_13_applied){
       delete outputs.step_13_applied;
       delete outputTimestamps.step_13_applied;
       console.log(`[v9.1] ${changedStep} 재생성 → step_13_applied 무효화`);
+    }
+    if(changedStep==='step_13'&&outputs.step_13_applied_method){
+      delete outputs.step_13_applied_method;
+      delete outputTimestamps.step_13_applied_method;
+      console.log(`[v9.1] step_13 재생성 → step_13_applied_method 무효화`);
     }
   }
   // step_12 변경 → 방법 검토 반영본 무효화
@@ -1218,7 +1234,7 @@ async function _cascadeRunShort(sid){
   const prompt=buildPrompt(sid);
   if(!prompt)return;
   if(sid==='step_13'){
-    const text=await App.callClaudeWithContinuation(prompt);
+    const text=await App.callClaudeWithContinuation(prompt,'progressStep13');
     outputs[sid]=text;
   }else{
     const r=await App.callClaude(prompt);
@@ -1401,7 +1417,7 @@ function _trimDesignTextToExpectedFigures(text,expectedNums){
 }
 async function _cascadeRunMath(){
   const r=await App.callClaude(buildPrompt('step_09'));
-  const baseDesc=outputs.step_13_applied||outputs.step_08||'';
+  const baseDesc=getLatestDescription()||'';
   outputs.step_09=insertMathBlocks(baseDesc,r.text);
   markOutputTimestamp('step_09');_cascadeRender('step_09',outputs.step_09);
 }
@@ -1439,9 +1455,8 @@ function insertBoilerplate(){
   outputs.step_08=STEP8_PREFIX+'\n\n'+cur+'\n\n'+STEP8_SUFFIX;
   renderOutput('step_08',outputs.step_08);
   // Also update step_09 and step_13_applied if they exist
-  if(outputs.step_09&&!hasBoilerplate(outputs.step_09)){outputs.step_09=STEP8_PREFIX+'\n\n'+outputs.step_09+'\n\n'+STEP8_SUFFIX;}
-  if(outputs.step_13_applied&&!hasBoilerplate(outputs.step_13_applied)){outputs.step_13_applied=STEP8_PREFIX+'\n\n'+outputs.step_13_applied+'\n\n'+STEP8_SUFFIX;}
-  // v9.1: 방법 검토 반영본은 정형문 대상 아님 (방법 상세설명은 별도 구조)
+  if(outputs.step_09&&!hasBoilerplate(outputs.step_09)){outputs.step_09=STEP8_PREFIX+'\n\n'+outputs.step_09+'\n\n'+STEP8_SUFFIX;markOutputTimestamp('step_09');}
+  if(outputs.step_13_applied&&!hasBoilerplate(outputs.step_13_applied)){outputs.step_13_applied=STEP8_PREFIX+'\n\n'+outputs.step_13_applied+'\n\n'+STEP8_SUFFIX;markOutputTimestamp('step_13_applied');}
   App.showToast('정형문 삽입 완료 (본문 전후에 자동 삽입됨)');
 }
 function hasBoilerplate(text){
@@ -1508,7 +1523,9 @@ function sanitizeDescFigureRefs(text,type){
   let maxAllowed;
   if(type==='device'){
     const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
-    maxAllowed=getLastFigureNumber(outputs.step_07||'')||deviceFigCount;
+    const _devMax=getLastFigureNumber(outputs.step_07||'')||deviceFigCount;
+    const _concCount=conceptDiagramTypes.filter(ct=>ct.svgContent).length;
+    maxAllowed=_devMax+_concCount;
   }else{
     // 방법: 장치 마지막 도면 + 방법 도면
     const deviceMax=getLastFigureNumber(outputs.step_07||'')||parseInt(document.getElementById('optDeviceFigures')?.value||4);
@@ -1844,7 +1861,7 @@ function computeFigNums(devCount,methCount,conceptCount){
 function getAutoFigNums(sid){
   const devCount=diagramData.step_07?.length||0;
   const methCount=diagramData.step_11?.length||0;
-  const cCount=conceptDiagramTypes.length||0;
+  const cCount=conceptDiagramTypes.filter(ct=>ct.svgContent).length||0;
   const r=computeFigNums(devCount,methCount,cCount);
   return sid==='step_07'?r.device:sid==='step_07c'?r.concept:r.method;
 }
@@ -2946,6 +2963,8 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
 [5] 보완/수정 제안
 - 위 1~4 및 8~11에서 발견된 문제에 대한 구체적 수정 문장을 제시하라
 - 형식: [위치] 현재 문장 → 수정 문장
+- ★ 기재 누락(해당 구성요소 설명이 없는 경우)에도 반드시 추가할 문장을 제시하라. "해당 없음"만 쓰고 수정 문장을 생략하지 마라.
+  형식: [추가 위치] 기재 누락 → (추가할 문장: 해당 구성요소의 동작 원리, 입출력, 기술적 효과 포함)
 
 [5-A] ★ 용어 통일 검토 (v14 신규) ★
 - 명세서 전체에서 동일 개념에 다른 용어를 사용한 곳을 모두 찾아 지적하라
@@ -3048,7 +3067,7 @@ ${hasTask?`★ 과제-효과 1:1 대응 원칙 ★
 ${T}
 ${hasTask?`[과제] ${outputs.step_05}`:''}
 [독립항] ${(outputs.step_06||'').match(/【청구항 1】[\s\S]*?(?=【청구항 2】|$)/)?.[0]||''}
-[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
+[상세설명] ${(getLatestDescription()||'').slice(0,2000)}${styleRef}`;
     }
     case 'step_17':return `과제의 해결 수단. 각 독립항 카테고리별로 요약하라.
 
@@ -3269,7 +3288,7 @@ async function runMathInsertion(){if(globalProcessing)return;const dep=checkDepe
     r={text:r.text+'\n'+r2.text};
     App.showToast(`수학식 ${mathBlocks.length}개→추가 생성 시도`,'info');
   }
-  const baseDesc=outputs.step_13_applied||outputs.step_08||'';
+  const baseDesc=getLatestDescription()||'';
   outputs.step_09=insertMathBlocks(baseDesc,r.text);
   // 삽입 후 실제 수학식 개수 검증
   const insertedCount=(outputs.step_09.match(/【수학식\s*\d+】/g)||[]).length;
@@ -3407,11 +3426,56 @@ function parseEditInstructions(text){
     const reason=(m[4]||'').trim();
     // CONTENT에서 다음 EDIT 또는 끝까지의 불필요한 텍스트 제거
     content=content.replace(/\n---EDIT_\d+---[\s\S]*/,'').trim();
+    // v10.4: CONTENT에서 검토 형식 텍스트 제거 (LLM이 검토 메타데이터를 혼입하는 문제 방지)
+    content=_sanitizeEditContent(content);
     if(anchor.length>=10&&content.length>=5){
       edits.push({anchor,action,content,reason});
     }
   }
   return edits;
+}
+
+// v10.4: CONTENT에서 검토 형식 메타데이터 제거
+function _sanitizeEditContent(content){
+  if(!content)return content;
+  let c=content;
+  // 패턴 1: "현재: ... 수정: ..." 형태 → 수정 부분만 추출
+  const curModMatch=c.match(/현재\s*:\s*[\s\S]*?수정\s*:\s*["']?([\s\S]+?)["']?\s*$/);
+  if(curModMatch){
+    c=curModMatch[1].trim();
+    console.log(`[_sanitizeEditContent] 현재/수정 형식 감지 → 수정 부분만 추출`);
+  }else{
+    // 패턴 2: "현재: ..." 단독 (수정 없이 현재 문장만 있는 경우 → 검토 설명이므로 제거)
+    if(/^현재\s*:/.test(c)){
+      c=c.replace(/^현재\s*:\s*/,'').trim();
+      console.log(`[_sanitizeEditContent] "현재:" 접두사 제거`);
+    }
+    // 패턴 3: "수정: ..." 단독 → 접두사만 제거
+    if(/^수정\s*:/.test(c)){
+      c=c.replace(/^수정\s*:\s*["']?/,'').replace(/["']\s*$/,'').trim();
+      console.log(`[_sanitizeEditContent] "수정:" 접두사 제거`);
+    }
+  }
+  // 패턴 4: "[위치: ...]" 접두사 제거
+  c=c.replace(/^\[위치\s*:\s*[^\]]*\]\s*/,'').trim();
+  // 패턴 5: "기재 누락 →" 또는 "해당 없음 →" 접두사 제거
+  c=c.replace(/^(?:기재\s*누락|해당\s*없음)\s*→?\s*/,'').trim();
+  // 패턴 6: 인라인 "현재 문장 → 수정 문장" 형태 (화살표 기준 분리)
+  const arrowMatch=c.match(/^(.+?)\s*→\s*(.+)$/s);
+  if(arrowMatch){
+    const before=arrowMatch[1].trim();
+    const after=arrowMatch[2].trim();
+    // 화살표 앞이 검토 설명이고 뒤가 실제 특허 문장인 경우
+    if(/부재|누락|불일치|미흡|부족|모호/.test(before)&&after.length>before.length*0.5){
+      c=after.replace(/^["']|["']$/g,'').trim();
+      console.log(`[_sanitizeEditContent] 검토→수정 화살표 형식 감지 → 수정 부분만 추출`);
+    }
+  }
+  // 패턴 7: 감싸는 큰따옴표/작은따옴표 제거 (전체를 감싸는 경우만)
+  if((c.startsWith('"')&&c.endsWith('"'))||(c.startsWith("'")&&c.endsWith("'"))){
+    c=c.slice(1,-1).trim();
+  }
+  return c;
 }
 
 // v10.3: 편집 지시를 원문에 적용 — 원본 구조 100% 보존
@@ -3448,14 +3512,43 @@ function applyEditInstructions(originalText,edits){
       console.warn(`[applyEditInstructions] 청구항/섹션 헤더 감지 → 건너뜀: "${edit.content.slice(0,40)}..."`);
       continue;
     }
+
+    // v10.4: 검토 형식 텍스트가 CONTENT에 잔존하는지 최종 검증
+    if(/(?:^|\n)\s*(?:현재\s*:|수정\s*:|→\s*["']|\[위치\s*:)/.test(edit.content)){
+      console.warn(`[applyEditInstructions] 검토 형식 잔존 감지 → 재정제: "${edit.content.slice(0,50)}..."`);
+      edit.content=_sanitizeEditContent(edit.content);
+      if(edit.content.length<5){console.warn(`[applyEditInstructions] 재정제 후 내용 부족 → 건너뜀`);continue;}
+    }
     
+    // v10.4: CONTENT 단어 잘림 복원 — CONTENT 시작부가 주변 원문의 단어 중간과 일치하면 누락 접두사 복원
+    // 예: 원문 "구체적으로" + CONTENT "적으로,..." → "구체" 복원 → "구체���으로,..."
+    const _surStart=Math.max(0,anchorStart-10);
+    const _surEnd=Math.min(result.length,sentenceEnd+30);
+    const _surText=result.slice(_surStart,_surEnd);
+    const _cHead=edit.content.slice(0,Math.min(8,edit.content.length));
+    if(_cHead.length>=2&&/[가-힣]/.test(_cHead[0])){
+      const _hIdx=_surText.indexOf(_cHead);
+      if(_hIdx>0){
+        const _cb=_surText[_hIdx-1];
+        if(/[가-힣]/.test(_cb)){
+          let _ws=_hIdx-1;
+          while(_ws>0&&/[가-힣]/.test(_surText[_ws-1]))_ws--;
+          const _missing=_surText.slice(_ws,_hIdx);
+          if(_missing.length>0&&_missing.length<=4&&!/\s/.test(_missing)){
+            console.warn(`[applyEditInstructions] 단어 잘림 복원: "${_missing}" + "${edit.content.slice(0,20)}..."`);
+            edit.content=_missing+edit.content;
+          }
+        }
+      }
+    }
+
     // v10.3: 중복 삽입 방지 — 이미 동일 내용이 근처에 있으면 건너뜀
     const nearbyRegion=result.slice(Math.max(0,anchorStart-200),Math.min(result.length,anchorStart+edit.anchor.length+500));
-    if(edit.action!=='MODIFY'&&nearbyRegion.includes(edit.content.slice(0,30))){
+    if(edit.action!=='MODIFY'&&nearbyRegion.includes(edit.content.slice(0,50))){
       console.warn(`[applyEditInstructions] 중복 감지 → 건너뜀: "${edit.content.slice(0,30)}..."`);
       continue;
     }
-    
+
     switch(edit.action){
       case 'ADD_AFTER':{
         const _afterChar=result[sentenceEnd]||'';
@@ -3480,7 +3573,13 @@ function applyEditInstructions(originalText,edits){
         break;
     }
   }
-  
+
+  // v10.4: 전체 편집 완료 후 — 마침표 뒤 띄어쓰기 누락 교정
+  // "한다.이러한" → "한다. 이러한" (한글.한글 패턴, 소수점 제외)
+  result=result.replace(/([가-힣)\]])\.\s*([가-힣(【])/g,(m,p,n)=>{
+    return p+'. '+n;
+  });
+
   console.log(`[applyEditInstructions] 총 ${edits.length}개 중 ${appliedCount}개 적용 완료`);
   return result;
 }
@@ -3596,9 +3695,14 @@ REASON: ...
 - ⛔ 【수학식 N】 블록, 수학식 번호 참조 금지 (수학식은 별도 처리).
 - ⛔ "~하는 단계", "S100" 등 방법 표현 금지. 장치 구성요소(~부)의 동작만.
 - ⛔ 기존 문장을 삭제하는 편집 금지. 추가(ADD)와 수정(MODIFY)만 가능.
+- ⛔⛔⛔ CONTENT에 검토 형식 텍스트를 절대 포함하지 마라:
+  "현재:", "수정:", "[위치:", "→", "✅", "⚠️", "기재 누락", "해당 없음" 등 검토 메타데이터 금지.
+  CONTENT에는 오직 상세설명에 실제로 삽입/교체될 순수 특허 문장만 작성하라.
+  검토의 "수정:" 뒤에 제안된 문장만 참고하여 CONTENT를 작성하되, "수정:" 접두사 자체는 제외하라.
 - "뒷받침 부족" → 해당 구성요소 설명 뒤에 동작 원리를 ADD_AFTER
 - "앵커 종속항 보완" → 해당 구성요소 뒤에 (1) 동작 상세 (2) 기술적 효과 ADD_AFTER
 - "용어 불일치" → 해당 문장을 올바른 용어로 MODIFY
+- "기재 누락" → 가장 가까운 관련 문장을 ANCHOR로 사용하고 ADD_AFTER로 새 문장 추가
 - 검토에서 지적되지 않은 부분은 편집하지 마라.
 - 최대 15개 이내로 핵심 지적만 반영하라.
 
@@ -3675,8 +3779,10 @@ CONTENT: (추가/수정할 문장. 특허문체.)
 REASON: (검토 항목)
 
 [규칙]
-- ANCHOR는 [현재 방법 상세설명]에 실제 존재하는 문장. 
+- ANCHOR는 [현재 방법 상세설명]에 실제 존재하는 문장.
 - ⛔ 【청구항 N】, 청구항 번호/구조 절대 금지.
+- ⛔⛔⛔ CONTENT에 검토 형식 텍스트 절대 금지: "현재:", "수정:", "[위치:", "→", "✅", "⚠️", "기재 누락" 등.
+  CONTENT에는 오직 삽입/교체될 순수 특허 문장만 작성하라.
 - 방법 상세설명만 편집. 장치 블록도 내용 금지.
 - 수행 주체: "${getDeviceSubject()}". 최대 10개 편집.
 
@@ -4607,10 +4713,10 @@ function stripMathBlocks(text){
   let r=text.replace(/\n*【수학식\s*\d+】[\s\S]*?(?=\n(?:도\s|이때|또한|한편|다음|여기서|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}(?:서버|시스템|장치|단말)|\n|$))/g,'');
   // Pattern 2: Standalone math block headers that might remain
   r=r.replace(/\n*【수학식\s*\d+】[^\n]*\n/g,'\n');
-  // Pattern 3: Remove "여기서," blocks that follow math formulas
-  r=r.replace(/\n여기서,[\s\S]*?(?=\n\n)/g,'');
-  // Pattern 4: Remove math example blocks (old and new format)
-  r=r.replace(/\n(?:예시 대입:|예를 들어,|일 예로,|구체적 예시로,)[\s\S]*?(?=\n\n)/g,'');
+  // Pattern 3: Remove "여기서," blocks — 수학식 직후 잔여물만 제거 (일반 서술 보호)
+  r=r.replace(/\n여기서,\s*\n[A-Z_a-z\s(]+[=:][^\n]*(?:\n(?![가-힣])[^\n]*)*/g,'');
+  // Pattern 4: Remove math example blocks — 수학식 변수 설명 패턴만 제거
+  r=r.replace(/\n(?:예시 대입:|일 예로,|구체적 예시로,)[\s\S]*?(?=\n\n)/g,'');
   // Clean up multiple newlines
   r=r.replace(/\n{3,}/g,'\n\n');
   return r.trim();
@@ -4659,7 +4765,12 @@ function extractExistingMathBlocks(text){
     // 소수점(3.14 등)을 보호한 후 문장 분리 — 소수점에서 잘리는 앵커 방지
     const _safeBefore=before.replace(/(\d)\.(\d)/g,'$1�$2');
     const sentences=_safeBefore.split(/[.。]\s*/);
-    const anchor=(sentences.length>1?sentences[sentences.length-2]:'').replace(/�/g,'.').trim();
+    // 마지막 비어있지 않은 완전한 문장을 앵커로 사용 (마지막 요소는 불완전 조각일 수 있음)
+    let anchor='';
+    for(let si=sentences.length-1;si>=0;si--){
+      const s=sentences[si].replace(/�/g,'.').trim();
+      if(s.length>=10){anchor=s;break;}
+    }
     if(anchor.length>=10)blocks.push({anchor,formula});
   }
   return blocks;
@@ -4699,7 +4810,7 @@ function fuzzyFindAnchor(text,anchor){
     try{
       const re=new RegExp(keyPhrase);
       const km=text.match(re);
-      if(km)return text.indexOf(km[0]);
+      if(km&&km.index!=null)return km.index;
     }catch(e){/* regex 실패 시 4차로 */}
   }
   // 4차: 앵커 앞 20자로 부분 매칭
@@ -4750,41 +4861,47 @@ function findSentenceEndAfterAnchor(text,anchorStart,anchor){
     }
   }
   
-  // Step 1.5: actualEnd 직전(~3자)에 문장 종결 마침표가 있으면 그것을 사용
+  // Step 1.5: actualEnd 직전(~6자)에 문장 종결 마침표가 있으면 그것을 사용
   // (정규화 오차로 actualEnd가 마침표 직후를 넘어간 경우 보정)
-  for(let pos=Math.min(actualEnd,text.length-1);pos>=Math.max(0,actualEnd-3);pos--){
+  for(let pos=Math.min(actualEnd,text.length-1);pos>=Math.max(0,actualEnd-6);pos--){
     if(text[pos]==='.'){
       const _b4=text.slice(Math.max(0,pos-4),pos);
       const _pc=pos>0?text[pos-1]:'';
       const _nx=pos+1<text.length?text[pos+1]:'';
       if(/\d/.test(_pc)&&/\d/.test(_nx))continue;
-      if(/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다)$/.test(_b4))return pos+1;
+      if(/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다|난다|진다|낸다|넓다|깊다|길다|는다)$/.test(_b4))return pos+1;
       if((!_nx||_nx===' '||_nx==='\n'||_nx==='\r')&&/[가-힣)]/.test(_pc))return pos+1;
+      // v10.4: 한글.한글 — 띄어쓰기 누락된 문장 경계 (소수점은 위에서 이미 제외됨)
+      if(/[가-힣)]/.test(_pc)&&/[가-힣(]/.test(_nx))return pos+1;
     }
   }
 
   // Step 2: actualEnd부터 한국어 문장 종결 패턴(~다.) 찾기
   for(let pos=actualEnd;pos<text.length;pos++){
     if(text[pos]==='.'){
-      // 마침표 앞 2~3자가 한국어 종결어미인지 확인
       const before=text.slice(Math.max(0,pos-4),pos);
       const next=pos+1<text.length?text[pos+1]:'';
-      
+
       // "0.5" 같은 소수점은 건너뜀
       const prevChar=pos>0?text[pos-1]:'';
       if(/\d/.test(prevChar)&&/\d/.test(next))continue;
-      
-      // 한국어 문장 종결 패턴 — 가장 신뢰도 높은 기준
-      const isKoreanSentEnd=/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다)$/.test(before);
+
+      // 한국어 문장 종결 패턴
+      const isKoreanSentEnd=/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다|난다|진다|낸다|넓다|깊다|길다|는다)$/.test(before);
       // "~수 있다." "~할 수 있다." 패턴
       const isCanPattern=/있다$/.test(before)&&/수\s*있다/.test(text.slice(Math.max(0,pos-10),pos));
-      
+
       if(isKoreanSentEnd||isCanPattern){
         return pos+1;
       }
-      
+
       // 마침표 다음이 공백/줄바꿈/EOF이고, 앞 글자가 한글이면 문장 끝 가능
       if((!next||next===' '||next==='\n'||next==='\r')&&/[가-힣)]/.test(prevChar)){
+        return pos+1;
+      }
+
+      // v10.4: 한글.한글 — 띄어쓰기 누락된 문장 경계 (소수점은 위에서 이미 제외됨)
+      if(/[가-힣)]/.test(prevChar)&&/[가-힣(]/.test(next)){
         return pos+1;
       }
     }
@@ -4878,8 +4995,14 @@ function _deduplicateSentences(text){
       }
     }
     
-    // 역순 제거
+    // 역순 제거 (겹치는 범위 병합)
     toRemove.sort((a,b)=>b.start-a.start);
+    for(let i=toRemove.length-1;i>0;i--){
+      if(toRemove[i].start<toRemove[i-1].end){
+        toRemove[i-1]={start:Math.min(toRemove[i-1].start,toRemove[i].start),end:Math.max(toRemove[i-1].end,toRemove[i].end),text:toRemove[i-1].text};
+        toRemove.splice(i,1);
+      }
+    }
     for(const rm of toRemove){
       let start=rm.start;
       let end=rm.end;
