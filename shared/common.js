@@ -256,7 +256,7 @@ async function callClaudeSonnet(prompt,maxTokens=8192){
     return{text:parsed.text,stopReason:parsed.stopReason};
   }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃');throw e;}
 }
-async function callClaudeWithContinuation(prompt,pid){let full='',r=await callClaude(prompt),a=0;full=r.text;while(a<6&&r.stopReason==='max_tokens'){a++;showProgress(pid,`이어서 작성 중... (${a}/6)`,a,6);r=await callClaude(`아래 특허명세서 뒷부분을 이어서 작성. 앞부분 반복 금지. 동일 문체.\n\n[마지막]\n${full.slice(-2000)}`);full+='\n'+r.text;}clearProgress(pid);return full;}
+async function callClaudeWithContinuation(prompt,pid){let full='',r=await callClaude(prompt),a=0;full=r.text;while(a<6&&r.stopReason==='max_tokens'){a++;showProgress(pid,`이어서 작성 중... (${a}/6)`,a,6);r=await callClaude(`아래 [마지막 부분]의 텍스트가 중간에 잘려 있다. 잘린 지점의 바로 다음부터 이어서 작성하라.\n- 마지막 단어가 불완전하면 해당 단어의 나머지 글자부터 시작하라.\n- [마지막 부분]의 내용을 반복하지 마라. 동일 문체.\n\n[마지막 부분]\n${full.slice(-2000)}`);const lc=full.slice(-1),fc=r.text[0]||'';if(/[가-힯a-zA-Z0-9]/.test(lc)&&/[가-힯a-zA-Z0-9]/.test(fc))full+=r.text;else full+='\n'+r.text;}clearProgress(pid);return full;}
 
 // ═══ FILE EXTRACTION ═══
 async function extractTextFromFile(file) {

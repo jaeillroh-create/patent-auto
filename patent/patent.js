@@ -132,26 +132,11 @@ ${tail}`;
       r = await App.callClaude(contPrompt);
       let newText = r.text;
 
-      // ★ v20: 겹침(overlap) 감지 — full 끝부분과 newText 시작부분이 동일하면 제거 ★
+      // ★ v20: 겹침(overlap) 감지 — full 끝부분과 newText 시작부분이 동일한 문자열이면 제거 ★
       const overlap = _findOverlap(full, newText, 500);
       if(overlap > 10){
         newText = newText.slice(overlap);
         console.log(`[v20 이어쓰기] 겹침 ${overlap}자 제거`);
-      }
-
-      // ★ v20: 대규모 중복 감지 — 이미 작성된 문장이 newText에서 반복되면 제거 ★
-      const fullTail = full.slice(-1000);
-      // 마지막 300자에서 완전한 문장 추출하여 newText에서 중복 검색
-      const tailSentences = fullTail.match(/[^.]*[다함됨임]\.(?:\s|$)/g) || [];
-      for(const sent of tailSentences){
-        const trimmed = sent.trim();
-        if(trimmed.length < 30) continue;
-        const dupPos = newText.indexOf(trimmed);
-        if(dupPos >= 0 && dupPos < 200){
-          newText = newText.slice(dupPos + trimmed.length);
-          console.log(`[v20 이어쓰기] 중복 문장 제거: "${trimmed.slice(0,40)}..." (${trimmed.length}자)`);
-          break;
-        }
       }
 
       // ★ v20: "도 N을 참조하면" 재시작 감지 — 이미 작성된 도면을 다시 시작하면 해당 부분 제거 ★
