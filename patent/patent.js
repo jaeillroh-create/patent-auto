@@ -3426,11 +3426,56 @@ function parseEditInstructions(text){
     const reason=(m[4]||'').trim();
     // CONTENT에서 다음 EDIT 또는 끝까지의 불필요한 텍스트 제거
     content=content.replace(/\n---EDIT_\d+---[\s\S]*/,'').trim();
+    // v10.4: CONTENT에서 검토 형식 텍스트 제거 (LLM이 검토 메타데이터를 혼입하는 문제 방지)
+    content=_sanitizeEditContent(content);
     if(anchor.length>=10&&content.length>=5){
       edits.push({anchor,action,content,reason});
     }
   }
   return edits;
+}
+
+// v10.4: CONTENT에서 검토 형식 메타데이터 제거
+function _sanitizeEditContent(content){
+  if(!content)return content;
+  let c=content;
+  // 패턴 1: "현재: ... 수정: ..." 형태 → 수정 부분만 추출
+  const curModMatch=c.match(/현재\s*:\s*[\s\S]*?수정\s*:\s*["']?([\s\S]+?)["']?\s*$/);
+  if(curModMatch){
+    c=curModMatch[1].trim();
+    console.log(`[_sanitizeEditContent] 현재/수정 형식 감지 → 수정 부분만 추출`);
+  }else{
+    // 패턴 2: "현재: ..." 단독 (수정 없이 현재 문장만 있는 경우 → 검토 설명이므로 제거)
+    if(/^현재\s*:/.test(c)){
+      c=c.replace(/^현재\s*:\s*/,'').trim();
+      console.log(`[_sanitizeEditContent] "현재:" 접두사 제거`);
+    }
+    // 패턴 3: "수정: ..." 단독 → 접두사만 제거
+    if(/^수정\s*:/.test(c)){
+      c=c.replace(/^수정\s*:\s*["']?/,'').replace(/["']\s*$/,'').trim();
+      console.log(`[_sanitizeEditContent] "수정:" 접두사 제거`);
+    }
+  }
+  // 패턴 4: "[위치: ...]" 접두사 제거
+  c=c.replace(/^\[위치\s*:\s*[^\]]*\]\s*/,'').trim();
+  // 패턴 5: "기재 누락 →" 또는 "해당 없음 →" 접두사 제거
+  c=c.replace(/^(?:기재\s*누락|해당\s*없음)\s*→?\s*/,'').trim();
+  // 패턴 6: 인라인 "현재 문장 → 수정 문장" 형태 (화살표 기준 분리)
+  const arrowMatch=c.match(/^(.+?)\s*→\s*(.+)$/s);
+  if(arrowMatch){
+    const before=arrowMatch[1].trim();
+    const after=arrowMatch[2].trim();
+    // 화살표 앞이 검토 설명이고 뒤가 실제 특허 문장인 경우
+    if(/부재|누락|불일치|미흡|부족|모호/.test(before)&&after.length>before.length*0.5){
+      c=after.replace(/^["']|["']$/g,'').trim();
+      console.log(`[_sanitizeEditContent] 검토→수정 화살표 형식 감지 → 수정 부분만 추출`);
+    }
+  }
+  // 패턴 7: 감싸는 큰따옴표/작은따옴표 제거 (전체를 감싸는 경우만)
+  if((c.startsWith('"')&&c.endsWith('"'))||(c.startsWith("'")&&c.endsWith("'"))){
+    c=c.slice(1,-1).trim();
+  }
+  return c;
 }
 
 // v10.3: 편집 지시를 원문에 적용 — 원본 구조 100% 보존
@@ -3466,6 +3511,13 @@ function applyEditInstructions(originalText,edits){
     if(/【청구항|청구항\s*\d+|【발명|【기술분야|【배경기술/.test(edit.content)){
       console.warn(`[applyEditInstructions] 청구항/섹션 헤더 감지 → 건너뜀: "${edit.content.slice(0,40)}..."`);
       continue;
+    }
+
+    // v10.4: 검토 형식 텍스트가 CONTENT에 잔존하는지 최종 검증
+    if(/(?:^|\n)\s*(?:현재\s*:|수정\s*:|→\s*["']|\[위치\s*:)/.test(edit.content)){
+      console.warn(`[applyEditInstructions] 검토 형식 잔존 감지 → 재정제: "${edit.content.slice(0,50)}..."`);
+      edit.content=_sanitizeEditContent(edit.content);
+      if(edit.content.length<5){console.warn(`[applyEditInstructions] 재정제 후 내용 부족 → 건너뜀`);continue;}
     }
     
     // v10.3: 중복 삽입 방지 — 이미 동일 내용이 근처에 있으면 건너뜀
@@ -3615,9 +3667,14 @@ REASON: ...
 - ⛔ 【수학식 N】 블록, 수학식 번호 참조 금지 (수학식은 별도 처리).
 - ⛔ "~하는 단계", "S100" 등 방법 표현 금지. 장치 구성요소(~부)의 동작만.
 - ⛔ 기존 문장을 삭제하는 편집 금지. 추가(ADD)와 수정(MODIFY)만 가능.
+- ⛔⛔⛔ CONTENT에 검토 형식 텍스트를 절대 포함하지 마라:
+  "현재:", "수정:", "[위치:", "→", "✅", "⚠️", "기재 누락", "해당 없음" 등 검토 메타데이터 금지.
+  CONTENT에는 오직 상세설명에 실제로 삽입/교체될 순수 특허 문장만 작성하라.
+  검토의 "수정:" 뒤에 제안된 문장만 참고하여 CONTENT를 작성하되, "수정:" 접두사 자체는 제외하라.
 - "뒷받침 부족" → 해당 구성요소 설명 뒤에 동작 원리를 ADD_AFTER
 - "앵커 종속항 보완" → 해당 구성요소 뒤에 (1) 동작 상세 (2) 기술적 효과 ADD_AFTER
 - "용어 불일치" → 해당 문장을 올바른 용어로 MODIFY
+- "기재 누락" → 가장 가까운 관련 문장을 ANCHOR로 사용하고 ADD_AFTER로 새 문장 추가
 - 검토에서 지적되지 않은 부분은 편집하지 마라.
 - 최대 15개 이내로 핵심 지적만 반영하라.
 
@@ -3694,8 +3751,10 @@ CONTENT: (추가/수정할 문장. 특허문체.)
 REASON: (검토 항목)
 
 [규칙]
-- ANCHOR는 [현재 방법 상세설명]에 실제 존재하는 문장. 
+- ANCHOR는 [현재 방법 상세설명]에 실제 존재하는 문장.
 - ⛔ 【청구항 N】, 청구항 번호/구조 절대 금지.
+- ⛔⛔⛔ CONTENT에 검토 형식 텍스트 절대 금지: "현재:", "수정:", "[위치:", "→", "✅", "⚠️", "기재 누락" 등.
+  CONTENT에는 오직 삽입/교체될 순수 특허 문장만 작성하라.
 - 방법 상세설명만 편집. 장치 블록도 내용 금지.
 - 수행 주체: "${getDeviceSubject()}". 최대 10개 편집.
 
