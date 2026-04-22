@@ -908,12 +908,17 @@ function invalidateDownstream(changedStep){
   const shouldDeps=(depObj.SHOULD||[]).filter(d=>d!=='step_13_applied'&&d!=='step_13_applied_method'&&outputs[d]);
   
   // ★ v9.1: 원본 step 재생성 시 검토 반영본 무효화 ★
-  // step_08 또는 step_09 변경 → 장치 검토 반영본 무효화
-  if(changedStep==='step_08'||changedStep==='step_09'){
+  // step_08, step_09, step_13 변경 → 장치 검토 반영본 무효화
+  if(changedStep==='step_08'||changedStep==='step_09'||changedStep==='step_13'){
     if(outputs.step_13_applied){
       delete outputs.step_13_applied;
       delete outputTimestamps.step_13_applied;
       console.log(`[v9.1] ${changedStep} 재생성 → step_13_applied 무효화`);
+    }
+    if(changedStep==='step_13'&&outputs.step_13_applied_method){
+      delete outputs.step_13_applied_method;
+      delete outputTimestamps.step_13_applied_method;
+      console.log(`[v9.1] step_13 재생성 → step_13_applied_method 무효화`);
     }
   }
   // step_12 변경 → 방법 검토 반영본 무효화
@@ -1229,7 +1234,7 @@ async function _cascadeRunShort(sid){
   const prompt=buildPrompt(sid);
   if(!prompt)return;
   if(sid==='step_13'){
-    const text=await App.callClaudeWithContinuation(prompt);
+    const text=await App.callClaudeWithContinuation(prompt,'progressStep13');
     outputs[sid]=text;
   }else{
     const r=await App.callClaude(prompt);
@@ -1412,7 +1417,7 @@ function _trimDesignTextToExpectedFigures(text,expectedNums){
 }
 async function _cascadeRunMath(){
   const r=await App.callClaude(buildPrompt('step_09'));
-  const baseDesc=outputs.step_13_applied||outputs.step_08||'';
+  const baseDesc=getLatestDescription()||'';
   outputs.step_09=insertMathBlocks(baseDesc,r.text);
   markOutputTimestamp('step_09');_cascadeRender('step_09',outputs.step_09);
 }
@@ -1450,9 +1455,8 @@ function insertBoilerplate(){
   outputs.step_08=STEP8_PREFIX+'\n\n'+cur+'\n\n'+STEP8_SUFFIX;
   renderOutput('step_08',outputs.step_08);
   // Also update step_09 and step_13_applied if they exist
-  if(outputs.step_09&&!hasBoilerplate(outputs.step_09)){outputs.step_09=STEP8_PREFIX+'\n\n'+outputs.step_09+'\n\n'+STEP8_SUFFIX;}
-  if(outputs.step_13_applied&&!hasBoilerplate(outputs.step_13_applied)){outputs.step_13_applied=STEP8_PREFIX+'\n\n'+outputs.step_13_applied+'\n\n'+STEP8_SUFFIX;}
-  // v9.1: 방법 검토 반영본은 정형문 대상 아님 (방법 상세설명은 별도 구조)
+  if(outputs.step_09&&!hasBoilerplate(outputs.step_09)){outputs.step_09=STEP8_PREFIX+'\n\n'+outputs.step_09+'\n\n'+STEP8_SUFFIX;markOutputTimestamp('step_09');}
+  if(outputs.step_13_applied&&!hasBoilerplate(outputs.step_13_applied)){outputs.step_13_applied=STEP8_PREFIX+'\n\n'+outputs.step_13_applied+'\n\n'+STEP8_SUFFIX;markOutputTimestamp('step_13_applied');}
   App.showToast('정형문 삽입 완료 (본문 전후에 자동 삽입됨)');
 }
 function hasBoilerplate(text){
@@ -1519,7 +1523,9 @@ function sanitizeDescFigureRefs(text,type){
   let maxAllowed;
   if(type==='device'){
     const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
-    maxAllowed=getLastFigureNumber(outputs.step_07||'')||deviceFigCount;
+    const _devMax=getLastFigureNumber(outputs.step_07||'')||deviceFigCount;
+    const _concCount=conceptDiagramTypes.filter(ct=>ct.svgContent).length;
+    maxAllowed=_devMax+_concCount;
   }else{
     // 방법: 장치 마지막 도면 + 방법 도면
     const deviceMax=getLastFigureNumber(outputs.step_07||'')||parseInt(document.getElementById('optDeviceFigures')?.value||4);
@@ -1855,7 +1861,7 @@ function computeFigNums(devCount,methCount,conceptCount){
 function getAutoFigNums(sid){
   const devCount=diagramData.step_07?.length||0;
   const methCount=diagramData.step_11?.length||0;
-  const cCount=conceptDiagramTypes.length||0;
+  const cCount=conceptDiagramTypes.filter(ct=>ct.svgContent).length||0;
   const r=computeFigNums(devCount,methCount,cCount);
   return sid==='step_07'?r.device:sid==='step_07c'?r.concept:r.method;
 }
@@ -3061,7 +3067,7 @@ ${hasTask?`★ 과제-효과 1:1 대응 원칙 ★
 ${T}
 ${hasTask?`[과제] ${outputs.step_05}`:''}
 [독립항] ${(outputs.step_06||'').match(/【청구항 1】[\s\S]*?(?=【청구항 2】|$)/)?.[0]||''}
-[상세설명] ${(outputs.step_08||'').slice(0,2000)}${styleRef}`;
+[상세설명] ${(getLatestDescription()||'').slice(0,2000)}${styleRef}`;
     }
     case 'step_17':return `과제의 해결 수단. 각 독립항 카테고리별로 요약하라.
 
@@ -3282,7 +3288,7 @@ async function runMathInsertion(){if(globalProcessing)return;const dep=checkDepe
     r={text:r.text+'\n'+r2.text};
     App.showToast(`수학식 ${mathBlocks.length}개→추가 생성 시도`,'info');
   }
-  const baseDesc=outputs.step_13_applied||outputs.step_08||'';
+  const baseDesc=getLatestDescription()||'';
   outputs.step_09=insertMathBlocks(baseDesc,r.text);
   // 삽입 후 실제 수학식 개수 검증
   const insertedCount=(outputs.step_09.match(/【수학식\s*\d+】/g)||[]).length;
@@ -3464,7 +3470,7 @@ function applyEditInstructions(originalText,edits){
     
     // v10.3: 중복 삽입 방지 — 이미 동일 내용이 근처에 있으면 건너뜀
     const nearbyRegion=result.slice(Math.max(0,anchorStart-200),Math.min(result.length,anchorStart+edit.anchor.length+500));
-    if(edit.action!=='MODIFY'&&nearbyRegion.includes(edit.content.slice(0,30))){
+    if(edit.action!=='MODIFY'&&nearbyRegion.includes(edit.content.slice(0,50))){
       console.warn(`[applyEditInstructions] 중복 감지 → 건너뜀: "${edit.content.slice(0,30)}..."`);
       continue;
     }
@@ -4620,10 +4626,10 @@ function stripMathBlocks(text){
   let r=text.replace(/\n*【수학식\s*\d+】[\s\S]*?(?=\n(?:도\s|이때|또한|한편|다음|여기서|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}(?:서버|시스템|장치|단말)|\n|$))/g,'');
   // Pattern 2: Standalone math block headers that might remain
   r=r.replace(/\n*【수학식\s*\d+】[^\n]*\n/g,'\n');
-  // Pattern 3: Remove "여기서," blocks that follow math formulas
-  r=r.replace(/\n여기서,[\s\S]*?(?=\n\n)/g,'');
-  // Pattern 4: Remove math example blocks (old and new format)
-  r=r.replace(/\n(?:예시 대입:|예를 들어,|일 예로,|구체적 예시로,)[\s\S]*?(?=\n\n)/g,'');
+  // Pattern 3: Remove "여기서," blocks — 수학식 직후 잔여물만 제거 (일반 서술 보호)
+  r=r.replace(/\n여기서,\s*\n[A-Z_a-z\s(]+[=:][^\n]*(?:\n(?![가-힣])[^\n]*)*/g,'');
+  // Pattern 4: Remove math example blocks — 수학식 변수 설명 패턴만 제거
+  r=r.replace(/\n(?:예시 대입:|일 예로,|구체적 예시로,)[\s\S]*?(?=\n\n)/g,'');
   // Clean up multiple newlines
   r=r.replace(/\n{3,}/g,'\n\n');
   return r.trim();
@@ -4672,7 +4678,12 @@ function extractExistingMathBlocks(text){
     // 소수점(3.14 등)을 보호한 후 문장 분리 — 소수점에서 잘리는 앵커 방지
     const _safeBefore=before.replace(/(\d)\.(\d)/g,'$1�$2');
     const sentences=_safeBefore.split(/[.。]\s*/);
-    const anchor=(sentences.length>1?sentences[sentences.length-2]:'').replace(/�/g,'.').trim();
+    // 마지막 비어있지 않은 완전한 문장을 앵커로 사용 (마지막 요소는 불완전 조각일 수 있음)
+    let anchor='';
+    for(let si=sentences.length-1;si>=0;si--){
+      const s=sentences[si].replace(/�/g,'.').trim();
+      if(s.length>=10){anchor=s;break;}
+    }
     if(anchor.length>=10)blocks.push({anchor,formula});
   }
   return blocks;
@@ -4712,7 +4723,7 @@ function fuzzyFindAnchor(text,anchor){
     try{
       const re=new RegExp(keyPhrase);
       const km=text.match(re);
-      if(km)return text.indexOf(km[0]);
+      if(km&&km.index!=null)return km.index;
     }catch(e){/* regex 실패 시 4차로 */}
   }
   // 4차: 앵커 앞 20자로 부분 매칭
@@ -4763,15 +4774,15 @@ function findSentenceEndAfterAnchor(text,anchorStart,anchor){
     }
   }
   
-  // Step 1.5: actualEnd 직전(~3자)에 문장 종결 마침표가 있으면 그것을 사용
+  // Step 1.5: actualEnd 직전(~6자)에 문장 종결 마침표가 있으면 그것을 사용
   // (정규화 오차로 actualEnd가 마침표 직후를 넘어간 경우 보정)
-  for(let pos=Math.min(actualEnd,text.length-1);pos>=Math.max(0,actualEnd-3);pos--){
+  for(let pos=Math.min(actualEnd,text.length-1);pos>=Math.max(0,actualEnd-6);pos--){
     if(text[pos]==='.'){
       const _b4=text.slice(Math.max(0,pos-4),pos);
       const _pc=pos>0?text[pos-1]:'';
       const _nx=pos+1<text.length?text[pos+1]:'';
       if(/\d/.test(_pc)&&/\d/.test(_nx))continue;
-      if(/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다)$/.test(_b4))return pos+1;
+      if(/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다|난다|진다|낸다|넓다|깊다|길다)$/.test(_b4))return pos+1;
       if((!_nx||_nx===' '||_nx==='\n'||_nx==='\r')&&/[가-힣)]/.test(_pc))return pos+1;
     }
   }
@@ -4779,16 +4790,15 @@ function findSentenceEndAfterAnchor(text,anchorStart,anchor){
   // Step 2: actualEnd부터 한국어 문장 종결 패턴(~다.) 찾기
   for(let pos=actualEnd;pos<text.length;pos++){
     if(text[pos]==='.'){
-      // 마침표 앞 2~3자가 한국어 종결어미인지 확인
       const before=text.slice(Math.max(0,pos-4),pos);
       const next=pos+1<text.length?text[pos+1]:'';
-      
+
       // "0.5" 같은 소수점은 건너뜀
       const prevChar=pos>0?text[pos-1]:'';
       if(/\d/.test(prevChar)&&/\d/.test(next))continue;
-      
-      // 한국어 문장 종결 패턴 — 가장 신뢰도 높은 기준
-      const isKoreanSentEnd=/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다)$/.test(before);
+
+      // 한국어 문장 종결 패턴
+      const isKoreanSentEnd=/(?:한다|된다|있다|이다|같다|높다|낮다|않다|크다|작다|많다|적다|좋다|짧다|보다|온다|간다|준다|난다|진다|낸다|넓다|깊다|길다)$/.test(before);
       // "~수 있다." "~할 수 있다." 패턴
       const isCanPattern=/있다$/.test(before)&&/수\s*있다/.test(text.slice(Math.max(0,pos-10),pos));
       
@@ -4891,8 +4901,14 @@ function _deduplicateSentences(text){
       }
     }
     
-    // 역순 제거
+    // 역순 제거 (겹치는 범위 병합)
     toRemove.sort((a,b)=>b.start-a.start);
+    for(let i=toRemove.length-1;i>0;i--){
+      if(toRemove[i].start<toRemove[i-1].end){
+        toRemove[i-1]={start:Math.min(toRemove[i-1].start,toRemove[i].start),end:Math.max(toRemove[i-1].end,toRemove[i].end),text:toRemove[i-1].text};
+        toRemove.splice(i,1);
+      }
+    }
     for(const rm of toRemove){
       let start=rm.start;
       let end=rm.end;
