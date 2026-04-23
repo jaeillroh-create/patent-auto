@@ -833,9 +833,13 @@ async function runScopeCheckAll() {
 
 async function extractInventionScope() {
   const input = document.getElementById('projectInput')?.value || '';
-  if (input.trim().length < 50) {
-    App.showToast('발명 설명이 너무 짧습니다 (최소 50자)', 'error');
+  const trimmed = input.trim();
+  if (trimmed.length < 10) {
+    App.showToast('발명 설명을 입력해주세요 (최소 10자)', 'error');
     return;
+  }
+  if (trimmed.length < 50) {
+    App.showToast('발명 설명이 짧습니다 (권장 50자 이상). 추출 결과가 부실할 수 있습니다.', 'warning');
   }
   if (globalProcessing) return;
   setGlobalProcessing(true);
