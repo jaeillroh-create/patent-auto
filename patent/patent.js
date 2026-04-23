@@ -9461,7 +9461,20 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const _fig1Containers=nodes.filter(n=>n.isContainer);
     const _fig1LayoutNodes=_fig1Containers.length>0?nodes.filter(n=>!n.isContainer):nodes;
     const layout=computeDeviceLayout2D(_fig1LayoutNodes,edges,figNum);
-    const{grid,maxCols,numRows,uniqueEdges,biDirPairs}=layout;
+    const{grid:_rawGrid,maxCols,numRows,uniqueEdges,biDirPairs}=layout;
+    // [C2-5] layers 기반 grid col 재구축 — alignCol 오염 보정
+    const _layers=layout.layers;
+    const grid={};
+    if(_layers&&_layers.length>0){
+      _layers.forEach((layer,ri)=>{
+        layer.forEach((id,ci)=>{
+          if(id===null)return;
+          grid[id]={row:ri,col:ci,layerSize:layer.length};
+        });
+      });
+    }else{
+      Object.assign(grid,_rawGrid);
+    }
     
     // 열 수에 따른 박스 크기 조정
     // ★ v20: 간격 축소 — svgW 감소 → 컨테이너 내 1:1 표시 비율 확보 ★
