@@ -7822,6 +7822,12 @@ function parseMermaidGraph(code){
   code.split('\n').forEach(line=>{
     const l=line.trim();
     if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef'))return;
+    // [C2-1] subgraph 부모 컨테이너 노드 생성
+    if(l.startsWith('subgraph')){
+      const sgm=l.match(/^subgraph\s+(\w+)(?:\s*\[["']?(.+?)["']?\])?/);
+      if(sgm){const[,id,label]=sgm;if(!nodes[id])nodes[id]={id,label:(label||id).trim(),shape:'container',isContainer:true};}
+      return;
+    }
     
     // 노드 정의 패턴들 (순서 중요: 더 복잡한 패턴 먼저)
     const patterns=[
