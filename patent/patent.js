@@ -4607,6 +4607,8 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
       App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
     }
     onStepCompleted(sid);saveProject(true);
+    // [C1 자동 연쇄] SCOPE_GUARDED 스텝 생성 후 자동 검증
+    if(inventionScope?.locked_at&&(SCOPE_GUARDED_TEXT_STEPS.includes(sid)||SCOPE_GUARDED_MERMAID_STEPS.includes(sid))){try{await runScopeCheck(sid);}catch(e2){console.warn('[C1] runScopeCheck 자동 실행 실패:',sid,e2.message);}}
   }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
 async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);
   // v6.0: 부분 수정 모드 표시
@@ -4634,7 +4636,10 @@ async function runLongStep(sid){if(globalProcessing)return;const dep=checkDepend
       }
     }
     pushOutputHistory(sid,'llm','runLongStep');
-    outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
+    outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
+    // [C1 자동 연쇄] SCOPE_GUARDED 스텝 생성 후 자동 검증
+    if(inventionScope?.locked_at&&(SCOPE_GUARDED_TEXT_STEPS.includes(sid)||SCOPE_GUARDED_MERMAID_STEPS.includes(sid))){try{await runScopeCheck(sid);}catch(e2){console.warn('[C1] runScopeCheck 자동 실행 실패:',sid,e2.message);}}
+  }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
 async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{
   const TARGET_MATH_COUNT=5;
   let r=await App.callClaude(buildPrompt('step_09'));
