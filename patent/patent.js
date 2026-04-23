@@ -4003,7 +4003,6 @@ ${baseMethod}`);
 }
 function showReviewDiff(mode){
   const area=document.getElementById('reviewDiffArea'),bb=document.getElementById('btnDiffBefore'),ba=document.getElementById('btnDiffAfter');if(!area)return;
-  // [P-C1] beforeReviewText → outputHistory 기반 조회
   const _preReview08=getLastHistoryByOrigin('step_08','pre_review');
   const _preReviewText=_preReview08?_preReview08.value:'(없음)';
   if(mode==='before'){
