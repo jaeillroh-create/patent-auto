@@ -273,7 +273,7 @@ function clearAllState(){
   for(let i=1;i<=19;i++){const e=document.getElementById(`resultStep${String(i).padStart(2,'0')}`);if(e)e.innerHTML='';}
   // v5.5: Clear step user command inputs
   document.querySelectorAll('[id^="userCmd_"]').forEach(el=>{el.value='';});
-  ['resultsBatch25','resultsBatchFinish','validationResults','previewArea','diagramsStep07','diagramsStep11','conceptDiagramsArea','fileList','requiredFiguresList','resultStep20','invention-scope-panel'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
+  ['resultsBatch25','resultsBatchFinish','validationResults','previewArea','diagramsStep07','diagramsStep11','conceptDiagramsArea','fileList','requiredFiguresList','resultStep20','invention-scope-panel','scope-verification-summary','scope-verification-details'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
   ['btnApplyReview','diagramDownload07','diagramDownload11','reviewApplyResult'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   document.querySelectorAll('.tab-item').forEach((t,i)=>{t.classList.toggle('active',i===0);t.setAttribute('aria-selected',i===0);});
   document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('active',i===0));
@@ -1414,8 +1414,204 @@ function removeExpansion(componentName) {
   App.showToast('확장 승인이 해제되었습니다', 'success');
 }
 
+// ═══════════ [C1-6b] 판정 결과 UI ═══════════
+
+function _verdictLabel(verdict) {
+  return { elaboration: '범위 내 구체화', strategic_anchor: '전략적 확장', drift: '범위 이탈', undetermined: '판정 보류' }[verdict] || verdict;
+}
+function _verdictBadgeClass(verdict) {
+  return { elaboration: 'verdict-elaboration', strategic_anchor: 'verdict-anchor', drift: 'verdict-drift', undetermined: 'verdict-undetermined' }[verdict] || '';
+}
+function _verdictIcon(verdict) {
+  return { elaboration: '✓', strategic_anchor: '↗', drift: '!', undetermined: '?' }[verdict] || '·';
+}
+
+function renderScopeBadgeSummary(sid) {
+  const result = scopeCheckResults[sid];
+  if (!result || !result.verdicts || result.verdicts.length === 0) return '';
+  const verdicts = result.verdicts;
+  const driftCount = verdicts.filter(v => v.verdict === 'drift').length;
+  const undetCount = verdicts.filter(v => v.verdict === 'undetermined').length;
+  const total = verdicts.length;
+  let summary;
+  if (driftCount > 0) {
+    summary = `<span class="scope-badge verdict-drift" onclick="openScopeDetailPanel('${sid}')">! 범위 이탈 ${driftCount}건 / 전체 ${total}건</span>`;
+  } else if (undetCount > 0) {
+    summary = `<span class="scope-badge verdict-undetermined" onclick="openScopeDetailPanel('${sid}')">? 판정 보류 ${undetCount}건</span>`;
+  } else {
+    summary = `<span class="scope-badge verdict-elaboration" onclick="openScopeDetailPanel('${sid}')">✓ 범위 내 ${total}건 전부 확인됨</span>`;
+  }
+  return `<div class="scope-badge-wrapper">${summary}</div>`;
+}
+
+function renderScopeVerificationSection() {
+  const summaryEl = document.getElementById('scope-verification-summary');
+  const detailsEl = document.getElementById('scope-verification-details');
+  if (!summaryEl || !detailsEl) return;
+  if (!inventionScope?.locked_at) {
+    summaryEl.innerHTML = `<div class="scope-notice">발명 범위가 확정되지 않았습니다. A. 기본 탭에서 "범위 확정"을 먼저 진행하세요.</div>`;
+    detailsEl.innerHTML = '';
+    return;
+  }
+  const allSids = [...SCOPE_GUARDED_TEXT_STEPS, ...SCOPE_GUARDED_MERMAID_STEPS];
+  const checkedSids = allSids.filter(sid => scopeCheckResults[sid]);
+  if (checkedSids.length === 0) {
+    summaryEl.innerHTML = `<div class="scope-notice">아직 검증된 스텝이 없습니다. 청구항·상세설명을 생성하면 자동으로 검증됩니다.</div>`;
+    detailsEl.innerHTML = '';
+    return;
+  }
+  let totalVerdicts = 0, totalDrift = 0, totalUndet = 0, totalElabor = 0, totalAnchor = 0, allConflicts = 0, totalCost = 0;
+  for (const sid of checkedSids) {
+    const r = scopeCheckResults[sid];
+    if (r.verdicts) {
+      totalVerdicts += r.verdicts.length;
+      totalDrift += r.verdicts.filter(v => v.verdict === 'drift').length;
+      totalUndet += r.verdicts.filter(v => v.verdict === 'undetermined').length;
+      totalElabor += r.verdicts.filter(v => v.verdict === 'elaboration').length;
+      totalAnchor += r.verdicts.filter(v => v.verdict === 'strategic_anchor').length;
+    }
+    if (r.conflicts) allConflicts += r.conflicts.length;
+    if (r.cost_tracking_snapshot) totalCost = Math.max(totalCost, r.cost_tracking_snapshot.estimated_cost_usd || 0);
+  }
+  summaryEl.innerHTML = `
+    <div class="scope-summary-cards">
+      <div class="summary-card"><div class="summary-num">${totalVerdicts}</div><div class="summary-label">전체 판정</div></div>
+      <div class="summary-card verdict-elaboration"><div class="summary-num">${totalElabor}</div><div class="summary-label">범위 내 구체화</div></div>
+      <div class="summary-card verdict-anchor"><div class="summary-num">${totalAnchor}</div><div class="summary-label">전략적 확장</div></div>
+      <div class="summary-card verdict-drift"><div class="summary-num">${totalDrift}</div><div class="summary-label">범위 이탈</div></div>
+      <div class="summary-card verdict-undetermined"><div class="summary-num">${totalUndet}</div><div class="summary-label">판정 보류</div></div>
+      ${allConflicts > 0 ? `<div class="summary-card verdict-drift"><div class="summary-num">${allConflicts}</div><div class="summary-label">도면 부호 충돌</div></div>` : ''}
+    </div>
+    <div class="scope-cost-info">
+      누적 판정 비용: 약 $${totalCost.toFixed(3)}
+      <button class="btn-small" onclick="runAllJudgments().then(renderScopeVerificationSection)">전체 재판정</button>
+    </div>`;
+  detailsEl.innerHTML = checkedSids.map(sid => renderSidVerificationCard(sid)).join('');
+}
+
+function renderSidVerificationCard(sid) {
+  const r = scopeCheckResults[sid];
+  if (!r) return '';
+  const stepLabel = STEP_NAMES[sid] || sid;
+  const verdicts = r.verdicts || [];
+  const conflicts = r.conflicts || [];
+  if (verdicts.length === 0 && conflicts.length === 0) {
+    return `<div class="sid-verification-card"><div class="sid-card-header"><span class="sid-name">${App.escapeHtml(stepLabel)}</span><span class="sid-status">확인됨 · 신규 요소 없음</span></div></div>`;
+  }
+  const driftCount = verdicts.filter(v => v.verdict === 'drift').length;
+  const undetCount = verdicts.filter(v => v.verdict === 'undetermined').length;
+  let cardClass = 'sid-verification-card';
+  if (driftCount > 0 || conflicts.length > 0) cardClass += ' has-drift';
+  else if (undetCount > 0) cardClass += ' has-undetermined';
+  return `<div class="${cardClass}">
+    <div class="sid-card-header" onclick="toggleSidCard('${sid}')">
+      <span class="sid-name">${App.escapeHtml(stepLabel)}</span>
+      <span class="sid-counts">${verdicts.length > 0 ? `판정 ${verdicts.length}건` : ''}${conflicts.length > 0 ? ` · 도면 충돌 ${conflicts.length}건` : ''}</span>
+      <span class="sid-toggle">▼</span>
+    </div>
+    <div class="sid-card-body" id="sid-card-body-${sid}" style="display:none">
+      ${verdicts.map((v, i) => renderVerdictRow(sid, v, i)).join('')}
+      ${conflicts.length > 0 ? renderConflictsSection(conflicts) : ''}
+    </div>
+  </div>`;
+}
+
+function toggleSidCard(sid) {
+  const body = document.getElementById('sid-card-body-' + sid);
+  if (!body) return;
+  body.style.display = body.style.display !== 'none' ? 'none' : 'block';
+}
+
+function renderVerdictRow(sid, verdict, index) {
+  const v = verdict.verdict;
+  const badgeClass = _verdictBadgeClass(v);
+  const label = _verdictLabel(v);
+  const icon = _verdictIcon(v);
+  const confidence = Math.round((verdict.confidence || 0) * 100);
+  let statusText = '';
+  if (verdict.auto_approved) statusText = '<span class="status-approved">자동 승인됨</span>';
+  else if (verdict.manual_verdict === 'approved') statusText = '<span class="status-approved">수동 승인됨</span>';
+  else if (verdict.manual_verdict === 'rejected') statusText = '<span class="status-rejected">거부됨</span>';
+  let actions = '';
+  if (v === 'drift' && !verdict.manual_verdict) {
+    actions = `<div class="verdict-actions">
+      <button class="btn-small btn-approve" onclick="approveDriftComponent('${sid}',${index})">승인 (범위 확장)</button>
+      <button class="btn-small btn-reject" onclick="rejectDriftComponent('${sid}',${index})">거부 (사유 기록)</button>
+    </div>`;
+  }
+  return `<div class="verdict-row">
+    <div class="verdict-main">
+      <span class="scope-badge ${badgeClass}">${icon} ${label}</span>
+      <span class="verdict-component">${App.escapeHtml(verdict.component || '')}</span>
+      <span class="verdict-confidence">신뢰도 ${confidence}%</span>
+      ${statusText}
+    </div>
+    ${verdict.reason ? `<div class="verdict-reason">${App.escapeHtml(verdict.reason)}</div>` : ''}
+    ${actions}
+  </div>`;
+}
+
+function renderConflictsSection(conflicts) {
+  return `<div class="conflicts-section">
+    <div class="conflicts-header">도면 간 참조부호 충돌</div>
+    ${conflicts.map(c => `<div class="conflict-row">
+      <span class="conflict-ref">부호 ${App.escapeHtml(String(c.ref || ''))}</span>
+      <span>${(c.occurrences || []).map(o => `${o.sid}에서 "${App.escapeHtml(o.name)}"`).join(' ↔ ')}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+function approveDriftComponent(sid, verdictIndex) {
+  const result = scopeCheckResults[sid];
+  if (!result?.verdicts?.[verdictIndex]) return;
+  const verdict = result.verdicts[verdictIndex];
+  if (verdict.verdict !== 'drift' || verdict.manual_verdict) return;
+  if (!inventionScope.approved_expansions) inventionScope.approved_expansions = [];
+  const exists = inventionScope.approved_expansions.some(e => e.component === verdict.component);
+  if (!exists) {
+    inventionScope.approved_expansions.push({
+      type: 'manual_drift_approved', component: verdict.component, anchor_theme: null,
+      approved_at: new Date().toISOString(), approved_by: App.currentUser?.id || 'manual',
+      approval_reason: '변리사 수동 승인 (drift → 확장으로 편입)',
+      originating_step: sid, confidence: verdict.confidence, original_verdict: 'drift'
+    });
+  }
+  verdict.manual_verdict = 'approved';
+  verdict.manual_verdict_at = new Date().toISOString();
+  _appendAuditLog('drift_manual_approved', { sid, component: verdict.component, confidence: verdict.confidence, reason: verdict.reason });
+  saveProject(true);
+  renderScopeVerificationSection();
+  renderInventionScopePanel();
+  App.showToast(`"${verdict.component}"을(를) 범위 확장으로 승인했습니다`, 'success');
+}
+
+function rejectDriftComponent(sid, verdictIndex) {
+  const result = scopeCheckResults[sid];
+  if (!result?.verdicts?.[verdictIndex]) return;
+  const verdict = result.verdicts[verdictIndex];
+  if (verdict.verdict !== 'drift' || verdict.manual_verdict) return;
+  const reason = prompt(`"${verdict.component}"을(를) 범위 이탈로 거부합니다.\n거부 사유를 입력하세요:`, '');
+  if (reason === null) return;
+  verdict.manual_verdict = 'rejected';
+  verdict.manual_verdict_at = new Date().toISOString();
+  verdict.manual_verdict_reason = reason || '(사유 미기재)';
+  _appendAuditLog('drift_manual_rejected', { sid, component: verdict.component, confidence: verdict.confidence, verdict_reason: verdict.reason, rejection_reason: reason || '(사유 미기재)' });
+  saveProject(true);
+  renderScopeVerificationSection();
+  App.showToast(`"${verdict.component}" 거부 기록됨`, 'info');
+}
+
+function openScopeDetailPanel(sid) {
+  switchTab(3);
+  renderScopeVerificationSection();
+  setTimeout(() => {
+    const body = document.getElementById('sid-card-body-' + sid);
+    if (body) { body.style.display = 'block'; body.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  }, 100);
+}
+
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
-function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===4)renderPreview();}
+function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===4)renderPreview();}
 function toggleMethod(){
   includeMethodClaims=document.getElementById('methodToggle').checked;
   ['methodClaimsCard','methodDiagramCard','methodDescCard'].forEach(id=>{
@@ -12798,8 +12994,8 @@ function renderTitleCards(c,text){
   c.innerHTML='<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'+cs.map(x=>`<div class="title-candidate-row" onclick="selectTitle(this,\`${x.korean.replace(/\`/g,'')}\`,\`${x.english.replace(/\`/g,'')}\`)" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:2px solid var(--color-border);border-radius:10px;cursor:pointer;transition:all 0.15s;background:#fff" onmouseover="this.style.borderColor='var(--color-primary)';this.style.background='var(--color-primary-light)'" onmouseout="if(!this.classList.contains('selected')){this.style.borderColor='var(--color-border)';this.style.background='#fff'}"><div style="width:28px;height:28px;border-radius:50%;background:var(--color-primary-light);color:var(--color-primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${x.num}</div><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--color-text-primary)">${App.escapeHtml(x.korean)}</div><div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">${App.escapeHtml(x.english)}</div></div></div>`).join('')+'</div>';
   document.getElementById('titleConfirmArea').style.display='block';
 }
-function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tf">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tf">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="pushOutputHistory('${sid}','user_edit','renderClaimResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
-function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral" id="charCount_${sid}">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="pushOutputHistory('${sid}','user_edit','renderEditableResult');outputs['${sid}']=this.value;markOutputTimestamp('${sid}');saveProject(true);document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'" oninput="outputs['${sid}']=this.value;document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'">${App.escapeHtml(text)}</textarea></div>`;}
+function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=renderScopeBadgeSummary(sid);h+=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tf">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tf">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="pushOutputHistory('${sid}','user_edit','renderClaimResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
+function renderEditableResult(c,sid,text){c.innerHTML=renderScopeBadgeSummary(sid)+`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral" id="charCount_${sid}">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="pushOutputHistory('${sid}','user_edit','renderEditableResult');outputs['${sid}']=this.value;markOutputTimestamp('${sid}');saveProject(true);document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'" oninput="outputs['${sid}']=this.value;document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'">${App.escapeHtml(text)}</textarea></div>`;}
 function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tf">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="pushOutputHistory('${sid}','user_edit','renderBatchResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
 function toggleAccordion(h){h.classList.toggle('open');const b=h.nextElementSibling;if(b)b.classList.toggle('open');}
 

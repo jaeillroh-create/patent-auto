@@ -852,6 +852,12 @@
           <div id="progressApplyReview" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnApplyReview" onclick="applyReview()" style="display:none"><span class="tf">🔧</span> 검토 반영</button>
         </div>
+        <!-- [C1-6b] 발명 범위 검증 -->
+        <div class="card">
+          <div class="card-header"><div class="card-title"><span class="tf">🛡️</span> 발명 범위 검증</div></div>
+          <p style="font-size:12px;color:var(--pt-gray-500);margin-bottom:12px">생성된 명세서가 확정 범위를 벗어나는지 판정 결과를 표시합니다.</p>
+          <div id="scope-verification-summary"></div>
+        </div>
       </div>
       <!-- 오른쪽: 결과 -->
       <div class="page-right">
@@ -868,6 +874,11 @@
             </div>
             <textarea id="reviewDiffArea" class="result-textarea" rows="10" readonly></textarea>
           </div>
+        </div>
+        <!-- [C1-6b] 범위 검증 상세 -->
+        <div class="result-card" id="resultCardScopeVerification">
+          <div class="card-header"><div class="card-title"><span class="tf">🛡️</span> 범위 검증 상세</div></div>
+          <div id="scope-verification-details" class="result-area"></div>
         </div>
       </div>
     </div>
