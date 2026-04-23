@@ -1476,6 +1476,7 @@ ${prompt.slice(0,2000)}`;
   pushOutputHistory(sid,'cascade','_cascadeRunDiagram');
   outputs[sid]=designText;markOutputTimestamp(sid);_cascadeRender(sid,designText);
   const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
+  pushOutputHistory(sid+'_mermaid','cascade','_cascadeRunDiagram.mermaid');
   outputs[sid+'_mermaid']=mr.text;
   renderDiagramsV14(sid,mr.text);
 }
@@ -4147,6 +4148,7 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
       App.showToast('Mermaid 변환 실패 — 다시 시도해 주세요.','error');
       throw new Error('Mermaid 변환 AI 응답 비어있음');
     }
+    pushOutputHistory(sid+'_mermaid','llm','runDiagramStep.mermaid');
     outputs[sid+'_mermaid']=mr.text;
     
     // 4. 렌더링 + 최종 검증
@@ -6329,6 +6331,7 @@ ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
     // Mermaid 변환
     const mermaidPrompt=buildMermaidPrompt(stepId);
     const r2=await App.callClaude(mermaidPrompt);
+    pushOutputHistory(stepId+'_mermaid','llm','regenerateDiagramWithFeedback.mermaid');
     outputs[stepId+'_mermaid']=r2.text;
     renderDiagrams(stepId,r2.text);
     
