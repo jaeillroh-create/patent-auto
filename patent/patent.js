@@ -27,7 +27,8 @@ const CATEGORY_ENDINGS = {
 };
 
 // ═══ Patent State ═══
-let outputs={},selectedTitle='',selectedTitleEn='',selectedTitleType='',includeMethodClaims=true;
+let outputs={},outputHistory={},selectedTitle='',selectedTitleEn='',selectedTitleType='',includeMethodClaims=true;
+let scopeCheckResults = {};
 let usage={calls:0,inputTokens:0,outputTokens:0,cost:0},loadingState={};
 let detailLevel='standard';
 let customDetailChars=2000;
@@ -39,11 +40,12 @@ let methodAnchorThemeMode='auto', selectedMethodAnchorThemes=[];
 let requiredFigures=[];
 let globalRefStyleText='';
 let projectRefStyleText='';
-let beforeReviewText = '';
 let uploadedFiles = [];
 let diagramData = {};
 let stepUserCommands = {}; // v5.5: 각 스텝별 사용자 명령어
 let outputTimestamps = {};
+// [P-C1] invention_scope: 발명 범위 기준선
+let inventionScope = null;
 // ═══ v11.0: 예시도/개념도 ═══
 let conceptDiagramEnabled = false;
 let conceptDiagramCount = 0;
@@ -189,10 +191,65 @@ ${tail}`;
 })();
 
 
+// ═══════════ [P-C1] OUTPUT HISTORY ═══════════
+// origin 스펙: 'llm' | 'user_edit' | 'pre_review' | 'cascade'
+const OUTPUT_HISTORY_MAX = 10;
+const OUTPUT_HISTORY_VALUE_MAX = 50000;
+function pushOutputHistory(sid, origin, triggeredBy) {
+  if (!outputs[sid]) return;
+  if (!outputHistory[sid]) outputHistory[sid] = [];
+  outputHistory[sid].push({
+    value: outputs[sid].length > OUTPUT_HISTORY_VALUE_MAX ? outputs[sid].slice(0, OUTPUT_HISTORY_VALUE_MAX) : outputs[sid],
+    timestamp: new Date().toISOString(),
+    origin,
+    triggered_by: triggeredBy
+  });
+  if (outputHistory[sid].length > OUTPUT_HISTORY_MAX) {
+    outputHistory[sid] = outputHistory[sid].slice(-OUTPUT_HISTORY_MAX);
+  }
+}
+function getLastHistoryByOrigin(sid, origin) {
+  if (!outputHistory[sid]) return null;
+  const matches = outputHistory[sid].filter(h => h.origin === origin);
+  return matches.length ? matches[matches.length - 1] : null;
+}
+
+// ═══════════ [P-C1] INVENTION SCOPE CONSTANTS ═══════════
+const INVENTION_SCOPE_SYSTEM_PROMPT = `당신은 15년 경력의 변리사 출신 발명 분석가이다.
+입력된 발명 설명에서 본질적 구성요소와 기능을 추출한다.
+원칙: 텍스트에 명시된 내용만 추출. 추론·추측·상식 추가 금지.
+애매한 경우 제외.`;
+
+const INVENTION_SCOPE_SCHEMA_INSTRUCTION = `아래 JSON 스키마로만 응답하라. 설명·prefix·markdown 금지. 순수 JSON만 출력.
+{
+  "core_components": [{"id":"c1","name":"구성요소명","role":"역할 설명","aliases":["별칭1","별칭2"]}],
+  "core_functions":  [{"id":"f1","desc":"기능 설명","component_refs":["c1"]}],
+  "problem_space": "해결과제 요약 200자 이내",
+  "solution_space": "해결수단 요약 200자 이내",
+  "explicit_nonscope": ["명시적으로 제외된 요소 (있는 경우만)"]
+}
+
+aliases 생성 기준:
+- 동일 구성요소를 지칭하는 한국어/영어/축약 표현을 모두 나열
+- 예: "제어부" → aliases: ["컨트롤러", "controller", "제어 모듈", "제어 유닛"]
+- 예: "딥러닝 모델" → aliases: ["인공지능 모델", "AI 모델", "신경망 모델", "deep learning model"]
+- 하위개념(CNN, RNN 등)은 aliases에 포함하지 않음 (별도 확장으로 관리)
+- 최소 1개, 최대 5개까지 권장`;
+
+// [C1-3] Layer 1 가드: invention_scope 주입 대상 sid
+const SCOPE_GUARDED_TEXT_STEPS = [
+  'step_06', 'step_10', 'step_20',
+  'step_08', 'step_12',
+  'step_13_applied', 'step_13_applied_method'
+];
+const SCOPE_GUARDED_MERMAID_STEPS = [
+  'step_07_mermaid', 'step_11_mermaid'
+];
+
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
-  currentProjectId=null;outputs={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
-  usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};beforeReviewText='';uploadedFiles=[];diagramData={};
+  currentProjectId=null;outputs={};outputHistory={};scopeCheckResults={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
+  usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};uploadedFiles=[];diagramData={};inventionScope=null;
   projectRefStyleText='';requiredFigures=[];outputTimestamps={};stepUserCommands={};
   conceptDiagramEnabled=false;conceptDiagramCount=0;conceptDiagramTypes=[];
   // Claim defaults
@@ -206,7 +263,7 @@ function clearAllState(){
   for(let i=1;i<=19;i++){const e=document.getElementById(`resultStep${String(i).padStart(2,'0')}`);if(e)e.innerHTML='';}
   // v5.5: Clear step user command inputs
   document.querySelectorAll('[id^="userCmd_"]').forEach(el=>{el.value='';});
-  ['resultsBatch25','resultsBatchFinish','validationResults','previewArea','diagramsStep07','diagramsStep11','conceptDiagramsArea','fileList','requiredFiguresList','resultStep20'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
+  ['resultsBatch25','resultsBatchFinish','validationResults','previewArea','diagramsStep07','diagramsStep11','conceptDiagramsArea','fileList','requiredFiguresList','resultStep20','invention-scope-panel'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
   ['btnApplyReview','diagramDownload07','diagramDownload11','reviewApplyResult'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   document.querySelectorAll('.tab-item').forEach((t,i)=>{t.classList.toggle('active',i===0);t.setAttribute('aria-selected',i===0);});
   document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('active',i===0));
@@ -433,6 +490,9 @@ async function openProject(pid){
   diagramData=s.diagramData||{};
   outputTimestamps=s.outputTimestamps||{};
   stepUserCommands=s.stepUserCommands||{};
+  outputHistory=s.outputHistory||{};
+  inventionScope=s.inventionScope||null;
+  scopeCheckResults=s.scopeCheckResults||{};
   conceptDiagramEnabled=s.conceptDiagramEnabled||false;
   conceptDiagramCount=s.conceptDiagramCount||0;
   conceptDiagramTypes=s.conceptDiagramTypes||[];
@@ -447,6 +507,8 @@ async function openProject(pid){
   Object.keys(outputs).forEach(k=>{if(outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied'))_cascadeRender(k,outputs[k]);});
   // v5.5: 스텝별 사용자 명령어 UI 주입
   injectAllUserCommandUIs();
+  // [P-C1] 발명 범위 패널 복원
+  renderInventionScopePanel();
   // Restore diagrams and show download buttons
   if(outputs.step_07_mermaid){renderDiagrams('step_07',outputs.step_07_mermaid);const dl07=document.getElementById('diagramDownload07');if(dl07)dl07.style.display='block';}
   if(outputs.step_11_mermaid){renderDiagrams('step_11',outputs.step_11_mermaid);const dl11=document.getElementById('diagramDownload11');if(dl11)dl11.style.display='block';}
@@ -482,7 +544,383 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes}}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+
+// ═══════════ [P-C1] INVENTION SCOPE ═══════════
+function _parseJSONSafe(text) {
+  try { return JSON.parse(text); } catch(e) {}
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced) try { return JSON.parse(fenced[1].trim()); } catch(e) {}
+  const braceMatch = text.match(/\{[\s\S]*\}/);
+  if (braceMatch) try { return JSON.parse(braceMatch[0]); } catch(e) {}
+  return null;
+}
+
+// [C1-3] Layer 1 가드: invention_scope 주입 블록 생성
+function buildScopeGuardBlock(sid, variant) {
+  if (!inventionScope || !inventionScope.locked_at) return '';
+  const bl = inventionScope.baseline;
+  if (!bl || !Array.isArray(bl.core_components)) return '';
+  const exp = inventionScope.approved_expansions || [];
+  const themes = (anchorThemeMode === 'manual' ? selectedAnchorThemes : [])
+    .map(k => ANCHOR_THEMES.find(t => t.key === k))
+    .filter(Boolean);
+
+  if (variant === 'text') {
+    return [
+      '',
+      '[발명 범위 준수 지침]',
+      '아래 invention_scope는 이 발명의 확정된 기준선이다.',
+      '이 범위를 벗어나는 신규 기술요소를 임의로 추가하지 말라.',
+      '',
+      '<baseline_components>',
+      bl.core_components.map(c =>
+        `- ${c.name}${c.aliases && c.aliases.length ? ' (별칭: '+c.aliases.join(', ')+')' : ''}`
+      ).join('\n'),
+      '</baseline_components>',
+      '',
+      '<baseline_functions>',
+      (bl.core_functions || []).map(f => `- ${f.desc}`).join('\n'),
+      '</baseline_functions>',
+      '',
+      exp.length ? '<approved_expansions>\n' +
+        exp.map(e => `- ${e.component} (${e.type})`).join('\n') +
+        '\n</approved_expansions>\n' : '',
+      themes.length ? '<active_anchor_themes>\n' +
+        themes.map(t => `- ${t.label}: ${t.desc}`).join('\n') +
+        '\n</active_anchor_themes>\n' : '',
+      '허용 규칙:',
+      '1. 위 baseline/approved_expansions에 포함된 요소 자유 사용',
+      '2. 자명한 하위개념 구체화 허용 (예: "딥러닝"→"CNN")',
+      '3. 활성 앵커 테마에 따른 전략적 확장 허용',
+      '4. 위 3가지에 해당하지 않는 신규 기술요소 추가 시, 해당 부분을',
+      '   [[NOVEL: 요소명]] 마크업으로 명시적 표시',
+      '5. 사용자 명시적 확장 지시가 있는 경우 [[NOVEL:]] 마크업 후 생성',
+      ''
+    ].join('\n');
+  }
+
+  if (variant === 'mermaid') {
+    return [
+      '',
+      '[도면 구성요소 제한]',
+      '아래 허용 구성요소 목록을 참고하여 Mermaid 도면을 구성하라.',
+      '각 노드의 레이블은 목록의 정확한 명칭을 사용하라.',
+      '',
+      '<allowed_components>',
+      bl.core_components.map(c => `- ${c.name}`).join('\n'),
+      exp.length ? exp.map(e => `- ${e.component} (확장)`).join('\n') : '',
+      '</allowed_components>',
+      '',
+      themes.length ? '<active_anchor_themes>\n' +
+        themes.map(t => `- ${t.label}`).join('\n') +
+        '\n</active_anchor_themes>\n' : '',
+      '허용 규칙:',
+      '1. 위 목록의 구성요소를 자유롭게 배치',
+      '2. 앵커 테마에 따른 새 노드 추가 시 실제 기술명 사용 (태깅 불필요)',
+      '3. Mermaid 문법 유지 (주석/마크업으로 문법을 깨지 말 것)',
+      ''
+    ].join('\n');
+  }
+
+  return '';
+}
+function _maybeScopeGuard(sid, variant) {
+  if (variant === 'text' && !SCOPE_GUARDED_TEXT_STEPS.includes(sid)) return '';
+  if (variant === 'mermaid' && !SCOPE_GUARDED_MERMAID_STEPS.includes(sid)) return '';
+  return buildScopeGuardBlock(sid, variant);
+}
+
+// ═══════════ [C1-4] LAYER 2: EXTRACTOR + DIFF ═══════════
+
+function extractNovelMarkers(text) {
+  const pattern = /\[\[NOVEL:\s*([^\]]+?)\s*\]\]/g;
+  const results = [];
+  let m;
+  while ((m = pattern.exec(text)) !== null) results.push(m[1].trim());
+  return results;
+}
+
+function extractMermaidNodes(mermaidText) {
+  const results = [];
+  // ID["이름(참조번호)"] — 장치 도면
+  const p1 = /\w+\["([^"]+?)\((\d+)\)"\]/g;
+  // ID["단계명(S번호)"] — 방법 도면
+  const p2 = /\w+\["([^"]+?)\((S\d+)\)"\]/g;
+  // ID{"조건"} — 조건 분기
+  const p3 = /\w+\{"([^}]+)"\}/g;
+  // ID(["라벨"]) — 시작/종료
+  const p4 = /\w+\(\["([^"]+)"\]\)/g;
+  // ID["라벨"] — 참조번호 없는 일반 노드
+  const p5 = /\w+\["([^"]+)"\]/g;
+  let mm;
+  while ((mm = p1.exec(mermaidText)) !== null) results.push({ name: mm[1].trim(), ref: mm[2], source: 'device_node' });
+  while ((mm = p2.exec(mermaidText)) !== null) results.push({ name: mm[1].trim(), ref: mm[2], source: 'method_node' });
+  while ((mm = p3.exec(mermaidText)) !== null) results.push({ name: mm[1].trim(), ref: null, source: 'decision' });
+  while ((mm = p4.exec(mermaidText)) !== null) results.push({ name: mm[1].trim(), ref: null, source: 'terminal' });
+  // p5 fallback: 참조번호 없는 라벨 (p1/p2에서 이미 캡처된 것과 중복 가능)
+  const captured = new Set(results.map(r => r.name));
+  while ((mm = p5.exec(mermaidText)) !== null) {
+    const name = mm[1].trim();
+    if (!captured.has(name) && !/\(\d+\)/.test(name) && !/\(S\d+\)/.test(name)) {
+      results.push({ name, ref: null, source: 'label_only' });
+      captured.add(name);
+    }
+  }
+  // 중복 제거 (name+ref 기준, 첫 등장 유지)
+  const seen = new Set();
+  return results.filter(n => {
+    const key = `${n.ref||''}:${n.name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+const SCOPE_EXTRACT_SYSTEM_PROMPT = `당신은 특허 명세서 분석 전문가이다.
+입력된 특허 문서에서 등장하는 기술적 구성요소를 추출한다.
+원칙: 텍스트에 명시된 구성요소만 추출. 추론·추측·상식 추가 금지.
+같은 개념의 다른 표현도 별도 요소로 기록. 일반 접속사·동사 제외.`;
+
+const SCOPE_EXTRACT_SCHEMA = `응답은 순수 JSON. 설명·prefix·코드블록 금지.
+{"components":[{"name":"구성요소명","context":"등장 문맥 50자 이내"}]}`;
+
+async function extractComponentsFromText(sid, text) {
+  if (!text || text.trim().length < 30) return { status: 'skipped_empty', components: [] };
+  const prompt = `${SCOPE_EXTRACT_SCHEMA}\n\n<patent_text>\n${text.slice(0, 20000)}\n</patent_text>`;
+  try {
+    const resp = await App.callClaudeSonnet(prompt, 4096);
+    const parsed = _parseJSONSafe(resp.text);
+    if (!parsed || !Array.isArray(parsed.components)) return { status: 'llm_failed_partial', components: [] };
+    return {
+      status: 'ok',
+      components: parsed.components.map(c => ({ name: c.name, context: c.context || '', source: 'llm' }))
+    };
+  } catch (e) {
+    console.warn('[C1-4] extractComponentsFromText failed:', e.message);
+    return { status: 'llm_failed_partial', components: [] };
+  }
+}
+
+function matchComponentToScope(componentName) {
+  if (!inventionScope || !inventionScope.baseline) return null;
+  const normalize = s => s.toLowerCase().replace(/\s+/g, '').trim();
+  const target = normalize(componentName);
+  if (!target) return null;
+  for (const c of inventionScope.baseline.core_components || []) {
+    if (normalize(c.name) === target) return { via: 'baseline:' + (c.id || c.name) };
+    for (const alias of (c.aliases || [])) {
+      if (normalize(alias) === target) return { via: 'alias:' + alias };
+    }
+  }
+  for (const e of inventionScope.approved_expansions || []) {
+    if (normalize(e.component) === target) return { via: 'expansion:' + e.component };
+  }
+  return null;
+}
+
+async function runScopeCheck_text(sid) {
+  if (!inventionScope?.locked_at) return;
+  if (!outputs[sid]) return;
+  const text = outputs[sid];
+  const novelMarkers = extractNovelMarkers(text);
+  const llmResult = await extractComponentsFromText(sid, text);
+  const allComponents = [];
+  const seen = new Set();
+  const addComp = (name, context, source) => {
+    const key = name.toLowerCase().trim();
+    if (!seen.has(key)) { seen.add(key); allComponents.push({ name, context, source }); }
+  };
+  novelMarkers.forEach(n => addComp(n, '', 'novel_marker'));
+  llmResult.components.forEach(c => addComp(c.name, c.context, c.source));
+  const matched = [], novel = [];
+  for (const comp of allComponents) {
+    const m = matchComponentToScope(comp.name);
+    if (m) matched.push({ name: comp.name, matched_via: m.via });
+    else {
+      const idx = text.indexOf(comp.name);
+      novel.push({
+        name: comp.name,
+        context_snippet: comp.context || (idx >= 0 ? text.slice(Math.max(0, idx - 80), idx + 80) : ''),
+        discovered_via: comp.source === 'novel_marker' ? 'novel_marker' : 'llm_extraction'
+      });
+    }
+  }
+  scopeCheckResults[sid] = {
+    sid,
+    extracted_at: new Date().toISOString(),
+    source_type: 'text',
+    extraction_method: llmResult.status === 'ok' ? 'hybrid' : 'partial',
+    extraction_status: llmResult.status,
+    all_components: allComponents,
+    matched_to_scope: matched,
+    novel_components: novel,
+    conflicts: []
+  };
+  saveProject(true);
+  return scopeCheckResults[sid];
+}
+
+async function runScopeCheck_mermaid(sid) {
+  if (!inventionScope?.locked_at) return;
+  if (!outputs[sid]) return;
+  const nodes = extractMermaidNodes(outputs[sid]);
+  const matched = [], novel = [];
+  for (const node of nodes) {
+    const m = matchComponentToScope(node.name);
+    if (m) matched.push({ name: node.name, ref: node.ref, matched_via: m.via });
+    else novel.push({ name: node.name, ref: node.ref, context_snippet: 'Mermaid node ' + (node.ref || node.name), discovered_via: 'mermaid_extraction' });
+  }
+  scopeCheckResults[sid] = {
+    sid,
+    extracted_at: new Date().toISOString(),
+    source_type: 'mermaid',
+    extraction_method: 'regex',
+    extraction_status: 'ok',
+    all_components: nodes.map(n => ({ name: n.name, ref: n.ref, source: n.source })),
+    matched_to_scope: matched,
+    novel_components: novel,
+    conflicts: []
+  };
+  saveProject(true);
+  return scopeCheckResults[sid];
+}
+
+function detectMermaidRefConflicts() {
+  const mermaidSids = SCOPE_GUARDED_MERMAID_STEPS.filter(sid => outputs[sid]);
+  if (mermaidSids.length < 2) return;
+  const refMap = {};
+  for (const sid of mermaidSids) {
+    const nodes = extractMermaidNodes(outputs[sid]);
+    for (const n of nodes) {
+      if (!n.ref) continue;
+      if (!refMap[n.ref]) refMap[n.ref] = [];
+      refMap[n.ref].push({ sid, name: n.name });
+    }
+  }
+  const conflicts = {};
+  for (const [ref, occurrences] of Object.entries(refMap)) {
+    const uniqueNames = new Set(occurrences.map(o => o.name));
+    if (uniqueNames.size > 1) {
+      for (const occ of occurrences) {
+        if (!conflicts[occ.sid]) conflicts[occ.sid] = [];
+        conflicts[occ.sid].push({ ref, names: [...uniqueNames], occurrences });
+      }
+    }
+  }
+  for (const sid of mermaidSids) {
+    if (scopeCheckResults[sid]) scopeCheckResults[sid].conflicts = conflicts[sid] || [];
+  }
+}
+
+// [C1-4] Layer 2 공개 API
+async function runScopeCheck(sid) {
+  if (!inventionScope?.locked_at) { App.showToast('발명 범위가 확정되지 않았습니다', 'info'); return null; }
+  if (SCOPE_GUARDED_TEXT_STEPS.includes(sid)) return await runScopeCheck_text(sid);
+  if (SCOPE_GUARDED_MERMAID_STEPS.includes(sid)) {
+    const result = await runScopeCheck_mermaid(sid);
+    detectMermaidRefConflicts();
+    return result;
+  }
+  return null;
+}
+async function runScopeCheckAll() {
+  const allSids = [...SCOPE_GUARDED_TEXT_STEPS, ...SCOPE_GUARDED_MERMAID_STEPS];
+  const results = {};
+  for (const sid of allSids) { if (outputs[sid]) results[sid] = await runScopeCheck(sid); }
+  return results;
+}
+
+async function extractInventionScope() {
+  const input = document.getElementById('projectInput')?.value || '';
+  if (input.trim().length < 50) {
+    App.showToast('발명 설명이 너무 짧습니다 (최소 50자)', 'error');
+    return;
+  }
+  if (globalProcessing) return;
+  setGlobalProcessing(true);
+  try {
+    const prompt = `${INVENTION_SCOPE_SCHEMA_INSTRUCTION}\n\n<invention_description>\n${input}\n</invention_description>`;
+    const resp = await App.callClaudeSonnet(prompt, 4096);
+    const parsed = _parseJSONSafe(resp.text);
+    if (!parsed || !parsed.core_components) {
+      App.showToast('발명 범위 추출 실패: JSON 파싱 불가', 'error');
+      return;
+    }
+    inventionScope = {
+      locked_at: new Date().toISOString(),
+      locked_by: App.currentUser?.id || 'unknown',
+      source_text_hash: input.length + '_' + input.slice(0, 20),
+      baseline: parsed,
+      approved_expansions: [],
+      audit_log: [],
+      _previous_versions: inventionScope?._previous_versions || []
+    };
+    saveProject(true);
+    renderInventionScopePanel();
+    App.showToast('발명 범위가 확정되었습니다', 'success');
+  } catch (e) {
+    App.showToast('발명 범위 추출 실패: ' + e.message, 'error');
+  } finally {
+    setGlobalProcessing(false);
+  }
+}
+
+function unlockInventionScope() {
+  if (!inventionScope) return;
+  if (!confirm('발명 범위를 재확정하시겠습니까? 이전 범위 이력은 보관됩니다.')) return;
+  inventionScope._previous_versions = inventionScope._previous_versions || [];
+  const archived = Object.assign({}, inventionScope, { archived_at: new Date().toISOString() });
+  delete archived._previous_versions;
+  inventionScope._previous_versions.push(archived);
+  inventionScope.locked_at = null;
+  inventionScope.baseline = null;
+  saveProject(true);
+  renderInventionScopePanel();
+}
+
+function renderInventionScopePanel() {
+  const panel = document.getElementById('invention-scope-panel');
+  if (!panel) return;
+  if (!inventionScope || !inventionScope.locked_at) {
+    panel.className = 'scope-panel';
+    panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between">
+      <div><span class="tf">🔍</span> <strong style="font-size:13px">발명 범위</strong>
+      <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:6px">범위를 확정하면 이후 스텝에서 범위 초과 여부를 검증합니다.</span></div>
+      <button class="btn btn-outline btn-sm" onclick="extractInventionScope()">범위 확정</button>
+    </div>`;
+    return;
+  }
+  const b = inventionScope.baseline;
+  const lockedDate = new Date(inventionScope.locked_at).toLocaleDateString('ko-KR');
+  const comps = (b.core_components || []).map(c =>
+    `<span class="scope-chip">${App.escapeHtml(c.name)}<span style="color:var(--color-text-tertiary);margin-left:4px;font-size:10px">${App.escapeHtml(c.role||'')}</span></span>`
+  ).join('');
+  const funcs = (b.core_functions || []).map(f =>
+    `<li style="font-size:12px;margin-bottom:2px">${App.escapeHtml(f.desc)} <span style="color:var(--color-text-tertiary)">[${(f.component_refs||[]).join(',')}]</span></li>`
+  ).join('');
+  const nonscope = (b.explicit_nonscope || []).length
+    ? `<div style="margin-top:6px;font-size:11px;color:var(--color-text-tertiary)">제외: ${b.explicit_nonscope.map(n => App.escapeHtml(n)).join(', ')}</div>` : '';
+  const prevCount = (inventionScope._previous_versions || []).length;
+  const prevBadge = prevCount ? `<span class="badge badge-neutral" style="margin-left:6px;font-size:10px">이��� ${prevCount}건</span>` : '';
+
+  panel.className = 'scope-panel locked';
+  panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div><span class="tf">🔒</span> <strong style="font-size:13px">발명 ��위 확정됨</strong>
+    <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:6px">${lockedDate}</span>${prevBadge}</div>
+    <button class="btn btn-ghost btn-sm" onclick="unlockInventionScope()">재확정</button>
+  </div>
+  <div class="baseline-summary">
+    <div style="margin-bottom:4px"><strong>과제:</strong> ${App.escapeHtml(b.problem_space || '')}</div>
+    <div><strong>해결:</strong> ${App.escapeHtml(b.solution_space || '')}</div>
+  </div>
+  <div class="scope-components">${comps}</div>
+  <details style="margin-top:8px">
+    <summary style="font-size:12px;cursor:pointer;color:var(--color-text-secondary)">핵심 기능 (${(b.core_functions||[]).length}건)</summary>
+    <ul style="margin:4px 0 0 16px;padding:0">${funcs}</ul>
+    ${nonscope}
+  </details>`;
+}
 
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===4)renderPreview();}
@@ -1227,12 +1665,14 @@ async function _cascadeRunShort(sid){
   // step_04는 KIPRIS API 검색 (buildPrompt 없음)
   if(sid==='step_04'){
     const sr=await searchPriorArt(selectedTitle);
-    outputs.step_04=sr?sr.formatted:'【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';
+    pushOutputHistory('step_04','cascade','_cascadeRunShort');
+    outputs.step_04=sr?sr.formatted:'【특허문헌】\n(관련 선행특허��� 검색하지 못하였습니다)';
     markOutputTimestamp('step_04');_cascadeRender('step_04',outputs.step_04);
     return;
   }
   const prompt=buildPrompt(sid);
   if(!prompt)return;
+  pushOutputHistory(sid,'cascade','_cascadeRunShort');
   if(sid==='step_13'){
     const text=await App.callClaudeWithContinuation(prompt,'progressStep13');
     outputs[sid]=text;
@@ -1251,6 +1691,7 @@ async function _cascadeRunShort(sid){
       const fixR=await App.callClaude(`청구범위 기재불비를 수정하라.\n[지적사항]\n${issueText}\n[원본]\n${corrected}`);
       corrected=fixR.text;
     }
+    pushOutputHistory(sid,'cascade','_cascadeRunShort.correction');
     outputs[sid]=corrected;markOutputTimestamp(sid);_cascadeRender(sid,corrected);
   }
 }
@@ -1261,6 +1702,7 @@ async function _cascadeRunLong(sid){
   // v8.1: 도면 범위 초과 자동 교정
   if(sid==='step_08')t=sanitizeDescFigureRefs(t,'device');
   if(sid==='step_12')t=sanitizeDescFigureRefs(t,'method');
+  pushOutputHistory(sid,'cascade','_cascadeRunLong');
   outputs[sid]=t;markOutputTimestamp(sid);_cascadeRender(sid,t);
 }
 async function _cascadeRunDiagram(sid){
@@ -1325,8 +1767,10 @@ ${prompt.slice(0,2000)}`;
     }
   }
   
+  pushOutputHistory(sid,'cascade','_cascadeRunDiagram');
   outputs[sid]=designText;markOutputTimestamp(sid);_cascadeRender(sid,designText);
   const mr=await App.callClaude(buildMermaidPrompt(sid),4096);
+  pushOutputHistory(sid+'_mermaid','cascade','_cascadeRunDiagram.mermaid');
   outputs[sid+'_mermaid']=mr.text;
   renderDiagramsV14(sid,mr.text);
 }
@@ -1367,6 +1811,7 @@ SVG 규칙: viewBox="0 0 680 500", stroke="#000", fill="none"(필요시 "#fff"),
     ct.svgContent=svgText;ct.figNum=figNum;
     ct.refNums=[...new Set([...svgText.matchAll(/\((\d+)\)/g)].map(m=>parseInt(m[1])))].filter(n=>n>=31&&n<=79).sort((a,b)=>a-b);
   }
+  pushOutputHistory('step_07c','cascade','_cascadeRunConceptDiagram');
   outputs.step_07c=conceptDiagramTypes.map((ct,i)=>{const fn=figNums[i]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `[도 ${fn}] ${td.label} 예시도\n참조번호: ${ct.refNums.join(', ')}\n${ct.briefDesc||''}`;}).join('\n\n');
   markOutputTimestamp('step_07c');
   renderConceptDiagramCards();
@@ -1418,6 +1863,7 @@ function _trimDesignTextToExpectedFigures(text,expectedNums){
 async function _cascadeRunMath(){
   const r=await App.callClaude(buildPrompt('step_09'));
   const baseDesc=getLatestDescription()||'';
+  pushOutputHistory('step_09','cascade','_cascadeRunMath');
   outputs.step_09=insertMathBlocks(baseDesc,r.text);
   markOutputTimestamp('step_09');_cascadeRender('step_09',outputs.step_09);
 }
@@ -1452,6 +1898,7 @@ function insertBoilerplate(){
   if(!cur){App.showToast('상세설명이 없습니다. 먼저 Step 8을 생성하세요.','error');return;}
   // Check if already has boilerplate
   if(hasBoilerplate(cur)){App.showToast('이미 정형문이 삽입되어 있습니다.','info');return;}
+  pushOutputHistory('step_08','llm','insertBoilerplate');
   outputs.step_08=STEP8_PREFIX+'\n\n'+cur+'\n\n'+STEP8_SUFFIX;
   renderOutput('step_08',outputs.step_08);
   // Also update step_09 and step_13_applied if they exist
@@ -1521,17 +1968,25 @@ function sanitizeDescFigureRefs(text,type){
     }
   }
   // 허용 도면 범위 결정
+  // v10.5 fix: getLastFigureNumber 대신 _extractFigureNumbersFromDesign 사용
+  // (getLastFigureNumber는 "도 N" 패턴을 텍스트 전체에서 매칭하여, 교차참조/비도면 숫자도 잡아 maxAllowed를 과대 산정)
   let maxAllowed;
   if(type==='device'){
     const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
-    const _devMax=getLastFigureNumber(outputs.step_07||'')||deviceFigCount;
+    const _headerFigs=_extractFigureNumbersFromDesign(outputs.step_07||'');
+    const _userFigMax=requiredFigures.length>0?Math.max(...requiredFigures.map(f=>f.num)):0;
+    const _devMax=_headerFigs.length>0?Math.max(Math.max(..._headerFigs),_userFigMax):(getLastFigureNumber(outputs.step_07||'')||deviceFigCount);
     const _concCount=conceptDiagramTypes.filter(ct=>ct.svgContent).length;
     maxAllowed=_devMax+_concCount;
   }else{
     // 방법: 장치 마지막 도면 + 방법 도면
-    const deviceMax=getLastFigureNumber(outputs.step_07||'')||parseInt(document.getElementById('optDeviceFigures')?.value||4);
-    const methodMax=getLastFigureNumber(outputs.step_11||'');
-    maxAllowed=methodMax||deviceMax+parseInt(document.getElementById('optMethodFigures')?.value||2);
+    const _devHeaders=_extractFigureNumbersFromDesign(outputs.step_07||'');
+    const _devUserMax=requiredFigures.length>0?Math.max(...requiredFigures.map(f=>f.num)):0;
+    const deviceMax=_devHeaders.length>0?Math.max(Math.max(..._devHeaders),_devUserMax):(getLastFigureNumber(outputs.step_07||'')||parseInt(document.getElementById('optDeviceFigures')?.value||4));
+    const _methHeaders=_extractFigureNumbersFromDesign(outputs.step_11||'');
+    const methodMax=_methHeaders.length>0?Math.max(..._methHeaders):getLastFigureNumber(outputs.step_11||'');
+    const _concCount=conceptDiagramTypes.filter(ct=>ct.svgContent).length;
+    maxAllowed=methodMax||(deviceMax+_concCount+parseInt(document.getElementById('optMethodFigures')?.value||2));
   }
   
   // 모든 "도 N" 참조 추출
@@ -2212,10 +2667,29 @@ function buildPrompt(stepId){
   // v6.0: 기존 내용 존재 시 부분 수정 모드
   const userCmd=getStepUserCommand(stepId);
   if(userCmd&&outputs[stepId]){
+    // v10.5 fix: step_08/step_12 부분 수정 시 도면 범위 제약 명시 (재실행 시 없는 도면 참조 방지)
+    let _pmFigConstraint='';
+    if(stepId==='step_08'){
+      const _pmDesign=outputs.step_07||'';
+      const _pmActual=_extractFigureNumbersFromDesign(_pmDesign);
+      const _pmCFN=getAutoFigNums('step_07c').filter((_,i)=>conceptDiagramTypes[i]?.svgContent);
+      const _pmAll=[...new Set([..._pmActual,...requiredFigures.map(f=>f.num),..._pmCFN])].sort((a,b)=>a-b);
+      if(_pmAll.length>0){
+        const _pmMax=Math.max(..._pmAll);
+        _pmFigConstraint=`\n⛔⛔⛔ 도면 범위 제한 (위반 시 전체 무효) ⛔⛔⛔\n- 이 발명의 장치 도면: ${_pmAll.map(n=>'도 '+n).join(', ')} (총 ${_pmAll.length}개)\n- 위 목록에 없는 도면 번호를 절대 참조하지 마라.\n- 도 ${_pmMax+1} 이후 도면 참조/설명 금지.\n`;
+      }
+    }else if(stepId==='step_12'){
+      const _pmMeth=_extractFigureNumbersFromDesign(outputs.step_11||'');
+      if(_pmMeth.length>0){
+        const _pmMax=Math.max(..._pmMeth);
+        _pmFigConstraint=`\n⛔⛔⛔ 도면 범위 제한 (위반 시 전체 무효) ⛔⛔⛔\n- 이 발명의 방법 도면: ${_pmMeth.map(n=>'도 '+n).join(', ')} (총 ${_pmMeth.length}개)\n- 위 목록에 없는 방법 도면 번호를 절대 참조하지 마라.\n- 도 ${_pmMax+1} 이후 도면 참조/설명 금지.\n`;
+      }
+    }
     // 기존 내용 + 추가 지시 → 부분 수정 프롬프트
+    // [C1-3] Layer 1 가드: invention_scope 주입
     return `아래 [기존 작성 내용]을 바탕으로, [수정 지시사항]에 해당하는 부분만 수정하고 나머지는 그대로 유지하여 전체 내용을 출력하라.
 수정 지시와 무관한 부분은 원문 그대로 유지해야 한다. 전체 재작성 금지.
-
+${_pmFigConstraint}
 [수정 지시사항]
 ${userCmd}
 
@@ -2223,11 +2697,12 @@ ${userCmd}
 ${outputs[stepId]}
 
 [참고: 원래 작성 기준]
-${prompt}`;
+${prompt}${_maybeScopeGuard(stepId,'text')}`;
   }
-  
+
   // 기존 내용 없음 → 전체 신규 작성 + 추가 지시사항
-  return prompt+buildUserCommandSuffix(stepId);
+  // [C1-3] Layer 1 가드: invention_scope 주입
+  return prompt+buildUserCommandSuffix(stepId)+_maybeScopeGuard(stepId,'text');
 }
 function _buildPromptCore(stepId,inv,T,styleRef){
   switch(stepId){
@@ -2586,13 +3061,13 @@ ${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 �
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(0,1500)}`;}
 
     case 'step_08':{
+      const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
       const dlCfg={
         compact:{charPerFig:'약 1,000자',total:'약 3,000~4,000자',extra:'핵심 구성요소 중심으로 간결하게 기술하라. 변형 실시예는 1개만.'},
         standard:{charPerFig:'약 1,500자',total:'약 5,000~7,000자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 주요 구성요소에 변형 실시예 포함.'},
         detailed:{charPerFig:'약 2,000자 이상',total:'8,000~10,000자',extra:'각 도면마다 구성요소의 기능, 동작 원리, 데이터 흐름, 상호 연동 관계를 상세히 설명하라. 변형 실시예를 통해 다양한 구현 방식을 기술하라. 절대 축약하지 마라.'},
-        custom:{charPerFig:'약 '+customDetailChars+'자',total:'약 '+(customDetailChars*parseInt(document.getElementById('optDeviceFigures')?.value||4))+'자',extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 변형 실시예를 포함하라.'}
+        custom:{charPerFig:'약 '+customDetailChars+'자',total:null,extra:'각 구성요소의 기능, 동작 원리, 데이터 흐름을 설명하라. 변형 실시예를 포함하라.'}
       }[detailLevel];
-      const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
       
       // v10.3: 실제 도면 설계 텍스트에서 도면 번호 목록 추출
       const designText=outputs.step_07||'';
@@ -2601,12 +3076,12 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
       const _conceptFigNums=getAutoFigNums('step_07c');
       const _genConceptFigNums=_conceptFigNums.filter((_,i)=>conceptDiagramTypes[i]?.svgContent);
       const allFigNumsRaw=[...new Set([...actualFigNums,...requiredFigures.map(f=>f.num),..._genConceptFigNums])].sort((a,b)=>a-b);
-      // ★ Safety: UI 설정 도면 수 + 생성된 예시도 수 반영 ★
+      // ★ v10.5 fix: 실제 도면 데이터가 있으면 그대로 사용 (UI 값 변경으로 인한 도면 누락/초과 방지) ★
+      // step_07 미생성 시에만 computeFigNums 폴백 사용
       const expectedTotalFig=deviceFigCount+_genConceptFigNums.length;
-      // ★ v10.4 fix: 도면 번호 목록이 비어있으면 computeFigNums로 순차 번호 생성
-      // (step_07 미생성 시 빈 목록으로 인해 LLM이 존재하지 않는 도면을 참조하는 버그 방지)
-      const _fallbackFigNums=allFigNumsRaw.length===0?computeFigNums(Math.max(deviceFigCount-requiredFigures.length,0),0).device.concat(requiredFigures.map(f=>f.num)).sort((a,b)=>a-b):allFigNumsRaw;
-      const allFigNums=_fallbackFigNums.length>expectedTotalFig?_fallbackFigNums.slice(0,expectedTotalFig):_fallbackFigNums;
+      const allFigNums=allFigNumsRaw.length>0?allFigNumsRaw:computeFigNums(Math.max(deviceFigCount-requiredFigures.length,0),0).device.concat(requiredFigures.map(f=>f.num)).sort((a,b)=>a-b).slice(0,expectedTotalFig);
+      // v10.5: custom 모드 총 분량을 실제 도면 수 기준으로 산출
+      if(!dlCfg.total)dlCfg.total='약 '+(customDetailChars*allFigNums.length)+'자';
       const lastDeviceFig=allFigNums.length>0?Math.max(...allFigNums):1;
       const figListStr=allFigNums.map(n=>'도 '+n).join(', ');
       
@@ -3179,6 +3654,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     // Step 04: KIPRIS API 실시간 검색
     if(sid==='step_04'){
       const sr=await searchPriorArt(selectedTitle);
+      pushOutputHistory('step_04','llm','runStep');
       if(sr){outputs.step_04=sr.formatted;renderOutput('step_04',sr.formatted);}
       else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderOutput('step_04',outputs.step_04);}
       markOutputTimestamp('step_04');
@@ -3187,6 +3663,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     }
     // Step 13: use continuation for long review
     let r;
+    pushOutputHistory(sid,'llm','runStep');
     if(sid==='step_13'){
       App.showProgress('progressStep13','AI 검토 생성 중...',0,1);
       const text=await App.callClaudeWithContinuation(buildPrompt(sid),'progressStep13');
@@ -3211,6 +3688,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
         const fixPrompt=`아래 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n수정 규칙:\n- 【청구항 N】형식 유지\n- \"상기\" 선행기재 누락: 참조하는 상위항(독립항 포함)에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 상위항에 추가할 때는 독립항의 범위가 과도하게 좁아지지 않도록 주의\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위]\n${corrected}`;
         const fixR=await App.callClaude(fixPrompt);corrected=fixR.text;
       }
+      pushOutputHistory(sid,'llm','runStep.step_06_correction');
       outputs[sid]=corrected;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,corrected);
       const finalIssues=validateClaims(corrected);
       App.showProgress('progressStep06',`완료 (수정 ${correctionRound}회)`,maxRounds*2+1,maxRounds*2+1);
@@ -3237,6 +3715,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
         const fixPrompt=`아래 방법 청구범위에서 기재불비가 발견되었다. 모든 지적사항을 수정하여 완전한 청구범위 전체를 다시 출력하라.\n\n⛔⛔ 절대 금지: 청구항 번호를 변경하지 마라! 방법 독립항은 반드시 【청구항 ${firstClaimNum}】을 유지해야 한다. 절대로 【청구항 1】로 변경 금지! ⛔⛔\n\n수정 규칙:\n- 【청구항 N】형식 유지 — 번호 변경 금지\n- \"상기\" 선행기재 누락: 방법 독립항(청구항 ${firstClaimNum}) 내에 해당 구성요소를 추가하거나, 종속항의 표현을 수정\n- 종속항에서 새로운 용어를 \"상기\"로 참조하려면, 반드시 해당 용어가 상위항에 먼저 기재되어야 한다\n- 제한적 표현: 삭제 또는 비제한적 표현으로 교체\n- 청구항 참조 오류: 올바른 청구항 번호로 수정\n- 종속항 대통령령: ①인용항 번호 기재 ②다중인용시 택일적 기재 ③다중인용의 다중인용 금지 ④번호 역전 금지\n\n[지적사항]\n${issueText}\n\n[원본 청구범위 — 번호 유지!]\n${corrected}`;
         const fixR=await App.callClaude(fixPrompt);corrected=fixR.text;
       }
+      pushOutputHistory(sid,'llm','runStep.step_10_correction');
       outputs[sid]=corrected;markOutputTimestamp(sid);invalidateDownstream(sid);renderOutput(sid,corrected);
       const finalIssues=validateClaims(corrected);
       App.showProgress('progressStep10',`완료 (수정 ${correctionRound}회)`,maxRounds*2+1,maxRounds*2+1);
@@ -3263,9 +3742,10 @@ async function runLongStep(sid){if(globalProcessing)return;const dep=checkDepend
     if(sid==='step_08'){
       const _bodyText=t.replace(/^[\s\S]*?(?=도 1)/,'').replace(/\n{2,}/g,'\n');
       const _charCount=_bodyText.length;
-      const _figCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
+      // v10.5: 실제 도면 수 기준 (UI 값 변경 시에도 정확한 경고)
+      const _actualFigCount=_extractFigureNumbersFromDesign(outputs.step_07||'').length||parseInt(document.getElementById('optDeviceFigures')?.value||4);
       const _dlCfg={compact:1000,standard:1500,detailed:2000,custom:customDetailChars||2000}[detailLevel]||1500;
-      const _targetTotal=_dlCfg*_figCount;
+      const _targetTotal=_dlCfg*_actualFigCount;
       const _ratio=_charCount/_targetTotal;
       if(_ratio>1.5){
         App.showToast(`⚠️ 상세설명 ${_charCount.toLocaleString()}자 (목표 ${_targetTotal.toLocaleString()}자의 ${Math.round(_ratio*100)}%) — 과다 생성됨`,'warning');
@@ -3274,6 +3754,7 @@ async function runLongStep(sid){if(globalProcessing)return;const dep=checkDepend
         App.showToast(`⚠️ 상세설명 ${_charCount.toLocaleString()}자 (목표 ${_targetTotal.toLocaleString()}자의 ${Math.round(_ratio*100)}%) — 과소 생성됨`,'warning');
       }
     }
+    pushOutputHistory(sid,'llm','runLongStep');
     outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);}catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
 async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{
   const TARGET_MATH_COUNT=5;
@@ -3290,6 +3771,7 @@ async function runMathInsertion(){if(globalProcessing)return;const dep=checkDepe
     App.showToast(`수학식 ${mathBlocks.length}개→추가 생성 시도`,'info');
   }
   const baseDesc=getLatestDescription()||'';
+  pushOutputHistory('step_09','llm','runMathInsertion');
   outputs.step_09=insertMathBlocks(baseDesc,r.text);
   // 삽입 후 실제 수학식 개수 검증
   const insertedCount=(outputs.step_09.match(/【수학식\s*\d+】/g)||[]).length;
@@ -3652,7 +4134,9 @@ async function applyReview(){
   const cur=getLatestDescription();if(!cur){App.showToast('상세설명 없음','error');return;}
   const hasMethodDesc=!!(outputs.step_12&&includeMethodClaims);
   const totalSteps=hasMethodDesc?3:2;
-  beforeReviewText=cur;setGlobalProcessing(true);loadingState.applyReview=true;App.setButtonLoading('btnApplyReview',true);
+  pushOutputHistory('step_08','pre_review','applyReview');
+  if(outputs.step_12)pushOutputHistory('step_12','pre_review','applyReview');
+  setGlobalProcessing(true);loadingState.applyReview=true;App.setButtonLoading('btnApplyReview',true);
   try{
     // ═══════════════════════════════════════════════════════════════
     // v10.3: 편집 지시 기반 아키텍처 (전문 재작성 → 편집 지시 + 코드 적용)
@@ -3710,7 +4194,7 @@ REASON: ...
 [검토 결과] ${filterReviewForScope(outputs.step_13,'device')}
 [청구항 구성요소 참조] ${extractClaimComponents(outputs.step_06||'')}
 [현재 상세설명]
-${baseDesc}`);
+${baseDesc}${_maybeScopeGuard('step_13_applied','text')}`);
 
     // 편집 지시 파싱
     const edits=parseEditInstructions(editInstructions.text);
@@ -3766,6 +4250,7 @@ ${baseDesc}`);
     finalDesc=finalDesc.replace(/([가-힣)\]])\.[ \t]*([가-힣(])/g,(m,p,n)=>{
       return p+'. '+n;
     });
+    pushOutputHistory('step_13_applied','llm','applyReview');
     outputs.step_13_applied=finalDesc;
     markOutputTimestamp('step_13_applied');
 
@@ -3795,11 +4280,12 @@ REASON: (검토 항목)
 [발명의 명칭] ${selectedTitle}
 [검토 결과] ${filterReviewForScope(outputs.step_13,'method')}
 [현재 방법 상세설명]
-${baseMethod}`);
+${baseMethod}${_maybeScopeGuard('step_13_applied_method','text')}`);
 
       const methodEdits=parseEditInstructions(methodEditInstructions.text);
       console.log(`[applyReview] 방법 편집 지시 ${methodEdits.length}개 파싱`);
       const improvedMethod=applyEditInstructions(baseMethod,methodEdits);
+      pushOutputHistory('step_13_applied_method','llm','applyReview');
       outputs.step_13_applied_method=improvedMethod;
       markOutputTimestamp('step_13_applied_method');
     }
@@ -3815,11 +4301,12 @@ ${baseMethod}`);
 }
 function showReviewDiff(mode){
   const area=document.getElementById('reviewDiffArea'),bb=document.getElementById('btnDiffBefore'),ba=document.getElementById('btnDiffAfter');if(!area)return;
+  const _preReview08=getLastHistoryByOrigin('step_08','pre_review');
+  const _preReviewText=_preReview08?_preReview08.value:'(없음)';
   if(mode==='before'){
-    const text=beforeReviewText||'(없음)';
+    const text=_preReviewText;
     area.value=text;
     if(bb)bb.className='btn btn-primary btn-sm';if(ba)ba.className='btn btn-outline btn-sm';
-    // v10.2: 글자수 표시
     if(bb)bb.innerHTML=`반영 전 <span class="badge badge-neutral" style="margin-left:4px;font-size:10px">${text.length.toLocaleString()}자</span>`;
     if(ba){
       let afterText=outputs.step_13_applied||'(없음)';
@@ -3828,15 +4315,13 @@ function showReviewDiff(mode){
     }
   }
   else{
-    // v9.1: 장치 + 방법 검토 반영본 모두 표시
     let afterText=outputs.step_13_applied||'(없음)';
     if(outputs.step_13_applied_method){
       afterText+='\n\n═══ [방법 상세설명 검토 반영본] ═══\n\n'+outputs.step_13_applied_method;
     }
     area.value=afterText;
     if(bb)bb.className='btn btn-outline btn-sm';if(ba)ba.className='btn btn-primary btn-sm';
-    // v10.2: 글자수 표시
-    const beforeText=beforeReviewText||'(없음)';
+    const beforeText=_preReviewText;
     if(bb)bb.innerHTML=`반영 전 <span class="badge badge-neutral" style="margin-left:4px;font-size:10px">${beforeText.length.toLocaleString()}자</span>`;
     if(ba)ba.innerHTML=`반영 후 <span class="badge badge-neutral" style="margin-left:4px;font-size:10px">${afterText.length.toLocaleString()}자</span>`;
     // v10.2: 분량 변화 안내
@@ -3946,6 +4431,7 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
       }
     }
     
+    pushOutputHistory(sid,'llm','runDiagramStep');
     outputs[sid]=designText;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);
     renderOutput(sid,designText);
     
@@ -3958,6 +4444,7 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
       App.showToast('Mermaid 변환 실패 — 다시 시도해 주세요.','error');
       throw new Error('Mermaid 변환 AI 응답 비어있음');
     }
+    pushOutputHistory(sid+'_mermaid','llm','runDiagramStep.mermaid');
     outputs[sid+'_mermaid']=mr.text;
     
     // 4. 렌더링 + 최종 검증
@@ -4158,6 +4645,7 @@ ${figNums.length>1?figNums.slice(1).map(n=>'\n---CONCEPT_FIG_'+n+'---\n<svg>...<
     }
 
     // 결과 저장
+    pushOutputHistory('step_07c','llm','runConceptDiagramStep');
     outputs.step_07c=conceptDiagramTypes.map((ct,i)=>{
       const figNum=figNums[i]||'?';
       const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
@@ -4196,19 +4684,23 @@ async function runBatch25(){
       searchPriorArt(selectedTitle)
     ]);
     
+    pushOutputHistory('step_02','llm','runBatch25');
     outputs.step_02=r02.text;markOutputTimestamp('step_02');
     renderBatchResult('resultsBatch25','step_02',r02.text);
-    
+
+    pushOutputHistory('step_03','llm','runBatch25');
     outputs.step_03=r03.text;markOutputTimestamp('step_03');
     renderBatchResult('resultsBatch25','step_03',r03.text);
-    
+
+    pushOutputHistory('step_04','llm','runBatch25');
     if(r04){outputs.step_04=r04.formatted;renderBatchResult('resultsBatch25','step_04',r04.formatted);}
     else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderBatchResult('resultsBatch25','step_04',outputs.step_04);}
     markOutputTimestamp('step_04');
-    
+
     // step_05는 step_03에 의존하므로 순차 실행
     App.showProgress('progressBatch','해결하고자 하는 과제 (2/2)',2,2);
     const r05=await App.callClaude(buildPrompt('step_05'));
+    pushOutputHistory('step_05','llm','runBatch25');
     outputs.step_05=r05.text;markOutputTimestamp('step_05');
     renderBatchResult('resultsBatch25','step_05',r05.text);
     
@@ -4217,7 +4709,7 @@ async function runBatch25(){
   }catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}
   finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}
 }
-async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));outputs[steps[i]]=r.text;markOutputTimestamp(steps[i]);renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
+async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));pushOutputHistory(steps[i],'llm','runBatchFinish');outputs[steps[i]]=r.text;markOutputTimestamp(steps[i]);renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
 
 // ═══ v14: Phase 기반 배치 실행 (역설계 체인) ═══
 
@@ -4239,6 +4731,7 @@ async function runPhaseD(){
       const sid=steps[i];
       App.showProgress('progressPhaseD',`${stepLabels[sid]} (${i+1}/${steps.length})`,i+1,steps.length);
       const r=await App.callClaude(buildPrompt(sid));
+      pushOutputHistory(sid,'llm','runPhaseD');
       outputs[sid]=r.text;
       markOutputTimestamp(sid);
       if(container)renderBatchResult('resultsPhaseDChain',sid,r.text);
@@ -4266,6 +4759,7 @@ async function runPhaseF(){
     for(let i=0;i<steps.length;i++){
       App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/${steps.length})`,i+1,steps.length);
       const r=await App.callClaude(buildPrompt(steps[i]));
+      pushOutputHistory(steps[i],'llm','runPhaseF');
       outputs[steps[i]]=r.text;markOutputTimestamp(steps[i]);
       renderBatchResult('resultsBatchFinish',steps[i],r.text);
     }
@@ -5250,6 +5744,7 @@ graph TD
   while((dfm=dfRe.exec(src))!==null)designFigNums.push(parseInt(dfm[1]));
   const uniqueDesignFigs=[...new Set(designFigNums)].sort((a,b)=>a-b);
   
+  // [C1-3] Layer 1 가드: invention_scope 주입 (Mermaid)
   return `아래 도면 설계를 Mermaid flowchart 코드로 변환하라. 각 도면당 \`\`\`mermaid 블록 1개.
 
 ⛔⛔⛔ 도면 수 규칙 (절대 준수) ⛔⛔⛔
@@ -5270,7 +5765,7 @@ graph TD
     연결들...
 \`\`\`
 
-${src}`;
+${src}${_maybeScopeGuard(sid+'_mermaid','mermaid')}`;
 }
 
 // ═══ 전역 도면 헬퍼 함수 (v5.5 — 3중 복제 제거, 단일 정의) ═══
@@ -6124,6 +6619,7 @@ ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
       }
     }
     
+    pushOutputHistory(stepId,'llm','regenerateDiagramWithFeedback');
     outputs[stepId]=regenDesign;
     const resEl=document.getElementById(stepId==='step_07'?'resStep07':'resStep11');
     if(resEl)resEl.value=regenDesign;
@@ -6132,6 +6628,7 @@ ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
     // Mermaid 변환
     const mermaidPrompt=buildMermaidPrompt(stepId);
     const r2=await App.callClaude(mermaidPrompt);
+    pushOutputHistory(stepId+'_mermaid','llm','regenerateDiagramWithFeedback.mermaid');
     outputs[stepId+'_mermaid']=r2.text;
     renderDiagrams(stepId,r2.text);
     
@@ -11809,9 +12306,9 @@ function renderTitleCards(c,text){
   c.innerHTML='<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'+cs.map(x=>`<div class="title-candidate-row" onclick="selectTitle(this,\`${x.korean.replace(/\`/g,'')}\`,\`${x.english.replace(/\`/g,'')}\`)" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:2px solid var(--color-border);border-radius:10px;cursor:pointer;transition:all 0.15s;background:#fff" onmouseover="this.style.borderColor='var(--color-primary)';this.style.background='var(--color-primary-light)'" onmouseout="if(!this.classList.contains('selected')){this.style.borderColor='var(--color-border)';this.style.background='#fff'}"><div style="width:28px;height:28px;border-radius:50%;background:var(--color-primary-light);color:var(--color-primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${x.num}</div><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--color-text-primary)">${App.escapeHtml(x.korean)}</div><div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">${App.escapeHtml(x.english)}</div></div></div>`).join('')+'</div>';
   document.getElementById('titleConfirmArea').style.display='block';
 }
-function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tf">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tf">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
-function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral" id="charCount_${sid}">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="outputs['${sid}']=this.value;markOutputTimestamp('${sid}');saveProject(true);document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'" oninput="outputs['${sid}']=this.value;document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'">${App.escapeHtml(text)}</textarea></div>`;}
-function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tf">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
+function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tf">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tf">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="pushOutputHistory('${sid}','user_edit','renderClaimResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
+function renderEditableResult(c,sid,text){c.innerHTML=`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral" id="charCount_${sid}">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="pushOutputHistory('${sid}','user_edit','renderEditableResult');outputs['${sid}']=this.value;markOutputTimestamp('${sid}');saveProject(true);document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'" oninput="outputs['${sid}']=this.value;document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'">${App.escapeHtml(text)}</textarea></div>`;}
+function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tf">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="pushOutputHistory('${sid}','user_edit','renderBatchResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
 function toggleAccordion(h){h.classList.toggle('open');const b=h.nextElementSibling;if(b)b.classList.toggle('open');}
 
 // ═══════════ VALIDATION (v4.9 — full claim chain + relaxed matching) ═══════════
