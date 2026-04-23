@@ -9874,7 +9874,15 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const minShapeH=nonIconHeights.length>0?Math.min(...nonIconHeights):boxH;
     const uniformHeightFont=Math.floor(minShapeH*0.22);
     const figFontSize=Math.max(baseFontSize, Math.min(uniformHeightFont, 14)); // 14px cap — 도면 내 통일
-    
+
+    // [C2-6] 행별 라벨 y 통일 — 같은 행의 모든 shape 라벨이 같은 높이에 표시
+    // 기준: 행 내 최대 _shapeTextCy (shape 중앙 텍스트 y)
+    const _rowLabelBaseY={};
+    nodeData.forEach(nd=>{
+      const textCy=_shapeTextCy(nd.shapeType,nd.sy,nd.sh);
+      if(!_rowLabelBaseY[nd.row]||textCy>_rowLabelBaseY[nd.row])_rowLabelBaseY[nd.row]=textCy;
+    });
+
     nodeData.forEach(nd=>{
       const{id,sx,sy,sw,sh,shapeType,displayLabel,refNum}=nd;
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sw,sh);
@@ -9886,21 +9894,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       
       // ★ v10.6 FIX: 아이콘 shape 텍스트를 아이콘 실제 드로잉 하단에 배치 ★
       if(_isIconShape(shapeType)){
-        // vb.bottom은 라우팅 충돌 방지용 (텍스트 예약 영역 포함) — 텍스트 배치에는 아이콘 실제 하단 사용
-        const vb=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
-        const _iconReserve=shapeType==='sensor'?42:22;
-        const iconDrawBottom=vb.bottom-_iconReserve;
-        const labelStartY=iconDrawBottom+6;
-        const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize,7);
-        const lineH=labelFit.fontSize+2;
-        let labelSvg='';
-        labelFit.lines.forEach((line,li)=>{
-          labelSvg+=`<text x="${sx+sw/2}" y="${labelStartY+li*lineH+labelFit.fontSize}" text-anchor="middle" font-size="${labelFit.fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(line)}</text>`;
-        });
-        svg+=labelSvg;
+        // [C2-6] 행별 통일 라벨 y — 아이콘도 shape 중앙 textCy 기반으로 배치
+        const _iconTextCy=_rowLabelBaseY[nd.row]!==undefined?_rowLabelBaseY[nd.row]:_shapeTextCy(shapeType,sy,sh);
+        const {svg:lSvg}=_svgMultiLineLabel(sx+sw/2, _iconTextCy, displayLabel, labelMaxW, fontSize, {minFontSize:7});
+        svg+=lSvg;
       }else if(shapeType==='server'){
         // ★ v10.4: 서버 shape — 텍스트를 전체 중앙에 배치 + 흰색 배경으로 가로선 가림 ★
-        const textCy2=_shapeTextCy(shapeType,sy,sh);
+        // [C2-6] 행별 통일 라벨 y 적용
+        const textCy2=_rowLabelBaseY[nd.row]!==undefined?_rowLabelBaseY[nd.row]:_shapeTextCy(shapeType,sy,sh);
         // 점(dots)이 우측에 있으므로 텍스트 너비를 제한 (sw의 75%)
         const serverLabelMaxW=sw*0.75;
         const labelFit=_fitLabelLines(displayLabel,serverLabelMaxW,fontSize,7);
@@ -9917,8 +9918,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
         });
         svg+=labelSvg;
       }else{
-        // 일반 shape: shape 내부 중앙에 텍스트
-        const textCy=_shapeTextCy(shapeType,sy,sh);
+        // [C2-6] 행별 통일 라벨 y 적용
+        const textCy=_rowLabelBaseY[nd.row]!==undefined?_rowLabelBaseY[nd.row]:_shapeTextCy(shapeType,sy,sh);
         const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize,7);
         fontSize=labelFit.fontSize;
         const labelBaseY=refInside?textCy-2:textCy;
