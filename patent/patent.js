@@ -9454,6 +9454,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
   if(isFig1){
     // ═══ 도 1: 2D 토폴로지 블록도 v10.0 ═══
     // 렌더 순서: ①연결선 → ②Shape(위에 덮음) → ③참조번호(Shape 아래)
+    // [C2-4] all-L1 평면 구조 감지
+    const _isAllL1Flat=allL1&&nodes.length>0&&nodes.every(n=>!n.isContainer);
+    if(_isAllL1Flat)console.log(`[C2-4] Fig ${figNum}: all-L1 평면 구조 (${nodes.length}개 노드)`);
     // [C2-2] container 노드 분리 — 일반 레이아웃에서 제외
     const _fig1Containers=nodes.filter(n=>n.isContainer);
     const _fig1LayoutNodes=_fig1Containers.length>0?nodes.filter(n=>!n.isContainer):nodes;
@@ -9948,6 +9951,38 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       }
       svg+=refSvg;
     });
+
+    // [C2-4] all-L1 렌더 검증 — grid 누락 노드 강제 복구
+    if(_isAllL1Flat&&nodeData.length<_fig1LayoutNodes.length){
+      console.warn(`[C2-4] 렌더 누락 감지: ${nodeData.length}/${_fig1LayoutNodes.length}개 렌더됨 — 누락 노드 복구`);
+      let _recovY=marginY;
+      if(nodeData.length>0)_recovY=Math.max(...nodeData.map(nd=>nd.sy+nd.sh))+rowGapBase+refNumH;
+      let _recovIdx=0;
+      _fig1LayoutNodes.forEach(nd=>{
+        if(nodeBoxes[nd.id])return;
+        const rx=marginX+_recovIdx*(boxW2D+colGap);
+        const ry=_recovY;
+        const refNum=extractRefNum(nd.label,'');
+        const displayLabel=_shortenFig1Label(nd.label);
+        svg+=_drawShapeShadow('box',rx+SHADOW_OFFSET,ry+SHADOW_OFFSET,boxW2D,boxH,1);
+        svg+=_drawShapeBody('box',rx,ry,boxW2D,boxH,2);
+        const{svg:lSvg}=_svgMultiLineLabel(rx+boxW2D/2,ry+boxH/2,displayLabel,boxW2D*0.9,11,{minFontSize:7});
+        svg+=lSvg;
+        if(refNum)svg+=`<text x="${rx+boxW2D/2}" y="${ry+boxH+16}" text-anchor="middle" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+        nodeBoxes[nd.id]={x:rx,y:ry,w:boxW2D,h:boxH,cx:rx+boxW2D/2,cy:ry+boxH/2,_sx:rx,_sy:ry,_sw:boxW2D,_sh:boxH,_shapeType:'box'};
+        _recovIdx++;
+      });
+      // [C2-4] viewBox 재확장 — 복구 노드 포함
+      let _recovMaxBottom=0;
+      Object.values(nodeBoxes).forEach(b=>{
+        const bot=(b._sy||b.y)+(b._sh||b.h)+REF_PADDING+10;
+        if(bot>_recovMaxBottom)_recovMaxBottom=bot;
+      });
+      const _recovSvgH=Math.max(correctedSvgH,_recovMaxBottom+marginY);
+      if(_recovSvgH>correctedSvgH){
+        svg=svg.replace(/viewBox="0 0 [^"]*"/,`viewBox="0 0 ${svgW} ${_recovSvgH}"`);
+      }
+    }
 
     // [C2-2] container 프레임 렌더 — 일반 노드 위에 점선 프레임 오버레이
     _fig1Containers.forEach(cn=>{
