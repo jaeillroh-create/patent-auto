@@ -1236,8 +1236,8 @@ label {
 /* ============================================================
    24. 발명 범위 패널 (inventionScope)
    ============================================================ */
-.scope-panel { margin-top: 16px; padding: 12px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-alt); }
-.scope-panel.locked { border-left: 4px solid var(--color-success); }
-.scope-panel .baseline-summary { font-size: 13px; color: var(--color-text-muted); }
+.scope-panel { margin-top: 16px; padding: 12px; border: 1px solid var(--pt-gray-200); border-radius: 8px; background: var(--pt-gray-50); }
+.scope-panel.locked { border-left: 4px solid var(--pt-success); }
+.scope-panel .baseline-summary { font-size: 13px; color: var(--pt-gray-500); }
 .scope-components { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.scope-chip { padding: 4px 10px; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 12px; font-size: 12px; }
+.scope-chip { padding: 4px 10px; background: #fff; border: 1px solid var(--pt-gray-200); border-radius: 12px; font-size: 12px; }
