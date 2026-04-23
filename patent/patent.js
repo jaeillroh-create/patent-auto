@@ -228,6 +228,16 @@ const INVENTION_SCOPE_SCHEMA_INSTRUCTION = `아래 JSON 스키마로만 응답�
   "explicit_nonscope": ["명시적으로 제외된 요소 (있는 경우만)"]
 }`;
 
+// [C1-3] Layer 1 가드: invention_scope 주입 대상 sid
+const SCOPE_GUARDED_TEXT_STEPS = [
+  'step_06', 'step_10', 'step_20',
+  'step_08', 'step_12',
+  'step_13_applied', 'step_13_applied_method'
+];
+const SCOPE_GUARDED_MERMAID_STEPS = [
+  'step_07_mermaid', 'step_11_mermaid'
+];
+
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
   currentProjectId=null;outputs={};outputHistory={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
@@ -535,6 +545,81 @@ function _parseJSONSafe(text) {
   const braceMatch = text.match(/\{[\s\S]*\}/);
   if (braceMatch) try { return JSON.parse(braceMatch[0]); } catch(e) {}
   return null;
+}
+
+// [C1-3] Layer 1 가드: invention_scope 주입 블록 생성
+function buildScopeGuardBlock(sid, variant) {
+  if (!inventionScope || !inventionScope.locked_at) return '';
+  const bl = inventionScope.baseline;
+  if (!bl || !Array.isArray(bl.core_components)) return '';
+  const exp = inventionScope.approved_expansions || [];
+  const themes = (anchorThemeMode === 'manual' ? selectedAnchorThemes : [])
+    .map(k => ANCHOR_THEMES.find(t => t.key === k))
+    .filter(Boolean);
+
+  if (variant === 'text') {
+    return [
+      '',
+      '[발명 범위 준수 지침]',
+      '아래 invention_scope는 이 발명의 확정된 기준선이다.',
+      '이 범위를 벗어나는 신규 기술요소를 임의로 추가하지 말라.',
+      '',
+      '<baseline_components>',
+      bl.core_components.map(c =>
+        `- ${c.name}${c.aliases && c.aliases.length ? ' (별칭: '+c.aliases.join(', ')+')' : ''}`
+      ).join('\n'),
+      '</baseline_components>',
+      '',
+      '<baseline_functions>',
+      (bl.core_functions || []).map(f => `- ${f.desc}`).join('\n'),
+      '</baseline_functions>',
+      '',
+      exp.length ? '<approved_expansions>\n' +
+        exp.map(e => `- ${e.component} (${e.type})`).join('\n') +
+        '\n</approved_expansions>\n' : '',
+      themes.length ? '<active_anchor_themes>\n' +
+        themes.map(t => `- ${t.label}: ${t.desc}`).join('\n') +
+        '\n</active_anchor_themes>\n' : '',
+      '허용 규칙:',
+      '1. 위 baseline/approved_expansions에 포함된 요소 자유 사용',
+      '2. 자명한 하위개념 구체화 허용 (예: "딥러닝"→"CNN")',
+      '3. 활성 앵커 테마에 따른 전략적 확장 허용',
+      '4. 위 3가지에 해당하지 않는 신규 기술요소 추가 시, 해당 부분을',
+      '   [[NOVEL: 요소명]] 마크업으로 명시적 표시',
+      '5. 사용자 명시적 확장 지시가 있는 경우 [[NOVEL:]] 마크업 후 생성',
+      ''
+    ].join('\n');
+  }
+
+  if (variant === 'mermaid') {
+    return [
+      '',
+      '[도면 구성요소 제한]',
+      '아래 허용 구성요소 목록을 참고하여 Mermaid 도면을 구성하라.',
+      '각 노드의 레이블은 목록의 정확한 명칭을 사용하라.',
+      '',
+      '<allowed_components>',
+      bl.core_components.map(c => `- ${c.name}`).join('\n'),
+      exp.length ? exp.map(e => `- ${e.component} (확장)`).join('\n') : '',
+      '</allowed_components>',
+      '',
+      themes.length ? '<active_anchor_themes>\n' +
+        themes.map(t => `- ${t.label}`).join('\n') +
+        '\n</active_anchor_themes>\n' : '',
+      '허용 규칙:',
+      '1. 위 목록의 구성요소를 자유롭게 배치',
+      '2. 앵커 테마에 따른 새 노드 추가 시 실제 기술명 사용 (태깅 불필요)',
+      '3. Mermaid 문법 유지 (주석/마크업으로 문법을 깨지 말 것)',
+      ''
+    ].join('\n');
+  }
+
+  return '';
+}
+function _maybeScopeGuard(sid, variant) {
+  if (variant === 'text' && !SCOPE_GUARDED_TEXT_STEPS.includes(sid)) return '';
+  if (variant === 'mermaid' && !SCOPE_GUARDED_MERMAID_STEPS.includes(sid)) return '';
+  return buildScopeGuardBlock(sid, variant);
 }
 
 async function extractInventionScope() {
@@ -2392,6 +2477,7 @@ function buildPrompt(stepId){
       }
     }
     // 기존 내용 + 추가 지시 → 부분 수정 프롬프트
+    // [C1-3] Layer 1 가드: invention_scope 주입
     return `아래 [기존 작성 내용]을 바탕으로, [수정 지시사항]에 해당하는 부분만 수정하고 나머지는 그대로 유지하여 전체 내용을 출력하라.
 수정 지시와 무관한 부분은 원문 그대로 유지해야 한다. 전체 재작성 금지.
 ${_pmFigConstraint}
@@ -2402,11 +2488,12 @@ ${userCmd}
 ${outputs[stepId]}
 
 [참고: 원래 작성 기준]
-${prompt}`;
+${prompt}${_maybeScopeGuard(stepId,'text')}`;
   }
-  
+
   // 기존 내용 없음 → 전체 신규 작성 + 추가 지시사항
-  return prompt+buildUserCommandSuffix(stepId);
+  // [C1-3] Layer 1 가드: invention_scope 주입
+  return prompt+buildUserCommandSuffix(stepId)+_maybeScopeGuard(stepId,'text');
 }
 function _buildPromptCore(stepId,inv,T,styleRef){
   switch(stepId){
@@ -3898,7 +3985,7 @@ REASON: ...
 [검토 결과] ${filterReviewForScope(outputs.step_13,'device')}
 [청구항 구성요소 참조] ${extractClaimComponents(outputs.step_06||'')}
 [현재 상세설명]
-${baseDesc}`);
+${baseDesc}${_maybeScopeGuard('step_13_applied','text')}`);
 
     // 편집 지시 파싱
     const edits=parseEditInstructions(editInstructions.text);
@@ -3984,7 +4071,7 @@ REASON: (검토 항목)
 [발명의 명칭] ${selectedTitle}
 [검토 결과] ${filterReviewForScope(outputs.step_13,'method')}
 [현재 방법 상세설명]
-${baseMethod}`);
+${baseMethod}${_maybeScopeGuard('step_13_applied_method','text')}`);
 
       const methodEdits=parseEditInstructions(methodEditInstructions.text);
       console.log(`[applyReview] 방법 편집 지시 ${methodEdits.length}개 파싱`);
@@ -5448,6 +5535,7 @@ graph TD
   while((dfm=dfRe.exec(src))!==null)designFigNums.push(parseInt(dfm[1]));
   const uniqueDesignFigs=[...new Set(designFigNums)].sort((a,b)=>a-b);
   
+  // [C1-3] Layer 1 가드: invention_scope 주입 (Mermaid)
   return `아래 도면 설계를 Mermaid flowchart 코드로 변환하라. 각 도면당 \`\`\`mermaid 블록 1개.
 
 ⛔⛔⛔ 도면 수 규칙 (절대 준수) ⛔⛔⛔
@@ -5468,7 +5556,7 @@ graph TD
     연결들...
 \`\`\`
 
-${src}`;
+${src}${_maybeScopeGuard(sid+'_mermaid','mermaid')}`;
 }
 
 // ═══ 전역 도면 헬퍼 함수 (v5.5 — 3중 복제 제거, 단일 정의) ═══
