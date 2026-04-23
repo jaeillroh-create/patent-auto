@@ -49,6 +49,12 @@ let inventionScope = null;
 // [C1-6a] baseline 편집 UI 상태
 let _editingComponentId = null;
 let _modalAliases = [];
+// [C1-5] Layer 3 Sonnet 판정 상태
+let _judgmentCache = new Map();
+let _costTracking = {
+  judgment_calls: 0, total_input_tokens: 0, total_output_tokens: 0,
+  estimated_cost_usd: 0, warned_50: false, stopped_100: false
+};
 // ═══ v11.0: 예시도/개념도 ═══
 let conceptDiagramEnabled = false;
 let conceptDiagramCount = 0;
@@ -253,6 +259,7 @@ const SCOPE_GUARDED_MERMAID_STEPS = [
 function clearAllState(){
   currentProjectId=null;outputs={};outputHistory={};scopeCheckResults={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
   usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};uploadedFiles=[];diagramData={};inventionScope=null;
+  _judgmentCache.clear();_costTracking={judgment_calls:0,total_input_tokens:0,total_output_tokens:0,estimated_cost_usd:0,warned_50:false,stopped_100:false};
   projectRefStyleText='';requiredFigures=[];outputTimestamps={};stepUserCommands={};
   conceptDiagramEnabled=false;conceptDiagramCount=0;conceptDiagramTypes=[];
   // Claim defaults
@@ -496,6 +503,8 @@ async function openProject(pid){
   outputHistory=s.outputHistory||{};
   inventionScope=s.inventionScope||null;
   scopeCheckResults=s.scopeCheckResults||{};
+  _costTracking=s.costTracking||{judgment_calls:0,total_input_tokens:0,total_output_tokens:0,estimated_cost_usd:0,warned_50:false,stopped_100:false};
+  _judgmentCache.clear();
   conceptDiagramEnabled=s.conceptDiagramEnabled||false;
   conceptDiagramCount=s.conceptDiagramCount||0;
   conceptDiagramTypes=s.conceptDiagramTypes||[];
@@ -547,7 +556,7 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,costTracking:_costTracking,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 
 // ═══════════ [P-C1] INVENTION SCOPE ═══════════
 function _parseJSONSafe(text) {
@@ -819,19 +828,310 @@ function detectMermaidRefConflicts() {
 // [C1-4] Layer 2 공개 API
 async function runScopeCheck(sid) {
   if (!inventionScope?.locked_at) { App.showToast('발명 범위가 확정되지 않았습니다', 'info'); return null; }
-  if (SCOPE_GUARDED_TEXT_STEPS.includes(sid)) return await runScopeCheck_text(sid);
-  if (SCOPE_GUARDED_MERMAID_STEPS.includes(sid)) {
-    const result = await runScopeCheck_mermaid(sid);
+  let result = null;
+  if (SCOPE_GUARDED_TEXT_STEPS.includes(sid)) {
+    result = await runScopeCheck_text(sid);
+  } else if (SCOPE_GUARDED_MERMAID_STEPS.includes(sid)) {
+    result = await runScopeCheck_mermaid(sid);
     detectMermaidRefConflicts();
-    return result;
   }
-  return null;
+  // [C1-5] 자동 판정 연쇄
+  if (result && result.novel_components && result.novel_components.length > 0) {
+    try { await runScopeJudgment(sid); } catch (e) {
+      console.warn('[C1-5] runScopeJudgment failed for', sid, e.message);
+    }
+  }
+  return result;
 }
 async function runScopeCheckAll() {
   const allSids = [...SCOPE_GUARDED_TEXT_STEPS, ...SCOPE_GUARDED_MERMAID_STEPS];
   const results = {};
   for (const sid of allSids) { if (outputs[sid]) results[sid] = await runScopeCheck(sid); }
   return results;
+}
+
+// ═══════════ [C1-5] LAYER 3: SONNET 판정 시스템 ═══════════
+
+const SONNET_INPUT_COST_PER_TOKEN = 3 / 1_000_000;
+const SONNET_OUTPUT_COST_PER_TOKEN = 15 / 1_000_000;
+
+const JUDGMENT_SYSTEM_PROMPT = `당신은 특허 명세서 심사 변리사이다.
+발명의 기준선(invention_scope) 대비 새로 등장한 기술 요소를 3종으로 분류한다.
+
+판정 기준:
+
+1. strategic_anchor: 선택된 앵커 테마(예: 신뢰도 가중치, 임계값 적응 등)에 따른 전략적 확장. 출원인의 의도적 확장 가능성 높음.
+
+2. elaboration: baseline 구성요소의 자명한 하위개념 또는 기술상식상 자명한 부속구성. 원 발명의 범위 내 구체화. 예: "딥러닝 모델" → "CNN 분류기", "무선 통신" → "BLE 모듈".
+
+3. drift: baseline에도 없고 앵커 테마와도 무관하며 자명한 하위개념도 아닌 신규 기술 요소. 원 발명 범위 이탈 가능성. 예: 센서 기반 발명에 갑자기 "블록체인 검증" 등장.
+
+confidence는 0.0~1.0 사이 소수. 0.85 이상이면 확신.
+
+응답은 순수 JSON. 설명/prefix/코드블록 금지.
+{"verdict":"strategic_anchor|elaboration|drift","confidence":0.0~1.0,"reason":"판정 근거 50자 이내","matched_anchor":"해당 anchor key 또는 null"}`;
+
+function _contextHash(text) {
+  const snippet = (text || '').substring(0, 150);
+  let h = 2166136261;
+  for (let i = 0; i < snippet.length; i++) {
+    h ^= snippet.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+function _buildJudgmentPrompt_direct(component, contextSnippet) {
+  if (!inventionScope?.baseline) return null;
+  const bl = inventionScope.baseline;
+  const exp = inventionScope.approved_expansions || [];
+  const themes = (anchorThemeMode === 'manual' ? selectedAnchorThemes : [])
+    .map(k => ANCHOR_THEMES.find(t => t.key === k))
+    .filter(Boolean);
+
+  return `<baseline>
+핵심 구성: ${(bl.core_components||[]).map(c => c.name).join(', ')}
+핵심 기능: ${(bl.core_functions || []).map(f => f.desc).join('; ')}
+문제: ${bl.problem_space || ''}
+해결: ${bl.solution_space || ''}
+</baseline>
+
+<approved_expansions>
+${exp.length ? exp.map(e => `- ${e.component} (${e.type})`).join('\n') : '(없음)'}
+</approved_expansions>
+
+<anchor_themes>
+${themes.length ? themes.map(t => `- ${t.key}: ${t.label} - ${t.desc}`).join('\n') : '(없음)'}
+</anchor_themes>
+
+<novel_component>
+이름: ${component.name}
+맥락: ${contextSnippet || ''}
+</novel_component>
+
+위 novel_component를 strategic_anchor / elaboration / drift 중 어느 것인지 판정하라.`;
+}
+
+function _buildJudgmentPrompt_postReview(component, contextSnippet, originalText) {
+  const direct = _buildJudgmentPrompt_direct(component, contextSnippet);
+  if (!direct) return null;
+
+  return `${direct}
+
+<review_context>
+이 novel_component는 AI 검토(step_13) 과정에서 원본 상세설명에 추가되었다.
+
+검토 지시 의도: 명확성 개선, 실시예 보강, 기재불비 방지 등
+검토 전 원본: ${(originalText || '').substring(0, 1500)}
+</review_context>
+
+참고: 검토 과정에서 추가된 요소가 검토 지시 의도(명확성 개선 등)에 부합하면 elaboration 가능성 높음. 의도와 무관하게 추가된 신규 기술은 drift.`;
+}
+
+function _checkCostThresholds() {
+  if (!_costTracking.warned_50 && _costTracking.judgment_calls >= 50) {
+    _costTracking.warned_50 = true;
+    App.showToast(
+      `검증 판정 ${_costTracking.judgment_calls}회, 누적 비용 약 $${_costTracking.estimated_cost_usd.toFixed(2)}`,
+      'warning'
+    );
+  }
+  if (!_costTracking.stopped_100 && _costTracking.judgment_calls >= 100) {
+    _costTracking.stopped_100 = true;
+    const proceed = confirm(
+      `판정 호출이 ${_costTracking.judgment_calls}회에 도달했습니다. ` +
+      `누적 비용 약 $${_costTracking.estimated_cost_usd.toFixed(2)}.\n\n` +
+      `계속 진행하시겠습니까? 취소하면 이후 판정은 중단되고 undetermined로 표시됩니다.`
+    );
+    if (proceed) {
+      _costTracking.stopped_100 = false;
+    }
+  }
+}
+
+async function classifyNovelComponent(component, contextSnippet) {
+  const ctxHash = _contextHash(contextSnippet);
+  const cacheKey = `${component.name}||${ctxHash}`;
+
+  if (_judgmentCache.has(cacheKey)) {
+    return { ..._judgmentCache.get(cacheKey), from_cache: true };
+  }
+
+  if (_costTracking.stopped_100) {
+    return { verdict: 'undetermined', confidence: 0, reason: '비용 상한 도달로 판정 중단', from_cache: false, judged_at: new Date().toISOString() };
+  }
+
+  const prompt = _buildJudgmentPrompt_direct(component, contextSnippet);
+  if (!prompt) {
+    return { verdict: 'undetermined', confidence: 0, reason: 'invention_scope 없음', from_cache: false, judged_at: new Date().toISOString() };
+  }
+
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const beforeIt = usage.inputTokens, beforeOt = usage.outputTokens;
+      const resp = await App.callClaudeSonnet(`${JUDGMENT_SYSTEM_PROMPT}\n\n${prompt}`, 512);
+      const deltaIt = usage.inputTokens - beforeIt;
+      const deltaOt = usage.outputTokens - beforeOt;
+
+      _costTracking.judgment_calls++;
+      _costTracking.total_input_tokens += deltaIt;
+      _costTracking.total_output_tokens += deltaOt;
+      _costTracking.estimated_cost_usd =
+        _costTracking.total_input_tokens * SONNET_INPUT_COST_PER_TOKEN +
+        _costTracking.total_output_tokens * SONNET_OUTPUT_COST_PER_TOKEN;
+      _checkCostThresholds();
+
+      const parsed = _parseJSONSafe(resp.text);
+      if (!parsed || !parsed.verdict) throw new Error('JSON 파싱 실패 또는 verdict 누락');
+
+      const result = {
+        verdict: parsed.verdict,
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+        reason: parsed.reason || '',
+        matched_anchor: parsed.matched_anchor || null,
+        from_cache: false,
+        judged_at: new Date().toISOString()
+      };
+      _judgmentCache.set(cacheKey, result);
+      return result;
+
+    } catch (e) {
+      lastError = e;
+      console.warn(`[C1-5] classifyNovelComponent attempt ${attempt} failed:`, e.message);
+      if (attempt === 1) await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+
+  return { verdict: 'undetermined', confidence: 0, reason: `Sonnet 판정 실패: ${lastError?.message || 'unknown'}`, from_cache: false, judged_at: new Date().toISOString() };
+}
+
+async function classifyNovelComponent_postReview(component, contextSnippet, originalText) {
+  const ctxHash = _contextHash(contextSnippet);
+  const cacheKey = `${component.name}||${ctxHash}||postReview`;
+
+  if (_judgmentCache.has(cacheKey)) {
+    return { ..._judgmentCache.get(cacheKey), from_cache: true };
+  }
+
+  if (_costTracking.stopped_100) {
+    return { verdict: 'undetermined', confidence: 0, reason: '비용 상한 도달', is_post_review: true, from_cache: false, judged_at: new Date().toISOString() };
+  }
+
+  const prompt = _buildJudgmentPrompt_postReview(component, contextSnippet, originalText);
+  if (!prompt) {
+    return { verdict: 'undetermined', confidence: 0, reason: 'invention_scope 없음', is_post_review: true, from_cache: false, judged_at: new Date().toISOString() };
+  }
+
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const beforeIt = usage.inputTokens, beforeOt = usage.outputTokens;
+      const resp = await App.callClaudeSonnet(`${JUDGMENT_SYSTEM_PROMPT}\n\n${prompt}`, 512);
+      const deltaIt = usage.inputTokens - beforeIt;
+      const deltaOt = usage.outputTokens - beforeOt;
+
+      _costTracking.judgment_calls++;
+      _costTracking.total_input_tokens += deltaIt;
+      _costTracking.total_output_tokens += deltaOt;
+      _costTracking.estimated_cost_usd =
+        _costTracking.total_input_tokens * SONNET_INPUT_COST_PER_TOKEN +
+        _costTracking.total_output_tokens * SONNET_OUTPUT_COST_PER_TOKEN;
+      _checkCostThresholds();
+
+      const parsed = _parseJSONSafe(resp.text);
+      if (!parsed || !parsed.verdict) throw new Error('JSON 파싱 실패');
+
+      const result = {
+        verdict: parsed.verdict,
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+        reason: parsed.reason || '',
+        matched_anchor: parsed.matched_anchor || null,
+        is_post_review: true,
+        from_cache: false,
+        judged_at: new Date().toISOString()
+      };
+      _judgmentCache.set(cacheKey, result);
+      return result;
+
+    } catch (e) {
+      lastError = e;
+      console.warn(`[C1-5] classifyPostReview attempt ${attempt} failed:`, e.message);
+      if (attempt === 1) await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+
+  return { verdict: 'undetermined', confidence: 0, reason: `Sonnet 판정 실패: ${lastError?.message || 'unknown'}`, is_post_review: true, from_cache: false, judged_at: new Date().toISOString() };
+}
+
+function _autoApproveIfEligible(component, verdict, sid) {
+  if (verdict.verdict !== 'elaboration') return false;
+  if (verdict.confidence < 0.85) return false;
+  const exists = (inventionScope.approved_expansions || []).some(e => e.component === component.name);
+  if (exists) return false;
+  if (!inventionScope.approved_expansions) inventionScope.approved_expansions = [];
+  const expansion = {
+    type: 'elaboration', component: component.name, anchor_theme: null,
+    approved_at: new Date().toISOString(), approved_by: 'auto',
+    approval_reason: verdict.reason, originating_step: sid, confidence: verdict.confidence
+  };
+  inventionScope.approved_expansions.push(expansion);
+  _appendAuditLog('expansion_auto_approved', expansion);
+  return true;
+}
+
+async function runScopeJudgment(sid) {
+  const result = scopeCheckResults[sid];
+  if (!result) return null;
+  if (!result.novel_components || result.novel_components.length === 0) {
+    result.verdicts = [];
+    result.judgment_status = 'no_novel';
+    return result;
+  }
+
+  const verdicts = [];
+  const isPostReview = sid === 'step_13_applied' || sid === 'step_13_applied_method';
+  const originalText = isPostReview
+    ? (sid === 'step_13_applied' ? outputs.step_08 : outputs.step_12)
+    : null;
+
+  for (const comp of result.novel_components) {
+    let v;
+    if (isPostReview) {
+      v = await classifyNovelComponent_postReview(comp, comp.context_snippet, originalText);
+    } else {
+      v = await classifyNovelComponent(comp, comp.context_snippet);
+    }
+    v.component = comp.name;
+    verdicts.push(v);
+    const approved = _autoApproveIfEligible(comp, v, sid);
+    v.auto_approved = approved;
+  }
+
+  result.verdicts = verdicts;
+  result.judgment_status = 'ok';
+  result.judgment_at = new Date().toISOString();
+  result.cost_tracking_snapshot = { ..._costTracking };
+  saveProject(true);
+  return result;
+}
+
+async function runAllJudgments() {
+  if (!inventionScope?.locked_at) {
+    App.showToast('발명 범위가 확정되지 않았습니다', 'warning');
+    return;
+  }
+  const sids = Object.keys(scopeCheckResults);
+  const totalBefore = _costTracking.judgment_calls;
+  for (const sid of sids) {
+    if (_costTracking.stopped_100) break;
+    await runScopeJudgment(sid);
+  }
+  const delta = _costTracking.judgment_calls - totalBefore;
+  App.showToast(
+    `판정 완료: ${delta}회 추가 호출 (누적 $${_costTracking.estimated_cost_usd.toFixed(3)})`,
+    'success'
+  );
 }
 
 async function extractInventionScope() {
