@@ -6982,6 +6982,9 @@ function _drawShapeBody(type,x,y,w,h,sw){
       });
       return s;
     }
+    // [C2-3] container shape: 점선 프레임 (subgraph 부모 노드용)
+    case 'container':
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#666" stroke-width="${sw}" stroke-dasharray="6,3" rx="4"/>`;
     default:return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff" stroke="#000" stroke-width="${sw}"/>`;
   }
 }
@@ -7822,6 +7825,12 @@ function parseMermaidGraph(code){
   code.split('\n').forEach(line=>{
     const l=line.trim();
     if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef'))return;
+    // [C2-1] subgraph 부모 컨테이너 노드 생성
+    if(l.startsWith('subgraph')){
+      const sgm=l.match(/^subgraph\s+(\w+)(?:\s*\[["']?(.+?)["']?\])?/);
+      if(sgm){const[,id,label]=sgm;if(!nodes[id])nodes[id]={id,label:(label||id).trim(),shape:'container',isContainer:true};}
+      return;
+    }
     
     // 노드 정의 패턴들 (순서 중요: 더 복잡한 패턴 먼저)
     const patterns=[
@@ -7920,15 +7929,41 @@ function parseMermaidGraph(code){
   return result;
 }
 function layoutGraph(nodes,edges){
+  // [C2-2] container 노드 분리 — 일반 레이아웃에서 제외 후 bounding box로 확장
+  const containers=nodes.filter(n=>n.isContainer);
+  const regular=nodes.filter(n=>!n.isContainer);
+  const layoutNodes=regular.length>0?regular:nodes;
+
   const adj={};edges.forEach(e=>{if(!adj[e.from])adj[e.from]=[];adj[e.from].push(e.to);});
-  const targets=new Set(edges.map(e=>e.to));const roots=nodes.filter(n=>!targets.has(n.id));
-  if(!roots.length&&nodes.length)roots.push(nodes[0]);
+  const targets=new Set(edges.map(e=>e.to));const roots=layoutNodes.filter(n=>!targets.has(n.id));
+  if(!roots.length&&layoutNodes.length)roots.push(layoutNodes[0]);
   const levels={},visited=new Set();const queue=roots.map(r=>({id:r.id,level:0}));
   while(queue.length){const{id,level}=queue.shift();if(visited.has(id))continue;visited.add(id);levels[id]=level;(adj[id]||[]).forEach(tid=>{if(!visited.has(tid))queue.push({id:tid,level:level+1});});}
-  nodes.forEach(n=>{if(!(n.id in levels))levels[n.id]=0;});
-  const groups={};nodes.forEach(n=>{const lv=levels[n.id];if(!groups[lv])groups[lv]=[];groups[lv].push(n);});
+  layoutNodes.forEach(n=>{if(!(n.id in levels))levels[n.id]=0;});
+  const groups={};layoutNodes.forEach(n=>{const lv=levels[n.id];if(!groups[lv])groups[lv]=[];groups[lv].push(n);});
   const NW=2.5,NH=0.65,HG=0.8,VG=1.2,SW=13.33,startY=0.7;const positions={};
   Object.entries(groups).forEach(([lv,grp])=>{const totalW=grp.length*NW+(grp.length-1)*HG;const sx=(SW-totalW)/2;grp.forEach((node,i)=>{const x=sx+i*(NW+HG),y=startY+parseInt(lv)*(NH+VG);positions[node.id]={x,y,w:NW,h:NH,cx:x+NW/2,cy:y+NH/2};});});
+
+  // [C2-2] container → 자식 노드의 bounding box + padding
+  const CPD=0.4,CLH=0.3;
+  containers.forEach(cn=>{
+    const cRef=parseInt((_extractRefNum(cn.label,'')||'').replace(/\D/g,''));
+    const children=regular.filter(n=>{
+      const nRef=parseInt((_extractRefNum(n.label,'')||'').replace(/\D/g,''));
+      if(isNaN(cRef)||isNaN(nRef))return true;
+      return Math.floor(nRef/100)===Math.floor(cRef/100)&&nRef!==cRef;
+    });
+    const childPos=children.map(c=>positions[c.id]).filter(Boolean);
+    if(childPos.length===0){
+      positions[cn.id]={x:0,y:startY,w:NW,h:NH,cx:NW/2,cy:startY+NH/2};
+      return;
+    }
+    let minX=Infinity,minY=Infinity,maxR=-Infinity,maxB=-Infinity;
+    childPos.forEach(p=>{minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxR=Math.max(maxR,p.x+p.w);maxB=Math.max(maxB,p.y+p.h);});
+    const w=(maxR-minX)+CPD*2,h=(maxB-minY)+CPD*2+CLH;
+    const x=minX-CPD,y=minY-CPD-CLH;
+    positions[cn.id]={x,y,w,h,cx:x+w/2,cy:y+h/2};
+  });
   return positions;
 }
 function computeEdgeRoutes(edges,positions){
@@ -9419,7 +9454,10 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
   if(isFig1){
     // ═══ 도 1: 2D 토폴로지 블록도 v10.0 ═══
     // 렌더 순서: ①연결선 → ②Shape(위에 덮음) → ③참조번호(Shape 아래)
-    const layout=computeDeviceLayout2D(nodes,edges,figNum);
+    // [C2-2] container 노드 분리 — 일반 레이아웃에서 제외
+    const _fig1Containers=nodes.filter(n=>n.isContainer);
+    const _fig1LayoutNodes=_fig1Containers.length>0?nodes.filter(n=>!n.isContainer):nodes;
+    const layout=computeDeviceLayout2D(_fig1LayoutNodes,edges,figNum);
     const{grid,maxCols,numRows,uniqueEdges,biDirPairs}=layout;
     
     // 열 수에 따른 박스 크기 조정
@@ -9910,7 +9948,31 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       }
       svg+=refSvg;
     });
-    
+
+    // [C2-2] container 프레임 렌더 — 일반 노드 위에 점선 프레임 오버레이
+    _fig1Containers.forEach(cn=>{
+      const cRef=parseInt((extractRefNum(cn.label,'')||'').replace(/\D/g,''));
+      const childBoxArr=Object.entries(nodeBoxes).filter(([id])=>{
+        if(isNaN(cRef))return true;
+        const nd=_fig1LayoutNodes.find(n=>n.id===id);
+        if(!nd)return false;
+        const nRef=parseInt((extractRefNum(nd.label,'')||'').replace(/\D/g,''));
+        return !isNaN(nRef)&&Math.floor(nRef/100)===Math.floor(cRef/100);
+      }).map(([,b])=>b);
+      if(childBoxArr.length===0)return;
+      let cMinX=Infinity,cMinY=Infinity,cMaxX=-Infinity,cMaxY=-Infinity;
+      childBoxArr.forEach(b=>{
+        cMinX=Math.min(cMinX,b._sx);cMinY=Math.min(cMinY,b._sy);
+        cMaxX=Math.max(cMaxX,b._sx+b._sw);cMaxY=Math.max(cMaxY,b._sy+b._sh+30);
+      });
+      const cPad=10,cLblH=16;
+      const cfx=cMinX-cPad,cfy=cMinY-cPad-cLblH;
+      const cfw=(cMaxX-cMinX)+cPad*2,cfh=(cMaxY-cMinY)+cPad*2+cLblH;
+      svg+=`<rect x="${cfx}" y="${cfy}" width="${cfw}" height="${cfh}" fill="none" stroke="#666" stroke-width="1.5" stroke-dasharray="6,3" rx="4"/>`;
+      const cLabel=_safeCleanLabel(cn.label);
+      svg+=`<text x="${cfx+6}" y="${cfy+12}" font-size="10" font-weight="bold" font-family="맑은 고딕,Arial,sans-serif" fill="#555">${App.escapeHtml(cLabel)}</text>`;
+    });
+
     svg+='</svg>';
     const c=document.getElementById(containerId);
     if(c)c.innerHTML=svg;
