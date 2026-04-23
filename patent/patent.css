@@ -1310,3 +1310,30 @@ label {
 .conflict-row { display: flex; gap: 12px; font-size: 13px; padding: 4px 0; }
 .conflict-ref { font-weight: 600; color: #92400e; min-width: 80px; }
 .scope-notice { padding: 20px; text-align: center; color: var(--pt-gray-600); background: var(--pt-gray-50); border-radius: 8px; font-size: 14px; }
+
+/* ============================================================
+   26. [C1-7] 재생성 제안 UI
+   ============================================================ */
+.btn-regenerate { background: white; color: #f59e0b; border-color: #f59e0b; }
+.btn-regenerate:hover { background: #f59e0b; color: white; }
+.status-regenerating { color: #f59e0b; font-size: 12px; }
+.regeneration-modal { width: 90%; }
+.regeneration-target { margin-bottom: 16px; padding: 12px 16px; background: var(--pt-gray-50); border-radius: 6px; }
+.target-label { font-size: 12px; color: var(--pt-gray-500); margin-bottom: 4px; }
+.target-name { font-size: 14px; font-weight: 600; color: var(--pt-gray-800); }
+.regeneration-drift-list { margin-bottom: 16px; }
+.drift-list-label { font-size: 13px; font-weight: 600; color: var(--pt-gray-700); margin-bottom: 8px; }
+.drift-option { display: block; padding: 10px 12px; margin-bottom: 6px; background: white; border: 1px solid var(--pt-gray-200); border-radius: 6px; cursor: pointer; transition: border-color 0.15s; }
+.drift-option:hover { border-color: var(--pt-danger); }
+.drift-option input[type="checkbox"] { margin-right: 8px; vertical-align: middle; }
+.drift-option-name { font-weight: 500; color: var(--pt-gray-800); }
+.drift-option-confidence { font-size: 12px; color: var(--pt-gray-500); margin-left: 8px; }
+.drift-option-reason { font-size: 12px; color: var(--pt-gray-600); margin-top: 4px; padding-left: 24px; }
+.regeneration-warning { padding: 12px 16px; background: #fef3c7; border-left: 3px solid #f59e0b; border-radius: 6px; font-size: 13px; color: #92400e; margin-bottom: 16px; }
+.regeneration-warning ul { margin: 6px 0 0 20px; padding: 0; }
+.regeneration-warning li { margin-bottom: 4px; }
+.downstream-label { font-size: 13px; font-weight: 600; color: var(--pt-gray-700); margin-bottom: 8px; }
+.downstream-list { margin: 0; padding-left: 20px; font-size: 13px; color: var(--pt-gray-600); }
+.downstream-list li { padding: 4px 0; }
+.downstream-status { font-size: 11px; color: var(--pt-gray-500); margin-left: 8px; }
+.no-downstream { font-size: 13px; color: var(--pt-gray-500); font-style: italic; margin: 0; }

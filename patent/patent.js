@@ -608,7 +608,9 @@ function buildScopeGuardBlock(sid, variant) {
       '4. 위 3가지에 해당하지 않는 신규 기술요소 추가 시, 해당 부분을',
       '   [[NOVEL: 요소명]] 마크업으로 명시적 표시',
       '5. 사용자 명시적 확장 지시가 있는 경우 [[NOVEL:]] 마크업 후 생성',
-      ''
+      '',
+      // [C1-7] negative_constraints 제외 지시
+      ..._buildNegativeConstraintsBlock()
     ].join('\n');
   }
 
@@ -631,11 +633,28 @@ function buildScopeGuardBlock(sid, variant) {
       '1. 위 목록의 구성요소를 자유롭게 배치',
       '2. 앵커 테마에 따른 새 노드 추가 시 실제 기술명 사용 (태깅 불필요)',
       '3. Mermaid 문법 유지 (주석/마크업으로 문법을 깨지 말 것)',
-      ''
+      '',
+      // [C1-7] negative_constraints 제외 지시
+      ..._buildNegativeConstraintsBlock()
     ].join('\n');
   }
 
   return '';
+}
+// [C1-7] negative_constraints → 제외 지시 블록 생성
+function _buildNegativeConstraintsBlock() {
+  const negList = (inventionScope && inventionScope.negative_constraints) || [];
+  if (negList.length === 0) return [];
+  return [
+    '',
+    '<rejected_components>',
+    '다음 구성요소들은 이전 검증에서 범위 이탈로 판정되어',
+    '변리사가 명시적으로 제외 지시한 요소들이다.',
+    '이번 응답에서 사용하지 말 것:',
+    ...negList.map(n => `- ${n.component}${n.reason ? ' (사유: ' + n.reason + ')' : ''}`),
+    '</rejected_components>',
+    ''
+  ];
 }
 function _maybeScopeGuard(sid, variant) {
   if (variant === 'text' && !SCOPE_GUARDED_TEXT_STEPS.includes(sid)) return '';
@@ -1532,11 +1551,13 @@ function renderVerdictRow(sid, verdict, index) {
   if (verdict.auto_approved) statusText = '<span class="status-approved">자동 승인됨</span>';
   else if (verdict.manual_verdict === 'approved') statusText = '<span class="status-approved">수동 승인됨</span>';
   else if (verdict.manual_verdict === 'rejected') statusText = '<span class="status-rejected">거부됨</span>';
+  else if (verdict.manual_verdict === 'regenerate_requested') statusText = '<span class="status-regenerating">재생성 요청됨</span>';
   let actions = '';
   if (v === 'drift' && !verdict.manual_verdict) {
     actions = `<div class="verdict-actions">
       <button class="btn-small btn-approve" onclick="approveDriftComponent('${sid}',${index})">승인 (범위 확장)</button>
       <button class="btn-small btn-reject" onclick="rejectDriftComponent('${sid}',${index})">거부 (사유 기록)</button>
+      <button class="btn-small btn-regenerate" onclick="proposeRegeneration('${sid}',${index})">재생성 제안</button>
     </div>`;
   }
   return `<div class="verdict-row">
@@ -1608,6 +1629,176 @@ function openScopeDetailPanel(sid) {
     const body = document.getElementById('sid-card-body-' + sid);
     if (body) { body.style.display = 'block'; body.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   }, 100);
+}
+
+// ═══════════ [C1-7] DRIFT 재생성 제안 ═══════════
+let _regenerationContext = null;
+
+function proposeRegeneration(sid, verdictIndex) {
+  const result = scopeCheckResults[sid];
+  if (!result || !result.verdicts || !result.verdicts[verdictIndex]) return;
+  const targetVerdict = result.verdicts[verdictIndex];
+  if (targetVerdict.verdict !== 'drift') return;
+  if (targetVerdict.manual_verdict) {
+    App.showToast('이미 처리된 항목입니다', 'info');
+    return;
+  }
+  const allDrifts = result.verdicts
+    .map((v, i) => ({ v, i }))
+    .filter(({ v }) => v.verdict === 'drift' && !v.manual_verdict);
+  _regenerationContext = {
+    sid,
+    primaryVerdictIndex: verdictIndex,
+    driftOptions: allDrifts.map(({ v, i }) => ({
+      index: i,
+      component: v.component,
+      reason: v.reason,
+      confidence: v.confidence,
+      selected: true
+    }))
+  };
+  renderRegenerationModal();
+  document.getElementById('regenerationProposalModal').style.display = 'flex';
+}
+
+function renderRegenerationModal() {
+  if (!_regenerationContext) return;
+  const ctx = _regenerationContext;
+  const stepLabel = STEP_NAMES[ctx.sid] || ctx.sid;
+  const targetHtml = `
+    <div class="regeneration-target">
+      <div class="target-label">재생성 대상 스텝</div>
+      <div class="target-name">${App.escapeHtml(ctx.sid)} · ${App.escapeHtml(stepLabel)}</div>
+    </div>
+    <div class="regeneration-drift-list">
+      <div class="drift-list-label">제외할 범위 이탈 요소 (체크하여 선택)</div>
+      ${ctx.driftOptions.map(opt => `
+        <label class="drift-option">
+          <input type="checkbox" ${opt.selected ? 'checked' : ''} onchange="toggleDriftOption(${opt.index})" />
+          <span class="drift-option-name">${App.escapeHtml(opt.component)}</span>
+          <span class="drift-option-confidence">신뢰도 ${Math.round(opt.confidence * 100)}%</span>
+          <div class="drift-option-reason">${App.escapeHtml(opt.reason || '')}</div>
+        </label>
+      `).join('')}
+    </div>`;
+  document.getElementById('regeneration-target-info').innerHTML = targetHtml;
+  const downstreamSids = _getDownstreamSids(ctx.sid);
+  const downstreamHtml = downstreamSids.length === 0
+    ? '<p class="no-downstream">영향받는 이후 단계가 없습니다.</p>'
+    : `<div class="downstream-label">무효화될 이후 단계 (${downstreamSids.length}개)</div>
+      <ul class="downstream-list">
+        ${downstreamSids.map(s => {
+          const label = STEP_NAMES[s] || s;
+          const hasOutput = outputs[s] ? '✓ 작성됨' : '(미작성)';
+          return `<li>${App.escapeHtml(s)} · ${App.escapeHtml(label)} <span class="downstream-status">${hasOutput}</span></li>`;
+        }).join('')}
+      </ul>`;
+  document.getElementById('regeneration-downstream-list').innerHTML = downstreamHtml;
+}
+
+function toggleDriftOption(index) {
+  if (!_regenerationContext) return;
+  const opt = _regenerationContext.driftOptions.find(o => o.index === index);
+  if (opt) opt.selected = !opt.selected;
+  const btn = document.getElementById('regenerationExecuteBtn');
+  const anySelected = _regenerationContext.driftOptions.some(o => o.selected);
+  if (btn) {
+    btn.disabled = !anySelected;
+    btn.style.opacity = anySelected ? '1' : '0.5';
+  }
+}
+
+function closeRegenerationModal() {
+  document.getElementById('regenerationProposalModal').style.display = 'none';
+  _regenerationContext = null;
+}
+
+function _getDownstreamSids(sid) {
+  const visited = new Set();
+  const queue = [sid];
+  visited.add(sid);
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const deps = STEP_DEPENDENCIES[current];
+    if (!deps) continue;
+    const children = [...(deps.MUST || []), ...(deps.SHOULD || [])];
+    for (const child of children) {
+      if (!visited.has(child)) {
+        visited.add(child);
+        queue.push(child);
+      }
+    }
+  }
+  visited.delete(sid);
+  return [...visited];
+}
+
+async function executeRegeneration() {
+  if (!_regenerationContext) return;
+  const ctx = _regenerationContext;
+  const selectedDrifts = ctx.driftOptions.filter(o => o.selected);
+  if (selectedDrifts.length === 0) {
+    App.showToast('제외할 요소를 하나 이상 선택하세요', 'info');
+    return;
+  }
+  if (!inventionScope.negative_constraints) {
+    inventionScope.negative_constraints = [];
+  }
+  const now = new Date().toISOString();
+  for (const opt of selectedDrifts) {
+    const existingIdx = inventionScope.negative_constraints.findIndex(
+      n => n.component === opt.component
+    );
+    const entry = {
+      component: opt.component,
+      rejected_at: now,
+      rejected_from_sid: ctx.sid,
+      reason: 'drift 판정 재생성 - ' + (opt.reason || '변리사 명시적 제외'),
+      regenerated_at: null
+    };
+    if (existingIdx === -1) {
+      inventionScope.negative_constraints.push(entry);
+    } else {
+      inventionScope.negative_constraints[existingIdx] = entry;
+    }
+    const verdict = scopeCheckResults[ctx.sid].verdicts[opt.index];
+    verdict.manual_verdict = 'regenerate_requested';
+    verdict.manual_verdict_at = now;
+  }
+  _appendAuditLog('regeneration_proposed', {
+    sid: ctx.sid,
+    rejected_components: selectedDrifts.map(o => o.component)
+  });
+  const downstreamSids = _getDownstreamSids(ctx.sid);
+  for (const dsid of downstreamSids) {
+    if (outputs[dsid]) {
+      delete outputs[dsid];
+      delete outputTimestamps[dsid];
+    }
+    delete scopeCheckResults[dsid];
+  }
+  delete outputs[ctx.sid];
+  delete outputTimestamps[ctx.sid];
+  delete scopeCheckResults[ctx.sid];
+  saveProject(true);
+  closeRegenerationModal();
+  const targetTab = _getTabForSid(ctx.sid);
+  if (typeof switchTab === 'function' && targetTab !== null) {
+    switchTab(targetTab);
+  }
+  renderScopeVerificationSection();
+  renderInventionScopePanel();
+  App.showToast('재생성 준비 완료. 해당 스텝을 다시 실행하세요.', 'success');
+}
+
+function _getTabForSid(sid) {
+  const map = {
+    step_06: 1, step_10: 1, step_20: 1,
+    step_07_mermaid: 2, step_11_mermaid: 2,
+    step_08: 2, step_12: 2, step_09: 2,
+    step_13_applied: 3, step_13_applied_method: 3
+  };
+  return typeof map[sid] !== 'undefined' ? map[sid] : null;
 }
 
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════

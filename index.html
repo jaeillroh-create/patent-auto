@@ -720,6 +720,31 @@
   </div>
 </div>
 
+<!-- [C1-7] 재생성 제안 모달 -->
+<div id="regenerationProposalModal" class="modal-overlay" style="display:none">
+  <div class="modal-content regeneration-modal" style="max-width:600px;padding:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin:0;font-size:16px">재생성 제안</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeRegenerationModal()">✕</button>
+    </div>
+    <div id="regeneration-target-info"></div>
+    <div class="regeneration-warning">
+      <strong>⚠ 이 작업은 되돌릴 수 없습니다.</strong> 재생성을 실행하면:
+      <ul>
+        <li>선택된 drift 요소들이 영구 제외 목록(negative_constraints)에 추가됩니다</li>
+        <li>해당 스텝과 이후 단계의 결과가 모두 무효화됩니다</li>
+        <li>LLM이 제외 지시를 받아 해당 스텝을 다시 생성합니다</li>
+      </ul>
+    </div>
+    <div id="regeneration-downstream-list"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:20px">
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost" onclick="closeRegenerationModal()">취소</button>
+      <button class="btn btn-primary" id="regenerationExecuteBtn" onclick="executeRegeneration()" style="background:var(--pt-danger);border-color:var(--pt-danger)">재생성 실행</button>
+    </div>
+  </div>
+</div>
+
 <!-- Admin -->
 <div id="adminPanel" class="screen" style="display:none">
   <div class="app-container">
