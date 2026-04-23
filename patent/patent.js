@@ -9485,28 +9485,17 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const marginY=0.6*PX*_sm;
     const refNumH=30*_sm;
     const rowGapBase=0.7*PX*_sm;
-    
-    // ═══ v17: 전역 행 높이 통일 — 간격 균등화 ═══
-    // 전체 도면에서 가장 큰 shape 기준으로 행 높이 통일
-    let globalRowH=boxH+refNumH;
-    // ★ v14 FIX: 행별 최대 실제 shape 높이 (라우팅 셀 높이용) ★
-    const rowMaxShapeH={};
-    nodes.forEach(nd=>{
-      const gp=grid[nd.id]; if(!gp)return;
-      const st=matchIconShape(nd.label);
-      const sm=_shapeMetrics(st,boxW2D,boxH);
-      const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);
-      const h=Math.max(vb.bottom, boxH)+refNumH;
-      if(h>globalRowH)globalRowH=h;
-      const shapeH=Math.max(sm.sh, boxH);
-      if(!rowMaxShapeH[gp.row]||shapeH>rowMaxShapeH[gp.row])rowMaxShapeH[gp.row]=shapeH;
-    });
-    // 제한: 최대 boxH+refNumH의 1.3배까지
-    globalRowH=Math.min(globalRowH, (boxH+refNumH)*1.3);
-    // 전역 최대 shape 높이 (라우팅 셀 기준)
-    let globalShapeH=boxH;
-    Object.values(rowMaxShapeH).forEach(h=>{if(h>globalShapeH)globalShapeH=h;});
-    globalShapeH=Math.min(globalShapeH, boxH*1.3);
+
+    // [C2-6 bbox] 통일 바운딩박스 — 모든 노드 동일 외곽 크기
+    const _bboxW=Math.round(boxW2D*0.80);  // SHAPE_W 기반
+    const _bboxH=Math.round(boxH*1.50);    // shape + label + refnum 포함
+    const _bboxIconAreaH=Math.round(_bboxH*0.58); // 상부 58%: shape/icon 영역
+    const _bboxLabelRatio=0.68;  // 라벨 y 비율 (bbox 상단 기준)
+    const _bboxRefRatio=0.88;    // 참조번호 y 비율
+
+    // ═══ v17: 전역 행 높이 통일 — bbox 기반 ═══
+    let globalRowH=_bboxH;
+    let globalShapeH=_bboxIconAreaH;
 
     // 행별 Y시작 좌표 — 모든 행 동일 높이
     const rowY={};
@@ -9515,14 +9504,12 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       rowY[r]=accY;
       accY+=globalRowH+rowGapBase;
     }
-    // ★ P1-FIX: 마지막 노드 실제 하단 기반 viewBox 높이 — 빈 공백 제거 ★
+    // [C2-6 bbox] bbox 하단 기반 viewBox 높이
     let maxNodeBottom=0;
     nodes.forEach(nd=>{
       const gp=grid[nd.id];if(!gp)return;
       const by=rowY[gp.row];
-      const st=matchIconShape(nd.label);
-      const sm=_shapeMetrics(st,boxW2D,boxH);
-      const bottom=by+sm.sh+refNumH+10;
+      const bottom=by+_bboxH+10;
       if(bottom>maxNodeBottom)maxNodeBottom=bottom;
     });
     const totalH=maxNodeBottom+marginY*0.5;
@@ -9541,10 +9528,11 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     // ★★★ v10.5: Phase 1~2 전면 재설계 — 균일 box + 실제 앵커 라우팅 ★★★
     // ══════════════════════════════════════════════════════════════
     
-    // ── Phase 1: 위치 계산 — ★ 이중 좌표 시스템 ★ ──
-    // 라우팅: 셀 기반 (boxW2D × boxH) — 균일 높이 → 같은 행 cy 동일 → 직선 연결
-    // 렌더링: 실제 shape (서버/센서/모니터 등) — 셀 내부에 배치
-    const nodeBoxes={};   // 셀 기반 — 라우팅용
+    // ── Phase 1: 위치 계산 — [C2-6 bbox] 통일 바운딩박스 시스템 ──
+    // 모든 노드: 동일 크기 bbox (_bboxW × _bboxH) 내부에 배치
+    // 라우팅(nodeBoxes): bbox 경계 기반 → 동일 cy → 직선 연결
+    // 렌더링(nodeData): bbox 상부에 shape, 하부에 label + refnum
+    const nodeBoxes={};   // bbox 기반 — 라우팅용
     const nodeData=[];    // shape 기반 — 렌더링용
     nodes.forEach(nd=>{
       const gp=grid[nd.id];
@@ -9555,11 +9543,9 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       const by=rowY[gp.row];
       const refNum=extractRefNum(nd.label,String((parseInt(nd.id.replace(/\D/g,''))||1)*100));
       const displayLabel=_shortenFig1Label(nd.label);
-      
-      // ★ 실제 shape 복원 (서버, 센서, 모니터 등) ★
+
       const shapeType=matchIconShape(nd.label);
       const sm=_shapeMetrics(shapeType,boxW2D,boxH);
-      // 텍스트 너비 기반 최소 shape 너비
       const fontSize=_computeDiagramFontSize(boxW2D,boxH,displayLabel.length);
       const textW=_estimateTextWidth(displayLabel,fontSize);
       const minShapeW=textW+20;
@@ -9567,25 +9553,26 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
         sm.sw=Math.min(minShapeW,boxW2D*0.90);
         sm.dx=(boxW2D-sm.sw)/2;
       }
-      // ★ v17: 전역 통일 shape 높이 → 모든 행 동일 라우팅 셀 ★
-      const _rowCellH=globalShapeH;
-      const sx=bx+sm.dx;
-      // shape를 셀 내부에 수직 중앙 정렬 (렌더링용)
-      const sy=by+Math.max(0,(_rowCellH-sm.sh)/2);
+      // [C2-6 bbox] shape 크기를 bbox icon area에 맞춤
+      const cappedSw=Math.min(sm.sw,_bboxW);
+      const cappedSh=Math.min(sm.sh,_bboxIconAreaH);
+      const sx=bx+(boxW2D-cappedSw)/2;
+      const sy=by+Math.max(0,(_bboxIconAreaH-cappedSh)/2);
 
-      // ★ 라우팅용 nodeBox — 전역 통일 shape 높이 → 동일 cy → 직선 연결 ★
+      // [C2-6 bbox] 라우팅용 nodeBox — bbox 크기 통일
+      const _bbx=bx+(boxW2D-_bboxW)/2;
       nodeBoxes[nd.id]={
-        x:bx, y:by, w:boxW2D, h:_rowCellH,
-        cx:bx+boxW2D/2, cy:by+_rowCellH/2,
-        _shapeType:shapeType, _sx:sx, _sy:sy, _sw:sm.sw, _sh:sm.sh
+        x:_bbx, y:by, w:_bboxW, h:_bboxH,
+        cx:bx+boxW2D/2, cy:by+_bboxH/2,
+        _shapeType:shapeType, _sx:sx, _sy:sy, _sw:cappedSw, _sh:cappedSh
       };
-      nodeData.push({id:nd.id, sx, sy, sw:sm.sw, sh:sm.sh,
+      nodeData.push({id:nd.id, sx, sy, sw:cappedSw, sh:cappedSh,
         shapeType, displayLabel, refNum, bx, boxW2D,
         row:gp.row, col:gp.col});
     });
     
-    // ── Phase 1.5: 겹침 검증 (실제 shape 높이 기반) ──
-    const REF_PADDING=refNumH+6;
+    // ── Phase 1.5: 겹침 검증 (bbox 높이 기반) ──
+    const REF_PADDING=6;
     const MIN_GAP=12;
     let correctionApplied=true;
     let correctionRounds=0;
@@ -9594,19 +9581,18 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       correctionRounds++;
       for(let i=0;i<nodeData.length;i++){
         const a=nodeData[i];
-        const aBottom=a.sy+a.sh+REF_PADDING;
+        const aBottom=nodeBoxes[a.id].y+_bboxH+REF_PADDING;
         for(let j=0;j<nodeData.length;j++){
           if(i===j)continue;
           const b=nodeData[j];
           if(a.row===b.row)continue;
           const hOverlap=!(a.sx+a.sw+8<b.sx||b.sx+b.sw+8<a.sx);
-          if(hOverlap&&b.sy<aBottom+MIN_GAP&&b.sy>=a.sy){
-            const push=aBottom+MIN_GAP-b.sy;
+          if(hOverlap&&nodeBoxes[b.id].y<aBottom+MIN_GAP&&nodeBoxes[b.id].y>=nodeBoxes[a.id].y){
+            const push=aBottom+MIN_GAP-nodeBoxes[b.id].y;
             if(push>0){
               b.sy+=push;
-              // ★ v14 FIX: 셀 y도 동일 push 이동 (centering offset 유지) ★
               nodeBoxes[b.id].y+=push;
-              nodeBoxes[b.id].cy=nodeBoxes[b.id].y+nodeBoxes[b.id].h/2;
+              nodeBoxes[b.id].cy=nodeBoxes[b.id].y+_bboxH/2;
               nodeBoxes[b.id]._sy=b.sy;
               correctionApplied=true;
             }
@@ -9667,19 +9653,16 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       }
     }
 
-    // ═══ v17 FIX-2: 겹침 보정 후 행 간격 균등화 재적용 ═══
-    // _autoCorrectOverlaps/양방향 동일행 강제가 일부 노드를 밀어냈을 수 있음
-    // → 각 행의 노드를 rowY[row] 기준으로 재정렬
+    // ═══ FIX-2: 겹침 보정 후 행 간격 균등화 재적용 (bbox 기반) ═══
     nodeData.forEach(nd=>{
       const expectedY=rowY[nd.row];
-      if(Math.abs(nd.sy-expectedY)>2){
-        nd.sy=expectedY+Math.max(0,(globalShapeH-nd.sh)/2);
+      if(Math.abs(nodeBoxes[nd.id].y-expectedY)>2){
         nodeBoxes[nd.id].y=expectedY;
-        nodeBoxes[nd.id].cy=expectedY+nodeBoxes[nd.id].h/2;
+        nodeBoxes[nd.id].cy=expectedY+_bboxH/2;
+        nd.sy=expectedY+Math.max(0,(_bboxIconAreaH-nd.sh)/2);
         nodeBoxes[nd.id]._sy=nd.sy;
       }
     });
-    // 복원 후 겹침 재검증 (최대 3회)
     let reEqRounds=0;
     while(reEqRounds<3){
       let hasOverlap=false;
@@ -9689,15 +9672,14 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
           const b=nodeData[j];
           if(a.row===b.row)continue;
           const hOvl=!(a.sx+a.sw+8<b.sx||b.sx+b.sw+8<a.sx);
-          const aBot=a.sy+a.sh+REF_PADDING+MIN_GAP;
-          const bBot=b.sy+b.sh+REF_PADDING+MIN_GAP;
-          if(hOvl&&((b.sy<aBot&&b.sy>=a.sy)||(a.sy<bBot&&a.sy>=b.sy))){
+          const aBot=nodeBoxes[a.id].y+_bboxH+REF_PADDING+MIN_GAP;
+          const bBot=nodeBoxes[b.id].y+_bboxH+REF_PADDING+MIN_GAP;
+          if(hOvl&&((nodeBoxes[b.id].y<aBot&&nodeBoxes[b.id].y>=nodeBoxes[a.id].y)||(nodeBoxes[a.id].y<bBot&&nodeBoxes[a.id].y>=nodeBoxes[b.id].y))){
             hasOverlap=true;break;
           }
         }
       }
       if(!hasOverlap)break;
-      // 겹침 발생 → globalRowH 증가 + rowY 재계산
       globalRowH+=20;
       let reAccY=marginY;
       for(let r=0;r<numRows;r++){
@@ -9706,18 +9688,18 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       }
       nodeData.forEach(nd=>{
         const ey=rowY[nd.row];
-        nd.sy=ey+Math.max(0,(globalShapeH-nd.sh)/2);
+        nd.sy=ey+Math.max(0,(_bboxIconAreaH-nd.sh)/2);
         nodeBoxes[nd.id].y=ey;
-        nodeBoxes[nd.id].cy=ey+nodeBoxes[nd.id].h/2;
+        nodeBoxes[nd.id].cy=ey+_bboxH/2;
         nodeBoxes[nd.id]._sy=nd.sy;
       });
       reEqRounds++;
     }
 
-    // ═══ v17 FIX-3: 최종 nodeData 위치 기반 정확한 viewBox ═══
+    // ═══ FIX-3: 최종 bbox 위치 기반 정확한 viewBox ═══
     let maxBottom=0;
     nodeData.forEach(nd=>{
-      const bottom=nd.sy+nd.sh+REF_PADDING+10;
+      const bottom=nodeBoxes[nd.id].y+_bboxH+REF_PADDING+10;
       if(bottom>maxBottom)maxBottom=bottom;
     });
     const correctedSvgH=Math.max(svgH,maxBottom+marginY);
@@ -9874,95 +9856,28 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const minShapeH=nonIconHeights.length>0?Math.min(...nonIconHeights):boxH;
     const uniformHeightFont=Math.floor(minShapeH*0.22);
     const figFontSize=Math.max(baseFontSize, Math.min(uniformHeightFont, 14)); // 14px cap — 도면 내 통일
-    
+
+    // [C2-6 bbox] 라벨/참조번호 y — bbox 기반 통일 위치
+    const _bboxLabelY=nodeData.length>0?nodeBoxes[nodeData[0].id].y+_bboxH*_bboxLabelRatio:0;
+
     nodeData.forEach(nd=>{
       const{id,sx,sy,sw,sh,shapeType,displayLabel,refNum}=nd;
+      const _by=nodeBoxes[id].y; // bbox 상단 y
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sw,sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sw,sh,2);
-      let fontSize=figFontSize; // ★ 전체 도면 균일 폰트 ★
+      let fontSize=figFontSize;
       const dir=nodeConnDir[id]||{};
       const refInside=dir.top&&dir.bottom&&dir.left&&dir.right;
       const labelMaxW=sw*0.90;
-      
-      // ★ v10.6 FIX: 아이콘 shape 텍스트를 아이콘 실제 드로잉 하단에 배치 ★
-      if(_isIconShape(shapeType)){
-        // vb.bottom은 라우팅 충돌 방지용 (텍스트 예약 영역 포함) — 텍스트 배치에는 아이콘 실제 하단 사용
-        const vb=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
-        const _iconReserve=shapeType==='sensor'?42:22;
-        const iconDrawBottom=vb.bottom-_iconReserve;
-        const labelStartY=iconDrawBottom+6;
-        const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize,7);
-        const lineH=labelFit.fontSize+2;
-        let labelSvg='';
-        labelFit.lines.forEach((line,li)=>{
-          labelSvg+=`<text x="${sx+sw/2}" y="${labelStartY+li*lineH+labelFit.fontSize}" text-anchor="middle" font-size="${labelFit.fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(line)}</text>`;
-        });
-        svg+=labelSvg;
-      }else if(shapeType==='server'){
-        // ★ v10.4: 서버 shape — 텍스트를 전체 중앙에 배치 + 흰색 배경으로 가로선 가림 ★
-        const textCy2=_shapeTextCy(shapeType,sy,sh);
-        // 점(dots)이 우측에 있으므로 텍스트 너비를 제한 (sw의 75%)
-        const serverLabelMaxW=sw*0.75;
-        const labelFit=_fitLabelLines(displayLabel,serverLabelMaxW,fontSize,7);
-        const lineH=labelFit.fontSize+2;
-        const totalTextH=labelFit.lines.length*lineH;
-        // 텍스트 시작 Y (수직 중앙정렬)
-        const textStartY=textCy2-(totalTextH/2)+labelFit.fontSize*0.8;
-        // 흰색 배경으로 가로 구분선 가림
-        const bgPad=4;
-        svg+=`<rect x="${sx+sw*0.05}" y="${textStartY-labelFit.fontSize-bgPad}" width="${sw*0.80}" height="${totalTextH+bgPad*2+4}" fill="#fff" stroke="none"/>`;
-        let labelSvg='';
-        labelFit.lines.forEach((line,li)=>{
-          labelSvg+=`<text x="${sx+sw/2}" y="${textStartY+li*lineH}" text-anchor="middle" font-size="${labelFit.fontSize}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${App.escapeHtml(line)}</text>`;
-        });
-        svg+=labelSvg;
-      }else{
-        // 일반 shape: shape 내부 중앙에 텍스트
-        const textCy=_shapeTextCy(shapeType,sy,sh);
-        const labelFit=_fitLabelLines(displayLabel,labelMaxW,fontSize,7);
-        fontSize=labelFit.fontSize;
-        const labelBaseY=refInside?textCy-2:textCy;
-        const {svg:lSvg}=_svgMultiLineLabel(sx+sw/2, labelBaseY, displayLabel, labelMaxW, fontSize, {minFontSize:7});
-        svg+=lSvg;
-      }
-      
-      // ★ 참조번호: 연결이 없는 쪽에 배치 (우선순위: 하단→우측→좌측→내부) ★
-      let refSvg='';
-      // 아이콘 shape는 참조번호도 아이콘 아래 (라벨 아래)에 배치
-      if(_isIconShape(shapeType)){
-        const vb=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
-        const _iconReserve2=shapeType==='sensor'?42:22;
-        const iconDrawBottom2=vb.bottom-_iconReserve2;
-        const labelFit=_fitLabelLines(displayLabel,sw*0.90,fontSize,7);
-        const lineH=labelFit.fontSize+2;
-        const labelBlockH=labelFit.lines.length*lineH;
-        // 참조번호: 아이콘 실제 하단 + 라벨 텍스트 높이 + 간격
-        const refY=iconDrawBottom2+6+labelBlockH+labelFit.fontSize+4;
-        refSvg=`<text x="${sx+sw/2}" y="${refY}" text-anchor="middle" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-      }else if(!dir.bottom){
-        // 하단: 수직선 + 번호 — shape 정확한 하단 앵커에서 시작
-        const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'bottom');
-        const ly2=anc.py+12; // v10.2: 12px leader line (was 8)
-        refSvg=`<line x1="${anc.px}" y1="${anc.py}" x2="${anc.px}" y2="${ly2}" stroke="#000" stroke-width="1"/>`;
-        refSvg+=`<text x="${anc.px}" y="${ly2+12}" text-anchor="middle" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-      }else if(!dir.right){
-        // 우측: 수평선 + 번호 — shape 정확한 우측 앵커에서 시작
-        const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'right');
-        const lx2=anc.px+15; // v10.2: 15px leader (was 12)
-        refSvg=`<line x1="${anc.px}" y1="${anc.py}" x2="${lx2}" y2="${anc.py}" stroke="#000" stroke-width="1"/>`;
-        refSvg+=`<text x="${lx2+4}" y="${anc.py+4}" text-anchor="start" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-      }else if(!dir.left){
-        // 좌측: 수평선 + 번호 — shape 정확한 좌측 앵커에서 시작
-        const anc=_shapeAnchor(shapeType,sx,sy,sw,sh,'left');
-        const lx2=anc.px-15; // v10.2: 15px leader (was 12)
-        refSvg=`<line x1="${anc.px}" y1="${anc.py}" x2="${lx2}" y2="${anc.py}" stroke="#000" stroke-width="1"/>`;
-        refSvg+=`<text x="${lx2-4}" y="${anc.py+4}" text-anchor="end" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-      }else{
-        // 모든 방향 사용 중 → Shape 내부에 (참조번호) 표시
-        const textCy2=_shapeTextCy(shapeType,sy,sh);
-        refSvg=`<text x="${sx+sw/2}" y="${textCy2+fontSize+4}" text-anchor="middle" font-size="${Math.max(fontSize-1,8)}" font-family="맑은 고딕,Arial,sans-serif" fill="#444">(${refNum})</text>`;
-      }
-      svg+=refSvg;
+
+      // [C2-6 bbox] 모든 shape 라벨 — bbox 하부 통일 y
+      const _labelY=_by+_bboxH*_bboxLabelRatio;
+      const {svg:lSvg}=_svgMultiLineLabel(sx+sw/2, _labelY, displayLabel, labelMaxW, fontSize, {minFontSize:7})
+      svg+=lSvg;
+
+      // [C2-6 bbox] 참조번호 — bbox 기반 통일 y (leader line 없이 일관된 위치)
+      const _refY=_by+_bboxH*_bboxRefRatio;
+      svg+=`<text x="${sx+sw/2}" y="${_refY}" text-anchor="middle" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
     });
 
     // [C2-4] all-L1 렌더 검증 — grid 누락 노드 강제 복구
@@ -9982,7 +9897,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
         const{svg:lSvg}=_svgMultiLineLabel(rx+boxW2D/2,ry+boxH/2,displayLabel,boxW2D*0.9,11,{minFontSize:7});
         svg+=lSvg;
         if(refNum)svg+=`<text x="${rx+boxW2D/2}" y="${ry+boxH+16}" text-anchor="middle" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-        nodeBoxes[nd.id]={x:rx,y:ry,w:boxW2D,h:boxH,cx:rx+boxW2D/2,cy:ry+boxH/2,_sx:rx,_sy:ry,_sw:boxW2D,_sh:boxH,_shapeType:'box'};
+        nodeBoxes[nd.id]={x:rx,y:ry,w:_bboxW,h:_bboxH,cx:rx+boxW2D/2,cy:ry+_bboxH/2,_sx:rx,_sy:ry,_sw:Math.min(boxW2D,_bboxW),_sh:Math.min(boxH,_bboxIconAreaH),_shapeType:'box'};
         _recovIdx++;
       });
       // [C2-4] viewBox 재확장 — 복구 노드 포함
