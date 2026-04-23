@@ -222,12 +222,19 @@ const INVENTION_SCOPE_SYSTEM_PROMPT = `당신은 15년 경력의 변리사 출�
 
 const INVENTION_SCOPE_SCHEMA_INSTRUCTION = `아래 JSON 스키마로만 응답하라. 설명·prefix·markdown 금지. 순수 JSON만 출력.
 {
-  "core_components": [{"id":"c1","name":"구성요소명","role":"역할 설명","aliases":["별칭"]}],
+  "core_components": [{"id":"c1","name":"구성요소명","role":"역할 설명","aliases":["별칭1","별칭2"]}],
   "core_functions":  [{"id":"f1","desc":"기능 설명","component_refs":["c1"]}],
   "problem_space": "해결과제 요약 200자 이내",
   "solution_space": "해결수단 요약 200자 이내",
   "explicit_nonscope": ["명시적으로 제외된 요소 (있는 경우만)"]
-}`;
+}
+
+aliases 생성 기준:
+- 동일 구성요소를 지칭하는 한국어/영어/축약 표현을 모두 나열
+- 예: "제어부" → aliases: ["컨트롤러", "controller", "제어 모듈", "제어 유닛"]
+- 예: "딥러닝 모델" → aliases: ["인공지능 모델", "AI 모델", "신경망 모델", "deep learning model"]
+- 하위개념(CNN, RNN 등)은 aliases에 포함하지 않음 (별도 확장으로 관리)
+- 최소 1개, 최대 5개까지 권장`;
 
 // [C1-3] Layer 1 가드: invention_scope 주입 대상 sid
 const SCOPE_GUARDED_TEXT_STEPS = [
@@ -704,10 +711,7 @@ function matchComponentToScope(componentName) {
     if (normalize(c.name) === target) return { via: 'baseline:' + (c.id || c.name) };
     for (const alias of (c.aliases || [])) {
       if (normalize(alias) === target) return { via: 'alias:' + alias };
-      if (normalize(alias).length >= 3 && target.includes(normalize(alias))) return { via: 'alias_partial:' + alias };
     }
-    // baseline name 부분 포함 (baseline이 상위개념일 때)
-    if (normalize(c.name).length >= 3 && target.includes(normalize(c.name))) return { via: 'baseline_partial:' + c.name };
   }
   for (const e of inventionScope.approved_expansions || []) {
     if (normalize(e.component) === target) return { via: 'expansion:' + e.component };
