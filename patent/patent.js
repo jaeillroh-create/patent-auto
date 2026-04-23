@@ -5355,6 +5355,9 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
 
     saveProject(true);
     App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
+    // [C1 자동 연쇄] SCOPE_GUARDED_MERMAID 스텝 생성 후 자동 검증
+    const mermaidSid=sid+'_mermaid';
+    if(inventionScope?.locked_at&&SCOPE_GUARDED_MERMAID_STEPS.includes(mermaidSid)){try{await runScopeCheck(mermaidSid);}catch(e2){console.warn('[C1] runDiagramStep 후 runScopeCheck 자동 실행 실패:',mermaidSid,e2.message);}}
   }catch(e){
     App.showToast(e.message,'error');
   }finally{
