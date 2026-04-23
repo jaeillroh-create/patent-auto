@@ -191,8 +191,9 @@ ${tail}`;
 
 
 // ═══════════ [P-C1] OUTPUT HISTORY ═══════════
+// origin 스펙: 'llm' | 'user_edit' | 'pre_review' | 'cascade'
 const OUTPUT_HISTORY_MAX = 10;
-const OUTPUT_HISTORY_VALUE_MAX = 10000;
+const OUTPUT_HISTORY_VALUE_MAX = 50000;
 function pushOutputHistory(sid, origin, triggeredBy) {
   if (!outputs[sid]) return;
   if (!outputHistory[sid]) outputHistory[sid] = [];
@@ -524,7 +525,7 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:{outputs,outputHistory,inventionScope,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes}}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 
 // ═══════════ [P-C1] INVENTION SCOPE ═══════════
 function _parseJSONSafe(text) {
