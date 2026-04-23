@@ -28,6 +28,7 @@ const CATEGORY_ENDINGS = {
 
 // ═══ Patent State ═══
 let outputs={},outputHistory={},selectedTitle='',selectedTitleEn='',selectedTitleType='',includeMethodClaims=true;
+let scopeCheckResults = {};
 let usage={calls:0,inputTokens:0,outputTokens:0,cost:0},loadingState={};
 let detailLevel='standard';
 let customDetailChars=2000;
@@ -240,7 +241,7 @@ const SCOPE_GUARDED_MERMAID_STEPS = [
 
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
-  currentProjectId=null;outputs={};outputHistory={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
+  currentProjectId=null;outputs={};outputHistory={};scopeCheckResults={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
   usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};uploadedFiles=[];diagramData={};inventionScope=null;
   projectRefStyleText='';requiredFigures=[];outputTimestamps={};stepUserCommands={};
   conceptDiagramEnabled=false;conceptDiagramCount=0;conceptDiagramTypes=[];
@@ -484,6 +485,7 @@ async function openProject(pid){
   stepUserCommands=s.stepUserCommands||{};
   outputHistory=s.outputHistory||{};
   inventionScope=s.inventionScope||null;
+  scopeCheckResults=s.scopeCheckResults||{};
   conceptDiagramEnabled=s.conceptDiagramEnabled||false;
   conceptDiagramCount=s.conceptDiagramCount||0;
   conceptDiagramTypes=s.conceptDiagramTypes||[];
@@ -535,7 +537,7 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 
 // ═══════════ [P-C1] INVENTION SCOPE ═══════════
 function _parseJSONSafe(text) {
@@ -620,6 +622,209 @@ function _maybeScopeGuard(sid, variant) {
   if (variant === 'text' && !SCOPE_GUARDED_TEXT_STEPS.includes(sid)) return '';
   if (variant === 'mermaid' && !SCOPE_GUARDED_MERMAID_STEPS.includes(sid)) return '';
   return buildScopeGuardBlock(sid, variant);
+}
+
+// ═══════════ [C1-4] LAYER 2: EXTRACTOR + DIFF ═══════════
+
+function extractNovelMarkers(text) {
+  const pattern = /\[\[NOVEL:\s*([^\]]+?)\s*\]\]/g;
+  const results = [];
+  let m;
+  while ((m = pattern.exec(text)) !== null) results.push(m[1].trim());
+  return results;
+}
+
+function extractMermaidNodes(mermaidText) {
+  const results = [];
+  // ID["이름(참조번호)"] — 장치 도면
+  const p1 = /\w+\["([^"]+?)\((\d+)\)"\]/g;
+  // ID["단계명(S번호)"] — 방법 도면
+  const p2 = /\w+\["([^"]+?)\((S\d+)\)"\]/g;
+  // ID{"조건"} — 조건 분기
+  const p3 = /\w+\{"([^}]+)"\}/g;
+  // ID(["라벨"]) — 시작/종료
+  const p4 = /\w+\(\["([^"]+)"\]\)/g;
+  // ID["라벨"] — 참조번호 없는 일반 노드
+  const p5 = /\w+\["([^"]+)"\]/g;
+  let mm;
+  while ((mm = p1.exec(mermaidText)) !== null) results.push({ name: mm[1].trim(), ref: mm[2], source: 'device_node' });
+  while ((mm = p2.exec(mermaidText)) !== null) results.push({ name: mm[1].trim(), ref: mm[2], source: 'method_node' });
+  while ((mm = p3.exec(mermaidText)) !== null) results.push({ name: mm[1].trim(), ref: null, source: 'decision' });
+  while ((mm = p4.exec(mermaidText)) !== null) results.push({ name: mm[1].trim(), ref: null, source: 'terminal' });
+  // p5 fallback: 참조번호 없는 라벨 (p1/p2에서 이미 캡처된 것과 중복 가능)
+  const captured = new Set(results.map(r => r.name));
+  while ((mm = p5.exec(mermaidText)) !== null) {
+    const name = mm[1].trim();
+    if (!captured.has(name) && !/\(\d+\)/.test(name) && !/\(S\d+\)/.test(name)) {
+      results.push({ name, ref: null, source: 'label_only' });
+      captured.add(name);
+    }
+  }
+  // 중복 제거 (name+ref 기준, 첫 등장 유지)
+  const seen = new Set();
+  return results.filter(n => {
+    const key = `${n.ref||''}:${n.name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+const SCOPE_EXTRACT_SYSTEM_PROMPT = `당신은 특허 명세서 분석 전문가이다.
+입력된 특허 문서에서 등장하는 기술적 구성요소를 추출한다.
+원칙: 텍스트에 명시된 구성요소만 추출. 추론·추측·상식 추가 금지.
+같은 개념의 다른 표현도 별도 요소로 기록. 일반 접속사·동사 제외.`;
+
+const SCOPE_EXTRACT_SCHEMA = `응답은 순수 JSON. 설명·prefix·코드블록 금지.
+{"components":[{"name":"구성요소명","context":"등장 문맥 50자 이내"}]}`;
+
+async function extractComponentsFromText(sid, text) {
+  if (!text || text.trim().length < 30) return { status: 'skipped_empty', components: [] };
+  const prompt = `${SCOPE_EXTRACT_SCHEMA}\n\n<patent_text>\n${text.slice(0, 20000)}\n</patent_text>`;
+  try {
+    const resp = await App.callClaudeSonnet(prompt, 4096);
+    const parsed = _parseJSONSafe(resp.text);
+    if (!parsed || !Array.isArray(parsed.components)) return { status: 'llm_failed_partial', components: [] };
+    return {
+      status: 'ok',
+      components: parsed.components.map(c => ({ name: c.name, context: c.context || '', source: 'llm' }))
+    };
+  } catch (e) {
+    console.warn('[C1-4] extractComponentsFromText failed:', e.message);
+    return { status: 'llm_failed_partial', components: [] };
+  }
+}
+
+function matchComponentToScope(componentName) {
+  if (!inventionScope || !inventionScope.baseline) return null;
+  const normalize = s => s.toLowerCase().replace(/\s+/g, '').trim();
+  const target = normalize(componentName);
+  if (!target) return null;
+  for (const c of inventionScope.baseline.core_components || []) {
+    if (normalize(c.name) === target) return { via: 'baseline:' + (c.id || c.name) };
+    for (const alias of (c.aliases || [])) {
+      if (normalize(alias) === target) return { via: 'alias:' + alias };
+      if (normalize(alias).length >= 3 && target.includes(normalize(alias))) return { via: 'alias_partial:' + alias };
+    }
+    // baseline name 부분 포함 (baseline이 상위개념일 때)
+    if (normalize(c.name).length >= 3 && target.includes(normalize(c.name))) return { via: 'baseline_partial:' + c.name };
+  }
+  for (const e of inventionScope.approved_expansions || []) {
+    if (normalize(e.component) === target) return { via: 'expansion:' + e.component };
+  }
+  return null;
+}
+
+async function runScopeCheck_text(sid) {
+  if (!inventionScope?.locked_at) return;
+  if (!outputs[sid]) return;
+  const text = outputs[sid];
+  const novelMarkers = extractNovelMarkers(text);
+  const llmResult = await extractComponentsFromText(sid, text);
+  const allComponents = [];
+  const seen = new Set();
+  const addComp = (name, context, source) => {
+    const key = name.toLowerCase().trim();
+    if (!seen.has(key)) { seen.add(key); allComponents.push({ name, context, source }); }
+  };
+  novelMarkers.forEach(n => addComp(n, '', 'novel_marker'));
+  llmResult.components.forEach(c => addComp(c.name, c.context, c.source));
+  const matched = [], novel = [];
+  for (const comp of allComponents) {
+    const m = matchComponentToScope(comp.name);
+    if (m) matched.push({ name: comp.name, matched_via: m.via });
+    else {
+      const idx = text.indexOf(comp.name);
+      novel.push({
+        name: comp.name,
+        context_snippet: comp.context || (idx >= 0 ? text.slice(Math.max(0, idx - 80), idx + 80) : ''),
+        discovered_via: comp.source === 'novel_marker' ? 'novel_marker' : 'llm_extraction'
+      });
+    }
+  }
+  scopeCheckResults[sid] = {
+    sid,
+    extracted_at: new Date().toISOString(),
+    source_type: 'text',
+    extraction_method: llmResult.status === 'ok' ? 'hybrid' : 'partial',
+    extraction_status: llmResult.status,
+    all_components: allComponents,
+    matched_to_scope: matched,
+    novel_components: novel,
+    conflicts: []
+  };
+  saveProject(true);
+  return scopeCheckResults[sid];
+}
+
+async function runScopeCheck_mermaid(sid) {
+  if (!inventionScope?.locked_at) return;
+  if (!outputs[sid]) return;
+  const nodes = extractMermaidNodes(outputs[sid]);
+  const matched = [], novel = [];
+  for (const node of nodes) {
+    const m = matchComponentToScope(node.name);
+    if (m) matched.push({ name: node.name, ref: node.ref, matched_via: m.via });
+    else novel.push({ name: node.name, ref: node.ref, context_snippet: 'Mermaid node ' + (node.ref || node.name), discovered_via: 'mermaid_extraction' });
+  }
+  scopeCheckResults[sid] = {
+    sid,
+    extracted_at: new Date().toISOString(),
+    source_type: 'mermaid',
+    extraction_method: 'regex',
+    extraction_status: 'ok',
+    all_components: nodes.map(n => ({ name: n.name, ref: n.ref, source: n.source })),
+    matched_to_scope: matched,
+    novel_components: novel,
+    conflicts: []
+  };
+  saveProject(true);
+  return scopeCheckResults[sid];
+}
+
+function detectMermaidRefConflicts() {
+  const mermaidSids = SCOPE_GUARDED_MERMAID_STEPS.filter(sid => outputs[sid]);
+  if (mermaidSids.length < 2) return;
+  const refMap = {};
+  for (const sid of mermaidSids) {
+    const nodes = extractMermaidNodes(outputs[sid]);
+    for (const n of nodes) {
+      if (!n.ref) continue;
+      if (!refMap[n.ref]) refMap[n.ref] = [];
+      refMap[n.ref].push({ sid, name: n.name });
+    }
+  }
+  const conflicts = {};
+  for (const [ref, occurrences] of Object.entries(refMap)) {
+    const uniqueNames = new Set(occurrences.map(o => o.name));
+    if (uniqueNames.size > 1) {
+      for (const occ of occurrences) {
+        if (!conflicts[occ.sid]) conflicts[occ.sid] = [];
+        conflicts[occ.sid].push({ ref, names: [...uniqueNames], occurrences });
+      }
+    }
+  }
+  for (const sid of mermaidSids) {
+    if (scopeCheckResults[sid]) scopeCheckResults[sid].conflicts = conflicts[sid] || [];
+  }
+}
+
+// [C1-4] Layer 2 공개 API
+async function runScopeCheck(sid) {
+  if (!inventionScope?.locked_at) { App.showToast('발명 범위가 확정되지 않았습니다', 'info'); return null; }
+  if (SCOPE_GUARDED_TEXT_STEPS.includes(sid)) return await runScopeCheck_text(sid);
+  if (SCOPE_GUARDED_MERMAID_STEPS.includes(sid)) {
+    const result = await runScopeCheck_mermaid(sid);
+    detectMermaidRefConflicts();
+    return result;
+  }
+  return null;
+}
+async function runScopeCheckAll() {
+  const allSids = [...SCOPE_GUARDED_TEXT_STEPS, ...SCOPE_GUARDED_MERMAID_STEPS];
+  const results = {};
+  for (const sid of allSids) { if (outputs[sid]) results[sid] = await runScopeCheck(sid); }
+  return results;
 }
 
 async function extractInventionScope() {
