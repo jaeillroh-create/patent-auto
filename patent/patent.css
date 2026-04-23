@@ -1240,4 +1240,24 @@ label {
 .scope-panel.locked { border-left: 4px solid var(--pt-success); }
 .scope-panel .baseline-summary { font-size: 13px; color: var(--pt-gray-500); }
 .scope-components { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.scope-chip { padding: 4px 10px; background: #fff; border: 1px solid var(--pt-gray-200); border-radius: 12px; font-size: 12px; }
+.scope-chip { padding: 4px 10px; background: #fff; border: 1px solid var(--pt-gray-200); border-radius: 12px; font-size: 12px; cursor: pointer; position: relative; transition: background 0.15s, border-color 0.15s; }
+.scope-chip:hover { background: var(--pt-gray-100); border-color: var(--pt-gray-400); }
+.chip-edit-icon { margin-left: 4px; font-size: 10px; opacity: 0.4; }
+.scope-chip:hover .chip-edit-icon { opacity: 1; }
+
+/* [C1-6a] baseline 편집 UI */
+.scope-panel .scope-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pt-gray-200); }
+.scope-panel .scope-section:first-of-type { border-top: none; padding-top: 0; }
+.scope-section-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: var(--pt-gray-700); margin-bottom: 6px; cursor: default; }
+.scope-section-title.clickable { cursor: pointer; }
+.scope-section-title.clickable:hover .edit-icon { opacity: 1; }
+.edit-icon { opacity: 0.3; font-size: 12px; transition: opacity 0.15s; }
+.scope-section-title .scope-add-btn { margin-left: auto; padding: 2px 10px; font-size: 12px; border: 1px solid var(--pt-gray-300); background: white; border-radius: 6px; cursor: pointer; }
+.scope-section-title .scope-add-btn:hover { background: var(--pt-gray-50); border-color: var(--pt-gray-400); }
+.scope-section-content { font-size: 13px; color: var(--pt-gray-600); line-height: 1.5; }
+.scope-empty { font-size: 12px; color: var(--pt-gray-500); padding: 8px 0; margin: 0; }
+.scope-modal .form-row { margin-bottom: 16px; }
+.aliases-container { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; min-height: 8px; }
+.alias-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: var(--pt-primary-light); color: var(--pt-primary-dark); border-radius: 12px; font-size: 12px; }
+.alias-tag button { background: none; border: none; color: inherit; font-size: 14px; line-height: 1; cursor: pointer; padding: 0; margin-left: 2px; }
+.alias-tag button:hover { color: var(--pt-danger); }

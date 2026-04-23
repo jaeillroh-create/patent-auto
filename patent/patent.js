@@ -46,6 +46,9 @@ let stepUserCommands = {}; // v5.5: 각 스텝별 사용자 명령어
 let outputTimestamps = {};
 // [P-C1] invention_scope: 발명 범위 기준선
 let inventionScope = null;
+// [C1-6a] baseline 편집 UI 상태
+let _editingComponentId = null;
+let _modalAliases = [];
 // ═══ v11.0: 예시도/개념도 ═══
 let conceptDiagramEnabled = false;
 let conceptDiagramCount = 0;
@@ -890,40 +893,225 @@ function renderInventionScopePanel() {
     panel.className = 'scope-panel';
     panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between">
       <div><span class="tf">🔍</span> <strong style="font-size:13px">발명 범위</strong>
-      <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:6px">범위를 확정하면 이후 스텝에서 범위 초과 여부를 검증합니다.</span></div>
+      <span style="font-size:11px;color:var(--pt-gray-500);margin-left:6px">범위를 확정하면 이후 스텝에서 범위 초과 여부를 검증합니다.</span></div>
       <button class="btn btn-outline btn-sm" onclick="extractInventionScope()">범위 확정</button>
     </div>`;
     return;
   }
   const b = inventionScope.baseline;
   const lockedDate = new Date(inventionScope.locked_at).toLocaleDateString('ko-KR');
-  const comps = (b.core_components || []).map(c =>
-    `<span class="scope-chip">${App.escapeHtml(c.name)}<span style="color:var(--color-text-tertiary);margin-left:4px;font-size:10px">${App.escapeHtml(c.role||'')}</span></span>`
-  ).join('');
+  const prevCount = (inventionScope._previous_versions || []).length;
+  const prevBadge = prevCount ? `<span class="badge badge-neutral" style="margin-left:6px;font-size:10px">이전 ${prevCount}건</span>` : '';
+
+  // [C1-6a] 구성요소 칩 (편집 가능)
+  const comps = (b.core_components || []).map(c => {
+    const cid = App.escapeHtml(c.id || c.name);
+    return `<span class="scope-chip" onclick="editComponent('${cid.replace(/'/g,"\\'")}')">${App.escapeHtml(c.name)}<span style="color:var(--pt-gray-500);margin-left:4px;font-size:10px">${App.escapeHtml(c.role||'')}</span><span class="chip-edit-icon">✎</span></span>`;
+  }).join('');
+
+  // 핵심 기능
   const funcs = (b.core_functions || []).map(f =>
-    `<li style="font-size:12px;margin-bottom:2px">${App.escapeHtml(f.desc)} <span style="color:var(--color-text-tertiary)">[${(f.component_refs||[]).join(',')}]</span></li>`
+    `<li style="font-size:12px;margin-bottom:2px">${App.escapeHtml(f.desc)} <span style="color:var(--pt-gray-500)">[${(f.component_refs||[]).join(',')}]</span></li>`
   ).join('');
   const nonscope = (b.explicit_nonscope || []).length
-    ? `<div style="margin-top:6px;font-size:11px;color:var(--color-text-tertiary)">제외: ${b.explicit_nonscope.map(n => App.escapeHtml(n)).join(', ')}</div>` : '';
-  const prevCount = (inventionScope._previous_versions || []).length;
-  const prevBadge = prevCount ? `<span class="badge badge-neutral" style="margin-left:6px;font-size:10px">이��� ${prevCount}건</span>` : '';
+    ? `<div style="margin-top:6px;font-size:11px;color:var(--pt-gray-500)">제외: ${b.explicit_nonscope.map(n => App.escapeHtml(n)).join(', ')}</div>` : '';
+
+  // [C1-6a] 승인된 확장
+  const expansions = inventionScope.approved_expansions || [];
+  const expansionHtml = expansions.length === 0
+    ? `<p class="scope-empty">청구항 생성 후 검증이 실행되면 여기에 승인된 확장 요소가 표시됩니다.</p>`
+    : expansions.map(e =>
+        `<span class="scope-chip" style="background:var(--pt-primary-light)">${App.escapeHtml(e.component)} <small style="color:var(--pt-gray-500)">(${App.escapeHtml(e.type||'')})</small> <button onclick="removeExpansion('${App.escapeHtml(e.component).replace(/'/g,"\\'")}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--pt-gray-500);padding:0;margin-left:2px">×</button></span>`
+      ).join('');
 
   panel.className = 'scope-panel locked';
   panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-    <div><span class="tf">🔒</span> <strong style="font-size:13px">발명 ��위 확정됨</strong>
-    <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:6px">${lockedDate}</span>${prevBadge}</div>
+    <div><span class="tf">🔒</span> <strong style="font-size:13px">발명 범위 확정됨</strong>
+    <span style="font-size:11px;color:var(--pt-gray-500);margin-left:6px">${lockedDate}</span>${prevBadge}</div>
     <button class="btn btn-ghost btn-sm" onclick="unlockInventionScope()">재확정</button>
   </div>
-  <div class="baseline-summary">
-    <div style="margin-bottom:4px"><strong>과제:</strong> ${App.escapeHtml(b.problem_space || '')}</div>
-    <div><strong>해결:</strong> ${App.escapeHtml(b.solution_space || '')}</div>
+  <div class="scope-section">
+    <div class="scope-section-title clickable" onclick="editProblemSpace()">과제 <span class="edit-icon">✎</span></div>
+    <div class="scope-section-content">${App.escapeHtml(b.problem_space || '')}</div>
   </div>
-  <div class="scope-components">${comps}</div>
-  <details style="margin-top:8px">
-    <summary style="font-size:12px;cursor:pointer;color:var(--color-text-secondary)">핵심 기능 (${(b.core_functions||[]).length}건)</summary>
+  <div class="scope-section">
+    <div class="scope-section-title clickable" onclick="editSolutionSpace()">해결 <span class="edit-icon">✎</span></div>
+    <div class="scope-section-content">${App.escapeHtml(b.solution_space || '')}</div>
+  </div>
+  <div class="scope-section">
+    <div class="scope-section-title">핵심 구성 (${(b.core_components||[]).length}) <button class="scope-add-btn" onclick="addComponent()">+ 추가</button></div>
+    <div class="scope-components">${comps}</div>
+  </div>
+  <details class="scope-section">
+    <summary class="scope-section-title" style="cursor:pointer">핵심 기능 (${(b.core_functions||[]).length}건)</summary>
     <ul style="margin:4px 0 0 16px;padding:0">${funcs}</ul>
     ${nonscope}
+  </details>
+  <details class="scope-section">
+    <summary class="scope-section-title" style="cursor:pointer">승인된 확장 (${expansions.length})</summary>
+    <div class="scope-components" style="margin-top:4px">${expansionHtml}</div>
   </details>`;
+}
+
+// ═══════════ [C1-6a] BASELINE 편집 UI ═══════════
+
+function _appendAuditLog(action, data) {
+  if (!inventionScope) return;
+  if (!inventionScope.audit_log) inventionScope.audit_log = [];
+  inventionScope.audit_log.push({
+    action,
+    data,
+    timestamp: new Date().toISOString(),
+    user: App.currentUser?.id || 'unknown'
+  });
+}
+
+function editComponent(componentId) {
+  if (!inventionScope?.baseline) return;
+  const comp = inventionScope.baseline.core_components.find(c =>
+    (c.id || c.name) === componentId);
+  if (!comp) return;
+  _editingComponentId = componentId;
+  document.getElementById('scopeComponentModalTitle').textContent = '구성요소 편집';
+  document.getElementById('scope-comp-name').value = comp.name || '';
+  document.getElementById('scope-comp-role').value = comp.role || '';
+  document.getElementById('scope-comp-delete-btn').style.display = '';
+  renderAliasesInModal(comp.aliases || []);
+  setupAliasInputHandler();
+  document.getElementById('scopeComponentModal').style.display = 'flex';
+  document.getElementById('scope-comp-name').focus();
+}
+
+function addComponent() {
+  if (!inventionScope?.baseline) return;
+  _editingComponentId = null;
+  document.getElementById('scopeComponentModalTitle').textContent = '구성요소 추가';
+  document.getElementById('scope-comp-name').value = '';
+  document.getElementById('scope-comp-role').value = '';
+  document.getElementById('scope-comp-delete-btn').style.display = 'none';
+  renderAliasesInModal([]);
+  setupAliasInputHandler();
+  document.getElementById('scopeComponentModal').style.display = 'flex';
+  document.getElementById('scope-comp-name').focus();
+}
+
+function closeScopeComponentModal() {
+  document.getElementById('scopeComponentModal').style.display = 'none';
+  _editingComponentId = null;
+}
+
+function renderAliasesInModal(aliases) {
+  _modalAliases = [...aliases];
+  const container = document.getElementById('scope-aliases-container');
+  if (!container) return;
+  container.innerHTML = _modalAliases.map((a, i) =>
+    `<span class="alias-tag">${App.escapeHtml(a)}<button onclick="removeAliasAt(${i})">×</button></span>`
+  ).join('');
+}
+
+function removeAliasAt(index) {
+  _modalAliases.splice(index, 1);
+  renderAliasesInModal(_modalAliases);
+}
+
+function setupAliasInputHandler() {
+  const input = document.getElementById('scope-alias-input');
+  if (!input || input._bound) return;
+  input._bound = true;
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const val = input.value.trim();
+      if (val && !_modalAliases.includes(val)) {
+        _modalAliases.push(val);
+        renderAliasesInModal(_modalAliases);
+      }
+      input.value = '';
+    }
+  });
+}
+
+function saveComponent() {
+  const name = document.getElementById('scope-comp-name').value.trim();
+  const role = document.getElementById('scope-comp-role').value.trim();
+  if (!name) { App.showToast('이름은 필수입니다', 'error'); return; }
+  if (!inventionScope?.baseline) return;
+  if (!Array.isArray(inventionScope.baseline.core_components)) {
+    inventionScope.baseline.core_components = [];
+  }
+  const components = inventionScope.baseline.core_components;
+
+  if (_editingComponentId === null) {
+    const newId = 'c' + Date.now();
+    components.push({ id: newId, name, role: role || undefined, aliases: [..._modalAliases] });
+    _appendAuditLog('component_added', { id: newId, name });
+  } else {
+    const idx = components.findIndex(c => (c.id || c.name) === _editingComponentId);
+    if (idx === -1) { App.showToast('구성요소를 찾을 수 없습니다', 'error'); closeScopeComponentModal(); return; }
+    const prev = Object.assign({}, components[idx]);
+    components[idx].name = name;
+    components[idx].role = role || undefined;
+    components[idx].aliases = [..._modalAliases];
+    _appendAuditLog('component_edited', { id: _editingComponentId, before: prev, after: components[idx] });
+  }
+  saveProject(true);
+  renderInventionScopePanel();
+  closeScopeComponentModal();
+  App.showToast(_editingComponentId ? '구성요소가 수정되었습니다' : '구성요소가 추가되었습니다', 'success');
+}
+
+function deleteComponent() {
+  if (_editingComponentId === null) return;
+  if (!inventionScope?.baseline) return;
+  const components = inventionScope.baseline.core_components;
+  const idx = components.findIndex(c => (c.id || c.name) === _editingComponentId);
+  if (idx === -1) return;
+  const comp = components[idx];
+  if (!confirm(`"${comp.name}" 구성요소를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) return;
+  const removed = components.splice(idx, 1)[0];
+  _appendAuditLog('component_deleted', { id: _editingComponentId, data: removed });
+  saveProject(true);
+  renderInventionScopePanel();
+  closeScopeComponentModal();
+  App.showToast('구성요소가 삭제되었습니다', 'success');
+}
+
+function editProblemSpace() {
+  if (!inventionScope?.baseline) return;
+  const current = inventionScope.baseline.problem_space || '';
+  const newVal = prompt('과제 설명을 입력하세요:', current);
+  if (newVal === null) return;
+  const trimmed = newVal.slice(0, 300);
+  _appendAuditLog('problem_space_edited', { before: current, after: trimmed });
+  inventionScope.baseline.problem_space = trimmed;
+  saveProject(true);
+  renderInventionScopePanel();
+  App.showToast('과제가 수정되었습니다', 'success');
+}
+
+function editSolutionSpace() {
+  if (!inventionScope?.baseline) return;
+  const current = inventionScope.baseline.solution_space || '';
+  const newVal = prompt('해결 방법을 입력하세요:', current);
+  if (newVal === null) return;
+  const trimmed = newVal.slice(0, 300);
+  _appendAuditLog('solution_space_edited', { before: current, after: trimmed });
+  inventionScope.baseline.solution_space = trimmed;
+  saveProject(true);
+  renderInventionScopePanel();
+  App.showToast('해결 방법이 수정되었습니다', 'success');
+}
+
+function removeExpansion(componentName) {
+  if (!inventionScope?.approved_expansions) return;
+  if (!confirm(`"${componentName}" 승인을 해제하시겠습니까?`)) return;
+  const idx = inventionScope.approved_expansions.findIndex(e => e.component === componentName);
+  if (idx === -1) return;
+  const removed = inventionScope.approved_expansions.splice(idx, 1)[0];
+  _appendAuditLog('expansion_removed', removed);
+  saveProject(true);
+  renderInventionScopePanel();
+  App.showToast('확장 승인이 해제되었습니다', 'success');
 }
 
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
