@@ -9515,17 +9515,22 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const refNumH=30*_sm;
     const rowGapBase=0.7*PX*_sm;
 
-    // [C2-8a] 동적 bbox — 도면 내 모든 노드의 max(sw, sh) 기준 통일
-    let _maxSw=0, _maxSh=0;
+    // [C2-8a-fix] visual bounds 기반 bbox 크기 — shape의 실제 시각 영역 (파형/전파 등 돌출 포함)
+    //   기존 metrics.sh는 shape 내부 기본 영역 → sensor/antenna 파형이 bbox 외부로 돌출
+    //   _shapeVisualBounds는 실제 렌더되는 전체 영역 반환
+    let _maxVisualW=0, _maxVisualH=0;
     _fig1LayoutNodes.forEach(nd=>{
       const st=matchIconShape(nd.label);
       const sm=_shapeMetrics(st,boxW2D,boxH);
-      if(sm.sw>_maxSw)_maxSw=sm.sw;
-      if(sm.sh>_maxSh)_maxSh=sm.sh;
+      const vb=_shapeVisualBounds(st,0,0,sm.sw,sm.sh);
+      const visualW=vb.right-vb.left;
+      const visualH=vb.bottom-vb.top;
+      if(visualW>_maxVisualW)_maxVisualW=visualW;
+      if(visualH>_maxVisualH)_maxVisualH=visualH;
     });
     const _bboxPad=8;
-    const _bboxW=Math.round(_maxSw+_bboxPad);
-    const _bboxH=Math.round(_maxSh+_bboxPad);
+    const _bboxW=Math.round(_maxVisualW+_bboxPad);
+    const _bboxH=Math.round(_maxVisualH+_bboxPad);
     // shapeicon 하단 외부 라벨+부호 영역 (박스형은 내부)
     const _bboxExtLabelGap=12;  // bbox 하단 → 라벨 간격
     const _bboxExtRefGap=26;    // bbox 하단 → 부호 간격 (라벨 아래 14)
@@ -9593,11 +9598,18 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
         sm.sw=Math.min(minShapeW,boxW2D*0.90);
         sm.dx=(boxW2D-sm.sw)/2;
       }
-      // [C2-7] shape 크기 — bbox 전체 활용 (원본 크기 복원)
-      const cappedSw=Math.min(sm.sw,_bboxW);
-      const cappedSh=Math.min(sm.sh,_bboxH-8);
-      const sx=bx+(boxW2D-cappedSw)/2;
-      const sy=by+(_bboxH-cappedSh)/2;
+      // [C2-8a-fix] shape visual 중심을 bbox 중앙에 정렬
+      //   sensor/antenna 등은 sm 기준점과 visual 중심이 다름 (파형이 한쪽에 치우침)
+      //   visual 중심을 bbox 중앙에 맞추면 돌출 방향 없이 균형 배치
+      const _bbxCenter=bx+(boxW2D)/2;  // bbox 수평 중심 (x)
+      const _byCenter=by+_bboxH/2;     // bbox 수직 중심 (y)
+      const _vb=_shapeVisualBounds(shapeType,0,0,sm.sw,sm.sh);
+      const _vCx=(_vb.left+_vb.right)/2;  // shape 로컬 좌표 visual 중심 x
+      const _vCy=(_vb.top+_vb.bottom)/2;  // shape 로컬 좌표 visual 중심 y
+      const cappedSw=sm.sw;
+      const cappedSh=sm.sh;
+      const sx=_bbxCenter-_vCx;
+      const sy=_byCenter-_vCy;
 
       // [C2-8a] 라우팅용 nodeBox — 노드 유형별 anchor 경계 다름
       //   박스형: bbox 경계에 화살표 스냅 (명칭이 shape 내부에 있어 관통 없음)
@@ -9700,12 +9712,15 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     }
 
     // ═══ FIX-2: 겹침 보정 후 행 간격 균등화 재적용 (bbox 기반) ═══
+    //   [C2-8a-fix] sy는 visual 중심 기준 재계산 (shape마다 visual 중심 오프셋 다름)
     nodeData.forEach(nd=>{
       const expectedY=rowY[nd.row];
       if(Math.abs(nodeBoxes[nd.id].y-expectedY)>2){
+        const vb2=_shapeVisualBounds(nd.shapeType,0,0,nd.sw,nd.sh);
+        const vCy2=(vb2.top+vb2.bottom)/2;
         nodeBoxes[nd.id].y=expectedY;
         nodeBoxes[nd.id].cy=expectedY+_bboxH/2;
-        nd.sy=expectedY+(_bboxH-nd.sh)/2;
+        nd.sy=expectedY+_bboxH/2-vCy2;
         nodeBoxes[nd.id]._sy=nd.sy;
       }
     });
@@ -9734,7 +9749,10 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       }
       nodeData.forEach(nd=>{
         const ey=rowY[nd.row];
-        nd.sy=ey+(_bboxH-nd.sh)/2;
+        // [C2-8a-fix] visual 중심 기반 sy 재계산
+        const vb3=_shapeVisualBounds(nd.shapeType,0,0,nd.sw,nd.sh);
+        const vCy3=(vb3.top+vb3.bottom)/2;
+        nd.sy=ey+_bboxH/2-vCy3;
         nodeBoxes[nd.id].y=ey;
         nodeBoxes[nd.id].cy=ey+_bboxH/2;
         nodeBoxes[nd.id]._sy=nd.sy;
