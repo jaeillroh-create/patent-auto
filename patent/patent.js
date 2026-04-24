@@ -7011,6 +7011,35 @@ function _isIconShape(type){
   return type==='sensor'||type==='antenna'||type==='camera'||type==='speaker';
 }
 
+// [C2-8a] 박스형 노드의 부호 위치 결정 — 연결선 없는 면 찾기
+// 우선순위: top > bottom > right > left (모두 점유되면 bottom 폴백)
+function _findEmptySide(nodeId, edges, grid){
+  const myPos = grid[nodeId];
+  if(!myPos) return 'bottom';
+  const sides = { top: true, bottom: true, left: true, right: true };
+  edges.forEach(e => {
+    if(e.from !== nodeId && e.to !== nodeId) return;
+    const otherId = e.from === nodeId ? e.to : e.from;
+    const otherPos = grid[otherId];
+    if(!otherPos) return;
+    // 상대 노드의 상대적 위치로 연결선이 향하는 면 판단
+    const dr = otherPos.row - myPos.row;
+    const dc = otherPos.col - myPos.col;
+    if(Math.abs(dr) >= Math.abs(dc)){
+      if(dr < 0) sides.top = false;
+      else if(dr > 0) sides.bottom = false;
+    } else {
+      if(dc < 0) sides.left = false;
+      else if(dc > 0) sides.right = false;
+    }
+  });
+  if(sides.top) return 'top';
+  if(sides.bottom) return 'bottom';
+  if(sides.right) return 'right';
+  if(sides.left) return 'left';
+  return 'bottom';
+}
+
 // ── Shape right edge X for leader line ──
 function _shapeLeaderX(type,x,w){
   switch(type){
@@ -9486,16 +9515,27 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const refNumH=30*_sm;
     const rowGapBase=0.7*PX*_sm;
 
-    // [C2-7] 통일 바운딩박스 — 모든 노드 동일 외곽 크기, 라벨은 bbox 외부
-    const _bboxW=Math.round(boxW2D*0.80);  // SHAPE_W 기반
-    const _bboxH=Math.round(boxH*1.50);    // shape 전용 (라벨 제외)
-    const _bboxExtLabelGap=6;   // bbox 하단 → 라벨 간격
-    const _bboxExtRefGap=18;    // bbox 하단 → 참조번호 간격
-    const _bboxExtH=_bboxExtRefGap+12; // 외부 라벨+참조번호 총 높이
+    // [C2-8a] 동적 bbox — 도면 내 모든 노드의 max(sw, sh) 기준 통일
+    let _maxSw=0, _maxSh=0;
+    _fig1LayoutNodes.forEach(nd=>{
+      const st=matchIconShape(nd.label);
+      const sm=_shapeMetrics(st,boxW2D,boxH);
+      if(sm.sw>_maxSw)_maxSw=sm.sw;
+      if(sm.sh>_maxSh)_maxSh=sm.sh;
+    });
+    const _bboxPad=8;
+    const _bboxW=Math.round(_maxSw+_bboxPad);
+    const _bboxH=Math.round(_maxSh+_bboxPad);
+    // shapeicon 하단 외부 라벨+부호 영역 (박스형은 내부)
+    const _bboxExtLabelGap=12;  // bbox 하단 → 라벨 간격
+    const _bboxExtRefGap=26;    // bbox 하단 → 부호 간격 (라벨 아래 14)
+    const _bboxExtH=_bboxExtRefGap+12; // shapeicon: 외부 라벨+부호 총 높이
+    // 박스형 전용: 부호를 상/좌/우 면에 배치할 때 여유 공간
+    const _bboxRefMargin=16; // bbox 외곽 → 부호까지 거리
 
-    // ═══ v17: 전역 행 높이 통일 — bbox + 외부 라벨 포함 ═══
+    // ═══ v17: 전역 행 높이 통일 — bbox + 외부 라벨/부호 포함 (shapeicon 기준) ═══
     let globalRowH=_bboxH+_bboxExtH;
-    let globalShapeH=_bboxH-8;
+    let globalShapeH=_bboxH-_bboxPad;
 
     // 행별 Y시작 좌표 — 모든 행 동일 높이
     const rowY={};
@@ -9559,12 +9599,18 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       const sx=bx+(boxW2D-cappedSw)/2;
       const sy=by+(_bboxH-cappedSh)/2;
 
-      // [C2-7] 라우팅용 nodeBox — bbox 경계에 화살표 스냅
+      // [C2-8a] 라우팅용 nodeBox — 노드 유형별 anchor 경계 다름
+      //   박스형: bbox 경계에 화살표 스냅 (명칭이 shape 내부에 있어 관통 없음)
+      //   shapeicon: anchor 하단만 label/refnum 아래까지 확장 → 화살표가 label/refnum 관통 방지
+      //   cx/cy/x/y/w/h는 모든 노드 공통 (_bboxH 기준) — 행 정렬 일관성 유지
       const _bbx=bx+(boxW2D-_bboxW)/2;
+      const _isIcon=_isIconShape(shapeType);
+      const _anchorSh=_isIcon?(_bboxH+_bboxExtH):_bboxH;
       nodeBoxes[nd.id]={
         x:_bbx, y:by, w:_bboxW, h:_bboxH,
         cx:bx+boxW2D/2, cy:by+_bboxH/2,
-        _shapeType:'box', _sx:_bbx, _sy:by, _sw:_bboxW, _sh:_bboxH
+        _shapeType:'box', _sx:_bbx, _sy:by, _sw:_bboxW, _sh:_anchorSh,
+        _isIcon
       };
       nodeData.push({id:nd.id, sx, sy, sw:cappedSw, sh:cappedSh,
         shapeType, displayLabel, refNum, bx, boxW2D,
@@ -9857,24 +9903,47 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const uniformHeightFont=Math.floor(minShapeH*0.22);
     const figFontSize=Math.max(baseFontSize, Math.min(uniformHeightFont, 14)); // 14px cap — 도면 내 통일
 
-    // [C2-7] 라벨/참조번호 — bbox 외부 (shape과 겹침 방지)
-
+    // [C2-8a] 노드 유형별 렌더 — 박스형(명칭 내부+부호 empty side) / shapeicon(명칭+부호 하단 외부)
     nodeData.forEach(nd=>{
       const{id,sx,sy,sw,sh,shapeType,displayLabel,refNum}=nd;
+      const _bx=nodeBoxes[id].x; // bbox 좌측 x
       const _by=nodeBoxes[id].y; // bbox 상단 y
+      const _bcx=_bx+_bboxW/2;   // bbox 중앙 x
+      const _bcy=_by+_bboxH/2;   // bbox 중앙 y
+      const isIcon=_isIconShape(shapeType);
+
+      // shape 렌더 (박스형/shapeicon 공통)
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sw,sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sw,sh,2);
-      let fontSize=figFontSize;
-      const labelMaxW=_bboxW*0.95;
+      const fontSize=figFontSize;
 
-      // [C2-7] 라벨 — bbox 하단 외부
-      const _labelY=_by+_bboxH+_bboxExtLabelGap;
-      const {svg:lSvg}=_svgMultiLineLabel(sx+sw/2, _labelY, displayLabel, labelMaxW, fontSize, {minFontSize:7})
-      svg+=lSvg;
+      if(isIcon){
+        // [C2-8a] shapeicon: 명칭 bbox 외부 하단, 부호 명칭 바로 아래 (연속 배치)
+        const labelMaxW=_bboxW*0.95;
+        const _labelY=_by+_bboxH+_bboxExtLabelGap;
+        const {svg:lSvg}=_svgMultiLineLabel(_bcx, _labelY, displayLabel, labelMaxW, fontSize, {minFontSize:7});
+        svg+=lSvg;
+        const _refY=_by+_bboxH+_bboxExtRefGap;
+        svg+=`<text x="${_bcx}" y="${_refY}" text-anchor="middle" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      } else {
+        // [C2-8a] 박스형: 명칭 shape 내부 중앙, 부호 연결선 없는 면
+        const labelMaxW=sw*0.85;
+        const _textCy=_shapeTextCy(shapeType,sy,sh);
+        const {svg:lSvg}=_svgMultiLineLabel(sx+sw/2, _textCy, displayLabel, labelMaxW, fontSize, {minFontSize:7});
+        svg+=lSvg;
 
-      // [C2-7] 참조번호 — 라벨 아래
-      const _refY=_by+_bboxH+_bboxExtRefGap;
-      svg+=`<text x="${sx+sw/2}" y="${_refY}" text-anchor="middle" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+        // [C2-8a] 부호 위치 — 연결선 없는 면
+        const emptySide=_findEmptySide(id, svgEdgesToDraw, grid);
+        let refX, refY, refAnchor='middle';
+        switch(emptySide){
+          case 'top':    refX=_bcx;             refY=_by-_bboxRefMargin/2-4;  refAnchor='middle'; break;
+          case 'bottom': refX=_bcx;             refY=_by+_bboxH+_bboxRefMargin; refAnchor='middle'; break;
+          case 'left':   refX=_bx-4;            refY=_bcy+4;                  refAnchor='end'; break;
+          case 'right':  refX=_bx+_bboxW+4;     refY=_bcy+4;                  refAnchor='start'; break;
+          default:       refX=_bcx;             refY=_by+_bboxH+_bboxRefMargin; refAnchor='middle';
+        }
+        svg+=`<text x="${refX}" y="${refY}" text-anchor="${refAnchor}" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
+      }
     });
 
     // [C2-4] all-L1 렌더 검증 — grid 누락 노드 강제 복구
