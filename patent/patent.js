@@ -9486,16 +9486,16 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const refNumH=30*_sm;
     const rowGapBase=0.7*PX*_sm;
 
-    // [C2-6 bbox] 통일 바운딩박스 — 모든 노드 동일 외곽 크기
+    // [C2-7] 통일 바운딩박스 — 모든 노드 동일 외곽 크기, 라벨은 bbox 외부
     const _bboxW=Math.round(boxW2D*0.80);  // SHAPE_W 기반
-    const _bboxH=Math.round(boxH*1.50);    // shape + label + refnum 포함
-    const _bboxIconAreaH=Math.round(_bboxH*0.58); // 상부 58%: shape/icon 영역
-    const _bboxLabelRatio=0.68;  // 라벨 y 비율 (bbox 상단 기준)
-    const _bboxRefRatio=0.88;    // 참조번호 y 비율
+    const _bboxH=Math.round(boxH*1.50);    // shape 전용 (라벨 제외)
+    const _bboxExtLabelGap=6;   // bbox 하단 → 라벨 간격
+    const _bboxExtRefGap=18;    // bbox 하단 → 참조번호 간격
+    const _bboxExtH=_bboxExtRefGap+12; // 외부 라벨+참조번호 총 높이
 
-    // ═══ v17: 전역 행 높이 통일 — bbox 기반 ═══
-    let globalRowH=_bboxH;
-    let globalShapeH=_bboxIconAreaH;
+    // ═══ v17: 전역 행 높이 통일 — bbox + 외부 라벨 포함 ═══
+    let globalRowH=_bboxH+_bboxExtH;
+    let globalShapeH=_bboxH-8;
 
     // 행별 Y시작 좌표 — 모든 행 동일 높이
     const rowY={};
@@ -9504,12 +9504,12 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       rowY[r]=accY;
       accY+=globalRowH+rowGapBase;
     }
-    // [C2-6 bbox] bbox 하단 기반 viewBox 높이
+    // [C2-7] bbox + 외부 라벨 하단 기반 viewBox 높이
     let maxNodeBottom=0;
     nodes.forEach(nd=>{
       const gp=grid[nd.id];if(!gp)return;
       const by=rowY[gp.row];
-      const bottom=by+_bboxH+10;
+      const bottom=by+_bboxH+_bboxExtH+10;
       if(bottom>maxNodeBottom)maxNodeBottom=bottom;
     });
     const totalH=maxNodeBottom+marginY*0.5;
@@ -9553,18 +9553,18 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
         sm.sw=Math.min(minShapeW,boxW2D*0.90);
         sm.dx=(boxW2D-sm.sw)/2;
       }
-      // [C2-6 bbox] shape 크기를 bbox icon area에 맞춤
+      // [C2-7] shape 크기 — bbox 전체 활용 (원본 크기 복원)
       const cappedSw=Math.min(sm.sw,_bboxW);
-      const cappedSh=Math.min(sm.sh,_bboxIconAreaH);
+      const cappedSh=Math.min(sm.sh,_bboxH-8);
       const sx=bx+(boxW2D-cappedSw)/2;
-      const sy=by+Math.max(0,(_bboxIconAreaH-cappedSh)/2);
+      const sy=by+(_bboxH-cappedSh)/2;
 
-      // [C2-6 bbox] 라우팅용 nodeBox — bbox 크기 통일
+      // [C2-7] 라우팅용 nodeBox — bbox 경계에 화살표 스냅
       const _bbx=bx+(boxW2D-_bboxW)/2;
       nodeBoxes[nd.id]={
         x:_bbx, y:by, w:_bboxW, h:_bboxH,
         cx:bx+boxW2D/2, cy:by+_bboxH/2,
-        _shapeType:shapeType, _sx:sx, _sy:sy, _sw:cappedSw, _sh:cappedSh
+        _shapeType:'box', _sx:_bbx, _sy:by, _sw:_bboxW, _sh:_bboxH
       };
       nodeData.push({id:nd.id, sx, sy, sw:cappedSw, sh:cappedSh,
         shapeType, displayLabel, refNum, bx, boxW2D,
@@ -9581,7 +9581,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       correctionRounds++;
       for(let i=0;i<nodeData.length;i++){
         const a=nodeData[i];
-        const aBottom=nodeBoxes[a.id].y+_bboxH+REF_PADDING;
+        const aBottom=nodeBoxes[a.id].y+_bboxH+_bboxExtH;
         for(let j=0;j<nodeData.length;j++){
           if(i===j)continue;
           const b=nodeData[j];
@@ -9659,7 +9659,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       if(Math.abs(nodeBoxes[nd.id].y-expectedY)>2){
         nodeBoxes[nd.id].y=expectedY;
         nodeBoxes[nd.id].cy=expectedY+_bboxH/2;
-        nd.sy=expectedY+Math.max(0,(_bboxIconAreaH-nd.sh)/2);
+        nd.sy=expectedY+(_bboxH-nd.sh)/2;
         nodeBoxes[nd.id]._sy=nd.sy;
       }
     });
@@ -9672,8 +9672,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
           const b=nodeData[j];
           if(a.row===b.row)continue;
           const hOvl=!(a.sx+a.sw+8<b.sx||b.sx+b.sw+8<a.sx);
-          const aBot=nodeBoxes[a.id].y+_bboxH+REF_PADDING+MIN_GAP;
-          const bBot=nodeBoxes[b.id].y+_bboxH+REF_PADDING+MIN_GAP;
+          const aBot=nodeBoxes[a.id].y+_bboxH+_bboxExtH+MIN_GAP;
+          const bBot=nodeBoxes[b.id].y+_bboxH+_bboxExtH+MIN_GAP;
           if(hOvl&&((nodeBoxes[b.id].y<aBot&&nodeBoxes[b.id].y>=nodeBoxes[a.id].y)||(nodeBoxes[a.id].y<bBot&&nodeBoxes[a.id].y>=nodeBoxes[b.id].y))){
             hasOverlap=true;break;
           }
@@ -9688,7 +9688,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       }
       nodeData.forEach(nd=>{
         const ey=rowY[nd.row];
-        nd.sy=ey+Math.max(0,(_bboxIconAreaH-nd.sh)/2);
+        nd.sy=ey+(_bboxH-nd.sh)/2;
         nodeBoxes[nd.id].y=ey;
         nodeBoxes[nd.id].cy=ey+_bboxH/2;
         nodeBoxes[nd.id]._sy=nd.sy;
@@ -9696,10 +9696,10 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       reEqRounds++;
     }
 
-    // ═══ FIX-3: 최종 bbox 위치 기반 정확한 viewBox ═══
+    // ═══ FIX-3: 최종 bbox + 외부 라벨 기반 정확한 viewBox ═══
     let maxBottom=0;
     nodeData.forEach(nd=>{
-      const bottom=nodeBoxes[nd.id].y+_bboxH+REF_PADDING+10;
+      const bottom=nodeBoxes[nd.id].y+_bboxH+_bboxExtH+10;
       if(bottom>maxBottom)maxBottom=bottom;
     });
     const correctedSvgH=Math.max(svgH,maxBottom+marginY);
@@ -9857,8 +9857,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     const uniformHeightFont=Math.floor(minShapeH*0.22);
     const figFontSize=Math.max(baseFontSize, Math.min(uniformHeightFont, 14)); // 14px cap — 도면 내 통일
 
-    // [C2-6 bbox] 라벨/참조번호 y — bbox 기반 통일 위치
-    const _bboxLabelY=nodeData.length>0?nodeBoxes[nodeData[0].id].y+_bboxH*_bboxLabelRatio:0;
+    // [C2-7] 라벨/참조번호 — bbox 외부 (shape과 겹침 방지)
 
     nodeData.forEach(nd=>{
       const{id,sx,sy,sw,sh,shapeType,displayLabel,refNum}=nd;
@@ -9866,17 +9865,15 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       svg+=_drawShapeShadow(shapeType,sx+SHADOW_OFFSET,sy+SHADOW_OFFSET,sw,sh);
       svg+=_drawShapeBody(shapeType,sx,sy,sw,sh,2);
       let fontSize=figFontSize;
-      const dir=nodeConnDir[id]||{};
-      const refInside=dir.top&&dir.bottom&&dir.left&&dir.right;
-      const labelMaxW=sw*0.90;
+      const labelMaxW=_bboxW*0.95;
 
-      // [C2-6 bbox] 모든 shape 라벨 — bbox 하부 통일 y
-      const _labelY=_by+_bboxH*_bboxLabelRatio;
+      // [C2-7] 라벨 — bbox 하단 외부
+      const _labelY=_by+_bboxH+_bboxExtLabelGap;
       const {svg:lSvg}=_svgMultiLineLabel(sx+sw/2, _labelY, displayLabel, labelMaxW, fontSize, {minFontSize:7})
       svg+=lSvg;
 
-      // [C2-6 bbox] 참조번호 — bbox 기반 통일 y (leader line 없이 일관된 위치)
-      const _refY=_by+_bboxH*_bboxRefRatio;
+      // [C2-7] 참조번호 — 라벨 아래
+      const _refY=_by+_bboxH+_bboxExtRefGap;
       svg+=`<text x="${sx+sw/2}" y="${_refY}" text-anchor="middle" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
     });
 
@@ -9897,13 +9894,13 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
         const{svg:lSvg}=_svgMultiLineLabel(rx+boxW2D/2,ry+boxH/2,displayLabel,boxW2D*0.9,11,{minFontSize:7});
         svg+=lSvg;
         if(refNum)svg+=`<text x="${rx+boxW2D/2}" y="${ry+boxH+16}" text-anchor="middle" font-size="${REF_NUM_FONT_SIZE}" font-family="맑은 고딕,Arial,sans-serif" fill="#000">${refNum}</text>`;
-        nodeBoxes[nd.id]={x:rx,y:ry,w:_bboxW,h:_bboxH,cx:rx+boxW2D/2,cy:ry+_bboxH/2,_sx:rx,_sy:ry,_sw:Math.min(boxW2D,_bboxW),_sh:Math.min(boxH,_bboxIconAreaH),_shapeType:'box'};
+        nodeBoxes[nd.id]={x:rx,y:ry,w:_bboxW,h:_bboxH,cx:rx+boxW2D/2,cy:ry+_bboxH/2,_sx:rx,_sy:ry,_sw:Math.min(boxW2D,_bboxW),_sh:Math.min(boxH,_bboxH-8),_shapeType:'box'};
         _recovIdx++;
       });
       // [C2-4] viewBox 재확장 — 복구 노드 포함
       let _recovMaxBottom=0;
       Object.values(nodeBoxes).forEach(b=>{
-        const bot=(b._sy||b.y)+(b._sh||b.h)+REF_PADDING+10;
+        const bot=(b._sy||b.y)+(b._sh||b.h)+_bboxExtH+10;
         if(bot>_recovMaxBottom)_recovMaxBottom=bot;
       });
       const _recovSvgH=Math.max(correctedSvgH,_recovMaxBottom+marginY);
