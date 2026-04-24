@@ -9579,6 +9579,21 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
     // 렌더링(nodeData): bbox 상부에 shape, 하부에 label + refnum
     const nodeBoxes={};   // bbox 기반 — 라우팅용
     const nodeData=[];    // shape 기반 — 렌더링용
+    // [C2-8a-fix-2] anchor 영역 재계산 헬퍼 — sy 변경 후 _sx/_sy/_sw/_sh 갱신
+    const _refreshAnchor=(ndId,shapeType,sx,sy,sw,sh)=>{
+      if(_isIconShape(shapeType)){
+        const vbAbs=_shapeVisualBounds(shapeType,sx,sy,sw,sh);
+        nodeBoxes[ndId]._sx=vbAbs.left;
+        nodeBoxes[ndId]._sy=vbAbs.top;
+        nodeBoxes[ndId]._sw=vbAbs.right-vbAbs.left;
+        nodeBoxes[ndId]._sh=vbAbs.bottom-vbAbs.top;
+      } else {
+        nodeBoxes[ndId]._sx=sx;
+        nodeBoxes[ndId]._sy=sy;
+        nodeBoxes[ndId]._sw=sw;
+        nodeBoxes[ndId]._sh=sh;
+      }
+    };
     nodes.forEach(nd=>{
       const gp=grid[nd.id];
       if(!gp)return;
@@ -9611,17 +9626,30 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
       const sx=_bbxCenter-_vCx;
       const sy=_byCenter-_vCy;
 
-      // [C2-8a] 라우팅용 nodeBox — 노드 유형별 anchor 경계 다름
-      //   박스형: bbox 경계에 화살표 스냅 (명칭이 shape 내부에 있어 관통 없음)
-      //   shapeicon: anchor 하단만 label/refnum 아래까지 확장 → 화살표가 label/refnum 관통 방지
-      //   cx/cy/x/y/w/h는 모든 노드 공통 (_bboxH 기준) — 행 정렬 일관성 유지
+      // [C2-8a-fix-2] 라우팅용 nodeBox — 노드 유형별 anchor 영역 정밀화
+      //   박스형: shape 실제 경계(sx,sy,sw,sh)를 anchor로 → 화살표가 박스에 정확히 닿음
+      //              + _shapeType=actual → monitor/server 등 정밀 anchor 사용
+      //   shapeicon: visual bounds(파형 포함 영역)를 anchor로 → 연결선이 파형과 겹침 없음
+      //              + _shapeType='box' → visual rect 변 중앙 anchor (단순/안정)
+      //   cx/cy/x/y/w/h(layout용)는 모든 노드 공통 (_bboxH 기준) — 행 정렬 일관성 유지
       const _bbx=bx+(boxW2D-_bboxW)/2;
       const _isIcon=_isIconShape(shapeType);
-      const _anchorSh=_isIcon?(_bboxH+_bboxExtH):_bboxH;
+      let _ax, _ay, _aw, _ah, _anchorType;
+      if(_isIcon){
+        // shapeicon: visual bounds (파형/전파까지 포함, 하단 라벨 패딩 포함)
+        const vbAbs=_shapeVisualBounds(shapeType,sx,sy,cappedSw,cappedSh);
+        _ax=vbAbs.left; _ay=vbAbs.top;
+        _aw=vbAbs.right-vbAbs.left; _ah=vbAbs.bottom-vbAbs.top;
+        _anchorType='box';
+      } else {
+        // 박스형: shape 실제 경계 + 정밀 anchor
+        _ax=sx; _ay=sy; _aw=cappedSw; _ah=cappedSh;
+        _anchorType=shapeType;
+      }
       nodeBoxes[nd.id]={
         x:_bbx, y:by, w:_bboxW, h:_bboxH,
         cx:bx+boxW2D/2, cy:by+_bboxH/2,
-        _shapeType:'box', _sx:_bbx, _sy:by, _sw:_bboxW, _sh:_anchorSh,
+        _shapeType:_anchorType, _sx:_ax, _sy:_ay, _sw:_aw, _sh:_ah,
         _isIcon
       };
       nodeData.push({id:nd.id, sx, sy, sw:cappedSw, sh:cappedSh,
@@ -9651,7 +9679,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
               b.sy+=push;
               nodeBoxes[b.id].y+=push;
               nodeBoxes[b.id].cy=nodeBoxes[b.id].y+_bboxH/2;
-              nodeBoxes[b.id]._sy=b.sy;
+              _refreshAnchor(b.id,b.shapeType,b.sx,b.sy,b.sw,b.sh);
               correctionApplied=true;
             }
           }
@@ -9676,8 +9704,8 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
         // mover를 target의 Y 위치로 이동
         const dy=targetBox.y-moverBox.y;
         moverBox.y+=dy; moverBox.cy+=dy;
-        moverBox._sy=mover.sy+dy;
         mover.sy+=dy;
+        _refreshAnchor(mover.id,mover.shapeType,mover.sx,mover.sy,mover.sw,mover.sh);
         mover.row=target.row;
         console.log(`[FIX-3] 양방향 엣지: ${mover.id}→${target.id} 동일행 강제 (dy=${dy.toFixed(1)})`);
       });
@@ -9702,7 +9730,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
                 lower.sy+=push;
                 nodeBoxes[lower.id].y+=push;
                 nodeBoxes[lower.id].cy=nodeBoxes[lower.id].y+nodeBoxes[lower.id].h/2;
-                nodeBoxes[lower.id]._sy=lower.sy;
+                _refreshAnchor(lower.id,lower.shapeType,lower.sx,lower.sy,lower.sw,lower.sh);
                 biOverlapFix=true;
               }
             }
@@ -9721,7 +9749,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
         nodeBoxes[nd.id].y=expectedY;
         nodeBoxes[nd.id].cy=expectedY+_bboxH/2;
         nd.sy=expectedY+_bboxH/2-vCy2;
-        nodeBoxes[nd.id]._sy=nd.sy;
+        _refreshAnchor(nd.id,nd.shapeType,nd.sx,nd.sy,nd.sw,nd.sh);
       }
     });
     let reEqRounds=0;
@@ -9755,7 +9783,7 @@ function renderDiagramSvg(containerId,nodes,edges,positions,figNum,adjustments,g
         nd.sy=ey+_bboxH/2-vCy3;
         nodeBoxes[nd.id].y=ey;
         nodeBoxes[nd.id].cy=ey+_bboxH/2;
-        nodeBoxes[nd.id]._sy=nd.sy;
+        _refreshAnchor(nd.id,nd.shapeType,nd.sx,nd.sy,nd.sw,nd.sh);
       });
       reEqRounds++;
     }
