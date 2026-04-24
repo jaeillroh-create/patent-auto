@@ -8011,6 +8011,98 @@ function computeEdgeRoutes(edges,positions){
 // 원칙 2: 허브 이웃은 허브와 같은 행 또는 같은 열
 // 원칙 3: 고립 노드는 별도 행 (다른 노드 자리 침범 금지)
 // 원칙 4: 행 너비 통일 (null 슬롯으로 균형)
+
+// [C2-9] shapeicon 판별 (layout 단계에서 사용)
+// 파형/전파 등 수직 공간을 추가로 점유하는 shape을 박스형과 분리 배치하기 위함
+function _isShapeiconLabel(label){
+  const t=matchIconShape(label||'');
+  return t==='sensor'||t==='antenna'||t==='camera'||t==='speaker';
+}
+
+// [C2-9] Fig 1 전용 shapeicon 인식 배치
+// 허브+자식 토폴로지에서 shapeicon을 박스와 다른 행에 분리하여
+// 꺾임 최소화 + 화살표-shape 겹침 방지. figNum===1에서만 동작.
+// 반환: null(폴백) 또는 {grid, maxCols, numRows, uniqueEdges, layers, biDirPairs}
+function _tryC29ShapeAwareLayout(nodes, adj, uniqueEdges, biDirPairs, n){
+  // 허브 판별: maxDeg >= 2
+  const degs={};
+  nodes.forEach(nd=>{degs[nd.id]=(adj[nd.id]||new Set()).size;});
+  const degVals=Object.values(degs);
+  const maxDeg=degVals.length>0?Math.max(...degVals):0;
+  if(maxDeg<2)return null;
+
+  const refNum=id=>{
+    const nd=nodes.find(x=>x.id===id);
+    return parseInt((nd?.label.match(/\((\d+)\)/)||[])[1])||9999;
+  };
+  const hubCands=nodes.filter(nd=>degs[nd.id]===maxDeg);
+  const hub=hubCands.slice().sort((a,b)=>refNum(a.id)-refNum(b.id))[0];
+  const childIds=[...(adj[hub.id]||new Set())];
+
+  // 완전 허브형(고립 노드 없음, 자식 2~4개)만 처리
+  if(childIds.length!==n-1)return null;
+  if(childIds.length<2||childIds.length>4)return null;
+
+  const childNodes=childIds.map(id=>nodes.find(x=>x.id===id)).filter(Boolean);
+  const boxChildren=childNodes.filter(nd=>!_isShapeiconLabel(nd.label))
+    .sort((a,b)=>refNum(a.id)-refNum(b.id));
+  const iconChildren=childNodes.filter(nd=>_isShapeiconLabel(nd.label))
+    .sort((a,b)=>refNum(a.id)-refNum(b.id));
+
+  let layers;
+  let strategy;
+
+  if(iconChildren.length===0){
+    // HUB_HORIZONTAL: 박스만, 허브 중앙, 1행
+    strategy='HUB_HORIZONTAL';
+    const total=1+boxChildren.length;
+    const hubCol=Math.floor(total/2);
+    const row=[];
+    let bi=0;
+    for(let i=0;i<total;i++){
+      if(i===hubCol)row.push(hub.id);
+      else row.push(boxChildren[bi++].id);
+    }
+    layers=[row];
+  }else if(boxChildren.length===0){
+    // ICON_VERTICAL: 아이콘만, 수직 1열
+    strategy='ICON_VERTICAL';
+    layers=[[hub.id], ...iconChildren.map(ic=>[ic.id])];
+  }else{
+    // HYBRID: 상단 [박스들 + 허브], 하단 [아이콘들 수직, 허브 col 정렬]
+    strategy='HYBRID';
+    const topWidth=1+boxChildren.length;
+    const hubCol=Math.floor(topWidth/2);
+    const topRow=[];
+    let bi=0;
+    for(let i=0;i<topWidth;i++){
+      if(i===hubCol)topRow.push(hub.id);
+      else topRow.push(boxChildren[bi++].id);
+    }
+    const iconLayers=iconChildren.map(ic=>{
+      const r=new Array(topWidth).fill(null);
+      r[hubCol]=ic.id;
+      return r;
+    });
+    layers=[topRow, ...iconLayers];
+  }
+
+  // layers → grid 생성 (null 슬롯은 col 인덱스 유지하며 스킵)
+  const grid={};
+  let maxCols=1;
+  layers.forEach((layer,ri)=>{
+    maxCols=Math.max(maxCols,layer.length);
+    layer.forEach((id,ci)=>{
+      if(id===null)return;
+      grid[id]={row:ri,col:ci,layerSize:layer.length};
+    });
+  });
+
+  console.log(`[Layout C2-9] figNum=1 n=${n} strategy=${strategy} hub=${hub.id} boxes=${boxChildren.length} icons=${iconChildren.length} rows=${layers.length} maxCols=${maxCols}`);
+
+  return{grid, maxCols, numRows:layers.length, uniqueEdges, layers, biDirPairs};
+}
+
 function computeDeviceLayout2D(nodes,edges,figNum){
   const n=nodes.length;
   console.log(`[Layout] input: n=${n}, edges=${edges.length}, figNum=${figNum}`);
@@ -8092,6 +8184,13 @@ function computeDeviceLayout2D(nodes,edges,figNum){
     for(let i=0;i<n;i+=MAX_COLS){rows.push(sorted.slice(i,Math.min(i+MAX_COLS,n)).map(nd=>nd.id));}
     rows.forEach((row,ri)=>{row.forEach((id,ci)=>{grid[id]={row:ri,col:ci,layerSize:row.length};});});
     return{grid,maxCols:Math.min(n,MAX_COLS),numRows:rows.length,uniqueEdges:[],layers:rows,biDirPairs:[]};
+  }
+
+  // [C2-9] Fig 1 전용 shapeicon 인식 배치 (P4-FIX 및 전략 선택 이전)
+  // 허브 + 자식 2~4개 토폴로지에서 박스/shapeicon 분리 배치로 꺾임·겹침 최소화
+  if(figNum===1&&n>=3&&n<=5){
+    const _c29=_tryC29ShapeAwareLayout(nodes,adj,uniqueEdges,biDirPairs,n);
+    if(_c29)return _c29;
   }
 
   // ★ P4-FIX: 3개 이하 노드는 무조건 1행 가로 배치 ★
