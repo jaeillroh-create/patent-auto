@@ -7077,8 +7077,10 @@ function _shapeVisualBounds(type,x,y,w,h){
     case 'database':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'monitor':{
-      // [C2-9-fix] bottom: h*0.93→h — visual 중앙(top+bottom)/2를 h/2로 통일
-      //   기존 h*0.93은 _vCy=h*0.465 → default anchor py=h/2와 2.7px 차이 → 수평 화살표 꺾임
+      // [shape-anchor-fix] monitor: bottom h*0.93→h, _vCy 정렬
+      //   기존 h*0.93은 _vCy=h*0.465 → default anchor py=h/2와 2.7px 차이 → 수평 화살표 꺾임.
+      //   default case를 사용하는 도형 중 monitor만 K≠1이었으므로 본 수정으로 box-type anchor 일관성 완결.
+      //   검증: cloud(0.77px)/database(0)/server(0)/document(0) — 모두 2px 임계 이내 (validation/pr107_integration_report.md)
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     }
     case 'server':
