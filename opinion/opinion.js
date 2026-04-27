@@ -8,9 +8,10 @@ window.Opinion = window.Opinion || {};
 
 // ═══ Constants ═══
 Opinion.TYPES = {
-  inventive_step:         { code:'A', label:'진보성/신규성 위반', icon:'⚖️', css:'type-a', law:'§29①②' },
-  description_deficiency: { code:'B', label:'기재불비 위반',      icon:'📝', css:'type-b', law:'§42③④' },
-  partial_rejection:      { code:'C', label:'일부 청구항 거절',   icon:'📋', css:'type-c', law:'§29 등' }
+  inventive_step:         { code:'A', label:'진보성/신규성 위반',    icon:'⚖️', css:'type-a',       law:'§29①②' },
+  description_deficiency: { code:'B', label:'기재불비 위반',         icon:'📝', css:'type-b',       law:'§42③④' },
+  partial_rejection:      { code:'C', label:'일부 청구항 거절',      icon:'📋', css:'type-c',       law:'§29 등' },
+  unsupported_type:       { code:'X', label:'수동 처리 필요',        icon:'⚠️', css:'type-unknown', law:'§32/§33/§36/§45 등' }
 };
 Opinion.STATUS = {
   // init 단계 (upload → parse → type)
@@ -920,12 +921,17 @@ Opinion.startParsing = async function(){
       +'1. application_no: 본원 출원번호\n'
       +'2. applicant: 본원 출원인\n'
       +'3. invention_title: 본원 발명의 명칭\n'
-      +'4. rejection_reasons: [{claim_nos:[N], article:"§29②", reason:"진보성 위반", cited_refs:["인용문헌1"]}]\n'
+      +'4. rejection_reasons: 거절이유별로 아래 3종 형식 중 해당하는 것을 사용하라.\n'
+      +'   §29 계열: {claim_nos:[1], article:"§29②", reason:"진보성 위반", cited_refs:["인용문헌1","인용문헌2"]}\n'
+      +'   §42 명확성: {claim_nos:[1,2,3], article:"§42② 1호 또는 §42④ 1호", reason:"명확성 흠결 또는 발명의 설명 기재불비", cited_refs:[]}\n'
+      +'   §42 뒷받침: {claim_nos:[2], article:"§42② 4호 또는 §42④ 2호", reason:"청구항 뒷받침 흠결", cited_refs:[]}\n'
+      +'   ★ §42 계열 거절은 cited_refs가 빈 배열이다. 빈 배열 그대로 출력. 가짜 인용문헌 생성 금지.\n'
+      +'   ★ 통지서에 기재된 조문 표기를 그대로 유지하라. §29를 §42로, §42를 §29로 변환 금지.\n'
       +'5. cited_references: 인용문헌별 개별 항목 [{ref_no:N, title:"인용발명 제목", publication_no:"공개번호"}] — 파일별로 반드시 별도 항목\n'
       +'6. claims: 본원 청구항 [{no:N, text:"..."}]\n'
       +'7. comparison_table: 심사관 대비표 [{element_no:N, applicant_feature:"본원 구성", cited_feature:"인용발명 구성", cited_ref_no:N}]\n\n'
       +'---\n'+orderedText.slice(0,30000),
-      '{"application_no":"10-...","applicant":"...","invention_title":"...","rejection_reasons":[...],"cited_references":[{"ref_no":1,"title":"...","publication_no":"..."},{"ref_no":2,"title":"...","publication_no":"..."}],"claims":[...]}'
+      '{"application_no":"10-...","applicant":"...","invention_title":"...","rejection_reasons":[{"claim_nos":[1],"article":"§29②","reason":"진보성 위반","cited_refs":["인용문헌1"]},{"claim_nos":[2,3],"article":"§42④ 2호","reason":"뒷받침 흠결","cited_refs":[]}],"cited_references":[{"ref_no":1,"title":"...","publication_no":"..."}],"claims":[...]}'
     );
     // 추출 품질 메타 저장
     parsed._file_results = fileResults;
@@ -1080,20 +1086,86 @@ Opinion.determineType = async function(){
       Opinion.SYS_PROMPT+'\n\n유형 판별 (의견제출통지서만으로 판단):\n'
         +'A. inventive_step — 신규성 위반(§29①) 또는 진보성 위반(§29②)\n'
         +'B. description_deficiency — 기재불비(§42③④)\n'
-        +'C. partial_rejection — 일부 청구항만 거절 (등록가능 청구항 존재)\n\n'
-        +'통지서에 기재된 거절이유 조항을 정확히 파악하여 판별하세요.\n---\n'+ctx,
-      '{"primary_type":"inventive_step","confidence":0.85,"reasoning":"...","claim_summary":{"total_claims":N,"rejected_claims":[1,2],"no_rejection_claims":[3]}}'
+        +'C. partial_rejection — 일부 청구항만 거절 (등록가능 청구항 존재)\n'
+        +'X. unsupported_type — §32(불특허발명)/§33(무권리자)/§36(선출원)/§45(단일성) 등 위 A·B·C에 해당하지 않는 거절\n\n'
+        +'규칙:\n'
+        +'1. 통지서에 §29·§42가 동시에 있으면 primary_type에 주된 유형, secondary_type에 나머지 유형을 기재하라.\n'
+        +'2. §32/§33/§36/§45 등 A·B·C 외 거절은 반드시 primary_type:"unsupported_type"으로 출력하고 reasoning에 조문과 사유를 명시하라.\n'
+        +'3. primary_type은 반드시 inventive_step / description_deficiency / partial_rejection / unsupported_type 중 하나만 출력하라.\n'
+        +'---\n'+ctx,
+      '{"primary_type":"inventive_step","confidence":0.85,"reasoning":"...","secondary_type":null,"claim_summary":{"total_claims":N,"rejected_claims":[1,2],"no_rejection_claims":[3]}}'
     );
-    await sb.from('opinion_type_determinations').insert({project_id:p.id,determined_type:tr.primary_type||'inventive_step',confidence:tr.confidence||0.5,reasoning:tr.reasoning||'',user_confirmed:false});
-    await sb.from('opinion_projects').update({rejection_type:tr.primary_type||'inventive_step',secondary_rejection_type:tr.secondary_type||null,status:'type_determined'}).eq('id',p.id);
-    p.rejection_type=tr.primary_type||'inventive_step'; p.status='type_determined';
-    Opinion.state.typeResult=tr; Opinion.renderDetail(); showToast('유형 판별 완료');
+
+    // ─── _parse_failed / 알 수 없는 유형 → silent fallback 없이 수동 선택 강제 ───
+    var validTypes = Object.keys(Opinion.TYPES);
+    var typeOk = !tr._parse_failed && tr.primary_type && validTypes.indexOf(tr.primary_type) >= 0;
+
+    // 진단용 행은 항상 저장 (실패 시에도 raw_text 보존)
+    await sb.from('opinion_type_determinations').insert({
+      project_id: p.id,
+      determined_type: typeOk ? tr.primary_type : null,
+      confidence: typeOk ? (tr.confidence || 0.5) : 0,
+      reasoning: tr._parse_failed ? ('[파싱실패] ' + (tr.raw_text || '').slice(0, 500)) : (tr.reasoning || ''),
+      user_confirmed: false
+    });
+
+    if (!typeOk) {
+      // 헤더·본문 모순의 원인 차단 — inventive_step 무음 fallback 제거
+      console.warn('[Opinion] 유형 판별 실패 (raw):', tr._parse_failed ? tr.raw_text : JSON.stringify(tr));
+      Opinion.state.typeResult = tr;
+      Opinion.state._typeNeedsManual = true; // renderTypeView에서 override 패널 자동 펼침
+      Opinion.renderDetail();
+      showToast('유형 자동 판별 실패 — 직접 선택해 주세요', 'error');
+      return;
+    }
+
+    // unsupported_type: 안내 화면 표시 후 파이프라인 중단
+    if (tr.primary_type === 'unsupported_type') {
+      await sb.from('opinion_projects').update({rejection_type:'unsupported_type', secondary_rejection_type:tr.secondary_type||null, status:'type_determined'}).eq('id',p.id);
+      p.rejection_type = 'unsupported_type'; p.status = 'type_determined';
+      Opinion.state.typeResult = tr;
+      Opinion.renderDetail();
+      showToast('미지원 거절유형 — 변리사 직접 작성 또는 유형 수동 선택 필요', 'info');
+      return;
+    }
+
+    // 정상 경로: DB 저장 + status 변경 + 다음 단계
+    await sb.from('opinion_projects').update({rejection_type:tr.primary_type, secondary_rejection_type:tr.secondary_type||null, status:'type_determined'}).eq('id',p.id);
+    p.rejection_type = tr.primary_type; p.status = 'type_determined';
+    Opinion.state.typeResult = tr; Opinion.renderDetail(); showToast('유형 판별 완료');
   }catch(e){showToast('유형 판별 실패: '+e.message,'error');}
   finally{setButtonLoading('btnOpinionType',false);}
 };
 
 Opinion.renderTypeView = function(L,R){
-  var p=Opinion.state.current, t=Opinion.TYPES[p.rejection_type]||Opinion.TYPES.inventive_step, tr=Opinion.state.typeResult||{}, conf=Math.round((tr.confidence||0.5)*100);
+  var p=Opinion.state.current, tr=Opinion.state.typeResult||{};
+
+  // _typeNeedsManual 플래그: override 패널 자동 펼침 후 초기화
+  var autoOpen = !!Opinion.state._typeNeedsManual;
+  if (autoOpen) Opinion.state._typeNeedsManual = false;
+
+  // ── unsupported_type 전용 안내 화면 ──
+  if (p.rejection_type === 'unsupported_type') {
+    L.innerHTML = Opinion.renderNavBar('type')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">⚠️</span> 수동 처리 필요</div></div>'
+      +'<div style="padding:16px">'
+      +'<div style="color:var(--color-error);font-weight:600;font-size:14px;margin-bottom:10px">본 거절이유는 현재 자동 처리를 지원하지 않습니다.</div>'
+      +'<p style="font-size:13px;color:var(--color-text-secondary);line-height:1.7;margin-bottom:12px">§32(불특허발명) / §33(무권리자) / §36(선출원) / §45(단일성) 등 특수 거절이유는 사건별 개별 판단이 필요합니다.<br>변리사가 직접 의견서를 작성하시거나, 아래에서 유사 유형을 수동 선택하여 참고용으로 진행하실 수 있습니다.</p>'
+      +(tr.reasoning?'<div style="font-size:12px;background:var(--color-bg-tertiary);padding:10px;border-radius:8px;margin-bottom:16px;line-height:1.6">'+escapeHtml(tr.reasoning)+'</div>':'')
+      +'<div style="font-size:13px;font-weight:600;margin-bottom:8px">유형 수동 선택 (참고용)</div>'
+      +'<div class="opinion-type-selector">'
+      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'inventive_step\')">⚖️ A. 진보성</div>'
+      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'description_deficiency\')">📝 B. 기재불비</div>'
+      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'partial_rejection\')">📋 C. 일부거절</div>'
+      +'</div><button class="btn btn-primary btn-full" style="margin-top:10px" onclick="Opinion.confirmType()">선택한 유형으로 진행</button>'
+      +'</div></div>';
+    R.innerHTML = '';
+    return;
+  }
+
+  // ── 정상 + 판별실패(autoOpen) 공통 화면 ──
+  var t = Opinion.TYPES[p.rejection_type] || Opinion.TYPES.inventive_step;
+  var conf = Math.round((tr.confidence||0.5)*100);
+
   L.innerHTML=Opinion.renderNavBar('type')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">🔍</span> 유형 판별 결과</div></div>'
     +'<div class="opinion-type-result"><div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:8px">AI 분석 결과</div>'
     +'<div class="opinion-type-determined '+t.css+'">'+t.icon+' '+t.code+'. '+t.label+'</div>'
@@ -1101,11 +1173,14 @@ Opinion.renderTypeView = function(L,R){
     +(tr.reasoning?'<p style="font-size:12px;color:var(--color-text-secondary);text-align:left;line-height:1.6;margin-top:12px;padding:10px;background:var(--color-bg-tertiary);border-radius:8px">'+escapeHtml(tr.reasoning)+'</p>':'')
     +'</div><div style="margin-top:16px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">이 판별이 맞습니까?</div>'
     +'<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="Opinion.confirmType()"><span class="tf">✅</span> 맞습니다</button><button class="btn btn-outline" style="flex:1" onclick="document.getElementById(\'opinionTypeOverride\').style.display=\'block\'"><span class="tf">✏️</span> 유형 변경</button></div>'
-    +'<div id="opinionTypeOverride" style="display:none;margin-top:12px"><div class="opinion-type-selector">'
+    +'<div id="opinionTypeOverride" style="'+(autoOpen?'':'display:none;')+'margin-top:12px">'
+    +(autoOpen?'<div style="color:var(--color-error);font-size:12px;font-weight:600;padding:8px;background:var(--color-error-bg,#fef2f2);border-radius:6px;margin-bottom:8px">⚠️ AI가 유형을 자동 판별하지 못했습니다. 직접 선택해 주세요.</div>':'')
+    +'<div class="opinion-type-selector">'
     +'<div class="opinion-type-option'+(p.rejection_type==='inventive_step'?' selected':'')+'" onclick="Opinion.selectType(this,\'inventive_step\')">⚖️ A. 진보성</div>'
     +'<div class="opinion-type-option'+(p.rejection_type==='description_deficiency'?' selected':'')+'" onclick="Opinion.selectType(this,\'description_deficiency\')">📝 B. 기재불비</div>'
     +'<div class="opinion-type-option'+(p.rejection_type==='partial_rejection'?' selected':'')+'" onclick="Opinion.selectType(this,\'partial_rejection\')">📋 C. 일부거절</div>'
     +'</div><button class="btn btn-primary btn-full" style="margin-top:10px" onclick="Opinion.confirmType()">변경 후 진행</button></div></div></div>';
+
   var cs=tr.claim_summary||{}, tot=cs.total_claims||0, rej=cs.rejected_claims||[], alw=cs.no_rejection_claims||[];
   R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tf">📊</span> 청구항별 현황</div></div>'
     +(tot>0?Array.from({length:tot},function(_,i){var n=i+1,isR=rej.indexOf(n)>=0,isA=alw.indexOf(n)>=0;return '<div class="opinion-claim-row '+(isA?'allowable':isR?'rejected':'')+'"><span class="claim-no">청구항 '+n+'</span><span>'+(isA?'✅':isR?'❌':'⬜')+'</span><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">'+(isA?'등록가능 후보':isR?'거절':'미확인')+'</span></div>';}).join(''):'<p style="padding:20px;text-align:center;color:var(--color-text-tertiary)">청구항 정보 없음</p>')+'</div>';
