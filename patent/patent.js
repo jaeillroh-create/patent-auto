@@ -6110,8 +6110,11 @@ function stripMathBlocks(text){
     if(/【수학식\s*\d+】/.test(before)||/[=+\-×÷∑∫]/.test(before))return '';
     return m;
   });
-  // Pattern 4: Remove math example blocks — 확장된 예시 키워드 (예를 들어, 예:, 예컨대, 다음은, 등)
-  r=r.replace(/\n(?:예시 대입:|일 예로,|구체적 예시로,|예를 들어,?|예컨대,?|다음은|예:)[\s\S]*?(?=\n\n(?:도\s|이때|또한|한편|다음(?!은)|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}(?:서버|시스템|장치|단말))|\n\n\n|$)/g,'');
+  // Pattern 4: Remove math example blocks — 수학식 컨텍스트 내 예시만 제거 (일반 서술 "예를 들어" 보존)
+  r=r.replace(/\n(?:예시 대입:|일 예로,|구체적 예시로,|예를 들어,?|예컨대,?|다음은|예:)([\s\S]*?)(?=\n\n(?:도\s|이때|또한|한편|다음(?!은)|구체적|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\s]|[가-힣]{2,}(?:서버|시스템|장치|단말))|\n\n\n|$)/g,(m,content)=>{
+    if(/[=×÷∑∫±≥≤]/.test(content)||/[A-Z_][A-Za-z_\d]*\s*[=:]/.test(content)||/\d+\s*[×*]\s*\d+/.test(content))return '';
+    return m;
+  });
   // Clean up multiple newlines
   r=r.replace(/\n{3,}/g,'\n\n');
   return r.trim();
