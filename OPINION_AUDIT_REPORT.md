@@ -130,4 +130,221 @@ else { await Opinion.setStatus(p.id,dd); ... await Opinion.startValidation(); }
 **개선 방향:** startValidation의 ctx에 명세서 원문(specification 역할 파일)을 명시적으로 잘라 주입. 또는 startDraft 단일 응답으로 검증까지 강제 통합 (validation 누락 시 재시도).
 
 ---
-**CHUNK 1 완료.** 발견: P0 2 / P1 3 / P2 0. 다음 청크(2) 진행하려면 "다음" 입력.
+**CHUNK 1 완료.** 발견: P0 2 / P1 3 / P2 0.
+
+---
+
+## CHUNK 2/7 — Axis A 후반: Gate 실효성·파서 견고성·오염 방어·fallback 처리
+
+[누적 카운트: P0 2 / P1 3 / P2 0]
+
+### 발견 #6 (계약 위반)
+
+### [P1] Gate 1·2·3 모두 실제 차단 조건 없음 — 검증 실패 상태에서도 무조건 통과
+**위치:** opinion.js L1507-L1537 `Opinion.approveGate`
+**증거:**
+```js
+// L1507-1537 — Gate 전체 로직
+Opinion.approveGate = async function(gn){
+  var p=Opinion.state.current;if(!p)return;var type=p.rejection_type,next;
+  if(gn===1){
+    next=type==='description_deficiency'?'correction_confirmed':...;
+    var radioEl = document.querySelector('input[name="opinionStrategy"]:checked');
+    if(radioEl && type==='inventive_step') {
+      var idx = parseInt(radioEl.value,10);
+      Opinion.state.selectedStrategy = extracted.strategies[idx] || null;
+    }
+    // ★ radioEl이 null이어도(전략 미선택) 차단하지 않음
+  }
+  else if(gn===2){ next='claims_confirmed'; } // ★ 검증 실패 항목 수 체크 없음
+  else if(gn===3){ next='approved'; }         // ★ 의견서 sections 길이 체크 없음
+  ...
+  await Opinion.startDraft();  // 전략 null인 채로 보정 시작 가능
+```
+**Gate별 누락 차단 조건:**
+| Gate | 원래 목적 | 실제 차단 조건 |
+|------|----------|--------------|
+| Gate 1 | 전략 확정 | 전략 radio 미선택 시 비차단. `selectedStrategy`=null로 진행 |
+| Gate 2 | 보정 청구항 확정 | `validation.elements` 중 fail 건수 무관 통과 |
+| Gate 3 | 의견서 최종 확인 | `opinionDraft.sections` 빈 배열이어도 통과 |
+
+**왜 문제인가:** Gate 1에서 전략이 선택되지 않으면 `Opinion.state.selectedStrategy`가 null로 유지된다. `getContext()`(L1571)는 `if(Opinion.state.selectedStrategy)` 분기로 전략 컨텍스트를 선택적으로 주입하므로, null이면 전략 없이 보정 프롬프트가 실행된다 → LLM이 임의로 전략을 결정. Gate 2에서는 validation.fail 항목이 있어도 의견서 작성이 시작되어, 신규사항 추가 위험이 있는 보정안이 의견서 본문에 그대로 인용된다.
+**영향:** Gates가 UI 장식으로만 기능. "검증 fail → 사용자 확인 → 통과 차단" 안전망이 실질적으로 존재하지 않음.
+**개선 방향:**
+- Gate 1: `if(type==='inventive_step' && !radioEl) { showToast('전략을 선택해 주세요','error'); return; }`
+- Gate 2: `var fails=(Opinion.state.validation?.elements||[]).filter(e=>e.checks?.some(c=>c.result==='fail')); if(fails.length>0 && !confirm('검증 실패 '+fails.length+'건을 확인하셨나요?')) return;`
+- Gate 3: `if(!(Opinion.state.opinionDraft?.sections?.length>0)){ showToast('의견서가 없습니다','error'); return; }`
+
+---
+
+### 발견 #7 (상태 관리)
+
+### [P2] `Opinion.usage` 프로젝트 전환 시 미초기화 — 호출 횟수 누산
+**위치:** opinion.js L742 (선언) / L467 (`openProject` 내 loadData 호출, usage 미리셋 없음)
+**증거:**
+```js
+// L742 — 모듈 최상단, 파일 로드 시 1회만 초기화
+Opinion.usage = { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
+
+// L461-467 — 프로젝트 전환 시
+Opinion.openProject = async function(id) {
+  var p = Opinion.state.projects.find(...);
+  Opinion.state.current = p;
+  await Opinion.loadData(id);
+  // ★ Opinion.usage 초기화 없음
+};
+
+// L2270 — callForJSON 내부
+Opinion.usage.calls++;
+// L1842 — startOpinionDraft 직접 호출 (callForJSON 우회)
+Opinion.usage.calls++;
+```
+**왜 문제인가:** 세션 중 프로젝트 A(3회) → 프로젝트 B(2회) 처리 시 B의 카운터는 5회로 표시. UI의 "API: 5회" 표시는 현재 프로젝트 비용이 아닌 세션 누산값. 사용자가 비용 과다를 오인할 수 있고, 추후 호출 횟수 기반 제한 로직 추가 시 오동작.
+**영향:** UI 신뢰도 저하. 실비용 추정 불가.
+**개선 방향:** `Opinion.openProject` 또는 `Opinion.loadData` 진입부에 `Opinion.usage = { calls:0, inputTokens:0, outputTokens:0, cost:0 };` 한 줄 추가.
+
+---
+
+### 발견 #8 (출력 파서)
+
+### [P1] `parseOpinionSections` — `##`/`###`만 인식, 필수 섹션 검증 없음
+**위치:** opinion.js L1870-L1915
+**증거:**
+```js
+// L1881 — 섹션 구분 패턴
+var headingMatch = line.match(/^#{2,3}\s+(.+)/);
+```
+인식 범위: `##`(레벨2), `###`(레벨3)만. `#`(레벨1), `####`(레벨4), 한국 법률 문서에서 흔한 `1.`, `가.`, `(1)` 형식의 제목은 섹션 경계로 인식하지 않음.
+
+LLM 응답에서 발생하는 두 가지 실패 모드:
+1. **레벨1 헤더 사용:** `# 서두` → `sections=[]` → 전체 텍스트가 단일 섹션으로 뭉쳐짐
+2. **마크다운 미사용 응답:** `1. 보정내용` → 역시 단일 섹션. `downloadDocx`(L2072-2083)는 sections 배열로 문서를 조립하므로, 섹션 분리 실패 시 구조 없는 벽 텍스트가 단일 단락으로 Word 출력됨.
+
+필수 섹션 검증 없음: `parseOpinionSections`는 섹션 수/제목을 체크하지 않는다. 의견서에 "서두", "보정내용", "구체적 의견내용", "결론"이 모두 있어야 KIPO 제출 형식에 맞지만 이를 코드 레벨에서 보장하지 않음.
+**영향:** 포맷이 틀린 LLM 응답을 파싱 성공으로 간주 → 구조 없는 의견서가 사용자에게 제공됨. 변리사가 Word를 열기 전까지 발견 불가.
+**개선 방향:**
+```js
+// parseOpinionSections 후 필수 섹션 검증
+var headings = od.sections.map(function(s){return s.heading;});
+var required = ['서두','보정내용','의견내용','결론'];
+var missing = required.filter(function(r){ return !headings.some(function(h){ return h.indexOf(r)>=0; }); });
+if (missing.length>0) showToast('의견서 섹션 누락: '+missing.join(', '),'error');
+```
+
+---
+
+### 발견 #9 (오염 방어)
+
+### [P2] `validateNoTemplateContamination` — 경고만, 비차단. 안전 구절 목록이 도메인 용어를 광범위 면제
+**위치:** opinion.js L337-L381 / L1850-L1856 (호출 시점)
+**증거:**
+```js
+// L1850-1856 — 호출 결과 처리
+var check = Opinion.validateNoTemplateContamination(fullText);
+if (check.warnings.length > 0) {
+  od._contamination_warnings = check.warnings;
+  showToast('⚠️ 참고 양식 내용 일부가 포함된 것으로 보입니다. 검토해 주세요.', 'info');
+}
+// ★ 차단 없음. od는 DB에 그대로 저장됨.
+```
+
+**SAFE_PHRASES 과다 면제 문제(L345-L349):**
+```js
+var SAFE_PHRASES = [
+  '의견을 제출합니다','특허등록되어야','신규사항에 해당하지','보정의 적법성',
+  '보정내용','구체적 의견내용','결론','서두','소결','기술적 요지',
+  '인용발명','본원발명','구성요소','결합의 용이성','명세서에 기재된 범위'
+];
+```
+`'인용발명'`, `'본원발명'`, `'구성요소'`는 단독 키워드로 SAFE 처리된다. 참고 양식에 "**인용발명** 갑호증의 A 구성은 X이고 B 구성은 Y이다"와 같이 실제 인용발명 내용이 들어 있어도, `indexOf('인용발명') >= 0`이면 해당 문장 전체가 면제된다. 결과적으로 양식의 사건별 내용(인용발명 분석, 구성요소 설명)이 의견서에 그대로 복사되어도 경고를 생성하지 않을 수 있다.
+**영향:** 최악 시나리오: 이전 사건의 인용발명 분석문이 새 사건 의견서에 등장해도 무음 통과. 실무에서 오사건 내용 혼입 → 의견서 기각.
+**개선 방향:** SAFE_PHRASES에서 단독 도메인 명사(`'인용발명'`, `'본원발명'`, `'구성요소'`) 제거. 이 단어들은 어떤 의견서에도 등장하므로 면제 기준으로 적합하지 않음. 대신 순수 연결어/서식어만 면제.
+
+---
+
+### 발견 #10 (오염 방어)
+
+### [P2] `sanitizeTemplate` — 60자 내 styleExample이 특정 사건 내용을 포함할 수 있음
+**위치:** opinion.js L295-L334
+**증거:**
+```js
+// L312-315
+else if (trimmed.length > 10 && trimmed.length < 80) {
+  if (/^(이상과 같이|상기|따라서|그러므로|살펴보면|검토하면|대비하면|종합하면|결론적으로|이에|아래와 같이|상기 출원|수령하였기에)/.test(trimmed)) {
+    styleExamples.push(trimmed.slice(0, 60));
+  }
+}
+```
+`"따라서"`, `"상기"`로 시작하는 문장은 60자까지 styleExample로 수집된다. 예시:
+- `"따라서 인용발명1의 탄소나노튜브 정렬 공정은 본원발명의 X 구성과 다르다"` → 60자 이내이면 template으로 전달.
+- `"상기 청구항 1의 'A 장치를 이용하여 B를 수행하는 단계'는 명세서 단락 [0045]에 뒷받침된다"` → 역시 60자 내 가능.
+
+이렇게 수집된 styleExample은 opinion prompt의 `[참고 의견서 양식]` 블록에 포함되어 LLM에 전달된다. LLM이 톤 참고 용도로 제공된 이 예시 문장의 특정 내용(탄소나노튜브, A 장치, [0045])을 의견서 본문에 반영하면 오사건 내용 혼입이 발생한다.
+**영향:** `TEMPLATE_GUARD`(L1789) 경고문과 함께 프롬프트에 들어가지만, LLM이 "참고 양식 내용은 절대 사용 금지"와 "styleExample로 제공된 문장을 참고하여 문체 구성" 사이에서 혼동할 수 있음.
+**개선 방향:** styleExamples 수집 기준을 20자 이하의 순수 접속부사/관용구로 제한. 또는 styleExamples를 완전히 제거하고 structurePatterns만 남김.
+
+---
+
+### 발견 #11 (계약 위반)
+
+### [P1] 한국 특허법 §29 / §42 외 조문 거절이유 → `inventive_step` 무음 fallback
+**위치:** opinion.js L10-L14 (`Opinion.TYPES`) / L1088 (type 결정)
+**증거:**
+```js
+// L10-14
+Opinion.TYPES = {
+  inventive_step:         { code:'A', label:'진보성/신규성 위반', law:'§29①②' },
+  description_deficiency: { code:'B', label:'기재불비 위반',      law:'§42③④' },
+  partial_rejection:      { code:'C', label:'일부 청구항 거절',   law:'§29 등' }
+};
+```
+시스템에 등록된 거절유형: 3개뿐. KIPO 실무에서 자주 출원되는 나머지 조문:
+
+| 조문 | 내용 | 대응 없음 |
+|------|------|----------|
+| §32 | 불특허 발명 (핵공학 등) | ✗ |
+| §33 | 무권리자 출원 | ✗ |
+| §36 | 선출원 위반 | ✗ |
+| §45 | 단일성 위반 | ✗ |
+| §62 각호 | 거절결정 | ✗ |
+
+`determineType`(L1087-L1089)의 LLM 응답에서 `primary_type`이 'inventive_step' / 'description_deficiency' / 'partial_rejection' 외 값을 반환하면:
+```js
+// L1088 — 3가지 TYPES 밖의 값도 그대로 DB에 저장됨
+p.rejection_type = tr.primary_type || 'inventive_step';
+// L519 이하 — PIPELINE은 fallback
+var type = p.rejection_type || 'inventive_step';
+```
+`Opinion.TYPES[p.rejection_type]`이 undefined가 되면 L413에서 `{code:'?',label:'미정',css:'type-unknown'}` fallback. 그러나 분석/보정/의견서 prompt selector(L1169, L1605, L1803)는 단순 문자열 비교로 분기하므로, 알 수 없는 type은 어떤 prompt 분기에도 해당하지 않아 undefined prompt가 주입됨. 실제 실행 시 LLM에 빈 프롬프트 또는 undefined 문자열이 들어갈 수 있음.
+**영향:** §45 단일성 위반 통지서를 입력하면 의견서 전체가 진보성 법리로 작성될 위험.
+**개선 방향:**
+1. `determineType` 응답이 알 수 없는 type이면 `showToast('거절유형 미지원: '+tr.primary_type+' — 수동 선택','error')` + type override UI 자동 펼침
+2. prompt selector에 `else { throw new Error('지원하지 않는 거절유형: '+type); }` 추가
+
+---
+
+### 발견 #12 (견고성)
+
+### [P2] `setStatus` catch가 예외를 삼킴 — DB 실패 시 메모리·DB 불일치
+**위치:** opinion.js L2151
+**증거:**
+```js
+// L2151 — 원라인 압축
+Opinion.setStatus=async function(id,s){
+  try{
+    await sb.from('opinion_projects').update({status:s,...}).eq('id',id);
+    var p=Opinion.state.current;
+    if(p&&p.id===id) p.status=s;          // ★ DB 성공 확인 전에 메모리 갱신
+    Opinion.state.projects.forEach(function(x){if(x.id===id)x.status=s;});
+  }catch(e){
+    console.error('[Opinion] status:',e);  // ★ re-throw 없음
+  }
+};
+```
+코드 흐름: DB update → 예외 발생 → catch에서 로그만 → 함수 정상 반환 (Promise 이행). 호출자는 await 후 예외를 받지 못함. 메모리는 이미 갱신되었으나 DB는 이전 상태. 이후 `loadData`로 재로드 시 DB 값으로 덮어써지나, 로드 전 사용자가 버튼을 클릭하면 잘못된 상태로 다음 단계가 시작됨.
+**영향:** 네트워크 단절이나 Supabase RLS 오류 시 무음으로 상태 불일치 발생. 디버깅 시 메모리(진행)와 DB(이전 상태)가 달라 재현 불가.
+**개선 방향:** `catch(e){ console.error('[Opinion] status:',e); throw e; }` — re-throw로 호출자가 `showToast` 오류 처리를 수행하도록 함.
+
+---
+
+**CHUNK 2 완료.** 발견: P0 0 / P1 3 / P2 4. **누적: P0 2 / P1 6 / P2 4.** 다음 청크(3) 진행하려면 "다음" 입력.
