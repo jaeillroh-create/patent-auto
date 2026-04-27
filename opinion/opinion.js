@@ -537,41 +537,71 @@ Opinion.getActiveTemplate = function(type) {
   return '[의견서 작성 양식]\n구조:\n' + def.structure + '\n\n작성 지침: ' + def.style_notes;
 };
 
-// ★ 참고 양식 정제 — 톤/구조/문장패턴만 추출, 사건 내용 제거 ★
+// ★ 참고 양식 정제 — 6가지 스타일 패턴 추출, 사건 내용 제거 ★
 Opinion.sanitizeTemplate = function(rawText, type) {
   var def = Opinion.DEFAULT_TEMPLATES[type] || Opinion.DEFAULT_TEMPLATES.inventive_step;
 
-  // 1단계: 구조 패턴 추출 (섹션 제목, 번호 체계)
+  // 1단계: 6가지 패턴 추출 — 사건 내용 철저 제외
   var lines = rawText.split('\n');
-  var structurePatterns = [];
-  var styleExamples = [];
+  var structurePatterns = [];   // [⑤] 단락 구조 (번호·기호 체계)
+  var salutationPatterns = [];  // [①] 호칭 패턴
+  var closingPatterns = [];     // [③] 종결어미 패턴
+  var emphasisPatterns = [];    // [④] 강조어구
+  var closerPatterns = [];      // [⑥] 결어·연결어
+  // [②] 명칭 패턴은 구조 안에서 자연 추출
+
   var headingPattern = /^(\s*)([\d\.\(\)가-힣①-⑳❶-❿]+[\.\)]\s*.{2,40})$/;
   var kwPattern = /^(\s*)(【[^】]+】|서두|보정내용|적법성|의견내용|결론|소결)/;
+  var salutPattern = /귀청|귀원|담당\s*심사관|출원인\s*(은|께서|이|을|의|에게)|이\s*건\s*출원의|본원\s*(발명|출원)\s*(은|이|의)/;
+  var closingEndPattern = /(합니다|드립니다|바랍니다|주장합니다|요청합니다|확인합니다|제출합니다)\s*[\.。]?\s*$/;
+  var emphasisKws = /명백히|분명히|강조하여|주장하건대|명시적으로|구체적으로|결론적으로|특히\s|더욱이|나아가\s/;
+  var closerKws = /^(이상과\s*같이|상기\s*이유로|따라서|그러므로|살펴보면|검토하면|대비하면|종합하면|이에\s|아래와\s*같이|상기\s*출원|수령하였기에)/;
 
   lines.forEach(function(line) {
     var trimmed = line.trim();
-    // 섹션 제목/번호 구조
+    if (!trimmed || trimmed.length < 5) return;
+
+    // [⑤] 단락 구조 + 섹션 제목
     if (headingPattern.test(trimmed) || kwPattern.test(trimmed)) {
       structurePatterns.push(trimmed);
+      return;
     }
-    // 문체 패턴 (짧은 연결어/관용구만 — 실질 내용 제외)
-    else if (trimmed.length > 10 && trimmed.length < 80) {
-      if (/^(이상과 같이|상기|따라서|그러므로|살펴보면|검토하면|대비하면|종합하면|결론적으로|이에|아래와 같이|상기 출원|수령하였기에)/.test(trimmed)) {
-        styleExamples.push(trimmed.slice(0, 60));
+
+    if (trimmed.length > 8 && trimmed.length < 90) {
+      // [①] 호칭 패턴
+      if (salutPattern.test(trimmed)) {
+        salutationPatterns.push(trimmed.slice(0, 60));
+      // [③] 종결어미 (짧은 문장 끝)
+      } else if (closingEndPattern.test(trimmed) && trimmed.length < 55) {
+        closingPatterns.push(trimmed.slice(0, 55));
+      // [④] 강조어구
+      } else if (emphasisKws.test(trimmed) && trimmed.length < 65) {
+        emphasisPatterns.push(trimmed.slice(0, 65));
+      // [⑥] 결어·연결어
+      } else if (closerKws.test(trimmed)) {
+        closerPatterns.push(trimmed.slice(0, 65));
       }
     }
   });
 
   // 2단계: 조립 — 실제 사건 내용은 절대 포함하지 않음
-  var result = '[참고 의견서 양식 — 톤/구조만 참고, 내용 사용 금지]\n\n';
+  var result = '[★ 본 사무소 표준 의견서 양식 — 스타일·문체 학습 자료 (내용 사용 금지)]\n\n';
   result += '기본 구조:\n' + def.structure + '\n\n';
 
   if (structurePatterns.length > 0) {
-    result += '참고 양식의 섹션 구조:\n' + structurePatterns.slice(0, 20).join('\n') + '\n\n';
+    result += '[⑤ 단락 구조 패턴 — 번호·기호 체계]\n' + structurePatterns.slice(0, 20).join('\n') + '\n\n';
   }
-
-  if (styleExamples.length > 0) {
-    result += '참고 양식의 문체 패턴 (톤 참고용):\n' + styleExamples.slice(0, 10).join('\n') + '\n\n';
+  if (salutationPatterns.length > 0) {
+    result += '[① 호칭 패턴 — 출원인·귀청·심사관 지칭 방식]\n' + salutationPatterns.slice(0, 5).join('\n') + '\n\n';
+  }
+  if (closingPatterns.length > 0) {
+    result += '[③ 종결어미 패턴 — 문장 끝맺음 방식]\n' + closingPatterns.slice(0, 5).join('\n') + '\n\n';
+  }
+  if (emphasisPatterns.length > 0) {
+    result += '[④ 강조어구 패턴 — 주요 강조 표현]\n' + emphasisPatterns.slice(0, 5).join('\n') + '\n\n';
+  }
+  if (closerPatterns.length > 0) {
+    result += '[⑥ 결어·연결어 패턴 — 섹션 끝맺음 표현]\n' + closerPatterns.slice(0, 8).join('\n') + '\n\n';
   }
 
   result += '작성 지침: ' + def.style_notes;
@@ -2120,7 +2150,7 @@ Opinion.getContext = async function(sections) {
     }
     if(sections.indexOf('ref')>=0) {
       var templateText = Opinion.getActiveTemplate(Opinion.state.current ? Opinion.state.current.rejection_type : 'inventive_step');
-      if(templateText) ctx += templateText + '\n\n';
+      if(templateText) ctx += '[★ 본 사무소 표준 의견서 양식 시작 — 이 양식의 스타일·문체를 반드시 따를 것]\n' + templateText + '\n[★ 본 사무소 표준 의견서 양식 끝]\n\n';
     }
   } catch(e) { console.warn('[Opinion] getContext:', e); }
   return ctx;
@@ -2536,7 +2566,23 @@ Opinion.startOpinionDraft=async function(){
         +'## 3. 구체적 의견내용\n(병합된 구성의 차이점 논증 — 기술적 예시 포함)\n\n## 4. 결론'
     };
 
-    var prompt = Opinion.SYS_PROMPT + Opinion.TEMPLATE_GUARD + '\n\n' + ctx + revCtx + tpl[t];
+    // ─── §3.2 스타일 지시 블록 (톤앤매너 강화) ───
+    var activeTemplObj = Opinion.state.templates && Opinion.state.templates[t];
+    var styleGuide = '';
+    if (activeTemplObj && activeTemplObj.text) {
+      styleGuide = '\n\n★★★ 문체·톤 준수 지시 (최우선 적용) ★★★\n'
+        + '위 컨텍스트의 [★ 본 사무소 표준 의견서 양식]은 본 사무소의 실제 의견서 스타일을 학습하기 위한 자료다.\n'
+        + '의견서를 작성하기 전에 아래 6가지 스타일 요소를 반드시 분석하고 동일하게 적용하라:\n'
+        + '  ① 호칭: 출원인·귀청·심사관을 부르는 방식 → 양식과 동일하게 사용\n'
+        + '  ② 명칭: 발명·특허·출원을 지칭하는 방식 (본원발명/이 건 출원/본원) → 동일 용어 사용\n'
+        + '  ③ 종결어미: 합니다체·습니다체·드립니다체 혼용 여부 → 동일 체계 유지\n'
+        + '  ④ 강조어구: 특정 단어나 구절의 반복 패턴 (강조하여 주장합니다, 명백히 등) → 재현\n'
+        + '  ⑤ 단락 구조: 번호·기호 체계 (가. 나. / ① ② / (1) (2) / 가목·나목 등) → 동일 체계\n'
+        + '  ⑥ 결어: 섹션 끝맺음 표현 ("이상과 같이", "따라서", "이에" 등) → 재현\n'
+        + '⚠️ 차단 규칙: [본 사무소 표준 의견서 양식]에 없는 문체 표현(외래어 투, 영어 혼용, 딱딱한 번역체)은 자제하라.\n'
+        + '⚠️ 단, 이 사건의 구체적 기술 내용·청구항 번호·특정 표현은 양식에서 절대 차용하지 마라. 현재 사건 내용으로만 채워야 한다.\n';
+    }
+    var prompt = Opinion.SYS_PROMPT + Opinion.TEMPLATE_GUARD + '\n\n' + ctx + revCtx + styleGuide + tpl[t];
     var r = await App.callClaude(prompt);
     Opinion.usage.calls++;  // callForJSON이 아닌 직접 호출이므로 수동 카운트
     Opinion.updateUsageDisplay();
@@ -2550,6 +2596,9 @@ Opinion.startOpinionDraft=async function(){
 
     // ★ 섹션 마커 기반 파싱 (JSON 불필요) ★
     var od = Opinion.parseOpinionSections(r.text);
+
+    // ─── §3.4 스타일 적용 가시성 플래그 ───
+    od._style_applied = !!(activeTemplObj && activeTemplObj.text);
 
     // 양식 내용 오염 검증
     var fullText = od.sections.map(function(s){return s.content;}).join('\n');
@@ -2651,7 +2700,21 @@ Opinion.renderOpinion=function(L,R,status){
       +'<p style="font-size:11px;color:var(--color-text-secondary);margin-top:6px">의견서 내용이 현재 사건이 아닌 참고 양식의 사건 정보를 포함할 수 있습니다. 해당 부분을 확인해 주세요.</p>'
       +'</div>';
   }
+
+  // ─── §3.4 스타일 적용 가시성 배지 ───
+  var styleBadge = '';
+  if (o._style_applied === true) {
+    if (contamWarnings.length > 0) {
+      styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#fff8e1;border-radius:12px;font-size:11px;font-weight:600;color:#f57f17;margin-top:8px;margin-bottom:2px">⚠️ 부분 적용 — 본 사무소 스타일 (오염 의심 확인 필요)</div>';
+    } else {
+      styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#e8f5e9;border-radius:12px;font-size:11px;font-weight:600;color:#2e7d32;margin-top:8px;margin-bottom:2px">🎨 본 사무소 스타일 적용됨</div>';
+    }
+  } else if (o._style_applied === false) {
+    styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--color-bg-secondary);border-radius:12px;font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-top:8px;margin-bottom:2px">ℹ️ 기본 스타일</div>';
+  }
+
   L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">📝</span> 의견서 작성 완료</div><p style="font-size:13px;color:var(--color-text-secondary)">의견서를 검토하고 승인하면 최종 출력물이 생성됩니다.</p>'
+    +styleBadge
     +contamHtml
     +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(3)"><span class="tf">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate3Approve" onclick="Opinion.approveGate(3)"><span class="tf">✅</span> 승인</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">의견서 작성 중...</div></div>');
   var secs=o.sections||[];
