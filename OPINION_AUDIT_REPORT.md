@@ -786,4 +786,169 @@ KIPO 심사관은 보정된 청구항 세트 전체를 검토하므로, 미거�
 
 (발견 #1: secondary_rejection_type 미소비 — CHUNK 1에서 P0으로 이미 반영. 시나리오 M의 경로 A/B 구체화는 위 흐름 추적으로 갈음.)
 
-**CHUNK 5 완료.** 발견: P0 0 / P1 2 / P2 1. **누적: P0 4 / P1 13 / P2 5.** 다음 청크(6) 진행하려면 "다음" 입력.
+**CHUNK 5 완료.** 발견: P0 0 / P1 2 / P2 1. **누적: P0 4 / P1 13 / P2 5.**
+
+---
+
+## CHUNK 6/7 — Axis E 시스템 견고성: 상태 캐시·AbortController·localStorage 격리
+
+[누적 카운트: P0 4 / P1 13 / P2 5]
+
+---
+
+### 발견 #23 (상태 관리)
+
+### [P1] `Opinion.open` — 프로젝트 전환 시 이전 프로젝트 state 필드 미초기화
+**위치:** opinion.js L113-L114 (state 선언) / L460-L468 (`Opinion.open`)
+**증거:**
+```js
+// L113-114 — 초기 state 정의
+Opinion.state = {
+  projects:[], current:null, view:'list', viewStep:null,
+  files:[], analysis:null, draftResult:null, validation:null,
+  opinionDraft:null, typeResult:null, gateDecisions:{},
+  refText:'', customTemplate:null
+};
+
+// L460-468 — 프로젝트 열기
+Opinion.open = async function(id){
+  var p=Opinion.state.projects.find(function(x){return x.id===id;});
+  Opinion.state.current=p;
+  Opinion.state.view='detail';
+  Opinion.state.viewStep=null;
+  Opinion.renderDetail();          // ★ loadData 전에 렌더링 — 이전 데이터 표시
+  await Opinion.loadData(id);      // ★ analysis/draft/validation/opinionDraft 조건부 갱신
+};
+
+// L2163-2194 — loadData: 각 필드를 데이터 있을 때만 갱신, null 초기화 없음
+if(a && a.result_data) {
+  Opinion.state.analysis = ad;    // ★ 새 프로젝트에 analysis 없으면 실행 안 됨
+}
+// 결과: 이전 프로젝트의 analysis가 그대로 남음
+```
+
+**누출되는 state 필드 전체 목록:**
+
+| 필드 | 선언 위치 | 초기화? | 조건부 갱신 |
+|------|----------|---------|-----------|
+| `analysis` | L114 | null | `if(a && a.result_data)` |
+| `draftResult` | L114 | null | `if(d && d.draft_data)` |
+| `validation` | L114 | null | `if(v)` |
+| `opinionDraft` | L114 | null | `if(o && o.content)` |
+| `typeResult` | L114 | null | `if(t)` |
+| `_strategies` | L1324 (동적 추가) | **없음** | never reset |
+| `selectedStrategy` | L1516 (동적 추가) | **없음** | never reset |
+| `selectedStrategyIndex` | L1517 (동적 추가) | **없음** | never reset |
+| `parseFailDetail` | L2117 참조 (동적 추가) | **없음** | never reset |
+
+**재현 시나리오:**
+1. 프로젝트 A (7단계 완료) 열기 → `loadData(A)` → 모든 state 필드 채워짐
+2. backToList → `Opinion.state.current=null` (analysis 등 미리셋)
+3. 프로젝트 B (파싱 완료 단계, analysis 없음) 열기
+4. `Opinion.renderDetail()` 즉시 호출 → B 헤더 + A의 analysis 내용 렌더링
+5. `loadData(B)` — analysis 쿼리 결과가 null → `if(a && a.result_data)` 미실행
+6. `Opinion.state.analysis` = 여전히 A의 analysis
+
+**영향:**
+- B 프로젝트에서 Gate 1 "분석 결과" 화면에 A 프로젝트의 구성요소·전략이 표시됨
+- 사용자가 A의 전략으로 B의 보정안을 생성할 수 있음
+- 발견 직전까지 사용자가 인식 불가 (헤더는 B, 본문은 A 내용)
+
+**개선 방향:** `Opinion.open` 시작부에 state 초기화 블록 삽입:
+```js
+Opinion.state.analysis = null;
+Opinion.state.draftResult = null;
+Opinion.state.validation = null;
+Opinion.state.opinionDraft = null;
+Opinion.state.typeResult = null;
+Opinion.state._strategies = null;
+Opinion.state.selectedStrategy = null;
+Opinion.state.selectedStrategyIndex = null;
+Opinion.state.parseFailDetail = null;
+```
+
+---
+
+### 발견 #24 (견고성)
+
+### [P2] opinion.js 파이프라인 레벨 AbortController 없음 — 프로젝트 전환 시 진행 중 LLM 호출 미취소
+**위치:** shared/common.js L234 (AbortController 있음) / opinion.js 전체 (파이프라인 레벨 없음)
+**증거:**
+```js
+// shared/common.js L234 — 개별 callClaude 호출당 180s 타임아웃
+const ctrl=new AbortController(), tout=setTimeout(()=>ctrl.abort(), 180000);
+const res=await fetch(req.url, {signal:ctrl.signal, ...});
+
+// opinion.js — 파이프라인 레벨 취소 코드 없음
+// Opinion.currentAbort, Opinion.abortPipeline 등 미존재
+```
+
+`App.callClaude`는 개별 호출 단위로 180초 타임아웃을 제공한다. 그러나 opinion.js 파이프라인은 여러 LLM 호출을 순차 실행한다:
+```
+startParsing → callForJSON(파싱) → callForJSON(인용발명파싱) → setStatus → 렌더링
+startAnalysis → callForJSON(분석) → setStatus
+startDraft → callForJSON(보정+검증) → [callForJSON(별도검증)] → setStatus
+startOpinionDraft → callClaude(의견서) → setStatus
+```
+
+사용자가 파이프라인 실행 중 다른 프로젝트로 이동하거나 backToList를 누르면:
+1. `Opinion.state.current`는 변경됨
+2. 그러나 진행 중인 async 함수(`startAnalysis` 등)는 계속 실행
+3. LLM 응답이 도착하면 **변경된 `Opinion.state.current`에 잘못 저장** (이전 프로젝트 ID)
+4. `await sb.from('opinion_issue_analyses').insert({project_id:p.id,...})` — p는 이전 함수 클로저의 로컬 변수이므로 old project ID
+5. 결과: 이전 프로젝트 DB에 새 호출 결과 삽입, 또는 찾을 수 없는 ID로 삽입 시도
+
+**영향:** 네트워크·타임아웃 오류 없이도 프로젝트 데이터 오염 가능. 실무에서 사건 혼입의 데이터 레이어 원인이 될 수 있음.
+
+**개선 방향:**
+```js
+// opinion.js — 전역 취소 토큰
+Opinion._abortCtrl = null;
+
+// Opinion.open 시작부
+if(Opinion._abortCtrl) { Opinion._abortCtrl.abort(); }
+Opinion._abortCtrl = new AbortController();
+
+// startAnalysis / startDraft 등 진입부
+if(Opinion._abortCtrl && Opinion._abortCtrl.signal.aborted) return;
+```
+
+---
+
+### 발견 #25 (격리)
+
+### [P2] localStorage 템플릿 키에 user_id 미포함 — 공용 브라우저 다계정 환경 격리 미흡
+**위치:** opinion.js L143, L150, L199
+**증거:**
+```js
+// L143 — 저장
+localStorage.setItem('opinion_template_inventive_step', JSON.stringify(template));
+
+// L150 — 로드
+var saved = localStorage.getItem('opinion_template_inventive_step');
+```
+키 형식: `'opinion_' + tKey` (`opinion_template_inventive_step`, `opinion_template_description_deficiency`, `opinion_custom_template`). **user_id 미포함.**
+
+`common.js`의 API 키 저장은 사용자별 키를 사용한다:
+```js
+// common.js L132 — user_id 포함
+localStorage.setItem('tm_kipris_api_key_'+user.id, pk.kipris);
+```
+
+opinion.js는 반대로 사용자 무관 키. 동일 브라우저에서 계정 A로 저장된 A사 기밀 의견서 양식 템플릿이 계정 B 로그인 시에도 로드됨. Supabase DB는 user_id로 격리되어 있으나, localStorage 캐시 경로에서 누출.
+
+**영향:** 개인정보보호 및 영업비밀 관점. 법률사무소에서 여러 변리사가 같은 PC를 공유하는 경우 다른 변리사의 의견서 양식이 노출될 수 있음.
+
+**개선 방향:** `localStorage.setItem('opinion_'+currentUser.id+'_'+tKey, ...)` — 키에 user_id 추가. 로그아웃 시 해당 사용자 키 정리.
+
+---
+
+### 추가 관찰 — `Opinion.state.files` 프로젝트 전환 시 잔류
+
+**위치:** opinion.js L114 (`files:[]` 초기 선언) / L460-L468 (`Opinion.open`)
+
+`Opinion.state.files`는 `Opinion.open` 시 초기화되지 않는다. `Opinion.startParsing`(L816)에서 `Opinion.state.files`를 직접 읽어 업로드 파일을 처리한다. 프로젝트 전환 후 파싱 재실행 시 이전 프로젝트의 업로드 파일이 혼입될 가능성. (severity: P2 — 파싱 전에 파일을 다시 업로드하면 덮어씌워지므로 실제 발생 빈도는 낮음.)
+
+---
+
+**CHUNK 6 완료.** 발견: P0 0 / P1 1 / P2 3. **누적: P0 4 / P1 14 / P2 8.** 다음 청크(7) 진행하려면 "다음" 입력.
