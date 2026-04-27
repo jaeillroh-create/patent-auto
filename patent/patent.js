@@ -7054,6 +7054,8 @@ function _shapeLeaderX(type,x,w){
 
 // ── v9.1: Shape 시각적 경계 (bounding box ≠ visual bounds) ──
 // 연결선 앵커, leader line 시작점에 사용
+// [C2-9-fix] shapeicon 화살표 여백 (_ICON_ARROW_GAP=12)
+const _ICON_ARROW_GAP=12;
 function _shapeVisualBounds(type,x,y,w,h){
   // ★ v10.4: cx/cy는 항상 기하학적 중심점 (라우팅 대칭성 보장) ★
   // 아이콘 shape는 하단에 라벨 영역(~20px) 포함
@@ -7064,40 +7066,46 @@ function _shapeVisualBounds(type,x,y,w,h){
     case 'database':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'monitor':{
-      const sh=h*0.72;
-      return{top:y, bottom:y+h*0.93, left:x, right:x+w, cx:x+w/2, cy:y+sh/2};
+      // [C2-9-fix] monitor visual cy 보정 (server와 일치)
+      // bottom을 y+h로 확장하여 _vCy=h/2가 server/box 등 다른 박스형과 동일
+      // → 같은 row에서 monitor↔server/box 화살표 직선화 (꺾임 0)
+      return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     }
     case 'server':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'sensor':{
       // [C2-8a-fix-3] 파형 호 실제 렌더 범위 반영 — 호 각도 ±0.35π, R_max=cr*2.65
+      // [C2-9-fix] shapeicon 화살표 여백 (_ICON_ARROW_GAP)
       const cr=Math.min(w*0.28,h*0.38);
       const waveCx=x+w*0.32, waveCy=y+h*0.50;
       const Rmax=cr*2.65;
       const sinA=Math.sin(Math.PI*0.35);
-      return{top:waveCy-Rmax*sinA, bottom:waveCy+Rmax*sinA,
+      return{top:waveCy-Rmax*sinA-_ICON_ARROW_GAP, bottom:waveCy+Rmax*sinA,
         left:waveCx-cr, right:waveCx+Rmax,
         cx:x+w/2, cy:y+h/2};
     }
     case 'antenna':{
       // [C2-8a-fix-3] 호 apex at -π/2, bottom에서 라벨 패딩 제거
+      // [C2-9-fix] shapeicon 화살표 여백 (_ICON_ARROW_GAP)
       const aTopY=y+h*0.18;
       const outerArc=h*0.36;
       const waveTop=aTopY-outerArc;
       const waveRight=x+w*0.38+outerArc*Math.cos(-Math.PI*0.05);
-      return{top:Math.min(y+h*0.18,waveTop), bottom:y+h*0.92, left:x+w*0.16, right:Math.max(x+w*0.62,waveRight),
+      return{top:Math.min(y+h*0.18,waveTop)-_ICON_ARROW_GAP, bottom:y+h*0.92, left:x+w*0.16, right:Math.max(x+w*0.62,waveRight),
         cx:x+w*0.43, cy:y+h/2};
     }
     case 'document':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'camera':
       // [C2-8a-fix-3] bottom에서 라벨 패딩 제거
-      return{top:y+h*0.08, bottom:y+h*0.83, left:x+w*0.05, right:x+w*0.85,
+      // [C2-9-fix] shapeicon 화살표 여백 (_ICON_ARROW_GAP)
+      return{top:y+h*0.08-_ICON_ARROW_GAP, bottom:y+h*0.83, left:x+w*0.05, right:x+w*0.85,
         cx:x+w*0.45, cy:y+h/2};
     case 'speaker':{
       // [C2-8a-fix-3] bottom에서 라벨 패딩 제거, right를 호 최대값(angle 0)으로
+      // [C2-9-fix] shapeicon 화살표 여백 (_ICON_ARROW_GAP)
       const spWaveRight=x+w*0.55+h*0.46;
-      return{top:y+h*0.08, bottom:y+h*0.92, left:x+w*0.10, right:Math.max(x+w*0.55,spWaveRight),
+      return{top:y+h*0.08-_ICON_ARROW_GAP, bottom:y+h*0.92, left:x+w*0.10, right:Math.max(x+w*0.55,spWaveRight),
         cx:x+w*0.35, cy:y+h/2};
     }
     default:
