@@ -8,9 +8,10 @@ window.Opinion = window.Opinion || {};
 
 // ═══ Constants ═══
 Opinion.TYPES = {
-  inventive_step:         { code:'A', label:'진보성/신규성 위반', icon:'⚖️', css:'type-a', law:'§29①②' },
-  description_deficiency: { code:'B', label:'기재불비 위반',      icon:'📝', css:'type-b', law:'§42③④' },
-  partial_rejection:      { code:'C', label:'일부 청구항 거절',   icon:'📋', css:'type-c', law:'§29 등' }
+  inventive_step:         { code:'A', label:'진보성/신규성 위반',    icon:'⚖️', css:'type-a',       law:'§29①②' },
+  description_deficiency: { code:'B', label:'기재불비 위반',         icon:'📝', css:'type-b',       law:'§42② / §42④' },
+  partial_rejection:      { code:'C', label:'일부 청구항 거절',      icon:'📋', css:'type-c',       law:'§29 등' },
+  unsupported_type:       { code:'X', label:'수동 처리 필요',        icon:'⚠️', css:'type-unknown', law:'§32/§33/§36/§45 등' }
 };
 Opinion.STATUS = {
   // init 단계 (upload → parse → type)
@@ -111,11 +112,256 @@ Opinion.DEFAULT_TEMPLATES = {
 };
 
 // ═══ State ═══
-Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null };
+Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null, _secondary_warned:false };
+
+// ═══ 파이프라인 레벨 취소 토큰 (P2 #24) ═══
+Opinion._currentRun = null; // AbortController instance
+
+// ═══ localStorage 키 헬퍼 — user_id 격리 (P2 #25) ═══
+Opinion._getTemplateKey = function(type) {
+  var uid = (App.currentUser && App.currentUser.id) || 'anon';
+  return 'opinion_user_' + uid + '_template_' + type;
+};
+
+// 구 키(user_id 미포함) → 신 키로 1회 마이그레이션 (P2 #25)
+Opinion._migrateTemplateKeys = function() {
+  var legacyTypes = ['inventive_step', 'description_deficiency'];
+  var migrated = 0;
+  legacyTypes.forEach(function(t) {
+    var oldKey = 'opinion_template_' + t;
+    var val = null;
+    try { val = localStorage.getItem(oldKey); } catch(e) {}
+    if (val) {
+      var newKey = Opinion._getTemplateKey(t);
+      try { localStorage.setItem(newKey, val); localStorage.removeItem(oldKey); migrated++; } catch(e) {}
+    }
+  });
+  // 구 단일 커스텀 템플릿 → inventive_step 신 키로 이전 (이미 신 키가 없을 때만)
+  var oldCustom = null;
+  try { oldCustom = localStorage.getItem('opinion_custom_template'); } catch(e) {}
+  if (oldCustom) {
+    var newKey = Opinion._getTemplateKey('inventive_step');
+    var existing = null;
+    try { existing = localStorage.getItem(newKey); } catch(e) {}
+    if (!existing) {
+      try { localStorage.setItem(newKey, oldCustom); migrated++; } catch(e) {}
+    }
+    try { localStorage.removeItem('opinion_custom_template'); } catch(e) {}
+  }
+  if (migrated > 0) {
+    console.log('[Opinion.migrate] localStorage keys migrated: ' + migrated + ' items');
+    showToast('템플릿이 사용자별 저장소로 이전되었습니다', 'info');
+  }
+};
+
+// ═══ 프로젝트 라이프사이클 초기화 (P1 #23 + P2 #7 + 추가관찰) ═══
+// keepProjectId:true 이면 state.current 유지 (재분석 등 동일 프로젝트 내 재실행 시)
+Opinion.resetState = function(opts) {
+  opts = opts || {};
+  var keepProjectId = opts.keepProjectId === true;
+
+  // 진행 중인 파이프라인 취소 (P2 #24)
+  if (Opinion._currentRun) {
+    Opinion._currentRun.abort();
+    Opinion._currentRun = null;
+  }
+
+  // 파이프라인 결과 상태 초기화
+  Opinion.state.files             = [];
+  Opinion.state.parsed            = null;
+  Opinion.state.analysis          = null;
+  Opinion.state.draftResult       = null;
+  Opinion.state.validation        = null;
+  Opinion.state.opinionDraft      = null;
+  Opinion.state.typeResult        = null;
+  Opinion.state._strategies       = null;
+  Opinion.state.selectedStrategy  = null;
+  Opinion.state.selectedStrategyIndex = null;
+  Opinion.state._typeNeedsManual  = false; // Cycle 1 플래그
+  Opinion.state._secondary_warned = false; // Cycle 3 혼합 거절 확인 플래그
+  Opinion.state.parseFailDetail   = null;
+  Opinion.state.lastRevisionNote  = '';
+  Opinion.state.gateDecisions     = {};
+  Opinion.state.viewStep          = null;
+  if (!keepProjectId) Opinion.state.current = null;
+
+  // API 사용량 리셋
+  Opinion.usage = { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
+
+  console.log('[Opinion.reset] cleared state, files, usage');
+};
+
+// ═══ 명세서 원문 추출 (DB raw_text 또는 state.files에서) — 사이클 2 ═══
+// raw_text는 startParsing에서 '=== [📑 출원 명세서: ...] ===' 구분자로 섹션화되어 저장됨
+Opinion.extractSpecificationText = async function(projectId) {
+  try {
+    var{data:pd}=await sb.from('opinion_parsed_documents').select('raw_text').eq('project_id',projectId).order('created_at',{ascending:false}).limit(1).maybeSingle();
+    if (!pd || !pd.raw_text) return '';
+    var raw = pd.raw_text;
+    // '=== [📑 출원 명세서: ...] ===' 다음 섹션부터 다음 '===' 또는 '##########'까지
+    var specStart = raw.search(/===\s*\[📑\s*출원\s*명세서[^\]]*\]\s*===/);
+    if (specStart < 0) {
+      // 폴백: '명세서' 키워드만으로 찾기
+      specStart = raw.search(/===\s*\[[^\]]*명세서[^\]]*\]\s*===/);
+    }
+    if (specStart < 0) return ''; // 명세서 미발견
+    var afterHeader = raw.slice(specStart).replace(/^===\s*\[[^\]]+\]\s*===\s*/, '');
+    // 다음 구분자까지 잘라냄
+    var nextDelim = afterHeader.search(/(===\s*\[|##########)/);
+    return nextDelim > 0 ? afterHeader.slice(0, nextDelim).trim() : afterHeader.trim();
+  } catch(e) { console.warn('[Opinion] extractSpecificationText failed:', e); return ''; }
+};
+
+// ═══ spec_basis 명세서 원문 cross-check (P0 #17) ═══
+// amendedClaims: [{claim_no, spec_basis: ["【0010】","【0065】"] | "..."}]
+// specRawText: 명세서 원문 string
+// 반환: { ok: true|false|null, missing: [{claim_no, missing_paragraphs}], reason? }
+Opinion._validateSpecBasis = function(amendedClaims, specRawText) {
+  if (!specRawText || specRawText.length < 50) {
+    return { ok: null, reason: 'specification_missing', missing: [] };
+  }
+  if (!Array.isArray(amendedClaims) || !amendedClaims.length) {
+    return { ok: true, missing: [] };
+  }
+  var missing = [];
+  // 단락번호 정규화 헬퍼: 【0010】, [0010], 0010 모두 4자리 숫자로 통일
+  function _normalize(p) {
+    var m = String(p).match(/(\d{1,4})/);
+    if (!m) return null;
+    return ('0000' + m[1]).slice(-4); // 4자리 패딩
+  }
+  // 명세서 원문에서 등장하는 모든 단락번호를 수집
+  var specParagraphsSet = {};
+  var pat = /[【\[]\s*(\d{1,4})\s*[】\]]/g;
+  var sm;
+  while ((sm = pat.exec(specRawText)) !== null) {
+    specParagraphsSet[_normalize(sm[1])] = true;
+  }
+
+  amendedClaims.forEach(function(ac) {
+    var basisRaw = ac.spec_basis || ac.spec_paragraphs || [];
+    var basisList = Array.isArray(basisRaw) ? basisRaw : String(basisRaw).split(/[,，]/);
+    var miss = [];
+    basisList.forEach(function(b) {
+      var norm = _normalize(b);
+      if (!norm) return; // 번호가 없으면 검증 대상 아님
+      if (!specParagraphsSet[norm]) {
+        miss.push('【' + norm + '】');
+      }
+    });
+    if (miss.length) {
+      missing.push({ claim_no: ac.claim_no, missing_paragraphs: miss });
+    }
+  });
+  return { ok: missing.length === 0, missing: missing };
+};
+
+// ═══ 청구항 보존 검증 (Cycle 4 P1 #21) ═══
+// 미거절 청구항이 amended_claims에 임의로 변경/누락됐는지 검증.
+// inputs:
+//   originalClaims: parsed.claims = [{no, text}]
+//   draftResult: {amended_claims, corrected_claims, merged_claim, unchanged_claims, remaining_claims, deleted_claims}
+//   rejectedNos: [N,...] (parsed.rejection_reasons에서 평탄화)
+// returns: { ok: bool, issues: [{type, claim_no, detail}] }
+Opinion._validateClaimPreservation = function(originalClaims, draftResult, rejectedNos) {
+  var issues = [];
+  if (!originalClaims || !originalClaims.length) return { ok: null, issues: [], reason: 'no_original_claims' };
+  var dr = draftResult || {};
+  var rejSet = {}; (rejectedNos || []).forEach(function(n){ rejSet[n] = true; });
+
+  // 보정 결과의 청구항 번호 집합
+  var amendedSet = {};
+  var amendedArr = dr.amended_claims || dr.corrected_claims || (dr.merged_claim ? [dr.merged_claim] : []);
+  amendedArr.forEach(function(ac){ if (ac && ac.claim_no != null) amendedSet[ac.claim_no] = ac; });
+
+  // unchanged_claims 또는 remaining_claims에서 보존 청구항 추출
+  var unchangedNos = [];
+  if (Array.isArray(dr.unchanged_claims)) unchangedNos = dr.unchanged_claims.slice();
+  else if (Array.isArray(dr.remaining_claims)) unchangedNos = dr.remaining_claims.filter(function(rc){ return rc && rc.changed === false; }).map(function(rc){ return rc.new_no || rc.old_no; });
+
+  // [검증 1] 미거절 청구항이 amended_claims에 포함되어 있는지 (LLM이 임의 수정한 의심)
+  Object.keys(amendedSet).forEach(function(noStr){
+    var no = parseInt(noStr, 10);
+    if (!rejSet[no]) {
+      issues.push({ type: 'unrejected_claim_amended', claim_no: no, detail: '미거절 청구항 ' + no + '이 보정 결과에 포함됨' });
+    }
+  });
+
+  // [검증 2] 거절되지 않은 원 청구항이 unchanged_claims에서도 누락됐는지 (보존 누락)
+  var unchangedSet = {}; unchangedNos.forEach(function(n){ unchangedSet[n] = true; });
+  originalClaims.forEach(function(oc){
+    var no = oc.no;
+    if (!rejSet[no] && !amendedSet[no] && !unchangedSet[no]) {
+      issues.push({ type: 'unchanged_claim_missing', claim_no: no, detail: '미거절 청구항 ' + no + '이 보정 결과에 누락됨 (unchanged_claims에도 없음)' });
+    }
+  });
+
+  return { ok: issues.length === 0, issues: issues };
+};
+
+// ═══ 청구항 인용관계 검증 (Cycle 4 P1 #22) ═══
+// 종속항이 인용하는 청구항 번호가 실제 존재하는지 + 자기/순환 인용 검출.
+// inputs: finalClaims = [{no, text}]
+// returns: { ok: bool, issues: [{claim_no, references_to, problem}] }
+Opinion._validateClaimReferences = function(finalClaims) {
+  var issues = [];
+  if (!finalClaims || !finalClaims.length) return { ok: null, issues: [], reason: 'no_claims' };
+  var noSet = {}; finalClaims.forEach(function(c){ if (c && c.no != null) noSet[c.no] = true; });
+  // 인용 그래프
+  var graph = {};
+  finalClaims.forEach(function(c){
+    if (!c || !c.text) return;
+    var refs = Opinion._extractClaimReferences(c.text);
+    graph[c.no] = refs;
+    refs.forEach(function(r){
+      if (r === c.no) {
+        issues.push({ claim_no: c.no, references_to: r, problem: 'self' });
+      } else if (!noSet[r]) {
+        issues.push({ claim_no: c.no, references_to: r, problem: 'missing' });
+      }
+    });
+  });
+  // 순환 인용 검출 (간단 DFS)
+  function detectCycle(start) {
+    var stack = [[start, [start]]];
+    var visited = {};
+    while (stack.length) {
+      var pair = stack.pop(); var n = pair[0]; var path = pair[1];
+      if (visited[n]) continue;
+      var refs = graph[n] || [];
+      for (var i = 0; i < refs.length; i++) {
+        var r = refs[i];
+        if (path.indexOf(r) >= 0) {
+          issues.push({ claim_no: start, references_to: r, problem: 'circular' });
+          return;
+        }
+        stack.push([r, path.concat(r)]);
+      }
+      visited[n] = true;
+    }
+  }
+  Object.keys(graph).forEach(function(k){ detectCycle(parseInt(k, 10)); });
+
+  return { ok: issues.length === 0, issues: issues };
+};
+
+// 청구항 텍스트에서 "제 N항", "청구항 N", "청구항 제 N항" 패턴 추출
+Opinion._extractClaimReferences = function(text) {
+  if (!text) return [];
+  var refs = {};
+  var re = /제\s*(\d+)\s*항|청구항\s*(?:제\s*)?(\d+)/g;
+  var m;
+  while ((m = re.exec(text)) !== null) {
+    var n = parseInt(m[1] || m[2], 10);
+    if (n > 0) refs[n] = true;
+  }
+  return Object.keys(refs).map(function(s){ return parseInt(s, 10); });
+};
 
 // ═══ Init ═══
 Opinion.init = function(){
   console.log('[Opinion] init');
+  Opinion._migrateTemplateKeys(); // 구 키 → 신 키 1회 마이그레이션
   Opinion.loadProjects();
   Opinion.loadSavedTemplate();
 };
@@ -140,14 +386,14 @@ Opinion.loadSavedTemplate = async function() {
       if (data && data.setting_value && data.setting_value.text) {
         Opinion.state.templates[types[i]] = data.setting_value;
         loaded = true;
-        try { localStorage.setItem('opinion_' + tKey, JSON.stringify(data.setting_value)); } catch(e){}
+        try { localStorage.setItem(Opinion._getTemplateKey(types[i]), JSON.stringify(data.setting_value)); } catch(e){}
       }
     } catch(e) {}
 
-    // 2차: localStorage
+    // 2차: localStorage (신 키 우선)
     if (!loaded) {
       try {
-        var saved = localStorage.getItem('opinion_' + tKey);
+        var saved = localStorage.getItem(Opinion._getTemplateKey(types[i]));
         if (saved) {
           var parsed = JSON.parse(saved);
           if (parsed && parsed.text) {
@@ -196,7 +442,7 @@ Opinion.saveTemplate = async function(name, text, type) {
   var template = { name: name, text: text, saved_at: new Date().toISOString(), type: type };
   var tKey = 'template_' + type;
 
-  try { localStorage.setItem('opinion_' + tKey, JSON.stringify(template)); } catch(e){}
+  try { localStorage.setItem(Opinion._getTemplateKey(type), JSON.stringify(template)); } catch(e){}
 
   try {
     await sb.from('opinion_user_settings').upsert({
@@ -225,7 +471,7 @@ Opinion.clearTemplate = async function(type) {
   type = type || 'inventive_step';
   var tKey = 'template_' + type;
   try { await sb.from('opinion_user_settings').delete().eq('user_id', currentUser.id).eq('setting_key', tKey); } catch(e) {}
-  try { localStorage.removeItem('opinion_' + tKey); } catch(e) {}
+  try { localStorage.removeItem(Opinion._getTemplateKey(type)); } catch(e) {}
   if (Opinion.state.templates) delete Opinion.state.templates[type];
   if (type === 'inventive_step') { Opinion.state.customTemplate = null; Opinion.state.refText = ''; }
   Opinion.updateTemplateStatus();
@@ -291,41 +537,71 @@ Opinion.getActiveTemplate = function(type) {
   return '[의견서 작성 양식]\n구조:\n' + def.structure + '\n\n작성 지침: ' + def.style_notes;
 };
 
-// ★ 참고 양식 정제 — 톤/구조/문장패턴만 추출, 사건 내용 제거 ★
+// ★ 참고 양식 정제 — 6가지 스타일 패턴 추출, 사건 내용 제거 ★
 Opinion.sanitizeTemplate = function(rawText, type) {
   var def = Opinion.DEFAULT_TEMPLATES[type] || Opinion.DEFAULT_TEMPLATES.inventive_step;
 
-  // 1단계: 구조 패턴 추출 (섹션 제목, 번호 체계)
+  // 1단계: 6가지 패턴 추출 — 사건 내용 철저 제외
   var lines = rawText.split('\n');
-  var structurePatterns = [];
-  var styleExamples = [];
+  var structurePatterns = [];   // [⑤] 단락 구조 (번호·기호 체계)
+  var salutationPatterns = [];  // [①] 호칭 패턴
+  var closingPatterns = [];     // [③] 종결어미 패턴
+  var emphasisPatterns = [];    // [④] 강조어구
+  var closerPatterns = [];      // [⑥] 결어·연결어
+  // [②] 명칭 패턴은 구조 안에서 자연 추출
+
   var headingPattern = /^(\s*)([\d\.\(\)가-힣①-⑳❶-❿]+[\.\)]\s*.{2,40})$/;
   var kwPattern = /^(\s*)(【[^】]+】|서두|보정내용|적법성|의견내용|결론|소결)/;
+  var salutPattern = /귀청|귀원|담당\s*심사관|출원인\s*(은|께서|이|을|의|에게)|이\s*건\s*출원의|본원\s*(발명|출원)\s*(은|이|의)/;
+  var closingEndPattern = /(합니다|드립니다|바랍니다|주장합니다|요청합니다|확인합니다|제출합니다)\s*[\.。]?\s*$/;
+  var emphasisKws = /명백히|분명히|강조하여|주장하건대|명시적으로|구체적으로|결론적으로|특히\s|더욱이|나아가\s/;
+  var closerKws = /^(이상과\s*같이|상기\s*이유로|따라서|그러므로|살펴보면|검토하면|대비하면|종합하면|이에\s|아래와\s*같이|상기\s*출원|수령하였기에)/;
 
   lines.forEach(function(line) {
     var trimmed = line.trim();
-    // 섹션 제목/번호 구조
+    if (!trimmed || trimmed.length < 5) return;
+
+    // [⑤] 단락 구조 + 섹션 제목
     if (headingPattern.test(trimmed) || kwPattern.test(trimmed)) {
       structurePatterns.push(trimmed);
+      return;
     }
-    // 문체 패턴 (짧은 연결어/관용구만 — 실질 내용 제외)
-    else if (trimmed.length > 10 && trimmed.length < 80) {
-      if (/^(이상과 같이|상기|따라서|그러므로|살펴보면|검토하면|대비하면|종합하면|결론적으로|이에|아래와 같이|상기 출원|수령하였기에)/.test(trimmed)) {
-        styleExamples.push(trimmed.slice(0, 60));
+
+    if (trimmed.length > 8 && trimmed.length < 90) {
+      // [①] 호칭 패턴
+      if (salutPattern.test(trimmed)) {
+        salutationPatterns.push(trimmed.slice(0, 60));
+      // [③] 종결어미 (짧은 문장 끝)
+      } else if (closingEndPattern.test(trimmed) && trimmed.length < 55) {
+        closingPatterns.push(trimmed.slice(0, 55));
+      // [④] 강조어구
+      } else if (emphasisKws.test(trimmed) && trimmed.length < 65) {
+        emphasisPatterns.push(trimmed.slice(0, 65));
+      // [⑥] 결어·연결어
+      } else if (closerKws.test(trimmed)) {
+        closerPatterns.push(trimmed.slice(0, 65));
       }
     }
   });
 
   // 2단계: 조립 — 실제 사건 내용은 절대 포함하지 않음
-  var result = '[참고 의견서 양식 — 톤/구조만 참고, 내용 사용 금지]\n\n';
+  var result = '[★ 본 사무소 표준 의견서 양식 — 스타일·문체 학습 자료 (내용 사용 금지)]\n\n';
   result += '기본 구조:\n' + def.structure + '\n\n';
 
   if (structurePatterns.length > 0) {
-    result += '참고 양식의 섹션 구조:\n' + structurePatterns.slice(0, 20).join('\n') + '\n\n';
+    result += '[⑤ 단락 구조 패턴 — 번호·기호 체계]\n' + structurePatterns.slice(0, 20).join('\n') + '\n\n';
   }
-
-  if (styleExamples.length > 0) {
-    result += '참고 양식의 문체 패턴 (톤 참고용):\n' + styleExamples.slice(0, 10).join('\n') + '\n\n';
+  if (salutationPatterns.length > 0) {
+    result += '[① 호칭 패턴 — 출원인·귀청·심사관 지칭 방식]\n' + salutationPatterns.slice(0, 5).join('\n') + '\n\n';
+  }
+  if (closingPatterns.length > 0) {
+    result += '[③ 종결어미 패턴 — 문장 끝맺음 방식]\n' + closingPatterns.slice(0, 5).join('\n') + '\n\n';
+  }
+  if (emphasisPatterns.length > 0) {
+    result += '[④ 강조어구 패턴 — 주요 강조 표현]\n' + emphasisPatterns.slice(0, 5).join('\n') + '\n\n';
+  }
+  if (closerPatterns.length > 0) {
+    result += '[⑥ 결어·연결어 패턴 — 섹션 끝맺음 표현]\n' + closerPatterns.slice(0, 8).join('\n') + '\n\n';
   }
 
   result += '작성 지침: ' + def.style_notes;
@@ -458,9 +734,16 @@ Opinion.del = async function(id){
 // 3. 프로젝트 상세
 // ═══════════════════════════════════════════
 Opinion.open = async function(id){
+  // 이전 프로젝트 메모리·파일·usage 초기화 + 진행 중 비동기 작업 취소 (P1 #23, P2 #7, #24)
+  Opinion.resetState({ keepProjectId: false });
+
   var p=Opinion.state.projects.find(function(x){return x.id===id;});
   if(!p){showToast('프로젝트를 찾을 수 없습니다','error');return;}
   Opinion.state.current=p; Opinion.state.view='detail'; Opinion.state.viewStep=null;
+
+  // 새 파이프라인 실행 토큰 발급 (P2 #24)
+  Opinion._currentRun = new AbortController();
+
   document.getElementById('opinionListView').style.display='none';
   document.getElementById('opinionDetailView').style.display='block';
   Opinion.renderDetail();
@@ -468,7 +751,9 @@ Opinion.open = async function(id){
 };
 
 Opinion.backToList = function(){
-  Opinion.state.current=null; Opinion.state.view='list'; Opinion.state.viewStep=null;
+  // 이전 프로젝트 상태·진행 중 작업 모두 초기화 (P1 #23, P2 #24)
+  Opinion.resetState({ keepProjectId: false });
+  Opinion.state.view='list';
   document.getElementById('opinionDetailView').style.display='none';
   document.getElementById('opinionListView').style.display='block';
   Opinion.loadProjects();
@@ -720,7 +1005,7 @@ Opinion.CHECK_TYPE_LABELS = {
   context_match: '문맥 일치 여부',
   combination_check: '조합 기재 여부',
   cited_ref_origin: '인용발명 유래 여부',
-  spec_support: '명세서 뒷받침 여부 (§42③)',
+  spec_support: '명세서 뒷받침 여부 (§42② 4호 / §42④ 2호)',
   within_scope: '최초 명세서 범위 내',
   within_original_scope: '최초 명세서 범위 내',
   resolved: '지적사항 해소 여부',
@@ -814,6 +1099,7 @@ Opinion.extractFileText = async function(file) {
 
 Opinion.startParsing = async function(){
   var p=Opinion.state.current; if(!p) return;
+  var run = Opinion._currentRun; // 파이프라인 취소 토큰 캡처 (P2 #24)
 
   // 수동 텍스트 확인
   var manualEl = document.getElementById('opinionManualText');
@@ -910,6 +1196,7 @@ Opinion.startParsing = async function(){
       citedRefGuide += 'cited_references 배열에 반드시 ' + citedRefFiles.length + '개 항목을 포함하세요. 하나로 합치지 마세요.\n';
     }
 
+    if (run && run.signal.aborted) return; // 파일 추출 완료 후 이탈 체크
     showProgress('opinionParseProgress', 'AI 분석 중...', totalFiles+(manualText?1:0), totalFiles+(manualText?1:0));
     var parsed = await Opinion.callForJSON(
       Opinion.SYS_PROMPT+'\n\n아래 문서들을 분석하여 구조화해 주세요.\n'
@@ -920,16 +1207,28 @@ Opinion.startParsing = async function(){
       +'1. application_no: 본원 출원번호\n'
       +'2. applicant: 본원 출원인\n'
       +'3. invention_title: 본원 발명의 명칭\n'
-      +'4. rejection_reasons: [{claim_nos:[N], article:"§29②", reason:"진보성 위반", cited_refs:["인용문헌1"]}]\n'
+      +'4. rejection_reasons: 거절이유별로 아래 3종 형식 중 해당하는 것을 사용하라.\n'
+      +'   §29 계열: {claim_nos:[1], article:"§29②", reason:"진보성 위반", cited_refs:["인용문헌1","인용문헌2"]}\n'
+      +'   §42 명확성: {claim_nos:[1,2,3], article:"§42② 1호 또는 §42④ 1호", reason:"명확성 흠결 또는 발명의 설명 기재불비", cited_refs:[]}\n'
+      +'   §42 뒷받침: {claim_nos:[2], article:"§42② 4호 또는 §42④ 2호", reason:"청구항 뒷받침 흠결", cited_refs:[]}\n'
+      +'   ★ §42 계열 거절은 cited_refs가 빈 배열이다. 빈 배열 그대로 출력. 가짜 인용문헌 생성 금지.\n'
+      +'   ★ 통지서에 기재된 조문 표기를 그대로 유지하라. §29를 §42로, §42를 §29로 변환 금지.\n'
       +'5. cited_references: 인용문헌별 개별 항목 [{ref_no:N, title:"인용발명 제목", publication_no:"공개번호"}] — 파일별로 반드시 별도 항목\n'
       +'6. claims: 본원 청구항 [{no:N, text:"..."}]\n'
       +'7. comparison_table: 심사관 대비표 [{element_no:N, applicant_feature:"본원 구성", cited_feature:"인용발명 구성", cited_ref_no:N}]\n\n'
       +'---\n'+orderedText.slice(0,30000),
-      '{"application_no":"10-...","applicant":"...","invention_title":"...","rejection_reasons":[...],"cited_references":[{"ref_no":1,"title":"...","publication_no":"..."},{"ref_no":2,"title":"...","publication_no":"..."}],"claims":[...]}'
+      '{"application_no":"10-...","applicant":"...","invention_title":"...","rejection_reasons":[{"claim_nos":[1],"article":"§29②","reason":"진보성 위반","cited_refs":["인용문헌1"]},{"claim_nos":[2,3],"article":"§42④ 2호","reason":"뒷받침 흠결","cited_refs":[]}],"cited_references":[{"ref_no":1,"title":"...","publication_no":"..."}],"claims":[...]}'
     );
     // 추출 품질 메타 저장
     parsed._file_results = fileResults;
     parsed._total_text_length = effectiveText.length;
+
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at startParsing');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
 
     // 인용문헌 수 검증: 업로드 파일 수 vs LLM 파싱 결과 수 비교
     var parsedCitedCount = (parsed.cited_references || []).length;
@@ -1046,9 +1345,11 @@ Opinion.renderParsedUI = function(el, pd) {
 
 Opinion.determineType = async function(){
   var p=Opinion.state.current;if(!p)return;
+  var run = Opinion._currentRun; // P2 #24
   setButtonLoading('btnOpinionType',true);
   try{
     var{data:pd}=await sb.from('opinion_parsed_documents').select('parsed_data,raw_text').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).single();
+    if (run && run.signal.aborted) return;
     // 유형 판별은 의견제출통지서만으로 충분 — 통지서 텍스트만 추출
     var ctx = '';
     if (pd && pd.parsed_data) {
@@ -1079,40 +1380,188 @@ Opinion.determineType = async function(){
     var tr = await Opinion.callForJSON(
       Opinion.SYS_PROMPT+'\n\n유형 판별 (의견제출통지서만으로 판단):\n'
         +'A. inventive_step — 신규성 위반(§29①) 또는 진보성 위반(§29②)\n'
-        +'B. description_deficiency — 기재불비(§42③④)\n'
-        +'C. partial_rejection — 일부 청구항만 거절 (등록가능 청구항 존재)\n\n'
-        +'통지서에 기재된 거절이유 조항을 정확히 파악하여 판별하세요.\n---\n'+ctx,
-      '{"primary_type":"inventive_step","confidence":0.85,"reasoning":"...","claim_summary":{"total_claims":N,"rejected_claims":[1,2],"no_rejection_claims":[3]}}'
+        +'B. description_deficiency — 기재불비(§42② 또는 §42④ — 구체 조항은 통지서에 따름)\n'
+        +'C. partial_rejection — 일부 청구항만 거절 (등록가능 청구항 존재)\n'
+        +'X. unsupported_type — §32(불특허발명)/§33(무권리자)/§36(선출원)/§45(단일성) 등 위 A·B·C에 해당하지 않는 거절\n\n'
+        +'규칙:\n'
+        +'1. 통지서에 §29·§42가 동시에 있으면 primary_type에 주된 유형, secondary_type에 나머지 유형을 기재하라.\n'
+        +'2. §32/§33/§36/§45 등 A·B·C 외 거절은 반드시 primary_type:"unsupported_type"으로 출력하고 reasoning에 조문과 사유를 명시하라.\n'
+        +'3. primary_type은 반드시 inventive_step / description_deficiency / partial_rejection / unsupported_type 중 하나만 출력하라.\n'
+        +'---\n'+ctx,
+      '{"primary_type":"inventive_step","confidence":0.85,"reasoning":"...","secondary_type":null,"claim_summary":{"total_claims":N,"rejected_claims":[1,2],"no_rejection_claims":[3]}}'
     );
-    await sb.from('opinion_type_determinations').insert({project_id:p.id,determined_type:tr.primary_type||'inventive_step',confidence:tr.confidence||0.5,reasoning:tr.reasoning||'',user_confirmed:false});
-    await sb.from('opinion_projects').update({rejection_type:tr.primary_type||'inventive_step',secondary_rejection_type:tr.secondary_type||null,status:'type_determined'}).eq('id',p.id);
-    p.rejection_type=tr.primary_type||'inventive_step'; p.status='type_determined';
-    Opinion.state.typeResult=tr; Opinion.renderDetail(); showToast('유형 판별 완료');
+
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at determineType');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
+
+    // ─── _parse_failed / 알 수 없는 유형 → silent fallback 없이 수동 선택 강제 ───
+    var validTypes = Object.keys(Opinion.TYPES);
+    var typeOk = !tr._parse_failed && tr.primary_type && validTypes.indexOf(tr.primary_type) >= 0;
+
+    // 진단용 행은 항상 저장 (실패 시에도 raw_text 보존)
+    await sb.from('opinion_type_determinations').insert({
+      project_id: p.id,
+      determined_type: typeOk ? tr.primary_type : null,
+      confidence: typeOk ? (tr.confidence || 0.5) : 0,
+      reasoning: tr._parse_failed ? ('[파싱실패] ' + (tr.raw_text || '').slice(0, 500)) : (tr.reasoning || ''),
+      user_confirmed: false
+    });
+
+    if (!typeOk) {
+      // 헤더·본문 모순의 원인 차단 — inventive_step 무음 fallback 제거
+      console.warn('[Opinion] 유형 판별 실패 (raw):', tr._parse_failed ? tr.raw_text : JSON.stringify(tr));
+      Opinion.state.typeResult = tr;
+      Opinion.state._typeNeedsManual = true; // renderTypeView에서 override 패널 자동 펼침
+      Opinion.renderDetail();
+      showToast('유형 자동 판별 실패 — 직접 선택해 주세요', 'error');
+      return;
+    }
+
+    // unsupported_type: 안내 화면 표시 후 파이프라인 중단
+    if (tr.primary_type === 'unsupported_type') {
+      await sb.from('opinion_projects').update({rejection_type:'unsupported_type', secondary_rejection_type:tr.secondary_type||null, status:'type_determined'}).eq('id',p.id);
+      p.rejection_type = 'unsupported_type'; p.status = 'type_determined';
+      Opinion.state.typeResult = tr;
+      Opinion.renderDetail();
+      showToast('미지원 거절유형 — 변리사 직접 작성 또는 유형 수동 선택 필요', 'info');
+      return;
+    }
+
+    // 정상 경로: DB 저장 + status 변경 + 다음 단계
+    await sb.from('opinion_projects').update({rejection_type:tr.primary_type, secondary_rejection_type:tr.secondary_type||null, status:'type_determined'}).eq('id',p.id);
+    p.rejection_type = tr.primary_type; p.secondary_rejection_type = tr.secondary_type||null; p.status = 'type_determined';
+    // 혼합 거절 감지 (Cycle 3 P0 #1): secondary가 TYPES에 등록된 유형이면 로그 + 경고 플래그
+    if (tr.secondary_type && Opinion.TYPES[tr.secondary_type] && tr.secondary_type !== 'unsupported_type') {
+      Opinion.state._secondary_warned = false; // 아직 안내 미확인
+      console.log('[Opinion.type] mixed rejection detected: primary='+tr.primary_type+', secondary='+tr.secondary_type);
+    }
+    Opinion.state.typeResult = tr; Opinion.renderDetail(); showToast('유형 판별 완료');
   }catch(e){showToast('유형 판별 실패: '+e.message,'error');}
   finally{setButtonLoading('btnOpinionType',false);}
 };
 
 Opinion.renderTypeView = function(L,R){
-  var p=Opinion.state.current, t=Opinion.TYPES[p.rejection_type]||Opinion.TYPES.inventive_step, tr=Opinion.state.typeResult||{}, conf=Math.round((tr.confidence||0.5)*100);
-  L.innerHTML=Opinion.renderNavBar('type')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">🔍</span> 유형 판별 결과</div></div>'
+  var p=Opinion.state.current, tr=Opinion.state.typeResult||{};
+
+  // _typeNeedsManual 플래그: override 패널 자동 펼침 후 초기화
+  var autoOpen = !!Opinion.state._typeNeedsManual;
+  if (autoOpen) Opinion.state._typeNeedsManual = false;
+
+  // ── unsupported_type 전용 안내 화면 ──
+  if (p.rejection_type === 'unsupported_type') {
+    L.innerHTML = Opinion.renderNavBar('type')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">⚠️</span> 수동 처리 필요</div></div>'
+      +'<div style="padding:16px">'
+      +'<div style="color:var(--color-error);font-weight:600;font-size:14px;margin-bottom:10px">본 거절이유는 현재 자동 처리를 지원하지 않습니다.</div>'
+      +'<p style="font-size:13px;color:var(--color-text-secondary);line-height:1.7;margin-bottom:12px">§32(불특허발명) / §33(무권리자) / §36(선출원) / §45(단일성) 등 특수 거절이유는 사건별 개별 판단이 필요합니다.<br>변리사가 직접 의견서를 작성하시거나, 아래에서 유사 유형을 수동 선택하여 참고용으로 진행하실 수 있습니다.</p>'
+      +(tr.reasoning?'<div style="font-size:12px;background:var(--color-bg-tertiary);padding:10px;border-radius:8px;margin-bottom:16px;line-height:1.6">'+escapeHtml(tr.reasoning)+'</div>':'')
+      +'<div style="font-size:13px;font-weight:600;margin-bottom:8px">유형 수동 선택 (참고용)</div>'
+      +'<div class="opinion-type-selector">'
+      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'inventive_step\')">⚖️ A. 진보성</div>'
+      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'description_deficiency\')">📝 B. 기재불비</div>'
+      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'partial_rejection\')">📋 C. 일부거절</div>'
+      +'</div><button class="btn btn-primary btn-full" style="margin-top:10px" onclick="Opinion.confirmType()">선택한 유형으로 진행</button>'
+      +'</div></div>';
+    R.innerHTML = '';
+    return;
+  }
+
+  // ── 정상 + 판별실패(autoOpen) 공통 화면 ──
+  var t = Opinion.TYPES[p.rejection_type] || Opinion.TYPES.inventive_step;
+  var conf = Math.round((tr.confidence||0.5)*100);
+
+  // ── 혼합 거절 노란 배너 (Cycle 3 P2 #20) ──
+  var secType = p.secondary_rejection_type || (Opinion.state.typeResult && Opinion.state.typeResult.secondary_type) || null;
+  var secInfo = secType ? Opinion.TYPES[secType] : null;
+  var priInfo = Opinion.TYPES[p.rejection_type] || Opinion.TYPES.inventive_step;
+  var secondaryBannerHtml = '';
+  if (secType && secInfo && !Opinion.state._secondary_warned) {
+    var isSecUnsupported = secType === 'unsupported_type';
+    if (isSecUnsupported) {
+      secondaryBannerHtml = '<div id="opinionMixedBanner" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:12px">'
+        +'<div style="font-weight:700;font-size:13px;color:#92400e;margin-bottom:6px">⚠️ 부 거절이유 — 수동 처리 필요</div>'
+        +'<p style="font-size:12px;color:#78350f;line-height:1.7;margin-bottom:10px">'
+        +'부 거절(<b>'+escapeHtml(secInfo.label)+'</b>)은 시스템이 자동 처리하지 않는 유형입니다.<br>'
+        +'해당 거절이유는 변리사가 직접 검토하고 수동으로 처리하시기 바랍니다.'
+        +'</p>'
+        +'<button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="Opinion.acknowledgeMixed()">이해했습니다 — 주 거절로 진행</button>'
+        +'</div>';
+    } else {
+      secondaryBannerHtml = '<div id="opinionMixedBanner" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:12px">'
+        +'<div style="font-weight:700;font-size:13px;color:#92400e;margin-bottom:8px">⚠️ 본 통지서는 두 종류의 거절이유를 포함합니다</div>'
+        +'<div style="font-size:12px;color:#78350f;line-height:1.8;margin-bottom:10px">'
+        +'· 주 거절: <b>'+escapeHtml(priInfo.icon+' '+priInfo.code+'. '+priInfo.label)+'</b><br>'
+        +'· 부 거절: <b>'+escapeHtml(secInfo.icon+' '+secInfo.code+'. '+secInfo.label)+'</b><br><br>'
+        +'현재 시스템은 한 거절이유를 단독 처리합니다. 두 거절이유 모두 대응하려면:<br>'
+        +'1) 본 프로젝트는 <b>'+escapeHtml(priInfo.label)+'</b> 경로로 진행<br>'
+        +'2) 동일 통지서로 별도 프로젝트를 생성하여 <b>'+escapeHtml(secInfo.label)+'</b> 경로로 진행<br>'
+        +'3) 두 의견서를 합본하여 KIPO 제출'
+        +'</div>'
+        +'<button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="Opinion.acknowledgeMixed()">이해했습니다 — 주 거절로 진행</button>'
+        +'</div>';
+    }
+  } else if (secType && secInfo && Opinion.state._secondary_warned) {
+    secondaryBannerHtml = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534">✅ 혼합 거절 안내 확인 완료 — 주 거절 경로로 진행 중</div>';
+  }
+
+  L.innerHTML=Opinion.renderNavBar('type')+secondaryBannerHtml+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">🔍</span> 유형 판별 결과</div></div>'
     +'<div class="opinion-type-result"><div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:8px">AI 분석 결과</div>'
     +'<div class="opinion-type-determined '+t.css+'">'+t.icon+' '+t.code+'. '+t.label+'</div>'
     +'<div style="font-size:12px;color:var(--color-text-tertiary)">신뢰도: '+conf+'% <div class="opinion-confidence-bar"><div class="opinion-confidence-fill" style="width:'+conf+'%"></div></div></div>'
     +(tr.reasoning?'<p style="font-size:12px;color:var(--color-text-secondary);text-align:left;line-height:1.6;margin-top:12px;padding:10px;background:var(--color-bg-tertiary);border-radius:8px">'+escapeHtml(tr.reasoning)+'</p>':'')
     +'</div><div style="margin-top:16px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">이 판별이 맞습니까?</div>'
     +'<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="Opinion.confirmType()"><span class="tf">✅</span> 맞습니다</button><button class="btn btn-outline" style="flex:1" onclick="document.getElementById(\'opinionTypeOverride\').style.display=\'block\'"><span class="tf">✏️</span> 유형 변경</button></div>'
-    +'<div id="opinionTypeOverride" style="display:none;margin-top:12px"><div class="opinion-type-selector">'
+    +'<div id="opinionTypeOverride" style="'+(autoOpen?'':'display:none;')+'margin-top:12px">'
+    +(autoOpen?'<div style="color:var(--color-error);font-size:12px;font-weight:600;padding:8px;background:var(--color-error-bg,#fef2f2);border-radius:6px;margin-bottom:8px">⚠️ AI가 유형을 자동 판별하지 못했습니다. 직접 선택해 주세요.</div>':'')
+    +'<div class="opinion-type-selector">'
     +'<div class="opinion-type-option'+(p.rejection_type==='inventive_step'?' selected':'')+'" onclick="Opinion.selectType(this,\'inventive_step\')">⚖️ A. 진보성</div>'
     +'<div class="opinion-type-option'+(p.rejection_type==='description_deficiency'?' selected':'')+'" onclick="Opinion.selectType(this,\'description_deficiency\')">📝 B. 기재불비</div>'
     +'<div class="opinion-type-option'+(p.rejection_type==='partial_rejection'?' selected':'')+'" onclick="Opinion.selectType(this,\'partial_rejection\')">📋 C. 일부거절</div>'
     +'</div><button class="btn btn-primary btn-full" style="margin-top:10px" onclick="Opinion.confirmType()">변경 후 진행</button></div></div></div>';
+
   var cs=tr.claim_summary||{}, tot=cs.total_claims||0, rej=cs.rejected_claims||[], alw=cs.no_rejection_claims||[];
   R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tf">📊</span> 청구항별 현황</div></div>'
     +(tot>0?Array.from({length:tot},function(_,i){var n=i+1,isR=rej.indexOf(n)>=0,isA=alw.indexOf(n)>=0;return '<div class="opinion-claim-row '+(isA?'allowable':isR?'rejected':'')+'"><span class="claim-no">청구항 '+n+'</span><span>'+(isA?'✅':isR?'❌':'⬜')+'</span><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">'+(isA?'등록가능 후보':isR?'거절':'미확인')+'</span></div>';}).join(''):'<p style="padding:20px;text-align:center;color:var(--color-text-tertiary)">청구항 정보 없음</p>')+'</div>';
 };
 Opinion.selectType=function(el,type){document.querySelectorAll('.opinion-type-option').forEach(function(o){o.classList.remove('selected');});el.classList.add('selected');Opinion.state.current.rejection_type=type;};
+
+// ── 혼합 거절 안내 확인 버튼 핸들러 (Cycle 3 P2 #20) ──
+Opinion.acknowledgeMixed = async function() {
+  var p = Opinion.state.current; if (!p) return;
+  Opinion.state._secondary_warned = true;
+  var secType = p.secondary_rejection_type || (Opinion.state.typeResult && Opinion.state.typeResult.secondary_type) || null;
+  try {
+    await sb.from('opinion_gate_decisions').insert({
+      project_id: p.id, gate_no: 0, decision: 'mixed_acknowledged',
+      decided_by: currentUser.id,
+      revision_note: JSON.stringify({primary: p.rejection_type, secondary: secType})
+    });
+  } catch(e) { console.warn('[Opinion.acknowledgeMixed] gate_decisions insert failed:', e); }
+  // 배너를 "확인 완료" 상태로 교체
+  var banner = document.getElementById('opinionMixedBanner');
+  if (banner) {
+    banner.outerHTML = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534">✅ 혼합 거절 안내 확인 완료 — 주 거절 경로로 진행 중</div>';
+  }
+};
+
 Opinion.confirmType=async function(){
   var p=Opinion.state.current;if(!p)return;
+
+  // ── Gate 0: 혼합 거절 안내 미확인 시 차단 (Cycle 3 P0 #1 단기) ──
+  var secType = p.secondary_rejection_type || (Opinion.state.typeResult && Opinion.state.typeResult.secondary_type) || null;
+  var secInfo = secType ? Opinion.TYPES[secType] : null;
+  if (secInfo && !Opinion.state._secondary_warned) {
+    showToast('혼합 거절 안내를 확인해 주세요', 'error');
+    var banner = document.getElementById('opinionMixedBanner');
+    if (banner) banner.scrollIntoView({behavior:'smooth', block:'center'});
+    // gate_decisions에 blocked 기록
+    try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:0,decision:'blocked',decided_by:currentUser.id,revision_note:'mixed_unacknowledged'}); } catch(_){}
+    return;
+  }
+
   try{
     // typeResult.id가 있으면 특정 레코드만 업데이트 (동일 프로젝트에 여러 판정이 있을 수 있음)
     var typeUpdateQuery = sb.from('opinion_type_determinations').update({user_confirmed:true,user_override:p.rejection_type});
@@ -1157,10 +1606,12 @@ Opinion.retryAnalysis = async function() {
 
 Opinion.startAnalysis = async function(){
   var p=Opinion.state.current;if(!p)return;
+  var run = Opinion._currentRun; // P2 #24
   var type=p.rejection_type, next=type==='description_deficiency'?'deficiency_analyzed':type==='partial_rejection'?'allowable_identified':'analyzed';
   await Opinion.setStatus(p.id,'analyzing'); Opinion.renderDetail();
   try{
     var{data:pd}=await sb.from('opinion_parsed_documents').select('parsed_data,raw_text').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).single();
+    if (run && run.signal.aborted) return;
     var ctx='';
     if(pd) {
       if(pd.parsed_data && pd.parsed_data.application_no) ctx+='[파싱 결과]\n'+JSON.stringify(pd.parsed_data,null,1).slice(0,5000)+'\n\n';
@@ -1188,7 +1639,18 @@ Opinion.startAnalysis = async function(){
       description_deficiency:'위 의견제출통지서의 기재불비 지적사항을 분석하세요.\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 분석하세요.\n'
         +'각 지적에 대해 실제 심사관 지적 내용과 명세서에서 대응 기재를 찾아 구체적 수정 방향을 제시하세요.\n\n'
-        +'JSON:\n{"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"items":[{"claim_no":N,"deficiency_type":"unclear|inconsistent|unsupported","examiner_comment":"심사관 지적 원문","spec_reference":"【0001】등 관련 단락","suggested_correction":"구체적 수정 문언 제안"}]}',
+        +'★ §42 조문 5종 분류 (deficiency_type 키 + article 정확 표기):\n'
+        +'  1) clarity            — §42② 1호 (청구항 표현 명확성)              → 청구항 문언 명확화. 권리범위 보존 가능\n'
+        +'  2) support            — §42② 4호 (청구항이 발명의 설명에 의해 뒷받침) → 청구항을 명세서 기재 범위로 축소\n'
+        +'  3) description_lack   — §42④ 1호 (발명의 설명 기재불비, 당업자 실시) → 명세서 보정 필요 (의견서 단독 곤란)\n'
+        +'  4) description_support — §42④ 2호 (발명의 설명에 청구항이 뒷받침 안 됨) → 청구항 축소 + 명세서 근거 단락 명시\n'
+        +'  5) inconsistent       — §42②/④ 일반 (청구항 간/명세서와 불일치)     → 용어 통일 또는 청구항 정리\n\n'
+        +'★★★ 절대 규칙:\n'
+        +'1. 통지서 본문의 조문 표기를 그대로 따르라. 통지서가 §42② 4호라면 deficiency_type="support", article="§42② 4호"로 출력.\n'
+        +'2. 통지서가 §42④ 2호라면 deficiency_type="description_support", article="§42④ 2호"로 출력. §42②와 §42④를 임의 변환 금지.\n'
+        +'3. 위 5개 키 외의 값(unclear, unsupported 등 구 분류) 출력 금지.\n'
+        +'4. 통지서에 명시되지 않은 조문은 추측하지 마라. 가장 근접한 키 1개를 선택하고 article에는 통지서 원문 표기 사용.\n\n'
+        +'JSON:\n{"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"items":[{"claim_no":N,"deficiency_type":"clarity|support|description_lack|description_support|inconsistent","article":"§42② 1호 | §42② 4호 | §42④ 1호 | §42④ 2호 | §42② 또는 §42④","examiner_comment":"심사관 지적 원문","spec_reference":"【0001】등 관련 단락","suggested_correction":"구체적 수정 문언 제안"}]}',
       partial_rejection:'위 의견제출통지서에서 청구항별 거절 상태를 분석하고 등록가능 청구항을 식별하세요.\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 분석하세요.\n\n'
         +'JSON:\n{"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"rejected_claims":[{"claim_no":N,"reason":"진보성 위반 등 구체적 이유"}],"allowable_claims":[{"claim_no":N,"basis":"거절이유 미지적 등 근거"}],"merge_suggestion":{"target":1,"source":N,"rationale":"병합 이유와 기대 효과"}}'
@@ -1196,9 +1658,15 @@ Opinion.startAnalysis = async function(){
     var ar = await Opinion.callForJSON(
       Opinion.SYS_PROMPT+'\n\n'+ctx+'\n'+prompts[type],
       type==='inventive_step' ? '{"elements":[{"element_id":"E1","claim_element":"...","difference":"...","strength":"strong"}],"strategies":[{"name":"...","rationale":"...","risk":"low"}]}'
-      : type==='description_deficiency' ? '[{"claim_no":1,"examiner_comment":"...","suggested_correction":"..."}]'
+      : type==='description_deficiency' ? '{"items":[{"claim_no":1,"deficiency_type":"support","article":"§42② 4호","examiner_comment":"...","spec_reference":"【0010】","suggested_correction":"..."}]}'
       : '{"rejected_claims":[...],"allowable_claims":[...],"merge_suggestion":{...}}'
     );
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at startAnalysis');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
     await sb.from('opinion_issue_analyses').insert({project_id:p.id,analysis_type:type,result_data:ar});
     Opinion.state.analysis=ar; await Opinion.setStatus(p.id,next); Opinion.renderDetail(); showToast('분석 완료');
   }catch(e){showToast('분석 실패: '+e.message,'error');await Opinion.setStatus(p.id,'type_determined');Opinion.renderDetail();}
@@ -1506,12 +1974,113 @@ Opinion.renderAnalysisUI = function(type, a, extracted) {
 
 Opinion.approveGate = async function(gn){
   var p=Opinion.state.current;if(!p)return;var type=p.rejection_type,next;
+
+  // ─── Gate 1 차단: 전략 미선택 (Cycle 3 P1 #6) ───
+  if (gn === 1 && type === 'inventive_step') {
+    var radioEl = document.querySelector('input[name="opinionStrategy"]:checked');
+    if (!radioEl) {
+      showToast('보정 전략을 선택해 주세요', 'error');
+      var strategyArea = document.querySelector('.opinion-strategy-list, [name="opinionStrategy"]');
+      if (strategyArea) strategyArea.closest('.card, .opinion-gate-card') && strategyArea.closest('.card, .opinion-gate-card').scrollIntoView({behavior:'smooth',block:'center'});
+      try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:1,decision:'blocked',decided_by:currentUser.id,revision_note:'strategy_not_selected'}); } catch(_){}
+      return;
+    }
+  }
+  if (gn === 1 && type === 'description_deficiency') {
+    var items = (Opinion.state.analysis && (Opinion.state.analysis.items || Opinion.state.analysis.deficiencies)) || [];
+    if (!items.length) {
+      showToast('분석 결과가 없습니다. 재분석 후 진행해 주세요', 'error');
+      try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:1,decision:'blocked',decided_by:currentUser.id,revision_note:'no_analysis_items'}); } catch(_){}
+      return;
+    }
+  }
+
+  // ─── Gate 2 차단: 다중 사유 통합 (Cycle 2 + Cycle 3 + Cycle 4) ───
+  // 차단 사유를 모두 수집한 뒤 단일 confirm 모달로 표시. 변리사가 한 번의 override로 모두 통과 가능.
+  if (gn === 2) {
+    var dr = Opinion.state.draftResult;
+    var amendedClaims = dr && (dr.amended_claims || dr.corrected_claims || (dr.merged_claim ? [dr.merged_claim] : []) || (dr.draft_data && dr.draft_data.amended_claims)) || [];
+
+    // [1] 강제 차단 사유 (override 불가): 보정 청구항 빈 배열
+    if (!amendedClaims.length) {
+      showToast('보정 청구항이 없습니다. 보정안을 먼저 작성해 주세요', 'error');
+      try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:2,decision:'blocked',decided_by:currentUser.id,revision_note:'no_amended_claims'}); } catch(_){}
+      return;
+    }
+
+    // [2] override 가능 차단 사유 — 다중 수집
+    var blockReasons = [];
+    var blockTags = [];
+
+    var sbc = dr && dr._spec_basis_check;
+    if (sbc && sbc.ok === false) {
+      var sbDetail = (sbc.missing || []).map(function(m){
+        return '청구항 ' + m.claim_no + ': ' + (m.missing_paragraphs || []).join(', ');
+      }).join('\n');
+      blockReasons.push('• 보정 근거 단락이 명세서에 없음 (§47② 위반 위험)\n' + sbDetail);
+      blockTags.push('spec_basis_fail');
+    }
+
+    var preserv = dr && dr._claim_preservation_check;
+    if (preserv && preserv.ok === false) {
+      var prDetail = (preserv.issues || []).slice(0, 3).map(function(i){ return '  - ' + i.detail; }).join('\n');
+      blockReasons.push('• 미거절 청구항 변경/누락 (P1 #21)\n' + prDetail);
+      blockTags.push('claim_preservation_fail');
+    }
+
+    var refChk = dr && dr._claim_reference_check;
+    if (refChk && refChk.ok === false) {
+      var refDetail = (refChk.issues || []).slice(0, 3).map(function(i){
+        return '  - 청구항 ' + i.claim_no + ' → 청구항 ' + i.references_to + ' (' + i.problem + ')';
+      }).join('\n');
+      blockReasons.push('• 청구항 인용관계 오류 (P1 #22)\n' + refDetail);
+      blockTags.push('claim_reference_fail');
+    }
+
+    var v = Opinion.state.validation;
+    var valItems = v && (v.elements || v.results) || [];
+    var failCount = valItems.filter(function(e){ return (e.overall_result||e.result) === 'fail'; }).length;
+    if (failCount > 0) {
+      blockReasons.push('• 검증 항목 ' + failCount + '건 실패');
+      blockTags.push('validation_fail_' + failCount);
+    }
+
+    // 통합 confirm 모달 — 다중 사유 한 번에 표시
+    if (blockReasons.length > 0) {
+      var msg = '⚠️ Gate 2 — ' + blockReasons.length + '건의 검증 사유가 발견됐습니다:\n\n'
+              + blockReasons.join('\n\n') + '\n\n'
+              + '변리사 책임 하에 의견서 작성을 진행하시겠습니까?';
+      if (!confirm(msg)) {
+        showToast('Gate 2 차단됨 — ' + blockReasons.length + '건 사유', 'error');
+        try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:2,decision:'blocked',decided_by:currentUser.id,revision_note:'multi:'+blockTags.join(',')}); } catch(_){}
+        return;
+      }
+      // 통합 override 기록
+      try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:2,decision:'override',decided_by:currentUser.id,revision_note:'multi_override:'+blockTags.join(',')}); } catch(_){}
+    }
+  }
+
+  // ─── Gate 3 차단: 빈 의견서 강제 차단 (Cycle 3 P1 #6) ───
+  if (gn === 3) {
+    var o = Opinion.state.opinionDraft;
+    var secs = o && o.sections || [];
+    var totalLen = secs.reduce(function(acc, s){ return acc + (s.content||'').length; }, 0);
+    if (!secs.length || totalLen < 100) {
+      showToast('의견서가 비어 있습니다. 다시 생성해 주세요', 'error');
+      // 재생성 버튼 활성화 힌트 (렌더링에 이미 있지만 스크롤로 강조)
+      var gateCard = document.querySelector('.opinion-gate-card');
+      if (gateCard) gateCard.scrollIntoView({behavior:'smooth', block:'start'});
+      try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:3,decision:'blocked',decided_by:currentUser.id,revision_note:'empty_opinion_len_'+totalLen}); } catch(_){}
+      return;
+    }
+  }
+
   if(gn===1){
     // 전략 확정 → 바로 청구항 보정 시작
     next=type==='description_deficiency'?'correction_confirmed':type==='partial_rejection'?'merge_confirmed':'strategy_confirmed';
-    var radioEl = document.querySelector('input[name="opinionStrategy"]:checked');
-    if(radioEl && type==='inventive_step') {
-      var idx = parseInt(radioEl.value,10);
+    var radioEl2 = document.querySelector('input[name="opinionStrategy"]:checked');
+    if(radioEl2 && type==='inventive_step') {
+      var idx = parseInt(radioEl2.value,10);
       var extracted = Opinion.extractAnalysisFields(Opinion.state.analysis);
       Opinion.state.selectedStrategy = extracted.strategies[idx] || null;
       Opinion.state.selectedStrategyIndex = idx;
@@ -1581,7 +2150,7 @@ Opinion.getContext = async function(sections) {
     }
     if(sections.indexOf('ref')>=0) {
       var templateText = Opinion.getActiveTemplate(Opinion.state.current ? Opinion.state.current.rejection_type : 'inventive_step');
-      if(templateText) ctx += templateText + '\n\n';
+      if(templateText) ctx += '[★ 본 사무소 표준 의견서 양식 시작 — 이 양식의 스타일·문체를 반드시 따를 것]\n' + templateText + '\n[★ 본 사무소 표준 의견서 양식 끝]\n\n';
     }
   } catch(e) { console.warn('[Opinion] getContext:', e); }
   return ctx;
@@ -1590,6 +2159,7 @@ Opinion.getContext = async function(sections) {
 // ═══ Draft (분리 실행 — UI 업데이트 후 자동으로 검증 시작) ═══
 Opinion.startDraft=async function(){
   var p=Opinion.state.current;if(!p)return;
+  var run = Opinion._currentRun; // P2 #24
   var t=p.rejection_type;
   var ds=t==='description_deficiency'?'drafting_corrections':t==='partial_rejection'?'drafting_merge':'drafting_claims';
   var dd=t==='description_deficiency'?'corrections_drafted':t==='partial_rejection'?'merge_drafted':'claims_drafted';
@@ -1598,20 +2168,42 @@ Opinion.startDraft=async function(){
 
   try{
     var ctx = await Opinion.getContext(['parsed','analysis']);
+    if (run && run.signal.aborted) return;
     var revNote = Opinion.state.lastRevisionNote || '';
     var revCtx = revNote ? '\n\n[사용자 수정 지시]\n'+revNote+'\n이 지시를 반드시 반영하여 작성하세요.\n' : '';
     Opinion.state.lastRevisionNote = ''; // 사용 후 초기화
 
+    // ─── 거절된 독립항 모두 추출 (Cycle 4 P1 #13) ───
+    // parsed.claims에서 종속·독립 판별 → 거절된 독립항 번호 리스트
+    var parsedData = null;
+    try {
+      var{data:_pd}=await sb.from('opinion_parsed_documents').select('parsed_data').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+      if (_pd) parsedData = _pd.parsed_data;
+    } catch(_) {}
+    var allClaims = (parsedData && parsedData.claims) || [];
+    var rejReasons = (parsedData && parsedData.rejection_reasons) || [];
+    var rejectedClaimNos = [];
+    rejReasons.forEach(function(rr){ (rr.claim_nos||[]).forEach(function(n){ if (rejectedClaimNos.indexOf(n)<0) rejectedClaimNos.push(n); }); });
+    var rejectedIndependentNos = [];
+    allClaims.forEach(function(c){
+      if (!c || c.no == null) return;
+      if (rejectedClaimNos.indexOf(c.no) < 0) return;
+      var refs = Opinion._extractClaimReferences(c.text || '');
+      if (!refs.length) rejectedIndependentNos.push(c.no); // 독립항 = 다른 청구항 인용 없음
+    });
+    if (!rejectedIndependentNos.length) rejectedIndependentNos = [1]; // 폴백
+    var targetClaimsCtx = '\n[보정 대상 청구항] 거절된 독립항 번호: ' + rejectedIndependentNos.join(', ') + '\n각 독립항에 대해 amended_claims 배열에 별도 원소로 보정 결과를 출력하세요.\n';
+
     var prompts = {
-      inventive_step: '[사용자 선택 전략]에 따라 보정 청구항을 생성하고 뒷받침 검증까지 수행해 주세요.'+revCtx+'\n\n'
+      inventive_step: '[사용자 선택 전략]에 따라 보정 청구항을 생성하고 뒷받침 검증까지 수행해 주세요.'+revCtx+targetClaimsCtx+'\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 검토하세요.\n'
         +'- 변리사가 보정안을 제시하면, 심사관이 인용발명 1~3 및 이들 조합으로 진보성을 극복할 수 있는지 재검토합니다.\n'
         +'- 변리사는 기재불비(특히 출원서에 기재된 사항에 의한 명확한 뒷받침) 여부도 검토합니다.\n'
         +'- 토론 결과를 "discussion" 배열에 기록하세요.\n\n'
         +'★ 보정 원칙 (핵심 — 반드시 준수):\n'
-        +'1. 독립 청구항 1항만 보정하세요. 독립항이 보정되면 종속항은 당연히 신규성/진보성이 인정되므로 종속항 보정은 불필요합니다.\n'
-        +'2. 단, 종속항 중 거절이유에서 별도로 지적된 것이 있으면 그것만 추가 보정하세요.\n'
-        +'3. 보정후 청구항 1항은 명확하고 간결하게 기재하되, 모든 인용발명과의 차이가 분명하도록 작성하세요.\n\n'
+        +'1. 거절된 모든 독립 청구항을 보정하세요 (위 [보정 대상 청구항] 참조). 독립항이 보정되면 그 종속항은 당연히 신규성/진보성이 인정됩니다.\n'
+        +'2. 단, 종속항 중 거절이유에서 별도로 지적된 것이 있으면 그것도 추가 보정하세요.\n'
+        +'3. 각 독립항의 보정후 문언은 명확하고 간결하게, 모든 인용발명과의 차이가 분명하도록 작성하세요.\n\n'
         +'★★★ 보정 방법 (절대 규칙 — 단순 병합 금지):\n'
         +'보정은 단순히 기존 종속항의 문언을 독립항에 병합하는 것이 아닙니다.\n'
         +'반드시 아래 3가지 방법 중 하나 이상을 사용하여 보정하세요:\n'
@@ -1622,14 +2214,14 @@ Opinion.startDraft=async function(){
         +'  (3) 구체화(具體化): 명세서에 기재된 구체적 실시예/수치/방법으로 추상적 표현을 구체화하는 것\n'
         +'      예: "데이터를 처리하는 단계" → "명세서 【0058】에 기재된 바와 같이, N-gram 기반으로 텍스트를 토큰화하고 TF-IDF 가중치를 산출하는 단계"\n\n'
         +'⚠️ 보정에 사용하는 모든 구성은 반드시 출원 명세서의 특정 단락에 기재된 것이어야 합니다.\n'
-        +'⚠️ 명세서에 없는 구성을 새로 창작하거나, 인용발명에만 있는 구성을 차용하면 기재불비(§42③) 위반입니다.\n'
+        +'⚠️ 명세서에 없는 구성을 새로 창작하거나, 인용발명에만 있는 구성을 차용하면 기재불비(§42② 4호 청구항 뒷받침 / §42④ 2호 발명의 설명에 의한 뒷받침) 위반입니다.\n'
         +'⚠️ 기재불비 위반은 절대 허용되지 않습니다. 보정안의 모든 문언이 명세서에 의해 뒷받침되는지 반드시 확인하세요.\n\n'
         +'★ 명세서 뒷받침 교차검증 (자동 수행 — 기재불비 방지):\n'
         +'1. 보정에 사용하는 모든 용어·구성은 반드시 출원 명세서에 기재된 것만 사용하세요.\n'
         +'2. 인용발명에만 있는 용어(인용발명 고유 표현)는 절대 보정에 사용하지 마세요.\n'
         +'3. 각 보정 문언에 대해 근거가 되는 명세서 단락번호(【0001】형식)를 spec_basis에 반드시 명시하세요.\n'
         +'4. 여러 구성요소를 조합하는 경우, 해당 조합이 명세서의 동일 단락 또는 관련 단락에 기재되어 있는지 확인하세요.\n'
-        +'5. 명세서에 기재되지 않은 구성을 보정에 사용하면 기재불비(§42③) 위반이므로 절대 금지합니다.\n\n'
+        +'5. 명세서에 기재되지 않은 구성을 보정에 사용하면 기재불비(§42② 4호 / §42④ 2호 — 청구항 뒷받침 결여) 위반이므로 절대 금지합니다.\n\n'
         +'★ 인용발명 극복 검토 (청구항 1항 보정 후):\n'
         +'1. 보정후 청구항 1항이 각 인용발명(전체)과 어떤 차이가 있는지 per_cited_ref_diff에 인용문헌별로 기재하세요.\n'
         +'2. 인용발명들의 결합에 의해서도 도달할 수 없는 구성을 포함하도록 하세요.\n'
@@ -1640,7 +2232,7 @@ Opinion.startDraft=async function(){
         +'  2. context_match(문맥일치) — 해당 맥락에서 명세서와 동일하게 사용되는지\n'
         +'  3. combination_check(결합체크) — 조합된 구성이 명세서에서 함께 기재되어 있는지\n'
         +'  4. cited_ref_origin(인용발명 유래) — 인용발명에서만 나오는 용어를 차용하지 않았는지\n'
-        +'  5. spec_support(명세서 뒷받침) — 보정된 각 구성이 명세서의 구체적 단락에 의해 명확히 뒷받침되는지 (기재불비 §42③ 위반 여부 최종 확인)\n\n'
+        +'  5. spec_support(명세서 뒷받침) — 보정된 각 구성이 명세서의 구체적 단락에 의해 명확히 뒷받침되는지 (기재불비 §42② 4호 / §42④ 2호 위반 여부 최종 확인)\n\n'
         +'JSON: {"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"amended_claims":[{"claim_no":1,"original":"원본 청구항 전문","amended":"보정후 청구항 전문","amendments_summary":"보정 사항 요약","amendment_methods":[{"method":"한정|부가|구체화","target":"보정 대상 구성","spec_paragraph":"【0035】","description":"명세서 기재에 근거한 구체적 보정 내용"}],"spec_basis":["【0029】","【0035】"],"per_cited_ref_diff":[{"ref_no":1,"ref_title":"인용문헌1 제목","difference":"이 인용발명과의 구체적 차이점"}]}],\n"unchanged_claims":[2,3,4],"strategy_name":"적용된 전략명",\n"validation":{"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"보정된 문언","checks":[{"check_type":"term_existence|context_match|combination_check|cited_ref_origin|spec_support","result":"pass|warn|fail","detail":"구체적 근거"}],"overall_result":"pass|warn|fail"}]}}',
       description_deficiency: '위 분석 결과의 각 지적사항을 반영한 수정 청구항을 생성하고 검증해 주세요.'+revCtx+'\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 검토하세요.\n'
@@ -1662,6 +2254,65 @@ Opinion.startDraft=async function(){
       Opinion.SYS_PROMPT+'\n\n'+ctx+prompts[t],
       schemaHints[t] || '{}'
     );
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at startDraft');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
+
+    // ─── spec_basis 명세서 원문 cross-check (P0 #17 사이클 2) ───
+    // 보정/수정/병합 청구항의 spec_basis 단락번호가 명세서에 실제 존재하는지 검증
+    var specText = await Opinion.extractSpecificationText(p.id);
+    var claimsToCheck = dr.amended_claims || dr.corrected_claims || (dr.merged_claim ? [dr.merged_claim] : []);
+    var specCheck = Opinion._validateSpecBasis(claimsToCheck, specText);
+    dr._spec_basis_check = specCheck;
+    if (specCheck.ok === false) {
+      console.warn('[Opinion] spec_basis 환각 감지:', specCheck.missing);
+      showToast('⚠️ 보정 근거 단락이 명세서에 없음 — 변리사 검토 필요', 'error');
+    } else if (specCheck.ok === null) {
+      console.warn('[Opinion] spec_basis 검증 skip:', specCheck.reason);
+    }
+
+    // ─── 청구항 보존 검증 (Cycle 4 P1 #21) ───
+    var preservCheck = Opinion._validateClaimPreservation(allClaims, dr, rejectedClaimNos);
+    dr._claim_preservation_check = preservCheck;
+    if (preservCheck.ok === false) {
+      console.warn('[Opinion] 청구항 보존 위반:', preservCheck.issues);
+      showToast('⚠️ 미거절 청구항 변경/누락 감지 — 변리사 확인 필요', 'error');
+    }
+
+    // ─── 거절된 모든 독립항 보정 누락 검증 (Cycle 4 P1 #13) ───
+    var amendedArr = dr.amended_claims || dr.corrected_claims || (dr.merged_claim ? [dr.merged_claim] : []);
+    if (t === 'inventive_step' && rejectedIndependentNos.length > 1) {
+      var amendedNos = amendedArr.map(function(ac){ return ac.claim_no; });
+      var missingTargets = rejectedIndependentNos.filter(function(n){ return amendedNos.indexOf(n) < 0; });
+      if (missingTargets.length) {
+        showToast('⚠️ 보정 청구항 ' + rejectedIndependentNos.length + '건 중 ' + amendedArr.length + '건만 생성됨. 변리사 수동 확인 필요.', 'error');
+        dr._missing_amendment_targets = missingTargets;
+      }
+    }
+
+    // ─── 청구항 인용관계 검증 (Cycle 4 P1 #22) ───
+    // 보정 후 최종 청구항 집합 = (amended 또는 corrected/merged) ∪ (unchanged_claims에 해당하는 원문)
+    var finalClaims = [];
+    amendedArr.forEach(function(ac){
+      finalClaims.push({ no: ac.claim_no, text: ac.amended || ac.corrected || ac.text || '' });
+    });
+    var unchangedNosList = Array.isArray(dr.unchanged_claims) ? dr.unchanged_claims
+      : (Array.isArray(dr.remaining_claims) ? dr.remaining_claims.map(function(rc){ return rc.new_no || rc.old_no; }) : []);
+    unchangedNosList.forEach(function(n){
+      var oc = allClaims.filter(function(x){ return x.no === n; })[0];
+      if (oc) finalClaims.push({ no: n, text: oc.text });
+    });
+    var refCheck = Opinion._validateClaimReferences(finalClaims);
+    dr._claim_reference_check = refCheck;
+    if (refCheck.ok === false) {
+      console.warn('[Opinion] 청구항 인용관계 오류:', refCheck.issues);
+      var firstIssue = refCheck.issues[0];
+      showToast('⚠️ 청구항 ' + firstIssue.claim_no + '의 인용관계 오류 (' + firstIssue.problem + ')', 'error');
+    }
+
     // 검증 결과가 draft 응답에 포함된 경우 자동 추출
     if (dr.validation) {
       Opinion.state.validation = dr.validation;
@@ -1697,11 +2348,31 @@ Opinion.startDraft=async function(){
 // ═══ Validate (파싱 원문 + 분석 + 초안 컨텍스트 전달) ═══
 Opinion.startValidation=async function(){
   var p=Opinion.state.current;if(!p)return;
+  var run = Opinion._currentRun; // P2 #24
   var t=p.rejection_type;
   var vs=t==='description_deficiency'?'correction_validated':t==='partial_rejection'?'merge_validated':'validated';
   await Opinion.setStatus(p.id,'validating');
   try{
     var ctx = await Opinion.getContext(['parsed','analysis','draft']);
+    if (run && run.signal.aborted) return;
+
+    // ─── 명세서 원문을 ctx에 직접 주입 (P1 #5 사이클 2) ───
+    // getContext의 raw_text 8K로는 명세서 보장 안 됨 → 별도 추출
+    var specText = await Opinion.extractSpecificationText(p.id);
+    if (run && run.signal.aborted) return;
+    var specWarn = false;
+    if (specText && specText.length >= 100) {
+      // 30K 초과 시 head + tail 분할
+      var specBlock = specText;
+      if (specText.length > 30000) {
+        specBlock = specText.slice(0, 20000) + '\n... [중간 생략 ' + (specText.length - 30000) + '자] ...\n' + specText.slice(-10000);
+      }
+      ctx += '\n[출원 명세서 원문 — 보정 검증 기준]\n' + specBlock + '\n\n';
+    } else {
+      specWarn = true;
+      ctx += '\n[⚠️ 출원 명세서 원문 미제공]\n명세서 파일이 업로드되지 않았거나 텍스트 추출에 실패했다. spec_basis 단락 검증 결과는 LLM이 명세서를 직접 보지 않은 상태에서 생성된 것이므로 신뢰성이 낮다. 변리사 수동 확인 필수.\n\n';
+    }
+
     var prompts = {
       inventive_step: '위 보정 청구항 초안을 명세서 원문과 대조하여 4중 뒷받침 검증을 수행해 주세요.\n\n각 보정된 구성요소에 대해:\n1. term_existence: 보정 문언의 용어가 명세서에 존재하는지\n2. context_match: 해당 맥락에서 사용되는지\n3. combination_check: 조합이 명세서 단일 단락에 기재되는지\n4. cited_ref_origin: 인용발명 유래 용어가 아닌지\n\nJSON: {"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"보정된 문언","checks":[{"check_type":"term_existence","result":"pass|warn|fail","detail":"구체적 근거"}],"overall_result":"pass|warn|fail"}]}',
       description_deficiency: '위 수정 청구항이 보정 범위(최초 명세서 범위) 내에 있는지 검증해 주세요.\n\nJSON: {"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"수정 사항","checks":[{"check_type":"within_scope|resolved","result":"pass|warn|fail","detail":"..."}],"overall_result":"pass|warn|fail"}]}',
@@ -1711,6 +2382,16 @@ Opinion.startValidation=async function(){
       Opinion.SYS_PROMPT+'\n\n'+ctx+prompts[t],
       '{"summary":{"total":4,"pass":2,"warn":1,"fail":1},"elements":[{"element_no":1,"element_text":"...","checks":[{"check_type":"term_existence","result":"pass","detail":"..."}],"overall_result":"pass"}]}'
     );
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at startValidation');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
+    if (specWarn) {
+      vr._spec_unverified = true; // 사이클 2: 명세서 미제공 검증 경고 플래그
+      showToast('명세서 원문 미제공 — 검증 결과 신뢰성 낮음. 변리사 수동 확인 필수', 'info');
+    }
     await sb.from('opinion_validation_results').insert({project_id:p.id,validation_type:t,result_data:vr,summary:vr.summary||{}});
     Opinion.state.validation=vr;
     await Opinion.setStatus(p.id,vs);
@@ -1748,15 +2429,38 @@ Opinion.renderDraft=function(L,R,status){
     discussionHtml = '<div style="margin-bottom:12px">'+Opinion.renderDiscussion(draftData.discussion)+'</div>';
   }
 
+  // ─── spec_basis 검증 실패 / 명세서 미제공 빨간 배너 (P0 #17 사이클 2) ───
+  var specBasisHtml = '';
+  var sbc = draftData._spec_basis_check;
+  if (sbc && sbc.ok === false) {
+    var missingDetail = (sbc.missing || []).map(function(m){
+      return '<li>청구항 ' + m.claim_no + ': ' + escapeHtml((m.missing_paragraphs || []).join(', ')) + '</li>';
+    }).join('');
+    specBasisHtml = '<div style="margin-top:12px;padding:12px;background:var(--color-error-light,#fef2f2);border-radius:8px;border-left:3px solid var(--color-error,#ef4444)">'
+      +'<div style="font-weight:600;font-size:13px;color:var(--color-error,#ef4444);margin-bottom:6px">⚠️ 보정 근거 단락이 명세서에 없음 — §47② 신규사항 추가 위험</div>'
+      +'<ul style="font-size:12px;color:var(--color-error,#ef4444);line-height:1.7;margin:6px 0 6px 18px">'+missingDetail+'</ul>'
+      +'<p style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">변리사가 명세서 원문과 직접 대조 확인 후 Gate 2 진행 시 우회 가능합니다.</p>'
+      +'</div>';
+  } else if (sbc && sbc.ok === null) {
+    specBasisHtml = '<div style="margin-top:12px;padding:10px;background:var(--color-warning-light,#fef3c7);border-radius:8px;border-left:3px solid var(--color-warning,#f59e0b)">'
+      +'<div style="font-size:12px;color:#92400e;font-weight:600">📄 명세서 원문 미제공 — spec_basis 검증 skip</div>'
+      +'<p style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">명세서 파일을 업로드하시면 보정 근거 단락이 자동 검증됩니다.</p>'
+      +'</div>';
+  }
+
   var valHtml = '';
   if (ready && sm.total) {
     valHtml = '<div style="margin-top:12px;margin-bottom:12px"><div style="font-weight:600;font-size:13px;margin-bottom:8px"><span class="tossface">🔬</span> 뒷받침 검증</div>'
-      +'<div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ 통과 '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ 주의 '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ 실패 '+(sm.fail||0)+'</div></div></div>';
+      +'<div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ 통과 '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ 주의 '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ 실패 '+(sm.fail||0)+'</div></div>';
+    if (v._spec_unverified) {
+      valHtml += '<div style="margin-top:6px;font-size:11px;color:#92400e;background:var(--color-warning-light,#fef3c7);padding:6px 8px;border-radius:6px">⚠️ 명세서 원문 미제공 — LLM이 명세서 없이 검증한 결과. 변리사 수동 확인 필수.</div>';
+    }
+    valHtml += '</div>';
   }
 
   L.innerHTML=nav+'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">📝</span> 청구항 보정 + 검증</div>'
     +'<p style="font-size:13px;color:var(--color-text-secondary)">심사관과 변리사가 보정안을 검토하고 뒷받침 검증까지 완료했습니다.</p>'
-    +discussionHtml+valHtml
+    +specBasisHtml+discussionHtml+valHtml
     +(ready?'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(2)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate2Approve" onclick="Opinion.approveGate(2)"><span class="tossface">✅</span> 확정</button></div>':'')
     +'</div>';
 
@@ -1790,11 +2494,13 @@ Opinion.TEMPLATE_GUARD = '\n\n⚠️ 중요 규칙: [참고 의견서 양식]은
 
 Opinion.startOpinionDraft=async function(){
   var p=Opinion.state.current;if(!p)return;
+  var run = Opinion._currentRun; // P2 #24
   await Opinion.setStatus(p.id,'drafting_opinion');
   Opinion.renderDetail();
   try{
     var t=p.rejection_type;
     var ctx = await Opinion.getContext(['parsed','analysis','draft','validation','ref']);
+    if (run && run.signal.aborted) return;
     var revNote = Opinion.state.lastRevisionNote || '';
     var revCtx = revNote ? '\n\n[사용자 수정 지시]\n'+revNote+'\n이 지시를 반드시 반영하여 의견서를 작성하세요.\n' : '';
     Opinion.state.lastRevisionNote = '';
@@ -1817,16 +2523,39 @@ Opinion.startOpinionDraft=async function(){
         +'### (1) 본원발명의 기술적 요지\n(본원 발명의 핵심 기술 요약)\n\n'
         +'### (2) 인용발명들의 기술적 요지\n(인용발명별 핵심 기술 요약)\n\n'
         +'### (3) 본원발명과 인용발명의 대비\n(구성요소별 구체적 차이점 논증. 기술적 예시를 들어 구체적으로. 가. 구성요소 ❶... 나. 구성요소 ❷...)\n\n'
-        +'### (4) 결합의 용이성에 대한 반박\n(① 결합 동기 부재 ② 기술 분야의 상이 ③ 현저한 효과 — 각각에 구체적 기술적 근거 제시)\n\n'
+        +'### (4) 결합의 용이성에 대한 반박\n'
+        +'(아래 4가지 논거 중 사안에 적용 가능한 것을 모두 채택. 가능하면 2개 이상 결합)\n'
+        +'  ① 결합의 동기·시사·암시 부재 — 인용발명들에 본원의 결합 방향을 시사하는 기재가 있는지 검토. 없으면 명시.\n'
+        +'  ② 사후적 고찰(hindsight)의 위험성 — 심사관의 결합 판단이 본원 발명의 구성을 알고 인용발명들을 재해석한 결과론적 판단인지 검토.\n'
+        +'     대법원 판례: 통상의 기술자가 본원의 출원시점으로 돌아가서도 동일한 결합을 시도할 동기가 있는지 기준으로 판단해야 함.\n'
+        +'     ★ 인용발명 2건 이상의 결합 거절 케이스에서는 반드시 이 논거를 포함하라. 단, 단독 인용 케이스는 생략 가능.\n'
+        +'  ③ 현저한 효과 — 본원이 인용발명들로부터 예측 불가능한 정량적·정성적 효과를 갖는지 명세서 단락 인용으로 도출.\n'
+        +'  ④ 부정적 시사(teach away) — 인용발명이 본원의 결합 방향과 반대를 시사하는지 검토. 적용 가능하면 강력한 논거.\n\n'
         +'### (5) 소결\n\n'
         +'## 4. 결론\n("이상과 같이 본원발명은... 특허등록되어야 합니다.")',
 
-      description_deficiency: '위 자료를 기반으로 기재불비 위반(§42③④) 의견서를 작성해 주세요.\n\n'
+      description_deficiency: '위 자료를 기반으로 기재불비 위반(§42② / §42④ — 통지서의 구체 조항에 따름) 의견서를 작성해 주세요.\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 의견서를 작성하세요.\n'
-        +'의견서 양식 템플릿의 형식을 따르되, 아래 섹션 구분자(## 제목)를 사용하여 작성. JSON이 아닌 일반 텍스트.\n'
+        +'아래 섹션 구분자(## 제목)를 사용하여 작성. JSON이 아닌 일반 텍스트.\n'
         +'보정내용에는 반드시 명세서 문단 번호(【0001】형식)를 표기하세요.\n\n'
-        +'## 서두\n\n## 1. 보정내용\n(수정 전·후 대비, 문단 번호 표기)\n\n'
-        +'## 2. 보정의 적법성\n\n## 3. 구체적 의견내용\n(지적사항별 수정 내용 + 거절이유 해소 설명)\n\n## 4. 결론',
+        +'★★★ §42 분리 섹션 규칙 (분석 결과의 deficiency_type 별로 분리):\n'
+        +'아래 1)~5) 중 분석 결과(items[].deficiency_type)에 등장한 키만 해당 섹션을 생성하라.\n'
+        +'  - clarity            → "## 5. 청구항 명확성에 대하여 (§42② 1호)"\n'
+        +'  - support            → "## 6. 발명의 설명에 의한 뒷받침에 대하여 (§42② 4호)"\n'
+        +'  - description_lack   → "## 7. 발명의 설명 기재불비에 대하여 (§42④ 1호)"\n'
+        +'  - description_support → "## 8. 청구항이 발명의 설명에 의해 뒷받침되지 않는 점에 대하여 (§42④ 2호)"\n'
+        +'  - inconsistent       → "## 9. 청구항 기재의 일관성에 대하여 (§42②/④ 일반)"\n'
+        +'★ 분석 결과에 없는 키의 섹션은 절대 생성하지 마라. 빈 섹션을 만들면 의견서가 부풀려진다.\n'
+        +'★ 각 분리 섹션 내부 구조: (1) 심사관 지적 요지 1~2줄 → (2) 변리사 의견(보정 내용 또는 반박) → (3) 결어. 두 섹션이 같은 보정으로 해소되면 cross-reference 사용.\n'
+        +'★ description_lack(§42④ 1호) 섹션에는 "본 사안은 명세서 보정이 필요한 사안으로, 본 의견서와 함께 명세서 보정서를 별도 제출합니다" 안내를 반드시 포함.\n\n'
+        +'[기본 구조]\n'
+        +'## 서두\n(통지서 수령 확인)\n\n'
+        +'## 1. 보정내용\n(수정 전·후 대비. 각 수정에 명세서 단락번호 표기)\n\n'
+        +'## 2. 보정의 적법성\n(최초 명세서 범위 내 / 신규사항 없음)\n\n'
+        +'## 3. 구체적 의견내용\n(아래 §42 분리 섹션의 도입부 1~2줄. 상세 논변은 분리 섹션에 둠)\n\n'
+        +'## 4. 결론\n("이상과 같이 거절이유는 모두 해소되었으므로, 특허등록되어야 합니다.")\n\n'
+        +'[§42 분리 섹션 — 분석 결과에 등장한 키만 생성]\n'
+        +'(여기에 위 5종 키 중 해당하는 것만 ## 헤더로 추가. 헤더 번호는 5번부터 시작.)',
 
       partial_rejection: '위 자료를 기반으로 일부 청구항 거절 의견서를 작성해 주세요.\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 의견서를 작성하세요.\n'
@@ -1837,13 +2566,39 @@ Opinion.startOpinionDraft=async function(){
         +'## 3. 구체적 의견내용\n(병합된 구성의 차이점 논증 — 기술적 예시 포함)\n\n## 4. 결론'
     };
 
-    var prompt = Opinion.SYS_PROMPT + Opinion.TEMPLATE_GUARD + '\n\n' + ctx + revCtx + tpl[t];
+    // ─── §3.2 스타일 지시 블록 (톤앤매너 강화) ───
+    var activeTemplObj = Opinion.state.templates && Opinion.state.templates[t];
+    var styleGuide = '';
+    if (activeTemplObj && activeTemplObj.text) {
+      styleGuide = '\n\n★★★ 문체·톤 준수 지시 (최우선 적용) ★★★\n'
+        + '위 컨텍스트의 [★ 본 사무소 표준 의견서 양식]은 본 사무소의 실제 의견서 스타일을 학습하기 위한 자료다.\n'
+        + '의견서를 작성하기 전에 아래 6가지 스타일 요소를 반드시 분석하고 동일하게 적용하라:\n'
+        + '  ① 호칭: 출원인·귀청·심사관을 부르는 방식 → 양식과 동일하게 사용\n'
+        + '  ② 명칭: 발명·특허·출원을 지칭하는 방식 (본원발명/이 건 출원/본원) → 동일 용어 사용\n'
+        + '  ③ 종결어미: 합니다체·습니다체·드립니다체 혼용 여부 → 동일 체계 유지\n'
+        + '  ④ 강조어구: 특정 단어나 구절의 반복 패턴 (강조하여 주장합니다, 명백히 등) → 재현\n'
+        + '  ⑤ 단락 구조: 번호·기호 체계 (가. 나. / ① ② / (1) (2) / 가목·나목 등) → 동일 체계\n'
+        + '  ⑥ 결어: 섹션 끝맺음 표현 ("이상과 같이", "따라서", "이에" 등) → 재현\n'
+        + '⚠️ 차단 규칙: [본 사무소 표준 의견서 양식]에 없는 문체 표현(외래어 투, 영어 혼용, 딱딱한 번역체)은 자제하라.\n'
+        + '⚠️ 단, 이 사건의 구체적 기술 내용·청구항 번호·특정 표현은 양식에서 절대 차용하지 마라. 현재 사건 내용으로만 채워야 한다.\n';
+    }
+    var prompt = Opinion.SYS_PROMPT + Opinion.TEMPLATE_GUARD + '\n\n' + ctx + revCtx + styleGuide + tpl[t];
     var r = await App.callClaude(prompt);
     Opinion.usage.calls++;  // callForJSON이 아닌 직접 호출이므로 수동 카운트
     Opinion.updateUsageDisplay();
 
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at startOpinionDraft');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
+
     // ★ 섹션 마커 기반 파싱 (JSON 불필요) ★
     var od = Opinion.parseOpinionSections(r.text);
+
+    // ─── §3.4 스타일 적용 가시성 플래그 ───
+    od._style_applied = !!(activeTemplObj && activeTemplObj.text);
 
     // 양식 내용 오염 검증
     var fullText = od.sections.map(function(s){return s.content;}).join('\n');
@@ -1851,6 +2606,16 @@ Opinion.startOpinionDraft=async function(){
     if (!check.clean) {
       console.warn('[Opinion] Template contamination:', check.warnings.length, 'items');
       od._contamination_warnings = check.warnings;
+    }
+
+    // ─── 사후적 고찰(hindsight) 키워드 검증 (Cycle 4 P1 #14) ───
+    // inventive_step에서 인용발명 2건 이상 결합 거절일 때 사후적 고찰 논거가 등장했는지 코드 레벨 체크
+    if (t === 'inventive_step') {
+      var hindsightKw = /사후적|hindsight|결합의\s*동기|teach\s*away|부정적\s*시사/i;
+      if (!hindsightKw.test(fullText)) {
+        console.warn('[Opinion.opinion] 사후적 고찰 논거 미검출 — prompt 강도 검토 필요');
+        od._hindsight_missing = true;
+      }
     }
 
     await sb.from('opinion_opinion_drafts').insert({project_id:p.id,opinion_type:t,content:od,status:'draft'});
@@ -1935,7 +2700,21 @@ Opinion.renderOpinion=function(L,R,status){
       +'<p style="font-size:11px;color:var(--color-text-secondary);margin-top:6px">의견서 내용이 현재 사건이 아닌 참고 양식의 사건 정보를 포함할 수 있습니다. 해당 부분을 확인해 주세요.</p>'
       +'</div>';
   }
+
+  // ─── §3.4 스타일 적용 가시성 배지 ───
+  var styleBadge = '';
+  if (o._style_applied === true) {
+    if (contamWarnings.length > 0) {
+      styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#fff8e1;border-radius:12px;font-size:11px;font-weight:600;color:#f57f17;margin-top:8px;margin-bottom:2px">⚠️ 부분 적용 — 본 사무소 스타일 (오염 의심 확인 필요)</div>';
+    } else {
+      styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#e8f5e9;border-radius:12px;font-size:11px;font-weight:600;color:#2e7d32;margin-top:8px;margin-bottom:2px">🎨 본 사무소 스타일 적용됨</div>';
+    }
+  } else if (o._style_applied === false) {
+    styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--color-bg-secondary);border-radius:12px;font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-top:8px;margin-bottom:2px">ℹ️ 기본 스타일</div>';
+  }
+
   L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">📝</span> 의견서 작성 완료</div><p style="font-size:13px;color:var(--color-text-secondary)">의견서를 검토하고 승인하면 최종 출력물이 생성됩니다.</p>'
+    +styleBadge
     +contamHtml
     +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(3)"><span class="tf">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate3Approve" onclick="Opinion.approveGate(3)"><span class="tf">✅</span> 승인</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">의견서 작성 중...</div></div>');
   var secs=o.sections||[];
@@ -1968,10 +2747,13 @@ Opinion.renderOutput=function(L,R,status){
   var nav=Opinion.renderNavBar('output');
 
   // 왼쪽: 출력물 다운로드
+  var amendDisabled = !done;
+  var amendTip = done ? '' : ' title="Gate 3 승인 후 활성화"';
   L.innerHTML=nav+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📥</span> 최종 확인 + 출력</div></div>'
     +'<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">의견서 대응이 완료되었습니다. 다운로드하여 특허로에 제출하세요.</p>'
     +'<div style="display:flex;flex-direction:column;gap:8px">'
-    +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadDocx(\'opinion\')"'+(done?'':' disabled')+'><span class="tossface">📝</span> 의견서 (Word)</button>'
+    +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadOpinionDocx()"'+(done?'':' disabled')+'><span class="tossface">📝</span> 의견서 (Word)</button>'
+    +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadAmendmentDocx()"'+(amendDisabled?' disabled':'')+amendTip+'><span class="tossface">📄</span> 보정서 (Word, 별지 제13호)</button>'
     +'<button class="btn btn-outline btn-full" onclick="Opinion.downloadDocx(\'all\')"'+(done?'':' disabled')+'><span class="tossface">📋</span> 전체 (의견서+검증보고서)</button>'
     +'<button class="btn btn-ghost btn-full" onclick="Opinion.copyOpinionText()"'+(done?'':' disabled')+'><span class="tossface">📋</span> 텍스트 복사</button>'
     +'</div></div>';
@@ -2024,6 +2806,125 @@ Opinion.copyOpinionText = function() {
   navigator.clipboard.writeText(text).then(function(){showToast('의견서 텍스트가 복사되었습니다');}).catch(function(){
     var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);showToast('복사됨');
   });
+};
+
+// 의견서 단독 다운로드 (Cycle 4 P0 #15 — 라우터)
+Opinion.downloadOpinionDocx = function() { return Opinion.downloadDocx('opinion'); };
+
+// ─── 보정서 다운로드 (KIPO 별지 제13호 양식, Cycle 4 P0 #15) ───
+Opinion.downloadAmendmentDocx = async function() {
+  var p = Opinion.state.current; if (!p) return;
+  // Gate 3 승인 후에만 가능
+  var status = (p.status || '').toLowerCase();
+  if (status !== 'completed' && status !== 'approved') {
+    showToast('Gate 3 승인 후 다운로드 가능합니다', 'error');
+    return;
+  }
+  // draftResult / parsed 확보
+  var dr = Opinion.state.draftResult;
+  if (!dr) {
+    try {
+      var{data:d}=await sb.from('opinion_draft_claims').select('draft_data').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+      if (d && d.draft_data) { dr = d.draft_data; Opinion.state.draftResult = dr; }
+    } catch(_) {}
+  }
+  if (!dr) { showToast('보정 청구항 데이터가 없습니다', 'error'); return; }
+
+  var parsedData = null;
+  try {
+    var{data:pd}=await sb.from('opinion_parsed_documents').select('parsed_data').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+    if (pd) parsedData = pd.parsed_data;
+  } catch(_) {}
+
+  var html = Opinion._buildAmendmentDocxHtml(p, dr, parsedData || {});
+  var fullHtml = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">'
+    +'<head><meta charset="utf-8"><style>body{font-family:"맑은 고딕",sans-serif;font-size:11pt;line-height:1.7}h1{font-size:18pt;text-align:center}h2{font-size:13pt;margin-top:16pt;border-bottom:1px solid #999;padding-bottom:4pt}h3{font-size:12pt;margin-top:10pt}.amend-claim{border:1px solid #ccc;padding:10pt;margin:8pt 0;background:#fafafa}.amend-old{color:#666;text-decoration:line-through}.amend-new{font-weight:600;color:#000}.amend-reason{font-size:10pt;color:#444;margin-top:6pt}</style></head>'
+    +'<body>'+html+'</body></html>';
+  var blob = new Blob(['﻿'+fullHtml], {type:'application/msword'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  var datestr = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = '보정서_' + (p.application_no||p.title||'output') + '_' + datestr + '.doc';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast('보정서 다운로드 완료');
+};
+
+// 보정서 HTML 본문 빌더 (KIPO 별지 제13호 구조)
+Opinion._buildAmendmentDocxHtml = function(project, draftResult, parsedData) {
+  var t = project.rejection_type;
+  var appNo = parsedData.application_no || project.application_no || '';
+  var applicant = parsedData.applicant || '';
+  var inventionTitle = parsedData.invention_title || project.title || '';
+
+  var amendedArr = draftResult.amended_claims || draftResult.corrected_claims || (draftResult.merged_claim ? [draftResult.merged_claim] : []);
+  var origClaims = (parsedData.claims || []);
+  var origByNo = {}; origClaims.forEach(function(c){ origByNo[c.no] = c; });
+
+  var html = '';
+  html += '<h1>보 정 서</h1>';
+  html += '<h2>【사건의 표시】</h2>';
+  html += '<p>출원번호: ' + escapeHtml(appNo) + '</p>';
+  if (applicant) html += '<p>출원인: ' + escapeHtml(applicant) + '</p>';
+  if (inventionTitle) html += '<p>발명의 명칭: ' + escapeHtml(inventionTitle) + '</p>';
+
+  html += '<h2>【보정의 대상】</h2>';
+  html += '<p>□ 명세서 &nbsp;&nbsp; □ 도면 &nbsp;&nbsp; ☑ 청구범위</p>';
+
+  html += '<h2>【보정의 내용】</h2>';
+
+  // 가. 보정 전
+  html += '<h3>가. 보정 전</h3>';
+  if (!amendedArr.length) {
+    html += '<p>(보정 대상 청구항 없음)</p>';
+  } else {
+    amendedArr.forEach(function(ac){
+      var origText = ac.original || (origByNo[ac.claim_no] && origByNo[ac.claim_no].text) || '';
+      html += '<div class="amend-claim"><div><b>【청구항 ' + escapeHtml(String(ac.claim_no)) + '】</b></div>'
+            + '<div class="amend-old">' + escapeHtml(origText).replace(/\n/g,'<br>') + '</div></div>';
+    });
+  }
+
+  // 나. 보정 후
+  html += '<h3>나. 보정 후</h3>';
+  amendedArr.forEach(function(ac){
+    var newText = ac.amended || ac.corrected || ac.text || '';
+    html += '<div class="amend-claim"><div><b>【청구항 ' + escapeHtml(String(ac.claim_no)) + '】</b></div>'
+          + '<div class="amend-new">' + escapeHtml(newText).replace(/\n/g,'<br>') + '</div></div>';
+  });
+  // partial_rejection의 deleted_claims도 표시
+  if (Array.isArray(draftResult.deleted_claims) && draftResult.deleted_claims.length) {
+    html += '<p style="color:#900"><b>삭제된 청구항:</b> ' + draftResult.deleted_claims.map(function(n){ return '【청구항 '+n+'】'; }).join(', ') + '</p>';
+  }
+
+  // 다. 보정 사유
+  html += '<h3>다. 보정 사유</h3>';
+  amendedArr.forEach(function(ac){
+    var basis = ac.spec_basis;
+    var basisStr = '';
+    if (Array.isArray(basis)) basisStr = basis.join(', ');
+    else if (typeof basis === 'string') basisStr = basis;
+    var summary = ac.amendments_summary || (ac.changes ? ac.changes.map(function(ch){ return ch.detail||ch.type; }).join('; ') : '');
+    html += '<div class="amend-reason"><b>청구항 ' + escapeHtml(String(ac.claim_no)) + ':</b> '
+          + escapeHtml(summary || '명세서 기재 범위 내에서 보정.')
+          + (basisStr ? ' <i>(근거 단락: ' + escapeHtml(basisStr) + ')</i>' : '')
+          + '</div>';
+  });
+
+  // §47② 신규사항 추가 금지 적시
+  html += '<p style="margin-top:12pt;font-size:10pt;color:#444">※ 본 보정은 특허법 제47조 제2항에 따라 최초 명세서 또는 도면에 기재된 사항의 범위 내에서 이루어졌습니다.</p>';
+
+  // description_lack 케이스 안내
+  if (t === 'description_deficiency') {
+    var items = (Opinion.state.analysis && (Opinion.state.analysis.items || [])) || [];
+    var hasDescLack = items.some(function(it){ return it && it.deficiency_type === 'description_lack'; });
+    if (hasDescLack) {
+      html += '<p style="margin-top:8pt;font-size:10pt;color:#900;background:#fff8e1;padding:8pt;border-left:3px solid #f59e0b">'
+            + '※ 본 보정서는 청구범위 보정만 포함합니다. 명세서 보정은 별첨 명세서 보정서를 참조하여 변리사가 수동 작성합니다.'
+            + '</p>';
+    }
+  }
+
+  return html;
 };
 
 // Word 다운로드 (HTML→Word 방식)
