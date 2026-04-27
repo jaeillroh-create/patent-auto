@@ -112,7 +112,7 @@ Opinion.DEFAULT_TEMPLATES = {
 };
 
 // ═══ State ═══
-Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null };
+Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null, _secondary_warned:false };
 
 // ═══ 파이프라인 레벨 취소 토큰 (P2 #24) ═══
 Opinion._currentRun = null; // AbortController instance
@@ -178,6 +178,7 @@ Opinion.resetState = function(opts) {
   Opinion.state.selectedStrategy  = null;
   Opinion.state.selectedStrategyIndex = null;
   Opinion.state._typeNeedsManual  = false; // Cycle 1 플래그
+  Opinion.state._secondary_warned = false; // Cycle 3 혼합 거절 확인 플래그
   Opinion.state.parseFailDetail   = null;
   Opinion.state.lastRevisionNote  = '';
   Opinion.state.gateDecisions     = {};
@@ -1300,7 +1301,12 @@ Opinion.determineType = async function(){
 
     // 정상 경로: DB 저장 + status 변경 + 다음 단계
     await sb.from('opinion_projects').update({rejection_type:tr.primary_type, secondary_rejection_type:tr.secondary_type||null, status:'type_determined'}).eq('id',p.id);
-    p.rejection_type = tr.primary_type; p.status = 'type_determined';
+    p.rejection_type = tr.primary_type; p.secondary_rejection_type = tr.secondary_type||null; p.status = 'type_determined';
+    // 혼합 거절 감지 (Cycle 3 P0 #1): secondary가 TYPES에 등록된 유형이면 로그 + 경고 플래그
+    if (tr.secondary_type && Opinion.TYPES[tr.secondary_type] && tr.secondary_type !== 'unsupported_type') {
+      Opinion.state._secondary_warned = false; // 아직 안내 미확인
+      console.log('[Opinion.type] mixed rejection detected: primary='+tr.primary_type+', secondary='+tr.secondary_type);
+    }
     Opinion.state.typeResult = tr; Opinion.renderDetail(); showToast('유형 판별 완료');
   }catch(e){showToast('유형 판별 실패: '+e.message,'error');}
   finally{setButtonLoading('btnOpinionType',false);}
@@ -1335,7 +1341,41 @@ Opinion.renderTypeView = function(L,R){
   var t = Opinion.TYPES[p.rejection_type] || Opinion.TYPES.inventive_step;
   var conf = Math.round((tr.confidence||0.5)*100);
 
-  L.innerHTML=Opinion.renderNavBar('type')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">🔍</span> 유형 판별 결과</div></div>'
+  // ── 혼합 거절 노란 배너 (Cycle 3 P2 #20) ──
+  var secType = p.secondary_rejection_type || (Opinion.state.typeResult && Opinion.state.typeResult.secondary_type) || null;
+  var secInfo = secType ? Opinion.TYPES[secType] : null;
+  var priInfo = Opinion.TYPES[p.rejection_type] || Opinion.TYPES.inventive_step;
+  var secondaryBannerHtml = '';
+  if (secType && secInfo && !Opinion.state._secondary_warned) {
+    var isSecUnsupported = secType === 'unsupported_type';
+    if (isSecUnsupported) {
+      secondaryBannerHtml = '<div id="opinionMixedBanner" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:12px">'
+        +'<div style="font-weight:700;font-size:13px;color:#92400e;margin-bottom:6px">⚠️ 부 거절이유 — 수동 처리 필요</div>'
+        +'<p style="font-size:12px;color:#78350f;line-height:1.7;margin-bottom:10px">'
+        +'부 거절(<b>'+escapeHtml(secInfo.label)+'</b>)은 시스템이 자동 처리하지 않는 유형입니다.<br>'
+        +'해당 거절이유는 변리사가 직접 검토하고 수동으로 처리하시기 바랍니다.'
+        +'</p>'
+        +'<button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="Opinion.acknowledgeMixed()">이해했습니다 — 주 거절로 진행</button>'
+        +'</div>';
+    } else {
+      secondaryBannerHtml = '<div id="opinionMixedBanner" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:12px">'
+        +'<div style="font-weight:700;font-size:13px;color:#92400e;margin-bottom:8px">⚠️ 본 통지서는 두 종류의 거절이유를 포함합니다</div>'
+        +'<div style="font-size:12px;color:#78350f;line-height:1.8;margin-bottom:10px">'
+        +'· 주 거절: <b>'+escapeHtml(priInfo.icon+' '+priInfo.code+'. '+priInfo.label)+'</b><br>'
+        +'· 부 거절: <b>'+escapeHtml(secInfo.icon+' '+secInfo.code+'. '+secInfo.label)+'</b><br><br>'
+        +'현재 시스템은 한 거절이유를 단독 처리합니다. 두 거절이유 모두 대응하려면:<br>'
+        +'1) 본 프로젝트는 <b>'+escapeHtml(priInfo.label)+'</b> 경로로 진행<br>'
+        +'2) 동일 통지서로 별도 프로젝트를 생성하여 <b>'+escapeHtml(secInfo.label)+'</b> 경로로 진행<br>'
+        +'3) 두 의견서를 합본하여 KIPO 제출'
+        +'</div>'
+        +'<button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="Opinion.acknowledgeMixed()">이해했습니다 — 주 거절로 진행</button>'
+        +'</div>';
+    }
+  } else if (secType && secInfo && Opinion.state._secondary_warned) {
+    secondaryBannerHtml = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534">✅ 혼합 거절 안내 확인 완료 — 주 거절 경로로 진행 중</div>';
+  }
+
+  L.innerHTML=Opinion.renderNavBar('type')+secondaryBannerHtml+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">🔍</span> 유형 판별 결과</div></div>'
     +'<div class="opinion-type-result"><div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:8px">AI 분석 결과</div>'
     +'<div class="opinion-type-determined '+t.css+'">'+t.icon+' '+t.code+'. '+t.label+'</div>'
     +'<div style="font-size:12px;color:var(--color-text-tertiary)">신뢰도: '+conf+'% <div class="opinion-confidence-bar"><div class="opinion-confidence-fill" style="width:'+conf+'%"></div></div></div>'
@@ -1355,8 +1395,41 @@ Opinion.renderTypeView = function(L,R){
     +(tot>0?Array.from({length:tot},function(_,i){var n=i+1,isR=rej.indexOf(n)>=0,isA=alw.indexOf(n)>=0;return '<div class="opinion-claim-row '+(isA?'allowable':isR?'rejected':'')+'"><span class="claim-no">청구항 '+n+'</span><span>'+(isA?'✅':isR?'❌':'⬜')+'</span><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">'+(isA?'등록가능 후보':isR?'거절':'미확인')+'</span></div>';}).join(''):'<p style="padding:20px;text-align:center;color:var(--color-text-tertiary)">청구항 정보 없음</p>')+'</div>';
 };
 Opinion.selectType=function(el,type){document.querySelectorAll('.opinion-type-option').forEach(function(o){o.classList.remove('selected');});el.classList.add('selected');Opinion.state.current.rejection_type=type;};
+
+// ── 혼합 거절 안내 확인 버튼 핸들러 (Cycle 3 P2 #20) ──
+Opinion.acknowledgeMixed = async function() {
+  var p = Opinion.state.current; if (!p) return;
+  Opinion.state._secondary_warned = true;
+  var secType = p.secondary_rejection_type || (Opinion.state.typeResult && Opinion.state.typeResult.secondary_type) || null;
+  try {
+    await sb.from('opinion_gate_decisions').insert({
+      project_id: p.id, gate_no: 0, decision: 'mixed_acknowledged',
+      decided_by: currentUser.id,
+      revision_note: JSON.stringify({primary: p.rejection_type, secondary: secType})
+    });
+  } catch(e) { console.warn('[Opinion.acknowledgeMixed] gate_decisions insert failed:', e); }
+  // 배너를 "확인 완료" 상태로 교체
+  var banner = document.getElementById('opinionMixedBanner');
+  if (banner) {
+    banner.outerHTML = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534">✅ 혼합 거절 안내 확인 완료 — 주 거절 경로로 진행 중</div>';
+  }
+};
+
 Opinion.confirmType=async function(){
   var p=Opinion.state.current;if(!p)return;
+
+  // ── Gate 0: 혼합 거절 안내 미확인 시 차단 (Cycle 3 P0 #1 단기) ──
+  var secType = p.secondary_rejection_type || (Opinion.state.typeResult && Opinion.state.typeResult.secondary_type) || null;
+  var secInfo = secType ? Opinion.TYPES[secType] : null;
+  if (secInfo && !Opinion.state._secondary_warned) {
+    showToast('혼합 거절 안내를 확인해 주세요', 'error');
+    var banner = document.getElementById('opinionMixedBanner');
+    if (banner) banner.scrollIntoView({behavior:'smooth', block:'center'});
+    // gate_decisions에 blocked 기록
+    try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:0,decision:'blocked',decided_by:currentUser.id,revision_note:'mixed_unacknowledged'}); } catch(_){}
+    return;
+  }
+
   try{
     // typeResult.id가 있으면 특정 레코드만 업데이트 (동일 프로젝트에 여러 판정이 있을 수 있음)
     var typeUpdateQuery = sb.from('opinion_type_determinations').update({user_confirmed:true,user_override:p.rejection_type});
@@ -1770,8 +1843,27 @@ Opinion.renderAnalysisUI = function(type, a, extracted) {
 Opinion.approveGate = async function(gn){
   var p=Opinion.state.current;if(!p)return;var type=p.rejection_type,next;
 
-  // ─── Gate 2 차단: spec_basis 환각 감지 시 (P0 #17 사이클 2) ───
-  // 변리사 override를 위한 우회 경로: confirm 모달로 명시적 승인
+  // ─── Gate 1 차단: 전략 미선택 (Cycle 3 P1 #6) ───
+  if (gn === 1 && type === 'inventive_step') {
+    var radioEl = document.querySelector('input[name="opinionStrategy"]:checked');
+    if (!radioEl) {
+      showToast('보정 전략을 선택해 주세요', 'error');
+      var strategyArea = document.querySelector('.opinion-strategy-list, [name="opinionStrategy"]');
+      if (strategyArea) strategyArea.closest('.card, .opinion-gate-card') && strategyArea.closest('.card, .opinion-gate-card').scrollIntoView({behavior:'smooth',block:'center'});
+      try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:1,decision:'blocked',decided_by:currentUser.id,revision_note:'strategy_not_selected'}); } catch(_){}
+      return;
+    }
+  }
+  if (gn === 1 && type === 'description_deficiency') {
+    var items = (Opinion.state.analysis && (Opinion.state.analysis.items || Opinion.state.analysis.deficiencies)) || [];
+    if (!items.length) {
+      showToast('분석 결과가 없습니다. 재분석 후 진행해 주세요', 'error');
+      try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:1,decision:'blocked',decided_by:currentUser.id,revision_note:'no_analysis_items'}); } catch(_){}
+      return;
+    }
+  }
+
+  // ─── Gate 2 차단: spec_basis 환각 감지 시 (P0 #17 사이클 2 유지) ───
   if (gn === 2) {
     var sbc = Opinion.state.draftResult && Opinion.state.draftResult._spec_basis_check;
     if (sbc && sbc.ok === false) {
@@ -1783,17 +1875,57 @@ Opinion.approveGate = async function(gn){
               + '§47② 신규사항 추가 위반 위험. 변리사가 직접 명세서 원문과 대조 확인 후 진행하시겠습니까?';
       if (!confirm(msg)) {
         showToast('Gate 2 차단됨 — spec_basis 검증 실패', 'error');
+        try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:2,decision:'blocked',decided_by:currentUser.id,revision_note:'spec_basis_fail'}); } catch(_){}
         return;
       }
+      // override 선택 시 기록
+      try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:2,decision:'override',decided_by:currentUser.id,revision_note:'spec_basis_override'}); } catch(_){}
+    }
+
+    // ─── Gate 2 추가 차단: 보정 청구항 빈 배열 / 검증 fail 항목 (Cycle 3 P1 #6 보강) ───
+    var dr = Opinion.state.draftResult;
+    var amendedClaims = dr && (dr.amended_claims || (dr.draft_data && dr.draft_data.amended_claims)) || [];
+    if (!amendedClaims.length) {
+      showToast('보정 청구항이 없습니다. 보정안을 먼저 작성해 주세요', 'error');
+      try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:2,decision:'blocked',decided_by:currentUser.id,revision_note:'no_amended_claims'}); } catch(_){}
+      return;
+    }
+    var v = Opinion.state.validation;
+    var valItems = v && (v.elements || v.results) || [];
+    var failCount = valItems.filter(function(e){ return (e.overall_result||e.result) === 'fail'; }).length;
+    if (failCount > 0) {
+      var failMsg = '검증 항목 ' + failCount + '건 실패.\n실패 항목을 무시하고 의견서 작성을 진행하시겠습니까?\n(권장: 수정 후 재검증)';
+      if (!confirm(failMsg)) {
+        showToast('Gate 2 — 검증 실패 항목 확인 후 진행해 주세요', 'error');
+        try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:2,decision:'blocked',decided_by:currentUser.id,revision_note:'validation_fail_'+failCount}); } catch(_){}
+        return;
+      }
+      // override 기록
+      try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:2,decision:'override',decided_by:currentUser.id,revision_note:'validation_fail_override_'+failCount}); } catch(_){}
+    }
+  }
+
+  // ─── Gate 3 차단: 빈 의견서 강제 차단 (Cycle 3 P1 #6) ───
+  if (gn === 3) {
+    var o = Opinion.state.opinionDraft;
+    var secs = o && o.sections || [];
+    var totalLen = secs.reduce(function(acc, s){ return acc + (s.content||'').length; }, 0);
+    if (!secs.length || totalLen < 100) {
+      showToast('의견서가 비어 있습니다. 다시 생성해 주세요', 'error');
+      // 재생성 버튼 활성화 힌트 (렌더링에 이미 있지만 스크롤로 강조)
+      var gateCard = document.querySelector('.opinion-gate-card');
+      if (gateCard) gateCard.scrollIntoView({behavior:'smooth', block:'start'});
+      try { await sb.from('opinion_gate_decisions').insert({project_id:p.id,gate_no:3,decision:'blocked',decided_by:currentUser.id,revision_note:'empty_opinion_len_'+totalLen}); } catch(_){}
+      return;
     }
   }
 
   if(gn===1){
     // 전략 확정 → 바로 청구항 보정 시작
     next=type==='description_deficiency'?'correction_confirmed':type==='partial_rejection'?'merge_confirmed':'strategy_confirmed';
-    var radioEl = document.querySelector('input[name="opinionStrategy"]:checked');
-    if(radioEl && type==='inventive_step') {
-      var idx = parseInt(radioEl.value,10);
+    var radioEl2 = document.querySelector('input[name="opinionStrategy"]:checked');
+    if(radioEl2 && type==='inventive_step') {
+      var idx = parseInt(radioEl2.value,10);
       var extracted = Opinion.extractAnalysisFields(Opinion.state.analysis);
       Opinion.state.selectedStrategy = extracted.strategies[idx] || null;
       Opinion.state.selectedStrategyIndex = idx;
