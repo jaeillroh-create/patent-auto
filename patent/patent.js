@@ -4116,7 +4116,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${out
   (1) 부호 의미: 양수일 때 어느 방향으로 보정되는가
   (2) 값 범위: 예시적 범위 (예: 0.01~0.5)
   (3) 과도 누적 방지: 보정 횟수 상한, 누적 보정량 상한, 또는 점감 조건
-  (4) 초기값과 갱신 여부\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n⛔⛔ ANCHOR 규칙 ⛔⛔\n- ANCHOR는 반드시 마침표(다.)로 끝나는 완전한 문장의 끝부분을 사용하라.\n- ❌ 금지: 쉼표(,) 또는 접속어(~하고, ~하며)로 끝나는 절 중간을 ANCHOR로 사용\n- ❌ 금지: \"예를 들어\" 블록 내부를 ANCHOR로 사용\n- ✅ 올바른 ANCHOR 예: \"~을 산출한다.\" \"~을 포함한다.\" \"~으로 구성된다.\"\n\n⛔⛔ FORMULA 규칙 ⛔⛔\n- FORMULA에는 【수학식 N】 + 수식 + \"여기서,\" + \"예를 들어,\" 만 포함.\n- ⛔ FORMULA 안에 상세설명 원문 텍스트를 절대 포함하지 마라.\n- FORMULA는 \"예를 들어,\" 예시 문장의 마침표(다.)로 종료하라.\n- FORMULA 종료 후 추가 텍스트 금지.\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 끝부분 20자 이상, 반드시 \"다.\"로 종료)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
+  (4) 초기값과 갱신 여부\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n★★★ 수학 기호 규칙 (필수) ★★★\n- 곱셈 기호는 반드시 \"×\" (U+00D7) 또는 \"·\" (가운데점, U+00B7)을 사용하라.\n- ❌ 금지: ASCII 알파벳 \"x\" 또는 \"X\"를 곱셈 기호로 사용 (변수명 x와 혼동)\n- ❌ 금지: ASCII 별표 \"*\"를 곱셈 기호로 사용 (코드 표기, 특허 명세서 부적합)\n- ✅ 올바른 예: \"a × b\", \"2 × π × r\", \"α · β\", \"3 × 10⁻⁶\"\n- ❌ 잘못된 예: \"a x b\", \"a * b\", \"2 * pi * r\", \"alpha*beta\"\n- 변수 인접 곱셈은 기호 생략 가능 (예: \"ab\", \"2πr\") — 단, 변수명이 두 글자 이상이면 \"·\" 권장\n- 나눗셈은 \"÷\" 또는 분수 표기, 부등호는 \"≤\", \"≥\", \"≠\" 사용\n- 그리스 문자는 유니코드 사용 (α, β, γ, π, σ, μ, λ — \"alpha\", \"beta\" 등 영어 표기 금지)\n- \"여기서,\" 변수 설명, \"예를 들어,\" 수치 예시에서도 동일 규칙 적용\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n⛔⛔ ANCHOR 규칙 ⛔⛔\n- ANCHOR는 반드시 마침표(다.)로 끝나는 완전한 문장의 끝부분을 사용하라.\n- ❌ 금지: 쉼표(,) 또는 접속어(~하고, ~하며)로 끝나는 절 중간을 ANCHOR로 사용\n- ❌ 금지: \"예를 들어\" 블록 내부를 ANCHOR로 사용\n- ✅ 올바른 ANCHOR 예: \"~을 산출한다.\" \"~을 포함한다.\" \"~으로 구성된다.\"\n\n⛔⛔ FORMULA 규칙 ⛔⛔\n- FORMULA에는 【수학식 N】 + 수식 + \"여기서,\" + \"예를 들어,\" 만 포함.\n- ⛔ FORMULA 안에 상세설명 원문 텍스트를 절대 포함하지 마라.\n- FORMULA는 \"예를 들어,\" 예시 문장의 마침표(다.)로 종료하라.\n- FORMULA 종료 후 추가 텍스트 금지.\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 끝부분 20자 이상, 반드시 \"다.\"로 종료)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
     // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
     case 'step_10':{
@@ -12626,6 +12626,24 @@ function downloadPptx(sid){
 }
 
 // ═══ 이미지 다운로드 (KIPO 규격 JPEG/TIF) ═══
+// [고해상도] 800×1000 / 1360×1000 → 3배 확대 (2400×3000 / 4080×3000)
+//   ctx.scale(SCALE,SCALE)로 좌표계 보존 → 기존 그리기 코드 무수정
+const _IMG_DL_SCALE=3;
+
+// Canvas → 진짜 TIFF Blob 변환 (UTIF v3.1.0)
+//   기존: TIF 요청 시 PNG로 저장 (확장자만 .png) — 가짜 TIFF
+//   수정: UTIF.encodeImage로 진짜 TIFF (image/tiff)
+function _canvasToTiffBlob(canvas){
+  if(typeof UTIF==='undefined'){console.warn('[TIFF] UTIF 라이브러리 없음 — 출력 생략');return null;}
+  try{
+    const ctx=canvas.getContext('2d');
+    const w=canvas.width, h=canvas.height;
+    const imgData=ctx.getImageData(0,0,w,h);
+    const tiffArr=UTIF.encodeImage(imgData.data.buffer,w,h);
+    return new Blob([tiffArr],{type:'image/tiff'});
+  }catch(e){console.error('[TIFF] 인코딩 실패:',e);return null;}
+}
+
 function downloadDiagramImages(sid, format='jpeg'){
   console.log('downloadDiagramImages called:', sid, format);
   
@@ -12703,12 +12721,13 @@ function downloadDiagramImages(sid, format='jpeg'){
     const figNum=autoFigNums[currentIdx]||(figOffset+currentIdx+1);
     const hasEdges=edges&&edges.length>0;
     
-    // 캔버스 생성 (스케일 없이 직접 크기 설정)
+    // 캔버스 생성 — [고해상도] 3배 확대, ctx.scale로 좌표계는 800×1000 유지
     const canvas=document.createElement('canvas');
     const W=800,H=1000;
-    canvas.width=W;
-    canvas.height=H;
+    canvas.width=W*_IMG_DL_SCALE;
+    canvas.height=H*_IMG_DL_SCALE;
     const ctx=canvas.getContext('2d');
+    ctx.scale(_IMG_DL_SCALE,_IMG_DL_SCALE);
     
     // 배경 흰색
     ctx.fillStyle='#FFFFFF';
@@ -13264,20 +13283,28 @@ function downloadDiagramImages(sid, format='jpeg'){
     } // end else (장치 도면)
     } // end if(nodes.length)
     
-    // 이미지를 ZIP에 추가
+    // 이미지를 ZIP에 추가 — [진짜 TIFF] tif/tiff 시 UTIF로 인코딩, .tif 확장자
     try{
-      const ext=(format==='tif'||format==='tiff')?'png':(format==='jpeg'?'jpg':format);
-      const mimeType=(format==='tif'||format==='tiff')?'image/png':`image/${format==='jpeg'?'jpeg':'png'}`;
-      const quality=format==='jpeg'?0.95:undefined;
+      const isTiff=(format==='tif'||format==='tiff');
+      const ext=isTiff?'tif':(format==='jpeg'?'jpg':format);
       const fileName=`${caseNum}_도${figNum}.${ext}`;
-      
-      canvas.toBlob(blob=>{
-        if(blob){
-          imageFiles.push({name:fileName,blob:blob});
-        }
+
+      if(isTiff){
+        const blob=_canvasToTiffBlob(canvas);
+        if(blob)imageFiles.push({name:fileName,blob:blob});
         currentIdx++;
         setTimeout(processNext,50);
-      },mimeType,quality);
+      } else {
+        const mimeType=`image/${format==='jpeg'?'jpeg':'png'}`;
+        const quality=format==='jpeg'?0.95:undefined;
+        canvas.toBlob(blob=>{
+          if(blob){
+            imageFiles.push({name:fileName,blob:blob});
+          }
+          currentIdx++;
+          setTimeout(processNext,50);
+        },mimeType,quality);
+      }
     }catch(e){
       console.error('이미지 생성 실패:',e);
       currentIdx++;
@@ -13404,21 +13431,33 @@ function downloadConceptImages(format='jpeg'){
     const url=URL.createObjectURL(blob);
     const img=new Image();
     img.onload=()=>{
+      // [고해상도] 1360×1000 → 4080×3000, ctx.scale로 SVG 재래스터화 시 고해상도 출력
       const canvas=document.createElement('canvas');
-      canvas.width=1360;canvas.height=1000;
+      canvas.width=1360*_IMG_DL_SCALE;canvas.height=1000*_IMG_DL_SCALE;
       const ctx2=canvas.getContext('2d');
+      ctx2.scale(_IMG_DL_SCALE,_IMG_DL_SCALE);
       ctx2.fillStyle='#FFFFFF';ctx2.fillRect(0,0,1360,1000);
       ctx2.drawImage(img,0,0,1360,1000);
-      canvas.toBlob(b=>{
+
+      // [진짜 TIFF] tif 시 UTIF 사용, 확장자도 .tif
+      const isTiff=(format==='tif'||format==='tiff');
+      const ext=isTiff?'tif':format;
+      const handleBlob=(b)=>{
         if(b){
-          const fname=`도${figNum}_예시도.${format==='tif'?'png':format}`;
+          const fname=`도${figNum}_예시도.${ext}`;
           if(zip)images.push({name:fname,blob:b});
           else{const a=document.createElement('a');a.download=fname;a.href=URL.createObjectURL(b);a.click();URL.revokeObjectURL(a.href);}
         }
         URL.revokeObjectURL(url);
         idx++;
         processNext();
-      },format==='tif'?'image/png':`image/${format}`,0.95);
+      };
+
+      if(isTiff){
+        handleBlob(_canvasToTiffBlob(canvas));
+      } else {
+        canvas.toBlob(handleBlob,`image/${format}`,0.95);
+      }
     };
     img.onerror=()=>{URL.revokeObjectURL(url);idx++;processNext();};
     img.src=url;
