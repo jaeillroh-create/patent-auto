@@ -7064,40 +7064,45 @@ function _shapeVisualBounds(type,x,y,w,h){
     case 'database':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'monitor':{
-      const sh=h*0.72;
-      return{top:y, bottom:y+h*0.93, left:x, right:x+w, cx:x+w/2, cy:y+sh/2};
+      // [C2-9-fix] bottom: h*0.93→h — visual 중앙(top+bottom)/2를 h/2로 통일
+      //   기존 h*0.93은 _vCy=h*0.465 → default anchor py=h/2와 2.7px 차이 → 수평 화살표 꺾임
+      return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     }
     case 'server':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'sensor':{
       // [C2-8a-fix-3] 파형 호 실제 렌더 범위 반영 — 호 각도 ±0.35π, R_max=cr*2.65
+      // [C2-9-fix] top -= 12: 화살표-파형 간격 확보
       const cr=Math.min(w*0.28,h*0.38);
       const waveCx=x+w*0.32, waveCy=y+h*0.50;
       const Rmax=cr*2.65;
       const sinA=Math.sin(Math.PI*0.35);
-      return{top:waveCy-Rmax*sinA, bottom:waveCy+Rmax*sinA,
+      return{top:waveCy-Rmax*sinA-12, bottom:waveCy+Rmax*sinA,
         left:waveCx-cr, right:waveCx+Rmax,
         cx:x+w/2, cy:y+h/2};
     }
     case 'antenna':{
       // [C2-8a-fix-3] 호 apex at -π/2, bottom에서 라벨 패딩 제거
+      // [C2-9-fix] top -= 12: 화살표-파형 간격 확보
       const aTopY=y+h*0.18;
       const outerArc=h*0.36;
       const waveTop=aTopY-outerArc;
       const waveRight=x+w*0.38+outerArc*Math.cos(-Math.PI*0.05);
-      return{top:Math.min(y+h*0.18,waveTop), bottom:y+h*0.92, left:x+w*0.16, right:Math.max(x+w*0.62,waveRight),
+      return{top:Math.min(y+h*0.18,waveTop)-12, bottom:y+h*0.92, left:x+w*0.16, right:Math.max(x+w*0.62,waveRight),
         cx:x+w*0.43, cy:y+h/2};
     }
     case 'document':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'camera':
       // [C2-8a-fix-3] bottom에서 라벨 패딩 제거
-      return{top:y+h*0.08, bottom:y+h*0.83, left:x+w*0.05, right:x+w*0.85,
+      // [C2-9-fix] top -= 12: 화살표-파형 간격 확보
+      return{top:y+h*0.08-12, bottom:y+h*0.83, left:x+w*0.05, right:x+w*0.85,
         cx:x+w*0.45, cy:y+h/2};
     case 'speaker':{
       // [C2-8a-fix-3] bottom에서 라벨 패딩 제거, right를 호 최대값(angle 0)으로
+      // [C2-9-fix] top -= 12: 화살표-파형 간격 확보
       const spWaveRight=x+w*0.55+h*0.46;
-      return{top:y+h*0.08, bottom:y+h*0.92, left:x+w*0.10, right:Math.max(x+w*0.55,spWaveRight),
+      return{top:y+h*0.08-12, bottom:y+h*0.92, left:x+w*0.10, right:Math.max(x+w*0.55,spWaveRight),
         cx:x+w*0.35, cy:y+h/2};
     }
     default:
