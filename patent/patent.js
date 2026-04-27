@@ -7060,6 +7060,13 @@ function _shapeLeaderX(type,x,w){
 
 // ── v9.1: Shape 시각적 경계 (bounding box ≠ visual bounds) ──
 // 연결선 앵커, leader line 시작점에 사용
+// ── shapeicon 시각 패딩 상수 ──
+// shapeicon(sensor/antenna/camera/speaker)의 visualBounds top에 추가되는 여유 공간.
+// 화살표 marker height(6px) + 화살표 stroke + 폰트 baseline 정도의 시각적 안전 거리.
+// 호출처: bbox 크기 계산(line ~9625) + 라우팅 anchor 영역(line ~9740, ~9847, ~9881).
+// 동일 의미의 기존 상수: _bboxExtLabelGap=12 (line ~9637, bbox 외부 라벨 간격).
+const _ICON_VISUAL_PAD=12;
+
 function _shapeVisualBounds(type,x,y,w,h){
   // ★ v10.4: cx/cy는 항상 기하학적 중심점 (라우팅 대칭성 보장) ★
   // 아이콘 shape는 하단에 라벨 영역(~20px) 포함
@@ -7078,37 +7085,37 @@ function _shapeVisualBounds(type,x,y,w,h){
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'sensor':{
       // [C2-8a-fix-3] 파형 호 실제 렌더 범위 반영 — 호 각도 ±0.35π, R_max=cr*2.65
-      // [C2-9-fix] top -= 12: 화살표-파형 간격 확보
+      // [shapeicon-gap] top -= _ICON_VISUAL_PAD: 화살표-파형 시각적 간격 확보
       const cr=Math.min(w*0.28,h*0.38);
       const waveCx=x+w*0.32, waveCy=y+h*0.50;
       const Rmax=cr*2.65;
       const sinA=Math.sin(Math.PI*0.35);
-      return{top:waveCy-Rmax*sinA-12, bottom:waveCy+Rmax*sinA,
+      return{top:waveCy-Rmax*sinA-_ICON_VISUAL_PAD, bottom:waveCy+Rmax*sinA,
         left:waveCx-cr, right:waveCx+Rmax,
         cx:x+w/2, cy:y+h/2};
     }
     case 'antenna':{
       // [C2-8a-fix-3] 호 apex at -π/2, bottom에서 라벨 패딩 제거
-      // [C2-9-fix] top -= 12: 화살표-파형 간격 확보
+      // [shapeicon-gap] top -= _ICON_VISUAL_PAD: 화살표-파형 시각적 간격 확보
       const aTopY=y+h*0.18;
       const outerArc=h*0.36;
       const waveTop=aTopY-outerArc;
       const waveRight=x+w*0.38+outerArc*Math.cos(-Math.PI*0.05);
-      return{top:Math.min(y+h*0.18,waveTop)-12, bottom:y+h*0.92, left:x+w*0.16, right:Math.max(x+w*0.62,waveRight),
+      return{top:Math.min(y+h*0.18,waveTop)-_ICON_VISUAL_PAD, bottom:y+h*0.92, left:x+w*0.16, right:Math.max(x+w*0.62,waveRight),
         cx:x+w*0.43, cy:y+h/2};
     }
     case 'document':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'camera':
       // [C2-8a-fix-3] bottom에서 라벨 패딩 제거
-      // [C2-9-fix] top -= 12: 화살표-파형 간격 확보
-      return{top:y+h*0.08-12, bottom:y+h*0.83, left:x+w*0.05, right:x+w*0.85,
+      // [shapeicon-gap] top -= _ICON_VISUAL_PAD: 화살표-파형 시각적 간격 확보
+      return{top:y+h*0.08-_ICON_VISUAL_PAD, bottom:y+h*0.83, left:x+w*0.05, right:x+w*0.85,
         cx:x+w*0.45, cy:y+h/2};
     case 'speaker':{
       // [C2-8a-fix-3] bottom에서 라벨 패딩 제거, right를 호 최대값(angle 0)으로
-      // [C2-9-fix] top -= 12: 화살표-파형 간격 확보
+      // [shapeicon-gap] top -= _ICON_VISUAL_PAD: 화살표-파형 시각적 간격 확보
       const spWaveRight=x+w*0.55+h*0.46;
-      return{top:y+h*0.08-12, bottom:y+h*0.92, left:x+w*0.10, right:Math.max(x+w*0.55,spWaveRight),
+      return{top:y+h*0.08-_ICON_VISUAL_PAD, bottom:y+h*0.92, left:x+w*0.10, right:Math.max(x+w*0.55,spWaveRight),
         cx:x+w*0.35, cy:y+h/2};
     }
     default:
