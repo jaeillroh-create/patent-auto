@@ -113,9 +113,30 @@ Opinion.DEFAULT_TEMPLATES = {
 // ═══ State ═══
 Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null };
 
+// ═══ User Settings (자동 연쇄 진행 등) ═══
+Opinion.userSettings = { autoChain: true };
+Opinion._chainAbortController = null; // 자동 연쇄 진행 제어용
+
+Opinion.loadUserSettings = function(){
+  try {
+    var v = localStorage.getItem('opinion:user:autoChain');
+    if (v !== null) Opinion.userSettings.autoChain = (v === '1' || v === 'true');
+  } catch(e){}
+  // 토글 UI 동기화 (있으면)
+  var cb = document.getElementById('opinionAutoChainToggle');
+  if (cb) cb.checked = Opinion.userSettings.autoChain;
+};
+
+Opinion.setAutoChain = function(on){
+  Opinion.userSettings.autoChain = !!on;
+  try { localStorage.setItem('opinion:user:autoChain', on?'1':'0'); } catch(e){}
+  showToast(on?'자동 진행 ON — 파싱 후 쟁점 분석까지 자동 연쇄':'자동 진행 OFF — 단계별 수동 진행', 'info');
+};
+
 // ═══ Init ═══
 Opinion.init = function(){
   console.log('[Opinion] init');
+  Opinion.loadUserSettings();
   Opinion.loadProjects();
   Opinion.loadSavedTemplate();
 };
@@ -800,6 +821,83 @@ Opinion.renderFiles=function(){
 };
 
 // ═══════════════════════════════════════════
+// 5.5 자동 연쇄 진행 (파싱 → 유형 판별 → 쟁점 분석 → Gate 1 정지)
+// ═══════════════════════════════════════════
+Opinion._renderChainBanner = function(active){
+  var el = document.getElementById('opinionChainBanner');
+  if (!el) return;
+  el.style.display = active ? 'flex' : 'none';
+};
+
+Opinion.cancelAutoChain = function(){
+  if (!Opinion._chainAbortController) return;
+  try { Opinion._chainAbortController.abort(); } catch(e){}
+};
+
+Opinion.backToList = (function(orig){
+  return function(){
+    if (Opinion._chainAbortController) Opinion.cancelAutoChain();
+    return orig.apply(this, arguments);
+  };
+})(Opinion.backToList);
+
+// 단계별 함수 시그니처는 그대로 두고, 호출 순서만 오케스트레이션
+Opinion.runAutoChain = async function(){
+  if (!Opinion.userSettings.autoChain) return;
+  if (Opinion._chainAbortController) return; // 이미 진행 중
+  var p = Opinion.state.current; if (!p) return;
+
+  // 진입 상태 검증: 파싱 완료 상태에서만 시작
+  if (p.status !== 'parsed') return;
+
+  Opinion._chainAbortController = new AbortController();
+  var signal = Opinion._chainAbortController.signal;
+  var checkAbort = function(){ if (signal.aborted) throw new Error('__aborted__'); };
+  Opinion._renderChainBanner(true);
+
+  try {
+    // ── Phase 3: 유형 판별 ──
+    checkAbort();
+    await Opinion.determineType();
+    checkAbort();
+    if (!Opinion.state.current || Opinion.state.current.status !== 'type_determined') {
+      throw new Error('유형 판별 단계에서 중단되었습니다');
+    }
+
+    // 유형 자동 확정 (사용자 검토는 Gate 1에서 수행)
+    try {
+      var cp = Opinion.state.current;
+      var q = sb.from('opinion_type_determinations').update({user_confirmed:true, user_override:cp.rejection_type});
+      if (Opinion.state.typeResult && Opinion.state.typeResult.id) q = q.eq('id', Opinion.state.typeResult.id);
+      else q = q.eq('project_id', cp.id);
+      await q;
+    } catch(e){ /* 비치명 */ }
+
+    // ── Phase 4: 쟁점 분석 ──
+    checkAbort();
+    await Opinion.startAnalysis();
+    checkAbort();
+    var doneStatuses = ['analyzed','deficiency_analyzed','allowable_identified'];
+    if (!Opinion.state.current || doneStatuses.indexOf(Opinion.state.current.status) < 0) {
+      throw new Error('쟁점 분석 단계에서 중단되었습니다');
+    }
+
+    showToast('자동 진행 완료 — Gate 1 검수 단계입니다', 'success');
+  } catch(e){
+    if (e && e.message === '__aborted__') {
+      showToast('자동 진행 중단됨 — 현재 단계까지의 결과는 유지됩니다', 'info');
+    } else {
+      console.error('[Opinion] auto-chain error:', e);
+      showToast('자동 진행 실패: '+(e&&e.message?e.message:'오류'), 'error');
+    }
+  } finally {
+    Opinion._chainAbortController = null;
+    Opinion._renderChainBanner(false);
+    Opinion.renderDetail();
+  }
+};
+
+// ═══════════════════════════════════════════
 // 6. 파싱 (Phase 1)
 // ═══════════════════════════════════════════
 // 텍스트 추출 — common.js의 App.extractTextFromFile 활용
@@ -943,6 +1041,11 @@ Opinion.startParsing = async function(){
     await Opinion.setStatus(p.id,'parsed');
     showToast('파싱 완료 ('+Math.round(effectiveText.length/1000)+'K자 추출)');
     Opinion.renderDetail();
+    // 자동 연쇄 진행: 파싱 → 유형 판별 → 쟁점 분석 (Gate 1에서 정지)
+    // finally의 setButtonLoading 이후 마이크로태스크로 시작되도록 setTimeout 사용
+    if (Opinion.userSettings.autoChain) {
+      setTimeout(function(){ Opinion.runAutoChain(); }, 0);
+    }
   }catch(e){
     console.error('[Opinion] parse:',e);
     clearProgress('opinionParseProgress');

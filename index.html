@@ -211,6 +211,15 @@
                 </div>
                 <p style="font-size:10px;color:var(--color-text-tertiary);margin-top:6px;line-height:1.4">유형별 의견서 템플릿을 업로드하면 문체·구조를 자동 참고합니다. 한 번 등록하면 해당 유형의 모든 프로젝트에 자동 적용됩니다.</p>
               </div>
+
+              <div class="card" style="padding:12px;margin-top:12px">
+                <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px"><span class="tossface">⚡</span> 자동 진행</div>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;line-height:1.4">
+                  <input type="checkbox" id="opinionAutoChainToggle" checked onchange="Opinion.setAutoChain(this.checked)" style="margin:0;flex-shrink:0" />
+                  <span>파싱 → 유형 판별 → 쟁점 분석 자동 연쇄</span>
+                </label>
+                <p style="font-size:10px;color:var(--color-text-tertiary);margin-top:6px;line-height:1.4">Gate 1(전문가 검수) 직전에서 자연 정지합니다. 진행 중 언제든 중단할 수 있습니다.</p>
+              </div>
             </div>
             <div class="opinion-main">
               <div class="card" style="padding:0;overflow:hidden">
@@ -243,6 +252,13 @@
               </div>
               <div style="display:flex;gap:8px;margin-top:4px"><span id="opinionDetailType"></span><span id="opinionDetailStatus"></span></div>
             </div>
+          </div>
+          <div id="opinionChainBanner" style="display:none;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;margin-bottom:12px;background:#eff6ff;border:1px solid var(--color-primary);border-radius:8px">
+            <div style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--color-primary);font-weight:500">
+              <div class="progress-dot" style="width:14px;height:14px;animation:pulse 1.5s infinite"></div>
+              <span><span class="tossface">⚡</span> 자동 진행 중 — 유형 판별 · 쟁점 분석을 순차 실행합니다</span>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="Opinion.cancelAutoChain()" style="font-size:12px;border-color:var(--color-error);color:var(--color-error)"><span class="tossface">⏸</span> 중단</button>
           </div>
           <div class="opinion-pipeline" id="opinionPipeline"></div>
           <div class="opinion-detail">
