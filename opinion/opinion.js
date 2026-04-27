@@ -368,8 +368,8 @@ Opinion.init = function(){
 
 // ═══ Template Management (유형별 템플릿 지원) ═══
 Opinion.loadSavedTemplate = async function() {
-  // 유형별 템플릿 로드
-  var types = ['inventive_step','description_deficiency'];
+  // 유형별 템플릿 로드 (partial_rejection 포함 3종)
+  var types = ['inventive_step','description_deficiency','partial_rejection'];
   if (!Opinion.state.templates) Opinion.state.templates = {};
 
   for (var i = 0; i < types.length; i++) {
@@ -2490,7 +2490,7 @@ Opinion.renderDraft=function(L,R,status){
 };
 
 // ═══ Opinion Draft (전체 컨텍스트 + 참고 양식 전달) ═══
-Opinion.TEMPLATE_GUARD = '\n\n⚠️ 중요 규칙: [참고 의견서 양식]은 톤·구조·문장 패턴만 참고하세요. 양식에 포함된 구체적 사건 내용(출원번호, 발명 명칭, 구성요소 설명, 인용발명 내용, 청구항 문언 등)을 절대 사용하지 마세요. 모든 내용은 반드시 [파싱 결과]와 [분석 결과]의 현재 대상 사건 정보로만 작성하세요.';
+Opinion.TEMPLATE_GUARD = '\n\n⚠️ 중요 규칙: [참고 의견서 양식]은 톤·구조·문장 패턴만 참고하세요. 양식에 포함된 구체적 사건 내용(출원번호, 발명 명칭, 구성요소 설명, 인용발명 내용, 청구항 문언 등)을 절대 사용하지 마세요. 모든 내용은 반드시 [파싱 결과]와 [분석 결과]의 현재 대상 사건 정보로만 작성하세요. 특히 §29/§42 등 조문 번호는 [분석 결과]의 article 필드를 절대 우선으로 사용하고, 양식의 조문 표기는 무시하세요.';
 
 Opinion.startOpinionDraft=async function(){
   var p=Opinion.state.current;if(!p)return;
@@ -2580,7 +2580,8 @@ Opinion.startOpinionDraft=async function(){
         + '  ⑤ 단락 구조: 번호·기호 체계 (가. 나. / ① ② / (1) (2) / 가목·나목 등) → 동일 체계\n'
         + '  ⑥ 결어: 섹션 끝맺음 표현 ("이상과 같이", "따라서", "이에" 등) → 재현\n'
         + '⚠️ 차단 규칙: [본 사무소 표준 의견서 양식]에 없는 문체 표현(외래어 투, 영어 혼용, 딱딱한 번역체)은 자제하라.\n'
-        + '⚠️ 단, 이 사건의 구체적 기술 내용·청구항 번호·특정 표현은 양식에서 절대 차용하지 마라. 현재 사건 내용으로만 채워야 한다.\n';
+        + '⚠️ 단, 이 사건의 구체적 기술 내용·청구항 번호·특정 표현은 양식에서 절대 차용하지 마라. 현재 사건 내용으로만 채워야 한다.\n'
+        + '⚠️ §42 조문 보호: 의견서에 등장하는 §42 조항 표기(§42② 1호, §42④ 2호 등)는 반드시 [분석 결과]의 article 필드 값만 사용하라. 양식에 다른 조문 번호가 있어도 무시하라. 조문 표기는 스타일 적용 대상이 아니다.\n';
     }
     var prompt = Opinion.SYS_PROMPT + Opinion.TEMPLATE_GUARD + '\n\n' + ctx + revCtx + styleGuide + tpl[t];
     var r = await App.callClaude(prompt);
