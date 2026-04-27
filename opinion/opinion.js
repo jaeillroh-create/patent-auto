@@ -9,7 +9,7 @@ window.Opinion = window.Opinion || {};
 // ═══ Constants ═══
 Opinion.TYPES = {
   inventive_step:         { code:'A', label:'진보성/신규성 위반',    icon:'⚖️', css:'type-a',       law:'§29①②' },
-  description_deficiency: { code:'B', label:'기재불비 위반',         icon:'📝', css:'type-b',       law:'§42③④' },
+  description_deficiency: { code:'B', label:'기재불비 위반',         icon:'📝', css:'type-b',       law:'§42② / §42④' },
   partial_rejection:      { code:'C', label:'일부 청구항 거절',      icon:'📋', css:'type-c',       law:'§29 등' },
   unsupported_type:       { code:'X', label:'수동 처리 필요',        icon:'⚠️', css:'type-unknown', law:'§32/§33/§36/§45 등' }
 };
@@ -188,6 +188,71 @@ Opinion.resetState = function(opts) {
   Opinion.usage = { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
 
   console.log('[Opinion.reset] cleared state, files, usage');
+};
+
+// ═══ 명세서 원문 추출 (DB raw_text 또는 state.files에서) — 사이클 2 ═══
+// raw_text는 startParsing에서 '=== [📑 출원 명세서: ...] ===' 구분자로 섹션화되어 저장됨
+Opinion.extractSpecificationText = async function(projectId) {
+  try {
+    var{data:pd}=await sb.from('opinion_parsed_documents').select('raw_text').eq('project_id',projectId).order('created_at',{ascending:false}).limit(1).maybeSingle();
+    if (!pd || !pd.raw_text) return '';
+    var raw = pd.raw_text;
+    // '=== [📑 출원 명세서: ...] ===' 다음 섹션부터 다음 '===' 또는 '##########'까지
+    var specStart = raw.search(/===\s*\[📑\s*출원\s*명세서[^\]]*\]\s*===/);
+    if (specStart < 0) {
+      // 폴백: '명세서' 키워드만으로 찾기
+      specStart = raw.search(/===\s*\[[^\]]*명세서[^\]]*\]\s*===/);
+    }
+    if (specStart < 0) return ''; // 명세서 미발견
+    var afterHeader = raw.slice(specStart).replace(/^===\s*\[[^\]]+\]\s*===\s*/, '');
+    // 다음 구분자까지 잘라냄
+    var nextDelim = afterHeader.search(/(===\s*\[|##########)/);
+    return nextDelim > 0 ? afterHeader.slice(0, nextDelim).trim() : afterHeader.trim();
+  } catch(e) { console.warn('[Opinion] extractSpecificationText failed:', e); return ''; }
+};
+
+// ═══ spec_basis 명세서 원문 cross-check (P0 #17) ═══
+// amendedClaims: [{claim_no, spec_basis: ["【0010】","【0065】"] | "..."}]
+// specRawText: 명세서 원문 string
+// 반환: { ok: true|false|null, missing: [{claim_no, missing_paragraphs}], reason? }
+Opinion._validateSpecBasis = function(amendedClaims, specRawText) {
+  if (!specRawText || specRawText.length < 50) {
+    return { ok: null, reason: 'specification_missing', missing: [] };
+  }
+  if (!Array.isArray(amendedClaims) || !amendedClaims.length) {
+    return { ok: true, missing: [] };
+  }
+  var missing = [];
+  // 단락번호 정규화 헬퍼: 【0010】, [0010], 0010 모두 4자리 숫자로 통일
+  function _normalize(p) {
+    var m = String(p).match(/(\d{1,4})/);
+    if (!m) return null;
+    return ('0000' + m[1]).slice(-4); // 4자리 패딩
+  }
+  // 명세서 원문에서 등장하는 모든 단락번호를 수집
+  var specParagraphsSet = {};
+  var pat = /[【\[]\s*(\d{1,4})\s*[】\]]/g;
+  var sm;
+  while ((sm = pat.exec(specRawText)) !== null) {
+    specParagraphsSet[_normalize(sm[1])] = true;
+  }
+
+  amendedClaims.forEach(function(ac) {
+    var basisRaw = ac.spec_basis || ac.spec_paragraphs || [];
+    var basisList = Array.isArray(basisRaw) ? basisRaw : String(basisRaw).split(/[,，]/);
+    var miss = [];
+    basisList.forEach(function(b) {
+      var norm = _normalize(b);
+      if (!norm) return; // 번호가 없으면 검증 대상 아님
+      if (!specParagraphsSet[norm]) {
+        miss.push('【' + norm + '】');
+      }
+    });
+    if (miss.length) {
+      missing.push({ claim_no: ac.claim_no, missing_paragraphs: miss });
+    }
+  });
+  return { ok: missing.length === 0, missing: missing };
 };
 
 // ═══ Init ═══
@@ -807,7 +872,7 @@ Opinion.CHECK_TYPE_LABELS = {
   context_match: '문맥 일치 여부',
   combination_check: '조합 기재 여부',
   cited_ref_origin: '인용발명 유래 여부',
-  spec_support: '명세서 뒷받침 여부 (§42③)',
+  spec_support: '명세서 뒷받침 여부 (§42② 4호 / §42④ 2호)',
   within_scope: '최초 명세서 범위 내',
   within_original_scope: '최초 명세서 범위 내',
   resolved: '지적사항 해소 여부',
@@ -1182,7 +1247,7 @@ Opinion.determineType = async function(){
     var tr = await Opinion.callForJSON(
       Opinion.SYS_PROMPT+'\n\n유형 판별 (의견제출통지서만으로 판단):\n'
         +'A. inventive_step — 신규성 위반(§29①) 또는 진보성 위반(§29②)\n'
-        +'B. description_deficiency — 기재불비(§42③④)\n'
+        +'B. description_deficiency — 기재불비(§42② 또는 §42④ — 구체 조항은 통지서에 따름)\n'
         +'C. partial_rejection — 일부 청구항만 거절 (등록가능 청구항 존재)\n'
         +'X. unsupported_type — §32(불특허발명)/§33(무권리자)/§36(선출원)/§45(단일성) 등 위 A·B·C에 해당하지 않는 거절\n\n'
         +'규칙:\n'
@@ -1369,7 +1434,18 @@ Opinion.startAnalysis = async function(){
       description_deficiency:'위 의견제출통지서의 기재불비 지적사항을 분석하세요.\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 분석하세요.\n'
         +'각 지적에 대해 실제 심사관 지적 내용과 명세서에서 대응 기재를 찾아 구체적 수정 방향을 제시하세요.\n\n'
-        +'JSON:\n{"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"items":[{"claim_no":N,"deficiency_type":"unclear|inconsistent|unsupported","examiner_comment":"심사관 지적 원문","spec_reference":"【0001】등 관련 단락","suggested_correction":"구체적 수정 문언 제안"}]}',
+        +'★ §42 조문 5종 분류 (deficiency_type 키 + article 정확 표기):\n'
+        +'  1) clarity            — §42② 1호 (청구항 표현 명확성)              → 청구항 문언 명확화. 권리범위 보존 가능\n'
+        +'  2) support            — §42② 4호 (청구항이 발명의 설명에 의해 뒷받침) → 청구항을 명세서 기재 범위로 축소\n'
+        +'  3) description_lack   — §42④ 1호 (발명의 설명 기재불비, 당업자 실시) → 명세서 보정 필요 (의견서 단독 곤란)\n'
+        +'  4) description_support — §42④ 2호 (발명의 설명에 청구항이 뒷받침 안 됨) → 청구항 축소 + 명세서 근거 단락 명시\n'
+        +'  5) inconsistent       — §42②/④ 일반 (청구항 간/명세서와 불일치)     → 용어 통일 또는 청구항 정리\n\n'
+        +'★★★ 절대 규칙:\n'
+        +'1. 통지서 본문의 조문 표기를 그대로 따르라. 통지서가 §42② 4호라면 deficiency_type="support", article="§42② 4호"로 출력.\n'
+        +'2. 통지서가 §42④ 2호라면 deficiency_type="description_support", article="§42④ 2호"로 출력. §42②와 §42④를 임의 변환 금지.\n'
+        +'3. 위 5개 키 외의 값(unclear, unsupported 등 구 분류) 출력 금지.\n'
+        +'4. 통지서에 명시되지 않은 조문은 추측하지 마라. 가장 근접한 키 1개를 선택하고 article에는 통지서 원문 표기 사용.\n\n'
+        +'JSON:\n{"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"items":[{"claim_no":N,"deficiency_type":"clarity|support|description_lack|description_support|inconsistent","article":"§42② 1호 | §42② 4호 | §42④ 1호 | §42④ 2호 | §42② 또는 §42④","examiner_comment":"심사관 지적 원문","spec_reference":"【0001】등 관련 단락","suggested_correction":"구체적 수정 문언 제안"}]}',
       partial_rejection:'위 의견제출통지서에서 청구항별 거절 상태를 분석하고 등록가능 청구항을 식별하세요.\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 분석하세요.\n\n'
         +'JSON:\n{"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"rejected_claims":[{"claim_no":N,"reason":"진보성 위반 등 구체적 이유"}],"allowable_claims":[{"claim_no":N,"basis":"거절이유 미지적 등 근거"}],"merge_suggestion":{"target":1,"source":N,"rationale":"병합 이유와 기대 효과"}}'
@@ -1377,7 +1453,7 @@ Opinion.startAnalysis = async function(){
     var ar = await Opinion.callForJSON(
       Opinion.SYS_PROMPT+'\n\n'+ctx+'\n'+prompts[type],
       type==='inventive_step' ? '{"elements":[{"element_id":"E1","claim_element":"...","difference":"...","strength":"strong"}],"strategies":[{"name":"...","rationale":"...","risk":"low"}]}'
-      : type==='description_deficiency' ? '[{"claim_no":1,"examiner_comment":"...","suggested_correction":"..."}]'
+      : type==='description_deficiency' ? '{"items":[{"claim_no":1,"deficiency_type":"support","article":"§42② 4호","examiner_comment":"...","spec_reference":"【0010】","suggested_correction":"..."}]}'
       : '{"rejected_claims":[...],"allowable_claims":[...],"merge_suggestion":{...}}'
     );
     // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
@@ -1693,6 +1769,25 @@ Opinion.renderAnalysisUI = function(type, a, extracted) {
 
 Opinion.approveGate = async function(gn){
   var p=Opinion.state.current;if(!p)return;var type=p.rejection_type,next;
+
+  // ─── Gate 2 차단: spec_basis 환각 감지 시 (P0 #17 사이클 2) ───
+  // 변리사 override를 위한 우회 경로: confirm 모달로 명시적 승인
+  if (gn === 2) {
+    var sbc = Opinion.state.draftResult && Opinion.state.draftResult._spec_basis_check;
+    if (sbc && sbc.ok === false) {
+      var detail = (sbc.missing || []).map(function(m){
+        return '청구항 ' + m.claim_no + ': ' + (m.missing_paragraphs || []).join(', ');
+      }).join('\n');
+      var msg = '⚠️ 보정 청구항의 근거 단락이 명세서에서 발견되지 않습니다.\n\n'
+              + detail + '\n\n'
+              + '§47② 신규사항 추가 위반 위험. 변리사가 직접 명세서 원문과 대조 확인 후 진행하시겠습니까?';
+      if (!confirm(msg)) {
+        showToast('Gate 2 차단됨 — spec_basis 검증 실패', 'error');
+        return;
+      }
+    }
+  }
+
   if(gn===1){
     // 전략 확정 → 바로 청구항 보정 시작
     next=type==='description_deficiency'?'correction_confirmed':type==='partial_rejection'?'merge_confirmed':'strategy_confirmed';
@@ -1811,14 +1906,14 @@ Opinion.startDraft=async function(){
         +'  (3) 구체화(具體化): 명세서에 기재된 구체적 실시예/수치/방법으로 추상적 표현을 구체화하는 것\n'
         +'      예: "데이터를 처리하는 단계" → "명세서 【0058】에 기재된 바와 같이, N-gram 기반으로 텍스트를 토큰화하고 TF-IDF 가중치를 산출하는 단계"\n\n'
         +'⚠️ 보정에 사용하는 모든 구성은 반드시 출원 명세서의 특정 단락에 기재된 것이어야 합니다.\n'
-        +'⚠️ 명세서에 없는 구성을 새로 창작하거나, 인용발명에만 있는 구성을 차용하면 기재불비(§42③) 위반입니다.\n'
+        +'⚠️ 명세서에 없는 구성을 새로 창작하거나, 인용발명에만 있는 구성을 차용하면 기재불비(§42② 4호 청구항 뒷받침 / §42④ 2호 발명의 설명에 의한 뒷받침) 위반입니다.\n'
         +'⚠️ 기재불비 위반은 절대 허용되지 않습니다. 보정안의 모든 문언이 명세서에 의해 뒷받침되는지 반드시 확인하세요.\n\n'
         +'★ 명세서 뒷받침 교차검증 (자동 수행 — 기재불비 방지):\n'
         +'1. 보정에 사용하는 모든 용어·구성은 반드시 출원 명세서에 기재된 것만 사용하세요.\n'
         +'2. 인용발명에만 있는 용어(인용발명 고유 표현)는 절대 보정에 사용하지 마세요.\n'
         +'3. 각 보정 문언에 대해 근거가 되는 명세서 단락번호(【0001】형식)를 spec_basis에 반드시 명시하세요.\n'
         +'4. 여러 구성요소를 조합하는 경우, 해당 조합이 명세서의 동일 단락 또는 관련 단락에 기재되어 있는지 확인하세요.\n'
-        +'5. 명세서에 기재되지 않은 구성을 보정에 사용하면 기재불비(§42③) 위반이므로 절대 금지합니다.\n\n'
+        +'5. 명세서에 기재되지 않은 구성을 보정에 사용하면 기재불비(§42② 4호 / §42④ 2호 — 청구항 뒷받침 결여) 위반이므로 절대 금지합니다.\n\n'
         +'★ 인용발명 극복 검토 (청구항 1항 보정 후):\n'
         +'1. 보정후 청구항 1항이 각 인용발명(전체)과 어떤 차이가 있는지 per_cited_ref_diff에 인용문헌별로 기재하세요.\n'
         +'2. 인용발명들의 결합에 의해서도 도달할 수 없는 구성을 포함하도록 하세요.\n'
@@ -1829,7 +1924,7 @@ Opinion.startDraft=async function(){
         +'  2. context_match(문맥일치) — 해당 맥락에서 명세서와 동일하게 사용되는지\n'
         +'  3. combination_check(결합체크) — 조합된 구성이 명세서에서 함께 기재되어 있는지\n'
         +'  4. cited_ref_origin(인용발명 유래) — 인용발명에서만 나오는 용어를 차용하지 않았는지\n'
-        +'  5. spec_support(명세서 뒷받침) — 보정된 각 구성이 명세서의 구체적 단락에 의해 명확히 뒷받침되는지 (기재불비 §42③ 위반 여부 최종 확인)\n\n'
+        +'  5. spec_support(명세서 뒷받침) — 보정된 각 구성이 명세서의 구체적 단락에 의해 명확히 뒷받침되는지 (기재불비 §42② 4호 / §42④ 2호 위반 여부 최종 확인)\n\n'
         +'JSON: {"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"amended_claims":[{"claim_no":1,"original":"원본 청구항 전문","amended":"보정후 청구항 전문","amendments_summary":"보정 사항 요약","amendment_methods":[{"method":"한정|부가|구체화","target":"보정 대상 구성","spec_paragraph":"【0035】","description":"명세서 기재에 근거한 구체적 보정 내용"}],"spec_basis":["【0029】","【0035】"],"per_cited_ref_diff":[{"ref_no":1,"ref_title":"인용문헌1 제목","difference":"이 인용발명과의 구체적 차이점"}]}],\n"unchanged_claims":[2,3,4],"strategy_name":"적용된 전략명",\n"validation":{"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"보정된 문언","checks":[{"check_type":"term_existence|context_match|combination_check|cited_ref_origin|spec_support","result":"pass|warn|fail","detail":"구체적 근거"}],"overall_result":"pass|warn|fail"}]}}',
       description_deficiency: '위 분석 결과의 각 지적사항을 반영한 수정 청구항을 생성하고 검증해 주세요.'+revCtx+'\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 검토하세요.\n'
@@ -1857,6 +1952,20 @@ Opinion.startDraft=async function(){
       showToast('이전 작업이 취소되었습니다', 'info');
       return;
     }
+
+    // ─── spec_basis 명세서 원문 cross-check (P0 #17 사이클 2) ───
+    // 보정/수정/병합 청구항의 spec_basis 단락번호가 명세서에 실제 존재하는지 검증
+    var specText = await Opinion.extractSpecificationText(p.id);
+    var claimsToCheck = dr.amended_claims || dr.corrected_claims || (dr.merged_claim ? [dr.merged_claim] : []);
+    var specCheck = Opinion._validateSpecBasis(claimsToCheck, specText);
+    dr._spec_basis_check = specCheck;
+    if (specCheck.ok === false) {
+      console.warn('[Opinion] spec_basis 환각 감지:', specCheck.missing);
+      showToast('⚠️ 보정 근거 단락이 명세서에 없음 — 변리사 검토 필요', 'error');
+    } else if (specCheck.ok === null) {
+      console.warn('[Opinion] spec_basis 검증 skip:', specCheck.reason);
+    }
+
     // 검증 결과가 draft 응답에 포함된 경우 자동 추출
     if (dr.validation) {
       Opinion.state.validation = dr.validation;
@@ -1899,6 +2008,24 @@ Opinion.startValidation=async function(){
   try{
     var ctx = await Opinion.getContext(['parsed','analysis','draft']);
     if (run && run.signal.aborted) return;
+
+    // ─── 명세서 원문을 ctx에 직접 주입 (P1 #5 사이클 2) ───
+    // getContext의 raw_text 8K로는 명세서 보장 안 됨 → 별도 추출
+    var specText = await Opinion.extractSpecificationText(p.id);
+    if (run && run.signal.aborted) return;
+    var specWarn = false;
+    if (specText && specText.length >= 100) {
+      // 30K 초과 시 head + tail 분할
+      var specBlock = specText;
+      if (specText.length > 30000) {
+        specBlock = specText.slice(0, 20000) + '\n... [중간 생략 ' + (specText.length - 30000) + '자] ...\n' + specText.slice(-10000);
+      }
+      ctx += '\n[출원 명세서 원문 — 보정 검증 기준]\n' + specBlock + '\n\n';
+    } else {
+      specWarn = true;
+      ctx += '\n[⚠️ 출원 명세서 원문 미제공]\n명세서 파일이 업로드되지 않았거나 텍스트 추출에 실패했다. spec_basis 단락 검증 결과는 LLM이 명세서를 직접 보지 않은 상태에서 생성된 것이므로 신뢰성이 낮다. 변리사 수동 확인 필수.\n\n';
+    }
+
     var prompts = {
       inventive_step: '위 보정 청구항 초안을 명세서 원문과 대조하여 4중 뒷받침 검증을 수행해 주세요.\n\n각 보정된 구성요소에 대해:\n1. term_existence: 보정 문언의 용어가 명세서에 존재하는지\n2. context_match: 해당 맥락에서 사용되는지\n3. combination_check: 조합이 명세서 단일 단락에 기재되는지\n4. cited_ref_origin: 인용발명 유래 용어가 아닌지\n\nJSON: {"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"보정된 문언","checks":[{"check_type":"term_existence","result":"pass|warn|fail","detail":"구체적 근거"}],"overall_result":"pass|warn|fail"}]}',
       description_deficiency: '위 수정 청구항이 보정 범위(최초 명세서 범위) 내에 있는지 검증해 주세요.\n\nJSON: {"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"수정 사항","checks":[{"check_type":"within_scope|resolved","result":"pass|warn|fail","detail":"..."}],"overall_result":"pass|warn|fail"}]}',
@@ -1913,6 +2040,10 @@ Opinion.startValidation=async function(){
       console.log('[Opinion.run] aborted at startValidation');
       showToast('이전 작업이 취소되었습니다', 'info');
       return;
+    }
+    if (specWarn) {
+      vr._spec_unverified = true; // 사이클 2: 명세서 미제공 검증 경고 플래그
+      showToast('명세서 원문 미제공 — 검증 결과 신뢰성 낮음. 변리사 수동 확인 필수', 'info');
     }
     await sb.from('opinion_validation_results').insert({project_id:p.id,validation_type:t,result_data:vr,summary:vr.summary||{}});
     Opinion.state.validation=vr;
@@ -1951,15 +2082,38 @@ Opinion.renderDraft=function(L,R,status){
     discussionHtml = '<div style="margin-bottom:12px">'+Opinion.renderDiscussion(draftData.discussion)+'</div>';
   }
 
+  // ─── spec_basis 검증 실패 / 명세서 미제공 빨간 배너 (P0 #17 사이클 2) ───
+  var specBasisHtml = '';
+  var sbc = draftData._spec_basis_check;
+  if (sbc && sbc.ok === false) {
+    var missingDetail = (sbc.missing || []).map(function(m){
+      return '<li>청구항 ' + m.claim_no + ': ' + escapeHtml((m.missing_paragraphs || []).join(', ')) + '</li>';
+    }).join('');
+    specBasisHtml = '<div style="margin-top:12px;padding:12px;background:var(--color-error-light,#fef2f2);border-radius:8px;border-left:3px solid var(--color-error,#ef4444)">'
+      +'<div style="font-weight:600;font-size:13px;color:var(--color-error,#ef4444);margin-bottom:6px">⚠️ 보정 근거 단락이 명세서에 없음 — §47② 신규사항 추가 위험</div>'
+      +'<ul style="font-size:12px;color:var(--color-error,#ef4444);line-height:1.7;margin:6px 0 6px 18px">'+missingDetail+'</ul>'
+      +'<p style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">변리사가 명세서 원문과 직접 대조 확인 후 Gate 2 진행 시 우회 가능합니다.</p>'
+      +'</div>';
+  } else if (sbc && sbc.ok === null) {
+    specBasisHtml = '<div style="margin-top:12px;padding:10px;background:var(--color-warning-light,#fef3c7);border-radius:8px;border-left:3px solid var(--color-warning,#f59e0b)">'
+      +'<div style="font-size:12px;color:#92400e;font-weight:600">📄 명세서 원문 미제공 — spec_basis 검증 skip</div>'
+      +'<p style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">명세서 파일을 업로드하시면 보정 근거 단락이 자동 검증됩니다.</p>'
+      +'</div>';
+  }
+
   var valHtml = '';
   if (ready && sm.total) {
     valHtml = '<div style="margin-top:12px;margin-bottom:12px"><div style="font-weight:600;font-size:13px;margin-bottom:8px"><span class="tossface">🔬</span> 뒷받침 검증</div>'
-      +'<div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ 통과 '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ 주의 '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ 실패 '+(sm.fail||0)+'</div></div></div>';
+      +'<div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ 통과 '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ 주의 '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ 실패 '+(sm.fail||0)+'</div></div>';
+    if (v._spec_unverified) {
+      valHtml += '<div style="margin-top:6px;font-size:11px;color:#92400e;background:var(--color-warning-light,#fef3c7);padding:6px 8px;border-radius:6px">⚠️ 명세서 원문 미제공 — LLM이 명세서 없이 검증한 결과. 변리사 수동 확인 필수.</div>';
+    }
+    valHtml += '</div>';
   }
 
   L.innerHTML=nav+'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">📝</span> 청구항 보정 + 검증</div>'
     +'<p style="font-size:13px;color:var(--color-text-secondary)">심사관과 변리사가 보정안을 검토하고 뒷받침 검증까지 완료했습니다.</p>'
-    +discussionHtml+valHtml
+    +specBasisHtml+discussionHtml+valHtml
     +(ready?'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(2)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate2Approve" onclick="Opinion.approveGate(2)"><span class="tossface">✅</span> 확정</button></div>':'')
     +'</div>';
 
@@ -2026,12 +2180,28 @@ Opinion.startOpinionDraft=async function(){
         +'### (5) 소결\n\n'
         +'## 4. 결론\n("이상과 같이 본원발명은... 특허등록되어야 합니다.")',
 
-      description_deficiency: '위 자료를 기반으로 기재불비 위반(§42③④) 의견서를 작성해 주세요.\n\n'
+      description_deficiency: '위 자료를 기반으로 기재불비 위반(§42② / §42④ — 통지서의 구체 조항에 따름) 의견서를 작성해 주세요.\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 의견서를 작성하세요.\n'
-        +'의견서 양식 템플릿의 형식을 따르되, 아래 섹션 구분자(## 제목)를 사용하여 작성. JSON이 아닌 일반 텍스트.\n'
+        +'아래 섹션 구분자(## 제목)를 사용하여 작성. JSON이 아닌 일반 텍스트.\n'
         +'보정내용에는 반드시 명세서 문단 번호(【0001】형식)를 표기하세요.\n\n'
-        +'## 서두\n\n## 1. 보정내용\n(수정 전·후 대비, 문단 번호 표기)\n\n'
-        +'## 2. 보정의 적법성\n\n## 3. 구체적 의견내용\n(지적사항별 수정 내용 + 거절이유 해소 설명)\n\n## 4. 결론',
+        +'★★★ §42 분리 섹션 규칙 (분석 결과의 deficiency_type 별로 분리):\n'
+        +'아래 1)~5) 중 분석 결과(items[].deficiency_type)에 등장한 키만 해당 섹션을 생성하라.\n'
+        +'  - clarity            → "## 5. 청구항 명확성에 대하여 (§42② 1호)"\n'
+        +'  - support            → "## 6. 발명의 설명에 의한 뒷받침에 대하여 (§42② 4호)"\n'
+        +'  - description_lack   → "## 7. 발명의 설명 기재불비에 대하여 (§42④ 1호)"\n'
+        +'  - description_support → "## 8. 청구항이 발명의 설명에 의해 뒷받침되지 않는 점에 대하여 (§42④ 2호)"\n'
+        +'  - inconsistent       → "## 9. 청구항 기재의 일관성에 대하여 (§42②/④ 일반)"\n'
+        +'★ 분석 결과에 없는 키의 섹션은 절대 생성하지 마라. 빈 섹션을 만들면 의견서가 부풀려진다.\n'
+        +'★ 각 분리 섹션 내부 구조: (1) 심사관 지적 요지 1~2줄 → (2) 변리사 의견(보정 내용 또는 반박) → (3) 결어. 두 섹션이 같은 보정으로 해소되면 cross-reference 사용.\n'
+        +'★ description_lack(§42④ 1호) 섹션에는 "본 사안은 명세서 보정이 필요한 사안으로, 본 의견서와 함께 명세서 보정서를 별도 제출합니다" 안내를 반드시 포함.\n\n'
+        +'[기본 구조]\n'
+        +'## 서두\n(통지서 수령 확인)\n\n'
+        +'## 1. 보정내용\n(수정 전·후 대비. 각 수정에 명세서 단락번호 표기)\n\n'
+        +'## 2. 보정의 적법성\n(최초 명세서 범위 내 / 신규사항 없음)\n\n'
+        +'## 3. 구체적 의견내용\n(아래 §42 분리 섹션의 도입부 1~2줄. 상세 논변은 분리 섹션에 둠)\n\n'
+        +'## 4. 결론\n("이상과 같이 거절이유는 모두 해소되었으므로, 특허등록되어야 합니다.")\n\n'
+        +'[§42 분리 섹션 — 분석 결과에 등장한 키만 생성]\n'
+        +'(여기에 위 5종 키 중 해당하는 것만 ## 헤더로 추가. 헤더 번호는 5번부터 시작.)',
 
       partial_rejection: '위 자료를 기반으로 일부 청구항 거절 의견서를 작성해 주세요.\n\n'
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 의견서를 작성하세요.\n'
