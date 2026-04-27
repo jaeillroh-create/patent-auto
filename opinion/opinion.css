@@ -117,6 +117,8 @@
 .opinion-claim-row.rejected { background: #fff5f5; border-color: #fecaca; }
 .opinion-claim-row.allowable { background: #f0fdf4; border-color: #bbf7d0; }
 .opinion-claim-row .claim-no { width: 70px; font-weight: 600; flex-shrink: 0; }
+/* Cycle 6 — 혼합 모드 secondary 카드 (노란 보더) */
+.opinion-analysis-card-secondary { border-left: 4px solid #f59e0b; background: #fffbeb; border-radius: 8px; padding: 14px; margin-top: 12px; }
 
 /* ═══ 11. 심사관·변리사 토론 형식 ═══ */
 .opinion-discussion { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }

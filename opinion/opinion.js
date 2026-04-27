@@ -577,29 +577,43 @@ Opinion.sanitizeTemplate = function(rawText, type) {
   var emphasisKws = /명백히|분명히|강조하여|주장하건대|명시적으로|구체적으로|결론적으로|특히\s|더욱이|나아가\s/;
   var closerKws = /^(이상과\s*같이|상기\s*이유로|따라서|그러므로|살펴보면|검토하면|대비하면|종합하면|이에\s|아래와\s*같이|상기\s*출원|수령하였기에)/;
 
+  // ─── Cycle 6 P2#10: 사건 특유 내용 마스킹 함수 ───
+  // 청구항 번호·인용번호·단락번호·출원번호를 [*]로 대체
+  function _maskCaseSpecific(str) {
+    return str
+      .replace(/제\s*\d+\s*항/g, '[청구항*]')
+      .replace(/청구항\s*\d+/g, '[청구항*]')
+      .replace(/(인용문헌|선행발명|비교대상발명)\s*\d+/g, '[인용*]')
+      .replace(/【\d{4}】/g, '[단락*]')
+      .replace(/\d{4}-\d{6,}/g, '[출원번호*]');
+  }
+
   lines.forEach(function(line) {
     var trimmed = line.trim();
     if (!trimmed || trimmed.length < 5) return;
 
     // [⑤] 단락 구조 + 섹션 제목
     if (headingPattern.test(trimmed) || kwPattern.test(trimmed)) {
-      structurePatterns.push(trimmed);
+      structurePatterns.push(_maskCaseSpecific(trimmed));
       return;
     }
 
     if (trimmed.length > 8 && trimmed.length < 90) {
       // [①] 호칭 패턴
       if (salutPattern.test(trimmed)) {
-        salutationPatterns.push(trimmed.slice(0, 60));
+        var masked = _maskCaseSpecific(trimmed.slice(0, 60));
+        if (masked.replace(/\[\*\]|\[[^\]]+\*\]/g, '').trim().length > 5) {
+          salutationPatterns.push(masked);
+        }
       // [③] 종결어미 (짧은 문장 끝)
       } else if (closingEndPattern.test(trimmed) && trimmed.length < 55) {
-        closingPatterns.push(trimmed.slice(0, 55));
+        closingPatterns.push(_maskCaseSpecific(trimmed.slice(0, 55)));
       // [④] 강조어구
       } else if (emphasisKws.test(trimmed) && trimmed.length < 65) {
-        emphasisPatterns.push(trimmed.slice(0, 65));
+        emphasisPatterns.push(_maskCaseSpecific(trimmed.slice(0, 65)));
       // [⑥] 결어·연결어
       } else if (closerKws.test(trimmed)) {
-        closerPatterns.push(trimmed.slice(0, 65));
+        closerPatterns.push(_maskCaseSpecific(trimmed.slice(0, 65)));
       }
     }
   });
@@ -630,38 +644,53 @@ Opinion.sanitizeTemplate = function(rawText, type) {
 };
 
 // ★ 양식 내용 오염 검증 — 의견서 생성 후 실행 ★
-Opinion.validateNoTemplateContamination = function(opinionText) {
-  if (!Opinion.state.customTemplate || !Opinion.state.customTemplate.text) return { clean: true, warnings: [] };
+// severity: 'high'=차단급(청구항번호·인용번호·단락번호 포함), 'medium'=경고급, 'low'=콘솔만
+Opinion.validateNoTemplateContamination = function(opinionText, contextType) {
+  if (!Opinion.state.customTemplate || !Opinion.state.customTemplate.text) return { clean: true, warnings: [], severity: 'low' };
 
   var templateText = Opinion.state.customTemplate.text;
   var warnings = [];
 
-  // 참고 양식에서 5단어 이상 연속 일치하는 구절 검출
-  // (구조적 관용구는 제외: 서두, 결론 등)
+  // ─── 안전 구절 (일반 법조문·관용어만 면제 — 사건 특유 내용 제거) ───
   var SAFE_PHRASES = [
     '의견을 제출합니다','특허등록되어야','신규사항에 해당하지','보정의 적법성',
-    '보정내용','구체적 의견내용','결론','서두','소결','기술적 요지',
-    '인용발명','본원발명','구성요소','결합의 용이성','명세서에 기재된 범위'
+    '보정내용','구체적 의견내용','결론','서두','소결',
+    '결합의 용이성','명세서에 기재된 범위',
+    '이상과 같이','상기 이유로','따라서','이에','이하에서','다음과 같이',
+    '특허법 제','제47조','제42조','제29조'
+    // ⚠️ '인용발명','본원발명','구성요소','기술적 요지'는 제거 — 사건 특유 내용 가능
   ];
 
-  // 참고 양식에서 30자 이상 의미 있는 문장 추출
+  // ─── 사건 특유 패턴 (high severity 탐지) ───
+  // 청구항 번호, 인용문헌 번호, 출원번호, 단락번호
+  var HIGH_PATTERNS = [
+    /제\s*\d+\s*항/,          // 청구항 번호
+    /청구항\s*\d+/,           // 청구항 번호 (대안)
+    /인용문헌\s*\d+|선행발명\s*\d+|비교대상발명\s*\d+/,  // 인용발명 번호
+    /【\d{4}】/,              // 단락번호
+    /\d{4}-\d{6,}/            // 출원번호 패턴
+  ];
+
+  // 참고 양식에서 25자 이상 의미 있는 문장 추출
   var templateSentences = templateText.split(/[.\n]/).filter(function(s) {
     var t = s.trim();
-    return t.length >= 30 && !/^[\s\d\.\(\)【】가-힣①-⑳❶-❿:]+$/.test(t);
+    return t.length >= 25 && !/^[\s\d\.\(\)【】가-힣①-⑳❶-❿:]+$/.test(t);
   });
 
   templateSentences.forEach(function(sentence) {
     var trimmed = sentence.trim().slice(0, 80);
-    // 안전 구절이면 스킵
     var isSafe = SAFE_PHRASES.some(function(sp) { return trimmed.indexOf(sp) >= 0; });
     if (isSafe) return;
 
-    // 의견서에 유사 구절이 있는지 검사 (20자 이상 연속 일치)
+    // high severity: 사건 특유 패턴 포함 여부 체크
+    var isHighRisk = HIGH_PATTERNS.some(function(re) { return re.test(trimmed); });
+
     for (var len = 20; len <= Math.min(trimmed.length, 50); len++) {
       var chunk = trimmed.slice(0, len);
       if (opinionText.indexOf(chunk) >= 0) {
         warnings.push({
-          type: 'content_leak',
+          type: isHighRisk ? 'case_specific_leak' : 'content_leak',
+          severity: isHighRisk ? 'high' : 'medium',
           template_fragment: trimmed.slice(0, 60) + '...',
           match_length: len
         });
@@ -670,9 +699,15 @@ Opinion.validateNoTemplateContamination = function(opinionText) {
     }
   });
 
+  // 전체 severity 결정: high 항목이 하나라도 있으면 high
+  var overallSeverity = 'low';
+  if (warnings.some(function(w) { return w.severity === 'high'; })) overallSeverity = 'high';
+  else if (warnings.length > 0) overallSeverity = 'medium';
+
   return {
     clean: warnings.length === 0,
-    warnings: warnings
+    warnings: warnings,
+    severity: overallSeverity
   };
 };
 
@@ -1900,7 +1935,26 @@ Opinion.renderStrategy = function(L,R,status){
     discussionHtml = '<div class="card" style="margin-bottom:12px"><div class="card-header"><div class="card-title"><span class="tossface">💬</span> 심사관·변리사 협의</div></div>'
       + Opinion.renderDiscussion(a.discussion) + '</div>';
   }
-  R.innerHTML = discussionHtml + Opinion.renderAnalysisUI(type, a, extracted);
+  // ── Cycle 6 P2 §2.4: secondary 카드 — 혼합 모드일 때 노란 보더 카드 추가 ──
+  var secondaryCardHtml = '';
+  var secAnaData = (a && a._secondary) || (a && a.secondary_analysis) || null;
+  if (Opinion.state._mixed_mode && secAnaData) {
+    var secKey4 = Opinion.state._mixed_secondary || '';
+    var secInfo4 = Opinion.TYPES[secKey4] || {};
+    secondaryCardHtml = '<div class="opinion-analysis-card-secondary" style="margin-top:12px;border-left:4px solid #f59e0b;background:#fffbeb;border-radius:8px;padding:14px">'
+      +'<div style="font-weight:700;font-size:13px;color:#92400e;margin-bottom:8px">📋 부 거절이유 분석 — §'+escapeHtml(secInfo4.code||'')+' '+escapeHtml(secInfo4.label||'')+'</div>'
+      +(secAnaData.items && secAnaData.items.length
+        ? secAnaData.items.map(function(it) {
+            return '<div style="padding:8px;border:1px solid #fcd34d;border-radius:6px;margin-bottom:6px;background:#fef9c3">'
+              +'<div style="font-size:12px;font-weight:600">청구항 '+(it.claim_no||'?')+'</div>'
+              +'<div style="font-size:12px;color:#78350f;margin-top:3px">'+escapeHtml(it.examiner_comment||it.reason||'')+'</div>'
+              +(it.suggested_correction?'<div style="font-size:11px;margin-top:4px;color:#451a03">→ '+escapeHtml(it.suggested_correction)+'</div>':'')
+              +'</div>';
+          }).join('')
+        : '<div style="font-size:12px;color:#78350f">'+escapeHtml(JSON.stringify(secAnaData).slice(0,300))+'</div>')
+      +'</div>';
+  }
+  R.innerHTML = discussionHtml + Opinion.renderAnalysisUI(type, a, extracted) + secondaryCardHtml;
 
   if (type==='inventive_step' && strategies.length) {
     Opinion.highlightStrategyElements(0);
@@ -2741,12 +2795,24 @@ Opinion.startOpinionDraft=async function(){
       };
     }
 
-    // 양식 내용 오염 검증
+    // 양식 내용 오염 검증 (Cycle 6 P2#9 — severity 3단계)
     var fullText = od.sections.map(function(s){return s.content;}).join('\n');
     var check = Opinion.validateNoTemplateContamination(fullText);
     if (!check.clean) {
-      console.warn('[Opinion] Template contamination:', check.warnings.length, 'items');
+      console.warn('[Opinion] Template contamination:', check.warnings.length, 'items, severity:', check.severity);
       od._contamination_warnings = check.warnings;
+      od._contamination_severity = check.severity;
+      if (check.severity === 'high') {
+        // high: 청구항 번호·인용발명 번호·단락번호 오염 → 차단
+        od._blocked_by_contamination = true;
+        await sb.from('opinion_opinion_drafts').insert({project_id:p.id,opinion_type:t,content:od,status:'contamination_blocked'});
+        Opinion.state.opinionDraft = od;
+        await Opinion.setStatus(p.id,'claims_confirmed');
+        Opinion.renderDetail();
+        showToast('⚠️ 템플릿 오염 감지 — 변리사 직접 확인 필수 (사건 특유 내용 혼입 의심)', 'error');
+        return;
+      }
+      // medium: 콘솔 경고 + 헤더에 표시하되 생성 진행
     }
 
     // ─── 사후적 고찰(hindsight) 키워드 검증 (Cycle 4 P1 #14) ───
@@ -2908,6 +2974,7 @@ Opinion.renderOutput=function(L,R,status){
   var amendDisabled = !done;
   var amendTip = done ? '' : ' title="Gate 3 승인 후 활성화"';
   L.innerHTML=nav+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📥</span> 최종 확인 + 출력</div></div>'
+    +'<div style="padding:6px 10px;background:#eff6ff;border-radius:6px;margin-bottom:10px;font-size:11px;color:#1e40af">ℹ️ 베타 단계 — 의견서·보정서는 변리사 검토 후 제출하세요</div>'
     +'<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">의견서 대응이 완료되었습니다. 다운로드하여 특허로에 제출하세요.</p>'
     +'<div style="display:flex;flex-direction:column;gap:8px">'
     +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadOpinionDocx()"'+(done?'':' disabled')+'><span class="tossface">📝</span> 의견서 (Word)</button>'
@@ -3011,7 +3078,8 @@ Opinion.downloadAmendmentDocx = async function() {
   var datestr = new Date().toISOString().slice(0,10);
   a.href = url; a.download = '보정서_' + (p.application_no||p.title||'output') + '_' + datestr + '.doc';
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-  showToast('보정서 다운로드 완료');
+  // Cycle 6 §2.5 — Word 호환성 수동 검증 안내 토스트
+  showToast('✅ 보정서 다운로드 완료 — KIPO 제출 전 Word/Hancom에서 표·취소선·한글 인코딩 정상 여부를 확인해 주세요', 'info');
 };
 
 // 보정서 HTML 본문 빌더 (KIPO 별지 제13호 구조)
@@ -3238,7 +3306,20 @@ Opinion.resetToUploadWithManual=async function(){
 };
 
 // ═══ Utilities ═══
-Opinion.setStatus=async function(id,s){try{await sb.from('opinion_projects').update({status:s,updated_at:new Date().toISOString()}).eq('id',id);var p=Opinion.state.current;if(p&&p.id===id)p.status=s;Opinion.state.projects.forEach(function(x){if(x.id===id)x.status=s;});}catch(e){console.error('[Opinion] status:',e);}};
+Opinion.setStatus=async function(id,s){
+  try{
+    var res=await sb.from('opinion_projects').update({status:s,updated_at:new Date().toISOString()}).eq('id',id);
+    if(res.error) throw res.error;
+    var p=Opinion.state.current;if(p&&p.id===id)p.status=s;
+    Opinion.state.projects.forEach(function(x){if(x.id===id)x.status=s;});
+    return {ok:true};
+  }catch(e){
+    console.error('[Opinion.setStatus] DB 실패 (status='+s+'):', e);
+    showToast('상태 저장 실패 — 새로고침 후 재시도해 주세요', 'error');
+    // 메모리 status 변경 않음 → DB와 일치 유지
+    return {ok:false, error:e.message||String(e)};
+  }
+};
 Opinion.loadData=async function(id){try{
   // 5개 독립 쿼리를 병렬 실행
   var results = await Promise.all([
