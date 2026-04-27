@@ -112,7 +112,7 @@ Opinion.DEFAULT_TEMPLATES = {
 };
 
 // ═══ State ═══
-Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null, _secondary_warned:false };
+Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null, _secondary_warned:false, _mixed_mode:false, _mixed_primary:null, _mixed_secondary:null };
 
 // ═══ 파이프라인 레벨 취소 토큰 (P2 #24) ═══
 Opinion._currentRun = null; // AbortController instance
@@ -179,6 +179,9 @@ Opinion.resetState = function(opts) {
   Opinion.state.selectedStrategyIndex = null;
   Opinion.state._typeNeedsManual  = false; // Cycle 1 플래그
   Opinion.state._secondary_warned = false; // Cycle 3 혼합 거절 확인 플래그
+  Opinion.state._mixed_mode       = false; // Cycle 5 혼합 모드 플래그
+  Opinion.state._mixed_primary    = null;  // Cycle 5 주 거절 유형 (스냅샷)
+  Opinion.state._mixed_secondary  = null;  // Cycle 5 부 거절 유형 (스냅샷)
   Opinion.state.parseFailDetail   = null;
   Opinion.state.lastRevisionNote  = '';
   Opinion.state.gateDecisions     = {};
@@ -782,7 +785,13 @@ Opinion.renderDetail = function(){
   var s=Opinion.STATUS[p.status]||{label:p.status,css:'status-created'};
   document.getElementById('opinionDetailTitle').textContent=p.title||'무제';
   document.getElementById('opinionDetailAppNo').textContent=p.application_no||'-';
-  document.getElementById('opinionDetailType').innerHTML='<span class="opinion-type-badge '+t.css+'">'+t.icon+' '+t.code+'. '+t.label+'</span>';
+  // ── Cycle 5: 혼합 모드 헤더 chip ──
+  var mixedChip = '';
+  if (Opinion.state._mixed_mode && Opinion.state._mixed_secondary) {
+    var sInfo = Opinion.TYPES[Opinion.state._mixed_secondary] || {};
+    mixedChip = ' <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:#e3f2fd;border-radius:10px;font-size:10px;font-weight:600;color:#1565c0;margin-left:4px">+ 부 거절: §'+(sInfo.code||'')+'</span>';
+  }
+  document.getElementById('opinionDetailType').innerHTML='<span class="opinion-type-badge '+t.css+'">'+t.icon+' '+t.code+'. '+t.label+'</span>'+mixedChip;
   document.getElementById('opinionDetailStatus').innerHTML='<span class="opinion-status-badge '+s.css+'">'+s.label+'</span> <span id="opinionUsage" style="font-size:11px;color:var(--color-text-tertiary);margin-left:8px"></span>';
   Opinion.updateUsageDisplay();
   Opinion.renderPipeline(p);
@@ -1512,16 +1521,18 @@ Opinion.renderTypeView = function(L,R){
         +'<div style="font-size:12px;color:#78350f;line-height:1.8;margin-bottom:10px">'
         +'· 주 거절: <b>'+escapeHtml(priInfo.icon+' '+priInfo.code+'. '+priInfo.label)+'</b><br>'
         +'· 부 거절: <b>'+escapeHtml(secInfo.icon+' '+secInfo.code+'. '+secInfo.label)+'</b><br><br>'
-        +'현재 시스템은 한 거절이유를 단독 처리합니다. 두 거절이유 모두 대응하려면:<br>'
-        +'1) 본 프로젝트는 <b>'+escapeHtml(priInfo.label)+'</b> 경로로 진행<br>'
-        +'2) 동일 통지서로 별도 프로젝트를 생성하여 <b>'+escapeHtml(secInfo.label)+'</b> 경로로 진행<br>'
-        +'3) 두 의견서를 합본하여 KIPO 제출'
+        +'본 시스템은 두 거절이유를 <b>한 의견서·보정서에서 통합 처리</b>합니다.<br>'
+        +'· 의견서: 거절이유별 분리 섹션 (4.1 주 거절 / 4.2 부 거절)<br>'
+        +'· 보정서: 통합 형식 (각 청구항에 적용된 거절이유 명시)'
         +'</div>'
-        +'<button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="Opinion.acknowledgeMixed()">이해했습니다 — 주 거절로 진행</button>'
+        +'<button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="Opinion.acknowledgeMixed()">이해했습니다 — 통합 진행</button>'
         +'</div>';
     }
   } else if (secType && secInfo && Opinion.state._secondary_warned) {
-    secondaryBannerHtml = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534">✅ 혼합 거절 안내 확인 완료 — 주 거절 경로로 진행 중</div>';
+    var modeLabel = (secType === 'unsupported_type')
+      ? '주 거절 경로로 진행 중'
+      : '두 거절이유 통합 처리 중 (§'+escapeHtml(priInfo.code||'')+' + §'+escapeHtml(secInfo.code||'')+')';
+    secondaryBannerHtml = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534">✅ 혼합 거절 안내 확인 완료 — '+modeLabel+'</div>';
   }
 
   L.innerHTML=Opinion.renderNavBar('type')+secondaryBannerHtml+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">🔍</span> 유형 판별 결과</div></div>'
@@ -1545,22 +1556,39 @@ Opinion.renderTypeView = function(L,R){
 };
 Opinion.selectType=function(el,type){document.querySelectorAll('.opinion-type-option').forEach(function(o){o.classList.remove('selected');});el.classList.add('selected');Opinion.state.current.rejection_type=type;};
 
-// ── 혼합 거절 안내 확인 버튼 핸들러 (Cycle 3 P2 #20) ──
+// ── 혼합 거절 안내 확인 버튼 핸들러 (Cycle 3 P2 #20 + Cycle 5 통합 모드) ──
 Opinion.acknowledgeMixed = async function() {
   var p = Opinion.state.current; if (!p) return;
   Opinion.state._secondary_warned = true;
   var secType = p.secondary_rejection_type || (Opinion.state.typeResult && Opinion.state.typeResult.secondary_type) || null;
+  // ── Cycle 5: secondary가 정상 유형이면 _mixed_mode 진입 ──
+  var secInfo = secType ? Opinion.TYPES[secType] : null;
+  var isSecUnsupported = secType === 'unsupported_type';
+  if (secInfo && !isSecUnsupported) {
+    Opinion.state._mixed_mode      = true;
+    Opinion.state._mixed_primary   = p.rejection_type;
+    Opinion.state._mixed_secondary = secType;
+    console.log('[Opinion.acknowledgeMixed] mixed mode ENABLED: '+p.rejection_type+' + '+secType);
+  } else {
+    Opinion.state._mixed_mode = false;
+    Opinion.state._mixed_primary = null;
+    Opinion.state._mixed_secondary = null;
+  }
   try {
     await sb.from('opinion_gate_decisions').insert({
       project_id: p.id, gate_no: 0, decision: 'mixed_acknowledged',
       decided_by: currentUser.id,
-      revision_note: JSON.stringify({primary: p.rejection_type, secondary: secType})
+      revision_note: JSON.stringify({primary: p.rejection_type, secondary: secType, mixed_mode: Opinion.state._mixed_mode})
     });
   } catch(e) { console.warn('[Opinion.acknowledgeMixed] gate_decisions insert failed:', e); }
   // 배너를 "확인 완료" 상태로 교체
   var banner = document.getElementById('opinionMixedBanner');
   if (banner) {
-    banner.outerHTML = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534">✅ 혼합 거절 안내 확인 완료 — 주 거절 경로로 진행 중</div>';
+    var priInfo = Opinion.TYPES[p.rejection_type] || Opinion.TYPES.inventive_step;
+    var modeLabel = isSecUnsupported
+      ? '주 거절 경로로 진행 중'
+      : '두 거절이유 통합 처리 중 (§'+(priInfo.code||'')+' + §'+(secInfo.code||'')+')';
+    banner.outerHTML = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534">✅ 혼합 거절 안내 확인 완료 — '+modeLabel+'</div>';
   }
 };
 
@@ -1672,8 +1700,26 @@ Opinion.startAnalysis = async function(){
         +'★ 토론 형식: 특허청 파트장 심사관과 20년차 수석 변리사가 번갈아 대화하면서 분석하세요.\n\n'
         +'JSON:\n{"discussion":[{"role":"심사관","text":"..."},{"role":"변리사","text":"..."}],\n"rejected_claims":[{"claim_no":N,"reason":"진보성 위반 등 구체적 이유"}],"allowable_claims":[{"claim_no":N,"basis":"거절이유 미지적 등 근거"}],"merge_suggestion":{"target":1,"source":N,"rationale":"병합 이유와 기대 효과"}}'
     };
+    // ── Cycle 5: 혼합 모드일 때 secondary 분석 지시 추가 ──
+    var mixedDirective = '';
+    if (Opinion.state._mixed_mode && Opinion.state._mixed_secondary && Opinion.state._mixed_secondary !== type) {
+      var secKey = Opinion.state._mixed_secondary;
+      var secInfoCtx = Opinion.TYPES[secKey] || {};
+      mixedDirective = '\n\n[혼합 거절 — 부 거절이유 추가 분석]\n'
+        +'본 통지서에는 주 거절이유('+type+') 외에 부 거절이유('+secKey+', §'+(secInfoCtx.code||'')+' '+(secInfoCtx.label||'')+')도 포함됩니다.\n'
+        +'parsed.rejection_reasons 배열에서 부 거절이유에 해당하는 항목들을 별도 분석하라.\n'
+        +'주 거절 분석은 위 지시를 그대로 따르되, 출력 JSON에 다음 키를 추가하라:\n\n'
+        +'"secondary_analysis": {\n'
+        +'  "type": "'+secKey+'",\n'
+        +'  "items": [/* secondary 유형 표준 항목 — '
+        +(secKey==='inventive_step' ? 'elements/strategies 구조' : secKey==='description_deficiency' ? 'items 배열 (claim_no, deficiency_type, article, examiner_comment, spec_reference, suggested_correction)' : 'rejected_claims/allowable_claims/merge_suggestion 구조')
+        +' */],\n'
+        +'  "rejected_claims_secondary": [N, ...]  // 부 거절이유로 거절된 청구항 번호\n'
+        +'}\n\n'
+        +'⚠️ secondary_analysis는 주 거절 분석과 분리하여 작성하라. 두 거절이유를 혼동하지 마라.\n';
+    }
     var ar = await Opinion.callForJSON(
-      Opinion.SYS_PROMPT+'\n\n'+ctx+'\n'+prompts[type],
+      Opinion.SYS_PROMPT+'\n\n'+ctx+'\n'+prompts[type]+mixedDirective,
       type==='inventive_step' ? '{"elements":[{"element_id":"E1","claim_element":"...","difference":"...","strength":"strong"}],"strategies":[{"name":"...","rationale":"...","risk":"low"}]}'
       : type==='description_deficiency' ? '{"items":[{"claim_no":1,"deficiency_type":"support","article":"§42② 4호","examiner_comment":"...","spec_reference":"【0010】","suggested_correction":"..."}]}'
       : '{"rejected_claims":[...],"allowable_claims":[...],"merge_suggestion":{...}}'
@@ -1684,8 +1730,15 @@ Opinion.startAnalysis = async function(){
       showToast('이전 작업이 취소되었습니다', 'info');
       return;
     }
+    // ── Cycle 5: secondary_analysis를 메모리에도 보관 (UI 렌더용) ──
+    if (ar && ar.secondary_analysis) {
+      Opinion.state.analysis = ar;
+      Opinion.state.analysis._secondary = ar.secondary_analysis;
+    } else {
+      Opinion.state.analysis = ar;
+    }
     await sb.from('opinion_issue_analyses').insert({project_id:p.id,analysis_type:type,result_data:ar});
-    Opinion.state.analysis=ar; await Opinion.setStatus(p.id,next); Opinion.renderDetail(); showToast('분석 완료');
+    await Opinion.setStatus(p.id,next); Opinion.renderDetail(); showToast('분석 완료');
   }catch(e){showToast('분석 실패: '+e.message,'error');await Opinion.setStatus(p.id,'type_determined');Opinion.renderDetail();}
 };
 
@@ -2267,8 +2320,28 @@ Opinion.startDraft=async function(){
       description_deficiency: '{"corrected_claims":[{"claim_no":1,"original":"...","corrected":"...","spec_basis":["【0001】"]}]}',
       partial_rejection: '{"merged_claim":{"claim_no":1,"text":"...","spec_basis":["【0001】"]},"remaining_claims":[...]}'
     };
+    // ── Cycle 5: 혼합 모드일 때 보정 통합 지시 추가 ──
+    var mixedDraftDirective = '';
+    if (Opinion.state._mixed_mode && Opinion.state._mixed_secondary && Opinion.state._mixed_secondary !== t) {
+      var secKey2 = Opinion.state._mixed_secondary;
+      var secInfo2 = Opinion.TYPES[secKey2] || {};
+      var priInfo2 = Opinion.TYPES[t] || {};
+      var secAna = (Opinion.state.analysis && Opinion.state.analysis._secondary) || (Opinion.state.analysis && Opinion.state.analysis.secondary_analysis) || null;
+      var secRejNos = (secAna && (secAna.rejected_claims_secondary || (secAna.items||[]).map(function(it){ return it.claim_no; }).filter(Boolean))) || [];
+      mixedDraftDirective = '\n\n[혼합 거절 — 보정 통합 지시]\n'
+        +'본 보정은 두 거절이유를 동시에 해소해야 한다:\n'
+        +'  · 주 거절('+t+', §'+(priInfo2.code||'')+' '+(priInfo2.label||'')+') 청구항: '+rejectedIndependentNos.join(', ')+'\n'
+        +'  · 부 거절('+secKey2+', §'+(secInfo2.code||'')+' '+(secInfo2.label||'')+') 청구항: '+(secRejNos.length?secRejNos.join(', '):'(secondary_analysis 참조)')+'\n\n'
+        +'각 청구항을 다음 원칙으로 보정하라:\n'
+        +'  - 청구항이 주 거절이유에만 해당 → 주 거절이유 보정 전략 적용\n'
+        +'  - 청구항이 부 거절이유에만 해당 → 부 거절이유 보정 전략 적용 (예: §42 명확화·청구항 축소·용어 통일)\n'
+        +'  - 청구항이 둘 다에 해당 → 부 거절이유(명확성 등)를 먼저 해소한 뒤 주 거절이유(진보성 등) 차이점 추가\n\n'
+        +'⚠️ 출력 amended_claims 배열의 각 항목에 다음 키를 반드시 포함:\n'
+        +'  "applied_rejections": ["§'+(priInfo2.code||'')+'"] 또는 ["§'+(secInfo2.code||'')+'"] 또는 ["§'+(priInfo2.code||'')+'", "§'+(secInfo2.code||'')+'"]\n'
+        +'  - 어느 거절이유를 해소하는 보정인지 명시. KIPO 심사관이 보정 의도를 추적할 수 있어야 한다.\n';
+    }
     var dr = await Opinion.callForJSON(
-      Opinion.SYS_PROMPT+'\n\n'+ctx+prompts[t],
+      Opinion.SYS_PROMPT+'\n\n'+ctx+prompts[t]+mixedDraftDirective,
       schemaHints[t] || '{}'
     );
     // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
@@ -2584,14 +2657,29 @@ Opinion.startOpinionDraft=async function(){
     };
 
     // ─── §3.2 스타일 지시 블록 (톤앤매너 강화) ───
+    // ── Cycle 5: 혼합 모드일 때 두 템플릿 모두 로드 ──
     var activeTemplObj = Opinion.state.templates && Opinion.state.templates[t];
+    var secTemplObj = null;
+    var secTemplKey = null;
+    if (Opinion.state._mixed_mode && Opinion.state._mixed_secondary && Opinion.state._mixed_secondary !== t) {
+      secTemplKey = Opinion.state._mixed_secondary;
+      secTemplObj = Opinion.state.templates && Opinion.state.templates[secTemplKey];
+    }
     var styleGuide = '';
     if (activeTemplObj && activeTemplObj.text) {
+      // ── Cycle 5: secondary 템플릿이 있으면 ref 컨텍스트에 추가 주입 ──
+      if (secTemplObj && secTemplObj.text) {
+        var secTplText = Opinion.getActiveTemplate(secTemplKey);
+        if (secTplText) {
+          ctx += '[★ 본 사무소 표준 의견서 양식 — 부 거절('+secTemplKey+') 시작]\n' + secTplText + '\n[★ 본 사무소 표준 의견서 양식 — 부 거절 끝]\n\n';
+        }
+      }
       styleGuide = '\n\n★★★ 문체·톤 준수 지시 (최우선 적용) ★★★\n'
         + '위 컨텍스트의 [★ 본 사무소 표준 의견서 양식]은 본 사무소의 실제 의견서 스타일을 학습하기 위한 자료다.\n'
+        + (secTemplObj && secTemplObj.text ? '⚠️ 혼합 거절 모드: 주 거절('+t+') 양식과 부 거절('+secTemplKey+') 양식 두 개가 모두 제공되었다. 두 양식의 톤앤매너 패턴을 조합하라. 충돌 시 주 거절 양식을 우선하라.\n' : '')
         + '의견서를 작성하기 전에 아래 6가지 스타일 요소를 반드시 분석하고 동일하게 적용하라:\n'
         + '  ① 호칭: 출원인·귀청·심사관을 부르는 방식 → 양식과 동일하게 사용\n'
-        + '  ② 명칭: 발명·특허·출원을 지칭하는 방식 (본원발명/이 건 출원/본원) → 동일 용어 사용\n'
+        + '  ② 명칭(본원·인용발명): 양식에서 가장 빈번한 본원 명칭(예: "본원발명"/"본 출원의 발명"/"본 발명")과 인용발명 명칭(예: "선행발명 1"/"인용문헌 1"/"비교대상발명 1")을 추출하여 동일하게 사용. LLM 기본 표현으로 변형하지 마라.\n'
         + '  ③ 종결어미: 합니다체·습니다체·드립니다체 혼용 여부 → 동일 체계 유지\n'
         + '  ④ 강조어구: 특정 단어나 구절의 반복 패턴 (강조하여 주장합니다, 명백히 등) → 재현\n'
         + '  ⑤ 단락 구조: 번호·기호 체계 (가. 나. / ① ② / (1) (2) / 가목·나목 등) → 동일 체계\n'
@@ -2600,7 +2688,32 @@ Opinion.startOpinionDraft=async function(){
         + '⚠️ 단, 이 사건의 구체적 기술 내용·청구항 번호·특정 표현은 양식에서 절대 차용하지 마라. 현재 사건 내용으로만 채워야 한다.\n'
         + '⚠️ §42 조문 보호: 의견서에 등장하는 §42 조항 표기(§42② 1호, §42④ 2호 등)는 반드시 [분석 결과]의 article 필드 값만 사용하라. 양식에 다른 조문 번호가 있어도 무시하라. 조문 표기는 스타일 적용 대상이 아니다.\n';
     }
-    var prompt = Opinion.SYS_PROMPT + Opinion.TEMPLATE_GUARD + '\n\n' + ctx + revCtx + styleGuide + tpl[t];
+
+    // ── Cycle 5: 혼합 모드일 때 의견서 통합 작성 지시 (4.1·4.2 분리 섹션) ──
+    var mixedOpinionDirective = '';
+    if (Opinion.state._mixed_mode && Opinion.state._mixed_secondary && Opinion.state._mixed_secondary !== t) {
+      var secKey3 = Opinion.state._mixed_secondary;
+      var secInfo3 = Opinion.TYPES[secKey3] || {};
+      var priInfo3 = Opinion.TYPES[t] || {};
+      mixedOpinionDirective = '\n\n★★★ 혼합 거절 — 의견서 통합 작성 지시 (최우선 적용) ★★★\n'
+        + '본 사건은 두 거절이유가 함께 통지된 혼합 거절이다. 위에 제공된 기본 구조 대신, 아래 통합 구조로 작성하라:\n\n'
+        + '## 1. 사건의 표시\n(출원번호, 출원인 등)\n\n'
+        + '## 2. 거절이유의 요지\n'
+        + '- 주 거절이유: §'+(priInfo3.code||'')+' '+(priInfo3.label||t)+' (해당 청구항 명시)\n'
+        + '- 부 거절이유: §'+(secInfo3.code||'')+' '+(secInfo3.label||secKey3)+' (해당 청구항 명시)\n\n'
+        + '## 3. 보정의 요지\n(보정된 청구항을 거절이유별로 분류 요약. 각 보정에 적용된 거절이유 명시.)\n\n'
+        + '## 4. 거절이유에 대한 의견\n'
+        + '## 4.1 주 거절이유에 대하여 (§'+(priInfo3.code||'')+' '+(priInfo3.label||t)+')\n'
+        + '(주 거절이유에 대한 의견 본문 — 위 기본 구조의 "구체적 의견내용" 단계 적용)\n\n'
+        + '## 4.2 부 거절이유에 대하여 (§'+(secInfo3.code||'')+' '+(secInfo3.label||secKey3)+')\n'
+        + '(부 거절이유에 대한 의견 본문 — secondary_analysis 결과를 바탕으로 작성)\n\n'
+        + '## 5. 결어\n("이상과 같이 두 거절이유는 모두 해소되었으므로...")\n\n'
+        + '⚠️ 4.1·4.2는 반드시 "## " 두 글자 헤더로 작성하라(### 3-level 금지). 두 거절이유의 가시성을 동등하게 유지해야 한다.\n'
+        + '⚠️ 두 섹션 사이 cross-reference는 자유. 같은 보정으로 두 거절을 동시 해소한 경우 명시하라.\n'
+        + '⚠️ 위 기본 구조(tpl[t])의 섹션 번호와 충돌하면 본 통합 구조를 우선하라.\n';
+    }
+
+    var prompt = Opinion.SYS_PROMPT + Opinion.TEMPLATE_GUARD + '\n\n' + ctx + revCtx + styleGuide + mixedOpinionDirective + tpl[t];
     var r = await App.callClaude(prompt);
     Opinion.usage.calls++;  // callForJSON이 아닌 직접 호출이므로 수동 카운트
     Opinion.updateUsageDisplay();
@@ -2617,6 +2730,16 @@ Opinion.startOpinionDraft=async function(){
 
     // ─── §3.4 스타일 적용 가시성 플래그 ───
     od._style_applied = !!(activeTemplObj && activeTemplObj.text);
+    // ─── Cycle 5: 혼합 모드 가시성 플래그 ───
+    if (Opinion.state._mixed_mode && Opinion.state._mixed_secondary) {
+      od._mixed_mode = true;
+      od._mixed_primary = Opinion.state._mixed_primary || t;
+      od._mixed_secondary = Opinion.state._mixed_secondary;
+      od._mixed_templates = {
+        primary: !!(activeTemplObj && activeTemplObj.text),
+        secondary: !!(secTemplObj && secTemplObj.text)
+      };
+    }
 
     // 양식 내용 오염 검증
     var fullText = od.sections.map(function(s){return s.content;}).join('\n');
@@ -2725,14 +2848,31 @@ Opinion.renderOpinion=function(L,R,status){
     if (contamWarnings.length > 0) {
       styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#fff8e1;border-radius:12px;font-size:11px;font-weight:600;color:#f57f17;margin-top:8px;margin-bottom:2px">⚠️ 부분 적용 — 본 사무소 스타일 (오염 의심 확인 필요)</div>';
     } else {
-      styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#e8f5e9;border-radius:12px;font-size:11px;font-weight:600;color:#2e7d32;margin-top:8px;margin-bottom:2px">🎨 본 사무소 스타일 적용됨</div>';
+      // ── Cycle 5: 두 템플릿 결합 표시 ──
+      var styleSuffix = '';
+      if (o._mixed_mode && o._mixed_templates && o._mixed_templates.primary && o._mixed_templates.secondary) {
+        styleSuffix = ' (' + (o._mixed_primary || '') + '·' + (o._mixed_secondary || '') + ' 템플릿 결합)';
+      } else if (o._mixed_mode && o._mixed_templates && (o._mixed_templates.primary || o._mixed_templates.secondary)) {
+        var onlyKey = o._mixed_templates.primary ? (o._mixed_primary || '') : (o._mixed_secondary || '');
+        styleSuffix = ' (' + onlyKey + ' 템플릿만 적용)';
+      }
+      styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#e8f5e9;border-radius:12px;font-size:11px;font-weight:600;color:#2e7d32;margin-top:8px;margin-bottom:2px">🎨 본 사무소 스타일 적용됨'+escapeHtml(styleSuffix)+'</div>';
     }
   } else if (o._style_applied === false) {
     styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--color-bg-secondary);border-radius:12px;font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-top:8px;margin-bottom:2px">ℹ️ 기본 스타일</div>';
   }
 
+  // ─── Cycle 5: 혼합 모드 배지 ───
+  var mixedBadge = '';
+  if (o._mixed_mode && o._mixed_secondary) {
+    var pInfoR = Opinion.TYPES[o._mixed_primary || ''] || {};
+    var sInfoR = Opinion.TYPES[o._mixed_secondary || ''] || {};
+    mixedBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#e3f2fd;border-radius:12px;font-size:11px;font-weight:600;color:#1565c0;margin-top:8px;margin-left:6px;margin-bottom:2px">🔀 혼합 거절 통합 모드 — §'+escapeHtml(pInfoR.code||'')+' + §'+escapeHtml(sInfoR.code||'')+'</div>';
+  }
+
   L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">📝</span> 의견서 작성 완료</div><p style="font-size:13px;color:var(--color-text-secondary)">의견서를 검토하고 승인하면 최종 출력물이 생성됩니다.</p>'
     +styleBadge
+    +mixedBadge
     +contamHtml
     +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(3)"><span class="tf">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate3Approve" onclick="Opinion.approveGate(3)"><span class="tf">✅</span> 승인</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">의견서 작성 중...</div></div>');
   var secs=o.sections||[];
@@ -2891,12 +3031,22 @@ Opinion._buildAmendmentDocxHtml = function(project, draftResult, parsedData) {
   var S_NEW   = 'style="font-weight:600;color:#000;display:block;margin-top:4pt;"';
   var S_REASON= 'style="font-size:10pt;color:#444;margin-top:6pt;display:block;"';
 
+  // ── Cycle 5: 혼합 모드 정보 ──
+  var isMixed = !!(Opinion.state._mixed_mode && Opinion.state._mixed_secondary);
+  var mixedPrimaryInfo = isMixed ? (Opinion.TYPES[Opinion.state._mixed_primary || t] || {}) : {};
+  var mixedSecondaryInfo = isMixed ? (Opinion.TYPES[Opinion.state._mixed_secondary] || {}) : {};
+
   var html = '';
   html += '<h1>보 정 서</h1>';
   html += '<h2>【사건의 표시】</h2>';
   html += '<p>출원번호: ' + escapeHtml(appNo) + '</p>';
   if (applicant) html += '<p>출원인: ' + escapeHtml(applicant) + '</p>';
   if (inventionTitle) html += '<p>발명의 명칭: ' + escapeHtml(inventionTitle) + '</p>';
+  if (isMixed) {
+    html += '<p style="font-size:10pt;color:#444;margin-top:6pt;">'
+          + '※ 본 보정서는 두 거절이유(§' + escapeHtml(mixedPrimaryInfo.code||'') + ' ' + escapeHtml(mixedPrimaryInfo.label||'')
+          + ' + §' + escapeHtml(mixedSecondaryInfo.code||'') + ' ' + escapeHtml(mixedSecondaryInfo.label||'') + ')에 대응하는 통합 보정서입니다.</p>';
+  }
 
   html += '<h2>【보정의 대상】</h2>';
   html += '<p>□ 명세서 &nbsp;&nbsp; □ 도면 &nbsp;&nbsp; ☑ 청구범위</p>';
@@ -2935,7 +3085,15 @@ Opinion._buildAmendmentDocxHtml = function(project, draftResult, parsedData) {
     if (Array.isArray(basis)) basisStr = basis.join(', ');
     else if (typeof basis === 'string') basisStr = basis;
     var summary = ac.amendments_summary || (ac.changes ? ac.changes.map(function(ch){ return ch.detail||ch.type; }).join('; ') : '');
-    html += '<div ' + S_REASON + '><b>청구항 ' + escapeHtml(String(ac.claim_no)) + ':</b> '
+    // ── Cycle 5: 혼합 모드 — applied_rejections 라벨 ──
+    var rejLabel = '';
+    if (isMixed) {
+      var ar = ac.applied_rejections;
+      if (Array.isArray(ar) && ar.length) {
+        rejLabel = ' <span style="font-size:9pt;color:#1565c0;font-weight:600">[' + escapeHtml(ar.join(' + ')) + ']</span>';
+      }
+    }
+    html += '<div ' + S_REASON + '><b>청구항 ' + escapeHtml(String(ac.claim_no)) + ':</b>' + rejLabel + ' '
           + escapeHtml(summary || '명세서 기재 범위 내에서 보정.')
           + (basisStr ? ' <i>(근거 단락: ' + escapeHtml(basisStr) + ')</i>' : '')
           + '</div>';
