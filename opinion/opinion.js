@@ -345,17 +345,34 @@ Opinion._validateClaimReferences = function(finalClaims) {
   return { ok: issues.length === 0, issues: issues };
 };
 
-// 청구항 텍스트에서 "제 N항", "청구항 N", "청구항 제 N항" 패턴 추출
+// 청구항 텍스트에서 인용 번호 추출
+// (1) "제 N항 내지 제 M항" → N~M 범위 전체 (다중종속)
+// (2) "제 N항", "청구항 N" → 단일 인용
 Opinion._extractClaimReferences = function(text) {
   if (!text) return [];
   var refs = {};
-  var re = /제\s*(\d+)\s*항|청구항\s*(?:제\s*)?(\d+)/g;
-  var m;
-  while ((m = re.exec(text)) !== null) {
-    var n = parseInt(m[1] || m[2], 10);
+
+  // (1) 범위 인용: "제 N항 내지 제 M항"
+  var rangeRe = /제\s*(\d+)\s*항\s*내지\s*제\s*(\d+)\s*항/g;
+  var rm;
+  while ((rm = rangeRe.exec(text)) !== null) {
+    var start = parseInt(rm[1], 10);
+    var end   = parseInt(rm[2], 10);
+    // 상한 50 방어: 비정상적 범위("제1항 내지 제999항")로 인한 루프 폭주 차단
+    if (start > 0 && end >= start && (end - start) <= 50) {
+      for (var i = start; i <= end; i++) refs[i] = true;
+    }
+  }
+
+  // (2) 단일/또는 인용: "제 N항", "청구항 N"
+  var singleRe = /제\s*(\d+)\s*항|청구항\s*(?:제\s*)?(\d+)/g;
+  var sm;
+  while ((sm = singleRe.exec(text)) !== null) {
+    var n = parseInt(sm[1] || sm[2], 10);
     if (n > 0) refs[n] = true;
   }
-  return Object.keys(refs).map(function(s){ return parseInt(s, 10); });
+
+  return Object.keys(refs).map(function(s){ return parseInt(s, 10); }).sort(function(a, b){ return a - b; });
 };
 
 // ═══ Init ═══
@@ -2838,8 +2855,15 @@ Opinion.downloadAmendmentDocx = async function() {
   } catch(_) {}
 
   var html = Opinion._buildAmendmentDocxHtml(p, dr, parsedData || {});
+  // CSS class 불사용 — 모든 스타일 inline 처리됨. Word/Hancom/LibreOffice 호환성 강화
   var fullHtml = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">'
-    +'<head><meta charset="utf-8"><style>body{font-family:"맑은 고딕",sans-serif;font-size:11pt;line-height:1.7}h1{font-size:18pt;text-align:center}h2{font-size:13pt;margin-top:16pt;border-bottom:1px solid #999;padding-bottom:4pt}h3{font-size:12pt;margin-top:10pt}.amend-claim{border:1px solid #ccc;padding:10pt;margin:8pt 0;background:#fafafa}.amend-old{color:#666;text-decoration:line-through}.amend-new{font-weight:600;color:#000}.amend-reason{font-size:10pt;color:#444;margin-top:6pt}</style></head>'
+    +'<head><meta charset="utf-8"><meta name="ProgId" content="Word.Document"><meta name="Originator" content="Microsoft Word 15"><style>'
+    +'body{font-family:"맑은 고딕","Malgun Gothic",sans-serif;font-size:11pt;line-height:1.7;mso-fareast-font-family:"맑은 고딕";}'
+    +'h1{font-size:18pt;text-align:center;mso-outline-level:1;}'
+    +'h2{font-size:13pt;margin-top:16pt;border-bottom:1px solid #999;padding-bottom:4pt;mso-outline-level:2;}'
+    +'h3{font-size:12pt;margin-top:10pt;mso-outline-level:3;}'
+    +'p{margin:0 0 6pt 0;mso-margin-top-alt:auto;mso-margin-bottom-alt:auto;}'
+    +'</style></head>'
     +'<body>'+html+'</body></html>';
   var blob = new Blob(['﻿'+fullHtml], {type:'application/msword'});
   var url = URL.createObjectURL(blob);
@@ -2861,6 +2885,12 @@ Opinion._buildAmendmentDocxHtml = function(project, draftResult, parsedData) {
   var origClaims = (parsedData.claims || []);
   var origByNo = {}; origClaims.forEach(function(c){ origByNo[c.no] = c; });
 
+  // ── inline style 상수 (Word mso 속성 포함) ──
+  var S_BLOCK = 'style="border:1px solid #ccc;border-collapse:collapse;padding:10pt;margin:8pt 0;background:#fafafa;mso-border-alt:solid #ccc .5pt;display:block;"';
+  var S_OLD   = 'style="color:#888;text-decoration:line-through;mso-text-strike:on;display:block;margin-top:4pt;"';
+  var S_NEW   = 'style="font-weight:600;color:#000;display:block;margin-top:4pt;"';
+  var S_REASON= 'style="font-size:10pt;color:#444;margin-top:6pt;display:block;"';
+
   var html = '';
   html += '<h1>보 정 서</h1>';
   html += '<h2>【사건의 표시】</h2>';
@@ -2880,8 +2910,8 @@ Opinion._buildAmendmentDocxHtml = function(project, draftResult, parsedData) {
   } else {
     amendedArr.forEach(function(ac){
       var origText = ac.original || (origByNo[ac.claim_no] && origByNo[ac.claim_no].text) || '';
-      html += '<div class="amend-claim"><div><b>【청구항 ' + escapeHtml(String(ac.claim_no)) + '】</b></div>'
-            + '<div class="amend-old">' + escapeHtml(origText).replace(/\n/g,'<br>') + '</div></div>';
+      html += '<div ' + S_BLOCK + '><div><b>【청구항 ' + escapeHtml(String(ac.claim_no)) + '】</b></div>'
+            + '<div ' + S_OLD + '>' + escapeHtml(origText).replace(/\n/g,'<br>') + '</div></div>';
     });
   }
 
@@ -2889,12 +2919,12 @@ Opinion._buildAmendmentDocxHtml = function(project, draftResult, parsedData) {
   html += '<h3>나. 보정 후</h3>';
   amendedArr.forEach(function(ac){
     var newText = ac.amended || ac.corrected || ac.text || '';
-    html += '<div class="amend-claim"><div><b>【청구항 ' + escapeHtml(String(ac.claim_no)) + '】</b></div>'
-          + '<div class="amend-new">' + escapeHtml(newText).replace(/\n/g,'<br>') + '</div></div>';
+    html += '<div ' + S_BLOCK + '><div><b>【청구항 ' + escapeHtml(String(ac.claim_no)) + '】</b></div>'
+          + '<div ' + S_NEW + '>' + escapeHtml(newText).replace(/\n/g,'<br>') + '</div></div>';
   });
   // partial_rejection의 deleted_claims도 표시
   if (Array.isArray(draftResult.deleted_claims) && draftResult.deleted_claims.length) {
-    html += '<p style="color:#900"><b>삭제된 청구항:</b> ' + draftResult.deleted_claims.map(function(n){ return '【청구항 '+n+'】'; }).join(', ') + '</p>';
+    html += '<p style="color:#900;"><b>삭제된 청구항:</b> ' + draftResult.deleted_claims.map(function(n){ return '【청구항 '+n+'】'; }).join(', ') + '</p>';
   }
 
   // 다. 보정 사유
@@ -2905,14 +2935,14 @@ Opinion._buildAmendmentDocxHtml = function(project, draftResult, parsedData) {
     if (Array.isArray(basis)) basisStr = basis.join(', ');
     else if (typeof basis === 'string') basisStr = basis;
     var summary = ac.amendments_summary || (ac.changes ? ac.changes.map(function(ch){ return ch.detail||ch.type; }).join('; ') : '');
-    html += '<div class="amend-reason"><b>청구항 ' + escapeHtml(String(ac.claim_no)) + ':</b> '
+    html += '<div ' + S_REASON + '><b>청구항 ' + escapeHtml(String(ac.claim_no)) + ':</b> '
           + escapeHtml(summary || '명세서 기재 범위 내에서 보정.')
           + (basisStr ? ' <i>(근거 단락: ' + escapeHtml(basisStr) + ')</i>' : '')
           + '</div>';
   });
 
   // §47② 신규사항 추가 금지 적시
-  html += '<p style="margin-top:12pt;font-size:10pt;color:#444">※ 본 보정은 특허법 제47조 제2항에 따라 최초 명세서 또는 도면에 기재된 사항의 범위 내에서 이루어졌습니다.</p>';
+  html += '<p style="margin-top:12pt;font-size:10pt;color:#444;mso-margin-top-alt:9.0pt;">※ 본 보정은 특허법 제47조 제2항에 따라 최초 명세서 또는 도면에 기재된 사항의 범위 내에서 이루어졌습니다.</p>';
 
   // description_lack 케이스 안내
   if (t === 'description_deficiency') {
