@@ -639,4 +639,151 @@ description_deficiency: { ..., law:'§42③④' }
 - 발견 #18 [P1]: §42③④ 조문 표기 오류
 - 발견 #19 [P1]: 기재불비 두 조문 의견서 분리 논변 없음
 
-**CHUNK 4 완료.** 발견: P0 1 / P1 3 / P2 0. **누적: P0 4 / P1 11 / P2 4.** 다음 청크(5) 진행하려면 "다음" 입력.
+**CHUNK 4 완료.** 발견: P0 1 / P1 3 / P2 0. **누적: P0 4 / P1 11 / P2 4.**
+
+---
+
+## CHUNK 5/7 — 시나리오 M (혼합: §29②+§42② 4호 동시): 동적 흐름 추적 + 4축 점수
+
+[누적 카운트: P0 4 / P1 11 / P2 4]
+
+### 시나리오 M 입력 전제
+```
+본원:   청구항 6개
+거절:   청구항 1·2 — §29② 진보성 위반 (인용문헌1·2 조합)
+        청구항 4   — §42② 4호 뒷받침 흠결 (§42④ 1호)
+미거절: 청구항 3·5·6
+```
+
+---
+
+### M-흐름 1 — 유형 판별: secondary_type 저장 후 즉시 소멸
+
+유형 판별 prompt(L1080-L1085)는 3가지 유형만 제시한다. 혼합 거절 통지서가 입력되면 LLM이 두 유형 중 하나를 `primary_type`으로 선택하고 나머지를 `secondary_type`으로 반환할 수 있다.
+
+**코드 실행 경로:**
+```js
+// L1088 — secondary_type 저장
+await sb.from('opinion_projects').update({
+  rejection_type: tr.primary_type || 'inventive_step',
+  secondary_rejection_type: tr.secondary_type || null,  // ← 저장됨
+  status: 'type_determined'
+}).eq('id', p.id);
+
+// L1088 이후 — secondary_rejection_type을 읽는 코드 0건 (CHUNK 1 발견 #1 확인)
+// L519, L543, L565, L584 — PIPELINE 분기는 rejection_type 단일값만 사용
+// L1169-L1195 — 분석 prompt 선택: rejection_type 단일값
+// L1605-L1655 — 보정 prompt 선택: rejection_type 단일값
+// L1803-L1837 — 의견서 prompt 선택: rejection_type 단일값
+```
+
+`secondary_rejection_type`은 DB에 저장된 직후 시스템에서 사라진다. M 시나리오에서 파이프라인 전체가 `primary_type` 단일값으로 진행됨.
+
+---
+
+### M-흐름 2 — 단일 유형 강제의 두 시나리오
+
+#### 경로 A: 사용자가 "A. 진보성" 선택 시
+- 분석 prompt: inventive_step (§29 구성요소 대비 + 전략)
+- 보정 prompt: 청구항 1항만 보정 (진보성 논변)
+- 의견서 prompt: "진보성 위반(§29②) 의견서" 섹션 구조 (`### (4) 결합의 용이성 반박`)
+- **청구항 4의 §42④ 1호(뒷받침 흠결):**
+  - 파싱 결과에 지적사항이 포함되어 ctx로 전달됨
+  - 그러나 inventive_step prompt(L1170-L1187)에 기재불비 지적을 처리하는 로직 없음
+  - 의견서에 "§42 응답" 섹션 자동 생성 X
+  - 결과: 청구항 4 거절이유 미해소 의견서 KIPO 제출 위험
+
+#### 경로 B: 사용자가 "B. 기재불비" 선택 시
+- 분석 prompt: description_deficiency (지적사항별 items 생성)
+- 보정 prompt: corrected_claims 생성 (문언 명확화/축소)
+- **청구항 1·2의 §29② 진보성:**
+  - `description_deficiency` 분석은 인용발명 대비표(`elements[]`)를 생성하지 않음
+  - 의견서 섹션에 "결합의 용이성 반박" 없음 — §29 논변 구조 자체가 없음
+  - 결과: 청구항 1·2 진보성 거절이유 미해소
+
+**두 경로 모두 OA 재발생:** 선택하지 않은 거절이유는 다음 OA에서 그대로 유지됨.
+
+---
+
+### M-흐름 3 — 발견 #20: 유형 선택 UI에 secondary_type 경고 없음
+
+#### [P2] 사용자에게 혼합 거절 인식 수단 없음
+**위치:** opinion.js L1096-L1113 (`Opinion.renderTypeView`) / L1104-L1108 (type 선택 UI)
+**증거:**
+```js
+// L1096-L1108 — type 결과 화면
+Opinion.renderTypeView = function(L,R){
+  var p=Opinion.state.current,
+      t=Opinion.TYPES[p.rejection_type]||Opinion.TYPES.inventive_step,
+      tr=Opinion.state.typeResult||{},
+      conf=Math.round((tr.confidence||0.5)*100);
+  // ★ tr.secondary_type, p.secondary_rejection_type 화면 표시 없음
+  // ★ "혼합 거절이유 감지" 경고 없음
+  L.innerHTML = ... + '진보성' + ... + '기재불비' + ...  // 단순 선택 라디오 버튼
+};
+```
+`tr.secondary_type`이 존재해도 화면에 표시되지 않는다. 사용자는 통지서 원문을 직접 읽지 않으면 두 번째 거절이유의 존재를 알 수 없음.
+
+**개선 방향:** `if(tr.secondary_type){ showToast('⚠️ 복합 거절이유 감지: '+tr.secondary_type+' — 두 거절이유를 모두 대응해야 합니다','info'); }` + 유형 선택 화면에 secondary_type 배지 표시.
+
+---
+
+### M-흐름 4 — 발견 #21: unchanged_claims 필드 미소비
+
+#### [P1] 미거절 청구항 보존 코드 레벨 검증 없음
+**위치:** opinion.js L1644 (`unchanged_claims` 필드) / 전체 파일
+**증거:**
+```js
+// L1644 — inventive_step 보정 JSON schema
+'"unchanged_claims":[2,3,4],"strategy_name":"...",'
+
+// grep 'unchanged_claims' opinion.js → L1644, L1657만 (schema 정의뿐)
+// 소비: 0건
+```
+시나리오 M에서 미거절 청구항: 3·5·6. 보정 후 청구항 1·2·4가 수정되면 나머지 3·5·6은 원문 보존이어야 한다. `unchanged_claims:[3,5,6]`이 JSON에 반환되어도:
+- UI에 표시되지 않음
+- 의견서 본문에 "청구항 3·5·6은 변경 없음"이 명시되는 로직 없음
+- downloadDocx에 미거절 청구항 현황 미포함
+
+KIPO 심사관은 보정된 청구항 세트 전체를 검토하므로, 미거절 청구항이 의도치 않게 변경되었는지 의견서에서 확인할 수 없음.
+
+---
+
+### M-흐름 5 — 발견 #22: 청구항 번호 재정렬 LLM 의존
+
+#### [P1] partial_rejection 병합 시 청구항 번호 재정렬 코드 검증 없음
+**위치:** opinion.js L1654 (`remaining_claims` 스키마)
+**증거:**
+```js
+// L1654 — partial_rejection 보정 JSON schema
+'"remaining_claims":[{"old_no":N,"new_no":N,"text":"...","changed":bool}],'
++'"deleted_claims":[N],'
+```
+`old_no → new_no` 매핑 필드가 있으나, 코드 레벨에서:
+1. `new_no`가 순번 연속인지 검사하지 않음
+2. 삭제된 청구항 번호가 실제 `deleted_claims`에 있는지 검사하지 않음
+3. 종속항 인용(`"청구항 3에 있어서"` → `"청구항 2에 있어서"`) 자동 갱신 로직 없음
+
+시나리오 M에서 청구항 4(§42 거절)를 삭제하면 청구항 5·6이 4·5로 재번호화되어야 하고, 청구항 5가 "청구항 4에 있어서"를 인용했다면 "청구항 3에 있어서"로 수정되어야 한다. 이 모든 처리가 LLM 응답에만 의존하며 코드 검증 없음.
+
+**영향:** 재번호화 오류 또는 종속항 인용 불일치가 있는 청구항 세트가 의견서에 그대로 포함될 수 있음 → §42④ 2호(명확성) 신규 거절이유 발생 가능.
+
+---
+
+### 시나리오 M — 4축 출력 점수
+
+| 축 | 점수 | 주요 근거 |
+|----|------|---------|
+| 자동 흐름 완전성 | 🔴 15/100 | secondary_type 미소비, 단일 PIPELINE 분기, 두 거절이유 중 하나 구조적 누락 |
+| 도메인 정확성 | 🔴 10/100 | §29+§42 동시 해소 프롬프트 없음, unchanged_claims 미검증 |
+| 출력 즉시 제출 가능성 | 🔴 5/100 | 두 거절이유 중 하나 미해소 의견서, 보정서 없음, 청구항 번호 오류 가능 |
+| 법리 완전성 | 🔴 15/100 | 혼합 거절 → OA 재발생 구조, 미거절 청구항 보존 미확인 |
+
+**시나리오 M CHUNK 5 신규 발견:**
+- 발견 #20 [P2]: 유형 선택 UI에 secondary_type 경고 없음
+- 발견 #21 [P1]: unchanged_claims 필드 미소비 — 미거절 청구항 보존 검증 없음
+- 발견 #22 [P1]: 청구항 번호 재정렬 코드 검증 없음 (종속항 인용 오류 위험)
+
+(발견 #1: secondary_rejection_type 미소비 — CHUNK 1에서 P0으로 이미 반영. 시나리오 M의 경로 A/B 구체화는 위 흐름 추적으로 갈음.)
+
+**CHUNK 5 완료.** 발견: P0 0 / P1 2 / P2 1. **누적: P0 4 / P1 13 / P2 5.** 다음 청크(6) 진행하려면 "다음" 입력.
