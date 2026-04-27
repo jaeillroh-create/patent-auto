@@ -114,9 +114,86 @@ Opinion.DEFAULT_TEMPLATES = {
 // ═══ State ═══
 Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null };
 
+// ═══ 파이프라인 레벨 취소 토큰 (P2 #24) ═══
+Opinion._currentRun = null; // AbortController instance
+
+// ═══ localStorage 키 헬퍼 — user_id 격리 (P2 #25) ═══
+Opinion._getTemplateKey = function(type) {
+  var uid = (App.currentUser && App.currentUser.id) || 'anon';
+  return 'opinion_user_' + uid + '_template_' + type;
+};
+
+// 구 키(user_id 미포함) → 신 키로 1회 마이그레이션 (P2 #25)
+Opinion._migrateTemplateKeys = function() {
+  var legacyTypes = ['inventive_step', 'description_deficiency'];
+  var migrated = 0;
+  legacyTypes.forEach(function(t) {
+    var oldKey = 'opinion_template_' + t;
+    var val = null;
+    try { val = localStorage.getItem(oldKey); } catch(e) {}
+    if (val) {
+      var newKey = Opinion._getTemplateKey(t);
+      try { localStorage.setItem(newKey, val); localStorage.removeItem(oldKey); migrated++; } catch(e) {}
+    }
+  });
+  // 구 단일 커스텀 템플릿 → inventive_step 신 키로 이전 (이미 신 키가 없을 때만)
+  var oldCustom = null;
+  try { oldCustom = localStorage.getItem('opinion_custom_template'); } catch(e) {}
+  if (oldCustom) {
+    var newKey = Opinion._getTemplateKey('inventive_step');
+    var existing = null;
+    try { existing = localStorage.getItem(newKey); } catch(e) {}
+    if (!existing) {
+      try { localStorage.setItem(newKey, oldCustom); migrated++; } catch(e) {}
+    }
+    try { localStorage.removeItem('opinion_custom_template'); } catch(e) {}
+  }
+  if (migrated > 0) {
+    console.log('[Opinion.migrate] localStorage keys migrated: ' + migrated + ' items');
+    showToast('템플릿이 사용자별 저장소로 이전되었습니다', 'info');
+  }
+};
+
+// ═══ 프로젝트 라이프사이클 초기화 (P1 #23 + P2 #7 + 추가관찰) ═══
+// keepProjectId:true 이면 state.current 유지 (재분석 등 동일 프로젝트 내 재실행 시)
+Opinion.resetState = function(opts) {
+  opts = opts || {};
+  var keepProjectId = opts.keepProjectId === true;
+
+  // 진행 중인 파이프라인 취소 (P2 #24)
+  if (Opinion._currentRun) {
+    Opinion._currentRun.abort();
+    Opinion._currentRun = null;
+  }
+
+  // 파이프라인 결과 상태 초기화
+  Opinion.state.files             = [];
+  Opinion.state.parsed            = null;
+  Opinion.state.analysis          = null;
+  Opinion.state.draftResult       = null;
+  Opinion.state.validation        = null;
+  Opinion.state.opinionDraft      = null;
+  Opinion.state.typeResult        = null;
+  Opinion.state._strategies       = null;
+  Opinion.state.selectedStrategy  = null;
+  Opinion.state.selectedStrategyIndex = null;
+  Opinion.state._typeNeedsManual  = false; // Cycle 1 플래그
+  Opinion.state.parseFailDetail   = null;
+  Opinion.state.lastRevisionNote  = '';
+  Opinion.state.gateDecisions     = {};
+  Opinion.state.viewStep          = null;
+  if (!keepProjectId) Opinion.state.current = null;
+
+  // API 사용량 리셋
+  Opinion.usage = { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
+
+  console.log('[Opinion.reset] cleared state, files, usage');
+};
+
 // ═══ Init ═══
 Opinion.init = function(){
   console.log('[Opinion] init');
+  Opinion._migrateTemplateKeys(); // 구 키 → 신 키 1회 마이그레이션
   Opinion.loadProjects();
   Opinion.loadSavedTemplate();
 };
@@ -141,14 +218,14 @@ Opinion.loadSavedTemplate = async function() {
       if (data && data.setting_value && data.setting_value.text) {
         Opinion.state.templates[types[i]] = data.setting_value;
         loaded = true;
-        try { localStorage.setItem('opinion_' + tKey, JSON.stringify(data.setting_value)); } catch(e){}
+        try { localStorage.setItem(Opinion._getTemplateKey(types[i]), JSON.stringify(data.setting_value)); } catch(e){}
       }
     } catch(e) {}
 
-    // 2차: localStorage
+    // 2차: localStorage (신 키 우선)
     if (!loaded) {
       try {
-        var saved = localStorage.getItem('opinion_' + tKey);
+        var saved = localStorage.getItem(Opinion._getTemplateKey(types[i]));
         if (saved) {
           var parsed = JSON.parse(saved);
           if (parsed && parsed.text) {
@@ -197,7 +274,7 @@ Opinion.saveTemplate = async function(name, text, type) {
   var template = { name: name, text: text, saved_at: new Date().toISOString(), type: type };
   var tKey = 'template_' + type;
 
-  try { localStorage.setItem('opinion_' + tKey, JSON.stringify(template)); } catch(e){}
+  try { localStorage.setItem(Opinion._getTemplateKey(type), JSON.stringify(template)); } catch(e){}
 
   try {
     await sb.from('opinion_user_settings').upsert({
@@ -226,7 +303,7 @@ Opinion.clearTemplate = async function(type) {
   type = type || 'inventive_step';
   var tKey = 'template_' + type;
   try { await sb.from('opinion_user_settings').delete().eq('user_id', currentUser.id).eq('setting_key', tKey); } catch(e) {}
-  try { localStorage.removeItem('opinion_' + tKey); } catch(e) {}
+  try { localStorage.removeItem(Opinion._getTemplateKey(type)); } catch(e) {}
   if (Opinion.state.templates) delete Opinion.state.templates[type];
   if (type === 'inventive_step') { Opinion.state.customTemplate = null; Opinion.state.refText = ''; }
   Opinion.updateTemplateStatus();
@@ -459,9 +536,16 @@ Opinion.del = async function(id){
 // 3. 프로젝트 상세
 // ═══════════════════════════════════════════
 Opinion.open = async function(id){
+  // 이전 프로젝트 메모리·파일·usage 초기화 + 진행 중 비동기 작업 취소 (P1 #23, P2 #7, #24)
+  Opinion.resetState({ keepProjectId: false });
+
   var p=Opinion.state.projects.find(function(x){return x.id===id;});
   if(!p){showToast('프로젝트를 찾을 수 없습니다','error');return;}
   Opinion.state.current=p; Opinion.state.view='detail'; Opinion.state.viewStep=null;
+
+  // 새 파이프라인 실행 토큰 발급 (P2 #24)
+  Opinion._currentRun = new AbortController();
+
   document.getElementById('opinionListView').style.display='none';
   document.getElementById('opinionDetailView').style.display='block';
   Opinion.renderDetail();
@@ -469,7 +553,9 @@ Opinion.open = async function(id){
 };
 
 Opinion.backToList = function(){
-  Opinion.state.current=null; Opinion.state.view='list'; Opinion.state.viewStep=null;
+  // 이전 프로젝트 상태·진행 중 작업 모두 초기화 (P1 #23, P2 #24)
+  Opinion.resetState({ keepProjectId: false });
+  Opinion.state.view='list';
   document.getElementById('opinionDetailView').style.display='none';
   document.getElementById('opinionListView').style.display='block';
   Opinion.loadProjects();
@@ -815,6 +901,7 @@ Opinion.extractFileText = async function(file) {
 
 Opinion.startParsing = async function(){
   var p=Opinion.state.current; if(!p) return;
+  var run = Opinion._currentRun; // 파이프라인 취소 토큰 캡처 (P2 #24)
 
   // 수동 텍스트 확인
   var manualEl = document.getElementById('opinionManualText');
@@ -911,6 +998,7 @@ Opinion.startParsing = async function(){
       citedRefGuide += 'cited_references 배열에 반드시 ' + citedRefFiles.length + '개 항목을 포함하세요. 하나로 합치지 마세요.\n';
     }
 
+    if (run && run.signal.aborted) return; // 파일 추출 완료 후 이탈 체크
     showProgress('opinionParseProgress', 'AI 분석 중...', totalFiles+(manualText?1:0), totalFiles+(manualText?1:0));
     var parsed = await Opinion.callForJSON(
       Opinion.SYS_PROMPT+'\n\n아래 문서들을 분석하여 구조화해 주세요.\n'
@@ -936,6 +1024,13 @@ Opinion.startParsing = async function(){
     // 추출 품질 메타 저장
     parsed._file_results = fileResults;
     parsed._total_text_length = effectiveText.length;
+
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at startParsing');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
 
     // 인용문헌 수 검증: 업로드 파일 수 vs LLM 파싱 결과 수 비교
     var parsedCitedCount = (parsed.cited_references || []).length;
@@ -1052,9 +1147,11 @@ Opinion.renderParsedUI = function(el, pd) {
 
 Opinion.determineType = async function(){
   var p=Opinion.state.current;if(!p)return;
+  var run = Opinion._currentRun; // P2 #24
   setButtonLoading('btnOpinionType',true);
   try{
     var{data:pd}=await sb.from('opinion_parsed_documents').select('parsed_data,raw_text').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).single();
+    if (run && run.signal.aborted) return;
     // 유형 판별은 의견제출통지서만으로 충분 — 통지서 텍스트만 추출
     var ctx = '';
     if (pd && pd.parsed_data) {
@@ -1095,6 +1192,13 @@ Opinion.determineType = async function(){
         +'---\n'+ctx,
       '{"primary_type":"inventive_step","confidence":0.85,"reasoning":"...","secondary_type":null,"claim_summary":{"total_claims":N,"rejected_claims":[1,2],"no_rejection_claims":[3]}}'
     );
+
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at determineType');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
 
     // ─── _parse_failed / 알 수 없는 유형 → silent fallback 없이 수동 선택 강제 ───
     var validTypes = Object.keys(Opinion.TYPES);
@@ -1232,10 +1336,12 @@ Opinion.retryAnalysis = async function() {
 
 Opinion.startAnalysis = async function(){
   var p=Opinion.state.current;if(!p)return;
+  var run = Opinion._currentRun; // P2 #24
   var type=p.rejection_type, next=type==='description_deficiency'?'deficiency_analyzed':type==='partial_rejection'?'allowable_identified':'analyzed';
   await Opinion.setStatus(p.id,'analyzing'); Opinion.renderDetail();
   try{
     var{data:pd}=await sb.from('opinion_parsed_documents').select('parsed_data,raw_text').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).single();
+    if (run && run.signal.aborted) return;
     var ctx='';
     if(pd) {
       if(pd.parsed_data && pd.parsed_data.application_no) ctx+='[파싱 결과]\n'+JSON.stringify(pd.parsed_data,null,1).slice(0,5000)+'\n\n';
@@ -1274,6 +1380,12 @@ Opinion.startAnalysis = async function(){
       : type==='description_deficiency' ? '[{"claim_no":1,"examiner_comment":"...","suggested_correction":"..."}]'
       : '{"rejected_claims":[...],"allowable_claims":[...],"merge_suggestion":{...}}'
     );
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at startAnalysis');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
     await sb.from('opinion_issue_analyses').insert({project_id:p.id,analysis_type:type,result_data:ar});
     Opinion.state.analysis=ar; await Opinion.setStatus(p.id,next); Opinion.renderDetail(); showToast('분석 완료');
   }catch(e){showToast('분석 실패: '+e.message,'error');await Opinion.setStatus(p.id,'type_determined');Opinion.renderDetail();}
@@ -1665,6 +1777,7 @@ Opinion.getContext = async function(sections) {
 // ═══ Draft (분리 실행 — UI 업데이트 후 자동으로 검증 시작) ═══
 Opinion.startDraft=async function(){
   var p=Opinion.state.current;if(!p)return;
+  var run = Opinion._currentRun; // P2 #24
   var t=p.rejection_type;
   var ds=t==='description_deficiency'?'drafting_corrections':t==='partial_rejection'?'drafting_merge':'drafting_claims';
   var dd=t==='description_deficiency'?'corrections_drafted':t==='partial_rejection'?'merge_drafted':'claims_drafted';
@@ -1673,6 +1786,7 @@ Opinion.startDraft=async function(){
 
   try{
     var ctx = await Opinion.getContext(['parsed','analysis']);
+    if (run && run.signal.aborted) return;
     var revNote = Opinion.state.lastRevisionNote || '';
     var revCtx = revNote ? '\n\n[사용자 수정 지시]\n'+revNote+'\n이 지시를 반드시 반영하여 작성하세요.\n' : '';
     Opinion.state.lastRevisionNote = ''; // 사용 후 초기화
@@ -1737,6 +1851,12 @@ Opinion.startDraft=async function(){
       Opinion.SYS_PROMPT+'\n\n'+ctx+prompts[t],
       schemaHints[t] || '{}'
     );
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at startDraft');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
     // 검증 결과가 draft 응답에 포함된 경우 자동 추출
     if (dr.validation) {
       Opinion.state.validation = dr.validation;
@@ -1772,11 +1892,13 @@ Opinion.startDraft=async function(){
 // ═══ Validate (파싱 원문 + 분석 + 초안 컨텍스트 전달) ═══
 Opinion.startValidation=async function(){
   var p=Opinion.state.current;if(!p)return;
+  var run = Opinion._currentRun; // P2 #24
   var t=p.rejection_type;
   var vs=t==='description_deficiency'?'correction_validated':t==='partial_rejection'?'merge_validated':'validated';
   await Opinion.setStatus(p.id,'validating');
   try{
     var ctx = await Opinion.getContext(['parsed','analysis','draft']);
+    if (run && run.signal.aborted) return;
     var prompts = {
       inventive_step: '위 보정 청구항 초안을 명세서 원문과 대조하여 4중 뒷받침 검증을 수행해 주세요.\n\n각 보정된 구성요소에 대해:\n1. term_existence: 보정 문언의 용어가 명세서에 존재하는지\n2. context_match: 해당 맥락에서 사용되는지\n3. combination_check: 조합이 명세서 단일 단락에 기재되는지\n4. cited_ref_origin: 인용발명 유래 용어가 아닌지\n\nJSON: {"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"보정된 문언","checks":[{"check_type":"term_existence","result":"pass|warn|fail","detail":"구체적 근거"}],"overall_result":"pass|warn|fail"}]}',
       description_deficiency: '위 수정 청구항이 보정 범위(최초 명세서 범위) 내에 있는지 검증해 주세요.\n\nJSON: {"summary":{"total":N,"pass":N,"warn":N,"fail":N},"elements":[{"element_no":N,"element_text":"수정 사항","checks":[{"check_type":"within_scope|resolved","result":"pass|warn|fail","detail":"..."}],"overall_result":"pass|warn|fail"}]}',
@@ -1786,6 +1908,12 @@ Opinion.startValidation=async function(){
       Opinion.SYS_PROMPT+'\n\n'+ctx+prompts[t],
       '{"summary":{"total":4,"pass":2,"warn":1,"fail":1},"elements":[{"element_no":1,"element_text":"...","checks":[{"check_type":"term_existence","result":"pass","detail":"..."}],"overall_result":"pass"}]}'
     );
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at startValidation');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
     await sb.from('opinion_validation_results').insert({project_id:p.id,validation_type:t,result_data:vr,summary:vr.summary||{}});
     Opinion.state.validation=vr;
     await Opinion.setStatus(p.id,vs);
@@ -1865,11 +1993,13 @@ Opinion.TEMPLATE_GUARD = '\n\n⚠️ 중요 규칙: [참고 의견서 양식]은
 
 Opinion.startOpinionDraft=async function(){
   var p=Opinion.state.current;if(!p)return;
+  var run = Opinion._currentRun; // P2 #24
   await Opinion.setStatus(p.id,'drafting_opinion');
   Opinion.renderDetail();
   try{
     var t=p.rejection_type;
     var ctx = await Opinion.getContext(['parsed','analysis','draft','validation','ref']);
+    if (run && run.signal.aborted) return;
     var revNote = Opinion.state.lastRevisionNote || '';
     var revCtx = revNote ? '\n\n[사용자 수정 지시]\n'+revNote+'\n이 지시를 반드시 반영하여 의견서를 작성하세요.\n' : '';
     Opinion.state.lastRevisionNote = '';
@@ -1916,6 +2046,13 @@ Opinion.startOpinionDraft=async function(){
     var r = await App.callClaude(prompt);
     Opinion.usage.calls++;  // callForJSON이 아닌 직접 호출이므로 수동 카운트
     Opinion.updateUsageDisplay();
+
+    // LLM 응답 도착 후 이탈 체크 — DB 저장 전 (P2 #24)
+    if (run && run.signal.aborted) {
+      console.log('[Opinion.run] aborted at startOpinionDraft');
+      showToast('이전 작업이 취소되었습니다', 'info');
+      return;
+    }
 
     // ★ 섹션 마커 기반 파싱 (JSON 불필요) ★
     var od = Opinion.parseOpinionSections(r.text);
