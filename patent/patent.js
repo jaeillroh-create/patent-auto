@@ -12626,6 +12626,24 @@ function downloadPptx(sid){
 }
 
 // ═══ 이미지 다운로드 (KIPO 규격 JPEG/TIF) ═══
+// [고해상도] 800×1000 / 1360×1000 → 3배 확대 (2400×3000 / 4080×3000)
+//   ctx.scale(SCALE,SCALE)로 좌표계 보존 → 기존 그리기 코드 무수정
+const _IMG_DL_SCALE=3;
+
+// Canvas → 진짜 TIFF Blob 변환 (UTIF v3.1.0)
+//   기존: TIF 요청 시 PNG로 저장 (확장자만 .png) — 가짜 TIFF
+//   수정: UTIF.encodeImage로 진짜 TIFF (image/tiff)
+function _canvasToTiffBlob(canvas){
+  if(typeof UTIF==='undefined'){console.warn('[TIFF] UTIF 라이브러리 없음 — 출력 생략');return null;}
+  try{
+    const ctx=canvas.getContext('2d');
+    const w=canvas.width, h=canvas.height;
+    const imgData=ctx.getImageData(0,0,w,h);
+    const tiffArr=UTIF.encodeImage(imgData.data.buffer,w,h);
+    return new Blob([tiffArr],{type:'image/tiff'});
+  }catch(e){console.error('[TIFF] 인코딩 실패:',e);return null;}
+}
+
 function downloadDiagramImages(sid, format='jpeg'){
   console.log('downloadDiagramImages called:', sid, format);
   
@@ -12703,12 +12721,13 @@ function downloadDiagramImages(sid, format='jpeg'){
     const figNum=autoFigNums[currentIdx]||(figOffset+currentIdx+1);
     const hasEdges=edges&&edges.length>0;
     
-    // 캔버스 생성 (스케일 없이 직접 크기 설정)
+    // 캔버스 생성 — [고해상도] 3배 확대, ctx.scale로 좌표계는 800×1000 유지
     const canvas=document.createElement('canvas');
     const W=800,H=1000;
-    canvas.width=W;
-    canvas.height=H;
+    canvas.width=W*_IMG_DL_SCALE;
+    canvas.height=H*_IMG_DL_SCALE;
     const ctx=canvas.getContext('2d');
+    ctx.scale(_IMG_DL_SCALE,_IMG_DL_SCALE);
     
     // 배경 흰색
     ctx.fillStyle='#FFFFFF';
@@ -13264,20 +13283,28 @@ function downloadDiagramImages(sid, format='jpeg'){
     } // end else (장치 도면)
     } // end if(nodes.length)
     
-    // 이미지를 ZIP에 추가
+    // 이미지를 ZIP에 추가 — [진짜 TIFF] tif/tiff 시 UTIF로 인코딩, .tif 확장자
     try{
-      const ext=(format==='tif'||format==='tiff')?'png':(format==='jpeg'?'jpg':format);
-      const mimeType=(format==='tif'||format==='tiff')?'image/png':`image/${format==='jpeg'?'jpeg':'png'}`;
-      const quality=format==='jpeg'?0.95:undefined;
+      const isTiff=(format==='tif'||format==='tiff');
+      const ext=isTiff?'tif':(format==='jpeg'?'jpg':format);
       const fileName=`${caseNum}_도${figNum}.${ext}`;
-      
-      canvas.toBlob(blob=>{
-        if(blob){
-          imageFiles.push({name:fileName,blob:blob});
-        }
+
+      if(isTiff){
+        const blob=_canvasToTiffBlob(canvas);
+        if(blob)imageFiles.push({name:fileName,blob:blob});
         currentIdx++;
         setTimeout(processNext,50);
-      },mimeType,quality);
+      } else {
+        const mimeType=`image/${format==='jpeg'?'jpeg':'png'}`;
+        const quality=format==='jpeg'?0.95:undefined;
+        canvas.toBlob(blob=>{
+          if(blob){
+            imageFiles.push({name:fileName,blob:blob});
+          }
+          currentIdx++;
+          setTimeout(processNext,50);
+        },mimeType,quality);
+      }
     }catch(e){
       console.error('이미지 생성 실패:',e);
       currentIdx++;
@@ -13404,21 +13431,33 @@ function downloadConceptImages(format='jpeg'){
     const url=URL.createObjectURL(blob);
     const img=new Image();
     img.onload=()=>{
+      // [고해상도] 1360×1000 → 4080×3000, ctx.scale로 SVG 재래스터화 시 고해상도 출력
       const canvas=document.createElement('canvas');
-      canvas.width=1360;canvas.height=1000;
+      canvas.width=1360*_IMG_DL_SCALE;canvas.height=1000*_IMG_DL_SCALE;
       const ctx2=canvas.getContext('2d');
+      ctx2.scale(_IMG_DL_SCALE,_IMG_DL_SCALE);
       ctx2.fillStyle='#FFFFFF';ctx2.fillRect(0,0,1360,1000);
       ctx2.drawImage(img,0,0,1360,1000);
-      canvas.toBlob(b=>{
+
+      // [진짜 TIFF] tif 시 UTIF 사용, 확장자도 .tif
+      const isTiff=(format==='tif'||format==='tiff');
+      const ext=isTiff?'tif':format;
+      const handleBlob=(b)=>{
         if(b){
-          const fname=`도${figNum}_예시도.${format==='tif'?'png':format}`;
+          const fname=`도${figNum}_예시도.${ext}`;
           if(zip)images.push({name:fname,blob:b});
           else{const a=document.createElement('a');a.download=fname;a.href=URL.createObjectURL(b);a.click();URL.revokeObjectURL(a.href);}
         }
         URL.revokeObjectURL(url);
         idx++;
         processNext();
-      },format==='tif'?'image/png':`image/${format}`,0.95);
+      };
+
+      if(isTiff){
+        handleBlob(_canvasToTiffBlob(canvas));
+      } else {
+        canvas.toBlob(handleBlob,`image/${format}`,0.95);
+      }
     };
     img.onerror=()=>{URL.revokeObjectURL(url);idx++;processNext();};
     img.src=url;
