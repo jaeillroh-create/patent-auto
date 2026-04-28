@@ -112,7 +112,7 @@ Opinion.DEFAULT_TEMPLATES = {
 };
 
 // ═══ State ═══
-Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null, _secondary_warned:false, _mixed_mode:false, _mixed_primary:null, _mixed_secondary:null };
+Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null, _secondary_warned:false, _mixed_mode:false, _mixed_primary:null, _mixed_secondary:null, _templateForbiddenSpans:[] };
 
 // ═══ 파이프라인 레벨 취소 토큰 (P2 #24) ═══
 Opinion._currentRun = null; // AbortController instance
@@ -182,6 +182,7 @@ Opinion.resetState = function(opts) {
   Opinion.state._mixed_mode       = false; // Cycle 5 혼합 모드 플래그
   Opinion.state._mixed_primary    = null;  // Cycle 5 주 거절 유형 (스냅샷)
   Opinion.state._mixed_secondary  = null;  // Cycle 5 부 거절 유형 (스냅샷)
+  Opinion.state._templateForbiddenSpans = []; // Cycle 7 양식 금지 구간 캐시
   Opinion.state.parseFailDetail   = null;
   Opinion.state.lastRevisionNote  = '';
   Opinion.state.gateDecisions     = {};
@@ -543,21 +544,61 @@ Opinion.handleRefUpload = async function(event, type) {
 };
 
 // 현재 활성 양식 텍스트 가져오기 (유형별 커스텀 > 기본)
+// sanitizeTemplate()의 {sanitized, forbiddenSpans} 중 sanitized를 반환하고
+// forbiddenSpans를 Opinion.state._templateForbiddenSpans에 누적한다.
 Opinion.getActiveTemplate = function(type) {
   var templates = Opinion.state.templates || {};
-  // 유형별 템플릿이 있으면 해당 유형 사용
+  var sanitized;
   if (templates[type] && templates[type].text) {
-    return Opinion.sanitizeTemplate(templates[type].text, type);
+    var r = Opinion.sanitizeTemplate(templates[type].text, type);
+    sanitized = r.sanitized;
+    Opinion.state._templateForbiddenSpans = (Opinion.state._templateForbiddenSpans || []).concat(r.forbiddenSpans);
+    return sanitized;
   }
-  // 하위 호환: 기존 단일 커스텀 템플릿
   if (Opinion.state.customTemplate && Opinion.state.customTemplate.text) {
-    return Opinion.sanitizeTemplate(Opinion.state.customTemplate.text, type);
+    var r2 = Opinion.sanitizeTemplate(Opinion.state.customTemplate.text, type);
+    sanitized = r2.sanitized;
+    Opinion.state._templateForbiddenSpans = (Opinion.state._templateForbiddenSpans || []).concat(r2.forbiddenSpans);
+    return sanitized;
   }
   var def = Opinion.DEFAULT_TEMPLATES[type] || Opinion.DEFAULT_TEMPLATES.inventive_step;
   return '[의견서 작성 양식]\n구조:\n' + def.structure + '\n\n작성 지침: ' + def.style_notes;
 };
 
+// ─── 한국 특허 정형 문구 화이트리스트 ───
+// 어느 사건 의견서에나 등장하는 일반적 표현 — 템플릿 오염 false-positive 방지
+//
+// 검증 예시: "상기 적어도 하나의 프로세서가 복수의 동작을 수행하도록 지시하는 명령어들을 저장하는 메모리를 포함하고"
+//   분류 경로: HIGH_RE(청구항번호·인용번호·단락번호·출원번호) 불일치
+//             → sanitizeTemplate의 forbiddenSpans에 미추가 → 검증 대상 자체 제외 → 경보 없음 (정상)
+//   (KOREAN_PATENT_BOILERPLATE whitelist는 HIGH_RE가 우연히 적중하지만 보일러플레이트인 경우를 위한 2차 보호
+//    예: "특허법 제29조 제2항 ... 제3항" — /제\s*\d+\s*항/ 매칭 → 보일러플레이트로 LOW 분류)
+var KOREAN_PATENT_BOILERPLATE = [
+  '상기 적어도 하나의 프로세서가',      // SW 특허 청구항 정형문
+  '복수의 동작을 수행하도록 지시하는 명령어', // SW 특허 청구항 정형문
+  '명령어들을 저장하는 메모리를 포함하고',   // SW 특허 청구항 정형문
+  '비일시적 컴퓨터 판독 가능 기록매체',      // SW 특허 기록매체 청구항
+  '하나 이상의 프로세서에 의해 실행될 때',   // SW 특허 정형문
+  '컴퓨터로 읽을 수 있는 기록매체에 저장',   // SW 특허 기록매체
+  '수행하도록 구성된 적어도 하나의 프로세서', // SW 특허 정형문
+  '데이터를 처리하도록 구성된',             // SW 특허 정형문
+  '의견제출통지서를 수령하였기에',           // 의견서 서두 정형문
+  '이하와 같이 의견을 제출합니다',           // 의견서 서두 정형문
+  '이상과 같이 본원발명은',                 // 의견서 결론 정형문
+  '특허등록되어야 마땅합니다',              // 의견서 결론 정형문
+  '귀청의 혜량을 바라는 바입니다',          // 의견서 결론 정형문
+  '명세서에 기재된 범위 내에서',            // 보정 적법성 정형문
+  '신규사항에 해당하지 않습니다',           // 보정 적법성 정형문
+  '특허법 제29조 제2항',                   // 법조문 인용
+  '특허법 제42조 제4항',                   // 법조문 인용
+  '특허법 제47조 제2항',                   // 법조문 인용
+  '인용발명에 개시되어 있지 않',            // 진보성 논거 정형문
+  '결합의 동기나 암시가 없',               // 진보성 논거 정형문
+  '통상의 기술자가 용이하게',              // 진보성 표준 문언
+];
+
 // ★ 참고 양식 정제 — 6가지 스타일 패턴 추출, 사건 내용 제거 ★
+// 반환: { sanitized: string (LLM 학습용), forbiddenSpans: string[] (검증용 실제 사건 문구) }
 Opinion.sanitizeTemplate = function(rawText, type) {
   var def = Opinion.DEFAULT_TEMPLATES[type] || Opinion.DEFAULT_TEMPLATES.inventive_step;
 
@@ -640,57 +681,74 @@ Opinion.sanitizeTemplate = function(rawText, type) {
 
   result += '작성 지침: ' + def.style_notes;
 
-  return result;
+  // ─── forbiddenSpans 추출 ───
+  // 원본 양식에서 진짜 사건 특유 문구만 추출 (HIGH_PATTERNS + 보일러플레이트 제외)
+  // validateNoTemplateContamination()에서 이 목록만 검사 → false-positive 차단
+  var HIGH_RE = [
+    /제\s*\d+\s*항/,
+    /청구항\s*\d+/,
+    /인용문헌\s*\d+|선행발명\s*\d+|비교대상발명\s*\d+/,
+    /【\d{4}】/,
+    /\d{4}-\d{6,}/
+  ];
+  var forbiddenSpans = [];
+  rawText.split(/[.\n]/).forEach(function(s) {
+    var t = s.trim();
+    if (t.length < 25 || t.length > 200) return;
+    // 사건 특유 마커가 없으면 스킵
+    if (!HIGH_RE.some(function(re) { return re.test(t); })) return;
+    // 보일러플레이트 화이트리스트 적중 시 스킵
+    if (KOREAN_PATENT_BOILERPLATE.some(function(bp) { return t.indexOf(bp) >= 0; })) return;
+    forbiddenSpans.push(t.slice(0, 80));
+  });
+
+  return { sanitized: result, forbiddenSpans: forbiddenSpans };
 };
 
 // ★ 양식 내용 오염 검증 — 의견서 생성 후 실행 ★
-// severity: 'high'=차단급(청구항번호·인용번호·단락번호 포함), 'medium'=경고급, 'low'=콘솔만
+// forbiddenSpans(사건 특유 문구)만 검사 → 보일러플레이트 false-positive 차단
+// severity:
+//   'high'   = 차단급 — 다른 사건의 청구항 번호·인용번호·단락번호·출원번호 혼입
+//   'medium' = 경고급 — 출처 불명 중간 길이 매치 (보일러플레이트 아님)
+//   'low'    = 콘솔만 — KOREAN_PATENT_BOILERPLATE 적중 (일반 정형 문구이므로 정상)
 Opinion.validateNoTemplateContamination = function(opinionText, contextType) {
-  if (!Opinion.state.customTemplate || !Opinion.state.customTemplate.text) return { clean: true, warnings: [], severity: 'low' };
+  // 템플릿이 없거나 forbiddenSpans가 없으면 검사 불필요
+  var spans = Opinion.state._templateForbiddenSpans || [];
+  if (spans.length === 0) return { clean: true, warnings: [], severity: 'low' };
 
-  var templateText = Opinion.state.customTemplate.text;
+  var HIGH_RE = [
+    /제\s*\d+\s*항/,
+    /청구항\s*\d+/,
+    /인용문헌\s*\d+|선행발명\s*\d+|비교대상발명\s*\d+/,
+    /【\d{4}】/,
+    /\d{4}-\d{6,}/
+  ];
+
   var warnings = [];
 
-  // ─── 안전 구절 (일반 법조문·관용어만 면제 — 사건 특유 내용 제거) ───
-  var SAFE_PHRASES = [
-    '의견을 제출합니다','특허등록되어야','신규사항에 해당하지','보정의 적법성',
-    '보정내용','구체적 의견내용','결론','서두','소결',
-    '결합의 용이성','명세서에 기재된 범위',
-    '이상과 같이','상기 이유로','따라서','이에','이하에서','다음과 같이',
-    '특허법 제','제47조','제42조','제29조'
-    // ⚠️ '인용발명','본원발명','구성요소','기술적 요지'는 제거 — 사건 특유 내용 가능
-  ];
+  spans.forEach(function(span) {
+    var trimmed = span.trim();
+    if (trimmed.length < 20) return;
 
-  // ─── 사건 특유 패턴 (high severity 탐지) ───
-  // 청구항 번호, 인용문헌 번호, 출원번호, 단락번호
-  var HIGH_PATTERNS = [
-    /제\s*\d+\s*항/,          // 청구항 번호
-    /청구항\s*\d+/,           // 청구항 번호 (대안)
-    /인용문헌\s*\d+|선행발명\s*\d+|비교대상발명\s*\d+/,  // 인용발명 번호
-    /【\d{4}】/,              // 단락번호
-    /\d{4}-\d{6,}/            // 출원번호 패턴
-  ];
+    // 보일러플레이트 화이트리스트 재확인 (sanitizeTemplate에서 이미 걸렀지만 double-check)
+    var isBoilerplate = KOREAN_PATENT_BOILERPLATE.some(function(bp) { return trimmed.indexOf(bp) >= 0; });
 
-  // 참고 양식에서 25자 이상 의미 있는 문장 추출
-  var templateSentences = templateText.split(/[.\n]/).filter(function(s) {
-    var t = s.trim();
-    return t.length >= 25 && !/^[\s\d\.\(\)【】가-힣①-⑳❶-❿:]+$/.test(t);
-  });
-
-  templateSentences.forEach(function(sentence) {
-    var trimmed = sentence.trim().slice(0, 80);
-    var isSafe = SAFE_PHRASES.some(function(sp) { return trimmed.indexOf(sp) >= 0; });
-    if (isSafe) return;
-
-    // high severity: 사건 특유 패턴 포함 여부 체크
-    var isHighRisk = HIGH_PATTERNS.some(function(re) { return re.test(trimmed); });
+    var isHighRisk = HIGH_RE.some(function(re) { return re.test(trimmed); });
 
     for (var len = 20; len <= Math.min(trimmed.length, 50); len++) {
       var chunk = trimmed.slice(0, len);
       if (opinionText.indexOf(chunk) >= 0) {
+        var sev;
+        if (isBoilerplate) {
+          sev = 'low'; // 정형 문구 — 정상이므로 UI 미표시
+        } else if (isHighRisk) {
+          sev = 'high'; // 다른 사건의 청구항 번호 등 — 차단
+        } else {
+          sev = 'medium'; // 출처 불명 매치 — 경고
+        }
         warnings.push({
-          type: isHighRisk ? 'case_specific_leak' : 'content_leak',
-          severity: isHighRisk ? 'high' : 'medium',
+          type: isHighRisk ? 'case_specific_leak' : (isBoilerplate ? 'boilerplate' : 'content_leak'),
+          severity: sev,
           template_fragment: trimmed.slice(0, 60) + '...',
           match_length: len
         });
@@ -699,13 +757,13 @@ Opinion.validateNoTemplateContamination = function(opinionText, contextType) {
     }
   });
 
-  // 전체 severity 결정: high 항목이 하나라도 있으면 high
-  var overallSeverity = 'low';
-  if (warnings.some(function(w) { return w.severity === 'high'; })) overallSeverity = 'high';
-  else if (warnings.length > 0) overallSeverity = 'medium';
+  // low-only 항목은 warnings에 포함하되 UI에는 미표시 (renderOpinion 참고)
+  var highWarn = warnings.filter(function(w) { return w.severity === 'high'; });
+  var medWarn  = warnings.filter(function(w) { return w.severity === 'medium'; });
+  var overallSeverity = highWarn.length > 0 ? 'high' : (medWarn.length > 0 ? 'medium' : 'low');
 
   return {
-    clean: warnings.length === 0,
+    clean: highWarn.length === 0 && medWarn.length === 0,
     warnings: warnings,
     severity: overallSeverity
   };
@@ -2634,11 +2692,26 @@ Opinion.renderDraft=function(L,R,status){
 };
 
 // ═══ Opinion Draft (전체 컨텍스트 + 참고 양식 전달) ═══
-Opinion.TEMPLATE_GUARD = '\n\n⚠️ 중요 규칙: [참고 의견서 양식]은 톤·구조·문장 패턴만 참고하세요. 양식에 포함된 구체적 사건 내용(출원번호, 발명 명칭, 구성요소 설명, 인용발명 내용, 청구항 문언 등)을 절대 사용하지 마세요. 모든 내용은 반드시 [파싱 결과]와 [분석 결과]의 현재 대상 사건 정보로만 작성하세요. 특히 §29/§42 등 조문 번호는 [분석 결과]의 article 필드를 절대 우선으로 사용하고, 양식의 조문 표기는 무시하세요.';
+// TEMPLATE_GUARD: 양식 오염 방지 지시 — 긍정(스타일 모방) + 부정(금지 문구 명시)
+Opinion.getTemplateGuard = function() {
+  var positive = '\n\n⚠️ 중요 규칙: [참고 의견서 양식]은 톤·구조·문장 패턴만 참고하세요.'
+    + ' 양식에 포함된 구체적 사건 내용(출원번호, 발명 명칭, 구성요소 설명, 인용발명 내용, 청구항 문언 등)을 절대 사용하지 마세요.'
+    + ' 모든 내용은 반드시 [파싱 결과]와 [분석 결과]의 현재 대상 사건 정보로만 작성하세요.'
+    + ' 특히 §29/§42 등 조문 번호는 [분석 결과]의 article 필드를 절대 우선으로 사용하고, 양식의 조문 표기는 무시하세요.';
+  // 부정(negative): 실제 금지 문구가 있으면 명시하여 LLM이 복사하지 않도록 강제
+  var spans = Opinion.state._templateForbiddenSpans || [];
+  if (spans.length > 0) {
+    positive += '\n\n[절대 복사 금지 — 아래 문구는 양식의 특정 사건 정보이므로 어떤 형태로도 사용하지 마세요]\n'
+      + spans.slice(0, 8).map(function(s) { return '× ' + s; }).join('\n');
+  }
+  return positive;
+};
 
 Opinion.startOpinionDraft=async function(){
   var p=Opinion.state.current;if(!p)return;
   var run = Opinion._currentRun; // P2 #24
+  // getActiveTemplate()을 호출하기 전에 forbiddenSpans 초기화 (새 실행마다 리셋)
+  Opinion.state._templateForbiddenSpans = [];
   await Opinion.setStatus(p.id,'drafting_opinion');
   Opinion.renderDetail();
   try{
@@ -2767,7 +2840,7 @@ Opinion.startOpinionDraft=async function(){
         + '⚠️ 위 기본 구조(tpl[t])의 섹션 번호와 충돌하면 본 통합 구조를 우선하라.\n';
     }
 
-    var prompt = Opinion.SYS_PROMPT + Opinion.TEMPLATE_GUARD + '\n\n' + ctx + revCtx + styleGuide + mixedOpinionDirective + tpl[t];
+    var prompt = Opinion.SYS_PROMPT + Opinion.getTemplateGuard() + '\n\n' + ctx + revCtx + styleGuide + mixedOpinionDirective + tpl[t];
     var r = await App.callClaude(prompt);
     Opinion.usage.calls++;  // callForJSON이 아닌 직접 호출이므로 수동 카운트
     Opinion.updateUsageDisplay();
@@ -2898,21 +2971,32 @@ Opinion.renderOpinion=function(L,R,status){
 
   var contamWarnings = o._contamination_warnings || [];
   var contamHtml = '';
-  if (contamWarnings.length > 0) {
-    contamHtml = '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:8px;border-left:3px solid var(--color-error)">'
-      +'<div style="font-weight:600;font-size:12px;color:var(--color-error);margin-bottom:6px">⚠️ 참고 양식 내용 혼입 의심 ('+contamWarnings.length+'건)</div>'
+  var highWarns  = contamWarnings.filter(function(w){ return w.severity === 'high'; });
+  var medWarns   = contamWarnings.filter(function(w){ return w.severity === 'medium'; });
+  // low severity는 UI 미표시 (KOREAN_PATENT_BOILERPLATE 정형 문구 — 정상)
+  if (highWarns.length > 0) {
+    contamHtml += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:8px;border-left:3px solid var(--color-error)">'
+      +'<div style="font-weight:600;font-size:12px;color:var(--color-error);margin-bottom:6px">🔴 다른 사건 정보 혼입 의심 ('+highWarns.length+'건) — 변리사 직접 확인 필수</div>'
       +'<div style="font-size:11px;color:var(--color-error);line-height:1.6">'
-      +contamWarnings.map(function(w){return '• "'+escapeHtml(w.template_fragment)+'" ('+w.match_length+'자 일치)';}).join('<br>')
+      +highWarns.map(function(w){return '• "'+escapeHtml(w.template_fragment)+'" ('+w.match_length+'자 일치)';}).join('<br>')
       +'</div>'
-      +'<p style="font-size:11px;color:var(--color-text-secondary);margin-top:6px">의견서 내용이 현재 사건이 아닌 참고 양식의 사건 정보를 포함할 수 있습니다. 해당 부분을 확인해 주세요.</p>'
+      +'<p style="font-size:11px;color:var(--color-text-secondary);margin-top:6px">청구항 번호·인용발명 번호·단락번호 등 참고 양식의 사건 특유 내용이 의견서에 혼입되었을 수 있습니다.</p>'
+      +'</div>';
+  }
+  if (medWarns.length > 0) {
+    contamHtml += '<div style="margin-top:8px;padding:10px 12px;background:#fffbeb;border-radius:8px;border-left:3px solid #f59e0b">'
+      +'<div style="font-weight:600;font-size:12px;color:#92400e;margin-bottom:4px">🟡 스타일 문구 유사 확인 권장 ('+medWarns.length+'건)</div>'
+      +'<div style="font-size:11px;color:#92400e;line-height:1.6">'
+      +medWarns.map(function(w){return '• "'+escapeHtml(w.template_fragment)+'" ('+w.match_length+'자 일치)';}).join('<br>')
+      +'</div>'
       +'</div>';
   }
 
   // ─── §3.4 스타일 적용 가시성 배지 ───
   var styleBadge = '';
   if (o._style_applied === true) {
-    if (contamWarnings.length > 0) {
-      styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#fff8e1;border-radius:12px;font-size:11px;font-weight:600;color:#f57f17;margin-top:8px;margin-bottom:2px">⚠️ 부분 적용 — 본 사무소 스타일 (오염 의심 확인 필요)</div>';
+    if (highWarns.length > 0) {
+      styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#fff8e1;border-radius:12px;font-size:11px;font-weight:600;color:#f57f17;margin-top:8px;margin-bottom:2px">⚠️ 부분 적용 — 본 사무소 스타일 (다른 사건 정보 혼입 의심 — 확인 필요)</div>';
     } else {
       // ── Cycle 5: 두 템플릿 결합 표시 ──
       var styleSuffix = '';
