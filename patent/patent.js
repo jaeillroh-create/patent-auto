@@ -2098,7 +2098,24 @@ function selectTitle(el,kr,en){
   // v7.0: 명칭 변경 시 하류 무효화
   invalidateDownstream('step_01');
 }
-function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));const prev=selectedTitle;selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';if(v)autoSetDeviceCategoryFromTitle(v);if(prev&&prev!==v)invalidateDownstream('step_01');}
+function onTitleInput(){
+  const v=document.getElementById('titleInput').value.trim();
+  // 후보 행 선택 해제 — selectTitle()과 동일하게 inline style까지 초기화
+  document.querySelectorAll('#resultStep01 .title-candidate-row').forEach(c=>{
+    c.classList.remove('selected');
+    c.style.borderColor='var(--color-border)';
+    c.style.background='#fff';
+  });
+  const prev=selectedTitle;
+  selectedTitle=v;
+  document.getElementById('titleConfirmMsg').style.display=v?'block':'none';
+  document.getElementById('batchArea').style.display=v?'block':'none';
+  if(v)autoSetDeviceCategoryFromTitle(v);
+  // prev 유무와 무관하게 변경 시 하류 무효화 (selectTitle과 동일 동작)
+  if(prev!==v)invalidateDownstream('step_01');
+  // 직접 입력한 명칭이 저장되도록 디바운스 저장 (1.5초 후)
+  if(currentProjectId)_debouncedSaveTitle();
+}
 function onTitleEnInput(){selectedTitleEn=document.getElementById('titleInputEn')?.value?.trim()||'';}
 
 // ═══ Auto Device Category from Title/Type (v5.2) ═══
@@ -2287,6 +2304,9 @@ function invalidateDownstream(changedStep){
 // ═══ 산출물 미리보기 디바운스 (cascade 재생성 시 과도 호출 방지) ═══
 let _previewDebounceTimer=null;
 function _debouncedRenderPreview(){if(_previewDebounceTimer)clearTimeout(_previewDebounceTimer);_previewDebounceTimer=setTimeout(()=>{_previewDebounceTimer=null;renderPreview();},500);}
+// ═══ 확정명칭 직접 입력 시 저장 디바운스 ═══
+let _titleSaveTimer=null;
+function _debouncedSaveTitle(){if(_titleSaveTimer)clearTimeout(_titleSaveTimer);_titleSaveTimer=setTimeout(()=>{_titleSaveTimer=null;saveProject(true);},1500);}
 
 // ═══ v10.1: Step 완료 시 stale 배지 + cascade 패널 갱신 ═══
 function onStepCompleted(sid){
