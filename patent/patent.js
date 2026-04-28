@@ -4136,7 +4136,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${out
   (1) 부호 의미: 양수일 때 어느 방향으로 보정되는가
   (2) 값 범위: 예시적 범위 (예: 0.01~0.5)
   (3) 과도 누적 방지: 보정 횟수 상한, 누적 보정량 상한, 또는 점감 조건
-  (4) 초기값과 갱신 여부\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n★★★ 수학 기호 규칙 (필수) ★★★\n- 곱셈 기호는 반드시 \"×\" (U+00D7) 또는 \"·\" (가운데점, U+00B7)을 사용하라.\n- ❌ 금지: ASCII 알파벳 \"x\" 또는 \"X\"를 곱셈 기호로 사용 (변수명 x와 혼동)\n- ❌ 금지: ASCII 별표 \"*\"를 곱셈 기호로 사용 (코드 표기, 특허 명세서 부적합)\n- ✅ 올바른 예: \"a × b\", \"2 × π × r\", \"α · β\", \"3 × 10⁻⁶\"\n- ❌ 잘못된 예: \"a x b\", \"a * b\", \"2 * pi * r\", \"alpha*beta\"\n- 변수 인접 곱셈은 기호 생략 가능 (예: \"ab\", \"2πr\") — 단, 변수명이 두 글자 이상이면 \"·\" 권장\n- 나눗셈은 \"÷\" 또는 분수 표기, 부등호는 \"≤\", \"≥\", \"≠\" 사용\n- 그리스 문자는 유니코드 사용 (α, β, γ, π, σ, μ, λ — \"alpha\", \"beta\" 등 영어 표기 금지)\n- \"여기서,\" 변수 설명, \"예를 들어,\" 수치 예시에서도 동일 규칙 적용\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n⛔⛔ ANCHOR 규칙 ⛔⛔\n- ANCHOR는 반드시 마침표(다.)로 끝나는 완전한 문장의 끝부분을 사용하라.\n- ❌ 금지: 쉼표(,) 또는 접속어(~하고, ~하며)로 끝나는 절 중간을 ANCHOR로 사용\n- ❌ 금지: \"예를 들어\" 블록 내부를 ANCHOR로 사용\n- ✅ 올바른 ANCHOR 예: \"~을 산출한다.\" \"~을 포함한다.\" \"~으로 구성된다.\"\n\n⛔⛔ FORMULA 규칙 ⛔⛔\n- FORMULA에는 【수학식 N】 + 수식 + \"여기서,\" + \"예를 들어,\" 만 포함.\n- ⛔ FORMULA 안에 상세설명 원문 텍스트를 절대 포함하지 마라.\n- FORMULA는 \"예를 들어,\" 예시 문장의 마침표(다.)로 종료하라.\n- FORMULA 종료 후 추가 텍스트 금지.\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 끝부분 20자 이상, 반드시 \"다.\"로 종료)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
+  (4) 초기값과 갱신 여부\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n★★★ 수학 기호 규칙 (필수) ★★★\n- 곱셈 기호는 반드시 \"×\" (U+00D7) 또는 \"·\" (가운데점, U+00B7)을 사용하라.\n- ❌ 금지: ASCII 알파벳 \"x\" 또는 \"X\"를 곱셈 기호로 사용 (변수명 x와 혼동)\n- ❌ 금지: ASCII 별표 \"*\"를 곱셈 기호로 사용 (코드 표기, 특허 명세서 부적합)\n- ✅ 올바른 예: \"a × b\", \"2 × π × r\", \"α · β\", \"3 × 10⁻⁶\"\n- ❌ 잘못된 예: \"a x b\", \"a * b\", \"2 * pi * r\", \"alpha*beta\"\n- 변수 인접 곱셈은 기호 생략 가능 (예: \"ab\", \"2πr\") — 단, 변수명이 두 글자 이상이면 \"·\" 권장\n- 나눗셈은 \"÷\" 또는 분수 표기, 부등호는 \"≤\", \"≥\", \"≠\" 사용\n- 그리스 문자는 유니코드 사용 (α, β, γ, π, σ, μ, λ — \"alpha\", \"beta\" 등 영어 표기 금지)\n- \"여기서,\" 변수 설명, \"예를 들어,\" 수치 예시에서도 동일 규칙 적용\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n⛔⛔ ANCHOR 규칙 ⛔⛔\n- ANCHOR는 반드시 마침표(다.)로 끝나는 완전한 문장의 끝부분을 사용하라.\n- ❌ 금지: 쉼표(,) 또는 접속어(~하고, ~하며)로 끝나는 절 중간을 ANCHOR로 사용\n- ❌ 금지: \"예를 들어\" 블록 내부를 ANCHOR로 사용\n- ✅ 올바른 ANCHOR 예: \"~을 산출한다.\" \"~을 포함한다.\" \"~으로 구성된다.\"\n\n⛔⛔ FORMULA 규칙 ⛔⛔\n- FORMULA에는 【수학식 N】 + 수식 + \"여기서,\" + \"예를 들어,\" 만 포함.\n- ⛔ FORMULA 안에 상세설명 원문 텍스트를 절대 포함하지 마라.\n- FORMULA는 \"예를 들어,\" 예시 문장의 마침표(다.)로 종료하라.\n- FORMULA 종료 후 추가 텍스트 금지.\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 끝부분 20자 이상, 반드시 \"다.\"로 종료)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${stripMathBlocks(getLatestDescription()||outputs.step_08||'')}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
     // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
     case 'step_10':{
@@ -6240,6 +6240,23 @@ function fuzzyFindAnchor(text,anchor){
     const pi=text.indexOf(partial);
     if(pi>=0)return pi;
   }
+  // 5차: 앵커 뒤 20자로 부분 매칭 (AI 검토로 앞부분이 변경된 경우)
+  if(anchor.length>=20){
+    const tail=anchor.slice(-20);
+    const ti=text.indexOf(tail);
+    if(ti>=0)return Math.max(0,ti-(anchor.length-20));
+  }
+  // 6차: 핵심 키워드 후방 3단어 연속 매칭
+  if(words&&words.length>=3){
+    const tailWords=words.slice(-Math.min(4,words.length));
+    const escaped2=tailWords.map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+    const tailPhrase=escaped2.join('\\s*[.,;:!?·…]*\\s*');
+    try{
+      const re2=new RegExp(tailPhrase);
+      const km2=text.match(re2);
+      if(km2&&km2.index!=null)return km2.index;
+    }catch(e){/* 무시 */}
+  }
   return -1;
 }
 
@@ -6502,7 +6519,8 @@ function insertMathBlocks(s08,s09){
   // Track inserted positions to avoid double-insertion
   const inserted=new Set();
   let successCount=0,failCount=0;
-  
+  const failed=[];
+
   for(const x of b.reverse()){
     const i=fuzzyFindAnchor(r,x.anchor);
     if(i>=0 && !inserted.has(x.anchor)){
@@ -6513,10 +6531,32 @@ function insertMathBlocks(s08,s09){
       successCount++;
     }else{
       failCount++;
+      failed.push(x);
       console.warn(`수학식 삽입 실패 — ANCHOR 매칭 불가: "${x.anchor.slice(0,50)}..."`);
     }
   }
-  // ★ A3 fix: 삽입 결과 알림 (v5.5) ★
+  // 폴백: 실패한 수학식을 키워드 기반으로 관련 문단 뒤에 삽입
+  if(failed.length>0){
+    for(const x of failed){
+      const kws=(x.formula.match(/[가-힣]{3,}/g)||[]).filter(w=>!['수학식','여기서','예를','들어','이상','이하','경우','하한','상한','값이다','범위'].includes(w));
+      if(!kws.length)continue;
+      const paras=r.split(/\n\n+/);
+      let bestIdx=-1,bestScore=0;
+      for(let pi=0;pi<paras.length;pi++){
+        if(/^【수학식/.test(paras[pi].trim()))continue;
+        let score=0;
+        for(const kw of kws)if(paras[pi].includes(kw))score++;
+        if(score>bestScore){bestScore=score;bestIdx=pi;}
+      }
+      if(bestIdx>=0&&bestScore>=2){
+        const before=paras.slice(0,bestIdx+1).join('\n\n');
+        const after=paras.slice(bestIdx+1).join('\n\n');
+        r=before+'\n\n'+x.formula+'\n\n'+after;
+        successCount++;failCount--;
+        console.log(`수학식 폴백 삽입: 키워드 ${bestScore}개 매칭 (문단 ${bestIdx})`);
+      }
+    }
+  }
   if(failCount>0){
     App.showToast(`수학식 삽입: ${successCount}개 성공, ${failCount}개 실패 (ANCHOR 매칭 불가)`,'warning');
   }else if(successCount>0){
