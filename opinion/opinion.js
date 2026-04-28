@@ -112,7 +112,7 @@ Opinion.DEFAULT_TEMPLATES = {
 };
 
 // ═══ State ═══
-Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null, _secondary_warned:false, _mixed_mode:false, _mixed_primary:null, _mixed_secondary:null, _templateForbiddenSpans:[] };
+Opinion.state = { projects:[], current:null, view:'list', viewStep:null, files:[], analysis:null, draftResult:null, validation:null, opinionDraft:null, typeResult:null, gateDecisions:{}, refText:'', customTemplate:null, _secondary_warned:false, _mixed_mode:false, _mixed_primary:null, _mixed_secondary:null, _templateForbiddenSpans:[], drafting:false, draftError:null };
 
 // ═══ 파이프라인 레벨 취소 토큰 (P2 #24) ═══
 Opinion._currentRun = null; // AbortController instance
@@ -183,6 +183,8 @@ Opinion.resetState = function(opts) {
   Opinion.state._mixed_primary    = null;  // Cycle 5 주 거절 유형 (스냅샷)
   Opinion.state._mixed_secondary  = null;  // Cycle 5 부 거절 유형 (스냅샷)
   Opinion.state._templateForbiddenSpans = []; // Cycle 7 양식 금지 구간 캐시
+  Opinion.state.drafting          = false; // Cycle 8 의견서 작성 진행 플래그 (loading 결정용)
+  Opinion.state.draftError        = null;  // Cycle 8 의견서 작성 에러 ({kind, message})
   Opinion.state.parseFailDetail   = null;
   Opinion.state.lastRevisionNote  = '';
   Opinion.state.gateDecisions     = {};
@@ -2707,16 +2709,25 @@ Opinion.getTemplateGuard = function() {
   return positive;
 };
 
-Opinion.startOpinionDraft=async function(){
+// opts: { skipTemplate: bool, ignoreContaminationCheck: bool }
+//   - skipTemplate: getActiveTemplate() 호출 안 함 (양식 무시 재시도)
+//   - ignoreContaminationCheck: validateNoTemplateContamination() 결과 무시 (강제 진행)
+Opinion.startOpinionDraft=async function(opts){
+  opts = opts || {};
   var p=Opinion.state.current;if(!p)return;
   var run = Opinion._currentRun; // P2 #24
+  // ── Cycle 8: 진행 플래그 + 에러 초기화 (finally가 책임지고 해제) ──
+  Opinion.state.drafting = true;
+  Opinion.state.draftError = null;
   // getActiveTemplate()을 호출하기 전에 forbiddenSpans 초기화 (새 실행마다 리셋)
   Opinion.state._templateForbiddenSpans = [];
-  await Opinion.setStatus(p.id,'drafting_opinion');
-  Opinion.renderDetail();
   try{
+    await Opinion.setStatus(p.id,'drafting_opinion');
+    Opinion.renderDetail();
     var t=p.rejection_type;
-    var ctx = await Opinion.getContext(['parsed','analysis','draft','validation','ref']);
+    // ── skipTemplate: ref 컨텍스트(양식 텍스트) 미주입 ──
+    var ctxSections = opts.skipTemplate ? ['parsed','analysis','draft','validation'] : ['parsed','analysis','draft','validation','ref'];
+    var ctx = await Opinion.getContext(ctxSections);
     if (run && run.signal.aborted) return;
     var revNote = Opinion.state.lastRevisionNote || '';
     var revCtx = revNote ? '\n\n[사용자 수정 지시]\n'+revNote+'\n이 지시를 반드시 반영하여 의견서를 작성하세요.\n' : '';
@@ -2785,10 +2796,11 @@ Opinion.startOpinionDraft=async function(){
 
     // ─── §3.2 스타일 지시 블록 (톤앤매너 강화) ───
     // ── Cycle 5: 혼합 모드일 때 두 템플릿 모두 로드 ──
-    var activeTemplObj = Opinion.state.templates && Opinion.state.templates[t];
+    // ── Cycle 8: skipTemplate 옵션이 true이면 양식 미적용 ──
+    var activeTemplObj = (!opts.skipTemplate) && Opinion.state.templates && Opinion.state.templates[t];
     var secTemplObj = null;
     var secTemplKey = null;
-    if (Opinion.state._mixed_mode && Opinion.state._mixed_secondary && Opinion.state._mixed_secondary !== t) {
+    if (!opts.skipTemplate && Opinion.state._mixed_mode && Opinion.state._mixed_secondary && Opinion.state._mixed_secondary !== t) {
       secTemplKey = Opinion.state._mixed_secondary;
       secTemplObj = Opinion.state.templates && Opinion.state.templates[secTemplKey];
     }
@@ -2870,20 +2882,46 @@ Opinion.startOpinionDraft=async function(){
 
     // 양식 내용 오염 검증 (Cycle 6 P2#9 — severity 3단계)
     var fullText = od.sections.map(function(s){return s.content;}).join('\n');
-    var check = Opinion.validateNoTemplateContamination(fullText);
+    var check = opts.ignoreContaminationCheck
+      ? { clean: true, warnings: [], severity: 'low' }
+      : Opinion.validateNoTemplateContamination(fullText);
     if (!check.clean) {
       console.warn('[Opinion] Template contamination:', check.warnings.length, 'items, severity:', check.severity);
       od._contamination_warnings = check.warnings;
       od._contamination_severity = check.severity;
       if (check.severity === 'high') {
-        // high: 청구항 번호·인용발명 번호·단락번호 오염 → 차단
+        // ── Cycle 8: HIGH 디버그 로깅 강화 (forbiddenSpan 원문 + 위치 컨텍스트 + 사건 cross-check) ──
+        var actualAppNo = p.application_no || '(미설정)';
+        var actualTitle = p.title || '(미설정)';
+        console.warn('[Opinion.contam HIGH] current case appNo:', actualAppNo, '| title:', actualTitle);
+        check.warnings.filter(function(w){return w.severity==='high';}).forEach(function(w, i) {
+          var frag = (w.template_fragment || '').replace(/\.\.\.$/, '');
+          var probe = frag.slice(0, Math.min(w.match_length || 20, frag.length));
+          var idx = probe ? fullText.indexOf(probe) : -1;
+          var ctx30 = idx >= 0
+            ? '...' + fullText.slice(Math.max(0, idx-30), idx + (w.match_length||20) + 30) + '...'
+            : '(매치 위치 재확인 실패)';
+          console.warn('[Opinion.contam HIGH #' + (i+1) + '] forbiddenSpan:', w.template_fragment);
+          console.warn('[Opinion.contam HIGH #' + (i+1) + '] match context (앞뒤 30자):', ctx30);
+        });
         od._blocked_by_contamination = true;
-        await sb.from('opinion_opinion_drafts').insert({project_id:p.id,opinion_type:t,content:od,status:'contamination_blocked'});
+        // DB 저장은 best-effort. 실패해도 차단은 진행.
+        try {
+          var blockPayload = {project_id:p.id, opinion_type:t, content:od, status:'contamination_blocked'};
+          console.log('[Opinion.DB] opinion_opinion_drafts INSERT (blocked) payload:', blockPayload);
+          var blockRes = await sb.from('opinion_opinion_drafts').insert(blockPayload).select();
+          if (blockRes && blockRes.error) {
+            console.error('[Opinion.DB] block-insert error:', blockRes.error.message, '| details:', blockRes.error.details, '| hint:', blockRes.error.hint, '| code:', blockRes.error.code);
+          }
+        } catch (be) {
+          console.error('[Opinion.DB] block-insert exception:', be);
+        }
         Opinion.state.opinionDraft = od;
-        await Opinion.setStatus(p.id,'claims_confirmed');
-        Opinion.renderDetail();
-        showToast('⚠️ 템플릿 오염 감지 — 변리사 직접 확인 필수 (사건 특유 내용 혼입 의심)', 'error');
-        return;
+        // 차단을 catch 블록의 통합 처리로 위임 (finally가 로딩을 풀고 에러 카드 표시)
+        var hiCnt = check.warnings.filter(function(w){return w.severity==='high';}).length;
+        var ce = new Error(hiCnt + '건 사건 특유 문구 혼입 의심 — 양식 점검 또는 양식 없이 재시도하세요');
+        ce.kind = 'contamination';
+        throw ce;
       }
       // medium: 콘솔 경고 + 헤더에 표시하되 생성 진행
     }
@@ -2898,17 +2936,55 @@ Opinion.startOpinionDraft=async function(){
       }
     }
 
-    await sb.from('opinion_opinion_drafts').insert({project_id:p.id,opinion_type:t,content:od,status:'draft'});
+    // ── Cycle 8: DB INSERT 에러 추적 강화 ──
+    var draftPayload = {project_id:p.id, opinion_type:t, content:od, status:'draft'};
+    console.log('[Opinion.DB] opinion_opinion_drafts INSERT (draft) payload keys:', Object.keys(draftPayload), '| project_id:', p.id, '| opinion_type:', t, '| status:', 'draft');
+    var insRes = await sb.from('opinion_opinion_drafts').insert(draftPayload).select();
+    if (insRes && insRes.error) {
+      console.error('[Opinion.DB] INSERT error:', insRes.error.message, '| details:', insRes.error.details, '| hint:', insRes.error.hint, '| code:', insRes.error.code);
+      var de = new Error('opinion_opinion_drafts INSERT 실패: ' + insRes.error.message + (insRes.error.details ? ' / '+insRes.error.details : ''));
+      de.kind = 'db';
+      throw de;
+    }
     Opinion.state.opinionDraft=od;
     await Opinion.setStatus(p.id,'opinion_drafted');
-    Opinion.renderDetail();
     showToast('의견서 초안 생성 완료 (' + od.sections.length + '개 섹션)');
   }catch(e){
+    // ── Cycle 8: 에러 종류별 분류 + state.draftError에 저장 (renderOpinion이 카드 표시) ──
     console.error('[Opinion] Opinion draft error:', e);
-    showToast('의견서 생성 실패: '+e.message,'error');
-    await Opinion.setStatus(p.id,'claims_confirmed');
+    var kind = e && e.kind ? e.kind : 'unknown';
+    var msg = (e && e.message) ? e.message : String(e);
+    if (kind === 'unknown') {
+      if (/INSERT|INSERT 실패|400/i.test(msg)) kind = 'db';
+      else if (/오염|혼입|contamination/i.test(msg)) kind = 'contamination';
+    }
+    Opinion.state.draftError = { kind: kind, message: msg };
+    try { await Opinion.setStatus(p.id,'claims_confirmed'); } catch(se) { console.warn('[Opinion] rollback setStatus failed:', se); }
+    var toastMsg = kind === 'contamination' ? '양식의 다른 사건 정보가 출력에 포함됨'
+                 : kind === 'db' ? '초안 저장 실패: '+msg
+                 : '의견서 생성 실패: '+msg;
+    showToast(toastMsg, 'error');
+  } finally {
+    // ── Cycle 8: finally — 어떤 경로(성공/예외/contamination/DB)로 끝나든 로딩 해제 ──
+    // Case A (contamination HIGH) / Case B (DB 400) / Case C (정상) 모두 이 finally를 거친다.
+    Opinion.state.drafting = false;
     Opinion.renderDetail();
   }
+};
+
+// ── Cycle 8: 의견서 작성 재시도 헬퍼 — 에러 카드 버튼에서 호출 ──
+Opinion.retryDraft = function() {
+  Opinion.state.draftError = null;
+  return Opinion.startOpinionDraft();
+};
+Opinion.retryDraftWithoutTemplate = function() {
+  Opinion.state.draftError = null;
+  return Opinion.startOpinionDraft({ skipTemplate: true });
+};
+Opinion.forceDraftIgnoringContamination = function() {
+  if (!confirm('검증에서 사건 특유 문구 혼입이 감지되었습니다. 검증 결과를 무시하고 강제로 초안을 사용하시겠습니까?\n(이후 변리사 직접 확인 필수)')) return;
+  Opinion.state.draftError = null;
+  return Opinion.startOpinionDraft({ ignoreContaminationCheck: true });
 };
 
 // ★ 의견서 텍스트를 ## 섹션으로 분리하는 파서 ★
@@ -2961,9 +3037,42 @@ Opinion.parseOpinionSections = function(text) {
 
 Opinion.renderOpinion=function(L,R,status){
   var ready=status==='opinion_drafted';
-  var loading=status==='drafting_opinion'||status==='claims_confirmed';
+  // ── Cycle 8: drafting flag가 false이면 status가 claims_confirmed/drafting_opinion이라도 로딩 미표시 ──
+  // (finally가 drafting=false 처리 후 에러 카드 또는 ready 화면으로 진입)
+  var loading=(status==='drafting_opinion'||status==='claims_confirmed') && Opinion.state.drafting === true;
   var nav=Opinion.renderNavBar('opinion');
   var o=Opinion.state.opinionDraft||{};
+
+  // ── Cycle 8: 우선순위 1 — 에러 카드 (인라인, alert 금지) ──
+  // contamination HIGH 또는 DB 400/저장 실패 시 startOpinionDraft가 state.draftError를 설정하고 finally에서 여기로 진입
+  if (Opinion.state.draftError && !ready) {
+    var err = Opinion.state.draftError;
+    var headLine, helpLine;
+    if (err.kind === 'contamination') {
+      headLine = '🔴 양식의 다른 사건 정보가 출력에 포함됨';
+      helpLine = '양식을 점검하거나 양식 없이 다시 시도하세요. 콘솔 로그에서 어떤 forbiddenSpan이 매치되었는지 확인할 수 있습니다.';
+    } else if (err.kind === 'db') {
+      headLine = '🔴 초안 저장 실패';
+      helpLine = '데이터베이스 INSERT가 거부되었습니다. 콘솔 로그의 details/hint/code를 확인 후 다시 시도하세요.';
+    } else {
+      headLine = '🔴 의견서 생성 실패';
+      helpLine = '예상치 못한 오류가 발생했습니다. 콘솔 로그를 확인 후 다시 시도하세요.';
+    }
+    var btnRetry = '<button class="btn btn-primary" onclick="Opinion.retryDraft()" style="flex:1"><span class="tf">🔁</span> 다시 시도</button>';
+    var btnNoTpl = '<button class="btn btn-outline" onclick="Opinion.retryDraftWithoutTemplate()" style="flex:1"><span class="tf">📋</span> 양식 제거 후 다시 시도</button>';
+    var btnForce = err.kind === 'contamination'
+      ? '<button class="btn btn-outline" onclick="Opinion.forceDraftIgnoringContamination()" style="flex:1;color:#b45309;border-color:#f59e0b"><span class="tf">⚠️</span> 양식 강제 적용 (검증 무시)</button>'
+      : '';
+    L.innerHTML = nav
+      + '<div class="opinion-gate-card" style="border-color:var(--color-error);background:linear-gradient(135deg,#fef2f2 0%,#fff 100%)">'
+      + '<div class="opinion-gate-title" style="color:var(--color-error)"><span class="tossface">⚠️</span> ' + headLine + '</div>'
+      + '<div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:8px">' + escapeHtml(err.message || '') + '</div>'
+      + '<div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:14px">' + helpLine + '</div>'
+      + '<div class="opinion-gate-actions" style="flex-wrap:wrap;gap:8px">' + btnRetry + btnNoTpl + btnForce + '</div>'
+      + '</div>';
+    R.innerHTML = '<div class="card" style="padding:24px;text-align:center;color:var(--color-text-tertiary);font-size:13px">의견서가 생성되지 않았습니다.<br><span style="font-size:11px">왼쪽 패널의 버튼으로 재시도하세요.</span></div>';
+    return;
+  }
 
   if(loading && !ready){
     Opinion.renderLoading(L,R,'의견서 작성 중...','심사관과 변리사가 의견서를 협의하고 있습니다');return;
