@@ -15,16 +15,21 @@
     currentProject: null,
     currentStep: 1,
     
-    // 워크플로우 단계 정의
+    // 워크플로우 단계 정의 (6단계 — 우선심사는 별도 서브탭으로 분리)
     steps: [
       { id: 1, name: '상표 정보', icon: '🏷️', key: 'trademark_info' },
       { id: 2, name: '지정상품', icon: '📦', key: 'designated_goods' },
       { id: 3, name: '선행상표 검색', icon: '🔍', key: 'prior_search' },
       { id: 4, name: '유사도 평가', icon: '⚖️', key: 'similarity' },
       { id: 5, name: '리스크 평가', icon: '📊', key: 'risk' },
-      { id: 6, name: '우선심사', icon: '⚡', key: 'priority_exam' },
-      { id: 7, name: '종합 요약', icon: '📋', key: 'summary' }
+      { id: 6, name: '종합 요약', icon: '📋', key: 'summary' }
     ],
+
+    // 우선심사 서브탭 상태
+    priorityTab: {
+      currentProject: null,  // 현재 열린 우선심사 프로젝트
+      initialized: false
+    },
     
     // 프로젝트 데이터 구조
     defaultProjectData: {
@@ -581,6 +586,29 @@
       case 'tm-replace-custom-term':
         TM.replaceCustomTerm(params.class, params.old, params.new);
         break;
+
+      // ─── 우선심사 서브탭 액션 ───
+      case 'tm-pe-new-from-project':
+        TM.showProjectImportModal();
+        break;
+      case 'tm-pe-new-from-upload':
+        TM.createPriorityFromUpload();
+        break;
+      case 'tm-pe-import-select':
+        TM.createPriorityFromProject(params.id);
+        break;
+      case 'tm-pe-open':
+        TM.openPriorityProject(params.id);
+        break;
+      case 'tm-pe-delete':
+        TM.deletePriorityProject(params.id);
+        break;
+      case 'tm-pe-back-to-list':
+        TM.renderPriorityDashboard();
+        break;
+      case 'tm-pe-save':
+        TM.savePriorityProject();
+        break;
     }
   };
   
@@ -619,15 +647,21 @@
   // ============================================================
   
   TM.renderDashboard = async function(skipHistory = false) {
-    const panel = document.getElementById('trademark-dashboard-panel');
+    const panel = document.getElementById('trademark-sub-application');
     if (!panel) return;
-    
+
+    // 서브탭 네비게이션 표시 복원
+    TM.showSubTabNav(true);
+
     // 히스토리 관리 (브라우저 뒤로가기 지원)
     if (!skipHistory && TM.currentProject) {
       // 프로젝트에서 대시보드로 전환할 때만 히스토리 추가
       history.pushState({ tmModule: true, view: 'dashboard' }, '', window.location.href);
     }
-    
+
+    // 프로젝트 상태 초기화
+    TM.currentProject = null;
+
     panel.innerHTML = `
       <div class="trademark-dashboard" style="max-width: 1400px; margin: 0 auto; padding: 40px 32px;">
         <!-- 좌측: 헤더 + 버튼 / 우측: 테이블 -->
@@ -685,9 +719,569 @@
   };
   
   // ============================================================
+  // 서브탭 네비게이션 표시/숨김
+  // ============================================================
+
+  TM.showSubTabNav = function(show) {
+    const nav = document.querySelector('.trademark-sub-tab-nav');
+    if (nav) nav.style.display = show ? '' : 'none';
+  };
+
+  // ============================================================
+  // 우선심사 서브탭 (Priority Exam Sub-Tab)
+  // ============================================================
+
+  TM.initPriorityTab = function() {
+    if (!TM.priorityTab) TM.priorityTab = { currentProject: null, initialized: false };
+    TM.renderPriorityDashboard();
+    TM.priorityTab.initialized = true;
+  };
+
+  // 우선심사 대시보드 렌더링
+  TM.renderPriorityDashboard = async function() {
+    const panel = document.getElementById('trademark-sub-priority');
+    if (!panel) return;
+
+    // 서브탭 네비게이션 표시 복원
+    TM.showSubTabNav(true);
+
+    // 우선심사 프로젝트 상태 초기화
+    TM.priorityTab.currentProject = null;
+
+    panel.innerHTML = `
+      <div class="trademark-dashboard" style="max-width: 1400px; margin: 0 auto; padding: 40px 32px;">
+        <div style="display: flex; gap: 40px; align-items: flex-start;">
+          <!-- 좌측 영역 -->
+          <div style="flex-shrink: 0; width: 260px;">
+            <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: #1f2937;">⚡ 우선심사 관리</h2>
+            <p style="margin: 0 0 24px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">
+              상표 우선심사 신청서를 작성합니다.<br>
+              기존 사건에서 정보를 불러오거나,<br>출원서를 직접 업로드할 수 있습니다.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <button class="btn btn-primary" data-action="tm-pe-new-from-project"
+                      style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap; cursor: pointer;">
+                <span style="font-size: 16px;">📂</span>
+                기존 사건에서 불러오기
+              </button>
+              <button class="btn btn-secondary" data-action="tm-pe-new-from-upload"
+                      style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; white-space: nowrap; cursor: pointer;">
+                <span style="font-size: 16px;">📄</span>
+                출원서 업로드로 시작
+              </button>
+            </div>
+
+            <!-- 안내 -->
+            <div style="margin-top: 20px; padding: 12px; background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px;">
+              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #92400e;">💡 우선심사란?</p>
+              <p style="margin: 0; font-size: 11px; color: #78350f; line-height: 1.5;">
+                일반 심사(12~14개월) 대비 2~3개월 내 심사가 진행됩니다.
+                류당 160,000원의 추가 비용이 발생합니다.
+              </p>
+            </div>
+          </div>
+
+          <!-- 우측: 우선심사 프로젝트 목록 -->
+          <div class="tm-project-list" id="tm-pe-project-list" style="flex: 1; min-width: 0;">
+            <div style="text-align: center; padding: 40px; color: #6b7280;">
+              <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
+              <p style="margin: 0;">우선심사 목록 로딩 중...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    await TM.loadPriorityProjectList();
+  };
+
+  // 우선심사 프로젝트 목록 로드 (trademark_projects에서 priorityExam.enabled = true이거나 pe_source_type 존재)
+  TM.loadPriorityProjectList = async function() {
+    const listEl = document.getElementById('tm-pe-project-list');
+    if (!listEl) return;
+
+    try {
+      const { data: projects, error } = await App.sb
+        .from('trademark_projects')
+        .select('id, title, status, trademark_name, trademark_type, current_state_json, created_at, updated_at')
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      // 우선심사 관련 프로젝트만 필터 (pe_source_type이 있는 것)
+      const peProjects = (projects || []).filter(p => {
+        const csj = p.current_state_json || {};
+        return csj.pe_source_type;
+      });
+
+      if (peProjects.length === 0) {
+        listEl.innerHTML = `
+          <div style="text-align: center; padding: 80px 20px; background: #f9fafb; border-radius: 16px; border: 2px dashed #d1d5db;">
+            <div style="font-size: 56px; margin-bottom: 20px;">⚡</div>
+            <h4 style="margin: 0 0 12px; font-size: 20px; color: #374151;">우선심사 프로젝트가 없습니다</h4>
+            <p style="margin: 0 0 24px; color: #6b7280; font-size: 15px;">기존 사건에서 불러오거나 출원서를 업로드하여 시작하세요.</p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+              <button class="btn btn-primary" data-action="tm-pe-new-from-project" style="padding: 12px 24px; font-size: 14px; border-radius: 10px;">📂 기존 사건에서 불러오기</button>
+              <button class="btn btn-secondary" data-action="tm-pe-new-from-upload" style="padding: 12px 24px; font-size: 14px; border-radius: 10px;">📄 출원서 업로드</button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      listEl.innerHTML = `
+        <div style="background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+          <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+            <thead>
+              <tr style="background: #f8fafc; border-bottom: 2px solid #e5e7eb;">
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">관리번호</th>
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">상표명</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px;">소스</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px;">수정일</th>
+                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 120px;">작업</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${peProjects.map(p => {
+                const csj = p.current_state_json || {};
+                const sourceLabel = csj.pe_source_type === 'project' ? '📂 사건연동' : '📄 업로드';
+                const updatedAt = new Date(p.updated_at).toLocaleDateString('ko-KR');
+                return `
+                  <tr style="border-bottom: 1px solid #f3f4f6; transition: background 0.15s;"
+                      onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='white'">
+                    <td style="padding: 12px 16px; font-size: 13px; color: #6b7280;">${TM.escapeHtml(p.title || '-')}</td>
+                    <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #1f2937;">${TM.escapeHtml(p.trademark_name || '-')}</td>
+                    <td style="padding: 12px; text-align: center; font-size: 12px;">${sourceLabel}</td>
+                    <td style="padding: 12px; text-align: center; font-size: 12px; color: #9ca3af;">${updatedAt}</td>
+                    <td style="padding: 12px 16px; text-align: center;">
+                      <button class="btn btn-sm btn-primary" data-action="tm-pe-open" data-id="${p.id}" style="padding: 6px 14px; font-size: 12px; border-radius: 6px;">열기</button>
+                      <button class="btn btn-sm btn-ghost" data-action="tm-pe-delete" data-id="${p.id}" style="padding: 6px 10px; font-size: 12px; color: #ef4444;">삭제</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top: 12px; text-align: right; color: #9ca3af; font-size: 12px;">총 ${peProjects.length}개 프로젝트</div>
+      `;
+    } catch (error) {
+      console.error('[TM] 우선심사 목록 로드 실패:', error);
+      listEl.innerHTML = `
+        <div style="text-align: center; padding: 40px; background: #fef2f2; border-radius: 12px; border: 1px solid #fecaca;">
+          <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
+          <p style="margin: 0; color: #dc2626;">${error.message}</p>
+        </div>
+      `;
+    }
+  };
+
+  // 기존 사건에서 우선심사 프로젝트 생성 — 사건 선택 모달
+  TM.showProjectImportModal = async function() {
+    try {
+      const { data: projects, error } = await App.sb
+        .from('trademark_projects')
+        .select('id, title, trademark_name, trademark_type, current_state_json, updated_at')
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      // 이미 우선심사인 프로젝트는 제외하되, 일반 상표 출원 프로젝트만 표시
+      const sourceProjects = (projects || []).filter(p => {
+        const csj = p.current_state_json || {};
+        return !csj.pe_source_type; // 우선심사 전용이 아닌 것만
+      });
+
+      if (sourceProjects.length === 0) {
+        App.showToast('불러올 수 있는 상표 출원 사건이 없습니다. 먼저 상표 출원 탭에서 사건을 생성하세요.', 'warning');
+        return;
+      }
+
+      const modal = document.createElement('div');
+      modal.id = 'tm-pe-import-modal';
+      modal.innerHTML = `
+        <div class="tm-modal-overlay" onclick="document.getElementById('tm-pe-import-modal')?.remove()">
+          <div class="tm-modal-content" onclick="event.stopPropagation()" style="max-width: 680px; max-height: 80vh; display: flex; flex-direction: column;">
+            <div class="tm-modal-header">
+              <h3 style="margin: 0; font-size: 18px; font-weight: 600;">📂 기존 사건에서 불러오기</h3>
+              <button class="tm-modal-close" onclick="document.getElementById('tm-pe-import-modal')?.remove()">✕</button>
+            </div>
+            <div class="tm-modal-body" style="padding: 16px 24px; overflow-y: auto; flex: 1;">
+              <p style="margin: 0 0 16px; font-size: 13px; color: #6b7280;">
+                아래 사건을 선택하면 상표명, 출원인, 지정상품 정보가 자동으로 입력됩니다.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${sourceProjects.map(p => {
+                  const goods = p.current_state_json?.designatedGoods || [];
+                  const goodsCount = goods.reduce((sum, g) => sum + (g.goods?.length || 0), 0);
+                  const classCount = goods.length;
+                  return `
+                    <div class="tm-pe-import-item" data-action="tm-pe-import-select" data-id="${p.id}"
+                         style="display: flex; align-items: center; gap: 16px; padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 10px; cursor: pointer; transition: all 0.15s;"
+                         onmouseover="this.style.borderColor='#3b82f6'; this.style.background='#f0f9ff'"
+                         onmouseout="this.style.borderColor='#e5e7eb'; this.style.background='white'">
+                      <div style="flex-shrink: 0; width: 40px; height: 40px; background: #dbeafe; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px;">🏷️</div>
+                      <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 15px; font-weight: 600; color: #1f2937;">${TM.escapeHtml(p.trademark_name || '(상표명 미입력)')}</div>
+                        <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">
+                          ${TM.escapeHtml(p.title || '(관리번호 없음)')}
+                          ${classCount > 0 ? ` · 제${goods.map(g => g.classCode).join(',')}류 · ${goodsCount}개 상품` : ''}
+                        </div>
+                      </div>
+                      <div style="flex-shrink: 0; font-size: 12px; color: #9ca3af;">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    } catch(error) {
+      console.error('[TM] 사건 목록 로드 실패:', error);
+      App.showToast('사건 목록을 불러올 수 없습니다.', 'error');
+    }
+  };
+
+  // 사건 선택 → 우선심사 프로젝트 생성
+  TM.createPriorityFromProject = async function(sourceProjectId) {
+    try {
+      // 소스 프로젝트 로드
+      const { data: source, error: loadErr } = await App.sb
+        .from('trademark_projects')
+        .select('*')
+        .eq('id', sourceProjectId)
+        .single();
+
+      if (loadErr) throw loadErr;
+
+      // current_state_json 또는 개별 컬럼에서 소스 데이터 읽기
+      const stateJson = source.current_state_json || {};
+      const srcTmName = stateJson.trademarkName || source.trademark_name || '';
+      const srcTmNameEn = stateJson.trademarkNameEn || source.trademark_name_en || '';
+      const srcTmType = stateJson.trademarkType || source.trademark_type || 'text';
+      const srcGoods = stateJson.designatedGoods || [];
+      const srcApplicant = stateJson.applicant || {};
+
+      // 우선심사 프로젝트 데이터 구성
+      const peData = JSON.parse(JSON.stringify(TM.defaultProjectData));
+      peData.pe_source_type = 'project';
+      peData.pe_source_project_id = sourceProjectId;
+
+      // 소스에서 정보 복사
+      peData.trademarkName = srcTmName;
+      peData.trademarkNameEn = srcTmNameEn;
+      peData.trademarkType = srcTmType;
+      peData.designatedGoods = srcGoods;
+      peData.applicant = srcApplicant;
+
+      // priorityExam 초기화 (소스에서 출원인/상표 정보 매핑)
+      peData.priorityExam = {
+        enabled: true,
+        userConfirmed: true,
+        reason: '',
+        reasonDetail: '',
+        applicationNumber: '',
+        applicationDate: '',
+        applicantName: srcApplicant.name || '',
+        trademarkNameFromApp: srcTmName,
+        classCode: srcGoods.map(g => g.classCode).join(', '),
+        designatedGoodsFromApp: srcGoods.flatMap(g => (g.goods || []).map(item => item.name)).join(', '),
+        extractedFromApplication: false,
+        editMode: false,
+        useExtractedGoods: false,
+        evidences: [],
+        generatedDocument: ''
+      };
+
+      // DB에 새 프로젝트 생성
+      const title = source.title ? `26T${source.title}` : `26T`;
+      const { data: newProject, error: insertErr } = await App.sb
+        .from('trademark_projects')
+        .insert({
+          owner_user_id: App.currentUser.id,
+          title: title,
+          trademark_name: peData.trademarkName,
+          trademark_type: peData.trademarkType,
+          status: 'documenting',
+          current_state_json: peData
+        })
+        .select()
+        .single();
+
+      if (insertErr) throw insertErr;
+
+      // 모달 닫기
+      document.getElementById('tm-pe-import-modal')?.remove();
+
+      App.showToast(`우선심사 프로젝트가 생성되었습니다: ${TM.escapeHtml(peData.trademarkName)}`, 'success');
+
+      // 프로젝트 열기
+      TM.openPriorityProject(newProject.id);
+    } catch(error) {
+      console.error('[TM] 우선심사 프로젝트 생성 실패:', error);
+      App.showToast('프로젝트 생성 실패: ' + error.message, 'error');
+    }
+  };
+
+  // 업로드 기반 우선심사 프로젝트 생성
+  TM.createPriorityFromUpload = async function() {
+    try {
+      const peData = JSON.parse(JSON.stringify(TM.defaultProjectData));
+      peData.pe_source_type = 'upload';
+
+      peData.priorityExam = {
+        enabled: true,
+        userConfirmed: true,
+        reason: '',
+        reasonDetail: '',
+        applicationNumber: '',
+        applicationDate: '',
+        applicantName: '',
+        trademarkNameFromApp: '',
+        classCode: '',
+        designatedGoodsFromApp: '',
+        extractedFromApplication: false,
+        editMode: false,
+        useExtractedGoods: false,
+        evidences: [],
+        generatedDocument: ''
+      };
+
+      const title = `26T`;
+      const { data: newProject, error } = await App.sb
+        .from('trademark_projects')
+        .insert({
+          owner_user_id: App.currentUser.id,
+          title: title,
+          trademark_name: '',
+          trademark_type: 'text',
+          status: 'documenting',
+          current_state_json: peData
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      App.showToast('우선심사 프로젝트가 생성되었습니다. 출원서를 업로드하세요.', 'success');
+      TM.openPriorityProject(newProject.id);
+    } catch(error) {
+      console.error('[TM] 우선심사 프로젝트 생성 실패:', error);
+      App.showToast('프로젝트 생성 실패: ' + error.message, 'error');
+    }
+  };
+
+  // 우선심사 프로젝트 열기
+  TM.openPriorityProject = async function(projectId) {
+    try {
+      const { data, error } = await App.sb
+        .from('trademark_projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
+
+      if (error) throw error;
+
+      // openProject와 동일한 로딩 패턴
+      const merged = {
+        id: data.id,
+        title: data.title,
+        status: data.status,
+        ...JSON.parse(JSON.stringify(TM.defaultProjectData)),
+        ...(data.current_state_json || {})
+      };
+
+      // 기존 필드 매핑
+      if (data.trademark_name) merged.trademarkName = data.trademark_name;
+      if (data.trademark_name_en) merged.trademarkNameEn = data.trademark_name_en;
+      if (data.trademark_type) merged.trademarkType = data.trademark_type;
+      if (data.applicant_info) merged.applicant = { ...merged.applicant, ...data.applicant_info };
+      if (data.designated_goods) merged.designatedGoods = data.designated_goods;
+      if (data.search_results) merged.searchResults = { ...merged.searchResults, ...data.search_results };
+      if (data.fee_calculation) merged.feeCalculation = { ...merged.feeCalculation, ...data.fee_calculation };
+      if (data.priority_exam) merged.priorityExam = { ...merged.priorityExam, ...data.priority_exam };
+      if (data.ai_analysis) merged.aiAnalysis = { ...merged.aiAnalysis, ...data.ai_analysis };
+
+      TM.priorityTab.currentProject = merged;
+
+      // 서브탭 네비게이션 숨김
+      TM.showSubTabNav(false);
+
+      // 워크스페이스 렌더링
+      TM.renderPriorityWorkspace();
+    } catch(error) {
+      console.error('[TM] 우선심사 프로젝트 열기 실패:', error);
+      App.showToast('프로젝트 열기 실패: ' + error.message, 'error');
+    }
+  };
+
+  // 우선심사 워크스페이스 렌더링
+  TM.renderPriorityWorkspace = function() {
+    const panel = document.getElementById('trademark-sub-priority');
+    if (!panel || !TM.priorityTab.currentProject) return;
+
+    const p = TM.priorityTab.currentProject;
+    const pe = p.priorityExam || {};
+    const sourceLabel = p.pe_source_type === 'project' ? '📂 기존 사건 연동' : '📄 출원서 업로드';
+
+    panel.innerHTML = `
+      <div class="tm-pe-workspace" style="max-width: 1000px; margin: 0 auto; padding: 32px 24px;">
+        <!-- 헤더 -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <button class="btn btn-ghost" data-action="tm-pe-back-to-list" style="padding: 8px 12px; font-size: 13px;">← 목록으로</button>
+            <div>
+              <h2 style="margin: 0; font-size: 22px; font-weight: 700; color: #1f2937;">⚡ 우선심사 신청서</h2>
+              <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">
+                ${TM.escapeHtml(p.title || '')} · ${sourceLabel}
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary btn-sm" data-action="tm-pe-save" style="padding: 8px 16px; font-size: 13px;">💾 저장</button>
+          </div>
+        </div>
+
+        <!-- 기본 정보 입력 -->
+        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
+          <div style="display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1.5; min-width: 180px;">
+              <label style="font-size: 11px; color: #92400e; font-weight: 600; display: block; margin-bottom: 4px;">🏷️ 상표명</label>
+              <input type="text" id="tm-pe-trademark-name"
+                     value="${TM.escapeHtml(pe.trademarkNameFromApp || p.trademarkName || '')}"
+                     placeholder="상표명을 입력하세요"
+                     style="width: 100%; padding: 8px 12px; border: 1px solid #d97706; border-radius: 6px; font-size: 14px; font-weight: 600; color: #78350f; background: rgba(255,255,255,0.7); box-sizing: border-box;">
+            </div>
+            <div style="flex: 1; min-width: 150px;">
+              <label style="font-size: 11px; color: #92400e; font-weight: 600; display: block; margin-bottom: 4px;">📋 출원번호</label>
+              <input type="text" id="tm-pe-application-number"
+                     value="${TM.escapeHtml(pe.applicationNumber || '')}"
+                     placeholder="예: 40-2025-0012345"
+                     style="width: 100%; padding: 8px 12px; border: 1px solid #d97706; border-radius: 6px; font-size: 13px; color: #78350f; background: rgba(255,255,255,0.7); box-sizing: border-box;">
+            </div>
+            <div style="flex: 1; min-width: 150px;">
+              <label style="font-size: 11px; color: #92400e; font-weight: 600; display: block; margin-bottom: 4px;">📁 사건번호</label>
+              <input type="text" id="tm-pe-case-number"
+                     value="${TM.escapeHtml(pe.caseNumber || p.title || '')}"
+                     placeholder="예: 26T0001"
+                     style="width: 100%; padding: 8px 12px; border: 1px solid #d97706; border-radius: 6px; font-size: 13px; color: #78350f; background: rgba(255,255,255,0.7); box-sizing: border-box;">
+            </div>
+          </div>
+        </div>
+
+        <!-- 메인 컨텐츠 -->
+        <div id="tm-pe-content">
+          <!-- renderStep7_PriorityExam이 여기에 렌더링 -->
+        </div>
+      </div>
+    `;
+
+    // currentProject를 우선심사 프로젝트로 설정하여 기존 함수들이 동작하도록 함
+    TM.currentProject = TM.priorityTab.currentProject;
+
+    // 우선심사 컨텐츠 렌더링 (기존 renderStep7_PriorityExam 재사용)
+    const contentEl = document.getElementById('tm-pe-content');
+    if (contentEl) {
+      TM.renderStep7_PriorityExam(contentEl);
+    }
+
+    // 기본 정보 입력 필드 이벤트 바인딩
+    TM.bindPriorityInfoInputs();
+  };
+
+  // 우선심사 기본 정보 입력 필드 이벤트 바인딩
+  TM.bindPriorityInfoInputs = function() {
+    const nameInput = document.getElementById('tm-pe-trademark-name');
+    const appNumInput = document.getElementById('tm-pe-application-number');
+    const caseNumInput = document.getElementById('tm-pe-case-number');
+    const p = TM.priorityTab.currentProject;
+    if (!p) return;
+
+    if (nameInput) {
+      nameInput.addEventListener('input', function() {
+        const val = this.value.trim();
+        p.trademarkName = val;
+        if (!p.priorityExam) p.priorityExam = {};
+        p.priorityExam.trademarkNameFromApp = val;
+        // 사이드바 상표명도 갱신
+        const sidebarName = document.querySelector('.tm-project-name');
+        if (sidebarName) sidebarName.textContent = val || '(상표명 미입력)';
+        TM.debounceSave();
+      });
+    }
+
+    if (appNumInput) {
+      appNumInput.addEventListener('input', function() {
+        if (!p.priorityExam) p.priorityExam = {};
+        p.priorityExam.applicationNumber = this.value.trim();
+        TM.debounceSave();
+      });
+    }
+
+    if (caseNumInput) {
+      caseNumInput.addEventListener('input', function() {
+        p.title = this.value.trim();
+        if (!p.priorityExam) p.priorityExam = {};
+        p.priorityExam.caseNumber = this.value.trim();
+        TM.debounceSave();
+      });
+    }
+  };
+
+  // 우선심사 정보 요약 배지 갱신
+  TM.updatePrioritySummaryBadge = function() {
+    // 워크스페이스 전체를 다시 그리지 않고, 입력 필드 값만 갱신
+    const p = TM.priorityTab.currentProject || TM.currentProject;
+    if (!p) return;
+    const pe = p.priorityExam || {};
+
+    const nameInput = document.getElementById('tm-pe-trademark-name');
+    const appNumInput = document.getElementById('tm-pe-application-number');
+    const caseNumInput = document.getElementById('tm-pe-case-number');
+
+    if (nameInput && !nameInput.matches(':focus')) {
+      nameInput.value = pe.trademarkNameFromApp || p.trademarkName || '';
+    }
+    if (appNumInput && !appNumInput.matches(':focus')) {
+      appNumInput.value = pe.applicationNumber || '';
+    }
+    if (caseNumInput && !caseNumInput.matches(':focus')) {
+      caseNumInput.value = pe.caseNumber || p.title || '';
+    }
+  };
+
+  // 우선심사 프로젝트 저장 (공통 saveProject 위임)
+  TM.savePriorityProject = async function() {
+    if (!TM.priorityTab.currentProject) return;
+    // currentProject가 이미 priorityTab.currentProject를 가리키므로 saveProject 재사용
+    await TM.saveProject(false);
+  };
+
+  // 우선심사 프로젝트 삭제
+  TM.deletePriorityProject = async function(projectId) {
+    if (!confirm('이 우선심사 프로젝트를 삭제하시겠습니까?')) return;
+
+    try {
+      const { error } = await App.sb
+        .from('trademark_projects')
+        .delete()
+        .eq('id', projectId);
+
+      if (error) throw error;
+      App.showToast('삭제되었습니다.', 'success');
+      TM.renderPriorityDashboard();
+    } catch(error) {
+      console.error('[TM] 우선심사 프로젝트 삭제 실패:', error);
+      App.showToast('삭제 실패: ' + error.message, 'error');
+    }
+  };
+
+  // ============================================================
   // 설정 모달
   // ============================================================
-  
+
   TM.openSettings = function() {
     const currentApiKey = TM.kiprisConfig.apiKey || '';
     
@@ -1047,22 +1641,37 @@
         designated_goods: TM.currentProject.designatedGoods,
         search_results: TM.currentProject.searchResults,
         fee_calculation: TM.currentProject.feeCalculation,
-        priority_exam: TM.currentProject.priorityExam,
+        priority_exam: (() => {
+          const pe = TM.currentProject.priorityExam;
+          if (pe && pe.specimenImageDataUrl) { const copy = { ...pe }; delete copy.specimenImageDataUrl; return copy; }
+          return pe;
+        })(),
         ai_analysis: TM.currentProject.aiAnalysis,
-        current_state_json: {
-          trademarkName: TM.currentProject.trademarkName,
-          trademarkNameEn: TM.currentProject.trademarkNameEn,
-          trademarkType: TM.currentProject.trademarkType,
-          applicant: TM.currentProject.applicant,
-          designatedGoods: TM.currentProject.designatedGoods,
-          gazettedOnly: TM.currentProject.gazettedOnly,
-          searchResults: TM.currentProject.searchResults,
-          similarityEvaluations: TM.currentProject.similarityEvaluations,
-          riskAssessment: TM.currentProject.riskAssessment,
-          feeCalculation: TM.currentProject.feeCalculation,
-          priorityExam: TM.currentProject.priorityExam,
-          aiAnalysis: TM.currentProject.aiAnalysis
-        },
+        current_state_json: (() => {
+          // specimenImageDataUrl은 큰 base64이므로 DB 저장에서 제외
+          const pe = TM.currentProject.priorityExam;
+          let peForSave = pe;
+          if (pe && pe.specimenImageDataUrl) {
+            peForSave = { ...pe };
+            delete peForSave.specimenImageDataUrl;
+          }
+          return {
+            trademarkName: TM.currentProject.trademarkName,
+            trademarkNameEn: TM.currentProject.trademarkNameEn,
+            trademarkType: TM.currentProject.trademarkType,
+            applicant: TM.currentProject.applicant,
+            designatedGoods: TM.currentProject.designatedGoods,
+            gazettedOnly: TM.currentProject.gazettedOnly,
+            searchResults: TM.currentProject.searchResults,
+            similarityEvaluations: TM.currentProject.similarityEvaluations,
+            riskAssessment: TM.currentProject.riskAssessment,
+            feeCalculation: TM.currentProject.feeCalculation,
+            priorityExam: peForSave,
+            aiAnalysis: TM.currentProject.aiAnalysis,
+            businessFiles: TM.currentProject.businessFiles,
+            businessFileTexts: TM.currentProject.businessFileTexts
+          };
+        })(),
         updated_at: new Date().toISOString()
       };
       
@@ -1244,8 +1853,11 @@
   // ============================================================
   
   TM.renderWorkspace = function() {
-    const panel = document.getElementById('trademark-dashboard-panel');
+    const panel = document.getElementById('trademark-sub-application');
     if (!panel || !TM.currentProject) return;
+
+    // 프로젝트 편집 시 서브탭 네비게이션 숨김
+    TM.showSubTabNav(false);
     
     panel.innerHTML = `
       <div class="tm-app-layout">
@@ -1409,9 +2021,7 @@
         return TM.currentProject.similarityEvaluations && TM.currentProject.similarityEvaluations.length > 0;
       case 5: // 리스크 평가
         return !!(TM.currentProject.riskAssessment.level);
-      case 6: // 우선심사 - 사용자가 명시적으로 선택 여부를 결정해야 완료
-        return TM.currentProject.priorityExam.userConfirmed === true;
-      case 7: // 종합 요약
+      case 6: // 종합 요약
         return false; // 항상 미완료 (언제든 출력 가능)
       default:
         return false;
@@ -1471,6 +2081,15 @@
   };
   
   TM.renderCurrentStep = function() {
+    // 우선심사 서브탭 컨텍스트에서 호출된 경우, 우선심사 워크스페이스 갱신
+    const peContent = document.getElementById('tm-pe-content');
+    if (peContent && TM.priorityTab.currentProject && TM.currentProject === TM.priorityTab.currentProject) {
+      TM.renderStep7_PriorityExam(peContent);
+      // 요약 배지도 갱신
+      TM.updatePrioritySummaryBadge();
+      return;
+    }
+
     const stepEl = document.getElementById('tm-step-content');
     if (!stepEl) return;
     
@@ -1494,9 +2113,6 @@
         TM.renderStep5_Risk(stepEl);
         break;
       case 6:
-        TM.renderStep7_PriorityExam(stepEl);
-        break;
-      case 7:
         TM.renderStep7_Summary(stepEl);
         break;
     }
@@ -1796,11 +2412,39 @@
               <span class="tm-badge tm-badge-primary">추천</span>
             </div>
             <div class="tm-panel-body">
-              <p class="tm-hint">사업 내용을 입력하면 AI가 상품류와 지정상품을 추천합니다.</p>
-              <div class="tm-field" style="margin-bottom: 16px;">
-                <input type="text" class="tm-input" id="tm-business-url" 
+              <p class="tm-hint">사업 내용을 입력하거나 파일을 업로드하면 AI가 상품류와 지정상품을 추천합니다.</p>
+              <div class="tm-field" style="margin-bottom: 12px;">
+                <input type="text" class="tm-input" id="tm-business-url"
                        value="${TM.escapeHtml(p.businessDescription || '')}"
                        placeholder="예: 소프트웨어 개발, 특허 출원 대행">
+              </div>
+              <!-- 사업 분석 파일 업로드 -->
+              <div class="tm-business-file-area" style="margin-bottom: 16px;">
+                <div class="tm-dropzone-compact tm-business-dropzone" id="tm-business-dropzone"
+                     onclick="document.getElementById('tm-business-file-input').click()"
+                     ondragover="event.preventDefault(); this.classList.add('dragover')"
+                     ondragleave="this.classList.remove('dragover')"
+                     ondrop="event.preventDefault(); this.classList.remove('dragover'); TM.handleBusinessFileUpload(event.dataTransfer.files)">
+                  <span class="tm-dropzone-compact-icon">📎</span>
+                  <span class="tm-dropzone-compact-text">사업 관련 파일 업로드 <strong>(클릭 또는 드래그)</strong></span>
+                  <span class="tm-dropzone-compact-formats">PDF, DOCX, XLSX, TXT, HWP 등</span>
+                </div>
+                <input type="file" id="tm-business-file-input"
+                       accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.rtf,.xlsx,.xls,.pptx,.hwp,.hwpx"
+                       multiple style="display:none"
+                       onchange="TM.handleBusinessFileUpload(this.files); this.value=''">
+                ${(p.businessFiles && p.businessFiles.length > 0) ? `
+                <div class="tm-business-file-list" id="tm-business-file-list">
+                  ${p.businessFiles.map((f, i) => `
+                    <div class="tm-business-file-item">
+                      <span class="tm-business-file-icon">${TM.getFileIcon(f.name)}</span>
+                      <span class="tm-business-file-name" title="${TM.escapeHtml(f.name)}">${TM.escapeHtml(f.name)}</span>
+                      <span class="tm-business-file-size">${TM.formatFileSize(f.size)}</span>
+                      <button class="tm-business-file-remove" onclick="TM.removeBusinessFile(${i})" title="삭제">✕</button>
+                    </div>
+                  `).join('')}
+                </div>
+                ` : ''}
               </div>
               <button class="btn btn-primary btn-block" data-action="tm-analyze-business" style="padding: 12px;">🔍 분석</button>
             </div>
@@ -1875,7 +2519,40 @@
                 ` : ''}
               </div>
             </div>
-            
+
+            ${p.aiAnalysis.fileAnalysisInsights ? `
+            <div class="tm-panel tm-strategy-panel">
+              <div class="tm-panel-header">
+                <h3>📑 문서 분석 전략</h3>
+                <span class="tm-badge tm-badge-info">파일 기반</span>
+              </div>
+              <div class="tm-panel-body">
+                ${p.aiAnalysis.fileAnalysisInsights.documentTypes?.length > 0 ? `
+                <div class="tm-strategy-section">
+                  <div class="tm-strategy-label">분석 문서</div>
+                  <div class="tm-strategy-tags">
+                    ${p.aiAnalysis.fileAnalysisInsights.documentTypes.map(t => `<span class="tm-strategy-tag">${TM.escapeHtml(t)}</span>`).join('')}
+                  </div>
+                </div>
+                ` : ''}
+                ${p.aiAnalysis.fileAnalysisInsights.keyFindings?.length > 0 ? `
+                <div class="tm-strategy-section">
+                  <div class="tm-strategy-label">핵심 발견사항</div>
+                  <ul class="tm-strategy-findings">
+                    ${p.aiAnalysis.fileAnalysisInsights.keyFindings.map(f => `<li>${TM.escapeHtml(f)}</li>`).join('')}
+                  </ul>
+                </div>
+                ` : ''}
+                ${p.aiAnalysis.fileAnalysisInsights.goodsSearchStrategy ? `
+                <div class="tm-strategy-section">
+                  <div class="tm-strategy-label">지정상품 탐색 전략</div>
+                  <div class="tm-strategy-text">${TM.escapeHtml(p.aiAnalysis.fileAnalysisInsights.goodsSearchStrategy)}</div>
+                </div>
+                ` : ''}
+              </div>
+            </div>
+            ` : ''}
+
             <div class="tm-panel">
               <div class="tm-panel-header">
                 <h3>🎯 추천 상품류</h3>
@@ -2875,25 +3552,7 @@
         searchKeywords: allKeywords
       };
       
-      let selectedGoods = [];
-      const fetchResult = await TM.fetchAllCandidates(classCode, businessCtx);
-      if (fetchResult && fetchResult.candidates.length > 0) {
-        try {
-          const oneshotResult = await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessCtx);
-          if (oneshotResult && oneshotResult.length > 0) selectedGoods = oneshotResult;
-        } catch (e) { console.warn(`[TM] addClass oneshot 실패:`, e.message); }
-        
-        // 부족분 DB 패딩 (API 호출 X)
-        if (selectedGoods.length < 10) {
-          const usedNames = new Set(selectedGoods.map(g => g.name));
-          for (const c of fetchResult.candidates) {
-            if (selectedGoods.length >= 10) break;
-            if (usedNames.has(c.goods_name)) continue;
-            usedNames.add(c.goods_name);
-            selectedGoods.push({ name: c.goods_name, similarGroup: c.similar_group_code || '', isCore: false });
-          }
-        }
-      }
+      const selectedGoods = await TM.selectGoodsTwoStage(classCode, businessCtx);
       
       // 추천 결과 저장
       if (p.aiAnalysis) {
@@ -3324,27 +3983,7 @@
               searchKeywords: allKeywords
             };
             
-            let selectedGoods = null;
-            const fetchResult2 = await TM.fetchAllCandidates(classCode, businessCtx2);
-            if (fetchResult2 && fetchResult2.candidates.length > 0) {
-              selectedGoods = await TM.selectGoodsOneshot(classCode, fetchResult2.candidates, businessCtx2);
-            }
-            
-            // fallback
-            if (!selectedGoods || selectedGoods.length < 10) {
-              const candidates = await TM.fetchOptimalCandidates(paddedCode, allKeywords, analysis);
-              console.log(`[TM] 추가 추천 제${classCode}류 fallback 후보: ${candidates.length}건`);
-              if (candidates.length > 0) {
-                selectedGoods = await TM.selectOptimalGoods(
-                  classCode, candidates,
-                  businessInput || p.aiAnalysis.businessAnalysis, analysis
-                );
-              }
-              if (!selectedGoods) selectedGoods = [];
-            }
-            
-            // ★ 10개 보장
-            selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods, businessInput || p.aiAnalysis.businessAnalysis || '');
+            let selectedGoods = await TM.selectGoodsTwoStage(classCode, businessCtx2);
             p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
             console.log(`[TM] 추가 추천 제${classCode}류 최종: ${selectedGoods.length}건`);
             
@@ -6151,7 +6790,7 @@ ${criticalResults.slice(0, 5).map(r =>
 
       const response = await App.callClaudeSonnet(prompt, 1500);
       
-      const jsonMatch = response.text.match(/\{[\s\S]*?\}/);
+      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('AI 응답을 파싱할 수 없습니다.');
       }
@@ -6363,10 +7002,17 @@ ${criticalResults.slice(0, 5).map(r =>
                     <input type="text" id="tm-extract-designatedGoodsFromApp" value="${TM.escapeHtml(pe.designatedGoodsFromApp || '')}" placeholder="지정상품 목록">
                   </div>
                 </div>
+                ${pe.specimenImageDataUrl ? `
+                  <div style="margin-top: 10px; padding: 8px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <label style="font-size: 11px; color: #6b7280; font-weight: 600; display: block; margin-bottom: 6px;">상표견본 (추출됨)</label>
+                    <img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 200px; max-height: 120px; border: 1px solid #d1d5db; border-radius: 4px; display: block;">
+                  </div>
+                ` : ''}
               </div>
             ` : `
               <div class="tm-extracted-summary">
                 <span><strong>${pe.applicationNumber || '-'}</strong> | ${pe.applicationDate || '-'} | ${pe.applicantName || '-'}</span>
+                ${pe.specimenImageDataUrl ? `<img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 80px; max-height: 50px; vertical-align: middle; margin-left: 8px; border: 1px solid #d1d5db; border-radius: 3px;">` : ''}
               </div>
             `}
           </div>
@@ -6622,6 +7268,7 @@ ${criticalResults.slice(0, 5).map(r =>
             }
             if (!p.priorityExam.trademarkNameFromApp && extracted.trademarkName) {
               p.priorityExam.trademarkNameFromApp = extracted.trademarkName;
+              p.trademarkName = extracted.trademarkName; // 상위 프로젝트에도 반영
               totalExtracted++;
             }
             // 상품류와 지정상품은 출원서에서 추출된 값 우선 적용
@@ -6633,7 +7280,13 @@ ${criticalResults.slice(0, 5).map(r =>
               p.priorityExam.designatedGoodsFromApp = extracted.designatedGoods;
               totalExtracted++;
             }
-            
+            // 상표견본 이미지 (출원서에서 추출된 경우 항상 갱신)
+            if (extracted.specimenImage) {
+              p.priorityExam.specimenImageDataUrl = extracted.specimenImage;
+              totalExtracted++;
+              console.log('[TM] 상표견본 이미지 추출 완료');
+            }
+
           } catch (pdfError) {
             console.error(`[TM] ${file.name} 추출 실패:`, pdfError);
           }
@@ -6690,7 +7343,14 @@ ${criticalResults.slice(0, 5).map(r =>
       console.log('[TM] 페이지', i, '텍스트 아이템 수:', textContent.items.length);
       
       const pageText = textContent.items.map(item => item.str).join(' ');
-      fullText += pageText + '\n';
+      // KIPO 출원서 꼬리말 제거: 쪽번호(3-1), 날짜(2026-03-24) 등
+      const cleanedPageText = pageText
+        .replace(/\s+\d{1,2}-\d{1,2}\s+/g, ' ')           // 쪽번호 (3-1, 3-2 등)
+        .replace(/\s+\d{4}-\d{2}-\d{2}\s*/g, ' ')          // 날짜 (2026-03-24 등)
+        .replace(/\s+\d{4}\.\d{2}\.\d{2}\s*/g, ' ')        // 날짜 (2026.03.24 등)
+        .replace(/\s{2,}/g, ' ')                            // 연속 공백 정리
+        .trim();
+      fullText += cleanedPageText + '\n';
     }
     
     // 텍스트가 거의 없으면 이미지 기반 PDF -> OCR 시도
@@ -6707,9 +7367,309 @@ ${criticalResults.slice(0, 5).map(r =>
     
     // Claude API로 정보 추출
     App.showToast('AI가 텍스트 분석 중...', 'info');
-    return await TM.parseApplicationText(fullText);
+    const parsed = await TM.parseApplicationText(fullText);
+
+    // 상표견본 이미지 추출 시도
+    try {
+      App.showToast('상표견본 이미지 추출 중...', 'info');
+      parsed.specimenImage = await TM.extractSpecimenImage(pdf);
+    } catch (imgErr) {
+      console.warn('[TM] 상표견본 이미지 추출 실패:', imgErr);
+    }
+
+    return parsed;
   };
   
+  // PDF에서 상표견본 이미지 추출 — 임베딩된 이미지 객체를 직접 추출 (페이지 래스터라이즈 없음)
+  // PyMuPDF의 page.get_images() + fitz.Pixmap(doc, xref)와 동일한 접근:
+  // PDF.js의 getOperatorList()로 paintImageXObject 오퍼레이션을 찾고,
+  // page.objs.get()으로 실제 이미지 데이터를 직접 추출
+  TM.extractSpecimenImage = async function(pdf) {
+    // 1단계: 【상표견본】텍스트가 있는 페이지 찾기 (마지막부터 역순)
+    let targetPageNum = -1;
+    for (let pageNum = pdf.numPages; pageNum >= 1; pageNum--) {
+      const page = await pdf.getPage(pageNum);
+      const tc = await page.getTextContent();
+      for (const item of tc.items) {
+        if (item.str.replace(/\s/g, '').includes('상표견본')) {
+          targetPageNum = pageNum;
+          break;
+        }
+      }
+      if (targetPageNum > 0) break;
+    }
+    if (targetPageNum < 0) {
+      console.log('[TM] 【상표견본】 텍스트를 찾을 수 없음');
+      return null;
+    }
+
+    console.log('[TM] 【상표견본】 페이지:', targetPageNum);
+    const page = await pdf.getPage(targetPageNum);
+
+    // 2단계: operator list에서 임베딩된 이미지 객체 참조 추출
+    const opList = await page.getOperatorList();
+    const imageRefs = [];
+
+    for (let i = 0; i < opList.fnArray.length; i++) {
+      const fn = opList.fnArray[i];
+      // paintImageXObject(85): 디코딩된 픽셀 데이터 이미지
+      // paintJpegImageXObject(82): JPEG 이미지 (HTMLImageElement)
+      // paintImageMaskXObject(83): 마스크 이미지
+      if (fn === pdfjsLib.OPS.paintImageXObject ||
+          fn === pdfjsLib.OPS.paintJpegImageXObject ||
+          fn === pdfjsLib.OPS.paintImageMaskXObject) {
+        const name = opList.argsArray[i][0];
+        if (!imageRefs.some(r => r.name === name)) {
+          imageRefs.push({ name, op: fn });
+        }
+      }
+    }
+
+    console.log('[TM] 임베딩 이미지 참조:', imageRefs.length, '개');
+
+    if (imageRefs.length === 0) {
+      console.warn('[TM] 임베딩 이미지 없음 → 렌더링 폴백');
+      return await TM.extractSpecimenByRendering(pdf, targetPageNum);
+    }
+
+    // 3단계: 각 이미지 객체 로드 → 가장 큰 이미지 선택
+    let bestCanvas = null;
+    let bestArea = 0;
+
+    for (const ref of imageRefs) {
+      try {
+        const imgObj = await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('timeout')), 5000);
+          page.objs.get(ref.name, (obj) => {
+            clearTimeout(timeout);
+            resolve(obj);
+          });
+        });
+
+        if (!imgObj) continue;
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (imgObj.bitmap && typeof imgObj.bitmap.width === 'number') {
+          // {bitmap: ImageBitmap} 래퍼
+          canvas.width = imgObj.bitmap.width;
+          canvas.height = imgObj.bitmap.height;
+          ctx.drawImage(imgObj.bitmap, 0, 0);
+        } else if (imgObj instanceof HTMLCanvasElement) {
+          // HTMLCanvasElement 직접
+          canvas.width = imgObj.width;
+          canvas.height = imgObj.height;
+          ctx.drawImage(imgObj, 0, 0);
+        } else if (imgObj.canvas instanceof HTMLCanvasElement) {
+          // {canvas: HTMLCanvasElement} 래퍼
+          canvas.width = imgObj.canvas.width;
+          canvas.height = imgObj.canvas.height;
+          ctx.drawImage(imgObj.canvas, 0, 0);
+        } else if (imgObj instanceof HTMLImageElement || (typeof ImageBitmap !== 'undefined' && imgObj instanceof ImageBitmap)) {
+          // JPEG 이미지 (브라우저가 디코딩)
+          canvas.width = imgObj.width;
+          canvas.height = imgObj.height;
+          ctx.drawImage(imgObj, 0, 0);
+        } else if (imgObj.data) {
+          // Raw 픽셀 데이터
+          const w = imgObj.width;
+          const h = imgObj.height;
+          if (!w || !h) continue;
+          canvas.width = w;
+          canvas.height = h;
+
+          const pixelCount = w * h;
+          const kind = imgObj.kind || 0;
+
+          if (kind === 3 || imgObj.data.length === pixelCount * 4) {
+            // RGBA (32bpp)
+            const clamped = (imgObj.data instanceof Uint8ClampedArray)
+              ? imgObj.data
+              : new Uint8ClampedArray(imgObj.data.buffer ? imgObj.data.buffer : imgObj.data);
+            const imgData = new ImageData(clamped, w, h);
+            ctx.putImageData(imgData, 0, 0);
+          } else if (kind === 2 || imgObj.data.length === pixelCount * 3) {
+            // RGB (24bpp) → RGBA 변환
+            const imgData = ctx.createImageData(w, h);
+            const src = imgObj.data, dst = imgData.data;
+            for (let s = 0, d = 0; s < src.length; s += 3, d += 4) {
+              dst[d] = src[s]; dst[d + 1] = src[s + 1]; dst[d + 2] = src[s + 2]; dst[d + 3] = 255;
+            }
+            ctx.putImageData(imgData, 0, 0);
+          } else if (kind === 1 || imgObj.data.length === pixelCount) {
+            // Grayscale (8bpp) → RGBA 변환
+            const imgData = ctx.createImageData(w, h);
+            const src = imgObj.data, dst = imgData.data;
+            for (let i = 0; i < src.length; i++) {
+              const d = i * 4;
+              dst[d] = src[i]; dst[d + 1] = src[i]; dst[d + 2] = src[i]; dst[d + 3] = 255;
+            }
+            ctx.putImageData(imgData, 0, 0);
+          } else if (imgObj.data.length === Math.ceil(pixelCount / 8)) {
+            // 1bpp 마스크 → RGBA 변환
+            const imgData = ctx.createImageData(w, h);
+            const src = imgObj.data, dst = imgData.data;
+            for (let i = 0; i < pixelCount; i++) {
+              const byteIdx = Math.floor(i / 8);
+              const bitIdx = 7 - (i % 8);
+              const bit = (src[byteIdx] >> bitIdx) & 1;
+              const d = i * 4;
+              const v = bit ? 0 : 255; // 1=검정, 0=흰색
+              dst[d] = v; dst[d + 1] = v; dst[d + 2] = v; dst[d + 3] = 255;
+            }
+            ctx.putImageData(imgData, 0, 0);
+          } else {
+            console.warn('[TM] 알 수 없는 이미지 포맷:', ref.name, 'kind:', kind, 'dataLen:', imgObj.data.length, 'expected:', pixelCount);
+            continue;
+          }
+        } else if (imgObj.src) {
+          // src 속성이 있는 이미지 객체
+          const img = new Image();
+          await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = imgObj.src; });
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+        } else {
+          console.warn('[TM] 이미지 객체 형식 미지원:', ref.name, typeof imgObj);
+          continue;
+        }
+
+        const area = canvas.width * canvas.height;
+        console.log('[TM] 이미지:', ref.name, canvas.width, 'x', canvas.height, '(' + area + 'px)');
+
+        // 너무 작은 이미지 (아이콘, 도장 등) 무시 — 최소 30x30
+        if (canvas.width < 30 || canvas.height < 30) continue;
+
+        if (area > bestArea) {
+          bestArea = area;
+          bestCanvas = canvas;
+        }
+      } catch (e) {
+        console.warn('[TM] 이미지 로드 실패:', ref.name, e.message);
+      }
+    }
+
+    if (bestCanvas) {
+      console.log('[TM] 최종 선택 이미지:', bestCanvas.width, 'x', bestCanvas.height);
+      return TM.autoCropCanvas(bestCanvas);
+    }
+
+    // 임베딩 이미지 추출 실패 시 렌더링 폴백
+    console.warn('[TM] 이미지 객체 추출 실패 → 렌더링 폴백');
+    return await TM.extractSpecimenByRendering(pdf, targetPageNum);
+  };
+
+  // 폴백: 페이지 렌더링 후 텍스트 gap 기반 크롭
+  TM.extractSpecimenByRendering = async function(pdf, pageNum) {
+    const page = await pdf.getPage(pageNum);
+    const scale = 3.0;
+    const vp = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = vp.width;
+    canvas.height = vp.height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, vp.width, vp.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+    const tc = await page.getTextContent();
+    const texts = [];
+    for (const item of tc.items) {
+      if (item.str.trim().length === 0) continue;
+      const [cx, cy] = vp.convertToViewportPoint(item.transform[4], item.transform[5]);
+      const fs = Math.abs(item.transform[0]);
+      texts.push({ str: item.str.trim(), cy, fs });
+    }
+    texts.sort((a, b) => a.cy - b.cy);
+
+    // 텍스트 사이 가장 큰 gap 찾기
+    let gapTop = 0, gapBottom = vp.height, biggestGap = 0;
+    if (texts.length >= 2) {
+      for (let i = 0; i < texts.length - 1; i++) {
+        const curBottom = texts[i].cy + texts[i].fs * scale * 0.5;
+        const nextTop = texts[i + 1].cy - texts[i + 1].fs * scale * 1.2;
+        const gap = nextTop - curBottom;
+        if (gap > biggestGap) { biggestGap = gap; gapTop = curBottom; gapBottom = nextTop; }
+      }
+      const lastBottom = texts[texts.length - 1].cy + texts[texts.length - 1].fs * scale;
+      if (vp.height - lastBottom > biggestGap) { biggestGap = vp.height - lastBottom; gapTop = lastBottom; gapBottom = vp.height; }
+    }
+
+    if (biggestGap > 50) {
+      const m = 15;
+      const cropTop = Math.max(0, Math.floor(gapTop - m));
+      const cropBottom = Math.min(vp.height, Math.ceil(gapBottom + m));
+      const cropH = cropBottom - cropTop;
+      if (cropH > 30) {
+        const gapCanvas = document.createElement('canvas');
+        gapCanvas.width = vp.width;
+        gapCanvas.height = cropH;
+        gapCanvas.getContext('2d').drawImage(canvas, 0, cropTop, vp.width, cropH, 0, 0, vp.width, cropH);
+        return TM.autoCropCanvas(gapCanvas);
+      }
+    }
+
+    return TM.autoCropCanvas(canvas);
+  };
+
+  // 캔버스 자동 크롭 — 흰색 여백 제거
+  TM.autoCropCanvas = function(srcCanvas) {
+    const ctx = srcCanvas.getContext('2d');
+    const w = srcCanvas.width, h = srcCanvas.height;
+    const data = ctx.getImageData(0, 0, w, h).data;
+
+    const isWhite = (r, g, b) => r > 250 && g > 250 && b > 250;
+    let top = 0, bottom = h - 1, left = 0, right = w - 1;
+
+    // 상단
+    outer1: for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (!isWhite(data[i], data[i+1], data[i+2])) { top = y; break outer1; }
+      }
+    }
+    // 하단 (하위 5%는 꼬리말 영역으로 제외)
+    const bottomLimit = Math.floor(h * 0.95);
+    outer2: for (let y = bottomLimit; y >= top; y--) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (!isWhite(data[i], data[i+1], data[i+2])) { bottom = y; break outer2; }
+      }
+    }
+    // 좌측
+    outer3: for (let x = 0; x < w; x++) {
+      for (let y = top; y <= bottom; y++) {
+        const i = (y * w + x) * 4;
+        if (!isWhite(data[i], data[i+1], data[i+2])) { left = x; break outer3; }
+      }
+    }
+    // 우측
+    outer4: for (let x = w - 1; x >= left; x--) {
+      for (let y = top; y <= bottom; y++) {
+        const i = (y * w + x) * 4;
+        if (!isWhite(data[i], data[i+1], data[i+2])) { right = x; break outer4; }
+      }
+    }
+
+    // 여유 패딩 (5px)
+    const pad = 5;
+    top = Math.max(0, top - pad);
+    bottom = Math.min(h - 1, bottom + pad);
+    left = Math.max(0, left - pad);
+    right = Math.min(w - 1, right + pad);
+
+    const cw = right - left + 1;
+    const ch = bottom - top + 1;
+    if (cw < 10 || ch < 10) return srcCanvas.toDataURL('image/png');
+
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = cw;
+    cropCanvas.height = ch;
+    cropCanvas.getContext('2d').drawImage(srcCanvas, left, top, cw, ch, 0, 0, cw, ch);
+    return cropCanvas.toDataURL('image/png');
+  };
+
   // PDF를 이미지로 렌더링 후 OCR
   TM.ocrPDF = async function(pdf) {
     // Tesseract.js 로드
@@ -6757,23 +7717,23 @@ ${criticalResults.slice(0, 5).map(r =>
   
   // 텍스트에서 출원 정보 파싱 (Claude API 사용)
   TM.parseApplicationText = async function(text) {
-    const result = {
-      applicationNumber: '',
-      applicationDate: '',
-      applicantName: '',
-      trademarkName: '',
-      classCode: '',
-      designatedGoods: ''
-    };
-    
     if (!text || text.trim().length < 10) {
       console.log('[TM] 텍스트가 너무 짧음');
-      return result;
+      return { applicationNumber: '', applicationDate: '', applicantName: '', trademarkName: '', classCode: '', designatedGoods: '' };
     }
-    
-    console.log('[TM] Claude API로 텍스트 분석 시작');
+
     console.log('[TM] 원본 텍스트:', text.substring(0, 800));
-    
+
+    // 정규식 우선 실행 — 출원서는 형식이 정해져 있으므로 대부분 충분
+    const regexResult = TM.parseApplicationTextRegex(text);
+    const hasEssentials = regexResult.applicationNumber && regexResult.classCode;
+    if (hasEssentials) {
+      console.log('[TM] 정규식만으로 핵심 필드 추출 완료:', regexResult);
+      return regexResult;
+    }
+
+    // 핵심 필드 부족 시에만 Claude API 호출
+    console.log('[TM] 정규식 부족 (applicationNumber:', regexResult.applicationNumber, ', classCode:', regexResult.classCode, ') → Claude API 보완');
     try {
       const prompt = `다음은 상표 출원번호통지서 또는 출원서를 OCR한 텍스트입니다. 띄어쓰기가 잘못되어 있거나 글자가 누락되었을 수 있습니다.
 
@@ -6794,33 +7754,27 @@ ${text.substring(0, 2000)}
 
       const response = await App.callClaudeSonnet(prompt, 800);
       const responseText = response.text || '';
-      
       console.log('[TM] Claude 응답:', responseText);
-      
-      // JSON 추출
+
       const startIdx = responseText.indexOf('{');
       const endIdx = responseText.lastIndexOf('}');
-      
+
       if (startIdx !== -1 && endIdx > startIdx) {
-        const jsonStr = responseText.substring(startIdx, endIdx + 1);
-        const parsed = JSON.parse(jsonStr);
-        
-        if (parsed.applicationNumber) result.applicationNumber = parsed.applicationNumber;
-        if (parsed.applicationDate) result.applicationDate = parsed.applicationDate;
-        if (parsed.applicantName) result.applicantName = parsed.applicantName;
-        if (parsed.trademarkName) result.trademarkName = parsed.trademarkName;
-        if (parsed.classCode) result.classCode = parsed.classCode;
-        if (parsed.designatedGoods) result.designatedGoods = parsed.designatedGoods;
-        
-        console.log('[TM] Claude 파싱 결과:', result);
-        return result;
+        const parsed = JSON.parse(responseText.substring(startIdx, endIdx + 1));
+        // 정규식 결과에 Claude 결과를 병합 (정규식 값 우선, 빈 값만 Claude로 보완)
+        const merged = { ...regexResult };
+        for (const key of ['applicationNumber', 'applicationDate', 'applicantName', 'trademarkName', 'classCode', 'designatedGoods']) {
+          if (!merged[key] && parsed[key]) merged[key] = parsed[key];
+        }
+        console.log('[TM] 병합 결과:', merged);
+        return merged;
       }
     } catch (error) {
-      console.error('[TM] Claude 분석 실패, 정규식 폴백:', error);
+      console.error('[TM] Claude 분석 실패:', error);
     }
-    
-    // 정규식 폴백
-    return TM.parseApplicationTextRegex(text);
+
+    // Claude도 실패 시 정규식 결과 반환
+    return regexResult;
   };
   
   // 정규식 기반 파싱 (폴백용)
@@ -6834,7 +7788,9 @@ ${text.substring(0, 2000)}
       designatedGoods: ''
     };
     
-    let t = text.replace(/\s+/g, ' ');
+    let t = text
+      .replace(/\d{1,2}-\d{1,2}\s+\d{4}[-./]\d{2}[-./]\d{2}/g, ' ')  // 쪽번호+날짜 연속 패턴
+      .replace(/\s+/g, ' ');
     
     console.log('[TM] 정규식 폴백 파싱 시작');
     
@@ -6852,13 +7808,25 @@ ${text.substring(0, 2000)}
       console.log('[TM] 출원일자:', result.applicationDate);
     }
     
-    // 출원인: 한글 사이 공백 제거하여 회사명 추출
-    const companyMatch = t.match(/([가-힣\s]{2,20})\s*주\s*식\s*회\s*사|주\s*식\s*회\s*사\s*([가-힣\s]{2,20})/);
-    if (companyMatch) {
-      let name = (companyMatch[1] || companyMatch[2] || '').replace(/\s/g, '');
-      if (name && name.length >= 2) {
-        result.applicantName = name + ' 주식회사';
-        console.log('[TM] 출원인:', result.applicantName);
+    // 출원인: 1순위 【명칭】필드 직접 파싱, 2순위 "주식회사" 전후 매칭
+    const nameFieldMatch = t.match(/명\s*칭[】\]\s]+([가-힣A-Za-z\s()（）]{2,30}?)(?=\s*【|\s*특허고객|\s*대리인|\s*$)/);
+    if (nameFieldMatch) {
+      result.applicantName = nameFieldMatch[1].replace(/\s+/g, ' ').trim();
+      console.log('[TM] 출원인(명칭필드):', result.applicantName);
+    } else {
+      const corpAfter = t.match(/주\s*식\s*회\s*사\s+([가-힣A-Za-z]{2,15})/);
+      if (corpAfter) {
+        result.applicantName = '주식회사 ' + corpAfter[1].replace(/\s/g, '');
+        console.log('[TM] 출원인(주식회사+):', result.applicantName);
+      } else {
+        const corpBefore = t.match(/([가-힣]{2,15})\s*주\s*식\s*회\s*사/);
+        if (corpBefore) {
+          const name = corpBefore[1].replace(/\s/g, '');
+          if (!['명칭', '출원인', '신청인', '권리자'].includes(name)) {
+            result.applicantName = name + ' 주식회사';
+            console.log('[TM] 출원인(+주식회사):', result.applicantName);
+          }
+        }
       }
     }
     
@@ -7047,8 +8015,8 @@ ${text.substring(0, 2000)}
       const file = files[i];
       
       // 파일 크기 체크 (10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        App.showToast(`${file.name}: 파일 크기 초과 (10MB 이하)`, 'warning');
+      if (file.size > 30 * 1024 * 1024) {
+        App.showToast(`${file.name}: 파일 크기 초과 (30MB 이하)`, 'warning');
         continue;
       }
       
@@ -7127,7 +8095,126 @@ ${text.substring(0, 2000)}
     TM.renderCurrentStep();
     App.showToast(`${files.length}개 증거자료가 추가되었습니다.`, 'success');
   };
-  
+
+  // ============================================================
+  // 사업 분석용 파일 업로드 처리
+  // ============================================================
+
+  TM.getFileIcon = function(filename) {
+    const ext = (filename || '').split('.').pop().toLowerCase();
+    const icons = { pdf: '📕', doc: '📘', docx: '📘', hwp: '📗', hwpx: '📗', xls: '📊', xlsx: '📊', pptx: '📙', ppt: '📙', txt: '📄', csv: '📄', md: '📄', json: '📄' };
+    return icons[ext] || '📎';
+  };
+
+  TM.formatFileSize = function(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
+  };
+
+  TM.handleBusinessFileUpload = async function(files) {
+    if (!files || files.length === 0) return;
+
+    const p = TM.currentProject;
+    if (!p.businessFiles) p.businessFiles = [];
+    if (!p.businessFileTexts) p.businessFileTexts = [];
+
+    const dropzone = document.getElementById('tm-business-dropzone');
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      // 파일 크기 체크 (30MB)
+      if (file.size > 30 * 1024 * 1024) {
+        App.showToast(`${file.name}: 파일 크기 초과 (30MB 이하)`, 'warning');
+        continue;
+      }
+
+      // 로딩 표시
+      if (dropzone) {
+        dropzone.innerHTML = `
+          <div class="tm-dropzone-loading">
+            <div class="tm-spinner"></div>
+            <div>파일 분석 중... (${i + 1}/${files.length}) ${file.name}</div>
+          </div>
+        `;
+      }
+
+      try {
+        // App.extractTextFromFile로 텍스트 추출
+        let extractedText = '';
+        try {
+          extractedText = await App.extractTextFromFile(file);
+        } catch (extractError) {
+          console.warn('[TM] 사업분석 파일 텍스트 추출 실패:', extractError.message);
+          // 폴백: trademark.js 내부 추출 함수 시도
+          const ext = file.name.toLowerCase().split('.').pop();
+          try {
+            if (ext === 'pdf') {
+              extractedText = await TM.extractTextFromPDF(file);
+            } else if (ext === 'doc' || ext === 'docx') {
+              extractedText = await TM.extractTextFromWord(file);
+            }
+          } catch (fallbackError) {
+            console.warn('[TM] 폴백 추출도 실패:', fallbackError.message);
+          }
+        }
+
+        if (!extractedText || extractedText.trim().length < 10) {
+          App.showToast(`${file.name}: 텍스트를 추출할 수 없습니다. 다른 형식으로 시도해주세요.`, 'warning');
+          continue;
+        }
+
+        // 파일 정보 + 추출된 텍스트 저장
+        p.businessFiles.push({
+          name: file.name,
+          size: file.size,
+          type: file.type || file.name.split('.').pop(),
+          addedAt: new Date().toISOString()
+        });
+        p.businessFileTexts.push({
+          name: file.name,
+          text: extractedText.substring(0, 50000) // 최대 5만자
+        });
+
+        console.log(`[TM] 사업분석 파일 추가: ${file.name} (${extractedText.length}자 추출)`);
+
+      } catch (error) {
+        console.error('[TM] 사업분석 파일 처리 실패:', error);
+        App.showToast(`${file.name}: 파일 처리 실패`, 'error');
+      }
+    }
+
+    // 드롭존 원상복구
+    if (dropzone) {
+      dropzone.innerHTML = `
+        <span class="tm-dropzone-compact-icon">📎</span>
+        <span class="tm-dropzone-compact-text">사업 관련 파일 업로드 <strong>(클릭 또는 드래그)</strong></span>
+        <span class="tm-dropzone-compact-formats">PDF, DOCX, XLSX, TXT, HWP 등</span>
+      `;
+    }
+
+    TM.hasUnsavedChanges = true;
+    TM.renderCurrentStep();
+
+    if (p.businessFiles.length > 0) {
+      App.showToast(`${files.length}개 파일이 추가되었습니다. 분석 버튼을 눌러주세요.`, 'success');
+    }
+  };
+
+  TM.removeBusinessFile = function(index) {
+    const p = TM.currentProject;
+    if (!p.businessFiles) return;
+
+    const removed = p.businessFiles.splice(index, 1);
+    if (p.businessFileTexts) p.businessFileTexts.splice(index, 1);
+
+    console.log('[TM] 사업분석 파일 제거:', removed[0]?.name);
+    TM.hasUnsavedChanges = true;
+    TM.renderCurrentStep();
+  };
+
   // PDF에서 텍스트 추출 (증거자료용)
   TM.extractTextFromPDF = async function(file) {
     if (!window.pdfjsLib) {
@@ -7336,6 +8423,78 @@ ${content.substring(0, 1200)}
     previewEl.style.display = 'block';
   };
   
+  // 증거자료 제목에 따른 도입 표현 차별화
+  TM.getEvidenceIntroPhrase = function(title) {
+    const t = (title || '').toLowerCase();
+    const mappings = [
+      [['사업자등록', '사업자'], '사업자등록 정보에서 확인되는 바와 같이,'],
+      [['계약서', '계약', '협약', 'mou', '양해각서'], '계약 내용에서 확인되는 바와 같이,'],
+      [['홈페이지', '웹사이트', 'url', '도메인', '블로그', 'sns', '인스타', '유튜브', '네이버'], '온라인 사용 현황에서 확인되는 바와 같이,'],
+      [['광고', '마케팅', '홍보', '프로모션', '캠페인', '전단', '배너', '리플렛'], '광고·홍보 자료에서 확인되는 바와 같이,'],
+      [['매출', '거래', '세금계산서', '영수증', '인보이스', '매입', '결제', '정산'], '거래 실적에서 확인되는 바와 같이,'],
+      [['사진', '간판', '포장', '패키지', '제품', '라벨', '스티커', '명함'], '실제 사용 모습에서 확인되는 바와 같이,'],
+      [['검색', '검색결과', '포털', '구글', '키워드'], '검색 결과에서 확인되는 바와 같이,'],
+      [['사업계획', '사업계획서', 'ir', '투자', '제안서', '기획서'], '사업 계획 내용에서 확인되는 바와 같이,'],
+      [['사업수행', '수행계획', '과제', '연구', 'r&d', '개발'], '사업 수행 내용에서 확인되는 바와 같이,'],
+      [['발표', '프레젠테이션', 'pt', '슬라이드', 'ppt'], '발표 자료에서 확인되는 바와 같이,'],
+      [['카탈로그', '브로슈어', '소개서', '회사소개'], '소개 자료에서 확인되는 바와 같이,'],
+      [['특허', '출원', '등록', '인증', '허가', '신고'], '관련 등록·인증 내용에서 확인되는 바와 같이,'],
+      [['기사', '보도', '뉴스', '언론', '미디어'], '보도 내용에서 확인되는 바와 같이,'],
+      [['앱', '어플', '애플리케이션', '스토어', '플레이스토어', '앱스토어'], '앱 서비스 현황에서 확인되는 바와 같이,'],
+    ];
+    for (const [keywords, phrase] of mappings) {
+      if (keywords.some(kw => t.includes(kw))) return phrase;
+    }
+    return '에서 직접 확인할 수 있는 바와 같이,';
+  };
+
+  // 신청이유에 따른 법조문 텍스트 반환
+  TM.buildReasonClause = function(reason) {
+    if (reason === 'using') {
+      return '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용하고 있는 것이 명백하므로';
+    } else if (reason === 'preparing') {
+      return '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로';
+    } else if (reason === 'infringement') {
+      return '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 제3자의 무단사용을 저지하기 위해';
+    } else if (reason === 'export') {
+      return '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제3호의 "조약에 따른 우선권주장의 기초가 되는 출원에 관한 경우"에 해당하는 상표등록출원으로서, 수출을 위해 긴급하게 상표등록이 필요하므로';
+    }
+    return '상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라';
+  };
+
+  // 사용/사용준비 표현 반환
+  TM.buildUsageText = function(reason) {
+    return reason === 'using' ? '사용 중' : '사용 및 사용 준비 중';
+  };
+
+  // 증거자료 문단 배열 생성 (미리보기/Word 공용)
+  TM.buildEvidenceParagraphs = function({ applicantName, goodsListStr, usageText, usageStatus, evidences }) {
+    const paragraphs = [];
+
+    if (evidences.length === 0) {
+      paragraphs.push(`본 출원인 "${applicantName}"는 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
+      paragraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
+      paragraphs.push(`이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
+    } else if (evidences.length === 1) {
+      const evRef = `첨부자료 1(${evidences[0].title})`;
+      paragraphs.push(`본 출원인 "${applicantName}"는 본 신청서의 ${evRef}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
+      paragraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
+      paragraphs.push(`부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
+    } else {
+      const firstRef = `첨부자료 1(${evidences[0].title})`;
+      paragraphs.push(`본 출원인 "${applicantName}"는 본 신청서의 ${firstRef}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsListStr}을 ${usageText}입니다.`);
+      paragraphs.push(`따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 ${usageStatus} 중에 있습니다.`);
+      for (let i = 1; i < evidences.length; i++) {
+        const evRef = `첨부자료 ${i + 1}(${evidences[i].title})`;
+        const introPhrase = TM.getEvidenceIntroPhrase(evidences[i].title);
+        paragraphs.push(`또한, ${evRef}의 ${introPhrase} 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 실제 사용하고 있습니다.`);
+      }
+      paragraphs.push(`이상과 같이, 이건 출원인 "${applicantName}"는 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`);
+    }
+
+    return paragraphs;
+  };
+
   // 우선심사 설명서 내용 생성
   TM.generatePriorityDocContent = function(useExtracted = false) {
     const p = TM.currentProject;
@@ -7352,36 +8511,38 @@ ${content.substring(0, 1200)}
     const finalUseExtracted = useExtracted || pe.useExtractedGoods || false;
     let classCodeStr, designatedGoodsStr, goodsWithGroups;
     
-    if (finalUseExtracted && hasExtracted) {
-      // 추출 정보 사용
-      classCodeStr = pe.classCode ? `제 ${pe.classCode}류` : '[상품류]';
-      designatedGoodsStr = pe.designatedGoodsFromApp || '[지정상품]';
-      goodsWithGroups = pe.designatedGoodsFromApp ? 
-        pe.designatedGoodsFromApp.split(',').map(g => `『${g.trim()}』`) : [];
-    } else {
-      // 2단계 정보 사용 (기본)
-      const classGroups = {};
-      (p.designatedGoods || []).forEach(classData => {
-        if (!classGroups[classData.classCode]) {
-          classGroups[classData.classCode] = [];
-        }
-        (classData.goods || []).forEach(g => {
-          classGroups[classData.classCode].push({
-            name: g.name,
-            similarGroup: g.similarGroup || ''
-          });
+    // 2단계 정보 확인
+    const classGroups = {};
+    (p.designatedGoods || []).forEach(classData => {
+      if (!classGroups[classData.classCode]) {
+        classGroups[classData.classCode] = [];
+      }
+      (classData.goods || []).forEach(g => {
+        classGroups[classData.classCode].push({
+          name: g.name,
+          similarGroup: g.similarGroup || ''
         });
       });
-      
+    });
+    const hasStep2Goods = Object.keys(classGroups).length > 0;
+
+    if ((finalUseExtracted || !hasStep2Goods) && hasExtracted) {
+      // 추출 정보 사용 (명시적 선택 또는 2단계 정보 없을 때 폴백)
+      classCodeStr = pe.classCode ? `제 ${pe.classCode}류` : '[상품류]';
+      designatedGoodsStr = pe.designatedGoodsFromApp || '[지정상품]';
+      goodsWithGroups = pe.designatedGoodsFromApp ?
+        pe.designatedGoodsFromApp.split(',').map(g => `『${g.trim()}』`) : [];
+    } else if (hasStep2Goods) {
+      // 2단계 정보 사용 (기본)
       const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
-      classCodeStr = classCodeList.length > 0 ? classCodeList.map(c => '제 ' + c + '류').join(', ') : '[상품류]';
-      
+      classCodeStr = classCodeList.map(c => '제 ' + c + '류').join(', ');
+
       const goodsList = [];
       Object.values(classGroups).forEach(goods => {
         goods.forEach(g => goodsList.push(g.name));
       });
-      designatedGoodsStr = goodsList.length > 0 ? goodsList.join(', ') : '[지정상품]';
-      
+      designatedGoodsStr = goodsList.join(', ');
+
       goodsWithGroups = [];
       Object.entries(classGroups).forEach(([classCode, goods]) => {
         goods.forEach(g => {
@@ -7392,30 +8553,28 @@ ${content.substring(0, 1200)}
           }
         });
       });
-    }
-    
-    // 증거자료 목록
-    const evidences = pe.evidences || [];
-    
-    // 첨부자료 참조 문자열 생성
-    const evidence1Ref = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
-    const evidence2Ref = evidences.length > 1 ? `(첨부자료 2: ${evidences[1].title})` : '';
-    
-    // 신청이유 선택에 따른 법조문
-    let reasonText = '';
-    if (pe.reason === 'using' || pe.reason === 'preparing') {
-      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로 우선심사를 신청합니다.`;
-    } else if (pe.reason === 'infringement') {
-      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 우선심사를 신청합니다.`;
     } else {
-      reasonText = `본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라 우선심사를 신청합니다.`;
+      // 둘 다 없는 경우
+      classCodeStr = '[상품류]';
+      designatedGoodsStr = '[지정상품]';
+      goodsWithGroups = [];
     }
     
+    const reasonClause = TM.buildReasonClause(pe.reason);
+    const evidences = pe.evidences || [];
+    const usageText = TM.buildUsageText(pe.reason);
+    const goodsListStr = goodsWithGroups.length > 0 ? goodsWithGroups.join(', ') : '[지정상품]';
+    const usageStatus = pe.reason === 'using' ? '사용' : '사용예정';
+
+    const evidenceParagraphs = TM.buildEvidenceParagraphs({ applicantName, goodsListStr, usageText, usageStatus, evidences });
+    const buildEvidenceParagraphsHtml = () => evidenceParagraphs.map(p => `
+          <p style="margin-top: 12px;">${p}</p>`).join('');
+
     // HTML 형식의 미리보기
     return `
       <div class="tm-doc-preview-body">
         <h2 style="text-align: center; margin-bottom: 24px;">상표 우선심사 신청 설명서</h2>
-        
+
         <div class="tm-doc-section">
           <h3>【서지사항】</h3>
           <table class="tm-doc-table">
@@ -7424,44 +8583,36 @@ ${content.substring(0, 1200)}
             <tr><td><strong>【출원일】</strong></td><td>${applicationDate}</td></tr>
           </table>
         </div>
-        
+
         <div class="tm-doc-section">
           <h3>【상표견본】</h3>
-          <p style="font-size: 18px; font-weight: bold;">${trademarkName}</p>
+          ${pe.specimenImageDataUrl
+            ? `<img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 280px; max-height: 180px; border: 1px solid #d1d5db; display: block;">`
+            : `<p style="font-size: 18px; font-weight: bold;">${trademarkName}</p>`
+          }
         </div>
-        
+
         <div class="tm-doc-section">
           <h3>【상품류】</h3>
           <p>${classCodeStr || '[상품류]'}</p>
         </div>
-        
+
         <div class="tm-doc-section">
           <h3>【지정상품】</h3>
           <p>${designatedGoodsStr || '[지정상품]'}</p>
         </div>
-        
+
         <div class="tm-doc-section">
           <h3>【우선심사 신청이유】</h3>
-          <p>${reasonText}</p>
-          <p style="margin-top: 12px;">
-            본 출원인 "${applicantName}"는 본 신청서의 첨부자료${evidence1Ref}에 기재된 바와 같이, 
-            이건 출원상표가 표시된 ${goodsWithGroups.join(', ')}을 
-            사용 및 사용 준비 중입니다.
-          </p>
-          <p style="margin-top: 12px;">
-            따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 사용예정 중에 있습니다.
-          </p>
-          <p style="margin-top: 12px;">
-            이건 출원인 "${applicantName}"${evidence2Ref}은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 
-            부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.
-          </p>
+          <p>본 상표는 ${reasonClause} 우선심사를 신청합니다.</p>
+          ${buildEvidenceParagraphsHtml()}
         </div>
-        
+
         ${evidences.length > 0 ? `
           <div class="tm-doc-section">
             <h3>【증빙자료】</h3>
             <ul style="margin: 0; padding-left: 0; list-style: none;">
-              ${evidences.map((ev, idx) => `<li>첨부자료 ${idx + 1} : ${TM.escapeHtml(ev.title)}</li>`).join('')}
+              ${evidences.map((ev, idx) => `<li>첨부자료 ${idx + 1} : ${TM.escapeHtml(ev.title)}${ev.description ? ' — ' + TM.escapeHtml(ev.description) : ''}</li>`).join('')}
             </ul>
           </div>
         ` : ''}
@@ -7504,36 +8655,38 @@ ${content.substring(0, 1200)}
       
       // 상품류 및 지정상품 - 선택에 따라 결정
       let classCodeStr, designatedGoodsStr, goodsWithGroups;
-      
-      if (finalUseExtracted && hasExtracted) {
-        // 7단계 추출 정보 사용
+
+      // 2단계 정보 확인
+      const classGroups = {};
+      (p.designatedGoods || []).forEach(classData => {
+        if (!classGroups[classData.classCode]) {
+          classGroups[classData.classCode] = [];
+        }
+        (classData.goods || []).forEach(g => {
+          classGroups[classData.classCode].push({
+            name: g.name,
+            similarGroup: g.similarGroup || ''
+          });
+        });
+      });
+      const hasStep2Goods = Object.keys(classGroups).length > 0;
+
+      if ((finalUseExtracted || !hasStep2Goods) && hasExtracted) {
+        // 추출 정보 사용 (명시적 선택 또는 2단계 정보 없을 때 폴백)
         classCodeStr = extractedClassCode ? `제 ${extractedClassCode}류` : '[상품류]';
         designatedGoodsStr = extractedGoodsStr || '[지정상품]';
         goodsWithGroups = extractedGoodsStr ? extractedGoodsStr.split(',').map(g => `『${g.trim()}』`) : [];
-      } else {
+      } else if (hasStep2Goods) {
         // 2단계 지정상품 정보 사용 (기본값)
-        const classGroups = {};
-        (p.designatedGoods || []).forEach(classData => {
-          if (!classGroups[classData.classCode]) {
-            classGroups[classData.classCode] = [];
-          }
-          (classData.goods || []).forEach(g => {
-            classGroups[classData.classCode].push({
-              name: g.name,
-              similarGroup: g.similarGroup || ''
-            });
-          });
-        });
-        
         const classCodeList = Object.keys(classGroups).sort((a, b) => parseInt(a) - parseInt(b));
-        classCodeStr = classCodeList.length > 0 ? classCodeList.map(c => '제 ' + c + '류').join(', ') : '[상품류]';
-        
+        classCodeStr = classCodeList.map(c => '제 ' + c + '류').join(', ');
+
         const goodsList = [];
         Object.values(classGroups).forEach(goods => {
           goods.forEach(g => goodsList.push(g.name));
         });
-        designatedGoodsStr = goodsList.length > 0 ? goodsList.join(', ') : '[지정상품]';
-        
+        designatedGoodsStr = goodsList.join(', ');
+
         goodsWithGroups = [];
         Object.entries(classGroups).forEach(([classCode, goods]) => {
           goods.forEach(g => {
@@ -7544,30 +8697,20 @@ ${content.substring(0, 1200)}
             }
           });
         });
-      }
-      
-      // 증거자료 목록
-      const evidences = pe.evidences || [];
-      
-      // 신청이유 선택에 따른 법조문
-      let reasonText1 = '';
-      if (pe.reason === 'using' || pe.reason === 'preparing') {
-        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 "상표등록출원인이 상표등록출원한 상표를 지정상품 전부에 대하여 사용하고 있거나 사용할 준비를 하고 있음이 명백한 경우"에 해당하는 상표등록출원으로서, 그 지정상품에 사용 준비하고 있는 것이 명백하므로 우선심사를 신청합니다.';
-      } else if (pe.reason === 'infringement') {
-        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제2호의 "출원인이 아닌 자가 출원상표와 동일·유사한 상표를 동일·유사한 지정상품에 정당한 사유 없이 사용하고 있다고 인정되는 경우"에 해당하는 상표등록출원으로서, 우선심사를 신청합니다.';
       } else {
-        reasonText1 = '본 상표는 상표법 제53조 제2항 제2호 및 상표법 시행령 제12조 제1호의 규정에 따라 우선심사를 신청합니다.';
+        classCodeStr = '[상품류]';
+        designatedGoodsStr = '[지정상품]';
+        goodsWithGroups = [];
       }
-      
-      // 증거자료 참조 문자열 생성 (첨부자료 1, 2 개별 참조)
-      const evidence1Ref = evidences.length > 0 ? `(첨부자료 1: ${evidences[0].title})` : '';
-      const evidence2Ref = evidences.length > 1 ? `(첨부자료 2: ${evidences[1].title})` : '';
-      
-      const reasonText2 = `본 출원인 "${applicantName}"는 본 신청서의 첨부자료${evidence1Ref}에 기재된 바와 같이, 이건 출원상표가 표시된 ${goodsWithGroups.join(', ')}을 사용 및 사용 준비 중입니다.`;
-      
-      const reasonText3 = '따라서, 이건 출원상표는 앞서 설명한 바와 같이, 그 지정상품 전부에 대하여 사용예정 중에 있습니다.';
-      
-      const reasonText4 = `이건 출원인 "${applicantName}"${evidence2Ref}은 이건 출원상표를 해당 지정상품에 사용할 것이 더욱 분명합니다. 부디 이점을 적극 고려하시어 이건 출원상표에 대하여 우선심사신청을 허여해 주시기 바랍니다.`;
+
+      const evidences = pe.evidences || [];
+      const reasonClause = TM.buildReasonClause(pe.reason);
+      const usageText = TM.buildUsageText(pe.reason);
+      const goodsListStr = goodsWithGroups.length > 0 ? goodsWithGroups.join(', ') : '[지정상품]';
+      const usageStatus = pe.reason === 'using' ? '사용' : '사용예정';
+
+      const reasonText1 = `본 상표는 ${reasonClause} 우선심사를 신청합니다.`;
+      const reasonParagraphs = TM.buildEvidenceParagraphs({ applicantName, goodsListStr, usageText, usageStatus, evidences });
       
       // Edge Function으로 Word 생성 요청
       const docData = {
@@ -7581,11 +8724,31 @@ ${content.substring(0, 1200)}
         goodsWithGroups,
         evidences,
         reasonText1,
-        reasonText2,
-        reasonText3,
-        reasonText4
+        reasonParagraphs,
+        specimenImageDataUrl: pe.specimenImageDataUrl || null
       };
       
+      // 상표견본 이미지를 ArrayBuffer로 변환 (Word용)
+      if (docData.specimenImageDataUrl) {
+        try {
+          const dataUrl = docData.specimenImageDataUrl;
+          const base64 = dataUrl.split(',')[1];
+          const binaryStr = atob(base64);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+          docData._specimenImageBuffer = bytes.buffer;
+          // 이미지 크기 계산 (원본 비율 유지, 최대 200px 너비)
+          const img = new Image();
+          await new Promise((resolve) => { img.onload = resolve; img.src = dataUrl; });
+          const maxW = 200;
+          const ratio = Math.min(maxW / img.width, 1);
+          docData._specimenImgWidth = Math.round(img.width * ratio);
+          docData._specimenImgHeight = Math.round(img.height * ratio);
+        } catch (imgErr) {
+          console.warn('[TM] Word 이미지 변환 실패:', imgErr);
+        }
+      }
+
       // Supabase Edge Function 호출 또는 클라이언트 사이드 생성
       const blob = await TM.createPriorityDocBlob(docData);
       
@@ -7731,7 +8894,7 @@ ${content.substring(0, 1200)}
       console.log('[TM] docx 라이브러리 로드 완료');
     }
     
-    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, 
+    const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell,
             AlignmentType, WidthType, BorderStyle, HeadingLevel } = window.docx;
     
     // 테이블 스타일
@@ -7785,11 +8948,21 @@ ${content.substring(0, 1200)}
             spacing: { before: 200, after: 100 },
             children: [new TextRun({ text: '【상표견본】', bold: true, size: 24 })]
           }),
-          new Paragraph({
-            spacing: { after: 200 },
-            children: [new TextRun({ text: data.trademarkName, bold: true, size: 28 })]
-          }),
-          
+          ...(data._specimenImageBuffer ? [
+            new Paragraph({
+              spacing: { after: 200 },
+              children: [new ImageRun({
+                data: data._specimenImageBuffer,
+                transformation: { width: data._specimenImgWidth || 200, height: data._specimenImgHeight || 100 }
+              })]
+            })
+          ] : [
+            new Paragraph({
+              spacing: { after: 200 },
+              children: [new TextRun({ text: data.trademarkName, bold: true, size: 28 })]
+            })
+          ]),
+
           // 상품류
           new Paragraph({
             spacing: { before: 200, after: 100 },
@@ -7819,18 +8992,12 @@ ${content.substring(0, 1200)}
             spacing: { after: 150 },
             children: [new TextRun({ text: data.reasonText1, size: 22 })]
           }),
-          new Paragraph({
-            spacing: { after: 150 },
-            children: [new TextRun({ text: data.reasonText2, size: 22 })]
-          }),
-          new Paragraph({
-            spacing: { after: 150 },
-            children: [new TextRun({ text: data.reasonText3, size: 22 })]
-          }),
-          new Paragraph({
-            spacing: { after: 200 },
-            children: [new TextRun({ text: data.reasonText4, size: 22 })]
-          }),
+          ...(data.reasonParagraphs || []).map((text, i, arr) =>
+            new Paragraph({
+              spacing: { after: i === arr.length - 1 ? 200 : 150 },
+              children: [new TextRun({ text: text, size: 22 })]
+            })
+          ),
           
           // 증빙자료
           ...(data.evidences.length > 0 ? [
@@ -7896,57 +9063,26 @@ ${content.substring(0, 1200)}
   TM.generatePriorityDocument = async function() {
     const p = TM.currentProject;
     const pe = p.priorityExam;
-    
+
     if (!pe.reason) {
       App.showToast('우선심사 사유를 선택하세요.', 'warning');
       return;
     }
-    
+
     try {
       App.showToast('설명서 생성 중...', 'info');
-      
-      const reasonLabels = {
-        using: '상표를 이미 사용 중인 경우',
-        preparing: '상표 사용 준비 중인 경우',
-        infringement: '제3자가 정당한 권한 없이 상표를 사용하고 있는 경우',
-        export: '수출을 위해 긴급하게 상표 등록이 필요한 경우',
-        other: '기타 긴급한 사유'
-      };
-      
-      const prompt = `당신은 상표 우선심사 설명서 작성 전문가입니다. 다음 정보를 바탕으로 우선심사 설명서를 작성하세요.
 
-[상표 정보]
-- 상표명: ${p.trademarkName}
-- 상표 유형: ${TM.getTypeLabel(p.trademarkType)}
-- 지정상품: ${p.designatedGoods?.map(g => '제' + g.classCode + '류 (' + g.goods.map(gg => gg.name).join(', ') + ')').join('; ') || '미선택'}
+      // 미리보기와 동일한 고정 양식 텍스트 생성 (LLM 불필요)
+      const docContent = TM.generatePriorityDocContent(pe.useExtractedGoods || false);
 
-[출원인 정보]
-- 출원인: ${p.applicant?.name || '(미입력)'}
-- 유형: ${p.applicant?.type === 'corporation' ? '법인' : p.applicant?.type === 'sme' ? '중소기업' : '개인'}
+      // HTML → 텍스트 변환
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = docContent;
+      pe.generatedDocument = tempDiv.innerText || tempDiv.textContent || '';
 
-[우선심사 사유]
-- 선택된 사유: ${reasonLabels[pe.reason]}
-- 첨부 증거: ${pe.evidences?.length || 0}건
-
-[증거자료 목록]
-${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTypeLabel(ev.type)})`).join('\n') || '증거자료 없음'}
-
-다음 구조로 우선심사 설명서를 작성하세요:
-
-1. 출원상표의 개요
-2. 우선심사 신청 사유
-3. 상표 사용 현황 및 증거 설명
-4. 결론 (우선심사 허여 요청)
-
-한국 특허청 형식에 맞게 공식적이고 설득력 있는 문체로 작성하세요.`;
-
-      const response = await App.callClaudeSonnet(prompt, 2000);
-      
-      pe.generatedDocument = response.text;
       TM.renderCurrentStep();
-      
       App.showToast('설명서가 생성되었습니다.', 'success');
-      
+
     } catch (error) {
       console.error('[TM] 설명서 생성 실패:', error);
       App.showToast('생성 실패: ' + error.message, 'error');
@@ -9021,13 +10157,17 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       return;
     }
     TM._analyzingBusiness = true;
-    
+
     const p = TM.currentProject;
     const businessInput = document.getElementById('tm-business-url')?.value?.trim();
-    
-    if (!businessInput && !p.trademarkName) {
+
+    // 업로드된 파일 텍스트 결합
+    const fileTexts = (p.businessFileTexts || []).map(f => f.text).filter(Boolean);
+    const hasFileContent = fileTexts.length > 0;
+
+    if (!businessInput && !hasFileContent && !p.trademarkName) {
       TM._analyzingBusiness = false;
-      App.showToast('상표명 또는 사업 내용을 입력하세요.', 'warning');
+      App.showToast('상표명, 사업 내용 또는 파일을 입력하세요.', 'warning');
       return;
     }
     
@@ -9051,12 +10191,23 @@ ${(pe.evidences || []).map((ev, i) => `${i + 1}. ${ev.title} (${TM.getEvidenceTy
       // - 하드코딩된 규칙 대신 LLM이 사업 특성을 분석하여 판단
       // - 실무 지식을 프롬프트에 포함하여 정확도 향상
       // ================================================================
+      // 파일 내용을 프롬프트에 포함 (최대 30,000자로 제한)
+      let fileContentSection = '';
+      if (hasFileContent) {
+        let combinedFileText = fileTexts.join('\n\n---\n\n');
+        if (combinedFileText.length > 30000) {
+          combinedFileText = combinedFileText.substring(0, 30000) + '\n... (이하 생략)';
+        }
+        const fileNames = (p.businessFiles || []).map(f => f.name).join(', ');
+        fileContentSection = `\n\n【업로드된 사업 관련 문서】\n파일: ${fileNames}\n\n${combinedFileText}\n\n★ 위 문서 내용을 정밀하게 분석하여 사업의 핵심 제품/서비스, 판매 채널, 사업 모델을 파악하세요.\n★ 문서에 나타난 구체적인 상품/서비스를 기반으로 상품류를 추천하세요.`;
+      }
+
       const analysisPrompt = `당신은 10년 이상 경력의 상표 출원 전문 변리사입니다.
 고객의 사업을 심층 분석하여 최적의 상품류를 추천하세요.
 
 【고객 정보】
 - 상표명: ${p.trademarkName || '미정'}
-- 사업 내용: ${businessInput || '미입력'}
+- 사업 내용: ${businessInput || '미입력'}${fileContentSection}
 
 ${TM.PRACTICE_GUIDELINES}
 
@@ -9117,6 +10268,11 @@ ${TM.PRACTICE_GUIDELINES}
     "details": "온라인 자사몰 운영"
   },
   "expansionPotential": ["댄스 용품", "스포츠 의류", "댄스 교육"],
+  "fileAnalysisInsights": {
+    "documentTypes": ["사업계획서", "제품 카탈로그"],
+    "keyFindings": ["주요 발견사항 1", "주요 발견사항 2", "주요 발견사항 3"],
+    "goodsSearchStrategy": "이 문서에서 확인된 핵심 제품/서비스를 기반으로 ... 전략으로 지정상품을 탐색합니다"
+  },
   "classRecommendations": {
     "core": [
       {"class": "25", "reason": "발레 의류, 댄스복 - 핵심 상품", "priority": 1}
@@ -9132,7 +10288,11 @@ ${TM.PRACTICE_GUIDELINES}
     ]
   },
   "searchKeywords": ["발레", "댄스", "의류", "레오타드", "판매"]
-}`;
+}
+★ fileAnalysisInsights는 업로드된 문서가 있을 때만 포함. 없으면 생략.
+  - documentTypes: 문서의 종류 (사업계획서, IR자료, 제품 카탈로그, 계약서, 홈페이지 등)
+  - keyFindings: 문서에서 파악한 핵심 사업 정보 (제품/서비스, 타겟 시장, 수익 모델 등) 3~5개
+  - goodsSearchStrategy: 이 문서 분석을 바탕으로 어떤 전략으로 지정상품을 찾을 것인지 2~3문장`;
 
       if (btn) btn.innerHTML = '<span class="tf">⏳</span> 사업 분석 중...';
       
@@ -9202,6 +10362,8 @@ ${TM.PRACTICE_GUIDELINES}
         salesChannels: analysis.salesChannels || {},
         expansionPotential: analysis.expansionPotential || [],
         coreActivity: (analysis.coreProducts?.[0] || '') + ' ' + (analysis.coreServices?.[0] || ''),
+        // ★ 파일 분석 전략 (파일 업로드 시에만)
+        fileAnalysisInsights: analysis.fileAnalysisInsights || null,
         // ★ 3단계 추천 구조
         classRecommendations: {
           core: coreClasses,
@@ -9248,51 +10410,7 @@ ${TM.PRACTICE_GUIDELINES}
             searchKeywords: allKeywords
           };
           
-          const fetchResult = await TM.fetchAllCandidates(classCode, businessCtx);
-          let selectedGoods = [];
-          
-          if (fetchResult && fetchResult.candidates.length > 0) {
-            console.log(`[TM] 제${classCode}류 후보: ${fetchResult.candidates.length}건 (${fetchResult.strategy})`);
-            
-            // 2. LLM으로 최적 10개 선택 (API 1회 - 유일한 호출)
-            try {
-              const oneshotResult = await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessCtx);
-              if (oneshotResult && oneshotResult.length > 0) {
-                selectedGoods = oneshotResult;
-              }
-            } catch (oneshotErr) {
-              console.warn(`[TM] 제${classCode}류 LLM 선택 실패:`, oneshotErr.message);
-            }
-            
-            // 3. 부족분은 DB 후보로 패딩 (API 호출 X)
-            if (selectedGoods.length < 10) {
-              console.log(`[TM] 제${classCode}류 ${selectedGoods.length}개 → DB 패딩으로 보충`);
-              const usedNames = new Set(selectedGoods.map(g => g.name));
-              for (const c of fetchResult.candidates) {
-                if (selectedGoods.length >= 10) break;
-                if (usedNames.has(c.goods_name)) continue;
-                usedNames.add(c.goods_name);
-                selectedGoods.push({
-                  name: c.goods_name,
-                  similarGroup: c.similar_group_code || '',
-                  isCore: false
-                });
-              }
-            }
-          } else {
-            // DB 후보가 아예 없는 경우만 LLM 생성 (드문 케이스)
-            console.log(`[TM] 제${classCode}류 DB 후보 없음 → LLM 생성`);
-            try {
-              const genPrompt = `제${classCode}류의 고시명칭(지정상품/서비스) 중 아래 사업 관련 10개를 JSON 배열로만 응답.\n사업: "${businessInput}"\n["상품명1", "상품명2", ..., "상품명10"]`;
-              const genResponse = await App.callClaudeSonnet(genPrompt, 500);
-              const nameArray = JSON.parse((genResponse.text || '').match(/\[[\s\S]*\]/)?.[0] || '[]');
-              selectedGoods = nameArray.slice(0, 10).map(name => ({
-                name, similarGroup: '', isCore: false, isLlmGenerated: true
-              }));
-            } catch (genErr) {
-              console.warn(`[TM] 제${classCode}류 LLM 생성 실패:`, genErr.message);
-            }
-          }
+          const selectedGoods = await TM.selectGoodsTwoStage(classCode, businessCtx);
           
           p.aiAnalysis.recommendedGoods[classCode] = selectedGoods;
           console.log(`[TM] 제${classCode}류 최종: ${selectedGoods.length}건`);
@@ -9738,7 +10856,512 @@ JSON 배열로만 응답: ["상품명1", "상품명2"]`;
   };
 
   // ================================================================
-  // ★ Phase 1: 개선된 상품 선택 — 원샷 방식 (모수 극대화)
+  // ★ Phase 2: 유사군 기반 2단계 + 교차검증 + 보충 루프
+  // ================================================================
+
+  // 유사군 목록 조회
+  TM.fetchSimilarGroups = async function(classCode) {
+    const paddedCode = String(classCode).padStart(2, '0');
+
+    // DB 직접 조회 후 JS 그룹핑
+    const { data, error } = await App.sb
+      .from('gazetted_goods_cache')
+      .select('similar_group_code, similar_group_name')
+      .eq('class_code', paddedCode)
+      .order('similar_group_code');
+
+    if (error) throw error;
+
+    const groupMap = new Map();
+    for (const item of data) {
+      const code = item.similar_group_code;
+      if (!groupMap.has(code)) {
+        groupMap.set(code, { code, name: item.similar_group_name || '', count: 0 });
+      }
+      groupMap.get(code).count++;
+    }
+
+    const groups = Array.from(groupMap.values());
+    console.log(`[TM] 제${classCode}류 유사군: ${groups.length}개 (JS)`);
+    return groups;
+  };
+
+  // LLM이 관련 유사군 선택
+  TM.selectRelevantGroups = async function(classCode, groups, businessContext) {
+    const groupList = groups.map(g => `${g.code} | ${g.name} | ${g.count}건`).join('\n');
+
+    const prompt = `당신은 상표 출원 전문 변리사입니다.
+
+【사업 내용】${businessContext.summary}
+【핵심 상품】${(businessContext.coreProducts || []).join(', ') || '없음'}
+【핵심 서비스】${(businessContext.coreServices || []).join(', ') || '없음'}
+【판매 채널】${businessContext.salesChannels?.details || '미정'}
+【확장 가능성】${(businessContext.expansionPotential || []).join(', ') || '미정'}
+
+【제${classCode}류 유사군 목록 (${groups.length}개)】
+유사군코드 | 유사군명 | 상품수
+${groupList}
+
+위 사업과 관련 있는 유사군을 모두 선택하세요.
+
+★★★ 핵심 원칙: 누락 방지 최우선.
+- 이 사업에 필수적인 상품/서비스가 속한 유사군은 반드시 포함
+- 과소 선택(누락)보다 과다 선택이 훨씬 낫다
+- 사업과 완전히 무관한 유사군만 제외
+
+【JSON으로만 응답】
+{"selected":["G3501","G3504","G3509"]}`;
+
+    const response = await App.callClaudeSonnet(prompt, 1000);
+    const jsonMatch = (response.text || '').match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('유사군 선택 파싱 실패');
+
+    const result = JSON.parse(jsonMatch[0]);
+    const selectedCodes = result.selected || [];
+    console.log(`[TM] 제${classCode}류 관련 유사군: ${selectedCodes.length}개 / ${groups.length}개`);
+    return selectedCodes;
+  };
+
+  // 선택된 유사군의 상품 조회 — 500건 이하 전체 포함, 초과 시 LLM 페이지 스캔
+  TM.fetchGoodsInGroups = async function(classCode, groupCodes, businessContext) {
+    const paddedCode = String(classCode).padStart(2, '0');
+    const PAGE_LIMIT = 500;
+    let allGoods = [];
+
+    for (const groupCode of groupCodes) {
+      const { count } = await App.sb
+        .from('gazetted_goods_cache')
+        .select('*', { count: 'exact', head: true })
+        .eq('class_code', paddedCode)
+        .eq('similar_group_code', groupCode);
+
+      if (count <= PAGE_LIMIT) {
+        let groupGoods = [];
+        const PAGE_SIZE = 1000;
+        for (let offset = 0; offset < count; offset += PAGE_SIZE) {
+          const { data } = await App.sb
+            .from('gazetted_goods_cache')
+            .select('goods_name, similar_group_code, similar_group_name')
+            .eq('class_code', paddedCode)
+            .eq('similar_group_code', groupCode)
+            .order('goods_name')
+            .range(offset, Math.min(offset + PAGE_SIZE - 1, count - 1));
+          if (data) groupGoods.push(...data);
+        }
+        allGoods.push(...groupGoods);
+        console.log(`[TM] ${groupCode}: ${count}건 전체 포함`);
+      } else {
+        console.log(`[TM] ${groupCode}: ${count}건 → 페이지별 LLM 스캔`);
+        const pickedGoods = await TM.scanLargeGroup(classCode, paddedCode, groupCode, count, businessContext);
+        allGoods.push(...pickedGoods);
+        console.log(`[TM] ${groupCode}: ${count}건 중 ${pickedGoods.length}건 LLM 선택`);
+      }
+    }
+
+    console.log(`[TM] 제${classCode}류 총 후보: ${allGoods.length}건 (유사군 ${groupCodes.length}개)`);
+    return allGoods;
+  };
+
+  // 대형 유사군(500건 초과) 페이지별 LLM 전수 스캔
+  TM.scanLargeGroup = async function(classCode, paddedCode, groupCode, totalCount, businessContext) {
+    const PAGE_SIZE = 500;
+    const allPicked = [];
+    const seen = new Set();
+
+    const coreProducts = (businessContext.coreProducts || []).join(', ');
+    const coreServices = (businessContext.coreServices || []).join(', ');
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+    for (let page = 0; page < totalPages; page++) {
+      const offset = page * PAGE_SIZE;
+
+      const { data, error } = await App.sb
+        .from('gazetted_goods_cache')
+        .select('goods_name, similar_group_code, similar_group_name')
+        .eq('class_code', paddedCode)
+        .eq('similar_group_code', groupCode)
+        .order('goods_name')
+        .range(offset, Math.min(offset + PAGE_SIZE - 1, totalCount - 1));
+
+      if (error || !data || data.length === 0) continue;
+
+      const numberedList = data.map((item, i) => `[${i+1}] ${item.goods_name}`).join('\n');
+
+      const prompt = `아래 상품 목록에서 이 사업과 관련 있는 상품의 번호만 선택하세요.
+관련 없는 상품은 무시. 관련 있는 상품이 없으면 빈 배열.
+
+【사업 내용】${businessContext.summary}
+【핵심 상품】${coreProducts || '없음'}
+【핵심 서비스】${coreServices || '없음'}
+
+【상품 목록 (${data.length}건, 페이지 ${page+1}/${totalPages})】
+${numberedList}
+
+【JSON으로만 응답】
+{"picks":[1,5,12,23]}`;
+
+      try {
+        const response = await App.callClaudeSonnet(prompt, 500);
+        const jsonMatch = (response.text || '').match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const result = JSON.parse(jsonMatch[0]);
+          const picks = result.picks || [];
+          for (const no of picks) {
+            if (no >= 1 && no <= data.length) {
+              const item = data[no - 1];
+              if (!seen.has(item.goods_name)) {
+                seen.add(item.goods_name);
+                allPicked.push(item);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[TM] ${groupCode} 페이지 ${page+1} 스캔 실패:`, e.message);
+      }
+
+      if (page < totalPages - 1) {
+        await new Promise(r => setTimeout(r, 800));
+      }
+    }
+
+    return allPicked;
+  };
+
+  // LLM이 10개 선택
+  TM.selectInitialGoods = async function(classCode, goods, businessContext) {
+    const TARGET_COUNT = 10;
+
+    // 유사군별 그룹핑
+    const groupedMap = new Map();
+    for (const g of goods) {
+      const code = g.similar_group_code || 'UNKNOWN';
+      if (!groupedMap.has(code)) groupedMap.set(code, []);
+      groupedMap.get(code).push(g);
+    }
+
+    let numberedList = '';
+    let globalIdx = 0;
+    for (const [code, items] of groupedMap) {
+      const groupName = items[0]?.similar_group_name || '';
+      numberedList += `\n── ${code} ${groupName} (${items.length}건) ──\n`;
+      for (const item of items) {
+        globalIdx++;
+        numberedList += `[${globalIdx}] ${item.goods_name}\n`;
+      }
+    }
+
+    const coreProducts = (businessContext.coreProducts || []).join(', ');
+    const coreServices = (businessContext.coreServices || []).join(', ');
+
+    const prompt = `당신은 상표 출원 전문 변리사입니다.
+
+【사업 내용】${businessContext.summary}
+【핵심 상품】${coreProducts || '없음'}
+【핵심 서비스】${coreServices || '없음'}
+【판매 채널】${businessContext.salesChannels?.details || '미정'}
+
+【제${classCode}류 후보 (유사군별 정리, 총 ${goods.length}건)】
+${numberedList}
+
+정확히 ${TARGET_COUNT}개를 선택하세요.
+
+【선택 기준】
+1. ★★★ 필수 상품 포함 최우선: 이 사업을 영위하는 데 반드시 필요한 지정상품을 빠짐없이 포함
+   핵심 상품 [${coreProducts}] 각각에 대응하는 지정상품 최소 1개씩
+   핵심 서비스 [${coreServices}] 각각에 대응하는 지정상품 최소 1개씩
+2. 상위 개념 상품 우선 (더 넓은 보호 범위)
+3. 유사군코드 분산은 보조적 기준 — 필수 상품이 한 유사군에 집중되어도 무방
+4. 혼동 방지: 동음이의어, 부분 문자열 매칭으로 무관한 상품 제외
+
+【JSON으로만 응답 — 정확히 ${TARGET_COUNT}개】
+{"selected":[{"no":1,"name":"상품명","group":"유사군코드","reason":"선택이유"}]}`;
+
+    const response = await App.callClaudeSonnet(prompt, 2000);
+    const jsonMatch = (response.text || '').match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('상품 선택 파싱 실패');
+
+    const cleaned = jsonMatch[0]
+      .replace(/[\x00-\x1F\x7F]/g, ' ')
+      .replace(/,(\s*[}\]])/g, '$1')
+      .replace(/\n/g, ' ');
+    const result = JSON.parse(cleaned);
+
+    const selectedItems = result.selected || [];
+    const finalGoods = [];
+    const usedNames = new Set();
+
+    for (const item of selectedItems) {
+      let matched = null;
+      if (item.no >= 1 && item.no <= goods.length) {
+        matched = goods[item.no - 1];
+      }
+      if (!matched && item.name) {
+        matched = goods.find(g => g.goods_name === item.name);
+      }
+      if (matched && !usedNames.has(matched.goods_name)) {
+        usedNames.add(matched.goods_name);
+        finalGoods.push({
+          name: matched.goods_name,
+          similarGroup: matched.similar_group_code || '',
+          reason: item.reason || ''
+        });
+      }
+    }
+
+    console.log(`[TM] 제${classCode}류 초기 선택: ${finalGoods.length}개`);
+    return finalGoods;
+  };
+
+  // 교차검증
+  TM.crossValidateGoods = async function(classCode, selectedGoods, allCandidates, businessContext) {
+    const goodsList = selectedGoods.map((g, i) =>
+      `${i+1}. ${g.name} (${g.similarGroup}) — ${g.reason}`
+    ).join('\n');
+
+    const coreProducts = (businessContext.coreProducts || []).join(', ');
+    const coreServices = (businessContext.coreServices || []).join(', ');
+
+    const prompt = `당신은 상표 출원 품질 검증 전문가입니다. (선택한 변리사와 다른 사람)
+다른 변리사가 선택한 지정상품을 독립적으로 검증하세요.
+
+【사업 내용】${businessContext.summary}
+【핵심 상품】${coreProducts || '없음'}
+【핵심 서비스】${coreServices || '없음'}
+【판매 채널】${businessContext.salesChannels?.details || '미정'}
+
+【제${classCode}류에서 선택된 지정상품 ${selectedGoods.length}개】
+${goodsList}
+
+【검증 과제】
+1. 부적합 상품 식별: 이 사업과 실제로 관련 없는 상품이 포함되었는가?
+   - 동음이의어 오류
+   - 업종 불일치
+   - 과도한 확대 해석
+
+2. 누락 영역 식별: 이 사업에 필수적인데 대응하는 지정상품이 빠진 영역이 있는가?
+   - 핵심 상품 [${coreProducts}] 각각 커버 여부
+   - 핵심 서비스 [${coreServices}] 각각 커버 여부
+   - 판매 채널 커버 여부
+
+【JSON으로만 응답】
+{
+  "inappropriate": [
+    {"index": 3, "name": "부적합상품명", "reason": "무관한 이유"}
+  ],
+  "missing": [
+    {"businessArea": "누락된 사업 영역", "suggestedKeyword": "검색 키워드"}
+  ],
+  "score": 85,
+  "comment": "전체 평가"
+}
+inappropriate/missing이 없으면 빈 배열 [].`;
+
+    const response = await App.callClaudeSonnet(prompt, 1500);
+    const jsonMatch = (response.text || '').match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('검증 파싱 실패');
+
+    const cleaned = jsonMatch[0]
+      .replace(/[\x00-\x1F\x7F]/g, ' ')
+      .replace(/,(\s*[}\]])/g, '$1')
+      .replace(/\n/g, ' ');
+
+    const result = JSON.parse(cleaned);
+    console.log(`[TM] 제${classCode}류 교차검증: 점수=${result.score}, 부적합=${(result.inappropriate||[]).length}건, 누락=${(result.missing||[]).length}건`);
+    return result;
+  };
+
+  // 부적합 제거 + 보충 루프
+  TM.fillMissingGoods = async function(classCode, currentGoods, validation, allCandidates, businessContext) {
+    const TARGET_COUNT = 10;
+    let goods = [...currentGoods];
+    const usedNames = new Set(goods.map(g => g.name));
+
+    // 1. 부적합 상품 제거
+    const inappropriate = validation.inappropriate || [];
+    if (inappropriate.length > 0) {
+      const removeNames = new Set(inappropriate.map(item => item.name));
+      goods = goods.filter(g => !removeNames.has(g.name));
+      console.log(`[TM] 제${classCode}류 부적합 ${inappropriate.length}개 제거 → ${goods.length}개`);
+      usedNames.clear();
+      goods.forEach(g => usedNames.add(g.name));
+    }
+
+    // 2. 이미 10개 이상이면 완료
+    if (goods.length >= TARGET_COUNT) {
+      return goods.slice(0, TARGET_COUNT);
+    }
+
+    // 3. 보충 루프 (최대 3회)
+    const missing = validation.missing || [];
+    console.log(`[TM] 제${classCode}류 보충 필요: ${TARGET_COUNT - goods.length}개 (누락 영역: ${missing.length}개)`);
+
+    let loopCount = 0;
+    const MAX_LOOPS = 3;
+
+    while (goods.length < TARGET_COUNT && loopCount < MAX_LOOPS) {
+      loopCount++;
+      console.log(`[TM] 제${classCode}류 보충 루프 ${loopCount}/${MAX_LOOPS}`);
+
+      const currentList = goods.map((g, i) => `${i+1}. ${g.name} (${g.similarGroup})`).join('\n');
+      const missingInfo = missing.length > 0
+        ? missing.map(m => `- ${m.businessArea}: "${m.suggestedKeyword}" 관련`).join('\n')
+        : '- 사업 전반에서 추가 커버 필요';
+
+      const remaining = allCandidates.filter(c => !usedNames.has(c.goods_name));
+
+      // 유사군별 그룹핑
+      const groupedMap = new Map();
+      for (const g of remaining) {
+        const code = g.similar_group_code || 'UNKNOWN';
+        if (!groupedMap.has(code)) groupedMap.set(code, []);
+        groupedMap.get(code).push(g);
+      }
+
+      let remainingList = '';
+      const remainingFlat = [];
+      let idx = 0;
+      for (const [code, items] of groupedMap) {
+        remainingList += `\n── ${code} ${items[0]?.similar_group_name || ''} ──\n`;
+        for (const item of items.slice(0, 30)) {
+          idx++;
+          remainingList += `[${idx}] ${item.goods_name}\n`;
+          remainingFlat.push(item);
+        }
+      }
+
+      const need = TARGET_COUNT - goods.length;
+
+      const prompt = `당신은 상표 출원 전문 변리사입니다.
+
+【사업 내용】${businessContext.summary}
+
+【현재 선택된 지정상품 ${goods.length}개】
+${currentList}
+
+【누락된 사업 영역】
+${missingInfo}
+
+【제${classCode}류 남은 후보 상품】
+${remainingList}
+
+${need}개를 추가 선택하세요.
+누락된 사업 영역을 우선 커버하고, 이 사업에 필수적인 상품을 선택하세요.
+
+【JSON으로만 응답 — 정확히 ${need}개】
+{"fill":[{"no":1,"name":"상품명","group":"유사군코드","reason":"보충 이유"}]}`;
+
+      try {
+        const response = await App.callClaudeSonnet(prompt, 1500);
+        const jsonMatch = (response.text || '').match(/\{[\s\S]*\}/);
+        if (!jsonMatch) break;
+
+        const cleaned = jsonMatch[0]
+          .replace(/[\x00-\x1F\x7F]/g, ' ')
+          .replace(/,(\s*[}\]])/g, '$1')
+          .replace(/\n/g, ' ');
+        const result = JSON.parse(cleaned);
+        const fillItems = result.fill || [];
+
+        for (const item of fillItems) {
+          if (goods.length >= TARGET_COUNT) break;
+          let matched = null;
+          if (item.no >= 1 && item.no <= remainingFlat.length) {
+            matched = remainingFlat[item.no - 1];
+          }
+          if (!matched && item.name) {
+            matched = remaining.find(c => c.goods_name === item.name);
+          }
+          if (matched && !usedNames.has(matched.goods_name)) {
+            usedNames.add(matched.goods_name);
+            goods.push({
+              name: matched.goods_name,
+              similarGroup: matched.similar_group_code || '',
+              reason: item.reason || '보충'
+            });
+          }
+        }
+
+        console.log(`[TM] 보충 루프 ${loopCount} → ${goods.length}개`);
+      } catch (e) {
+        console.error(`[TM] 보충 루프 ${loopCount} 실패:`, e.message);
+        break;
+      }
+
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // 4. 그래도 부족하면 DB 후보에서 자동 패딩
+    if (goods.length < TARGET_COUNT) {
+      console.log(`[TM] 제${classCode}류 LLM 보충 후에도 ${goods.length}개 — DB 자동 패딩`);
+      for (const c of allCandidates) {
+        if (goods.length >= TARGET_COUNT) break;
+        if (!usedNames.has(c.goods_name)) {
+          usedNames.add(c.goods_name);
+          goods.push({
+            name: c.goods_name,
+            similarGroup: c.similar_group_code || '',
+            reason: '자동 보충'
+          });
+        }
+      }
+    }
+
+    return goods.slice(0, TARGET_COUNT);
+  };
+
+  // 통합 함수: 2단계 상품 선택
+  TM.selectGoodsTwoStage = async function(classCode, businessContext) {
+    const TARGET_COUNT = 10;
+    console.log(`[TM] ════ 2단계 상품 선택: 제${classCode}류 ════`);
+
+    try {
+      // Step 1: 유사군 목록 (DB)
+      const groups = await TM.fetchSimilarGroups(classCode);
+      if (!groups || groups.length === 0) return [];
+
+      // Step 2: 관련 유사군 선택 (API 1회)
+      const selectedGroupCodes = await TM.selectRelevantGroups(classCode, groups, businessContext);
+      if (!selectedGroupCodes || selectedGroupCodes.length === 0) return [];
+
+      // Step 3: 해당 유사군 상품 조회 (DB)
+      const allCandidates = await TM.fetchGoodsInGroups(classCode, selectedGroupCodes, businessContext);
+      if (!allCandidates || allCandidates.length === 0) return [];
+
+      // Step 4: 초기 10개 선택 (API 1회)
+      let selectedGoods = await TM.selectInitialGoods(classCode, allCandidates, businessContext);
+
+      // Step 5: 교차검증 (API 1회)
+      const validation = await TM.crossValidateGoods(classCode, selectedGoods, allCandidates, businessContext);
+
+      // Step 6: 부적합 제거 + 보충 루프 (10개 보장)
+      if ((validation.inappropriate?.length > 0) || selectedGoods.length < TARGET_COUNT) {
+        selectedGoods = await TM.fillMissingGoods(classCode, selectedGoods, validation, allCandidates, businessContext);
+      }
+
+      // isCore 플래그
+      selectedGoods.forEach((g, i) => { g.isCore = i < 3; });
+
+      console.log(`[TM] ════ 완료: 제${classCode}류 → ${selectedGoods.length}개 ════`);
+      return selectedGoods;
+
+    } catch (e) {
+      console.error(`[TM] 2단계 실패 (제${classCode}류):`, e.message);
+      console.log(`[TM] 기존 방식으로 폴백`);
+      try {
+        const fetchResult = await TM.fetchAllCandidates(classCode, businessContext);
+        if (fetchResult && fetchResult.candidates.length > 0) {
+          return await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessContext) || [];
+        }
+      } catch (fe) {
+        console.error(`[TM] 폴백도 실패:`, fe.message);
+      }
+      return [];
+    }
+  };
+
+  // ================================================================
+  // ★ Phase 1: 개선된 상품 선택 — 원샷 방식 (모수 극대화) [폴백용 유지]
   // ================================================================
 
   // DB에서 후보 전체 조회 또는 필터링 조회
@@ -10296,30 +11919,7 @@ ${goods.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}
             searchKeywords: allKeywords
           };
           
-          const fetchResult = await TM.fetchAllCandidates(classCode, businessCtx);
-          let selectedGoods = null;
-          
-          if (fetchResult && fetchResult.candidates.length > 0) {
-            selectedGoods = await TM.selectGoodsOneshot(classCode, fetchResult.candidates, businessCtx);
-          }
-          
-          if (!selectedGoods || selectedGoods.length < 10) {
-            const paddedCode = String(classCode).padStart(2, '0');
-            const analysisCtx = {
-              businessSummary: aiAnalysis.businessAnalysis,
-              businessTypes: aiAnalysis.businessTypes,
-              coreProducts: aiAnalysis.coreProducts,
-              coreServices: aiAnalysis.coreServices,
-              salesChannels: aiAnalysis.salesChannels,
-              expansionPotential: aiAnalysis.expansionPotential,
-              searchKeywords: allKeywords
-            };
-            const candidates = await TM.fetchOptimalCandidates(paddedCode, allKeywords, analysisCtx);
-            if (candidates.length > 0) {
-              selectedGoods = await TM.selectOptimalGoods(classCode, candidates, aiAnalysis.businessAnalysis || '', analysisCtx);
-            }
-            selectedGoods = await TM.ensureMinGoods(classCode, selectedGoods || [], aiAnalysis.businessAnalysis || '');
-          }
+          let selectedGoods = await TM.selectGoodsTwoStage(classCode, businessCtx);
           
           // ★ BUG-5 FIX: undefined 방어
           if (!aiAnalysis.recommendedGoods) aiAnalysis.recommendedGoods = {};

@@ -2098,7 +2098,24 @@ function selectTitle(el,kr,en){
   // v7.0: 명칭 변경 시 하류 무효화
   invalidateDownstream('step_01');
 }
-function onTitleInput(){const v=document.getElementById('titleInput').value.trim();document.querySelectorAll('#resultStep01 .selection-card').forEach(c=>c.classList.remove('selected'));const prev=selectedTitle;selectedTitle=v;document.getElementById('titleConfirmMsg').style.display=v?'block':'none';document.getElementById('batchArea').style.display=v?'block':'none';if(v)autoSetDeviceCategoryFromTitle(v);if(prev&&prev!==v)invalidateDownstream('step_01');}
+function onTitleInput(){
+  const v=document.getElementById('titleInput').value.trim();
+  // 후보 행 선택 해제 — selectTitle()과 동일하게 inline style까지 초기화
+  document.querySelectorAll('#resultStep01 .title-candidate-row').forEach(c=>{
+    c.classList.remove('selected');
+    c.style.borderColor='var(--color-border)';
+    c.style.background='#fff';
+  });
+  const prev=selectedTitle;
+  selectedTitle=v;
+  document.getElementById('titleConfirmMsg').style.display=v?'block':'none';
+  document.getElementById('batchArea').style.display=v?'block':'none';
+  if(v)autoSetDeviceCategoryFromTitle(v);
+  // prev 유무와 무관하게 변경 시 하류 무효화 (selectTitle과 동일 동작)
+  if(prev!==v)invalidateDownstream('step_01');
+  // 직접 입력한 명칭이 저장되도록 디바운스 저장 (1.5초 후)
+  if(currentProjectId)_debouncedSaveTitle();
+}
 function onTitleEnInput(){selectedTitleEn=document.getElementById('titleInputEn')?.value?.trim()||'';}
 
 // ═══ Auto Device Category from Title/Type (v5.2) ═══
@@ -2287,6 +2304,9 @@ function invalidateDownstream(changedStep){
 // ═══ 산출물 미리보기 디바운스 (cascade 재생성 시 과도 호출 방지) ═══
 let _previewDebounceTimer=null;
 function _debouncedRenderPreview(){if(_previewDebounceTimer)clearTimeout(_previewDebounceTimer);_previewDebounceTimer=setTimeout(()=>{_previewDebounceTimer=null;renderPreview();},500);}
+// ═══ 확정명칭 직접 입력 시 저장 디바운스 ═══
+let _titleSaveTimer=null;
+function _debouncedSaveTitle(){if(_titleSaveTimer)clearTimeout(_titleSaveTimer);_titleSaveTimer=setTimeout(()=>{_titleSaveTimer=null;saveProject(true);},1500);}
 
 // ═══ v10.1: Step 완료 시 stale 배지 + cascade 패널 갱신 ═══
 function onStepCompleted(sid){
@@ -4116,7 +4136,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${out
   (1) 부호 의미: 양수일 때 어느 방향으로 보정되는가
   (2) 값 범위: 예시적 범위 (예: 0.01~0.5)
   (3) 과도 누적 방지: 보정 횟수 상한, 누적 보정량 상한, 또는 점감 조건
-  (4) 초기값과 갱신 여부\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n⛔⛔ ANCHOR 규칙 ⛔⛔\n- ANCHOR는 반드시 마침표(다.)로 끝나는 완전한 문장의 끝부분을 사용하라.\n- ❌ 금지: 쉼표(,) 또는 접속어(~하고, ~하며)로 끝나는 절 중간을 ANCHOR로 사용\n- ❌ 금지: \"예를 들어\" 블록 내부를 ANCHOR로 사용\n- ✅ 올바른 ANCHOR 예: \"~을 산출한다.\" \"~을 포함한다.\" \"~으로 구성된다.\"\n\n⛔⛔ FORMULA 규칙 ⛔⛔\n- FORMULA에는 【수학식 N】 + 수식 + \"여기서,\" + \"예를 들어,\" 만 포함.\n- ⛔ FORMULA 안에 상세설명 원문 텍스트를 절대 포함하지 마라.\n- FORMULA는 \"예를 들어,\" 예시 문장의 마침표(다.)로 종료하라.\n- FORMULA 종료 후 추가 텍스트 금지.\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 끝부분 20자 이상, 반드시 \"다.\"로 종료)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
+  (4) 초기값과 갱신 여부\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n★★★ 수학 기호 규칙 (필수) ★★★\n- 곱셈 기호는 반드시 \"×\" (U+00D7) 또는 \"·\" (가운데점, U+00B7)을 사용하라.\n- ❌ 금지: ASCII 알파벳 \"x\" 또는 \"X\"를 곱셈 기호로 사용 (변수명 x와 혼동)\n- ❌ 금지: ASCII 별표 \"*\"를 곱셈 기호로 사용 (코드 표기, 특허 명세서 부적합)\n- ✅ 올바른 예: \"a × b\", \"2 × π × r\", \"α · β\", \"3 × 10⁻⁶\"\n- ❌ 잘못된 예: \"a x b\", \"a * b\", \"2 * pi * r\", \"alpha*beta\"\n- 변수 인접 곱셈은 기호 생략 가능 (예: \"ab\", \"2πr\") — 단, 변수명이 두 글자 이상이면 \"·\" 권장\n- 나눗셈은 \"÷\" 또는 분수 표기, 부등호는 \"≤\", \"≥\", \"≠\" 사용\n- 그리스 문자는 유니코드 사용 (α, β, γ, π, σ, μ, λ — \"alpha\", \"beta\" 등 영어 표기 금지)\n- \"여기서,\" 변수 설명, \"예를 들어,\" 수치 예시에서도 동일 규칙 적용\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n⛔⛔ ANCHOR 규칙 ⛔⛔\n- ANCHOR는 반드시 마침표(다.)로 끝나는 완전한 문장의 끝부분을 사용하라.\n- ❌ 금지: 쉼표(,) 또는 접속어(~하고, ~하며)로 끝나는 절 중간을 ANCHOR로 사용\n- ❌ 금지: \"예를 들어\" 블록 내부를 ANCHOR로 사용\n- ✅ 올바른 ANCHOR 예: \"~을 산출한다.\" \"~을 포함한다.\" \"~으로 구성된다.\"\n\n⛔⛔ FORMULA 규칙 ⛔⛔\n- FORMULA에는 【수학식 N】 + 수식 + \"여기서,\" + \"예를 들어,\" 만 포함.\n- ⛔ FORMULA 안에 상세설명 원문 텍스트를 절대 포함하지 마라.\n- FORMULA는 \"예를 들어,\" 예시 문장의 마침표(다.)로 종료하라.\n- FORMULA 종료 후 추가 텍스트 금지.\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 끝부분 20자 이상, 반드시 \"다.\"로 종료)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${outputs.step_08||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
     // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
     case 'step_10':{
@@ -6105,13 +6125,13 @@ function stripMathBlocks(text){
   // [IN]  "【수학식 1】\nA=B\n여기서 A는 면적,\nB는 폭이다."
   // [OUT] ""   ← "여기서" 절이 줄바꿈 포함해도 끝까지 따라감
   //
-  // 호출처: insertMathBlocks(line 6471, step_09 수학식 삽입 시 기존 블록 제거)
+  // 호출처: insertMathBlocks(line ~6471, step_09 수학식 삽입 시 기존 블록 제거)
   //
-  // 원리: 【수학식 N】 블록 전체를 단일 패턴으로 제거
+  // 원리: 【수학식 N】 블록 전체를 단일 패턴으로 제거 (4개 독립 패턴 → 1개 통합)
   // 수학식 블록 = 【수학식 N】 + 수식 + 여기서 + 예를 들어 (하나의 단위)
   // 종결 조건: (1) \n + 서술 키워드, (2) \n\n + 비수학 시작, (3) 문자열 끝
   // 수학 연속(MC) 패턴: "여기서", "예를 들어"는 단독 키워드만으로는 부족 —
-  // 일반 서술도 흔히 쓰는 표현이므로 "예를 들어"는 같은 줄에 수식기호(=,×,÷,∑) 동반시만 인식
+  // 일반 서술도 흔히 쓰는 표현이므로 "예를 들어"는 같은 줄에 수식기호(=,×,÷,∑,±) 동반시만 인식
   const MC='여기서|예를 들어[^\\n]*?[=×÷∑±]|예시 대입|일 예로[^\\n]*?[=×÷∑±]|구체적\\s*예시|예컨대[^\\n]*?[=×÷∑±]|다음은[^\\n]*?[=×÷∑±]|예:[^\\n]*?[=×÷∑±]|[A-Z_][A-Za-z_\\d]*\\s*[=:]';
   const DK='도\\s|이때|또한|한편|다음(?!은)|구체적으로|상기|본 발명|이상|따라서|결과|이를|아울|이와|상술|전술|[가-힣]{2,}부[(\\s]|[가-힣]{2,}(?:서버|시스템|장치|단말)';
   const term=`\\n(?:${DK}|\\n(?!\\s*(?:${MC})))|$`;
@@ -7060,13 +7080,8 @@ function _shapeLeaderX(type,x,w){
 
 // ── v9.1: Shape 시각적 경계 (bounding box ≠ visual bounds) ──
 // 연결선 앵커, leader line 시작점에 사용
-// ── shapeicon 시각 패딩 상수 ──
-// shapeicon(sensor/antenna/camera/speaker)의 visualBounds top에 추가되는 여유 공간.
-// 화살표 marker height(6px) + 화살표 stroke + 폰트 baseline 정도의 시각적 안전 거리.
-// 호출처: bbox 크기 계산(line ~9625) + 라우팅 anchor 영역(line ~9740, ~9847, ~9881).
-// 동일 의미의 기존 상수: _bboxExtLabelGap=12 (line ~9637, bbox 외부 라벨 간격).
-const _ICON_VISUAL_PAD=12;
-
+// [C2-9-fix] shapeicon 화살표 여백 (_ICON_ARROW_GAP=12)
+const _ICON_ARROW_GAP=12;
 function _shapeVisualBounds(type,x,y,w,h){
   // ★ v10.4: cx/cy는 항상 기하학적 중심점 (라우팅 대칭성 보장) ★
   // 아이콘 shape는 하단에 라벨 영역(~20px) 포함
@@ -7077,47 +7092,46 @@ function _shapeVisualBounds(type,x,y,w,h){
     case 'database':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'monitor':{
-      // [shape-anchor-fix] monitor: bottom h*0.93→h, _vCy 정렬
-      //   기존 h*0.93은 _vCy=h*0.465 → default anchor py=h/2와 2.7px 차이 → 수평 화살표 꺾임.
-      //   default case를 사용하는 도형 중 monitor만 K≠1이었으므로 본 수정으로 box-type anchor 일관성 완결.
-      //   검증: cloud(0.77px)/database(0)/server(0)/document(0) — 모두 2px 임계 이내 (validation/pr107_integration_report.md)
+      // [C2-9-fix] monitor visual cy 보정 (server와 일치)
+      // bottom을 y+h로 확장하여 _vCy=h/2가 server/box 등 다른 박스형과 동일
+      // → 같은 row에서 monitor↔server/box 화살표 직선화 (꺾임 0)
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     }
     case 'server':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'sensor':{
       // [C2-8a-fix-3] 파형 호 실제 렌더 범위 반영 — 호 각도 ±0.35π, R_max=cr*2.65
-      // [shapeicon-gap] top -= _ICON_VISUAL_PAD: 화살표-파형 시각적 간격 확보
+      // [C2-9-fix] shapeicon 화살표 여백 (_ICON_ARROW_GAP)
       const cr=Math.min(w*0.28,h*0.38);
       const waveCx=x+w*0.32, waveCy=y+h*0.50;
       const Rmax=cr*2.65;
       const sinA=Math.sin(Math.PI*0.35);
-      return{top:waveCy-Rmax*sinA-_ICON_VISUAL_PAD, bottom:waveCy+Rmax*sinA,
+      return{top:waveCy-Rmax*sinA-_ICON_ARROW_GAP, bottom:waveCy+Rmax*sinA,
         left:waveCx-cr, right:waveCx+Rmax,
         cx:x+w/2, cy:y+h/2};
     }
     case 'antenna':{
       // [C2-8a-fix-3] 호 apex at -π/2, bottom에서 라벨 패딩 제거
-      // [shapeicon-gap] top -= _ICON_VISUAL_PAD: 화살표-파형 시각적 간격 확보
+      // [C2-9-fix] shapeicon 화살표 여백 (_ICON_ARROW_GAP)
       const aTopY=y+h*0.18;
       const outerArc=h*0.36;
       const waveTop=aTopY-outerArc;
       const waveRight=x+w*0.38+outerArc*Math.cos(-Math.PI*0.05);
-      return{top:Math.min(y+h*0.18,waveTop)-_ICON_VISUAL_PAD, bottom:y+h*0.92, left:x+w*0.16, right:Math.max(x+w*0.62,waveRight),
+      return{top:Math.min(y+h*0.18,waveTop)-_ICON_ARROW_GAP, bottom:y+h*0.92, left:x+w*0.16, right:Math.max(x+w*0.62,waveRight),
         cx:x+w*0.43, cy:y+h/2};
     }
     case 'document':
       return{top:y, bottom:y+h, left:x, right:x+w, cx:x+w/2, cy:y+h/2};
     case 'camera':
       // [C2-8a-fix-3] bottom에서 라벨 패딩 제거
-      // [shapeicon-gap] top -= _ICON_VISUAL_PAD: 화살표-파형 시각적 간격 확보
-      return{top:y+h*0.08-_ICON_VISUAL_PAD, bottom:y+h*0.83, left:x+w*0.05, right:x+w*0.85,
+      // [C2-9-fix] shapeicon 화살표 여백 (_ICON_ARROW_GAP)
+      return{top:y+h*0.08-_ICON_ARROW_GAP, bottom:y+h*0.83, left:x+w*0.05, right:x+w*0.85,
         cx:x+w*0.45, cy:y+h/2};
     case 'speaker':{
       // [C2-8a-fix-3] bottom에서 라벨 패딩 제거, right를 호 최대값(angle 0)으로
-      // [shapeicon-gap] top -= _ICON_VISUAL_PAD: 화살표-파형 시각적 간격 확보
+      // [C2-9-fix] shapeicon 화살표 여백 (_ICON_ARROW_GAP)
       const spWaveRight=x+w*0.55+h*0.46;
-      return{top:y+h*0.08-_ICON_VISUAL_PAD, bottom:y+h*0.92, left:x+w*0.10, right:Math.max(x+w*0.55,spWaveRight),
+      return{top:y+h*0.08-_ICON_ARROW_GAP, bottom:y+h*0.92, left:x+w*0.10, right:Math.max(x+w*0.55,spWaveRight),
         cx:x+w*0.35, cy:y+h/2};
     }
     default:
@@ -12638,6 +12652,24 @@ function downloadPptx(sid){
 }
 
 // ═══ 이미지 다운로드 (KIPO 규격 JPEG/TIF) ═══
+// [고해상도] 800×1000 / 1360×1000 → 3배 확대 (2400×3000 / 4080×3000)
+//   ctx.scale(SCALE,SCALE)로 좌표계 보존 → 기존 그리기 코드 무수정
+const _IMG_DL_SCALE=3;
+
+// Canvas → 진짜 TIFF Blob 변환 (UTIF v3.1.0)
+//   기존: TIF 요청 시 PNG로 저장 (확장자만 .png) — 가짜 TIFF
+//   수정: UTIF.encodeImage로 진짜 TIFF (image/tiff)
+function _canvasToTiffBlob(canvas){
+  if(typeof UTIF==='undefined'){console.warn('[TIFF] UTIF 라이브러리 없음 — 출력 생략');return null;}
+  try{
+    const ctx=canvas.getContext('2d');
+    const w=canvas.width, h=canvas.height;
+    const imgData=ctx.getImageData(0,0,w,h);
+    const tiffArr=UTIF.encodeImage(imgData.data.buffer,w,h);
+    return new Blob([tiffArr],{type:'image/tiff'});
+  }catch(e){console.error('[TIFF] 인코딩 실패:',e);return null;}
+}
+
 function downloadDiagramImages(sid, format='jpeg'){
   console.log('downloadDiagramImages called:', sid, format);
   
@@ -12715,12 +12747,13 @@ function downloadDiagramImages(sid, format='jpeg'){
     const figNum=autoFigNums[currentIdx]||(figOffset+currentIdx+1);
     const hasEdges=edges&&edges.length>0;
     
-    // 캔버스 생성 (스케일 없이 직접 크기 설정)
+    // 캔버스 생성 — [고해상도] 3배 확대, ctx.scale로 좌표계는 800×1000 유지
     const canvas=document.createElement('canvas');
     const W=800,H=1000;
-    canvas.width=W;
-    canvas.height=H;
+    canvas.width=W*_IMG_DL_SCALE;
+    canvas.height=H*_IMG_DL_SCALE;
     const ctx=canvas.getContext('2d');
+    ctx.scale(_IMG_DL_SCALE,_IMG_DL_SCALE);
     
     // 배경 흰색
     ctx.fillStyle='#FFFFFF';
@@ -13276,20 +13309,28 @@ function downloadDiagramImages(sid, format='jpeg'){
     } // end else (장치 도면)
     } // end if(nodes.length)
     
-    // 이미지를 ZIP에 추가
+    // 이미지를 ZIP에 추가 — [진짜 TIFF] tif/tiff 시 UTIF로 인코딩, .tif 확장자
     try{
-      const ext=(format==='tif'||format==='tiff')?'png':(format==='jpeg'?'jpg':format);
-      const mimeType=(format==='tif'||format==='tiff')?'image/png':`image/${format==='jpeg'?'jpeg':'png'}`;
-      const quality=format==='jpeg'?0.95:undefined;
+      const isTiff=(format==='tif'||format==='tiff');
+      const ext=isTiff?'tif':(format==='jpeg'?'jpg':format);
       const fileName=`${caseNum}_도${figNum}.${ext}`;
-      
-      canvas.toBlob(blob=>{
-        if(blob){
-          imageFiles.push({name:fileName,blob:blob});
-        }
+
+      if(isTiff){
+        const blob=_canvasToTiffBlob(canvas);
+        if(blob)imageFiles.push({name:fileName,blob:blob});
         currentIdx++;
         setTimeout(processNext,50);
-      },mimeType,quality);
+      } else {
+        const mimeType=`image/${format==='jpeg'?'jpeg':'png'}`;
+        const quality=format==='jpeg'?0.95:undefined;
+        canvas.toBlob(blob=>{
+          if(blob){
+            imageFiles.push({name:fileName,blob:blob});
+          }
+          currentIdx++;
+          setTimeout(processNext,50);
+        },mimeType,quality);
+      }
     }catch(e){
       console.error('이미지 생성 실패:',e);
       currentIdx++;
@@ -13416,21 +13457,33 @@ function downloadConceptImages(format='jpeg'){
     const url=URL.createObjectURL(blob);
     const img=new Image();
     img.onload=()=>{
+      // [고해상도] 1360×1000 → 4080×3000, ctx.scale로 SVG 재래스터화 시 고해상도 출력
       const canvas=document.createElement('canvas');
-      canvas.width=1360;canvas.height=1000;
+      canvas.width=1360*_IMG_DL_SCALE;canvas.height=1000*_IMG_DL_SCALE;
       const ctx2=canvas.getContext('2d');
+      ctx2.scale(_IMG_DL_SCALE,_IMG_DL_SCALE);
       ctx2.fillStyle='#FFFFFF';ctx2.fillRect(0,0,1360,1000);
       ctx2.drawImage(img,0,0,1360,1000);
-      canvas.toBlob(b=>{
+
+      // [진짜 TIFF] tif 시 UTIF 사용, 확장자도 .tif
+      const isTiff=(format==='tif'||format==='tiff');
+      const ext=isTiff?'tif':format;
+      const handleBlob=(b)=>{
         if(b){
-          const fname=`도${figNum}_예시도.${format==='tif'?'png':format}`;
+          const fname=`도${figNum}_예시도.${ext}`;
           if(zip)images.push({name:fname,blob:b});
           else{const a=document.createElement('a');a.download=fname;a.href=URL.createObjectURL(b);a.click();URL.revokeObjectURL(a.href);}
         }
         URL.revokeObjectURL(url);
         idx++;
         processNext();
-      },format==='tif'?'image/png':`image/${format}`,0.95);
+      };
+
+      if(isTiff){
+        handleBlob(_canvasToTiffBlob(canvas));
+      } else {
+        canvas.toBlob(handleBlob,`image/${format}`,0.95);
+      }
     };
     img.onerror=()=>{URL.revokeObjectURL(url);idx++;processNext();};
     img.src=url;

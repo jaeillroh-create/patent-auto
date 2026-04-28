@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="trademark/trademark.css" />
   <link rel="stylesheet" href="opinion/opinion.css" />
   <link rel="stylesheet" href="division/division.css" />
+  <link rel="stylesheet" href="docket.css" />
 </head>
 <body>
 <div id="toastContainer" class="toast-container"></div>
@@ -93,6 +94,9 @@
       </button>
       <button class="service-tab" data-service="trademark" onclick="App.switchService('trademark')">
         <span class="tf">™️</span> 상표 출원
+      </button>
+      <button class="service-tab" data-service="docket" onclick="App.switchService('docket')">
+        <span class="tossface">📮</span> 사건등록
       </button>
     </nav>
 
@@ -198,14 +202,18 @@
               </div>
 
               <div class="card" style="padding:12px;margin-top:12px">
-                <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px"><span class="tf">📎</span> 의견서 양식</div>
+                <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px"><span class="tossface">📎</span> 의견서 템플릿</div>
                 <div id="opinionTemplateStatus" style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px;line-height:1.4">
                   <span style="color:var(--color-primary)">📋 기본 양식 사용 중</span>
                   <br><span style="font-size:10px;color:var(--color-text-tertiary)">유형별 표준 구조가 자동 적용됩니다</span>
                 </div>
-                <label for="opinionRefUpload" class="btn btn-outline btn-sm btn-full" style="cursor:pointer;font-size:11px"><span class="tf">📄</span> 커스텀 양식 등록</label>
-                <input type="file" id="opinionRefUpload" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="Opinion.handleRefUpload(event)" />
-                <p style="font-size:10px;color:var(--color-text-tertiary);margin-top:6px;line-height:1.4">기존 의견서를 업로드하면 문체·구조를 자동 참고합니다. 한 번 등록하면 모든 프로젝트에 적용됩니다.</p>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <label for="opinionRefUploadInv" class="btn btn-outline btn-sm btn-full" style="cursor:pointer;font-size:11px;border-color:var(--color-primary)"><span class="tossface">⚖️</span> 진보성/신규성 템플릿</label>
+                  <input type="file" id="opinionRefUploadInv" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="Opinion.handleRefUpload(event,'inventive_step')" />
+                  <label for="opinionRefUploadDef" class="btn btn-outline btn-sm btn-full" style="cursor:pointer;font-size:11px;border-color:var(--color-warning)"><span class="tossface">📝</span> 기재불비 템플릿</label>
+                  <input type="file" id="opinionRefUploadDef" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="Opinion.handleRefUpload(event,'description_deficiency')" />
+                </div>
+                <p style="font-size:10px;color:var(--color-text-tertiary);margin-top:6px;line-height:1.4">유형별 의견서 템플릿을 업로드하면 문체·구조를 자동 참고합니다. 한 번 등록하면 해당 유형의 모든 프로젝트에 자동 적용됩니다.</p>
               </div>
             </div>
             <div class="opinion-main">
@@ -312,20 +320,276 @@
 
     <!-- ═══ 상표 대시보드 패널 ═══ -->
     <div id="trademark-dashboard-panel" class="service-panel">
-      <div class="trademark-placeholder">
-        <div style="font-size:56px;margin-bottom:16px"><span class="tf">🏷️</span></div>
-        <h2 style="font-size:22px;font-weight:700;color:var(--color-text-primary);margin-bottom:8px">상표 출원 기능 준비 중</h2>
-        <p style="font-size:14px;color:var(--color-text-secondary);line-height:1.6;max-width:400px;margin:0 auto">
-          상표 출원서 작성, 지정상품 분류 추천,<br>유사상표 검토 기능이 곧 추가됩니다.
-        </p>
-        <div style="margin-top:24px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-          <div class="trademark-feature-chip"><span class="tf">📝</span> 출원서 자동 작성</div>
-          <div class="trademark-feature-chip"><span class="tf">🔍</span> 유사상표 검토</div>
-          <div class="trademark-feature-chip"><span class="tf">📑</span> 지정상품 분류</div>
-        </div>
+
+      <!-- ★ 상표 서브탭 (상표 출원 / 우선심사) ★ -->
+      <nav class="trademark-sub-tab-nav">
+        <button class="trademark-sub-tab active" data-subtab="application" onclick="App.switchTrademarkSubTab('application')">
+          <span class="tf">🏷️</span> 상표 출원
+        </button>
+        <button class="trademark-sub-tab" data-subtab="priority" onclick="App.switchTrademarkSubTab('priority')">
+          <span class="tf">⚡</span> 우선심사
+        </button>
+      </nav>
+
+      <!-- ═══ 서브패널 1: 상표 출원 ═══ -->
+      <div id="trademark-sub-application" class="trademark-sub-panel active">
+        <!-- TM.renderDashboard()에서 동적 렌더링 -->
       </div>
+
+      <!-- ═══ 서브패널 2: 우선심사 ═══ -->
+      <div id="trademark-sub-priority" class="trademark-sub-panel">
+        <!-- TM.renderPriorityDashboard()에서 동적 렌더링 -->
+      </div>
+
     </div><!-- /trademark-dashboard-panel -->
 
+    <!-- ═══ 사건등록 대시보드 패널 ═══ -->
+    <div id="docket-dashboard-panel" class="service-panel">
+      <div class="dkt-card">
+        <div class="dkt-card-title"><span class="tossface">📮</span> 사건등록 · 견적서 발송</div>
+        <div class="dkt-card-desc">1회 입력으로 사건등록 이메일 + 견적서 첨부까지 한 번에 처리합니다. 수가표 기준 할인이 자동 계산됩니다.</div>
+
+        <!-- 수신인 -->
+        <div class="dkt-recipient-bar">
+          <label>📧 수신인:</label>
+          <input type="email" class="input-field" id="dkt-recipient" value="docket@didimip.com" />
+        </div>
+
+        <!-- ── 사건종류 ── -->
+        <div class="dkt-section-title"><span>📂 사건종류</span></div>
+        <div class="dkt-row dkt-row-3">
+          <div>
+            <label>권리유형</label>
+            <select id="dkt-right" class="input-field" onchange="Docket.onRightChange()"></select>
+          </div>
+          <div>
+            <label>DB (담당 변리사)</label>
+            <select id="dkt-db" class="input-field" onchange="Docket.onDBChange()"></select>
+          </div>
+          <div>
+            <label>건수</label>
+            <input type="number" id="dkt-case-count" class="input-field" value="1" min="1" max="99" onchange="Docket.recalc()" />
+          </div>
+        </div>
+
+        <!-- ── 출원인 ── -->
+        <div class="dkt-section-title"><span>👤 출원인(의뢰인)</span></div>
+        <div class="dkt-row dkt-row-2">
+          <div>
+            <label>회사명</label>
+            <input type="text" id="dkt-client-company" class="input-field" placeholder="주식회사 OOO" />
+          </div>
+          <div>
+            <label>고객 구분</label>
+            <div class="dkt-radio-group">
+              <label><input type="radio" name="dkt-client-type" value="new" checked /> 신규</label>
+              <label><input type="radio" name="dkt-client-type" value="existing" /> 기존</label>
+            </div>
+          </div>
+        </div>
+        <div class="dkt-row dkt-row-4">
+          <div>
+            <label>담당자&amp;수신</label>
+            <input type="text" id="dkt-contact-name" class="input-field" placeholder="홍길동 부장" />
+          </div>
+          <div>
+            <label>이메일</label>
+            <input type="email" id="dkt-contact-email" class="input-field" placeholder="contact@company.com" />
+          </div>
+          <div>
+            <label>전화번호</label>
+            <input type="text" id="dkt-contact-phone" class="input-field" placeholder="010-0000-0000" />
+          </div>
+          <div>
+            <label>참조 (cc)</label>
+            <input type="text" id="dkt-contact-cc" class="input-field" placeholder="optional" />
+          </div>
+        </div>
+
+        <!-- ── 관계자 ── -->
+        <div class="dkt-section-title"><span>🏢 관계자</span></div>
+        <div class="dkt-row dkt-row-4">
+          <div>
+            <label>발명자/창작자</label>
+            <input type="text" id="dkt-inventor" class="input-field" />
+          </div>
+          <div>
+            <label>실무자</label>
+            <input type="text" id="dkt-worker" class="input-field" />
+          </div>
+          <div>
+            <label>수임자</label>
+            <input type="text" id="dkt-mandator" class="input-field" />
+          </div>
+          <div>
+            <label>소개자</label>
+            <input type="text" id="dkt-introducer" class="input-field" />
+          </div>
+        </div>
+
+        <!-- ── 비용 ── -->
+        <div class="dkt-section-title"><span>💰 수수료 항목 선택</span></div>
+        <div class="dkt-fee-info">
+          <div class="dkt-fee-summary-wrap">
+            <!-- 상표 상품명 유형 토글 (상표 선택 시에만 표시) -->
+            <div id="dkt-trademark-term-wrap" style="display:none;margin-bottom:12px;padding:10px 12px;background:var(--color-primary-light);border-radius:8px">
+              <div class="dkt-fee-sub-title" style="margin-bottom:6px">상표 출원료 기준 (지정상품)</div>
+              <div class="dkt-radio-group">
+                <label><input type="radio" name="dkt-trademark-term" value="non-gazetted" checked onchange="Docket.recalc()" /> 비고시명칭 (52,000원)</label>
+                <label><input type="radio" name="dkt-trademark-term" value="gazetted" onchange="Docket.recalc()" /> 고시명칭 (46,000원)</label>
+              </div>
+            </div>
+
+            <!-- 특허·실용신안 관납료 감면 계산 패널 (해당 권리유형 선택 시에만 표시) -->
+            <div id="dkt-patent-options-wrap" style="display:none;margin-bottom:12px;padding:10px 12px;background:var(--color-primary-light);border-radius:8px">
+              <div class="dkt-fee-sub-title" style="margin-bottom:6px">관납료 감면 계산 (특허·실용신안)</div>
+              <div style="display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center">
+                <label style="font-size:12px;font-weight:600">청구항 수</label>
+                <input type="number" id="dkt-patent-claims" value="3" min="1" max="99" oninput="Docket.recalc()" class="input-field" style="max-width:120px" />
+                <label style="font-size:12px;font-weight:600">기업 규모</label>
+                <div class="dkt-radio-group" style="flex-wrap:wrap;gap:10px">
+                  <label><input type="radio" name="dkt-reduction" value="small" checked onchange="Docket.recalc()" /> 중소/개인/벤처 (70%↓)</label>
+                  <label><input type="radio" name="dkt-reduction" value="medium" onchange="Docket.recalc()" /> 중견 (50%↓)</label>
+                  <label><input type="radio" name="dkt-reduction" value="large" onchange="Docket.recalc()" /> 대기업 (감면X)</label>
+                </div>
+              </div>
+              <div style="font-size:10px;color:var(--color-text-tertiary);margin-top:6px;line-height:1.4">
+                ※ 2024년 전자출원 기준 단가로 계산. 청구항 수·기업 규모 변경 시 관납료가 자동 재계산됩니다.
+                보정료는 감면 대상이 아닙니다.
+              </div>
+            </div>
+
+            <div class="dkt-fee-sub-title">대리인수수료 — 체크한 항목만 견적에 포함</div>
+            <div id="dkt-fee-checkboxes" class="dkt-fee-checkboxes"></div>
+            <div class="dkt-fee-sub-title" style="margin-top:14px">특허청관납료 (체크된 수수료에 자동 연동)</div>
+            <table class="dkt-summary-table">
+              <thead><tr><th>항목</th><th>단가</th><th>건수</th><th>금액</th></tr></thead>
+              <tbody id="dkt-gov-summary"></tbody>
+            </table>
+          </div>
+
+          <div class="dkt-fee-input-wrap">
+            <div class="dkt-field">
+              <label>실제 청구금액</label>
+              <input type="number" id="dkt-actual-fee" class="input-field" oninput="Docket.recalc()" placeholder="4000000" />
+              <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px;line-height:1.4">
+                아래 옵션(부가세/관납료 포함여부)에 따라 입력값이 해석됩니다.<br>
+                예) 둘 다 '포함' 선택 시 입력값 = 총 지불액(부가세 및 관납료 포함)
+              </div>
+            </div>
+            <div class="dkt-field">
+              <label>부가세 포함여부</label>
+              <div class="dkt-radio-group">
+                <label><input type="radio" name="dkt-vat-included" value="no" checked onchange="Docket.recalc()" /> 별도</label>
+                <label><input type="radio" name="dkt-vat-included" value="yes" onchange="Docket.recalc()" /> 포함</label>
+              </div>
+            </div>
+            <div class="dkt-field">
+              <label>관납료 포함여부</label>
+              <div class="dkt-radio-group">
+                <label><input type="radio" name="dkt-gov-included" value="no" checked onchange="Docket.recalc()" /> 별도</label>
+                <label><input type="radio" name="dkt-gov-included" value="yes" onchange="Docket.recalc()" /> 포함</label>
+              </div>
+            </div>
+
+            <div class="dkt-calc-box">
+              <div class="dkt-calc-row"><span>수가표 합계</span><strong id="dkt-listed-total">0</strong></div>
+              <div class="dkt-calc-row discount"><span>담당 변리사 우대 할인</span><strong id="dkt-discount-display">0</strong></div>
+              <div class="dkt-calc-row"><span>대리인수수료 소계 (부가세 전)</span><strong id="dkt-actual-fee-display">0</strong></div>
+              <div class="dkt-calc-row"><span>부가가치세 (수수료의 10%)</span><strong id="dkt-vat-display">0</strong></div>
+              <div class="dkt-calc-row"><span>대리인수수료 + VAT</span><strong id="dkt-fee-with-vat-display">0</strong></div>
+              <div class="dkt-calc-row"><span>특허청관납료 소계</span><strong id="dkt-gov-total-display">0</strong></div>
+              <div class="dkt-calc-row grand"><span>총 예상금액</span><strong id="dkt-grand-total">0</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── 기타 정보 ── -->
+        <div class="dkt-section-title"><span>📋 기타 정보</span></div>
+        <div class="dkt-row dkt-row-1">
+          <div>
+            <label>사건내용 (발명명/상표명)</label>
+            <input type="text" id="dkt-case-content" class="input-field" placeholder="(가칭) 발명명칭 또는 상표명" />
+          </div>
+        </div>
+        <div class="dkt-row dkt-row-2">
+          <div>
+            <label>우선심사 진행여부</label>
+            <div class="dkt-radio-group">
+              <label><input type="radio" name="dkt-priority-exam" value="O" onchange="Docket.onPriorityExamChange()" /> O (진행)</label>
+              <label><input type="radio" name="dkt-priority-exam" value="X" checked onchange="Docket.onPriorityExamChange()" /> X</label>
+            </div>
+            <div id="dkt-priority-reasons-wrap" style="display:none;margin-top:8px;padding:10px 12px;background:var(--color-primary-light);border-radius:8px">
+              <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);margin-bottom:6px">우선심사 사유 (복수 선택 가능)</div>
+              <div class="dkt-priority-reason-list">
+                <label><input type="checkbox" name="dkt-priority-reason" value="실시 또는 실시준비 중" /> 실시 또는 실시준비 중</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="벤처기업" /> 벤처기업</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="직무발명보상 우수기업" /> 직무발명보상 우수기업</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="기술혁신형 중소기업(INNO-BIZ)" /> 기술혁신형 중소기업(INNO-BIZ)</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="국가연구개발사업 결과물" /> 국가연구개발사업 결과물</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="선행기술조사 의뢰" /> 선행기술조사 의뢰</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="조약 우선권 주장" /> 조약 우선권 주장</label>
+                <label><input type="checkbox" name="dkt-priority-reason" value="녹색기술" /> 녹색기술</label>
+              </div>
+              <input type="text" id="dkt-priority-reason-etc" class="input-field" placeholder="기타 사유 (직접 입력)" style="margin-top:6px;font-size:12px;padding:6px 10px" />
+            </div>
+          </div>
+          <div>
+            <label>초안 발송일 설정여부</label>
+            <input type="text" id="dkt-draft-date" class="input-field" />
+          </div>
+        </div>
+        <div class="dkt-row dkt-row-1">
+          <div>
+            <label>출원안내메일 / 견적서 / 위임계약서</label>
+            <div class="dkt-guide-checkboxes">
+              <label><input type="checkbox" id="dkt-need-guide-mail" /> 출원안내메일</label>
+              <label><input type="checkbox" id="dkt-need-quote" /> 견적서</label>
+              <label><input type="checkbox" id="dkt-need-contract" /> 위임계약서</label>
+            </div>
+            <input type="text" class="input-field" id="dkt-guide-note" placeholder="특이사항 (예: 국가지원금용 견적서 발송 등)" />
+          </div>
+        </div>
+        <div class="dkt-row dkt-row-1">
+          <div>
+            <label>필수확인사항</label>
+            <textarea id="dkt-must-check" class="input-field" rows="2"></textarea>
+          </div>
+        </div>
+
+        <!-- ── 견적서 상세 조항 ── -->
+        <div class="dkt-section-title">
+          <span>📝 견적서 상세 조항</span>
+          <button class="btn btn-outline btn-sm" onclick="Docket.resetNotes()">기본값 복원</button>
+        </div>
+        <textarea class="input-field dkt-notes-area" id="dkt-notes" rows="8"
+          oninput="this.dataset.userEdited='true'"></textarea>
+
+        <!-- 하단 버튼 -->
+        <div class="dkt-actions">
+          <button class="btn btn-ghost" onclick="Docket.resetForm()"><span class="tossface">🔄</span> 초기화</button>
+          <button class="btn btn-outline" onclick="Docket.downloadExcel()"><span class="tossface">📥</span> 견적서만 다운로드</button>
+          <button class="btn btn-primary" onclick="Docket.preview()"><span class="tossface">📧</span> 미리보기 &amp; 발송</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ 사건등록 미리보기 모달 ═══ -->
+<div id="docketPreviewModal" class="modal-overlay" style="display:none">
+  <div class="modal-content" style="max-width:760px;padding:24px;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin:0"><span class="tossface">📧</span> 사건등록 이메일 미리보기</div>
+      <button class="btn btn-ghost btn-sm" onclick="Docket.closePreview()">✕</button>
+    </div>
+    <div id="docket-preview-content"></div>
+    <div style="display:flex;gap:8px;margin-top:20px">
+      <button class="btn btn-ghost" onclick="Docket.closePreview()" style="flex:1">닫기</button>
+      <button class="btn btn-outline" onclick="Docket.downloadExcel()" style="flex:1"><span class="tossface">📥</span> 견적서만 다운로드</button>
+      <button class="btn btn-primary" id="dkt-send-btn" onclick="Docket.sendEmail()" style="flex:1"><span class="tossface">📧</span> 사건등록 발송</button>
+    </div>
   </div>
 </div>
 
@@ -1053,6 +1317,7 @@
   </div>
 </div>
 
-<script src="division/division.js"></script>
+<script src="division/division.js?v=20260407b"></script>
+<script src="docket.js"></script>
 </body>
 </html>
