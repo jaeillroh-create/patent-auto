@@ -315,7 +315,9 @@ Docket.renderFeeCheckboxes = function() {
       (item.defaultChecked ? ' checked' : '') +
       ' onchange="Docket.recalc()" />' +
       '<span class="name">' + item.name + '</span>' +
-      '<span class="price">' + Docket.fmt(item.unitPrice) + '</span>';
+      '<input type="number" class="price" data-key="' + item.key + '"' +
+      ' value="' + item.unitPrice + '" oninput="Docket.recalc()"' +
+      ' onclick="event.stopPropagation()" />';
     container.appendChild(row);
   });
 };
@@ -523,12 +525,22 @@ Docket._selection = function() {
     checkedKeys[cb.dataset.key] = true;
   });
 
+  // 사용자가 수정한 금액을 DOM에서 읽기 (수가표 기본값 override)
+  var customPrices = {};
+  document.querySelectorAll('#dkt-fee-checkboxes input[type="number"].price').forEach(function(inp) {
+    if (inp.dataset.key) {
+      customPrices[inp.dataset.key] = parseInt(inp.value) || 0;
+    }
+  });
+
   var feeItems = [];
   var govItems = [];
   if (schedule) {
     schedule.items.forEach(function(item) {
       if (!checkedKeys[item.key]) return;
-      feeItems.push({ name: item.name, unitPrice: item.unitPrice, qty: cnt });
+      // 사용자 수정값이 있으면 그걸 사용, 없으면 수가표 기본값
+      var price = (customPrices[item.key] != null) ? customPrices[item.key] : item.unitPrice;
+      feeItems.push({ name: item.name, unitPrice: price, qty: cnt });
       var linkedGov = Docket._resolveLinkedGov(right, item);
       linkedGov.forEach(function(g) {
         govItems.push({ name: g.name, unitPrice: g.unitPrice, qty: cnt });

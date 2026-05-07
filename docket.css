@@ -68,13 +68,23 @@
   margin: 0;
 }
 .dkt-fee-cb-row .name { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
-.dkt-fee-cb-row .price {
+.dkt-fee-cb-row input.price {
+  width: 110px;
   font-size: 12px;
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  text-align: right;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 6px;
+  background: transparent;
+  font-family: inherit;
+  -moz-appearance: textfield;
 }
-.dkt-fee-cb-row:has(input:checked) .price { color: var(--color-primary); font-weight: 600; }
+.dkt-fee-cb-row input.price:hover { border-color: var(--color-border); }
+.dkt-fee-cb-row input.price:focus { border-color: var(--color-primary); background: #fff; outline: none; color: var(--color-text-primary); }
+.dkt-fee-cb-row input.price::-webkit-inner-spin-button { -webkit-appearance: none; }
+.dkt-fee-cb-row:has(input[type="checkbox"]:checked) input.price { color: var(--color-primary); font-weight: 600; }
 
 /* 수가표 요약 테이블 (읽기 전용) */
 .dkt-summary-table { width: 100%; border-collapse: collapse; font-size: 12px; }
