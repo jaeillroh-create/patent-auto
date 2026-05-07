@@ -68,6 +68,13 @@ Docket.feeSchedule = {
         linkedGov: [] },
       { key: 'interview', name: '심사관면담', unitPrice: 400000, defaultChecked: false,
         linkedGov: [] },
+      // ── 심판 (수가표 미확정 → placeholder, 사용자 확정 시 업데이트) ──
+      { key: 'appeal_reject', name: '거절결정불복심판', unitPrice: 1000000, defaultChecked: false,
+        linkedGov: [{ name: '심판청구료', unitPrice: 159000 }] },
+      { key: 'appeal_invalidation', name: '무효심판', unitPrice: 1000000, defaultChecked: false,
+        linkedGov: [{ name: '심판청구료', unitPrice: 159000 }] },
+      { key: 'appeal_correction', name: '정정심판', unitPrice: 500000, defaultChecked: false,
+        linkedGov: [{ name: '심판청구료', unitPrice: 159000 }] },
     ],
   },
   // 상표 관납료 매핑 (DOCKET_SPEC_FINAL §5 상표):
@@ -90,6 +97,13 @@ Docket.feeSchedule = {
         linkedGov: [] },
       { key: 'info', name: '정보제공', unitPrice: 600000, defaultChecked: false,
         linkedGov: [] },
+      // ── 심판 ──
+      { key: 'appeal_reject', name: '거절결정불복심판', unitPrice: 1000000, defaultChecked: false,
+        linkedGov: [{ name: '심판청구료', unitPrice: 240000 }] },
+      { key: 'appeal_invalidation', name: '무효심판', unitPrice: 1000000, defaultChecked: false,
+        linkedGov: [{ name: '심판청구료', unitPrice: 240000 }] },
+      { key: 'appeal_cancel', name: '취소심판', unitPrice: 1000000, defaultChecked: false,
+        linkedGov: [{ name: '심판청구료', unitPrice: 240000 }] },
     ],
   },
   // 디자인 관납료 매핑 (DOCKET_SPEC_FINAL §5 디자인):
@@ -111,6 +125,11 @@ Docket.feeSchedule = {
         linkedGov: [{ name: '우선심사료', unitPrice: 70000 }] },
       { key: 'oa', name: '중간사건', unitPrice: 300000, defaultChecked: false,
         linkedGov: [{ name: '보정료', unitPrice: 4000 }] },
+      // ── 심판 ──
+      { key: 'appeal_reject', name: '거절결정불복심판', unitPrice: 1000000, defaultChecked: false,
+        linkedGov: [{ name: '심판청구료', unitPrice: 159000 }] },
+      { key: 'appeal_invalidation', name: '무효심판', unitPrice: 1000000, defaultChecked: false,
+        linkedGov: [{ name: '심판청구료', unitPrice: 159000 }] },
     ],
   },
   // 실용신안 관납료 매핑 (DOCKET_SPEC_FINAL §5 실용신안):
@@ -131,6 +150,13 @@ Docket.feeSchedule = {
         linkedGov: [{ name: '보정료', unitPrice: 4000 }] },
       { key: 'consulting', name: 'IP창출컨설팅', unitPrice: 1000000, defaultChecked: false,
         linkedGov: [] },
+      // ── 심판 ──
+      { key: 'appeal_reject', name: '거절결정불복심판', unitPrice: 1000000, defaultChecked: false,
+        linkedGov: [{ name: '심판청구료', unitPrice: 159000 }] },
+      { key: 'appeal_invalidation', name: '무효심판', unitPrice: 1000000, defaultChecked: false,
+        linkedGov: [{ name: '심판청구료', unitPrice: 159000 }] },
+      { key: 'appeal_correction', name: '정정심판', unitPrice: 500000, defaultChecked: false,
+        linkedGov: [{ name: '심판청구료', unitPrice: 159000 }] },
     ],
   },
 };
@@ -599,6 +625,7 @@ Docket.collectData = function() {
       return joined;
     })(),
     caseContent: v('dkt-case-content'),
+    priorCaseNo: v('dkt-prior-case-no'),
     priorityExam: (function() {
       // O/X 라디오 + 사유 체크박스 조합 → 문자열로 반환
       var radio = document.querySelector('input[name="dkt-priority-exam"]:checked');
@@ -674,6 +701,7 @@ Docket.generateEmailBodyHtml = function(data) {
   h += '<p>사건등록 해주세요.</p>';
   h += '<table style="border-collapse:collapse;font-size:13px;margin-top:12px;min-width:520px">';
   h += row('사건종류', esc(data.right) + '(' + esc(data.examType) + ') ' + data.caseCount + '건');
+  if (data.priorCaseNo) h += row('원사건번호', esc(data.priorCaseNo));
   if (data.selectedItemsLabel) h += row('수수료항목', esc(data.selectedItemsLabel));
   if (data.patentClaims) {
     h += row('청구항수', data.patentClaims + '항');
@@ -711,6 +739,7 @@ Docket.generateEmailBodyText = function(data) {
   lines.push('');
   lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   lines.push('사건종류 | ' + data.right + '(' + data.examType + ') ' + data.caseCount + '건');
+  if (data.priorCaseNo) lines.push('원사건번호 | ' + data.priorCaseNo);
   if (data.selectedItemsLabel) lines.push('수수료항목 | ' + data.selectedItemsLabel);
   if (data.patentClaims) {
     lines.push('청구항수 | ' + data.patentClaims + '항');
@@ -1512,7 +1541,7 @@ Docket.resetForm = function() {
   var textIds = [
     'dkt-client-company','dkt-contact-name','dkt-contact-email','dkt-contact-phone','dkt-contact-cc',
     'dkt-inventor','dkt-worker','dkt-mandator','dkt-introducer',
-    'dkt-case-content','dkt-draft-date','dkt-priority-reason-etc',
+    'dkt-case-content','dkt-prior-case-no','dkt-draft-date','dkt-priority-reason-etc',
     'dkt-guide-note','dkt-must-check','dkt-actual-fee',
   ];
   textIds.forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
