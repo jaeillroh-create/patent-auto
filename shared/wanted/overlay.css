@@ -8,6 +8,56 @@
 /* ── Wanted Sans 표시용 폰트 ─────────────────────────────────── */
 @import url("https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css");
 
+/* ── 0. 모듈별 자체 토큰(--tm-*, --pt-*)도 Wanted 팔레트로 재매핑 ─ */
+:root {
+  /* Trademark 모듈 (--tm-*) */
+  --tm-primary:       #0066FF;
+  --tm-primary-dark:  #005EEB;
+  --tm-primary-light: #EAF2FE;
+  --tm-success:       #009632;
+  --tm-success-light: #D9FFE6;
+  --tm-warning:       #D17600;
+  --tm-warning-light: #FEF4E6;
+  --tm-danger:        #E52222;
+  --tm-danger-light:  #FEECEC;
+  --tm-gray-50:       #F7F7F8;
+  --tm-gray-100:      #F4F4F5;
+  --tm-gray-200:      #EAEBEC;
+  --tm-gray-300:      #DBDCDF;
+  --tm-gray-400:      #AEB0B6;
+  --tm-gray-500:      #70737C;
+  --tm-gray-600:      #46474C;
+  --tm-gray-700:      #2E2F33;
+  --tm-gray-800:      #000000;
+  --tm-radius:        16px;
+  --tm-radius-sm:     8px;
+  --tm-shadow:        none;
+  --tm-shadow-lg:     0 4px 12px rgba(23,23,25,.06);
+
+  /* Patent 모듈 (--pt-*) */
+  --pt-primary:       #0066FF;
+  --pt-primary-dark:  #005EEB;
+  --pt-primary-light: #EAF2FE;
+  --pt-success:       #009632;
+  --pt-success-light: #D9FFE6;
+  --pt-warning:       #D17600;
+  --pt-warning-light: #FEF4E6;
+  --pt-danger:        #E52222;
+  --pt-gray-50:       #F7F7F8;
+  --pt-gray-100:      #F4F4F5;
+  --pt-gray-200:      #EAEBEC;
+  --pt-gray-300:      #DBDCDF;
+  --pt-gray-400:      #AEB0B6;
+  --pt-gray-500:      #70737C;
+  --pt-gray-600:      #46474C;
+  --pt-gray-700:      #2E2F33;
+  --pt-gray-800:      #000000;
+  --pt-radius:        16px;
+  --pt-radius-sm:     8px;
+  --pt-shadow:        none;
+  --pt-shadow-lg:     0 4px 12px rgba(23,23,25,.06);
+}
+
 /* ── 1. 기존 --dt-* 토큰을 Wanted 팔레트로 재매핑 ─────────────── */
 :root {
   /* Brand — Wanted blue */
@@ -439,6 +489,34 @@ table thead th { letter-spacing: 0.04em; font-size: 11.5px !important; }
   color: #0054D1;
 }
 
+/* ── 20-a. 상태 점 (status dot) — 🟢🟡🔴 대체용 ─────────────── */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  position: relative;
+  top: -1px;
+}
+.status-dot.positive   { background: var(--dt-success); }
+.status-dot.cautionary { background: var(--dt-warning); }
+.status-dot.negative   { background: var(--dt-danger); }
+.status-dot.neutral    { background: var(--dt-g300); }
+.status-dot.info       { background: var(--dt-brand); }
+
+/* ── 20-b. 토스트 — 타입별 톤 ─────────────────────────────── */
+.toast.toast-success { background: var(--dt-g900); border-left: 3px solid var(--dt-success); }
+.toast.toast-error   { background: var(--dt-g900); border-left: 3px solid var(--dt-danger); }
+.toast.toast-warning { background: var(--dt-g900); border-left: 3px solid var(--dt-warning); }
+.toast.toast-info    { background: var(--dt-g900); border-left: 3px solid var(--dt-brand); }
+.toast .ico { color: var(--static-white); }
+.toast.toast-success .ico { color: #5DFFB1; }
+.toast.toast-error   .ico { color: #FF8C8C; }
+.toast.toast-warning .ico { color: #FFC06E; }
+
 /* ── 21. 의견서/분할 타입 뱃지 ───────────────────────────────── */
 .opinion-type-badge,
 .division-type-badge {
@@ -804,6 +882,202 @@ table thead th { letter-spacing: 0.04em; font-size: 11.5px !important; }
 #screenMain .page-left .card-title {
   font-size: 13.5px;
   color: var(--dt-g900);
+}
+
+/* ── 28-1b. 상표 출원 모듈 (.tm-*) — 디자인 시안과 정렬 ─────── */
+.tm-sidebar {
+  background: #fff;
+  border-right: 1px solid var(--dt-g150);
+  padding: 20px 12px;
+  position: sticky;
+  top: 113px; /* 64 header + 49 service-tab */
+  max-height: calc(100vh - 113px);
+  overflow-y: auto;
+  box-shadow: none;
+}
+.tm-sidebar-header {
+  padding: 0 8px 14px;
+  border-bottom: 1px solid var(--dt-g150);
+  margin-bottom: 12px;
+}
+.tm-sidebar-project {
+  padding: 8px 10px;
+  background: var(--dt-g50);
+  border-radius: var(--dt-r-sm);
+  margin: 0 0 12px;
+}
+.tm-sidebar-save {
+  margin-bottom: 16px;
+}
+.tm-sidebar-save .btn,
+.tm-sidebar-save button {
+  width: 100%;
+  background: var(--dt-brand) !important;
+  color: #fff !important;
+  border-radius: var(--dt-r-sm);
+  font-weight: 700;
+  height: 40px;
+  border: none !important;
+}
+.tm-sidebar-save .btn:hover,
+.tm-sidebar-save button:hover {
+  background: var(--dt-brand-hover) !important;
+}
+
+.tm-step-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tm-step-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--dt-r-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dt-g500);
+  cursor: pointer;
+  text-align: left;
+  transition: background .12s ease, color .12s ease;
+}
+.tm-step-item:hover {
+  background: rgba(112,115,124,.08);
+  color: var(--dt-g700);
+}
+.tm-step-item.active {
+  background: var(--dt-brand-light) !important;
+  color: #0054D1 !important;
+  font-weight: 600;
+}
+.tm-step-item.completed { color: var(--dt-g900); }
+.tm-step-num {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 50% !important;
+  background: var(--dt-g100) !important;
+  color: var(--dt-g500) !important;
+  font-size: 11px !important;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: none;
+}
+.tm-step-item.active .tm-step-num {
+  background: #fff !important;
+  color: var(--dt-brand) !important;
+  border: 1.5px solid var(--dt-brand) !important;
+}
+.tm-step-item.completed .tm-step-num {
+  background: var(--dt-brand) !important;
+  color: #fff !important;
+}
+.tm-step-name { flex: 1; }
+.tm-step-check {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--dt-success);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tm-sidebar-footer {
+  border-top: 1px solid var(--dt-g150);
+  padding-top: 12px;
+  margin-top: 16px;
+  font-size: 11px;
+  color: var(--dt-g400);
+}
+
+/* 메인 영역 */
+.tm-container {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: var(--dt-g50);
+}
+.tm-main {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 28px 32px;
+  background: var(--dt-g50);
+}
+.tm-main-header {
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-lg);
+  padding: 16px 20px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.tm-main-header h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  color: var(--dt-g900);
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.tm-main-header h2 .ico { color: var(--dt-g500); }
+.tm-step-indicator {
+  font-family: var(--dt-mono);
+  font-size: 12px;
+  color: var(--dt-g500);
+  padding: 4px 10px;
+  background: var(--dt-g100);
+  border-radius: 999px;
+}
+.tm-main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.tm-main-content > * { margin: 0 !important; }
+
+.tm-main-footer {
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-lg);
+  padding: 12px 20px;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 카드 — tm 모듈 내부 카드들도 Wanted 톤 */
+.tm-main-content .card,
+.tm-main-content [class*="-card"]:not(.tm-step-num) {
+  background: #fff !important;
+  border: 1px solid var(--dt-g150) !important;
+  border-radius: var(--dt-r-lg) !important;
+  box-shadow: none !important;
+}
+
+/* AI 사업 분석 "추천" 뱃지 */
+.tm-recommend-badge,
+.tm-card-badge {
+  background: var(--dt-warning-light) !important;
+  color: var(--dt-warning) !important;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
 }
 
 /* ── 28-2. 의견서 / 분할 상세 (dashboard 내부) ───────────────── */
