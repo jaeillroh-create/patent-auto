@@ -395,7 +395,7 @@ Division.renderList = function(){
 
   if(!ps.length){
     el.innerHTML = '<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--color-text-tertiary);font-size:13px">'
-      + '<div style="font-size:32px;margin-bottom:8px"><span class="tf">📭</span></div>'
+      + '<div style="font-size:32px;margin-bottom:8px"><span class="ico" data-icon="mail"></span></div>'
       + '분할출원 프로젝트가 없습니다.<br><span style="font-size:12px">새 프로젝트를 만들어 분할출원 청구항을 작성하세요.</span></td></tr>';
     return;
   }
@@ -727,7 +727,7 @@ Division.renderUpload = function(left, right, p){
 
   // 선택 파일 (공통)
   h += '<div class="card" style="padding:16px;margin-top:12px">';
-  h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📎</span> 선택 파일</div>';
+  h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="link"></span> 선택 파일</div>';
   h += '<label class="checkbox-label" style="margin-bottom:8px"><input type="checkbox" ' + (p.include_prior_art?'checked':'') + ' onchange="Division.togglePriorArt(this.checked)" /><span>인용발명 대비 분석 포함</span></label>';
   if(p.include_prior_art){
     var priorFile = files.find(function(f){ return f.file_type==='prior_art'; });
@@ -2417,7 +2417,7 @@ Division.renderAssemble = function(left, right, p){
     // 종속항 목록
     var divDeps = divClaims.filter(function(c){ return c.claim_type==='dependent'; });
     if(divDeps.length > 0){
-      h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📎</span> 종속항 (' + divDeps.length + '항)</div>';
+      h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="link"></span> 종속항 (' + divDeps.length + '항)</div>';
       divDeps.forEach(function(dc){
         var divCleanText = (dc.claim_text || '').replace(/\*{2,3}/g, '');
 
@@ -3507,7 +3507,7 @@ Division.renderConfirm = function(left, right, p){
     rh += '</div>';
   }
   rh += '</div>';
-  rh += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🖍️</span> 하이라이트 버전</div>';
+  rh += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="edit"></span> 하이라이트 버전</div>';
   rh += '<div style="font-size:13px;line-height:1.8">';
   divClaims.forEach(function(dc){
     var d = escapeHtml(dc.claim_text_highlighted||dc.claim_text);

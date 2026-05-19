@@ -587,19 +587,25 @@ table thead th { letter-spacing: 0.04em; font-size: 11.5px !important; }
 .detail-back-btn {
   display: inline-grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--dt-r-sm);
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--dt-g500);
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  color: var(--dt-g700);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background .12s ease, color .12s ease;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
 }
+.detail-back-btn .ico,
+.detail-back-btn svg { width: 20px; height: 20px; }
 .detail-back-btn:hover {
-  background: rgba(112,115,124,.08);
+  background: var(--dt-g50);
+  border-color: var(--dt-g300);
   color: var(--dt-g900);
+}
+.detail-back-btn:active {
+  background: var(--dt-g100);
 }
 
 /* ── 23. 스티키 하단 액션 바 (step-nav 패턴) ───────────────── */
@@ -746,6 +752,138 @@ table thead th { letter-spacing: 0.04em; font-size: 11.5px !important; }
 .division-detail {
   display: grid;
   gap: 16px;
+}
+
+/* opinion.js renderNavBar() 가 동적으로 만드는 인라인 nav row.
+   기본 마크업: <div style="display:flex;gap:8px;...margin-bottom:12px;flex-wrap:wrap">
+   안에 .btn.btn-ghost.btn-sm 들로 이전/현재로/파일추가 등 표시.
+   → Wanted 스타일의 깔끔한 secondary 버튼들로 정렬 */
+.opinion-detail-left > div[style*="flex-wrap:wrap"]:first-child,
+.opinion-detail-left > div[style*="flex-wrap: wrap"]:first-child,
+.division-detail-left > div[style*="flex-wrap:wrap"]:first-child,
+.division-detail-left > div[style*="flex-wrap: wrap"]:first-child {
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-md);
+  padding: 8px 12px !important;
+  margin-bottom: 14px !important;
+  gap: 6px !important;
+}
+
+/* renderNavBar 가 만든 버튼들도 통일 톤 */
+.opinion-detail-left > div[style*="flex-wrap"]:first-child .btn,
+.division-detail-left > div[style*="flex-wrap"]:first-child .btn {
+  height: 32px;
+  font-size: 12.5px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--dt-g600);
+}
+.opinion-detail-left > div[style*="flex-wrap"]:first-child .btn:hover,
+.division-detail-left > div[style*="flex-wrap"]:first-child .btn:hover {
+  background: rgba(112,115,124,.08);
+  color: var(--dt-g900);
+}
+.opinion-detail-left > div[style*="flex-wrap"]:first-child .btn-primary,
+.division-detail-left > div[style*="flex-wrap"]:first-child .btn-primary {
+  background: var(--dt-brand) !important;
+  color: #fff !important;
+  border-color: var(--dt-brand);
+}
+.opinion-detail-left > div[style*="flex-wrap"]:first-child .btn-outline,
+.division-detail-left > div[style*="flex-wrap"]:first-child .btn-outline {
+  border: 1px solid var(--dt-g150);
+}
+
+/* gate / step cards 안의 안내 배너 — info banner 톤 통일 */
+.opinion-gate-card,
+.division-gate-card {
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-lg);
+  padding: 20px;
+}
+.opinion-gate-title,
+.division-gate-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dt-g900);
+  letter-spacing: -0.005em;
+  margin-bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.opinion-gate-title .ico,
+.division-gate-title .ico { color: var(--dt-brand); }
+.opinion-gate-actions,
+.division-gate-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dt-g150);
+}
+.opinion-gate-actions .btn,
+.division-gate-actions .btn {
+  flex: 1;
+  height: 40px;
+  font-weight: 600;
+}
+
+/* opinion-chat-bubble (renderDiscussion) 톤 정리 */
+.opinion-chat-bubble {
+  background: var(--dt-g50);
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-md);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.opinion-chat-bubble.examiner {
+  background: #FEF4E6;
+  border-color: #FEE6C6;
+}
+.opinion-chat-bubble.attorney {
+  background: var(--dt-brand-light);
+  border-color: #C9DEFE;
+}
+.opinion-chat-role {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--dt-g700);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.opinion-chat-text {
+  font-size: 13px;
+  color: var(--dt-g700);
+  line-height: 1.6;
+}
+
+/* 정보 배너 (베타/안내) */
+.opinion-info-banner,
+.division-info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--dt-brand-light);
+  border: 1px solid #C9DEFE;
+  border-radius: var(--dt-r-sm);
+  font-size: 12.5px;
+  color: #002966;
+  margin-bottom: 14px;
+}
+.opinion-info-banner .ico,
+.division-info-banner .ico {
+  color: var(--dt-brand);
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 
 /* ──────────────────────────────────────────────────────────────

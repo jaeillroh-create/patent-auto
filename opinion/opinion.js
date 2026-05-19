@@ -799,7 +799,7 @@ Opinion.renderList = function(){
   if(!el)return;
   var ps=Opinion.state.projects;
   if(cnt) cnt.textContent='총 '+ps.length+'건';
-  if(!ps.length){ el.innerHTML='<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--color-text-tertiary);font-size:13px"><div style="font-size:32px;margin-bottom:8px"><span class="tf">📭</span></div>의견서 대응 프로젝트가 없습니다.<br><span style="font-size:12px">새 프로젝트를 만들어 의견제출통지서에 대응하세요.</span></td></tr>'; return; }
+  if(!ps.length){ el.innerHTML='<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--color-text-tertiary);font-size:13px"><div style="font-size:32px;margin-bottom:8px"><span class="ico" data-icon="mail"></span></div>의견서 대응 프로젝트가 없습니다.<br><span style="font-size:12px">새 프로젝트를 만들어 의견제출통지서에 대응하세요.</span></td></tr>'; return; }
   el.innerHTML=ps.map(function(p){
     var t=Opinion.TYPES[p.rejection_type]||{code:'?',label:'미정',css:'type-unknown',icon:'❓'};
     var s=Opinion.STATUS[p.status]||{label:p.status,css:'status-created'};
@@ -1011,19 +1011,19 @@ Opinion.renderNavBar = function(currentStepKey) {
   // 현재 단계로 돌아가기 (과거 뷰일 때만)
   if(isViewingPast) {
     h+='<button class="btn btn-primary btn-sm" onclick="Opinion.goToCurrent()" style="font-size:12px">'
-      +'<span class="tf">▶</span> 현재 단계로</button>';
+      +'<span class="ico" data-icon="arrow-right"></span> 현재 단계로</button>';
   }
 
   // 이 단계로 되돌리기 (과거 뷰일 때, 해당 단계부터 다시 시작)
   if(isViewingPast && si < ci) {
     h+='<button class="btn btn-outline btn-sm" onclick="Opinion.rollbackToStep(\''+currentStepKey+'\')" style="font-size:12px;color:var(--color-warning);border-color:var(--color-warning)">'
-      +'<span class="tf">↩️</span> 여기서 다시 시작</button>';
+      +'<span class="ico" data-icon="refresh"></span> 여기서 다시 시작</button>';
   }
 
   // 파일 추가 (어느 단계에서든 파일 업로드 단계로 되돌릴 수 있음)
   if(!isViewingPast && currentStepKey !== 'upload' && si > 0) {
     h+='<button class="btn btn-ghost btn-sm" onclick="Opinion.rollbackToStep(\'upload\')" style="font-size:11px;margin-left:auto">'
-      +'<span class="tf">📎</span> 파일 추가/재업로드</button>';
+      +'<span class="ico" data-icon="link"></span> 파일 추가/재업로드</button>';
   }
 
   h+='</div>';
@@ -1071,7 +1071,7 @@ Opinion.renderUpload = function(L,R){
 
   L.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="ico" data-icon="folder"></span> 파일 업로드</div></div>'
     +'<div class="opinion-upload-zone" id="opinionUploadZone" onclick="document.getElementById(\'opinionFileInput\').click()" ondragover="event.preventDefault();this.classList.add(\'dragover\')" ondragleave="this.classList.remove(\'dragover\')" ondrop="event.preventDefault();this.classList.remove(\'dragover\');Opinion.handleDrop(event)">'
-    +'<div style="font-size:36px;margin-bottom:8px"><span class="tf">📎</span></div>'
+    +'<div style="font-size:36px;margin-bottom:8px"><span class="ico" data-icon="link"></span></div>'
     +'<div style="font-size:13px;color:var(--color-text-secondary)">클릭 또는 드래그하여 파일 업로드<br><span style="font-size:11px;color:var(--color-text-tertiary)">PDF, DOCX, TXT (HWP는 텍스트 복사 후 붙여넣기)</span></div></div>'
     +'<input type="file" id="opinionFileInput" multiple accept=".pdf,.docx,.doc,.txt" style="display:none" onchange="Opinion.handleFiles(event)" />'
     +'<div id="opinionFileList" class="opinion-file-list"></div>'
@@ -1152,7 +1152,7 @@ Opinion.usage = { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0 };
 Opinion.updateUsageDisplay = function() {
   var el = document.getElementById('opinionUsage');
   if (!el) return;
-  el.innerHTML = '<span class="tf">🔢</span> API: ' + Opinion.usage.calls + '회';
+  el.innerHTML = '<span class="ico" data-icon="chart"></span> API: ' + Opinion.usage.calls + '회';
 };
 
 // ═══ 파일 역할 상수 ═══
@@ -1722,11 +1722,11 @@ Opinion.renderDiscussion = function(discussionArr) {
   var h = '<div class="opinion-discussion">';
   discussionArr.forEach(function(d) {
     var isExaminer = d.role === '심사관';
-    var icon = isExaminer ? '👨‍⚖️' : '👨‍💼';
+    var icon = isExaminer ? '<span class="ico" data-icon="scales" data-size="14"></span>' : '<span class="ico" data-icon="user" data-size="14"></span>';
     var label = isExaminer ? '심사관' : '변리사';
     var cls = isExaminer ? 'examiner' : 'attorney';
     h += '<div class="opinion-chat-bubble '+cls+'">'
-      +'<div class="opinion-chat-role"><span class="tossface">'+icon+'</span> <b>'+label+'</b></div>'
+      +'<div class="opinion-chat-role">'+icon+' <b>'+label+'</b></div>'
       +'<div class="opinion-chat-text">'+escapeHtml(d.text||'').replace(/\n/g,'<br>')+'</div>'
       +'</div>';
   });
@@ -1992,7 +1992,7 @@ Opinion.renderStrategy = function(L,R,status){
   // 오른쪽: 토론 내용 + 분석 결과
   var discussionHtml = '';
   if (a.discussion && a.discussion.length) {
-    discussionHtml = '<div class="card" style="margin-bottom:12px"><div class="card-header"><div class="card-title"><span class="tossface">💬</span> 심사관·변리사 협의</div></div>'
+    discussionHtml = '<div class="card" style="margin-bottom:12px"><div class="card-header"><div class="card-title"><span class="ico" data-icon="comment"></span> 심사관·변리사 협의</div></div>'
       + Opinion.renderDiscussion(a.discussion) + '</div>';
   }
   // ── Cycle 6 P2 §2.4: secondary 카드 — 혼합 모드일 때 노란 보더 카드 추가 ──
@@ -2654,7 +2654,7 @@ Opinion.renderDraft=function(L,R,status){
 
   var valHtml = '';
   if (ready && sm.total) {
-    valHtml = '<div style="margin-top:12px;margin-bottom:12px"><div style="font-weight:600;font-size:13px;margin-bottom:8px"><span class="tossface">🔬</span> 뒷받침 검증</div>'
+    valHtml = '<div style="margin-top:12px;margin-bottom:12px"><div style="font-weight:600;font-size:13px;margin-bottom:8px"><span class="ico" data-icon="search"></span> 뒷받침 검증</div>'
       +'<div class="opinion-val-summary"><div class="opinion-val-stat pass"><span class="ico" data-icon="check-circle"></span> 통과 '+(sm.pass||0)+'</div><div class="opinion-val-stat warn"><span class="ico" data-icon="warning"></span> 주의 '+(sm.warn||0)+'</div><div class="opinion-val-stat fail"><span class="ico" data-icon="x"></span> 실패 '+(sm.fail||0)+'</div></div>';
     if (v._spec_unverified) {
       valHtml += '<div style="margin-top:6px;font-size:11px;color:#663A00;background:var(--color-warning-light,#FEF4E6);padding:6px 8px;border-radius:6px"><span class="ico" data-icon="warning"></span> 명세서 원문 미제공 — LLM이 명세서 없이 검증한 결과. 변리사 수동 확인 필수.</div>';
@@ -2670,7 +2670,7 @@ Opinion.renderDraft=function(L,R,status){
 
   // 오른쪽: 검증 보고서 항목
   var items=v.elements||v.results||[];
-  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tf">🔬</span> 검증 보고서</div></div>'
+  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="ico" data-icon="search"></span> 검증 보고서</div></div>'
     +(items.length?items.map(function(e,i){
       var r=e.overall_result||e.result||'pass';
       var checks=e.checks||[];
@@ -3058,7 +3058,7 @@ Opinion.renderOpinion=function(L,R,status){
       headLine = '<span class="status-dot negative"></span> 의견서 생성 실패';
       helpLine = '예상치 못한 오류가 발생했습니다. 콘솔 로그를 확인 후 다시 시도하세요.';
     }
-    var btnRetry = '<button class="btn btn-primary" onclick="Opinion.retryDraft()" style="flex:1"><span class="tf">🔁</span> 다시 시도</button>';
+    var btnRetry = '<button class="btn btn-primary" onclick="Opinion.retryDraft()" style="flex:1"><span class="ico" data-icon="refresh"></span> 다시 시도</button>';
     var btnNoTpl = '<button class="btn btn-outline" onclick="Opinion.retryDraftWithoutTemplate()" style="flex:1"><span class="ico" data-icon="clipboard"></span> 양식 제거 후 다시 시도</button>';
     var btnForce = err.kind === 'contamination'
       ? '<button class="btn btn-outline" onclick="Opinion.forceDraftIgnoringContamination()" style="flex:1;color:#b45309;border-color:var(--dt-warning)"><span class="ico" data-icon="warning"></span> 양식 강제 적용 (검증 무시)</button>'
@@ -3193,7 +3193,7 @@ Opinion.renderOutput=function(L,R,status){
         + '<div style="line-height:1.9;color:var(--color-text-secondary)">' + content + '</div></div>';
     }).join('');
   } else {
-    opinionHtml = done?'<div style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:12px"><span class="tossface">🎉</span></div><h3 style="font-size:18px;font-weight:700;color:var(--color-success);margin-bottom:8px">의견서 대응 완료!</h3></div>':'<p style="color:var(--color-text-tertiary);text-align:center;padding:40px">의견서 미생성</p>';
+    opinionHtml = done?'<div style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:12px"><span class="ico" data-icon="check-circle"></span></div><h3 style="font-size:18px;font-weight:700;color:var(--color-success);margin-bottom:8px">의견서 대응 완료!</h3></div>':'<p style="color:var(--color-text-tertiary);text-align:center;padding:40px">의견서 미생성</p>';
   }
   R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="ico" data-icon="edit"></span> '+escapeHtml(o.title||'의견서')+' 미리보기</span></div><div class="opinion-preview-body">'+opinionHtml+'</div></div>';
 };
