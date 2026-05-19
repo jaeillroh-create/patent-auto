@@ -1535,7 +1535,7 @@ Docket.sendEmail = async function() {
   var html = Docket.generateEmailBodyHtml(data);
 
   var btn = document.getElementById('dkt-send-btn');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="tossface">⏳</span> 발송 중...'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="ico" data-icon="history"></span> 발송 중...'; }
 
   try {
     // Edge Function URL + anon key는 Docket.config에 하드코딩됨
@@ -1563,7 +1563,7 @@ Docket.sendEmail = async function() {
     });
     var result = await res.json();
     if (res.ok && result.success) {
-      App.showToast('✅ 사건등록이 ' + data.recipient + '으로 발송되었습니다', 'success');
+      App.showToast('<span class="ico" data-icon="check-circle"></span> 사건등록이 ' + data.recipient + '으로 발송되었습니다', 'success');
       Docket.closePreview();
     } else {
       throw new Error(result.error || '발송 실패');
@@ -1581,7 +1581,7 @@ Docket.sendEmail = async function() {
       window.open(gmailUrl, '_blank');
     }
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<span class="tossface">📧</span> 사건등록 발송'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<span class="ico" data-icon="mail"></span> 사건등록 발송'; }
   }
 };
 

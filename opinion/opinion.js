@@ -8,9 +8,9 @@ window.Opinion = window.Opinion || {};
 
 // ═══ Constants ═══
 Opinion.TYPES = {
-  inventive_step:         { code:'A', label:'진보성/신규성 위반',    icon:'⚖️', css:'type-a',       law:'§29①②' },
-  description_deficiency: { code:'B', label:'기재불비 위반',         icon:'📝', css:'type-b',       law:'§42② / §42④' },
-  partial_rejection:      { code:'C', label:'일부 청구항 거절',      icon:'📋', css:'type-c',       law:'§29 등' },
+  inventive_step:         { code:'A', label:'진보성/신규성 위반',    icon: '<span class="ico" data-icon="scales"></span>', css:'type-a',       law:'§29①②' },
+  description_deficiency: { code:'B', label:'기재불비 위반',         icon: '<span class="ico" data-icon="edit"></span>', css:'type-b',       law:'§42② / §42④' },
+  partial_rejection:      { code:'C', label:'일부 청구항 거절',      icon: '<span class="ico" data-icon="clipboard"></span>', css:'type-c',       law:'§29 등' },
   unsupported_type:       { code:'X', label:'수동 처리 필요',        icon:'⚠️', css:'type-unknown', law:'§32/§33/§36/§45 등' }
 };
 Opinion.STATUS = {
@@ -511,22 +511,22 @@ Opinion.updateTemplateStatus = function() {
   var invTpl = templates.inventive_step;
   if (invTpl) {
     h += '<div style="margin-bottom:8px;padding:6px 8px;background:#eff6ff;border-radius:6px;border-left:3px solid var(--color-primary)">'
-      +'<div style="font-size:11px;color:var(--color-primary);font-weight:600">⚖️ 진보성/신규성</div>'
+      +'<div style="font-size:11px;color:var(--color-primary);font-weight:600"><span class="ico" data-icon="scales"></span> 진보성/신규성</div>'
       +'<div style="font-size:10px;color:var(--color-text-tertiary)">'+escapeHtml(invTpl.name||'커스텀')+' ('+Math.round((invTpl.text||'').length/1000)+'K자)</div>'
-      +'<button class="btn btn-ghost btn-sm" onclick="Opinion.clearTemplate(\'inventive_step\')" style="font-size:10px;color:var(--color-error);padding:2px 6px;margin-top:2px">✕ 제거</button></div>';
+      +'<button class="btn btn-ghost btn-sm" onclick="Opinion.clearTemplate(\'inventive_step\')" style="font-size:10px;color:var(--color-error);padding:2px 6px;margin-top:2px"><span class="ico" data-icon="x"></span> 제거</button></div>';
   }
 
   // 기재불비 템플릿
   var defTpl = templates.description_deficiency;
   if (defTpl) {
     h += '<div style="margin-bottom:8px;padding:6px 8px;background:#fef3c7;border-radius:6px;border-left:3px solid var(--color-warning)">'
-      +'<div style="font-size:11px;color:#92400e;font-weight:600">📝 기재불비</div>'
+      +'<div style="font-size:11px;color:#92400e;font-weight:600"><span class="ico" data-icon="edit"></span> 기재불비</div>'
       +'<div style="font-size:10px;color:var(--color-text-tertiary)">'+escapeHtml(defTpl.name||'커스텀')+' ('+Math.round((defTpl.text||'').length/1000)+'K자)</div>'
-      +'<button class="btn btn-ghost btn-sm" onclick="Opinion.clearTemplate(\'description_deficiency\')" style="font-size:10px;color:var(--color-error);padding:2px 6px;margin-top:2px">✕ 제거</button></div>';
+      +'<button class="btn btn-ghost btn-sm" onclick="Opinion.clearTemplate(\'description_deficiency\')" style="font-size:10px;color:var(--color-error);padding:2px 6px;margin-top:2px"><span class="ico" data-icon="x"></span> 제거</button></div>';
   }
 
   if (!invTpl && !defTpl) {
-    h = '<span style="color:var(--color-primary)">📋 기본 양식 사용 중</span>'
+    h = '<span style="color:var(--color-primary)"><span class="ico" data-icon="clipboard"></span> 기본 양식 사용 중</span>'
       + '<br><span style="font-size:10px;color:var(--color-text-tertiary)">유형별 표준 구조가 자동 적용됩니다</span>';
   }
 
@@ -1005,7 +1005,7 @@ Opinion.renderNavBar = function(currentStepKey) {
   // 이전 단계 보기
   if(prevClickable) {
     h+='<button class="btn btn-ghost btn-sm" onclick="Opinion.goToStep(\''+prevStep.key+'\')" style="font-size:12px">'
-      +'<span class="tf">←</span> '+prevStep.label+'</button>';
+      +'<span class="ico" data-icon="arrow-left"></span> '+prevStep.label+'</button>';
   }
 
   // 현재 단계로 돌아가기 (과거 뷰일 때만)
@@ -1069,7 +1069,7 @@ Opinion.renderUpload = function(L,R){
   if(!Opinion.state.files) Opinion.state.files=[];
   // 기존 파일 유지 (재진입 시 초기화 방지)
 
-  L.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tf">📁</span> 파일 업로드</div></div>'
+  L.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="ico" data-icon="folder"></span> 파일 업로드</div></div>'
     +'<div class="opinion-upload-zone" id="opinionUploadZone" onclick="document.getElementById(\'opinionFileInput\').click()" ondragover="event.preventDefault();this.classList.add(\'dragover\')" ondragleave="this.classList.remove(\'dragover\')" ondrop="event.preventDefault();this.classList.remove(\'dragover\');Opinion.handleDrop(event)">'
     +'<div style="font-size:36px;margin-bottom:8px"><span class="tf">📎</span></div>'
     +'<div style="font-size:13px;color:var(--color-text-secondary)">클릭 또는 드래그하여 파일 업로드<br><span style="font-size:11px;color:var(--color-text-tertiary)">PDF, DOCX, TXT (HWP는 텍스트 복사 후 붙여넣기)</span></div></div>'
@@ -1078,29 +1078,29 @@ Opinion.renderUpload = function(L,R){
 
     // 수동 텍스트 입력 (PDF 인식 실패 시)
     +'<div style="margin-top:12px;border-top:1px solid var(--color-border);padding-top:12px">'
-    +'<details id="opinionManualInput"><summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--color-text-secondary)"><span class="tf">✏️</span> PDF 인식이 안 될 때: 직접 텍스트 붙여넣기</summary>'
+    +'<details id="opinionManualInput"><summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--color-text-secondary)"><span class="ico" data-icon="edit"></span> PDF 인식이 안 될 때: 직접 텍스트 붙여넣기</summary>'
     +'<div style="margin-top:8px">'
     +'<textarea class="textarea-field" id="opinionManualText" rows="8" placeholder="의견제출통지서, 명세서 등의 텍스트를 직접 붙여넣으세요.&#10;&#10;예: 특허출원 제10-2025-0128349호에 대하여 다음과 같이 의견제출통지합니다..." style="font-size:12px;line-height:1.6"></textarea>'
-    +'<p style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px">💡 PDF를 열어서 전체 선택(Ctrl+A) → 복사(Ctrl+C) → 여기 붙여넣기(Ctrl+V)</p>'
+    +'<p style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px"><span class="ico" data-icon="lightbulb"></span> PDF를 열어서 전체 선택(Ctrl+A) → 복사(Ctrl+C) → 여기 붙여넣기(Ctrl+V)</p>'
     +'</div></details></div>'
 
     +'</div>' // card 닫기
 
-    +'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">ℹ️</span> 필수 파일 (역할 지정 필수)</div></div>'
+    +'<div class="card"><div class="card-header"><div class="card-title"><span class="ico" data-icon="info"></span> 필수 파일 (역할 지정 필수)</div></div>'
     +'<div style="font-size:12px;line-height:1.7;color:var(--color-text-secondary)">'
-    +'<div style="margin-bottom:6px;padding:6px 10px;border-left:3px solid #ef4444;background:#fff5f5;border-radius:0 6px 6px 0"><b>📋 의견제출통지서</b> — 심사관이 보낸 통지서 (필수)</div>'
-    +'<div style="margin-bottom:6px;padding:6px 10px;border-left:3px solid #3182f6;background:#eff6ff;border-radius:0 6px 6px 0"><b>📑 출원 명세서</b> — 우리 특허 (본원발명) (필수)</div>'
-    +'<div style="margin-bottom:6px;padding:6px 10px;border-left:3px solid #f59e0b;background:#fffbeb;border-radius:0 6px 6px 0"><b>📄 인용발명</b> — 심사관이 인용한 선행기술 (다른 특허)</div>'
+    +'<div style="margin-bottom:6px;padding:6px 10px;border-left:3px solid #ef4444;background:#fff5f5;border-radius:0 6px 6px 0"><b><span class="ico" data-icon="clipboard"></span> 의견제출통지서</b> — 심사관이 보낸 통지서 (필수)</div>'
+    +'<div style="margin-bottom:6px;padding:6px 10px;border-left:3px solid #3182f6;background:#eff6ff;border-radius:0 6px 6px 0"><b><span class="ico" data-icon="doc"></span> 출원 명세서</b> — 우리 특허 (본원발명) (필수)</div>'
+    +'<div style="margin-bottom:6px;padding:6px 10px;border-left:3px solid #f59e0b;background:#fffbeb;border-radius:0 6px 6px 0"><b><span class="ico" data-icon="doc"></span> 인용발명</b> — 심사관이 인용한 선행기술 (다른 특허)</div>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--color-error);margin-top:8px;padding:8px;background:var(--color-error-light);border-radius:6px;line-height:1.5">'
     +'⚠️ <b>본원 명세서와 인용발명을 반드시 올바르게 지정해 주세요.</b> 잘못 지정하면 분석·의견서 전체가 틀어집니다.'
     +'</div></div>'
     +'<div id="opinionParseProgress" style="margin-top:8px"></div>'
-    +'<button class="btn btn-primary btn-full" id="btnOpinionParse" onclick="Opinion.startParsing()" disabled><span class="tf">🔍</span> 문서 파싱 시작</button>';
+    +'<button class="btn btn-primary btn-full" id="btnOpinionParse" onclick="Opinion.startParsing()" disabled><span class="ico" data-icon="search"></span> 문서 파싱 시작</button>';
 
-  R.innerHTML='<div class="card" style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:12px"><span class="tf">📋</span></div><h3 style="font-size:16px;font-weight:600;margin-bottom:8px">의견제출통지서를 업로드하세요</h3><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6;max-width:400px;margin:0 auto">통지서를 업로드하면 AI가 자동으로 거절이유를 분석하고,<br>보정 전략 → 청구항 초안 → 검증 → 의견서 생성까지 안내합니다.</p>'
+  R.innerHTML='<div class="card" style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:12px"><span class="ico" data-icon="clipboard"></span></div><h3 style="font-size:16px;font-weight:600;margin-bottom:8px">의견제출통지서를 업로드하세요</h3><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6;max-width:400px;margin:0 auto">통지서를 업로드하면 AI가 자동으로 거절이유를 분석하고,<br>보정 전략 → 청구항 초안 → 검증 → 의견서 생성까지 안내합니다.</p>'
     +'<div style="margin-top:20px;padding:14px;background:var(--color-bg-tertiary);border-radius:8px;text-align:left;font-size:12px;color:var(--color-text-secondary);line-height:1.6">'
-    +'<b>💡 팁:</b> PDF에서 텍스트가 추출되지 않으면(이미지 스캔본),<br>왼쪽 "직접 텍스트 붙여넣기"를 이용하세요.'
+    +'<b><span class="ico" data-icon="lightbulb"></span> 팁:</b> PDF에서 텍스트가 추출되지 않으면(이미지 스캔본),<br>왼쪽 "직접 텍스트 붙여넣기"를 이용하세요.'
     +'</div></div>';
 
   // 이미 파일이 있으면 렌더
@@ -1157,9 +1157,9 @@ Opinion.updateUsageDisplay = function() {
 
 // ═══ 파일 역할 상수 ═══
 Opinion.FILE_ROLES = {
-  notification: { label: '📋 의견제출통지서', color: '#ef4444' },
-  specification: { label: '📑 출원 명세서', color: '#3182f6' },
-  cited_ref: { label: '📄 인용발명', color: '#f59e0b' },
+  notification: { label: '<span class="ico" data-icon="clipboard"></span> 의견제출통지서', color: '#ef4444' },
+  specification: { label: '<span class="ico" data-icon="doc"></span> 출원 명세서', color: '#3182f6' },
+  cited_ref: { label: '<span class="ico" data-icon="doc"></span> 인용발명', color: '#f59e0b' },
   other: { label: '📎 기타', color: '#6b7684' }
 };
 
@@ -1195,13 +1195,13 @@ Opinion.renderFiles=function(){
     return '<div class="opinion-file-item" style="border-left:3px solid '+roleInfo.color+'">'
       +'<span class="file-name">'+escapeHtml(f.name)+'</span>'
       +'<select onchange="Opinion.setFileRole('+i+',this.value)" style="font-size:10px;padding:2px 4px;border:1px solid var(--color-border);border-radius:4px;background:#fff;color:var(--color-text-secondary)">'
-      +'<option value="notification"'+(role==='notification'?' selected':'')+'>📋 통지서</option>'
-      +'<option value="specification"'+(role==='specification'?' selected':'')+'>📑 명세서</option>'
-      +'<option value="cited_ref"'+(role==='cited_ref'?' selected':'')+'>📄 인용발명</option>'
+      +'<option value="notification"'+(role==='notification'?' selected':'')+'><span class="ico" data-icon="clipboard"></span> 통지서</option>'
+      +'<option value="specification"'+(role==='specification'?' selected':'')+'><span class="ico" data-icon="doc"></span> 명세서</option>'
+      +'<option value="cited_ref"'+(role==='cited_ref'?' selected':'')+'><span class="ico" data-icon="doc"></span> 인용발명</option>'
       +'<option value="other"'+(role==='other'?' selected':'')+'>📎 기타</option>'
       +'</select>'
       +'<span class="file-type">'+ext+' · '+sz+'</span>'
-      +'<button class="file-remove" onclick="Opinion.removeFile('+i+')">✕</button></div>';
+      +'<button class="file-remove" onclick="Opinion.removeFile('+i+')"><span class="ico" data-icon="x"></span></button></div>';
   }).join('');
 };
 
@@ -1378,8 +1378,8 @@ Opinion.startParsing = async function(){
 // 7. 유형 판별 (Phase 2)
 // ═══════════════════════════════════════════
 Opinion.renderParsed = function(L,R){
-  L.innerHTML=Opinion.renderNavBar('parse')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">✅</span> 파싱 완료</div></div><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">문서 파싱이 완료되었습니다.<br>결과를 확인한 후 유형을 판별합니다.</p><button class="btn btn-primary btn-full" id="btnOpinionType" onclick="Opinion.determineType()" style="margin-top:12px"><span class="tf">🔍</span> 유형 판별 시작</button></div>';
-  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tf">📋</span> 파싱 결과</div></div><div id="opinionParsedContent" style="font-size:13px;color:var(--color-text-secondary);padding:4px 0">로딩 중...</div></div>';
+  L.innerHTML=Opinion.renderNavBar('parse')+'<div class="card"><div class="card-header"><div class="card-title"><span class="ico" data-icon="check-circle"></span> 파싱 완료</div></div><p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">문서 파싱이 완료되었습니다.<br>결과를 확인한 후 유형을 판별합니다.</p><button class="btn btn-primary btn-full" id="btnOpinionType" onclick="Opinion.determineType()" style="margin-top:12px"><span class="ico" data-icon="search"></span> 유형 판별 시작</button></div>';
+  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="ico" data-icon="clipboard"></span> 파싱 결과</div></div><div id="opinionParsedContent" style="font-size:13px;color:var(--color-text-secondary);padding:4px 0">로딩 중...</div></div>';
   Opinion.loadParsed();
 };
 Opinion.loadParsed = async function(){
@@ -1394,7 +1394,7 @@ Opinion.loadParsed = async function(){
 Opinion.renderParsedUI = function(el, pd) {
   if(pd.raw_text && !pd.application_no) {
     // LLM이 구조화 실패 → raw_text만 있는 경우
-    el.innerHTML='<div style="padding:12px;background:var(--color-warning-light);border-radius:8px;border-left:3px solid var(--color-warning);margin-bottom:12px"><div style="font-weight:600;font-size:12px;color:#92400e;margin-bottom:4px">⚠️ 자동 구조화에 실패했습니다</div><div style="font-size:12px;color:#92400e">PDF 내용이 이미지 스캔본이거나 형식이 비표준일 수 있습니다. 유형 판별은 원문 기준으로 진행됩니다.</div></div>'
+    el.innerHTML='<div style="padding:12px;background:var(--color-warning-light);border-radius:8px;border-left:3px solid var(--color-warning);margin-bottom:12px"><div style="font-weight:600;font-size:12px;color:var(--dt-warning);margin-bottom:4px"><span class="ico" data-icon="warning" data-size="14"></span> 자동 구조화에 실패했습니다</div><div style="font-size:12px;color:var(--dt-warning)">PDF 내용이 이미지 스캔본이거나 형식이 비표준일 수 있습니다. 유형 판별은 원문 기준으로 진행됩니다.</div></div>'
       +'<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--color-text-secondary)">원문 텍스트 보기</summary>'
       +'<pre style="white-space:pre-wrap;font-size:11px;background:var(--color-bg-tertiary);padding:12px;border-radius:8px;max-height:300px;overflow-y:auto;margin-top:8px">'+escapeHtml(pd.raw_text.slice(0,3000))+'</pre></details>';
     return;
@@ -1413,7 +1413,7 @@ Opinion.renderParsedUI = function(el, pd) {
 
   // 거절이유
   if(pd.rejection_reasons&&pd.rejection_reasons.length) {
-    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tf">⚠️</span> 거절이유</div>';
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="ico" data-icon="warning"></span> 거절이유</div>';
     pd.rejection_reasons.forEach(function(rr) {
       h+='<div style="padding:10px 14px;border:1px solid var(--color-border);border-radius:8px;margin-bottom:6px;background:#fff">'
         +'<div style="font-size:13px;font-weight:600;color:var(--color-error)">'+escapeHtml(rr.article||'')+'<span style="font-weight:400;color:var(--color-text-secondary);margin-left:8px">'+escapeHtml(rr.reason||'')+'</span></div>'
@@ -1426,7 +1426,7 @@ Opinion.renderParsedUI = function(el, pd) {
 
   // 인용문헌
   if(pd.cited_references&&pd.cited_references.length) {
-    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tf">📄</span> 인용문헌</div>';
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="ico" data-icon="doc"></span> 인용문헌</div>';
     pd.cited_references.forEach(function(ref) {
       h+='<div style="padding:8px 12px;background:var(--color-bg-tertiary);border-radius:6px;margin-bottom:4px;font-size:12px">'
         +'<span style="font-weight:600">'+escapeHtml('인용문헌 '+(ref.ref_no||''))+'</span> '
@@ -1438,7 +1438,7 @@ Opinion.renderParsedUI = function(el, pd) {
 
   // 청구항
   if(pd.claims&&pd.claims.length) {
-    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tf">📑</span> 청구항 ('+pd.claims.length+'개)</div>';
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="ico" data-icon="doc"></span> 청구항 ('+pd.claims.length+'개)</div>';
     h+='<details><summary style="cursor:pointer;font-size:12px;color:var(--color-primary);font-weight:500">청구항 펼치기</summary><div style="margin-top:8px">';
     pd.claims.forEach(function(c) {
       h+='<div style="padding:8px 12px;border-left:3px solid var(--color-primary-light);margin-bottom:6px;font-size:12px;line-height:1.6;background:var(--color-bg-tertiary);border-radius:0 6px 6px 0">'
@@ -1451,7 +1451,7 @@ Opinion.renderParsedUI = function(el, pd) {
 
   // 대비표
   if(pd.comparison_table&&pd.comparison_table.length) {
-    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="tf">⚖️</span> 구성요소 대비표</div>';
+    h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="ico" data-icon="scales"></span> 구성요소 대비표</div>';
     h+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--color-bg-tertiary)"><th style="padding:8px;text-align:left;border-bottom:1px solid var(--color-border)">구성요소</th><th style="padding:8px;text-align:left;border-bottom:1px solid var(--color-border)">본원</th><th style="padding:8px;text-align:left;border-bottom:1px solid var(--color-border)">인용발명</th></tr></thead><tbody>';
     pd.comparison_table.forEach(function(row) {
       h+='<tr><td style="padding:6px 8px;border-bottom:1px solid var(--color-divider);font-weight:600">❶ '+(row.element_no||'')+'</td>'
@@ -1574,16 +1574,16 @@ Opinion.renderTypeView = function(L,R){
 
   // ── unsupported_type 전용 안내 화면 ──
   if (p.rejection_type === 'unsupported_type') {
-    L.innerHTML = Opinion.renderNavBar('type')+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">⚠️</span> 수동 처리 필요</div></div>'
+    L.innerHTML = Opinion.renderNavBar('type')+'<div class="card"><div class="card-header"><div class="card-title"><span class="ico" data-icon="warning"></span> 수동 처리 필요</div></div>'
       +'<div style="padding:16px">'
       +'<div style="color:var(--color-error);font-weight:600;font-size:14px;margin-bottom:10px">본 거절이유는 현재 자동 처리를 지원하지 않습니다.</div>'
       +'<p style="font-size:13px;color:var(--color-text-secondary);line-height:1.7;margin-bottom:12px">§32(불특허발명) / §33(무권리자) / §36(선출원) / §45(단일성) 등 특수 거절이유는 사건별 개별 판단이 필요합니다.<br>변리사가 직접 의견서를 작성하시거나, 아래에서 유사 유형을 수동 선택하여 참고용으로 진행하실 수 있습니다.</p>'
       +(tr.reasoning?'<div style="font-size:12px;background:var(--color-bg-tertiary);padding:10px;border-radius:8px;margin-bottom:16px;line-height:1.6">'+escapeHtml(tr.reasoning)+'</div>':'')
       +'<div style="font-size:13px;font-weight:600;margin-bottom:8px">유형 수동 선택 (참고용)</div>'
       +'<div class="opinion-type-selector">'
-      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'inventive_step\')">⚖️ A. 진보성</div>'
-      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'description_deficiency\')">📝 B. 기재불비</div>'
-      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'partial_rejection\')">📋 C. 일부거절</div>'
+      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'inventive_step\')"><span class="ico" data-icon="scales"></span> A. 진보성</div>'
+      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'description_deficiency\')"><span class="ico" data-icon="edit"></span> B. 기재불비</div>'
+      +'<div class="opinion-type-option" onclick="Opinion.selectType(this,\'partial_rejection\')"><span class="ico" data-icon="clipboard"></span> C. 일부거절</div>'
       +'</div><button class="btn btn-primary btn-full" style="margin-top:10px" onclick="Opinion.confirmType()">선택한 유형으로 진행</button>'
       +'</div></div>';
     R.innerHTML = '';
@@ -1627,26 +1627,26 @@ Opinion.renderTypeView = function(L,R){
     var modeLabel = (secType === 'unsupported_type')
       ? '주 거절 경로로 진행 중'
       : '두 거절이유 통합 처리 중 (§'+escapeHtml(priInfo.code||'')+' + §'+escapeHtml(secInfo.code||'')+')';
-    secondaryBannerHtml = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534">✅ 혼합 거절 안내 확인 완료 — '+modeLabel+'</div>';
+    secondaryBannerHtml = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534"><span class="ico" data-icon="check-circle"></span> 혼합 거절 안내 확인 완료 — '+modeLabel+'</div>';
   }
 
-  L.innerHTML=Opinion.renderNavBar('type')+secondaryBannerHtml+'<div class="card"><div class="card-header"><div class="card-title"><span class="tf">🔍</span> 유형 판별 결과</div></div>'
+  L.innerHTML=Opinion.renderNavBar('type')+secondaryBannerHtml+'<div class="card"><div class="card-header"><div class="card-title"><span class="ico" data-icon="search"></span> 유형 판별 결과</div></div>'
     +'<div class="opinion-type-result"><div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:8px">AI 분석 결과</div>'
     +'<div class="opinion-type-determined '+t.css+'">'+t.icon+' '+t.code+'. '+t.label+'</div>'
     +'<div style="font-size:12px;color:var(--color-text-tertiary)">신뢰도: '+conf+'% <div class="opinion-confidence-bar"><div class="opinion-confidence-fill" style="width:'+conf+'%"></div></div></div>'
     +(tr.reasoning?'<p style="font-size:12px;color:var(--color-text-secondary);text-align:left;line-height:1.6;margin-top:12px;padding:10px;background:var(--color-bg-tertiary);border-radius:8px">'+escapeHtml(tr.reasoning)+'</p>':'')
     +'</div><div style="margin-top:16px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">이 판별이 맞습니까?</div>'
-    +'<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="Opinion.confirmType()"><span class="tf">✅</span> 맞습니다</button><button class="btn btn-outline" style="flex:1" onclick="document.getElementById(\'opinionTypeOverride\').style.display=\'block\'"><span class="tf">✏️</span> 유형 변경</button></div>'
+    +'<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="Opinion.confirmType()"><span class="ico" data-icon="check-circle"></span> 맞습니다</button><button class="btn btn-outline" style="flex:1" onclick="document.getElementById(\'opinionTypeOverride\').style.display=\'block\'"><span class="ico" data-icon="edit"></span> 유형 변경</button></div>'
     +'<div id="opinionTypeOverride" style="'+(autoOpen?'':'display:none;')+'margin-top:12px">'
     +(autoOpen?'<div style="color:var(--color-error);font-size:12px;font-weight:600;padding:8px;background:var(--color-error-bg,#fef2f2);border-radius:6px;margin-bottom:8px">⚠️ AI가 유형을 자동 판별하지 못했습니다. 직접 선택해 주세요.</div>':'')
     +'<div class="opinion-type-selector">'
-    +'<div class="opinion-type-option'+(p.rejection_type==='inventive_step'?' selected':'')+'" onclick="Opinion.selectType(this,\'inventive_step\')">⚖️ A. 진보성</div>'
-    +'<div class="opinion-type-option'+(p.rejection_type==='description_deficiency'?' selected':'')+'" onclick="Opinion.selectType(this,\'description_deficiency\')">📝 B. 기재불비</div>'
-    +'<div class="opinion-type-option'+(p.rejection_type==='partial_rejection'?' selected':'')+'" onclick="Opinion.selectType(this,\'partial_rejection\')">📋 C. 일부거절</div>'
+    +'<div class="opinion-type-option'+(p.rejection_type==='inventive_step'?' selected':'')+'" onclick="Opinion.selectType(this,\'inventive_step\')"><span class="ico" data-icon="scales"></span> A. 진보성</div>'
+    +'<div class="opinion-type-option'+(p.rejection_type==='description_deficiency'?' selected':'')+'" onclick="Opinion.selectType(this,\'description_deficiency\')"><span class="ico" data-icon="edit"></span> B. 기재불비</div>'
+    +'<div class="opinion-type-option'+(p.rejection_type==='partial_rejection'?' selected':'')+'" onclick="Opinion.selectType(this,\'partial_rejection\')"><span class="ico" data-icon="clipboard"></span> C. 일부거절</div>'
     +'</div><button class="btn btn-primary btn-full" style="margin-top:10px" onclick="Opinion.confirmType()">변경 후 진행</button></div></div></div>';
 
   var cs=tr.claim_summary||{}, tot=cs.total_claims||0, rej=cs.rejected_claims||[], alw=cs.no_rejection_claims||[];
-  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="tf">📊</span> 청구항별 현황</div></div>'
+  R.innerHTML='<div class="card"><div class="card-header"><div class="card-title"><span class="ico" data-icon="chart"></span> 청구항별 현황</div></div>'
     +(tot>0?Array.from({length:tot},function(_,i){var n=i+1,isR=rej.indexOf(n)>=0,isA=alw.indexOf(n)>=0;return '<div class="opinion-claim-row '+(isA?'allowable':isR?'rejected':'')+'"><span class="claim-no">청구항 '+n+'</span><span>'+(isA?'✅':isR?'❌':'⬜')+'</span><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">'+(isA?'등록가능 후보':isR?'거절':'미확인')+'</span></div>';}).join(''):'<p style="padding:20px;text-align:center;color:var(--color-text-tertiary)">청구항 정보 없음</p>')+'</div>';
 };
 Opinion.selectType=function(el,type){document.querySelectorAll('.opinion-type-option').forEach(function(o){o.classList.remove('selected');});el.classList.add('selected');Opinion.state.current.rejection_type=type;};
@@ -1683,7 +1683,7 @@ Opinion.acknowledgeMixed = async function() {
     var modeLabel = isSecUnsupported
       ? '주 거절 경로로 진행 중'
       : '두 거절이유 통합 처리 중 (§'+(priInfo.code||'')+' + §'+(secInfo.code||'')+')';
-    banner.outerHTML = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534">✅ 혼합 거절 안내 확인 완료 — '+modeLabel+'</div>';
+    banner.outerHTML = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#166534"><span class="ico" data-icon="check-circle"></span> 혼합 거절 안내 확인 완료 — '+modeLabel+'</div>';
   }
 };
 
@@ -1915,17 +1915,17 @@ Opinion.showRevisionModal = function(gateNo, callback) {
   modal.className = 'modal-overlay';
   modal.style.display = 'flex';
   modal.innerHTML = '<div class="modal-content" style="max-width:500px;padding:24px">'
-    +'<div class="modal-title" style="font-size:16px;margin-bottom:4px"><span class="tf">✏️</span> Gate '+gateNo+' 수정 요청</div>'
+    +'<div class="modal-title" style="font-size:16px;margin-bottom:4px"><span class="ico" data-icon="edit"></span> Gate '+gateNo+' 수정 요청</div>'
     +'<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:16px">수정이 필요한 부분을 구체적으로 작성해 주세요. AI가 이 지시에 따라 해당 단계를 재실행합니다.</p>'
     +'<textarea id="opinionRevisionText" class="textarea-field" rows="5" placeholder="예: 구성요소 ❸의 차이점 논증을 더 강화해 주세요. 【0088】의 구체적 예시를 인용하세요." style="font-size:13px;line-height:1.6"></textarea>'
     +'<div style="display:flex;gap:12px;margin-top:4px;font-size:11px;color:var(--color-text-tertiary);flex-wrap:wrap">'
-    +'<span onclick="document.getElementById(\'opinionRevisionText\').value+=\'논증을 더 강화해 주세요. \'" style="cursor:pointer;padding:2px 8px;background:var(--color-bg-tertiary);border-radius:10px">💡 논증 강화</span>'
-    +'<span onclick="document.getElementById(\'opinionRevisionText\').value+=\'명세서 단락을 더 구체적으로 인용해 주세요. \'" style="cursor:pointer;padding:2px 8px;background:var(--color-bg-tertiary);border-radius:10px">💡 단락 인용</span>'
-    +'<span onclick="document.getElementById(\'opinionRevisionText\').value+=\'권리범위를 더 넓게 유지해 주세요. \'" style="cursor:pointer;padding:2px 8px;background:var(--color-bg-tertiary);border-radius:10px">💡 범위 확대</span>'
+    +'<span onclick="document.getElementById(\'opinionRevisionText\').value+=\'논증을 더 강화해 주세요. \'" style="cursor:pointer;padding:2px 8px;background:var(--color-bg-tertiary);border-radius:10px"><span class="ico" data-icon="lightbulb"></span> 논증 강화</span>'
+    +'<span onclick="document.getElementById(\'opinionRevisionText\').value+=\'명세서 단락을 더 구체적으로 인용해 주세요. \'" style="cursor:pointer;padding:2px 8px;background:var(--color-bg-tertiary);border-radius:10px"><span class="ico" data-icon="lightbulb"></span> 단락 인용</span>'
+    +'<span onclick="document.getElementById(\'opinionRevisionText\').value+=\'권리범위를 더 넓게 유지해 주세요. \'" style="cursor:pointer;padding:2px 8px;background:var(--color-bg-tertiary);border-radius:10px"><span class="ico" data-icon="lightbulb"></span> 범위 확대</span>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:16px">'
     +'<button class="btn btn-ghost" style="flex:1;padding:10px" onclick="document.getElementById(\'opinionRevisionModal\').remove()">취소</button>'
-    +'<button class="btn btn-primary" style="flex:1;padding:10px" id="btnRevisionSubmit"><span class="tf">✏️</span> 수정 요청</button>'
+    +'<button class="btn btn-primary" style="flex:1;padding:10px" id="btnRevisionSubmit"><span class="ico" data-icon="edit"></span> 수정 요청</button>'
     +'</div></div>';
   document.body.appendChild(modal);
 
@@ -1984,10 +1984,10 @@ Opinion.renderStrategy = function(L,R,status){
   }
 
   L.innerHTML=Opinion.renderNavBar('strategy')
-    +'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">⚖️</span> 쟁점 분석 + '+gLabel+'</div>'
+    +'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="ico" data-icon="scales"></span> 쟁점 분석 + '+gLabel+'</div>'
     +'<p style="font-size:13px;color:var(--color-text-secondary)">심사관과 변리사의 토론 결과를 검토하고 전략을 확정해 주세요.</p>'
     +stratHtml
-    +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.backToList()">나중에</button><button class="btn btn-primary" id="btnGate1Approve" onclick="Opinion.approveGate(1)"><span class="tf">✅</span> 확정</button></div></div>';
+    +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.backToList()">나중에</button><button class="btn btn-primary" id="btnGate1Approve" onclick="Opinion.approveGate(1)"><span class="ico" data-icon="check-circle"></span> 확정</button></div></div>';
 
   // 오른쪽: 토론 내용 + 분석 결과
   var discussionHtml = '';
@@ -2002,13 +2002,13 @@ Opinion.renderStrategy = function(L,R,status){
     var secKey4 = Opinion.state._mixed_secondary || '';
     var secInfo4 = Opinion.TYPES[secKey4] || {};
     secondaryCardHtml = '<div class="opinion-analysis-card-secondary" style="margin-top:12px;border-left:4px solid #f59e0b;background:#fffbeb;border-radius:8px;padding:14px">'
-      +'<div style="font-weight:700;font-size:13px;color:#92400e;margin-bottom:8px">📋 부 거절이유 분석 — §'+escapeHtml(secInfo4.code||'')+' '+escapeHtml(secInfo4.label||'')+'</div>'
+      +'<div style="font-weight:700;font-size:13px;color:#92400e;margin-bottom:8px"><span class="ico" data-icon="clipboard"></span> 부 거절이유 분석 — §'+escapeHtml(secInfo4.code||'')+' '+escapeHtml(secInfo4.label||'')+'</div>'
       +(secAnaData.items && secAnaData.items.length
         ? secAnaData.items.map(function(it) {
             return '<div style="padding:8px;border:1px solid #fcd34d;border-radius:6px;margin-bottom:6px;background:#fef9c3">'
               +'<div style="font-size:12px;font-weight:600">청구항 '+(it.claim_no||'?')+'</div>'
               +'<div style="font-size:12px;color:#78350f;margin-top:3px">'+escapeHtml(it.examiner_comment||it.reason||'')+'</div>'
-              +(it.suggested_correction?'<div style="font-size:11px;margin-top:4px;color:#451a03">→ '+escapeHtml(it.suggested_correction)+'</div>':'')
+              +(it.suggested_correction?'<div style="font-size:11px;margin-top:4px;color:#451a03"><span class="ico" data-icon="arrow-right"></span> '+escapeHtml(it.suggested_correction)+'</div>':'')
               +'</div>';
           }).join('')
         : '<div style="font-size:12px;color:#78350f">'+escapeHtml(JSON.stringify(secAnaData).slice(0,300))+'</div>')
@@ -2046,7 +2046,7 @@ Opinion.highlightStrategyElements = function(strategyIndex) {
 // 분석 결과 구조화 렌더링
 Opinion.renderAnalysisUI = function(type, a, extracted) {
   if (!extracted) extracted = Opinion.extractAnalysisFields(a);
-  var h = '<div class="card"><div class="card-header"><div class="card-title"><span class="tf">📊</span> 분석 결과</div></div>';
+  var h = '<div class="card"><div class="card-header"><div class="card-title"><span class="ico" data-icon="chart"></span> 분석 결과</div></div>';
   var hasContent = false;
 
   if (type === 'inventive_step') {
@@ -2075,7 +2075,7 @@ Opinion.renderAnalysisUI = function(type, a, extracted) {
         if (diff)
           h += '<div style="font-size:12px;padding:8px 10px;background:var(--color-success-light);border-radius:6px;margin-bottom:6px;border-left:3px solid var(--color-success)"><b style="color:#065f46">★ 차이점:</b> '+escapeHtml(diff)+'</div>';
         if (arg)
-          h += '<div style="font-size:11px;color:var(--color-primary);line-height:1.5">💡 '+escapeHtml(arg)+'</div>';
+          h += '<div style="font-size:11px;color:var(--color-primary);line-height:1.5"><span class="ico" data-icon="lightbulb"></span> '+escapeHtml(arg)+'</div>';
         h += '</div>';
       });
       h += '</div>';
@@ -2125,15 +2125,15 @@ Opinion.renderAnalysisUI = function(type, a, extracted) {
     if (rej.length || alw.length) {
       hasContent = true;
       h += '<div style="margin-bottom:12px"><div style="font-weight:600;font-size:13px;margin-bottom:10px">청구항 현황</div>';
-      rej.forEach(function(r) { h += '<div class="opinion-claim-row rejected"><span class="claim-no">청구항 '+r.claim_no+'</span><span>❌</span><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">'+escapeHtml(r.reason||'거절')+'</span></div>'; });
-      alw.forEach(function(a) { h += '<div class="opinion-claim-row allowable"><span class="claim-no">청구항 '+a.claim_no+'</span><span>✅</span><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">'+escapeHtml(a.basis||'등록가능')+'</span></div>'; });
+      rej.forEach(function(r) { h += '<div class="opinion-claim-row rejected"><span class="claim-no">청구항 '+r.claim_no+'</span><span><span class="ico" data-icon="x"></span></span><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">'+escapeHtml(r.reason||'거절')+'</span></div>'; });
+      alw.forEach(function(a) { h += '<div class="opinion-claim-row allowable"><span class="claim-no">청구항 '+a.claim_no+'</span><span><span class="ico" data-icon="check-circle"></span></span><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">'+escapeHtml(a.basis||'등록가능')+'</span></div>'; });
       h += '</div>';
     }
     if (a.merge_suggestion) {
       hasContent = true;
       var mg = a.merge_suggestion;
       h += '<div style="padding:14px;background:var(--color-primary-light);border-radius:8px;border-left:3px solid var(--color-primary)">'
-        +'<div style="font-weight:600;font-size:13px;color:var(--color-primary);margin-bottom:6px">💡 병합 제안</div>'
+        +'<div style="font-weight:600;font-size:13px;color:var(--color-primary);margin-bottom:6px"><span class="ico" data-icon="lightbulb"></span> 병합 제안</div>'
         +'<div style="font-size:12px;line-height:1.6">청구항 '+(mg.source||'?')+' → 청구항 '+(mg.target||'?')+' 병합</div>'
         +(mg.rationale?'<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px">'+escapeHtml(mg.rationale)+'</div>':'')
         +'</div>';
@@ -2145,7 +2145,7 @@ Opinion.renderAnalysisUI = function(type, a, extracted) {
     h += '<div style="padding:16px;background:var(--color-warning-light);border-radius:8px;margin-bottom:12px;border-left:3px solid var(--color-warning)">'
       +'<div style="font-weight:600;font-size:12px;color:#92400e;margin-bottom:6px">⚠️ 분석 결과를 구조화하지 못했습니다</div>'
       +'<div style="font-size:12px;color:#92400e;line-height:1.5">AI가 서술형으로 응답했습니다. 재분석하면 구조화된 결과를 얻을 수 있습니다.</div>'
-      +'<button class="btn btn-outline btn-sm" onclick="Opinion.retryAnalysis()" style="margin-top:8px;font-size:12px"><span class="tf">🔄</span> 재분석</button>'
+      +'<button class="btn btn-outline btn-sm" onclick="Opinion.retryAnalysis()" style="margin-top:8px;font-size:12px"><span class="ico" data-icon="refresh"></span> 재분석</button>'
       +'</div>';
     h += '<details><summary style="cursor:pointer;font-size:12px;font-weight:500;color:var(--color-text-secondary)">원본 데이터 보기</summary>'
       +'<pre style="white-space:pre-wrap;word-break:break-all;font-size:11px;background:var(--color-bg-tertiary);padding:12px;border-radius:8px;max-height:400px;overflow-y:auto;margin-top:8px;line-height:1.5">'
@@ -2647,7 +2647,7 @@ Opinion.renderDraft=function(L,R,status){
       +'</div>';
   } else if (sbc && sbc.ok === null) {
     specBasisHtml = '<div style="margin-top:12px;padding:10px;background:var(--color-warning-light,#fef3c7);border-radius:8px;border-left:3px solid var(--color-warning,#f59e0b)">'
-      +'<div style="font-size:12px;color:#92400e;font-weight:600">📄 명세서 원문 미제공 — spec_basis 검증 skip</div>'
+      +'<div style="font-size:12px;color:#92400e;font-weight:600"><span class="ico" data-icon="doc"></span> 명세서 원문 미제공 — spec_basis 검증 skip</div>'
       +'<p style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">명세서 파일을 업로드하시면 보정 근거 단락이 자동 검증됩니다.</p>'
       +'</div>';
   }
@@ -2655,17 +2655,17 @@ Opinion.renderDraft=function(L,R,status){
   var valHtml = '';
   if (ready && sm.total) {
     valHtml = '<div style="margin-top:12px;margin-bottom:12px"><div style="font-weight:600;font-size:13px;margin-bottom:8px"><span class="tossface">🔬</span> 뒷받침 검증</div>'
-      +'<div class="opinion-val-summary"><div class="opinion-val-stat pass">✅ 통과 '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ 주의 '+(sm.warn||0)+'</div><div class="opinion-val-stat fail">❌ 실패 '+(sm.fail||0)+'</div></div>';
+      +'<div class="opinion-val-summary"><div class="opinion-val-stat pass"><span class="ico" data-icon="check-circle"></span> 통과 '+(sm.pass||0)+'</div><div class="opinion-val-stat warn">⚠️ 주의 '+(sm.warn||0)+'</div><div class="opinion-val-stat fail"><span class="ico" data-icon="x"></span> 실패 '+(sm.fail||0)+'</div></div>';
     if (v._spec_unverified) {
       valHtml += '<div style="margin-top:6px;font-size:11px;color:#92400e;background:var(--color-warning-light,#fef3c7);padding:6px 8px;border-radius:6px">⚠️ 명세서 원문 미제공 — LLM이 명세서 없이 검증한 결과. 변리사 수동 확인 필수.</div>';
     }
     valHtml += '</div>';
   }
 
-  L.innerHTML=nav+'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">📝</span> 청구항 보정 + 검증</div>'
+  L.innerHTML=nav+'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="ico" data-icon="edit"></span> 청구항 보정 + 검증</div>'
     +'<p style="font-size:13px;color:var(--color-text-secondary)">심사관과 변리사가 보정안을 검토하고 뒷받침 검증까지 완료했습니다.</p>'
     +specBasisHtml+discussionHtml+valHtml
-    +(ready?'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(2)"><span class="tossface">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate2Approve" onclick="Opinion.approveGate(2)"><span class="tossface">✅</span> 확정</button></div>':'')
+    +(ready?'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(2)"><span class="ico" data-icon="edit"></span> 수정</button><button class="btn btn-primary" id="btnGate2Approve" onclick="Opinion.approveGate(2)"><span class="ico" data-icon="check-circle"></span> 확정</button></div>':'')
     +'</div>';
 
   // 오른쪽: 검증 보고서 항목
@@ -2678,7 +2678,7 @@ Opinion.renderDraft=function(L,R,status){
         +'<div class="opinion-val-item-header">'
         +'<div class="el-no">'+(e.element_no||(i+1))+'</div>'
         +'<div class="el-label" style="line-height:1.5">'+escapeHtml(e.element_text||e.detail||'항목 '+(i+1))+'</div>'
-        +'<div class="el-result">'+(r==='pass'?'✅ 통과':r==='warn'?'⚠️ 주의':'❌ 실패')+'</div>'
+        +'<div class="el-result">'+(r==='pass'?'<span class="ico" data-icon="check-circle"></span> 통과':r==='warn'?'⚠️ 주의':'<span class="ico" data-icon="x"></span> 실패')+'</div>'
         +'</div>'
         +'<div class="opinion-val-item-body">'
         +(checks.length?checks.map(function(c){
@@ -3049,23 +3049,23 @@ Opinion.renderOpinion=function(L,R,status){
     var err = Opinion.state.draftError;
     var headLine, helpLine;
     if (err.kind === 'contamination') {
-      headLine = '🔴 양식의 다른 사건 정보가 출력에 포함됨';
+      headLine = '<span class="status-dot negative"></span> 양식의 다른 사건 정보가 출력에 포함됨';
       helpLine = '양식을 점검하거나 양식 없이 다시 시도하세요. 콘솔 로그에서 어떤 forbiddenSpan이 매치되었는지 확인할 수 있습니다.';
     } else if (err.kind === 'db') {
-      headLine = '🔴 초안 저장 실패';
+      headLine = '<span class="status-dot negative"></span> 초안 저장 실패';
       helpLine = '데이터베이스 INSERT가 거부되었습니다. 콘솔 로그의 details/hint/code를 확인 후 다시 시도하세요.';
     } else {
-      headLine = '🔴 의견서 생성 실패';
+      headLine = '<span class="status-dot negative"></span> 의견서 생성 실패';
       helpLine = '예상치 못한 오류가 발생했습니다. 콘솔 로그를 확인 후 다시 시도하세요.';
     }
     var btnRetry = '<button class="btn btn-primary" onclick="Opinion.retryDraft()" style="flex:1"><span class="tf">🔁</span> 다시 시도</button>';
-    var btnNoTpl = '<button class="btn btn-outline" onclick="Opinion.retryDraftWithoutTemplate()" style="flex:1"><span class="tf">📋</span> 양식 제거 후 다시 시도</button>';
+    var btnNoTpl = '<button class="btn btn-outline" onclick="Opinion.retryDraftWithoutTemplate()" style="flex:1"><span class="ico" data-icon="clipboard"></span> 양식 제거 후 다시 시도</button>';
     var btnForce = err.kind === 'contamination'
-      ? '<button class="btn btn-outline" onclick="Opinion.forceDraftIgnoringContamination()" style="flex:1;color:#b45309;border-color:#f59e0b"><span class="tf">⚠️</span> 양식 강제 적용 (검증 무시)</button>'
+      ? '<button class="btn btn-outline" onclick="Opinion.forceDraftIgnoringContamination()" style="flex:1;color:#b45309;border-color:#f59e0b"><span class="ico" data-icon="warning"></span> 양식 강제 적용 (검증 무시)</button>'
       : '';
     L.innerHTML = nav
       + '<div class="opinion-gate-card" style="border-color:var(--color-error);background:linear-gradient(135deg,#fef2f2 0%,#fff 100%)">'
-      + '<div class="opinion-gate-title" style="color:var(--color-error)"><span class="tossface">⚠️</span> ' + headLine + '</div>'
+      + '<div class="opinion-gate-title" style="color:var(--color-error)"><span class="ico" data-icon="warning"></span> ' + headLine + '</div>'
       + '<div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:8px">' + escapeHtml(err.message || '') + '</div>'
       + '<div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:14px">' + helpLine + '</div>'
       + '<div class="opinion-gate-actions" style="flex-wrap:wrap;gap:8px">' + btnRetry + btnNoTpl + btnForce + '</div>'
@@ -3085,7 +3085,7 @@ Opinion.renderOpinion=function(L,R,status){
   // low severity는 UI 미표시 (KOREAN_PATENT_BOILERPLATE 정형 문구 — 정상)
   if (highWarns.length > 0) {
     contamHtml += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:8px;border-left:3px solid var(--color-error)">'
-      +'<div style="font-weight:600;font-size:12px;color:var(--color-error);margin-bottom:6px">🔴 다른 사건 정보 혼입 의심 ('+highWarns.length+'건) — 변리사 직접 확인 필수</div>'
+      +'<div style="font-weight:600;font-size:12px;color:var(--color-error);margin-bottom:6px"><span class="status-dot negative"></span> 다른 사건 정보 혼입 의심 ('+highWarns.length+'건) — 변리사 직접 확인 필수</div>'
       +'<div style="font-size:11px;color:var(--color-error);line-height:1.6">'
       +highWarns.map(function(w){return '• "'+escapeHtml(w.template_fragment)+'" ('+w.match_length+'자 일치)';}).join('<br>')
       +'</div>'
@@ -3094,7 +3094,7 @@ Opinion.renderOpinion=function(L,R,status){
   }
   if (medWarns.length > 0) {
     contamHtml += '<div style="margin-top:8px;padding:10px 12px;background:#fffbeb;border-radius:8px;border-left:3px solid #f59e0b">'
-      +'<div style="font-weight:600;font-size:12px;color:#92400e;margin-bottom:4px">🟡 스타일 문구 유사 확인 권장 ('+medWarns.length+'건)</div>'
+      +'<div style="font-weight:600;font-size:12px;color:#92400e;margin-bottom:4px"><span class="status-dot cautionary"></span> 스타일 문구 유사 확인 권장 ('+medWarns.length+'건)</div>'
       +'<div style="font-size:11px;color:#92400e;line-height:1.6">'
       +medWarns.map(function(w){return '• "'+escapeHtml(w.template_fragment)+'" ('+w.match_length+'자 일치)';}).join('<br>')
       +'</div>'
@@ -3115,10 +3115,10 @@ Opinion.renderOpinion=function(L,R,status){
         var onlyKey = o._mixed_templates.primary ? (o._mixed_primary || '') : (o._mixed_secondary || '');
         styleSuffix = ' (' + onlyKey + ' 템플릿만 적용)';
       }
-      styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#e8f5e9;border-radius:12px;font-size:11px;font-weight:600;color:#2e7d32;margin-top:8px;margin-bottom:2px">🎨 본 사무소 스타일 적용됨'+escapeHtml(styleSuffix)+'</div>';
+      styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#e8f5e9;border-radius:12px;font-size:11px;font-weight:600;color:#2e7d32;margin-top:8px;margin-bottom:2px"><span class="ico" data-icon="image"></span> 본 사무소 스타일 적용됨'+escapeHtml(styleSuffix)+'</div>';
     }
   } else if (o._style_applied === false) {
-    styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--color-bg-secondary);border-radius:12px;font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-top:8px;margin-bottom:2px">ℹ️ 기본 스타일</div>';
+    styleBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--color-bg-secondary);border-radius:12px;font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-top:8px;margin-bottom:2px"><span class="ico" data-icon="info"></span> 기본 스타일</div>';
   }
 
   // ─── Cycle 5: 혼합 모드 배지 ───
@@ -3126,14 +3126,14 @@ Opinion.renderOpinion=function(L,R,status){
   if (o._mixed_mode && o._mixed_secondary) {
     var pInfoR = Opinion.TYPES[o._mixed_primary || ''] || {};
     var sInfoR = Opinion.TYPES[o._mixed_secondary || ''] || {};
-    mixedBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#e3f2fd;border-radius:12px;font-size:11px;font-weight:600;color:#1565c0;margin-top:8px;margin-left:6px;margin-bottom:2px">🔀 혼합 거절 통합 모드 — §'+escapeHtml(pInfoR.code||'')+' + §'+escapeHtml(sInfoR.code||'')+'</div>';
+    mixedBadge = '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#e3f2fd;border-radius:12px;font-size:11px;font-weight:600;color:#1565c0;margin-top:8px;margin-left:6px;margin-bottom:2px"><span class="ico" data-icon="split"></span> 혼합 거절 통합 모드 — §'+escapeHtml(pInfoR.code||'')+' + §'+escapeHtml(sInfoR.code||'')+'</div>';
   }
 
-  L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="tossface">📝</span> 의견서 작성 완료</div><p style="font-size:13px;color:var(--color-text-secondary)">의견서를 검토하고 승인하면 최종 출력물이 생성됩니다.</p>'
+  L.innerHTML=nav+(ready?'<div class="opinion-gate-card"><div class="opinion-gate-title"><span class="ico" data-icon="edit"></span> 의견서 작성 완료</div><p style="font-size:13px;color:var(--color-text-secondary)">의견서를 검토하고 승인하면 최종 출력물이 생성됩니다.</p>'
     +styleBadge
     +mixedBadge
     +contamHtml
-    +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(3)"><span class="tf">✏️</span> 수정</button><button class="btn btn-primary" id="btnGate3Approve" onclick="Opinion.approveGate(3)"><span class="tf">✅</span> 승인</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">의견서 작성 중...</div></div>');
+    +'<div class="opinion-gate-actions"><button class="btn btn-outline" onclick="Opinion.reviseGate(3)"><span class="ico" data-icon="edit"></span> 수정</button><button class="btn btn-primary" id="btnGate3Approve" onclick="Opinion.approveGate(3)"><span class="ico" data-icon="check-circle"></span> 승인</button></div></div>':'<div class="card" style="text-align:center;padding:40px"><div class="progress-dot" style="width:32px;height:32px;margin:0 auto 12px;animation:pulse 1.5s infinite"></div><div style="font-size:14px;font-weight:600">의견서 작성 중...</div></div>');
   var secs=o.sections||[];
   var opinionHtml = '';
   if (secs.length) {
@@ -3152,7 +3152,7 @@ Opinion.renderOpinion=function(L,R,status){
   } else {
     opinionHtml = '<p style="color:var(--color-text-tertiary);text-align:center;padding:40px">의견서 미생성</p>';
   }
-  R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="tf">📝</span> '+escapeHtml(o.title||'의견서')+'</span></div><div class="opinion-preview-body">'+opinionHtml+'</div></div>';
+  R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="ico" data-icon="edit"></span> '+escapeHtml(o.title||'의견서')+'</span></div><div class="opinion-preview-body">'+opinionHtml+'</div></div>';
 };
 
 // ═══ Output + DOCX Download ═══
@@ -3166,14 +3166,14 @@ Opinion.renderOutput=function(L,R,status){
   // 왼쪽: 출력물 다운로드
   var amendDisabled = !done;
   var amendTip = done ? '' : ' title="Gate 3 승인 후 활성화"';
-  L.innerHTML=nav+'<div class="card"><div class="card-header"><div class="card-title"><span class="tossface">📥</span> 최종 확인 + 출력</div></div>'
-    +'<div style="padding:6px 10px;background:#eff6ff;border-radius:6px;margin-bottom:10px;font-size:11px;color:#1e40af">ℹ️ 베타 단계 — 의견서·보정서는 변리사 검토 후 제출하세요</div>'
+  L.innerHTML=nav+'<div class="card"><div class="card-header"><div class="card-title"><span class="ico" data-icon="download"></span> 최종 확인 + 출력</div></div>'
+    +'<div style="padding:6px 10px;background:#eff6ff;border-radius:6px;margin-bottom:10px;font-size:11px;color:#1e40af"><span class="ico" data-icon="info"></span> 베타 단계 — 의견서·보정서는 변리사 검토 후 제출하세요</div>'
     +'<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">의견서 대응이 완료되었습니다. 다운로드하여 특허로에 제출하세요.</p>'
     +'<div style="display:flex;flex-direction:column;gap:8px">'
-    +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadOpinionDocx()"'+(done?'':' disabled')+'><span class="tossface">📝</span> 의견서 (Word)</button>'
-    +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadAmendmentDocx()"'+(amendDisabled?' disabled':'')+amendTip+'><span class="tossface">📄</span> 보정서 (Word, 별지 제13호)</button>'
-    +'<button class="btn btn-outline btn-full" onclick="Opinion.downloadDocx(\'all\')"'+(done?'':' disabled')+'><span class="tossface">📋</span> 전체 (의견서+검증보고서)</button>'
-    +'<button class="btn btn-ghost btn-full" onclick="Opinion.copyOpinionText()"'+(done?'':' disabled')+'><span class="tossface">📋</span> 텍스트 복사</button>'
+    +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadOpinionDocx()"'+(done?'':' disabled')+'><span class="ico" data-icon="edit"></span> 의견서 (Word)</button>'
+    +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadAmendmentDocx()"'+(amendDisabled?' disabled':'')+amendTip+'><span class="ico" data-icon="doc"></span> 보정서 (Word, 별지 제13호)</button>'
+    +'<button class="btn btn-outline btn-full" onclick="Opinion.downloadDocx(\'all\')"'+(done?'':' disabled')+'><span class="ico" data-icon="clipboard"></span> 전체 (의견서+검증보고서)</button>'
+    +'<button class="btn btn-ghost btn-full" onclick="Opinion.copyOpinionText()"'+(done?'':' disabled')+'><span class="ico" data-icon="clipboard"></span> 텍스트 복사</button>'
     +'</div></div>';
 
   // 오른쪽: 의견서 미리보기 (기존 gate3의 미리보기)
@@ -3195,7 +3195,7 @@ Opinion.renderOutput=function(L,R,status){
   } else {
     opinionHtml = done?'<div style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:12px"><span class="tossface">🎉</span></div><h3 style="font-size:18px;font-weight:700;color:var(--color-success);margin-bottom:8px">의견서 대응 완료!</h3></div>':'<p style="color:var(--color-text-tertiary);text-align:center;padding:40px">의견서 미생성</p>';
   }
-  R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="tossface">📝</span> '+escapeHtml(o.title||'의견서')+' 미리보기</span></div><div class="opinion-preview-body">'+opinionHtml+'</div></div>';
+  R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="ico" data-icon="edit"></span> '+escapeHtml(o.title||'의견서')+' 미리보기</span></div><div class="opinion-preview-body">'+opinionHtml+'</div></div>';
 };
 
 // 의견서 텍스트 조합 (JSON sections 형식 + raw string 형식 모두 지원)
@@ -3272,7 +3272,7 @@ Opinion.downloadAmendmentDocx = async function() {
   a.href = url; a.download = '보정서_' + (p.application_no||p.title||'output') + '_' + datestr + '.doc';
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   // Cycle 6 §2.5 — Word 호환성 수동 검증 안내 토스트
-  showToast('✅ 보정서 다운로드 완료 — KIPO 제출 전 Word/Hancom에서 표·취소선·한글 인코딩 정상 여부를 확인해 주세요', 'info');
+  showToast('<span class="ico" data-icon="check-circle"></span> 보정서 다운로드 완료 — KIPO 제출 전 Word/Hancom에서 표·취소선·한글 인코딩 정상 여부를 확인해 주세요', 'info');
 };
 
 // 보정서 HTML 본문 빌더 (KIPO 별지 제13호 구조)
@@ -3466,13 +3466,13 @@ Opinion.downloadDocx = async function(type) {
 Opinion.renderFailed=function(L,R){
   var detail = Opinion.state.parseFailDetail || '파일에서 텍스트를 추출할 수 없었습니다.';
   L.innerHTML='<div class="card" style="padding:24px">'
-    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><span class="tf" style="font-size:32px">⚠️</span><div><h3 style="font-size:16px;font-weight:600;color:var(--color-error);margin-bottom:2px">파싱 실패</h3><p style="font-size:12px;color:var(--color-text-secondary)">텍스트 추출에 문제가 있습니다</p></div></div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><span class="ico" data-icon="warning" data-size="32"></span><div><h3 style="font-size:16px;font-weight:600;color:var(--color-error);margin-bottom:2px">파싱 실패</h3><p style="font-size:12px;color:var(--color-text-secondary)">텍스트 추출에 문제가 있습니다</p></div></div>'
     +'<pre style="white-space:pre-wrap;font-size:12px;background:var(--color-bg-tertiary);padding:14px;border-radius:8px;line-height:1.6;color:var(--color-text-secondary);max-height:200px;overflow-y:auto">'+escapeHtml(detail)+'</pre>'
     +'<div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">'
-    +'<button class="btn btn-primary btn-full" onclick="Opinion.resetToUpload()"><span class="tf">📁</span> 파일 추가/변경 후 재시도</button>'
-    +'<button class="btn btn-outline btn-full" onclick="Opinion.resetToUploadWithManual()"><span class="tf">✏️</span> 직접 텍스트 입력으로 전환</button>'
+    +'<button class="btn btn-primary btn-full" onclick="Opinion.resetToUpload()"><span class="ico" data-icon="folder"></span> 파일 추가/변경 후 재시도</button>'
+    +'<button class="btn btn-outline btn-full" onclick="Opinion.resetToUploadWithManual()"><span class="ico" data-icon="edit"></span> 직접 텍스트 입력으로 전환</button>'
     +'</div></div>';
-  R.innerHTML='<div class="card" style="padding:24px"><div style="font-weight:600;font-size:13px;margin-bottom:12px"><span class="tf">💡</span> PDF 인식이 안 되는 경우</div>'
+  R.innerHTML='<div class="card" style="padding:24px"><div style="font-weight:600;font-size:13px;margin-bottom:12px"><span class="ico" data-icon="lightbulb"></span> PDF 인식이 안 되는 경우</div>'
     +'<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.8">'
     +'<p><b>원인 1: 이미지 스캔 PDF</b><br>특허청에서 발송한 PDF가 텍스트가 아닌 이미지로 된 경우입니다. Adobe Acrobat이나 한글 뷰어에서 열어 텍스트를 복사해서 붙여넣어 주세요.</p>'
     +'<p style="margin-top:10px"><b>원인 2: 암호화된 PDF</b><br>비밀번호가 걸린 PDF는 텍스트 추출이 불가능합니다. PDF 비밀번호를 해제한 후 다시 업로드하세요.</p>'

@@ -273,7 +273,7 @@ window.DT = (function () {
     let html = '<span class="' + cls + '"' + clickAttr + '>';
     html += opts.text;
     if (opts.count != null) html += '<span class="dt-tag-count">' + opts.count + '</span>';
-    if (opts.removable) html += '<span class="dt-tag-remove">✕</span>';
+    if (opts.removable) html += '<span class="dt-tag-remove"><span class="ico" data-icon="x"></span></span>';
     html += '</span>';
     return html;
   }
@@ -621,7 +621,7 @@ window.DT = (function () {
       const ctaClick = opts.onCtaClick ? ' onclick="' + opts.onCtaClick + '"' : '';
       html += '<button class="dt-promo-cta"' + ctaClick + '>' + opts.cta + '</button>';
     }
-    if (opts.onClose) html += '<button class="dt-promo-close" onclick="' + opts.onClose + '">✕</button>';
+    if (opts.onClose) html += '<button class="dt-promo-close" onclick="' + opts.onClose + '"><span class="ico" data-icon="x"></span></button>';
     html += '</div>';
     return html;
   }

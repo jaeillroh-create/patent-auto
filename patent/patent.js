@@ -309,7 +309,7 @@ async function loadDashboardProjects(){
       const statusBadge=pct===100?'badge-success':pct>0?'badge-warning':'badge-neutral';
       const statusText=pct===100?'완료':pct>0?'작성 중':'대기';
       return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-bg-tertiary)'" onmouseout="this.style.background=''" onclick="openProject('${p.id}')">
-        <td style="padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tf">📁</span><span style="color:var(--color-primary);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
+        <td style="padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="ico" data-icon="folder"></span><span style="color:var(--color-primary);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
         <td style="padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(p.title)}</span></td>
         <td style="padding:10px 12px;text-align:center"><span class="badge ${statusBadge}" style="font-size:11px">${statusText}</span></td>
         <td style="padding:10px 12px;text-align:center;color:var(--color-text-tertiary);font-size:11px;white-space:nowrap">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</td>
@@ -330,7 +330,7 @@ async function loadDashboardProjects(){
         const pd=p.current_state_json?.provisionalData||{};
         const caseNum=p.project_number||'-';
         return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-warning-light)'" onmouseout="this.style.background=''" onclick="openProvisionalViewer('${p.id}')">
-          <td style="padding:8px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tf">⚡</span><span style="color:var(--color-warning);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
+          <td style="padding:8px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="ico" data-icon="bolt"></span><span style="color:var(--color-warning);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
           <td style="padding:8px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(pd.title||p.title)}</span></td>
           <td style="padding:8px 12px;text-align:center;color:var(--color-text-tertiary);font-size:11px;white-space:nowrap">${new Date(p.created_at).toLocaleDateString('ko-KR')}</td>
           <td style="padding:6px 8px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
@@ -348,7 +348,7 @@ function loadGlobalRefFromStorage(){
   try{globalRefStyleText=App._lsGet('patent_global_ref')||'';}catch(e){globalRefStyleText='';}
   const st=document.getElementById('globalRefStatus');
   if(st){
-    if(globalRefStyleText)st.innerHTML=`<span class="tf">✅</span> 등록됨 (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px">✕</button>`;
+    if(globalRefStyleText)st.innerHTML=`<span class="ico" data-icon="check-circle"></span> 등록됨 (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px"><span class="ico" data-icon="x"></span></button>`;
     else st.textContent='업로드된 문서 없음';
   }
 }
@@ -361,7 +361,7 @@ async function handleGlobalRefUpload(event){
     if(text&&text.trim()&&!text.startsWith('[')){
       globalRefStyleText=text.trim().slice(0,5000);
       try{App._lsSet('patent_global_ref',globalRefStyleText);}catch(e){}
-      st.innerHTML=`<span class="tf">✅</span> ${App.escapeHtml(file.name)} (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px">✕</button>`;
+      st.innerHTML=`<span class="ico" data-icon="check-circle"></span> ${App.escapeHtml(file.name)} (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px"><span class="ico" data-icon="x"></span></button>`;
       st.style.color='var(--color-success)';
       App.showToast('공통 참고 문서 등록 완료 — 모든 프로젝트에 적용');
     }else{st.textContent='텍스트 추출 불가';st.style.color='var(--color-error)';}
@@ -551,7 +551,7 @@ function restoreClaimUI(){
   if(detailLevel==='custom'){const inp=document.getElementById('customDetailChars');if(inp)inp.value=customDetailChars;}
   // Restore project ref
   const prs=document.getElementById('projectRefStatus');
-  if(prs&&projectRefStyleText)prs.innerHTML=`<span class="tf">✅</span> 등록됨 (${projectRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px">✕</button>`;
+  if(prs&&projectRefStyleText)prs.innerHTML=`<span class="ico" data-icon="check-circle"></span> 등록됨 (${projectRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px"><span class="ico" data-icon="x"></span></button>`;
 }
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
@@ -1211,7 +1211,7 @@ function renderInventionScopePanel() {
   if (!inventionScope || !inventionScope.locked_at) {
     panel.className = 'scope-panel';
     panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between">
-      <div><span class="tf">🔍</span> <strong style="font-size:13px">발명 범위</strong>
+      <div><span class="ico" data-icon="search"></span> <strong style="font-size:13px">발명 범위</strong>
       <span style="font-size:11px;color:var(--pt-gray-500);margin-left:6px">범위를 확정하면 이후 스텝에서 범위 초과 여부를 검증합니다.</span></div>
       <button class="btn btn-outline btn-sm" onclick="extractInventionScope()">범위 확정</button>
     </div>`;
@@ -1245,7 +1245,7 @@ function renderInventionScopePanel() {
 
   panel.className = 'scope-panel locked';
   panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-    <div><span class="tf">🔒</span> <strong style="font-size:13px">발명 범위 확정됨</strong>
+    <div><span class="ico" data-icon="lock"></span> <strong style="font-size:13px">발명 범위 확정됨</strong>
     <span style="font-size:11px;color:var(--pt-gray-500);margin-left:6px">${lockedDate}</span>${prevBadge}</div>
     <button class="btn btn-ghost btn-sm" onclick="unlockInventionScope()">재확정</button>
   </div>
@@ -1908,7 +1908,7 @@ function initUserFiguresUI(){
   const card=document.getElementById('requiredFiguresList')?.closest('.card');
   if(!card)return;
   const hdr=card.querySelector('.card-title');
-  if(hdr)hdr.innerHTML='<span class="tf">🖼️</span> 사용자 도면 추가';
+  if(hdr)hdr.innerHTML='<span class="ico" data-icon="image"></span> 사용자 도면 추가';
   // 기존 입력폼 교체 (파일 업로드 추가)
   const formArea=card.querySelector('div[style*="display:flex"]');
   if(formArea){
@@ -1985,7 +1985,7 @@ function renderRequiredFiguresList(){
       <span class="badge badge-primary" style="min-width:40px;text-align:center">도 ${f.num}</span>
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${App.escapeHtml(f.description)}">${App.escapeHtml(f.description)}</span>
       ${f.fileName?`<span class="badge badge-success" title="${App.escapeHtml(f.fileName)}">📎</span>`:''}
-      <button class="btn btn-ghost btn-sm" onclick="removeRequiredFigure(${f.num})" title="삭제">✕</button>
+      <button class="btn btn-ghost btn-sm" onclick="removeRequiredFigure(${f.num})" title="삭제"><span class="ico" data-icon="x"></span></button>
     </div>`;
   }).join('');
 }
@@ -2026,7 +2026,7 @@ function renderConceptDiagramTypesList(){
       <span class="badge badge-primary" style="min-width:40px;text-align:center">도 ${figNum}</span>
       <span style="flex:1">${App.escapeHtml(typeDef.label)} <span style="color:var(--color-text-tertiary);font-size:11px">${App.escapeHtml(typeDef.desc)}</span></span>
       ${statusBadge}
-      <button class="btn btn-ghost btn-sm" onclick="removeConceptDiagramType('${ct.type}')" title="삭제">✕</button>
+      <button class="btn btn-ghost btn-sm" onclick="removeConceptDiagramType('${ct.type}')" title="삭제"><span class="ico" data-icon="x"></span></button>
     </div>`;
   }).join('');
 }
@@ -2063,7 +2063,7 @@ async function handleProjectRefUpload(event){
     const text=await App.extractTextFromFile(file);
     if(text&&text.trim()&&!text.startsWith('[')){
       projectRefStyleText=text.trim().slice(0,5000);
-      st.innerHTML=`<span class="tf">✅</span> ${App.escapeHtml(file.name)} (${projectRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px">✕</button>`;
+      st.innerHTML=`<span class="ico" data-icon="check-circle"></span> ${App.escapeHtml(file.name)} (${projectRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px"><span class="ico" data-icon="x"></span></button>`;
       st.style.color='var(--color-success)';
       App.showToast('이 프로젝트 전용 참고 문서 등록 (공통 참고 문서 대신 사용)');
     }else{st.textContent='추출 불가';st.style.color='var(--color-error)';}
@@ -2179,7 +2179,7 @@ function injectUserCommandUI(sid,containerSelector){
   const area=document.createElement('div');
   area.className='user-cmd-area';
   area.style.cssText='margin:8px 0';
-  area.innerHTML=`<details style="margin:0"><summary style="font-size:11px;color:var(--color-text-secondary);cursor:pointer;user-select:none;padding:4px 0">📝 추가 지시사항 (선택)</summary><textarea id="userCmd_${sid}" class="result-textarea" rows="2" placeholder="예: 독립항을 더 넓게 작성해 주세요 / 앵커에 캐싱 로직을 반드시 포함해 주세요" style="margin-top:6px;font-size:12px;min-height:48px;resize:vertical" oninput="stepUserCommands['${sid}']=this.value.trim()">${App.escapeHtml(stepUserCommands[sid]||'')}</textarea></details>`;
+  area.innerHTML=`<details style="margin:0"><summary style="font-size:11px;color:var(--color-text-secondary);cursor:pointer;user-select:none;padding:4px 0"><span class="ico" data-icon="edit"></span> 추가 지시사항 (선택)</summary><textarea id="userCmd_${sid}" class="result-textarea" rows="2" placeholder="예: 독립항을 더 넓게 작성해 주세요 / 앵커에 캐싱 로직을 반드시 포함해 주세요" style="margin-top:6px;font-size:12px;min-height:48px;resize:vertical" oninput="stepUserCommands['${sid}']=this.value.trim()">${App.escapeHtml(stepUserCommands[sid]||'')}</textarea></details>`;
   // 버튼 바로 앞에 삽입
   const btn=container.querySelector('button[id^="btn"]');
   if(btn)container.insertBefore(area,btn);
@@ -2292,7 +2292,7 @@ function invalidateDownstream(changedStep){
       w.style.cssText=isMust
         ?'background:#ffebee;border:1px solid #ef5350;border-radius:6px;padding:6px 10px;margin-bottom:6px;font-size:11px;color:#c62828;display:flex;align-items:center;gap:6px'
         :'background:#fff3e0;border:1px solid #ffb74d;border-radius:6px;padding:6px 10px;margin-bottom:6px;font-size:11px;color:#e65100;display:flex;align-items:center;gap:6px';
-      w.innerHTML=`<span class="tf">${isMust?'🔴':'🟡'}</span> ${STEP_NAMES[d]} — ${STEP_NAMES[changedStep]} 변경으로 ${isMust?'재생성 필수':'재생성 권장'}`;
+      w.innerHTML=`<span class="status-dot ${isMust?'negative':'cautionary'}"></span> ${STEP_NAMES[d]} — ${STEP_NAMES[changedStep]} 변경으로 ${isMust?'재생성 필수':'재생성 권장'}`;
       el.prepend(w);
     }
   });
@@ -2340,7 +2340,7 @@ function _updateCascadePanelItem(sid,status){
   const remaining=panel.querySelectorAll('.cascade-cb:not(:disabled)');
   if(remaining.length===0){
     const btn=panel.querySelector('#btnCascadeRun');
-    if(btn){btn.textContent='✅ 모두 완료';btn.style.background='#4caf50';btn.disabled=true;}
+    if(btn){btn.textContent='<span class="ico" data-icon="check-circle"></span> 모두 완료';btn.style.background='#4caf50';btn.disabled=true;}
     setTimeout(()=>{const p=document.getElementById('cascadePanel');if(p)p.remove();},3000);
   }
 }
@@ -2361,15 +2361,15 @@ function showCascadePanel(changedStep,mustDeps,shouldDeps){
   panel.style.cssText='position:fixed;bottom:20px;right:20px;width:380px;max-height:70vh;overflow-y:auto;background:#fff;border:2px solid #1976d2;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:9999;font-family:"맑은 고딕",sans-serif';
 
   let html=`<div style="background:#1976d2;color:#fff;padding:12px 16px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center">
-    <span style="font-size:13px;font-weight:600">🔄 ${STEP_NAMES[changedStep]} 변경 — 연쇄 수정</span>
-    <button onclick="document.getElementById('cascadePanel').remove()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px">✕</button>
+    <span style="font-size:13px;font-weight:600"><span class="ico" data-icon="refresh"></span> ${STEP_NAMES[changedStep]} 변경 — 연쇄 수정</span>
+    <button onclick="document.getElementById('cascadePanel').remove()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px"><span class="ico" data-icon="x"></span></button>
   </div>
   <div style="padding:12px 16px">`;
 
   // MUST 항목
   if(mustDeps.length){
     html+=`<div style="margin-bottom:10px">
-      <div style="font-size:11px;font-weight:700;color:#c62828;margin-bottom:6px">🔴 필수 재생성 (${mustDeps.length}건)</div>`;
+      <div style="font-size:11px;font-weight:700;color:#c62828;margin-bottom:6px"><span class="status-dot negative"></span> 필수 재생성 (${mustDeps.length}건)</div>`;
     mustDeps.forEach(d=>{
       html+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer">
         <input type="checkbox" class="cascade-cb" data-step="${d}" data-level="must" checked style="accent-color:#c62828">
@@ -2382,7 +2382,7 @@ function showCascadePanel(changedStep,mustDeps,shouldDeps){
   // SHOULD 항목
   if(shouldDeps.length){
     html+=`<details style="margin-bottom:10px"${mustDeps.length?'':' open'}>
-      <summary style="font-size:11px;font-weight:700;color:#e65100;cursor:pointer;padding:4px 0">🟡 권장 재생성 (${shouldDeps.length}건)</summary>`;
+      <summary style="font-size:11px;font-weight:700;color:#e65100;cursor:pointer;padding:4px 0"><span class="status-dot cautionary"></span> 권장 재생성 (${shouldDeps.length}건)</summary>`;
     shouldDeps.forEach(d=>{
       html+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer;margin-left:4px">
         <input type="checkbox" class="cascade-cb" data-step="${d}" data-level="should" style="accent-color:#ff9800">
@@ -2512,7 +2512,7 @@ async function runCascadeRegeneration(sourceStep){
 
   const btn=document.getElementById('btnCascadeRun');
   const prog=document.getElementById('cascadeProgress');
-  if(btn){btn.disabled=true;btn.textContent='⏳ 재생성 진행 중...';}
+  if(btn){btn.disabled=true;btn.textContent='<span class="ico" data-icon="history"></span> 재생성 진행 중...';}
 
   let completed=0;
   const total=sorted.length;
@@ -2535,13 +2535,13 @@ async function runCascadeRegeneration(sourceStep){
       onStepCompleted(sid);
     }catch(e){
       console.error(`Cascade ${sid} 실패:`,e);
-      if(prog)prog.innerHTML+=`<div style="color:#c62828;font-size:11px">❌ ${STEP_NAMES[sid]} 실패: ${e.message}</div>`;
+      if(prog)prog.innerHTML+=`<div style="color:#c62828;font-size:11px"><span class="ico" data-icon="x"></span> ${STEP_NAMES[sid]} 실패: ${e.message}</div>`;
     }
   }
 
-  if(prog)prog.innerHTML=`<div style="color:#2e7d32;font-weight:600">✅ ${completed}/${total} 완료</div>
+  if(prog)prog.innerHTML=`<div style="color:#2e7d32;font-weight:600"><span class="ico" data-icon="check-circle"></span> ${completed}/${total} 완료</div>
     <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:#4caf50;border-radius:4px;height:6px;width:100%"></div></div>`;
-  if(btn){btn.textContent='✅ 완료';btn.style.background='#4caf50';}
+  if(btn){btn.textContent='<span class="ico" data-icon="check-circle"></span> 완료';btn.style.background='#4caf50';}
   // BUG-3 fix: globalProcessing 해제
   setGlobalProcessing(false);
   setTimeout(()=>{const p=document.getElementById('cascadePanel');if(p)p.remove();},3000);
@@ -3054,7 +3054,7 @@ async function _processUploadedFiles(files){
     if(uploadedFiles.find(f=>f.name===file.name)){App.showToast(`"${file.name}" 이미 추가됨`,'info');continue;}
     const item=document.createElement('div');item.className='file-upload-item';item.id=`file_${uploadedFiles.length}`;
     item.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:6px;font-size:13px';
-    item.innerHTML=`<span class="tf">📄</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">추출 중...</span>`;
+    item.innerHTML=`<span class="ico" data-icon="doc"></span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">추출 중...</span>`;
     if(listEl)listEl.appendChild(item);
     try{
       const text=await App.extractTextFromFile(file);
@@ -3062,13 +3062,13 @@ async function _processUploadedFiles(files){
         uploadedFiles.push({name:file.name,text:text.trim(),size:file.size});
         const ta=document.getElementById('projectInput');const separator=ta.value.trim()?'\n\n':'';
         ta.value+=`${separator}[첨부: ${file.name}]\n${text.trim()}`;
-        item.innerHTML=`<span class="tf">✅</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} · ${text.trim().length.toLocaleString()}자</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length-1},'${App.escapeHtml(file.name).replace(/'/g, "\\'")}')">\u2715</button>`;
+        item.innerHTML=`<span class="ico" data-icon="check-circle"></span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} · ${text.trim().length.toLocaleString()}자</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length-1},'${App.escapeHtml(file.name).replace(/'/g, "\\'")}')">\u2715</button>`;
         App.showToast(`"${file.name}" 추출 완료`);
       }else{
-        item.innerHTML=`<span class="tf">⚠️</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">추출 불가</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
+        item.innerHTML=`<span class="ico" data-icon="warning"></span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">추출 불가</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
       }
     }catch(e){
-      item.innerHTML=`<span class="tf">❌</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
+      item.innerHTML=`<span class="ico" data-icon="x"></span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
     }
   }
   if(uploadedFiles.length>0)debouncedGenerateInventionSummary();
@@ -3139,16 +3139,16 @@ async function generateInventionSummary(){
     summaryEl=document.createElement('div');
     summaryEl.id='inventionSummary';
     summaryEl.style.cssText='margin-top:8px;padding:12px 16px;background:var(--color-bg-secondary);border-radius:10px;border-left:3px solid var(--color-primary);font-size:13px;line-height:1.6;color:var(--color-text-secondary)';
-    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
+    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)"><span class="ico" data-icon="clipboard"></span> 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
     ta.parentElement.insertBefore(summaryEl,ta.nextSibling);
   }else{
-    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
+    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)"><span class="ico" data-icon="clipboard"></span> 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
   }
   try{
     const r=await App.callClaude(`아래 발명 내용을 300자 이내로 핵심만 요약하라. 기술분야, 핵심 구성요소, 주요 기능을 포함. 마크다운/글머리 없이 자연스러운 문장으로.\n\n${inv.slice(0,5000)}`);
-    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br>${App.escapeHtml(r.text)}`;
+    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)"><span class="ico" data-icon="clipboard"></span> 발명 내용 요약</span><br>${App.escapeHtml(r.text)}`;
   }catch(e){
-    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-text-tertiary)">요약 생성 실패</span>`;
+    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)"><span class="ico" data-icon="clipboard"></span> 발명 내용 요약</span><br><span style="color:var(--color-text-tertiary)">요약 생성 실패</span>`;
   }
 }
 
@@ -4548,7 +4548,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     // v6.0: 부분 수정 모드 표시
     const _hasCmd=!!getStepUserCommand(sid);
     const _hasOut=!!outputs[sid];
-    if(_hasCmd&&_hasOut)App.showToast('📝 기존 내용 부분 수정 모드','info');
+    if(_hasCmd&&_hasOut)App.showToast('<span class="ico" data-icon="edit"></span> 기존 내용 부분 수정 모드','info');
     
     // Step 04: KIPRIS API 실시간 검색
     if(sid==='step_04'){
@@ -5626,7 +5626,7 @@ async function runPhaseD(){
   if(!outputs.step_06){App.showToast('장치 청구항(A2)을 먼저 작성하세요','error');return;}
   setGlobalProcessing(true);
   const btn=document.getElementById('btnPhaseD');
-  if(btn){btn.disabled=true;btn.textContent='⏳ 역설계 진행 중...';}
+  if(btn){btn.disabled=true;btn.textContent='<span class="ico" data-icon="history"></span> 역설계 진행 중...';}
   const container=document.getElementById('resultsPhaseDChain');
   if(container)container.innerHTML='';
   
@@ -5645,12 +5645,12 @@ async function runPhaseD(){
     }
     App.clearProgress('progressPhaseD');
     saveProject(true);
-    App.showToast('✅ 역설계 체인 완료 (효과→과제→해결수단→배경→기술분야)');
+    App.showToast('<span class="ico" data-icon="check-circle"></span> 역설계 체인 완료 (효과→과제→해결수단→배경→기술분야)');
   }catch(e){
     App.clearProgress('progressPhaseD');
     App.showToast(e.message,'error');
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='🔄 역설계 체인 일괄 생성';}
+    if(btn){btn.disabled=false;btn.textContent='<span class="ico" data-icon="refresh"></span> 역설계 체인 일괄 생성';}
     setGlobalProcessing(false);
   }
 }
@@ -5671,7 +5671,7 @@ async function runPhaseF(){
       renderBatchResult('resultsBatchFinish',steps[i],r.text);
     }
     App.clearProgress('progressBatchFinish');
-    saveProject(true);App.showToast('✅ 마무리 완료 (F1→F2)');
+    saveProject(true);App.showToast('<span class="ico" data-icon="check-circle"></span> 마무리 완료 (F1→F2)');
   }catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}
   finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}
 }
@@ -7902,7 +7902,7 @@ function renderDiagramsV14(sid,responseText){
     const dl=document.getElementById(sid==='step_07'?'diagramDownload07':'diagramDownload11');if(dl)dl.style.display='block';
     return true;
   }
-  console.warn('[v14] JSON 실패:',jr.error,'→ Mermaid 폴백');
+  console.warn('[v14] JSON 실패:',jr.error,'<span class="ico" data-icon="arrow-right"></span> Mermaid 폴백');
   renderDiagrams(sid,responseText);
   return false;
 }
@@ -11211,7 +11211,7 @@ function _runPostRenderValidation(sid, figNums){
   const resultEl=document.getElementById(`validationResult_${sid}`);
   if(resultEl){
     if(totalIssues===0){
-      resultEl.innerHTML='<span style="color:#2e7d32">✅ 포스트 렌더 검증 통과</span>';
+      resultEl.innerHTML='<span style="color:#2e7d32"><span class="ico" data-icon="check-circle"></span> 포스트 렌더 검증 통과</span>';
     }else{
       const errCount=reports.reduce((sum,r)=>sum+r.issues.filter(i=>i.severity==='ERROR').length,0);
       const warnCount=reports.reduce((sum,r)=>sum+r.issues.filter(i=>i.severity==='WARNING').length,0);
@@ -11737,17 +11737,17 @@ function renderDiagrams(sid,mt){
     html=`<div style="background:#ffebee;border:1px solid #ef5350;border-radius:8px;padding:12px;margin-bottom:16px">
       <div style="color:#c62828;font-weight:600;margin-bottom:8px">⚠️ 도면 규칙 위반 발견</div>
       <div style="font-size:12px;color:#b71c1c;margin-bottom:12px;white-space:pre-line">${App.escapeHtml(errorSummary)}</div>
-      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1976d2;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">🔄 규칙에 맞게 재생성</button>
+      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1976d2;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px"><span class="ico" data-icon="refresh"></span> 규칙에 맞게 재생성</button>
     </div>`+html;
   }
   
   html+=`<div style="margin-top:12px;padding:12px;background:var(--color-bg-secondary);border-radius:8px">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button onclick="runDiagramValidation('${sid}')" style="background:#43a047;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="R0~R14 규칙 검증 + 시각적 겹침/잘림 검사">✅ 검증</button>
+      <button onclick="runDiagramValidation('${sid}')" style="background:#43a047;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="R0~R14 규칙 검증 + 시각적 겹침/잘림 검사"><span class="ico" data-icon="check-circle"></span> 검증</button>
       <span style="color:var(--color-text-tertiary);font-size:11px">\u2192</span>
-      <button onclick="runAIDiagramReview('${sid}')" style="background:#7b1fa2;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="AI가 연결관계의 기술적 적절성을 평가">🤖 AI 검증</button>
+      <button onclick="runAIDiagramReview('${sid}')" style="background:#7b1fa2;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="AI가 연결관계의 기술적 적절성을 평가"><span class="ico" data-icon="robot"></span> AI 검증</button>
       <span style="color:var(--color-text-tertiary);font-size:11px">\u2192</span>
-      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1565c0;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="검증 결과를 반영하여 도면 재생성 (검증 미실행 시 자동 실행)">🔄 재생성</button>
+      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1565c0;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="검증 결과를 반영하여 도면 재생성 (검증 미실행 시 자동 실행)"><span class="ico" data-icon="refresh"></span> 재생성</button>
       <span id="validationResult_${sid}" style="font-size:12px;color:var(--color-text-secondary);margin-left:4px"></span>
     </div>
     <div id="aiReviewResult_${sid}" style="margin-top:8px"></div>
@@ -11825,7 +11825,7 @@ function runDiagramValidation(sid){
     
     if(errors.length||warnings.length){
       reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> `;
-      errors.forEach(e=>reportHtml+=`<span style="color:#c62828;font-size:11px">❌ [${e.rule}] ${e.message} </span>`);
+      errors.forEach(e=>reportHtml+=`<span style="color:#c62828;font-size:11px"><span class="ico" data-icon="x"></span> [${e.rule}] ${e.message} </span>`);
       warnings.forEach(w=>reportHtml+=`<span style="color:#f57c00;font-size:11px">⚠️ [${w.rule}] ${w.message} </span>`);
       reportHtml+='</div>';
     }else{
@@ -11868,7 +11868,7 @@ function runDiagramValidation(sid){
       if(levels.size>1){
         const mixed=[...levels].sort().join('+');
         totalErrors++;
-        reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> <span style="color:#c62828;font-size:11px">❌ [R14] 레벨 혼재(${mixed}) — 한 도면 내부는 동일 레벨이어야 함</span></div>`;
+        reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> <span style="color:#c62828;font-size:11px"><span class="ico" data-icon="x"></span> [R14] 레벨 혼재(${mixed}) — 한 도면 내부는 동일 레벨이어야 함</span></div>`;
       }
     });
   }
@@ -11876,10 +11876,10 @@ function runDiagramValidation(sid){
   const resultEl=document.getElementById(`validationResult_${sid}`);
   if(resultEl){
     if(totalErrors===0&&totalWarnings===0){
-      resultEl.innerHTML=`<span style="color:#2e7d32;font-weight:600">✅ 전체 검증 통과 (${data.length}개 도면)</span>`;
+      resultEl.innerHTML=`<span style="color:#2e7d32;font-weight:600"><span class="ico" data-icon="check-circle"></span> 전체 검증 통과 (${data.length}개 도면)</span>`;
     }else{
       resultEl.innerHTML=`<div>
-        <span style="color:#c62828;font-weight:600">❌ 오류 ${totalErrors}건</span>,
+        <span style="color:#c62828;font-weight:600"><span class="ico" data-icon="x"></span> 오류 ${totalErrors}건</span>,
         <span style="color:#f57c00">⚠️ 경고 ${totalWarnings}건</span>
         <div style="margin-top:6px;font-size:11px">${reportHtml}</div>
       </div>`;
@@ -11901,7 +11901,7 @@ function runDiagramValidation(sid){
       const prErrors=prResult.reports.reduce((s,r)=>s+r.issues.filter(i=>i.severity==='ERROR').length,0);
       const prWarns=prResult.reports.reduce((s,r)=>s+r.issues.filter(i=>i.severity==='WARNING').length,0);
       if(prErrors>0||prWarns>0){
-        reportHtml+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee"><b>🔍 시각적 검증:</b> `;
+        reportHtml+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee"><b><span class="ico" data-icon="search"></span> 시각적 검증:</b> `;
         if(prErrors>0)reportHtml+=`<span style="color:#c62828">겹침 ${prErrors}건 </span>`;
         if(prWarns>0)reportHtml+=`<span style="color:#f57c00">잘림/넘침 ${prWarns}건 </span>`;
         prResult.reports.forEach(r=>{
@@ -11953,7 +11953,7 @@ async function runAIDiagramReview(sid){
   }
 
   const resultEl=document.getElementById(`aiReviewResult_${sid}`);
-  if(resultEl)resultEl.innerHTML='<div style="padding:12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a">🤖 AI 연결관계 검증 중...</div>';
+  if(resultEl)resultEl.innerHTML='<div style="padding:12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a"><span class="ico" data-icon="robot"></span> AI 연결관계 검증 중...</div>';
 
   const autoFigNums=getAutoFigNums(sid);
   const designText=outputs[sid]||'';
@@ -12055,7 +12055,7 @@ ${'{'}개선안${'}'}:
     // 결과 표시
     if(resultEl){
       let html='<div style="padding:12px;background:#f3e5f5;border:1px solid #ce93d8;border-radius:8px;margin-top:8px">';
-      html+='<div style="font-weight:600;color:#6a1b9a;margin-bottom:8px">🤖 AI 연결관계 검증 결과</div>';
+      html+='<div style="font-weight:600;color:#6a1b9a;margin-bottom:8px"><span class="ico" data-icon="robot"></span> AI 연결관계 검증 결과</div>';
       if(figResults.length>0){
         figResults.forEach(fr=>{
           const icon=fr.pass?'✅':'⚠️';
@@ -12064,7 +12064,7 @@ ${'{'}개선안${'}'}:
           if(fr.reason)html+=`<div style="font-size:12px;color:#555;margin-top:2px">${App.escapeHtml(fr.reason)}</div>`;
           if(fr.suggestions.length>0){
             html+='<div style="font-size:11px;color:#6a1b9a;margin-top:4px">';
-            fr.suggestions.forEach(s=>{html+=`<div>→ ${App.escapeHtml(s)}</div>`;});
+            fr.suggestions.forEach(s=>{html+=`<div><span class="ico" data-icon="arrow-right"></span> ${App.escapeHtml(s)}</div>`;});
             html+='</div>';
           }
           html+='</div>';
@@ -13545,9 +13545,9 @@ function renderTitleCards(c,text){
   c.innerHTML='<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'+cs.map(x=>`<div class="title-candidate-row" onclick="selectTitle(this,\`${x.korean.replace(/\`/g,'')}\`,\`${x.english.replace(/\`/g,'')}\`)" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:2px solid var(--color-border);border-radius:10px;cursor:pointer;transition:all 0.15s;background:#fff" onmouseover="this.style.borderColor='var(--color-primary)';this.style.background='var(--color-primary-light)'" onmouseout="if(!this.classList.contains('selected')){this.style.borderColor='var(--color-border)';this.style.background='#fff'}"><div style="width:28px;height:28px;border-radius:50%;background:var(--color-primary-light);color:var(--color-primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${x.num}</div><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--color-text-primary)">${App.escapeHtml(x.korean)}</div><div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">${App.escapeHtml(x.english)}</div></div></div>`).join('')+'</div>';
   document.getElementById('titleConfirmArea').style.display='block';
 }
-function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=renderScopeBadgeSummary(sid);h+=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tf">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tf">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="pushOutputHistory('${sid}','user_edit','renderClaimResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
+function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=renderScopeBadgeSummary(sid);h+=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tf">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="ico" data-icon="check-circle"></span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="pushOutputHistory('${sid}','user_edit','renderClaimResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
 function renderEditableResult(c,sid,text){c.innerHTML=renderScopeBadgeSummary(sid)+`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral" id="charCount_${sid}">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="pushOutputHistory('${sid}','user_edit','renderEditableResult');outputs['${sid}']=this.value;markOutputTimestamp('${sid}');saveProject(true);document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'" oninput="outputs['${sid}']=this.value;document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'">${App.escapeHtml(text)}</textarea></div>`;}
-function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tf">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="pushOutputHistory('${sid}','user_edit','renderBatchResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
+function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="ico" data-icon="check-circle"></span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="pushOutputHistory('${sid}','user_edit','renderBatchResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
 function toggleAccordion(h){h.classList.toggle('open');const b=h.nextElementSibling;if(b)b.classList.toggle('open');}
 
 // ═══════════ VALIDATION (v4.9 — full claim chain + relaxed matching) ═══════════
@@ -13653,7 +13653,7 @@ function runValidation(){
   const allIssues=[...iss,...refIssues];
   const el=document.getElementById('validationResults');
   if(!allIssues.length){el.innerHTML='<div class="issue-item issue-pass"><span class="tossface">🎉</span>모든 검증 통과</div>';return;}
-  el.innerHTML=allIssues.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':i.severity==='HIGH'?'issue-high':'issue-warning'}"><span class="tossface">${i.severity==='CRITICAL'?'🔴':i.severity==='HIGH'?'🟠':'🟡'}</span>${App.escapeHtml(i.message)}</div>`).join('');
+  el.innerHTML=allIssues.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':i.severity==='HIGH'?'issue-high':'issue-warning'}"><span class="status-dot ${i.severity==='CRITICAL'?'negative':i.severity==='HIGH'?'cautionary':'cautionary'}"></span> ${App.escapeHtml(i.message)}</div>`).join('');
 }
 
 // ═══ v5.6: 참조번호 일관성 검증 (명칭 불일치, 도면 미정의, 혼용) ═══
