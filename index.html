@@ -240,14 +240,20 @@
 
         <!-- 의견서 프로젝트 상세 -->
         <div id="opinionDetailView" style="display:none">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-            <button class="btn btn-ghost btn-sm" onclick="Opinion.backToList()"><span class="ico" data-icon="arrow-left" data-size="14"></span></button>
-            <div>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span id="opinionDetailAppNo" style="font-size:12px;font-weight:600;color:var(--color-primary)">-</span>
-                <h2 id="opinionDetailTitle" style="font-size:18px;font-weight:700">프로젝트</h2>
+          <div class="detail-page-header">
+            <div class="dph-left">
+              <button class="detail-back-btn" onclick="Opinion.backToList()" title="목록으로 돌아가기" aria-label="목록으로 돌아가기"><span class="ico" data-icon="arrow-left" data-size="16"></span></button>
+              <div class="dph-title-block">
+                <div class="dph-eyebrow">의견서 대응</div>
+                <h2 class="dph-title">
+                  <span id="opinionDetailAppNo" style="font-size:12px;font-weight:600;color:var(--dt-brand);font-family:var(--dt-mono)">-</span>
+                  <span id="opinionDetailTitle">프로젝트</span>
+                </h2>
+                <div class="dph-meta"><span id="opinionDetailType"></span><span id="opinionDetailStatus"></span></div>
               </div>
-              <div style="display:flex;gap:8px;margin-top:4px"><span id="opinionDetailType"></span><span id="opinionDetailStatus"></span></div>
+            </div>
+            <div class="dph-actions">
+              <button class="btn btn-secondary btn-sm" onclick="Opinion.saveCurrentProject && Opinion.saveCurrentProject()" title="저장"><span class="ico" data-icon="save" data-size="14"></span> 저장</button>
             </div>
           </div>
           <div class="opinion-pipeline" id="opinionPipeline"></div>
@@ -299,14 +305,20 @@
 
         <!-- 분할출원 프로젝트 상세 -->
         <div id="divisionDetailView" style="display:none">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-            <button class="btn btn-ghost btn-sm" onclick="Division.backToList()"><span class="ico" data-icon="arrow-left" data-size="14"></span></button>
-            <div>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span id="divisionDetailRef" style="font-size:12px;font-weight:600;color:var(--color-primary)">-</span>
-                <h2 id="divisionDetailTitle" style="font-size:18px;font-weight:700">프로젝트</h2>
+          <div class="detail-page-header">
+            <div class="dph-left">
+              <button class="detail-back-btn" onclick="Division.backToList()" title="목록으로 돌아가기" aria-label="목록으로 돌아가기"><span class="ico" data-icon="arrow-left" data-size="16"></span></button>
+              <div class="dph-title-block">
+                <div class="dph-eyebrow">분할출원</div>
+                <h2 class="dph-title">
+                  <span id="divisionDetailRef" style="font-size:12px;font-weight:600;color:var(--dt-brand);font-family:var(--dt-mono)">-</span>
+                  <span id="divisionDetailTitle">프로젝트</span>
+                </h2>
+                <div class="dph-meta"><span id="divisionDetailType"></span><span id="divisionDetailStatus"></span></div>
               </div>
-              <div style="display:flex;gap:8px;margin-top:4px"><span id="divisionDetailType"></span><span id="divisionDetailStatus"></span></div>
+            </div>
+            <div class="dph-actions">
+              <button class="btn btn-secondary btn-sm" onclick="Division.saveCurrentProject && Division.saveCurrentProject()" title="저장"><span class="ico" data-icon="save" data-size="14"></span> 저장</button>
             </div>
           </div>
           <div class="division-pipeline" id="divisionPipeline"></div>
@@ -571,10 +583,11 @@
         <textarea class="input-field dkt-notes-area" id="dkt-notes" rows="8"
           oninput="this.dataset.userEdited='true'"></textarea>
 
-        <!-- 하단 버튼 -->
+        <!-- 하단 액션 바 (스티키) -->
         <div class="dkt-actions">
-          <button class="btn btn-ghost" onclick="Docket.resetForm()"><span class="ico" data-icon="refresh"></span> 초기화</button>
-          <button class="btn btn-outline" onclick="Docket.downloadExcel()"><span class="ico" data-icon="download"></span> 견적서만 다운로드</button>
+          <span class="dkt-actions-spacer">입력 완료 후 미리보기를 거쳐 발송하세요. 견적서만 따로 받을 수도 있어요.</span>
+          <button class="btn btn-ghost" onclick="Docket.resetForm()" title="초기화"><span class="ico" data-icon="refresh"></span> 초기화</button>
+          <button class="btn btn-secondary" onclick="Docket.downloadExcel()"><span class="ico" data-icon="download"></span> 견적서 다운로드</button>
           <button class="btn btn-primary" onclick="Docket.preview()"><span class="ico" data-icon="mail"></span> 미리보기 &amp; 발송</button>
         </div>
       </div>
@@ -1215,8 +1228,83 @@
       </div>
     </div>
 
+    <!-- 스티키 하단 단계 네비게이션 (특허 명세서 에디터) -->
+    <div class="sticky-step-nav" id="editorStepNav">
+      <div class="ssn-progress">
+        <span id="editorStepLabel">1 / 5 단계 · A. 기본</span>
+        <div class="ssn-bar"><i id="editorStepBar" style="width:20%"></i></div>
+      </div>
+      <div class="ssn-actions">
+        <button class="btn btn-secondary" id="editorPrevBtn" onclick="editorGoPrev()" title="이전 단계 (Alt+←)"><span class="ico" data-icon="chevron-left"></span> 이전</button>
+        <button class="btn btn-secondary" onclick="saveProject()" title="저장 (Ctrl+S)"><span class="ico" data-icon="save" data-size="14"></span> 저장</button>
+        <button class="btn btn-primary" id="editorNextBtn" onclick="editorGoNext()" title="다음 단계 (Alt+→)">다음 <span class="ico" data-icon="chevron-right"></span></button>
+      </div>
+    </div>
+
   </div>
 </div>
+
+<!-- 특허 명세서 에디터 — 스티키 하단 nav 동작 (switchTab 래핑) -->
+<script>
+(function(){
+  var LABELS = ['A. 기본','A. 청구항','B·C. 도면','D·E. 검증','F. 산출물'];
+  var TOTAL  = LABELS.length;
+  function curIdx(){
+    var act = document.querySelector('#screenMain .tab-item.active');
+    if(!act) return 0;
+    var tabs = document.querySelectorAll('#screenMain .tab-item');
+    return Array.prototype.indexOf.call(tabs, act);
+  }
+  function applyState(i){
+    var label = document.getElementById('editorStepLabel');
+    var bar   = document.getElementById('editorStepBar');
+    var prev  = document.getElementById('editorPrevBtn');
+    var next  = document.getElementById('editorNextBtn');
+    if(label) label.textContent = (i+1) + ' / ' + TOTAL + ' · ' + LABELS[i];
+    if(bar)   bar.style.width = Math.round(((i+1)/TOTAL)*100) + '%';
+    if(prev)  prev.disabled = (i <= 0);
+    if(next)  next.disabled = (i >= TOTAL-1);
+    if(next){
+      // 마지막 단계에서는 "완료" 의미로 살짝 다른 문구
+      next.innerHTML = (i >= TOTAL-1)
+        ? '<span class="ico" data-icon="check"></span> 단계 완료'
+        : '다음 <span class="ico" data-icon="chevron-right"></span>';
+      if(window.Icons && Icons.renderAll) Icons.renderAll(next);
+    }
+  }
+  window.editorGoPrev = function(){
+    var i = curIdx();
+    if(i > 0 && typeof switchTab === 'function') switchTab(i-1);
+    applyState(Math.max(0, i-1));
+  };
+  window.editorGoNext = function(){
+    var i = curIdx();
+    if(i < TOTAL-1 && typeof switchTab === 'function') switchTab(i+1);
+    applyState(Math.min(TOTAL-1, i+1));
+  };
+  // switchTab 외부 호출 추적: tab-item 클릭 직후 상태 동기화
+  document.addEventListener('click', function(e){
+    var t = e.target.closest && e.target.closest('#screenMain .tab-item');
+    if(!t) return;
+    // switchTab(i) 가 클래스 토글까지 끝낸 뒤에 동기화
+    setTimeout(function(){ applyState(curIdx()); }, 0);
+  });
+  // 키보드 단축키
+  document.addEventListener('keydown', function(e){
+    if(document.getElementById('screenMain').style.display === 'none') return;
+    if(e.altKey && e.key === 'ArrowLeft')  { e.preventDefault(); editorGoPrev(); }
+    if(e.altKey && e.key === 'ArrowRight') { e.preventDefault(); editorGoNext(); }
+  });
+  // 초기 상태 + screenMain 표시 변화 감시
+  document.addEventListener('DOMContentLoaded', function(){ applyState(curIdx()); });
+  var sm = document.getElementById('screenMain');
+  if(sm){
+    new MutationObserver(function(){
+      if(sm.style.display !== 'none') applyState(curIdx());
+    }).observe(sm, { attributes: true, attributeFilter: ['style','class'] });
+  }
+})();
+</script>
 
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

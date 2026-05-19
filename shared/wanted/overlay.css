@@ -450,3 +450,248 @@ table thead th { letter-spacing: 0.04em; font-size: 11.5px !important; }
   align-items: center;
   gap: 4px;
 }
+
+/* ── 22. 상세 페이지 공통 — page-header / back-row ──────────── */
+.detail-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 28px 12px;
+  background: #fff;
+  border-bottom: 1px solid var(--dt-g150);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.detail-page-header .dph-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.detail-page-header .dph-title-block { min-width: 0; }
+.detail-page-header .dph-eyebrow {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--dt-brand);
+  text-transform: uppercase;
+}
+.detail-page-header .dph-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  color: var(--dt-g900);
+  margin: 2px 0 0;
+  line-height: 1.3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.detail-page-header .dph-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dt-g500);
+}
+.detail-page-header .dph-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.detail-back-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--dt-r-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--dt-g500);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .12s ease, color .12s ease;
+}
+.detail-back-btn:hover {
+  background: rgba(112,115,124,.08);
+  color: var(--dt-g900);
+}
+
+/* ── 23. 스티키 하단 액션 바 (step-nav 패턴) ───────────────── */
+.sticky-step-nav {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 28px;
+  background: #fff;
+  border-top: 1px solid var(--dt-g150);
+  box-shadow: 0 -4px 12px -8px rgba(23,23,25,.10);
+  margin-top: 24px;
+}
+.sticky-step-nav .ssn-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dt-g500);
+  font-family: var(--font-display);
+  letter-spacing: -0.005em;
+}
+.sticky-step-nav .ssn-bar {
+  width: 180px;
+  height: 4px;
+  background: var(--dt-g100);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.sticky-step-nav .ssn-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--dt-brand);
+  transition: width .25s cubic-bezier(.4,0,.2,1);
+}
+.sticky-step-nav .ssn-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sticky-step-nav .ssn-secondary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 4px;
+  border-right: 1px solid var(--dt-g150);
+  margin-right: 4px;
+}
+.sticky-step-nav .ssn-secondary:empty { display: none; }
+.sticky-step-nav .btn { height: 38px; padding: 0 14px; }
+.sticky-step-nav .btn-primary {
+  padding: 0 18px;
+  font-weight: 700;
+}
+
+/* 사건등록 — 기존 .dkt-actions 를 위 스티키 패턴으로 끌어올림 */
+.dkt-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  margin: 32px -28px -32px;
+  padding: 14px 28px;
+  background: #fff;
+  border-top: 1px solid var(--dt-g150);
+  box-shadow: 0 -4px 12px -8px rgba(23,23,25,.10);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.dkt-actions .btn { height: 40px; padding: 0 16px; }
+.dkt-actions .btn-primary { padding: 0 22px; font-weight: 700; }
+.dkt-actions .dkt-actions-spacer {
+  flex: 1;
+  font-size: 12px;
+  color: var(--dt-g500);
+}
+
+/* ── 24. CTA 위계 명확화 — 카드 안 단독 행에서의 primary 버튼 강조 */
+.btn-primary.btn-full,
+.btn-primary.btn-lg {
+  height: 44px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* 결과 카드 헤더 우측 액션 그룹 */
+.result-card .card-header {
+  align-items: center;
+}
+.result-card .card-header .card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* ── 25. 모달 푸터 CTA — 좌측 ghost 취소 + 우측 primary ─────── */
+.modal-content .modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  margin-top: 20px;
+  border-top: 1px solid var(--dt-g150);
+  padding-top: 16px;
+}
+.modal-content .modal-footer .btn { height: 40px; min-width: 88px; }
+.modal-content .modal-footer .btn-primary { flex: 1; font-weight: 700; }
+.modal-content .modal-footer .modal-footer-spacer { flex: 1; }
+
+/* ── 26. selection-card 상태 ─────────────────────────────────── */
+.selection-card {
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all .12s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.selection-card:hover { border-color: var(--dt-g300); }
+.selection-card-category .ico { color: var(--dt-g500); }
+.selection-card.selected .selection-card-category .ico,
+.selection-card.is-active .selection-card-category .ico {
+  color: var(--dt-brand);
+}
+
+/* ── 27. opinion / division pipeline · detail wrapper 여유 ── */
+.opinion-pipeline,
+.division-pipeline {
+  margin-bottom: 16px;
+}
+.opinion-detail,
+.division-detail {
+  display: grid;
+  gap: 16px;
+}
+
+/* ── 28. screenMain 컨테이너 — 기존 patent.css의 flex 레이아웃은 유지,
+   sticky tab-container와 하단 nav 영역만 보강 ─────────────────── */
+#screenMain .app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+#screenMain .tab-container {
+  position: sticky;
+  top: 64px;
+  z-index: 30;
+  background: #fff;
+}
+/* 스티키 하단 nav 와 겹치지 않도록 마지막 page 하단 여유 확보 */
+#screenMain .page { padding-bottom: 24px; }
+
+/* ── 29. 결과 카드 빈 상태 톤 ────────────────────────────────── */
+.result-area:empty::before {
+  content: "아직 결과가 없어요";
+  display: block;
+  padding: 24px 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--dt-g400);
+}
