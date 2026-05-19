@@ -1281,7 +1281,7 @@ Division.renderParse = function(left, right, p){
   rh += '<div style="display:flex;gap:8px;margin-top:12px">';
   rh += '<button class="btn btn-ghost" onclick="Division.rerunParse()" style="flex:1;padding:12px"><span class="ico" data-icon="refresh"></span> 재파싱</button>';
   rh += '<button class="btn btn-primary" onclick="Division.confirmParse()" style="flex:1;padding:12px"><span class="ico" data-icon="check-circle"></span> 파싱 승인 → 분석</button></div>';
-  rh += '<div style="margin-top:8px;padding:10px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm);font-size:12px;color:var(--color-text-tertiary)">⚠️ 파싱 결과가 정확한지 확인 후 승인을 눌러주세요. 역할은 드롭다운으로 수정 가능합니다.</div>';
+  rh += '<div style="margin-top:8px;padding:10px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm);font-size:12px;color:var(--color-text-tertiary)"><span class="ico" data-icon="warning"></span> 파싱 결과가 정확한지 확인 후 승인을 눌러주세요. 역할은 드롭다운으로 수정 가능합니다.</div>';
   right.innerHTML = rh;
 };
 
@@ -1763,7 +1763,7 @@ Division.renderAnalyze = function(left, right, p){
       if(!im.target) return;
       var escaped = escapeHtml(im.target);
       var color = im.selected ? (im.riskLevel==='safe'?'#059669':'#d97706') : '#9ca3af';
-      var marker = '<span style="background:' + (im.selected?'#ecfdf5':'#f9fafb') + ';border-bottom:2px solid ' + color + ';padding:0 2px" title="' + escapeHtml(im.content) + '">' + escaped + ' <sup style="font-size:9px;color:' + color + '">+</sup></span>';
+      var marker = '<span style="background:' + (im.selected?'#F2FFF6':'var(--dt-g50)') + ';border-bottom:2px solid ' + color + ';padding:0 2px" title="' + escapeHtml(im.content) + '">' + escaped + ' <sup style="font-size:9px;color:' + color + '">+</sup></span>';
       var placeholder = '\x00PH' + imIdx + '\x00';
       placeholders.push({ placeholder:placeholder, marker:marker });
       // 첫 번째 매치만 치환하여 중복 방지
@@ -1867,7 +1867,7 @@ Division.renderAnalyze = function(left, right, p){
       h += '<div style="font-size:11px;color:var(--color-text-tertiary)">근거: ' + (t.spec_paragraphs||[]).map(function(s){return '【'+s+'】';}).join(' ') + '</div>';
       if(t.differentiation) h += '<div style="font-size:11px;color:var(--color-primary);margin-top:2px"><span class="ico" data-icon="lightbulb"></span> ' + escapeHtml(t.differentiation) + '</div>';
       var tFlags = Division._toArray(t.risk_flags);
-      if(tFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:2px">⚠️ ' + escapeHtml(tFlags.join(', ')) + '</div>';
+      if(tFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:2px"><span class="ico" data-icon="warning"></span> ' + escapeHtml(tFlags.join(', ')) + '</div>';
       h += '</div>';
 
       h += '</div></label></div>';
@@ -1947,7 +1947,7 @@ Division.renderAnalyze = function(left, right, p){
       }
       if(cd.registration_strategy) h += '<div class="division-reg-strategy"><span class="ico" data-icon="lightbulb"></span> '+escapeHtml(cd.registration_strategy.substring(0,150))+'</div>';
       var ucFlags = Division._toArray(uc.risk_flags);
-      if(ucFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:4px">⚠️ '+escapeHtml(ucFlags.join(', '))+'</div>';
+      if(ucFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:4px"><span class="ico" data-icon="warning"></span> '+escapeHtml(ucFlags.join(', '))+'</div>';
       if(uc.suggestion) h += '<div style="font-size:11px;color:var(--color-success);margin-top:2px"><span class="ico" data-icon="lightbulb"></span> '+escapeHtml(uc.suggestion)+'</div>';
       h += '</div>'; // card-body
       h += '</div>'; // card
@@ -2432,7 +2432,7 @@ Division.renderAssemble = function(left, right, p){
         h += '<div class="division-claim-body" style="white-space:pre-wrap">' + escapeHtml(Division._formatClaimText(divCleanText)) + '</div>';
         if(origDep){
           h += '<details style="margin-top:8px"><summary style="font-size:11px;color:var(--color-text-tertiary);cursor:pointer">원본 제' + origDep.claim_number + '항 보기</summary>';
-          h += '<div style="font-size:12px;line-height:1.7;padding:8px;background:#f8fafc;border-radius:4px;margin-top:4px">' + escapeHtml(origDep.amended_text || origDep.original_text || '') + '</div>';
+          h += '<div style="font-size:12px;line-height:1.7;padding:8px;background:var(--dt-g50);border-radius:4px;margin-top:4px">' + escapeHtml(origDep.amended_text || origDep.original_text || '') + '</div>';
           h += '</details>';
         }
         h += '</div>';
@@ -2458,7 +2458,7 @@ Division.renderAssemble = function(left, right, p){
   rh += '<div class="card" style="padding:14px;margin-top:12px"><div style="font-size:12px;font-weight:600;margin-bottom:8px">🖍️ 색상 범례</div>';
   rh += '<div style="font-size:12px;line-height:2">';
   rh += '<span class="division-diff-added" style="padding:2px 8px">초록 배경</span> 부가/병합/변환된 구성 (원본에 없던 내용)<br>';
-  rh += '<span style="padding:2px 8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:2px">회색 배경</span> 원본 유지 부분';
+  rh += '<span style="padding:2px 8px;background:var(--dt-g50);border:1px solid var(--dt-g150);border-radius:2px">회색 배경</span> 원본 유지 부분';
   rh += '</div></div>';
 
   rh += '<div id="divisionVerifyProgress" style="margin-top:12px"></div>';
@@ -2905,12 +2905,12 @@ Division.renderVerify = function(left, right, p){
   var warnCount = results.filter(function(r){ return r.result==='warning'; }).length;
   var failCount = results.filter(function(r){ return r.result==='fail'; }).length;
   h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="robot"></span> AI 검증 (LLM)</div>';
-  h += '<div class="division-val-summary"><div class="division-val-stat pass"><span class="ico" data-icon="check-circle"></span> 통과 '+passCount+'</div><div class="division-val-stat warn">⚠️ 주의 '+warnCount+'</div><div class="division-val-stat fail"><span class="ico" data-icon="x"></span> 실패 '+failCount+'</div></div>';
+  h += '<div class="division-val-summary"><div class="division-val-stat pass"><span class="ico" data-icon="check-circle"></span> 통과 '+passCount+'</div><div class="division-val-stat warn"><span class="ico" data-icon="warning"></span> 주의 '+warnCount+'</div><div class="division-val-stat fail"><span class="ico" data-icon="x"></span> 실패 '+failCount+'</div></div>';
   var typeLabels = {new_matter:'신규사항',basis_scope:'basis 보존/원출원 범위',double_patenting:'이중 특허',spec_support:'명세서 뒷받침',support:'명세서 뒷받침',format:'형식',abstract_expression:'추상적 표현',functional_limitation:'기능적 기재',overlap:'구성 중복'};
   if(!results.length){ h += '<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)">검증 결과가 없습니다.</div>'; }
   else { results.forEach(function(vr, vrIdx){
     var resultCss = vr.result==='pass'?'vr-pass':vr.result==='warning'?'vr-warn':'vr-fail';
-    var resultIcon = vr.result==='pass'?'✅':vr.result==='warning'?'⚠️':'❌';
+    var resultIcon = vr.result==='pass'?'<span class="ico" data-icon="check-circle" data-size="14"></span>':vr.result==='warning'?'<span class="ico" data-icon="warning" data-size="14"></span>':'<span class="ico" data-icon="x-circle" data-size="14"></span>';
     var typeLabel = typeLabels[vr.check_type]||vr.check_type;
     h += '<div class="division-val-row '+resultCss+'" id="divValRow'+vrIdx+'" onclick="this.classList.toggle(\'expanded\')">';
     h += '<div class="division-val-row-header"><span>'+resultIcon+'</span><span style="font-weight:500;flex:1">'+typeLabel+'</span><span class="division-val-result-badge '+resultCss+'">'+vr.result+'</span></div>';
@@ -2994,8 +2994,8 @@ Division.renderVerify = function(left, right, p){
         var elementText = tc.based_on_element;
         // 교차확인: based_on_element가 독립항에 실제 포함되는지
         var found = allClaimText.indexOf(elementText.substring(0, Math.min(20, elementText.length))) >= 0;
-        rh += '<div style="font-size:11px;margin-top:2px;padding:4px 8px;border-radius:var(--radius-sm);background:'+(found?'#f0fdf4':'#fef2f2')+'">';
-        rh += '<span style="color:'+(found?'var(--color-success)':'var(--color-error)')+'"><span class="ico" data-icon="flag"></span> 청구항 포함 확인: '+(found?'✅':'⚠️ 미포함')+'</span>';
+        rh += '<div style="font-size:11px;margin-top:2px;padding:4px 8px;border-radius:var(--radius-sm);background:'+(found?'#f0fdf4':'#FEECEC')+'">';
+        rh += '<span style="color:'+(found?'var(--color-success)':'var(--color-error)')+'"><span class="ico" data-icon="flag"></span> 청구항 포함 확인: '+(found?'<span class="ico" data-icon="check-circle" data-size="12"></span> 포함':'<span class="ico" data-icon="warning" data-size="12"></span> 미포함')+'</span>';
         rh += '<div style="color:var(--color-text-secondary);margin-top:2px">"'+escapeHtml(elementText.substring(0,120))+(elementText.length>120?'...':'')+'"</div>';
         rh += '</div>';
       }
@@ -3012,7 +3012,7 @@ Division.renderVerify = function(left, right, p){
 
   // ⚠️ 명칭 변경 시 경고
   rh += '<div id="divisionTitleWarning" class="division-title-warning" style="display:none">';
-  rh += '<div style="font-weight:600;margin-bottom:4px">⚠️ 발명의 명칭 변경 시 유의사항</div>';
+  rh += '<div style="font-weight:600;margin-bottom:4px"><span class="ico" data-icon="warning"></span> 발명의 명칭 변경 시 유의사항</div>';
   rh += '<div style="font-size:12px;line-height:1.7">';
   rh += '분할출원의 명칭을 원출원과 다르게 하는 경우, 명세서의 다음 부분도 함께 변경해야 합니다:';
   rh += '<ul style="margin:6px 0 0 16px;padding:0"><li>【발명의 명칭】 항목</li><li>【요약서】의 발명 제목</li><li>【국제특허분류】가 달라지는 경우 IPC 코드</li><li>출원서 표지의 발명의 명칭란</li></ul>';
@@ -3037,9 +3037,9 @@ Division.renderVerify = function(left, right, p){
     if(totalWarning > 0) msgs.push('주의 '+totalWarning+'건');
     rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)"><span class="ico" data-icon="x"></span> '+msgs.join(' / ')+' — 수정하거나 구성을 제거한 후 재검증하세요.</div>';
   } else if(totalWarning > 0){
-    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-warning-light);border-radius:var(--radius-sm);font-size:13px;color:#92400e">⚠️ 주의 '+totalWarning+'건 — "수용" 또는 "수정"을 선택하면 최종 확정할 수 있습니다.</div>';
+    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-warning-light);border-radius:var(--radius-sm);font-size:13px;color:#663A00"><span class="ico" data-icon="warning"></span> 주의 '+totalWarning+'건 — "수용" 또는 "수정"을 선택하면 최종 확정할 수 있습니다.</div>';
   } else {
-    rh += '<div style="margin-top:12px;padding:12px;background:#d1fae5;border-radius:var(--radius-sm);font-size:13px;color:#065f46"><span class="ico" data-icon="check-circle"></span> 모든 검증 통과 — 최종 확정할 수 있습니다.</div>';
+    rh += '<div style="margin-top:12px;padding:12px;background:#D9FFE6;border-radius:var(--radius-sm);font-size:13px;color:#006E25"><span class="ico" data-icon="check-circle"></span> 모든 검증 통과 — 최종 확정할 수 있습니다.</div>';
   }
   rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="ico" data-icon="refresh"></span> 재검증</button>';
   var canConfirm = totalBlocking === 0 && totalWarning === 0;
@@ -3501,7 +3501,7 @@ Division.renderConfirm = function(left, right, p){
   rh += '<div style="margin-top:4px"><strong>【영문】</strong>'+escapeHtml(p.title_en||'')+'</div></div>';
   if(p.title_changed){
     rh += '<div style="margin-top:10px;padding:10px 12px;background:var(--color-warning-light);border-radius:var(--radius-sm);border-left:3px solid var(--color-warning);font-size:12px;line-height:1.6">';
-    rh += '<strong>⚠️ 명칭 변경됨</strong> — 원출원과 발명의 명칭이 다릅니다.<br>';
+    rh += '<strong><span class="ico" data-icon="warning"></span> 명칭 변경됨</strong> — 원출원과 발명의 명칭이 다릅니다.<br>';
     rh += '명세서의 【발명의 명칭】, 【요약서】, 출원서 표지도 함께 수정하세요.';
     if(p.original_title_ko) rh += '<div style="margin-top:6px;color:var(--color-text-tertiary)">원출원: ' + escapeHtml(p.original_title_ko) + '</div>';
     rh += '</div>';

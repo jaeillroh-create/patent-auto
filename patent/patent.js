@@ -1916,7 +1916,7 @@ function initUserFiguresUI(){
       <div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px">
         <div><label style="font-size:11px;color:var(--color-text-tertiary)">도면 번호</label>
           <input type="number" class="input-field" id="inpRequiredFigNum" min="1" max="30" placeholder="3" style="width:60px;margin-top:2px" /></div>
-        <div style="flex:1"><label style="font-size:11px;color:var(--color-text-tertiary)">도면 설명 <span style="color:#e53935">*필수</span></label>
+        <div style="flex:1"><label style="font-size:11px;color:var(--color-text-tertiary)">도면 설명 <span style="color:var(--dt-danger)">*필수</span></label>
           <input type="text" class="input-field" id="inpRequiredFigDesc" placeholder="예: 본 발명의 실험 결과를 나타내는 그래프" style="margin-top:2px" /></div>
         <button class="btn btn-primary btn-sm" onclick="addRequiredFigure()" title="도면 추가">＋ 추가</button>
       </div>
@@ -1925,7 +1925,7 @@ function initUserFiguresUI(){
         <input type="file" id="inpRequiredFigFile" accept="image/*,.pdf" style="font-size:12px;margin-top:2px" />
       </div>
       <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px;padding:6px 8px;background:var(--color-bg-secondary);border-radius:6px">
-        💡 사용자 도면의 번호는 자동 생성 도면과 충돌하지 않도록 번호가 밀립니다. 예: 도 3을 추가하면, 자동 도면은 도 1, 2, 4, 5... 순으로 생성됩니다.
+        <span class="ico" data-icon="lightbulb"></span> 사용자 도면의 번호는 자동 생성 도면과 충돌하지 않도록 번호가 밀립니다. 예: 도 3을 추가하면, 자동 도면은 도 1, 2, 4, 5... 순으로 생성됩니다.
       </div>
     </div>`;
   }
@@ -2329,11 +2329,11 @@ function _updateCascadePanelItem(sid,status){
     if(status==='done'){
       label.style.cssText='display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;opacity:0.5;text-decoration:line-through;pointer-events:none';
       const span=label.querySelector('span');
-      if(span)span.textContent=`✅ ${STEP_NAMES[sid]||sid}`;
+      if(span){span.innerHTML=`<span class="ico" data-icon="check-circle" data-size="12"></span> ${App.escapeHtml(STEP_NAMES[sid]||sid)}`;if(window.Icons&&Icons.renderAll)Icons.renderAll(span);}
     }else if(status==='fail'){
       label.style.opacity='0.7';
       const span=label.querySelector('span');
-      if(span)span.textContent=`❌ ${STEP_NAMES[sid]||sid}`;
+      if(span){span.innerHTML=`<span class="ico" data-icon="x-circle" data-size="12"></span> ${App.escapeHtml(STEP_NAMES[sid]||sid)}`;if(window.Icons&&Icons.renderAll)Icons.renderAll(span);}
     }
   }
   // 모든 항목 완료 시 패널 자동 닫기
@@ -2360,7 +2360,7 @@ function showCascadePanel(changedStep,mustDeps,shouldDeps){
   panel.id='cascadePanel';
   panel.style.cssText='position:fixed;bottom:20px;right:20px;width:380px;max-height:70vh;overflow-y:auto;background:#fff;border:2px solid #1976d2;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:9999;font-family:"맑은 고딕",sans-serif';
 
-  let html=`<div style="background:#1976d2;color:#fff;padding:12px 16px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center">
+  let html=`<div style="background:var(--dt-brand-hover);color:#fff;padding:12px 16px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center">
     <span style="font-size:13px;font-weight:600"><span class="ico" data-icon="refresh"></span> ${STEP_NAMES[changedStep]} 변경 — 연쇄 수정</span>
     <button onclick="document.getElementById('cascadePanel').remove()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px"><span class="ico" data-icon="x"></span></button>
   </div>
@@ -2369,10 +2369,10 @@ function showCascadePanel(changedStep,mustDeps,shouldDeps){
   // MUST 항목
   if(mustDeps.length){
     html+=`<div style="margin-bottom:10px">
-      <div style="font-size:11px;font-weight:700;color:#c62828;margin-bottom:6px"><span class="status-dot negative"></span> 필수 재생성 (${mustDeps.length}건)</div>`;
+      <div style="font-size:11px;font-weight:700;color:var(--dt-danger);margin-bottom:6px"><span class="status-dot negative"></span> 필수 재생성 (${mustDeps.length}건)</div>`;
     mustDeps.forEach(d=>{
       html+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer">
-        <input type="checkbox" class="cascade-cb" data-step="${d}" data-level="must" checked style="accent-color:#c62828">
+        <input type="checkbox" class="cascade-cb" data-step="${d}" data-level="must" checked style="accent-color:var(--dt-danger)">
         <span>${STEP_NAMES[d]||d}</span>
       </label>`;
     });
@@ -2394,10 +2394,10 @@ function showCascadePanel(changedStep,mustDeps,shouldDeps){
 
   // 전체선택/해제 + 실행 버튼
   html+=`<div style="display:flex;gap:8px;margin-top:10px">
-    <button onclick="document.querySelectorAll('.cascade-cb').forEach(c=>c.checked=true)" style="flex:1;padding:6px;font-size:11px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer">전체 선택</button>
-    <button onclick="document.querySelectorAll('.cascade-cb').forEach(c=>c.checked=false)" style="flex:1;padding:6px;font-size:11px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer">전체 해제</button>
+    <button onclick="document.querySelectorAll('.cascade-cb').forEach(c=>c.checked=true)" style="flex:1;padding:6px;font-size:11px;border:1px solid #ccc;border-radius:6px;background:var(--dt-g100);cursor:pointer">전체 선택</button>
+    <button onclick="document.querySelectorAll('.cascade-cb').forEach(c=>c.checked=false)" style="flex:1;padding:6px;font-size:11px;border:1px solid #ccc;border-radius:6px;background:var(--dt-g100);cursor:pointer">전체 해제</button>
   </div>
-  <button id="btnCascadeRun" onclick="runCascadeRegeneration('${changedStep}')" style="width:100%;margin-top:10px;padding:10px;font-size:13px;font-weight:600;color:#fff;background:#1976d2;border:none;border-radius:8px;cursor:pointer">
+  <button id="btnCascadeRun" onclick="runCascadeRegeneration('${changedStep}')" style="width:100%;margin-top:10px;padding:10px;font-size:13px;font-weight:600;color:#fff;background:var(--dt-brand-hover);border:none;border-radius:8px;cursor:pointer">
     ✨ 선택 항목 자동 재생성
   </button>
   <div id="cascadeProgress" style="margin-top:8px;font-size:11px;color:#666"></div>
@@ -2421,7 +2421,7 @@ function _mergeCascadeItems(panel,changedStep,mustDeps,shouldDeps){
     if(target){
       const lbl=document.createElement('label');
       lbl.style.cssText='display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer';
-      lbl.innerHTML=`<input type="checkbox" class="cascade-cb" data-step="${d}" data-level="must" checked style="accent-color:#c62828"><span>${STEP_NAMES[d]||d}</span>`;
+      lbl.innerHTML=`<input type="checkbox" class="cascade-cb" data-step="${d}" data-level="must" checked style="accent-color:var(--dt-danger)"><span>${STEP_NAMES[d]||d}</span>`;
       target.appendChild(lbl);
       added++;
     }
@@ -2519,7 +2519,7 @@ async function runCascadeRegeneration(sourceStep){
 
   for(const sid of sorted){
     if(prog)prog.innerHTML=`<div style="margin-bottom:4px">진행: ${completed+1}/${total} — <b>${STEP_NAMES[sid]}</b> 재생성 중...</div>
-      <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:#1976d2;border-radius:4px;height:6px;width:${Math.round(completed/total*100)}%;transition:width .3s"></div></div>`;
+      <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:var(--dt-brand-hover);border-radius:4px;height:6px;width:${Math.round(completed/total*100)}%;transition:width .3s"></div></div>`;
 
     try{
       // step별 적절한 runner 호출
@@ -2535,12 +2535,12 @@ async function runCascadeRegeneration(sourceStep){
       onStepCompleted(sid);
     }catch(e){
       console.error(`Cascade ${sid} 실패:`,e);
-      if(prog)prog.innerHTML+=`<div style="color:#c62828;font-size:11px"><span class="ico" data-icon="x"></span> ${STEP_NAMES[sid]} 실패: ${e.message}</div>`;
+      if(prog)prog.innerHTML+=`<div style="color:var(--dt-danger);font-size:11px"><span class="ico" data-icon="x"></span> ${STEP_NAMES[sid]} 실패: ${e.message}</div>`;
     }
   }
 
-  if(prog)prog.innerHTML=`<div style="color:#2e7d32;font-weight:600"><span class="ico" data-icon="check-circle"></span> ${completed}/${total} 완료</div>
-    <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:#4caf50;border-radius:4px;height:6px;width:100%"></div></div>`;
+  if(prog)prog.innerHTML=`<div style="color:var(--dt-success);font-weight:600"><span class="ico" data-icon="check-circle"></span> ${completed}/${total} 완료</div>
+    <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:var(--dt-success);border-radius:4px;height:6px;width:100%"></div></div>`;
   if(btn){btn.textContent='<span class="ico" data-icon="check-circle"></span> 완료';btn.style.background='#4caf50';}
   // BUG-3 fix: globalProcessing 해제
   setGlobalProcessing(false);
@@ -3727,11 +3727,11 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
 
 ⛔⛔⛔ 명칭 고유성 규칙 (기재불비 — 절대 위반 금지) ⛔⛔⛔
 - 서로 다른 참조번호에는 반드시 서로 다른 명칭을 사용하라.
-  ❌ 금지: 서버(100)와 서버(300) — 같은 이름에 다른 번호
-  ✅ 올바른: 통합 서버(100)와 벤더 서버(300) — 구별 가능한 이름
+  <span class="ico" data-icon="x"></span> 금지: 서버(100)와 서버(300) — 같은 이름에 다른 번호
+  <span class="ico" data-icon="check-circle"></span> 올바른: 통합 서버(100)와 벤더 서버(300) — 구별 가능한 이름
 - 서로 같은 참조번호에는 반드시 동일한 명칭을 사용하라.
-  ❌ 금지: 도 1에서 "처리부(110)", 도 2에서 "분석부(110)"
-  ✅ 올바른: 모든 도면에서 "처리부(110)"으로 통일
+  <span class="ico" data-icon="x"></span> 금지: 도 1에서 "처리부(110)", 도 2에서 "분석부(110)"
+  <span class="ico" data-icon="check-circle"></span> 올바른: 모든 도면에서 "처리부(110)"으로 통일
 - L1 장치명은 발명 명칭에서 유래하거나, 역할이 명확히 구분되는 명칭을 사용하라.
   예: "기업용 인공지능 통합 서버(100)", "사용자 단말(200)", "벤더 서버(300)"
 
@@ -3757,8 +3757,8 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ■ 도 1: 전체 시스템 구성도 (System Overview)
-  ✅ 허용: L1 장치 박스만 — 100, 200, 300, 400...
-  ✅ 허용: L1 장치 박스들 간의 연결선만
+  <span class="ico" data-icon="check-circle"></span> 허용: L1 장치 박스만 — 100, 200, 300, 400...
+  <span class="ico" data-icon="check-circle"></span> 허용: L1 장치 박스들 간의 연결선만
   ⛔ 금지: L2/L3 하위 구성요소(110, 120, 111...) 표시 금지
   ⛔ 금지: 최외곽 박스 생성 금지 (L1만 있으므로 외곽 불필요)
   ★ 최소 L1 구성요소: 2개 이상 (1개만 있으면 도 1 불필요)
@@ -3768,29 +3768,29 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   최외곽 박스 = 상위 장치
   내부 박스 = 그 상위 장치의 직계 자식 레벨만
   단, 서브 프레임을 사용한 중첩은 허용:
-  ✅ 허용: 100 프레임 → L2(110 서브프레임[111,112,113 내부] + 120 독립블록)
+  <span class="ico" data-icon="check-circle"></span> 허용: 100 프레임 → L2(110 서브프레임[111,112,113 내부] + 120 독립블록)
      → 110이 서브 프레임(점선)으로 그려지고 내부에 L3이 포함된 구조
   ⛔ 금지: 100 프레임 → 110 + 120 + 111 + 112 (서브 프레임 없이 L2·L3 혼합 나열)
   
   ⛔⛔⛔ 내부 구성요소 수량 규칙 (절대 준수) ⛔⛔⛔
   ★★ 최소: 3개 이상 (2개만으로는 도면이 빈약) ★★
   ★★ 최대: 5개 이하 (6개 이상이면 반드시 도면을 분할하라) ★★
-  → 청구항에 하위 구성요소가 6개 이상이면, 핵심 3~5개만 골라 이 도면에 넣고 나머지는 다음 도면에서 다루라.
-  → 청구항에 하위 구성요소가 2개뿐이면, 기능적으로 분리하여 3~4개로 확장하라.
-  → 구성요소를 억지로 세분화하여 수를 늘리지 마라. 청구항에 명시된 핵심 구성만 사용하라.
+  <span class="ico" data-icon="arrow-right"></span> 청구항에 하위 구성요소가 6개 이상이면, 핵심 3~5개만 골라 이 도면에 넣고 나머지는 다음 도면에서 다루라.
+  <span class="ico" data-icon="arrow-right"></span> 청구항에 하위 구성요소가 2개뿐이면, 기능적으로 분리하여 3~4개로 확장하라.
+  <span class="ico" data-icon="arrow-right"></span> 구성요소를 억지로 세분화하여 수를 늘리지 마라. 청구항에 명시된 핵심 구성만 사용하라.
   ⛔ 절대 금지: 하나의 도면에 6개 이상의 내부 블록을 배치하는 것
 
   ★★★ 동일 프레임 반복 최소화 규칙 ★★★
   - 동일 참조번호의 프레임이 2개 이상 도면에 반복되는 것은 최소화하라.
   - 하위 구성요소가 5개를 초과하여 분할하는 경우에만 허용한다.
   - 분할 시, 첫 도면에 5개(상한), 다음 도면에 나머지를 넣어라.
-    ❌ 잘못된 분할: 도 2에 4개 + 도 3에 3개 + 도 4에 1개 (3개 도면)
-    ✅ 올바른 분할: 도 2에 5개 + 도 3에 3개 (2개 도면으로 충분)
+    <span class="ico" data-icon="x"></span> 잘못된 분할: 도 2에 4개 + 도 3에 3개 + 도 4에 1개 (3개 도면)
+    <span class="ico" data-icon="check-circle"></span> 올바른 분할: 도 2에 5개 + 도 3에 3개 (2개 도면으로 충분)
   - 한 도면에 1~2개만 남으면, 이전 도면에 병합하여 도면 수를 줄여라.
     ⛔ 내부 구성요소 1개인 도면 = 절대 금지 (R12 위반)
   - 도면 수를 줄이는 것이 빈약한 도면을 만드는 것보다 낫다.
 
-  ✅ 올바른 예 (도 2: ${getDeviceSubject()} 상세):
+  <span class="ico" data-icon="check-circle"></span> 올바른 예 (도 2: ${getDeviceSubject()} 상세):
   최외곽=${getDeviceSubject()}(100), 내부=L2 4개: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)
   → 4개 구성요소가 프레임 안에 2행 배치, 참조번호가 겹치지 않음
   
@@ -3827,12 +3827,12 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   ★ 모든 내부 구성요소에 최소 1개 이상 연결이 있어야 함
   ★ "허브" 구성요소(가장 많은 연결)를 반드시 식별
   예: 통신부(110) ↔ 프로세서(120) ↔ 메모리(130), 프로세서(120) ↔ 저장부(140)
-  → 프로세서(120)가 허브 (3개 연결)
+  <span class="ico" data-icon="arrow-right"></span> 프로세서(120)가 허브 (3개 연결)
 
 ★★★ 배치 품질 규칙 (렌더링 겹침 방지) ★★★
   ⛔ 한 행에 3개 초과 금지 → 한 행에는 최대 3개까지 배치
-  ✅ 도 2 이후 내부 블록도: 데이터 흐름 방향에 따라 입력측→처리→출력측 순서로 배치
-  ✅ 흐름 방향이 명확하지 않으면 참조번호 오름차순으로 배치
+  <span class="ico" data-icon="check-circle"></span> 도 2 이후 내부 블록도: 데이터 흐름 방향에 따라 입력측→처리→출력측 순서로 배치
+  <span class="ico" data-icon="check-circle"></span> 흐름 방향이 명확하지 않으면 참조번호 오름차순으로 배치
 
 ⛔⛔⛔ 점진적 구체화 원칙 (한 단계씩만 깊어진다 — 절대 규칙) ⛔⛔⛔
 
@@ -3850,12 +3850,12 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   ■ 도 4+ → 다른 L1 장치의 L2 상세화 또는, 도 3에서 남은 L2 상세화
 
   ■ 위반 패턴 예시
-    ❌ 도 2 내부에 프로세서(120) + 정보수신부(121) + 알림산출부(122)
+    <span class="ico" data-icon="x"></span> 도 2 내부에 프로세서(120) + 정보수신부(121) + 알림산출부(122)
        → 120은 L2, 121/122는 L3 → 같은 도면에 L2+L3 혼재 → NG
-    ✅ 도 2 내부에 프로세서(120) + 메모리(130) + 통신부(110)
-       → 모두 L2 → OK
-    ✅ 도 3 최외곽 프로세서(120) 내부에 정보수신부(121) + 알림산출부(122)
-       → 모두 L3 → OK
+    <span class="ico" data-icon="check-circle"></span> 도 2 내부에 프로세서(120) + 메모리(130) + 통신부(110)
+       <span class="ico" data-icon="arrow-right"></span> 모두 L2 → OK
+    <span class="ico" data-icon="check-circle"></span> 도 3 최외곽 프로세서(120) 내부에 정보수신부(121) + 알림산출부(122)
+       <span class="ico" data-icon="arrow-right"></span> 모두 L3 → OK
 
   ■ 검증 공식: 한 도면 내부 참조번호의 "레벨"이 모두 동일해야 한다
     level(ref) = ref < 100 ? 'small' : ref%100===0 ? 'L1' : ref%10===0 ? 'L2' : ref<1000 ? 'L3' : 'L4'
@@ -4005,7 +4005,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
   예: 청구항이 "사용자 단말"이면 본문에서 "단말", "디바이스", "장치"로 바꾸지 말고 "사용자 단말(200)" 유지.
 - 유사 개념의 위계를 명확히 정리하라:
   → "~값", "~수준", "~지표", "~계수", "~파라미터"가 서로 다른 것인지, 같은 것의 다른 표현인지 명시하라.
-  → 상위 개념과 하위 개념이 있으면 "A는 B를 포함하며" 또는 "B는 A의 일 유형으로서" 형태로 관계를 서술하라.
+  <span class="ico" data-icon="arrow-right"></span> 상위 개념과 하위 개념이 있으면 "A는 B를 포함하며" 또는 "B는 A의 일 유형으로서" 형태로 관계를 서술하라.
 - ⛔ 같은 것을 다른 이름으로 부르는 것을 절대 금지: "음량 조절 값" = "목표 음량 수준" = "최종 음량"처럼 혼용하면 기재불비.
 
 ★★★ 파라미터/변수 명세 규칙 (실시 가능성 보강) ★★★
@@ -4044,8 +4044,8 @@ ${!hasMethodClaims?`- 방법 청구항이 생성되지 않았으므로, 방법 �
 ★★★ 설명 순서 규칙 ★★★
 - 도 1 → 도 2 → 도 3 → ... 순서로 진행하라 (도면 간 순서는 반드시 번호순).
 - 각 도면 내에서는 데이터/정보 흐름 순서에 따라 설명하라:
-  → 입력측 구성요소부터 시작하여 처리→출력 순서로 기술
-  → 예) 통신부(110)에서 데이터를 수신하면, 프로세서(120)가 분석하고, 저장부(140)에 저장한다
+  <span class="ico" data-icon="arrow-right"></span> 입력측 구성요소부터 시작하여 처리→출력 순서로 기술
+  <span class="ico" data-icon="arrow-right"></span> 예) 통신부(110)에서 데이터를 수신하면, 프로세서(120)가 분석하고, 저장부(140)에 저장한다
 - 흐름 방향이 불분명하면 참조번호 오름차순: 예) 110→120→130→140.
 - 같은 L2 구성요소 내의 L3 하위 요소도 흐름순 또는 오름차순: 예) 121→122→123.
 
@@ -4101,8 +4101,8 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 ★★★ 장치 도면(${figListStr})에 포함된 구성요소만 설명하라. 도면에 없는 참조번호를 임의로 추가하지 마라. ★★★
 ★★★ 참조번호 명칭 통일 규칙 (기재불비 방지 — 핵심) ★★★
 - 하나의 참조번호에는 반드시 하나의 명칭만 사용하라. 동의어/약칭을 혼용하지 마라.
-  → 예: "추천부(114)"와 "추천 생성부(114)"를 혼용하면 기재불비. 하나로 통일하라.
-  → 예: "메모리(120)"와 "데이터베이스(120)"를 혼용하면 기재불비. 다른 구성요소이면 별도 참조번호를 부여하라.
+  <span class="ico" data-icon="arrow-right"></span> 예: "추천부(114)"와 "추천 생성부(114)"를 혼용하면 기재불비. 하나로 통일하라.
+  <span class="ico" data-icon="arrow-right"></span> 예: "메모리(120)"와 "데이터베이스(120)"를 혼용하면 기재불비. 다른 구성요소이면 별도 참조번호를 부여하라.
 - 도면 설계에서 정의된 명칭을 우선으로 사용하라.
 - 청구항에서 사용한 명칭과 상세설명의 명칭이 일치해야 한다.
 ${_designCompStr}
@@ -4120,7 +4120,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${out
   (3) 값 범위 또는 예시적 범위 (예: "0 이상 1 이하의 정규화값이다")
   (4) 단위가 있으면 단위 명시
 - 같은 변수가 복수 수학식에 등장하면, 정의가 모순되지 않게 하라.
-  → 수학식 1의 출력이 수학식 2의 입력이면, 변수명·정의·범위가 완전 일치해야 한다.
+  <span class="ico" data-icon="arrow-right"></span> 수학식 1의 출력이 수학식 2의 입력이면, 변수명·정의·범위가 완전 일치해야 한다.
 
 ★★★ 수학식 간 정합성 규칙 (핵심) ★★★
 - 동일 목적의 수학식이 2개 이상 있으면(예: 보정 공식이 2가지 방식), 반드시:
@@ -4387,8 +4387,8 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
 - 참조번호 계층 일관성: L1(X00) → L2(XY0) → L3(XYZ) 체계가 혼란 없이 사용되는지 확인
 - 불일치가 있으면 "상세설명의 참조번호 OOO(OOO)은 도면에 존재하지 않음" 형식으로 지적하라
 - ★ 참조번호 명칭 혼용 검토: 하나의 참조번호에 2개 이상의 명칭이 사용되고 있으면 반드시 지적하라
-  → 예: "추천부(114)" vs "추천 생성부(114)" 혼용, "메모리(120)" vs "데이터베이스(120)" 혼용
-  → 가장 빈도 높은 명칭으로 통일할 것을 제안하라
+  <span class="ico" data-icon="arrow-right"></span> 예: "추천부(114)" vs "추천 생성부(114)" 혼용, "메모리(120)" vs "데이터베이스(120)" 혼용
+  <span class="ico" data-icon="arrow-right"></span> 가장 빈도 높은 명칭으로 통일할 것을 제안하라
 - ★ 도면 미정의 참조번호 사용 검토: 도면에 정의되지 않은(존재하지 않는) 참조번호가 상세설명에서 사용되면 지적하라
 
 [11] 청구항 형식 검토
@@ -6629,11 +6629,11 @@ graph TD
 ★★ 도면별 계층 규칙 ★★
 - 도 1: L1(100, 200, 300...) 장치만
 - 도 2 (L1 상세화): L1(100)과 그 L2 하위(110,120,130) 포함
-  → 렌더링: 최외곽 프레임=100, 내부 박스=110,120,130 (100은 프레임으로만)
+  <span class="ico" data-icon="arrow-right"></span> 렌더링: 최외곽 프레임=100, 내부 박스=110,120,130 (100은 프레임으로만)
 - 도 3+ (L2 상세화): L2(110)와 그 L3 하위(111,112,113) 포함
-  → 렌더링: 최외곽 프레임=110, 내부 박스=111,112,113 (110은 프레임으로만)
+  <span class="ico" data-icon="arrow-right"></span> 렌더링: 최외곽 프레임=110, 내부 박스=111,112,113 (110은 프레임으로만)
 - L4 (L3 상세화): L3(121)과 그 L4 하위(1211,1212) 포함
-  → 렌더링: 최외곽 프레임=121, 내부 박스=1211,1212 (121은 프레임으로만)
+  <span class="ico" data-icon="arrow-right"></span> 렌더링: 최외곽 프레임=121, 내부 박스=1211,1212 (121은 프레임으로만)
 
 ★★ 연결관계 규칙 ★★
 - 데이터/정보 도면(~정보, ~데이터): 정보 항목은 ${getDeviceSubject()} 입력 데이터 → 상호 화살표 연결 부적절 → 연결선 없이 병렬 배치 (노드 정의만, A --> B 금지)
@@ -11112,7 +11112,7 @@ function _postRenderValidationLoop(containerId, figNum, maxAttempts, renderInfo)
     lastResult=result;
     
     if(result.pass){
-      if(attempt>0)console.log(`[PostRender] 도 ${figNum}: DOM 보정 ${attempt}회 후 통과 ✅`);
+      if(attempt>0)console.log(`[PostRender] 도 ${figNum}: DOM 보정 ${attempt}회 후 통과 <span class="ico" data-icon="check-circle"></span>`);
       return result;
     }
     
@@ -11161,7 +11161,7 @@ function _postRenderValidationLoop(containerId, figNum, maxAttempts, renderInfo)
         lastResult=result2;
 
         if(result2.pass){
-          console.log(`[PostRender] 도 ${figNum}: 재렌더링 후 통과 ✅`);
+          console.log(`[PostRender] 도 ${figNum}: 재렌더링 후 통과 <span class="ico" data-icon="check-circle"></span>`);
         }else{
           // 한 번 더 시도 — 더 큰 조정
           console.warn(`[PostRender] 도 ${figNum}: 재렌더링 후에도 ${result2.issues.length}개 문제 → 2차 재렌더링`);
@@ -11171,7 +11171,7 @@ function _postRenderValidationLoop(containerId, figNum, maxAttempts, renderInfo)
           lastResult=_postRenderValidateSvg(containerId, figNum);
 
           if(lastResult.pass){
-            console.log(`[PostRender] 도 ${figNum}: 2차 재렌더링 후 통과 ✅`);
+            console.log(`[PostRender] 도 ${figNum}: 2차 재렌더링 후 통과 <span class="ico" data-icon="check-circle"></span>`);
           }else{
             // DOM 보정 마지막 시도
             _autoFixRenderedSvg(containerId, lastResult.issues, 2);
@@ -11211,14 +11211,14 @@ function _runPostRenderValidation(sid, figNums){
   const resultEl=document.getElementById(`validationResult_${sid}`);
   if(resultEl){
     if(totalIssues===0){
-      resultEl.innerHTML='<span style="color:#2e7d32"><span class="ico" data-icon="check-circle"></span> 포스트 렌더 검증 통과</span>';
+      resultEl.innerHTML='<span style="color:var(--dt-success)"><span class="ico" data-icon="check-circle"></span> 포스트 렌더 검증 통과</span>';
     }else{
       const errCount=reports.reduce((sum,r)=>sum+r.issues.filter(i=>i.severity==='ERROR').length,0);
       const warnCount=reports.reduce((sum,r)=>sum+r.issues.filter(i=>i.severity==='WARNING').length,0);
       let msg=`⚠️ 포스트 렌더: `;
       if(errCount>0)msg+=`ERROR ${errCount}개 `;
       if(warnCount>0)msg+=`WARNING ${warnCount}개`;
-      resultEl.innerHTML=`<span style="color:${errCount>0?'#c62828':'#f57c00'}">${msg}</span>`;
+      resultEl.innerHTML=`<span style="color:${errCount>0?'var(--dt-danger)':'var(--dt-warning)'}">${msg}</span>`;
       
       // 상세 리포트 (콘솔)
       reports.forEach(r=>{
@@ -11734,20 +11734,20 @@ function renderDiagrams(sid,mt){
       .map(ai=>`도 ${ai.figNum}: ${ai.issues.filter(iss=>iss.severity==='ERROR').map(iss=>`[${iss.rule}] ${iss.message}`).join('; ')}`)
       .join('\n');
     window._diagramErrors={sid,errors:errorSummary};
-    html=`<div style="background:#ffebee;border:1px solid #ef5350;border-radius:8px;padding:12px;margin-bottom:16px">
-      <div style="color:#c62828;font-weight:600;margin-bottom:8px">⚠️ 도면 규칙 위반 발견</div>
+    html=`<div style="background:#FEECEC;border:1px solid #FF6363;border-radius:8px;padding:12px;margin-bottom:16px">
+      <div style="color:var(--dt-danger);font-weight:600;margin-bottom:8px"><span class="ico" data-icon="warning"></span> 도면 규칙 위반 발견</div>
       <div style="font-size:12px;color:#b71c1c;margin-bottom:12px;white-space:pre-line">${App.escapeHtml(errorSummary)}</div>
-      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1976d2;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px"><span class="ico" data-icon="refresh"></span> 규칙에 맞게 재생성</button>
+      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:var(--dt-brand-hover);color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px"><span class="ico" data-icon="refresh"></span> 규칙에 맞게 재생성</button>
     </div>`+html;
   }
   
   html+=`<div style="margin-top:12px;padding:12px;background:var(--color-bg-secondary);border-radius:8px">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button onclick="runDiagramValidation('${sid}')" style="background:#43a047;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="R0~R14 규칙 검증 + 시각적 겹침/잘림 검사"><span class="ico" data-icon="check-circle"></span> 검증</button>
+      <button onclick="runDiagramValidation('${sid}')" style="background:var(--dt-success);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="R0~R14 규칙 검증 + 시각적 겹침/잘림 검사"><span class="ico" data-icon="check-circle"></span> 검증</button>
       <span style="color:var(--color-text-tertiary);font-size:11px">\u2192</span>
       <button onclick="runAIDiagramReview('${sid}')" style="background:#7b1fa2;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="AI가 연결관계의 기술적 적절성을 평가"><span class="ico" data-icon="robot"></span> AI 검증</button>
       <span style="color:var(--color-text-tertiary);font-size:11px">\u2192</span>
-      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1565c0;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="검증 결과를 반영하여 도면 재생성 (검증 미실행 시 자동 실행)"><span class="ico" data-icon="refresh"></span> 재생성</button>
+      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:var(--dt-brand-hover);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="검증 결과를 반영하여 도면 재생성 (검증 미실행 시 자동 실행)"><span class="ico" data-icon="refresh"></span> 재생성</button>
       <span id="validationResult_${sid}" style="font-size:12px;color:var(--color-text-secondary);margin-left:4px"></span>
     </div>
     <div id="aiReviewResult_${sid}" style="margin-top:8px"></div>
@@ -11825,11 +11825,11 @@ function runDiagramValidation(sid){
     
     if(errors.length||warnings.length){
       reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> `;
-      errors.forEach(e=>reportHtml+=`<span style="color:#c62828;font-size:11px"><span class="ico" data-icon="x"></span> [${e.rule}] ${e.message} </span>`);
-      warnings.forEach(w=>reportHtml+=`<span style="color:#f57c00;font-size:11px">⚠️ [${w.rule}] ${w.message} </span>`);
+      errors.forEach(e=>reportHtml+=`<span style="color:var(--dt-danger);font-size:11px"><span class="ico" data-icon="x"></span> [${e.rule}] ${e.message} </span>`);
+      warnings.forEach(w=>reportHtml+=`<span style="color:var(--dt-warning);font-size:11px"><span class="ico" data-icon="warning"></span> [${w.rule}] ${w.message} </span>`);
       reportHtml+='</div>';
     }else{
-      reportHtml+=`<div style="margin:4px 0;color:#2e7d32"><b>도 ${figNum}:</b> ✅ 통과 ${infos.map(i=>`(${i.message})`).join(' ')}</div>`;
+      reportHtml+=`<div style="margin:4px 0;color:var(--dt-success)"><b>도 ${figNum}:</b> <span class="ico" data-icon="check-circle"></span>  통과 ${infos.map(i=>`(${i.message})`).join(' ')}</div>`;
     }
   });
 
@@ -11868,7 +11868,7 @@ function runDiagramValidation(sid){
       if(levels.size>1){
         const mixed=[...levels].sort().join('+');
         totalErrors++;
-        reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> <span style="color:#c62828;font-size:11px"><span class="ico" data-icon="x"></span> [R14] 레벨 혼재(${mixed}) — 한 도면 내부는 동일 레벨이어야 함</span></div>`;
+        reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> <span style="color:var(--dt-danger);font-size:11px"><span class="ico" data-icon="x"></span> [R14] 레벨 혼재(${mixed}) — 한 도면 내부는 동일 레벨이어야 함</span></div>`;
       }
     });
   }
@@ -11876,11 +11876,11 @@ function runDiagramValidation(sid){
   const resultEl=document.getElementById(`validationResult_${sid}`);
   if(resultEl){
     if(totalErrors===0&&totalWarnings===0){
-      resultEl.innerHTML=`<span style="color:#2e7d32;font-weight:600"><span class="ico" data-icon="check-circle"></span> 전체 검증 통과 (${data.length}개 도면)</span>`;
+      resultEl.innerHTML=`<span style="color:var(--dt-success);font-weight:600"><span class="ico" data-icon="check-circle"></span> 전체 검증 통과 (${data.length}개 도면)</span>`;
     }else{
       resultEl.innerHTML=`<div>
-        <span style="color:#c62828;font-weight:600"><span class="ico" data-icon="x"></span> 오류 ${totalErrors}건</span>,
-        <span style="color:#f57c00">⚠️ 경고 ${totalWarnings}건</span>
+        <span style="color:var(--dt-danger);font-weight:600"><span class="ico" data-icon="x"></span> 오류 ${totalErrors}건</span>,
+        <span style="color:var(--dt-warning)"><span class="ico" data-icon="warning"></span> 경고 ${totalWarnings}건</span>
         <div style="margin-top:6px;font-size:11px">${reportHtml}</div>
       </div>`;
     }
@@ -11902,8 +11902,8 @@ function runDiagramValidation(sid){
       const prWarns=prResult.reports.reduce((s,r)=>s+r.issues.filter(i=>i.severity==='WARNING').length,0);
       if(prErrors>0||prWarns>0){
         reportHtml+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee"><b><span class="ico" data-icon="search"></span> 시각적 검증:</b> `;
-        if(prErrors>0)reportHtml+=`<span style="color:#c62828">겹침 ${prErrors}건 </span>`;
-        if(prWarns>0)reportHtml+=`<span style="color:#f57c00">잘림/넘침 ${prWarns}건 </span>`;
+        if(prErrors>0)reportHtml+=`<span style="color:var(--dt-danger)">겹침 ${prErrors}건 </span>`;
+        if(prWarns>0)reportHtml+=`<span style="color:var(--dt-warning)">잘림/넘침 ${prWarns}건 </span>`;
         prResult.reports.forEach(r=>{
           r.issues.forEach(i=>{
             const c=i.severity==='ERROR'?'#c62828':'#f57c00';
@@ -12059,7 +12059,7 @@ ${'{'}개선안${'}'}:
       if(figResults.length>0){
         figResults.forEach(fr=>{
           const icon=fr.pass?'✅':'⚠️';
-          html+=`<div style="margin-bottom:8px;padding:8px;background:${fr.pass?'#e8f5e9':'#fff3e0'};border-radius:6px">`;
+          html+=`<div style="margin-bottom:8px;padding:8px;background:${fr.pass?'#e8f5e9':'#FEF4E6'};border-radius:6px">`;
           html+=`<div style="font-weight:600;font-size:13px">${icon} 도 ${fr.figNum}</div>`;
           if(fr.reason)html+=`<div style="font-size:12px;color:#555;margin-top:2px">${App.escapeHtml(fr.reason)}</div>`;
           if(fr.suggestions.length>0){
@@ -12085,10 +12085,10 @@ ${'{'}개선안${'}'}:
       App.showToast('AI 검증: 일부 도면 연결관계 수정 권장','warning');
     }else{
       window._aiDiagramReview=null;
-      App.showToast('AI 검증: 모든 도면 연결관계 적절 ✅');
+      App.showToast('AI 검증: 모든 도면 연결관계 적절 <span class="ico" data-icon="check-circle"></span>');
     }
   }catch(e){
-    if(resultEl)resultEl.innerHTML=`<div style="padding:8px;background:#ffebee;border-radius:8px;font-size:12px;color:#c62828">AI 검증 실패: ${e.message}</div>`;
+    if(resultEl)resultEl.innerHTML=`<div style="padding:8px;background:#FEECEC;border-radius:8px;font-size:12px;color:var(--dt-danger)">AI 검증 실패: ${e.message}</div>`;
     App.showToast('AI 검증 실패: '+e.message,'error');
   }
 }
