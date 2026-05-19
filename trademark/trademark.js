@@ -668,33 +668,33 @@
         <div style="display: flex; gap: 40px; align-items: flex-start;">
           <!-- 좌측 영역 -->
           <div style="flex-shrink: 0; width: 240px;">
-            <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: #1f2937;"><span class="ico" data-icon="tag"></span> 상표 출원 관리</h2>
-            <p style="margin: 0 0 24px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">특허그룹 디딤 상표 출원 프로젝트를 관리합니다.</p>
+            <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: var(--dt-g900);"><span class="ico" data-icon="tag"></span> 상표 출원 관리</h2>
+            <p style="margin: 0 0 24px 0; color: var(--dt-g500); font-size: 13px; line-height: 1.5;">특허그룹 디딤 상표 출원 프로젝트를 관리합니다.</p>
             <div style="display: flex; flex-direction: column; gap: 12px;">
               <button class="btn btn-primary" onclick="window.TM.createNewProject(); return false;" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap; cursor: pointer;">
                 <span style="font-size: 18px;">+</span>
                 새 프로젝트
               </button>
-              <button id="tm-settings-btn" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; white-space: nowrap; cursor: pointer;">
+              <button id="tm-settings-btn" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: var(--dt-g100); color: var(--dt-g700); border: 1px solid var(--dt-g150); white-space: nowrap; cursor: pointer;">
                 <span class="ico" data-icon="settings" data-size="16"></span>
                 설정
               </button>
             </div>
             
             <!-- API 안내 -->
-            <div style="margin-top: 20px; padding: 12px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px;">
-              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #0369a1;"><span class="ico" data-icon="lightbulb"></span> KIPRIS API 키 안내</p>
-              <p style="margin: 0; font-size: 11px; color: #0c4a6e; line-height: 1.5;">
+            <div style="margin-top: 20px; padding: 12px; background: #F7FBFF; border: 1px solid #C9DEFE; border-radius: 8px;">
+              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: var(--dt-brand);"><span class="ico" data-icon="lightbulb"></span> KIPRIS API 키 안내</p>
+              <p style="margin: 0; font-size: 11px; color: #002966; line-height: 1.5;">
                 선행상표 검색을 위해 KIPRIS API 키가 필요합니다.
-                <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" style="color: #2563eb; text-decoration: underline;">KIPRIS Plus</a>에서 발급받으세요.
+                <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" style="color: var(--dt-brand-hover); text-decoration: underline;">KIPRIS Plus</a>에서 발급받으세요.
               </p>
             </div>
           </div>
           
           <!-- 우측: 프로젝트 목록 -->
           <div class="tm-project-list" id="tm-project-list" style="flex: 1; min-width: 0;">
-            <div style="text-align: center; padding: 40px; color: #6b7280;">
-              <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
+            <div style="text-align: center; padding: 40px; color: var(--dt-g500);">
+              <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid var(--dt-g150); border-top-color: var(--dt-brand); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
               <p style="margin: 0;">프로젝트 목록 로딩 중...</p>
             </div>
           </div>
@@ -753,8 +753,8 @@
         <div style="display: flex; gap: 40px; align-items: flex-start;">
           <!-- 좌측 영역 -->
           <div style="flex-shrink: 0; width: 260px;">
-            <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: #1f2937;"><span class="ico" data-icon="bolt"></span> 우선심사 관리</h2>
-            <p style="margin: 0 0 24px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">
+            <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: var(--dt-g900);"><span class="ico" data-icon="bolt"></span> 우선심사 관리</h2>
+            <p style="margin: 0 0 24px 0; color: var(--dt-g500); font-size: 13px; line-height: 1.5;">
               상표 우선심사 신청서를 작성합니다.<br>
               기존 사건에서 정보를 불러오거나,<br>출원서를 직접 업로드할 수 있습니다.
             </p>
@@ -765,16 +765,16 @@
                 기존 사건에서 불러오기
               </button>
               <button class="btn btn-secondary" data-action="tm-pe-new-from-upload"
-                      style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; white-space: nowrap; cursor: pointer;">
+                      style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: var(--dt-g100); color: var(--dt-g700); border: 1px solid var(--dt-g150); white-space: nowrap; cursor: pointer;">
                 <span class="ico" data-icon="doc" data-size="16"></span>
                 출원서 업로드로 시작
               </button>
             </div>
 
             <!-- 안내 -->
-            <div style="margin-top: 20px; padding: 12px; background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px;">
-              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #92400e;"><span class="ico" data-icon="lightbulb"></span> 우선심사란?</p>
-              <p style="margin: 0; font-size: 11px; color: #78350f; line-height: 1.5;">
+            <div style="margin-top: 20px; padding: 12px; background: #FEF4E6; border: 1px solid #fde68a; border-radius: 8px;">
+              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #663A00;"><span class="ico" data-icon="lightbulb"></span> 우선심사란?</p>
+              <p style="margin: 0; font-size: 11px; color: #663A00; line-height: 1.5;">
                 일반 심사(12~14개월) 대비 2~3개월 내 심사가 진행됩니다.
                 류당 160,000원의 추가 비용이 발생합니다.
               </p>
@@ -783,8 +783,8 @@
 
           <!-- 우측: 우선심사 프로젝트 목록 -->
           <div class="tm-project-list" id="tm-pe-project-list" style="flex: 1; min-width: 0;">
-            <div style="text-align: center; padding: 40px; color: #6b7280;">
-              <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
+            <div style="text-align: center; padding: 40px; color: var(--dt-g500);">
+              <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid var(--dt-g150); border-top-color: var(--dt-brand); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
               <p style="margin: 0;">우선심사 목록 로딩 중...</p>
             </div>
           </div>
@@ -816,10 +816,10 @@
 
       if (peProjects.length === 0) {
         listEl.innerHTML = `
-          <div style="text-align: center; padding: 80px 20px; background: #f9fafb; border-radius: 16px; border: 2px dashed #d1d5db;">
+          <div style="text-align: center; padding: 80px 20px; background: var(--dt-g50); border-radius: 16px; border: 2px dashed var(--dt-g300);">
             <div style="font-size: 56px; margin-bottom: 20px;"><span class="ico" data-icon="bolt" data-size="56"></span></div>
-            <h4 style="margin: 0 0 12px; font-size: 20px; color: #374151;">우선심사 프로젝트가 없습니다</h4>
-            <p style="margin: 0 0 24px; color: #6b7280; font-size: 15px;">기존 사건에서 불러오거나 출원서를 업로드하여 시작하세요.</p>
+            <h4 style="margin: 0 0 12px; font-size: 20px; color: var(--dt-g700);">우선심사 프로젝트가 없습니다</h4>
+            <p style="margin: 0 0 24px; color: var(--dt-g500); font-size: 15px;">기존 사건에서 불러오거나 출원서를 업로드하여 시작하세요.</p>
             <div style="display: flex; gap: 12px; justify-content: center;">
               <button class="btn btn-primary" data-action="tm-pe-new-from-project" style="padding: 12px 24px; font-size: 14px; border-radius: 10px;"><span class="ico" data-icon="folder"></span> 기존 사건에서 불러오기</button>
               <button class="btn btn-secondary" data-action="tm-pe-new-from-upload" style="padding: 12px 24px; font-size: 14px; border-radius: 10px;"><span class="ico" data-icon="doc"></span> 출원서 업로드</button>
@@ -830,15 +830,15 @@
       }
 
       listEl.innerHTML = `
-        <div style="background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+        <div style="background: white; border-radius: 16px; border: 1px solid var(--dt-g150); overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
           <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
             <thead>
-              <tr style="background: #f8fafc; border-bottom: 2px solid #e5e7eb;">
-                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">관리번호</th>
-                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px;">상표명</th>
-                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px;">소스</th>
-                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px;">수정일</th>
-                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 120px;">작업</th>
+              <tr style="background: var(--dt-g50); border-bottom: 2px solid var(--dt-g150);">
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: var(--dt-g700); font-size: 13px;">관리번호</th>
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: var(--dt-g700); font-size: 13px;">상표명</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: var(--dt-g700); font-size: 13px; width: 90px;">소스</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: var(--dt-g700); font-size: 13px; width: 90px;">수정일</th>
+                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: var(--dt-g700); font-size: 13px; width: 120px;">작업</th>
               </tr>
             </thead>
             <tbody>
@@ -847,15 +847,15 @@
                 const sourceLabel = csj.pe_source_type === 'project' ? '<span class="ico" data-icon="folder"></span> 사건연동' : '<span class="ico" data-icon="doc"></span> 업로드';
                 const updatedAt = new Date(p.updated_at).toLocaleDateString('ko-KR');
                 return `
-                  <tr style="border-bottom: 1px solid #f3f4f6; transition: background 0.15s;"
+                  <tr style="border-bottom: 1px solid var(--dt-g100); transition: background 0.15s;"
                       onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='white'">
-                    <td style="padding: 12px 16px; font-size: 13px; color: #6b7280;">${TM.escapeHtml(p.title || '-')}</td>
-                    <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: #1f2937;">${TM.escapeHtml(p.trademark_name || '-')}</td>
+                    <td style="padding: 12px 16px; font-size: 13px; color: var(--dt-g500);">${TM.escapeHtml(p.title || '-')}</td>
+                    <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: var(--dt-g900);">${TM.escapeHtml(p.trademark_name || '-')}</td>
                     <td style="padding: 12px; text-align: center; font-size: 12px;">${sourceLabel}</td>
-                    <td style="padding: 12px; text-align: center; font-size: 12px; color: #9ca3af;">${updatedAt}</td>
+                    <td style="padding: 12px; text-align: center; font-size: 12px; color: var(--dt-g400);">${updatedAt}</td>
                     <td style="padding: 12px 16px; text-align: center;">
                       <button class="btn btn-sm btn-primary" data-action="tm-pe-open" data-id="${p.id}" style="padding: 6px 14px; font-size: 12px; border-radius: 6px;">열기</button>
-                      <button class="btn btn-sm btn-ghost" data-action="tm-pe-delete" data-id="${p.id}" style="padding: 6px 10px; font-size: 12px; color: #ef4444;">삭제</button>
+                      <button class="btn btn-sm btn-ghost" data-action="tm-pe-delete" data-id="${p.id}" style="padding: 6px 10px; font-size: 12px; color: var(--dt-danger);">삭제</button>
                     </td>
                   </tr>
                 `;
@@ -863,14 +863,14 @@
             </tbody>
           </table>
         </div>
-        <div style="margin-top: 12px; text-align: right; color: #9ca3af; font-size: 12px;">총 ${peProjects.length}개 프로젝트</div>
+        <div style="margin-top: 12px; text-align: right; color: var(--dt-g400); font-size: 12px;">총 ${peProjects.length}개 프로젝트</div>
       `;
     } catch (error) {
       console.error('[TM] 우선심사 목록 로드 실패:', error);
       listEl.innerHTML = `
-        <div style="text-align: center; padding: 40px; background: #fef2f2; border-radius: 12px; border: 1px solid #fecaca;">
+        <div style="text-align: center; padding: 40px; background: #FEECEC; border-radius: 12px; border: 1px solid #fecaca;">
           <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
-          <p style="margin: 0; color: #dc2626;">${error.message}</p>
+          <p style="margin: 0; color: var(--dt-danger);">${error.message}</p>
         </div>
       `;
     }
@@ -907,7 +907,7 @@
               <button class="tm-modal-close" onclick="document.getElementById('tm-pe-import-modal')?.remove()"><span class="ico" data-icon="x"></span></button>
             </div>
             <div class="tm-modal-body" style="padding: 16px 24px; overflow-y: auto; flex: 1;">
-              <p style="margin: 0 0 16px; font-size: 13px; color: #6b7280;">
+              <p style="margin: 0 0 16px; font-size: 13px; color: var(--dt-g500);">
                 아래 사건을 선택하면 상표명, 출원인, 지정상품 정보가 자동으로 입력됩니다.
               </p>
               <div style="display: flex; flex-direction: column; gap: 8px;">
@@ -917,18 +917,18 @@
                   const classCount = goods.length;
                   return `
                     <div class="tm-pe-import-item" data-action="tm-pe-import-select" data-id="${p.id}"
-                         style="display: flex; align-items: center; gap: 16px; padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 10px; cursor: pointer; transition: all 0.15s;"
+                         style="display: flex; align-items: center; gap: 16px; padding: 14px 16px; border: 1px solid var(--dt-g150); border-radius: 10px; cursor: pointer; transition: all 0.15s;"
                          onmouseover="this.style.borderColor='#3b82f6'; this.style.background='#f0f9ff'"
                          onmouseout="this.style.borderColor='#e5e7eb'; this.style.background='white'">
-                      <div style="flex-shrink: 0; width: 40px; height: 40px; background: #dbeafe; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px;"><span class="ico" data-icon="tag" data-size="18"></span></div>
+                      <div style="flex-shrink: 0; width: 40px; height: 40px; background: var(--dt-brand-light); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px;"><span class="ico" data-icon="tag" data-size="18"></span></div>
                       <div style="flex: 1; min-width: 0;">
-                        <div style="font-size: 15px; font-weight: 600; color: #1f2937;">${TM.escapeHtml(p.trademark_name || '(상표명 미입력)')}</div>
-                        <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">
+                        <div style="font-size: 15px; font-weight: 600; color: var(--dt-g900);">${TM.escapeHtml(p.trademark_name || '(상표명 미입력)')}</div>
+                        <div style="font-size: 12px; color: var(--dt-g500); margin-top: 2px;">
                           ${TM.escapeHtml(p.title || '(관리번호 없음)')}
                           ${classCount > 0 ? ` · 제${goods.map(g => g.classCode).join(',')}류 · ${goodsCount}개 상품` : ''}
                         </div>
                       </div>
-                      <div style="flex-shrink: 0; font-size: 12px; color: #9ca3af;">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</div>
+                      <div style="flex-shrink: 0; font-size: 12px; color: var(--dt-g400);">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</div>
                     </div>
                   `;
                 }).join('')}
@@ -1133,8 +1133,8 @@
           <div style="display: flex; align-items: center; gap: 12px;">
             <button class="btn btn-ghost" data-action="tm-pe-back-to-list" style="padding: 8px 12px; font-size: 13px;"><span class="ico" data-icon="arrow-left"></span> 목록으로</button>
             <div>
-              <h2 style="margin: 0; font-size: 22px; font-weight: 700; color: #1f2937;"><span class="ico" data-icon="bolt"></span> 우선심사 신청서</h2>
-              <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">
+              <h2 style="margin: 0; font-size: 22px; font-weight: 700; color: var(--dt-g900);"><span class="ico" data-icon="bolt"></span> 우선심사 신청서</h2>
+              <div style="font-size: 12px; color: var(--dt-g500); margin-top: 2px;">
                 ${TM.escapeHtml(p.title || '')} · ${sourceLabel}
               </div>
             </div>
@@ -1145,28 +1145,28 @@
         </div>
 
         <!-- 기본 정보 입력 -->
-        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
+        <div style="background: linear-gradient(135deg, #FEF4E6 0%, #fde68a 100%); border: 1px solid var(--dt-warning); border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
           <div style="display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;">
             <div style="flex: 1.5; min-width: 180px;">
-              <label style="font-size: 11px; color: #92400e; font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="tag"></span> 상표명</label>
+              <label style="font-size: 11px; color: #663A00; font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="tag"></span> 상표명</label>
               <input type="text" id="tm-pe-trademark-name"
                      value="${TM.escapeHtml(pe.trademarkNameFromApp || p.trademarkName || '')}"
                      placeholder="상표명을 입력하세요"
-                     style="width: 100%; padding: 8px 12px; border: 1px solid #d97706; border-radius: 6px; font-size: 14px; font-weight: 600; color: #78350f; background: rgba(255,255,255,0.7); box-sizing: border-box;">
+                     style="width: 100%; padding: 8px 12px; border: 1px solid var(--dt-warning); border-radius: 6px; font-size: 14px; font-weight: 600; color: #663A00; background: rgba(255,255,255,0.7); box-sizing: border-box;">
             </div>
             <div style="flex: 1; min-width: 150px;">
-              <label style="font-size: 11px; color: #92400e; font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="clipboard"></span> 출원번호</label>
+              <label style="font-size: 11px; color: #663A00; font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="clipboard"></span> 출원번호</label>
               <input type="text" id="tm-pe-application-number"
                      value="${TM.escapeHtml(pe.applicationNumber || '')}"
                      placeholder="예: 40-2025-0012345"
-                     style="width: 100%; padding: 8px 12px; border: 1px solid #d97706; border-radius: 6px; font-size: 13px; color: #78350f; background: rgba(255,255,255,0.7); box-sizing: border-box;">
+                     style="width: 100%; padding: 8px 12px; border: 1px solid var(--dt-warning); border-radius: 6px; font-size: 13px; color: #663A00; background: rgba(255,255,255,0.7); box-sizing: border-box;">
             </div>
             <div style="flex: 1; min-width: 150px;">
-              <label style="font-size: 11px; color: #92400e; font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="folder"></span> 사건번호</label>
+              <label style="font-size: 11px; color: #663A00; font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="folder"></span> 사건번호</label>
               <input type="text" id="tm-pe-case-number"
                      value="${TM.escapeHtml(pe.caseNumber || p.title || '')}"
                      placeholder="예: 26T0001"
-                     style="width: 100%; padding: 8px 12px; border: 1px solid #d97706; border-radius: 6px; font-size: 13px; color: #78350f; background: rgba(255,255,255,0.7); box-sizing: border-box;">
+                     style="width: 100%; padding: 8px 12px; border: 1px solid var(--dt-warning); border-radius: 6px; font-size: 13px; color: #663A00; background: rgba(255,255,255,0.7); box-sizing: border-box;">
             </div>
           </div>
         </div>
@@ -1299,52 +1299,52 @@
           <div class="tm-modal-body" style="padding: 24px;">
             <!-- KIPRIS API 키 설정 -->
             <div class="tm-settings-section">
-              <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #374151;">
-                🔑 KIPRIS API 키
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: var(--dt-g700);">
+                <span class="ico" data-icon="lock"></span> KIPRIS API 키
               </h4>
-              <p style="margin: 0 0 12px 0; font-size: 12px; color: #6b7280; line-height: 1.5;">
+              <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--dt-g500); line-height: 1.5;">
                 선행상표 검색을 위해 KIPRIS OpenAPI 인증키가 필요합니다.<br>
-                <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" style="color: #3b82f6; text-decoration: underline;">
+                <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" style="color: var(--dt-brand); text-decoration: underline;">
                   👉 KIPRIS Plus에서 무료 발급받기
                 </a>
               </p>
               <input type="text" id="tm-settings-kipris-key" class="tm-input" 
                      value="${TM.escapeHtml(currentApiKey)}"
                      placeholder="API 키를 입력하세요"
-                     style="width: 100%; font-size: 13px; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
+                     style="width: 100%; font-size: 13px; padding: 10px 12px; border: 1px solid var(--dt-g300); border-radius: 6px;">
             </div>
             
             <!-- 자동 저장 설정 -->
             <div class="tm-settings-section" style="margin-top: 20px;">
-              <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #374151;">
-                💾 자동 저장
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: var(--dt-g700);">
+                <span class="ico" data-icon="save"></span> 자동 저장
               </h4>
-              <p style="margin: 0 0 12px 0; font-size: 12px; color: #6b7280; line-height: 1.5;">
+              <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--dt-g500); line-height: 1.5;">
                 변경사항이 있을 경우 자동으로 저장됩니다.
               </p>
-              <div style="font-size: 13px; color: #374151; line-height: 1.6;">
+              <div style="font-size: 13px; color: var(--dt-g700); line-height: 1.6;">
                 <div>• 입력 후 3초 후 자동 저장</div>
                 <div>• 15초마다 주기적 저장</div>
               </div>
             </div>
             
             <!-- 현재 상태 -->
-            <div class="tm-settings-section" style="margin-top: 20px; padding: 12px; background: #f9fafb; border-radius: 8px;">
-              <h4 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600; color: #374151;">
-                ℹ️ 현재 상태
+            <div class="tm-settings-section" style="margin-top: 20px; padding: 12px; background: var(--dt-g50); border-radius: 8px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600; color: var(--dt-g700);">
+                <span class="ico" data-icon="info"></span> 현재 상태
               </h4>
-              <div style="font-size: 12px; color: #6b7280; line-height: 1.6;">
+              <div style="font-size: 12px; color: var(--dt-g500); line-height: 1.6;">
                 <div>• KIPRIS API 키: ${currentApiKey ? '<span class="ico" data-icon="check-circle"></span> 설정됨' : '<span class="ico" data-icon="x"></span> 미설정'}</div>
-                <div>• 자동 저장: ✅ 활성화됨</div>
+                <div>• 자동 저장: <span class="ico" data-icon="check-circle"></span> 활성화됨</div>
               </div>
             </div>
           </div>
           
-          <div class="tm-modal-footer" style="padding: 16px 24px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 12px;">
-            <button class="btn btn-secondary" onclick="TM.closeSettings()" style="padding: 10px 20px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer;">
+          <div class="tm-modal-footer" style="padding: 16px 24px; border-top: 1px solid var(--dt-g150); display: flex; justify-content: flex-end; gap: 12px;">
+            <button class="btn btn-secondary" onclick="TM.closeSettings()" style="padding: 10px 20px; background: var(--dt-g100); color: var(--dt-g700); border: 1px solid var(--dt-g300); border-radius: 6px; cursor: pointer;">
               취소
             </button>
-            <button class="btn btn-primary" onclick="TM.saveSettings()" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer;">
+            <button class="btn btn-primary" onclick="TM.saveSettings()" style="padding: 10px 20px; background: var(--dt-brand); color: white; border: none; border-radius: 6px; cursor: pointer;">
               저장
             </button>
           </div>
@@ -1403,10 +1403,10 @@
       
       if (!projects || projects.length === 0) {
         listEl.innerHTML = `
-          <div style="text-align: center; padding: 80px 20px; background: #f9fafb; border-radius: 16px; border: 2px dashed #d1d5db;">
+          <div style="text-align: center; padding: 80px 20px; background: var(--dt-g50); border-radius: 16px; border: 2px dashed var(--dt-g300);">
             <div style="font-size: 56px; margin-bottom: 20px;"><span class="ico" data-icon="tag" data-size="56"></span></div>
-            <h4 style="margin: 0 0 12px; font-size: 20px; color: #374151;">상표 프로젝트가 없습니다</h4>
-            <p style="margin: 0 0 24px; color: #6b7280; font-size: 15px;">새 프로젝트를 만들어 상표 출원을 시작하세요.</p>
+            <h4 style="margin: 0 0 12px; font-size: 20px; color: var(--dt-g700);">상표 프로젝트가 없습니다</h4>
+            <p style="margin: 0 0 24px; color: var(--dt-g500); font-size: 15px;">새 프로젝트를 만들어 상표 출원을 시작하세요.</p>
             <button class="btn btn-primary" data-action="tm-new-project" style="padding: 14px 28px; font-size: 15px; border-radius: 10px;">+ 새 프로젝트 만들기</button>
           </div>
         `;
@@ -1415,16 +1415,16 @@
       
       // 테이블 형식 목록
       listEl.innerHTML = `
-        <div style="background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+        <div style="background: white; border-radius: 16px; border: 1px solid var(--dt-g150); overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
           <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
             <thead>
-              <tr style="background: #f8fafc; border-bottom: 2px solid #e5e7eb;">
-                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px; white-space: nowrap;">디딤 관리번호</th>
-                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: #374151; font-size: 13px; white-space: nowrap;">상표명</th>
-                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 70px; white-space: nowrap;">유형</th>
-                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 80px; white-space: nowrap;">상태</th>
-                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 90px; white-space: nowrap;">수정일</th>
-                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: #374151; font-size: 13px; width: 140px; white-space: nowrap;">작업</th>
+              <tr style="background: var(--dt-g50); border-bottom: 2px solid var(--dt-g150);">
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: var(--dt-g700); font-size: 13px; white-space: nowrap;">디딤 관리번호</th>
+                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: var(--dt-g700); font-size: 13px; white-space: nowrap;">상표명</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: var(--dt-g700); font-size: 13px; width: 70px; white-space: nowrap;">유형</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: var(--dt-g700); font-size: 13px; width: 80px; white-space: nowrap;">상태</th>
+                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: var(--dt-g700); font-size: 13px; width: 90px; white-space: nowrap;">수정일</th>
+                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: var(--dt-g700); font-size: 13px; width: 140px; white-space: nowrap;">작업</th>
               </tr>
             </thead>
             <tbody>
@@ -1432,7 +1432,7 @@
             </tbody>
           </table>
         </div>
-        <div style="margin-top: 12px; text-align: right; color: #9ca3af; font-size: 12px;">
+        <div style="margin-top: 12px; text-align: right; color: var(--dt-g400); font-size: 12px;">
           총 ${projects.length}개 프로젝트
         </div>
       `;
@@ -1440,10 +1440,10 @@
     } catch (error) {
       console.error('[TM] 프로젝트 목록 로드 실패:', error);
       listEl.innerHTML = `
-        <div style="text-align: center; padding: 40px; background: #fef2f2; border-radius: 12px; border: 1px solid #fecaca;">
+        <div style="text-align: center; padding: 40px; background: #FEECEC; border-radius: 12px; border: 1px solid #fecaca;">
           <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
-          <h4 style="margin: 0 0 8px; color: #991b1b;">로드 실패</h4>
-          <p style="margin: 0; color: #dc2626;">${error.message}</p>
+          <h4 style="margin: 0 0 8px; color: #B20C0C;">로드 실패</h4>
+          <p style="margin: 0; color: var(--dt-danger);">${error.message}</p>
         </div>
       `;
     }
@@ -1478,13 +1478,13 @@
     const statusColor = statusColors[project.status] || '#6b7280';
     
     return `
-      <tr style="border-bottom: 1px solid #f3f4f6; transition: background 0.15s;" 
+      <tr style="border-bottom: 1px solid var(--dt-g100); transition: background 0.15s;" 
           onmouseover="this.style.background='#f9fafb'" 
           onmouseout="this.style.background='white'">
         <td style="padding: 12px 16px; white-space: nowrap;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="ico" data-icon="folder" data-size="18"></span>
-            <span style="font-weight: 600; color: #3b82f6; font-size: 13px; cursor: pointer;" 
+            <span style="font-weight: 600; color: var(--dt-brand); font-size: 13px; cursor: pointer;" 
                  onclick="TM.openProject('${project.id}')"
                  onmouseover="this.style.textDecoration='underline'" 
                  onmouseout="this.style.textDecoration='none'">${TM.escapeHtml(project.title || '(미지정)')}</span>
@@ -1493,30 +1493,30 @@
         <td style="padding: 12px 16px; white-space: nowrap;">
           <div style="display: flex; align-items: center; gap: 6px;">
             <span class="ico" data-icon="tag" data-size="16"></span>
-            <span style="font-weight: 500; color: #1f2937; font-size: 13px;">${TM.escapeHtml(project.trademark_name || '-')}</span>
+            <span style="font-weight: 500; color: var(--dt-g900); font-size: 13px;">${TM.escapeHtml(project.trademark_name || '-')}</span>
           </div>
         </td>
         <td style="padding: 12px 12px; text-align: center; white-space: nowrap;">
-          <span style="font-size: 12px; color: #6b7280;">${typeLabels[project.trademark_type] || '문자'}</span>
+          <span style="font-size: 12px; color: var(--dt-g500);">${typeLabels[project.trademark_type] || '문자'}</span>
         </td>
         <td style="padding: 12px 12px; text-align: center; white-space: nowrap;">
           <span style="display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; background: ${statusColor}15; color: ${statusColor};">${statusLabels[project.status] || '작성 중'}</span>
         </td>
-        <td style="padding: 12px 12px; text-align: center; font-size: 12px; color: #6b7280; white-space: nowrap;">
+        <td style="padding: 12px 12px; text-align: center; font-size: 12px; color: var(--dt-g500); white-space: nowrap;">
           ${updatedAt}
         </td>
         <td style="padding: 12px 16px; text-align: center; white-space: nowrap;">
           <div style="display: inline-flex; gap: 4px; align-items: center;">
             <button onclick="TM.openProject('${project.id}')" 
-                    style="padding: 4px 8px; font-size: 11px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
+                    style="padding: 4px 8px; font-size: 11px; background: var(--dt-brand); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
                     onmouseover="this.style.background='#2563eb'" 
                     onmouseout="this.style.background='#3b82f6'">열기</button>
             <button onclick="TM.editProject('${project.id}', '${TM.escapeHtml(project.title || '').replace(/'/g, "\\'")}')" 
-                    style="padding: 4px 8px; font-size: 11px; background: #f3f4f6; color: #374151; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
+                    style="padding: 4px 8px; font-size: 11px; background: var(--dt-g100); color: var(--dt-g700); border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
                     onmouseover="this.style.background='#e5e7eb'" 
                     onmouseout="this.style.background='#f3f4f6'">편집</button>
             <button onclick="TM.deleteProject('${project.id}')" 
-                    style="padding: 4px 8px; font-size: 11px; background: #fef2f2; color: #dc2626; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
+                    style="padding: 4px 8px; font-size: 11px; background: #FEECEC; color: var(--dt-danger); border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
                     onmouseover="this.style.background='#fee2e2'" 
                     onmouseout="this.style.background='#fef2f2'">삭제</button>
           </div>
@@ -1873,8 +1873,8 @@
             <div class="tm-project-icon"><span class="ico" data-icon="tag"></span></div>
             <div class="tm-project-info">
               <h3 class="tm-project-name">${TM.escapeHtml(TM.currentProject.trademarkName || '(상표명 미입력)')}</h3>
-              <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">
-                📁 ${TM.escapeHtml(TM.currentProject.title || '(관리번호 미지정)')}
+              <div style="font-size: 11px; color: var(--dt-g400); margin-top: 2px;">
+                <span class="ico" data-icon="folder"></span> ${TM.escapeHtml(TM.currentProject.title || '(관리번호 미지정)')}
               </div>
               <span class="tm-status-badge ${TM.currentProject.status}">${TM.getStatusLabel(TM.currentProject.status)}</span>
             </div>
@@ -1883,7 +1883,7 @@
           <!-- 저장 버튼 별도 영역 -->
           <div class="tm-sidebar-save">
             <button class="tm-save-btn-large" data-action="tm-save-project">
-              💾 저장하기
+              <span class="ico" data-icon="save"></span> 저장하기
             </button>
           </div>
           
@@ -1913,7 +1913,7 @@
             <!-- 헤더에 네비게이션 버튼 추가 -->
             <div class="tm-header-nav">
               <button class="btn btn-sm btn-secondary" data-action="tm-prev-step" ${TM.currentStep === 1 ? 'disabled' : ''}>
-                ← 이전
+                <span class="ico" data-icon="arrow-left"></span> 이전
               </button>
               <span class="tm-step-indicator">${TM.currentStep} / ${TM.steps.length}</span>
               <button class="btn btn-sm btn-primary" data-action="tm-next-step" ${TM.currentStep === TM.steps.length ? 'disabled' : ''}>
@@ -1923,26 +1923,26 @@
           </div>
           
           <!-- ★ 프로젝트 정보 요약 (항상 표시) -->
-          <div class="tm-project-summary" id="tm-project-summary" style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
+          <div class="tm-project-summary" id="tm-project-summary" style="background: linear-gradient(135deg, #F7FBFF 0%, var(--dt-brand-light) 100%); border: 1px solid #C9DEFE; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="ico" data-icon="tag" data-size="20"></span>
               <div>
-                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">상표명</div>
-                <div style="font-size: 14px; font-weight: 600; color: #0c4a6e;">${TM.escapeHtml(TM.currentProject.trademarkName || '(미입력)')}</div>
+                <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">상표명</div>
+                <div style="font-size: 14px; font-weight: 600; color: #002966;">${TM.escapeHtml(TM.currentProject.trademarkName || '(미입력)')}</div>
               </div>
             </div>
             
             ${TM.currentProject.aiAnalysis?.businessAnalysis ? `
-              <div style="flex: 1; min-width: 200px; border-left: 2px solid #bae6fd; padding-left: 16px;">
-                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">사업 내용</div>
-                <div style="font-size: 13px; color: #1e3a5f; line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(TM.currentProject.aiAnalysis.businessAnalysis.slice(0, 100))}${TM.currentProject.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
+              <div style="flex: 1; min-width: 200px; border-left: 2px solid #C9DEFE; padding-left: 16px;">
+                <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">사업 내용</div>
+                <div style="font-size: 13px; color: #002966; line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(TM.currentProject.aiAnalysis.businessAnalysis.slice(0, 100))}${TM.currentProject.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
               </div>
             ` : ''}
             
             ${TM.currentProject.designatedGoods?.length > 0 ? `
-              <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
-                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">지정상품</div>
-                <div style="font-size: 13px; color: #1e3a5f;">
+              <div style="border-left: 2px solid #C9DEFE; padding-left: 16px;">
+                <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">지정상품</div>
+                <div style="font-size: 13px; color: #002966;">
                   <strong>${TM.currentProject.designatedGoods.length}</strong>개 류 / 
                   <strong>${TM.currentProject.designatedGoods.reduce((sum, g) => sum + (g.goods?.length || 0), 0)}</strong>개 상품
                 </div>
@@ -1950,9 +1950,9 @@
             ` : ''}
             
             ${TM.currentProject.aiAnalysis?.classRecommendations?.core?.length > 0 ? `
-              <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
-                <div style="font-size: 11px; color: #0369a1; font-weight: 500;">추천 류</div>
-                <div style="font-size: 12px; color: #1e3a5f;">
+              <div style="border-left: 2px solid #C9DEFE; padding-left: 16px;">
+                <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">추천 류</div>
+                <div style="font-size: 12px; color: #002966;">
                   ${TM.currentProject.aiAnalysis.classRecommendations.core.map(c => '제' + c.class + '류').join(', ')}
                   ${TM.currentProject.aiAnalysis.classRecommendations.recommended?.length > 0 ? ' 외 ' + TM.currentProject.aiAnalysis.classRecommendations.recommended.length + '개' : ''}
                 </div>
@@ -1967,7 +1967,7 @@
           <!-- 하단 네비게이션 (스크롤 시에도 보임) -->
           <div class="tm-main-footer">
             <button class="btn btn-secondary" data-action="tm-prev-step" ${TM.currentStep === 1 ? 'disabled' : ''}>
-              ← 이전 단계
+              <span class="ico" data-icon="arrow-left"></span> 이전 단계
             </button>
             <div class="tm-footer-center">
               <span class="tm-step-indicator">${TM.currentStep} / ${TM.steps.length}</span>
@@ -2129,17 +2129,17 @@
       <div style="display: flex; align-items: center; gap: 8px;">
         <span class="ico" data-icon="tag" data-size="20"></span>
         <div>
-          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">상표명</div>
-          <div style="font-size: 14px; font-weight: 600; color: #0c4a6e;">${TM.escapeHtml(p.trademarkName || '(미입력)')}</div>
+          <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">상표명</div>
+          <div style="font-size: 14px; font-weight: 600; color: #002966;">${TM.escapeHtml(p.trademarkName || '(미입력)')}</div>
         </div>
       </div>
     `;
     
     if (p.aiAnalysis?.businessAnalysis) {
       html += `
-        <div style="flex: 1; min-width: 200px; border-left: 2px solid #bae6fd; padding-left: 16px;">
-          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">사업 내용</div>
-          <div style="font-size: 13px; color: #1e3a5f; line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(p.aiAnalysis.businessAnalysis.slice(0, 100))}${p.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
+        <div style="flex: 1; min-width: 200px; border-left: 2px solid #C9DEFE; padding-left: 16px;">
+          <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">사업 내용</div>
+          <div style="font-size: 13px; color: #002966; line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(p.aiAnalysis.businessAnalysis.slice(0, 100))}${p.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
         </div>
       `;
     }
@@ -2147,9 +2147,9 @@
     if (p.designatedGoods?.length > 0) {
       const totalGoods = p.designatedGoods.reduce((sum, g) => sum + (g.goods?.length || 0), 0);
       html += `
-        <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
-          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">지정상품</div>
-          <div style="font-size: 13px; color: #1e3a5f;">
+        <div style="border-left: 2px solid #C9DEFE; padding-left: 16px;">
+          <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">지정상품</div>
+          <div style="font-size: 13px; color: #002966;">
             <strong>${p.designatedGoods.length}</strong>개 류 / 
             <strong>${totalGoods}</strong>개 상품
           </div>
@@ -2161,9 +2161,9 @@
       const coreClasses = p.aiAnalysis.classRecommendations.core.map(c => '제' + c.class + '류').join(', ');
       const recCount = p.aiAnalysis.classRecommendations.recommended?.length || 0;
       html += `
-        <div style="border-left: 2px solid #bae6fd; padding-left: 16px;">
-          <div style="font-size: 11px; color: #0369a1; font-weight: 500;">추천 류</div>
-          <div style="font-size: 12px; color: #1e3a5f;">
+        <div style="border-left: 2px solid #C9DEFE; padding-left: 16px;">
+          <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">추천 류</div>
+          <div style="font-size: 12px; color: #002966;">
             ${coreClasses}${recCount > 0 ? ' 외 ' + recCount + '개' : ''}
           </div>
         </div>
@@ -2378,7 +2378,7 @@
               
               <!-- 견본 업로드 (개선) -->
               <div class="tm-field">
-                <label>견본 <span style="font-weight:400;color:#9ca3af;font-size:12px;">(도형/결합 상표 시 필수)</span></label>
+                <label>견본 <span style="font-weight:400;color:var(--dt-g400);font-size:12px;">(도형/결합 상표 시 필수)</span></label>
                 <div class="tm-specimen-upload" id="tm-specimen-dropzone"
                      ondragover="TM.handleDragOver(event)"
                      ondragleave="TM.handleDragLeave(event)"
@@ -2459,7 +2459,7 @@
             <div class="tm-panel-body">
               <div class="tm-field-grid tm-field-grid-3">
                 <div class="tm-field">
-                  <label>디딤 관리번호 <span style="font-weight:400;color:#9ca3af;font-size:11px;">(프로젝트 식별)</span></label>
+                  <label>디딤 관리번호 <span style="font-weight:400;color:var(--dt-g400);font-size:11px;">(프로젝트 식별)</span></label>
                   <input type="text" class="tm-input" id="tm-project-title-input"
                          value="${TM.escapeHtml(TM.currentProject?.title || '')}" 
                          placeholder="예: 26T0001"
@@ -2559,7 +2559,7 @@
                 <button class="btn btn-sm btn-primary" data-action="tm-apply-all-recommendations">✓ 전체 적용</button>
               </div>
               <div class="tm-panel-body">
-                <p style="font-size: 13px; color: #6b7684; margin: 0 0 16px;">AI가 분석한 결과, 아래 상품류가 사업에 적합합니다. <strong>적용</strong> 버튼을 클릭하면 지정상품에 추가됩니다.</p>
+                <p style="font-size: 13px; color: var(--dt-g500); margin: 0 0 16px;">AI가 분석한 결과, 아래 상품류가 사업에 적합합니다. <strong>적용</strong> 버튼을 클릭하면 지정상품에 추가됩니다.</p>
                 <div class="tm-rec-list">
                   ${p.aiAnalysis.recommendedClasses.map((code, idx) => {
                     const className = TM.niceClasses[code] || '';
@@ -2616,14 +2616,14 @@
   
   TM.getTypeIcon = function(type) {
     const icons = {
-      text: '🔤',
-      figure: '🎨',
-      combined: '🔀',
-      sound: '🔊',
-      color: '🌈',
-      '3d': '🎲'
+      text:     '<span class="ico" data-icon="tag"></span>',
+      figure:   '<span class="ico" data-icon="image"></span>',
+      combined: '<span class="ico" data-icon="split"></span>',
+      sound:    '<span class="ico" data-icon="bell"></span>',
+      color:    '<span class="ico" data-icon="image"></span>',
+      '3d':     '<span class="ico" data-icon="box"></span>'
     };
-    return icons[type] || '🏷️';
+    return icons[type] || '<span class="ico" data-icon="tag"></span>';
   };
   
   TM.getTypeLabel = function(type) {
@@ -2767,7 +2767,7 @@
               <!-- 추가 추천 요청 버튼 -->
               <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #eee; text-align: center;">
                 <button class="btn btn-outline btn-sm" data-action="tm-request-more-recommendations" style="font-size: 12px;">
-                  🔍 추가 추천 요청
+                  <span class="ico" data-icon="search"></span> 추가 추천 요청
                 </button>
               </div>
             </div>
@@ -2940,7 +2940,7 @@
             <div class="tm-custom-term-meta">
               <span>추정 유사군: ${term.similarGroup || '(미확인)'}</span>
               ${term.confidence ? `<span>매칭도: ${Math.round(term.confidence * 100)}%</span>` : ''}
-              ${term.riskLevel === 'high' ? '<span class="risk-warn">⚠️ 보정 가능성 높음</span>' : ''}
+              ${term.riskLevel === 'high' ? '<span class="risk-warn"><span class="ico" data-icon="warning"></span> 보정 가능성 높음</span>' : ''}
             </div>
             ${term.mappingCandidates?.length > 0 ? `
               <div class="tm-custom-term-alts">
@@ -3115,15 +3115,15 @@
       
       // 요약
       if (v.summary) {
-        html += '<div style="font-size: 13px; color: #374151; margin-bottom: 12px; font-weight: 500;">' + TM.escapeHtml(v.summary) + '</div>';
+        html += '<div style="font-size: 13px; color: var(--dt-g700); margin-bottom: 12px; font-weight: 500;">' + TM.escapeHtml(v.summary) + '</div>';
       }
       
       // 제거된 류 표시
       if (v.invalidClasses?.length > 0) {
         html += '<div style="margin-bottom: 10px;">' +
-          '<div style="font-size: 11px; font-weight: 600; color: #dc2626; margin-bottom: 6px;"><span class="ico" data-icon="x"></span> 제거된 류 (' + v.invalidClasses.length + '개)</div>';
+          '<div style="font-size: 11px; font-weight: 600; color: var(--dt-danger); margin-bottom: 6px;"><span class="ico" data-icon="x"></span> 제거된 류 (' + v.invalidClasses.length + '개)</div>';
         v.invalidClasses.forEach(c => {
-          html += '<div style="font-size: 11px; color: #7f1d1d; padding: 6px 10px; background: #fef2f2; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #dc2626;">' +
+          html += '<div style="font-size: 11px; color: #7f1d1d; padding: 6px 10px; background: #FEECEC; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--dt-danger);">' +
             '<strong>제' + c.class + '류</strong>: ' + TM.escapeHtml(c.reason) +
           '</div>';
         });
@@ -3133,12 +3133,12 @@
       // 제거된 지정상품 표시
       if (v.invalidGoods?.length > 0) {
         html += '<div style="margin-bottom: 10px;">' +
-          '<div style="font-size: 11px; font-weight: 600; color: #dc2626; margin-bottom: 6px;"><span class="ico" data-icon="x"></span> 제거된 지정상품 (' + v.invalidGoods.length + '개)</div>';
+          '<div style="font-size: 11px; font-weight: 600; color: var(--dt-danger); margin-bottom: 6px;"><span class="ico" data-icon="x"></span> 제거된 지정상품 (' + v.invalidGoods.length + '개)</div>';
         v.invalidGoods.forEach(g => {
           const errorLabel = g.errorType === 'homonym' ? '🔤 동음이의어' : 
                             g.errorType === 'partial_match' ? '<span class="ico" data-icon="edit"></span> 부분매칭 오류' : '⚠️ 관련성 부족';
-          html += '<div style="font-size: 11px; color: #7f1d1d; padding: 6px 10px; background: #fef2f2; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #f87171;">' +
-            '<span style="background: #fee2e2; padding: 1px 6px; border-radius: 4px; margin-right: 6px; font-size: 10px;">' + errorLabel + '</span>' +
+          html += '<div style="font-size: 11px; color: #7f1d1d; padding: 6px 10px; background: #FEECEC; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #f87171;">' +
+            '<span style="background: #FEECEC; padding: 1px 6px; border-radius: 4px; margin-right: 6px; font-size: 10px;">' + errorLabel + '</span>' +
             '<strong>제' + g.classCode + '류</strong> "' + TM.escapeHtml(g.goodsName) + '": ' + TM.escapeHtml(g.reason) +
           '</div>';
         });
@@ -3150,9 +3150,9 @@
         html += '<div style="margin-bottom: 10px;">' +
           '<div style="font-size: 11px; font-weight: 600; color: #059669; margin-bottom: 6px;"><span class="ico" data-icon="refresh"></span> 대체 추천 (' + v.replacementGoods.length + '개)</div>';
         v.replacementGoods.forEach(r => {
-          html += '<div style="font-size: 11px; color: #065f46; padding: 6px 10px; background: #ecfdf5; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #10b981;">' +
+          html += '<div style="font-size: 11px; color: #006E25; padding: 6px 10px; background: #F2FFF6; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--dt-success);">' +
             '<strong>제' + r.classCode + '류</strong>: ' +
-            '<span style="text-decoration: line-through; color: #9ca3af;">' + TM.escapeHtml(r.remove) + '</span> → ' +
+            '<span style="text-decoration: line-through; color: var(--dt-g400);">' + TM.escapeHtml(r.remove) + '</span> → ' +
             '<strong>' + TM.escapeHtml(r.addInstead) + '</strong>' +
           '</div>';
         });
@@ -3162,9 +3162,9 @@
       // 경고 사항
       if (v.warnings?.length > 0) {
         html += '<div style="margin-bottom: 10px;">' +
-          '<div style="font-size: 11px; font-weight: 600; color: #d97706; margin-bottom: 6px;">⚠️ 확인 필요</div>';
+          '<div style="font-size: 11px; font-weight: 600; color: var(--dt-warning); margin-bottom: 6px;"><span class="ico" data-icon="warning"></span> 확인 필요</div>';
         v.warnings.forEach(w => {
-          html += '<div style="font-size: 11px; color: #92400e; padding: 6px 10px; background: #fffbeb; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #f59e0b;">' +
+          html += '<div style="font-size: 11px; color: #663A00; padding: 6px 10px; background: #fffbeb; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--dt-warning);">' +
             '제' + w.class + '류: ' + TM.escapeHtml(w.message) +
           '</div>';
         });
@@ -3178,7 +3178,7 @@
         
         if (addClassSuggestions.length > 0) {
           html += '<div style="margin-bottom: 10px;">' +
-            '<div style="font-size: 11px; font-weight: 600; color: #2563eb; margin-bottom: 6px;"><span class="ico" data-icon="lightbulb"></span> 추가 권장 류</div>';
+            '<div style="font-size: 11px; font-weight: 600; color: var(--dt-brand-hover); margin-bottom: 6px;"><span class="ico" data-icon="lightbulb"></span> 추가 권장 류</div>';
           addClassSuggestions.forEach(s => {
             const priorityBadge = s.priority === '핵심' ? '🔴' : s.priority === '권장' ? '🟠' : '🟢';
             const isAdded = p.designatedGoods.some(g => g.classCode === s.class);
@@ -3190,17 +3190,17 @@
               const tags = recGoods.map(g => {
                 const name = g.name || g;
                 const dn = name.length > 18 ? name.slice(0, 18) + '..' : name;
-                return '<span style="padding: 1px 5px; background: #dbeafe; border-radius: 3px; font-size: 10px; display: inline-block; margin: 1px 1px;">' + TM.escapeHtml(dn) + '</span>';
+                return '<span style="padding: 1px 5px; background: var(--dt-brand-light); border-radius: 3px; font-size: 10px; display: inline-block; margin: 1px 1px;">' + TM.escapeHtml(dn) + '</span>';
               }).join('');
               goodsLine = '<div style="margin-top: 4px; line-height: 1.7;">' +
-                '<span style="font-size: 10px; font-weight: 600; color: #3b82f6;">추천 지정상품(' + recGoods.length + '):</span> ' + tags + '</div>';
+                '<span style="font-size: 10px; font-weight: 600; color: var(--dt-brand);">추천 지정상품(' + recGoods.length + '):</span> ' + tags + '</div>';
             }
             
             const actionBtn = isAdded
               ? '<span style="font-size: 10px; color: #28a745; white-space: nowrap;">✓적용됨</span>'
-              : '<button class="btn btn-sm" style="padding: 3px 10px; font-size: 10px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;" data-action="tm-add-class" data-class-code="' + s.class + '">+ 추가</button>';
+              : '<button class="btn btn-sm" style="padding: 3px 10px; font-size: 10px; background: var(--dt-brand); color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;" data-action="tm-add-class" data-class-code="' + s.class + '">+ 추가</button>';
             
-            html += '<div style="font-size: 11px; color: #1e40af; padding: 8px 10px; background: #eff6ff; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #3b82f6;">' +
+            html += '<div style="font-size: 11px; color: #003E9C; padding: 8px 10px; background: #F7FBFF; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid var(--dt-brand);">' +
               '<div style="display: flex; justify-content: space-between; align-items: center;">' +
                 '<span>' + priorityBadge + ' <strong>제' + s.class + '류</strong>: ' + TM.escapeHtml(s.reason) + '</span>' +
                 actionBtn +
@@ -3215,9 +3215,9 @@
       // 누락된 지정상품
       if (v.missingGoods?.length > 0) {
         html += '<div>' +
-          '<div style="font-size: 11px; font-weight: 600; color: #7c3aed; margin-bottom: 6px;"><span class="ico" data-icon="box"></span> 추가 권장 상품</div>';
+          '<div style="font-size: 11px; font-weight: 600; color: var(--color-violet-50,#6541F2); margin-bottom: 6px;"><span class="ico" data-icon="box"></span> 추가 권장 상품</div>';
         v.missingGoods.forEach(g => {
-          html += '<div style="font-size: 11px; color: #5b21b6; padding: 6px 10px; background: #f5f3ff; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #8b5cf6;">' +
+          html += '<div style="font-size: 11px; color: #5b21b6; padding: 6px 10px; background: #f5f3ff; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--color-violet-50,#6541F2);">' +
             '<strong>제' + g.classCode + '류</strong>: ' + TM.escapeHtml(g.goodsName) + ' - ' + TM.escapeHtml(g.reason) +
           '</div>';
         });
@@ -3226,7 +3226,7 @@
       
       // 재검증 버튼
       html += '<div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid ' + borderColor + '; text-align: center;">' +
-        '<button class="btn btn-sm" style="padding: 6px 16px; font-size: 11px; background: white; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer;" data-action="tm-revalidate"><span class="ico" data-icon="refresh"></span> 다시 검증</button>' +
+        '<button class="btn btn-sm" style="padding: 6px 16px; font-size: 11px; background: white; border: 1px solid var(--dt-g300); border-radius: 6px; cursor: pointer;" data-action="tm-revalidate"><span class="ico" data-icon="refresh"></span> 다시 검증</button>' +
       '</div>';
       
       html += '</div>';
@@ -3295,7 +3295,7 @@
           
           ${analysis.riskAnalysis?.risks?.length > 0 ? `
             <div class="tm-analysis-risks">
-              ${analysis.riskAnalysis.risks.map(r => `<span class="risk-item">⚠️ ${r}</span>`).join('')}
+              ${analysis.riskAnalysis.risks.map(r => `<span class="risk-item"><span class="ico" data-icon="warning"></span> ${r}</span>`).join('')}
             </div>
           ` : ''}
         </div>
@@ -3431,7 +3431,7 @@
             <span class="tm-class-name">${TM.niceClasses[classData.classCode]}</span>
           </div>
           <button class="btn btn-sm btn-ghost" data-action="tm-remove-class" data-class-code="${classData.classCode}">
-            ✕ 제거
+            <span class="ico" data-icon="x"></span> 제거
           </button>
         </div>
         
@@ -4377,7 +4377,7 @@
         </div>
       ` : `
         <div class="tm-warning-box">
-          ⚠️ 지정상품을 먼저 선택해주세요. 유사군 코드 기반 검색이 더 정확합니다.
+          <span class="ico" data-icon="warning"></span> 지정상품을 먼저 선택해주세요. 유사군 코드 기반 검색이 더 정확합니다.
         </div>
       `}
       
@@ -4469,7 +4469,7 @@
             
             <div class="tm-search-actions">
               <button class="btn btn-primary btn-lg" data-action="tm-search-text">
-                🔍 상표 검색
+                <span class="ico" data-icon="search"></span> 상표 검색
               </button>
             </div>
             
@@ -4489,7 +4489,7 @@
             <h4>비엔나 도형 분류 코드</h4>
             <p class="tm-hint">상표 이미지를 분석하여 비엔나 코드를 추천받으세요.</p>
             <button class="btn btn-secondary" data-action="tm-analyze-vienna">
-              🤖 AI 비엔나 코드 분석
+              <span class="ico" data-icon="robot"></span> AI 비엔나 코드 분석
             </button>
             ${p.aiAnalysis.viennaCodeSuggestion && p.aiAnalysis.viennaCodeSuggestion.length > 0 ? `
               <div class="tm-vienna-suggestions">
@@ -4506,7 +4506,7 @@
             </div>
             <div class="tm-search-actions">
               <button class="btn btn-primary" data-action="tm-search-figure">
-                🔍 도형 검색
+                <span class="ico" data-icon="search"></span> 도형 검색
               </button>
             </div>
           </div>
@@ -4667,7 +4667,7 @@
         </div>
         <div class="tm-summary-stat risk-overlap">
           <span class="tm-stat-num">${groupOverlapCount}</span>
-          <span class="tm-stat-label">⚠️ 유사군 중복</span>
+          <span class="tm-stat-label"><span class="ico" data-icon="warning"></span> 유사군 중복</span>
         </div>
         <div class="tm-summary-stat risk-safe">
           <span class="tm-stat-num">${noOverlapCount}</span>
@@ -6118,21 +6118,21 @@
     const hasCustomApiKey = apiKey && apiKey !== defaultKey;
     
     const apiKeyWarning = !hasCustomApiKey ? `
-      <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px;">
+      <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: #FEF4E6; border: 1px solid var(--dt-warning); border-radius: 10px;">
         <div style="display: flex; align-items: flex-start; gap: 12px;">
           <span style="font-size: 24px;">⚠️</span>
           <div>
-            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #92400e;">KIPRIS API 키가 설정되지 않았습니다</h4>
+            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #663A00;">KIPRIS API 키가 설정되지 않았습니다</h4>
             <p style="margin: 0 0 10px 0; font-size: 13px; color: #a16207; line-height: 1.5;">
               선행상표 검색을 위해 개인 API 키가 필요합니다. 기본 키는 호출 제한에 걸릴 수 있습니다.
             </p>
             <div style="display: flex; gap: 12px; align-items: center;">
               <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" 
-                 style="font-size: 12px; color: #d97706; text-decoration: underline;">
+                 style="font-size: 12px; color: var(--dt-warning); text-decoration: underline;">
                 👉 KIPRIS Plus에서 무료 API 키 발급받기
               </a>
               <button class="btn btn-sm" onclick="TM.openSettings()" 
-                      style="padding: 4px 12px; font-size: 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                      style="padding: 4px 12px; font-size: 12px; background: var(--dt-warning); color: white; border: none; border-radius: 4px; cursor: pointer;">
                 설정에서 입력
               </button>
             </div>
@@ -6140,9 +6140,9 @@
         </div>
       </div>
     ` : `
-      <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+      <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: #D9FFE6; border: 1px solid var(--dt-success); border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
         <span><span class="ico" data-icon="check-circle"></span></span>
-        <span style="font-size: 13px; color: #166534;">KIPRIS API 키 설정됨</span>
+        <span style="font-size: 13px; color: #006E25;">KIPRIS API 키 설정됨</span>
       </div>
     `;
     
@@ -6167,7 +6167,7 @@
         <div class="tm-eval-control-panel">
           <div class="tm-eval-control-left">
             <button class="btn btn-primary btn-lg" id="tm-eval-all-btn" data-action="tm-evaluate-all-similarity">
-              🤖 전체 AI 평가 실행
+              <span class="ico" data-icon="robot"></span> 전체 AI 평가 실행
             </button>
             <p class="tm-eval-hint">선행상표 ${allSearchResults.length}건에 대해 외관·호칭·관념 유사도를 AI가 일괄 분석합니다.</p>
           </div>
@@ -6533,21 +6533,21 @@ notes는 평가 근거를 3-4문장으로 서술.
     const hasCustomApiKey = apiKey && apiKey !== defaultKey;
     
     const apiKeyWarning = !hasCustomApiKey ? `
-      <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px;">
+      <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: #FEF4E6; border: 1px solid var(--dt-warning); border-radius: 10px;">
         <div style="display: flex; align-items: flex-start; gap: 12px;">
           <span style="font-size: 24px;">⚠️</span>
           <div>
-            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #92400e;">KIPRIS API 키가 설정되지 않았습니다</h4>
+            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #663A00;">KIPRIS API 키가 설정되지 않았습니다</h4>
             <p style="margin: 0 0 10px 0; font-size: 13px; color: #a16207; line-height: 1.5;">
               정확한 리스크 평가를 위해 개인 API 키가 필요합니다. 기본 키는 호출 제한에 걸릴 수 있습니다.
             </p>
             <div style="display: flex; gap: 12px; align-items: center;">
               <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" 
-                 style="font-size: 12px; color: #d97706; text-decoration: underline;">
+                 style="font-size: 12px; color: var(--dt-warning); text-decoration: underline;">
                 👉 KIPRIS Plus에서 무료 API 키 발급받기
               </a>
               <button class="btn btn-sm" onclick="TM.openSettings()" 
-                      style="padding: 4px 12px; font-size: 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                      style="padding: 4px 12px; font-size: 12px; background: var(--dt-warning); color: white; border: none; border-radius: 4px; cursor: pointer;">
                 설정에서 입력
               </button>
             </div>
@@ -6555,9 +6555,9 @@ notes는 평가 근거를 3-4문장으로 서술.
         </div>
       </div>
     ` : `
-      <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+      <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: #D9FFE6; border: 1px solid var(--dt-success); border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
         <span><span class="ico" data-icon="check-circle"></span></span>
-        <span style="font-size: 13px; color: #166534;">KIPRIS API 키 설정됨</span>
+        <span style="font-size: 13px; color: #006E25;">KIPRIS API 키 설정됨</span>
       </div>
     `;
     
@@ -6571,7 +6571,7 @@ notes는 평가 근거를 3-4문장으로 서술.
       <!-- AI 평가 버튼 -->
       <div class="tm-risk-action-panel">
         <button class="btn btn-primary btn-lg" id="tm-risk-btn" data-action="tm-assess-risk">
-          🤖 AI 리스크 종합 평가
+          <span class="ico" data-icon="robot"></span> AI 리스크 종합 평가
         </button>
         <div class="tm-risk-progress" id="tm-risk-progress" style="display: none;">
           <div class="tm-progress-bar">
@@ -6662,7 +6662,7 @@ notes는 평가 근거를 3-4문장으로 서술.
               <div class="tm-criteria-desc">유사군 중복 + 상표 유사 → 거절 가능성 높음</div>
             </div>
             <div class="tm-criteria-item medium">
-              <div class="tm-criteria-label">⚠️ 중간 위험</div>
+              <div class="tm-criteria-label"><span class="ico" data-icon="warning"></span> 중간 위험</div>
               <div class="tm-criteria-desc">유사군 중복, 상표 다소 유사 → 심사관 판단</div>
             </div>
             <div class="tm-criteria-item low">
@@ -7003,16 +7003,16 @@ ${criticalResults.slice(0, 5).map(r =>
                   </div>
                 </div>
                 ${pe.specimenImageDataUrl ? `
-                  <div style="margin-top: 10px; padding: 8px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-                    <label style="font-size: 11px; color: #6b7280; font-weight: 600; display: block; margin-bottom: 6px;">상표견본 (추출됨)</label>
-                    <img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 200px; max-height: 120px; border: 1px solid #d1d5db; border-radius: 4px; display: block;">
+                  <div style="margin-top: 10px; padding: 8px; background: var(--dt-g50); border: 1px solid var(--dt-g150); border-radius: 8px;">
+                    <label style="font-size: 11px; color: var(--dt-g500); font-weight: 600; display: block; margin-bottom: 6px;">상표견본 (추출됨)</label>
+                    <img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 200px; max-height: 120px; border: 1px solid var(--dt-g300); border-radius: 4px; display: block;">
                   </div>
                 ` : ''}
               </div>
             ` : `
               <div class="tm-extracted-summary">
                 <span><strong>${pe.applicationNumber || '-'}</strong> | ${pe.applicationDate || '-'} | ${pe.applicantName || '-'}</span>
-                ${pe.specimenImageDataUrl ? `<img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 80px; max-height: 50px; vertical-align: middle; margin-left: 8px; border: 1px solid #d1d5db; border-radius: 3px;">` : ''}
+                ${pe.specimenImageDataUrl ? `<img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 80px; max-height: 50px; vertical-align: middle; margin-left: 8px; border: 1px solid var(--dt-g300); border-radius: 3px;">` : ''}
               </div>
             `}
           </div>
@@ -7024,10 +7024,10 @@ ${criticalResults.slice(0, 5).map(r =>
         <span class="tm-choice-label">우선심사 신청</span>
         <div class="tm-choice-buttons">
           <button class="tm-choice-btn ${pe.enabled ? 'selected' : ''}" data-action="tm-set-priority" data-enabled="true">
-            ⚡ 신청 <small>(2~3개월, +160,000원/류)</small>
+            <span class="ico" data-icon="bolt"></span> 신청 <small>(2~3개월, +160,000원/류)</small>
           </button>
           <button class="tm-choice-btn ${pe.enabled === false && isConfirmed ? 'selected' : ''}" data-action="tm-set-priority" data-enabled="false">
-            📋 일반심사 <small>(12~14개월)</small>
+            <span class="ico" data-icon="clipboard"></span> 일반심사 <small>(12~14개월)</small>
           </button>
         </div>
         ${!isConfirmed ? '<span class="tm-choice-required"><span class="ico" data-icon="arrow-left"></span> 선택 필요</span>' : ''}
@@ -7103,7 +7103,7 @@ ${criticalResults.slice(0, 5).map(r =>
           
           ${TM.checkGoodsMismatch() ? `
             <div class="tm-goods-selector">
-              <div class="tm-goods-selector-header">⚠️ 지정상품 정보 불일치 - 사용할 정보 선택:</div>
+              <div class="tm-goods-selector-header"><span class="ico" data-icon="warning"></span> 지정상품 정보 불일치 - 사용할 정보 선택:</div>
               <div class="tm-goods-selector-options">
                 <label class="tm-goods-option-inline ${!pe.useExtractedGoods ? 'selected' : ''}" onclick="TM.selectGoodsSource(false)">
                   <input type="radio" name="goods-source" ${!pe.useExtractedGoods ? 'checked' : ''}>
@@ -7121,10 +7121,10 @@ ${criticalResults.slice(0, 5).map(r =>
           
           <div class="tm-doc-actions-compact">
             <button class="tm-btn-generate" data-action="tm-generate-priority-doc">
-              📄 Word 생성
+              <span class="ico" data-icon="doc"></span> Word 생성
             </button>
             <button class="tm-btn-preview" onclick="TM.previewPriorityDoc()">
-              👁️ 미리보기
+              <span class="ico" data-icon="eye"></span> 미리보기
             </button>
           </div>
           
@@ -8587,7 +8587,7 @@ ${content.substring(0, 1200)}
         <div class="tm-doc-section">
           <h3>【상표견본】</h3>
           ${pe.specimenImageDataUrl
-            ? `<img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 280px; max-height: 180px; border: 1px solid #d1d5db; display: block;">`
+            ? `<img src="${pe.specimenImageDataUrl}" alt="상표견본" style="max-width: 280px; max-height: 180px; border: 1px solid var(--dt-g300); display: block;">`
             : `<p style="font-size: 18px; font-weight: bold;">${trademarkName}</p>`
           }
         </div>
@@ -8782,7 +8782,7 @@ ${content.substring(0, 1200)}
     modal.innerHTML = `
       <div class="tm-modal tm-goods-mismatch-modal">
         <div class="tm-modal-header">
-          <h3>⚠️ 지정상품 정보 불일치</h3>
+          <h3><span class="ico" data-icon="warning"></span> 지정상품 정보 불일치</h3>
           <button class="tm-modal-close" onclick="TM.closeGoodsMismatchModal()"><span class="ico" data-icon="x"></span></button>
         </div>
         <div class="tm-modal-body">
@@ -9240,11 +9240,11 @@ ${content.substring(0, 1200)}
         <h4><span class="ico" data-icon="download"></span> 문서 다운로드</h4>
         <div class="tm-output-buttons">
           <button class="btn btn-primary" data-action="tm-download-docx">
-            📝 검토 보고서 (Word)
+            <span class="ico" data-icon="edit"></span> 검토 보고서 (Word)
           </button>
           ${p.priorityExam?.enabled ? `
             <button class="btn btn-secondary" data-action="tm-generate-priority-doc">
-              ⚡ 우선심사 설명서 (Word)
+              <span class="ico" data-icon="bolt"></span> 우선심사 설명서 (Word)
             </button>
           ` : ''}
         </div>
