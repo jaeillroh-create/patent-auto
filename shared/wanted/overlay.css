@@ -1,0 +1,452 @@
+/* ──────────────────────────────────────────────────────────────────
+   Wanted DS Overlay — patent-auto SPA
+   기존 --dt-* 토큰 + 컴포넌트 클래스를 Wanted Design System 색·서체·
+   라운드로 재매핑. 모든 기존 JS 훅(클래스명·ID)은 보존.
+   로드 순서: 가장 마지막. (cascade 우선권 확보)
+   ────────────────────────────────────────────────────────────────── */
+
+/* ── Wanted Sans 표시용 폰트 ─────────────────────────────────── */
+@import url("https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css");
+
+/* ── 1. 기존 --dt-* 토큰을 Wanted 팔레트로 재매핑 ─────────────── */
+:root {
+  /* Brand — Wanted blue */
+  --dt-brand:        #0066FF;
+  --dt-brand-hover:  #005EEB;
+  --dt-brand-light:  #EAF2FE;
+  --dt-brand-mid:    #C9DEFE;
+  --dt-brand-pale:   #F7FBFF;
+
+  /* Semantic — Wanted status ramps */
+  --dt-success:        #009632;
+  --dt-success-light:  #D9FFE6;
+  --dt-warning:        #D17600;
+  --dt-warning-light:  #FEF4E6;
+  --dt-danger:         #E52222;
+  --dt-danger-light:   #FEECEC;
+
+  /* Cool-neutral 그레이로 교체 (기존 warm gray → Wanted cool gray) */
+  --dt-g900: #000000;
+  --dt-g800: #1B1C1E;
+  --dt-g700: #2E2F33;
+  --dt-g600: #46474C;
+  --dt-g500: #70737C;
+  --dt-g400: #878A93;
+  --dt-g300: #AEB0B6;
+  --dt-g200: #DBDCDF;
+  --dt-g150: #EAEBEC;
+  --dt-g100: #F4F4F5;
+  --dt-g50:  #F7F7F8;
+
+  /* Radius — Wanted scale (조금 더 부드럽게) */
+  --dt-r-xs:   4px;
+  --dt-r-sm:   8px;
+  --dt-r-md:  10px;
+  --dt-r-lg:  16px;
+  --dt-r-xl:  20px;
+
+  /* Shadow — Wanted shadow ramp */
+  --dt-sh-sm: 0 1px 2px -1px rgba(23,23,23,.10);
+  --dt-sh-md: 0 4px 6px -1px rgba(23,23,23,.06), 0 2px 4px -2px rgba(23,23,23,.06);
+  --dt-sh-lg: 0 16px 24px -6px rgba(23,23,23,.08), 0 6px 10px -4px rgba(23,23,23,.08);
+
+  /* Font — Pretendard JP body + Wanted Sans display */
+  --dt-font: "Pretendard JP Variable","Pretendard JP","Pretendard Variable","Pretendard",
+             -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  --font-family: var(--dt-font);
+  --font-display: "Wanted Sans Variable","Wanted Sans","Pretendard JP Variable",sans-serif;
+
+  /* 기존 별칭 토큰들도 Wanted 값으로 정렬 */
+  --color-primary:        var(--dt-brand);
+  --color-primary-hover:  var(--dt-brand-hover);
+  --color-primary-light:  var(--dt-brand-light);
+  --color-success:        var(--dt-success);
+  --color-warning:        var(--dt-warning);
+  --color-error:          var(--dt-danger);
+  --color-border:         var(--dt-g150);
+  --color-bg-secondary:   var(--dt-g50);
+  --color-bg-tertiary:    var(--dt-g100);
+  --color-text-primary:   var(--dt-g900);
+  --color-text-secondary: var(--dt-g700);
+  --color-text-tertiary:  var(--dt-g500);
+  --color-warning-light:  var(--dt-warning-light);
+}
+
+/* ── 2. body 전역 ─────────────────────────────────────────────── */
+html, body {
+  background: var(--background-normal, var(--dt-g50));
+  color: var(--label-normal, var(--dt-g700));
+  font-family: var(--dt-font);
+  font-feature-settings: "ss01","ss02";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── 3. 상단 헤더 / 브랜드 영역 ──────────────────────────────── */
+.app-header {
+  background: #fff;
+  border-bottom: 1px solid var(--dt-g150);
+  padding: 0 28px;
+  height: 64px;
+  margin-bottom: 0;
+}
+.header-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--dt-g900);
+}
+.header-logo { height: 28px; }
+.header-user {
+  font-size: 13px;
+  color: var(--dt-g500);
+  padding: 0 8px;
+}
+
+/* ── 4. 서비스 탭 (특허/상표/사건등록) ────────────────────────── */
+.service-tab-nav {
+  background: #fff;
+  border-bottom: 1px solid var(--dt-g150);
+  padding: 0 28px;
+  gap: 4px;
+}
+.service-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dt-g500);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  letter-spacing: -0.005em;
+  border-radius: 0;
+  cursor: pointer;
+}
+.service-tab:hover { color: var(--dt-g700); background: transparent; }
+.service-tab.active {
+  color: var(--dt-g900);
+  border-bottom-color: var(--dt-brand);
+  background: transparent;
+}
+.service-tab .ico { color: var(--dt-g300); }
+.service-tab.active .ico { color: var(--dt-brand); }
+
+/* ── 5. 서브탭 (명세서/의견서/분할 · 상표/우선심사) ───────────── */
+.patent-sub-tab-nav,
+.trademark-sub-tab-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 28px;
+  background: #fff;
+  border-bottom: 1px solid var(--dt-g150);
+}
+.patent-sub-tab,
+.trademark-sub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dt-g500);
+  background: transparent;
+  border: none;
+  border-radius: var(--dt-r-sm);
+  cursor: pointer;
+}
+.patent-sub-tab:hover,
+.trademark-sub-tab:hover {
+  background: rgba(112,115,124,.08);
+  color: var(--dt-g700);
+}
+.patent-sub-tab.active,
+.trademark-sub-tab.active {
+  color: #0054D1;
+  background: var(--dt-brand-light);
+  font-weight: 600;
+}
+
+/* ── 6. 메인 컨텐츠 컨테이너 ─────────────────────────────────── */
+.app-container {
+  background: var(--dt-g50);
+  min-height: 100vh;
+}
+.service-panel { padding: 24px 28px; }
+
+/* ── 7. 카드 ─────────────────────────────────────────────────── */
+.card {
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-lg);
+  box-shadow: none;
+  padding: 20px;
+  margin-bottom: 14px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.card:hover { box-shadow: none; border-color: var(--dt-g200); }
+.card-header { margin-bottom: 12px; }
+.card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dt-g900);
+  letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-title .ico { color: var(--dt-g500); }
+.card-description { color: var(--dt-g500); font-size: 12.5px; }
+
+/* result-card / opinion-card / division-card 등 모든 카드 패밀리 통일 */
+.result-card {
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-lg);
+  box-shadow: none;
+}
+
+/* ── 8. 버튼 ─────────────────────────────────────────────────── */
+.btn {
+  border-radius: var(--dt-r-sm);
+  font-family: var(--dt-font);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+  border: 1px solid transparent;
+}
+.btn:active:not(:disabled) { transform: none; }
+
+.btn-primary {
+  background: var(--dt-brand);
+  color: #fff;
+  border-color: var(--dt-brand);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--dt-brand-hover);
+  border-color: var(--dt-brand-hover);
+}
+
+.btn-secondary {
+  background: #fff;
+  color: var(--dt-g700);
+  border: 1px solid rgba(112,115,124,.16);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(112,115,124,.08);
+  border-color: rgba(112,115,124,.16);
+  color: var(--dt-g900);
+}
+
+.btn-outline {
+  background: #fff;
+  color: var(--dt-g700);
+  border: 1px solid rgba(112,115,124,.16);
+}
+.btn-outline:hover:not(:disabled) {
+  background: rgba(112,115,124,.08);
+  border-color: rgba(112,115,124,.16);
+  color: var(--dt-g900);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--dt-g500);
+  border: 1px solid transparent;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(112,115,124,.08);
+  color: var(--dt-g700);
+  border-color: transparent;
+}
+
+.btn:disabled,
+.btn[disabled] {
+  background: var(--dt-g100) !important;
+  color: var(--dt-g400) !important;
+  border-color: var(--dt-g150) !important;
+}
+
+.btn-sm  { height: 30px; padding: 0 10px; font-size: 12px; border-radius: 6px; }
+.btn-lg  { height: 44px; padding: 0 20px; font-size: 14px; border-radius: var(--dt-r-md); }
+
+/* ── 9. 입력 / 셀렉트 / 텍스트에리어 ─────────────────────────── */
+.input-field,
+.textarea-field,
+input.input-field,
+select.input-field,
+textarea.input-field,
+textarea.textarea-field {
+  background: #fff;
+  border: 1px solid rgba(112,115,124,.16);
+  border-radius: var(--dt-r-sm);
+  color: var(--dt-g900);
+  font-family: var(--dt-font);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.input-field::placeholder,
+.textarea-field::placeholder {
+  color: var(--dt-g400);
+}
+.input-field:hover,
+.textarea-field:hover { border-color: #989BA2; }
+.input-field:focus,
+.textarea-field:focus {
+  border-color: var(--dt-brand);
+  box-shadow: 0 0 0 3px rgba(0,102,255,.12);
+  outline: none;
+}
+
+/* ── 10. 배지 ────────────────────────────────────────────────── */
+.badge {
+  border-radius: 4px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 16px;
+}
+.badge-primary { background: var(--dt-brand-light); color: #0054D1; }
+.badge-success { background: #D9FFE6;               color: #009632; }
+.badge-warning { background: #FEF4E6;               color: #D17600; }
+.badge-error   { background: #FEECEC;               color: #E52222; }
+.badge-neutral { background: var(--dt-g100);        color: var(--dt-g500); }
+
+/* ── 11. 모달 ────────────────────────────────────────────────── */
+.modal-overlay {
+  background: rgba(23,23,25,.52);
+  backdrop-filter: blur(4px);
+}
+.modal-content {
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  border-radius: 20px;
+  box-shadow: 0 24px 38px -10px rgba(23,23,25,.12),
+              0 10px 15px -5px rgba(23,23,25,.10);
+}
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--dt-g900);
+  letter-spacing: -0.01em;
+}
+
+/* ── 12. 메인 에디터 탭 (page0~page4) ─────────────────────────── */
+.tab-container {
+  background: #fff;
+  border-bottom: 1px solid var(--dt-g150);
+  padding: 0 28px;
+  gap: 0;
+}
+.tab-item {
+  flex-direction: row;
+  gap: 8px;
+  padding: 14px 16px;
+  min-width: 0;
+  font-weight: 600;
+}
+.tab-item .tab-icon { display: inline-flex; align-items: center; }
+.tab-item .tab-label { color: var(--dt-g500); font-size: 13.5px; font-weight: 600; }
+.tab-item:hover .tab-label { color: var(--dt-g700); }
+.tab-item.active { border-bottom-color: var(--dt-brand); }
+.tab-item.active .tab-label { color: var(--dt-g900); font-weight: 700; }
+.tab-item.active .tab-icon { color: var(--dt-brand); }
+
+/* ── 13. 인증 화면 ───────────────────────────────────────────── */
+.auth-card {
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  border-radius: 20px;
+  box-shadow: 0 4px 6px -1px rgba(23,23,23,.05);
+  padding: 28px;
+}
+.auth-tab {
+  font-family: var(--dt-font);
+  color: var(--dt-g500);
+}
+.auth-tab.active { color: var(--dt-brand); border-bottom-color: var(--dt-brand); }
+
+/* ── 14. 토스트 ──────────────────────────────────────────────── */
+.toast {
+  background: var(--dt-g800);
+  border-radius: var(--dt-r-md);
+  box-shadow: 0 16px 24px -6px rgba(23,23,23,.20);
+  font-weight: 500;
+  font-size: 13.5px;
+}
+
+/* ── 15. 토글 스위치 ─────────────────────────────────────────── */
+.toggle-slider { background: var(--dt-g200); }
+.toggle-switch input:checked + .toggle-slider { background: var(--dt-brand); }
+
+/* ── 16. 아이콘 ──────────────────────────────────────────────── */
+.ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  flex-shrink: 0;
+  color: currentColor;
+  line-height: 0;
+}
+.ico svg { display: block; }
+
+/* tossface/tf 잔여 흔적 정리 */
+.tf, .tossface {
+  font-family: var(--dt-font);
+  font-style: normal;
+}
+
+/* ── 17. 테이블 통일 ─────────────────────────────────────────── */
+table thead th { letter-spacing: 0.04em; font-size: 11.5px !important; }
+
+/* ── 18. dkt-card / 사건등록 폼 ──────────────────────────────── */
+.dkt-card {
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-lg);
+}
+.dkt-card-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--dt-g900);
+}
+
+/* ── 19. 헤더 우측 모델 토글 컨테이너 ────────────────────────── */
+#modelToggleContainer {
+  border: 1px solid var(--dt-g150) !important;
+  border-radius: var(--dt-r-sm) !important;
+  background: var(--dt-g100);
+  padding: 3px;
+  gap: 2px;
+}
+
+/* ── 20. 셀렉션 카드 (제목 후보 등) ──────────────────────────── */
+.selection-card {
+  border: 1px solid rgba(112,115,124,.16);
+  border-radius: var(--dt-r-sm);
+  background: #fff;
+}
+.selection-card.selected,
+.selection-card.is-active {
+  border-color: var(--dt-brand);
+  background: var(--dt-brand-light);
+  color: #0054D1;
+}
+
+/* ── 21. 의견서/분할 타입 뱃지 ───────────────────────────────── */
+.opinion-type-badge,
+.division-type-badge {
+  border-radius: 4px;
+  font-weight: 600;
+  padding: 3px 8px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
