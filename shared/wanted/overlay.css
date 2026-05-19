@@ -670,21 +670,499 @@ table thead th { letter-spacing: 0.04em; font-size: 11.5px !important; }
   gap: 16px;
 }
 
-/* ── 28. screenMain 컨테이너 — 기존 patent.css의 flex 레이아웃은 유지,
-   sticky tab-container와 하단 nav 영역만 보강 ─────────────────── */
+/* ──────────────────────────────────────────────────────────────
+   28. 전체 세부 페이지 레이아웃 — sticky 스택 정합 + 비율 정리
+   ─────────────────────────────────────────────────────────────
+   sticky stack (위→아래):
+     app-header           top:0    height:64
+     tab-container        top:64   height:~52  (screenMain 만)
+     detail-page-header   top:64   height:~76  (의견서/분할 상세)
+     page-left / detail-left 등 sub-sticky → 위 합산값 + 12px gap
+
+   bottom:
+     sticky-step-nav      bottom:0 height:~60
+   ────────────────────────────────────────────────────────────── */
+
+/* ── 28-1. 특허 명세서 에디터 (screenMain) ───────────────────── */
 #screenMain .app-container {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  padding: 0;
 }
+
+/* tab-container — Wanted DS underline 탭으로 통일 (patent.css의 알약 톤 제거) */
 #screenMain .tab-container {
   position: sticky;
   top: 64px;
   z-index: 30;
   background: #fff;
+  border-radius: 0;
+  border-bottom: 1px solid var(--dt-g150);
+  padding: 0 28px;
+  gap: 0;
+  margin: 0;
 }
-/* 스티키 하단 nav 와 겹치지 않도록 마지막 page 하단 여유 확보 */
-#screenMain .page { padding-bottom: 24px; }
+#screenMain .tab-item {
+  background: transparent !important;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  box-shadow: none !important;
+  padding: 14px 18px;
+  font-weight: 600;
+  color: var(--dt-g500);
+}
+#screenMain .tab-item:hover { background: transparent !important; color: var(--dt-g700); }
+#screenMain .tab-item.active {
+  background: transparent !important;
+  color: var(--dt-g900);
+  border-bottom-color: var(--dt-brand);
+  font-weight: 700;
+}
+#screenMain .tab-item.active .tab-label { color: var(--dt-g900); }
+#screenMain .tab-item.active .ico { color: var(--dt-brand); }
+
+/* 페이지 영역 — 좌우 비율 + sub-sticky 위치 정렬 */
+#screenMain .page { padding: 24px 28px 16px; }
+#screenMain .page.active { gap: 20px; align-items: flex-start; }
+
+/* 좌측 입력 패널 — sticky top = 64(header) + 52(tabs) = 116 */
+#screenMain .page-left {
+  position: sticky !important;
+  top: 116px !important;
+  /* 화면 높이 - sticky-top(116) - bottom-step-nav(60) - 여백(20) */
+  max-height: calc(100vh - 196px) !important;
+  overflow-y: auto;
+  padding-right: 4px;
+  flex: 0 0 38% !important;
+  width: 38% !important;
+  min-width: 320px;
+}
+
+/* 우측 결과 패널 — bottom step-nav 침범 방지 */
+#screenMain .page-right {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 16px;
+}
+
+/* result-card — 컬러풀 그라데이션 헤더 제거, Wanted 톤으로 평탄화 */
+#screenMain .result-card {
+  background: #fff;
+  border: 1px solid var(--dt-g150) !important;
+  border-radius: var(--dt-r-lg) !important;
+  box-shadow: none !important;
+  overflow: visible;
+  min-height: 0;
+}
+#screenMain .result-card .card-header {
+  background: transparent !important;
+  border-bottom: 1px solid var(--dt-g150) !important;
+  padding: 14px 18px !important;
+  margin: 0;
+}
+#screenMain .result-card .card-title {
+  color: var(--dt-g900) !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+}
+#screenMain .result-card .card-title .ico { color: var(--dt-g500); }
+#screenMain .result-card.has-result {
+  border-color: var(--dt-g150) !important;
+}
+#screenMain .result-card.has-result .card-header {
+  background: transparent !important;
+  border-bottom-color: var(--dt-g150) !important;
+}
+#screenMain .result-card.has-result {
+  border-left: 3px solid var(--dt-success) !important;
+}
+#screenMain .result-card.has-result .card-title .ico {
+  color: var(--dt-success);
+}
+#screenMain .result-area {
+  padding: 16px 18px 18px;
+}
+#screenMain .result-area:empty::before {
+  font-style: normal;
+  font-size: 12.5px;
+  color: var(--dt-g400);
+  padding: 24px 0;
+}
+
+/* page-left 카드 내부 헤더 — Wanted DS underline 톤 */
+#screenMain .page-left .card {
+  margin: 0;
+  padding: 16px 18px;
+  border-radius: var(--dt-r-lg);
+}
+#screenMain .page-left .card-header {
+  margin-bottom: 12px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--dt-g150);
+}
+#screenMain .page-left .card-title {
+  font-size: 13.5px;
+  color: var(--dt-g900);
+}
+
+/* ── 28-2. 의견서 / 분할 상세 (dashboard 내부) ───────────────── */
+
+/* 대시보드 service-tab-nav 와 patent-sub-tab-nav 도 sticky 로 — */
+/* 사용자가 detail 페이지에서도 상위 탭으로 빠르게 돌아갈 수 있도록 */
+#screenDashboard .service-tab-nav {
+  position: sticky;
+  top: 64px;
+  z-index: 35;
+  background: #fff;
+  margin: 0;
+}
+#screenDashboard .patent-sub-tab-nav,
+#screenDashboard .trademark-sub-tab-nav {
+  position: sticky;
+  top: 113px; /* 64 + 49 (service-tab-nav 높이) */
+  z-index: 30;
+  background: #fff;
+}
+
+/* detail-page-header 위치 — sub-tab 아래 stick */
+.detail-page-header {
+  top: 161px; /* 64 + 49 + 48 */
+  z-index: 28;
+}
+
+/* 의견서 상세 — 좌측 sticky 위치 + 균형잡힌 비율 */
+#opinionDetailView .opinion-pipeline {
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-lg);
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+#opinionDetailView .opinion-detail {
+  align-items: flex-start;
+  gap: 20px;
+}
+#opinionDetailView .opinion-detail-left {
+  position: sticky;
+  top: 245px; /* 64 + 49 + 48 + 76(detail-header) + 8 gap */
+  max-height: calc(100vh - 261px);
+  flex: 0 0 38%;
+  width: 38%;
+  min-width: 320px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+#opinionDetailView .opinion-detail-right {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 24px;
+}
+
+/* 분할 상세 — 동일 패턴 */
+#divisionDetailView .division-pipeline {
+  background: #fff;
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-lg);
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+#divisionDetailView .division-detail {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 20px;
+  height: auto !important; /* 고정 높이 제거 → 자연 흐름 */
+  min-height: 0 !important;
+}
+#divisionDetailView .division-detail-left {
+  position: sticky;
+  top: 245px;
+  max-height: calc(100vh - 261px);
+  flex: 0 0 42%;
+  width: 42%;
+  min-width: 320px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+#divisionDetailView .division-detail-right {
+  flex: 1;
+  min-width: 0;
+  height: auto !important;
+  overflow-y: visible;
+  padding-bottom: 24px;
+}
+
+/* ── 28-3. 의견서/분할 step-dot — pulse 제거 + Wanted 톤 ────── */
+.opinion-step-dot,
+.division-step-dot {
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 11px !important;
+  font-weight: 700;
+  border: none !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+.opinion-step.pending .opinion-step-dot,
+.division-step.pending .division-step-dot {
+  background: var(--dt-g100);
+  color: var(--dt-g400);
+  border: 1.5px solid var(--dt-g150) !important;
+}
+.opinion-step.active .opinion-step-dot,
+.division-step.active .division-step-dot {
+  background: #fff !important;
+  color: var(--dt-brand) !important;
+  border: 1.5px solid var(--dt-brand) !important;
+  box-shadow: 0 0 0 3px rgba(0,102,255,.12) !important;
+  animation: none !important;
+}
+.opinion-step.done .opinion-step-dot,
+.division-step.done .division-step-dot {
+  background: var(--dt-brand) !important;
+  color: #fff !important;
+}
+.opinion-step.failed .opinion-step-dot {
+  background: var(--dt-danger) !important;
+  color: #fff !important;
+}
+.opinion-step-label,
+.division-step-label {
+  font-size: 12px !important;
+  font-weight: 500;
+  color: var(--dt-g500) !important;
+}
+.opinion-step.active .opinion-step-label,
+.division-step.active .division-step-label,
+.opinion-step.done .opinion-step-label,
+.division-step.done .division-step-label,
+.opinion-step.viewing .opinion-step-label,
+.division-step.viewing .division-step-label {
+  color: var(--dt-g900) !important;
+  font-weight: 600;
+}
+.opinion-step-connector,
+.division-step-connector {
+  background: var(--dt-g150) !important;
+  height: 1.5px !important;
+}
+.opinion-step-connector.done,
+.division-step-connector.done {
+  background: var(--dt-brand) !important;
+}
+
+/* hover 시 scale up 제거 — Wanted DS 미니멀 원칙 */
+.opinion-step.done:hover .opinion-step-dot,
+.division-step.done:hover .division-step-dot {
+  transform: none !important;
+  box-shadow: 0 0 0 3px rgba(0,102,255,.12) !important;
+  cursor: pointer;
+}
+.opinion-step.viewing .opinion-step-dot,
+.division-step.viewing .division-step-dot {
+  transform: none !important;
+}
+
+/* ── 28-4. 검증 결과 stat / item — Wanted 팔레트로 통일 ────── */
+.opinion-val-stat,
+.division-val-stat {
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  border-radius: var(--dt-r-sm);
+  font-weight: 600;
+}
+.opinion-val-stat.pass,
+.division-val-stat.pass {
+  background: #D9FFE6 !important;
+  color: var(--dt-success) !important;
+}
+.opinion-val-stat.warn,
+.division-val-stat.warn {
+  background: #FEF4E6 !important;
+  color: var(--dt-warning) !important;
+}
+.opinion-val-stat.fail,
+.division-val-stat.fail {
+  background: #FEECEC !important;
+  color: var(--dt-danger) !important;
+}
+.opinion-val-item.pass .el-result {
+  background: #D9FFE6 !important;
+  color: var(--dt-success) !important;
+}
+.opinion-val-item.warn .el-result {
+  background: #FEF4E6 !important;
+  color: var(--dt-warning) !important;
+}
+.opinion-val-item.fail .el-result {
+  background: #FEECEC !important;
+  color: var(--dt-danger) !important;
+}
+
+/* ── 28-5. 사이드바 리스트 (의견서/분할 리스트 화면) ────────── */
+.opinion-sidebar,
+.division-sidebar {
+  position: sticky;
+  top: 173px; /* 64(header) + 49(service-tab) + 48(sub-tab) + 12 gap */
+  max-height: calc(100vh - 189px);
+  overflow-y: auto;
+  width: 256px !important;
+  padding-right: 4px;
+}
+
+/* ── 28-6. 사건등록 폼 ───────────────────────────────────────── */
+#docket-dashboard-panel {
+  padding: 24px 28px 0;
+}
+.dkt-card {
+  border-radius: var(--dt-r-lg) !important;
+  padding: 28px 28px 24px;
+  margin: 0;
+}
+.dkt-card-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.012em;
+}
+.dkt-recipient-bar {
+  background: var(--dt-brand-light) !important;
+  border-radius: var(--dt-r-md) !important;
+  padding: 12px 14px;
+}
+.dkt-section-title {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: var(--dt-g900) !important;
+  margin: 24px 0 10px !important;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--dt-g150);
+}
+.dkt-section-title > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: -0.005em;
+}
+.dkt-fee-info {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 4px;
+}
+.dkt-fee-summary-wrap,
+.dkt-fee-input-wrap {
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-md);
+  padding: 14px;
+  background: #fff;
+}
+.dkt-calc-box {
+  background: var(--dt-g50);
+  border-radius: var(--dt-r-sm);
+  padding: 12px 14px;
+  margin-top: 12px;
+}
+.dkt-calc-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12.5px;
+  color: var(--dt-g600);
+}
+.dkt-calc-row strong {
+  font-family: var(--dt-mono);
+  font-weight: 600;
+  color: var(--dt-g900);
+}
+.dkt-calc-row.discount strong { color: var(--dt-danger); }
+.dkt-calc-row.grand {
+  border-top: 1px solid var(--dt-g150);
+  margin-top: 6px;
+  padding-top: 10px;
+  font-size: 13px;
+}
+.dkt-calc-row.grand span { font-weight: 700; color: var(--dt-g900); }
+.dkt-calc-row.grand strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--dt-brand);
+  letter-spacing: -0.02em;
+}
+
+/* ── 28-7. 모든 모달 — 푸터 영역 일관 ─────────────────────── */
+.modal-overlay { padding: 16px; }
+.modal-content {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+/* ── 28-8. 대시보드 리스트 영역 ────────────────────────────── */
+#patent-dashboard-panel,
+#trademark-dashboard-panel {
+  padding: 20px 28px 32px;
+}
+#patent-dashboard-panel .card,
+#trademark-dashboard-panel .card,
+#docket-dashboard-panel .card {
+  margin-bottom: 12px;
+}
+
+/* 대시보드의 좌측 사이드 컬럼 (240px) sticky */
+#patent-sub-spec > div > div:first-child {
+  position: sticky;
+  top: 173px; /* 64 + 49 + 48 + 12 */
+  max-height: calc(100vh - 189px);
+  overflow-y: auto;
+}
+
+/* ── 28-9. 인증 화면 중앙 정렬 보강 ───────────────────────── */
+.auth-wrapper { background: var(--dt-g50); }
+.logo-img { max-width: 200px; height: auto; }
+
+/* ── 28-10. 결과 카드 안 텍스트 영역 폰트 ──────────────────── */
+.result-area,
+.result-textarea {
+  font-family: var(--dt-font) !important;
+  font-size: 13.5px !important;
+  line-height: 1.75;
+  color: var(--dt-g700);
+}
+.result-textarea {
+  width: 100%;
+  border: 1px solid var(--dt-g150);
+  border-radius: var(--dt-r-sm);
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+/* ── 28-11. 페이지 우측 결과 카드들 사이 간격 (page-right) ── */
+#screenMain .page-right .result-card + .result-card { margin-top: 0; }
+
+/* ── 28-12. tab-container 가 sticky 상태일 때 헤더 그림자 ─── */
+#screenMain .tab-container {
+  box-shadow: 0 1px 0 var(--dt-g150);
+}
+
+/* ── 28-13. 반응형 — 1100px 이하에서 sticky 해제 ──────────── */
+@media (max-width: 1100px) {
+  #screenMain .page-left,
+  #opinionDetailView .opinion-detail-left,
+  #divisionDetailView .division-detail-left {
+    position: static !important;
+    width: 100% !important;
+    flex: none !important;
+    max-height: none !important;
+    overflow-y: visible;
+  }
+  #opinionDetailView .opinion-detail,
+  #divisionDetailView .division-detail {
+    flex-direction: column;
+  }
+}
 
 /* ── 29. 결과 카드 빈 상태 톤 ────────────────────────────────── */
 .result-area:empty::before {
