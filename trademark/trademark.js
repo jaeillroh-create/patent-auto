@@ -663,41 +663,57 @@
     TM.currentProject = null;
 
     panel.innerHTML = `
-      <div class="trademark-dashboard" style="max-width: 1400px; margin: 0 auto; padding: 40px 32px;">
-        <!-- 좌측: 헤더 + 버튼 / 우측: 테이블 -->
-        <div style="display: flex; gap: 40px; align-items: flex-start;">
-          <!-- 좌측 영역 -->
-          <div style="flex-shrink: 0; width: 240px;">
-            <h2 style="margin: 0 0 8px 0; font-size: 26px; font-weight: 700; color: var(--dt-g900);"><span class="ico" data-icon="tag"></span> 상표 출원 관리</h2>
-            <p style="margin: 0 0 24px 0; color: var(--dt-g500); font-size: 13px; line-height: 1.5;">특허그룹 디딤 상표 출원 프로젝트를 관리합니다.</p>
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <button class="btn btn-primary" onclick="window.TM.createNewProject(); return false;" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap; cursor: pointer;">
-                <span style="font-size: 18px;">+</span>
-                새 프로젝트
-              </button>
-              <button id="tm-settings-btn" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; border-radius: 8px; background: var(--dt-g100); color: var(--dt-g700); border: 1px solid var(--dt-g150); white-space: nowrap; cursor: pointer;">
-                <span class="ico" data-icon="settings" data-size="16"></span>
-                설정
-              </button>
-            </div>
-            
-            <!-- API 안내 -->
-            <div style="margin-top: 20px; padding: 12px; background: #F7FBFF; border: 1px solid #C9DEFE; border-radius: 8px;">
-              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: var(--dt-brand);"><span class="ico" data-icon="lightbulb"></span> KIPRIS API 키 안내</p>
-              <p style="margin: 0; font-size: 11px; color: #002966; line-height: 1.5;">
-                선행상표 검색을 위해 KIPRIS API 키가 필요합니다.
-                <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank" style="color: var(--dt-brand-hover); text-decoration: underline;">KIPRIS Plus</a>에서 발급받으세요.
-              </p>
-            </div>
+      <div class="trademark-dashboard" style="max-width: var(--dt-max-w); margin: 0 auto; padding: 32px;">
+
+        <!-- 통계 4카드 (실제 status enum: draft/searching/documenting/completed) -->
+        <div class="tmd-stat-grid">
+          <div class="tmd-stat-card">
+            <div class="tmd-stat-label">전체</div>
+            <div class="tmd-stat-value"><span id="tm-stat-total">0</span><span class="unit">건</span></div>
           </div>
-          
+          <div class="tmd-stat-card accent-brand">
+            <div class="tmd-stat-label">작성 중</div>
+            <div class="tmd-stat-value"><span id="tm-stat-draft">0</span><span class="unit">건</span></div>
+          </div>
+          <div class="tmd-stat-card accent-warning">
+            <div class="tmd-stat-label">진행 중</div>
+            <div class="tmd-stat-value"><span id="tm-stat-progress">0</span><span class="unit">건</span></div>
+          </div>
+          <div class="tmd-stat-card accent-success">
+            <div class="tmd-stat-label">완료</div>
+            <div class="tmd-stat-value"><span id="tm-stat-done">0</span><span class="unit">건</span></div>
+          </div>
+        </div>
+
+        <div class="tmd-work-row">
+          <!-- 좌측: 액션 컬럼 -->
+          <aside class="tmd-action-col">
+            <div>
+              <h2 class="tmd-panel-title"><span class="ico" data-icon="tag"></span> 상표 출원 관리</h2>
+              <p class="tmd-panel-desc">특허그룹 디딤 상표 출원 프로젝트를 관리합니다.</p>
+            </div>
+            <button class="btn btn-primary btn-full" onclick="window.TM.createNewProject(); return false;"><span class="ico" data-icon="plus"></span> 새 프로젝트</button>
+            <button id="tm-settings-btn" class="btn btn-outline btn-full"><span class="ico" data-icon="settings" data-size="16"></span> 설정</button>
+
+            <div class="tmd-kipris-note">
+              <p class="tmd-kipris-title"><span class="ico" data-icon="lightbulb"></span> KIPRIS API 키 안내</p>
+              <p class="tmd-kipris-body">선행상표 검색을 위해 KIPRIS API 키가 필요합니다. <a href="https://plus.kipris.or.kr/portal/main.do" target="_blank">KIPRIS Plus</a>에서 발급받으세요.</p>
+            </div>
+          </aside>
+
           <!-- 우측: 프로젝트 목록 -->
-          <div class="tm-project-list" id="tm-project-list" style="flex: 1; min-width: 0;">
-            <div style="text-align: center; padding: 40px; color: var(--dt-g500);">
-              <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid var(--dt-g150); border-top-color: var(--dt-brand); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
-              <p style="margin: 0;">프로젝트 목록 로딩 중...</p>
+          <main class="tmd-main-col">
+            <div class="tmd-list-head">
+              <h3>프로젝트 목록</h3>
+              <div class="tmd-list-count" id="tm-project-count">총 0개</div>
             </div>
-          </div>
+            <div class="tm-project-list" id="tm-project-list">
+              <div style="text-align: center; padding: 40px; color: var(--dt-g500);">
+                <div class="tm-loading-spinner" style="width: 32px; height: 32px; border: 3px solid var(--dt-g150); border-top-color: var(--dt-brand); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px;"></div>
+                <p style="margin: 0;">프로젝트 목록 로딩 중...</p>
+              </div>
+            </div>
+          </main>
         </div>
       </div>
       <style>
@@ -749,7 +765,7 @@
     TM.priorityTab.currentProject = null;
 
     panel.innerHTML = `
-      <div class="trademark-dashboard" style="max-width: 1400px; margin: 0 auto; padding: 40px 32px;">
+      <div class="trademark-dashboard" style="max-width: var(--dt-max-w); margin: 0 auto; padding: 40px 32px;">
         <div style="display: flex; gap: 40px; align-items: flex-start;">
           <!-- 좌측 영역 -->
           <div style="flex-shrink: 0; width: 260px;">
@@ -760,7 +776,7 @@
             </p>
             <div style="display: flex; flex-direction: column; gap: 12px;">
               <button class="btn btn-primary" data-action="tm-pe-new-from-project"
-                      style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); white-space: nowrap; cursor: pointer;">
+                      style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; font-size: 14px; font-weight: 600; border-radius: 10px; box-shadow: var(--dt-sh-sm); white-space: nowrap; cursor: pointer;">
                 <span class="ico" data-icon="folder" data-size="16"></span>
                 기존 사건에서 불러오기
               </button>
@@ -918,7 +934,7 @@
                   return `
                     <div class="tm-pe-import-item" data-action="tm-pe-import-select" data-id="${p.id}"
                          style="display: flex; align-items: center; gap: 16px; padding: 14px 16px; border: 1px solid var(--dt-g150); border-radius: 10px; cursor: pointer; transition: all 0.15s;"
-                         onmouseover="this.style.borderColor='#3b82f6'; this.style.background='#f0f9ff'"
+                         onmouseover="this.style.borderColor='var(--dt-brand)'; this.style.background='#f0f9ff'"
                          onmouseout="this.style.borderColor='#e5e7eb'; this.style.background='white'">
                       <div style="flex-shrink: 0; width: 40px; height: 40px; background: var(--dt-brand-light); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px;"><span class="ico" data-icon="tag" data-size="18"></span></div>
                       <div style="flex: 1; min-width: 0;">
@@ -1402,6 +1418,9 @@
       if (error) throw error;
       
       if (!projects || projects.length === 0) {
+        const _z=(id)=>{const e=document.getElementById(id);if(e)e.textContent='0';};
+        _z('tm-stat-total');_z('tm-stat-draft');_z('tm-stat-progress');_z('tm-stat-done');
+        const _pc0=document.getElementById('tm-project-count');if(_pc0)_pc0.textContent='총 0개';
         listEl.innerHTML = `
           <div style="text-align: center; padding: 80px 20px; background: var(--dt-g50); border-radius: 16px; border: 2px dashed var(--dt-g300);">
             <div style="font-size: 56px; margin-bottom: 20px;"><span class="ico" data-icon="tag" data-size="56"></span></div>
@@ -1413,18 +1432,29 @@
         return;
       }
       
+      // 통계 4카드 — 실제 status enum 기준, 기존 배열 재사용 (신규 API 호출·하드코딩 숫자 없음)
+      const _setStat=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+      _setStat('tm-stat-total',projects.length);
+      _setStat('tm-stat-draft',projects.filter(p=>p.status==='draft').length);
+      _setStat('tm-stat-progress',projects.filter(p=>p.status==='searching'||p.status==='documenting').length);
+      _setStat('tm-stat-done',projects.filter(p=>p.status==='completed').length);
+      _setStat('tm-project-count','총 '+projects.length+'개');
+
       // 테이블 형식 목록
       listEl.innerHTML = `
-        <div style="background: white; border-radius: 16px; border: 1px solid var(--dt-g150); overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-          <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+        <div class="tmd-card" style="overflow: hidden;">
+          <table class="tmd-table">
+            <colgroup>
+              <col style="width:16%"><col style="width:34%"><col style="width:10%"><col style="width:12%"><col style="width:12%"><col style="width:16%">
+            </colgroup>
             <thead>
-              <tr style="background: var(--dt-g50); border-bottom: 2px solid var(--dt-g150);">
-                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: var(--dt-g700); font-size: 13px; white-space: nowrap;">디딤 관리번호</th>
-                <th style="padding: 14px 16px; text-align: left; font-weight: 600; color: var(--dt-g700); font-size: 13px; white-space: nowrap;">상표명</th>
-                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: var(--dt-g700); font-size: 13px; width: 70px; white-space: nowrap;">유형</th>
-                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: var(--dt-g700); font-size: 13px; width: 80px; white-space: nowrap;">상태</th>
-                <th style="padding: 14px 12px; text-align: center; font-weight: 600; color: var(--dt-g700); font-size: 13px; width: 90px; white-space: nowrap;">수정일</th>
-                <th style="padding: 14px 16px; text-align: center; font-weight: 600; color: var(--dt-g700); font-size: 13px; width: 140px; white-space: nowrap;">작업</th>
+              <tr>
+                <th>디딤 관리번호</th>
+                <th>상표명</th>
+                <th class="tmd-c">유형</th>
+                <th class="tmd-c">상태</th>
+                <th class="tmd-c">수정일</th>
+                <th class="tmd-c">작업</th>
               </tr>
             </thead>
             <tbody>
@@ -1432,17 +1462,14 @@
             </tbody>
           </table>
         </div>
-        <div style="margin-top: 12px; text-align: right; color: var(--dt-g400); font-size: 12px;">
-          총 ${projects.length}개 프로젝트
-        </div>
       `;
       
     } catch (error) {
       console.error('[TM] 프로젝트 목록 로드 실패:', error);
       listEl.innerHTML = `
-        <div style="text-align: center; padding: 40px; background: #FEECEC; border-radius: 12px; border: 1px solid #fecaca;">
+        <div style="text-align: center; padding: 40px; background: var(--dt-danger-light); border-radius: 12px; border: 1px solid var(--dt-danger);">
           <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
-          <h4 style="margin: 0 0 8px; color: #B20C0C;">로드 실패</h4>
+          <h4 style="margin: 0 0 8px; color: var(--dt-danger);">로드 실패</h4>
           <p style="margin: 0; color: var(--dt-danger);">${error.message}</p>
         </div>
       `;
@@ -1458,13 +1485,13 @@
       completed: '완료'
     };
     
-    const statusColors = {
-      draft: '#f59e0b',
-      searching: '#3b82f6',
-      documenting: '#8b5cf6',
-      completed: '#10b981'
+    const statusClass = {
+      draft: 's-draft',
+      searching: 's-searching',
+      documenting: 's-documenting',
+      completed: 's-completed'
     };
-    
+
     const typeLabels = {
       text: '문자',
       figure: '도형',
@@ -1473,52 +1500,22 @@
       color: '색채',
       '3d': '입체'
     };
-    
+
     const updatedAt = new Date(project.updated_at).toLocaleDateString('ko-KR');
-    const statusColor = statusColors[project.status] || '#6b7280';
-    
+    const sCls = statusClass[project.status] || 's-draft';
+
     return `
-      <tr style="border-bottom: 1px solid var(--dt-g100); transition: background 0.15s;" 
-          onmouseover="this.style.background='#f9fafb'" 
-          onmouseout="this.style.background='white'">
-        <td style="padding: 12px 16px; white-space: nowrap;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="ico" data-icon="folder" data-size="18"></span>
-            <span style="font-weight: 600; color: var(--dt-brand); font-size: 13px; cursor: pointer;" 
-                 onclick="TM.openProject('${project.id}')"
-                 onmouseover="this.style.textDecoration='underline'" 
-                 onmouseout="this.style.textDecoration='none'">${TM.escapeHtml(project.title || '(미지정)')}</span>
-          </div>
-        </td>
-        <td style="padding: 12px 16px; white-space: nowrap;">
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span class="ico" data-icon="tag" data-size="16"></span>
-            <span style="font-weight: 500; color: var(--dt-g900); font-size: 13px;">${TM.escapeHtml(project.trademark_name || '-')}</span>
-          </div>
-        </td>
-        <td style="padding: 12px 12px; text-align: center; white-space: nowrap;">
-          <span style="font-size: 12px; color: var(--dt-g500);">${typeLabels[project.trademark_type] || '문자'}</span>
-        </td>
-        <td style="padding: 12px 12px; text-align: center; white-space: nowrap;">
-          <span style="display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; background: ${statusColor}15; color: ${statusColor};">${statusLabels[project.status] || '작성 중'}</span>
-        </td>
-        <td style="padding: 12px 12px; text-align: center; font-size: 12px; color: var(--dt-g500); white-space: nowrap;">
-          ${updatedAt}
-        </td>
-        <td style="padding: 12px 16px; text-align: center; white-space: nowrap;">
-          <div style="display: inline-flex; gap: 4px; align-items: center;">
-            <button onclick="TM.openProject('${project.id}')" 
-                    style="padding: 4px 8px; font-size: 11px; background: var(--dt-brand); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
-                    onmouseover="this.style.background='#2563eb'" 
-                    onmouseout="this.style.background='#3b82f6'">열기</button>
-            <button onclick="TM.editProject('${project.id}', '${TM.escapeHtml(project.title || '').replace(/'/g, "\\'")}')" 
-                    style="padding: 4px 8px; font-size: 11px; background: var(--dt-g100); color: var(--dt-g700); border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
-                    onmouseover="this.style.background='#e5e7eb'" 
-                    onmouseout="this.style.background='#f3f4f6'">편집</button>
-            <button onclick="TM.deleteProject('${project.id}')" 
-                    style="padding: 4px 8px; font-size: 11px; background: #FEECEC; color: var(--dt-danger); border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
-                    onmouseover="this.style.background='#fee2e2'" 
-                    onmouseout="this.style.background='#fef2f2'">삭제</button>
+      <tr class="tmd-case-row" onclick="TM.openProject('${project.id}')">
+        <td><span class="tmd-case-no">${TM.escapeHtml(project.title || '(미지정)')}</span></td>
+        <td><div class="tmd-case-name">${TM.escapeHtml(project.trademark_name || '-')}</div></td>
+        <td class="tmd-c"><span class="tmd-case-type">${typeLabels[project.trademark_type] || '문자'}</span></td>
+        <td class="tmd-c"><span class="tmd-badge ${sCls}"><span class="dot"></span>${statusLabels[project.status] || '작성 중'}</span></td>
+        <td class="tmd-c"><span class="tmd-case-date">${updatedAt}</span></td>
+        <td class="tmd-c" onclick="event.stopPropagation()">
+          <div class="tmd-row-actions">
+            <button class="btn btn-outline btn-sm" onclick="TM.openProject('${project.id}')">열기</button>
+            <button class="btn btn-outline btn-sm" onclick="TM.editProject('${project.id}', '${TM.escapeHtml(project.title || '').replace(/'/g, "\\'")}')">편집</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="TM.deleteProject('${project.id}')">삭제</button>
           </div>
         </td>
       </tr>
@@ -1923,26 +1920,26 @@
           </div>
           
           <!-- ★ 프로젝트 정보 요약 (항상 표시) -->
-          <div class="tm-project-summary" id="tm-project-summary" style="background: linear-gradient(135deg, #F7FBFF 0%, var(--dt-brand-light) 100%); border: 1px solid #C9DEFE; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
+          <div class="tm-project-summary" id="tm-project-summary" style="background: linear-gradient(135deg, var(--dt-brand-pale) 0%, var(--dt-brand-light) 100%); border: 1px solid var(--dt-brand-mid); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="ico" data-icon="tag" data-size="20"></span>
               <div>
                 <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">상표명</div>
-                <div style="font-size: 14px; font-weight: 600; color: #002966;">${TM.escapeHtml(TM.currentProject.trademarkName || '(미입력)')}</div>
+                <div style="font-size: 14px; font-weight: 600; color: var(--dt-brand-deep);">${TM.escapeHtml(TM.currentProject.trademarkName || '(미입력)')}</div>
               </div>
             </div>
             
             ${TM.currentProject.aiAnalysis?.businessAnalysis ? `
-              <div style="flex: 1; min-width: 200px; border-left: 2px solid #C9DEFE; padding-left: 16px;">
+              <div style="flex: 1; min-width: 200px; border-left: 2px solid var(--dt-brand-mid); padding-left: 16px;">
                 <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">사업 내용</div>
-                <div style="font-size: 13px; color: #002966; line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(TM.currentProject.aiAnalysis.businessAnalysis.slice(0, 100))}${TM.currentProject.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
+                <div style="font-size: 13px; color: var(--dt-brand-deep); line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(TM.currentProject.aiAnalysis.businessAnalysis.slice(0, 100))}${TM.currentProject.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
               </div>
             ` : ''}
             
             ${TM.currentProject.designatedGoods?.length > 0 ? `
-              <div style="border-left: 2px solid #C9DEFE; padding-left: 16px;">
+              <div style="border-left: 2px solid var(--dt-brand-mid); padding-left: 16px;">
                 <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">지정상품</div>
-                <div style="font-size: 13px; color: #002966;">
+                <div style="font-size: 13px; color: var(--dt-brand-deep);">
                   <strong>${TM.currentProject.designatedGoods.length}</strong>개 류 / 
                   <strong>${TM.currentProject.designatedGoods.reduce((sum, g) => sum + (g.goods?.length || 0), 0)}</strong>개 상품
                 </div>
@@ -1950,9 +1947,9 @@
             ` : ''}
             
             ${TM.currentProject.aiAnalysis?.classRecommendations?.core?.length > 0 ? `
-              <div style="border-left: 2px solid #C9DEFE; padding-left: 16px;">
+              <div style="border-left: 2px solid var(--dt-brand-mid); padding-left: 16px;">
                 <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">추천 류</div>
-                <div style="font-size: 12px; color: #002966;">
+                <div style="font-size: 12px; color: var(--dt-brand-deep);">
                   ${TM.currentProject.aiAnalysis.classRecommendations.core.map(c => '제' + c.class + '류').join(', ')}
                   ${TM.currentProject.aiAnalysis.classRecommendations.recommended?.length > 0 ? ' 외 ' + TM.currentProject.aiAnalysis.classRecommendations.recommended.length + '개' : ''}
                 </div>
@@ -2130,16 +2127,16 @@
         <span class="ico" data-icon="tag" data-size="20"></span>
         <div>
           <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">상표명</div>
-          <div style="font-size: 14px; font-weight: 600; color: #002966;">${TM.escapeHtml(p.trademarkName || '(미입력)')}</div>
+          <div style="font-size: 14px; font-weight: 600; color: var(--dt-brand-deep);">${TM.escapeHtml(p.trademarkName || '(미입력)')}</div>
         </div>
       </div>
     `;
     
     if (p.aiAnalysis?.businessAnalysis) {
       html += `
-        <div style="flex: 1; min-width: 200px; border-left: 2px solid #C9DEFE; padding-left: 16px;">
+        <div style="flex: 1; min-width: 200px; border-left: 2px solid var(--dt-brand-mid); padding-left: 16px;">
           <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">사업 내용</div>
-          <div style="font-size: 13px; color: #002966; line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(p.aiAnalysis.businessAnalysis.slice(0, 100))}${p.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
+          <div style="font-size: 13px; color: var(--dt-brand-deep); line-height: 1.4; max-height: 40px; overflow: hidden;">${TM.escapeHtml(p.aiAnalysis.businessAnalysis.slice(0, 100))}${p.aiAnalysis.businessAnalysis.length > 100 ? '...' : ''}</div>
         </div>
       `;
     }
@@ -2147,9 +2144,9 @@
     if (p.designatedGoods?.length > 0) {
       const totalGoods = p.designatedGoods.reduce((sum, g) => sum + (g.goods?.length || 0), 0);
       html += `
-        <div style="border-left: 2px solid #C9DEFE; padding-left: 16px;">
+        <div style="border-left: 2px solid var(--dt-brand-mid); padding-left: 16px;">
           <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">지정상품</div>
-          <div style="font-size: 13px; color: #002966;">
+          <div style="font-size: 13px; color: var(--dt-brand-deep);">
             <strong>${p.designatedGoods.length}</strong>개 류 / 
             <strong>${totalGoods}</strong>개 상품
           </div>
@@ -2161,9 +2158,9 @@
       const coreClasses = p.aiAnalysis.classRecommendations.core.map(c => '제' + c.class + '류').join(', ');
       const recCount = p.aiAnalysis.classRecommendations.recommended?.length || 0;
       html += `
-        <div style="border-left: 2px solid #C9DEFE; padding-left: 16px;">
+        <div style="border-left: 2px solid var(--dt-brand-mid); padding-left: 16px;">
           <div style="font-size: 11px; color: var(--dt-brand); font-weight: 500;">추천 류</div>
-          <div style="font-size: 12px; color: #002966;">
+          <div style="font-size: 12px; color: var(--dt-brand-deep);">
             ${coreClasses}${recCount > 0 ? ' 외 ' + recCount + '개' : ''}
           </div>
         </div>
@@ -3071,7 +3068,7 @@
           const goodsTags = recGoods.map(g => {
             const name = g.name || g;
             const displayName = name.length > 20 ? name.slice(0, 20) + '..' : name;
-            return '<span class="tag" style="padding: 2px 6px; background: #f0f4ff; border-radius: 3px; font-size: 11px; display: inline-block; margin: 1px 2px;">' + TM.escapeHtml(displayName) + '</span>';
+            return '<span class="tag" style="padding: 2px 6px; background: var(--dt-brand-pale); border-radius: 3px; font-size: 11px; display: inline-block; margin: 1px 2px;">' + TM.escapeHtml(displayName) + '</span>';
           }).join('');
           goodsHtml = '<div class="tm-ai-rec-goods" style="margin-top: 6px; font-size: 11px; line-height: 1.8;">' +
             '<span class="label" style="margin-right: 4px; font-weight: 600; color: #555;">추천 지정상품(' + recGoods.length + '):</span>' +
@@ -3200,7 +3197,7 @@
               ? '<span style="font-size: 10px; color: #28a745; white-space: nowrap;">✓적용됨</span>'
               : '<button class="btn btn-sm" style="padding: 3px 10px; font-size: 10px; background: var(--dt-brand); color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;" data-action="tm-add-class" data-class-code="' + s.class + '">+ 추가</button>';
             
-            html += '<div style="font-size: 11px; color: #003E9C; padding: 8px 10px; background: #F7FBFF; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid var(--dt-brand);">' +
+            html += '<div style="font-size: 11px; color: var(--dt-brand-deep); padding: 8px 10px; background: var(--dt-brand-pale); border-radius: 6px; margin-bottom: 6px; border-left: 3px solid var(--dt-brand);">' +
               '<div style="display: flex; justify-content: space-between; align-items: center;">' +
                 '<span>' + priorityBadge + ' <strong>제' + s.class + '류</strong>: ' + TM.escapeHtml(s.reason) + '</span>' +
                 actionBtn +
