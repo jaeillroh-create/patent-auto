@@ -20,7 +20,7 @@
 /* ═══ 2. 유형 배지 ═══ */
 .opinion-type-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: var(--font-weight-semibold); line-height: 1.6; white-space: nowrap; }
 .opinion-type-badge.type-a { background: var(--color-error-light); color: var(--color-error); }
-.opinion-type-badge.type-b { background: var(--color-warning-light); color: #b45309; }
+.opinion-type-badge.type-b { background: var(--color-warning-light); color: var(--color-warning); }
 .opinion-type-badge.type-c { background: var(--color-primary-light); color: var(--color-primary); }
 .opinion-type-badge.type-unknown { background: var(--color-bg-secondary); color: var(--color-text-tertiary); }
 
@@ -29,9 +29,9 @@
 .opinion-step { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .opinion-step-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: var(--font-weight-semibold); flex-shrink: 0; }
 .opinion-step.pending .opinion-step-dot { background: var(--color-bg-secondary); color: var(--color-text-disabled); border: 2px solid var(--color-border); }
-.opinion-step.active .opinion-step-dot { background: var(--color-primary); color: #fff; box-shadow: 0 0 0 4px var(--color-primary-light); animation: pulse 2s infinite; }
-.opinion-step.done .opinion-step-dot { background: var(--color-success); color: #fff; }
-.opinion-step.failed .opinion-step-dot { background: var(--color-error); color: #fff; }
+.opinion-step.active .opinion-step-dot { background: var(--color-primary); color: var(--dt-white); box-shadow: 0 0 0 4px var(--color-primary-light); animation: pulse 2s infinite; }
+.opinion-step.done .opinion-step-dot { background: var(--color-success); color: var(--dt-white); }
+.opinion-step.failed .opinion-step-dot { background: var(--color-error); color: var(--dt-white); }
 .opinion-step-label { font-size: 11px; font-weight: var(--font-weight-medium); color: var(--color-text-tertiary); }
 .opinion-step.active .opinion-step-label { color: var(--color-primary); font-weight: var(--font-weight-semibold); }
 .opinion-step.done .opinion-step-label { color: var(--color-success); }
@@ -46,33 +46,33 @@
 .opinion-detail { display: flex; gap: 24px; align-items: flex-start; }
 .opinion-detail-left { flex: 0 0 38%; width: 38%; min-width: 320px; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 70px; max-height: calc(100vh - 160px); overflow-y: auto; padding-right: 8px; }
 .opinion-detail-left::-webkit-scrollbar { width: 5px; }
-.opinion-detail-left::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+.opinion-detail-left::-webkit-scrollbar-thumb { background: var(--dt-g200); border-radius: 3px; }
 .opinion-detail-right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 
 /* ═══ 5. 검증 보고서 ═══ */
 .opinion-val-summary { display: flex; gap: 12px; margin-bottom: 16px; }
 .opinion-val-stat { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: var(--font-weight-semibold); }
-.opinion-val-stat.pass { background: #d1fae5; color: #065f46; }
-.opinion-val-stat.warn { background: #fef3c7; color: #92400e; }
-.opinion-val-stat.fail { background: #ffe4e6; color: #9f1239; }
+.opinion-val-stat.pass { background: var(--color-success-light); color: var(--color-success); }
+.opinion-val-stat.warn { background: var(--color-warning-light); color: var(--color-warning); }
+.opinion-val-stat.fail { background: var(--color-error-light); color: var(--color-error); }
 .opinion-val-item { border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 12px; overflow: hidden; }
 .opinion-val-item:hover { box-shadow: var(--shadow-md); }
 .opinion-val-item-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--color-bg-tertiary); cursor: pointer; user-select: none; }
-.opinion-val-item-header .el-no { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.opinion-val-item-header .el-no { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--dt-white); flex-shrink: 0; }
 .opinion-val-item.pass .el-no { background: var(--color-success); }
 .opinion-val-item.warn .el-no { background: var(--color-warning); }
 .opinion-val-item.fail .el-no { background: var(--color-error); }
 .opinion-val-item-header .el-label { flex: 1; font-size: 13px; font-weight: 500; }
 .opinion-val-item-header .el-result { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: var(--radius-full); }
-.opinion-val-item.pass .el-result { background: #d1fae5; color: #065f46; }
-.opinion-val-item.warn .el-result { background: #fef3c7; color: #92400e; }
-.opinion-val-item.fail .el-result { background: #ffe4e6; color: #9f1239; }
+.opinion-val-item.pass .el-result { background: var(--color-success-light); color: var(--color-success); }
+.opinion-val-item.warn .el-result { background: var(--color-warning-light); color: var(--color-warning); }
+.opinion-val-item.fail .el-result { background: var(--color-error-light); color: var(--color-error); }
 .opinion-val-item-body { padding: 14px 16px; font-size: 13px; line-height: 1.7; border-top: 1px solid var(--color-border); display: none; }
 .opinion-val-item.expanded .opinion-val-item-body { display: block; }
 .opinion-val-alt { margin-top: 10px; padding: 10px 14px; background: var(--color-primary-light); border-radius: var(--radius-sm); border-left: 3px solid var(--color-primary); }
 
 /* ═══ 6. Gate 카드 ═══ */
-.opinion-gate-card { border: 2px solid var(--color-primary-light); border-radius: var(--radius-md); padding: 20px; background: linear-gradient(135deg, #f0f7ff 0%, #fff 100%); }
+.opinion-gate-card { border: 2px solid var(--color-primary-light); border-radius: var(--radius-md); padding: 20px; background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--dt-white) 100%); }
 .opinion-gate-title { font-size: 16px; font-weight: 700; color: var(--color-primary); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
 .opinion-gate-actions { display: flex; gap: 12px; margin-top: 20px; }
 .opinion-gate-actions .btn { flex: 1; padding: 14px; font-size: 14px; }
@@ -81,12 +81,12 @@
 .opinion-type-result { border: 2px solid var(--color-border); border-radius: var(--radius-md); padding: 24px; text-align: center; }
 .opinion-type-determined { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border-radius: var(--radius-md); font-size: 16px; font-weight: 700; margin: 16px 0; }
 .opinion-type-determined.type-a { background: var(--color-error-light); color: var(--color-error); }
-.opinion-type-determined.type-b { background: var(--color-warning-light); color: #b45309; }
+.opinion-type-determined.type-b { background: var(--color-warning-light); color: var(--color-warning); }
 .opinion-type-determined.type-c { background: var(--color-primary-light); color: var(--color-primary); }
 .opinion-confidence-bar { width: 120px; height: 6px; background: var(--color-bg-secondary); border-radius: 3px; display: inline-block; vertical-align: middle; margin-left: 6px; overflow: hidden; }
 .opinion-confidence-fill { height: 100%; border-radius: 3px; background: var(--color-success); }
 .opinion-type-selector { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
-.opinion-type-option { padding: 12px 20px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: 13px; background: #fff; }
+.opinion-type-option { padding: 12px 20px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: 13px; background: var(--dt-white); }
 .opinion-type-option:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
 .opinion-type-option.selected { border-color: var(--color-primary); background: var(--color-primary-light); color: var(--color-primary); font-weight: 600; }
 
@@ -103,28 +103,28 @@
 /* ═══ 9. 상태 배지 ═══ */
 .opinion-status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
 .opinion-status-badge.status-created { background: var(--color-bg-secondary); color: var(--color-text-tertiary); }
-.opinion-status-badge.status-parsing { background: #dbeafe; color: #1e40af; }
-.opinion-status-badge.status-analyzing { background: #e0e7ff; color: #3730a3; }
-.opinion-status-badge.status-gate { background: var(--color-warning-light); color: #92400e; }
-.opinion-status-badge.status-drafting { background: #fce7f3; color: #9d174d; }
-.opinion-status-badge.status-validating { background: #ede9fe; color: #5b21b6; }
-.opinion-status-badge.status-approved { background: #d1fae5; color: #065f46; }
+.opinion-status-badge.status-parsing { background: var(--color-primary-light); color: var(--color-primary); }
+.opinion-status-badge.status-analyzing { background: var(--color-primary-light); color: var(--color-primary); }
+.opinion-status-badge.status-gate { background: var(--color-warning-light); color: var(--color-warning); }
+.opinion-status-badge.status-drafting { background: var(--color-error-light); color: var(--color-error); }
+.opinion-status-badge.status-validating { background: var(--color-primary-light); color: var(--color-primary); }
+.opinion-status-badge.status-approved { background: var(--color-success-light); color: var(--color-success); }
 .opinion-status-badge.status-completed { background: var(--color-success-light); color: var(--color-success); }
 .opinion-status-badge.status-failed { background: var(--color-error-light); color: var(--color-error); }
 
 /* ═══ 10. 청구항 거절 현황 (유형 C) ═══ */
 .opinion-claim-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); font-size: 13px; margin-bottom: 6px; }
-.opinion-claim-row.rejected { background: #fff5f5; border-color: #fecaca; }
-.opinion-claim-row.allowable { background: #f0fdf4; border-color: #bbf7d0; }
+.opinion-claim-row.rejected { background: var(--color-error-light); border-color: var(--color-error); }
+.opinion-claim-row.allowable { background: var(--color-success-light); border-color: var(--color-success); }
 .opinion-claim-row .claim-no { width: 70px; font-weight: 600; flex-shrink: 0; }
 /* Cycle 6 — 혼합 모드 secondary 카드 (노란 보더) */
-.opinion-analysis-card-secondary { border-left: 4px solid #f59e0b; background: #fffbeb; border-radius: 8px; padding: 14px; margin-top: 12px; }
+.opinion-analysis-card-secondary { border-left: 4px solid var(--color-warning); background: var(--color-warning-light); border-radius: 8px; padding: 14px; margin-top: 12px; }
 
 /* ═══ 11. 심사관·변리사 토론 형식 ═══ */
 .opinion-discussion { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }
 .opinion-chat-bubble { padding: 12px 14px; border-radius: 12px; font-size: 12px; line-height: 1.7; max-width: 100%; }
-.opinion-chat-bubble.examiner { background: #fff5f5; border-left: 3px solid var(--color-error); }
-.opinion-chat-bubble.attorney { background: #eff6ff; border-left: 3px solid var(--color-primary); }
+.opinion-chat-bubble.examiner { background: var(--color-error-light); border-left: 3px solid var(--color-error); }
+.opinion-chat-bubble.attorney { background: var(--color-primary-light); border-left: 3px solid var(--color-primary); }
 .opinion-chat-role { font-size: 11px; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
 .opinion-chat-bubble.examiner .opinion-chat-role { color: var(--color-error); }
 .opinion-chat-bubble.attorney .opinion-chat-role { color: var(--color-primary); }
