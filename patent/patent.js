@@ -288,16 +288,23 @@ async function loadDashboardProjects(){
   const{data}=await App.sb.from('projects').select('id,title,project_number,invention_content,current_state_json,created_at,updated_at').eq('owner_user_id',currentUser.id).order('updated_at',{ascending:false}).limit(100);
   const el=document.getElementById('dashProjectList'),cnt=document.getElementById('dashProjectCount');
   const provEl=document.getElementById('dashProvisionalList');
+  const _setStat=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   if(!data?.length){
     el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="ico" data-icon="mail"></span></div><p style="font-size:13px">아직 생성된 사건이 없어요.</p></td></tr>';
     cnt.textContent='총 0건';
+    _setStat('dashStatTotal',0);_setStat('dashStatWriting',0);_setStat('dashStatWait',0);_setStat('dashStatDone',0);_setStat('dashProvCount','0건');
     if(provEl)provEl.innerHTML='<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--color-text-tertiary);font-size:12px">가출원 내역이 없어요.</td></tr>';
     return;
   }
   const regular=data.filter(p=>!p.current_state_json?.type||p.current_state_json.type!=='provisional');
   const provisional=data.filter(p=>p.current_state_json?.type==='provisional');
   cnt.textContent=`총 ${regular.length}건`;
-  
+  // [STEP3] 통계 4카드 — 기존 목록 배열 재사용, 완성도 pct로 대기/작성 중/완료 산출 (신규 API 호출 없음)
+  let _nDone=0,_nWriting=0,_nWait=0;
+  regular.forEach(p=>{const _o=(p.current_state_json||{}).outputs||{};const _c=Object.keys(_o).filter(k=>_o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;const _pct=Math.round(_c/19*100);if(_pct===100)_nDone++;else if(_pct>0)_nWriting++;else _nWait++;});
+  _setStat('dashStatTotal',regular.length);_setStat('dashStatWriting',_nWriting);_setStat('dashStatWait',_nWait);_setStat('dashStatDone',_nDone);
+  _setStat('dashProvCount',provisional.length+'건');
+
   if(!regular.length){
     el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="ico" data-icon="mail"></span></div><p style="font-size:13px">아직 생성된 사건이 없어요.</p></td></tr>';
   } else {
@@ -306,18 +313,18 @@ async function loadDashboardProjects(){
       const c=Object.keys(o).filter(k=>o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;
       const pct=Math.round(c/19*100);
       const caseNum=p.project_number||'-';
-      const statusBadge=pct===100?'badge-success':pct>0?'badge-warning':'badge-neutral';
+      const badgeCls=pct===100?'is-done':pct>0?'is-writing':'is-wait';
       const statusText=pct===100?'완료':pct>0?'작성 중':'대기';
-      return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-bg-tertiary)'" onmouseout="this.style.background=''" onclick="openProject('${p.id}')">
-        <td style="padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="ico" data-icon="folder"></span><span style="color:var(--color-primary);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
-        <td style="padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(p.title)}</span></td>
-        <td style="padding:10px 12px;text-align:center"><span class="badge ${statusBadge}" style="font-size:11px">${statusText}</span></td>
-        <td style="padding:10px 12px;text-align:center;color:var(--color-text-tertiary);font-size:11px;white-space:nowrap">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</td>
-        <td style="padding:6px 8px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
-          <button class="btn btn-primary btn-sm" onclick="openProject('${p.id}')" style="padding:4px 10px;font-size:11px">열기</button>
-          <button class="btn btn-outline btn-sm" onclick="renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:4px 8px;font-size:11px">편집</button>
-          <span style="color:var(--color-error);cursor:pointer;font-size:11px;margin-left:4px" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</span>
-        </td>
+      return `<tr class="pt-case-row" onclick="openProject('${p.id}')">
+        <td><span class="pt-case-no">${App.escapeHtml(caseNum)}</span></td>
+        <td><div class="pt-case-name">${App.escapeHtml(p.title)}</div></td>
+        <td class="pt-c"><span class="pt-badge ${badgeCls}"><span class="dot"></span>${statusText}</span></td>
+        <td class="pt-c"><span class="pt-case-date">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</span></td>
+        <td class="pt-c" onclick="event.stopPropagation()"><div class="pt-row-actions">
+          <button class="btn btn-outline btn-sm" onclick="openProject('${p.id}')">열기</button>
+          <button class="btn btn-outline btn-sm" onclick="renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">편집</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</button>
+        </div></td>
       </tr>`;
     }).join('');
   }
@@ -329,14 +336,14 @@ async function loadDashboardProjects(){
       provEl.innerHTML=provisional.map(p=>{
         const pd=p.current_state_json?.provisionalData||{};
         const caseNum=p.project_number||'-';
-        return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-warning-light)'" onmouseout="this.style.background=''" onclick="openProvisionalViewer('${p.id}')">
-          <td style="padding:8px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="ico" data-icon="bolt"></span><span style="color:var(--color-warning);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
-          <td style="padding:8px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(pd.title||p.title)}</span></td>
-          <td style="padding:8px 12px;text-align:center;color:var(--color-text-tertiary);font-size:11px;white-space:nowrap">${new Date(p.created_at).toLocaleDateString('ko-KR')}</td>
-          <td style="padding:6px 8px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
-            <button class="btn btn-outline btn-sm" onclick="openProvisionalViewer('${p.id}')" style="padding:4px 10px;font-size:11px">보기</button>
-            <span style="color:var(--color-error);cursor:pointer;font-size:11px;margin-left:4px" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</span>
-          </td>
+        return `<tr class="pt-case-row" onclick="openProvisionalViewer('${p.id}')">
+          <td><span class="pt-case-no">${App.escapeHtml(caseNum)}</span></td>
+          <td><div class="pt-case-name">${App.escapeHtml(pd.title||p.title)}</div></td>
+          <td class="pt-c"><span class="pt-case-date">${new Date(p.created_at).toLocaleDateString('ko-KR')}</span></td>
+          <td class="pt-c" onclick="event.stopPropagation()"><div class="pt-row-actions">
+            <button class="btn btn-outline btn-sm" onclick="openProvisionalViewer('${p.id}')">보기</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</button>
+          </div></td>
         </tr>`;
       }).join('');
     }

@@ -120,68 +120,90 @@
 
       <!-- ═══ 서브패널 1: 기존 명세서 ═══ -->
       <div id="patent-sub-spec" class="patent-sub-panel active">
-      <div style="display:flex;gap:20px;align-items:flex-start">
-        <!-- 왼쪽: 액션 패널 (좁게) -->
-        <div style="width:240px;flex-shrink:0">
-          <h2 style="font-size:20px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px"><span class="ico" data-icon="doc"></span> 특허 명세서</h2>
-          <p style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:16px;line-height:1.4">AI 기반 특허명세서 자동 생성 시스템입니다.</p>
-          
-          <button class="btn btn-primary btn-full" onclick="openNewProjectModal()" style="margin-bottom:8px;padding:12px;font-size:14px"><span class="ico" data-icon="plus"></span> 새 사건 만들기</button>
-          <button class="btn btn-outline btn-full" onclick="openProvisionalModal()" style="margin-bottom:16px;padding:10px;font-size:13px"><span class="ico" data-icon="bolt"></span> 가출원 명세서</button>
-          
-          <div class="card" style="padding:12px">
-            <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px"><span class="ico" data-icon="link"></span> 공통 참고 문서</div>
-            <p style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px;line-height:1.3">기존 특허명세서 문체를 참고합니다.</p>
-            <label for="globalRefUpload" class="btn btn-outline btn-sm btn-full" style="cursor:pointer;font-size:11px"><span class="ico" data-icon="doc"></span> 문서 업로드</label>
-            <input type="file" id="globalRefUpload" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="handleGlobalRefUpload(event)" />
-            <div id="globalRefStatus" style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px;text-align:center">없음</div>
+
+        <!-- 통계 4카드 (실제 사건 데이터에서 계산) -->
+        <div class="pt-stat-grid">
+          <div class="pt-stat-card">
+            <div class="pt-stat-label">전체 사건</div>
+            <div class="pt-stat-value"><span id="dashStatTotal">0</span><span class="unit">건</span></div>
+          </div>
+          <div class="pt-stat-card accent-brand">
+            <div class="pt-stat-label">작성 중</div>
+            <div class="pt-stat-value"><span id="dashStatWriting">0</span><span class="unit">건</span></div>
+          </div>
+          <div class="pt-stat-card">
+            <div class="pt-stat-label">대기</div>
+            <div class="pt-stat-value"><span id="dashStatWait">0</span><span class="unit">건</span></div>
+          </div>
+          <div class="pt-stat-card accent-success">
+            <div class="pt-stat-label">완료</div>
+            <div class="pt-stat-value"><span id="dashStatDone">0</span><span class="unit">건</span></div>
           </div>
         </div>
-        
-        <!-- 오른쪽: 사건 목록 (flex:1로 나머지 전체 차지) -->
-        <div style="flex:1;min-width:0">
-          <!-- 사건 목록 카드 -->
-          <div class="card" style="padding:0;overflow:hidden">
-            <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
-              <colgroup>
-                <col style="width:15%">
-                <col style="width:40%">
-                <col style="width:10%">
-                <col style="width:12%">
-                <col style="width:23%">
-              </colgroup>
-              <thead>
-                <tr style="background:var(--color-bg-tertiary);border-bottom:1px solid var(--color-border)">
-                  <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--color-text-secondary)">사건번호</th>
-                  <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--color-text-secondary)">사건명</th>
-                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">상태</th>
-                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">수정일</th>
-                  <th style="padding:10px 12px;text-align:center;font-weight:600;color:var(--color-text-secondary)">작업</th>
-                </tr>
-              </thead>
-              <tbody id="dashProjectList"></tbody>
-            </table>
-          </div>
-          <div style="text-align:right;margin-top:6px;font-size:11px;color:var(--color-text-tertiary)" id="dashProjectCount">총 0건</div>
-          
-          <!-- 가출원 내역 -->
-          <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
-            <div style="padding:10px 12px;background:var(--color-warning-light);border-bottom:1px solid var(--color-warning);display:flex;align-items:center;gap:6px">
-              <span class="ico" data-icon="bolt"></span>
-              <span style="font-weight:600;font-size:13px;color:var(--color-warning)">가출원 내역</span>
+
+        <div class="pt-work-row">
+          <!-- 왼쪽: 액션 컬럼 -->
+          <aside class="pt-action-col">
+            <div>
+              <h2 class="pt-panel-title"><span class="ico" data-icon="doc"></span> 특허 명세서</h2>
+              <p class="pt-panel-desc">AI 기반 특허명세서 자동 생성 시스템입니다.</p>
             </div>
-            <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
-              <colgroup>
-                <col style="width:15%">
-                <col style="width:50%">
-                <col style="width:15%">
-                <col style="width:20%">
-              </colgroup>
-              <tbody id="dashProvisionalList"></tbody>
-            </table>
-          </div>
+            <button class="btn btn-primary btn-full" onclick="openNewProjectModal()"><span class="ico" data-icon="plus"></span> 새 사건 만들기</button>
+            <button class="btn btn-outline btn-full" onclick="openProvisionalModal()"><span class="ico" data-icon="bolt"></span> 가출원 명세서</button>
+
+            <div class="pt-card pt-ref-card">
+              <div class="pt-ref-card-title"><span class="ico" data-icon="link"></span> 공통 참고 문서</div>
+              <p class="pt-ref-card-desc">기존 특허명세서 문체를 참고합니다.</p>
+              <label for="globalRefUpload" class="btn btn-outline btn-sm btn-full" style="cursor:pointer"><span class="ico" data-icon="doc"></span> 문서 업로드</label>
+              <input type="file" id="globalRefUpload" accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.md,.rtf" style="display:none" onchange="handleGlobalRefUpload(event)" />
+              <div id="globalRefStatus" class="pt-ref-status">없음</div>
+            </div>
+          </aside>
+
+          <!-- 오른쪽: 사건 목록 -->
+          <main class="pt-main-col">
+            <div class="pt-list-head">
+              <h3>사건 목록</h3>
+              <div class="pt-list-count" id="dashProjectCount">총 0건</div>
+            </div>
+
+            <div class="pt-card" style="overflow:hidden">
+              <table class="pt-table">
+                <colgroup>
+                  <col style="width:15%">
+                  <col style="width:40%">
+                  <col style="width:13%">
+                  <col style="width:14%">
+                  <col style="width:18%">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>사건번호</th>
+                    <th>사건명</th>
+                    <th class="pt-c">상태</th>
+                    <th class="pt-c">수정일</th>
+                    <th class="pt-c">작업</th>
+                  </tr>
+                </thead>
+                <tbody id="dashProjectList"></tbody>
+              </table>
+            </div>
+
+            <!-- 가출원 내역 -->
+            <div class="pt-section-title"><span class="ico" data-icon="bolt"></span> 가출원 내역 <span class="pt-prov-flag" id="dashProvCount">0건</span></div>
+            <div class="pt-card" style="overflow:hidden">
+              <table class="pt-table">
+                <colgroup>
+                  <col style="width:15%">
+                  <col style="width:50%">
+                  <col style="width:15%">
+                  <col style="width:20%">
+                </colgroup>
+                <tbody id="dashProvisionalList"></tbody>
+              </table>
+            </div>
+          </main>
         </div>
-      </div>
       </div><!-- /patent-sub-spec -->
 
       <!-- ═══ 서브패널 2: 의견서 대응 ═══ -->
