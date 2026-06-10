@@ -1,0 +1,24 @@
+/* ═══════════════════════════════════════════════════════════════
+   design-tokens.css 에 추가할 신규 토큰 패치
+   ★ 기존 --dt-* 값은 절대 변경 금지. 아래 블록을 닫는 } 직전에 추가만.
+   ★ 출처: handoff/토큰_매핑_가이드.md §3
+   ═══════════════════════════════════════════════════════════════ */
+
+  /* ── 신규: 매칭 등급색 (S/A/B/C/D) — 지원사업 카드 ── */
+  --dt-grade-s: #6D28D9;               /* S등급 — 보라(절제된 단색, 그라데이션 X) */
+  --dt-grade-s-bg: rgba(109,40,217,.10);
+  --dt-grade-a: var(--dt-success);     /* A등급 = success 재사용 */
+  --dt-grade-a-bg: var(--dt-success-light);
+  --dt-grade-b: var(--dt-brand);       /* B등급 = brand 재사용 */
+  --dt-grade-b-bg: var(--dt-brand-light);
+  --dt-grade-c: var(--dt-warning);     /* C등급 = warning 재사용 */
+  --dt-grade-c-bg: var(--dt-warning-light);
+  --dt-grade-d: var(--dt-g400);        /* D등급 = 회색 */
+  --dt-grade-d-bg: var(--dt-g100);
+
+  /* ── 신규: 브랜드 확장 (Toss 블루 계열로 조정 — #3B82F6 시안색 아님) ── */
+  --dt-brand-deep: #0F3A8C;            /* 그라데이션 끝점 / 다크 강조 */
+  --dt-brand-accent: #5B8DEF;          /* 다크 배경 위 강조 텍스트 */
+
+  /* ── 신규: 라운드 8 (시안 다용 — 기존 6/10 사이) ── */
+  --dt-r-sm2: 8px;
