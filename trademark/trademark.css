@@ -5656,3 +5656,73 @@
     align-items: flex-start;
   }
 }
+
+/* ============================================================
+   [STEP3] 상표 대시보드 리디자인 (#trademark-sub-application)
+   — 특허 파일럿(.pt-*)과 동일 디자인 언어. 색은 --color-*/--dt-* 토큰만.
+   — 기존 .tm-badge/.tm-panel-title 등과 충돌 회피 위해 .tmd-* 접두 사용.
+   ============================================================ */
+
+/* 통계 4카드 */
+.tmd-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.tmd-stat-card { background: var(--color-bg-primary); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 18px 20px; }
+.tmd-stat-label { font-size: var(--dt-f-sm); color: var(--color-text-secondary); font-weight: var(--font-weight-medium); }
+.tmd-stat-value { margin-top: 8px; font-size: var(--dt-f-3xl); font-weight: var(--dt-w-extrabold); letter-spacing: -0.03em; line-height: 1; color: var(--color-text-primary); font-family: var(--dt-mono); }
+.tmd-stat-value .unit { font-size: var(--dt-f-md); color: var(--color-text-tertiary); font-weight: var(--font-weight-semibold); margin-left: 3px; font-family: var(--font-family); }
+.tmd-stat-card.accent-brand .tmd-stat-value { color: var(--color-primary); }
+.tmd-stat-card.accent-warning .tmd-stat-value { color: var(--color-warning); }
+.tmd-stat-card.accent-success .tmd-stat-value { color: var(--color-success); }
+
+/* 작업 행 레이아웃 */
+.tmd-work-row { display: flex; gap: 20px; align-items: flex-start; }
+.tmd-action-col { width: 248px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
+.tmd-main-col { flex: 1; min-width: 0; }
+
+/* 액션 컬럼 */
+.tmd-panel-title { font-size: var(--dt-f-xl); font-weight: var(--font-weight-bold); letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; color: var(--color-text-primary); margin: 0; }
+.tmd-panel-desc { font-size: var(--dt-f-sm); color: var(--color-text-secondary); margin: 4px 0 0; line-height: 1.5; }
+.tmd-card { background: var(--color-bg-primary); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.tmd-ref-card { padding: 16px; }
+.tmd-ref-title { font-size: var(--dt-f-sm); font-weight: var(--font-weight-semibold); display: flex; align-items: center; gap: 6px; color: var(--color-primary); margin: 0; }
+.tmd-ref-desc { font-size: var(--dt-f-xs); color: var(--color-text-secondary); margin: 6px 0 0; line-height: 1.5; }
+
+/* 사건 목록 헤더 */
+.tmd-list-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.tmd-list-head h3 { font-size: var(--dt-f-lg); font-weight: var(--font-weight-bold); letter-spacing: -0.01em; color: var(--color-text-primary); margin: 0; }
+.tmd-list-count { font-size: var(--dt-f-sm); color: var(--color-text-secondary); }
+
+/* 목록 테이블 */
+.tmd-table { width: 100%; border-collapse: collapse; font-size: var(--dt-f-md); table-layout: fixed; }
+.tmd-table thead th { padding: 12px 16px; text-align: left; font-size: var(--dt-f-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); background: var(--color-bg-tertiary); border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+.tmd-table thead th.tmd-c { text-align: center; }
+.tmd-table tbody td { padding: 14px 16px; border-bottom: 1px solid var(--color-divider); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tmd-table tbody tr:last-child td { border-bottom: none; }
+.tmd-case-row { transition: background var(--dt-ease-fast); cursor: pointer; }
+.tmd-case-row:hover { background: var(--dt-brand-pale); }
+.tmd-c { text-align: center; }
+.tmd-case-no { font-family: var(--dt-mono); font-size: var(--dt-f-sm); color: var(--color-primary); font-weight: var(--font-weight-semibold); }
+.tmd-case-name { font-weight: var(--font-weight-semibold); color: var(--color-text-primary); letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tmd-case-type { font-size: var(--dt-f-sm); color: var(--color-text-secondary); }
+.tmd-case-date { font-size: var(--dt-f-sm); color: var(--color-text-secondary); }
+.tmd-row-actions { display: inline-flex; gap: 6px; justify-content: center; align-items: center; }
+
+/* 상태 배지 (실제 status enum: draft/searching/documenting/completed) */
+.tmd-badge { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px; border-radius: var(--radius-full); font-size: var(--dt-f-xs); font-weight: var(--font-weight-bold); letter-spacing: -0.01em; }
+.tmd-badge .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.tmd-badge.s-draft       { background: var(--color-primary-light); color: var(--color-primary-hover); }
+.tmd-badge.s-searching   { background: var(--color-warning-light); color: var(--color-warning); }
+.tmd-badge.s-documenting { background: var(--color-warning-light); color: var(--color-warning); }
+.tmd-badge.s-completed   { background: var(--color-success-light); color: var(--color-success); }
+
+/* KIPRIS 안내 박스 */
+.tmd-kipris-note { margin-top: 20px; padding: 12px 14px; background: var(--dt-brand-pale); border: 1px solid var(--dt-brand-mid); border-radius: var(--radius-md); }
+.tmd-kipris-note .tmd-kipris-title { margin: 0 0 6px; font-size: var(--dt-f-sm); font-weight: var(--font-weight-semibold); color: var(--color-primary); display: flex; align-items: center; gap: 5px; }
+.tmd-kipris-note .tmd-kipris-body { margin: 0; font-size: var(--dt-f-xs); color: var(--dt-brand-deep); line-height: 1.5; }
+.tmd-kipris-note a { color: var(--color-primary-hover); text-decoration: underline; }
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .tmd-stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .tmd-work-row { flex-direction: column; }
+  .tmd-action-col { width: 100%; }
+}
