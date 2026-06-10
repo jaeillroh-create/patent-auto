@@ -300,25 +300,25 @@
   align-items: center !important;
   justify-content: center !important;
   padding: 14px 10px !important;
-  border: 2px solid var(--dt-g200) !important;
-  border-radius: 10px !important;
+  border: 2px solid var(--color-border) !important;
+  border-radius: var(--dt-r-md) !important;
   background: var(--dt-white) !important;
   cursor: pointer !important;
-  transition: all 0.15s ease !important;
+  transition: all var(--dt-ease-fast) !important;
   text-align: center !important;
   min-height: 50px !important;
 }
 
 .selection-card:hover {
-  border-color: var(--dt-brand) !important;
-  background: var(--dt-brand-light) !important;
-  box-shadow: 0 2px 8px rgba(49, 130, 246, 0.2) !important;
+  border-color: var(--dt-g300) !important;
+  background: var(--dt-g50) !important;
+  box-shadow: var(--shadow-sm) !important;
 }
 
 .selection-card.selected {
-  border-color: var(--dt-brand) !important;
-  background: var(--dt-brand-light) !important;
-  box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.25) !important;
+  border-color: var(--color-primary) !important;
+  background: var(--color-primary-light) !important;
+  box-shadow: 0 0 0 3px var(--color-primary-light) !important;
 }
 
 .selection-card-category {
@@ -328,12 +328,12 @@
 
 .selection-card-title {
   font-size: 13px !important;
-  font-weight: 600 !important;
-  color: var(--dt-g700) !important;
+  font-weight: var(--font-weight-semibold) !important;
+  color: var(--color-text-secondary) !important;
 }
 
 .selection-card.selected .selection-card-title {
-  color: var(--dt-brand) !important;
+  color: var(--color-primary) !important;
 }
 
 .selection-card-subtitle {
@@ -504,41 +504,41 @@
 .tab-container {
   display: flex;
   gap: 4px;
-  padding: 6px;
-  background: var(--dt-g100);
-  border-radius: var(--dt-r-md);
+  background: var(--dt-white);
+  border-bottom: 1px solid var(--color-border);
   margin-bottom: 20px;
   position: sticky;
   top: 0;
   z-index: 100;
+  overflow-x: auto;
 }
 
 .tab-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 18px;
+  padding: 12px 18px;
   background: transparent;
   border: none;
-  border-radius: var(--dt-r-sm);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
   font-size: 13px;
-  font-weight: 500;
-  color: var(--dt-g500);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dt-ease-fast);
   white-space: nowrap;
 }
 
 .tab-item:hover {
-  background: rgba(255,255,255,0.7);
-  color: var(--dt-g700);
+  color: var(--color-text-primary);
 }
 
 .tab-item.active {
-  background: var(--dt-white);
-  color: var(--dt-brand);
-  font-weight: 600;
-  box-shadow: var(--dt-sh-sm);
+  background: transparent;
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: var(--font-weight-bold);
 }
 
 /* ============================================================
@@ -589,14 +589,15 @@
    ============================================================ */
 .card {
   background: var(--dt-white);
-  border: 1px solid var(--dt-g150);
-  border-radius: var(--dt-r-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  transition: box-shadow 0.15s;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--dt-ease-normal);
 }
 
 .card:hover {
-  box-shadow: var(--dt-sh-sm);
+  box-shadow: var(--shadow-md);
 }
 
 .card-header {
@@ -605,13 +606,13 @@
   align-items: center;
   padding: 14px 18px;
   background: var(--dt-g50);
-  border-bottom: 1px solid var(--dt-g100);
+  border-bottom: 1px solid var(--color-divider);
 }
 
 .card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--dt-g700);
+  font-size: var(--dt-f-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
   display: flex;
   align-items: center;
   gap: 8px;
