@@ -1315,3 +1315,72 @@ label {
 .downstream-list li { padding: 4px 0; }
 .downstream-status { font-size: 11px; color: var(--dt-g500); margin-left: 8px; }
 .no-downstream { font-size: 13px; color: var(--dt-g500); font-style: italic; margin: 0; }
+
+/* ============================================================
+   27. [STEP3] 특허 대시보드 리디자인 (명세서 작성 서브패널)
+   — 시안 patent_dashboard_redesign.html 이식. 색은 --color-*/--dt-* 토큰만.
+   ============================================================ */
+
+/* 통계 4카드 */
+.pt-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.pt-stat-card { background: var(--color-bg-primary); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 18px 20px; }
+.pt-stat-label { font-size: var(--dt-f-sm); color: var(--color-text-secondary); font-weight: var(--font-weight-medium); }
+.pt-stat-value { margin-top: 8px; font-size: var(--dt-f-3xl); font-weight: var(--dt-w-extrabold); letter-spacing: -0.03em; line-height: 1; color: var(--color-text-primary); font-family: var(--dt-mono); }
+.pt-stat-value .unit { font-size: var(--dt-f-md); color: var(--color-text-tertiary); font-weight: var(--font-weight-semibold); margin-left: 3px; font-family: var(--font-family); }
+.pt-stat-card.accent-brand .pt-stat-value { color: var(--color-primary); }
+.pt-stat-card.accent-warning .pt-stat-value { color: var(--color-warning); }
+.pt-stat-card.accent-success .pt-stat-value { color: var(--color-success); }
+
+/* 작업 행 레이아웃 */
+.pt-work-row { display: flex; gap: 20px; align-items: flex-start; }
+.pt-action-col { width: 248px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
+.pt-main-col { flex: 1; min-width: 0; }
+
+/* 액션 컬럼 */
+.pt-panel-title { font-size: var(--dt-f-xl); font-weight: var(--font-weight-bold); letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; color: var(--color-text-primary); }
+.pt-panel-desc { font-size: var(--dt-f-sm); color: var(--color-text-secondary); margin-top: 4px; line-height: 1.5; }
+.pt-card { background: var(--color-bg-primary); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.pt-ref-card { padding: 16px; }
+.pt-ref-card-title { font-size: var(--dt-f-sm); font-weight: var(--font-weight-semibold); display: flex; align-items: center; gap: 6px; color: var(--color-text-primary); }
+.pt-ref-card-desc { font-size: var(--dt-f-xs); color: var(--color-text-secondary); margin: 6px 0 10px; line-height: 1.45; }
+.pt-ref-status { font-size: var(--dt-f-xs); color: var(--color-text-tertiary); margin-top: 8px; text-align: center; }
+
+/* 사건 목록 헤더 */
+.pt-list-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.pt-list-head h3 { font-size: var(--dt-f-lg); font-weight: var(--font-weight-bold); letter-spacing: -0.01em; color: var(--color-text-primary); }
+.pt-list-count { font-size: var(--dt-f-sm); color: var(--color-text-secondary); }
+
+/* 사건 목록 테이블 */
+.pt-table { width: 100%; border-collapse: collapse; font-size: var(--dt-f-md); table-layout: fixed; }
+.pt-table thead th { padding: 12px 16px; text-align: left; font-size: var(--dt-f-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); background: var(--color-bg-tertiary); border-bottom: 1px solid var(--color-border); }
+.pt-table thead th.pt-c { text-align: center; }
+.pt-table tbody td { padding: 14px 16px; border-bottom: 1px solid var(--color-divider); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pt-table tbody tr:last-child td { border-bottom: none; }
+.pt-case-row { transition: background var(--dt-ease-fast); cursor: pointer; }
+.pt-case-row:hover { background: var(--dt-brand-pale); }
+.pt-c { text-align: center; }
+.pt-case-no { font-family: var(--dt-mono); font-size: var(--dt-f-sm); color: var(--color-text-secondary); }
+.pt-case-name { font-weight: var(--font-weight-semibold); color: var(--color-text-primary); letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pt-case-sub { font-size: var(--dt-f-xs); color: var(--color-text-tertiary); margin-top: 2px; }
+.pt-case-date { font-size: var(--dt-f-sm); color: var(--color-text-secondary); }
+.pt-row-actions { display: inline-flex; gap: 6px; justify-content: center; align-items: center; }
+
+/* 상태 배지 */
+.pt-badge { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px; border-radius: var(--radius-full); font-size: var(--dt-f-xs); font-weight: var(--font-weight-bold); letter-spacing: -0.01em; }
+.pt-badge .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.pt-badge.is-writing { background: var(--color-primary-light); color: var(--color-primary-hover); }
+.pt-badge.is-review  { background: var(--color-warning-light); color: var(--color-warning); }
+.pt-badge.is-done    { background: var(--color-success-light); color: var(--color-success); }
+.pt-badge.is-wait    { background: var(--color-bg-secondary); color: var(--color-text-tertiary); }
+.pt-badge.is-prov    { background: var(--color-bg-secondary); color: var(--color-text-tertiary); }
+
+/* 가출원 섹션 */
+.pt-section-title { margin: 24px 0 12px; font-size: var(--dt-f-lg); font-weight: var(--font-weight-bold); display: flex; align-items: center; gap: 7px; letter-spacing: -0.01em; color: var(--color-text-primary); }
+.pt-prov-flag { display: inline-flex; align-items: center; gap: 5px; font-size: var(--dt-f-xs); font-weight: var(--font-weight-bold); color: var(--color-warning); padding: 3px 8px; background: var(--color-warning-light); border-radius: var(--radius-full); }
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .pt-stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .pt-work-row { flex-direction: column; }
+  .pt-action-col { width: 100%; }
+}
