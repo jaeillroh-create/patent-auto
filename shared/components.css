@@ -60,7 +60,7 @@
 .dt-btn-ghost:hover:not(:disabled) { background: var(--dt-g50); }
 
 .dt-btn-danger { background: var(--dt-danger); color: var(--dt-white); }
-.dt-btn-danger:hover:not(:disabled) { background: #C62828; }
+.dt-btn-danger:hover:not(:disabled) { background: var(--dt-danger); }
 
 /* Disabled */
 .dt-btn:disabled {
