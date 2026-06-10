@@ -1212,7 +1212,7 @@ function renderInventionScopePanel() {
     panel.className = 'scope-panel';
     panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between">
       <div><span class="ico" data-icon="search"></span> <strong style="font-size:13px">발명 범위</strong>
-      <span style="font-size:11px;color:var(--pt-gray-500);margin-left:6px">범위를 확정하면 이후 스텝에서 범위 초과 여부를 검증합니다.</span></div>
+      <span style="font-size:11px;color:var(--dt-g500);margin-left:6px">범위를 확정하면 이후 스텝에서 범위 초과 여부를 검증합니다.</span></div>
       <button class="btn btn-outline btn-sm" onclick="extractInventionScope()">범위 확정</button>
     </div>`;
     return;
@@ -1225,28 +1225,28 @@ function renderInventionScopePanel() {
   // [C1-6a] 구성요소 칩 (편집 가능)
   const comps = (b.core_components || []).map(c => {
     const cid = App.escapeHtml(c.id || c.name);
-    return `<span class="scope-chip" onclick="editComponent('${cid.replace(/'/g,"\\'")}')">${App.escapeHtml(c.name)}<span style="color:var(--pt-gray-500);margin-left:4px;font-size:10px">${App.escapeHtml(c.role||'')}</span><span class="chip-edit-icon">✎</span></span>`;
+    return `<span class="scope-chip" onclick="editComponent('${cid.replace(/'/g,"\\'")}')">${App.escapeHtml(c.name)}<span style="color:var(--dt-g500);margin-left:4px;font-size:10px">${App.escapeHtml(c.role||'')}</span><span class="chip-edit-icon">✎</span></span>`;
   }).join('');
 
   // 핵심 기능
   const funcs = (b.core_functions || []).map(f =>
-    `<li style="font-size:12px;margin-bottom:2px">${App.escapeHtml(f.desc)} <span style="color:var(--pt-gray-500)">[${(f.component_refs||[]).join(',')}]</span></li>`
+    `<li style="font-size:12px;margin-bottom:2px">${App.escapeHtml(f.desc)} <span style="color:var(--dt-g500)">[${(f.component_refs||[]).join(',')}]</span></li>`
   ).join('');
   const nonscope = (b.explicit_nonscope || []).length
-    ? `<div style="margin-top:6px;font-size:11px;color:var(--pt-gray-500)">제외: ${b.explicit_nonscope.map(n => App.escapeHtml(n)).join(', ')}</div>` : '';
+    ? `<div style="margin-top:6px;font-size:11px;color:var(--dt-g500)">제외: ${b.explicit_nonscope.map(n => App.escapeHtml(n)).join(', ')}</div>` : '';
 
   // [C1-6a] 승인된 확장
   const expansions = inventionScope.approved_expansions || [];
   const expansionHtml = expansions.length === 0
     ? `<p class="scope-empty">청구항 생성 후 검증이 실행되면 여기에 승인된 확장 요소가 표시됩니다.</p>`
     : expansions.map(e =>
-        `<span class="scope-chip" style="background:var(--pt-primary-light)">${App.escapeHtml(e.component)} <small style="color:var(--pt-gray-500)">(${App.escapeHtml(e.type||'')})</small> <button onclick="removeExpansion('${App.escapeHtml(e.component).replace(/'/g,"\\'")}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--pt-gray-500);padding:0;margin-left:2px">×</button></span>`
+        `<span class="scope-chip" style="background:var(--dt-brand-light)">${App.escapeHtml(e.component)} <small style="color:var(--dt-g500)">(${App.escapeHtml(e.type||'')})</small> <button onclick="removeExpansion('${App.escapeHtml(e.component).replace(/'/g,"\\'")}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--dt-g500);padding:0;margin-left:2px">×</button></span>`
       ).join('');
 
   panel.className = 'scope-panel locked';
   panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div><span class="ico" data-icon="lock"></span> <strong style="font-size:13px">발명 범위 확정됨</strong>
-    <span style="font-size:11px;color:var(--pt-gray-500);margin-left:6px">${lockedDate}</span>${prevBadge}</div>
+    <span style="font-size:11px;color:var(--dt-g500);margin-left:6px">${lockedDate}</span>${prevBadge}</div>
     <button class="btn btn-ghost btn-sm" onclick="unlockInventionScope()">재확정</button>
   </div>
   <div class="scope-section">
