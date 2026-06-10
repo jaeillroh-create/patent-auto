@@ -788,9 +788,9 @@
             </div>
 
             <!-- 안내 -->
-            <div style="margin-top: 20px; padding: 12px; background: #FEF4E6; border: 1px solid #fde68a; border-radius: 8px;">
-              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #663A00;"><span class="ico" data-icon="lightbulb"></span> 우선심사란?</p>
-              <p style="margin: 0; font-size: 11px; color: #663A00; line-height: 1.5;">
+            <div style="margin-top: 20px; padding: 12px; background: var(--dt-warning-light); border: 1px solid var(--dt-warning-light); border-radius: 8px;">
+              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: var(--dt-warning);"><span class="ico" data-icon="lightbulb"></span> 우선심사란?</p>
+              <p style="margin: 0; font-size: 11px; color: var(--dt-warning); line-height: 1.5;">
                 일반 심사(12~14개월) 대비 2~3개월 내 심사가 진행됩니다.
                 류당 160,000원의 추가 비용이 발생합니다.
               </p>
@@ -864,7 +864,7 @@
                 const updatedAt = new Date(p.updated_at).toLocaleDateString('ko-KR');
                 return `
                   <tr style="border-bottom: 1px solid var(--dt-g100); transition: background 0.15s;"
-                      onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='white'">
+                      onmouseover="this.style.background='var(--dt-g50)'" onmouseout="this.style.background='white'">
                     <td style="padding: 12px 16px; font-size: 13px; color: var(--dt-g500);">${TM.escapeHtml(p.title || '-')}</td>
                     <td style="padding: 12px 16px; font-size: 14px; font-weight: 500; color: var(--dt-g900);">${TM.escapeHtml(p.trademark_name || '-')}</td>
                     <td style="padding: 12px; text-align: center; font-size: 12px;">${sourceLabel}</td>
@@ -884,7 +884,7 @@
     } catch (error) {
       console.error('[TM] 우선심사 목록 로드 실패:', error);
       listEl.innerHTML = `
-        <div style="text-align: center; padding: 40px; background: #FEECEC; border-radius: 12px; border: 1px solid #fecaca;">
+        <div style="text-align: center; padding: 40px; background: var(--dt-danger-light); border-radius: 12px; border: 1px solid var(--dt-danger-light);">
           <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
           <p style="margin: 0; color: var(--dt-danger);">${error.message}</p>
         </div>
@@ -934,8 +934,8 @@
                   return `
                     <div class="tm-pe-import-item" data-action="tm-pe-import-select" data-id="${p.id}"
                          style="display: flex; align-items: center; gap: 16px; padding: 14px 16px; border: 1px solid var(--dt-g150); border-radius: 10px; cursor: pointer; transition: all 0.15s;"
-                         onmouseover="this.style.borderColor='var(--dt-brand)'; this.style.background='#f0f9ff'"
-                         onmouseout="this.style.borderColor='#e5e7eb'; this.style.background='white'">
+                         onmouseover="this.style.borderColor='var(--dt-brand)'; this.style.background='var(--dt-brand-pale)'"
+                         onmouseout="this.style.borderColor='var(--dt-g150)'; this.style.background='white'">
                       <div style="flex-shrink: 0; width: 40px; height: 40px; background: var(--dt-brand-light); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px;"><span class="ico" data-icon="tag" data-size="18"></span></div>
                       <div style="flex: 1; min-width: 0;">
                         <div style="font-size: 15px; font-weight: 600; color: var(--dt-g900);">${TM.escapeHtml(p.trademark_name || '(상표명 미입력)')}</div>
@@ -1161,28 +1161,28 @@
         </div>
 
         <!-- 기본 정보 입력 -->
-        <div style="background: linear-gradient(135deg, #FEF4E6 0%, #fde68a 100%); border: 1px solid var(--dt-warning); border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
+        <div style="background: linear-gradient(135deg, var(--dt-warning-light) 0%, var(--dt-warning-light) 100%); border: 1px solid var(--dt-warning); border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
           <div style="display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;">
             <div style="flex: 1.5; min-width: 180px;">
-              <label style="font-size: 11px; color: #663A00; font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="tag"></span> 상표명</label>
+              <label style="font-size: 11px; color: var(--dt-warning); font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="tag"></span> 상표명</label>
               <input type="text" id="tm-pe-trademark-name"
                      value="${TM.escapeHtml(pe.trademarkNameFromApp || p.trademarkName || '')}"
                      placeholder="상표명을 입력하세요"
-                     style="width: 100%; padding: 8px 12px; border: 1px solid var(--dt-warning); border-radius: 6px; font-size: 14px; font-weight: 600; color: #663A00; background: rgba(255,255,255,0.7); box-sizing: border-box;">
+                     style="width: 100%; padding: 8px 12px; border: 1px solid var(--dt-warning); border-radius: 6px; font-size: 14px; font-weight: 600; color: var(--dt-warning); background: rgba(255,255,255,0.7); box-sizing: border-box;">
             </div>
             <div style="flex: 1; min-width: 150px;">
-              <label style="font-size: 11px; color: #663A00; font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="clipboard"></span> 출원번호</label>
+              <label style="font-size: 11px; color: var(--dt-warning); font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="clipboard"></span> 출원번호</label>
               <input type="text" id="tm-pe-application-number"
                      value="${TM.escapeHtml(pe.applicationNumber || '')}"
                      placeholder="예: 40-2025-0012345"
-                     style="width: 100%; padding: 8px 12px; border: 1px solid var(--dt-warning); border-radius: 6px; font-size: 13px; color: #663A00; background: rgba(255,255,255,0.7); box-sizing: border-box;">
+                     style="width: 100%; padding: 8px 12px; border: 1px solid var(--dt-warning); border-radius: 6px; font-size: 13px; color: var(--dt-warning); background: rgba(255,255,255,0.7); box-sizing: border-box;">
             </div>
             <div style="flex: 1; min-width: 150px;">
-              <label style="font-size: 11px; color: #663A00; font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="folder"></span> 사건번호</label>
+              <label style="font-size: 11px; color: var(--dt-warning); font-weight: 600; display: block; margin-bottom: 4px;"><span class="ico" data-icon="folder"></span> 사건번호</label>
               <input type="text" id="tm-pe-case-number"
                      value="${TM.escapeHtml(pe.caseNumber || p.title || '')}"
                      placeholder="예: 26T0001"
-                     style="width: 100%; padding: 8px 12px; border: 1px solid var(--dt-warning); border-radius: 6px; font-size: 13px; color: #663A00; background: rgba(255,255,255,0.7); box-sizing: border-box;">
+                     style="width: 100%; padding: 8px 12px; border: 1px solid var(--dt-warning); border-radius: 6px; font-size: 13px; color: var(--dt-warning); background: rgba(255,255,255,0.7); box-sizing: border-box;">
             </div>
           </div>
         </div>
@@ -2753,16 +2753,16 @@
                 <h3><span class="ico" data-icon="robot"></span> AI 추천 상품류</h3>
                 <button class="btn btn-sm btn-primary" data-action="tm-apply-all-recommendations">✓ 전체 적용</button>
               </div>
-              <div class="tm-ai-rec-desc" style="font-size: 12px; padding: 8px 12px; background: #f8f9fa; margin: 0 0 10px 0; border-radius: 4px;">
-                사업 분석 결과입니다. <strong style="color: #dc3545;"><span class="status-dot negative"></span> 핵심</strong>은 필수, 
-                <strong style="color: #fd7e14;"><span class="status-dot cautionary"></span> 권장</strong>은 권리 보호용, 
-                <strong style="color: #28a745;"><span class="status-dot positive"></span> 확장</strong>은 사업 확장 시 고려하세요.
+              <div class="tm-ai-rec-desc" style="font-size: 12px; padding: 8px 12px; background: var(--dt-g50); margin: 0 0 10px 0; border-radius: 4px;">
+                사업 분석 결과입니다. <strong style="color: var(--dt-danger);"><span class="status-dot negative"></span> 핵심</strong>은 필수, 
+                <strong style="color: var(--dt-warning);"><span class="status-dot cautionary"></span> 권장</strong>은 권리 보호용, 
+                <strong style="color: var(--dt-success);"><span class="status-dot positive"></span> 확장</strong>은 사업 확장 시 고려하세요.
               </div>
               
               <div id="tm-ai-recommendations-container"></div>
               
               <!-- 추가 추천 요청 버튼 -->
-              <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #eee; text-align: center;">
+              <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--dt-g100); text-align: center;">
                 <button class="btn btn-outline btn-sm" data-action="tm-request-more-recommendations" style="font-size: 12px;">
                   <span class="ico" data-icon="search"></span> 추가 추천 요청
                 </button>
@@ -3071,7 +3071,7 @@
             return '<span class="tag" style="padding: 2px 6px; background: var(--dt-brand-pale); border-radius: 3px; font-size: 11px; display: inline-block; margin: 1px 2px;">' + TM.escapeHtml(displayName) + '</span>';
           }).join('');
           goodsHtml = '<div class="tm-ai-rec-goods" style="margin-top: 6px; font-size: 11px; line-height: 1.8;">' +
-            '<span class="label" style="margin-right: 4px; font-weight: 600; color: #555;">추천 지정상품(' + recGoods.length + '):</span>' +
+            '<span class="label" style="margin-right: 4px; font-weight: 600; color: var(--dt-g600);">추천 지정상품(' + recGoods.length + '):</span>' +
             goodsTags + '</div>';
         }
         
@@ -3097,10 +3097,10 @@
     // 검증 결과 표시
     if (p.aiAnalysis.validation) {
       const v = p.aiAnalysis.validation;
-      const scoreColor = v.overallScore >= 80 ? '#10b981' : v.overallScore >= 60 ? '#f59e0b' : '#ef4444';
+      const scoreColor = v.overallScore >= 80 ? 'var(--dt-success)' : v.overallScore >= 60 ? 'var(--dt-warning)' : 'var(--dt-danger)';
       const scoreEmoji = v.overallScore >= 80 ? '✅' : v.overallScore >= 60 ? '⚠️' : '❌';
-      const bgColor = v.overallScore >= 80 ? '#d1fae5' : v.overallScore >= 60 ? '#fef3c7' : '#fee2e2';
-      const borderColor = v.overallScore >= 80 ? '#6ee7b7' : v.overallScore >= 60 ? '#fcd34d' : '#fca5a5';
+      const bgColor = v.overallScore >= 80 ? 'var(--dt-success-light)' : v.overallScore >= 60 ? 'var(--dt-warning-light)' : 'var(--dt-danger-light)';
+      const borderColor = v.overallScore >= 80 ? 'var(--dt-success)' : v.overallScore >= 60 ? 'var(--dt-warning)' : 'var(--dt-danger)';
       
       html += '<div style="margin-top: 16px; padding: 14px; background: ' + bgColor + '; border-radius: 10px; border: 1px solid ' + borderColor + ';">';
       
@@ -3120,7 +3120,7 @@
         html += '<div style="margin-bottom: 10px;">' +
           '<div style="font-size: 11px; font-weight: 600; color: var(--dt-danger); margin-bottom: 6px;"><span class="ico" data-icon="x"></span> 제거된 류 (' + v.invalidClasses.length + '개)</div>';
         v.invalidClasses.forEach(c => {
-          html += '<div style="font-size: 11px; color: #7f1d1d; padding: 6px 10px; background: #FEECEC; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--dt-danger);">' +
+          html += '<div style="font-size: 11px; color: var(--dt-danger); padding: 6px 10px; background: var(--dt-danger-light); border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--dt-danger);">' +
             '<strong>제' + c.class + '류</strong>: ' + TM.escapeHtml(c.reason) +
           '</div>';
         });
@@ -3134,8 +3134,8 @@
         v.invalidGoods.forEach(g => {
           const errorLabel = g.errorType === 'homonym' ? '🔤 동음이의어' : 
                             g.errorType === 'partial_match' ? '<span class="ico" data-icon="edit"></span> 부분매칭 오류' : '⚠️ 관련성 부족';
-          html += '<div style="font-size: 11px; color: #7f1d1d; padding: 6px 10px; background: #FEECEC; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #f87171;">' +
-            '<span style="background: #FEECEC; padding: 1px 6px; border-radius: 4px; margin-right: 6px; font-size: 10px;">' + errorLabel + '</span>' +
+          html += '<div style="font-size: 11px; color: var(--dt-danger); padding: 6px 10px; background: var(--dt-danger-light); border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--dt-danger);">' +
+            '<span style="background: var(--dt-danger-light); padding: 1px 6px; border-radius: 4px; margin-right: 6px; font-size: 10px;">' + errorLabel + '</span>' +
             '<strong>제' + g.classCode + '류</strong> "' + TM.escapeHtml(g.goodsName) + '": ' + TM.escapeHtml(g.reason) +
           '</div>';
         });
@@ -3145,9 +3145,9 @@
       // 대체 추천된 상품
       if (v.replacementGoods?.length > 0) {
         html += '<div style="margin-bottom: 10px;">' +
-          '<div style="font-size: 11px; font-weight: 600; color: #059669; margin-bottom: 6px;"><span class="ico" data-icon="refresh"></span> 대체 추천 (' + v.replacementGoods.length + '개)</div>';
+          '<div style="font-size: 11px; font-weight: 600; color: var(--dt-success); margin-bottom: 6px;"><span class="ico" data-icon="refresh"></span> 대체 추천 (' + v.replacementGoods.length + '개)</div>';
         v.replacementGoods.forEach(r => {
-          html += '<div style="font-size: 11px; color: #006E25; padding: 6px 10px; background: #F2FFF6; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--dt-success);">' +
+          html += '<div style="font-size: 11px; color: var(--dt-success); padding: 6px 10px; background: var(--dt-success-light); border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--dt-success);">' +
             '<strong>제' + r.classCode + '류</strong>: ' +
             '<span style="text-decoration: line-through; color: var(--dt-g400);">' + TM.escapeHtml(r.remove) + '</span> → ' +
             '<strong>' + TM.escapeHtml(r.addInstead) + '</strong>' +
@@ -3161,7 +3161,7 @@
         html += '<div style="margin-bottom: 10px;">' +
           '<div style="font-size: 11px; font-weight: 600; color: var(--dt-warning); margin-bottom: 6px;"><span class="ico" data-icon="warning"></span> 확인 필요</div>';
         v.warnings.forEach(w => {
-          html += '<div style="font-size: 11px; color: #663A00; padding: 6px 10px; background: #fffbeb; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--dt-warning);">' +
+          html += '<div style="font-size: 11px; color: var(--dt-warning); padding: 6px 10px; background: var(--dt-warning-light); border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--dt-warning);">' +
             '제' + w.class + '류: ' + TM.escapeHtml(w.message) +
           '</div>';
         });
@@ -3194,7 +3194,7 @@
             }
             
             const actionBtn = isAdded
-              ? '<span style="font-size: 10px; color: #28a745; white-space: nowrap;">✓적용됨</span>'
+              ? '<span style="font-size: 10px; color: var(--dt-success); white-space: nowrap;">✓적용됨</span>'
               : '<button class="btn btn-sm" style="padding: 3px 10px; font-size: 10px; background: var(--dt-brand); color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;" data-action="tm-add-class" data-class-code="' + s.class + '">+ 추가</button>';
             
             html += '<div style="font-size: 11px; color: var(--dt-brand-deep); padding: 8px 10px; background: var(--dt-brand-pale); border-radius: 6px; margin-bottom: 6px; border-left: 3px solid var(--dt-brand);">' +
@@ -3212,9 +3212,9 @@
       // 누락된 지정상품
       if (v.missingGoods?.length > 0) {
         html += '<div>' +
-          '<div style="font-size: 11px; font-weight: 600; color: var(--color-violet-50,#6541F2); margin-bottom: 6px;"><span class="ico" data-icon="box"></span> 추가 권장 상품</div>';
+          '<div style="font-size: 11px; font-weight: 600; color: var(--color-violet-50,var(--dt-grade-s)); margin-bottom: 6px;"><span class="ico" data-icon="box"></span> 추가 권장 상품</div>';
         v.missingGoods.forEach(g => {
-          html += '<div style="font-size: 11px; color: #5b21b6; padding: 6px 10px; background: #f5f3ff; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--color-violet-50,#6541F2);">' +
+          html += '<div style="font-size: 11px; color: var(--dt-grade-s); padding: 6px 10px; background: var(--dt-grade-s-bg); border-radius: 6px; margin-bottom: 4px; border-left: 3px solid var(--color-violet-50,var(--dt-grade-s));">' +
             '<strong>제' + g.classCode + '류</strong>: ' + TM.escapeHtml(g.goodsName) + ' - ' + TM.escapeHtml(g.reason) +
           '</div>';
         });
@@ -3388,9 +3388,9 @@
                  placeholder="지정상품명 검색 (자동완성)"
                  data-class="${classData.classCode}"
                  autocomplete="off"
-                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                 style="width: 100%; padding: 8px; border: 1px solid var(--dt-g200); border-radius: 4px; font-size: 13px;">
           <div class="tm-goods-autocomplete" id="tm-autocomplete-${classData.classCode}"
-               style="position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; display: none;"></div>
+               style="position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: white; border: 1px solid var(--dt-g200); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; display: none;"></div>
         </div>
         
         <div class="tm-goods-chips">
@@ -4255,16 +4255,16 @@
           autocomplete.innerHTML = `
             <div class="tm-goods-autocomplete-item" data-name="${TM.escapeHtml(query)}" data-gazetted="false"
                  style="padding: 8px 12px; cursor: pointer;"
-                 onmouseover="this.style.backgroundColor='#f5f5f5'" 
+                 onmouseover="this.style.backgroundColor='var(--dt-g100)'" 
                  onmouseout="this.style.backgroundColor='white'">
               <div class="goods-name" style="font-weight: 500;">"${TM.escapeHtml(query)}" 직접 입력</div>
-              <div class="goods-meta" style="font-size: 11px; color: #888;">비고시명칭 (52,000원/류 적용)</div>
+              <div class="goods-meta" style="font-size: 11px; color: var(--dt-g400);">비고시명칭 (52,000원/류 적용)</div>
             </div>
           `;
           autocomplete.style.display = 'block';
         } else {
           autocomplete.innerHTML = `
-            <div class="tm-goods-autocomplete-item" style="padding: 8px 12px; color: #8b95a1;">
+            <div class="tm-goods-autocomplete-item" style="padding: 8px 12px; color: var(--dt-g400);">
               검색 결과가 없습니다. (고시명칭 모드)
             </div>
           `;
@@ -4279,11 +4279,11 @@
              data-name-en="${TM.escapeHtml(r.goods_name_en || '')}"
              data-similar-group="${r.similar_group_code || ''}"
              data-gazetted="true"
-             style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;"
-             onmouseover="this.style.backgroundColor='#f5f5f5'" 
+             style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--dt-g100);"
+             onmouseover="this.style.backgroundColor='var(--dt-g100)'" 
              onmouseout="this.style.backgroundColor='white'">
           <div class="goods-name" style="font-weight: 500;">${TM.escapeHtml(r.goods_name)}</div>
-          <div class="goods-meta" style="font-size: 11px; color: #888;">${r.goods_name_en || ''} · ${r.similar_group_code || ''}</div>
+          <div class="goods-meta" style="font-size: 11px; color: var(--dt-g400);">${r.goods_name_en || ''} · ${r.similar_group_code || ''}</div>
         </div>
       `).join('');
       
@@ -6115,12 +6115,12 @@
     const hasCustomApiKey = apiKey && apiKey !== defaultKey;
     
     const apiKeyWarning = !hasCustomApiKey ? `
-      <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: #FEF4E6; border: 1px solid var(--dt-warning); border-radius: 10px;">
+      <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: var(--dt-warning-light); border: 1px solid var(--dt-warning); border-radius: 10px;">
         <div style="display: flex; align-items: flex-start; gap: 12px;">
           <span style="font-size: 24px;">⚠️</span>
           <div>
-            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #663A00;">KIPRIS API 키가 설정되지 않았습니다</h4>
-            <p style="margin: 0 0 10px 0; font-size: 13px; color: #a16207; line-height: 1.5;">
+            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: var(--dt-warning);">KIPRIS API 키가 설정되지 않았습니다</h4>
+            <p style="margin: 0 0 10px 0; font-size: 13px; color: var(--dt-warning); line-height: 1.5;">
               선행상표 검색을 위해 개인 API 키가 필요합니다. 기본 키는 호출 제한에 걸릴 수 있습니다.
             </p>
             <div style="display: flex; gap: 12px; align-items: center;">
@@ -6137,9 +6137,9 @@
         </div>
       </div>
     ` : `
-      <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: #D9FFE6; border: 1px solid var(--dt-success); border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+      <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: var(--dt-success-light); border: 1px solid var(--dt-success); border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
         <span><span class="ico" data-icon="check-circle"></span></span>
-        <span style="font-size: 13px; color: #006E25;">KIPRIS API 키 설정됨</span>
+        <span style="font-size: 13px; color: var(--dt-success);">KIPRIS API 키 설정됨</span>
       </div>
     `;
     
@@ -6530,12 +6530,12 @@ notes는 평가 근거를 3-4문장으로 서술.
     const hasCustomApiKey = apiKey && apiKey !== defaultKey;
     
     const apiKeyWarning = !hasCustomApiKey ? `
-      <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: #FEF4E6; border: 1px solid var(--dt-warning); border-radius: 10px;">
+      <div class="tm-api-warning" style="margin-bottom: 20px; padding: 16px; background: var(--dt-warning-light); border: 1px solid var(--dt-warning); border-radius: 10px;">
         <div style="display: flex; align-items: flex-start; gap: 12px;">
           <span style="font-size: 24px;">⚠️</span>
           <div>
-            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #663A00;">KIPRIS API 키가 설정되지 않았습니다</h4>
-            <p style="margin: 0 0 10px 0; font-size: 13px; color: #a16207; line-height: 1.5;">
+            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: var(--dt-warning);">KIPRIS API 키가 설정되지 않았습니다</h4>
+            <p style="margin: 0 0 10px 0; font-size: 13px; color: var(--dt-warning); line-height: 1.5;">
               정확한 리스크 평가를 위해 개인 API 키가 필요합니다. 기본 키는 호출 제한에 걸릴 수 있습니다.
             </p>
             <div style="display: flex; gap: 12px; align-items: center;">
@@ -6552,9 +6552,9 @@ notes는 평가 근거를 3-4문장으로 서술.
         </div>
       </div>
     ` : `
-      <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: #D9FFE6; border: 1px solid var(--dt-success); border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+      <div class="tm-api-ok" style="margin-bottom: 16px; padding: 10px 16px; background: var(--dt-success-light); border: 1px solid var(--dt-success); border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
         <span><span class="ico" data-icon="check-circle"></span></span>
-        <span style="font-size: 13px; color: #006E25;">KIPRIS API 키 설정됨</span>
+        <span style="font-size: 13px; color: var(--dt-success);">KIPRIS API 키 설정됨</span>
       </div>
     `;
     
@@ -7566,7 +7566,7 @@ ${criticalResults.slice(0, 5).map(r =>
     canvas.width = vp.width;
     canvas.height = vp.height;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = 'var(--dt-white)';
     ctx.fillRect(0, 0, vp.width, vp.height);
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
 
