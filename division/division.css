@@ -11,18 +11,18 @@
 
 /* ═══ 2. 유형 배지 ═══ */
 .division-type-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: var(--font-weight-semibold); line-height: 1.6; white-space: nowrap; }
-.division-type-badge.dtype-merge { background: #dbeafe; color: #1e40af; }
-.division-type-badge.dtype-category { background: #e0e7ff; color: #3730a3; }
-.division-type-badge.dtype-strategic { background: #fce7f3; color: #9d174d; }
+.division-type-badge.dtype-merge { background: var(--color-primary-light); color: var(--color-primary); }
+.division-type-badge.dtype-category { background: var(--color-primary-light); color: var(--color-primary); }
+.division-type-badge.dtype-strategic { background: var(--color-error-light); color: var(--color-error); }
 
 /* ═══ 3. 상태 배지 ═══ */
 .division-status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
 .division-status-badge.dstatus-created { background: var(--color-bg-secondary); color: var(--color-text-tertiary); }
-.division-status-badge.dstatus-uploaded { background: #dbeafe; color: #1e40af; }
-.division-status-badge.dstatus-parsed { background: #e0e7ff; color: #3730a3; }
-.division-status-badge.dstatus-analyzed { background: var(--color-warning-light); color: #92400e; }
-.division-status-badge.dstatus-assembled { background: #fce7f3; color: #9d174d; }
-.division-status-badge.dstatus-verified { background: #ede9fe; color: #5b21b6; }
+.division-status-badge.dstatus-uploaded { background: var(--color-primary-light); color: var(--color-primary); }
+.division-status-badge.dstatus-parsed { background: var(--color-primary-light); color: var(--color-primary); }
+.division-status-badge.dstatus-analyzed { background: var(--color-warning-light); color: var(--color-warning); }
+.division-status-badge.dstatus-assembled { background: var(--color-error-light); color: var(--color-error); }
+.division-status-badge.dstatus-verified { background: var(--color-primary-light); color: var(--color-primary); }
 .division-status-badge.dstatus-confirmed { background: var(--color-success-light); color: var(--color-success); }
 .division-status-badge.dstatus-error { background: var(--color-error-light); color: var(--color-error); }
 
@@ -31,8 +31,8 @@
 .division-step { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .division-step-dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; transition: all 0.2s; }
 .division-step.pending .division-step-dot { background: var(--color-bg-secondary); color: var(--color-text-disabled); border: 2px solid var(--color-border); }
-.division-step.active .division-step-dot { background: var(--color-primary); color: #fff; box-shadow: 0 0 0 4px var(--color-primary-light); animation: divisionPulse 2s infinite; }
-.division-step.done .division-step-dot { background: var(--color-success); color: #fff; }
+.division-step.active .division-step-dot { background: var(--color-primary); color: var(--dt-white); box-shadow: 0 0 0 4px var(--color-primary-light); animation: divisionPulse 2s infinite; }
+.division-step.done .division-step-dot { background: var(--color-success); color: var(--dt-white); }
 .division-step-label { font-size: 12px; font-weight: var(--font-weight-medium); color: var(--color-text-tertiary); }
 .division-step.active .division-step-label { color: var(--color-primary); font-weight: var(--font-weight-semibold); }
 .division-step.done .division-step-label { color: var(--color-success); }
@@ -46,11 +46,11 @@
 .division-detail { display: flex; gap: 24px; align-items: stretch; height: calc(100vh - 260px); min-height: 400px; }
 .division-detail-left { flex: 0 0 55%; width: 55%; min-width: 320px; overflow-y: auto; overflow-x: hidden; padding-right: 8px; }
 .division-detail-left::-webkit-scrollbar { width: 5px; }
-.division-detail-left::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.division-detail-left::-webkit-scrollbar-thumb { background: var(--dt-g200); border-radius: 3px; }
 .division-detail-left::-webkit-scrollbar-track { background: transparent; }
 .division-detail-right { flex: 1; min-width: 0; overflow-y: auto; padding-right: 4px; }
 .division-detail-right::-webkit-scrollbar { width: 4px; }
-.division-detail-right::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.division-detail-right::-webkit-scrollbar-thumb { background: var(--dt-g200); border-radius: 3px; }
 .division-detail-right::-webkit-scrollbar-track { background: transparent; }
 .division-detail-left > *, .division-detail-right > * { margin-bottom: 12px; }
 .division-detail-left > *:last-child, .division-detail-right > *:last-child { margin-bottom: 0; }
@@ -63,7 +63,7 @@
 .division-file-status.uploaded { color: var(--color-success); font-size: 12px; }
 
 /* 업로드 완료 행 */
-.division-file-row-uploaded { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-sm); margin-bottom: 8px; font-size: 13px; }
+.division-file-row-uploaded { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--color-success-light); border: 1px solid var(--color-success); border-radius: var(--radius-sm); margin-bottom: 8px; font-size: 13px; }
 .division-file-row-uploaded .division-file-info { flex: 1; min-width: 0; }
 .division-file-row-uploaded .division-file-name { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .division-file-row-uploaded .division-file-check { color: var(--color-success); font-size: 14px; flex-shrink: 0; }
@@ -78,7 +78,7 @@
 /* 통합 드롭존 (여러 파일 한번에) */
 .division-bulk-drop { border: 2px dashed var(--color-border); border-radius: var(--radius-md); cursor: pointer; background: var(--color-bg-tertiary); transition: all 0.2s; }
 .division-bulk-drop:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
-.division-bulk-drop.dragover { border-color: var(--color-primary); background: #dbeafe; box-shadow: 0 0 0 4px rgba(49,130,246,0.15); transform: scale(1.01); }
+.division-bulk-drop.dragover { border-color: var(--color-primary); background: var(--color-primary-light); box-shadow: 0 0 0 4px rgba(49,130,246,0.15); transform: scale(1.01); }
 .division-bulk-drop-inner { padding: 32px 20px; text-align: center; pointer-events: none; }
 .division-bulk-drop-inner label { pointer-events: auto; }
 
@@ -87,10 +87,10 @@
 
 /* 입력 모드 토글 */
 .division-mode-toggle { display: flex; gap: 0; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 12px; }
-.division-mode-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 12px; border: none; background: #fff; font-size: 12px; font-weight: var(--font-weight-medium); font-family: var(--font-family); color: var(--color-text-tertiary); cursor: pointer; transition: all 0.15s; }
+.division-mode-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 12px; border: none; background: var(--dt-white); font-size: 12px; font-weight: var(--font-weight-medium); font-family: var(--font-family); color: var(--color-text-tertiary); cursor: pointer; transition: all 0.15s; }
 .division-mode-btn:first-child { border-right: 1px solid var(--color-border); }
 .division-mode-btn:hover { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
-.division-mode-btn.active { background: var(--color-primary); color: #fff; font-weight: var(--font-weight-semibold); }
+.division-mode-btn.active { background: var(--color-primary); color: var(--dt-white); font-weight: var(--font-weight-semibold); }
 
 /* ═══ 7. 정보 박스 ═══ */
 .division-info-box { padding: 14px 16px; background: var(--color-bg-tertiary); border-radius: var(--radius-sm); border-left: 3px solid var(--color-primary); }
@@ -101,27 +101,27 @@
 .division-matrix-table td { padding: 8px 10px; border-bottom: 1px solid var(--color-divider); vertical-align: middle; }
 .division-matrix-table tr:hover { background: var(--color-bg-tertiary); }
 .division-rej-badge { display: inline-block; padding: 1px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
-.division-rej-badge.rej-yes { background: #ffe4e6; color: #9f1239; }
-.division-rej-badge.rej-no { background: #d1fae5; color: #065f46; }
-.division-role-select { font-size: 12px; padding: 3px 6px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: #fff; font-family: inherit; cursor: pointer; }
+.division-rej-badge.rej-yes { background: var(--color-error-light); color: var(--color-error); }
+.division-rej-badge.rej-no { background: var(--color-success-light); color: var(--color-success); }
+.division-role-select { font-size: 12px; padding: 3px 6px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--dt-white); font-family: inherit; cursor: pointer; }
 .division-role-select:focus { border-color: var(--color-primary); outline: none; box-shadow: 0 0 0 2px var(--color-primary-light); }
 
 /* ═══ 9. 청구항 블록 ═══ */
 .division-claim-text { padding: 14px 16px; background: var(--color-bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--color-border); }
-.division-claim-block { padding: 14px 16px; background: #fff; border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 12px; }
+.division-claim-block { padding: 14px 16px; background: var(--dt-white); border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 12px; }
 .division-claim-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .division-claim-type-tag { font-size: 10px; padding: 1px 8px; border-radius: var(--radius-full); background: var(--color-bg-secondary); color: var(--color-text-tertiary); font-weight: 600; }
 .division-claim-body { font-size: 13px; line-height: 1.8; white-space: pre-wrap; }
 
 /* ═══ 10. 하이라이트 ═══ */
-.division-hl-added { background: #fef3c7; border-radius: 2px; padding: 0 2px; }
-.division-hl-merge { background: #dbeafe; border-radius: 2px; padding: 0 2px; font-style: italic; }
+.division-hl-added { background: var(--color-warning-light); border-radius: 2px; padding: 0 2px; }
+.division-hl-merge { background: var(--color-primary-light); border-radius: 2px; padding: 0 2px; font-style: italic; }
 
 /* ═══ 11. 미활용 구성 후보 ═══ */
 .division-component-row { padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); margin-bottom: 8px; }
 .division-component-row.risk-safe { border-left: 3px solid var(--color-success); }
-.division-component-row.risk-caution { border-left: 3px solid var(--color-warning); background: #fffbeb; }
-.division-component-row.risk-danger { border-left: 3px solid var(--color-error); background: #fff5f5; }
+.division-component-row.risk-caution { border-left: 3px solid var(--color-warning); background: var(--color-warning-light); }
+.division-component-row.risk-danger { border-left: 3px solid var(--color-error); background: var(--color-error-light); }
 
 /* 구성 선택 카드 (개선) */
 .division-component-card {
@@ -130,8 +130,8 @@
 }
 .division-component-card:hover { box-shadow: var(--shadow-sm); }
 .division-component-card.risk-safe { border-color: var(--color-success); }
-.division-component-card.risk-caution { border-color: var(--color-warning); background: #fffbeb; }
-.division-component-card.risk-danger { border-color: var(--color-error); background: #fff5f5; }
+.division-component-card.risk-caution { border-color: var(--color-warning); background: var(--color-warning-light); }
+.division-component-card.risk-danger { border-color: var(--color-error); background: var(--color-error-light); }
 .division-component-card-header {
   display: flex; align-items: flex-start; gap: 12px; cursor: pointer;
 }
@@ -159,16 +159,16 @@
   max-height: 500px; overflow-y: auto; padding: 4px 0;
 }
 .division-comp-scroll::-webkit-scrollbar { width: 5px; }
-.division-comp-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+.division-comp-scroll::-webkit-scrollbar-thumb { background: var(--dt-g200); border-radius: 3px; }
 
 /* ═══ 11-1. 등록 청구항 / 비교 뷰 ═══ */
-.division-registered-claim { padding: 14px 16px; background: #fafbfc; border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 10px; }
+.division-registered-claim { padding: 14px 16px; background: var(--dt-g50); border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 10px; }
 .division-registered-claim .claim-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; }
 .division-registered-claim .claim-header:hover { color: var(--color-primary); }
 .division-registered-claim .claim-text { font-size: 13px; line-height: 1.8; white-space: pre-wrap; max-height: 0; overflow: hidden; transition: max-height 0.3s; padding: 0; }
 .division-registered-claim.expanded .claim-text { max-height: 500px; overflow-y: auto; padding-top: 8px; }
 .division-registered-claim.expanded .claim-text::-webkit-scrollbar { width: 4px; }
-.division-registered-claim.expanded .claim-text::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+.division-registered-claim.expanded .claim-text::-webkit-scrollbar-thumb { background: var(--dt-g200); border-radius: 3px; }
 .division-registered-claim .claim-toggle { font-size: 11px; color: var(--color-primary); cursor: pointer; margin-top: 4px; display: inline-block; }
 
 /* 비교 뷰 (등록 vs 분할) */
@@ -177,53 +177,53 @@
 .division-compare-body { display: grid; grid-template-columns: 1fr 1fr; }
 .division-compare-col { padding: 14px 16px; font-size: 13px; line-height: 1.8; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
 .division-compare-col::-webkit-scrollbar { width: 4px; }
-.division-compare-col::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-.division-compare-col:first-child { background: #fafbfc; border-right: 1px solid var(--color-border); }
-.division-compare-col:last-child { background: #fff; }
+.division-compare-col::-webkit-scrollbar-thumb { background: var(--dt-g200); border-radius: 3px; }
+.division-compare-col:first-child { background: var(--dt-g50); border-right: 1px solid var(--color-border); }
+.division-compare-col:last-child { background: var(--dt-white); }
 .division-compare-col-title { font-size: 11px; font-weight: 700; padding: 6px 16px; text-transform: uppercase; letter-spacing: 0.5px; }
-.division-compare-col-title.original { background: #f1f5f9; color: #475569; border-right: 1px solid var(--color-border); }
-.division-compare-col-title.division { background: #eff6ff; color: #1e40af; }
+.division-compare-col-title.original { background: var(--dt-g100); color: var(--dt-g600); border-right: 1px solid var(--color-border); }
+.division-compare-col-title.division { background: var(--color-primary-light); color: var(--color-primary); }
 .division-compare-titles { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--color-border); }
 
 /* 비교 뷰 내 하이라이트 */
-.division-diff-added { background: #bbf7d0; border-radius: 2px; padding: 0 2px; }
-.division-diff-removed { background: #fecaca; border-radius: 2px; padding: 0 2px; text-decoration: line-through; opacity: 0.7; }
-.division-diff-changed { background: #fef3c7; border-radius: 2px; padding: 0 2px; }
+.division-diff-added { background: var(--color-success-light); border-radius: 2px; padding: 0 2px; }
+.division-diff-removed { background: var(--color-error-light); border-radius: 2px; padding: 0 2px; text-decoration: line-through; opacity: 0.7; }
+.division-diff-changed { background: var(--color-warning-light); border-radius: 2px; padding: 0 2px; }
 
 /* 청구항 미리보기 (접기/펼치기) */
-.division-claim-preview { margin-top: 8px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); font-size: 12px; line-height: 1.7; color: var(--color-text-secondary); white-space: pre-wrap; max-height: 100px; overflow: hidden; cursor: pointer; transition: max-height 0.3s; }
+.division-claim-preview { margin-top: 8px; padding: 10px 12px; background: var(--dt-g50); border: 1px solid var(--dt-g150); border-radius: var(--radius-sm); font-size: 12px; line-height: 1.7; color: var(--color-text-secondary); white-space: pre-wrap; max-height: 100px; overflow: hidden; cursor: pointer; transition: max-height 0.3s; }
 .division-claim-preview.expanded { max-height: 2000px; }
 .division-claim-preview:hover { border-color: var(--color-primary); }
 .division-claim-preview-toggle { font-size: 11px; color: var(--color-primary); cursor: pointer; margin-top: 4px; display: inline-block; }
 .division-claim-preview-toggle:hover { text-decoration: underline; }
 
 /* 청구항 미리보기 (스크롤 가능 — 테마 카드 내부) */
-.division-claim-preview-scroll { margin-top: 8px; padding: 10px 12px; background: #f0f7ff; border: 1px solid #bfdbfe; border-radius: var(--radius-sm); max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
+.division-claim-preview-scroll { margin-top: 8px; padding: 10px 12px; background: var(--color-primary-light); border: 1px solid var(--dt-brand-mid); border-radius: var(--radius-sm); max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
 .division-claim-preview-scroll::-webkit-scrollbar { width: 4px; }
-.division-claim-preview-scroll::-webkit-scrollbar-thumb { background: #93c5fd; border-radius: 3px; }
+.division-claim-preview-scroll::-webkit-scrollbar-thumb { background: var(--dt-brand-mid); border-radius: 3px; }
 
 /* 테마 카드 (전략적 분할) */
-.division-theme-card { padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 12px; background: #fff; }
+.division-theme-card { padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 12px; background: var(--dt-white); }
 .division-theme-card.risk-safe { border-left: 4px solid var(--color-success); }
-.division-theme-card.risk-caution { border-left: 4px solid var(--color-warning); background: #fffdf7; }
-.division-theme-card.risk-danger { border-left: 4px solid var(--color-error); background: #fffafa; }
+.division-theme-card.risk-caution { border-left: 4px solid var(--color-warning); background: var(--color-warning-light); }
+.division-theme-card.risk-danger { border-left: 4px solid var(--color-error); background: var(--color-error-light); }
 
 /* Diff 비교 토글 (등록 vs 제안) */
 .division-diff-details { margin-top: 8px; }
 .division-diff-details summary { list-style: none; }
 .division-diff-details summary::-webkit-details-marker { display: none; }
-.division-diff-box { margin-top: 6px; padding: 10px 12px; background: #fefefe; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); max-height: 200px; overflow-y: auto; }
+.division-diff-box { margin-top: 6px; padding: 10px 12px; background: var(--dt-white); border: 1px solid var(--dt-g150); border-radius: var(--radius-sm); max-height: 200px; overflow-y: auto; }
 .division-diff-box::-webkit-scrollbar { width: 4px; }
-.division-diff-box::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+.division-diff-box::-webkit-scrollbar-thumb { background: var(--dt-g200); border-radius: 3px; }
 
 /* 핵심 구성 태그 */
-.division-element-tag { display: inline-block; padding: 1px 6px; margin: 1px 2px; border-radius: var(--radius-full); font-size: 10px; font-weight: 600; background: #e0e7ff; color: #3730a3; }
+.division-element-tag { display: inline-block; padding: 1px 6px; margin: 1px 2px; border-radius: var(--radius-full); font-size: 10px; font-weight: 600; background: var(--color-primary-light); color: var(--color-primary); }
 
 /* 상태 뱃지 (삭제/유지/정정) */
 .division-amd-badge { display: inline-block; padding: 1px 6px; border-radius: var(--radius-full); font-size: 10px; font-weight: 600; }
-.division-amd-badge.amd-amended { background: #fef3c7; color: #92400e; }
-.division-amd-badge.amd-deleted { background: #ffe4e6; color: #9f1239; }
-.division-amd-badge.amd-maintained { background: #d1fae5; color: #065f46; }
+.division-amd-badge.amd-amended { background: var(--color-warning-light); color: var(--color-warning); }
+.division-amd-badge.amd-deleted { background: var(--color-error-light); color: var(--color-error); }
+.division-amd-badge.amd-maintained { background: var(--color-success-light); color: var(--color-success); }
 
 /* ═══ 12. 구성 요약 그리드 ═══ */
 .division-summary-grid { display: flex; gap: 12px; }
@@ -239,18 +239,18 @@
 /* ═══ 13. 검증 결과 ═══ */
 .division-val-summary { display: flex; gap: 10px; margin-bottom: 16px; }
 .division-val-stat { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: var(--font-weight-semibold); }
-.division-val-stat.pass { background: #d1fae5; color: #065f46; }
-.division-val-stat.warn { background: #fef3c7; color: #92400e; }
-.division-val-stat.fail { background: #ffe4e6; color: #9f1239; }
+.division-val-stat.pass { background: var(--color-success-light); color: var(--color-success); }
+.division-val-stat.warn { background: var(--color-warning-light); color: var(--color-warning); }
+.division-val-stat.fail { background: var(--color-error-light); color: var(--color-error); }
 .division-val-row { border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: 8px; overflow: hidden; }
 .division-val-row:hover { box-shadow: var(--shadow-sm); }
 .division-val-row-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; user-select: none; background: var(--color-bg-tertiary); }
 .division-val-row-body { padding: 12px 14px; font-size: 13px; line-height: 1.7; border-top: 1px solid var(--color-border); display: none; }
 .division-val-row.expanded .division-val-row-body { display: block; }
 .division-val-result-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-full); }
-.division-val-result-badge.vr-pass { background: #d1fae5; color: #065f46; }
-.division-val-result-badge.vr-warn { background: #fef3c7; color: #92400e; }
-.division-val-result-badge.vr-fail { background: #ffe4e6; color: #9f1239; }
+.division-val-result-badge.vr-pass { background: var(--color-success-light); color: var(--color-success); }
+.division-val-result-badge.vr-warn { background: var(--color-warning-light); color: var(--color-warning); }
+.division-val-result-badge.vr-fail { background: var(--color-error-light); color: var(--color-error); }
 .division-val-row.vr-pass { border-left: 3px solid var(--color-success); }
 .division-val-row.vr-warn { border-left: 3px solid var(--color-warning); }
 .division-val-row.vr-fail { border-left: 3px solid var(--color-error); }
@@ -258,12 +258,12 @@
 /* ═══ T16: 분석 결과 카드 — 근거·overlap·전략 표시 ═══ */
 .division-source-citation {
   margin-top: 6px; padding: 6px 10px;
-  background: #f0fdf4; border-left: 3px solid var(--color-success);
+  background: var(--color-success-light); border-left: 3px solid var(--color-success);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  font-size: 11px; color: #065f46;
+  font-size: 11px; color: var(--color-success);
 }
 .division-source-citation .citation-text {
-  margin-top: 2px; color: #047857; font-style: italic; line-height: 1.5;
+  margin-top: 2px; color: var(--color-success); font-style: italic; line-height: 1.5;
 }
 .division-overlap-warning {
   margin-top: 4px; padding: 4px 8px;
@@ -283,10 +283,10 @@
 }
 .division-autocheck-item {
   padding: 10px; margin-bottom: 8px;
-  background: #fafbfc; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--dt-g50); border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 .division-autocheck-item.severity-CRITICAL { border-left: 3px solid var(--color-error); }
-.division-autocheck-item.severity-HIGH { border-left: 3px solid #ea580c; }
+.division-autocheck-item.severity-HIGH { border-left: 3px solid var(--color-warning); }
 .division-autocheck-item.severity-MEDIUM { border-left: 3px solid var(--color-warning); }
 .division-autocheck-header {
   display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
@@ -295,14 +295,14 @@
   font-size: 12px; font-weight: var(--font-weight-bold);
 }
 .division-severity-badge.severity-CRITICAL { color: var(--color-error); }
-.division-severity-badge.severity-HIGH { color: #ea580c; }
-.division-severity-badge.severity-MEDIUM { color: #ca8a04; }
+.division-severity-badge.severity-HIGH { color: var(--color-warning); }
+.division-severity-badge.severity-MEDIUM { color: var(--color-warning); }
 .division-check-tag {
   font-size: 11px; color: var(--color-text-tertiary);
   padding: 1px 6px; background: var(--color-border); border-radius: 10px;
 }
 .division-autocheck-pass {
-  padding: 12px; background: #f0fdf4; border-radius: var(--radius-sm);
+  padding: 12px; background: var(--color-success-light); border-radius: var(--radius-sm);
   color: var(--color-success); font-size: 13px;
 }
 
@@ -313,19 +313,19 @@
 
 /* ═══ 15. 청구항 개수 선택 버튼 그룹 ═══ */
 .division-claim-count-group { display: inline-flex; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; }
-.division-count-btn { padding: 6px 14px; border: none; background: #fff; font-size: 12px; font-weight: var(--font-weight-medium); font-family: var(--font-family); color: var(--color-text-secondary); cursor: pointer; transition: all 0.15s; border-right: 1px solid var(--color-border); }
+.division-count-btn { padding: 6px 14px; border: none; background: var(--dt-white); font-size: 12px; font-weight: var(--font-weight-medium); font-family: var(--font-family); color: var(--color-text-secondary); cursor: pointer; transition: all 0.15s; border-right: 1px solid var(--color-border); }
 .division-count-btn:last-child { border-right: none; }
 .division-count-btn:hover { background: var(--color-bg-tertiary); }
-.division-count-btn.active { background: var(--color-primary); color: #fff; font-weight: var(--font-weight-semibold); }
+.division-count-btn.active { background: var(--color-primary); color: var(--dt-white); font-weight: var(--font-weight-semibold); }
 
 /* ═══ 16. 분할 유형 전환 토글 ═══ */
 .division-type-switch { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 10px 14px; background: var(--color-bg-tertiary); border-radius: var(--radius-md); margin-bottom: 12px; }
-.division-type-switch-btn { padding: 6px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: #fff; font-size: 11px; font-weight: var(--font-weight-medium); font-family: var(--font-family); color: var(--color-text-tertiary); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.division-type-switch-btn { padding: 6px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--dt-white); font-size: 11px; font-weight: var(--font-weight-medium); font-family: var(--font-family); color: var(--color-text-tertiary); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
 .division-type-switch-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); }
-.division-type-switch-btn.active { border-color: var(--color-primary); background: var(--color-primary); color: #fff; font-weight: var(--font-weight-semibold); }
+.division-type-switch-btn.active { border-color: var(--color-primary); background: var(--color-primary); color: var(--dt-white); font-weight: var(--font-weight-semibold); }
 
 /* ═══ 14-1. 명칭 변경 경고 ═══ */
-.division-title-warning { margin-top: 12px; padding: 12px 14px; background: var(--color-warning-light); border: 1px solid var(--color-warning); border-radius: var(--radius-sm); font-size: 13px; color: #92400e; line-height: 1.6; }
+.division-title-warning { margin-top: 12px; padding: 12px 14px; background: var(--color-warning-light); border: 1px solid var(--color-warning); border-radius: var(--radius-sm); font-size: 13px; color: var(--color-warning); line-height: 1.6; }
 .division-title-warning ul { margin: 4px 0 0 16px; padding: 0; }
 .division-title-warning li { margin-bottom: 2px; }
 
