@@ -20,6 +20,7 @@
 // Deno/Edge 런타임 import (배포 시 import map 또는 상대경로 번들).
 import { run as orchestrate } from '../kernel/orchestrator.js';
 import OpinionProfile from '../profiles/opinion/OpinionProfile.js';
+import { makeEngineWriter } from '../profiles/opinion/writerAdapter.js';
 import { makeRunAgent, SchemaEscalateError } from '../adapters/runAgent.js';
 import { makeHttpTransport } from '../adapters/providerTransport.js';
 import { ENV_KEYS } from '../adapters/providerCatalog.js';
@@ -78,9 +79,13 @@ export default async function handler(req: Request): Promise<Response> {
     onEvent: (ev: any) => console.log('[review-engine event]', JSON.stringify(ev)), // §15 관측
   });
 
+  // 4b) 엔진-side writer 주입(요청별 state 클로저) — 단조성 simulate 의 구조적 정합성 산출.
+  //     실(實)반영은 브라우저 Opinion.applyAmendments 가 담당(opinion.js, 사람 승인분만).
+  const profile = { ...OpinionProfile, writer: makeEngineWriter(() => state) };
+
   // 5) 오케스트레이션 + E-04 escalate 처리(kernel 불변 → 경계에서 catch)
   try {
-    const result = await orchestrate(OpinionProfile, state, { runAgent });
+    const result = await orchestrate(profile, state, { runAgent });
     // 6) await persist(result);  // ← T6 writer 연동 시 활성화 (rounds/issues/transitions append-only)
     return json({ reviewId: result.reviewId, phase: result.phase, issues: result.issues, rounds: result.rounds, transitions: result.transitions, budget: result.budget }, 200);
   } catch (e) {
