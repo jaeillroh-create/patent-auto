@@ -8,6 +8,7 @@
  */
 import { adaptSnapshot } from './adapter.js';
 import { consistencyRules } from './consistency.js';
+import { makeEngineWriter } from './writerAdapter.js';
 
 /**
  * 에이전트 구성(선언형, spec §4.2). 실제 프롬프트=T3, 실 LLM 연결=T4.
@@ -72,15 +73,13 @@ export const rippleRules = [
 export const terminationPolicy = { K: 1, maxRounds: 12, capUsd: 5, perIssueAttemptCap: 2 };
 
 /**
- * 작성모듈 반영 계약 (§2 (8), §10). 실제 연동(exportSnapshot/applyAmendments/rollback)은 T6.
- * T2에서는 계약 멤버만 존재(opinion.js 미수정). 호출 시 명시적 차단.
+ * 작성모듈 반영 계약 (§2 (8), §10) — T6 연동(SIMULATE_MODE 옵션 B).
+ *  - 엔진-side writer: 단조성 simulate 의 근사 정합성만 산출(makeEngineWriter, writerAdapter.js).
+ *    기본값은 state 미주입(중립) — edge 핸들러가 요청별 makeEngineWriter(()=>state) 로 교체 주입한다.
+ *  - 실(實)반영(사람 승인분)은 브라우저 Opinion.applyAmendments(opinion.js) 가 담당한다.
  * @type {import('../../contracts/WriterModule.js').WriterModule}
  */
-export const writer = {
-  exportSnapshot() { throw new Error('OpinionProfile.writer.exportSnapshot: not wired yet (worksheet T6)'); },
-  applyAmendments() { throw new Error('OpinionProfile.writer.applyAmendments: not wired yet (worksheet T6)'); },
-  rollback() { throw new Error('OpinionProfile.writer.rollback: not wired yet (worksheet T6)'); },
-};
+export const writer = makeEngineWriter(() => null);
 
 /** ReviewProfile 8멤버 (spec §2). */
 const OpinionProfile = {

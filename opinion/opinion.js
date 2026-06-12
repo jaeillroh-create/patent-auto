@@ -381,6 +381,98 @@ Opinion._extractClaimReferences = function(text) {
   return Object.keys(refs).map(function(s){ return parseInt(s, 10); }).sort(function(a, b){ return a - b; });
 };
 
+// ═══════════════════════════════════════════════════════════════════
+// [T6] WriterModule 연동 — 통합 리뷰 엔진(review-engine)과의 계약 2함수.
+//   기존 작성·자기검토 로직은 일절 변경하지 않는다(추가만).
+//   simulate/rollback은 opinion.js에 넣지 않는다(SIMULATE_MODE 옵션 B):
+//   단조성용 simulate는 리뷰 엔진이 ReviewState deepClone 사본에서 처리한다.
+// ═══════════════════════════════════════════════════════════════════
+
+// exportSnapshot — 원본(Opinion.state) 변형 없이 깊은 복사본 반환(I-1, 읽기전용).
+//   반환 형상은 profiles/opinion/adapter.js: adaptSnapshot 입력과 정합.
+Opinion.exportSnapshot = function() {
+  var s = Opinion.state || {};
+  var parsed = s.parsed || {};
+  var cur = s.current || null;
+  var projection = {
+    caseId: parsed.application_no || (cur && cur.application_no) || '',
+    reviewId: cur ? ('rev_' + (cur.id || parsed.application_no || 'opinion')) : undefined,
+    parsed: parsed,
+    typeResult: s.typeResult || null,
+    draftResult: s.draftResult || null,
+    refText: s.refText || '',
+    analysis: s.analysis || null,
+    validation: s.validation || null
+  };
+  // 깊은 복사로 원본과 완전 격리(I-1). structuredClone 우선, 폴백 JSON.
+  try { return structuredClone(projection); }
+  catch (e) { return JSON.parse(JSON.stringify(projection)); }
+};
+
+// applyAmendments — 사람 승인 PatchPlan만 실(實)반영(구조적) + 정합성 재검증(§7⑤).
+//   ★ I-2/E-19: accepted !== true 가 하나라도 있으면 throw(미승인 미반영).
+//   ★ 산문 청구항 텍스트는 재작성하지 않는다(op.content=보정 "방향", attorney_author 계약).
+//     승인된 방향을 amended_claims[].review_amendments[] 에 구조적으로 기록하고 정합성을 재검증한다.
+//   ★ 원자성(E-27): 작업 사본에 적용→검증→커밋(commit-at-end). 예외 시 Opinion.state 불변.
+Opinion.applyAmendments = function(acceptedPlans) {
+  if (!Array.isArray(acceptedPlans)) throw new Error('applyAmendments: plans 배열 필요');
+  acceptedPlans.forEach(function(pl) {
+    if (!pl || pl.accepted !== true) {
+      throw new Error('applyAmendments: 미승인 plan 반영 불가 (I-2/E-19) — ' + (pl && pl.id));
+    }
+  });
+
+  var s = Opinion.state || {};
+  // 작업 사본(원본 격리) — 예외 시 원본 보존.
+  var working;
+  try { working = structuredClone(s.draftResult || {}); }
+  catch (e) { working = JSON.parse(JSON.stringify(s.draftResult || {})); }
+  var amended = working.amended_claims || working.corrected_claims || (working.merged_claim ? [working.merged_claim] : []);
+  var byNo = {};
+  amended.forEach(function(ac) { if (ac && ac.claim_no != null) byNo[String(ac.claim_no)] = ac; });
+
+  // 승인 op를 대상 청구항에 구조적으로 기록(문언 날조 금지 — 대상 보정 청구항 없으면 skip).
+  var applied = [];
+  acceptedPlans.forEach(function(pl) {
+    (pl.ops || []).forEach(function(op) {
+      var no = String(op.target || '').replace(/^claim_/, '');
+      var ac = byNo[no];
+      if (!ac) return;
+      ac.review_amendments = ac.review_amendments || [];
+      ac.review_amendments.push({
+        op: op.op, direction: op.content || '',
+        reason: op.reason || (pl.addressesIssues || [])[0] || '', planId: pl.id,
+        approvedBy: (typeof App !== 'undefined' && App.currentUser && App.currentUser.email) || 'human'
+      });
+      applied.push({ planId: pl.id, claim_no: no, op: op.op });
+    });
+  });
+
+  // 정합성 재검증(§7⑤) — 기존 _validate* 재사용(동작 불변).
+  var parsed = s.parsed || {};
+  var rejectedNos = [];
+  (parsed.rejection_reasons || []).forEach(function(r) {
+    (r.claim_nos || r.target_claims || []).forEach(function(n) { rejectedNos.push(n); });
+  });
+  var finalClaims = (parsed.claims || []).map(function(c) {
+    var ac = byNo[String(c.no)];
+    return { no: c.no, text: ac ? (ac.amended || c.text) : c.text };
+  });
+  var consistency = {
+    specBasis: Opinion._validateSpecBasis(amended, s.refText || ''),
+    preservation: Opinion._validateClaimPreservation(parsed.claims || [], working, rejectedNos),
+    references: Opinion._validateClaimReferences(finalClaims)
+  };
+
+  // 커밋-앳-엔드(원자성): 검증 완료된 working 을 원본에 반영(유일 커밋 지점).
+  working.amended_claims = amended;
+  working._review_applied = applied;
+  working._review_consistency = consistency;
+  Opinion.state.draftResult = working;
+
+  return { applied: applied, consistency: consistency, count: applied.length };
+};
+
 // ═══ Init ═══
 Opinion.init = function(){
   console.log('[Opinion] init');
@@ -2691,6 +2783,10 @@ Opinion.renderDraft=function(L,R,status){
         +'</div></div>';
     }).join(''):'<p style="padding:20px;text-align:center;color:var(--color-text-tertiary)">검증 결과 없음</p>')
     +'</div>';
+
+  // ── [T6 훅] 통합 리뷰 엔진 결과 표시(window.ReviewUI). reviewState 없으면 no-op(기존 동작 불변).
+  //    승인(Human Gate) → onChange → Opinion.applyAmendments(승인분만) 연결.
+  try { if (window.ReviewUI && Opinion.state.reviewState) { var _rm=document.createElement('div'); _rm.id='opinionReviewMount'; _rm.style.marginTop='12px'; R.appendChild(_rm); window.ReviewUI.render(Opinion.state.reviewState, _rm, { actor:(App.currentUser&&App.currentUser.email)||'', onChange:function(rs){ var acc=(rs.patchPlans||[]).filter(function(pp){return pp.accepted===true;}); if(acc.length) Opinion.applyAmendments(acc); } }); } } catch(_e){}
 };
 
 // ═══ Opinion Draft (전체 컨텍스트 + 참고 양식 전달) ═══
