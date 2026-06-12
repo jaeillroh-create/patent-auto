@@ -1,0 +1,7 @@
+{
+  "name": "review-engine",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "DIDIM IP Center — Unified Review Engine (T0 scaffolding: contracts/schemas/toggle only)"
+}
