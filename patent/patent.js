@@ -7965,23 +7965,30 @@ function parseMermaidGraph(code){
     });
   });
   
-  // 연결선 추출
+  // 연결선 추출 (v15: 인라인 라벨/체인 대응 토큰 파서)
+  // 기존 정규식은 화살표 왼쪽이 \w로 끝나야 매칭되어, A["라벨"] --> B["라벨"] 처럼
+  // 노드가 인라인 라벨을 가지면 엣지를 통째로 누락했다. 또한 A --> B --> C 체인도
+  // 첫 엣지만 잡혔다. → 인라인 라벨/클래스지정을 제거한 골격에서 토큰 단위로 파싱.
   code.split('\n').forEach(line=>{
     const l=line.trim();
     if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef')||l.startsWith('subgraph'))return;
-    
-    // 연결 패턴: A --> B, A <--> B, A --- B, A -->|text| B
-    const connections=l.match(/(\w+)\s*(?:-->|<-->|---)\s*(?:\|[^|]*\|\s*)?(\w+)/g);
-    if(connections){
-      connections.forEach(conn=>{
-        const cm=conn.match(/(\w+)\s*(-->|<-->|---)\s*(?:\|([^|]*)\|\s*)?(\w+)/);
-        if(cm){
-          const[,from,arrow,edgeLabel,to]=cm;
-          if(!nodes[from])nodes[from]={id:from,label:from};
-          if(!nodes[to])nodes[to]={id:to,label:to};
-          edges.push({from,to,label:edgeLabel||'',bidirectional:arrow==='<-->'});
+    // 노드 인라인 라벨(([..]),((..)),[/../],[..],{..},(..)) 및 클래스지정(:::) 제거 → "id 화살표 id" 골격만 남김
+    const skel=l.replace(/\(\[[\s\S]*?\]\)|\(\([\s\S]*?\)\)|\[\/[\s\S]*?\/\]|\[[\s\S]*?\]|\{[\s\S]*?\}|\([\s\S]*?\)/g,' ').replace(/:::\w+/g,' ');
+    // 토큰: 화살표(<--> 우선) | 엣지라벨(|..|) | 노드ID
+    const toks=skel.match(/<-->|-->|---|\|[^|]*\||\w+/g);
+    if(!toks)return;
+    let prevId=null,arrow=null,elabel='';
+    for(const t of toks){
+      if(t==='-->'||t==='<-->'||t==='---'){arrow=t;elabel='';}
+      else if(t[0]==='|'){elabel=t.slice(1,-1).trim();}
+      else{ // 노드 ID
+        if(prevId&&arrow){
+          if(!nodes[prevId])nodes[prevId]={id:prevId,label:prevId};
+          if(!nodes[t])nodes[t]={id:t,label:t};
+          edges.push({from:prevId,to:t,label:elabel||'',bidirectional:arrow==='<-->'});
         }
-      });
+        prevId=t;arrow=null;elabel='';
+      }
     }
   });
   
@@ -8038,7 +8045,6 @@ function parseMermaidGraph(code){
   });
   
   const result={nodes:Object.values(nodes),edges:uniqueEdges};
-  console.log('Parsed Mermaid:',result);
   return result;
 }
 function layoutGraph(nodes,edges){
