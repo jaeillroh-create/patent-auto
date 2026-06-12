@@ -6523,10 +6523,12 @@ function _deduplicateSentences(text){
       }
     }
     
-    // 역순 제거 (겹치는 범위 병합)
+    // 역순 제거 (겹치는 범위만 병합)
+    // ★ 수정: 내림차순 정렬 기준 겹침은 (앞범위 시작 < 뒷범위 끝). 기존 조건은
+    //   겹치지 않는 범위도 항상 병합하여 중복 사이의 수학식·본문을 통째로 삭제했음.
     toRemove.sort((a,b)=>b.start-a.start);
     for(let i=toRemove.length-1;i>0;i--){
-      if(toRemove[i].start<toRemove[i-1].end){
+      if(toRemove[i-1].start<toRemove[i].end){
         toRemove[i-1]={start:Math.min(toRemove[i-1].start,toRemove[i].start),end:Math.max(toRemove[i-1].end,toRemove[i].end),text:toRemove[i-1].text};
         toRemove.splice(i,1);
       }
