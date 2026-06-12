@@ -89,7 +89,8 @@ export default async function handler(req: Request): Promise<Response> {
   try {
     const result = await orchestrate(profile, state, { runAgent });
     // 6) await persist(result);  // ← T6 writer 연동 시 활성화 (rounds/issues/transitions append-only)
-    return json({ reviewId: result.reviewId, phase: result.phase, issues: result.issues, rounds: result.rounds, transitions: result.transitions, budget: result.budget }, 200);
+    // patchPlans·consensus 포함(B1): Human Gate 가 승인할 보정안 + 합의 신호를 클라가 받는다.
+    return json({ reviewId: result.reviewId, phase: result.phase, issues: result.issues, patchPlans: result.patchPlans, consensus: result.consensus, rounds: result.rounds, transitions: result.transitions, budget: result.budget }, 200);
   } catch (e) {
     if (e instanceof SchemaEscalateError) {
       state.phase = PHASE.ESCALATED;

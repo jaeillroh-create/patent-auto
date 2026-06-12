@@ -473,6 +473,31 @@ Opinion.applyAmendments = function(acceptedPlans) {
   return { applied: applied, consistency: consistency, count: applied.length };
 };
 
+// runReviewEngine — [B1] 리뷰 엔진 검증 트리거(클라).
+//   토글 게이트(E-21): window.ReviewUI.isEnabled() 가 true 일 때만 동작. OFF면 무동작.
+//   흐름: exportSnapshot → runner(prod=edge invoke / test=주입) → reviewState 설정 → renderDetail.
+//   runner 는 snapshot 을 받아 { issues, patchPlans, phase, rounds, budget, consensus } 를 반환한다.
+Opinion.runReviewEngine = async function(runner) {
+  if (!(typeof window !== 'undefined' && window.ReviewUI && typeof window.ReviewUI.isEnabled === 'function' && window.ReviewUI.isEnabled())) {
+    return null; // 토글 OFF → 무동작(기존 동작 불변)
+  }
+  var run = runner || Opinion._reviewRunner || Opinion._defaultReviewRunner;
+  if (typeof run !== 'function') return null;
+  Opinion._reviewRunner = run; // recheck 재트리거용 보존
+  var snapshot = Opinion.exportSnapshot();
+  var result = await run(snapshot);
+  if (!result) return null;
+  Opinion.state.reviewState = result; // T6 훅(renderDraft) 발화 조건
+  try { if (typeof Opinion.renderDetail === 'function') Opinion.renderDetail(); } catch (_e) {} // 렌더는 best-effort(데이터 흐름 우선)
+  return result;
+};
+
+// prod 기본 runner — Supabase Edge Function(review-orchestrate) 호출. 클라는 트리거·구독만(spec §14).
+Opinion._defaultReviewRunner = async function(snapshot) {
+  var res = await App.sb.functions.invoke('review-orchestrate', { body: { snapshot: snapshot, caseId: snapshot && snapshot.caseId } });
+  return (res && res.data) || null;
+};
+
 // ═══ Init ═══
 Opinion.init = function(){
   console.log('[Opinion] init');
@@ -2786,7 +2811,7 @@ Opinion.renderDraft=function(L,R,status){
 
   // ── [T6 훅] 통합 리뷰 엔진 결과 표시(window.ReviewUI). reviewState 없으면 no-op(기존 동작 불변).
   //    승인(Human Gate) → onChange → Opinion.applyAmendments(승인분만) 연결.
-  try { if (window.ReviewUI && Opinion.state.reviewState) { var _rm=document.createElement('div'); _rm.id='opinionReviewMount'; _rm.style.marginTop='12px'; R.appendChild(_rm); window.ReviewUI.render(Opinion.state.reviewState, _rm, { actor:(App.currentUser&&App.currentUser.email)||'', onChange:function(rs){ var acc=(rs.patchPlans||[]).filter(function(pp){return pp.accepted===true;}); if(acc.length) Opinion.applyAmendments(acc); } }); } } catch(_e){}
+  try { if (window.ReviewUI && Opinion.state.reviewState) { var _rm=document.createElement('div'); _rm.id='opinionReviewMount'; _rm.style.marginTop='12px'; R.appendChild(_rm); window.ReviewUI.render(Opinion.state.reviewState, _rm, { actor:(App.currentUser&&App.currentUser.email)||'', onChange:function(rs){ var acc=(rs.patchPlans||[]).filter(function(pp){return pp.accepted===true;}); if(acc.length){ Opinion.applyAmendments(acc); if(Opinion._reviewRunner) Opinion.runReviewEngine(Opinion._reviewRunner); /* B1: 승인·반영 후 recheck 재트리거 */ } } }); } } catch(_e){}
 };
 
 // ═══ Opinion Draft (전체 컨텍스트 + 참고 양식 전달) ═══
