@@ -18,8 +18,8 @@ const API_PROVIDERS = {
     endpoint:'https://api.anthropic.com/v1/messages',
     keyPlaceholder:'sk-ant-api03-...', keyUrl:'https://console.anthropic.com/settings/keys',
     models:{
-      sonnet:{id:'claude-sonnet-4-5-20250929',label:'Sonnet 4.5',inputCost:3,outputCost:15},
-      opus:{id:'claude-opus-4-6',label:'Opus 4.6',inputCost:15,outputCost:75}
+      sonnet:{id:'claude-sonnet-4-6',label:'Sonnet 4.6',inputCost:3,outputCost:15},
+      opus:{id:'claude-opus-4-8',label:'Opus 4.8',inputCost:5,outputCost:25}
     }, defaultModel:'opus', cheapModel:'sonnet'
   },
   gpt: {
@@ -76,6 +76,59 @@ function updateProviderLabel(){
   const el=document.getElementById('providerLabel');
   if(el)el.textContent=getProvider().short;
 }
+
+// ═══ Claude 최신 모델 자동 감지 (Anthropic Models API) ═══
+// GET /v1/models 로 사용 가능한 모델 목록을 받아, 가장 최신 Opus/Sonnet을
+// 자동으로 골라 적용한다. → 새 버전(4.9, 5 등)이 출시되면 코드 수정 없이 자동 선택.
+// 네트워크/CORS 실패 시 위의 하드코딩 기본값(폴백)을 그대로 사용한다.
+const CLAUDE_MODELS_CACHE_KEY='patent_claude_models_v1';
+const CLAUDE_MODELS_TTL=12*60*60*1000; // 12시간
+
+// opus/sonnet: {id,label} 형태. 비용(inputCost/outputCost)은 기존 값 유지.
+function _applyClaudeModels(opus,sonnet){
+  const m=API_PROVIDERS.claude.models;
+  if(opus&&opus.id){m.opus.id=opus.id;if(opus.label)m.opus.label=opus.label;}
+  if(sonnet&&sonnet.id){m.sonnet.id=sonnet.id;if(sonnet.label)m.sonnet.label=sonnet.label;}
+  if(selectedProvider==='claude')updateModelToggle();
+}
+
+// 캐시된 최신 모델 정보를 즉시 적용(라벨이 깜빡이지 않도록 로드 시 1회 호출)
+function restoreCachedClaudeModels(){
+  try{
+    const c=JSON.parse(localStorage.getItem(CLAUDE_MODELS_CACHE_KEY)||'null');
+    if(c&&(c.opus||c.sonnet))_applyClaudeModels(c.opus,c.sonnet);
+  }catch(e){}
+}
+
+// Models API 호출 → 최신 Opus/Sonnet 갱신. force=true면 TTL 무시하고 즉시 갱신.
+async function refreshClaudeModels(force){
+  const key=apiKeys.claude;if(!key)return;
+  try{
+    const c=JSON.parse(localStorage.getItem(CLAUDE_MODELS_CACHE_KEY)||'null');
+    if(!force&&c&&c.ts&&(Date.now()-c.ts)<CLAUDE_MODELS_TTL)return; // 캐시 신선
+  }catch(e){}
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/models?limit=100',{
+      headers:{'x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}
+    });
+    if(!res.ok)return;
+    const data=await res.json(),list=(data&&data.data)||[];
+    // 접두사로 후보를 거른 뒤 created_at 최신순으로 1위 선택
+    const pickLatest=(prefix)=>{
+      const cands=list.filter(x=>x&&typeof x.id==='string'&&x.id.indexOf(prefix)===0);
+      if(!cands.length)return null;
+      cands.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+      return {id:cands[0].id,label:(cands[0].display_name||cands[0].id).replace(/^Claude\s+/,'')};
+    };
+    const opus=pickLatest('claude-opus-'),sonnet=pickLatest('claude-sonnet-');
+    if(!opus&&!sonnet)return;
+    _applyClaudeModels(opus,sonnet);
+    try{localStorage.setItem(CLAUDE_MODELS_CACHE_KEY,JSON.stringify({ts:Date.now(),opus,sonnet}));}catch(e){}
+  }catch(e){/* CORS/네트워크 실패 → 하드코딩 폴백 유지 */}
+}
+
+// 로드 시 캐시 즉시 적용
+restoreCachedClaudeModels();
 
 // ═══ Provider-agnostic API request/response ═══
 function buildAPIRequest(prov,modelKey,sys,user,maxTok){
@@ -135,6 +188,7 @@ async function onAuthSuccess(user){
     selectedModel=API_PROVIDERS[selectedProvider].defaultModel;API_KEY=apiKeys[selectedProvider]||'';
     if(!API_KEY){try{API_KEY=localStorage.getItem('patent_api_key')||'';}catch(e){}}
   }
+  refreshClaudeModels(); // 최신 Claude 모델 자동 감지(비차단)
   if(typeof clearAllState==='function')clearAllState();showScreen('dashboard');
 }
 async function handleTosAccept(){if(!document.getElementById('tosCheck1').checked||!document.getElementById('tosCheck2').checked){showToast('모든 항목에 동의해 주세요','error');return;}await sb.from('profiles').update({tos_accepted:true,tos_accepted_at:new Date().toISOString()}).eq('id',currentUser.id);currentProfile.tos_accepted=true;if(currentProfile.status==='pending')showScreen('pending');else await onAuthSuccess(currentUser);}
@@ -194,6 +248,7 @@ async function saveProfileSettings(){
   try{Object.entries(apiKeys).forEach(([p,k])=>{if(k)localStorage.setItem('patent_api_key_'+p,k);});localStorage.setItem('patent_api_provider',selectedProvider);}catch(e){}
   if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
   closeProfileSettings();updateModelToggle();updateProviderLabel();
+  refreshClaudeModels(true); // 새 키로 최신 모델 즉시 갱신
   showToast(API_PROVIDERS[selectedProvider].short+' 적용됨 · '+getModelConfig().label);
 }
 
@@ -281,7 +336,7 @@ Object.assign(App, {
   sb, SUPABASE_URL, SUPABASE_ANON_KEY, API_PROVIDERS, SYSTEM_PROMPT,
   apiKeys,
   getProvider, getModelConfig, getModel, selectModel, selectProvider,
-  updateModelToggle, updateProviderLabel, buildAPIRequest, parseAPIResponse,
+  updateModelToggle, updateProviderLabel, refreshClaudeModels, buildAPIRequest, parseAPIResponse,
   escapeHtml, showToast, showProgress, clearProgress, setButtonLoading,
   showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation,
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
