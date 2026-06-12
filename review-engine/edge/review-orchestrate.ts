@@ -21,6 +21,7 @@
 import { run as orchestrate } from '../kernel/orchestrator.js';
 import OpinionProfile from '../profiles/opinion/OpinionProfile.js';
 import { makeEngineWriter } from '../profiles/opinion/writerAdapter.js';
+import { OPINION_AGENTS } from '../profiles/opinion/agents/index.js';
 import { makeRunAgent, SchemaEscalateError } from '../adapters/runAgent.js';
 import { makeHttpTransport } from '../adapters/providerTransport.js';
 import { ENV_KEYS } from '../adapters/providerCatalog.js';
@@ -76,6 +77,7 @@ export default async function handler(req: Request): Promise<Response> {
   const runAgent = makeRunAgent({
     transport,
     loadPrompt,
+    agents: OPINION_AGENTS, // I-6: 모듈 agents 명시 주입(어댑터에 opinion 기본값 없음)
     onEvent: (ev: any) => console.log('[review-engine event]', JSON.stringify(ev)), // §15 관측
   });
 

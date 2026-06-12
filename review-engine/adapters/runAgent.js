@@ -18,7 +18,7 @@
 import { SCHEMAS } from '../contracts/schemas/index.js';
 import { validate } from './schemaValidate.js';
 import { costOf } from './providerCatalog.js';
-import { OPINION_AGENTS } from '../profiles/opinion/agents/index.js';
+// T7 Core 추출: 모듈 불문 어댑터 — opinion 기본값 제거. agents 는 호출측(모듈)이 주입한다.
 
 /** E-04: 스키마 위반(1회 재시도 후)으로 라운드를 ESCALATE 시키는 신호. */
 export class SchemaEscalateError extends Error {
@@ -155,7 +155,9 @@ function selectAgents(agents, mode, opts) {
 export function makeRunAgent(deps) {
   if (!deps || typeof deps.transport !== 'function') throw new Error('makeRunAgent: deps.transport (function) required');
   if (typeof deps.loadPrompt !== 'function') throw new Error('makeRunAgent: deps.loadPrompt (function) required');
-  const agents = deps.agents || OPINION_AGENTS;
+  // I-6: 모듈 불문. agents 는 호출측(profile/module)이 주입한다(opinion 기본값 없음).
+  const agents = deps.agents;
+  if (!Array.isArray(agents) || agents.length === 0) throw new Error('makeRunAgent: deps.agents (비어있지 않은 배열) 필수 — 모듈 agents 주입');
   const opts = { includeExpertInDiscover: !!deps.includeExpertInDiscover };
 
   return async function runAgent({ mode, state, issue }) {

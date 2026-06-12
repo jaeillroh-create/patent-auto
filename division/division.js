@@ -177,6 +177,81 @@ Division.state = {
   _runningProjectId: null  // AI 호출 중인 프로젝트 ID (레이스 컨디션 방지)
 };
 
+// ═══════════════════════════════════════════════════════════════════
+// [T7] WriterModule 연동 — 통합 리뷰 엔진(review-engine)과의 계약 2함수 (opinion T6와 동형).
+//   기존 작성·검증 로직은 일절 변경하지 않는다(추가만). simulate/rollback은 division.js에 안 넣음(옵션 B).
+// ═══════════════════════════════════════════════════════════════════
+
+// exportSnapshot — 원본(Division.state) 변형 없이 깊은 복사본 반환(I-1, 읽기전용).
+//   반환 형상은 profiles/division/adapter.js: adaptSnapshot 입력과 정합.
+Division.exportSnapshot = function() {
+  var s = Division.state || {};
+  var cur = s.current || {};
+  var projection = {
+    caseId: cur.application_number || cur.reference_number || '',
+    reviewId: cur.id ? ('rev_div_' + cur.id) : undefined,
+    divisionType: cur.division_type || null,
+    originalClaims: s.claims || [],
+    unusedComponents: s.unusedComponents || [],
+    divisionClaims: s.divisionClaims || [],
+    specParagraphs: s.specParagraphs || [],
+    selfReview: s.validationResults || null
+  };
+  try { return structuredClone(projection); }
+  catch (e) { return JSON.parse(JSON.stringify(projection)); }
+};
+
+// applyAmendments — 사람 승인 PatchPlan만 실(實)반영(구조적) + 정합성 재검증(§47/이중특허).
+//   ★ I-2/E-19: accepted !== true 가 하나라도 있으면 throw(미승인 미반영).
+//   ★ 산문 청구항 텍스트는 재작성하지 않는다(op.content=보정 "방향"). 승인 방향을 구조적으로 기록.
+//   ★ 원자성(E-27): 작업 사본에 적용→재검증→커밋(commit-at-end). 예외 시 Division.state 불변.
+//   ★ 재검증은 기존 Division.runAutoVerify(Pass 1 코드검증) 재사용(동작 불변).
+Division.applyAmendments = function(acceptedPlans) {
+  if (!Array.isArray(acceptedPlans)) throw new Error('applyAmendments: plans 배열 필요');
+  acceptedPlans.forEach(function(pl) {
+    if (!pl || pl.accepted !== true) {
+      throw new Error('applyAmendments: 미승인 plan 반영 불가 (I-2/E-19) — ' + (pl && pl.id));
+    }
+  });
+
+  var s = Division.state || {};
+  var working;
+  try { working = structuredClone(s.divisionClaims || []); }
+  catch (e) { working = JSON.parse(JSON.stringify(s.divisionClaims || [])); }
+  var byNo = {};
+  working.forEach(function(dc) { if (dc && dc.claim_number != null) byNo[String(dc.claim_number)] = dc; });
+
+  var applied = [];
+  acceptedPlans.forEach(function(pl) {
+    (pl.ops || []).forEach(function(op) {
+      var no = String(op.target || '').replace(/^claim_/, '');
+      var dc = byNo[no];
+      if (!dc) return;
+      dc.review_amendments = dc.review_amendments || [];
+      dc.review_amendments.push({
+        op: op.op, direction: op.content || '',
+        reason: op.reason || (pl.addressesIssues || [])[0] || '', planId: pl.id,
+        approvedBy: (typeof App !== 'undefined' && App.currentUser && App.currentUser.email) || 'human'
+      });
+      applied.push({ planId: pl.id, claim_number: no, op: op.op });
+    });
+  });
+
+  // 정합성 재검증(§47/이중특허/basis) — 기존 runAutoVerify 재사용.
+  var cur = s.current || {};
+  var basisClaim = (s.claims || []).filter(function(c) { return c.division_role === 'basis'; })[0] || null;
+  var specText = (s.specParagraphs || []).map(function(p) { return p.content || ''; }).join('\n');
+  var autoIssues = [];
+  try { autoIssues = Division.runAutoVerify(working, basisClaim, s.claims || [], specText, cur.division_type) || []; } catch (e) {}
+
+  // 커밋-앳-엔드(원자성).
+  Division.state.divisionClaims = working;
+  Division.state._review_applied = applied;
+  Division.state._review_auto_issues = autoIssues;
+
+  return { applied: applied, autoIssues: autoIssues, count: applied.length };
+};
+
 // ═══ Init ═══
 Division.init = function(){
   Division._log('[Division] init');
