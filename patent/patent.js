@@ -389,10 +389,10 @@ async function openProvisionalViewer(pid){
   document.getElementById('provisionalViewerMeta').textContent=`생성: ${new Date(data.created_at).toLocaleDateString('ko-KR')} · 발명 내용: ${(data.invention_content||'').length.toLocaleString()}자`;
   const content=[
     `【발명의 명칭】\n${titleLine}`,
-    `【기술분야】\n${pd.techField||''}`,
-    `【해결하고자 하는 과제】\n${pd.problem||''}`,
-    `【과제의 해결 수단】\n${pd.solution||''}`,
-    `【발명의 효과】\n${pd.effect||''}`,
+    `【기술분야】\n${_stripDupHeader(pd.techField||'','기술분야')}`,
+    `【해결하고자 하는 과제】\n${_stripDupHeader(pd.problem||'','해결하고자 하는 과제')}`,
+    `【과제의 해결 수단】\n${_stripDupHeader(pd.solution||'','과제의 해결 수단')}`,
+    `【발명의 효과】\n${_stripDupHeader(pd.effect||'','발명의 효과')}`,
     `【도면의 간단한 설명】\n도 1은 ${pd.title||''}의 구성을 나타내는 블록도이다.`,
     `【발명을 실시하기 위한 구체적인 내용】\n${pd.desc||''}`,
     `【청구범위】\n${pd.claim||''}`,
@@ -419,8 +419,9 @@ async function redownloadProvisionalWord(){
   ];
   const html=secs.map(s=>{
     const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;
-    if(!s.b)return hd;
-    return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
+    const body=_stripDupHeader(s.b,s.h);
+    if(!body)return hd;
+    return hd+body.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
   }).join('');
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));
@@ -4149,7 +4150,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${out
   (1) 부호 의미: 양수일 때 어느 방향으로 보정되는가
   (2) 값 범위: 예시적 범위 (예: 0.01~0.5)
   (3) 과도 누적 방지: 보정 횟수 상한, 누적 보정량 상한, 또는 점감 조건
-  (4) 초기값과 갱신 여부\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n★★★ 수학 기호 규칙 (필수) ★★★\n- 곱셈 기호는 반드시 \"×\" (U+00D7) 또는 \"·\" (가운데점, U+00B7)을 사용하라.\n- ❌ 금지: ASCII 알파벳 \"x\" 또는 \"X\"를 곱셈 기호로 사용 (변수명 x와 혼동)\n- ❌ 금지: ASCII 별표 \"*\"를 곱셈 기호로 사용 (코드 표기, 특허 명세서 부적합)\n- ✅ 올바른 예: \"a × b\", \"2 × π × r\", \"α · β\", \"3 × 10⁻⁶\"\n- ❌ 잘못된 예: \"a x b\", \"a * b\", \"2 * pi * r\", \"alpha*beta\"\n- 변수 인접 곱셈은 기호 생략 가능 (예: \"ab\", \"2πr\") — 단, 변수명이 두 글자 이상이면 \"·\" 권장\n- 나눗셈은 \"÷\" 또는 분수 표기, 부등호는 \"≤\", \"≥\", \"≠\" 사용\n- 그리스 문자는 유니코드 사용 (α, β, γ, π, σ, μ, λ — \"alpha\", \"beta\" 등 영어 표기 금지)\n- \"여기서,\" 변수 설명, \"예를 들어,\" 수치 예시에서도 동일 규칙 적용\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n⛔⛔ ANCHOR 규칙 ⛔⛔\n- ANCHOR는 반드시 마침표(다.)로 끝나는 완전한 문장의 끝부분을 사용하라.\n- ❌ 금지: 쉼표(,) 또는 접속어(~하고, ~하며)로 끝나는 절 중간을 ANCHOR로 사용\n- ❌ 금지: \"예를 들어\" 블록 내부를 ANCHOR로 사용\n- ✅ 올바른 ANCHOR 예: \"~을 산출한다.\" \"~을 포함한다.\" \"~으로 구성된다.\"\n\n⛔⛔ FORMULA 규칙 ⛔⛔\n- FORMULA에는 【수학식 N】 + 수식 + \"여기서,\" + \"예를 들어,\" 만 포함.\n- ⛔ FORMULA 안에 상세설명 원문 텍스트를 절대 포함하지 마라.\n- FORMULA는 \"예를 들어,\" 예시 문장의 마침표(다.)로 종료하라.\n- FORMULA 종료 후 추가 텍스트 금지.\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 끝부분 20자 이상, 반드시 \"다.\"로 종료)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${stripMathBlocks(getLatestDescription()||outputs.step_08||'')}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
+  (4) 초기값과 갱신 여부\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n★★★ 수학 기호 규칙 (필수) ★★★\n- 곱셈 기호는 반드시 \"×\" (U+00D7) 또는 \"·\" (가운데점, U+00B7)을 사용하라.\n- ❌ 금지: ASCII 알파벳 \"x\" 또는 \"X\"를 곱셈 기호로 사용 (변수명 x와 혼동)\n- ❌ 금지: ASCII 별표 \"*\"를 곱셈 기호로 사용 (코드 표기, 특허 명세서 부적합)\n- ✅ 올바른 예: \"a × b\", \"2 × π × r\", \"α · β\", \"3 × 10⁻⁶\"\n- ❌ 잘못된 예: \"a x b\", \"a * b\", \"2 * pi * r\", \"alpha*beta\"\n- 변수 인접 곱셈은 기호 생략 가능 (예: \"ab\", \"2πr\") — 단, 변수명이 두 글자 이상이면 \"·\" 권장\n- 나눗셈은 \"÷\" 또는 분수 표기, 부등호는 \"≤\", \"≥\", \"≠\" 사용\n- 그리스 문자는 유니코드 사용 (α, β, γ, π, σ, μ, λ — \"alpha\", \"beta\" 등 영어 표기 금지)\n- \"여기서,\" 변수 설명, \"예를 들어,\" 수치 예시에서도 동일 규칙 적용\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n⛔⛔ ANCHOR 규칙 ⛔⛔\n- ANCHOR는 반드시 마침표(다.)로 끝나는 완전한 문장의 끝부분을 사용하라.\n- ❌ 금지: 쉼표(,) 또는 접속어(~하고, ~하며)로 끝나는 절 중간을 ANCHOR로 사용\n- ❌ 금지: \"예를 들어\" 블록 내부를 ANCHOR로 사용\n- ✅ 올바른 ANCHOR 예: \"~을 산출한다.\" \"~을 포함한다.\" \"~으로 구성된다.\"\n\n⛔⛔ FORMULA 규칙 ⛔⛔\n- FORMULA에는 【수학식 N】 + 수식 + \"여기서,\" + \"예를 들어,\" 만 포함.\n- ⛔ FORMULA 안에 상세설명 원문 텍스트를 절대 포함하지 마라.\n- FORMULA는 \"예를 들어,\" 예시 문장의 마침표(다.)로 종료하라.\n- FORMULA 종료 후 추가 텍스트 금지.\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (이 수식이 산출·정의하는 값을 직접 서술하며 상세설명에 정확히 1회만 등장하는 고유 문장의 끝부분 20자 이상, 반드시 \"다.\"로 종료 — 수식과 무관한 문장·중복 문장 금지)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (각 변수는 상세설명에 이미 등장한 파라미터·구성을 구체화하는 것이어야 함 — 본문에 없는 새 개념 도입 금지, 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${stripMathBlocks(getLatestDescription()||outputs.step_08||'')}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
     // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
     case 'step_10':{
@@ -5867,8 +5868,9 @@ ${diagram}`,4096);
     ];
     const html=secs.map(s=>{
       const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;
-      if(!s.b)return hd;
-      return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
+      const body=_stripDupHeader(s.b,s.h);
+      if(!body)return hd;
+      return hd+body.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
     }).join('');
     const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));
@@ -6521,10 +6523,12 @@ function _deduplicateSentences(text){
       }
     }
     
-    // 역순 제거 (겹치는 범위 병합)
+    // 역순 제거 (겹치는 범위만 병합)
+    // ★ 수정: 내림차순 정렬 기준 겹침은 (앞범위 시작 < 뒷범위 끝). 기존 조건은
+    //   겹치지 않는 범위도 항상 병합하여 중복 사이의 수학식·본문을 통째로 삭제했음.
     toRemove.sort((a,b)=>b.start-a.start);
     for(let i=toRemove.length-1;i>0;i--){
-      if(toRemove[i].start<toRemove[i-1].end){
+      if(toRemove[i-1].start<toRemove[i].end){
         toRemove[i-1]={start:Math.min(toRemove[i-1].start,toRemove[i].start),end:Math.max(toRemove[i-1].end,toRemove[i].end),text:toRemove[i-1].text};
         toRemove.splice(i,1);
       }
@@ -13842,6 +13846,13 @@ function validateRefNumberConsistency(){
 // ═══════════ OUTPUT ═══════════
 function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;const totalSteps=conceptDiagramTypes.length>0?21:20;document.getElementById('statCompleted').textContent=`${c}/${totalSteps}`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
 function renderPreview(){const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow"><span class="ico" data-icon="chevron-down" data-size="12"></span></span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('');}
+// 출력 시 항목 헤더 중복 방지: 본문 첫 줄이 해당 항목 헤더(【h】, 공백 변형 포함)면 제거.
+// 항목명이 정확히 일치할 때만 제거하므로 청구범위의 "【청구항 1】" 등은 보존됨.
+function _stripDupHeader(body,h){
+  if(!body||!h)return body;
+  const esc=h.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/\s+/g,'\\s*');
+  return body.replace(new RegExp('^\\s*【\\s*'+esc+'\\s*】[ \\t]*\\r?\\n?'),'');
+}
 function buildSpecification(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
@@ -13865,7 +13876,7 @@ function buildSpecification(){
   let extras='';
   if(outputs.step_14)extras+='\n\n[참고: 대안 청구항]\n'+outputs.step_14;
   if(outputs.step_15)extras+='\n\n[참고: 특허성 검토]\n'+outputs.step_15;
-  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${getLatestMethodDescription()?'\n\n'+getLatestMethodDescription():''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${allClaims}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n')+extras;
+  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${_stripDupHeader(outputs.step_02||'','기술분야')}`,`【발명의 배경이 되는 기술】\n${_stripDupHeader(outputs.step_03||'','발명의 배경이 되는 기술')}`,`【선행기술문헌】\n${_stripDupHeader(outputs.step_04||'','선행기술문헌')}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${_stripDupHeader(outputs.step_05||'','해결하고자 하는 과제')}`,`【과제의 해결 수단】\n${_stripDupHeader(outputs.step_17||'','과제의 해결 수단')}`,`【발명의 효과】\n${_stripDupHeader(outputs.step_16||'','발명의 효과')}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${getLatestMethodDescription()?'\n\n'+getLatestMethodDescription():''}`,`【부호의 설명】\n${_stripDupHeader(outputs.step_18||'','부호의 설명')}`,`【청구범위】\n${allClaims}`,`【요약서】\n${_stripDupHeader(outputs.step_19||'','요약서')}`].filter(Boolean).join('\n\n')+extras;
 }
 function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
 function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
@@ -13876,7 +13887,7 @@ function downloadAsWord(){
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
   const allClaims=[outputs.step_06,outputs.step_10,outputs.step_20].filter(Boolean).join('\n\n');
   const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,getLatestMethodDescription()].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
-  const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:normal;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
+  const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:normal;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;const body=_stripDupHeader(s.b,s.h);if(!body)return hd;return hd+body.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);App.showToast('Word 다운로드 완료');
 }
