@@ -478,8 +478,8 @@ Opinion.applyAmendments = function(acceptedPlans) {
 //   흐름: exportSnapshot → runner(prod=edge invoke / test=주입) → reviewState 설정 → renderDetail.
 //   runner 는 snapshot 을 받아 { issues, patchPlans, phase, rounds, budget, consensus } 를 반환한다.
 Opinion.runReviewEngine = async function(runner) {
-  if (!(typeof window !== 'undefined' && window.ReviewUI && typeof window.ReviewUI.isEnabled === 'function' && window.ReviewUI.isEnabled())) {
-    return null; // 토글 OFF → 무동작(기존 동작 불변)
+  if (!(typeof window !== 'undefined' && window.ReviewUI && typeof window.ReviewUI.isEnabled === 'function' && window.ReviewUI.isEnabled('opinion'))) {
+    return null; // 토글 OFF(마스터 또는 opinion 모듈) → 무동작(기존 동작 불변)
   }
   var run = runner || Opinion._reviewRunner || Opinion._defaultReviewRunner;
   if (typeof run !== 'function') return null;

@@ -15,11 +15,31 @@
 import { PHASE } from './contracts/stateSchema.js';
 
 /**
- * 기능 토글 (spec §10). OFF가 기본값 — T0~P1 동안 리뷰 엔진은 비활성.
- * 가변 객체로 노출하여 런타임/테스트에서 토글 가능.
- * @type {{ reviewEngine: boolean }}
+ * 기능 토글 (spec §10) — 마스터 + 모듈별 (B2).
+ *  - `reviewEngine`(마스터): 전역 kill-switch. false면 모듈 토글과 무관하게 전부 무동작.
+ *  - `modules`: 모듈별 격리 토글. 마스터 ON 이어도 해당 모듈이 false면 그 모듈은 무동작.
+ * 미검증 모듈(division/patent: 프롬프트 본문·라이브 검증 미완)이 마스터 ON 시 동시 활성화되는 것을
+ * 구조적으로 차단한다("트리거 부재"라는 우연한 안전에 기대지 않음).
+ * 모든 토글 기본값 false. 가변 객체로 노출하여 런타임/테스트에서 토글 가능.
+ * @type {{ reviewEngine: boolean, modules: { opinion: boolean, division: boolean, patent: boolean } }}
  */
-export const FEATURE_FLAGS = { reviewEngine: false };
+export const FEATURE_FLAGS = {
+  reviewEngine: false,
+  modules: { opinion: false, division: false, patent: false },
+};
+
+/**
+ * 모듈 활성 여부 = 마스터 ON AND 해당 모듈 ON (B2).
+ *  - module 인자가 없으면 마스터만 검사(후방호환).
+ *  - ★ modules[module]은 데이터 키 조회다(문자열 분기 아님) → I-6 유지.
+ * @param {string} [module]  'opinion'|'division'|'patent'
+ * @returns {boolean}
+ */
+export function isModuleEnabled(module) {
+  if (!FEATURE_FLAGS.reviewEngine) return false;          // 마스터 OFF → 전부 무동작
+  if (module == null) return true;                         // 인자 없음 → 마스터만(후방호환)
+  return FEATURE_FLAGS.modules[module] === true;           // 데이터 키 조회(분기 아님)
+}
 
 /**
  * 토글 OFF 시 반환되는 무동작 결과.
@@ -38,12 +58,13 @@ export const FEATURE_FLAGS = { reviewEngine: false };
  * @returns {SkippedResult}  토글 OFF 시. (ON 시 throw — T0 미구현)
  */
 function run(profile, snapshot) {
-  // ── 토글 게이트 (E-21): OFF면 어떤 일도 하지 않고 즉시 반환 ──
-  if (!FEATURE_FLAGS.reviewEngine) {
+  // ── 토글 게이트 (E-21): 마스터 OFF 또는 해당 모듈 OFF면 무동작 즉시 반환 ──
+  //    profile.module 은 데이터 키 조회(문자열 분기 아님) → I-6 유지. kernel 미접촉.
+  if (!isModuleEnabled(profile && profile.module)) {
     return Object.freeze({
       skipped: true,
       phase: PHASE.IDLE,
-      reason: 'FEATURE_FLAGS.reviewEngine is OFF (T0 scaffolding)',
+      reason: `review-engine OFF (master=${FEATURE_FLAGS.reviewEngine}, module=${profile && profile.module})`,
     });
   }
 
