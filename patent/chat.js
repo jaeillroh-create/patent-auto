@@ -180,6 +180,183 @@
   }
   API.applyStepChat = applyStepChat;
 
+  // ════════════════════════════════════════════════════════════════
+  // 브라우저 통합 레이어 (DOM 필요) — 기존 단계 실행기/렌더러 재사용
+  // ★ 각 단계는 global chatHistory[sid]만 사용 → 완전 독립
+  // ════════════════════════════════════════════════════════════════
+  if (typeof document !== 'undefined') {
+    // 채팅 가능 단계 제외:
+    //  · 수학식(09): ANCHOR 삽입 특수 — 별도 재생성 버튼 사용
+    //  · 예시도(07c): 실행기가 자유지시(userCmd)를 받지 않음 → 지시 무시 방지
+    function _enabled(sid) { return classify(sid) !== 'math' && sid !== 'step_07c'; }
+
+    function _camelResultId(sid) { return 'result' + sid.charAt(0).toUpperCase() + sid.slice(1).replace('_', ''); }
+
+    // 단계별 마운트 앵커(결과 컨테이너 옆/배치 아코디언 안/도면 컨테이너 옆)
+    function _anchorFor(sid) {
+      const cls = classify(sid);
+      if (cls === 'diagram') {
+        const m = { step_07: 'diagramsStep07', step_11: 'diagramsStep11', step_07c: 'conceptDiagramsArea' };
+        return { el: document.getElementById(m[sid]), mode: 'after' };
+      }
+      if (BATCH_STEPS[sid]) return { el: document.getElementById('chatMount_' + sid), mode: 'inside' };
+      return { el: document.getElementById(_camelResultId(sid)), mode: 'after' };
+    }
+
+    function _esc(s) { return (window.App && App.escapeHtml) ? App.escapeHtml(s) : String(s || ''); }
+
+    function _hist(sid) { return (typeof chatHistory !== 'undefined' && chatHistory[sid]) ? chatHistory[sid] : []; }
+    function _push(sid, role, content) {
+      if (typeof chatHistory === 'undefined') return;
+      if (!chatHistory[sid]) chatHistory[sid] = [];
+      chatHistory[sid].push({ role: role, content: content, ts: new Date().toISOString() });
+      if (chatHistory[sid].length > HISTORY_MAX) chatHistory[sid] = chatHistory[sid].slice(-HISTORY_MAX);
+    }
+
+    function _panelHtml(sid) {
+      const ph = classify(sid) === 'search' ? '예: 다른 키워드로 재검색' : '예: 독립항을 더 넓게 / 변형 실시예 추가';
+      return '<details class="pchat-d"><summary class="pchat-sum"><span class="ico" data-icon="message-circle"></span> 이 단계 수정 요청 (AI)</summary>' +
+        '<div class="pchat-log" id="chatLog_' + sid + '"></div>' +
+        '<div class="pchat-in"><textarea id="chatInput_' + sid + '" rows="2" placeholder="' + ph + '" ' +
+        'onkeydown="if(event.ctrlKey&&event.key===\'Enter\')PatentChat.send(\'' + sid + '\')"></textarea>' +
+        '<button id="chatSend_' + sid + '" class="pchat-send" onclick="PatentChat.send(\'' + sid + '\')">전송</button></div>' +
+        '<div class="pchat-foot"><span class="pchat-hint">Ctrl+Enter 전송 · 이 단계에만 적용</span>' +
+        '<button class="pchat-reset" onclick="PatentChat.clearHistory(\'' + sid + '\')">이력 비우기</button></div></details>';
+    }
+
+    function _renderHistory(sid) {
+      const log = document.getElementById('chatLog_' + sid);
+      if (!log) return;
+      const h = _hist(sid);
+      log.innerHTML = h.map(function (t) {
+        return '<div class="pchat-msg pchat-' + (t.role === 'user' ? 'u' : 'a') + '">' + _esc(t.content) + '</div>';
+      }).join('');
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function mount(sid) {
+      if (!_enabled(sid)) return;
+      const a = _anchorFor(sid);
+      if (!a || !a.el) return;
+      let panel = document.getElementById('chatPanel_' + sid);
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'chatPanel_' + sid;
+        panel.className = 'pchat';
+        panel.innerHTML = _panelHtml(sid);
+        if (a.mode === 'inside') a.el.appendChild(panel);
+        else a.el.insertAdjacentElement('afterend', panel);
+        if (window.Icons && Icons.renderAll) Icons.renderAll(panel);
+      }
+      _renderHistory(sid);
+    }
+
+    function mountAll() {
+      Object.keys(STEP_CLASS).forEach(function (sid) {
+        if (!_enabled(sid)) return;
+        // 출력이 있어야 수정 가능(검색 단계는 예외)
+        const hasOut = typeof outputs !== 'undefined' && outputs[sid];
+        if (hasOut || classify(sid) === 'search') mount(sid);
+      });
+    }
+
+    function clearHistory(sid) {
+      if (typeof chatHistory !== 'undefined') chatHistory[sid] = [];
+      _renderHistory(sid);
+      if (typeof saveProject === 'function') saveProject(true);
+    }
+
+    // 단계 실행기 디스패치 (연쇄 재생성과 동일 — 기존 검증/렌더/도면 파이프라인 재사용)
+    async function _dispatch(sid) {
+      const runner = (typeof STEP_RUNNERS !== 'undefined' && STEP_RUNNERS[sid]) || 'runStep';
+      if (runner === 'runLongStep') await _cascadeRunLong(sid);
+      else if (runner === 'runDiagramStep') await _cascadeRunDiagram(sid);
+      else if (runner === 'runConceptDiagramStep') { if (typeof conceptDiagramTypes !== 'undefined' && conceptDiagramTypes.length) await _cascadeRunConceptDiagram(); }
+      else await _cascadeRunShort(sid);
+    }
+
+    async function send(sid) {
+      const cls = classify(sid);
+      if (!_enabled(sid)) { if (window.App) App.showToast('이 단계는 채팅 수정을 지원하지 않습니다', 'error'); return; }
+      const ta = document.getElementById('chatInput_' + sid);
+      const msg = ta ? ta.value.trim() : '';
+      if (!msg) return;
+      // 가드: 처리중 락
+      if (typeof globalProcessing !== 'undefined' && globalProcessing) { if (window.App) App.showToast('처리 중입니다. 완료 후 다시 시도하세요', 'error'); return; }
+      // 가드: 출력 존재(검색 제외)
+      if (cls !== 'search' && !(typeof outputs !== 'undefined' && outputs[sid])) { if (window.App) App.showToast('먼저 이 단계를 생성하세요', 'error'); return; }
+
+      _push(sid, 'user', msg);     // 이 단계 이력에만 기록(독립)
+      _renderHistory(sid);
+      if (ta) { ta.value = ''; ta.disabled = true; }
+      const sb = document.getElementById('chatSend_' + sid); if (sb) sb.disabled = true;
+
+      try {
+        if (typeof setGlobalProcessing === 'function') setGlobalProcessing(true);
+        if (cls === 'search') {
+          const sr = await searchPriorArt(typeof selectedTitle !== 'undefined' ? selectedTitle : '');
+          outputs.step_04 = sr ? sr.formatted : '【특허문헌】\n(재검색 결과 없음)';
+          if (typeof markOutputTimestamp === 'function') markOutputTimestamp('step_04');
+          if (typeof _cascadeRender === 'function') _cascadeRender('step_04', outputs.step_04);
+          _push(sid, 'assistant', '선행기술 재검색 완료');
+        } else {
+          // 기존 부분수정 파이프라인: userCmd 주입 → 단계 러너 실행(검증/렌더/도면/장문 자동 처리)
+          if (typeof setStepUserCommand === 'function') setStepUserCommand(sid, msg);
+          await _dispatch(sid);
+          if (typeof setStepUserCommand === 'function') setStepUserCommand(sid, ''); // 누수 방지: 다음 일반 생성에 안 섞이도록
+          _push(sid, 'assistant', '수정 반영됨');
+        }
+        // 후처리: 하류 무효화 + 완료 + 스코프 검증 + 저장
+        if (typeof invalidateDownstream === 'function') invalidateDownstream(sid);
+        if (typeof inventionScope !== 'undefined' && inventionScope && inventionScope.locked_at && typeof runScopeCheck === 'function' &&
+          ((typeof SCOPE_GUARDED_TEXT_STEPS !== 'undefined' && SCOPE_GUARDED_TEXT_STEPS.indexOf(sid) >= 0) ||
+           (typeof SCOPE_GUARDED_MERMAID_STEPS !== 'undefined' && SCOPE_GUARDED_MERMAID_STEPS.indexOf(sid) >= 0))) {
+          try { await runScopeCheck(sid); } catch (e) { /* 스코프 검증 실패는 무시 */ }
+        }
+        if (typeof onStepCompleted === 'function') onStepCompleted(sid); // mountAll 트리거(패널 복원)
+        if (typeof saveProject === 'function') saveProject(true);
+        if (window.App) App.showToast('수정 반영됨');
+      } catch (e) {
+        _push(sid, 'assistant', '오류: ' + (e && e.message ? e.message : e));
+        if (window.App) App.showToast('수정 실패: ' + (e && e.message ? e.message : e), 'error');
+      } finally {
+        if (typeof setGlobalProcessing === 'function') setGlobalProcessing(false);
+        const ta2 = document.getElementById('chatInput_' + sid); if (ta2) ta2.disabled = false;
+        const sb2 = document.getElementById('chatSend_' + sid); if (sb2) sb2.disabled = false;
+        mount(sid); _renderHistory(sid); // 재렌더로 패널이 사라졌으면 복원
+      }
+    }
+
+    // CSS 1회 주입
+    (function () {
+      if (document.getElementById('pchat-css')) return;
+      const st = document.createElement('style');
+      st.id = 'pchat-css';
+      st.textContent =
+        '.pchat{margin:8px 0}' +
+        '.pchat-d{border:1px solid var(--color-border,#e0e0e0);border-radius:8px;background:var(--color-bg-tertiary,#fafafa);padding:6px 10px}' +
+        '.pchat-sum{font-size:12px;font-weight:600;color:var(--color-text-secondary,#666);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:6px}' +
+        '.pchat-log{max-height:180px;overflow-y:auto;margin:8px 0;display:flex;flex-direction:column;gap:6px}' +
+        '.pchat-log:empty{display:none}' +
+        '.pchat-msg{font-size:12px;padding:6px 10px;border-radius:10px;max-width:90%;white-space:pre-wrap;word-break:break-word}' +
+        '.pchat-u{align-self:flex-end;background:var(--color-primary,#3b82f6);color:#fff}' +
+        '.pchat-a{align-self:flex-start;background:#eceff1;color:#333}' +
+        '.pchat-in{display:flex;gap:6px;align-items:flex-end}' +
+        '.pchat-in textarea{flex:1;font-size:12px;min-height:40px;resize:vertical;border:1px solid var(--color-border,#ddd);border-radius:6px;padding:6px;font-family:inherit}' +
+        '.pchat-send{flex-shrink:0;background:var(--color-primary,#3b82f6);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;font-family:inherit}' +
+        '.pchat-send:disabled{opacity:.5;cursor:default}' +
+        '.pchat-foot{display:flex;justify-content:space-between;align-items:center;margin-top:6px}' +
+        '.pchat-hint{font-size:10px;color:var(--color-text-tertiary,#999)}' +
+        '.pchat-reset{font-size:10px;color:var(--color-text-tertiary,#999);background:none;border:none;cursor:pointer;text-decoration:underline}';
+      document.head.appendChild(st);
+    })();
+
+    API.mount = mount;
+    API.mountAll = mountAll;
+    API.send = send;
+    API.clearHistory = clearHistory;
+  }
+
   global.PatentChat = API;
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
 })(typeof window !== 'undefined' ? window : globalThis);
