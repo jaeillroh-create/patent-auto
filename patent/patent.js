@@ -4457,7 +4457,8 @@ ${hasTask?`[과제] ${outputs.step_05}`:''}
 [독립항] ${(outputs.step_06||'').match(/【청구항 1】[\s\S]*?(?=【청구항 2】|$)/)?.[0]||''}
 [상세설명] ${(getLatestDescription()||'').slice(0,2000)}${styleRef}`;
     }
-    case 'step_17':return `과제의 해결 수단. 각 독립항 카테고리별로 요약하라.
+    case 'step_17':return `아래 [장치]/[방법] 청구항을 요약하여 【과제의 해결 수단】 항목의 본문을 작성하라. 각 독립항 카테고리별로 요약한다.
+⛔ "과제의 해결 수단"이라는 제목/머리말을 출력하지 마라. 본문 문장만 출력하라.
 
 ★ 용어 규칙: 청구항에서 사용한 구성요소 명칭, 참조번호, 기술 용어를 그대로 사용하라. 동의어로 바꾸지 마라.
 형식:
@@ -5629,7 +5630,38 @@ async function runBatch25(){
   }catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}
   finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}
 }
-async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));pushOutputHistory(steps[i],'llm','runBatchFinish');outputs[steps[i]]=r.text;markOutputTimestamp(steps[i]);renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
+// ★ Bug1 수정: "마무리 일괄생성"이 후반부 전체를 역설계 의존 순서로 생성.
+//   기존: [16,17,18,19]만 생성 → 02/03/04/05 누락 + 효과(16)가 해결수단(17)보다 먼저 생성되어 맥락 부실.
+//   수정: 해결수단(17)→과제(05)→효과(16)/배경(03)→기술분야(02)→부호(18)→요약(19) + 선행기술(04) 검색.
+//   각 단계는 _cascadeRender로 올바른 컨테이너(resultsBatch25/resultsBatchFinish)에 자동 라우팅.
+async function runBatchFinish(){
+  if(globalProcessing)return;
+  if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}
+  setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);
+  // 의존 순서: 해결수단→과제→효과→배경→기술분야→부호→요약
+  const steps=['step_17','step_05','step_16','step_03','step_02','step_18','step_19'];
+  const total=steps.length+1; // +선행기술 검색
+  try{
+    // 선행기술(04)이 비어 있으면 KIPRIS 검색으로 보충
+    if(!outputs.step_04&&selectedTitle){
+      App.showProgress('progressBatchFinish','선행기술 검색 중 (1/'+total+')',1,total);
+      try{const sr=await searchPriorArt(selectedTitle);outputs.step_04=sr?sr.formatted:'【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';pushOutputHistory('step_04','llm','runBatchFinish');markOutputTimestamp('step_04');_cascadeRender('step_04',outputs.step_04);}catch(e){console.warn('[runBatchFinish] 선행기술 검색 실패',e);}
+    }
+    for(let i=0;i<steps.length;i++){
+      const sid=steps[i];
+      App.showProgress('progressBatchFinish',`${STEP_NAMES[sid]} (${i+2}/${total})`,i+2,total);
+      const prompt=buildPrompt(sid);
+      if(!prompt)continue;
+      const r=await App.callClaude(prompt);
+      pushOutputHistory(sid,'llm','runBatchFinish');
+      outputs[sid]=r.text;markOutputTimestamp(sid);
+      _cascadeRender(sid,r.text);
+    }
+    App.clearProgress('progressBatchFinish');saveProject(true);
+    App.showToast('마무리 완료 (해결수단→과제→효과→배경→기술분야→부호→요약)');
+  }catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}
+  finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}
+}
 
 // ═══ v14: Phase 기반 배치 실행 (역설계 체인) ═══
 
@@ -5643,8 +5675,9 @@ async function runPhaseD(){
   const container=document.getElementById('resultsPhaseDChain');
   if(container)container.innerHTML='';
   
-  const steps=['step_16','step_05','step_17','step_03','step_02'];
-  const stepLabels={step_16:'D1. 효과',step_05:'D2. 과제',step_17:'D3. 해결 수단',step_03:'D4. 배경기술',step_02:'D5. 기술분야'};
+  // ★ Bug1 수정: 역설계 의존 순서 — 해결수단(17)이 과제(05)·효과(16)보다 먼저 생성돼야 맥락이 맞음
+  const steps=['step_17','step_05','step_16','step_03','step_02'];
+  const stepLabels={step_17:'D1. 해결 수단',step_05:'D2. 과제',step_16:'D3. 효과',step_03:'D4. 배경기술',step_02:'D5. 기술분야'};
   
   try{
     for(let i=0;i<steps.length;i++){
@@ -6548,30 +6581,65 @@ function insertMathBlocks(s08,s09){
       console.warn(`수학식 삽입 실패 — ANCHOR 매칭 불가: "${x.anchor.slice(0,50)}..."`);
     }
   }
-  // 폴백: 실패한 수학식을 키워드 기반으로 관련 문단 뒤에 삽입
+  // 폴백 1단계: 실패한 수학식을 키워드 기반으로 관련 문단 뒤에 삽입
+  let stillFailed=[];
   if(failed.length>0){
     for(const x of failed){
       const kws=(x.formula.match(/[가-힣]{3,}/g)||[]).filter(w=>!['수학식','여기서','예를','들어','이상','이하','경우','하한','상한','값이다','범위'].includes(w));
-      if(!kws.length)continue;
-      const paras=r.split(/\n\n+/);
       let bestIdx=-1,bestScore=0;
-      for(let pi=0;pi<paras.length;pi++){
-        if(/^【수학식/.test(paras[pi].trim()))continue;
-        let score=0;
-        for(const kw of kws)if(paras[pi].includes(kw))score++;
-        if(score>bestScore){bestScore=score;bestIdx=pi;}
+      if(kws.length){
+        const paras=r.split(/\n\n+/);
+        for(let pi=0;pi<paras.length;pi++){
+          if(/^【수학식/.test(paras[pi].trim()))continue;
+          let score=0;
+          for(const kw of kws)if(paras[pi].includes(kw))score++;
+          if(score>bestScore){bestScore=score;bestIdx=pi;}
+        }
       }
       if(bestIdx>=0&&bestScore>=2){
-        const before=paras.slice(0,bestIdx+1).join('\n\n');
-        const after=paras.slice(bestIdx+1).join('\n\n');
-        r=before+'\n\n'+x.formula+'\n\n'+after;
+        const paras=r.split(/\n\n+/);
+        r=paras.slice(0,bestIdx+1).join('\n\n')+'\n\n'+x.formula+'\n\n'+paras.slice(bestIdx+1).join('\n\n');
         successCount++;failCount--;
         console.log(`수학식 폴백 삽입: 키워드 ${bestScore}개 매칭 (문단 ${bestIdx})`);
+      }else{
+        stillFailed.push(x);
+      }
+    }
+  }
+  // ★ Bug3 수정: 폴백 2단계(보장 배치) — ANCHOR/키워드 모두 실패해도 드롭하지 않고
+  //   수식이 없는 가장 긴 문단들에 분산 삽입하여 생성된 수학식을 모두 반영한다.
+  if(stillFailed.length>0){
+    const usedIdx=new Set();
+    for(const x of stillFailed){
+      const paras=r.split(/\n\n+/);
+      let bestIdx=-1,bestLen=-1;
+      for(let pi=0;pi<paras.length;pi++){
+        const p=paras[pi].trim();
+        if(/^【수학식/.test(p))continue;        // 수식 문단 제외
+        if(p.length<40)continue;                  // 너무 짧은 문단 제외
+        if(usedIdx.has(pi))continue;              // 이미 사용한 문단 제외(분산)
+        if(p.length>bestLen){bestLen=p.length;bestIdx=pi;}
+      }
+      // 미사용 적합 문단이 없으면(전부 사용) 가장 긴 비수식 문단 재사용
+      if(bestIdx<0){
+        for(let pi=0;pi<paras.length;pi++){
+          const p=paras[pi].trim();
+          if(/^【수학식/.test(p)||p.length<40)continue;
+          if(p.length>bestLen){bestLen=p.length;bestIdx=pi;}
+        }
+      }
+      if(bestIdx>=0){
+        usedIdx.add(bestIdx);
+        r=paras.slice(0,bestIdx+1).join('\n\n')+'\n\n'+x.formula+'\n\n'+paras.slice(bestIdx+1).join('\n\n');
+        successCount++;failCount--;
+        console.log(`수학식 보장 배치: 문단 ${bestIdx}(${bestLen}자) 뒤 삽입`);
+      }else{
+        console.warn(`수학식 보장 배치 실패 — 적합 문단 없음: "${x.anchor.slice(0,30)}..."`);
       }
     }
   }
   if(failCount>0){
-    App.showToast(`수학식 삽입: ${successCount}개 성공, ${failCount}개 실패 (ANCHOR 매칭 불가)`,'warning');
+    App.showToast(`수학식 삽입: ${successCount}개 성공, ${failCount}개 미삽입(적합 위치 없음)`,'warning');
   }else if(successCount>0){
     App.showToast(`수학식 ${successCount}개 삽입 완료`);
   }
@@ -7547,9 +7615,23 @@ async function regenerateDiagramWithFeedback(sid){
   const hasLayoutErr=/배치|레이아웃|겹침|위치|overlap/i.test(errStr);
   const hasFigCountErr=/도면\s*수|불일치|count/.test(errStr);
 
+  // ★ Bug2 수정: 재생성 시 도면 수가 줄어드는 문제 — 명시적 개수/번호 지시 + 이전 설계 충분히 제공
+  let _figCountBlock='';
+  if(stepId==='step_07'){
+    const _tf=parseInt(document.getElementById('optDeviceFigures')?.value||4);
+    const _gc=Math.max(_tf-requiredFigures.length,0);
+    const _en=computeFigNums(_gc,0).device;
+    _figCountBlock=`\n═══ 도면 수 (절대 준수 — 누락/추가 금지) ═══\n- 정확히 ${_gc}개의 도면을 생성하라: ${_en.map(n=>'도 '+n).join(', ')}\n- 위 번호의 도면을 하나도 빠뜨리지 말고 모두 생성하라. ${_gc}개보다 적게 생성하지 마라.\n`;
+  }else if(stepId==='step_11'){
+    const _mc=parseInt(document.getElementById('optMethodFigures')?.value||2);
+    const _dc=diagramData.step_07?.length||0;
+    const _en=computeFigNums(_dc,_mc,conceptDiagramTypes.filter(ct=>ct.svgContent).length).method;
+    _figCountBlock=`\n═══ 도면 수 (절대 준수 — 누락/추가 금지) ═══\n- 정확히 ${_mc}개의 방법 도면을 생성하라: ${_en.map(n=>'도 '+n).join(', ')}\n- 위 번호의 도면을 하나도 빠뜨리지 말고 모두 생성하라. ${_mc}개보다 적게 생성하지 마라.\n`;
+  }
+
   // 피드백 프롬프트 생성
   const feedbackPrompt=`이전에 생성한 ${isMethod?'방법':'장치'} 도면 설계에 규칙 위반이 발견되었습니다. 아래 오류를 수정하여 다시 생성하세요.
-
+${_figCountBlock}
 ═══ 발견된 오류 ═══
 ${errors}
 ${aiReview?`\n═══ AI 연결관계 검증 결과 ═══\n${aiReview}\n`:''}
@@ -7590,10 +7672,10 @@ ${hasLayoutErr?`
 - 연결된 구성요소끼리 인접하게 배치하라
 - 데이터 흐름: 왼쪽→오른쪽 또는 위→아래 방향으로 자연스럽게 배치`:''}
 
-═══ 이전 도면 설계 (오류 포함) ═══
-${prevDesign.slice(0,2000)}
+═══ 이전 도면 설계 (오류 포함 — 도면 수는 유지하고 오류만 수정) ═══
+${prevDesign.slice(0,8000)}
 
-위 오류를 모두 수정하여 도면 설계를 다시 출력하세요.
+위 오류를 모두 수정하여 도면 설계를 다시 출력하세요. ★ 도면 개수는 위 "도면 수" 지시를 절대 준수하라.
 ${isMethod?'방법 흐름도는 시작/종료 노드를 반드시 포함!':'도 1에는 반드시 L1 장치만 포함해야 합니다!'}
 ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
 [장치 청구범위] ${(outputs.step_06||'').slice(0,2000)}`;
@@ -7606,26 +7688,32 @@ ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
     const r1=await App.callClaude(feedbackPrompt);
     let regenDesign=r1.text;
     
-    // ★ 재생성 후 도면 수 검증 + 강제 트림 ★
+    // ★ Bug2 수정: 재생성 후 도면 수 검증 — 부족 시 1회 재요청(누락 명시), 초과 시 트림 ★
     if(stepId==='step_07'){
       const totalFig=parseInt(document.getElementById('optDeviceFigures')?.value||4);
-      const _genCount=totalFig-requiredFigures.length;
-      const _figNums=computeFigNums(Math.max(_genCount,0),0);
-      const _expectedNums=_figNums.device;
-      const postIssues=validateDiagramDesignText(regenDesign,_genCount,_expectedNums);
-      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
-        regenDesign=_trimDesignTextToExpectedFigures(regenDesign,_expectedNums);
-        App.showToast(`도면 수 강제 조정: ${_genCount}개로 트림`,'warning');
+      const _genCount=Math.max(totalFig-requiredFigures.length,0);
+      const _expectedNums=computeFigNums(_genCount,0).device;
+      let _actual=_extractFigureNumbersFromDesign(regenDesign);
+      if(_actual.length<_genCount){
+        const missing=_expectedNums.filter(n=>!_actual.includes(n));
+        const reReq=`방금 생성한 도면 설계에 도면이 누락되었습니다(${_actual.length}/${_genCount}개). 반드시 ${_genCount}개 도면(${_expectedNums.map(n=>'도 '+n).join(', ')})을 모두 포함하여 전체 도면 설계를 다시 출력하세요. 누락된 ${missing.map(n=>'도 '+n).join(', ')}을 빠뜨리지 마세요.\n\n[기존 설계]\n${regenDesign.slice(0,8000)}`;
+        try{const rr=await App.callClaude(reReq);if(_extractFigureNumbersFromDesign(rr.text).length>_actual.length){regenDesign=rr.text;_actual=_extractFigureNumbersFromDesign(regenDesign);}}catch(e){console.warn('[regenDiagram] 도면 보충 재요청 실패',e);}
       }
+      const postIssues=validateDiagramDesignText(regenDesign,_genCount,_expectedNums);
+      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치')))regenDesign=_trimDesignTextToExpectedFigures(regenDesign,_expectedNums);
+      if(_extractFigureNumbersFromDesign(regenDesign).length<_genCount)App.showToast(`⚠ 도면이 ${_genCount}개보다 적게 생성됨 — 다시 시도해 주세요`,'warning');
     }else if(stepId==='step_11'){
       const _methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
       const _devCount=diagramData.step_07?.length||0;
-      const _figNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length);
-      const _expectedNums=_figNums.method;
-      const postIssues=validateDiagramDesignText(regenDesign,_methFigCount,_expectedNums);
-      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
-        regenDesign=_trimDesignTextToExpectedFigures(regenDesign,_expectedNums);
+      const _expectedNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length).method;
+      let _actual=_extractFigureNumbersFromDesign(regenDesign);
+      if(_actual.length<_methFigCount){
+        const missing=_expectedNums.filter(n=>!_actual.includes(n));
+        const reReq=`방금 생성한 방법 도면 설계에 도면이 누락되었습니다(${_actual.length}/${_methFigCount}개). 반드시 ${_methFigCount}개 도면(${_expectedNums.map(n=>'도 '+n).join(', ')})을 모두 포함하여 다시 출력하세요. 누락된 ${missing.map(n=>'도 '+n).join(', ')}을 빠뜨리지 마세요.\n\n[기존 설계]\n${regenDesign.slice(0,8000)}`;
+        try{const rr=await App.callClaude(reReq);if(_extractFigureNumbersFromDesign(rr.text).length>_actual.length){regenDesign=rr.text;_actual=_extractFigureNumbersFromDesign(regenDesign);}}catch(e){console.warn('[regenDiagram] 방법도면 보충 재요청 실패',e);}
       }
+      const postIssues=validateDiagramDesignText(regenDesign,_methFigCount,_expectedNums);
+      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치')))regenDesign=_trimDesignTextToExpectedFigures(regenDesign,_expectedNums);
     }
     
     pushOutputHistory(stepId,'llm','regenerateDiagramWithFeedback');
