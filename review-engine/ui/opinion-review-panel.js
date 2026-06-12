@@ -11,7 +11,7 @@
  */
 import { buildViewModel } from './reviewViewModel.js';
 import { approvePlan, rejectPlan, GATE_DECISION } from '../kernel/humanGate.js';
-import { FEATURE_FLAGS } from '../index.js';
+import { isModuleEnabled } from '../index.js';
 
 const STYLE_ID = 'review-panel-style';
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -159,8 +159,12 @@ export function render(state, mount, opts = {}) {
   return el;
 }
 
-/** 리뷰 엔진 토글 상태(라이브). classic 트리거(Opinion.runReviewEngine)가 게이트로 사용(E-21). */
-export function isEnabled() { return FEATURE_FLAGS.reviewEngine === true; }
+/**
+ * 리뷰 엔진 토글 상태(라이브). classic 트리거(Opinion.runReviewEngine)가 게이트로 사용(E-21).
+ *  - module 인자가 있으면 마스터 AND 해당 모듈(B2). 없으면 마스터만(후방호환).
+ * @param {string} [module]  'opinion'|'division'|'patent'
+ */
+export function isEnabled(module) { return isModuleEnabled(module); }
 
 /** classic-script SPA 브리지: window.ReviewUI 노출. */
 export const ReviewUI = { render, renderHTML, buildViewModel, GATE_DECISION, isEnabled };

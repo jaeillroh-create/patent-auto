@@ -27,12 +27,15 @@ ok(typeof r.reason === 'string' && r.reason.includes('OFF'), '토글 OFF → rea
 const r2 = engine.run(undefined, undefined);
 ok(r2 && r2.skipped === true, '토글 OFF → 입력 없이도 무동작 안전 return');
 
-// ── 2) 토글 ON → 커널 미구현 차단(가짜 통과 금지) ──
+// ── 2) 토글 ON(마스터 + 모듈) → 커널 미구현 차단(가짜 통과 금지) ──
+// B2: 마스터만으로는 부족 — 해당 모듈도 ON이어야 게이트 통과.
 FEATURE_FLAGS.reviewEngine = true;
+ok(engine.run({ module: 'opinion' }, {}).skipped === true, 'B2: 마스터 ON + 모듈 OFF → 여전히 skip(격리)');
+FEATURE_FLAGS.modules.opinion = true;
 let threw = false;
 try { engine.run({ module: 'opinion' }, {}); } catch (e) { threw = e.message.includes('kernel not implemented'); }
-ok(threw, '토글 ON → 커널 미구현 명시적 throw');
-FEATURE_FLAGS.reviewEngine = false; // 원복
+ok(threw, '토글 ON(마스터+모듈) → 커널 미구현 명시적 throw');
+FEATURE_FLAGS.reviewEngine = false; FEATURE_FLAGS.modules.opinion = false; // 원복
 
 // ── 3) ReviewProfile 8멤버 계약 선언 확인 ──
 const numbered = REVIEW_PROFILE_MEMBERS.filter((m) => m.n !== null).map((m) => m.n);
