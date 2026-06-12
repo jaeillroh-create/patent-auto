@@ -1479,6 +1479,9 @@ function renderScopeVerificationSection() {
   const summaryEl = document.getElementById('scope-verification-summary');
   const detailsEl = document.getElementById('scope-verification-details');
   if (!summaryEl || !detailsEl) return;
+  // ── [T8 훅] 통합 리뷰 엔진 결과 표시(window.ReviewUI). reviewState 없으면 no-op(기존 동작 불변).
+  //    승인(Human Gate) → onChange → Patent.applyAmendments(승인분만, 3경로 정합 재검증).
+  try { if (window.ReviewUI && window.__patentReviewState) { var _pm = document.getElementById('patent-review-mount'); if (!_pm) { _pm = document.createElement('div'); _pm.id = 'patent-review-mount'; _pm.style.marginTop = '12px'; (detailsEl.parentNode || detailsEl).appendChild(_pm); } window.ReviewUI.render(window.__patentReviewState, _pm, { actor: (App.currentUser && App.currentUser.email) || '', onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) Patent.applyAmendments(acc); } }); } } catch (_e) {}
   if (!inventionScope?.locked_at) {
     summaryEl.innerHTML = `<div class="scope-notice">발명 범위가 확정되지 않았습니다. A. 기본 탭에서 "범위 확정"을 먼저 진행하세요.</div>`;
     detailsEl.innerHTML = '';
@@ -13895,6 +13898,90 @@ function downloadAsWord(){
 
 // ★ KIPRIS 키 설정은 common.js saveProfileSettings()에서 통합 관리 (v5.4)
 
+
+// ═══════════════════════════════════════════════════════════════════
+// [T8] WriterModule 연동 — 통합 리뷰 엔진(review-engine)과의 계약 2함수 (opinion T6와 동형).
+//   기존 작성·자기검토 로직은 일절 변경하지 않는다(추가만). simulate/rollback은 patent.js에 안 넣음(옵션 B).
+//   ★ patent 특수: applyAmendments 반영 후 3경로(SVG/PPTX/Canvas) 렌더 정합 재검증(E-11) — 공유 소스인
+//     도면(mermaid) 부호 ↔ 부호의 설명(step_18) 교차 정합. 불일치 시 커밋하지 않고 롤백 + 렌더회귀 반환.
+// ═══════════════════════════════════════════════════════════════════
+window.Patent = window.Patent || {};
+
+// exportSnapshot — 원본(전역 상태) 변형 없이 깊은 복사본 반환(I-1, 읽기전용).
+//   반환 형상은 profiles/patent/adapter.js: adaptSnapshot 입력과 정합.
+Patent.exportSnapshot = function() {
+  var projection = {
+    caseId: (typeof currentProjectId !== 'undefined' && currentProjectId) || '',
+    reviewId: (typeof currentProjectId !== 'undefined' && currentProjectId) ? ('rev_pat_' + currentProjectId) : undefined,
+    outputs: (typeof outputs !== 'undefined' && outputs) || {},
+    scopeCheckResults: (typeof scopeCheckResults !== 'undefined' && scopeCheckResults) || {},
+    inventionScope: (typeof inventionScope !== 'undefined' && inventionScope) || null,
+    deviceAnchorStart: (typeof deviceAnchorStart !== 'undefined') ? deviceAnchorStart : 0,
+    methodAnchorStart: (typeof methodAnchorStart !== 'undefined') ? methodAnchorStart : 0
+  };
+  try { return structuredClone(projection); }
+  catch (e) { return JSON.parse(JSON.stringify(projection)); }
+};
+
+// _reviewRenderCheck — 3경로(SVG/PPTX/Canvas) 정합 구조검사(E-11).
+//   3경로는 공유 소스(mermaid)에서 _sharedExtractRefNum 로 파생되므로, 도면 부호 ⊆ 부호의 설명(step_18)을
+//   검사하면 3경로 정합의 구조 대리검증이 된다. 반환 {svg,pptx,canvas, missing}.
+Patent._reviewRenderCheck = function(o) {
+  o = o || ((typeof outputs !== 'undefined' && outputs) || {});
+  function refsOf(text) {
+    var set = {}; var s = String(text || ''); var m;
+    var p1 = /\((\d{2,4})\)/g, p2 = /(?:^|\n)\s*(\d{2,4})\s*[:：]/g;
+    while ((m = p1.exec(s)) !== null) set[m[1]] = true;
+    while ((m = p2.exec(s)) !== null) set[m[1]] = true;
+    return set;
+  }
+  var diagram = Object.assign({}, refsOf(o.step_07_mermaid), refsOf(o.step_11_mermaid));
+  var signs = refsOf(o.step_18);
+  var missing = Object.keys(diagram).filter(function(r){ return !signs[r]; });
+  var ok = missing.length === 0;
+  return { svg: ok, pptx: ok, canvas: ok, missing: missing };
+};
+
+// applyAmendments — 사람 승인 PatchPlan만 실(實)반영(구조적) + 3경로 렌더 정합 재검증(E-11).
+//   ★ I-2/E-19: accepted !== true 가 하나라도 있으면 throw(미승인 미반영).
+//   ★ 산문(청구항/상세설명) 텍스트는 재작성하지 않는다(op.content=보정 "방향"). 승인 방향을 구조적으로 기록.
+//   ★ E-11: 3경로 정합 불일치 시 커밋하지 않고 롤백 + 렌더회귀 issue 반환.
+//   ★ 원자성: 커밋-앳-엔드. 예외/롤백 시 전역 상태 불변.
+Patent.applyAmendments = function(acceptedPlans) {
+  if (!Array.isArray(acceptedPlans)) throw new Error('applyAmendments: plans 배열 필요');
+  acceptedPlans.forEach(function(pl) {
+    if (!pl || pl.accepted !== true) {
+      throw new Error('applyAmendments: 미승인 plan 반영 불가 (I-2/E-19) — ' + (pl && pl.id));
+    }
+  });
+
+  // 승인 방향을 구조적으로 기록(작업 로그 — 산문 미수정).
+  var log = [];
+  acceptedPlans.forEach(function(pl) {
+    (pl.ops || []).forEach(function(op) {
+      log.push({ op: op.op, target: op.target, direction: op.content || '', reason: op.reason || (pl.addressesIssues || [])[0] || '', planId: pl.id,
+        approvedBy: (typeof App !== 'undefined' && App.currentUser && App.currentUser.email) || 'human' });
+    });
+  });
+
+  // ★ E-11: 3경로 렌더 정합 재검증. 불일치 → 롤백(커밋 안 함) + 렌더회귀.
+  var rc = Patent._reviewRenderCheck();
+  if (!(rc.svg && rc.pptx && rc.canvas)) {
+    return {
+      rolledBack: true, renderCheck: { svg: rc.svg, pptx: rc.pptx, canvas: rc.canvas },
+      renderRegression: { type: '명확성', legalBasis: '§42(도면정합)', missing: rc.missing,
+        description: '반영 후 3경로 렌더 정합 위반(도면 부호 ' + rc.missing.slice(0, 5).join(', ') + ' 이 부호의 설명에 없음) — 롤백(E-11).' },
+      applied: [], count: 0
+    };
+  }
+
+  // 커밋-앳-엔드(정합 통과 시에만 반영 로그 기록 — 산문 원본 불변).
+  if (typeof outputs !== 'undefined' && outputs) {
+    outputs._review_applied = log;
+    outputs._review_render_check = rc;
+  }
+  return { applied: log, renderCheck: { svg: true, pptx: true, canvas: true }, count: log.length, rolledBack: false };
+};
 
 // ═══════════ DASHBOARD HOOK + INIT ═══════════
 App._onDashboard = function(){ loadDashboardProjects(); loadGlobalRefFromStorage(); };
