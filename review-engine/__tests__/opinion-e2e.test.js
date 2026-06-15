@@ -61,7 +61,9 @@ before(() => {
 /** ESM 파이프라인 runner — 결정적 stub LLM. (prod 의 edge invoke 자리) */
 function makeStubRunner() {
   return async (snapshot) => {
-    const state = OpinionProfile.adaptSnapshot(snapshot, null, { terminationPolicy: OpinionProfile.terminationPolicy });
+    // 엔진 다라운드 전구간 검증 — 프로덕션 임시 throttle(opinion maxRounds=1)과 분리해 full policy 주입.
+    const FULL_POLICY = { K: 1, maxRounds: 12, capUsd: 5, perIssueAttemptCap: 2 };
+    const state = OpinionProfile.adaptSnapshot(snapshot, null, { terminationPolicy: FULL_POLICY });
     const ALL_TRUE = { examiner: true, attorney: true, expert: true };
     const runAgent = async ({ mode, state: st }) => {
       if (mode === 'discover') {
@@ -72,7 +74,7 @@ function makeStubRunner() {
       }
       return { verdicts: (st.issues || []).map((i) => ({ issueId: i.id, result: 'resolved' })), consensus: ALL_TRUE, cost: 0, provider: 'stub', latencyMs: 1 };
     };
-    const profile = { ...OpinionProfile, writer: makeEngineWriter(() => state) };
+    const profile = { ...OpinionProfile, writer: makeEngineWriter(() => state), terminationPolicy: FULL_POLICY };
     const res = await orchestrate(profile, state, { runAgent });
     return { issues: res.issues, patchPlans: res.patchPlans, phase: res.phase, rounds: res.rounds, budget: res.budget, consensus: res.consensus };
   };

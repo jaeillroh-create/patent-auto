@@ -70,13 +70,15 @@ before(() => {
 function makeStubRunner(tracker) {
   return async (snapshot) => {
     if (tracker) tracker.called = true;
-    const state = OpinionProfile.adaptSnapshot(snapshot, null, { terminationPolicy: OpinionProfile.terminationPolicy });
+    // 엔진 다라운드(discover+recheck+patchPlan) 검증 — 프로덕션 임시 throttle(opinion maxRounds=1)과 분리해 full policy 주입.
+    const FULL_POLICY = { K: 1, maxRounds: 12, capUsd: 5, perIssueAttemptCap: 2 };
+    const state = OpinionProfile.adaptSnapshot(snapshot, null, { terminationPolicy: FULL_POLICY });
     const CONS = { examiner: true, attorney: true, expert: true };
     const runAgent = async ({ mode, state: st }) => {
       if (mode === 'discover') return { issues: [{ id: 'exA-1', type: '거절미해소', severity: 'high', target: ['claim_1'], raisedBy: 'examiner_A', legalBasis: '§29②', description: '인용문헌1 대비 진보성 미해소', suggestedOp: 'add_limitation', amendmentDirection: '청구항1에 【0021】 냉각 유로 한정' }], consensus: CONS, cost: 0.01, provider: 'stub', latencyMs: 1 };
       return { verdicts: (st.issues || []).map((i) => ({ issueId: i.id, result: 'resolved' })), consensus: CONS, cost: 0, provider: 'stub', latencyMs: 1 };
     };
-    const profile = { ...OpinionProfile, writer: makeEngineWriter(() => state) };
+    const profile = { ...OpinionProfile, writer: makeEngineWriter(() => state), terminationPolicy: FULL_POLICY };
     const res = await orchestrate(profile, state, { runAgent });
     return { issues: res.issues, patchPlans: res.patchPlans, phase: res.phase, rounds: res.rounds, budget: res.budget, consensus: res.consensus };
   };
