@@ -24,8 +24,8 @@ import { PHASE } from './contracts/stateSchema.js';
  * @type {{ reviewEngine: boolean, modules: { opinion: boolean, division: boolean, patent: boolean } }}
  */
 export const FEATURE_FLAGS = {
-  reviewEngine: false,
-  modules: { opinion: false, division: false, patent: false },
+  reviewEngine: true,
+  modules: { opinion: true, division: false, patent: false },
 };
 
 /**
