@@ -43,6 +43,8 @@ const API_PROVIDERS = {
 };
 let selectedProvider='claude', selectedModel='opus';
 let apiKeys={claude:'',gpt:'',gemini:''};
+// 검증 엔진 6역할 LLM 배정(L-T1) — api_key_encrypted JSON 의 roleAssignments 에 얹어 사용자별 저장(DB 마이그레이션 0).
+let roleAssignments={};
 let profileTempProvider='claude';
 let API_KEY='',currentUser=null,currentProfile=null,currentProjectId=null;
 
@@ -181,9 +183,10 @@ async function onAuthSuccess(user){
   if(!API_KEY){
     const rawKey=profile.api_key_encrypted||'';
     try{const pk=JSON.parse(rawKey);apiKeys={claude:pk.claude||'',gpt:pk.gpt||'',gemini:pk.gemini||''};if(pk.provider&&API_PROVIDERS[pk.provider])selectedProvider=pk.provider;
+      roleAssignments=(pk.roleAssignments&&typeof pk.roleAssignments==='object')?pk.roleAssignments:{}; // 역할배정 복원(L-T1)
       // KIPRIS 키를 계정별 localStorage에 캐시
       if(pk.kipris){try{localStorage.setItem('tm_kipris_api_key_'+user.id,pk.kipris);}catch(e){}}
-    }catch(e){apiKeys={claude:rawKey,gpt:'',gemini:''};}
+    }catch(e){apiKeys={claude:rawKey,gpt:'',gemini:''};roleAssignments={};}
     try{const sp=localStorage.getItem('patent_api_provider');if(sp&&API_PROVIDERS[sp])selectedProvider=sp;}catch(e){}
     selectedModel=API_PROVIDERS[selectedProvider].defaultModel;API_KEY=apiKeys[selectedProvider]||'';
     if(!API_KEY){try{API_KEY=localStorage.getItem('patent_api_key')||'';}catch(e){}}
@@ -244,12 +247,52 @@ async function saveProfileSettings(){
   // 기존 프로필의 추가 필드(kipris 등) 보존
   let existing={};
   try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
-  const data={...existing,...apiKeys,provider:selectedProvider};
+  const data={...existing,...apiKeys,provider:selectedProvider,roleAssignments}; // 역할배정 보존(L-T1, KIPRIS 등 기존 필드는 ...existing 로 유지)
   try{Object.entries(apiKeys).forEach(([p,k])=>{if(k)localStorage.setItem('patent_api_key_'+p,k);});localStorage.setItem('patent_api_provider',selectedProvider);}catch(e){}
   if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
   closeProfileSettings();updateModelToggle();updateProviderLabel();
   refreshClaudeModels(true); // 새 키로 최신 모델 즉시 갱신
   showToast(API_PROVIDERS[selectedProvider].short+' 적용됨 · '+getModelConfig().label);
+}
+
+// ═══ 검증 엔진 LLM 역할배정 데이터 계층 (L-T1) ═══════════════════════════
+//   api_key_encrypted JSON 에 roleAssignments 만 얹는다(DB 마이그레이션 0, KIPRIS/키 로직 불변).
+//   순수 함수: 인자 미지정 시 모듈 라이브 상태(apiKeys/roleAssignments)를 읽고, 인자 주면 그것으로 계산(테스트·재사용).
+const REVIEW_ROLES=['examiner_A','examiner_B','examiner_C','attorney_author','attorney_reviewer','domain_expert'];
+const REVIEW_PROVIDERS=['claude','gpt','gemini'];
+
+// 입력된(비어있지 않은) LLM provider 키만 {provider:key} 로 — Edge body(L-T3) 전송용. kipris 등은 제외.
+function getProviderKeys(keys){
+  const src=keys||apiKeys||{};const out={};
+  REVIEW_PROVIDERS.forEach(p=>{const k=((src[p]!=null?src[p]:'')+'').trim();if(k)out[p]=k;});
+  return out;
+}
+// 키가 입력된 provider 목록(개수 세기·토글용).
+function getEnteredProviders(keys){return Object.keys(getProviderKeys(keys));}
+
+// ★ 역할배정 — "1키 전역적용" 규칙 내장(UI·Edge 어디서 부르든 일관).
+//   0개 → {} (검증 불가; UI 가 차단) / 1개 → 6역할 전부 그 provider / 2개+ → 저장 배정(키 없는 provider 는 첫 입력키로 교정).
+function getRoleAssignments(keys,assignments){
+  const entered=getEnteredProviders(keys);
+  if(entered.length===0)return {};
+  const m={};
+  if(entered.length===1){const only=entered[0];REVIEW_ROLES.forEach(r=>{m[r]=only;});return m;}
+  const stored=(assignments||roleAssignments||{});
+  REVIEW_ROLES.forEach(r=>{const a=stored[r];m[r]=(a&&entered.indexOf(a)>=0)?a:entered[0];}); // 유효(키 보유)하면 사용, 아니면 첫 입력키
+  return m;
+}
+// 역할 1건 배정(메모리). roleId·provider 검증 후 반영.
+function setRoleAssignment(roleId,provider){
+  if(REVIEW_ROLES.indexOf(roleId)<0||REVIEW_PROVIDERS.indexOf(provider)<0)return false;
+  roleAssignments[roleId]=provider;return true;
+}
+// 역할배정 영속 — 기존 KIPRIS/키 JSON 보존(saveProfileSettings 와 동일 머지 패턴).
+async function saveRoleAssignments(map){
+  if(map&&typeof map==='object')Object.keys(map).forEach(r=>setRoleAssignment(r,map[r]));
+  let existing={};try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
+  const data={...existing,roleAssignments};
+  if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
+  return getRoleAssignments();
 }
 
 // ═══ Project Rename (v5.2) ═══
@@ -341,6 +384,7 @@ Object.assign(App, {
   showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation,
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
   openProfileSettings, closeProfileSettings,
+  REVIEW_ROLES, REVIEW_PROVIDERS, getProviderKeys, getEnteredProviders, getRoleAssignments, setRoleAssignment, saveRoleAssignments,
   currentService: 'patent',
   _onDashboard: null  // Hook for patent.js to register dashboard load callback
 });
