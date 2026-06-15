@@ -80,6 +80,36 @@ supabase functions deploy review-orchestrate
 - (참고) 코어 모듈은 Deno 호환이다. Node 전용 API(`node:` import)는 `review-engine/adapters/__demo__/`
   에만 있고 핸들러가 참조하지 않는다.
 
+### 4-1. ★ verify_jwt = false (CORS preflight 차단 해소) — 필수
+
+`supabase/config.toml` 에 아래가 선언돼 있다(저장소에 커밋됨). `supabase functions deploy` 는 이 설정을
+읽어 함수를 **verify_jwt=false** 로 배포한다.
+
+```toml
+[functions.review-orchestrate]
+verify_jwt = false
+```
+
+- **이유**: 기본값 `verify_jwt=true` 면 엣지 게이트웨이가 함수 코드 도달 전에 JWT 를 검증한다.
+  브라우저 CORS preflight(OPTIONS)는 사양상 `Authorization` 헤더를 싣지 않으므로 게이트웨이가
+  401 을 반환 → **"preflight response does not have HTTP ok status"** CORS 오류로 SPA 의
+  `functions.invoke('review-orchestrate')` 호출이 막힌다(`net::ERR_FAILED`).
+- **인증은 약화되지 않는다**: 실제 핸들러(`review-engine/edge/review-orchestrate.ts:55-56`)가 스스로
+  `Authorization: Bearer` 를 검증한다. 게이트는 OPTIONS preflight 만 통과시키고, 실제 POST 는
+  여전히 핸들러가 인증한다. 정상 작동 중인 `send-docket-email`/`kipris-proxy` 와 동일한 운용이다.
+- config.toml 을 읽지 않는 환경/버전이라면 **배포 플래그로 동일 효과**:
+  ```bash
+  supabase functions deploy review-orchestrate --no-verify-jwt
+  ```
+- 대시보드에서 확인: Edge Functions → review-orchestrate → **Verify JWT = OFF** 인지 점검.
+  (이미 verify_jwt=true 로 배포돼 있으면 위 명령으로 **재배포**해야 preflight 가 통과한다.)
+
+> ⚠️ **사용자 확인 필요**
+> 1. 대시보드에서 review-orchestrate 의 **Verify JWT 설정이 OFF** 인지 확인(또는 위 재배포).
+> 2. 배포된 함수가 **최신 코드(pt3b 래퍼 + review-engine 그래프)** 인지 확인 — 구버전 CLI 로 떠 있으면
+>    `../../../review-engine/*` 번들이 누락돼 함수가 부팅 단계에서 에러를 내고, 그 경우에도 OPTIONS 가
+>    실패해 같은 CORS 증상이 난다. **최신 CLI 로 재배포**(§1)로 함께 해소된다.
+
 ---
 
 ## 5. 검증 (토글 ON 전 스모크)
