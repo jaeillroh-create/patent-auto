@@ -477,19 +477,89 @@ Opinion.applyAmendments = function(acceptedPlans) {
 //   토글 게이트(E-21): window.ReviewUI.isEnabled() 가 true 일 때만 동작. OFF면 무동작.
 //   흐름: exportSnapshot → runner(prod=edge invoke / test=주입) → reviewState 설정 → renderDetail.
 //   runner 는 snapshot 을 받아 { issues, patchPlans, phase, rounds, budget, consensus } 를 반환한다.
-Opinion.runReviewEngine = async function(runner) {
+Opinion.runReviewEngine = async function(runner, opts) {
+  opts = opts || {};
   if (!(typeof window !== 'undefined' && window.ReviewUI && typeof window.ReviewUI.isEnabled === 'function' && window.ReviewUI.isEnabled('opinion'))) {
     return null; // 토글 OFF(마스터 또는 opinion 모듈) → 무동작(기존 동작 불변)
   }
+  // 검증 가능 게이트(보정안 존재) — 미충족 시 안내 후 미발화.
+  var gate = Opinion._reviewGate();
+  if (!gate.ok) {
+    try { showToast(gate.missing.join(', ') + '을(를) 먼저 완료하세요', 'info'); } catch (_e) {}
+    return null;
+  }
+  // 비용·시간 확인(명시 동의 시에만 발화). recheck 재트리거는 동의 세션의 후속이라 재확인 생략.
+  if (!opts.recheck && !Opinion._confirmReviewCost(Opinion._reviewCostEstimate())) return null;
+
   var run = runner || Opinion._reviewRunner || Opinion._defaultReviewRunner;
   if (typeof run !== 'function') return null;
   Opinion._reviewRunner = run; // recheck 재트리거용 보존
   var snapshot = Opinion.exportSnapshot();
-  var result = await run(snapshot);
+  try { setButtonLoading && setButtonLoading('btnOpinionReview', true); } catch (_e) {}
+  var result = null;
+  try { result = await run(snapshot); }
+  finally { try { setButtonLoading && setButtonLoading('btnOpinionReview', false); } catch (_e) {} }
   if (!result) return null;
-  Opinion.state.reviewState = result; // T6 훅(renderDraft) 발화 조건
+  Opinion.state.reviewState = result; // 마운트 발화 조건(renderOutput)
   try { if (typeof Opinion.renderDetail === 'function') Opinion.renderDetail(); } catch (_e) {} // 렌더는 best-effort(데이터 흐름 우선)
   return result;
+};
+
+// _reviewGate — 검증 발화 가능 게이트(보정안 존재). 검증할 청구항·보정이 있어야 의미.
+Opinion._reviewGate = function() {
+  var s = Opinion.state || {};
+  var parsed = s.parsed || {};
+  var dr = s.draftResult || {};
+  var hasClaims = !!(parsed.claims && parsed.claims.length);
+  var hasAmend = !!(dr.amended_claims && dr.amended_claims.length) || !!(dr.corrected_claims && dr.corrected_claims.length) || !!dr.merged_claim;
+  var missing = [];
+  if (!hasClaims) missing.push('청구항 파싱');
+  if (!hasAmend) missing.push('보정안 작성');
+  return { ok: missing.length === 0, missing: missing };
+};
+
+// _reviewCostEstimate — 예상 비용·시간. capUsd/maxRounds 는 ReviewUI.policy('opinion') 에서 읽음(하드코딩 0).
+Opinion._reviewCostEstimate = function() {
+  var pol = null;
+  try { if (window.ReviewUI && typeof window.ReviewUI.policy === 'function') pol = window.ReviewUI.policy('opinion'); } catch (_e) {}
+  var cap = (pol && pol.capUsd) || 5;
+  var rounds = (pol && pol.maxRounds) || 12;
+  var minutes = Math.max(1, Math.ceil(rounds * 0.7));
+  return { capUsd: cap, maxRounds: rounds, minutes: minutes };
+};
+
+// _confirmReviewCost — 비용·시간 사전고지 + 명시 동의(오발화 방지). 테스트에서 override 가능.
+Opinion._confirmReviewCost = function(est) {
+  if (typeof window === 'undefined' || typeof window.confirm !== 'function') return true;
+  var msg = '의견서 AI 검증을 시작합니다.\n\n'
+    + '· 예상 최대 비용: 약 $' + est.capUsd + '\n'
+    + '· 예상 소요: 최대 약 ' + est.minutes + '분 (최대 ' + est.maxRounds + '라운드)\n\n'
+    + '진행하시겠습니까?';
+  return window.confirm(msg);
+};
+
+// _updateReviewGate — 최종 확인 화면 검증 버튼 활성/비활성 + 안내(renderOutput 에서 호출).
+Opinion._updateReviewGate = function() {
+  var btn = document.getElementById('btnOpinionReview');
+  if (!btn) return;
+  var gate = Opinion._reviewGate();
+  var msgEl = document.getElementById('opinionReviewGateMsg');
+  if (!gate.ok) { btn.disabled = true; if (msgEl) msgEl.textContent = gate.missing.join(', ') + '을(를) 먼저 완료하세요.'; }
+  else { btn.disabled = false; if (msgEl) msgEl.textContent = ''; }
+};
+
+// _mountReviewResult — 검증 결과를 같은 화면(최종 확인)에 마운트. reviewState 없으면 no-op.
+//   승인(Human Gate) → onChange → applyAmendments(승인분만) → recheck 재트리거(비용 재확인 생략).
+Opinion._mountReviewResult = function() {
+  try {
+    if (!(window.ReviewUI && Opinion.state.reviewState)) return;
+    var _rm = document.getElementById('opinionReviewMount');
+    if (!_rm) return;
+    window.ReviewUI.render(Opinion.state.reviewState, _rm, {
+      actor: (App.currentUser && App.currentUser.email) || '',
+      onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) { Opinion.applyAmendments(acc); if (Opinion._reviewRunner) Opinion.runReviewEngine(Opinion._reviewRunner, { recheck: true }); } }
+    });
+  } catch (_e) {}
 };
 
 // prod 기본 runner — Supabase Edge Function(review-orchestrate) 호출. 클라는 트리거·구독만(spec §14).
@@ -2809,9 +2879,7 @@ Opinion.renderDraft=function(L,R,status){
     }).join(''):'<p style="padding:20px;text-align:center;color:var(--color-text-tertiary)">검증 결과 없음</p>')
     +'</div>';
 
-  // ── [T6 훅] 통합 리뷰 엔진 결과 표시(window.ReviewUI). reviewState 없으면 no-op(기존 동작 불변).
-  //    승인(Human Gate) → onChange → Opinion.applyAmendments(승인분만) 연결.
-  try { if (window.ReviewUI && Opinion.state.reviewState) { var _rm=document.createElement('div'); _rm.id='opinionReviewMount'; _rm.style.marginTop='12px'; R.appendChild(_rm); window.ReviewUI.render(Opinion.state.reviewState, _rm, { actor:(App.currentUser&&App.currentUser.email)||'', onChange:function(rs){ var acc=(rs.patchPlans||[]).filter(function(pp){return pp.accepted===true;}); if(acc.length){ Opinion.applyAmendments(acc); if(Opinion._reviewRunner) Opinion.runReviewEngine(Opinion._reviewRunner); /* B1: 승인·반영 후 recheck 재트리거 */ } } }); } } catch(_e){}
+  // 리뷰 엔진 마운트는 "최종 확인(renderOutput)" 화면으로 이전됨(트리거 버튼과 동일 위치). 여기선 no-op.
 };
 
 // ═══ Opinion Draft (전체 컨텍스트 + 참고 양식 전달) ═══
@@ -3295,7 +3363,14 @@ Opinion.renderOutput=function(L,R,status){
     +'<button class="btn btn-primary btn-full" onclick="Opinion.downloadAmendmentDocx()"'+(amendDisabled?' disabled':'')+amendTip+'><span class="ico" data-icon="doc"></span> 보정서 (Word, 별지 제13호)</button>'
     +'<button class="btn btn-outline btn-full" onclick="Opinion.downloadDocx(\'all\')"'+(done?'':' disabled')+'><span class="ico" data-icon="clipboard"></span> 전체 (의견서+검증보고서)</button>'
     +'<button class="btn btn-ghost btn-full" onclick="Opinion.copyOpinionText()"'+(done?'':' disabled')+'><span class="ico" data-icon="clipboard"></span> 텍스트 복사</button>'
-    +'</div></div>';
+    +'</div></div>'
+    // AI 검증(통합 리뷰 엔진) — 토글 OFF면 무동작(E-21). 보정안 미작성 시 비활성(게이트). 결과도 같은 화면 마운트.
+    +'<div class="card" id="opinionReviewCard"><div class="card-header"><div class="card-title"><span class="ico" data-icon="shield"></span> AI 검증</div></div>'
+    +'<p style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:10px">심사관단·변리사 AI가 보정안의 거절위험(진보성·기재불비 등)을 검증합니다.</p>'
+    +'<button class="btn btn-primary btn-full" id="btnOpinionReview" onclick="Opinion.runReviewEngine()"><span class="ico" data-icon="shield"></span> 의견서 검증 시작</button>'
+    +'<div id="opinionReviewGateMsg" style="font-size:12px;color:var(--color-text-tertiary);margin-top:8px"></div>'
+    +'<div id="opinionReviewMount" style="margin-top:12px"></div>'
+    +'</div>';
 
   // 오른쪽: 의견서 미리보기 (기존 gate3의 미리보기)
   var o=Opinion.state.opinionDraft||{};
@@ -3317,6 +3392,10 @@ Opinion.renderOutput=function(L,R,status){
     opinionHtml = done?'<div style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:12px"><span class="ico" data-icon="check-circle"></span></div><h3 style="font-size:18px;font-weight:700;color:var(--color-success);margin-bottom:8px">의견서 대응 완료!</h3></div>':'<p style="color:var(--color-text-tertiary);text-align:center;padding:40px">의견서 미생성</p>';
   }
   R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="ico" data-icon="edit"></span> '+escapeHtml(o.title||'의견서')+' 미리보기</span></div><div class="opinion-preview-body">'+opinionHtml+'</div></div>';
+
+  // 검증 버튼 게이트 갱신 + 결과 마운트(트리거·결과 동일 화면).
+  try { Opinion._updateReviewGate(); } catch (_e) {}
+  try { Opinion._mountReviewResult(); } catch (_e) {}
 };
 
 // 의견서 텍스트 조합 (JSON sections 형식 + raw string 형식 모두 지원)
