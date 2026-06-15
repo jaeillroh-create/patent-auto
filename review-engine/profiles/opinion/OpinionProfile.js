@@ -69,8 +69,11 @@ export const rippleRules = [
   },
 ];
 
-/** 종료 정책 (§2 (7), §13). capUsd=$5(opinion). */
-export const terminationPolicy = { K: 1, maxRounds: 12, capUsd: 5, perIssueAttemptCap: 2 };
+/** 종료 정책 (§2 (7), §13). capUsd=$5(opinion).
+ *  ⚠️ 임시(wall-clock 회피): maxRounds 12→1 = discover-only(examiner 쟁점 발굴만, recheck 자동보정 루프 제거).
+ *     단일 Edge 동기 호출의 게이트웨이 타임아웃(504) 회피용 잠정 조치 — 전체 흐름 완주 확인 목적.
+ *     ★ 근본 해결 (c) 백그라운드+폴링(spec §14) 도입 후 maxRounds 를 원복(또는 적정선)으로 되돌릴 것. */
+export const terminationPolicy = { K: 1, maxRounds: 1, capUsd: 5, perIssueAttemptCap: 2 };
 
 /**
  * 작성모듈 반영 계약 (§2 (8), §10) — T6 연동(SIMULATE_MODE 옵션 B).

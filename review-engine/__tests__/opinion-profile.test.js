@@ -118,7 +118,8 @@ ok(v2.length === 1 && v2[0].severity === 'high' && v2[0].legalBasis === '§47', 
     applyAmendments: async (_c, plans) => ({ applied: plans.map((p) => p.id), rejected: [], consistency: { claimSpecOk: true, refSignOk: true, abstractOk: true }, renderCheck: { svg: true, pptx: true, canvas: true }, txnId: 'tx' }),
     rollback: async () => ({ ok: true }),
   };
-  const profile = { ...OpinionProfile, writer: mockWriter };
+  // 엔진 다라운드 능력 검증(I-6) — 프로덕션 임시 throttle(opinion maxRounds=1, discover-only)과 분리해 full policy 주입.
+  const profile = { ...OpinionProfile, writer: mockWriter, terminationPolicy: { K: 1, maxRounds: 12, capUsd: 5, perIssueAttemptCap: 2 } };
   const state = adaptSnapshot(snap, snap.validation, { terminationPolicy: profile.terminationPolicy });
   // mock 에이전트: discover 1개 high issue(청구항1) → recheck resolved, consensus true
   const ALL = { examiner: true, attorney: true, expert: true };
