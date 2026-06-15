@@ -76,12 +76,16 @@ function fillSlots(promptText, state) {
 }
 
 /** 단일 에이전트 1회 호출(파싱+검증까지). 실패 사유를 구조화 반환(throw 안 함). */
-async function callOnce(agent, system, userPayload, transport) {
-  const r = await transport({ provider: agent.provider, model: agent.model, system, user: userPayload, maxTokens: agent.maxTokens });
+async function callOnce(agent, system, userPayload, transport, maxTokensOverride) {
+  const r = await transport({ provider: agent.provider, model: agent.model, system, user: userPayload, maxTokens: maxTokensOverride || agent.maxTokens });
   const parsed = extractJson(r.text);
   const schemaId = agent.outputSchemaByMode[userPayloadMode(userPayload)];
   const schema = SCHEMAS[schemaId];
-  if (!parsed) return { ok: false, errors: ['JSON 파싱 실패(빈/비정형 응답)'], raw: r };
+  if (!parsed) {
+    // 잘림(stop_reason=max_tokens)과 빈/비정형 응답을 구분 — 잘림이면 재시도에서 maxTokens 상향(truncated 플래그).
+    const truncated = r.stopReason === 'max_tokens';
+    return { ok: false, truncated, errors: [truncated ? '출력 토큰 한도 초과(잘림) — maxTokens 부족' : 'JSON 파싱 실패(빈/비정형 응답)'], raw: r };
+  }
   const v = validate(schema, parsed);
   return { ok: v.ok, errors: v.errors, data: parsed, raw: r, schemaId };
 }
@@ -120,9 +124,12 @@ async function runOneAgent(agent, state, mode, issue, deps) {
   // E-04: 위반 시 1회 재시도(스키마 위반 사유를 프롬프트에 덧대 강화)
   if (!res.ok) {
     warnings.push(`E-04 재시도: ${res.errors.slice(0, 3).join('; ')}`);
-    deps.onEvent && deps.onEvent({ kind: 'schema_retry', agent: agent.id, errors: res.errors });
-    const retryPayload = JSON.stringify({ ...payloadObj, _schemaViolation: res.errors, _instruction: '직전 출력이 스키마를 위반했다. 지정 JSON 스키마를 엄격히 준수하여 순수 JSON만 다시 출력하라.' });
-    res = await callOnce({ ...agent, provider: activeProvider }, system, retryPayload, transport);
+    // 진단 로깅: 잘림/빈응답 판별용(stopReason·출력토큰·응답길이). 다음 실패 시 즉시 원인 구분.
+    deps.onEvent && deps.onEvent({ kind: 'schema_retry', agent: agent.id, errors: res.errors, truncated: !!res.truncated, stopReason: res.raw && res.raw.stopReason, ot: res.raw && res.raw.ot, textLen: ((res.raw && res.raw.text) || '').length });
+    // 잘림이면 maxTokens 를 16000 으로 상향 재시도(같은 cap 무한 재실패 차단 → wall-clock 보호). gpt-4o(16384)·gemini(자기한도 clamp)·claude 모두 안전.
+    const retryMax = res.truncated ? 16000 : (agent.maxTokens || 4096);
+    const retryPayload = JSON.stringify({ ...payloadObj, _schemaViolation: res.errors, _instruction: '직전 출력이 스키마를 위반했다. 지정 JSON 스키마를 엄격히 준수하여 순수 JSON만 다시 출력하라. 핵심 issue 위주로 간결히 작성해 토큰 한도 내에 JSON 을 반드시 완결하라.' });
+    res = await callOnce({ ...agent, provider: activeProvider }, system, retryPayload, transport, retryMax);
     if (!res.ok) throw new SchemaEscalateError(agent.id, res.errors);
   }
 
@@ -152,6 +159,9 @@ function selectAgents(agents, mode, opts) {
  * }} deps
  * @returns {(args:{mode:string, state:Object, issue?:Object})=>Promise<Object>}  agentOut
  */
+// ※ 후속(이번 범위 밖): truncation(maxTokens 상향)·1인 실패 격리(allSettled)는 examiner_B 케이스를 해결하나,
+//   discover 3인 + recheck 다라운드의 실 LLM 호출 누적은 여전히 단일 Edge 동기 호출의 wall-clock 한계에 걸릴 수
+//   있다. 장기적으로는 트리거·구독 기반 비동기/백그라운드 실행(spec §14)으로 전환 필요.
 export function makeRunAgent(deps) {
   if (!deps || typeof deps.transport !== 'function') throw new Error('makeRunAgent: deps.transport (function) required');
   if (typeof deps.loadPrompt !== 'function') throw new Error('makeRunAgent: deps.loadPrompt (function) required');
@@ -162,13 +172,29 @@ export function makeRunAgent(deps) {
 
   return async function runAgent({ mode, state, issue }) {
     const selected = selectAgents(agents, mode, opts);
-    // 병렬 호출(§13: 라운드1 심사관 3인 병렬). 지연 = max, 비용 = Σ.
-    const results = await Promise.all(selected.map((a) => runOneAgent(a, state, mode, issue, deps)));
+    // 병렬 호출(§13: 라운드1 심사관 3인 병렬). ★ graceful: allSettled 로 1인 schema 실패가 라운드 전체를
+    //   죽이지 않게 격리(살아남은 에이전트로 진행). 단조성·수렴 판단(kernel)은 불변 — 더 적은 issue 집합을 받을 뿐.
+    const settled = await Promise.allSettled(selected.map((a) => runOneAgent(a, state, mode, issue, deps)));
+    const results = [];
+    const failed = [];
+    settled.forEach((s, i) => {
+      if (s.status === 'fulfilled') { results.push(s.value); return; }
+      const a = selected[i];
+      const errs = (s.reason && s.reason.errors) || [String((s.reason && s.reason.message) || s.reason)];
+      failed.push({ id: a.id, errors: errs });
+      deps.onEvent && deps.onEvent({ kind: 'agent_failed', agent: a.id, errors: errs }); // 격리: 실패 에이전트만 제외
+    });
+    // ★ 전원 실패 → 빈 리뷰 묵인 방지: 원래 실패(SchemaEscalateError 등)를 재throw → 핸들러가 ESCALATED(200) 처리.
+    if (results.length === 0) {
+      const firstRej = settled.find((s) => s.status === 'rejected');
+      throw (firstRej && firstRej.reason) || new Error('모든 에이전트 실패');
+    }
 
     const cost = results.reduce((s, r) => s + (r.cost || 0), 0);
     const latencyMs = results.reduce((m, r) => Math.max(m, r.latencyMs || 0), 0);
     const providerLabel = results.map((r) => `${r.id}:${r.provider}`).join(',');
-    const warnings = results.flatMap((r) => (r.warnings || []).map((w) => `${r.id}: ${w}`));
+    const warnings = results.flatMap((r) => (r.warnings || []).map((w) => `${r.id}: ${w}`))
+      .concat(failed.map((f) => `${f.id}: 실패 격리(${f.errors.slice(0, 2).join('; ')})`)); // 격리된 실패도 결과에 노출
     const perAgent = results.map((r) => ({ id: r.id, provider: r.provider, model: r.model, cost: r.cost, latencyMs: r.latencyMs, it: r.it, ot: r.ot }));
 
     if (mode === 'discover') {

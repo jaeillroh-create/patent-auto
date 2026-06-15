@@ -12,7 +12,7 @@ export const examiner_A = Object.freeze({
   model: 'gpt4o',
   fallbackProvider: 'gemini', // E-05: 장애 시 1회 폴백(다른 프로바이더)
   temperature: 0.2,
-  maxTokens: 4096,
+  maxTokens: 8192,
   mode: 'both',
   triggers: ['review'],
   reads: ['claims', 'citedPrior', 'moduleContext'],

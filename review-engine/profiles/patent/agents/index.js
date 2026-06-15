@@ -16,7 +16,7 @@ const A = (o) => Object.freeze(Object.assign({
 /** examiner_A — 진보성·신규성(§29). */
 export const examiner_A = A({
   id: 'examiner_A', role: 'examiner', provider: 'gpt', model: 'gpt4o', fallbackProvider: 'gemini',
-  reads: ['claims', 'citedPrior', 'moduleContext'], writes: ['issues'],
+  reads: ['claims', 'citedPrior', 'moduleContext'], writes: ['issues'], maxTokens: 8192, // truncation 방지(전수 발굴 장문 출력)
   systemPromptRef: '.claude/rules/agents/patent/examiner_A.md',
   outputSchemaByMode: { discover: 'IssueList', recheck: 'Verdict' },
 });
@@ -24,7 +24,7 @@ export const examiner_A = A({
 /** examiner_B — 기재불비·명확성·뒷받침(§42, 앵커 1차 관문). selfReview 통과근거 활용. */
 export const examiner_B = A({
   id: 'examiner_B', role: 'examiner', provider: 'gemini', model: 'gemini_pro', fallbackProvider: 'gpt',
-  reads: ['claims', 'spec', 'moduleContext'], writes: ['issues'],
+  reads: ['claims', 'spec', 'moduleContext'], writes: ['issues'], maxTokens: 8192, // spec 입력 최대 → 출력 최대 → truncation 방지
   systemPromptRef: '.claude/rules/agents/patent/examiner_B.md',
   outputSchemaByMode: { discover: 'IssueList', recheck: 'Verdict' },
 });
@@ -32,7 +32,7 @@ export const examiner_B = A({
 /** examiner_C — 단일성·도면정합(§45, E-11 3경로). */
 export const examiner_C = A({
   id: 'examiner_C', role: 'examiner', provider: 'gpt', model: 'gpt4o', fallbackProvider: 'gemini',
-  reads: ['claims', 'moduleContext'], writes: ['issues'],
+  reads: ['claims', 'moduleContext'], writes: ['issues'], maxTokens: 8192, // truncation 방지
   systemPromptRef: '.claude/rules/agents/patent/examiner_C.md',
   outputSchemaByMode: { discover: 'IssueList', recheck: 'Verdict' },
 });
