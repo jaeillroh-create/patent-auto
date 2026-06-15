@@ -19,9 +19,7 @@
  */
 // Deno/Edge 런타임 import (배포 시 import map 또는 상대경로 번들).
 import { run as orchestrate } from '../kernel/orchestrator.js';
-import OpinionProfile from '../profiles/opinion/OpinionProfile.js';
-import { makeEngineWriter } from '../profiles/opinion/writerAdapter.js';
-import { OPINION_AGENTS } from '../profiles/opinion/agents/index.js';
+import { PROFILES } from '../profiles/registry.js';
 import { makeRunAgent, SchemaEscalateError } from '../adapters/runAgent.js';
 import { makeHttpTransport } from '../adapters/providerTransport.js';
 import { ENV_KEYS } from '../adapters/providerCatalog.js';
@@ -63,9 +61,16 @@ export default async function handler(req: Request): Promise<Response> {
   const selfReview = body?.selfReviewLog || null;
   if (!snapshot) return json({ error: 'snapshot required' }, 400);
 
+  // 1b) 모듈 → 프로필 선택 (G9). ★ I-6: PROFILES[module] 데이터-키 조회(문자열 분기 금지).
+  //     module 미지정 시 opinion 기본(후방호환 — opinion 클라가 module 을 보내지 않던 시절 지원).
+  const moduleName = body?.module || 'opinion';
+  const entry = PROFILES[moduleName as keyof typeof PROFILES];
+  if (!entry) return json({ error: 'unknown module', module: moduleName }, 400);
+  const baseProfile = entry.profile;
+
   // 2) adaptSnapshot → ReviewState
-  const state = OpinionProfile.adaptSnapshot(snapshot, selfReview, {
-    terminationPolicy: OpinionProfile.terminationPolicy,
+  const state = baseProfile.adaptSnapshot(snapshot, selfReview, {
+    terminationPolicy: baseProfile.terminationPolicy,
     reviewId: body?.reviewId,
     caseId: body?.caseId,
   });
@@ -77,13 +82,13 @@ export default async function handler(req: Request): Promise<Response> {
   const runAgent = makeRunAgent({
     transport,
     loadPrompt,
-    agents: OPINION_AGENTS, // I-6: 모듈 agents 명시 주입(어댑터에 opinion 기본값 없음)
+    agents: entry.agents, // I-6: 선택된 모듈 agents 명시 주입(어댑터에 기본값 없음)
     onEvent: (ev: any) => console.log('[review-engine event]', JSON.stringify(ev)), // §15 관측
   });
 
   // 4b) 엔진-side writer 주입(요청별 state 클로저) — 단조성 simulate 의 구조적 정합성 산출.
-  //     실(實)반영은 브라우저 Opinion.applyAmendments 가 담당(opinion.js, 사람 승인분만).
-  const profile = { ...OpinionProfile, writer: makeEngineWriter(() => state) };
+  //     실(實)반영은 브라우저 측 applyAmendments 가 담당(클라, 사람 승인분만).
+  const profile = { ...baseProfile, writer: entry.makeEngineWriter(() => state) };
 
   // 5) 오케스트레이션 + E-04 escalate 처리(kernel 불변 → 경계에서 catch)
   try {

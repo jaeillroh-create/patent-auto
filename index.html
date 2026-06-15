@@ -1236,9 +1236,20 @@
             <button class="btn btn-outline btn-full" onclick="copyToClipboard()"><span class="ico" data-icon="clipboard"></span> 클립보드 복사</button>
           </div>
         </div>
+        <!-- 출원 전 AI 검증(통합 리뷰 엔진) — 토글 OFF면 무동작(E-21). 필수4종 미충족 시 비활성(G4). -->
+        <div class="card" id="patentReviewCard">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="shield"></span> 출원 전 AI 검증</div></div>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 10px">심사관단·변리사 AI가 출원 전 거절위험(진보성·기재불비·단일성 등)을 검증합니다.</p>
+          <button class="btn btn-primary btn-full" id="btnPatentReview" onclick="Patent.runReviewEngine()"><span class="ico" data-icon="shield"></span> 출원 전 검증 시작</button>
+          <div id="patentReviewGateMsg" style="font-size:12px;color:var(--color-text-tertiary);margin-top:8px"></div>
+        </div>
       </div>
       <!-- 오른쪽: 결과 -->
       <div class="page-right">
+        <div class="result-card" id="resultCardPatentReview" style="display:none">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="shield"></span> 검증 결과</div></div>
+          <div id="patent-review-mount" class="result-area"></div>
+        </div>
         <div class="result-card" id="resultCardFinish">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 16~19 결과</div></div>
           <div id="resultsBatchFinish" class="result-area"></div>
