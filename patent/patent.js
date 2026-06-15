@@ -14036,7 +14036,10 @@ Patent.runReviewEngine = async function(runner, opts) {
 // _defaultReviewRunner — prod 기본 runner: Supabase Edge(review-orchestrate) 호출.
 //   module:'patent' 전송(G9 edge 가 PROFILES['patent'] 선택). 클라는 트리거·구독만(spec §14).
 Patent._defaultReviewRunner = async function(snapshot) {
-  var res = await App.sb.functions.invoke('review-orchestrate', { body: { snapshot: snapshot, caseId: snapshot && snapshot.caseId, module: 'patent' } });
+  // 사용자 LLM 키·역할배정 동봉(L-T3) — getReviewAuth 가 "1키 전역" 규칙 적용한 keys/assignments 산출.
+  //   ★ keys 는 HTTPS body 로 자기 Edge 에만 전달, 절대 로깅 금지(키 노출 방지).
+  var auth = (App.getReviewAuth && App.getReviewAuth()) || { keys: {}, assignments: {} };
+  var res = await App.sb.functions.invoke('review-orchestrate', { body: { snapshot: snapshot, caseId: snapshot && snapshot.caseId, module: 'patent', keys: auth.keys, assignments: auth.assignments } });
   return (res && res.data) || null;
 };
 

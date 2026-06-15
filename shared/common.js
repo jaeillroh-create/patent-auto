@@ -299,6 +299,11 @@ async function saveRoleAssignments(map){
   return getRoleAssignments();
 }
 
+// 검증 엔진 Edge 전송용 인증 묶음(L-T3) — getProviderKeys(입력 키만)+getRoleAssignments("1키 전역" 규칙 자동 적용).
+//   ★ 보안: 반환값(keys)은 HTTPS body 로 자기 Edge(review-orchestrate)에만 전달한다.
+//     절대 console.log/localStorage/에러메시지에 남기지 말 것(키 노출 사고 방지). 호출측도 keys 를 로깅 금지.
+function getReviewAuth(){ return { keys: getProviderKeys(), assignments: getRoleAssignments() }; }
+
 // ═══ 검증 엔진 LLM 설정 UI (L-T2) — 규칙은 L-T1 헬퍼가 진실원천(UI 재구현 0) ═══════════
 const REVIEW_ROLE_LABELS={
   examiner_A:'심사관 A — 진보성·신규성 (§29)',
@@ -442,7 +447,7 @@ Object.assign(App, {
   showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation,
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
   openProfileSettings, closeProfileSettings,
-  REVIEW_ROLES, REVIEW_PROVIDERS, getProviderKeys, getEnteredProviders, getRoleAssignments, setRoleAssignment, saveRoleAssignments,
+  REVIEW_ROLES, REVIEW_PROVIDERS, getProviderKeys, getEnteredProviders, getRoleAssignments, setRoleAssignment, saveRoleAssignments, getReviewAuth,
   REVIEW_ROLE_LABELS, onLlmKeyInput, onProfileApiKeyMirror, onLlmRoleChange, fillLlmKeySlots, renderLlmRoleArea,
   currentService: 'patent',
   _onDashboard: null  // Hook for patent.js to register dashboard load callback
