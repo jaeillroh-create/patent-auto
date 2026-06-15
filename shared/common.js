@@ -217,6 +217,8 @@ function showApiKeyModal(){openProfileSettings();}
 function openProfileSettings(){
   profileTempProvider=selectedProvider;
   renderProfileModal();
+  fillLlmKeySlots();         // 검증 엔진 LLM 3슬롯 pre-fill(apiKeys 단일소스) — L-T2
+  renderLlmRoleArea();       // 키개수 토글 초기 렌더
   document.getElementById('profileSettingsModal').style.display='flex';
 }
 function closeProfileSettings(){document.getElementById('profileSettingsModal').style.display='none';}
@@ -243,6 +245,8 @@ function profileSelectProvider(p){
 async function saveProfileSettings(){
   const key=document.getElementById('profileApiKeyInput').value.trim();
   if(key)apiKeys[profileTempProvider]=key;
+  // 검증 엔진 LLM 3슬롯을 apiKeys 로 최종 확정(양방향 미러로 이미 동기지만 방어적 재확인) — L-T2
+  REVIEW_PROVIDERS.forEach(p=>{const el=document.getElementById(LLM_SLOT_IDS[p]);if(el)apiKeys[p]=(el.value||'').trim();});
   selectProvider(profileTempProvider);
   // 기존 프로필의 추가 필드(kipris 등) 보존
   let existing={};
@@ -293,6 +297,60 @@ async function saveRoleAssignments(map){
   const data={...existing,roleAssignments};
   if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
   return getRoleAssignments();
+}
+
+// ═══ 검증 엔진 LLM 설정 UI (L-T2) — 규칙은 L-T1 헬퍼가 진실원천(UI 재구현 0) ═══════════
+const REVIEW_ROLE_LABELS={
+  examiner_A:'심사관 A — 진보성·신규성 (§29)',
+  examiner_B:'심사관 B — 기재불비·뒷받침 (§42)',
+  examiner_C:'심사관 C — 청구범위·단일성 (§45)',
+  attorney_author:'출원인측 변리사 — 방어·보정방향',
+  attorney_reviewer:'독립검토 변리사 — 교차검증',
+  domain_expert:'기술분야 전문가 — 실시가능성'
+};
+const LLM_SLOT_IDS={claude:'llmKeyClaude',gpt:'llmKeyGpt',gemini:'llmKeyGemini'};
+
+// 3슬롯 입력 → apiKeys 단일 라이브 소스 갱신 + (선택 provider면) 기존 단일입력에 미러 + 실시간 토글 갱신.
+function onLlmKeyInput(provider,value){
+  if(REVIEW_PROVIDERS.indexOf(provider)<0)return;
+  apiKeys[provider]=(value||'').trim();
+  if(provider===profileTempProvider){const oi=document.getElementById('profileApiKeyInput');if(oi&&oi.value!==value)oi.value=value;}
+  renderLlmRoleArea();
+}
+// 기존 단일입력 → apiKeys + (일치 provider) 3슬롯 미러 (양방향 동기로 이중소스 충돌 차단).
+function onProfileApiKeyMirror(value){
+  apiKeys[profileTempProvider]=(value||'').trim();
+  const el=document.getElementById(LLM_SLOT_IDS[profileTempProvider]);if(el&&el.value!==value)el.value=value;
+  renderLlmRoleArea();
+}
+// 역할 드롭다운 변경 → L-T1 setRoleAssignment(검증·메모리 반영). 영속은 저장 시.
+function onLlmRoleChange(roleId,provider){setRoleAssignment(roleId,provider);}
+
+// 3슬롯 pre-fill(apiKeys 기준) — 모달 열 때 호출.
+function fillLlmKeySlots(){
+  REVIEW_PROVIDERS.forEach(p=>{const el=document.getElementById(LLM_SLOT_IDS[p]);if(el)el.value=apiKeys[p]||'';});
+}
+// ★ 키개수 토글 — getEnteredProviders/getRoleAssignments(L-T1) 가 규칙의 진실원천.
+function renderLlmRoleArea(){
+  const el=document.getElementById('llmRoleArea');if(!el)return;
+  const entered=getEnteredProviders(); // 라이브 apiKeys 기준
+  if(entered.length===0){
+    el.innerHTML='<div style="font-size:12px;color:var(--color-text-tertiary);padding:10px;background:var(--color-bg-secondary);border-radius:8px">검증 LLM 키를 1개 이상 입력하세요. (미입력 시 출원 전 검증 사용 불가)</div>';
+    return;
+  }
+  if(entered.length===1){
+    const only=entered[0];const label=(API_PROVIDERS[only]&&API_PROVIDERS[only].short)||only;
+    el.innerHTML='<div style="font-size:12px;color:var(--color-success);padding:10px;background:var(--color-bg-secondary);border-radius:8px">✓ <strong>'+escapeHtml(label)+'</strong> 단독 — 6역할 전체 자동 적용됨 (편향상쇄 없음)</div>';
+    return; // ★ 1키: 드롭다운 완전 숨김 → 사용자가 안 골라도 전역 적용
+  }
+  // 2개+ : 6역할 드롭다운 (옵션 = 입력된 provider 만)
+  const assign=getRoleAssignments();
+  const optHtml=function(sel){return entered.map(function(p){const lab=(API_PROVIDERS[p]&&API_PROVIDERS[p].short)||p;return '<option value="'+p+'"'+(p===sel?' selected':'')+'>'+escapeHtml(lab)+'</option>';}).join('');};
+  el.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px">역할별 LLM 배정 ('+entered.length+'개 provider · 편향상쇄)</div>'+
+    REVIEW_ROLES.map(function(r){
+      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">'+escapeHtml(REVIEW_ROLE_LABELS[r]||r)+'</span>'+
+        '<select class="input-field" style="width:128px;flex-shrink:0;padding:6px" onchange="onLlmRoleChange(\''+r+'\',this.value)">'+optHtml(assign[r])+'</select></div>';
+    }).join('');
 }
 
 // ═══ Project Rename (v5.2) ═══
@@ -385,6 +443,7 @@ Object.assign(App, {
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
   openProfileSettings, closeProfileSettings,
   REVIEW_ROLES, REVIEW_PROVIDERS, getProviderKeys, getEnteredProviders, getRoleAssignments, setRoleAssignment, saveRoleAssignments,
+  REVIEW_ROLE_LABELS, onLlmKeyInput, onProfileApiKeyMirror, onLlmRoleChange, fillLlmKeySlots, renderLlmRoleArea,
   currentService: 'patent',
   _onDashboard: null  // Hook for patent.js to register dashboard load callback
 });
