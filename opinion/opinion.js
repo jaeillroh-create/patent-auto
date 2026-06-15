@@ -169,6 +169,7 @@ Opinion.resetState = function(opts) {
   // 파이프라인 결과 상태 초기화
   Opinion.state.files             = [];
   Opinion.state.parsed            = null;
+  Opinion.state.parsedDoc         = null;   // ★ DB-backed parsed_data 캐시(진실원천) — 프로젝트 전환 시 교차오염 방지
   Opinion.state.analysis          = null;
   Opinion.state.draftResult       = null;
   Opinion.state.validation        = null;
@@ -388,11 +389,36 @@ Opinion._extractClaimReferences = function(text) {
 //   단조성용 simulate는 리뷰 엔진이 ReviewState deepClone 사본에서 처리한다.
 // ═══════════════════════════════════════════════════════════════════
 
+// _resolveParsedDoc — ★ 단일 진실원천(공유 헬퍼). 게이트·exportSnapshot 이 모두 이걸 읽는다.
+//   실제 파싱결과(claims·cited_references·rejection_reasons·application_no)는 state.parsed(유령필드)가
+//   아니라 DB(opinion_parsed_documents.parsed_data)에 산다 → _loadParsedDoc 가 캐시한 state.parsedDoc 를 본다.
+//   동기 함수: 캐시 미적재면 {} (호출측이 _loadParsedDoc 로 선적재). 레거시 픽스처 호환 위해 state.parsed 폴백.
+Opinion._resolveParsedDoc = function() {
+  var s = Opinion.state || {};
+  return s.parsedDoc || s.parsed || {};
+};
+
+// _loadParsedDoc — DB재조회로 parsed_data 를 state.parsedDoc 에 1회 캐시(이후 동기 접근 가능).
+//   기존 소비처(:1575/:2552/:3454)와 동일 쿼리. 파싱·저장 로직은 불변(읽기 캐시만 추가).
+Opinion._loadParsedDoc = async function() {
+  var s = Opinion.state || {};
+  if (s.parsedDoc) return s.parsedDoc;            // 캐시 히트
+  var cur = s.current;
+  if (!cur || !cur.id) return null;
+  try {
+    var { data: pd } = await sb.from('opinion_parsed_documents').select('parsed_data')
+      .eq('project_id', cur.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (pd && pd.parsed_data) { Opinion.state.parsedDoc = pd.parsed_data; return pd.parsed_data; }
+  } catch (_e) {}
+  return Opinion.state.parsedDoc || null;
+};
+
 // exportSnapshot — 원본(Opinion.state) 변형 없이 깊은 복사본 반환(I-1, 읽기전용).
 //   반환 형상은 profiles/opinion/adapter.js: adaptSnapshot 입력과 정합.
+//   parsed 는 _resolveParsedDoc(단일 진실원천)에서 — runReviewEngine 이 호출 전 _loadParsedDoc 로 선적재.
 Opinion.exportSnapshot = function() {
   var s = Opinion.state || {};
-  var parsed = s.parsed || {};
+  var parsed = Opinion._resolveParsedDoc();
   var cur = s.current || null;
   var projection = {
     caseId: parsed.application_no || (cur && cur.application_no) || '',
@@ -482,6 +508,8 @@ Opinion.runReviewEngine = async function(runner, opts) {
   if (!(typeof window !== 'undefined' && window.ReviewUI && typeof window.ReviewUI.isEnabled === 'function' && window.ReviewUI.isEnabled('opinion'))) {
     return null; // 토글 OFF(마스터 또는 opinion 모듈) → 무동작(기존 동작 불변)
   }
+  // ★ 진실원천 선적재 — parsed_data(DB)를 캐시하여 게이트·exportSnapshot 이 동기 접근하게 한다.
+  try { await Opinion._loadParsedDoc(); } catch (_e) {}
   // 검증 가능 게이트(보정안 존재) — 미충족 시 안내 후 미발화.
   var gate = Opinion._reviewGate();
   if (!gate.ok) {
@@ -508,7 +536,7 @@ Opinion.runReviewEngine = async function(runner, opts) {
 // _reviewGate — 검증 발화 가능 게이트(보정안 존재). 검증할 청구항·보정이 있어야 의미.
 Opinion._reviewGate = function() {
   var s = Opinion.state || {};
-  var parsed = s.parsed || {};
+  var parsed = Opinion._resolveParsedDoc();   // ★ exportSnapshot 과 동일 진실원천(한 곳만 고치면 둘 다 맞음)
   var dr = s.draftResult || {};
   var hasClaims = !!(parsed.claims && parsed.claims.length);
   var hasAmend = !!(dr.amended_claims && dr.amended_claims.length) || !!(dr.corrected_claims && dr.corrected_claims.length) || !!dr.merged_claim;
@@ -3394,7 +3422,8 @@ Opinion.renderOutput=function(L,R,status){
   R.innerHTML='<div class="opinion-preview"><div class="opinion-preview-header"><span style="font-weight:600"><span class="ico" data-icon="edit"></span> '+escapeHtml(o.title||'의견서')+' 미리보기</span></div><div class="opinion-preview-body">'+opinionHtml+'</div></div>';
 
   // 검증 버튼 게이트 갱신 + 결과 마운트(트리거·결과 동일 화면).
-  try { Opinion._updateReviewGate(); } catch (_e) {}
+  try { Opinion._updateReviewGate(); } catch (_e) {}                                  // 캐시 있으면 즉시 반영
+  try { Opinion._loadParsedDoc().then(function(){ Opinion._updateReviewGate(); }); } catch (_e) {} // DB재조회 후 버튼 활성화
   try { Opinion._mountReviewResult(); } catch (_e) {}
 };
 
