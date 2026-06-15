@@ -30,6 +30,7 @@ ok(r2 && r2.skipped === true, '토글 OFF → 입력 없이도 무동작 안전 
 // ── 2) 토글 ON(마스터 + 모듈) → 커널 미구현 차단(가짜 통과 금지) ──
 // B2: 마스터만으로는 부족 — 해당 모듈도 ON이어야 게이트 통과.
 FEATURE_FLAGS.reviewEngine = true;
+FEATURE_FLAGS.modules.opinion = false; // 출하 기본이 opinion ON 으로 바뀌어, B2 격리 검증 위해 명시적 OFF
 ok(engine.run({ module: 'opinion' }, {}).skipped === true, 'B2: 마스터 ON + 모듈 OFF → 여전히 skip(격리)');
 FEATURE_FLAGS.modules.opinion = true;
 let threw = false;

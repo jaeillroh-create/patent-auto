@@ -15,9 +15,9 @@ afterEach(() => {
   FEATURE_FLAGS.modules.patent = false;
 });
 
-test('기본값: 모든 토글 false (이 작업에서 아무것도 안 켬)', () => {
-  assert.equal(FEATURE_FLAGS.reviewEngine, false);
-  assert.deepEqual(FEATURE_FLAGS.modules, { opinion: false, division: false, patent: false });
+test('출하 기본값: 마스터 ON + opinion 단독 ON (patent/division 격리 유지)', () => {
+  assert.equal(FEATURE_FLAGS.reviewEngine, true);
+  assert.deepEqual(FEATURE_FLAGS.modules, { opinion: true, division: false, patent: false });
 });
 
 test('진리표 ①: 마스터 OFF → 모듈 토글 무관하게 전부 무동작', () => {
