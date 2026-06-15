@@ -1479,9 +1479,7 @@ function renderScopeVerificationSection() {
   const summaryEl = document.getElementById('scope-verification-summary');
   const detailsEl = document.getElementById('scope-verification-details');
   if (!summaryEl || !detailsEl) return;
-  // ── [T8 훅] 통합 리뷰 엔진 결과 표시(window.ReviewUI). reviewState 없으면 no-op(기존 동작 불변).
-  //    승인(Human Gate) → onChange → Patent.applyAmendments(승인분만, 3경로 정합 재검증).
-  try { if (window.ReviewUI && window.__patentReviewState) { var _pm = document.getElementById('patent-review-mount'); if (!_pm) { _pm = document.createElement('div'); _pm.id = 'patent-review-mount'; _pm.style.marginTop = '12px'; (detailsEl.parentNode || detailsEl).appendChild(_pm); } window.ReviewUI.render(window.__patentReviewState, _pm, { actor: (App.currentUser && App.currentUser.email) || '', onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) Patent.applyAmendments(acc); } }); } } catch (_e) {}
+  // ── [G5] 통합 리뷰 엔진 마운트는 page4(renderPreview)로 이전됨(트리거·결과 동일 위치).
   if (!inventionScope?.locked_at) {
     summaryEl.innerHTML = `<div class="scope-notice">발명 범위가 확정되지 않았습니다. A. 기본 탭에서 "범위 확정"을 먼저 진행하세요.</div>`;
     detailsEl.innerHTML = '';
@@ -13850,7 +13848,24 @@ function validateRefNumberConsistency(){
 
 // ═══════════ OUTPUT ═══════════
 function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;const totalSteps=conceptDiagramTypes.length>0?21:20;document.getElementById('statCompleted').textContent=`${c}/${totalSteps}`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
-function renderPreview(){const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow"><span class="ico" data-icon="chevron-down" data-size="12"></span></span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('');}
+function renderPreview(){
+  // ── [G4/G5] page4 진입 시 검증 게이트 갱신 + 리뷰 결과 마운트(트리거·결과 동일 위치).
+  try { if (Patent._updateReviewGate) Patent._updateReviewGate(); } catch (_e) {}
+  // [T8 훅 이전] 통합 리뷰 엔진 결과 표시(window.ReviewUI). __patentReviewState 없으면 no-op(기존 동작 불변).
+  //   승인(Human Gate) → onChange → Patent.applyAmendments(승인분만, 3경로 정합 재검증) → recheck 재트리거.
+  try {
+    if (window.ReviewUI && window.__patentReviewState) {
+      var _card = document.getElementById('resultCardPatentReview'); if (_card) _card.style.display = '';
+      var _pm = document.getElementById('patent-review-mount');
+      if (_pm) {
+        window.ReviewUI.render(window.__patentReviewState, _pm, {
+          actor: (App.currentUser && App.currentUser.email) || '',
+          onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) { Patent.applyAmendments(acc); if (Patent._reviewRunner) Patent.runReviewEngine(Patent._reviewRunner, { recheck: true }); } }
+        });
+      }
+    }
+  } catch (_e) {}
+  const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow"><span class="ico" data-icon="chevron-down" data-size="12"></span></span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('');}
 // 출력 시 항목 헤더 중복 방지: 본문 첫 줄이 해당 항목 헤더(【h】, 공백 변형 포함)면 제거.
 // 항목명이 정확히 일치할 때만 제거하므로 청구범위의 "【청구항 1】" 등은 보존됨.
 function _stripDupHeader(body,h){
@@ -13923,6 +13938,106 @@ Patent.exportSnapshot = function() {
   };
   try { return structuredClone(projection); }
   catch (e) { return JSON.parse(JSON.stringify(projection)); }
+};
+
+// ═══════════ [P-T2] 출원 전 검증 트리거(클라) — G1·G3·G4 ═══════════
+// 작성·자기검토 로직은 불변. 아래는 "검증 배선"만 추가한다.
+
+// _reviewGate — 검증 발화 가능 게이트(G4). 필수 4종(청구항·상세설명·부호·도면)이 갖춰졌는가.
+//   각 범주는 장치(device) 또는 방법(method) 변형 중 하나만 있어도 충족. 자기검토/범위는 선택.
+//   반환 { ok, missing:[라벨...] }. outputs 키 판정은 updateStats 와 동일 규약.
+Patent._reviewGate = function() {
+  var o = (typeof outputs !== 'undefined' && outputs) || {};
+  var has = function(k){ return !!(o[k] && String(o[k]).trim()); };
+  var checks = [
+    { ok: has('step_06') || has('step_10'), label: '청구항(장치 또는 방법)' },
+    { ok: has('step_08') || has('step_12'), label: '상세설명(장치 또는 방법)' },
+    { ok: has('step_18'), label: '부호의 설명' },
+    { ok: has('step_07_mermaid') || has('step_11_mermaid'), label: '도면' },
+  ];
+  var missing = checks.filter(function(c){ return !c.ok; }).map(function(c){ return c.label; });
+  return { ok: missing.length === 0, missing: missing };
+};
+
+// _reviewCostEstimate — 예상 비용·시간(G3). capUsd/maxRounds 는 프로필에서 읽음(하드코딩 0).
+//   ReviewUI.policy('patent') 미가용(토글 OFF·브리지 미로드) 시 보수적 폴백.
+Patent._reviewCostEstimate = function() {
+  var pol = null;
+  try { if (window.ReviewUI && typeof window.ReviewUI.policy === 'function') pol = window.ReviewUI.policy('patent'); } catch (_e) {}
+  var cap = (pol && pol.capUsd) || 15;
+  var rounds = (pol && pol.maxRounds) || 12;
+  var minutes = Math.max(1, Math.ceil(rounds * 0.7)); // 라운드당 ~0.7분 추정
+  var spent = 0; try { spent = (typeof usage !== 'undefined' && usage && usage.cost) || 0; } catch (_e) {}
+  return { capUsd: cap, maxRounds: rounds, minutes: minutes, spent: spent };
+};
+
+// _confirmReviewCost — 비용·시간 사전고지 + 명시적 진행 동의(G3, 오발화 방지).
+//   ★ 함수로 분리 → 테스트에서 override 가능(confirm=false 시 runner 미발화 검증).
+Patent._confirmReviewCost = function(est) {
+  if (typeof window === 'undefined' || typeof window.confirm !== 'function') return true;
+  var msg = '출원 전 AI 검증을 시작합니다.\n\n'
+    + '· 예상 최대 비용: 약 $' + est.capUsd + (est.spent ? ' (현재 누적 $' + est.spent.toFixed(2) + ')' : '') + '\n'
+    + '· 예상 소요: 최대 약 ' + est.minutes + '분 (최대 ' + est.maxRounds + '라운드)\n\n'
+    + '진행하시겠습니까?';
+  return window.confirm(msg);
+};
+
+// _updateReviewGate — page4 검증 버튼 활성/비활성 + 안내(G4). renderPreview 에서 호출.
+Patent._updateReviewGate = function() {
+  var btn = document.getElementById('btnPatentReview');
+  var msgEl = document.getElementById('patentReviewGateMsg');
+  if (!btn) return;
+  var enabledModule = false;
+  try { enabledModule = !!(window.ReviewUI && window.ReviewUI.isEnabled && window.ReviewUI.isEnabled('patent')); } catch (_e) {}
+  var gate = Patent._reviewGate();
+  // 토글 OFF: 버튼은 두되 눌러도 무동작(E-21). 게이트 미충족: 비활성 + 안내.
+  if (!gate.ok) {
+    btn.disabled = true;
+    if (msgEl) msgEl.textContent = '먼저 ' + gate.missing.join(', ') + '을(를) 완료하세요.';
+  } else {
+    btn.disabled = false;
+    if (msgEl) msgEl.textContent = enabledModule ? '' : '';
+  }
+};
+
+// runReviewEngine — [G1] 검증 트리거. 토글 게이트(E-21) → 필수4종 게이트(G4) →
+//   비용확인(G3, 명시 동의) → exportSnapshot → runner(edge/test) → __patentReviewState → renderPreview 마운트.
+//   흐름 어느 단계든 실패/거부 시 runner 미발화(부작용 0).
+Patent.runReviewEngine = async function(runner, opts) {
+  opts = opts || {};
+  // (1) 토글 OFF(마스터 또는 patent 모듈) → 무동작(E-21).
+  if (!(typeof window !== 'undefined' && window.ReviewUI && typeof window.ReviewUI.isEnabled === 'function' && window.ReviewUI.isEnabled('patent'))) {
+    return null;
+  }
+  // (2) 필수 4종 게이트(G4).
+  var gate = Patent._reviewGate();
+  if (!gate.ok) {
+    try { App.showToast('먼저 ' + gate.missing.join(', ') + '을(를) 완료하세요', 'info'); } catch (_e) {}
+    return null;
+  }
+  // (3) 비용·시간 확인 — 사용자가 명시적으로 진행을 눌러야만 발화(G3, 오발화 방지).
+  //   ★ recheck 재트리거(opts.recheck)는 이미 동의한 세션의 후속이므로 재확인 생략.
+  if (!opts.recheck && !Patent._confirmReviewCost(Patent._reviewCostEstimate())) return null;
+
+  var run = runner || Patent._reviewRunner || Patent._defaultReviewRunner;
+  if (typeof run !== 'function') return null;
+  Patent._reviewRunner = run; // recheck 재트리거용 보존
+  var snapshot = Patent.exportSnapshot();
+  try { setButtonLoading && setButtonLoading('btnPatentReview', true); } catch (_e) {}
+  var result = null;
+  try { result = await run(snapshot); }
+  finally { try { setButtonLoading && setButtonLoading('btnPatentReview', false); } catch (_e) {} }
+  if (!result) return null;
+  window.__patentReviewState = result; // page4 마운트 발화 조건
+  try { if (typeof renderPreview === 'function') renderPreview(); } catch (_e) {} // best-effort 렌더
+  return result;
+};
+
+// _defaultReviewRunner — prod 기본 runner: Supabase Edge(review-orchestrate) 호출.
+//   module:'patent' 전송(G9 edge 가 PROFILES['patent'] 선택). 클라는 트리거·구독만(spec §14).
+Patent._defaultReviewRunner = async function(snapshot) {
+  var res = await App.sb.functions.invoke('review-orchestrate', { body: { snapshot: snapshot, caseId: snapshot && snapshot.caseId, module: 'patent' } });
+  return (res && res.data) || null;
 };
 
 // _reviewRenderCheck — 3경로(SVG/PPTX/Canvas) 정합 구조검사(E-11).

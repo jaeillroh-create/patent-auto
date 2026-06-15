@@ -32,6 +32,31 @@ export function parseClaims(text) {
   return out;
 }
 
+/**
+ * 선행기술 텍스트(step_04)에서 특허번호를 추출해 citedPrior[{id,label,summary}] 로 매핑(G7).
+ * 번호만 매핑(summary=''): patent 선행기술 산출물은 번호 중심이며 요약이 빈약하다(E-02 변형 전제).
+ * 지원 패턴: 제10-1234567호 / 10-2020-0012345 / KR(US) 10-XXXX / 등록·공개번호(하이픈/공백 허용).
+ * @param {string} text  outputs.step_04
+ * @returns {Array<{id:string,label:string,summary:string}>}  중복 제거, 등장 순서 보존.
+ */
+export function parseCitedPrior(text) {
+  const s = String(text || '');
+  if (!s) return [];
+  // 제…호 우선, 없으면 10-자리군(출원/등록/공개번호) 패턴. 국가코드(KR/US) 접두 허용.
+  const re = /(?:제\s*)?((?:KR|US)?\s*10[-\s]?\d{4}[-\s]?\d{5,7}|(?:제\s*)?10[-\s]?\d{6,7})\s*호?/g;
+  const seen = new Set();
+  const out = [];
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const label = m[0].trim().replace(/\s+/g, ' ');
+    const norm = label.replace(/[^0-9]/g, ''); // 숫자만으로 동일성 판정(표기 변형 흡수)
+    if (norm.length < 7 || seen.has(norm)) continue;
+    seen.add(norm);
+    out.push({ id: 'cited_' + out.length, label, summary: '' });
+  }
+  return out;
+}
+
 /** 종속항 판별: "제N항에 있어서/청구항 N에 있어서" 인용. */
 function claimType(text) {
   return /(?:제\s*\d+\s*항|청구항\s*\d+)\s*에\s*있어서/.test(text || '') ? CLAIM_TYPE.DEPENDENT : CLAIM_TYPE.INDEPENDENT;
@@ -103,8 +128,11 @@ export function adaptSnapshot(raw, selfReview, opts = {}) {
     { key: 'abstract', text: String(outputs.step_19 || '') },
   ].filter((s) => s.text);
 
-  // citedPrior — 선행기술(step_04, 선택)
-  st.citedPrior = raw.citedPrior || [];
+  // citedPrior — 선행기술. raw.citedPrior 우선(후방호환), 없으면 step_04(선행기술 검색 산출물)
+  //   에서 특허번호를 정규식으로 추출해 번호만 매핑(G7). ⚠️ patent 선행기술은 번호 중심이라
+  //   summary 는 비움('') — 내용 완전성은 후속(P-T3 실측) 결정(examiner_A 의 E-02 변형이 번호만으론
+  //   high 단정을 막는다).
+  st.citedPrior = (raw.citedPrior && raw.citedPrior.length) ? raw.citedPrior : parseCitedPrior(outputs.step_04);
 
   // figures — 도면(mermaid) ref 부호(3경로 정합 검증 소스)
   st.figures = [];
@@ -125,4 +153,4 @@ export function adaptSnapshot(raw, selfReview, opts = {}) {
   return st;
 }
 
-export default { adaptSnapshot, parseClaims, classifyKind, normalizeSelfReview, NOT_APPLICABLE };
+export default { adaptSnapshot, parseClaims, parseCitedPrior, classifyKind, normalizeSelfReview, NOT_APPLICABLE };

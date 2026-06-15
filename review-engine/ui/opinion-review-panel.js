@@ -12,6 +12,7 @@
 import { buildViewModel } from './reviewViewModel.js';
 import { approvePlan, rejectPlan, GATE_DECISION } from '../kernel/humanGate.js';
 import { isModuleEnabled } from '../index.js';
+import { PROFILES } from '../profiles/registry.js';
 
 const STYLE_ID = 'review-panel-style';
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -166,8 +167,19 @@ export function render(state, mount, opts = {}) {
  */
 export function isEnabled(module) { return isModuleEnabled(module); }
 
+/**
+ * 모듈 종료정책 노출(G3 — 비용·시간 사전고지용). classic 트리거가 capUsd/maxRounds 를
+ * 프로필에서 읽어 confirm 문구를 구성한다(하드코딩 방지). 미등록 모듈 → null.
+ * @param {string} module  'opinion'|'division'|'patent'
+ * @returns {{capUsd:number, maxRounds:number, K:number, perIssueAttemptCap:number}|null}
+ */
+export function policy(module) {
+  const entry = PROFILES[module];
+  return (entry && entry.profile && entry.profile.terminationPolicy) || null;
+}
+
 /** classic-script SPA 브리지: window.ReviewUI 노출. */
-export const ReviewUI = { render, renderHTML, buildViewModel, GATE_DECISION, isEnabled };
+export const ReviewUI = { render, renderHTML, buildViewModel, GATE_DECISION, isEnabled, policy };
 if (typeof window !== 'undefined') window.ReviewUI = ReviewUI;
 
 export default ReviewUI;
