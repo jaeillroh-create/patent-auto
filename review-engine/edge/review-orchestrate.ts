@@ -75,15 +75,33 @@ export default async function handler(req: Request): Promise<Response> {
     caseId: body?.caseId,
   });
 
-  // 3) transport (멀티프로바이더, env 시크릿)
-  const transport = makeHttpTransport({ resolveKey, fetchImpl: fetch });
+  // 3) transport (멀티프로바이더). ★ L-T4: 사용자 키(body.keys) 우선, 없으면 env(ENV_KEYS) 폴백(후방호환).
+  //    ⚠️ 보안: body.keys/반환 키는 절대 로깅하지 않는다(키 노출 0). 핸들러 인증(Bearer)·CORS 는 불변.
+  const bodyKeys: Record<string, string> = (body?.keys && typeof body.keys === 'object') ? body.keys : {};
+  const resolveKeyReq = (provider: string): string => {
+    const k = bodyKeys[provider];
+    if (k && typeof k === 'string') return k;   // body.keys 우선(사용자 키)
+    return resolveKey(provider);                 // env 폴백
+  };
+  const transport = makeHttpTransport({ resolveKey: resolveKeyReq, fetchImpl: fetch });
+
+  // 3b) ★ L-T4: 역할배정 override — body.assignments[agent.id] 데이터-키 조회(I-6, 문자열 분기 금지).
+  //     assignments 없으면 원본 agents 그대로(후방호환). frozen 원본 불변(얕은 복사로 provider 만 교체).
+  const assignments: Record<string, string> | null =
+    (body?.assignments && typeof body.assignments === 'object') ? body.assignments : null;
+  const agents = assignments
+    ? entry.agents.map((a: any) => {
+        const p = assignments[a.id];
+        return (p && typeof p === 'string') ? { ...a, provider: p } : a;
+      })
+    : entry.agents;
 
   // 4) runAgent 주입
   const runAgent = makeRunAgent({
     transport,
     loadPrompt,
-    agents: entry.agents, // I-6: 선택된 모듈 agents 명시 주입(어댑터에 기본값 없음)
-    onEvent: (ev: any) => console.log('[review-engine event]', JSON.stringify(ev)), // §15 관측
+    agents, // I-6: 선택된 모듈 agents(역할배정 override 반영) 명시 주입
+    onEvent: (ev: any) => console.log('[review-engine event]', JSON.stringify(ev)), // §15 관측(키 미포함)
   });
 
   // 4b) 엔진-side writer 주입(요청별 state 클로저) — 단조성 simulate 의 구조적 정합성 산출.
