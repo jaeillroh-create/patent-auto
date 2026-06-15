@@ -11,7 +11,7 @@ export const examiner_C = Object.freeze({
   model: 'gpt4o',
   fallbackProvider: 'gemini',
   temperature: 0.2,
-  maxTokens: 4096,
+  maxTokens: 8192,
   mode: 'both',
   triggers: ['review'],
   reads: ['claims', 'moduleContext'],
