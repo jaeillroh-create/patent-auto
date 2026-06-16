@@ -23,7 +23,11 @@ function injectStylesOnce(doc) {
   const st = doc.createElement('style');
   st.id = STYLE_ID;
   st.textContent = `
-  .review-panel{font-size:13px;line-height:1.5;color:var(--color-text-primary,#222)}
+  /* 자체 스크롤 영역(opinion/patent 공유) — 부모 컬럼(opinion.css:47 sticky+캡)에 의존하지 않고 패널 안에서 스크롤.
+     overscroll-behavior:contain 으로 sticky 부모와의 스크롤 경합 차단. 짧은 결과는 overflow:auto 라 스크롤바 미생성. */
+  .review-panel{font-size:13px;line-height:1.5;color:var(--color-text-primary,#222);max-height:70vh;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
+  .review-panel::-webkit-scrollbar{width:6px}
+  .review-panel::-webkit-scrollbar-thumb{background:var(--dt-g200,#d0d0d0);border-radius:3px}
   .review-banner{padding:8px 10px;border-radius:8px;margin-bottom:10px;font-size:12px}
   .review-banner.warn{background:#fff7e6;color:#a15c00}
   .review-verdict{display:inline-flex;align-items:center;gap:6px;font-weight:700;padding:4px 10px;border-radius:999px}
