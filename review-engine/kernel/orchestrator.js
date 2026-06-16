@@ -91,6 +91,17 @@ function ingest(state, agentOut, deps) {
   if (agentOut.consensus) state.consensus = { ...state.consensus, ...agentOut.consensus };
 }
 
+/** rebut 출력의 amendmentDirection 을 issue 에 병합(AC-T3a). ★ I-6: issueId 데이터-키 조회만(모듈/agent.id 분기 0).
+ *  compiler 가 issue.amendmentDirection 을 op.content(보정 방향)로 읽는다(amendmentCompiler.js). */
+function ingestRebuttals(state, agentOut) {
+  const list = (agentOut && Array.isArray(agentOut.rebuttals)) ? agentOut.rebuttals : [];
+  for (const rb of list) {
+    if (!rb || !rb.amendmentDirection) continue;
+    const it = (state.issues || []).find((i) => i.id === rb.issueId); // issueId 데이터-키
+    if (it) it.amendmentDirection = rb.amendmentDirection;
+  }
+}
+
 /**
  * 수렴 루프 실행.
  * @param {import('../contracts/ReviewProfile.js').ReviewProfile} profile
@@ -123,6 +134,12 @@ export async function run(profile, state, deps) {
   state.budget.roundsUsed += 1;
   ingest(state, r1, D);
   D.logger.logRound(state, { n: state.budget.roundsUsed, agent: r1.agent || 'examiners', mode: REVIEW_MODE.DISCOVER, inputRef: 'snapshot', output: { issueCount: state.issues.length }, provider: r1.provider || 'mock', cost: r1.cost || 0, latencyMs: r1.latencyMs || 0, ts: Date.now() });
+
+  // ── rebut: 발굴된 issue에 보정 "방향"(amendmentDirection) enrichment (AC-T3a, R1 후 1회) ──
+  //   ★ I-6: mode 데이터 파라미터로 발화, issueId 데이터-키로 병합(모듈/agent.id 분기 0). attorney 없는 모듈은 빈 결과로 무해.
+  const rb = await D.runAgent({ mode: REVIEW_MODE.REBUT, state });
+  state.budget.spentUsd += (rb && rb.cost) || 0;
+  ingestRebuttals(state, rb);
 
   // ── 수렴 루프 ──
   // 종료 보장: 매 반복 roundsUsed 최소 1 증가(아래 끝) → convergence가 L3로 반드시 종료.

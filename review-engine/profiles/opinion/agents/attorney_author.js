@@ -17,7 +17,7 @@ export const attorney_author = Object.freeze({
   reads: ['issues', 'moduleContext'],
   writes: ['rebuttals'],
   systemPromptRef: '.claude/rules/agents/opinion/attorney_author.md',
-  outputSchemaByMode: { discover: 'RebuttalSet', recheck: 'RebuttalSet' },
+  outputSchemaByMode: { discover: 'RebuttalSet', recheck: 'RebuttalSet', rebut: 'RebuttalSet' }, // rebut: AC-T3a 보정방향 enrichment
   retryPolicy: { maxRetry: 1, onFail: 'escalate' },
 });
 export default attorney_author;

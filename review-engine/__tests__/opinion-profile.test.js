@@ -125,6 +125,7 @@ ok(v2.length === 1 && v2[0].severity === 'high' && v2[0].legalBasis === '§47', 
   const ALL = { examiner: true, attorney: true, expert: true };
   const runAgent = async ({ mode, issue }) => {
     if (mode === 'discover') return { issues: [{ id: 'i1', type: '거절미해소', severity: 'high', target: ['claim_1'], legalBasis: '§29②', description: 'd', coreElement: 'i1', suggestedOp: 'add_limitation', status: 'open', occurrences: 1 }], consensus: ALL, cost: 0.01 };
+    if (mode === 'rebut') return { rebuttals: [], cost: 0 }; // AC-T3a: rebut enrichment
     return { verdicts: [{ issueId: issue.id, result: 'resolved' }], consensus: ALL, cost: 0.01 };
   };
   const res = await orchestrator.run(profile, state, { runAgent });
