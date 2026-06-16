@@ -87,24 +87,25 @@ test('applyAmendments: 대상 보정 청구항 없으면 skip(문언 날조 금�
   assert.equal(res.count, 0, '없는 청구항엔 반영 안 함');
 });
 
-test('호출 훅(마운트 이전): reviewState 있으면 renderOutput 이 ReviewUI.render 발화(최종 확인 화면)', () => {
-  // 마운트가 renderDraft → renderOutput("최종 확인", 트리거 버튼과 동일 화면)으로 이전됨.
-  // window.ReviewUI 스텁 + opinionReviewMount 컨테이너 + reviewState 주입 → renderOutput 발화 확인.
+test('호출 훅: 카드에 재오픈 버튼 + openReviewModal 이 공유 모달 발화(2a)', () => {
+  // 결과는 넓은 공유 모달(2a)에 표시 — renderOutput 은 카드에 재오픈 버튼만, 실제 마운트는 openModal.
   let fired = null;
-  win.ReviewUI = { isEnabled: () => true, policy: () => ({ capUsd: 5, maxRounds: 12 }), render: (state, mount, opts) => { fired = { state, hasActor: !!(opts && opts.actor), elId: mount && mount.id }; } };
+  win.ReviewUI = { isEnabled: () => true, policy: () => ({ capUsd: 5, maxRounds: 12 }), render: () => {}, openModal: (state, opts) => { fired = { state, hasActor: !!(opts && opts.actor) }; }, closeModal: () => {} };
   const mountEl = { id: 'opinionReviewMount', innerHTML: '', appendChild() {} };
   const origGet = win.document.getElementById;
   win.document.getElementById = (id) => (id === 'opinionReviewMount' ? mountEl : null);
   Opinion.state.reviewState = { patchPlans: [{ id: 'plan_1', accepted: true, ops: [] }], issues: [], rounds: [], budget: {} };
   const mk = () => ({ innerHTML: '', appendChild() {} });
   Opinion.renderOutput(mk(), mk(), 'completed');
-  assert.ok(fired, '훅이 ReviewUI.render 를 발화');
+  assert.match(mountEl.innerHTML, /검증 결과 보기/, '카드에 재오픈 버튼(결과는 모달)');
+  Opinion.openReviewModal();
+  assert.ok(fired, 'openReviewModal → 공유 모달 발화');
   assert.equal(fired.state, Opinion.state.reviewState);
   assert.equal(fired.hasActor, true, 'actor(로그인 사용자) 전달');
-  assert.equal(fired.elId, 'opinionReviewMount', '버튼과 같은 화면(opinionReviewMount)에 마운트');
-  // 훅은 가드형 — reviewState 없으면 no-op
-  fired = null; Opinion.state.reviewState = null;
+  // 가드형 — reviewState 없으면 버튼/발화 없음
+  fired = null; Opinion.state.reviewState = null; mountEl.innerHTML = '';
   Opinion.renderOutput(mk(), mk(), 'completed');
+  Opinion.openReviewModal();
   assert.equal(fired, null, 'reviewState 없으면 발화 안 함(기존 동작 불변)');
   win.document.getElementById = origGet; // 복원
 });

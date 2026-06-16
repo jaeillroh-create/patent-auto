@@ -530,6 +530,7 @@ Opinion.runReviewEngine = async function(runner, opts) {
   if (!result) return null;
   Opinion.state.reviewState = result; // 마운트 발화 조건(renderOutput)
   try { if (typeof Opinion.renderDetail === 'function') Opinion.renderDetail(); } catch (_e) {} // 렌더는 best-effort(데이터 흐름 우선)
+  try { Opinion.openReviewModal(); } catch (_e) {} // 검증 완료 → 넓은 공유 모달 자동 오픈(2a)
   return result;
 };
 
@@ -578,15 +579,24 @@ Opinion._updateReviewGate = function() {
 
 // _mountReviewResult — 검증 결과를 같은 화면(최종 확인)에 마운트. reviewState 없으면 no-op.
 //   승인(Human Gate) → onChange → applyAmendments(승인분만) → recheck 재트리거(비용 재확인 생략).
+// 결과 모달 옵션(actor + 승인→applyAmendments→recheck). 자동오픈·재오픈이 공유.
+Opinion._reviewModalOpts = function() {
+  return {
+    actor: (App.currentUser && App.currentUser.email) || '',
+    onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) { Opinion.applyAmendments(acc); if (Opinion._reviewRunner) Opinion.runReviewEngine(Opinion._reviewRunner, { recheck: true }); } }
+  };
+};
+Opinion.openReviewModal = function() {
+  try { if (window.ReviewUI && window.ReviewUI.openModal && Opinion.state.reviewState) window.ReviewUI.openModal(Opinion.state.reviewState, Opinion._reviewModalOpts()); } catch (_e) {}
+};
 Opinion._mountReviewResult = function() {
   try {
     if (!(window.ReviewUI && Opinion.state.reviewState)) return;
     var _rm = document.getElementById('opinionReviewMount');
     if (!_rm) return;
-    window.ReviewUI.render(Opinion.state.reviewState, _rm, {
-      actor: (App.currentUser && App.currentUser.email) || '',
-      onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) { Opinion.applyAmendments(acc); if (Opinion._reviewRunner) Opinion.runReviewEngine(Opinion._reviewRunner, { recheck: true }); } }
-    });
+    // 결과는 넓은 공유 모달(2a)에 표시 — 카드에는 재오픈 버튼만(닫아도 세션 내 reviewState 유지).
+    var n = ((Opinion.state.reviewState.issues) || []).length;
+    _rm.innerHTML = '<button class="btn btn-outline btn-full" onclick="Opinion.openReviewModal()"><span class="ico" data-icon="shield"></span> 검증 결과 보기' + (n ? ' (' + n + '건)' : '') + '</button>';
   } catch (_e) {}
 };
 

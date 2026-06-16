@@ -13858,10 +13858,9 @@ function renderPreview(){
       var _card = document.getElementById('resultCardPatentReview'); if (_card) _card.style.display = '';
       var _pm = document.getElementById('patent-review-mount');
       if (_pm) {
-        window.ReviewUI.render(window.__patentReviewState, _pm, {
-          actor: (App.currentUser && App.currentUser.email) || '',
-          onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) { Patent.applyAmendments(acc); if (Patent._reviewRunner) Patent.runReviewEngine(Patent._reviewRunner, { recheck: true }); } }
-        });
+        // 결과는 넓은 공유 모달(2a)에 표시 — 카드에는 재오픈 버튼만(닫아도 세션 내 __patentReviewState 유지).
+        var _n = ((window.__patentReviewState.issues) || []).length;
+        _pm.innerHTML = '<button class="btn btn-outline btn-full" onclick="Patent.openReviewModal()"><span class="ico" data-icon="shield"></span> 검증 결과 보기' + (_n ? ' (' + _n + '건)' : '') + '</button>';
       }
     }
   } catch (_e) {}
@@ -14030,7 +14029,19 @@ Patent.runReviewEngine = async function(runner, opts) {
   if (!result) return null;
   window.__patentReviewState = result; // page4 마운트 발화 조건
   try { if (typeof renderPreview === 'function') renderPreview(); } catch (_e) {} // best-effort 렌더
+  try { Patent.openReviewModal(); } catch (_e) {} // 검증 완료 → 넓은 공유 모달 자동 오픈(2a)
   return result;
+};
+
+// 결과 모달 옵션·오픈(actor + 승인→applyAmendments→recheck). 자동오픈·재오픈 공유.
+Patent._reviewModalOpts = function() {
+  return {
+    actor: (App.currentUser && App.currentUser.email) || '',
+    onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) { Patent.applyAmendments(acc); if (Patent._reviewRunner) Patent.runReviewEngine(Patent._reviewRunner, { recheck: true }); } }
+  };
+};
+Patent.openReviewModal = function() {
+  try { if (window.ReviewUI && window.ReviewUI.openModal && window.__patentReviewState) window.ReviewUI.openModal(window.__patentReviewState, Patent._reviewModalOpts()); } catch (_e) {}
 };
 
 // _defaultReviewRunner — prod 기본 runner: Supabase Edge(review-orchestrate) 호출.
