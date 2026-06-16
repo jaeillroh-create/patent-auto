@@ -578,13 +578,26 @@ Opinion._updateReviewGate = function() {
 };
 
 // _mountReviewResult — 검증 결과를 같은 화면(최종 확인)에 마운트. reviewState 없으면 no-op.
-//   승인(Human Gate) → onChange → applyAmendments(승인분만) → recheck 재트리거(비용 재확인 생략).
-// 결과 모달 옵션(actor + 승인→applyAmendments→recheck). 자동오픈·재오픈이 공유.
+//   승인(Human Gate) → onChange → applyAmendments(승인분, 인메모리) + 결정 빠른 영속. ★ 자동 풀 재검증 제거(AC-T1).
+// 결과 모달 옵션(actor + 승인/거부 처리). 자동오픈·재오픈이 공유.
 Opinion._reviewModalOpts = function() {
   return {
     actor: (App.currentUser && App.currentUser.email) || '',
-    onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) { Opinion.applyAmendments(acc); if (Opinion._reviewRunner) Opinion.runReviewEngine(Opinion._reviewRunner, { recheck: true }); } }
+    onChange: function(rs){
+      var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; });
+      if (acc.length) { try { Opinion.applyAmendments(acc); } catch (_e) {} }   // 승인분 인메모리 구조 반영(유지)
+      // ★ AC-T1: 자동 runReviewEngine(recheck) 제거 — 승인 한 번이 discover부터 풀 재검증을 재실행해 타임아웃하던 버그.
+      //   승인/거부는 결정 상태만 빠르게 영속. 재검증은 '의견서 검증 시작' 버튼으로 사용자가 명시적으로.
+      try { Opinion._persistReviewDecision(rs); } catch (_e) {}
+    }
   };
+};
+// _persistReviewDecision — 승인/거부 결정 빠른 영속(풀 재검증 아님): review_runs.result 의 patchPlans 상태만 UPDATE.
+//   reviewRunId 없으면(동기 폴백 등) 로컬 상태(reviewState)로만 유지하고 영속 생략. best-effort(블로킹 0).
+Opinion._persistReviewDecision = function(reviewState) {
+  var runId = Opinion.state && Opinion.state.reviewRunId;
+  if (!runId || !reviewState) return;
+  try { App.sb.from('review_runs').update({ result: reviewState, updated_at: new Date().toISOString() }).eq('id', runId); } catch (_e) {}
 };
 Opinion.openReviewModal = function() {
   try { if (window.ReviewUI && window.ReviewUI.openModal && Opinion.state.reviewState) window.ReviewUI.openModal(Opinion.state.reviewState, Opinion._reviewModalOpts()); } catch (_e) {}
@@ -614,6 +627,7 @@ Opinion._defaultReviewRunner = async function(snapshot) {
     var uid = (App.currentUser && App.currentUser.id) || null;
     var ins = await App.sb.from('review_runs').insert({ user_id: uid, project_id: String(proj.id || (snapshot && snapshot.caseId) || ''), module: 'opinion', status: 'running' }).select('id').single();
     reviewRunId = ins && ins.data && ins.data.id;
+    Opinion.state.reviewRunId = reviewRunId; // 승인/거부 결정 빠른 영속(AC-T1)용
   } catch (_e) {}
   // 2) invoke — reviewRunId 동봉 시 Edge 가 202(비동기) 반환. 미동봉/구 Edge 면 동기 결과.
   var res = await App.sb.functions.invoke('review-orchestrate', { body: { snapshot: snapshot, caseId: snapshot && snapshot.caseId, keys: auth.keys, assignments: auth.assignments, reviewRunId: reviewRunId || undefined } });
