@@ -47,6 +47,42 @@ async function loadPrompt(ref: string): Promise<string> {
   return await res.text();
 }
 
+/** 오케스트레이션 1회 → 영속·응답용 결과. E-04 escalate 는 정상 종료(done/escalated). ⚠️ payload 에 키 미포함(보안). */
+async function computeReview(profile: any, state: any, runAgent: any): Promise<{ status: string; phase?: string; payload: any; httpStatus: number; error?: string }> {
+  try {
+    const result: any = await orchestrate(profile, state, { runAgent });
+    const payload = { reviewId: result.reviewId, phase: result.phase, issues: result.issues, patchPlans: result.patchPlans, consensus: result.consensus, rounds: result.rounds, transitions: result.transitions, budget: result.budget };
+    return { status: 'done', phase: result.phase, payload, httpStatus: 200 };
+  } catch (e: any) {
+    if (e instanceof SchemaEscalateError) {
+      state.phase = PHASE.ESCALATED;
+      state.transitions = state.transitions || [];
+      state.transitions.push({ ts: Date.now(), round: state.budget?.roundsUsed ?? 0, kind: 'engine', to: PHASE.ESCALATED, actor: 'engine', note: `E-04 schema escalate: ${e.agentId} → ${(e.errors || []).join('; ')}` });
+      console.error('[review-engine] E-04 ESCALATE', e.agentId, e.errors); // §15 알림(키 미포함)
+      const payload = { reviewId: state.reviewId, phase: state.phase, escalated: true, reason: 'E-04', agent: e.agentId, errors: e.errors, transitions: state.transitions };
+      return { status: 'done', phase: 'escalated', payload, httpStatus: 200 };
+    }
+    console.error('[review-engine] fatal', e);
+    return { status: 'failed', error: String(e?.message || e), payload: { error: 'internal', detail: String(e?.message || e) }, httpStatus: 500 };
+  }
+}
+
+/** review_runs 행 영속(service_role, RLS 우회) — PostgREST PATCH. createClient import 없이 fetch 재사용(Node 안전).
+ *  SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY 는 Supabase Edge 자동주입(신규 시크릿 0). ⚠️ patch 에 키 미포함. */
+async function persistRun(reviewRunId: string, patch: Record<string, unknown>): Promise<void> {
+  const url = Deno?.env?.get?.('SUPABASE_URL');
+  const key = Deno?.env?.get?.('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) { console.error('[review-engine] persist skip — SUPABASE_URL/SERVICE_ROLE_KEY 미주입'); return; }
+  try {
+    const res = await fetch(`${url}/rest/v1/review_runs?id=eq.${encodeURIComponent(reviewRunId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', apikey: key, Authorization: `Bearer ${key}`, Prefer: 'return=minimal' },
+      body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+    });
+    if (!res.ok) console.error('[review-engine] persist PATCH 실패', res.status); // 본문(키 가능성) 미로깅
+  } catch (e: any) { console.error('[review-engine] persist 오류', String(e?.message || e)); }
+}
+
 /** Edge 엔트리. */
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
@@ -108,24 +144,25 @@ export default async function handler(req: Request): Promise<Response> {
   //     실(實)반영은 브라우저 측 applyAmendments 가 담당(클라, 사람 승인분만).
   const profile = { ...baseProfile, writer: entry.makeEngineWriter(() => state) };
 
-  // 5) 오케스트레이션 + E-04 escalate 처리(kernel 불변 → 경계에서 catch)
-  try {
-    const result = await orchestrate(profile, state, { runAgent });
-    // 6) await persist(result);  // ← T6 writer 연동 시 활성화 (rounds/issues/transitions append-only)
-    // patchPlans·consensus 포함(B1): Human Gate 가 승인할 보정안 + 합의 신호를 클라가 받는다.
-    return json({ reviewId: result.reviewId, phase: result.phase, issues: result.issues, patchPlans: result.patchPlans, consensus: result.consensus, rounds: result.rounds, transitions: result.transitions, budget: result.budget }, 200);
-  } catch (e) {
-    if (e instanceof SchemaEscalateError) {
-      state.phase = PHASE.ESCALATED;
-      state.transitions = state.transitions || [];
-      state.transitions.push({ ts: Date.now(), round: state.budget?.roundsUsed ?? 0, kind: 'engine', to: PHASE.ESCALATED, actor: 'engine', note: `E-04 schema escalate: ${e.agentId} → ${(e.errors || []).join('; ')}` });
-      console.error('[review-engine] E-04 ESCALATE', e.agentId, e.errors); // §15 알림
-      // await persist(state);
-      return json({ reviewId: state.reviewId, phase: state.phase, escalated: true, reason: 'E-04', agent: e.agentId, errors: e.errors, transitions: state.transitions }, 200);
-    }
-    console.error('[review-engine] fatal', e);
-    return json({ error: 'internal', detail: String(e?.message || e) }, 500);
+  // 5) ★ dual-mode(B-T2): reviewRunId 있으면 비동기(202 + EdgeRuntime.waitUntil → service_role persist),
+  //    없으면 기존 동기 200(후방호환 — reviewRunId 안 보내던 클라 안 깨짐). kernel 불변 — 경계에서 분기.
+  const reviewRunId = body?.reviewRunId;
+  if (reviewRunId && typeof reviewRunId === 'string') {
+    const bg = (async () => {
+      const r = await computeReview(profile, state, runAgent);
+      const patch = r.status === 'failed'
+        ? { status: 'failed', error: r.error }
+        : { status: 'done', phase: r.phase, result: r.payload }; // result 는 키 미포함(computeReview)
+      await persistRun(reviewRunId, patch);
+    })();
+    const ER: any = (globalThis as any).EdgeRuntime;
+    if (ER && typeof ER.waitUntil === 'function') ER.waitUntil(bg); // 응답 후 worker 유지(백그라운드 완주)
+    else bg.catch((e: any) => console.error('[review-engine] bg(no waitUntil)', String(e?.message || e))); // 비-Deno 폴백: fire-and-forget
+    return json({ reviewRunId, status: 'running' }, 202); // 즉시 반환(504 해소) — 클라는 review_runs 폴링(B-T3)
   }
+  // 동기(후방호환): reviewRunId 미전송 클라 → 기존대로 결과 반환(200, escalate 200, 내부오류 500).
+  const r = await computeReview(profile, state, runAgent);
+  return json(r.payload, r.httpStatus);
 }
 
 function json(obj: unknown, status = 200): Response {
