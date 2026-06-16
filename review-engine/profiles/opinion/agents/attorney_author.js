@@ -11,7 +11,7 @@ export const attorney_author = Object.freeze({
   model: 'sonnet',
   fallbackProvider: 'gpt',
   temperature: 0.3,
-  maxTokens: 4096,
+  maxTokens: 8192, // RebuttalSet 전수 발화(보정방향 enrichment 포함) 장문 → truncation 방지(examiner와 동일 cap)
   mode: 'both',
   triggers: ['rebut'],
   reads: ['issues', 'moduleContext'],

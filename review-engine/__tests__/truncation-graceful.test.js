@@ -11,7 +11,9 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { makeRunAgent, SchemaEscalateError } from '../adapters/runAgent.js';
 import opinionExaminerB from '../profiles/opinion/agents/examiner_B.js';
-import { examiner_B as patentExaminerB } from '../profiles/patent/agents/index.js';
+import opinionAttorneyAuthor from '../profiles/opinion/agents/attorney_author.js';
+import opinionDomainExpert from '../profiles/opinion/agents/domain_expert.js';
+import { examiner_B as patentExaminerB, attorney_author as patentAttorneyAuthor, domain_expert as patentDomainExpert } from '../profiles/patent/agents/index.js';
 
 // 응답 헬퍼(deps.transport 가 직접 반환하는 형상: text/stopReason/it/ot/latencyMs/provider/model).
 const VALID = { text: '{"issues":[]}', stopReason: 'end_turn', it: 10, ot: 5, latencyMs: 1, provider: 'claude', model: 'm' };
@@ -44,6 +46,15 @@ function harness(agents, behaviors) {
 test('examiner maxTokens 8192 (opinion·patent)', () => {
   assert.equal(opinionExaminerB.maxTokens, 8192, 'opinion examiner_B');
   assert.equal(patentExaminerB.maxTokens, 8192, 'patent examiner_B');
+});
+
+// ★ 장문 산출자(IssueList/RebuttalSet) 일관 cap — attorney_author 잘림 해소 + domain_expert(IssueList 산출자) 정합.
+//   첫콜 8192면 #161 잘림감지→16000 재시도가 불필요(불필요 왕복 제거). recheck 전용 Verdict(attorney_reviewer)는 단문 → 4096 유지.
+test('★ attorney_author·domain_expert maxTokens 8192 (opinion·patent) — 장문 산출자 일관 cap', () => {
+  assert.equal(opinionAttorneyAuthor.maxTokens, 8192, 'opinion attorney_author');
+  assert.equal(patentAttorneyAuthor.maxTokens, 8192, 'patent attorney_author');
+  assert.equal(opinionDomainExpert.maxTokens, 8192, 'opinion domain_expert');
+  assert.equal(patentDomainExpert.maxTokens, 8192, 'patent domain_expert');
 });
 
 test('★ 잘림 감지 → 재시도 maxTokens 16000 상향 + 잘림 메시지', async () => {
