@@ -49,6 +49,7 @@ const ALL_TRUE = { examiner: true, attorney: true, expert: true };
 function agent({ discover, recheck, consensus }) {
   return async ({ mode, state, issue: iss }) => {
     if (mode === 'discover') return { issues: discover || [], consensus: consensus || ALL_TRUE, cost: 0.01 };
+    if (mode === 'rebut') return { rebuttals: [], cost: 0 }; // AC-T3a: rebut enrichment(이 테스트는 방향 미주입)
     return { verdicts: recheck ? recheck(iss, state) : [{ issueId: iss.id, result: 'resolved' }], consensus: consensus || ALL_TRUE, cost: 0.01 };
   };
 }

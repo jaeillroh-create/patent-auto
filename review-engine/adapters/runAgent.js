@@ -146,6 +146,10 @@ function selectAgents(agents, mode, opts) {
       .concat(opts.includeExpertInDiscover ? agents.filter((a) => a.role === 'domain_expert') : []);
   }
   // recheck: Verdict 산출 에이전트(심사관 recheck + reviewer + expert).
+  if (mode === 'rebut') {
+    // ★ AC-T3a: 출원인측 변리사(RebuttalSet 산출자)만 — outputSchema 값으로 선택(agent.id 분기 0, I-6).
+    return agents.filter((a) => a.outputSchemaByMode && a.outputSchemaByMode.discover === 'RebuttalSet');
+  }
   return agents.filter((a) => a.outputSchemaByMode && a.outputSchemaByMode.recheck === 'Verdict' && a.mode !== 'discover');
 }
 
@@ -184,7 +188,11 @@ export function makeRunAgent(deps) {
       failed.push({ id: a.id, errors: errs });
       deps.onEvent && deps.onEvent({ kind: 'agent_failed', agent: a.id, errors: errs }); // 격리: 실패 에이전트만 제외
     });
-    // ★ 전원 실패 → 빈 리뷰 묵인 방지: 원래 실패(SchemaEscalateError 등)를 재throw → 핸들러가 ESCALATED(200) 처리.
+    // ★ AC-T3a: rebut(보정 방향 enrichment)는 빈 선택/전원 실패여도 무해 통과(throw 금지) — 검증 전체를 죽이지 않음.
+    if (mode === 'rebut' && results.length === 0) {
+      return { rebuttals: [], provider: '', cost: 0, latencyMs: 0, perAgent: [], warnings: failed.map((f) => `${f.id}: rebut 실패 격리`) };
+    }
+    // ★ 전원 실패(discover/recheck) → 빈 리뷰 묵인 방지: 원래 실패(SchemaEscalateError 등)를 재throw → 핸들러가 ESCALATED(200) 처리.
     if (results.length === 0) {
       const firstRej = settled.find((s) => s.status === 'rejected');
       throw (firstRej && firstRej.reason) || new Error('모든 에이전트 실패');
@@ -213,6 +221,16 @@ export function makeRunAgent(deps) {
         deps.onEvent && deps.onEvent({ kind: 'zero_issue_pass', agents: examinerResults.map((r) => r.id) });
       }
       return { issues, consensus, provider: providerLabel, cost, latencyMs, perAgent, warnings };
+    }
+
+    if (mode === 'rebut') {
+      // ★ AC-T3a: 보정 방향 집계(RebuttalSet). issue별 amendmentDirection 을 orchestrator 가 issueId 로 병합.
+      const rebuttals = [];
+      for (const r of results) {
+        const list = (r.data && Array.isArray(r.data.rebuttals)) ? r.data.rebuttals : [];
+        list.forEach((rb) => rebuttals.push({ raisedBy: r.id, ...rb }));
+      }
+      return { rebuttals, provider: providerLabel, cost, latencyMs, perAgent, warnings };
     }
 
     // recheck: verdict 집계.

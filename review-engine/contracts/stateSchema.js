@@ -43,7 +43,7 @@ export const CLAIM_KIND = Object.freeze({ GENERAL: 'general', ANCHOR: 'anchor', 
 export const CLAIM_TYPE = Object.freeze({ INDEPENDENT: 'independent', DEPENDENT: 'dependent' });
 
 /** 에이전트 동작 모드 (spec §4.4). recheck는 신규지적 금지. */
-export const REVIEW_MODE = Object.freeze({ DISCOVER: 'discover', RECHECK: 'recheck' });
+export const REVIEW_MODE = Object.freeze({ DISCOVER: 'discover', RECHECK: 'recheck', REBUT: 'rebut' });
 
 /** 지원 모듈 식별자. Profile.module과 1:1 (spec §2). */
 export const MODULE = Object.freeze({ PATENT: 'patent', OPINION: 'opinion', DIVISION: 'division' });

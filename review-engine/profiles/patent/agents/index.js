@@ -42,7 +42,7 @@ export const attorney_author = A({
   id: 'attorney_author', role: 'attorney_author', provider: 'claude', model: 'sonnet', fallbackProvider: 'gpt',
   temperature: 0.3, reads: ['issues', 'moduleContext'], writes: ['rebuttals'], triggers: ['rebut'],
   systemPromptRef: '.claude/rules/agents/patent/attorney_author.md',
-  outputSchemaByMode: { discover: 'RebuttalSet', recheck: 'RebuttalSet' },
+  outputSchemaByMode: { discover: 'RebuttalSet', recheck: 'RebuttalSet', rebut: 'RebuttalSet' }, // rebut: AC-T3a
 });
 
 /** attorney_reviewer — 독립 검토(과축소 견제). recheck 전용. */
