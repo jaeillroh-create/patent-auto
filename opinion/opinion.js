@@ -172,6 +172,7 @@ Opinion.resetState = function(opts) {
   Opinion.state.parsedDoc         = null;   // ★ DB-backed parsed_data 캐시(진실원천) — 프로젝트 전환 시 교차오염 방지
   Opinion.state.analysis          = null;
   Opinion.state.draftResult       = null;
+  Opinion.state._pendingRewrite   = null;   // D2a: 승인 방향 splice 재작성 보류본(확정 전 draftResult 미변경)
   Opinion.state.validation        = null;
   Opinion.state.opinionDraft      = null;
   Opinion.state.typeResult        = null;
@@ -516,6 +517,92 @@ Opinion._collectApprovedDirections = function(draftResult) {
     if (dirs.length) out.push({ claim_no: ac.claim_no, directions: dirs });
   });
   return out;
+};
+
+// applyDirectionRewrite — D2a(옵션 B splice): 승인된 보정 "방향"을 ★대상 청구항만★ LLM 으로 재작성하고,
+//   나머지 청구항은 직전 draftResult 문언을 그대로 복사(byte-identical)한다.
+//   ─ ★ 범위제어가 프롬프트 부탁이 아니라 코드(splice)로 보장된다: 비대상 청구항은 LLM 에 보내지도, 건드리지도
+//     않는다(structuredClone 후 대상 ac 의 문언/근거 필드만 교체). → 비대상 drift 구조적 불가.
+//   ─ ★ 결과는 즉시 적용하지 않고 state._pendingRewrite 에 "보류"한다(자동적용 금지 — D2c 변리사 확정에서 커밋).
+//     draftResult 를 변경하지 않으므로 review_amendments(D1 입력)도 보존된다.
+//   ─ ★ 승인(onChange/AC-T1)이 이 함수를 자동 호출하지 않는다 — 별도 명시 액션(버튼)으로만 호출(D2c 배선).
+//   ─ client-side LLM(callForJSON→App.callClaude) — edge wall-clock 무관. 대상 청구항 1건씩 호출(비용↓·격리).
+//   @param {{claimNos?:(number|string)[]}} [opts]  특정 대상만(생략 시 승인된 방향 전체)
+//   @returns {Promise<object|null>} state._pendingRewrite(보류본) 또는 null
+Opinion.applyDirectionRewrite = async function(opts) {
+  opts = opts || {};
+  var p = Opinion.state.current; if (!p) return null;
+  var dr = Opinion.state.draftResult;
+  if (!dr) { showToast('보정 청구항 데이터가 없습니다', 'error'); return null; }
+
+  // 1) 승인 방향 수집(승인분만). opts.claimNos 주어지면 그 교집합만.
+  var approved = Opinion._collectApprovedDirections(dr);
+  if (Array.isArray(opts.claimNos) && opts.claimNos.length) {
+    var want = opts.claimNos.map(String);
+    approved = approved.filter(function(e) { return want.indexOf(String(e.claim_no)) >= 0; });
+  }
+  if (!approved.length) { showToast('반영할 승인 보정 방향이 없습니다', 'info'); return null; }
+
+  // 2) ★ splice 토대: draftResult 깊은 복제(원본 불변 → review_amendments 보존). 비대상은 이 복제본 그대로 유지.
+  var pending = structuredClone(dr);
+  var pendingArr = pending.amended_claims || pending.corrected_claims || (pending.merged_claim ? [pending.merged_claim] : []);
+  var byNo = {}; pendingArr.forEach(function(ac) { if (ac && ac.claim_no != null) byNo[String(ac.claim_no)] = ac; });
+
+  // 3) 명세서 근거(뒷받침·신규사항 방지). 30K 초과 시 head+tail.
+  var specBlock = '';
+  try { specBlock = (await Opinion.extractSpecificationText(p.id)) || ''; } catch (_e) {}
+  if (specBlock.length > 30000) specBlock = specBlock.slice(0, 20000) + '\n...[중략]...\n' + specBlock.slice(-10000);
+
+  // 4) ★ 대상 청구항만 1건씩 재작성 → 해당 ac 의 문언/근거 필드만 교체(나머지 필드·비대상 청구항 불변).
+  var rewritten = [], failed = [], before = {}, after = {};
+  for (var i = 0; i < approved.length; i++) {
+    var tgt = approved[i];
+    var ac = byNo[String(tgt.claim_no)];
+    if (!ac) { failed.push({ claim_no: tgt.claim_no, reason: 'draft에 대상 청구항 없음' }); continue; }
+    var origText = ac.amended || ac.corrected || ac.text || ac.original || '';
+    var prompt = Opinion.SYS_PROMPT + '\n\n'
+      + '[대상 청구항 ' + tgt.claim_no + ' — 오직 이 청구항 하나만 보정한다. 다른 청구항은 출력하지 마라]\n'
+      + '현재 문언:\n' + origText + '\n\n'
+      + '[반영할 승인 보정 방향(AI 검증 통과·변리사 승인)]\n' + tgt.directions.map(function(d) { return '· ' + d; }).join('\n') + '\n\n'
+      + (specBlock ? '[출원 명세서 원문 — 뒷받침 근거]\n' + specBlock + '\n\n'
+                   : '[⚠️ 명세서 원문 미제공 — spec_basis 신뢰성 낮음, 변리사 확인 필수]\n\n')
+      + '★ 규칙:\n'
+      + '1. 위 "승인 보정 방향"을 청구항 ' + tgt.claim_no + ' 문언에 반영한다.\n'
+      + '2. 방향과 무관한 부분은 현재 문언을 최대한 유지한다(불필요한 재서술·과축소 금지).\n'
+      + '3. 모든 보정 구성은 명세서 기재 범위 내에서만(신규사항 추가 금지 §47, 인용발명 유래 용어 금지).\n'
+      + '4. 근거 단락을 spec_basis 에 【0000】 형식으로 명시한다.\n'
+      + '5. 청구항 ' + tgt.claim_no + ' 한 항만 출력한다.\n\n'
+      + 'JSON: {"claim_no":' + tgt.claim_no + ',"amended":"보정후 청구항 전문","amendments_summary":"보정 요약","amendment_methods":[{"method":"한정|부가|구체화","target":"보정 대상 구성","spec_paragraph":"【0035】","description":"명세서 근거 보정 내용"}],"spec_basis":["【0035】"]}';
+    var out = null;
+    try { out = await Opinion.callForJSON(prompt, '{"claim_no":1,"amended":"...","spec_basis":["【0001】"]}'); }
+    catch (e) { failed.push({ claim_no: tgt.claim_no, reason: 'LLM 호출 실패: ' + ((e && e.message) || e) }); continue; }
+    if (!out || out._parse_failed || !out.amended || !String(out.amended).trim()) {
+      failed.push({ claim_no: tgt.claim_no, reason: '재작성 응답 파싱 실패/빈 문언' }); continue;
+    }
+    // ★ splice: 이 대상 ac 의 문언·근거만 교체. claim_no·original·per_cited_ref_diff·review_amendments 등은 보존.
+    before[String(tgt.claim_no)] = origText;
+    after[String(tgt.claim_no)] = String(out.amended);
+    ac.amended = String(out.amended);
+    if (Array.isArray(out.spec_basis)) ac.spec_basis = out.spec_basis;
+    if (Array.isArray(out.amendment_methods)) ac.amendment_methods = out.amendment_methods;
+    if (out.amendments_summary) ac.amendments_summary = String(out.amendments_summary);
+    ac._d2_rewritten = true;              // D2 반영 표시(D2d 공존 라벨용)
+    ac._d2_directions = tgt.directions;   // 반영한 승인 방향(추적)
+    rewritten.push(tgt.claim_no);
+  }
+
+  if (!rewritten.length) { showToast('재작성 실패 — ' + (failed[0] ? failed[0].reason : '대상 없음'), 'error'); return null; }
+
+  // 5) ★ 보류(자동적용 금지): draftResult 는 그대로 두고 후보만 state._pendingRewrite 에. D2c 확정에서 커밋.
+  Opinion.state._pendingRewrite = {
+    draftResult: pending,         // 확정 시 state.draftResult 로 커밋할 후보
+    targetClaimNos: rewritten,    // 재작성된 claim_no
+    failed: failed,               // 실패 대상(있으면)
+    before: before, after: after, // D2c 비교 diff용 (재작성 전/후 문언)
+    createdAt: new Date().toISOString(),
+  };
+  showToast('승인 방향 반영(재작성) 완료 — 청구항 ' + rewritten.join(', ') + ' · 변리사 확정 대기', 'success');
+  return Opinion.state._pendingRewrite;
 };
 
 // runReviewEngine — [B1] 리뷰 엔진 검증 트리거(클라).
