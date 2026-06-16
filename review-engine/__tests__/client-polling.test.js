@@ -143,6 +143,6 @@ test('progressClient 재사용 + 브리지 노출 (소스 확인)', () => {
   assert.ok(bridge.includes('subscribePolling') && bridge.includes('openModalMessage'), 'ReviewUI 브리지에 노출(재구현 0)');
 });
 
-test('maxRounds 1→3 (OpinionProfile) — ★ 재배포 후 엔진 반영', () => {
-  assert.equal(OpinionProfile.terminationPolicy.maxRounds, 3, 'maxRounds=3');
+test('maxRounds=2 (② wall-clock 대응) — ★ 재배포 후 엔진 반영', () => {
+  assert.equal(OpinionProfile.terminationPolicy.maxRounds, 2, 'maxRounds=2');
 });

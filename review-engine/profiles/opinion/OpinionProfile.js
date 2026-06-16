@@ -70,11 +70,15 @@ export const rippleRules = [
 ];
 
 /** 종료 정책 (§2 (7), §13). capUsd=$5(opinion).
- *  maxRounds=3 (B-T3): 비동기(B-T2 dual-mode 202+waitUntil)로 게이트웨이 504가 해소되어 R1 discover +
- *    최대 2 recheck 라운드를 worker wall-clock(~150s) 내에서 수행 → recheck 발화 → patchPlan(C 액션플랜 토대).
+ *  maxRounds=2 (②): Claude 단독(6역할 1키) 운용에서 worker wall-clock(~150s) 안에 들도록 3→2 로 축소.
+ *    R1 discover + rebut(attorney_author 1회 — D1 보정권고 입력원, 유지) + recheck **1라운드**.
+ *    진단(DIAG-walltime-death): recheck 1라운드 제거로 ~50–110s 단축(2분25초=경계 done 을 여유 아래로).
+ *  ⚠️ 깊이 트레이드오프: recheck 가 1회뿐이라 거절이유 정교화·반박 검수 깊이가 줄어든다(done 은 빨라짐).
+ *    수렴이 1 recheck 안에 안 끝나면 L3 ESCALATE(자동통과 금지 — high 잔존은 사람 결정으로 넘어감).
+ *  ★ 멀티프로바이더(GPT/Gemini 분산)로 라운드 시간이 줄면 3 복원 검토(분산 시 wall-clock 여유 생김).
  *  ★ 이 값은 Edge 함수에 번들된다(orchestrator.js:114 가 읽음). 변경은 `supabase functions deploy
- *    review-orchestrate` 재배포 후에만 엔진에 반영된다(클라 polling 은 무재배포). 실측 빠듯하면 2로 튜닝. */
-export const terminationPolicy = { K: 1, maxRounds: 3, capUsd: 5, perIssueAttemptCap: 2 };
+ *    review-orchestrate` 재배포 후에만 엔진에 반영된다(클라 polling 은 무재배포). 수렴 로직은 불변. */
+export const terminationPolicy = { K: 1, maxRounds: 2, capUsd: 5, perIssueAttemptCap: 2 };
 
 /**
  * 작성모듈 반영 계약 (§2 (8), §10) — T6 연동(SIMULATE_MODE 옵션 B).
