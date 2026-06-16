@@ -670,7 +670,17 @@ Opinion._pollReviewRun = function(reviewRunId) {
       if (msg) { try { window.ReviewUI.openModalMessage(msg); } catch (_e) {} }
       resolve(result);
     }
-    var killer = setTimeout(function(){ finish(null, '검증 시간 초과 — 다시 시도해 주세요'); }, 180000); // worker 사망 방어
+    var killer = setTimeout(function(){
+      // ③ 고착 정리(보조): worker 사망 추정 → 이 run 을 DB 에서도 failed 로 즉시 정리(사용자 즉시 인지).
+      //   RLS 로 본인 행만 update, status='running' 인 행만(막 done 된 행 덮어쓰기 방지). 실패해도 무해(pg_cron 백업).
+      //   fire-and-forget(await 안 함) — finish 로 UX 는 즉시 종료.
+      try {
+        App.sb.from('review_runs')
+          .update({ status: 'failed', error: 'wall-clock timeout (client killer — worker 사망 추정)' })
+          .eq('id', reviewRunId).eq('status', 'running');
+      } catch (_e) {}
+      finish(null, '검증 시간 초과 — 다시 시도해 주세요');
+    }, 180000); // worker 사망 방어
     sub = window.ReviewUI.subscribePolling({
       intervalMs: 2000,
       fetchState: async function() {
