@@ -96,7 +96,7 @@ test('E2E: exportSnapshot→adapt→orchestrate→Human Gate→승인→applyAme
 
   // ── 3) Human Gate 표시: ReviewUI 가 reviewState 를 소비해 게이트 UI 생성 ──
   const html = renderHTML(result, { actor: 'jaeill.roh@gmail.com' });
-  assert.match(html, /보정 diff/);
+  assert.match(html, /권장 보정안/); // AC-T2: 섹션명 '보정 diff'→'권장 보정안'
   assert.match(html, new RegExp(plan.id), '게이트 UI에 승인 대상 plan 표시');
 
   // ── 4) 사람 승인(Human Gate 버튼이 호출하는 것과 동일 경로): humanGate.approvePlan ──
