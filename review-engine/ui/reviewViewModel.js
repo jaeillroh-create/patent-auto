@@ -87,8 +87,8 @@ export function buildViewModel(state) {
     cost,                                     // image 13/15
     humanNeeded,                              // §9
     consensus: state.consensus || {},
-    // §12: 비결정성 고지(UI 필수 문구)
-    nondeterministicNotice: '검증은 비결정적입니다. 결과를 참고한 뒤 사람이 최종 확정하세요.',
+    // §12: 보조 자료 고지(AC-T2 — "비결정적" 부정 표현 제거, 변리사 최종 확정 안내)
+    nondeterministicNotice: '본 AI 검증은 보조 자료입니다. 최종 판단은 변리사가 확정합니다.',
   };
 }
 

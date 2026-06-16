@@ -107,11 +107,11 @@ test('UI 매핑: image 33(쟁점·전략 심사관별) + image 13/15(비용)', (
 
 test('renderHTML: 스크린 매핑 문자열 증명(DOM-free) + 비결정성 고지', () => {
   const html = renderHTML(makeState(), { actor: 'jaeill.roh@gmail.com' });
-  assert.match(html, /🔴 실패/);
-  assert.match(html, /사람 결정 필요/);
+  assert.match(html, /🔴 보정 필요/);       // AC-T2: '실패'→'보정 필요'
+  assert.match(html, /변리사 확정 필요/);   // AC-T2: '사람 결정 필요'→'변리사 확정 필요'(긍정 프레이밍)
   assert.match(html, /review-op add/);     // diff 초록
   assert.match(html, /review-op narrow/);  // diff 빨강
-  assert.match(html, /비결정적/);           // §12 고지
+  assert.match(html, /보조 자료/);          // §12 고지(AC-T2: '비결정적' 제거)
   assert.match(html, /표시만 — 작성모듈 미반영/); // 읽고 지적만
   assert.match(html, /data-act="approve"/);
 });

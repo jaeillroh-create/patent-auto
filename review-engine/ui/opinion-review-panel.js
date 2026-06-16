@@ -68,43 +68,96 @@ function injectStylesOnce(doc) {
   .review-cost{border-top:1px dashed var(--color-border,#e5e5e5);margin-top:12px;padding-top:8px;font-size:11px;color:#777}
   .review-cost table{width:100%;border-collapse:collapse}
   .review-cost td{padding:2px 4px}
+  /* 최상단 한국어 종합 결론(AC-T2) */
+  .review-verdict-box{border:1px solid var(--color-border,#e5e5e5);border-left:4px solid var(--color-primary,#2563eb);border-radius:8px;padding:12px 14px;margin-bottom:12px;background:var(--color-bg-secondary,#f7f9fc)}
+  .review-verdict-box .rv-headline{font-size:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .review-verdict-box .rv-sub{font-size:12px;color:var(--color-text-secondary,#555);margin-top:6px}
+  .review-verdict-box .rv-final{font-size:12px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--color-border,#e5e5e5);font-weight:600}
+  .review-verdict-box ul{margin:4px 0 0;padding-left:18px;font-size:12px}
+  .review-verdict-box li{margin:2px 0}
   `;
   doc.head.appendChild(st);
 }
 
+// ── 영문 라벨 → 한국어 매핑(AC-T2, presentation) ──
+const OP_LABEL = { add_limitation: '한정 추가', narrow_scope: '권리 축소', fix_term: '용어 정정', add_antecedent: '선행근거 추가', add_spec_support: '명세서 근거 추가', merge_claim: '청구항 병합', amend_claim: '청구항 보정', delete_claim: '청구항 삭제', add_dependent: '종속항 추가' };
+const PHASE_LABEL = { escalated: '보정 필요(미해소 거절위험 잔존)', ESCALATED: '보정 필요(미해소 거절위험 잔존)', converged: '수렴 완료(거절위험 해소)', CONVERGED: '수렴 완료(거절위험 해소)', finalized: '확정', running: '검증 중', RUNNING: '검증 중' };
+const STATUS_LABEL = { open: '미해소', regression: '회귀', resolved: '해소', accepted: '수용', deadlock: '판단 요망', escalated: '보정 필요' };
+const SEV_LABEL = { high: '높음', medium: '주의', low: '참고', HIGH: '높음', MEDIUM: '주의', LOW: '참고' };
+function opLabel(o) { return OP_LABEL[o] || o; }
+function phaseLabel(p) { return PHASE_LABEL[p] || (p || ''); }
+function statusLabel(s) { return STATUS_LABEL[s] || s; }
+function sevLabel(s) { return SEV_LABEL[s] || s; }
+
+function opSummary(d) {
+  const who = (d.addressesIssues || []).join(', ');
+  const ops = (d.ops || []).map((o) => opLabel(o.op) + (o.target ? ' @ ' + o.target : '')).join(', ');
+  return (who ? who + ': ' : '') + ops;
+}
+
+/** ★ 최상단 한국어 종합 결론(판정 + 핵심 거절이유 + 권장 보정 + 최종 판정). presentation 만. */
+function renderVerdict(vm) {
+  const p = vm.passCount;
+  const overallTxt = vm.overall === 'pass' ? '✅ 통과' : vm.overall === 'warn' ? '⚠️ 주의' : '🔴 보정 필요';
+  const headline = p.total === 0
+    ? '발굴된 거절이유가 없습니다 — 현재 청구항 기준 거절위험이 낮습니다(보조 자료).'
+    : `거절이유 ${p.total}건 발굴 · 해소 ${p.resolved} · 미해소(높음) ${p.highOpen} · 주의 ${p.medOpen}`;
+  const highs = (vm.severity.fail || []).slice(0, 5).map((it) =>
+    `<li>${esc(it.legalBasis || '')} ${esc(it.type || '')} — ${esc((it.target || []).join(', '))}: ${esc((it.description || '').slice(0, 90))}</li>`).join('');
+  const highBlock = (vm.severity.fail || []).length
+    ? `<div style="margin-top:6px"><b>핵심 거절이유 (미해소 · 보정 필요)</b><ul>${highs}</ul></div>` : '';
+  const planCount = (vm.diffs || []).length;
+  const hasContent = (vm.diffs || []).some((d) => (d.ops || []).some((o) => o.content));
+  const planBlock = planCount === 0
+    ? `<div style="margin-top:6px;color:var(--color-text-tertiary,#888)">권장 보정안: 아직 생성되지 않았습니다.</div>`
+    : `<div style="margin-top:6px"><b>권장 보정 (${planCount}건)</b>: ${hasContent ? esc((vm.diffs || []).map(opSummary).join(' / ')) : '보정 방향 생성 중 — 아래 보정안 참조'}</div>`;
+  const finalMsg = (vm.severity.fail || []).length
+    ? `미해소 거절이유 ${vm.severity.fail.length}건은 보정 없이 등록 통과가 불가합니다(특허상 정당한 판정). 아래 보정안을 검토·확정하세요.`
+    : (p.total === 0 ? '추가 대응 없이 진행 가능합니다(참고용).' : '주의 항목을 검토한 뒤 확정하세요.');
+  return `<div class="review-verdict-box">
+    <div class="rv-headline"><span class="review-verdict ${esc(vm.overall)}">${overallTxt}</span> <b>검증 판정</b> · ${esc(phaseLabel(vm.phase))}</div>
+    <div class="rv-sub">${esc(headline)}</div>
+    ${highBlock}
+    ${planBlock}
+    <div class="rv-final">최종 판정: ${esc(finalMsg)}</div>
+  </div>`;
+}
+
 function renderNeed(hn) {
   if (!hn.required) return '';
+  // ★ AC-T2: "진동/합의불가/사람 판단 떠넘김" 부정 표현 제거 → 명확한 최종 판정·변리사 확정 요망(긍정 프레이밍).
   const rows = [];
-  if (hn.deadlocks.length) rows.push(`<span class="rn-badge">교착 ${hn.deadlocks.length}</span>진동/합의불가 — 사람 판단 필요`);
-  if (hn.tradeoffs.length) rows.push(`<span class="rn-badge">권리 trade-off ${hn.tradeoffs.length}</span>일반항 축소는 사업 판단`);
-  if (hn.residualHigh.length) rows.push(`<span class="rn-badge">잔여 high ${hn.residualHigh.length}</span>자동통과 금지(E-17)`);
-  if (hn.unknownKind.length) rows.push(`<span class="rn-badge">유형 미상 ${hn.unknownKind.length}</span>청구항 kind 지정 필요(E-12)`);
-  return `<div class="review-need"><b>⚠️ 사람 결정 필요</b><div style="margin-top:6px">${rows.map((r) => `<div style="margin:3px 0">${r}</div>`).join('')}</div></div>`;
+  if (hn.residualHigh.length) rows.push(`<span class="rn-badge">미해소 ${hn.residualHigh.length}</span>보정 없이는 등록 통과 불가 — 아래 보정안 확정 요망(특허상 정당한 판정)`);
+  if (hn.deadlocks.length) rows.push(`<span class="rn-badge">핵심 쟁점 ${hn.deadlocks.length}</span>보정 방향을 변리사가 확정 요망`);
+  if (hn.tradeoffs.length) rows.push(`<span class="rn-badge">권리범위 ${hn.tradeoffs.length}</span>일반항 축소는 사업 판단`);
+  if (hn.unknownKind.length) rows.push(`<span class="rn-badge">유형 ${hn.unknownKind.length}</span>청구항 종류 지정 요망`);
+  return `<div class="review-need"><b>변리사 확정 필요</b><div style="margin-top:6px">${rows.map((r) => `<div style="margin:3px 0">${r}</div>`).join('')}</div></div>`;
 }
 
 function renderIssues(issuesByAgent) {
-  if (!issuesByAgent.length) return '<div class="review-issue pass">발굴된 쟁점 없음 — 통과(참고: 검증 비결정적)</div>';
+  if (!issuesByAgent.length) return '<div class="review-issue pass">발굴된 거절이유 없음 — 현재 기준 거절위험이 낮습니다(보조 자료)</div>';
   return issuesByAgent.map((g) => `
     <div style="margin-bottom:8px">
       <div style="font-weight:700;font-size:12px;margin-bottom:2px">${esc(g.agent)}</div>
       ${g.items.map((it) => `
         <div class="review-issue ${esc(it.verdict)}">
-          <div class="ri-meta">${esc(it.severity)} · ${esc(it.legalBasis)} · ${esc(it.type)} → ${esc((it.target || []).join(', '))} · [${esc(it.status)}]</div>
+          <div class="ri-meta">${esc(sevLabel(it.severity))} · ${esc(it.legalBasis)} · ${esc(it.type)} → ${esc((it.target || []).join(', '))} · [${esc(statusLabel(it.status))}]</div>
           <div>${esc(it.description)}</div>
         </div>`).join('')}
     </div>`).join('');
 }
 
+const DECISION_LABEL = { approved: '승인됨', rejected: '거부됨', pending: '대기' };
 function renderDiffs(diffs, opts) {
-  if (!diffs.length) return '<div style="font-size:12px;color:#888">표시할 보정안 없음</div>';
+  if (!diffs.length) return '<div style="font-size:12px;color:#888">생성된 보정안이 없습니다</div>';
   const canAct = !!opts.actor;
   return diffs.map((d) => `
     <div class="review-plan ${esc(d.decision)}" data-plan="${esc(d.planId)}">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <b style="font-size:12px">${esc(d.planId)} <span style="color:#999;font-weight:400">→ ${esc((d.addressesIssues || []).join(', '))}</span></b>
-        <span class="review-decision ${esc(d.decision)}">${esc(d.decision)}</span>
+        <span class="review-decision ${esc(d.decision)}">${esc(DECISION_LABEL[d.decision] || d.decision)}</span>
       </div>
-      <div style="margin:6px 0">${d.ops.map((o) => `<span class="review-op ${esc(o.diffClass)}">${esc(o.op)} @ ${esc(o.target)}${o.content ? ' — ' + esc(o.content) : ''}</span>`).join('')}</div>
+      <div style="margin:6px 0">${d.ops.map((o) => `<span class="review-op ${esc(o.diffClass)}">${esc(opLabel(o.op))} @ ${esc(o.target)}${o.content ? ' — ' + esc(o.content) : ''}</span>`).join('')}</div>
       <div style="font-size:11px;color:#999">score ${d.scoreBefore} → ${d.scoreAfter} · <i>표시만 — 작성모듈 미반영(T6)</i></div>
       <div class="review-gate-btns">
         <button class="appr" data-act="approve" data-plan="${esc(d.planId)}" ${canAct ? '' : 'disabled'}>승인</button>
@@ -126,12 +179,11 @@ function renderCost(cost) {
 export function renderHTML(state, opts = {}) {
   const vm = buildViewModel(state);
   return `<div class="review-panel">
+    ${renderVerdict(vm)}
     <div class="review-banner warn">${esc(vm.nondeterministicNotice)}</div>
-    <div><span class="review-verdict ${esc(vm.overall)}">${vm.overall === 'pass' ? '✅ 통과' : vm.overall === 'warn' ? '⚠️ 주의' : '🔴 실패'}</span></div>
-    <div class="review-count"><span>해소 <b>${vm.passCount.resolved}</b>/${vm.passCount.total}</span><span>high 잔존 <b>${vm.passCount.highOpen}</b></span><span>주의 <b>${vm.passCount.medOpen}</b></span></div>
     ${renderNeed(vm.humanNeeded)}
-    <div class="review-sec"><h4>쟁점 · 전략 (심사관별)</h4>${renderIssues(vm.issuesByAgent)}</div>
-    <div class="review-sec"><h4>보정 diff (표시만)</h4>${renderDiffs(vm.diffs, opts)}</div>
+    <div class="review-sec"><h4>거절이유 · 쟁점 (심사관별)</h4>${renderIssues(vm.issuesByAgent)}</div>
+    <div class="review-sec"><h4>권장 보정안</h4>${renderDiffs(vm.diffs, opts)}</div>
     ${renderCost(vm.cost)}
   </div>`;
 }
