@@ -70,10 +70,11 @@ export const rippleRules = [
 ];
 
 /** 종료 정책 (§2 (7), §13). capUsd=$5(opinion).
- *  ⚠️ 임시(wall-clock 회피): maxRounds 12→1 = discover-only(examiner 쟁점 발굴만, recheck 자동보정 루프 제거).
- *     단일 Edge 동기 호출의 게이트웨이 타임아웃(504) 회피용 잠정 조치 — 전체 흐름 완주 확인 목적.
- *     ★ 근본 해결 (c) 백그라운드+폴링(spec §14) 도입 후 maxRounds 를 원복(또는 적정선)으로 되돌릴 것. */
-export const terminationPolicy = { K: 1, maxRounds: 1, capUsd: 5, perIssueAttemptCap: 2 };
+ *  maxRounds=3 (B-T3): 비동기(B-T2 dual-mode 202+waitUntil)로 게이트웨이 504가 해소되어 R1 discover +
+ *    최대 2 recheck 라운드를 worker wall-clock(~150s) 내에서 수행 → recheck 발화 → patchPlan(C 액션플랜 토대).
+ *  ★ 이 값은 Edge 함수에 번들된다(orchestrator.js:114 가 읽음). 변경은 `supabase functions deploy
+ *    review-orchestrate` 재배포 후에만 엔진에 반영된다(클라 polling 은 무재배포). 실측 빠듯하면 2로 튜닝. */
+export const terminationPolicy = { K: 1, maxRounds: 3, capUsd: 5, perIssueAttemptCap: 2 };
 
 /**
  * 작성모듈 반영 계약 (§2 (8), §10) — T6 연동(SIMULATE_MODE 옵션 B).

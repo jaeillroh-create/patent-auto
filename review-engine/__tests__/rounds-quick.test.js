@@ -1,9 +1,9 @@
 /**
  * review-engine/__tests__/rounds-quick.test.js
- * (d) 임시 완화 — opinion maxRounds=1(discover-only)로 wall-clock 회피.
+ * opinion maxRounds 정책 — B-T3 에서 1→3 복원(비동기 토대 위에서 recheck 활성).
  *
- * 실제 orchestrator.run + 스텁 runAgent 로 검증: discover 1회만 발화하고 recheck 미발화,
- * discover 가 낸 쟁점이 결과에 실려 ESCALATED(200 경로)로 완주 — "전체 흐름 완주" 확인.
+ * 실제 orchestrator.run + 스텁 runAgent/writer 로 검증: maxRounds=3 이면 R1 discover + recheck 발화
+ * (자동보정 루프 활성 → patchPlan 생성), 유한 종료(≤ maxRounds). ★ 값 변경은 Edge 재배포 후 엔진 반영.
  */
 import { test } from 'node:test';
 import assert from 'node:assert';
@@ -16,55 +16,56 @@ const SNAP = {
     application_no: '10-2024-1', invention_title: '열관리 장치',
     claims: [{ no: 1, text: '복수의 셀과 상기 셀을 제어하는 제어부를 포함하는 배터리 장치.' }],
     cited_references: [{ ref_no: 1, title: '인용문헌1' }],
-    rejection_reasons: [{ article: '§42④', claim_nos: [1] }],
+    rejection_reasons: [{ article: '§29②', claim_nos: [1] }],
   },
-  typeResult: { primary_type: '기재불비' },
-  draftResult: { amended_claims: [{ claim_no: 1, amended: '복수의 셀과 제어부와 냉각 유로를 포함하는 배터리 장치.' }] },
+  typeResult: { primary_type: '진보성' },
+  draftResult: { amended_claims: [{ claim_no: 1, amended: '복수의 셀과 제어부와 냉각 유로를 포함하는 배터리 장치.', spec_basis: ['0021'] }] },
   refText: '【0021】 냉각 유로 설명.', analysis: null, validation: null,
 };
 
-function mkState() {
-  return OpinionProfile.adaptSnapshot(SNAP, null, { terminationPolicy: OpinionProfile.terminationPolicy });
-}
+const mockWriter = {
+  applyAmendments: async (_c, plans) => ({ applied: plans.map((p) => p.id), rejected: [], consistency: { claimSpecOk: true, refSignOk: true, abstractOk: true }, renderCheck: { svg: true, pptx: true, canvas: true }, txnId: 'tx' }),
+  rollback: async () => ({ ok: true }),
+};
+function mkProfile() { return { ...OpinionProfile, writer: mockWriter }; }
+function mkState(profile) { return OpinionProfile.adaptSnapshot(SNAP, null, { terminationPolicy: profile.terminationPolicy }); }
 
-test('opinion maxRounds = 1 (임시 discover-only), patent 은 미변경(12)', async () => {
-  assert.equal(OpinionProfile.terminationPolicy.maxRounds, 1, 'opinion maxRounds 1');
+test('opinion maxRounds = 3 (B-T3 복원), patent 12 — ★ Edge 재배포 후 엔진 반영', async () => {
+  assert.equal(OpinionProfile.terminationPolicy.maxRounds, 3, 'opinion maxRounds 3');
   const Patent = (await import('../profiles/patent/PatentProfile.js')).default;
-  assert.equal(Patent.terminationPolicy.maxRounds, 12, 'patent 은 이번 미변경(12)');
+  assert.equal(Patent.terminationPolicy.maxRounds, 12, 'patent 미변경(12)');
 });
 
-test('★ maxRounds=1 → discover 1회만 발화, recheck 미발화(자동보정 루프 제거)', async () => {
+test('★ maxRounds=3 → R1 discover + recheck 발화(자동보정 루프 활성 → patchPlan)', async () => {
   const modes = [];
+  const ALL = { examiner: true, attorney: true, expert: true };
   const runAgent = async ({ mode }) => {
     modes.push(mode);
-    if (mode === 'discover') {
-      return {
-        issues: [{ raisedBy: 'examiner_B', id: 'exB-1', type: '기재불비', severity: 'medium', target: ['claim_1'], legalBasis: '§42④', description: '청구항 1의 제어부 뒷받침 미흡.' }],
-        consensus: {}, provider: 'examiner_B:claude', cost: 0.02, latencyMs: 100, perAgent: [], warnings: [],
-      };
-    }
-    return { verdicts: [], provider: '', cost: 0, latencyMs: 0, perAgent: [], warnings: [] };
+    if (mode === 'discover') return { issues: [{ id: 'i1', type: '거절미해소', severity: 'high', target: ['claim_1'], legalBasis: '§29②', description: 'd', coreElement: 'i1', suggestedOp: 'add_limitation', status: 'open', occurrences: 1, raisedBy: 'examiner_A' }], consensus: ALL, cost: 0.01, provider: 'x', latencyMs: 1, perAgent: [], warnings: [] };
+    return { verdicts: [{ issueId: 'i1', result: 'resolved' }], consensus: ALL, cost: 0.01, provider: 'x', latencyMs: 1, perAgent: [], warnings: [] };
   };
-  const result = await orchestrate(OpinionProfile, mkState(), { runAgent });
-  assert.deepEqual(modes, ['discover'], '★ discover 1회만(recheck 호출 0)');
-  assert.ok(result.issues.length >= 1, '쟁점이 결과에 실림(쟁점 발굴 표시 가능)');
-  assert.equal(result.issues[0].raisedBy, 'examiner_B');
+  const profile = mkProfile();
+  const result = await orchestrate(profile, mkState(profile), { runAgent });
+  assert.ok(modes.includes('recheck'), '★ recheck 발화(discover-only 아님)');
+  assert.ok(result.patchPlans.length >= 1, '★ patchPlan 생성(C 액션플랜 토대)');
+  assert.equal(result.phase, 'converged', '해소 → CONVERGED');
 });
 
-test('★ 완주 — maxRounds 하드캡으로 ESCALATED(200 경로)로 즉시 종료(무한 라운드 아님)', async () => {
+test('유한 종료 — roundsUsed ≤ maxRounds(3)', async () => {
   const runAgent = async ({ mode }) => (mode === 'discover'
-    ? { issues: [{ raisedBy: 'examiner_A', id: 'exA-1', type: '거절미해소', severity: 'high', target: ['claim_1'], legalBasis: '§29②', description: '진보성 미흡.' }], consensus: {}, provider: 'x', cost: 0, latencyMs: 1, perAgent: [], warnings: [] }
-    : { verdicts: [], provider: '', cost: 0, latencyMs: 0, perAgent: [], warnings: [] });
-  const result = await orchestrate(OpinionProfile, mkState(), { runAgent });
-  assert.equal(result.phase, 'escalated', 'maxRounds 하드캡 → ESCALATED(자동수렴 아님, 정상)');
-  assert.ok((result.budget.roundsUsed || 0) <= 1, '라운드 1 이내 종료(wall-clock 회피)');
+    ? { issues: [{ id: 'i2', type: '거절미해소', severity: 'high', target: ['claim_1'], legalBasis: '§29②', description: 'd', coreElement: 'i2', suggestedOp: 'add_limitation', status: 'open', occurrences: 1, raisedBy: 'examiner_A' }], consensus: {}, cost: 0, provider: 'x', latencyMs: 1, perAgent: [], warnings: [] }
+    : { verdicts: [{ issueId: 'i2', result: 'remaining' }], consensus: {}, cost: 0, provider: 'x', latencyMs: 1, perAgent: [], warnings: [] }); // 미해소 반복 → 하드캡까지
+  const profile = mkProfile();
+  const result = await orchestrate(profile, mkState(profile), { runAgent });
+  assert.ok((result.budget.roundsUsed || 0) <= 3, '★ 최대 maxRounds(3) 내 유한 종료');
 });
 
-test('zero-issue 도 maxRounds=1 로 즉시 종료(빈 스핀 없음)', async () => {
+test('zero-issue → 유한 종료(빈 스핀 ≤ maxRounds)', async () => {
   const runAgent = async ({ mode }) => (mode === 'discover'
     ? { issues: [], consensus: { examiner: true }, provider: 'x', cost: 0, latencyMs: 1, perAgent: [], warnings: [] }
     : { verdicts: [], provider: '', cost: 0, latencyMs: 0, perAgent: [], warnings: [] });
-  const result = await orchestrate(OpinionProfile, mkState(), { runAgent });
-  assert.ok((result.budget.roundsUsed || 0) <= 1, '빈 스핀 없이 1라운드 종료');
+  const profile = mkProfile();
+  const result = await orchestrate(profile, mkState(profile), { runAgent });
+  assert.ok((result.budget.roundsUsed || 0) <= 3, '빈 스핀 ≤ 3라운드');
   assert.ok(Array.isArray(result.issues), '결과 정상');
 });
