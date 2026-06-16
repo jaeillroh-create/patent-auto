@@ -548,9 +548,10 @@ Opinion.applyDirectionRewrite = async function(opts) {
   var pendingArr = pending.amended_claims || pending.corrected_claims || (pending.merged_claim ? [pending.merged_claim] : []);
   var byNo = {}; pendingArr.forEach(function(ac) { if (ac && ac.claim_no != null) byNo[String(ac.claim_no)] = ac; });
 
-  // 3) 명세서 근거(뒷받침·신규사항 방지). 30K 초과 시 head+tail.
-  var specBlock = '';
-  try { specBlock = (await Opinion.extractSpecificationText(p.id)) || ''; } catch (_e) {}
+  // 3) 명세서 근거(뒷받침·신규사항 방지). 프롬프트는 30K head+tail 트림, 게이트(D2b)는 full 사용.
+  var specFull = '';
+  try { specFull = (await Opinion.extractSpecificationText(p.id)) || ''; } catch (_e) {}
+  var specBlock = specFull;
   if (specBlock.length > 30000) specBlock = specBlock.slice(0, 20000) + '\n...[중략]...\n' + specBlock.slice(-10000);
 
   // 4) ★ 대상 청구항만 1건씩 재작성 → 해당 ac 의 문언/근거 필드만 교체(나머지 필드·비대상 청구항 불변).
@@ -593,16 +594,91 @@ Opinion.applyDirectionRewrite = async function(opts) {
 
   if (!rewritten.length) { showToast('재작성 실패 — ' + (failed[0] ? failed[0].reason : '대상 없음'), 'error'); return null; }
 
+  // ── D2b: 재작성본(pending) 검증 게이트 재실행(부수효과 방어) — pending 에만 적용, draftResult 불변. ──
+  var parsedClaims = [], rejectedNos = [];
+  try {
+    var{data:_pd}=await sb.from('opinion_parsed_documents').select('parsed_data').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+    if (_pd && _pd.parsed_data) {
+      parsedClaims = _pd.parsed_data.claims || [];
+      (_pd.parsed_data.rejection_reasons || []).forEach(function(rr){ (rr.claim_nos||[]).forEach(function(n){ if (rejectedNos.indexOf(n)<0) rejectedNos.push(n); }); });
+    }
+  } catch (_e) {}
+  var gates = Opinion._gatePendingRewrite(pending, dr, { targetClaimNos: rewritten, parsedClaims: parsedClaims, rejectedNos: rejectedNos, specText: specFull });
+
   // 5) ★ 보류(자동적용 금지): draftResult 는 그대로 두고 후보만 state._pendingRewrite 에. D2c 확정에서 커밋.
   Opinion.state._pendingRewrite = {
     draftResult: pending,         // 확정 시 state.draftResult 로 커밋할 후보
     targetClaimNos: rewritten,    // 재작성된 claim_no
     failed: failed,               // 실패 대상(있으면)
     before: before, after: after, // D2c 비교 diff용 (재작성 전/후 문언)
+    gates: gates,                 // D2b: 게이트 결과(blockers/warnings/canConfirm) — D2c 가 표시·차단에 사용
     createdAt: new Date().toISOString(),
   };
-  showToast('승인 방향 반영(재작성) 완료 — 청구항 ' + rewritten.join(', ') + ' · 변리사 확정 대기', 'success');
+  // CRITICAL(비대상 불변 위반)만 확정 차단, 나머지(spec_basis/뒷받침/참조)는 경고(변리사 판단 여지).
+  if (!gates.canConfirm) showToast('⚠️ 재작성 무결성 위반(비대상 청구항 변경 감지) — 확정 차단, 변리사 확인 필요', 'error');
+  else if (gates.warnings.length) showToast('재작성 완료(청구항 ' + rewritten.join(', ') + ') — 경고 ' + gates.warnings.length + '건, 변리사 확정 검토', 'info');
+  else showToast('승인 방향 반영(재작성) 완료 — 청구항 ' + rewritten.join(', ') + ' · 변리사 확정 대기', 'success');
   return Opinion.state._pendingRewrite;
+};
+
+// _gatePendingRewrite — D2b: 재작성 보류본(pending)에 검증 게이트를 재실행(부수효과 방어). 순수 함수(DB·LLM 없음).
+//   ★ baseline(직전 draftResult) 대비 "비대상 청구항 불변" 단언(신규) + 기존 게이트 3종 재사용(재구현 0).
+//   차단 정책: 비대상 불변 위반(splice 무결성)만 CRITICAL → 확정 차단(canConfirm=false). spec_basis/뒷받침/참조
+//     위반은 경고(변리사 판단 — 차단 안 함). ※ 게이트는 read-only, draftResult·pending 을 변경하지 않는다.
+//   @param {object} pending  재작성 보류본 draftResult
+//   @param {object} baseline 직전 draftResult(비대상 불변 비교 기준)
+//   @param {{targetClaimNos:(number|string)[], parsedClaims:Array, rejectedNos:number[], specText:string}} opts
+//   @returns {{invariance,specBasis,preservation,references,blockers:string[],warnings:string[],canConfirm:boolean}}
+Opinion._gatePendingRewrite = function(pending, baseline, opts) {
+  opts = opts || {};
+  var arrOf = function(d){ return d ? (d.amended_claims || d.corrected_claims || (d.merged_claim ? [d.merged_claim] : [])) : []; };
+  var pendingArr = arrOf(pending), baseArr = arrOf(baseline);
+  var targetSet = {}; (opts.targetClaimNos || []).forEach(function(n){ targetSet[String(n)] = true; });
+
+  // ── [신규 게이트] 비대상 불변(splice 무결성) — CRITICAL ──
+  var baseByNo = {}; baseArr.forEach(function(ac){ if (ac && ac.claim_no != null) baseByNo[String(ac.claim_no)] = ac; });
+  var drift = [];
+  pendingArr.forEach(function(ac){
+    if (!ac || ac.claim_no == null) return;
+    var no = String(ac.claim_no);
+    if (targetSet[no]) return;                       // 대상은 변경 허용
+    var b = baseByNo[no];
+    if (!b) { drift.push({ claim_no: ac.claim_no, reason: '비대상인데 baseline 에 없음' }); return; }
+    if (JSON.stringify(ac) !== JSON.stringify(b)) drift.push({ claim_no: ac.claim_no, reason: '비대상 청구항이 변경됨(byte 불일치)' });
+  });
+  baseArr.forEach(function(b){                        // 비대상 누락 검출
+    if (!b || b.claim_no == null) return;
+    var no = String(b.claim_no);
+    if (targetSet[no]) return;
+    if (!pendingArr.some(function(ac){ return ac && String(ac.claim_no) === no; })) drift.push({ claim_no: b.claim_no, reason: '비대상 청구항 누락' });
+  });
+  var invariance = { check: 'non_target_invariance', severity: 'CRITICAL', ok: drift.length === 0, drift: drift };
+
+  // ── [기존 게이트 재사용] spec_basis · preservation · references ──
+  var specBasis = Opinion._validateSpecBasis(pendingArr, opts.specText || '');
+  var preservation = Opinion._validateClaimPreservation(opts.parsedClaims || [], pending, opts.rejectedNos || []);
+  var finalClaims = [];
+  pendingArr.forEach(function(ac){ finalClaims.push({ no: ac.claim_no, text: ac.amended || ac.corrected || ac.text || '' }); });
+  var unchangedNos = Array.isArray(pending && pending.unchanged_claims) ? pending.unchanged_claims
+    : (Array.isArray(pending && pending.remaining_claims) ? pending.remaining_claims.map(function(rc){ return rc.new_no || rc.old_no; }) : []);
+  unchangedNos.forEach(function(n){
+    var oc = (opts.parsedClaims || []).filter(function(x){ return x.no === n; })[0];
+    if (oc && !finalClaims.some(function(fc){ return fc.no === n; })) finalClaims.push({ no: n, text: oc.text });
+  });
+  var references = Opinion._validateClaimReferences(finalClaims);
+
+  // ── 종합: CRITICAL(invariance)만 차단, 나머지는 경고(변리사 판단). ──
+  var blockers = [];
+  if (!invariance.ok) blockers.push('non_target_invariance');
+  var warnings = [];
+  if (specBasis.ok === false) warnings.push('spec_basis');
+  if (preservation.ok === false) warnings.push('preservation');
+  if (references.ok === false) warnings.push('references');
+
+  return {
+    invariance: invariance, specBasis: specBasis, preservation: preservation, references: references,
+    blockers: blockers, warnings: warnings, canConfirm: blockers.length === 0,
+  };
 };
 
 // runReviewEngine — [B1] 리뷰 엔진 검증 트리거(클라).
