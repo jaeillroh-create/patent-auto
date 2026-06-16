@@ -41,6 +41,7 @@ export const examiner_C = A({
 export const attorney_author = A({
   id: 'attorney_author', role: 'attorney_author', provider: 'claude', model: 'sonnet', fallbackProvider: 'gpt',
   temperature: 0.3, reads: ['issues', 'moduleContext'], writes: ['rebuttals'], triggers: ['rebut'],
+  maxTokens: 8192, // RebuttalSet 전수 발화(보정방향 enrichment 포함) 장문 → truncation 방지(examiner와 동일 cap)
   systemPromptRef: '.claude/rules/agents/patent/attorney_author.md',
   outputSchemaByMode: { discover: 'RebuttalSet', recheck: 'RebuttalSet', rebut: 'RebuttalSet' }, // rebut: AC-T3a
 });
@@ -57,6 +58,7 @@ export const attorney_reviewer = A({
 export const domain_expert = A({
   id: 'domain_expert', role: 'domain_expert', provider: 'gemini', model: 'gemini_pro', fallbackProvider: 'gpt',
   temperature: 0.3, reads: ['invention', 'claims'], writes: ['issues'],
+  maxTokens: 8192, // discover 시 IssueList 장문 산출(examiner와 동일 schema) → truncation 방지(IssueList 산출자 일관 cap)
   systemPromptRef: '.claude/rules/agents/patent/domain_expert.md',
   outputSchemaByMode: { discover: 'IssueList', recheck: 'Verdict' },
 });

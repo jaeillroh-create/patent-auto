@@ -11,7 +11,7 @@ export const domain_expert = Object.freeze({
   model: 'gemini_pro',
   fallbackProvider: 'gpt',
   temperature: 0.3,
-  maxTokens: 4096,
+  maxTokens: 8192, // discover 시 IssueList 장문 산출(examiner와 동일 schema) → truncation 방지(IssueList 산출자 일관 cap)
   mode: 'both',
   triggers: ['review'],
   reads: ['invention', 'claims'],
