@@ -59,6 +59,6 @@ test('공유 컴포넌트 — opinion·patent 동시 적용(둘 다 window.Revie
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
   const op = readFileSync(path.join(root, 'opinion/opinion.js'), 'utf8');
   const pt = readFileSync(path.join(root, 'patent/patent.js'), 'utf8');
-  assert.ok(op.includes('window.ReviewUI.render'), 'opinion 이 공유 패널 사용');
-  assert.ok(pt.includes('window.ReviewUI.render'), 'patent 이 공유 패널 사용 → 한 곳 수정으로 동시 해결');
+  assert.ok(op.includes('ReviewUI.openModal'), 'opinion 이 공유 모달 사용');
+  assert.ok(pt.includes('ReviewUI.openModal'), 'patent 이 공유 모달 사용 → 한 곳 수정으로 동시 해결');
 });

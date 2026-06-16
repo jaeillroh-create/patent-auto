@@ -26,7 +26,7 @@ function mkEl(id) { return { id, style: {}, disabled: false, textContent: '', in
 before(() => {
   const src = readFileSync(path.join(REPO_ROOT, 'opinion/opinion.js'), 'utf8');
   renderCalls = [];
-  els = { btnOpinionReview: mkEl('btnOpinionReview'), opinionReviewGateMsg: mkEl('opinionReviewGateMsg'), opinionReviewMount: mkEl('opinionReviewMount') };
+  els = { btnOpinionReview: mkEl('btnOpinionReview'), opinionReviewGateMsg: mkEl('opinionReviewGateMsg'), opinionReviewMount: mkEl('opinionReviewMount'), reviewModalMount: mkEl('reviewModalMount'), reviewResultModal: mkEl('reviewResultModal') };
   const sandbox = {
     console: { log() {}, warn() {}, error() {} },
     structuredClone: globalThis.structuredClone,
@@ -42,6 +42,8 @@ before(() => {
       isEnabled: () => true,
       policy: () => ({ K: 1, maxRounds: 12, capUsd: 5, perIssueAttemptCap: 2 }),
       render: (state, el, opts) => { renderCalls.push({ elId: el && el.id, hasState: !!state, opts }); },
+      openModal: (state, opts) => { renderCalls.push({ elId: 'reviewModalMount', via: 'openModal', hasState: !!state, opts }); },
+      closeModal: () => {},
     },
   };
   sandbox.window = sandbox;
@@ -104,13 +106,15 @@ test('★ 버튼 경유 발화: runReviewEngine() 인자 없이 → _defaultRevi
   assert.ok(result.issues.length >= 1 && result.patchPlans.length >= 1, 'discover issue+patchPlan');
 });
 
-test('같은 화면 마운트: reviewState 설정 후 renderOutput → ReviewUI.render(opinionReviewMount)', () => {
+test('최종확인 화면: 카드에 재오픈 버튼 + 재오픈 시 넓은 공유 모달(openModal)에 마운트(2a)', () => {
   renderCalls.length = 0;
   // 직전 테스트에서 reviewState 설정됨
   const L = mkEl('L'), R = mkEl('R');
   Opinion.renderOutput(L, R, 'completed');
-  const mount = renderCalls.find((c) => c.elId === 'opinionReviewMount');
-  assert.ok(mount && mount.hasState, '버튼과 같은 화면(opinionReviewMount)에 결과 마운트');
+  assert.match(els.opinionReviewMount.innerHTML, /검증 결과 보기/, '카드엔 재오픈 버튼(결과는 모달)');
+  Opinion.openReviewModal();
+  const modal = renderCalls.find((c) => c.via === 'openModal');
+  assert.ok(modal && modal.hasState, '재오픈 → 공유 모달에 결과 마운트(좁은 컬럼 탈출)');
 });
 
 test('게이트: 보정안 없으면 미발화 + 안내', async () => {

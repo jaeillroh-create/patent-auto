@@ -28,6 +28,8 @@ function injectStylesOnce(doc) {
   .review-panel{font-size:13px;line-height:1.5;color:var(--color-text-primary,#222);max-height:70vh;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
   .review-panel::-webkit-scrollbar{width:6px}
   .review-panel::-webkit-scrollbar-thumb{background:var(--dt-g200,#d0d0d0);border-radius:3px}
+  /* 모달 맥락(2a): 넓은 공유 모달 바디(.review-modal-body)가 단일 스크롤 → 패널 자체 70vh 캡 해제(중첩 이중스크롤 제거). */
+  .review-modal-body .review-panel{max-height:none;overflow:visible;padding-right:0}
   .review-banner{padding:8px 10px;border-radius:8px;margin-bottom:10px;font-size:12px}
   .review-banner.warn{background:#fff7e6;color:#a15c00}
   .review-verdict{display:inline-flex;align-items:center;gap:6px;font-weight:700;padding:4px 10px;border-radius:999px}
@@ -182,8 +184,25 @@ export function policy(module) {
   return (entry && entry.profile && entry.profile.terminationPolicy) || null;
 }
 
+/** 공유 결과 모달(2a) — 좁은 sticky 컬럼에서 빼서 넓은 단일 스크롤로(opinion/patent 공유). 마운트 타깃만 모달 바디로 이동(render 로직 불변). */
+export function openModal(state, opts = {}) {
+  const doc = typeof document !== 'undefined' ? document : null;
+  if (!doc) return null;
+  const overlay = doc.getElementById('reviewResultModal');
+  const mount = doc.getElementById('reviewModalMount');
+  if (!overlay || !mount) return render(state, opts.fallbackMount || mount, opts); // 모달 DOM 없으면 폴백(후방호환)
+  render(state, mount, opts);          // 모달 바디에 마운트 → .review-modal-body 가 단일 스크롤
+  overlay.style.display = 'flex';
+  return mount;
+}
+export function closeModal() {
+  const doc = typeof document !== 'undefined' ? document : null;
+  const overlay = doc && doc.getElementById('reviewResultModal');
+  if (overlay) overlay.style.display = 'none';
+}
+
 /** classic-script SPA 브리지: window.ReviewUI 노출. */
-export const ReviewUI = { render, renderHTML, buildViewModel, GATE_DECISION, isEnabled, policy };
+export const ReviewUI = { render, renderHTML, buildViewModel, GATE_DECISION, isEnabled, policy, openModal, closeModal };
 if (typeof window !== 'undefined') window.ReviewUI = ReviewUI;
 
 export default ReviewUI;

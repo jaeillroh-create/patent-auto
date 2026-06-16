@@ -65,6 +65,8 @@ before(() => {
       isEnabled: () => true,
       policy: () => ({ capUsd: 15, maxRounds: 12 }),
       render: (state, el, opts) => { renderCalls.push({ elId: el && el.id, hasState: !!state, opts }); },
+      openModal: (state, opts) => { renderCalls.push({ elId: 'reviewModalMount', via: 'openModal', hasState: !!state, opts }); },
+      closeModal: () => {},
     },
   };
   sandbox.window = sandbox;
@@ -146,9 +148,10 @@ test('G1/G5 E2E: 트리거→토론→Human Gate→승인→3경로 renderCheck�
   const plan = result.patchPlans[0];
   assert.equal(plan.accepted, null, '승인 전 accepted=null');
 
-  // 3) G5: renderPreview 가 ReviewUI.render 를 page4 마운트(patent-review-mount)로 호출
-  const mountCall = renderCalls.find((c) => c.elId === 'patent-review-mount');
-  assert.ok(mountCall && mountCall.hasState, 'ReviewUI.render(page4 patent-review-mount) 호출됨');
+  // 3) G5(2a): 카드에 재오픈 버튼 + runReviewEngine 이 넓은 공유 모달(openModal) 발화
+  const modalCall = renderCalls.find((c) => c.via === 'openModal');
+  assert.ok(modalCall && modalCall.hasState, '검증 완료 → 공유 모달(openModal) 발화');
+  assert.match(els['patent-review-mount'].innerHTML, /검증 결과 보기/, 'page4 카드에 재오픈 버튼');
 
   // 4) 사람 승인(Human Gate)
   approvePlan(result, plan.id, 'jaeill.roh@gmail.com');
