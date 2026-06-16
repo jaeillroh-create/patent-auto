@@ -3951,9 +3951,6 @@ Opinion._buildAmendmentDocxHtml = function(project, draftResult, parsedData) {
 
   // 다. 보정 사유
   html += '<h3>다. 보정 사유</h3>';
-  // ★ D1: AI 검증에서 승인된 보정 "방향"을 청구항별로 인덱싱(read-only). 승인분만(applyAmendments 기록), 없으면 미표시.
-  var _apprByNo = {};
-  Opinion._collectApprovedDirections(draftResult).forEach(function(e){ _apprByNo[String(e.claim_no)] = e.directions; });
   amendedArr.forEach(function(ac){
     var basis = ac.spec_basis;
     var basisStr = '';
@@ -3972,13 +3969,22 @@ Opinion._buildAmendmentDocxHtml = function(project, draftResult, parsedData) {
           + escapeHtml(summary || '명세서 기재 범위 내에서 보정.')
           + (basisStr ? ' <i>(근거 단락: ' + escapeHtml(basisStr) + ')</i>' : '')
           + '</div>';
-    // ★ D1: AI 검증 승인 보정 권고(방향). ac.amended 문언은 자동 변경하지 않는다(attorney 계약 — 방향만).
-    //   _apprByNo 는 승인분만 담으므로 미승인은 렌더 0, 권고 없으면 블록 자체를 만들지 않는다(기존 동작 불변).
-    var _dirs = _apprByNo[String(ac.claim_no)];
-    if (_dirs && _dirs.length) {
+    // ★ D1+D2d: AI 검증 승인 보정 권고(방향)를 read-only 로 렌더. ac.review_amendments 를 직접 읽어
+    //   각 방향의 applied(=D2c 확정으로 청구항 문언에 반영됨) 여부를 "(반영됨)" 라벨로 공존 표시한다.
+    //   ★ D1(텍스트 권고)과 D2(문언 반영)는 공존 — D2가 D1 을 대체하지 않는다(미반영은 기존대로 권고만). write 0.
+    var _revAmds = (Array.isArray(ac.review_amendments) ? ac.review_amendments : [])
+      .filter(function(ra){ return ra && ra.direction && String(ra.direction).trim(); });
+    if (_revAmds.length) {
+      var _anyApplied = _revAmds.some(function(ra){ return ra.applied === true; });
       html += '<div ' + S_REASON + '><b>청구항 ' + escapeHtml(String(ac.claim_no)) + ' — [AI 검증 보정 권고]</b>'
-            + ' <span style="font-size:9pt;color:#666;">※ AI 검증에서 승인된 보정 방향입니다. 완성 문언은 변리사가 확정하세요(자동 변경되지 않음).</span>'
-            + _dirs.map(function(d){ return '<div style="margin-top:2pt;">· ' + escapeHtml(d) + '</div>'; }).join('')
+            + ' <span style="font-size:9pt;color:#666;">※ AI 검증에서 승인된 보정 방향입니다. '
+            + (_anyApplied ? '<b style="color:#1B5E20">(반영됨)</b>은 청구항 문언에 반영 완료, 그 외는 변리사가 확정하세요.'
+                           : '완성 문언은 변리사가 확정하세요(자동 변경되지 않음).')
+            + '</span>'
+            + _revAmds.map(function(ra){
+                return '<div style="margin-top:2pt;">· ' + escapeHtml(String(ra.direction))
+                     + (ra.applied === true ? ' <b style="color:#1B5E20;font-size:9pt;">(반영됨)</b>' : '') + '</div>';
+              }).join('')
             + '</div>';
     }
   });
