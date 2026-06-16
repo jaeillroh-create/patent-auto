@@ -27,6 +27,7 @@ function load(cfg) {
     from: () => ({
       insert: (payload) => { cap.insert = payload; return { select: () => ({ single: async () => cfg.insertResult }) }; },
       select: () => ({ eq: () => ({ single: async () => { cap.pollCount++; return cfg.pollResult ? cfg.pollResult(cap.pollCount) : { data: {} }; } }) }),
+      update: (patch) => { cap.update = patch; const ch = { eq: (c, v) => { (cap.updateEq = cap.updateEq || []).push([c, v]); return ch; } }; return ch; },
     }),
     functions: { invoke: async (_n, o) => { cap.invokeBody = o && o.body; return cfg.invokeResult || { data: { status: 'running' } }; } },
   };
@@ -103,6 +104,24 @@ test('★ 180s 고착 → killer 강제 종료(null + 타임아웃) — worker �
   const out = await p;
   assert.equal(out, null, '타임아웃 → null');
   assert.ok(cap.msgs.some((m) => m.includes('시간 초과')), '타임아웃 메시지');
+  // ③ 고착 정리(보조): killer 가 DB run 도 failed 로 정리(즉시성). pg_cron 백업과 별개로 사용자 즉시 인지.
+  assert.deepEqual(cap.update, { status: 'failed', error: 'wall-clock timeout (client killer — worker 사망 추정)' }, '★ killer 가 review_runs 를 failed 로 UPDATE');
+  assert.deepEqual(cap.updateEq, [['id', 'run-3'], ['status', 'running']], '★ 본인 run(id) + running 인 행만(막 done 된 행 덮어쓰기 방지)');
+});
+
+test('★ done/failed 정상 종료 시 killer 의 DB update 안 함(정상 run 보호)', async () => {
+  const RESULT = { issues: [], phase: 'converged', budget: {} };
+  const { cap } = await (async () => {
+    const r = load({
+      insertResult: { data: { id: 'run-ok' } },
+      invokeResult: { data: { reviewRunId: 'run-ok', status: 'running' } },
+      pollResult: () => ({ data: { status: 'done', phase: 'converged', result: RESULT } }),
+      drive: true,
+    });
+    await r.Opinion._defaultReviewRunner(SNAP);
+    return r;
+  })();
+  assert.equal(cap.update, null, 'done 으로 끝나면 killer 미발화 → DB update 0(정상 run 안 죽임)');
 });
 
 test('★ 동기 폴백: INSERT 실패(reviewRunId 없음) → invoke 동기 결과 반환(후방호환)', async () => {
