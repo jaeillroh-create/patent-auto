@@ -112,6 +112,6 @@ test('SUPABASE_URL/SERVICE_ROLE 미주입 시 persist 스킵(throw 0)', async ()
   assert.equal(patches.length, 0, '키 미주입 → PATCH 안 함(스킵)');
 });
 
-test('maxRounds 미변경(1 유지) — B-T2 는 비동기 구조만, maxRounds 1→3 은 B-T3', () => {
-  assert.equal(OpinionProfile.terminationPolicy.maxRounds, 1, 'maxRounds 그대로 1');
+test('maxRounds=3 (B-T3 복원) — 비동기 토대 위 recheck 활성', () => {
+  assert.equal(OpinionProfile.terminationPolicy.maxRounds, 3, 'maxRounds 3');
 });

@@ -13,6 +13,7 @@ import { buildViewModel } from './reviewViewModel.js';
 import { approvePlan, rejectPlan, GATE_DECISION } from '../kernel/humanGate.js';
 import { isModuleEnabled } from '../index.js';
 import { PROFILES } from '../profiles/registry.js';
+import { subscribePolling } from './progressClient.js'; // B-T3: 폴링 재사용(재구현 0)
 
 const STYLE_ID = 'review-panel-style';
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -201,8 +202,18 @@ export function closeModal() {
   if (overlay) overlay.style.display = 'none';
 }
 
+/** 진행/안내 메시지를 공유 모달에 표시(B-T3 비동기 폴링 "검증 중…"). 결과 렌더(render)와 같은 .review-panel 스타일. */
+export function openModalMessage(message) {
+  const doc = typeof document !== 'undefined' ? document : null;
+  if (!doc) return;
+  const overlay = doc.getElementById('reviewResultModal');
+  const mount = doc.getElementById('reviewModalMount');
+  if (mount) mount.innerHTML = `<div class="review-panel"><div class="review-banner warn">${esc(message)}</div></div>`;
+  if (overlay) overlay.style.display = 'flex';
+}
+
 /** classic-script SPA 브리지: window.ReviewUI 노출. */
-export const ReviewUI = { render, renderHTML, buildViewModel, GATE_DECISION, isEnabled, policy, openModal, closeModal };
+export const ReviewUI = { render, renderHTML, buildViewModel, GATE_DECISION, isEnabled, policy, openModal, closeModal, openModalMessage, subscribePolling };
 if (typeof window !== 'undefined') window.ReviewUI = ReviewUI;
 
 export default ReviewUI;
