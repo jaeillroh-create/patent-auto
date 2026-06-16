@@ -681,6 +681,110 @@ Opinion._gatePendingRewrite = function(pending, baseline, opts) {
   };
 };
 
+// ═══ D2c: 승인 방향 반영 — 비교 확정 UI(사람 방어선) ═══
+// startDirectionRewrite — "승인 방향 반영" 버튼 핸들러(★명시 액션). applyDirectionRewrite(D2a splice + D2b gates) → 비교 모달.
+//   ★ 승인(onChange/AC-T1)이 자동 호출하지 않는다 — 변리사가 명시적으로 누른다(자동적용 금지).
+Opinion.startDirectionRewrite = async function() {
+  try { if (typeof setButtonLoading === 'function') setButtonLoading('btnDirectionRewrite', true); } catch (_e) {}
+  try {
+    var pend = await Opinion.applyDirectionRewrite();   // state._pendingRewrite 생성(보류 — draftResult 불변)
+    if (pend) Opinion.showRewriteConfirmModal();
+  } catch (e) { showToast('재작성 실패: ' + ((e && e.message) || e), 'error'); }
+  finally { try { if (typeof setButtonLoading === 'function') setButtonLoading('btnDirectionRewrite', false); } catch (_e) {} }
+};
+
+// _buildRewriteDiffHtml — 보류본 보정 전/후 비교 + 비대상 "변경 없음"(splice 가시화) + 게이트 배너. 순수(HTML 문자열).
+Opinion._buildRewriteDiffHtml = function(pend) {
+  if (!pend || !pend.draftResult) return '<p style="font-size:13px;color:var(--color-text-secondary)">재작성 보류본이 없습니다.</p>';
+  var g = pend.gates || {};
+  var tset = {}; (pend.targetClaimNos || []).forEach(function(n){ tset[String(n)] = true; });
+  var arr = pend.draftResult.amended_claims || pend.draftResult.corrected_claims || (pend.draftResult.merged_claim ? [pend.draftResult.merged_claim] : []);
+  var h = '';
+  // 게이트 배너: CRITICAL 차단 / 경고(확정 가능) / 통과
+  if (g.canConfirm === false) {
+    h += '<div style="padding:10px 12px;border-radius:8px;background:#FDECEC;border-left:3px solid var(--color-error,#D32F2F);color:#9A1C1C;font-size:12px;margin-bottom:12px">⛔ 무결성 위반(비대상 청구항 변경 감지) — 확정 불가. [취소] 후 다시 시도하세요.</div>';
+  } else if (g.warnings && g.warnings.length) {
+    h += '<div style="padding:10px 12px;border-radius:8px;background:#FEF4E6;border-left:3px solid var(--color-warning,#ED6C02);color:#7A4100;font-size:12px;margin-bottom:12px">⚠️ 경고 ' + g.warnings.length + '건 (' + escapeHtml(g.warnings.join(', ')) + ') — 변리사 검토 후 확정하세요(확정은 가능).</div>';
+  } else {
+    h += '<div style="padding:10px 12px;border-radius:8px;background:#EAF7EE;border-left:3px solid var(--color-success,#2E7D32);color:#1B5E20;font-size:12px;margin-bottom:12px">✅ 게이트 통과 — 비대상 청구항 불변 확인.</div>';
+  }
+  // 청구항별: 대상=전/후 diff, 비대상=변경 없음
+  arr.forEach(function(ac){
+    if (!ac || ac.claim_no == null) return;
+    var no = String(ac.claim_no);
+    if (tset[no]) {
+      var b = (pend.before && pend.before[no]) || '';
+      var a = (pend.after && pend.after[no]) || ac.amended || '';
+      h += '<div style="border:1px solid var(--color-border,#E0E0E0);border-radius:8px;padding:12px;margin-bottom:10px">'
+        + '<div style="font-weight:600;font-size:13px;margin-bottom:6px">청구항 ' + escapeHtml(no) + ' <span style="color:var(--color-primary);font-size:11px">[재작성]</span></div>'
+        + '<div style="font-size:12px;color:#9A1C1C;background:#FDECEC;border-radius:6px;padding:8px;margin-bottom:6px"><b>보정 전</b><br>' + escapeHtml(b).replace(/\n/g, '<br>') + '</div>'
+        + '<div style="font-size:12px;color:#1B5E20;background:#EAF7EE;border-radius:6px;padding:8px"><b>보정 후</b><br>' + escapeHtml(a).replace(/\n/g, '<br>') + '</div>'
+        + '</div>';
+    } else {
+      h += '<div style="font-size:12px;color:var(--color-text-tertiary);padding:6px 12px">청구항 ' + escapeHtml(no) + ' — <b>변경 없음</b> (splice 보존)</div>';
+    }
+  });
+  return h;
+};
+
+// showRewriteConfirmModal — 비교 확정 모달(showRevisionModal 패턴 재사용). CRITICAL 차단 시 [확정] 비활성.
+Opinion.showRewriteConfirmModal = function() {
+  var pend = Opinion.state._pendingRewrite;
+  if (!pend) { showToast('재작성 보류본이 없습니다', 'error'); return; }
+  var existing = document.getElementById('opinionRewriteModal'); if (existing) existing.remove();
+  var blocked = !!(pend.gates && pend.gates.canConfirm === false);
+  var modal = document.createElement('div');
+  modal.id = 'opinionRewriteModal'; modal.className = 'modal-overlay'; modal.style.display = 'flex';
+  modal.innerHTML = '<div class="modal-content" style="max-width:760px;padding:24px;max-height:82vh;overflow:auto">'
+    + '<div class="modal-title" style="font-size:16px;margin-bottom:4px"><span class="ico" data-icon="edit"></span> 승인 방향 반영 — 보정 전/후 비교</div>'
+    + '<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:14px">대상 청구항만 재작성됩니다. 비대상 청구항은 변경되지 않습니다(코드 보장). 확정 전에는 기존 보정안이 유지됩니다.</p>'
+    + Opinion._buildRewriteDiffHtml(pend)
+    + '<div style="display:flex;gap:8px;margin-top:16px">'
+    + '<button class="btn btn-ghost" style="flex:1;padding:10px" onclick="Opinion.cancelRewrite()">취소 (폐기)</button>'
+    + '<button class="btn btn-primary" style="flex:1;padding:10px" id="btnRewriteConfirm"' + (blocked ? ' disabled title="무결성 위반 — 확정 불가"' : '') + '><span class="ico" data-icon="check"></span> 확정 (보정서 반영)</button>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); });
+  var btn = document.getElementById('btnRewriteConfirm');
+  if (btn && !blocked) btn.addEventListener('click', function(){
+    Opinion.confirmRewrite().then(function(ok){ if (ok) { var m = document.getElementById('opinionRewriteModal'); if (m) m.remove(); } });
+  });
+};
+
+// confirmRewrite — ★ 확정: 보류본 → draftResult 커밋(이전까지 불변). CRITICAL 차단 시 거부. review_amendments "반영됨" 마킹.
+//   커밋 후 보정서 "보정 후"가 ac.amended 를 자동 렌더(별도 작업 0).
+Opinion.confirmRewrite = async function() {
+  var pend = Opinion.state._pendingRewrite;
+  if (!pend) { showToast('확정할 재작성 보류본이 없습니다', 'error'); return false; }
+  if (pend.gates && pend.gates.canConfirm === false) {
+    showToast('⚠️ 무결성 위반(비대상 청구항 변경)으로 확정할 수 없습니다 — 취소 후 다시 시도하세요', 'error'); return false;
+  }
+  var p = Opinion.state.current; if (!p) return false;
+  var committed = pend.draftResult;
+  // review_amendments 에 "반영됨" 마킹(재작성된 대상 청구항) — D2d 공존 라벨용.
+  var arr = committed.amended_claims || committed.corrected_claims || (committed.merged_claim ? [committed.merged_claim] : []);
+  var tset = {}; (pend.targetClaimNos || []).forEach(function(n){ tset[String(n)] = true; });
+  var stamp = new Date().toISOString();
+  arr.forEach(function(ac){
+    if (ac && tset[String(ac.claim_no)] && Array.isArray(ac.review_amendments)) {
+      ac.review_amendments.forEach(function(ra){ ra.applied = true; ra.appliedAt = stamp; });
+    }
+  });
+  Opinion.state.draftResult = committed;      // ★ 이제서야 커밋
+  Opinion.state._pendingRewrite = null;        // 보류 해제
+  try { await sb.from('opinion_draft_claims').insert({ project_id: p.id, draft_type: p.rejection_type, draft_data: committed, status: 'draft' }); } catch (_e) {}
+  showToast('재작성 확정 — 보정서·의견서에 반영됩니다 (청구항 ' + (pend.targetClaimNos || []).join(', ') + ')', 'success');
+  try { if (typeof Opinion.renderDetail === 'function') Opinion.renderDetail(); } catch (_e) {}
+  return true;
+};
+
+// cancelRewrite — 보류 폐기. draftResult 불변(기존 보정안 유지).
+Opinion.cancelRewrite = function() {
+  Opinion.state._pendingRewrite = null;
+  try { var m = document.getElementById('opinionRewriteModal'); if (m) m.remove(); } catch (_e) {}
+  showToast('재작성 취소됨 — 기존 보정안 유지', 'info');
+};
+
 // runReviewEngine — [B1] 리뷰 엔진 검증 트리거(클라).
 //   토글 게이트(E-21): window.ReviewUI.isEnabled() 가 true 일 때만 동작. OFF면 무동작.
 //   흐름: exportSnapshot → runner(prod=edge invoke / test=주입) → reviewState 설정 → renderDetail.
@@ -3672,6 +3776,10 @@ Opinion.renderOutput=function(L,R,status){
     +'<button class="btn btn-primary btn-full" id="btnOpinionReview" onclick="Opinion.runReviewEngine()"><span class="ico" data-icon="shield"></span> 의견서 검증 시작</button>'
     +'<div id="opinionReviewGateMsg" style="font-size:12px;color:var(--color-text-tertiary);margin-top:8px"></div>'
     +'<div id="opinionReviewMount" style="margin-top:12px"></div>'
+    // D2c: 승인된 보정 방향이 있을 때만 "승인 방향 반영"(청구항 자동 재작성) 버튼 노출. ★ 명시 액션(승인 자동트리거 아님).
+    +(Opinion._collectApprovedDirections(Opinion.state.draftResult||{}).length
+        ? '<button class="btn btn-outline btn-full" id="btnDirectionRewrite" style="margin-top:10px" onclick="Opinion.startDirectionRewrite()"><span class="ico" data-icon="edit"></span> 승인 방향 반영 — 청구항 자동 재작성(변리사 확정)</button>'
+        : '')
     +'</div>';
 
   // 오른쪽: 의견서 미리보기 (기존 gate3의 미리보기)
