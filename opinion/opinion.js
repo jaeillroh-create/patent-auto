@@ -499,6 +499,25 @@ Opinion.applyAmendments = function(acceptedPlans) {
   return { applied: applied, consistency: consistency, count: applied.length };
 };
 
+// _collectApprovedDirections — D1: AI 검증에서 "승인된" 보정 방향만 수집(read-only).
+//   applyAmendments 가 accepted plan 의 op.content(방향)만 amended_claims[].review_amendments 에 기록하므로,
+//   여기서 모이는 것은 승인분뿐이다(미승인 0 — I-2/E-19 구조 보장). 완성 문언이 아닌 "방향"이며
+//   ac.amended(청구항 문언)는 변경하지 않는다(attorney 계약). 방향이 없으면 빈 배열.
+//   반환: [{ claim_no, directions:[비어있지 않은 방향 문자열...] }]
+Opinion._collectApprovedDirections = function(draftResult) {
+  var dr = draftResult || {};
+  var arr = dr.amended_claims || dr.corrected_claims || (dr.merged_claim ? [dr.merged_claim] : []);
+  var out = [];
+  (arr || []).forEach(function(ac) {
+    if (!ac) return;
+    var dirs = (Array.isArray(ac.review_amendments) ? ac.review_amendments : [])
+      .map(function(ra) { return ra && ra.direction ? String(ra.direction) : ''; })
+      .filter(function(d) { return d.trim(); });
+    if (dirs.length) out.push({ claim_no: ac.claim_no, directions: dirs });
+  });
+  return out;
+};
+
 // runReviewEngine — [B1] 리뷰 엔진 검증 트리거(클라).
 //   토글 게이트(E-21): window.ReviewUI.isEnabled() 가 true 일 때만 동작. OFF면 무동작.
 //   흐름: exportSnapshot → runner(prod=edge invoke / test=주입) → reviewState 설정 → renderDetail.
@@ -2616,6 +2635,15 @@ Opinion.getContext = async function(sections) {
     if(sections.indexOf('draft')>=0) {
       var{data:dr}=await sb.from('opinion_draft_claims').select('draft_data').eq('project_id',p.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
       if(dr) ctx+='[보정 청구항 초안]\n'+JSON.stringify(dr.draft_data,null,1).slice(0,4000)+'\n\n';
+      // ★ D1: AI 검증에서 승인된 보정 "방향"(권고)을 의견서 작성 컨텍스트에 첨부(read-only — 청구항 문언 미변경).
+      //   승인분만(_collectApprovedDirections), 완성 문언이 아닌 방향이며 신규사항 금지 원칙은 그대로.
+      var _apprDirs = Opinion._collectApprovedDirections(Opinion.state.draftResult);
+      if (_apprDirs.length) {
+        ctx += '[AI 검증 승인 보정 권고 — 방향]\n'
+             + '※ 아래는 AI 검증에서 변리사가 승인한 보정 "방향"입니다. 의견서의 보정내용·보정의 적법성 설명에 참고하되, 완성 문언은 명세서 기재 범위 내에서 작성하세요(신규사항 금지).\n'
+             + _apprDirs.map(function(e){ return '· 청구항 ' + e.claim_no + ': ' + e.directions.join(' / '); }).join('\n')
+             + '\n\n';
+      }
     }
     if(sections.indexOf('validation')>=0 && Opinion.state.validation) {
       ctx+='[검증 결과]\n'+JSON.stringify(Opinion.state.validation,null,1).slice(0,3000)+'\n\n';
@@ -3642,6 +3670,9 @@ Opinion._buildAmendmentDocxHtml = function(project, draftResult, parsedData) {
 
   // 다. 보정 사유
   html += '<h3>다. 보정 사유</h3>';
+  // ★ D1: AI 검증에서 승인된 보정 "방향"을 청구항별로 인덱싱(read-only). 승인분만(applyAmendments 기록), 없으면 미표시.
+  var _apprByNo = {};
+  Opinion._collectApprovedDirections(draftResult).forEach(function(e){ _apprByNo[String(e.claim_no)] = e.directions; });
   amendedArr.forEach(function(ac){
     var basis = ac.spec_basis;
     var basisStr = '';
@@ -3660,6 +3691,15 @@ Opinion._buildAmendmentDocxHtml = function(project, draftResult, parsedData) {
           + escapeHtml(summary || '명세서 기재 범위 내에서 보정.')
           + (basisStr ? ' <i>(근거 단락: ' + escapeHtml(basisStr) + ')</i>' : '')
           + '</div>';
+    // ★ D1: AI 검증 승인 보정 권고(방향). ac.amended 문언은 자동 변경하지 않는다(attorney 계약 — 방향만).
+    //   _apprByNo 는 승인분만 담으므로 미승인은 렌더 0, 권고 없으면 블록 자체를 만들지 않는다(기존 동작 불변).
+    var _dirs = _apprByNo[String(ac.claim_no)];
+    if (_dirs && _dirs.length) {
+      html += '<div ' + S_REASON + '><b>청구항 ' + escapeHtml(String(ac.claim_no)) + ' — [AI 검증 보정 권고]</b>'
+            + ' <span style="font-size:9pt;color:#666;">※ AI 검증에서 승인된 보정 방향입니다. 완성 문언은 변리사가 확정하세요(자동 변경되지 않음).</span>'
+            + _dirs.map(function(d){ return '<div style="margin-top:2pt;">· ' + escapeHtml(d) + '</div>'; }).join('')
+            + '</div>';
+    }
   });
 
   // §47② 신규사항 추가 금지 적시
