@@ -112,6 +112,6 @@ test('SUPABASE_URL/SERVICE_ROLE 미주입 시 persist 스킵(throw 0)', async ()
   assert.equal(patches.length, 0, '키 미주입 → PATCH 안 함(스킵)');
 });
 
-test('maxRounds=3 (B-T3 복원) — 비동기 토대 위 recheck 활성', () => {
-  assert.equal(OpinionProfile.terminationPolicy.maxRounds, 3, 'maxRounds 3');
+test('maxRounds=2 (② wall-clock 대응) — 비동기 토대 위 recheck 1라운드', () => {
+  assert.equal(OpinionProfile.terminationPolicy.maxRounds, 2, 'maxRounds 2');
 });
