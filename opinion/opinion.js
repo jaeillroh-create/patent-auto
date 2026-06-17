@@ -1198,86 +1198,36 @@ var KOREAN_PATENT_BOILERPLATE = [
 // ★ 참고 양식 정제 — 6가지 스타일 패턴 추출, 사건 내용 제거 ★
 // 반환: { sanitized: string (LLM 학습용), forbiddenSpans: string[] (검증용 실제 사건 문구) }
 Opinion.sanitizeTemplate = function(rawText, type) {
-  var def = Opinion.DEFAULT_TEMPLATES[type] || Opinion.DEFAULT_TEMPLATES.inventive_step;
-
-  // 1단계: 6가지 패턴 추출 — 사건 내용 철저 제외
-  var lines = rawText.split('\n');
-  var structurePatterns = [];   // [⑤] 단락 구조 (번호·기호 체계)
-  var salutationPatterns = [];  // [①] 호칭 패턴
-  var closingPatterns = [];     // [③] 종결어미 패턴
-  var emphasisPatterns = [];    // [④] 강조어구
-  var closerPatterns = [];      // [⑥] 결어·연결어
-  // [②] 명칭 패턴은 구조 안에서 자연 추출
-
-  var headingPattern = /^(\s*)([\d\.\(\)가-힣①-⑳❶-❿]+[\.\)]\s*.{2,40})$/;
-  var kwPattern = /^(\s*)(【[^】]+】|서두|보정내용|적법성|의견내용|결론|소결)/;
-  var salutPattern = /귀청|귀원|담당\s*심사관|출원인\s*(은|께서|이|을|의|에게)|이\s*건\s*출원의|본원\s*(발명|출원)\s*(은|이|의)/;
-  var closingEndPattern = /(합니다|드립니다|바랍니다|주장합니다|요청합니다|확인합니다|제출합니다)\s*[\.。]?\s*$/;
-  var emphasisKws = /명백히|분명히|강조하여|주장하건대|명시적으로|구체적으로|결론적으로|특히\s|더욱이|나아가\s/;
-  var closerKws = /^(이상과\s*같이|상기\s*이유로|따라서|그러므로|살펴보면|검토하면|대비하면|종합하면|이에\s|아래와\s*같이|상기\s*출원|수령하였기에)/;
-
-  // ─── Cycle 6 P2#10: 사건 특유 내용 마스킹 함수 ───
-  // 청구항 번호·인용번호·단락번호·출원번호를 [*]로 대체
+  // ─── 사건 특유 내용 마스킹 (식별자 + ★4 기술 prose) — 문체는 보존, 기술내용 누출 0 우선 ───
+  //   ★4: 식별자(청구항/인용/단락/출원번호)에 더해 수치·단위·영문약어·기술 구성명사·낫표 용어까지 [*]로 가린다.
+  //   어투·종결어미·호칭·연결어·강조어구는 마스킹 대상이 아니므로 그대로 남아 "문체"만 학습된다.
   function _maskCaseSpecific(str) {
-    return str
+    return String(str || '')
+      // ① 식별자
       .replace(/제\s*\d+\s*항/g, '[청구항*]')
       .replace(/청구항\s*\d+/g, '[청구항*]')
-      .replace(/(인용문헌|선행발명|비교대상발명)\s*\d+/g, '[인용*]')
-      .replace(/【\d{4}】/g, '[단락*]')
-      .replace(/\d{4}-\d{6,}/g, '[출원번호*]');
+      .replace(/(인용문헌|선행발명|비교대상발명|인용발명|선행문헌)\s*\d+/g, '[인용*]')
+      .replace(/【\s*\d{1,4}\s*】/g, '[단락*]')
+      .replace(/\d{4}-\d{6,}/g, '[출원번호*]')
+      // ② ★4 수치·단위 (구체 수치·측정값 누출 차단)
+      .replace(/\d+(?:\.\d+)?\s*(?:℃|°C|°|㎛|㎜|μm|nm|mm|cm|kg|mg|kHz|MHz|GHz|Hz|kW|mA|dB|bar|Pa|mol|％|%|초|분|시간|배|개|회|차|도|V|A|W|J|m|g)/g, '[수치*]')
+      // ③ ★4 영문·약어·화학식·모델명·코드 (기술 식별 토큰; 2자 이상 영숫자)
+      .replace(/[A-Za-z][A-Za-z0-9._\-\/]*[A-Za-z0-9]/g, '[기술*]')
+      // ④ ★4 기술 구성 명사(기술 접미사 결합어) — 발명 고유 구성요소명. 일반 2자어(전부·일부·내부…)는 길이상 제외.
+      .replace(/[가-힣]{2,12}(?:모듈|유닛|소자|회로|센서|엔진|알고리즘|프로세서|디바이스|메커니즘|어셈블리|하우징|유로|챔버|전극|기판|박막|레이어|코어|로직|버퍼|컨트롤러|액추에이터)/g, '[구성*]')
+      .replace(/[가-힣]{2,12}부/g, '[구성*]')
+      // ⑤ ★4 낫표·따옴표 안 고유 용어
+      .replace(/[「『][^」』\n]{1,40}[」』]/g, '[용어*]');
   }
 
-  lines.forEach(function(line) {
-    var trimmed = line.trim();
-    if (!trimmed || trimmed.length < 5) return;
-
-    // [⑤] 단락 구조 + 섹션 제목
-    if (headingPattern.test(trimmed) || kwPattern.test(trimmed)) {
-      structurePatterns.push(_maskCaseSpecific(trimmed));
-      return;
-    }
-
-    if (trimmed.length > 8 && trimmed.length < 90) {
-      // [①] 호칭 패턴
-      if (salutPattern.test(trimmed)) {
-        var masked = _maskCaseSpecific(trimmed.slice(0, 60));
-        if (masked.replace(/\[\*\]|\[[^\]]+\*\]/g, '').trim().length > 5) {
-          salutationPatterns.push(masked);
-        }
-      // [③] 종결어미 (짧은 문장 끝)
-      } else if (closingEndPattern.test(trimmed) && trimmed.length < 55) {
-        closingPatterns.push(_maskCaseSpecific(trimmed.slice(0, 55)));
-      // [④] 강조어구
-      } else if (emphasisKws.test(trimmed) && trimmed.length < 65) {
-        emphasisPatterns.push(_maskCaseSpecific(trimmed.slice(0, 65)));
-      // [⑥] 결어·연결어
-      } else if (closerKws.test(trimmed)) {
-        closerPatterns.push(_maskCaseSpecific(trimmed.slice(0, 65)));
-      }
-    }
-  });
-
-  // 2단계: 조립 — 실제 사건 내용은 절대 포함하지 않음
-  var result = '[★ 본 사무소 표준 의견서 양식 — 스타일·문체 학습 자료 (내용 사용 금지)]\n\n';
-  result += '기본 구조:\n' + def.structure + '\n\n';
-
-  if (structurePatterns.length > 0) {
-    result += '[⑤ 단락 구조 패턴 — 번호·기호 체계]\n' + structurePatterns.slice(0, 20).join('\n') + '\n\n';
-  }
-  if (salutationPatterns.length > 0) {
-    result += '[① 호칭 패턴 — 출원인·귀청·심사관 지칭 방식]\n' + salutationPatterns.slice(0, 5).join('\n') + '\n\n';
-  }
-  if (closingPatterns.length > 0) {
-    result += '[③ 종결어미 패턴 — 문장 끝맺음 방식]\n' + closingPatterns.slice(0, 5).join('\n') + '\n\n';
-  }
-  if (emphasisPatterns.length > 0) {
-    result += '[④ 강조어구 패턴 — 주요 강조 표현]\n' + emphasisPatterns.slice(0, 5).join('\n') + '\n\n';
-  }
-  if (closerPatterns.length > 0) {
-    result += '[⑥ 결어·연결어 패턴 — 섹션 끝맺음 표현]\n' + closerPatterns.slice(0, 8).join('\n') + '\n\n';
-  }
-
-  result += '작성 지침: ' + def.style_notes;
+  // ★1 마스킹 전문 주입 — 조각 추출 대신 양식 전문을 마스킹해 문체(어투·종결어미·호칭·문단 호흡)를 그대로 학습시킨다.
+  //   기술내용·구조 차용 금지는 styleGuide + tpl[t](섹션 강제)가 담당. 길이 캡 25K(프롬프트 방어).
+  var maskedFull = _maskCaseSpecific(rawText);
+  if (maskedFull.length > 25000) maskedFull = maskedFull.slice(0, 25000) + '\n…[양식 후략]';
+  var result = '[★ 본 사무소 표준 의견서 양식 — 문체·어투 학습 자료 (마스킹됨)]\n'
+    + '※ 아래는 사건 식별자·기술용어·수치를 [*]로 가린 본 사무소 실제 의견서다. 어투·종결어미·호칭·강조표현·문단 호흡만 학습하라.\n'
+    + '※ 기술내용·논증·섹션 구조는 차용하지 마라(구조는 본문 지시의 ## 섹션 순서를 따른다).\n\n'
+    + maskedFull + '\n';
 
   // ─── forbiddenSpans 추출 ───
   // 원본 양식에서 진짜 사건 특유 문구만 추출 (HIGH_PATTERNS + 보일러플레이트 제외)
@@ -3405,6 +3355,14 @@ Opinion.startOpinionDraft=async function(opts){
     // ── Cycle 5: 혼합 모드일 때 두 템플릿 모두 로드 ──
     // ── Cycle 8: skipTemplate 옵션이 true이면 양식 미적용 ──
     var activeTemplObj = (!opts.skipTemplate) && Opinion.state.templates && Opinion.state.templates[t];
+    // B-1: 사건 유형(t)에 업로드된 양식이 없는데 다른 유형 양식은 존재하면 유형 불일치 → 기본 문체로 생성됨을 알린다.
+    //   (partial_rejection 등은 양식 슬롯이 없어 항상 기본 문체. inventive_step/description_deficiency 만 양식 슬롯.)
+    Opinion.state._templateTypeMismatch = !!(!opts.skipTemplate && !activeTemplObj && Opinion.state.templates
+      && Object.keys(Opinion.state.templates).filter(function(k){ return Opinion.state.templates[k] && Opinion.state.templates[k].text; }).length);
+    if (Opinion.state._templateTypeMismatch) {
+      console.warn('[Opinion] 양식 미적용 — 사건 유형(' + t + ')에 업로드된 양식 없음(다른 유형 양식만 존재) → 기본 문체로 생성.');
+      try { showToast('이 사건 유형(' + t + ')에 업로드된 양식이 없어 기본 문체로 생성됩니다', 'info'); } catch (_e) {}
+    }
     var secTemplObj = null;
     var secTemplKey = null;
     if (!opts.skipTemplate && Opinion.state._mixed_mode && Opinion.state._mixed_secondary && Opinion.state._mixed_secondary !== t) {
@@ -3421,7 +3379,7 @@ Opinion.startOpinionDraft=async function(opts){
         }
       }
       styleGuide = '\n\n★★★ 문체·톤 준수 지시 (최우선 적용) ★★★\n'
-        + '위 컨텍스트의 [★ 본 사무소 표준 의견서 양식]은 본 사무소의 실제 의견서 스타일을 학습하기 위한 자료다.\n'
+        + '위 컨텍스트의 [★ 본 사무소 표준 의견서 양식]은 본 사무소의 실제 의견서다(기술용어·수치·식별자는 [*]로 마스킹됨). ★ 어투·문체만 학습 대상이며, [*] 마스킹 부분·기술내용·논증은 절대 차용하지 마라.\n'
         + (secTemplObj && secTemplObj.text ? '⚠️ 혼합 거절 모드: 주 거절('+t+') 양식과 부 거절('+secTemplKey+') 양식 두 개가 모두 제공되었다. 두 양식의 톤앤매너 패턴을 조합하라. 충돌 시 주 거절 양식을 우선하라.\n' : '')
         + '의견서를 작성하기 전에 아래 6가지 스타일 요소를 반드시 분석하고 동일하게 적용하라:\n'
         + '  ① 호칭: 출원인·귀청·심사관을 부르는 방식 → 양식과 동일하게 사용\n'
@@ -3431,7 +3389,7 @@ Opinion.startOpinionDraft=async function(opts){
         + '  ⑤ 단락 구조: 번호·기호 체계 (가. 나. / ① ② / (1) (2) / 가목·나목 등) → 동일 체계\n'
         + '  ⑥ 결어: 섹션 끝맺음 표현 ("이상과 같이", "따라서", "이에" 등) → 재현\n'
         + '⚠️ 차단 규칙: [본 사무소 표준 의견서 양식]에 없는 문체 표현(외래어 투, 영어 혼용, 딱딱한 번역체)은 자제하라.\n'
-        + '⚠️ 단, 이 사건의 구체적 기술 내용·청구항 번호·특정 표현은 양식에서 절대 차용하지 마라. 현재 사건 내용으로만 채워야 한다.\n'
+        + '⚠️ ★ 내용·구조 차용 절대 금지(오염 방지): (a) 양식의 [*] 마스킹 부분·기술내용·논증·구체 표현은 차용 금지 — 현재 사건의 실제 내용으로만 채운다. (b) 섹션 구조(순서·제목)는 양식이 아니라 아래 본문 지시의 ## 섹션을 그대로 따른다(양식 구조 차용 금지). 양식에서 가져오는 것은 오직 어투·종결어미·호칭·강조·연결어 등 "문체"뿐이다.\n'
         + '⚠️ §42 조문 보호: 의견서에 등장하는 §42 조항 표기(§42② 1호, §42④ 2호 등)는 반드시 [분석 결과]의 article 필드 값만 사용하라. 양식에 다른 조문 번호가 있어도 무시하라. 조문 표기는 스타일 적용 대상이 아니다.\n';
     }
 
