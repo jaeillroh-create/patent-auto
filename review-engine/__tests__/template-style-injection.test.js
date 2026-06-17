@@ -31,7 +31,8 @@ before(() => {
   Opinion = sandbox.window.Opinion;
 });
 
-const SAMPLE = '본원발명의 제어부는 120℃에서 TF-IDF 방식으로 처리하며, 인용발명 1의 비교부와 명백히 구별되는 것으로 사료됩니다.';
+// 마커(제N항·인용발명N 등)가 없는 문장 — ②(마커 문장 제거) 후에도 마스킹이 적용되는 케이스.
+const SAMPLE = '본원발명의 제어부는 120℃에서 TF-IDF 방식으로 동작하는 구성으로서 명백히 구별되는 것으로 사료됩니다.';
 
 test('★1 sanitizeTemplate — 조각이 아니라 마스킹 전문 반환(헤더+본문)', () => {
   const r = Opinion.sanitizeTemplate(SAMPLE, 'inventive_step');
@@ -43,16 +44,13 @@ test('★1 sanitizeTemplate — 조각이 아니라 마스킹 전문 반환(헤�
 
 test('★4 기술명사·수치·영문·식별자 마스킹 (오염 차단)', () => {
   const s = Opinion.sanitizeTemplate(SAMPLE, 'inventive_step').sanitized;
-  assert.ok(s.includes('[구성*]'), '제어부/비교부 → [구성*]');
+  assert.ok(s.includes('[구성*]'), '제어부 → [구성*]');
   assert.ok(s.includes('[수치*]'), '120℃ → [수치*]');
   assert.ok(s.includes('[기술*]'), 'TF-IDF → [기술*]');
-  assert.ok(s.includes('[인용*]'), '인용발명 1 → [인용*]');
-  // ★ 실제 기술내용은 사라져야 함
+  // ★ 실제 기술내용은 사라져야 함 (마커 없는 문장의 기술명사 마스킹)
   assert.ok(!s.includes('제어부'), '제어부 누출 0');
-  assert.ok(!s.includes('비교부'), '비교부 누출 0');
   assert.ok(!s.includes('120'), '수치 120 누출 0');
   assert.ok(!s.includes('TF-IDF'), '영문 약어 누출 0');
-  assert.ok(!s.includes('인용발명 1'), '인용 식별자 누출 0');
 });
 
 test('★ 문체(어투·종결어미·연결어·강조)는 보존', () => {

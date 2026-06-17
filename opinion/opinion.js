@@ -1220,9 +1220,26 @@ Opinion.sanitizeTemplate = function(rawText, type) {
       .replace(/[「『][^」』\n]{1,40}[」』]/g, '[용어*]');
   }
 
+  // ── ②(오염 0): HIGH_RE 마커(제N항/인용N/단락/출원번호) 포함 "문장"을 통째로 제거한다.
+  //   접미사 마스킹으로 못 잡는 도메인 주제어(소셜미디어·콘텐츠·식자재·컨셉 등)는 대부분 이런 마커 문장에
+  //   들어있으므로(사건특유 = forbiddenSpans 와 동일 집합), 문장 자체를 [사건특유 문장 생략]으로 치환 →
+  //   프롬프트에 도메인 어구가 원천적으로 안 들어간다. 문체(호칭·종결어미·연결어·결어)는 마커 없는 일반
+  //   문장에 있으므로 보존된다. ★ 접미사 확장(whack-a-mole)이 아니라 마커 문장 제거가 근본.
+  function _redactMarkerSentences(str) {
+    var HIGH_SENT = /제\s*\d+\s*항|청구항\s*\d+|인용문헌\s*\d+|선행발명\s*\d+|비교대상발명\s*\d+|인용발명\s*\d+|선행문헌\s*\d+|【\s*\d{1,4}\s*】|\d{4}-\d{6,}/;
+    // 마침표·줄바꿈을 보존하며 분할(캡처 그룹). 짝수 인덱스=본문 segment, 홀수=구분자.
+    var parts = String(str || '').split(/([.。\n])/);
+    for (var i = 0; i < parts.length; i += 2) {
+      if (parts[i] && HIGH_SENT.test(parts[i])) parts[i] = ' [사건특유 문장 생략] ';
+    }
+    // 연속 생략 표시는 1개로 축약.
+    return parts.join('').replace(/(\[사건특유 문장 생략\]\s*){2,}/g, '[사건특유 문장 생략] ');
+  }
+
   // ★1 마스킹 전문 주입 — 조각 추출 대신 양식 전문을 마스킹해 문체(어투·종결어미·호칭·문단 호흡)를 그대로 학습시킨다.
+  //   ②: 마커 문장 제거(도메인 주제어 차단) 후 잔여 식별자·수치·영문·구성명사를 _maskCaseSpecific 으로 가린다(2겹).
   //   기술내용·구조 차용 금지는 styleGuide + tpl[t](섹션 강제)가 담당. 길이 캡 25K(프롬프트 방어).
-  var maskedFull = _maskCaseSpecific(rawText);
+  var maskedFull = _maskCaseSpecific(_redactMarkerSentences(rawText));
   if (maskedFull.length > 25000) maskedFull = maskedFull.slice(0, 25000) + '\n…[양식 후략]';
   var result = '[★ 본 사무소 표준 의견서 양식 — 문체·어투 학습 자료 (마스킹됨)]\n'
     + '※ 아래는 사건 식별자·기술용어·수치를 [*]로 가린 본 사무소 실제 의견서다. 어투·종결어미·호칭·강조표현·문단 호흡만 학습하라.\n'
