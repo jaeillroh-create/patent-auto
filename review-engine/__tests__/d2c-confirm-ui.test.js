@@ -150,9 +150,7 @@ test('★ 통합: applyDirectionRewrite(보류 유지) → confirmRewrite(커밋
   assert.equal(Opinion.state._pendingRewrite, null, '보류 해제');
 });
 
-test('버튼 노출 조건 — 승인 방향 있으면 renderOutput 에 btnDirectionRewrite', () => {
-  // 소스 레벨: renderOutput 이 _collectApprovedDirections 길이로 버튼을 조건 렌더하는지
+test('버튼 배선 — renderOutput 에 btnDirectionRewrite → startDirectionRewrite (상시 렌더는 fix-d2c-button-render 에서 검증)', () => {
   const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
   assert.match(src, /btnDirectionRewrite[\s\S]*?Opinion\.startDirectionRewrite\(\)/, 'startDirectionRewrite 버튼 배선');
-  assert.match(src, /_collectApprovedDirections\(Opinion\.state\.draftResult\|\|\{\}\)\.length[\s\S]*?btnDirectionRewrite/, '승인 방향 있을 때만 노출');
 });

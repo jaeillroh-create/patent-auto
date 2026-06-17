@@ -875,6 +875,9 @@ Opinion._reviewModalOpts = function() {
       // ★ AC-T1: 자동 runReviewEngine(recheck) 제거 — 승인 한 번이 discover부터 풀 재검증을 재실행해 타임아웃하던 버그.
       //   승인/거부는 결정 상태만 빠르게 영속. 재검증은 '의견서 검증 시작' 버튼으로 사용자가 명시적으로.
       try { Opinion._persistReviewDecision(rs); } catch (_e) {}
+      // ★ 승인 후 화면 재렌더(클라 렌더 — edge 재검증 아님, AC-T1 보존). renderOutput 이 승인 상태(review_amendments)를
+      //   다시 읽어 "승인 방향 반영" 등 조건부 UI 를 갱신한다. ⛔ 풀 재검증(runReviewEngine) 트리거는 그대로 금지.
+      try { if (typeof Opinion.renderDetail === 'function') Opinion.renderDetail(); } catch (_e) {}
     }
   };
 };
@@ -3776,10 +3779,9 @@ Opinion.renderOutput=function(L,R,status){
     +'<button class="btn btn-primary btn-full" id="btnOpinionReview" onclick="Opinion.runReviewEngine()"><span class="ico" data-icon="shield"></span> 의견서 검증 시작</button>'
     +'<div id="opinionReviewGateMsg" style="font-size:12px;color:var(--color-text-tertiary);margin-top:8px"></div>'
     +'<div id="opinionReviewMount" style="margin-top:12px"></div>'
-    // D2c: 승인된 보정 방향이 있을 때만 "승인 방향 반영"(청구항 자동 재작성) 버튼 노출. ★ 명시 액션(승인 자동트리거 아님).
-    +(Opinion._collectApprovedDirections(Opinion.state.draftResult||{}).length
-        ? '<button class="btn btn-outline btn-full" id="btnDirectionRewrite" style="margin-top:10px" onclick="Opinion.startDirectionRewrite()"><span class="ico" data-icon="edit"></span> 승인 방향 반영 — 청구항 자동 재작성(변리사 확정)</button>'
-        : '')
+    // D2c: "승인 방향 반영"(청구항 자동 재작성) 버튼 — ★ 상시 렌더(렌더 타이밍 의존 구조적 제거). 승인된 방향이
+    //   없으면 클릭 시 applyDirectionRewrite 가드 토스트("반영할 승인 보정 방향이 없습니다")로 안전 처리. 명시 액션(승인 자동트리거 아님).
+    +'<button class="btn btn-outline btn-full" id="btnDirectionRewrite" style="margin-top:10px" onclick="Opinion.startDirectionRewrite()"><span class="ico" data-icon="edit"></span> 승인 방향 반영 — 청구항 자동 재작성(변리사 확정)</button>'
     +'</div>';
 
   // 오른쪽: 의견서 미리보기 (기존 gate3의 미리보기)
