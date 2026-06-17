@@ -741,14 +741,11 @@ Opinion.showRewriteConfirmModal = function() {
     + Opinion._buildRewriteDiffHtml(pend)
     + '<div style="display:flex;gap:8px;margin-top:16px">'
     + '<button class="btn btn-ghost" style="flex:1;padding:10px" onclick="Opinion.cancelRewrite()">취소 (폐기)</button>'
-    + '<button class="btn btn-primary" style="flex:1;padding:10px" id="btnRewriteConfirm"' + (blocked ? ' disabled title="무결성 위반 — 확정 불가"' : '') + '><span class="ico" data-icon="check"></span> 확정 (보정서 반영)</button>'
+    + '<button class="btn btn-primary" style="flex:1;padding:10px" id="btnRewriteConfirm" onclick="Opinion._confirmRewriteClick()"' + (blocked ? ' disabled title="무결성 위반 — 확정 불가"' : '') + '><span class="ico" data-icon="check"></span> 확정 (보정서 반영)</button>'
     + '</div></div>';
   document.body.appendChild(modal);
-  modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); });
-  var btn = document.getElementById('btnRewriteConfirm');
-  if (btn && !blocked) btn.addEventListener('click', function(){
-    Opinion.confirmRewrite().then(function(ok){ if (ok) { var m = document.getElementById('opinionRewriteModal'); if (m) m.remove(); } });
-  });
+  modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); }); // 외부 클릭 닫기
+  // ★ A-1: [확정] 은 인라인 onclick(Opinion._confirmRewriteClick)으로 [취소]와 배선 통일 — addEventListener 의존 제거(클릭 무반응 방지).
 };
 
 // confirmRewrite — ★ 확정: 보류본 → draftResult 커밋(이전까지 불변). CRITICAL 차단 시 거부. review_amendments "반영됨" 마킹.
@@ -772,10 +769,22 @@ Opinion.confirmRewrite = async function() {
   });
   Opinion.state.draftResult = committed;      // ★ 이제서야 커밋
   Opinion.state._pendingRewrite = null;        // 보류 해제
-  try { await sb.from('opinion_draft_claims').insert({ project_id: p.id, draft_type: p.rejection_type, draft_data: committed, status: 'draft' }); } catch (_e) {}
+  // B-2: DB 영속 실패를 조용히 삼키지 않고 경고(커밋은 in-memory 로 됐으나 새로고침/재오픈 시 소실 가능 인지).
+  try {
+    var _ins = await sb.from('opinion_draft_claims').insert({ project_id: p.id, draft_type: p.rejection_type, draft_data: committed, status: 'draft' });
+    if (_ins && _ins.error) showToast('⚠️ 재작성은 반영됐으나 저장 실패 — 새로고침 전 보정서를 다운로드하세요', 'error');
+  } catch (_e) { showToast('⚠️ 재작성은 반영됐으나 저장 실패 — 새로고침 전 보정서를 다운로드하세요', 'error'); }
   showToast('재작성 확정 — 보정서·의견서에 반영됩니다 (청구항 ' + (pend.targetClaimNos || []).join(', ') + ')', 'success');
   try { if (typeof Opinion.renderDetail === 'function') Opinion.renderDetail(); } catch (_e) {}
   return true;
+};
+
+// _confirmRewriteClick — [확정] 버튼 인라인 onclick 핸들러([취소]와 배선 통일, A-1). confirmRewrite(async) 호출 후
+//   성공 시 모달 닫음. ★ addEventListener 의존 제거로 "클릭 무반응" 차단. 반환=Promise(테스트 await용; onclick 은 무시).
+Opinion._confirmRewriteClick = function() {
+  return Opinion.confirmRewrite().then(function(ok){
+    if (ok) { try { var m = document.getElementById('opinionRewriteModal'); if (m) m.remove(); } catch (_e) {} }
+  });
 };
 
 // cancelRewrite — 보류 폐기. draftResult 불변(기존 보정안 유지).
@@ -3881,7 +3890,9 @@ Opinion.downloadAmendmentDocx = async function() {
   var blob = new Blob(['﻿'+fullHtml], {type:'application/msword'});
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
-  var datestr = new Date().toISOString().slice(0,10);
+  // B-1: 파일명에 날짜+시각(HHMMSS) — 같은 날 재다운로드 시 구버전(확정 전) 파일 혼동 방지.
+  var _dt = new Date();
+  var datestr = _dt.toISOString().slice(0,10) + '_' + _dt.toTimeString().slice(0,8).replace(/:/g,'');
   a.href = url; a.download = '보정서_' + (p.application_no||p.title||'output') + '_' + datestr + '.doc';
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   // Cycle 6 §2.5 — Word 호환성 수동 검증 안내 토스트
