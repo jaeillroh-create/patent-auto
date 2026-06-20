@@ -3529,7 +3529,15 @@ Opinion.startOpinionDraft=async function(opts){
       throw de;
     }
     Opinion.state.opinionDraft=od;
-    await Opinion.setStatus(p.id,'opinion_drafted');
+    // ★ setStatus 결과 표면화: opinion_projects.status 가 'opinion_drafted' 를 거부(조용한 {ok:false})하면
+    //   상태가 '작성 중'에 묶여 무증상 멈춤(본문은 있는데 7단계 안 열림) → db 에러로 승격해 에러 카드+재시도로
+    //   표면화한다. setStatus 자체는 불변(다른 호출처 영향 없음) — 여기서만 결과를 검사한다.
+    var stRes = await Opinion.setStatus(p.id,'opinion_drafted');
+    if (stRes && stRes.ok === false) {
+      var stErr = new Error('상태 전환 실패(opinion_drafted): ' + (stRes.error || 'opinion_projects.status 거부') + ' — DB status 제약 확인 필요');
+      stErr.kind = 'db';
+      throw stErr;
+    }
     showToast('의견서 초안 생성 완료 (' + od.sections.length + '개 섹션)');
   }catch(e){
     // ── Cycle 8: 에러 종류별 분류 + state.draftError에 저장 (renderOpinion이 카드 표시) ──
