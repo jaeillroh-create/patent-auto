@@ -14092,17 +14092,22 @@ Patent._pollReviewRun = function(reviewRunId) {
           .eq('id', reviewRunId).eq('status', 'running');
       } catch (_e) {}
       finish(null, '검증 시간 초과 — 다시 시도해 주세요');
-    }, 180000); // worker 사망 방어
+    }, 300000); // worker 사망 방어 — patent 명세서 입력이 커 완주가 길 수 있어 180→300s (Pro 백그라운드 여유)
+    // ★ 완료 인식: status==='done' 외에 "결과(result) 존재" 또는 "종결 phase(converged/escalated/finalized)" 도 완주로 본다.
+    //   escalated 는 정상 완료(자동통과 금지지 실패 아님) — opinion 처럼 완주 처리. 일부 Edge 빌드가 status 대신
+    //   phase/result 만 갱신해도 결과를 놓치지 않게 한다("결과 왔는데 시간 초과" 오표시 차단).
+    var TERMINAL = { converged: 1, escalated: 1, finalized: 1 };
+    function _isComplete(s) { return !!(s && (s.status === 'done' || s.result || (s.phase && TERMINAL[s.phase]))); }
     sub = window.ReviewUI.subscribePolling({
       intervalMs: 2000,
       fetchState: async function() {
         var r = await App.sb.from('review_runs').select('status,phase,result,error').eq('id', reviewRunId).single();
         return (r && r.data) || {};
       },
-      isDone: function(s) { return !!(s && (s.status === 'done' || s.status === 'failed')); },
+      isDone: function(s) { return _isComplete(s) || !!(s && s.status === 'failed'); },
       onTick: function(s) {
         if (done) return;
-        if (s && s.status === 'done') { clearTimeout(killer); finish(s.result || null); return; }
+        if (_isComplete(s)) { clearTimeout(killer); finish(s.result || null); return; }   // ★ 결과/종결 phase(escalated 포함) → 완주
         if (s && s.status === 'failed') { clearTimeout(killer); finish(null, '검증 실패: ' + ((s && s.error) || '알 수 없는 오류')); return; }
         try { if (window.ReviewUI.openModalMessage) window.ReviewUI.openModalMessage('검증 중… (' + ((s && s.status) || 'running') + ')'); } catch (_e) {}
       },

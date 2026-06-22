@@ -15,9 +15,10 @@ afterEach(() => {
   FEATURE_FLAGS.modules.patent = false;
 });
 
-test('출하 기본값: 마스터 ON + opinion 단독 ON (patent/division 격리 유지)', () => {
+test('출하 기본값: 마스터 ON + opinion·patent ON (division 격리 유지)', () => {
   assert.equal(FEATURE_FLAGS.reviewEngine, true);
-  assert.deepEqual(FEATURE_FLAGS.modules, { opinion: true, division: false, patent: false });
+  // patent: T1(#192 비동기 러너)+폴링 완주 인식 후 ON. division 은 여전히 미검증 격리.
+  assert.deepEqual(FEATURE_FLAGS.modules, { opinion: true, division: false, patent: true });
 });
 
 test('진리표 ①: 마스터 OFF → 모듈 토글 무관하게 전부 무동작', () => {
@@ -36,7 +37,7 @@ test('진리표 ②: 마스터 ON + opinion만 ON → opinion 발화, division/p
   FEATURE_FLAGS.modules.opinion = true;
   assert.equal(isModuleEnabled('opinion'), true, 'opinion 활성');
   assert.equal(isModuleEnabled('division'), false, 'division 격리(미검증)');
-  assert.equal(isModuleEnabled('patent'), false, 'patent 격리(미검증)');
+  assert.equal(isModuleEnabled('patent'), false, 'patent OFF(본 테스트 컨텍스트 — 출하 기본은 ON)');
 });
 
 test('진리표 ③: 마스터 ON + 모듈 전부 OFF → 무동작', () => {

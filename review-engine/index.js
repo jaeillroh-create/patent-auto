@@ -25,7 +25,7 @@ import { PHASE } from './contracts/stateSchema.js';
  */
 export const FEATURE_FLAGS = {
   reviewEngine: true,
-  modules: { opinion: true, division: false, patent: false },
+  modules: { opinion: true, division: false, patent: true }, // patent ON (T1 비동기 러너 #192 + 폴링 완주 인식)
 };
 
 /**
