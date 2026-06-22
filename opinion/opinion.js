@@ -1195,6 +1195,43 @@ var KOREAN_PATENT_BOILERPLATE = [
   '통상의 기술자가 용이하게',              // 진보성 표준 문언
 ];
 
+// ─── 정형(보일러플레이트) vs 사건고유 판별 — 추출·검증 공유 헬퍼 ───
+// ★ 핵심: `제N항` 은 "청구항 제N항(사건고유)" 과 "특허법 제N조 제M항(정형 조문)" 을 구분 못 해
+//   정형 서두·조문이 forbiddenSpan→high 로 오검출되던 버그(DIAG-contam-false-positive)를 바로잡는다.
+//   추출(sanitizeTemplate)·검증(validateNoTemplateContamination) 양쪽이 ★동일 헬퍼★를 써 기준 불일치를 차단한다.
+
+// 법조 인용 패턴(정형) — 조문의 제N조/제M항/제K호는 사건고유가 아니다(모든 의견서 공통).
+//   특허법 제N조 [제M항] [제K호] / 동조 [제M항] [제K호] / 단독 제N호 를 한 토큰으로 본다(띄어쓰기·번호 변형 허용).
+var STATUTE_RE = /(?:특허법|실용신안법|디자인보호법|상표법|법)\s*제\s*\d+\s*조(?:\s*제\s*\d+\s*항)?(?:\s*제\s*\d+\s*호)?|동\s*조(?:\s*제\s*\d+\s*항)?(?:\s*제\s*\d+\s*호)?|제\s*\d+\s*호/g;
+
+// 한 문장에서 "진짜 사건고유 마커"만 추출(법조 문맥 제거 후 판정). 반환: ['claim'|'cited'|'para'|'appno'...] (없으면 []).
+//   ★ 법조(특허법 제N조 제M항)·동조·제N호 는 먼저 제거 → 조문의 제M항이 청구항 마커로 오검출되지 않는다.
+Opinion._caseSpecificMarkers = function(sentence) {
+  var s = String(sentence || '');
+  var stripped = s.replace(STATUTE_RE, ' '); // 1) 법조 인용 선제거(조문 제M항/제K호의 오인 차단)
+  var markers = [];                          // 2) 잔여에서 진짜 사건고유 마커 탐지
+  if (/청구항\s*제?\s*\d+\s*항?/.test(stripped) || /제\s*\d+\s*항/.test(stripped)) markers.push('claim');
+  if (/(?:인용문헌|선행발명|비교대상발명|인용발명|선행문헌)\s*\d+/.test(stripped)) markers.push('cited');
+  if (/【\s*\d{1,4}\s*】/.test(stripped)) markers.push('para');
+  if (/\d{4}-\d{6,}/.test(stripped)) markers.push('appno');
+  return markers;
+};
+
+// 문장이 "정형(보일러플레이트)" 인지 — 법조 인용/표준 서두·결어/일자 신호가 있고 ★사건고유 마커가 없을 때★ true.
+//   혼합 문장(조문 + 청구항/인용 등 고유 마커 동시)은 고유 우선(false) → 진짜 누수 보존.
+Opinion._isBoilerplateSentence = function(sentence) {
+  var s = String(sentence || '');
+  if (Opinion._caseSpecificMarkers(s).length > 0) return false; // 고유 마커 있으면 정형 아님(누수 보존)
+  var BOILER_RE = [
+    /(?:특허법|실용신안법|디자인보호법|상표법|법)\s*제\s*\d+\s*조/, // 법조 인용(번호·띄어쓰기 무관)
+    /동\s*조\s*제\s*\d+\s*항/,                                    // "동조 제N항"
+    /의견제출통지서/, /귀\s*청/, /의견서를?\s*제출/,              // 표준 서두·결어
+    /\d{4}\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}/,                        // 통지/기준 일자(2026.04.10. 등)
+  ];
+  if (BOILER_RE.some(function(re){ return re.test(s); })) return true;
+  return KOREAN_PATENT_BOILERPLATE.some(function(bp){ return s.indexOf(bp) >= 0; }); // 기존 exact 화이트리스트 유지(보강)
+};
+
 // ★ 참고 양식 정제 — 6가지 스타일 패턴 추출, 사건 내용 제거 ★
 // 반환: { sanitized: string (LLM 학습용), forbiddenSpans: string[] (검증용 실제 사건 문구) }
 Opinion.sanitizeTemplate = function(rawText, type) {
@@ -1247,23 +1284,16 @@ Opinion.sanitizeTemplate = function(rawText, type) {
     + maskedFull + '\n';
 
   // ─── forbiddenSpans 추출 ───
-  // 원본 양식에서 진짜 사건 특유 문구만 추출 (HIGH_PATTERNS + 보일러플레이트 제외)
-  // validateNoTemplateContamination()에서 이 목록만 검사 → false-positive 차단
-  var HIGH_RE = [
-    /제\s*\d+\s*항/,
-    /청구항\s*\d+/,
-    /인용문헌\s*\d+|선행발명\s*\d+|비교대상발명\s*\d+/,
-    /【\d{4}】/,
-    /\d{4}-\d{6,}/
-  ];
+  // 원본 양식에서 진짜 사건 특유 문구만 추출 (★ 공유 헬퍼 _caseSpecificMarkers/_isBoilerplateSentence 사용)
+  // validateNoTemplateContamination()에서 이 목록만 검사 → 정형(조문·서두) false-positive 차단
   var forbiddenSpans = [];
   rawText.split(/[.\n]/).forEach(function(s) {
     var t = s.trim();
     if (t.length < 25 || t.length > 200) return;
-    // 사건 특유 마커가 없으면 스킵
-    if (!HIGH_RE.some(function(re) { return re.test(t); })) return;
-    // 보일러플레이트 화이트리스트 적중 시 스킵
-    if (KOREAN_PATENT_BOILERPLATE.some(function(bp) { return t.indexOf(bp) >= 0; })) return;
+    // ★ 정형(법조·서두) → 제외. 법조 문맥의 제N항은 사건고유로 치지 않는다(조문 ≠ 청구항).
+    if (Opinion._isBoilerplateSentence(t)) return;
+    // ★ 진짜 사건고유 마커(청구항·인용·단락·출원번호; 법조 제외)가 없으면 제외.
+    if (Opinion._caseSpecificMarkers(t).length === 0) return;
     forbiddenSpans.push(t.slice(0, 80));
   });
 
@@ -1281,24 +1311,15 @@ Opinion.validateNoTemplateContamination = function(opinionText, contextType) {
   var spans = Opinion.state._templateForbiddenSpans || [];
   if (spans.length === 0) return { clean: true, warnings: [], severity: 'low' };
 
-  var HIGH_RE = [
-    /제\s*\d+\s*항/,
-    /청구항\s*\d+/,
-    /인용문헌\s*\d+|선행발명\s*\d+|비교대상발명\s*\d+/,
-    /【\d{4}】/,
-    /\d{4}-\d{6,}/
-  ];
-
   var warnings = [];
 
   spans.forEach(function(span) {
     var trimmed = span.trim();
     if (trimmed.length < 20) return;
 
-    // 보일러플레이트 화이트리스트 재확인 (sanitizeTemplate에서 이미 걸렀지만 double-check)
-    var isBoilerplate = KOREAN_PATENT_BOILERPLATE.some(function(bp) { return trimmed.indexOf(bp) >= 0; });
-
-    var isHighRisk = HIGH_RE.some(function(re) { return re.test(trimmed); });
+    // ★ 추출과 동일한 공유 헬퍼로 판정(기준 일치) — 정형(조문·서두)은 low, 진짜 사건고유 마커만 high.
+    var isBoilerplate = Opinion._isBoilerplateSentence(trimmed);
+    var isHighRisk = Opinion._caseSpecificMarkers(trimmed).length > 0;
 
     for (var len = 20; len <= Math.min(trimmed.length, 50); len++) {
       var chunk = trimmed.slice(0, len);
