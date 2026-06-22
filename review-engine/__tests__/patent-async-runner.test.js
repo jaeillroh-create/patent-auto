@@ -152,3 +152,48 @@ test('소스 정합 — patent 러너가 opinion 패턴(review_runs·reviewRunId
   // D2 기존 재사용 — applyAmendments + recheck 유지(신규 0)
   assert.match(PATENT_SRC, /Patent\.applyAmendments\(acc\);\s*if\s*\(Patent\._reviewRunner\)\s*Patent\.runReviewEngine/, 'applyAmendments+recheck 유지(D2 재사용)');
 });
+
+// ──────────────── ① 폴링 완주 인식(escalated/result) — "결과 왔는데 시간초과" 차단 ────────────────
+
+test('★★① escalated+result — status!==done 이라도 result 있으면 완주(시간초과 오표시 차단)', async () => {
+  // 증상 재현: Edge 가 phase:escalated + result 를 줬는데 status 가 done 으로 안 박힘/늦음 → 폴링이 놓쳐 180s 타임아웃.
+  hooks.pollResult = { phase: 'escalated', result: { issues: new Array(8).fill(0).map((_, i) => ({ id: 'i' + i })) } };
+  const r = await Patent._pollReviewRun('run-esc');
+  assert.ok(r && r.issues && r.issues.length === 8, '★ escalated+result → 8개 issue 결과 반환(타임아웃 아님)');
+});
+
+test('★① terminal phase(converged)+result → 완주', async () => {
+  hooks.pollResult = { phase: 'converged', result: { issues: [] } };
+  assert.deepEqual(await Patent._pollReviewRun('run-conv'), { issues: [] }, 'converged+result → 결과');
+});
+
+test('★① status:running + result 존재 → 완주(결과 우선)', async () => {
+  hooks.pollResult = { status: 'running', result: { issues: [{ id: 'x' }] } };
+  assert.deepEqual(await Patent._pollReviewRun('run-run'), { issues: [{ id: 'x' }] }, 'result 있으면 running 이어도 완주');
+});
+
+test('★① 진짜 실패(result 없음 + status failed) → null (오완주 아님)', async () => {
+  hooks.pollResult = { status: 'failed', error: 'E', phase: null, result: null };
+  assert.equal(await Patent._pollReviewRun('run-fail'), null, 'result 없는 failed 는 그대로 실패');
+});
+
+test('★① 소스 — _isComplete(완주 인식 헬퍼)·종결 phase 집합·killer 300s', () => {
+  assert.match(PATENT_SRC, /function _isComplete/, '_isComplete 헬퍼');
+  assert.match(PATENT_SRC, /TERMINAL\s*=\s*\{\s*converged:\s*1,\s*escalated:\s*1,\s*finalized:\s*1\s*\}/, '종결 phase(escalated 포함)');
+  assert.match(PATENT_SRC, /\},\s*300000\);/, 'killer 180→300s');
+});
+
+// ──────────────── ② 플래그 ON + ESM 캐시버스트 ────────────────
+
+test('★② FEATURE_FLAGS.modules.patent: true (출하 ON)', () => {
+  const flagSrc = readFileSync(path.join(REPO, 'review-engine/index.js'), 'utf8');
+  assert.match(flagSrc, /modules:\s*\{[^}]*patent:\s*true/, 'patent: true');
+});
+
+test('★② ESM 캐시버스트 — 패널이 index.js 를 ?v= 로 import + 패널/patent ?v= 갱신', () => {
+  const panelSrc = readFileSync(path.join(REPO, 'review-engine/ui/opinion-review-panel.js'), 'utf8');
+  assert.match(panelSrc, /from '\.\.\/index\.js\?v=/, 'index.js import 에 ?v=(FEATURE_FLAGS 캐시버스트)');
+  const html = readFileSync(path.join(REPO, 'index.html'), 'utf8');
+  assert.match(html, /opinion-review-panel\.js\?v=20260634/, '패널 ?v= 갱신');
+  assert.match(html, /patent\/patent\.js\?v=20260634/, 'patent.js ?v= 갱신');
+});

@@ -11,7 +11,7 @@
  */
 import { buildViewModel } from './reviewViewModel.js';
 import { approvePlan, rejectPlan, GATE_DECISION } from '../kernel/humanGate.js';
-import { isModuleEnabled } from '../index.js';
+import { isModuleEnabled } from '../index.js?v=20260634'; // ?v=: FEATURE_FLAGS(patent ON) ESM 캐시버스트 — 패널 ?v=만으론 캐시된 index.js 재사용됨
 import { PROFILES } from '../profiles/registry.js';
 import { subscribePolling } from './progressClient.js'; // B-T3: 폴링 재사용(재구현 0)
 
