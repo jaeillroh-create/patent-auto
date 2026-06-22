@@ -14201,6 +14201,75 @@ Patent.applyAmendments = function(acceptedPlans) {
   return { applied: log, renderCheck: { svg: true, pptx: true, canvas: true }, count: log.length, rolledBack: false };
 };
 
+// ═══════════ [D2 T1] 반영 엔진 — 승인 보정 방향을 실제 명세서에 반영(add_spec_support 우선) ═══════════
+// opinion D2a(applyDirectionRewrite) 패턴 이식. patent 주력 op = add_spec_support(§42④ 상세설명 뒷받침 — DB high 주력).
+//   ★ 안전(opinion 교훈): 대상 섹션만 수정, 비대상 byte-identical, APPEND(기존 상세설명 불변), 보류(자동 커밋 금지).
+//   ★ §47 비적용(출원 전 — 최초 명세서 작성 중). E-11 도면 정합(_reviewRenderCheck) 게이트.
+
+// _genSpecSupportParagraph — add_spec_support 방향 → 상세설명 뒷받침 "단락 1개" 생성(LLM, 평문).
+//   ★ 기존 상세설명을 재출력하지 않고 "추가할 단락"만 생성(APPEND 용). 기존 문체·용어·도면부호와 정합.
+//   ★ 별도 함수로 분리 → 테스트가 LLM 없이 stub 가능(반영 로직 단위검증).
+Patent._genSpecSupportParagraph = async function(dir, basisText) {
+  var target = (dir && dir.target) || '해당 구성';
+  var direction = (dir && dir.direction) || '';
+  var reason = (dir && dir.reason) || '';
+  var basis = String(basisText || '');
+  var ctx = basis.length > 12000 ? (basis.slice(0, 8000) + '\n...[중략]...\n' + basis.slice(-4000)) : basis;
+  var prompt = '당신은 15년차 한국 특허 변리사입니다. 아래 [기존 상세설명]에 ' + target + ' 구성의 뒷받침(§42④)을 보강하는 상세설명 단락 1개를 작성하세요.\n\n'
+    + '[보강 방향(AI 검증·변리사 승인)]\n' + direction + (reason ? '\n[근거 지적]\n' + reason : '') + '\n\n'
+    + '[기존 상세설명]\n' + ctx + '\n\n'
+    + '★ 규칙:\n'
+    + '1. ★ 추가할 "단락 하나"만 출력한다. 기존 상세설명을 재출력하지 마라(뒤에 APPEND 된다).\n'
+    + '2. 기존 상세설명의 문체·용어·도면부호와 정합되게 작성한다(★ 새 도면부호 도입 금지 — 부호의 설명 정합 유지).\n'
+    + '3. ' + target + ' 구성의 동작원리·기준값 산출·구현을 통상의 기술자가 실시 가능하게 구체적으로 기술한다(출원 전 작성 — 신규사항 §47 제약 없음).\n'
+    + '4. 마크다운·머리표·번호 없이 특허 명세서 본문 문장으로만 작성한다. 본문 단락만 출력(머리말·인사·설명 금지).';
+  var r = await App.callClaude(prompt, 2048);
+  var t = (r && r.text ? String(r.text) : '').trim();
+  return t || null;
+};
+
+// applyDirectionRewrite — T1: 승인된 add_spec_support 방향을 상세설명(step_08/12)에 뒷받침 단락으로 APPEND.
+//   입력: outputs._review_applied(applyAmendments 가 채운 승인 방향 로그). 출력: Patent._pendingPatentRewrite(보류본).
+//   ★ outputs 미커밋 — 변리사 [확정](T2)에서만 outputs 에 반영. 청구항 op(add_limitation/narrow_scope)·fix_* 는 다음 단계.
+Patent.applyDirectionRewrite = async function(opts) {
+  opts = opts || {};
+  var log = (typeof outputs !== 'undefined' && outputs && Array.isArray(outputs._review_applied)) ? outputs._review_applied : [];
+  var specOps = log.filter(function(e){ return e && e.op === 'add_spec_support' && String(e.direction || '').trim(); });
+  if (!specOps.length) { try { App.showToast('반영할 승인 보정(상세설명 뒷받침)이 없습니다', 'info'); } catch (_e) {} return null; }
+
+  // ★ 대상 섹션(상세설명)만 클론 — 청구항(step_06/10)·도면·부호(step_18)는 미접촉(비대상 byte-identical).
+  var baseDev = String((typeof outputs !== 'undefined' && outputs.step_08) || '');
+  var baseMet = String((typeof outputs !== 'undefined' && outputs.step_12) || '');
+  var pending = { step_08: baseDev, step_12: baseMet };
+  var before = { step_08: baseDev, step_12: baseMet };
+
+  // ★ APPEND: target 의 뒷받침 단락을 LLM 생성 → 상세설명(장치 step_08 기본 / 장치 없으면 방법 step_12)에 추가만(기존 불변).
+  var sec = (baseDev || !baseMet) ? 'step_08' : 'step_12';
+  var appended = [], failed = [];
+  for (var i = 0; i < specOps.length; i++) {
+    var e = specOps[i], para = null;
+    try { para = await Patent._genSpecSupportParagraph(e, pending[sec]); } catch (_x) { para = null; }
+    if (!para) { failed.push({ planId: e.planId, target: e.target, reason: '뒷받침 단락 생성 실패' }); continue; }
+    pending[sec] = pending[sec] + (pending[sec] ? '\n\n' : '') + para;   // ★ APPEND(기존 텍스트 byte-identical + 뒤에 추가)
+    appended.push({ planId: e.planId, target: e.target, section: sec, paragraph: para });
+  }
+  if (!appended.length) { try { App.showToast('뒷받침 단락 생성 실패 — 재시도하세요', 'error'); } catch (_e) {} return null; }
+
+  // ★ E-11 도면 정합 게이트(_reviewRenderCheck) — pending 섹션 덮어 검사(상세설명 APPEND 는 부호 정합 무영향이나 방어적 실행).
+  var checkO = Object.assign({}, (typeof outputs !== 'undefined' && outputs) || {}, pending);
+  var rc = Patent._reviewRenderCheck(checkO);
+
+  // ★ 보류(outputs 미커밋) — T2 [확정]에서만 outputs 반영. 비대상 섹션은 pending 에 없으므로 구조적으로 불변.
+  Patent._pendingPatentRewrite = {
+    pending: pending, before: before, after: { step_08: pending.step_08, step_12: pending.step_12 },
+    appended: appended, failed: failed,
+    renderCheck: { svg: rc.svg, pptx: rc.pptx, canvas: rc.canvas, missing: rc.missing },
+    canConfirm: !!(rc.svg && rc.pptx && rc.canvas),
+  };
+  try { App.showToast(appended.length + '건 뒷받침 단락 생성(보류) — 비교 후 확정하세요', 'success'); } catch (_e) {}
+  return Patent._pendingPatentRewrite;
+};
+
 // ═══════════ DASHBOARD HOOK + INIT ═══════════
 App._onDashboard = function(){ loadDashboardProjects(); loadGlobalRefFromStorage(); };
 
