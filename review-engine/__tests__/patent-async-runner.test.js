@@ -149,8 +149,9 @@ test('소스 정합 — patent 러너가 opinion 패턴(review_runs·reviewRunId
   assert.match(PATENT_SRC, /Patent\._pollReviewRun\s*=\s*function/, '_pollReviewRun 정의');
   assert.match(PATENT_SRC, /Patent\._persistReviewDecision\s*=\s*function/, '_persistReviewDecision 정의');
   assert.match(PATENT_SRC, /Patent\._persistReviewDecision\(rs\)/, 'onChange 에 결정영속 배선');
-  // D2 기존 재사용 — applyAmendments + recheck 유지(신규 0)
-  assert.match(PATENT_SRC, /Patent\.applyAmendments\(acc\);\s*if\s*\(Patent\._reviewRunner\)\s*Patent\.runReviewEngine/, 'applyAmendments+recheck 유지(D2 재사용)');
+  // D2 = opinion AC-T1 정합: 승인은 applyAmendments(누적)+persist 만, 자동 recheck 없음(patent-batch-approve.test.js 상세).
+  assert.match(PATENT_SRC, /Patent\.applyAmendments\(acc\)/, 'applyAmendments 유지(승인 누적 반영)');
+  assert.doesNotMatch(PATENT_SRC, /onChange[\s\S]{0,400}runReviewEngine\([^)]*,\s*\{\s*recheck/, 'onChange 자동 recheck 제거(AC-T1)');
 });
 
 // ──────────────── ① 폴링 완주 인식(escalated/result) — "결과 왔는데 시간초과" 차단 ────────────────
@@ -195,5 +196,5 @@ test('★② ESM 캐시버스트 — 패널이 index.js 를 ?v= 로 import + 패
   assert.match(panelSrc, /from '\.\.\/index\.js\?v=/, 'index.js import 에 ?v=(FEATURE_FLAGS 캐시버스트)');
   const html = readFileSync(path.join(REPO, 'index.html'), 'utf8');
   assert.match(html, /opinion-review-panel\.js\?v=2026063[4-9]/, '패널 ?v= 갱신(이후 PR 에서 추가 bump 가능)');
-  assert.match(html, /patent\/patent\.js\?v=20260634/, 'patent.js ?v= 갱신');
+  assert.match(html, /patent\/patent\.js\?v=2026063[4-9]/, 'patent.js ?v= 갱신(이후 PR 추가 bump 가능)');
 });

@@ -14033,11 +14033,19 @@ Patent.runReviewEngine = async function(runner, opts) {
   return result;
 };
 
-// 결과 모달 옵션·오픈(actor + 승인→applyAmendments→recheck). 자동오픈·재오픈 공유.
+// 결과 모달 옵션·오픈(actor + 승인→applyAmendments+영속, 재검증은 명시적 버튼). 자동오픈·재오픈 공유.
 Patent._reviewModalOpts = function() {
   return {
     actor: (App.currentUser && App.currentUser.email) || '',
-    onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) { Patent.applyAmendments(acc); if (Patent._reviewRunner) Patent.runReviewEngine(Patent._reviewRunner, { recheck: true }); } try { Patent._persistReviewDecision(rs); } catch (_e) {} }
+    // ★ AC-T1(opinion.js:884 동일): 승인 시 자동 runReviewEngine(recheck) 제거 — 승인 1건마다 재검증(running) 트리거하던 버그.
+    //   승인은 누적 반영(applyAmendments, 인메모리 방향 기록)+결정 영속만. 재검증은 '출원 전 검증 시작' 버튼으로 변리사가 명시적 1회.
+    //   → 5건 승인 누적 → 버튼 1회 → 누적분 일괄 재검증. 신규 UI 0. ⛔ onChange 에서 풀 재검증 트리거 금지.
+    onChange: function(rs){
+      var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; });
+      if (acc.length) { try { Patent.applyAmendments(acc); } catch (_e) {} }   // 승인분(누적) 인메모리 방향 기록(유지)
+      try { Patent._persistReviewDecision(rs); } catch (_e) {}                  // 결정 빠른 영속(유지)
+      try { if (typeof renderPreview === 'function') renderPreview(); } catch (_e) {} // 승인 반영 클라 재렌더(edge 재검증 아님)
+    }
   };
 };
 Patent.openReviewModal = function() {
