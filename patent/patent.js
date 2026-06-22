@@ -541,6 +541,16 @@ async function openProject(pid){
   document.getElementById('headerProjectName').textContent=data.title;document.getElementById('headerUserName').textContent=currentProfile?.display_name||currentUser?.email||'';
   if(currentProfile?.role==='admin')document.getElementById('btnAdmin').style.display='inline-flex';
   updateStats();
+  // ★ 검증 결과 재수화 (review_runs 최신 done) — 새로고침/재오픈 시 메모리 reviewState 복원(재검증 $15·2분 방지).
+  //   _persistReviewDecision 가 result=reviewState(patchPlans[].accepted 포함) 저장 → issues+보정안+승인상태 동시 복원.
+  //   ★ clearAllState 는 __patentReviewState 를 안 지우므로 항상 명시 설정(result 또는 null) → 이전 사건 stale 차단.
+  //   null 이면 renderPreview 훅(page4)이 카드 미표시 → 기존 "출원 전 검증 시작" 버튼. RLS·인덱스 기존(20260616).
+  try {
+    var _rr = await App.sb.from('review_runs').select('result')
+      .eq('project_id', String(currentProjectId)).eq('module', 'patent').eq('status', 'done')
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    window.__patentReviewState = (_rr && _rr.data && _rr.data.result) || null;
+  } catch (_e) { window.__patentReviewState = null; }
   App.showScreen('main');App.updateModelToggle();App.updateProviderLabel();App.showToast(`"${data.title}" 열림`);
 }
 function restoreClaimUI(){
