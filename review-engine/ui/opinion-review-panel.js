@@ -134,9 +134,9 @@ function renderNeed(hn) {
   return `<div class="review-need"><b>변리사 확정 필요</b><div style="margin-top:6px">${rows.map((r) => `<div style="margin:3px 0">${r}</div>`).join('')}</div></div>`;
 }
 
-function renderIssues(issuesByAgent) {
-  if (!issuesByAgent.length) return '<div class="review-issue pass">발굴된 거절이유 없음 — 현재 기준 거절위험이 낮습니다(보조 자료)</div>';
-  return issuesByAgent.map((g) => `
+// 한 심사관 그룹(에이전트 라벨 + issue 항목들) 렌더 — 마크업 불변(추출만).
+function renderIssueGroup(g) {
+  return `
     <div style="margin-bottom:8px">
       <div style="font-weight:700;font-size:12px;margin-bottom:2px">${esc(g.agent)}</div>
       ${g.items.map((it) => `
@@ -144,7 +144,37 @@ function renderIssues(issuesByAgent) {
           <div class="ri-meta">${esc(sevLabel(it.severity))} · ${esc(it.legalBasis)} · ${esc(it.type)} → ${esc((it.target || []).join(', '))} · [${esc(statusLabel(it.status))}]</div>
           <div>${esc(it.description)}</div>
         </div>`).join('')}
-    </div>`).join('');
+    </div>`;
+}
+
+// ★ severity 게이트(UI) — 발굴·저장은 전부 유지(숨김 아님), 표시만 high(치명/심각·거절무효 직결) 우선.
+//   medium/low 는 <details> 로 접어둠(클릭 시 펼침) — 생성 단계가 이미 치밀 검증하므로 review 는 치명만 표면화(변리사 설계).
+//   patent·opinion 공통(공유 패널). examiner .md severity 매김은 불변(§42④ 뒷받침=high 등 그대로 사용).
+function renderIssues(issuesByAgent) {
+  if (!issuesByAgent.length) return '<div class="review-issue pass">발굴된 거절이유 없음 — 현재 기준 거절위험이 낮습니다(보조 자료)</div>';
+  const isHigh = (it) => it.severity === 'high';
+  const highGroups = issuesByAgent.map((g) => ({ agent: g.agent, items: (g.items || []).filter(isHigh) })).filter((g) => g.items.length);
+  const minorGroups = issuesByAgent.map((g) => ({ agent: g.agent, items: (g.items || []).filter((it) => !isHigh(it)) })).filter((g) => g.items.length);
+  const highCount = highGroups.reduce((n, g) => n + g.items.length, 0);
+  const allItems = issuesByAgent.reduce((a, g) => a.concat(g.items || []), []);
+  const medCount = allItems.filter((it) => it.severity === 'medium').length;
+  const lowCount = allItems.filter((it) => it.severity === 'low').length;
+  const minorCount = medCount + lowCount;
+
+  let html = '';
+  if (highCount) {
+    html += highGroups.map(renderIssueGroup).join('');                                  // ★ high 우선(항상 표시)
+  } else {
+    html += `<div class="review-issue pass">치명적·심각(거절·무효 직결) 결함 없음`
+      + (minorCount ? ` — 참고 ${minorCount}건은 아래에서 펼쳐 확인하세요.` : '.') + '</div>';
+  }
+  if (minorCount) {                                                                      // ★ medium/low 접어둠(펼치면 보임)
+    html += `<details class="review-minor" style="margin-top:6px">`
+      + `<summary style="cursor:pointer;font-size:12px;color:var(--color-text-secondary,#667085)">기타 ${minorCount}건 (medium ${medCount} · low ${lowCount}) — 펼쳐보기</summary>`
+      + `<div style="margin-top:6px">${minorGroups.map(renderIssueGroup).join('')}</div>`
+      + `</details>`;
+  }
+  return html;
 }
 
 const DECISION_LABEL = { approved: '승인됨', rejected: '거부됨', pending: '대기' };

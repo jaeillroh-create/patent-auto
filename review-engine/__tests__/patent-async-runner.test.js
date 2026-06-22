@@ -194,6 +194,6 @@ test('★② ESM 캐시버스트 — 패널이 index.js 를 ?v= 로 import + 패
   const panelSrc = readFileSync(path.join(REPO, 'review-engine/ui/opinion-review-panel.js'), 'utf8');
   assert.match(panelSrc, /from '\.\.\/index\.js\?v=/, 'index.js import 에 ?v=(FEATURE_FLAGS 캐시버스트)');
   const html = readFileSync(path.join(REPO, 'index.html'), 'utf8');
-  assert.match(html, /opinion-review-panel\.js\?v=20260634/, '패널 ?v= 갱신');
+  assert.match(html, /opinion-review-panel\.js\?v=2026063[4-9]/, '패널 ?v= 갱신(이후 PR 에서 추가 bump 가능)');
   assert.match(html, /patent\/patent\.js\?v=20260634/, 'patent.js ?v= 갱신');
 });
