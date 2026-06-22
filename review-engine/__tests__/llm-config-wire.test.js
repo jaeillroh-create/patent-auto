@@ -120,7 +120,7 @@ test('getReviewAuth 자체가 keys+assignments 형상(L-T1 헬퍼 래핑)', () =
 test('patent 러너도 동일 배선(소스 확인) — keys/assignments/module + getReviewAuth 가드', () => {
   const src = readFileSync(path.join(REPO_ROOT, 'patent/patent.js'), 'utf8');
   const i = src.indexOf('Patent._defaultReviewRunner = async'); // 정의 지점(앞선 폴백 참조 회피)
-  const seg = src.slice(i, i + 600);
+  const seg = src.slice(i, i + 1500); // T1 비동기화로 본문 확장(review_runs INSERT) → invoke 라인까지 포함하도록 창 확대
   assert.ok(seg.includes('App.getReviewAuth'), 'getReviewAuth 사용');
   assert.ok(seg.includes('keys: auth.keys'), 'keys 동봉');
   assert.ok(seg.includes('assignments: auth.assignments'), 'assignments 동봉');

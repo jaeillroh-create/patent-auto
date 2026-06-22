@@ -32,10 +32,10 @@ const mockWriter = {
 function mkProfile() { return { ...OpinionProfile, writer: mockWriter }; }
 function mkState(profile) { return OpinionProfile.adaptSnapshot(SNAP, null, { terminationPolicy: profile.terminationPolicy }); }
 
-test('opinion maxRounds = 2 (② wall-clock 대응), patent 12 미변경 — ★ Edge 재배포 후 엔진 반영', async () => {
+test('opinion·patent maxRounds = 2 (② wall-clock 대응) — ★ Edge 재배포 후 엔진 반영', async () => {
   assert.equal(OpinionProfile.terminationPolicy.maxRounds, 2, 'opinion maxRounds 2');
   const Patent = (await import('../profiles/patent/PatentProfile.js')).default;
-  assert.equal(Patent.terminationPolicy.maxRounds, 12, 'patent 미변경(12 — 동기경로 평가는 본 PR 범위 밖, 별도)');
+  assert.equal(Patent.terminationPolicy.maxRounds, 2, 'patent maxRounds 2 (T1 fix-patent-async — 비동기+축소로 504 해소)');
 });
 
 test('★ maxRounds=2 → R1 discover + recheck 정확히 1라운드 발화(patchPlan 생성)', async () => {

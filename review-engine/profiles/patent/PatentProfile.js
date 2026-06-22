@@ -62,8 +62,11 @@ export const rippleRules = [
   },
 ];
 
-/** 종료 정책 (§2 (7), §13). capUsd=$15(patent, 최복잡). */
-export const terminationPolicy = { K: 1, maxRounds: 12, capUsd: 15, perIssueAttemptCap: 2 };
+/** 종료 정책 (§2 (7), §13). capUsd=$15(patent, 최복잡).
+ *  ★ maxRounds 12→2 (T1, 504 해소): patent 클라가 비동기(reviewRunId+폴링)로 전환돼도 Edge worker
+ *    wall-clock(~150s) 안에 완주해야 한다. 명세서 입력(청구항+상세설명+도면)이 opinion 보정안보다 커
+ *    라운드당 LLM 시간이 길므로, opinion(maxRounds=2)과 동일하게 축소. (Pro 시간여유 확보 시 복원 검토.) */
+export const terminationPolicy = { K: 1, maxRounds: 2, capUsd: 15, perIssueAttemptCap: 2 };
 
 /**
  * 작성모듈 반영 계약 (§2 (8), §10) — 옵션 B.
