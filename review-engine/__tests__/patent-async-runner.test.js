@@ -155,8 +155,15 @@ test('소스 정합 — patent 러너가 opinion 패턴(review_runs·reviewRunId
 
 // ──────────────── ① 폴링 완주 인식(escalated/result) — "결과 왔는데 시간초과" 차단 ────────────────
 
-test('★★① escalated+result — status!==done 이라도 result 있으면 완주(시간초과 오표시 차단)', async () => {
-  // 증상 재현: Edge 가 phase:escalated + result 를 줬는데 status 가 done 으로 안 박힘/늦음 → 폴링이 놓쳐 180s 타임아웃.
+test('★★① DB 확정 케이스 — status:done + phase:escalated + result(issues 8) → 완주(phase 무관)', async () => {
+  // 사용자 DB 확정: review_runs(patent) = {status:done, phase:escalated, result(issues 8)}. 엔진 완벽.
+  //   status==='done' 이면 phase 가 escalated 든 무엇이든 완주여야 한다(escalated=정상 완료).
+  hooks.pollResult = { status: 'done', phase: 'escalated', result: { issues: new Array(8).fill(0).map((_, i) => ({ id: 'i' + i })) } };
+  const r = await Patent._pollReviewRun('run-db');
+  assert.ok(r && r.issues && r.issues.length === 8, '★ status:done+escalated → 8개 issue 반환(시간초과 아님)');
+});
+
+test('★★① escalated+result — status 미확정이라도 result 있으면 완주(방어)', async () => {
   hooks.pollResult = { phase: 'escalated', result: { issues: new Array(8).fill(0).map((_, i) => ({ id: 'i' + i })) } };
   const r = await Patent._pollReviewRun('run-esc');
   assert.ok(r && r.issues && r.issues.length === 8, '★ escalated+result → 8개 issue 결과 반환(타임아웃 아님)');
