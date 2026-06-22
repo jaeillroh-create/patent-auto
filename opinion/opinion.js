@@ -4163,15 +4163,20 @@ Opinion.setStatus=async function(id,s){
   }
 };
 Opinion.loadData=async function(id){try{
-  // 5개 독립 쿼리를 병렬 실행
+  // 6개 독립 쿼리를 병렬 실행 (★ review_runs = 검증 결과 재수화)
   var results = await Promise.all([
     sb.from('opinion_issue_analyses').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
     sb.from('opinion_draft_claims').select('draft_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
     sb.from('opinion_validation_results').select('result_data').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
     sb.from('opinion_opinion_drafts').select('content').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
-    sb.from('opinion_type_determinations').select('*').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle()
+    sb.from('opinion_type_determinations').select('*').eq('project_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
+    // ★ 검증 결과 재수화 — review_runs 최신 done. _persistReviewDecision 가 result=reviewState(accepted 포함) 저장 →
+    //   issues+보정안+승인상태 동시 복원. 없으면 null → 기존 "의견서 검증 시작" 버튼. RLS·인덱스 기존(20260616).
+    sb.from('review_runs').select('result').eq('project_id',String(id)).eq('module','opinion').eq('status','done').order('created_at',{ascending:false}).limit(1).maybeSingle()
   ]);
-  var a=results[0].data, d=results[1].data, v=results[2].data, o=results[3].data, t=results[4].data;
+  var a=results[0].data, d=results[1].data, v=results[2].data, o=results[3].data, t=results[4].data, rr=results[5].data;
+  // ★ 검증 결과 메모리 복원(있으면) — 끝의 renderDetail 이 _mountReviewResult 카드 발화. resetState 가 이미 비웠으므로 결과 있을 때만 설정.
+  if (rr && rr.result) Opinion.state.reviewState = rr.result;
 
   if(a && a.result_data) {
     var ad = a.result_data;
