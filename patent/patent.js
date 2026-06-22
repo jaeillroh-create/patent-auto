@@ -13870,7 +13870,10 @@ function renderPreview(){
       if (_pm) {
         // 결과는 넓은 공유 모달(2a)에 표시 — 카드에는 재오픈 버튼만(닫아도 세션 내 __patentReviewState 유지).
         var _n = ((window.__patentReviewState.issues) || []).length;
-        _pm.innerHTML = '<button class="btn btn-outline btn-full" onclick="Patent.openReviewModal()"><span class="ico" data-icon="shield"></span> 검증 결과 보기' + (_n ? ' (' + _n + '건)' : '') + '</button>';
+        // 검증 결과 보기 + [반영하기](승인 방향 → 상세설명 뒷받침 추가, 변리사 확정). 반영 버튼은 상시 렌더 —
+        //   승인 add_spec_support 가 없으면 클릭 시 가드 토스트(applyDirectionRewrite)로 안전 처리(렌더 타이밍 의존 제거).
+        _pm.innerHTML = '<button class="btn btn-outline btn-full" onclick="Patent.openReviewModal()"><span class="ico" data-icon="shield"></span> 검증 결과 보기' + (_n ? ' (' + _n + '건)' : '') + '</button>'
+          + '<button class="btn btn-primary btn-full" id="btnPatentDirectionRewrite" style="margin-top:8px" onclick="Patent.startDirectionRewrite()"><span class="ico" data-icon="edit"></span> 승인 방향 반영 — 상세설명 뒷받침 추가(변리사 확정)</button>';
       }
     }
   } catch (_e) {}
@@ -14268,6 +14271,124 @@ Patent.applyDirectionRewrite = async function(opts) {
   };
   try { App.showToast(appended.length + '건 뒷받침 단락 생성(보류) — 비교 후 확정하세요', 'success'); } catch (_e) {}
   return Patent._pendingPatentRewrite;
+};
+
+// ─────────── [D2 T2] 비교 모달 + 확정 — 보류본(_pendingPatentRewrite)을 변리사가 전/후 비교 후 outputs 커밋 ───────────
+// opinion D2c(showRewriteConfirmModal/confirmRewrite/_confirmRewriteClick/cancelRewrite) 패턴 이식.
+//   ★ 확정 전까지 outputs 불변(보류). [확정]에서만 outputs.step_08/12 커밋 → renderPreview(화면) + saveProject(영속).
+//   ★ outputs 단일소스 → Word 다운로드(downloadAsWord)가 자동 반영(별도 작업 0).
+//   ★ 배선: [확정]/[취소] 모두 인라인 onclick(opinion 무반응 교훈 — addEventListener 의존 제거).
+
+// _secLabelKo — 상세설명 섹션 키 → 한글 라벨(비교 모달 표시용).
+Patent._secLabelKo = function(sec){ return sec === 'step_12' ? '방법 상세설명' : '장치 상세설명'; };
+
+// startDirectionRewrite — [반영하기] 버튼 핸들러(★명시 액션). applyDirectionRewrite(보류본 생성) → 비교 모달.
+//   ★ 승인(onChange)이 자동 호출하지 않는다 — 변리사가 명시적으로 누른다(자동적용 금지).
+Patent.startDirectionRewrite = async function() {
+  try { if (typeof setButtonLoading === 'function') setButtonLoading('btnPatentDirectionRewrite', true); } catch (_e) {}
+  try {
+    var pend = await Patent.applyDirectionRewrite();   // _pendingPatentRewrite 생성(보류 — outputs 불변)
+    if (pend) Patent.showPatentRewriteModal();
+  } catch (e) { try { App.showToast('반영 실패: ' + ((e && e.message) || e), 'error'); } catch (_x) {} }
+  finally { try { if (typeof setButtonLoading === 'function') setButtonLoading('btnPatentDirectionRewrite', false); } catch (_e) {} }
+};
+
+// _buildPatentRewriteDiffHtml — 보류본 보정 전/후. 추가되는 뒷받침 단락(하이라이트 + 대상 claim_N) + 기존 상세설명(불변).
+//   ★ APPEND 라 "추가된 단락"만 초록 하이라이트(어디가 추가됐나 가시화). 순수(HTML 문자열).
+Patent._buildPatentRewriteDiffHtml = function(pend) {
+  if (!pend) return '<p style="font-size:13px;color:var(--color-text-secondary)">반영 보류본이 없습니다.</p>';
+  var esc = (typeof escapeHtml === 'function') ? escapeHtml : function(s){ return String(s == null ? '' : s); };
+  var h = '';
+  // 게이트 배너(E-11 도면 부호 정합)
+  if (pend.canConfirm === false) {
+    h += '<div style="padding:10px 12px;border-radius:8px;background:#FDECEC;border-left:3px solid var(--color-error,#D32F2F);color:#9A1C1C;font-size:12px;margin-bottom:12px">⛔ 도면 부호 정합 위반(부호의 설명에 없는 도면 부호 ' + esc(((pend.renderCheck && pend.renderCheck.missing) || []).slice(0, 5).join(', ')) + ') — 확정 불가(E-11). [취소] 후 부호의 설명을 보강하세요.</div>';
+  } else {
+    h += '<div style="padding:10px 12px;border-radius:8px;background:#EAF7EE;border-left:3px solid var(--color-success,#2E7D32);color:#1B5E20;font-size:12px;margin-bottom:12px">✅ 도면 부호 정합 통과 — 청구항·부호의 설명은 변경되지 않습니다(상세설명에만 단락 추가).</div>';
+  }
+  var arr = pend.appended || [];
+  if (!arr.length) {
+    h += '<p style="font-size:12px;color:var(--color-text-tertiary)">추가되는 단락이 없습니다.</p>';
+  } else {
+    h += '<div style="font-weight:600;font-size:13px;margin:4px 0 8px">추가되는 뒷받침 단락 ' + arr.length + '건 (기존 상세설명 뒤에 APPEND)</div>';
+    arr.forEach(function(a){
+      var claimNo = String(a.target || '').replace(/^claim_/, '청구항 ');
+      h += '<div style="border:1px solid var(--color-border,#E0E0E0);border-radius:8px;padding:12px;margin-bottom:10px">'
+        + '<div style="font-weight:600;font-size:12px;margin-bottom:6px">' + esc(Patent._secLabelKo(a.section)) + ' · <span style="color:var(--color-primary)">' + esc(claimNo) + ' 뒷받침</span> <span style="color:var(--color-success);font-size:11px">[추가]</span></div>'
+        + '<div style="font-size:12px;color:#1B5E20;background:#EAF7EE;border-radius:6px;padding:8px">' + esc(a.paragraph || '').replace(/\n/g, '<br>') + '</div>'
+        + '</div>';
+    });
+  }
+  if (pend.failed && pend.failed.length) {
+    h += '<div style="font-size:12px;color:#7A4100;background:#FEF4E6;border-radius:6px;padding:8px;margin-bottom:6px">⚠️ 단락 생성 실패 ' + pend.failed.length + '건 — 확정 시 제외됩니다.</div>';
+  }
+  // 기존 상세설명(불변) 미리보기 — 접두 보존 확인용(접어둠).
+  var sec = (arr[0] && arr[0].section) || 'step_08';
+  var baseTxt = String((pend.before && pend.before[sec]) || '');
+  h += '<details style="margin-top:6px"><summary style="font-size:12px;color:var(--color-text-secondary);cursor:pointer">기존 ' + esc(Patent._secLabelKo(sec)) + ' (변경 없음 · 접두 보존)</summary>'
+    + '<div style="font-size:12px;color:var(--color-text-tertiary);background:var(--color-bg-subtle,#FAFAFA);border-radius:6px;padding:8px;margin-top:6px;max-height:200px;overflow:auto">' + esc(baseTxt).replace(/\n/g, '<br>') + '</div></details>';
+  return h;
+};
+
+// showPatentRewriteModal — 비교 확정 모달. canConfirm=false 면 [확정] 비활성(E-11 차단).
+Patent.showPatentRewriteModal = function() {
+  var pend = Patent._pendingPatentRewrite;
+  if (!pend) { try { App.showToast('반영 보류본이 없습니다', 'error'); } catch (_e) {} return; }
+  try { var existing = document.getElementById('patentRewriteModal'); if (existing) existing.remove(); } catch (_e) {}
+  var blocked = pend.canConfirm === false;
+  var modal = document.createElement('div');
+  modal.id = 'patentRewriteModal'; modal.className = 'modal-overlay'; modal.style.display = 'flex';
+  modal.innerHTML = '<div class="modal-content" style="max-width:760px;padding:24px;max-height:82vh;overflow:auto">'
+    + '<div class="modal-title" style="font-size:16px;margin-bottom:4px"><span class="ico" data-icon="edit"></span> 승인 방향 반영 — 상세설명 뒷받침 추가(전/후 비교)</div>'
+    + '<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:14px">상세설명에만 뒷받침 단락이 추가됩니다. 청구항·부호의 설명은 변경되지 않습니다(코드 보장). 확정 전에는 명세서가 변경되지 않습니다.</p>'
+    + Patent._buildPatentRewriteDiffHtml(pend)
+    + '<div style="display:flex;gap:8px;margin-top:16px">'
+    + '<button class="btn btn-ghost" style="flex:1;padding:10px" onclick="Patent.cancelPatentRewrite()">취소 (폐기)</button>'
+    + '<button class="btn btn-primary" style="flex:1;padding:10px" id="btnPatentRewriteConfirm" onclick="Patent._confirmPatentRewriteClick()"' + (blocked ? ' disabled title="도면 부호 정합 위반 — 확정 불가"' : '') + '><span class="ico" data-icon="check"></span> 확정 (명세서 반영)</button>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+  try { modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); }); } catch (_e) {} // 외부 클릭 닫기
+  // ★ A-1: [확정]/[취소] 모두 인라인 onclick — addEventListener 의존 제거(클릭 무반응 방지, opinion 교훈).
+};
+
+// confirmPatentRewrite — ★ 확정: 보류본 after → outputs 커밋(이전까지 불변). E-11 차단 시 거부.
+//   커밋 후 renderPreview(화면) + saveProject(영속). outputs 단일소스라 Word 다운로드 자동 반영.
+Patent.confirmPatentRewrite = async function() {
+  var pend = Patent._pendingPatentRewrite;
+  if (!pend) { try { App.showToast('확정할 반영 보류본이 없습니다', 'error'); } catch (_e) {} return false; }
+  if (pend.canConfirm === false) {
+    try { App.showToast('⚠️ 도면 부호 정합 위반(E-11)으로 확정할 수 없습니다 — 취소 후 부호의 설명을 보강하세요', 'error'); } catch (_e) {}
+    return false;
+  }
+  // ★ 확정 시에만 커밋 — appended 된 섹션만 outputs 에 반영(비대상 섹션 미기록 → 불변).
+  var stamp = new Date().toISOString();
+  var doneIds = {}, sections = {};
+  (pend.appended || []).forEach(function(a){ doneIds[a.planId] = true; sections[a.section] = true; });
+  if (typeof outputs !== 'undefined' && outputs) {
+    Object.keys(sections).forEach(function(sec){ outputs[sec] = pend.after[sec]; });   // ★ outputs 커밋(보류 해제)
+    if (Array.isArray(outputs._review_applied)) {
+      outputs._review_applied.forEach(function(e){ if (e && doneIds[e.planId]) { e.applied = true; e.appliedAt = stamp; } });
+    }
+  }
+  Patent._pendingPatentRewrite = null;   // 보류 해제
+  try { if (typeof renderPreview === 'function') renderPreview(); } catch (_e) {}        // 화면 반영(미리보기/다운로드 동일 소스)
+  try { if (typeof saveProject === 'function') await saveProject(true); } catch (_e) {}  // current_state_json 영속(Word 자동 반영)
+  try { App.showToast('반영 확정 — 상세설명에 뒷받침 단락 ' + (pend.appended || []).length + '건 추가(다운로드 반영)', 'success'); } catch (_e) {}
+  return true;
+};
+
+// _confirmPatentRewriteClick — [확정] 인라인 onclick 핸들러([취소]와 배선 통일). 성공 시 모달 닫음.
+//   ★ addEventListener 의존 제거 → "클릭 무반응" 차단. 반환=Promise(테스트 await용; onclick 은 무시).
+Patent._confirmPatentRewriteClick = function() {
+  return Patent.confirmPatentRewrite().then(function(ok){
+    if (ok) { try { var m = document.getElementById('patentRewriteModal'); if (m) m.remove(); } catch (_e) {} }
+  });
+};
+
+// cancelPatentRewrite — 보류 폐기. outputs 불변(기존 명세서 유지).
+Patent.cancelPatentRewrite = function() {
+  Patent._pendingPatentRewrite = null;
+  try { var m = document.getElementById('patentRewriteModal'); if (m) m.remove(); } catch (_e) {}
+  try { App.showToast('반영 취소됨 — 기존 명세서 유지', 'info'); } catch (_e) {}
 };
 
 // ═══════════ DASHBOARD HOOK + INIT ═══════════
