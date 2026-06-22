@@ -1195,6 +1195,43 @@ var KOREAN_PATENT_BOILERPLATE = [
   '통상의 기술자가 용이하게',              // 진보성 표준 문언
 ];
 
+// ─── 정형(보일러플레이트) vs 사건고유 판별 — 추출·검증 공유 헬퍼 ───
+// ★ 핵심: `제N항` 은 "청구항 제N항(사건고유)" 과 "특허법 제N조 제M항(정형 조문)" 을 구분 못 해
+//   정형 서두·조문이 forbiddenSpan→high 로 오검출되던 버그(DIAG-contam-false-positive)를 바로잡는다.
+//   추출(sanitizeTemplate)·검증(validateNoTemplateContamination) 양쪽이 ★동일 헬퍼★를 써 기준 불일치를 차단한다.
+
+// 법조 인용 패턴(정형) — 조문의 제N조/제M항/제K호는 사건고유가 아니다(모든 의견서 공통).
+//   특허법 제N조 [제M항] [제K호] / 동조 [제M항] [제K호] / 단독 제N호 를 한 토큰으로 본다(띄어쓰기·번호 변형 허용).
+var STATUTE_RE = /(?:특허법|실용신안법|디자인보호법|상표법|법)\s*제\s*\d+\s*조(?:\s*제\s*\d+\s*항)?(?:\s*제\s*\d+\s*호)?|동\s*조(?:\s*제\s*\d+\s*항)?(?:\s*제\s*\d+\s*호)?|제\s*\d+\s*호/g;
+
+// 한 문장에서 "진짜 사건고유 마커"만 추출(법조 문맥 제거 후 판정). 반환: ['claim'|'cited'|'para'|'appno'...] (없으면 []).
+//   ★ 법조(특허법 제N조 제M항)·동조·제N호 는 먼저 제거 → 조문의 제M항이 청구항 마커로 오검출되지 않는다.
+Opinion._caseSpecificMarkers = function(sentence) {
+  var s = String(sentence || '');
+  var stripped = s.replace(STATUTE_RE, ' '); // 1) 법조 인용 선제거(조문 제M항/제K호의 오인 차단)
+  var markers = [];                          // 2) 잔여에서 진짜 사건고유 마커 탐지
+  if (/청구항\s*제?\s*\d+\s*항?/.test(stripped) || /제\s*\d+\s*항/.test(stripped)) markers.push('claim');
+  if (/(?:인용문헌|선행발명|비교대상발명|인용발명|선행문헌)\s*\d+/.test(stripped)) markers.push('cited');
+  if (/【\s*\d{1,4}\s*】/.test(stripped)) markers.push('para');
+  if (/\d{4}-\d{6,}/.test(stripped)) markers.push('appno');
+  return markers;
+};
+
+// 문장이 "정형(보일러플레이트)" 인지 — 법조 인용/표준 서두·결어/일자 신호가 있고 ★사건고유 마커가 없을 때★ true.
+//   혼합 문장(조문 + 청구항/인용 등 고유 마커 동시)은 고유 우선(false) → 진짜 누수 보존.
+Opinion._isBoilerplateSentence = function(sentence) {
+  var s = String(sentence || '');
+  if (Opinion._caseSpecificMarkers(s).length > 0) return false; // 고유 마커 있으면 정형 아님(누수 보존)
+  var BOILER_RE = [
+    /(?:특허법|실용신안법|디자인보호법|상표법|법)\s*제\s*\d+\s*조/, // 법조 인용(번호·띄어쓰기 무관)
+    /동\s*조\s*제\s*\d+\s*항/,                                    // "동조 제N항"
+    /의견제출통지서/, /귀\s*청/, /의견서를?\s*제출/,              // 표준 서두·결어
+    /\d{4}\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}/,                        // 통지/기준 일자(2026.04.10. 등)
+  ];
+  if (BOILER_RE.some(function(re){ return re.test(s); })) return true;
+  return KOREAN_PATENT_BOILERPLATE.some(function(bp){ return s.indexOf(bp) >= 0; }); // 기존 exact 화이트리스트 유지(보강)
+};
+
 // ★ 참고 양식 정제 — 6가지 스타일 패턴 추출, 사건 내용 제거 ★
 // 반환: { sanitized: string (LLM 학습용), forbiddenSpans: string[] (검증용 실제 사건 문구) }
 Opinion.sanitizeTemplate = function(rawText, type) {
@@ -1215,22 +1252,24 @@ Opinion.sanitizeTemplate = function(rawText, type) {
       .replace(/[A-Za-z][A-Za-z0-9._\-\/]*[A-Za-z0-9]/g, '[기술*]')
       // ④ ★4 기술 구성 명사(기술 접미사 결합어) — 발명 고유 구성요소명. 일반 2자어(전부·일부·내부…)는 길이상 제외.
       .replace(/[가-힣]{2,12}(?:모듈|유닛|소자|회로|센서|엔진|알고리즘|프로세서|디바이스|메커니즘|어셈블리|하우징|유로|챔버|전극|기판|박막|레이어|코어|로직|버퍼|컨트롤러|액추에이터)/g, '[구성*]')
-      .replace(/[가-힣]{2,12}부/g, '[구성*]')
+      // ⓑ 연결어 보호: '…로부터'·'…부분' 의 '부' 는 구성명사가 아니므로 마스킹 제외(부 뒤 터/분 부정탐색).
+      .replace(/[가-힣]{2,12}부(?![터분])/g, '[구성*]')
       // ⑤ ★4 낫표·따옴표 안 고유 용어
       .replace(/[「『][^」』\n]{1,40}[」』]/g, '[용어*]');
   }
 
-  // ── ②(오염 0): HIGH_RE 마커(제N항/인용N/단락/출원번호) 포함 "문장"을 통째로 제거한다.
-  //   접미사 마스킹으로 못 잡는 도메인 주제어(소셜미디어·콘텐츠·식자재·컨셉 등)는 대부분 이런 마커 문장에
-  //   들어있으므로(사건특유 = forbiddenSpans 와 동일 집합), 문장 자체를 [사건특유 문장 생략]으로 치환 →
-  //   프롬프트에 도메인 어구가 원천적으로 안 들어간다. 문체(호칭·종결어미·연결어·결어)는 마커 없는 일반
-  //   문장에 있으므로 보존된다. ★ 접미사 확장(whack-a-mole)이 아니라 마커 문장 제거가 근본.
+  // ── ②(오염 0) + ⓐ(서두 문체 보존): "사건고유 마커" 문장만 통째 제거하고, "정형(서두·조문)" 문장은 보존한다.
+  //   ★ #190 헬퍼 정합: _caseSpecificMarkers(법조 제외 진짜 마커: 청구항+기술·인용번호·【단락】·출원번호)가 있으면
+  //     그 문장에 도메인/사건 내용이 실리므로 [사건특유 문장 생략]으로 제거(소셜미디어·식자재 등 누출 차단).
+  //   ★ 정형 서두("귀청께서는 …의견제출통지서를 …")·조문("특허법 제N조 제M항")은 _caseSpecificMarkers=[] 이므로
+  //     redact 하지 않고 보존 → 직후 _maskCaseSpecific 가 식별자·조문번호만 [*]로 가린다(어투·호칭·결어 문체 생존).
+  //   (이전: 모든 제N항 문장 통째 삭제 → 표준 서두/결어 문체가 LLM 예시에서 사라지던 문제 해소. DIAG-template-tone-tracing)
   function _redactMarkerSentences(str) {
-    var HIGH_SENT = /제\s*\d+\s*항|청구항\s*\d+|인용문헌\s*\d+|선행발명\s*\d+|비교대상발명\s*\d+|인용발명\s*\d+|선행문헌\s*\d+|【\s*\d{1,4}\s*】|\d{4}-\d{6,}/;
     // 마침표·줄바꿈을 보존하며 분할(캡처 그룹). 짝수 인덱스=본문 segment, 홀수=구분자.
     var parts = String(str || '').split(/([.。\n])/);
     for (var i = 0; i < parts.length; i += 2) {
-      if (parts[i] && HIGH_SENT.test(parts[i])) parts[i] = ' [사건특유 문장 생략] ';
+      // 진짜 사건고유 마커(법조 제외)가 있는 문장만 제거. 정형(서두·조문)·문체 문장은 보존(이후 마스킹).
+      if (parts[i] && Opinion._caseSpecificMarkers(parts[i]).length > 0) parts[i] = ' [사건특유 문장 생략] ';
     }
     // 연속 생략 표시는 1개로 축약.
     return parts.join('').replace(/(\[사건특유 문장 생략\]\s*){2,}/g, '[사건특유 문장 생략] ');
@@ -1247,23 +1286,16 @@ Opinion.sanitizeTemplate = function(rawText, type) {
     + maskedFull + '\n';
 
   // ─── forbiddenSpans 추출 ───
-  // 원본 양식에서 진짜 사건 특유 문구만 추출 (HIGH_PATTERNS + 보일러플레이트 제외)
-  // validateNoTemplateContamination()에서 이 목록만 검사 → false-positive 차단
-  var HIGH_RE = [
-    /제\s*\d+\s*항/,
-    /청구항\s*\d+/,
-    /인용문헌\s*\d+|선행발명\s*\d+|비교대상발명\s*\d+/,
-    /【\d{4}】/,
-    /\d{4}-\d{6,}/
-  ];
+  // 원본 양식에서 진짜 사건 특유 문구만 추출 (★ 공유 헬퍼 _caseSpecificMarkers/_isBoilerplateSentence 사용)
+  // validateNoTemplateContamination()에서 이 목록만 검사 → 정형(조문·서두) false-positive 차단
   var forbiddenSpans = [];
   rawText.split(/[.\n]/).forEach(function(s) {
     var t = s.trim();
     if (t.length < 25 || t.length > 200) return;
-    // 사건 특유 마커가 없으면 스킵
-    if (!HIGH_RE.some(function(re) { return re.test(t); })) return;
-    // 보일러플레이트 화이트리스트 적중 시 스킵
-    if (KOREAN_PATENT_BOILERPLATE.some(function(bp) { return t.indexOf(bp) >= 0; })) return;
+    // ★ 정형(법조·서두) → 제외. 법조 문맥의 제N항은 사건고유로 치지 않는다(조문 ≠ 청구항).
+    if (Opinion._isBoilerplateSentence(t)) return;
+    // ★ 진짜 사건고유 마커(청구항·인용·단락·출원번호; 법조 제외)가 없으면 제외.
+    if (Opinion._caseSpecificMarkers(t).length === 0) return;
     forbiddenSpans.push(t.slice(0, 80));
   });
 
@@ -1281,24 +1313,15 @@ Opinion.validateNoTemplateContamination = function(opinionText, contextType) {
   var spans = Opinion.state._templateForbiddenSpans || [];
   if (spans.length === 0) return { clean: true, warnings: [], severity: 'low' };
 
-  var HIGH_RE = [
-    /제\s*\d+\s*항/,
-    /청구항\s*\d+/,
-    /인용문헌\s*\d+|선행발명\s*\d+|비교대상발명\s*\d+/,
-    /【\d{4}】/,
-    /\d{4}-\d{6,}/
-  ];
-
   var warnings = [];
 
   spans.forEach(function(span) {
     var trimmed = span.trim();
     if (trimmed.length < 20) return;
 
-    // 보일러플레이트 화이트리스트 재확인 (sanitizeTemplate에서 이미 걸렀지만 double-check)
-    var isBoilerplate = KOREAN_PATENT_BOILERPLATE.some(function(bp) { return trimmed.indexOf(bp) >= 0; });
-
-    var isHighRisk = HIGH_RE.some(function(re) { return re.test(trimmed); });
+    // ★ 추출과 동일한 공유 헬퍼로 판정(기준 일치) — 정형(조문·서두)은 low, 진짜 사건고유 마커만 high.
+    var isBoilerplate = Opinion._isBoilerplateSentence(trimmed);
+    var isHighRisk = Opinion._caseSpecificMarkers(trimmed).length > 0;
 
     for (var len = 20; len <= Math.min(trimmed.length, 50); len++) {
       var chunk = trimmed.slice(0, len);
@@ -3405,6 +3428,7 @@ Opinion.startOpinionDraft=async function(opts){
         + '  ④ 강조어구: 특정 단어나 구절의 반복 패턴 (강조하여 주장합니다, 명백히 등) → 재현\n'
         + '  ⑤ 단락 구조: 번호·기호 체계 (가. 나. / ① ② / (1) (2) / 가목·나목 등) → 동일 체계\n'
         + '  ⑥ 결어: 섹션 끝맺음 표현 ("이상과 같이", "따라서", "이에" 등) → 재현\n'
+        + '★ 서두·결어 문체 우선 학습: 양식의 도입부(예: "귀청께서는 …의견제출통지서를 …하였는바") 와 맺음부(예: "이상과 같이 …할 것입니다" / "…앙망하는 바입니다")의 어투·호칭·종결을 그대로 재현하라. 단 식별자·조문번호([청구항*]/[*])는 현재 사건의 실제 값(분석 결과)으로 교체한다.\n'
         + '⚠️ 차단 규칙: [본 사무소 표준 의견서 양식]에 없는 문체 표현(외래어 투, 영어 혼용, 딱딱한 번역체)은 자제하라.\n'
         + '⚠️ ★ 내용·구조 차용 절대 금지(오염 방지): (a) 양식의 [*] 마스킹 부분·기술내용·논증·구체 표현은 차용 금지 — 현재 사건의 실제 내용으로만 채운다. (b) 섹션 구조(순서·제목)는 양식이 아니라 아래 본문 지시의 ## 섹션을 그대로 따른다(양식 구조 차용 금지). 양식에서 가져오는 것은 오직 어투·종결어미·호칭·강조·연결어 등 "문체"뿐이다.\n'
         + '⚠️ §42 조문 보호: 의견서에 등장하는 §42 조항 표기(§42② 1호, §42④ 2호 등)는 반드시 [분석 결과]의 article 필드 값만 사용하라. 양식에 다른 조문 번호가 있어도 무시하라. 조문 표기는 스타일 적용 대상이 아니다.\n';
