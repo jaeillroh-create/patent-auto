@@ -1,0 +1,20 @@
+# Supabase 프로젝트 설정(부분) — Edge Function 의 verify_jwt 선언 전용.
+# 부분 config.toml 이며, 미기재 섹션([api]/[db]/[auth] 등)은 CLI 기본값이 적용된다.
+# project_id 는 비밀이 아니다(모든 API URL 에 노출되는 public project ref — CLAUDE.md 의 SUPABASE_URL).
+project_id = "uvrzwhfjtzqujawmscca"
+
+# ─────────────────────────────────────────────────────────────
+# review-orchestrate — 통합 리뷰 엔진 엣지(opinion/patent/division 공용)
+#
+# ★ verify_jwt = false 인 이유 (CORS preflight 차단 해소):
+#   기본값 verify_jwt=true 면 Supabase 엣지 게이트웨이가 "함수 코드 도달 전"에 모든 요청의
+#   JWT 를 검증한다. 브라우저의 CORS preflight(OPTIONS)는 사양상 Authorization 헤더를 싣지
+#   않으므로 게이트웨이가 401 을 반환 → "preflight response does not have HTTP ok status"
+#   CORS 실패로 SPA 의 functions.invoke('review-orchestrate') 가 막힌다.
+#
+#   게이트를 끄지만 인증은 약화되지 않는다: 실제 핸들러가 스스로 Bearer 를 검증한다
+#   (review-engine/edge/review-orchestrate.ts:55-56 — Authorization 없으면 401).
+#   즉 OPTIONS preflight 만 통과시키고, 실제 POST 는 여전히 핸들러가 인증한다.
+#   (정상 작동 중인 send-docket-email/kipris-proxy 와 동일한 운용.)
+[functions.review-orchestrate]
+verify_jwt = false

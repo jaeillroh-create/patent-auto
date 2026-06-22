@@ -43,6 +43,7 @@ let projectRefStyleText='';
 let uploadedFiles = [];
 let diagramData = {};
 let stepUserCommands = {}; // v5.5: 각 스텝별 사용자 명령어
+let chatHistory = {}; // 단계별 독립 채팅 수정 이력 (chat.js)
 let outputTimestamps = {};
 // [P-C1] invention_scope: 발명 범위 기준선
 let inventionScope = null;
@@ -260,7 +261,7 @@ function clearAllState(){
   currentProjectId=null;outputs={};outputHistory={};scopeCheckResults={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
   usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};uploadedFiles=[];diagramData={};inventionScope=null;
   _judgmentCache.clear();_costTracking={judgment_calls:0,total_input_tokens:0,total_output_tokens:0,estimated_cost_usd:0,warned_50:false,stopped_100:false};
-  projectRefStyleText='';requiredFigures=[];outputTimestamps={};stepUserCommands={};
+  projectRefStyleText='';requiredFigures=[];outputTimestamps={};stepUserCommands={};chatHistory={};
   conceptDiagramEnabled=false;conceptDiagramCount=0;conceptDiagramTypes=[];
   // Claim defaults
   deviceCategory='server';deviceGeneralDep=5;deviceAnchorDep=4;deviceAnchorStart=7;
@@ -288,36 +289,43 @@ async function loadDashboardProjects(){
   const{data}=await App.sb.from('projects').select('id,title,project_number,invention_content,current_state_json,created_at,updated_at').eq('owner_user_id',currentUser.id).order('updated_at',{ascending:false}).limit(100);
   const el=document.getElementById('dashProjectList'),cnt=document.getElementById('dashProjectCount');
   const provEl=document.getElementById('dashProvisionalList');
+  const _setStat=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   if(!data?.length){
-    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="tf">📭</span></div><p style="font-size:13px">아직 생성된 사건이 없어요.</p></td></tr>';
+    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="ico" data-icon="mail"></span></div><p style="font-size:13px">아직 생성된 사건이 없어요.</p></td></tr>';
     cnt.textContent='총 0건';
+    _setStat('dashStatTotal',0);_setStat('dashStatWriting',0);_setStat('dashStatWait',0);_setStat('dashStatDone',0);_setStat('dashProvCount','0건');
     if(provEl)provEl.innerHTML='<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--color-text-tertiary);font-size:12px">가출원 내역이 없어요.</td></tr>';
     return;
   }
   const regular=data.filter(p=>!p.current_state_json?.type||p.current_state_json.type!=='provisional');
   const provisional=data.filter(p=>p.current_state_json?.type==='provisional');
   cnt.textContent=`총 ${regular.length}건`;
-  
+  // [STEP3] 통계 4카드 — 기존 목록 배열 재사용, 완성도 pct로 대기/작성 중/완료 산출 (신규 API 호출 없음)
+  let _nDone=0,_nWriting=0,_nWait=0;
+  regular.forEach(p=>{const _o=(p.current_state_json||{}).outputs||{};const _c=Object.keys(_o).filter(k=>_o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;const _pct=Math.round(_c/19*100);if(_pct===100)_nDone++;else if(_pct>0)_nWriting++;else _nWait++;});
+  _setStat('dashStatTotal',regular.length);_setStat('dashStatWriting',_nWriting);_setStat('dashStatWait',_nWait);_setStat('dashStatDone',_nDone);
+  _setStat('dashProvCount',provisional.length+'건');
+
   if(!regular.length){
-    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="tf">📭</span></div><p style="font-size:13px">아직 생성된 사건이 없어요.</p></td></tr>';
+    el.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-tertiary)"><div style="font-size:28px;margin-bottom:6px"><span class="ico" data-icon="mail"></span></div><p style="font-size:13px">아직 생성된 사건이 없어요.</p></td></tr>';
   } else {
     el.innerHTML=regular.map(p=>{
       const s=p.current_state_json||{},o=s.outputs||{};
       const c=Object.keys(o).filter(k=>o[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;
       const pct=Math.round(c/19*100);
       const caseNum=p.project_number||'-';
-      const statusBadge=pct===100?'badge-success':pct>0?'badge-warning':'badge-neutral';
+      const badgeCls=pct===100?'is-done':pct>0?'is-writing':'is-wait';
       const statusText=pct===100?'완료':pct>0?'작성 중':'대기';
-      return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-bg-tertiary)'" onmouseout="this.style.background=''" onclick="openProject('${p.id}')">
-        <td style="padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tf">📁</span><span style="color:var(--color-primary);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
-        <td style="padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(p.title)}</span></td>
-        <td style="padding:10px 12px;text-align:center"><span class="badge ${statusBadge}" style="font-size:11px">${statusText}</span></td>
-        <td style="padding:10px 12px;text-align:center;color:var(--color-text-tertiary);font-size:11px;white-space:nowrap">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</td>
-        <td style="padding:6px 8px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
-          <button class="btn btn-primary btn-sm" onclick="openProject('${p.id}')" style="padding:4px 10px;font-size:11px">열기</button>
-          <button class="btn btn-outline btn-sm" onclick="renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')" style="padding:4px 8px;font-size:11px">편집</button>
-          <span style="color:var(--color-error);cursor:pointer;font-size:11px;margin-left:4px" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</span>
-        </td>
+      return `<tr class="pt-case-row" onclick="openProject('${p.id}')">
+        <td><span class="pt-case-no">${App.escapeHtml(caseNum)}</span></td>
+        <td><div class="pt-case-name">${App.escapeHtml(p.title)}</div></td>
+        <td class="pt-c"><span class="pt-badge ${badgeCls}"><span class="dot"></span>${statusText}</span></td>
+        <td class="pt-c"><span class="pt-case-date">${new Date(p.updated_at).toLocaleDateString('ko-KR')}</span></td>
+        <td class="pt-c" onclick="event.stopPropagation()"><div class="pt-row-actions">
+          <button class="btn btn-outline btn-sm" onclick="openProject('${p.id}')">열기</button>
+          <button class="btn btn-outline btn-sm" onclick="renameProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">편집</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</button>
+        </div></td>
       </tr>`;
     }).join('');
   }
@@ -329,14 +337,14 @@ async function loadDashboardProjects(){
       provEl.innerHTML=provisional.map(p=>{
         const pd=p.current_state_json?.provisionalData||{};
         const caseNum=p.project_number||'-';
-        return `<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--color-warning-light)'" onmouseout="this.style.background=''" onclick="openProvisionalViewer('${p.id}')">
-          <td style="padding:8px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div style="display:flex;align-items:center;gap:6px"><span class="tf">⚡</span><span style="color:var(--color-warning);font-weight:600;font-size:12px">${App.escapeHtml(caseNum)}</span></div></td>
-          <td style="padding:8px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-weight:500">${App.escapeHtml(pd.title||p.title)}</span></td>
-          <td style="padding:8px 12px;text-align:center;color:var(--color-text-tertiary);font-size:11px;white-space:nowrap">${new Date(p.created_at).toLocaleDateString('ko-KR')}</td>
-          <td style="padding:6px 8px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">
-            <button class="btn btn-outline btn-sm" onclick="openProvisionalViewer('${p.id}')" style="padding:4px 10px;font-size:11px">보기</button>
-            <span style="color:var(--color-error);cursor:pointer;font-size:11px;margin-left:4px" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</span>
-          </td>
+        return `<tr class="pt-case-row" onclick="openProvisionalViewer('${p.id}')">
+          <td><span class="pt-case-no">${App.escapeHtml(caseNum)}</span></td>
+          <td><div class="pt-case-name">${App.escapeHtml(pd.title||p.title)}</div></td>
+          <td class="pt-c"><span class="pt-case-date">${new Date(p.created_at).toLocaleDateString('ko-KR')}</span></td>
+          <td class="pt-c" onclick="event.stopPropagation()"><div class="pt-row-actions">
+            <button class="btn btn-outline btn-sm" onclick="openProvisionalViewer('${p.id}')">보기</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="confirmDeleteProject('${p.id}','${App.escapeHtml(p.title).replace(/'/g,"\\'")}')">삭제</button>
+          </div></td>
         </tr>`;
       }).join('');
     }
@@ -348,7 +356,7 @@ function loadGlobalRefFromStorage(){
   try{globalRefStyleText=App._lsGet('patent_global_ref')||'';}catch(e){globalRefStyleText='';}
   const st=document.getElementById('globalRefStatus');
   if(st){
-    if(globalRefStyleText)st.innerHTML=`<span class="tf">✅</span> 등록됨 (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px">✕</button>`;
+    if(globalRefStyleText)st.innerHTML=`<span class="ico" data-icon="check-circle"></span> 등록됨 (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px"><span class="ico" data-icon="x"></span></button>`;
     else st.textContent='업로드된 문서 없음';
   }
 }
@@ -361,7 +369,7 @@ async function handleGlobalRefUpload(event){
     if(text&&text.trim()&&!text.startsWith('[')){
       globalRefStyleText=text.trim().slice(0,5000);
       try{App._lsSet('patent_global_ref',globalRefStyleText);}catch(e){}
-      st.innerHTML=`<span class="tf">✅</span> ${App.escapeHtml(file.name)} (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px">✕</button>`;
+      st.innerHTML=`<span class="ico" data-icon="check-circle"></span> ${App.escapeHtml(file.name)} (${globalRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearGlobalRef()" style="margin-left:4px"><span class="ico" data-icon="x"></span></button>`;
       st.style.color='var(--color-success)';
       App.showToast('공통 참고 문서 등록 완료 — 모든 프로젝트에 적용');
     }else{st.textContent='텍스트 추출 불가';st.style.color='var(--color-error)';}
@@ -381,10 +389,10 @@ async function openProvisionalViewer(pid){
   document.getElementById('provisionalViewerMeta').textContent=`생성: ${new Date(data.created_at).toLocaleDateString('ko-KR')} · 발명 내용: ${(data.invention_content||'').length.toLocaleString()}자`;
   const content=[
     `【발명의 명칭】\n${titleLine}`,
-    `【기술분야】\n${pd.techField||''}`,
-    `【해결하고자 하는 과제】\n${pd.problem||''}`,
-    `【과제의 해결 수단】\n${pd.solution||''}`,
-    `【발명의 효과】\n${pd.effect||''}`,
+    `【기술분야】\n${_stripDupHeader(pd.techField||'','기술분야')}`,
+    `【해결하고자 하는 과제】\n${_stripDupHeader(pd.problem||'','해결하고자 하는 과제')}`,
+    `【과제의 해결 수단】\n${_stripDupHeader(pd.solution||'','과제의 해결 수단')}`,
+    `【발명의 효과】\n${_stripDupHeader(pd.effect||'','발명의 효과')}`,
     `【도면의 간단한 설명】\n도 1은 ${pd.title||''}의 구성을 나타내는 블록도이다.`,
     `【발명을 실시하기 위한 구체적인 내용】\n${pd.desc||''}`,
     `【청구범위】\n${pd.claim||''}`,
@@ -411,8 +419,9 @@ async function redownloadProvisionalWord(){
   ];
   const html=secs.map(s=>{
     const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;
-    if(!s.b)return hd;
-    return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
+    const body=_stripDupHeader(s.b,s.h);
+    if(!body)return hd;
+    return hd+body.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
   }).join('');
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));
@@ -500,6 +509,7 @@ async function openProject(pid){
   diagramData=s.diagramData||{};
   outputTimestamps=s.outputTimestamps||{};
   stepUserCommands=s.stepUserCommands||{};
+  chatHistory=s.chatHistory||{};
   outputHistory=s.outputHistory||{};
   inventionScope=s.inventionScope||null;
   scopeCheckResults=s.scopeCheckResults||{};
@@ -526,6 +536,8 @@ async function openProject(pid){
   if(outputs.step_11_mermaid){renderDiagrams('step_11',outputs.step_11_mermaid);const dl11=document.getElementById('diagramDownload11');if(dl11)dl11.style.display='block';}
   // v11.0: 예시도/개념도 복원
   if(conceptDiagramTypes.length>0)renderConceptDiagramCards();
+  // v15: 단계별 채팅 수정 패널 복원
+  if(window.PatentChat)PatentChat.mountAll();
   document.getElementById('headerProjectName').textContent=data.title;document.getElementById('headerUserName').textContent=currentProfile?.display_name||currentUser?.email||'';
   if(currentProfile?.role==='admin')document.getElementById('btnAdmin').style.display='inline-flex';
   updateStats();
@@ -551,12 +563,12 @@ function restoreClaimUI(){
   if(detailLevel==='custom'){const inp=document.getElementById('customDetailChars');if(inp)inp.value=customDetailChars;}
   // Restore project ref
   const prs=document.getElementById('projectRefStatus');
-  if(prs&&projectRefStyleText)prs.innerHTML=`<span class="tf">✅</span> 등록됨 (${projectRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px">✕</button>`;
+  if(prs&&projectRefStyleText)prs.innerHTML=`<span class="ico" data-icon="check-circle"></span> 등록됨 (${projectRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px"><span class="ico" data-icon="x"></span></button>`;
 }
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,costTracking:_costTracking,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,costTracking:_costTracking,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,chatHistory,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 
 // ═══════════ [P-C1] INVENTION SCOPE ═══════════
 function _parseJSONSafe(text) {
@@ -1211,8 +1223,8 @@ function renderInventionScopePanel() {
   if (!inventionScope || !inventionScope.locked_at) {
     panel.className = 'scope-panel';
     panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between">
-      <div><span class="tf">🔍</span> <strong style="font-size:13px">발명 범위</strong>
-      <span style="font-size:11px;color:var(--pt-gray-500);margin-left:6px">범위를 확정하면 이후 스텝에서 범위 초과 여부를 검증합니다.</span></div>
+      <div><span class="ico" data-icon="search"></span> <strong style="font-size:13px">발명 범위</strong>
+      <span style="font-size:11px;color:var(--dt-g500);margin-left:6px">범위를 확정하면 이후 스텝에서 범위 초과 여부를 검증합니다.</span></div>
       <button class="btn btn-outline btn-sm" onclick="extractInventionScope()">범위 확정</button>
     </div>`;
     return;
@@ -1225,28 +1237,28 @@ function renderInventionScopePanel() {
   // [C1-6a] 구성요소 칩 (편집 가능)
   const comps = (b.core_components || []).map(c => {
     const cid = App.escapeHtml(c.id || c.name);
-    return `<span class="scope-chip" onclick="editComponent('${cid.replace(/'/g,"\\'")}')">${App.escapeHtml(c.name)}<span style="color:var(--pt-gray-500);margin-left:4px;font-size:10px">${App.escapeHtml(c.role||'')}</span><span class="chip-edit-icon">✎</span></span>`;
+    return `<span class="scope-chip" onclick="editComponent('${cid.replace(/'/g,"\\'")}')">${App.escapeHtml(c.name)}<span style="color:var(--dt-g500);margin-left:4px;font-size:10px">${App.escapeHtml(c.role||'')}</span><span class="chip-edit-icon">✎</span></span>`;
   }).join('');
 
   // 핵심 기능
   const funcs = (b.core_functions || []).map(f =>
-    `<li style="font-size:12px;margin-bottom:2px">${App.escapeHtml(f.desc)} <span style="color:var(--pt-gray-500)">[${(f.component_refs||[]).join(',')}]</span></li>`
+    `<li style="font-size:12px;margin-bottom:2px">${App.escapeHtml(f.desc)} <span style="color:var(--dt-g500)">[${(f.component_refs||[]).join(',')}]</span></li>`
   ).join('');
   const nonscope = (b.explicit_nonscope || []).length
-    ? `<div style="margin-top:6px;font-size:11px;color:var(--pt-gray-500)">제외: ${b.explicit_nonscope.map(n => App.escapeHtml(n)).join(', ')}</div>` : '';
+    ? `<div style="margin-top:6px;font-size:11px;color:var(--dt-g500)">제외: ${b.explicit_nonscope.map(n => App.escapeHtml(n)).join(', ')}</div>` : '';
 
   // [C1-6a] 승인된 확장
   const expansions = inventionScope.approved_expansions || [];
   const expansionHtml = expansions.length === 0
     ? `<p class="scope-empty">청구항 생성 후 검증이 실행되면 여기에 승인된 확장 요소가 표시됩니다.</p>`
     : expansions.map(e =>
-        `<span class="scope-chip" style="background:var(--pt-primary-light)">${App.escapeHtml(e.component)} <small style="color:var(--pt-gray-500)">(${App.escapeHtml(e.type||'')})</small> <button onclick="removeExpansion('${App.escapeHtml(e.component).replace(/'/g,"\\'")}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--pt-gray-500);padding:0;margin-left:2px">×</button></span>`
+        `<span class="scope-chip" style="background:var(--dt-brand-light)">${App.escapeHtml(e.component)} <small style="color:var(--dt-g500)">(${App.escapeHtml(e.type||'')})</small> <button onclick="removeExpansion('${App.escapeHtml(e.component).replace(/'/g,"\\'")}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--dt-g500);padding:0;margin-left:2px">×</button></span>`
       ).join('');
 
   panel.className = 'scope-panel locked';
   panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-    <div><span class="tf">🔒</span> <strong style="font-size:13px">발명 범위 확정됨</strong>
-    <span style="font-size:11px;color:var(--pt-gray-500);margin-left:6px">${lockedDate}</span>${prevBadge}</div>
+    <div><span class="ico" data-icon="lock"></span> <strong style="font-size:13px">발명 범위 확정됨</strong>
+    <span style="font-size:11px;color:var(--dt-g500);margin-left:6px">${lockedDate}</span>${prevBadge}</div>
     <button class="btn btn-ghost btn-sm" onclick="unlockInventionScope()">재확정</button>
   </div>
   <div class="scope-section">
@@ -1467,6 +1479,7 @@ function renderScopeVerificationSection() {
   const summaryEl = document.getElementById('scope-verification-summary');
   const detailsEl = document.getElementById('scope-verification-details');
   if (!summaryEl || !detailsEl) return;
+  // ── [G5] 통합 리뷰 엔진 마운트는 page4(renderPreview)로 이전됨(트리거·결과 동일 위치).
   if (!inventionScope?.locked_at) {
     summaryEl.innerHTML = `<div class="scope-notice">발명 범위가 확정되지 않았습니다. A. 기본 탭에서 "범위 확정"을 먼저 진행하세요.</div>`;
     detailsEl.innerHTML = '';
@@ -1908,7 +1921,7 @@ function initUserFiguresUI(){
   const card=document.getElementById('requiredFiguresList')?.closest('.card');
   if(!card)return;
   const hdr=card.querySelector('.card-title');
-  if(hdr)hdr.innerHTML='<span class="tf">🖼️</span> 사용자 도면 추가';
+  if(hdr)hdr.innerHTML='<span class="ico" data-icon="image"></span> 사용자 도면 추가';
   // 기존 입력폼 교체 (파일 업로드 추가)
   const formArea=card.querySelector('div[style*="display:flex"]');
   if(formArea){
@@ -1916,7 +1929,7 @@ function initUserFiguresUI(){
       <div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px">
         <div><label style="font-size:11px;color:var(--color-text-tertiary)">도면 번호</label>
           <input type="number" class="input-field" id="inpRequiredFigNum" min="1" max="30" placeholder="3" style="width:60px;margin-top:2px" /></div>
-        <div style="flex:1"><label style="font-size:11px;color:var(--color-text-tertiary)">도면 설명 <span style="color:#e53935">*필수</span></label>
+        <div style="flex:1"><label style="font-size:11px;color:var(--color-text-tertiary)">도면 설명 <span style="color:var(--dt-danger)">*필수</span></label>
           <input type="text" class="input-field" id="inpRequiredFigDesc" placeholder="예: 본 발명의 실험 결과를 나타내는 그래프" style="margin-top:2px" /></div>
         <button class="btn btn-primary btn-sm" onclick="addRequiredFigure()" title="도면 추가">＋ 추가</button>
       </div>
@@ -1925,7 +1938,7 @@ function initUserFiguresUI(){
         <input type="file" id="inpRequiredFigFile" accept="image/*,.pdf" style="font-size:12px;margin-top:2px" />
       </div>
       <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:8px;padding:6px 8px;background:var(--color-bg-secondary);border-radius:6px">
-        💡 사용자 도면의 번호는 자동 생성 도면과 충돌하지 않도록 번호가 밀립니다. 예: 도 3을 추가하면, 자동 도면은 도 1, 2, 4, 5... 순으로 생성됩니다.
+        <span class="ico" data-icon="lightbulb"></span> 사용자 도면의 번호는 자동 생성 도면과 충돌하지 않도록 번호가 밀립니다. 예: 도 3을 추가하면, 자동 도면은 도 1, 2, 4, 5... 순으로 생성됩니다.
       </div>
     </div>`;
   }
@@ -1984,8 +1997,8 @@ function renderRequiredFiguresList(){
       ${preview}
       <span class="badge badge-primary" style="min-width:40px;text-align:center">도 ${f.num}</span>
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${App.escapeHtml(f.description)}">${App.escapeHtml(f.description)}</span>
-      ${f.fileName?`<span class="badge badge-success" title="${App.escapeHtml(f.fileName)}">📎</span>`:''}
-      <button class="btn btn-ghost btn-sm" onclick="removeRequiredFigure(${f.num})" title="삭제">✕</button>
+      ${f.fileName?`<span class="badge badge-success" title="${App.escapeHtml(f.fileName)}"><span class="ico" data-icon="link" data-size="12"></span></span>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="removeRequiredFigure(${f.num})" title="삭제"><span class="ico" data-icon="x"></span></button>
     </div>`;
   }).join('');
 }
@@ -2026,7 +2039,7 @@ function renderConceptDiagramTypesList(){
       <span class="badge badge-primary" style="min-width:40px;text-align:center">도 ${figNum}</span>
       <span style="flex:1">${App.escapeHtml(typeDef.label)} <span style="color:var(--color-text-tertiary);font-size:11px">${App.escapeHtml(typeDef.desc)}</span></span>
       ${statusBadge}
-      <button class="btn btn-ghost btn-sm" onclick="removeConceptDiagramType('${ct.type}')" title="삭제">✕</button>
+      <button class="btn btn-ghost btn-sm" onclick="removeConceptDiagramType('${ct.type}')" title="삭제"><span class="ico" data-icon="x"></span></button>
     </div>`;
   }).join('');
 }
@@ -2063,7 +2076,7 @@ async function handleProjectRefUpload(event){
     const text=await App.extractTextFromFile(file);
     if(text&&text.trim()&&!text.startsWith('[')){
       projectRefStyleText=text.trim().slice(0,5000);
-      st.innerHTML=`<span class="tf">✅</span> ${App.escapeHtml(file.name)} (${projectRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px">✕</button>`;
+      st.innerHTML=`<span class="ico" data-icon="check-circle"></span> ${App.escapeHtml(file.name)} (${projectRefStyleText.length.toLocaleString()}자) <button class="btn btn-ghost btn-sm" onclick="clearProjectRef()" style="margin-left:4px"><span class="ico" data-icon="x"></span></button>`;
       st.style.color='var(--color-success)';
       App.showToast('이 프로젝트 전용 참고 문서 등록 (공통 참고 문서 대신 사용)');
     }else{st.textContent='추출 불가';st.style.color='var(--color-error)';}
@@ -2179,7 +2192,7 @@ function injectUserCommandUI(sid,containerSelector){
   const area=document.createElement('div');
   area.className='user-cmd-area';
   area.style.cssText='margin:8px 0';
-  area.innerHTML=`<details style="margin:0"><summary style="font-size:11px;color:var(--color-text-secondary);cursor:pointer;user-select:none;padding:4px 0">📝 추가 지시사항 (선택)</summary><textarea id="userCmd_${sid}" class="result-textarea" rows="2" placeholder="예: 독립항을 더 넓게 작성해 주세요 / 앵커에 캐싱 로직을 반드시 포함해 주세요" style="margin-top:6px;font-size:12px;min-height:48px;resize:vertical" oninput="stepUserCommands['${sid}']=this.value.trim()">${App.escapeHtml(stepUserCommands[sid]||'')}</textarea></details>`;
+  area.innerHTML=`<details style="margin:0"><summary style="font-size:11px;color:var(--color-text-secondary);cursor:pointer;user-select:none;padding:4px 0"><span class="ico" data-icon="edit"></span> 추가 지시사항 (선택)</summary><textarea id="userCmd_${sid}" class="result-textarea" rows="2" placeholder="예: 독립항을 더 넓게 작성해 주세요 / 앵커에 캐싱 로직을 반드시 포함해 주세요" style="margin-top:6px;font-size:12px;min-height:48px;resize:vertical" oninput="stepUserCommands['${sid}']=this.value.trim()">${App.escapeHtml(stepUserCommands[sid]||'')}</textarea></details>`;
   // 버튼 바로 앞에 삽입
   const btn=container.querySelector('button[id^="btn"]');
   if(btn)container.insertBefore(area,btn);
@@ -2292,7 +2305,7 @@ function invalidateDownstream(changedStep){
       w.style.cssText=isMust
         ?'background:#ffebee;border:1px solid #ef5350;border-radius:6px;padding:6px 10px;margin-bottom:6px;font-size:11px;color:#c62828;display:flex;align-items:center;gap:6px'
         :'background:#fff3e0;border:1px solid #ffb74d;border-radius:6px;padding:6px 10px;margin-bottom:6px;font-size:11px;color:#e65100;display:flex;align-items:center;gap:6px';
-      w.innerHTML=`<span class="tf">${isMust?'🔴':'🟡'}</span> ${STEP_NAMES[d]} — ${STEP_NAMES[changedStep]} 변경으로 ${isMust?'재생성 필수':'재생성 권장'}`;
+      w.innerHTML=`<span class="status-dot ${isMust?'negative':'cautionary'}"></span> ${STEP_NAMES[d]} — ${STEP_NAMES[changedStep]} 변경으로 ${isMust?'재생성 필수':'재생성 권장'}`;
       el.prepend(w);
     }
   });
@@ -2317,6 +2330,8 @@ function onStepCompleted(sid){
   // 3. v10.2: 산출물 미리보기 자동 갱신 (디바운스 적용)
   const previewTab=document.querySelector('.tab-item:nth-child(5)');
   if(previewTab&&previewTab.classList.contains('active'))_debouncedRenderPreview();
+  // v15: 단계별 채팅 수정 패널 마운트(모든 생성/재생성 완료의 공통 훅)
+  if(window.PatentChat)PatentChat.mountAll();
 }
 function _updateCascadePanelItem(sid,status){
   const panel=document.getElementById('cascadePanel');
@@ -2329,18 +2344,18 @@ function _updateCascadePanelItem(sid,status){
     if(status==='done'){
       label.style.cssText='display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;opacity:0.5;text-decoration:line-through;pointer-events:none';
       const span=label.querySelector('span');
-      if(span)span.textContent=`✅ ${STEP_NAMES[sid]||sid}`;
+      if(span){span.innerHTML=`<span class="ico" data-icon="check-circle" data-size="12"></span> ${App.escapeHtml(STEP_NAMES[sid]||sid)}`;if(window.Icons&&Icons.renderAll)Icons.renderAll(span);}
     }else if(status==='fail'){
       label.style.opacity='0.7';
       const span=label.querySelector('span');
-      if(span)span.textContent=`❌ ${STEP_NAMES[sid]||sid}`;
+      if(span){span.innerHTML=`<span class="ico" data-icon="x-circle" data-size="12"></span> ${App.escapeHtml(STEP_NAMES[sid]||sid)}`;if(window.Icons&&Icons.renderAll)Icons.renderAll(span);}
     }
   }
   // 모든 항목 완료 시 패널 자동 닫기
   const remaining=panel.querySelectorAll('.cascade-cb:not(:disabled)');
   if(remaining.length===0){
     const btn=panel.querySelector('#btnCascadeRun');
-    if(btn){btn.textContent='✅ 모두 완료';btn.style.background='#4caf50';btn.disabled=true;}
+    if(btn){btn.textContent='<span class="ico" data-icon="check-circle"></span> 모두 완료';btn.style.background='#4caf50';btn.disabled=true;}
     setTimeout(()=>{const p=document.getElementById('cascadePanel');if(p)p.remove();},3000);
   }
 }
@@ -2360,19 +2375,19 @@ function showCascadePanel(changedStep,mustDeps,shouldDeps){
   panel.id='cascadePanel';
   panel.style.cssText='position:fixed;bottom:20px;right:20px;width:380px;max-height:70vh;overflow-y:auto;background:#fff;border:2px solid #1976d2;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:9999;font-family:"맑은 고딕",sans-serif';
 
-  let html=`<div style="background:#1976d2;color:#fff;padding:12px 16px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center">
-    <span style="font-size:13px;font-weight:600">🔄 ${STEP_NAMES[changedStep]} 변경 — 연쇄 수정</span>
-    <button onclick="document.getElementById('cascadePanel').remove()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px">✕</button>
+  let html=`<div style="background:var(--dt-brand-hover);color:#fff;padding:12px 16px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:13px;font-weight:600"><span class="ico" data-icon="refresh"></span> ${STEP_NAMES[changedStep]} 변경 — 연쇄 수정</span>
+    <button onclick="document.getElementById('cascadePanel').remove()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 4px"><span class="ico" data-icon="x"></span></button>
   </div>
   <div style="padding:12px 16px">`;
 
   // MUST 항목
   if(mustDeps.length){
     html+=`<div style="margin-bottom:10px">
-      <div style="font-size:11px;font-weight:700;color:#c62828;margin-bottom:6px">🔴 필수 재생성 (${mustDeps.length}건)</div>`;
+      <div style="font-size:11px;font-weight:700;color:var(--dt-danger);margin-bottom:6px"><span class="status-dot negative"></span> 필수 재생성 (${mustDeps.length}건)</div>`;
     mustDeps.forEach(d=>{
       html+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer">
-        <input type="checkbox" class="cascade-cb" data-step="${d}" data-level="must" checked style="accent-color:#c62828">
+        <input type="checkbox" class="cascade-cb" data-step="${d}" data-level="must" checked style="accent-color:var(--dt-danger)">
         <span>${STEP_NAMES[d]||d}</span>
       </label>`;
     });
@@ -2382,7 +2397,7 @@ function showCascadePanel(changedStep,mustDeps,shouldDeps){
   // SHOULD 항목
   if(shouldDeps.length){
     html+=`<details style="margin-bottom:10px"${mustDeps.length?'':' open'}>
-      <summary style="font-size:11px;font-weight:700;color:#e65100;cursor:pointer;padding:4px 0">🟡 권장 재생성 (${shouldDeps.length}건)</summary>`;
+      <summary style="font-size:11px;font-weight:700;color:#e65100;cursor:pointer;padding:4px 0"><span class="status-dot cautionary"></span> 권장 재생성 (${shouldDeps.length}건)</summary>`;
     shouldDeps.forEach(d=>{
       html+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer;margin-left:4px">
         <input type="checkbox" class="cascade-cb" data-step="${d}" data-level="should" style="accent-color:#ff9800">
@@ -2394,10 +2409,10 @@ function showCascadePanel(changedStep,mustDeps,shouldDeps){
 
   // 전체선택/해제 + 실행 버튼
   html+=`<div style="display:flex;gap:8px;margin-top:10px">
-    <button onclick="document.querySelectorAll('.cascade-cb').forEach(c=>c.checked=true)" style="flex:1;padding:6px;font-size:11px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer">전체 선택</button>
-    <button onclick="document.querySelectorAll('.cascade-cb').forEach(c=>c.checked=false)" style="flex:1;padding:6px;font-size:11px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer">전체 해제</button>
+    <button onclick="document.querySelectorAll('.cascade-cb').forEach(c=>c.checked=true)" style="flex:1;padding:6px;font-size:11px;border:1px solid #ccc;border-radius:6px;background:var(--dt-g100);cursor:pointer">전체 선택</button>
+    <button onclick="document.querySelectorAll('.cascade-cb').forEach(c=>c.checked=false)" style="flex:1;padding:6px;font-size:11px;border:1px solid #ccc;border-radius:6px;background:var(--dt-g100);cursor:pointer">전체 해제</button>
   </div>
-  <button id="btnCascadeRun" onclick="runCascadeRegeneration('${changedStep}')" style="width:100%;margin-top:10px;padding:10px;font-size:13px;font-weight:600;color:#fff;background:#1976d2;border:none;border-radius:8px;cursor:pointer">
+  <button id="btnCascadeRun" onclick="runCascadeRegeneration('${changedStep}')" style="width:100%;margin-top:10px;padding:10px;font-size:13px;font-weight:600;color:#fff;background:var(--dt-brand-hover);border:none;border-radius:8px;cursor:pointer">
     ✨ 선택 항목 자동 재생성
   </button>
   <div id="cascadeProgress" style="margin-top:8px;font-size:11px;color:#666"></div>
@@ -2421,7 +2436,7 @@ function _mergeCascadeItems(panel,changedStep,mustDeps,shouldDeps){
     if(target){
       const lbl=document.createElement('label');
       lbl.style.cssText='display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer';
-      lbl.innerHTML=`<input type="checkbox" class="cascade-cb" data-step="${d}" data-level="must" checked style="accent-color:#c62828"><span>${STEP_NAMES[d]||d}</span>`;
+      lbl.innerHTML=`<input type="checkbox" class="cascade-cb" data-step="${d}" data-level="must" checked style="accent-color:var(--dt-danger)"><span>${STEP_NAMES[d]||d}</span>`;
       target.appendChild(lbl);
       added++;
     }
@@ -2512,14 +2527,14 @@ async function runCascadeRegeneration(sourceStep){
 
   const btn=document.getElementById('btnCascadeRun');
   const prog=document.getElementById('cascadeProgress');
-  if(btn){btn.disabled=true;btn.textContent='⏳ 재생성 진행 중...';}
+  if(btn){btn.disabled=true;btn.textContent='<span class="ico" data-icon="history"></span> 재생성 진행 중...';}
 
   let completed=0;
   const total=sorted.length;
 
   for(const sid of sorted){
     if(prog)prog.innerHTML=`<div style="margin-bottom:4px">진행: ${completed+1}/${total} — <b>${STEP_NAMES[sid]}</b> 재생성 중...</div>
-      <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:#1976d2;border-radius:4px;height:6px;width:${Math.round(completed/total*100)}%;transition:width .3s"></div></div>`;
+      <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:var(--dt-brand-hover);border-radius:4px;height:6px;width:${Math.round(completed/total*100)}%;transition:width .3s"></div></div>`;
 
     try{
       // step별 적절한 runner 호출
@@ -2535,13 +2550,13 @@ async function runCascadeRegeneration(sourceStep){
       onStepCompleted(sid);
     }catch(e){
       console.error(`Cascade ${sid} 실패:`,e);
-      if(prog)prog.innerHTML+=`<div style="color:#c62828;font-size:11px">❌ ${STEP_NAMES[sid]} 실패: ${e.message}</div>`;
+      if(prog)prog.innerHTML+=`<div style="color:var(--dt-danger);font-size:11px"><span class="ico" data-icon="x"></span> ${STEP_NAMES[sid]} 실패: ${e.message}</div>`;
     }
   }
 
-  if(prog)prog.innerHTML=`<div style="color:#2e7d32;font-weight:600">✅ ${completed}/${total} 완료</div>
-    <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:#4caf50;border-radius:4px;height:6px;width:100%"></div></div>`;
-  if(btn){btn.textContent='✅ 완료';btn.style.background='#4caf50';}
+  if(prog)prog.innerHTML=`<div style="color:var(--dt-success);font-weight:600"><span class="ico" data-icon="check-circle"></span> ${completed}/${total} 완료</div>
+    <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:var(--dt-success);border-radius:4px;height:6px;width:100%"></div></div>`;
+  if(btn){btn.textContent='<span class="ico" data-icon="check-circle"></span> 완료';btn.style.background='#4caf50';}
   // BUG-3 fix: globalProcessing 해제
   setGlobalProcessing(false);
   setTimeout(()=>{const p=document.getElementById('cascadePanel');if(p)p.remove();},3000);
@@ -3054,7 +3069,7 @@ async function _processUploadedFiles(files){
     if(uploadedFiles.find(f=>f.name===file.name)){App.showToast(`"${file.name}" 이미 추가됨`,'info');continue;}
     const item=document.createElement('div');item.className='file-upload-item';item.id=`file_${uploadedFiles.length}`;
     item.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:6px;font-size:13px';
-    item.innerHTML=`<span class="tf">📄</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">추출 중...</span>`;
+    item.innerHTML=`<span class="ico" data-icon="doc"></span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-neutral">${App.formatFileSize(file.size)}</span><span style="color:var(--color-primary)">추출 중...</span>`;
     if(listEl)listEl.appendChild(item);
     try{
       const text=await App.extractTextFromFile(file);
@@ -3062,13 +3077,13 @@ async function _processUploadedFiles(files){
         uploadedFiles.push({name:file.name,text:text.trim(),size:file.size});
         const ta=document.getElementById('projectInput');const separator=ta.value.trim()?'\n\n':'';
         ta.value+=`${separator}[첨부: ${file.name}]\n${text.trim()}`;
-        item.innerHTML=`<span class="tf">✅</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} · ${text.trim().length.toLocaleString()}자</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length-1},'${App.escapeHtml(file.name).replace(/'/g, "\\'")}')">\u2715</button>`;
+        item.innerHTML=`<span class="ico" data-icon="check-circle"></span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(file.name)}</span><span class="badge badge-success">${App.formatFileSize(file.size)} · ${text.trim().length.toLocaleString()}자</span><button class="btn btn-ghost btn-sm" onclick="removeUploadedFile(${uploadedFiles.length-1},'${App.escapeHtml(file.name).replace(/'/g, "\\'")}')">\u2715</button>`;
         App.showToast(`"${file.name}" 추출 완료`);
       }else{
-        item.innerHTML=`<span class="tf">⚠️</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">추출 불가</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
+        item.innerHTML=`<span class="ico" data-icon="warning"></span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-warning">추출 불가</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
       }
     }catch(e){
-      item.innerHTML=`<span class="tf">❌</span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
+      item.innerHTML=`<span class="ico" data-icon="x"></span><span style="flex:1">${App.escapeHtml(file.name)}</span><span class="badge badge-error">오류</span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">\u2715</button>`;
     }
   }
   if(uploadedFiles.length>0)debouncedGenerateInventionSummary();
@@ -3098,7 +3113,7 @@ function setupDragDrop(){
   const overlay=document.createElement('div');
   overlay.id='dragOverlay';
   overlay.style.cssText='display:none;position:absolute;inset:0;background:rgba(79,70,229,0.08);border:2px dashed var(--color-primary);border-radius:12px;z-index:10;pointer-events:none;align-items:center;justify-content:center';
-  overlay.innerHTML='<div style="text-align:center;color:var(--color-primary);font-weight:600"><span class="tf" style="font-size:32px">📎</span><br>파일을 여기에 놓으세요<br><span style="font-size:12px;font-weight:normal;color:var(--color-text-secondary)">Word, PDF, PPT, 이미지 등</span></div>';
+  overlay.innerHTML='<div style="text-align:center;color:var(--color-primary);font-weight:600"><span class="ico" data-icon="link" data-size="32"></span><br>파일을 여기에 놓으세요<br><span style="font-size:12px;font-weight:normal;color:var(--color-text-secondary)">Word, PDF, PPT, 이미지 등</span></div>';
   wrapper.style.position='relative';
   wrapper.appendChild(overlay);
   let dragCounter=0;
@@ -3139,16 +3154,16 @@ async function generateInventionSummary(){
     summaryEl=document.createElement('div');
     summaryEl.id='inventionSummary';
     summaryEl.style.cssText='margin-top:8px;padding:12px 16px;background:var(--color-bg-secondary);border-radius:10px;border-left:3px solid var(--color-primary);font-size:13px;line-height:1.6;color:var(--color-text-secondary)';
-    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
+    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)"><span class="ico" data-icon="clipboard"></span> 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
     ta.parentElement.insertBefore(summaryEl,ta.nextSibling);
   }else{
-    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
+    summaryEl.innerHTML='<span style="font-weight:600;color:var(--color-text-primary)"><span class="ico" data-icon="clipboard"></span> 발명 내용 요약</span><br><span style="color:var(--color-primary)">요약 생성 중...</span>';
   }
   try{
     const r=await App.callClaude(`아래 발명 내용을 300자 이내로 핵심만 요약하라. 기술분야, 핵심 구성요소, 주요 기능을 포함. 마크다운/글머리 없이 자연스러운 문장으로.\n\n${inv.slice(0,5000)}`);
-    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br>${App.escapeHtml(r.text)}`;
+    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)"><span class="ico" data-icon="clipboard"></span> 발명 내용 요약</span><br>${App.escapeHtml(r.text)}`;
   }catch(e){
-    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)">📋 발명 내용 요약</span><br><span style="color:var(--color-text-tertiary)">요약 생성 실패</span>`;
+    summaryEl.innerHTML=`<span style="font-weight:600;color:var(--color-text-primary)"><span class="ico" data-icon="clipboard"></span> 발명 내용 요약</span><br><span style="color:var(--color-text-tertiary)">요약 생성 실패</span>`;
   }
 }
 
@@ -3637,7 +3652,7 @@ function _buildPromptCore(stepId,inv,T,styleRef){
 
 (R3) Killer Words 금지: \"반드시/무조건/오직/필수적으로/만\" 절대 금지. \"~하도록 구성되는\", \"~하는\", \"~을 포함하는\" 사용.
 
-(R4) 일반 종속항: 상위항 인용하여 구체화·확장. 수치/수식 과도하게 고정하지 않고, 후속 Step 8/9/13에서 상세화 가능하도록 문장 구성.
+(R4) 일반 종속항: 상위항 인용하여 구체화·확장. ★ 발명의 본질(핵심 구성요소·핵심 기능)을 각 일반 종속항이 분담하여 빠짐없이 한정하라 — 발명의 본질적 기능 중 어느 하나라도 종속항 어디에도 구체화되지 않고 누락되는 일이 없도록 하라(일반 종속항은 발명충실항으로서 발명의 본질을 충실히 반영해야 한다). 수치/수식은 과도하게 고정하지 않고, 후속 Step 8/9/13에서 상세화 가능하도록 문장 구성.
 
 ★★ 종속항 작성 규칙 (대통령령 — 위반 시 기재불비) ★★
 ① 종속항은 독립항 또는 다른 종속항 중 1 또는 2 이상의 항을 인용하되, 인용 항의 번호를 기재
@@ -3727,11 +3742,11 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
 
 ⛔⛔⛔ 명칭 고유성 규칙 (기재불비 — 절대 위반 금지) ⛔⛔⛔
 - 서로 다른 참조번호에는 반드시 서로 다른 명칭을 사용하라.
-  ❌ 금지: 서버(100)와 서버(300) — 같은 이름에 다른 번호
-  ✅ 올바른: 통합 서버(100)와 벤더 서버(300) — 구별 가능한 이름
+  <span class="ico" data-icon="x"></span> 금지: 서버(100)와 서버(300) — 같은 이름에 다른 번호
+  <span class="ico" data-icon="check-circle"></span> 올바른: 통합 서버(100)와 벤더 서버(300) — 구별 가능한 이름
 - 서로 같은 참조번호에는 반드시 동일한 명칭을 사용하라.
-  ❌ 금지: 도 1에서 "처리부(110)", 도 2에서 "분석부(110)"
-  ✅ 올바른: 모든 도면에서 "처리부(110)"으로 통일
+  <span class="ico" data-icon="x"></span> 금지: 도 1에서 "처리부(110)", 도 2에서 "분석부(110)"
+  <span class="ico" data-icon="check-circle"></span> 올바른: 모든 도면에서 "처리부(110)"으로 통일
 - L1 장치명은 발명 명칭에서 유래하거나, 역할이 명확히 구분되는 명칭을 사용하라.
   예: "기업용 인공지능 통합 서버(100)", "사용자 단말(200)", "벤더 서버(300)"
 
@@ -3757,8 +3772,8 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ■ 도 1: 전체 시스템 구성도 (System Overview)
-  ✅ 허용: L1 장치 박스만 — 100, 200, 300, 400...
-  ✅ 허용: L1 장치 박스들 간의 연결선만
+  <span class="ico" data-icon="check-circle"></span> 허용: L1 장치 박스만 — 100, 200, 300, 400...
+  <span class="ico" data-icon="check-circle"></span> 허용: L1 장치 박스들 간의 연결선만
   ⛔ 금지: L2/L3 하위 구성요소(110, 120, 111...) 표시 금지
   ⛔ 금지: 최외곽 박스 생성 금지 (L1만 있으므로 외곽 불필요)
   ★ 최소 L1 구성요소: 2개 이상 (1개만 있으면 도 1 불필요)
@@ -3768,29 +3783,29 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   최외곽 박스 = 상위 장치
   내부 박스 = 그 상위 장치의 직계 자식 레벨만
   단, 서브 프레임을 사용한 중첩은 허용:
-  ✅ 허용: 100 프레임 → L2(110 서브프레임[111,112,113 내부] + 120 독립블록)
+  <span class="ico" data-icon="check-circle"></span> 허용: 100 프레임 → L2(110 서브프레임[111,112,113 내부] + 120 독립블록)
      → 110이 서브 프레임(점선)으로 그려지고 내부에 L3이 포함된 구조
   ⛔ 금지: 100 프레임 → 110 + 120 + 111 + 112 (서브 프레임 없이 L2·L3 혼합 나열)
   
   ⛔⛔⛔ 내부 구성요소 수량 규칙 (절대 준수) ⛔⛔⛔
   ★★ 최소: 3개 이상 (2개만으로는 도면이 빈약) ★★
   ★★ 최대: 5개 이하 (6개 이상이면 반드시 도면을 분할하라) ★★
-  → 청구항에 하위 구성요소가 6개 이상이면, 핵심 3~5개만 골라 이 도면에 넣고 나머지는 다음 도면에서 다루라.
-  → 청구항에 하위 구성요소가 2개뿐이면, 기능적으로 분리하여 3~4개로 확장하라.
-  → 구성요소를 억지로 세분화하여 수를 늘리지 마라. 청구항에 명시된 핵심 구성만 사용하라.
+  <span class="ico" data-icon="arrow-right"></span> 청구항에 하위 구성요소가 6개 이상이면, 핵심 3~5개만 골라 이 도면에 넣고 나머지는 다음 도면에서 다루라.
+  <span class="ico" data-icon="arrow-right"></span> 청구항에 하위 구성요소가 2개뿐이면, 기능적으로 분리하여 3~4개로 확장하라.
+  <span class="ico" data-icon="arrow-right"></span> 구성요소를 억지로 세분화하여 수를 늘리지 마라. 청구항에 명시된 핵심 구성만 사용하라.
   ⛔ 절대 금지: 하나의 도면에 6개 이상의 내부 블록을 배치하는 것
 
   ★★★ 동일 프레임 반복 최소화 규칙 ★★★
   - 동일 참조번호의 프레임이 2개 이상 도면에 반복되는 것은 최소화하라.
   - 하위 구성요소가 5개를 초과하여 분할하는 경우에만 허용한다.
   - 분할 시, 첫 도면에 5개(상한), 다음 도면에 나머지를 넣어라.
-    ❌ 잘못된 분할: 도 2에 4개 + 도 3에 3개 + 도 4에 1개 (3개 도면)
-    ✅ 올바른 분할: 도 2에 5개 + 도 3에 3개 (2개 도면으로 충분)
+    <span class="ico" data-icon="x"></span> 잘못된 분할: 도 2에 4개 + 도 3에 3개 + 도 4에 1개 (3개 도면)
+    <span class="ico" data-icon="check-circle"></span> 올바른 분할: 도 2에 5개 + 도 3에 3개 (2개 도면으로 충분)
   - 한 도면에 1~2개만 남으면, 이전 도면에 병합하여 도면 수를 줄여라.
     ⛔ 내부 구성요소 1개인 도면 = 절대 금지 (R12 위반)
   - 도면 수를 줄이는 것이 빈약한 도면을 만드는 것보다 낫다.
 
-  ✅ 올바른 예 (도 2: ${getDeviceSubject()} 상세):
+  <span class="ico" data-icon="check-circle"></span> 올바른 예 (도 2: ${getDeviceSubject()} 상세):
   최외곽=${getDeviceSubject()}(100), 내부=L2 4개: 통신부(110), 프로세서(120), 메모리(130), 저장부(140)
   → 4개 구성요소가 프레임 안에 2행 배치, 참조번호가 겹치지 않음
   
@@ -3827,12 +3842,12 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   ★ 모든 내부 구성요소에 최소 1개 이상 연결이 있어야 함
   ★ "허브" 구성요소(가장 많은 연결)를 반드시 식별
   예: 통신부(110) ↔ 프로세서(120) ↔ 메모리(130), 프로세서(120) ↔ 저장부(140)
-  → 프로세서(120)가 허브 (3개 연결)
+  <span class="ico" data-icon="arrow-right"></span> 프로세서(120)가 허브 (3개 연결)
 
 ★★★ 배치 품질 규칙 (렌더링 겹침 방지) ★★★
   ⛔ 한 행에 3개 초과 금지 → 한 행에는 최대 3개까지 배치
-  ✅ 도 2 이후 내부 블록도: 데이터 흐름 방향에 따라 입력측→처리→출력측 순서로 배치
-  ✅ 흐름 방향이 명확하지 않으면 참조번호 오름차순으로 배치
+  <span class="ico" data-icon="check-circle"></span> 도 2 이후 내부 블록도: 데이터 흐름 방향에 따라 입력측→처리→출력측 순서로 배치
+  <span class="ico" data-icon="check-circle"></span> 흐름 방향이 명확하지 않으면 참조번호 오름차순으로 배치
 
 ⛔⛔⛔ 점진적 구체화 원칙 (한 단계씩만 깊어진다 — 절대 규칙) ⛔⛔⛔
 
@@ -3850,12 +3865,12 @@ ${_buildClaimComponentHierarchy(outputs.step_06||'')}
   ■ 도 4+ → 다른 L1 장치의 L2 상세화 또는, 도 3에서 남은 L2 상세화
 
   ■ 위반 패턴 예시
-    ❌ 도 2 내부에 프로세서(120) + 정보수신부(121) + 알림산출부(122)
+    <span class="ico" data-icon="x"></span> 도 2 내부에 프로세서(120) + 정보수신부(121) + 알림산출부(122)
        → 120은 L2, 121/122는 L3 → 같은 도면에 L2+L3 혼재 → NG
-    ✅ 도 2 내부에 프로세서(120) + 메모리(130) + 통신부(110)
-       → 모두 L2 → OK
-    ✅ 도 3 최외곽 프로세서(120) 내부에 정보수신부(121) + 알림산출부(122)
-       → 모두 L3 → OK
+    <span class="ico" data-icon="check-circle"></span> 도 2 내부에 프로세서(120) + 메모리(130) + 통신부(110)
+       <span class="ico" data-icon="arrow-right"></span> 모두 L2 → OK
+    <span class="ico" data-icon="check-circle"></span> 도 3 최외곽 프로세서(120) 내부에 정보수신부(121) + 알림산출부(122)
+       <span class="ico" data-icon="arrow-right"></span> 모두 L3 → OK
 
   ■ 검증 공식: 한 도면 내부 참조번호의 "레벨"이 모두 동일해야 한다
     level(ref) = ref < 100 ? 'small' : ref%100===0 ? 'L1' : ref%10===0 ? 'L2' : ref<1000 ? 'L3' : 'L4'
@@ -4005,7 +4020,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
   예: 청구항이 "사용자 단말"이면 본문에서 "단말", "디바이스", "장치"로 바꾸지 말고 "사용자 단말(200)" 유지.
 - 유사 개념의 위계를 명확히 정리하라:
   → "~값", "~수준", "~지표", "~계수", "~파라미터"가 서로 다른 것인지, 같은 것의 다른 표현인지 명시하라.
-  → 상위 개념과 하위 개념이 있으면 "A는 B를 포함하며" 또는 "B는 A의 일 유형으로서" 형태로 관계를 서술하라.
+  <span class="ico" data-icon="arrow-right"></span> 상위 개념과 하위 개념이 있으면 "A는 B를 포함하며" 또는 "B는 A의 일 유형으로서" 형태로 관계를 서술하라.
 - ⛔ 같은 것을 다른 이름으로 부르는 것을 절대 금지: "음량 조절 값" = "목표 음량 수준" = "최종 음량"처럼 혼용하면 기재불비.
 
 ★★★ 파라미터/변수 명세 규칙 (실시 가능성 보강) ★★★
@@ -4044,8 +4059,8 @@ ${!hasMethodClaims?`- 방법 청구항이 생성되지 않았으므로, 방법 �
 ★★★ 설명 순서 규칙 ★★★
 - 도 1 → 도 2 → 도 3 → ... 순서로 진행하라 (도면 간 순서는 반드시 번호순).
 - 각 도면 내에서는 데이터/정보 흐름 순서에 따라 설명하라:
-  → 입력측 구성요소부터 시작하여 처리→출력 순서로 기술
-  → 예) 통신부(110)에서 데이터를 수신하면, 프로세서(120)가 분석하고, 저장부(140)에 저장한다
+  <span class="ico" data-icon="arrow-right"></span> 입력측 구성요소부터 시작하여 처리→출력 순서로 기술
+  <span class="ico" data-icon="arrow-right"></span> 예) 통신부(110)에서 데이터를 수신하면, 프로세서(120)가 분석하고, 저장부(140)에 저장한다
 - 흐름 방향이 불분명하면 참조번호 오름차순: 예) 110→120→130→140.
 - 같은 L2 구성요소 내의 L3 하위 요소도 흐름순 또는 오름차순: 예) 121→122→123.
 
@@ -4079,20 +4094,21 @@ ${!hasMethodClaims?`- 방법 청구항이 생성되지 않았으므로, 방법 �
   받침 있는 숫자 뒤 → "은" (예: 도 1은, 도 3은, 도 6은, 도 7은, 도 8은, 도 10은)
   받침 없는 숫자 뒤 → "는" (예: 도 2는, 도 4는, 도 5는, 도 9는)
 
-⛔⛔⛔ 분량 규칙 (엄격 준수 — 초과 시 기재불비) ⛔⛔⛔
-- 도면 1개당 ${dlCfg.charPerFig}(공백 포함) — 이 한도를 절대 초과하지 마라
-- 총 분량 ${dlCfg.total}(공백 포함). 본문 전후 정형문 글자수 제외.
+⛔⛔⛔ 분량 규칙 (앵커 뒷받침 우선) ⛔⛔⛔
+- 도면 1개당 ${dlCfg.charPerFig}(공백 포함)를 기준으로 한다. 단, 앵커 종속항 뒷받침·정량적 근거 기술을 위해 필요한 경우 이 기준을 적정 범위(약 20~30%) 초과해도 무방하다.
+- 총 분량 ${dlCfg.total}(공백 포함)을 기준으로 하되, 앵커 뒷받침을 위해서는 적정 초과를 허용한다. 본문 전후 정형문 글자수 제외.
 - ${dlCfg.extra}
-- ⛔ 총 분량을 초과하면 안 됨. 핵심 내용만 기술하고 불필요한 반복/나열을 금지한다.
+- ⛔ 단, 불필요한 반복/나열·동어반복으로 분량을 늘리지 마라. 기준을 넘는 분량은 오직 앵커 종속항 뒷받침·정량적 근거·기술적 효과 설명에만 사용하라(일반 설명은 기준 준수).
 
 ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 — 42조 4항) ★★
-- 앵커 종속항(청구항 ${deviceAnchorStart}~${deviceAnchorStart+deviceAnchorDep-1})은 진보성 방어의 핵심이므로, 일반 종속항보다 2배 이상 상세하게 기술하라.
+- 앵커 종속항(청구항 ${deviceAnchorStart}~${deviceAnchorStart+deviceAnchorDep-1})은 진보성 방어의 핵심이다. ★ 심사관이 별도 보정 없이 곧바로 등록을 인정할 수 있는 수준으로, 일반 종속항보다 2배 이상 상세하고 정량적 근거가 명확하게 기술하라.
 - 각 앵커 종속항의 기술적 구성에 대해:
   (1) 동작 원리를 단계별(입력→처리→출력)로 설명하라
   (2) "이러한 구성에 의하면, ~한 기술적 효과를 얻을 수 있다" 문장을 반드시 포함하라
-  (3) 기준값/임계값/가중치가 있으면, 그 값의 기술적 의의와 조정 시 영향을 설명하라
-  (4) 다단계 처리가 있으면, 각 단계의 입력·처리·출력을 명시하라
-  (5) 조건 분기가 있으면, 각 분기의 판단 기준과 분기 후 처리를 설명하라
+  (3) ★ 기준값/임계값/가중치/계수는 구체적 수치 예시 또는 수치 범위와 함께, 그 값을 어떻게 도출·설정하는지의 산출 근거(계산 과정·결정 원리)와 값 조정 시 거동 변화를 정량적으로 설명하라 (예: "일 예로 상기 가중치는 0.7로 설정되며, 이는 ~의 비율로부터 산출된다")
+  (4) 다단계 처리가 있으면, 각 단계의 입력·처리·출력과 단계 간 정량적 관계(비율·임계·조건)를 명시하라
+  (5) 조건 분기가 있으면, 각 분기의 판단 기준(구체적 조건식·임계값)과 분기 후 처리를 설명하라
+  (6) ★ 위 정량적 근거는 발명 내용에 기재된 사실에 부합해야 한다. 명세서에 없는 수치를 임의로 창작하지 마라(신규사항·허위기재 금지). 발명 내용에 수치 근거가 없으면 "일 예로/대략" 등 예시임이 드러나는 표현으로 기술하라.
 `:''}★ 변형 실시예 규칙:
 - 독립항의 상위 개념 용어마다: "한편, 다른 실시예에서 상기 [용어]는 [구체적 대안]일 수 있다" 형태로 기술
 - 앵커 종속항의 핵심 처리에 대해 1개 이상의 대안적 구현을 기술
@@ -4101,8 +4117,8 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 ★★★ 장치 도면(${figListStr})에 포함된 구성요소만 설명하라. 도면에 없는 참조번호를 임의로 추가하지 마라. ★★★
 ★★★ 참조번호 명칭 통일 규칙 (기재불비 방지 — 핵심) ★★★
 - 하나의 참조번호에는 반드시 하나의 명칭만 사용하라. 동의어/약칭을 혼용하지 마라.
-  → 예: "추천부(114)"와 "추천 생성부(114)"를 혼용하면 기재불비. 하나로 통일하라.
-  → 예: "메모리(120)"와 "데이터베이스(120)"를 혼용하면 기재불비. 다른 구성요소이면 별도 참조번호를 부여하라.
+  <span class="ico" data-icon="arrow-right"></span> 예: "추천부(114)"와 "추천 생성부(114)"를 혼용하면 기재불비. 하나로 통일하라.
+  <span class="ico" data-icon="arrow-right"></span> 예: "메모리(120)"와 "데이터베이스(120)"를 혼용하면 기재불비. 다른 구성요소이면 별도 참조번호를 부여하라.
 - 도면 설계에서 정의된 명칭을 우선으로 사용하라.
 - 청구항에서 사용한 명칭과 상세설명의 명칭이 일치해야 한다.
 ${_designCompStr}
@@ -4120,7 +4136,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${out
   (3) 값 범위 또는 예시적 범위 (예: "0 이상 1 이하의 정규화값이다")
   (4) 단위가 있으면 단위 명시
 - 같은 변수가 복수 수학식에 등장하면, 정의가 모순되지 않게 하라.
-  → 수학식 1의 출력이 수학식 2의 입력이면, 변수명·정의·범위가 완전 일치해야 한다.
+  <span class="ico" data-icon="arrow-right"></span> 수학식 1의 출력이 수학식 2의 입력이면, 변수명·정의·범위가 완전 일치해야 한다.
 
 ★★★ 수학식 간 정합성 규칙 (핵심) ★★★
 - 동일 목적의 수학식이 2개 이상 있으면(예: 보정 공식이 2가지 방식), 반드시:
@@ -4136,7 +4152,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${out
   (1) 부호 의미: 양수일 때 어느 방향으로 보정되는가
   (2) 값 범위: 예시적 범위 (예: 0.01~0.5)
   (3) 과도 누적 방지: 보정 횟수 상한, 누적 보정량 상한, 또는 점감 조건
-  (4) 초기값과 갱신 여부\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n★★★ 수학 기호 규칙 (필수) ★★★\n- 곱셈 기호는 반드시 \"×\" (U+00D7) 또는 \"·\" (가운데점, U+00B7)을 사용하라.\n- ❌ 금지: ASCII 알파벳 \"x\" 또는 \"X\"를 곱셈 기호로 사용 (변수명 x와 혼동)\n- ❌ 금지: ASCII 별표 \"*\"를 곱셈 기호로 사용 (코드 표기, 특허 명세서 부적합)\n- ✅ 올바른 예: \"a × b\", \"2 × π × r\", \"α · β\", \"3 × 10⁻⁶\"\n- ❌ 잘못된 예: \"a x b\", \"a * b\", \"2 * pi * r\", \"alpha*beta\"\n- 변수 인접 곱셈은 기호 생략 가능 (예: \"ab\", \"2πr\") — 단, 변수명이 두 글자 이상이면 \"·\" 권장\n- 나눗셈은 \"÷\" 또는 분수 표기, 부등호는 \"≤\", \"≥\", \"≠\" 사용\n- 그리스 문자는 유니코드 사용 (α, β, γ, π, σ, μ, λ — \"alpha\", \"beta\" 등 영어 표기 금지)\n- \"여기서,\" 변수 설명, \"예를 들어,\" 수치 예시에서도 동일 규칙 적용\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n⛔⛔ ANCHOR 규칙 ⛔⛔\n- ANCHOR는 반드시 마침표(다.)로 끝나는 완전한 문장의 끝부분을 사용하라.\n- ❌ 금지: 쉼표(,) 또는 접속어(~하고, ~하며)로 끝나는 절 중간을 ANCHOR로 사용\n- ❌ 금지: \"예를 들어\" 블록 내부를 ANCHOR로 사용\n- ✅ 올바른 ANCHOR 예: \"~을 산출한다.\" \"~을 포함한다.\" \"~으로 구성된다.\"\n\n⛔⛔ FORMULA 규칙 ⛔⛔\n- FORMULA에는 【수학식 N】 + 수식 + \"여기서,\" + \"예를 들어,\" 만 포함.\n- ⛔ FORMULA 안에 상세설명 원문 텍스트를 절대 포함하지 마라.\n- FORMULA는 \"예를 들어,\" 예시 문장의 마침표(다.)로 종료하라.\n- FORMULA 종료 후 추가 텍스트 금지.\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (삽입위치 문장 끝부분 20자 이상, 반드시 \"다.\"로 종료)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (파라미터 — 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${stripMathBlocks(getLatestDescription()||outputs.step_08||'')}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
+  (4) 초기값과 갱신 여부\n규칙: 수학식+삽입위치만. 상세설명 재출력 금지. 첨자 금지.\n★ 수치 예시는 \"예를 들어,\", \"일 예로,\", \"구체적 예시로,\" 등 자연스러운 표현 사용 (\"예시 대입:\" 금지)\n\n★★★ 수학 기호 규칙 (필수) ★★★\n- 곱셈 기호는 반드시 \"×\" (U+00D7) 또는 \"·\" (가운데점, U+00B7)을 사용하라.\n- ❌ 금지: ASCII 알파벳 \"x\" 또는 \"X\"를 곱셈 기호로 사용 (변수명 x와 혼동)\n- ❌ 금지: ASCII 별표 \"*\"를 곱셈 기호로 사용 (코드 표기, 특허 명세서 부적합)\n- ✅ 올바른 예: \"a × b\", \"2 × π × r\", \"α · β\", \"3 × 10⁻⁶\"\n- ❌ 잘못된 예: \"a x b\", \"a * b\", \"2 * pi * r\", \"alpha*beta\"\n- 변수 인접 곱셈은 기호 생략 가능 (예: \"ab\", \"2πr\") — 단, 변수명이 두 글자 이상이면 \"·\" 권장\n- 나눗셈은 \"÷\" 또는 분수 표기, 부등호는 \"≤\", \"≥\", \"≠\" 사용\n- 그리스 문자는 유니코드 사용 (α, β, γ, π, σ, μ, λ — \"alpha\", \"beta\" 등 영어 표기 금지)\n- \"여기서,\" 변수 설명, \"예를 들어,\" 수치 예시에서도 동일 규칙 적용\n\n⛔⛔⛔ 수학식 간 교차참조 금지 (핵심!) ⛔⛔⛔\n- 수학식의 \"여기서,\" 설명에서 다른 수학식을 번호로 참조하지 마라.\n- ❌ 금지: \"수학식 1에 의해 산출된 Lw\", \"수학식 2의 결과를 이용하여\"\n- ✅ 허용: \"상기 산출된 가중 소음 수준 Lw\", \"상기 개별 소음 수준 Li를 이용하여\"\n- 각 수학식의 변수 설명은 해당 수학식 내에서 자체 완결적으로 작성하라.\n- 변수가 다른 수학식에서도 사용되는 경우, 변수의 의미만 재서술하라 (번호 참조 금지).\n\n⛔⛔ ANCHOR 규칙 ⛔⛔\n- ANCHOR는 반드시 마침표(다.)로 끝나는 완전한 문장의 끝부분을 사용하라.\n- ❌ 금지: 쉼표(,) 또는 접속어(~하고, ~하며)로 끝나는 절 중간을 ANCHOR로 사용\n- ❌ 금지: \"예를 들어\" 블록 내부를 ANCHOR로 사용\n- ✅ 올바른 ANCHOR 예: \"~을 산출한다.\" \"~을 포함한다.\" \"~으로 구성된다.\"\n\n⛔⛔ FORMULA 규칙 ⛔⛔\n- FORMULA에는 【수학식 N】 + 수식 + \"여기서,\" + \"예를 들어,\" 만 포함.\n- ⛔ FORMULA 안에 상세설명 원문 텍스트를 절대 포함하지 마라.\n- FORMULA는 \"예를 들어,\" 예시 문장의 마침표(다.)로 종료하라.\n- FORMULA 종료 후 추가 텍스트 금지.\n\n출력:\n---MATH_BLOCK_1---\nANCHOR: (이 수식이 산출·정의하는 값을 직접 서술하며 상세설명에 정확히 1회만 등장하는 고유 문장의 끝부분 20자 이상, 반드시 \"다.\"로 종료 — 수식과 무관한 문장·중복 문장 금지)\nFORMULA:\n【수학식 1】\n(수식)\n여기서, (각 변수는 상세설명에 이미 등장한 파라미터·구성을 구체화하는 것이어야 함 — 본문에 없는 새 개념 도입 금지, 다른 수학식 번호 참조 금지, 변수명으로만 설명)\n예를 들어, (수치 대입 설명)\n\n${T}\n[현재 상세설명] ${stripMathBlocks(getLatestDescription()||outputs.step_08||'')}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):''}`;
 
     // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
     case 'step_10':{
@@ -4295,15 +4311,16 @@ ${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${inv.slice(
       const step15Ref=(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_12||0))?`\n\n[특허성 검토 결과 — 아래 지적사항을 방법 상세설명에 반영하여 보완하라]\n${outputs.step_15.slice(0,2000)}`:'';
       return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: "이하에서는 앞서 설명한 ${getDeviceSubject()}의 구성 및 동작을 참조하여 ${getDeviceSubject()}에 의해 수행되는 방법을 설명한다." 생략 금지. 제한성 표현 금지.
 
-★ 분량 지침: ${methodDetailGuide} 작성하라.
+★ 분량 지침: ${methodDetailGuide} 작성하라. (단, 앵커 종속항 뒷받침·정량적 근거 기술을 위해서는 위 분량 기준을 적정 범위 초과해도 무방하다. 초과분은 앵커 뒷받침에만 사용하고, 일반 설명은 기준을 준수하라.)
 ★ 방법의 수행 주체: "${getDeviceSubject()}"로 일관되게 서술하라.
 
 ${methodAnchorDep>0?`★★ 방법 앵커 종속항 뒷받침 규칙 (등록 핵심) ★★
+- 방법 앵커 종속항은 등록 핵심이다. ★ 심사관이 별도 보정 없이 곧바로 등록을 인정할 수 있는 수준으로, 일반 종속항보다 2배 이상 상세하고 정량적 근거가 명확하게 기술하라.
 - 방법 앵커 종속항의 각 기술적 구성(다단계 처리, 조건 분기, 기준값 등)을:
   (1) 단계별 처리 흐름으로 설명하라
   (2) "이러한 단계에 의하면, ~한 기술적 효과를 얻을 수 있다" 문장을 반드시 포함하라
-  (3) 조건 분기의 판단 기준과 각 분기의 후속 처리를 명시하라
-- 일반 종속항보다 앵커 종속항 설명을 2배 이상 상세하게 기술하라
+  (3) 조건 분기의 판단 기준(구체적 조건식·임계값)과 각 분기의 후속 처리를 명시하라
+  (4) ★ 기준값/임계값/가중치/계수는 구체적 수치 예시 또는 범위와 그 산출·설정 근거를 정량적으로 설명하라. 단, 발명 내용에 없는 수치를 임의로 창작하지 마라(신규사항 금지) — 근거가 없으면 "일 예로" 등 예시임이 드러나게 기술하라.
 `:''}
 ★★★ 발명 내용을 단 하나도 누락 없이 모두 반영하라. ★★★
 
@@ -4387,8 +4404,8 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
 - 참조번호 계층 일관성: L1(X00) → L2(XY0) → L3(XYZ) 체계가 혼란 없이 사용되는지 확인
 - 불일치가 있으면 "상세설명의 참조번호 OOO(OOO)은 도면에 존재하지 않음" 형식으로 지적하라
 - ★ 참조번호 명칭 혼용 검토: 하나의 참조번호에 2개 이상의 명칭이 사용되고 있으면 반드시 지적하라
-  → 예: "추천부(114)" vs "추천 생성부(114)" 혼용, "메모리(120)" vs "데이터베이스(120)" 혼용
-  → 가장 빈도 높은 명칭으로 통일할 것을 제안하라
+  <span class="ico" data-icon="arrow-right"></span> 예: "추천부(114)" vs "추천 생성부(114)" 혼용, "메모리(120)" vs "데이터베이스(120)" 혼용
+  <span class="ico" data-icon="arrow-right"></span> 가장 빈도 높은 명칭으로 통일할 것을 제안하라
 - ★ 도면 미정의 참조번호 사용 검토: 도면에 정의되지 않은(존재하지 않는) 참조번호가 상세설명에서 사용되면 지적하라
 
 [11] 청구항 형식 검토
@@ -4444,7 +4461,8 @@ ${hasTask?`[과제] ${outputs.step_05}`:''}
 [독립항] ${(outputs.step_06||'').match(/【청구항 1】[\s\S]*?(?=【청구항 2】|$)/)?.[0]||''}
 [상세설명] ${(getLatestDescription()||'').slice(0,2000)}${styleRef}`;
     }
-    case 'step_17':return `과제의 해결 수단. 각 독립항 카테고리별로 요약하라.
+    case 'step_17':return `아래 [장치]/[방법] 청구항을 요약하여 【과제의 해결 수단】 항목의 본문을 작성하라. 각 독립항 카테고리별로 요약한다.
+⛔ "과제의 해결 수단"이라는 제목/머리말을 출력하지 마라. 본문 문장만 출력하라.
 
 ★ 용어 규칙: 청구항에서 사용한 구성요소 명칭, 참조번호, 기술 용어를 그대로 사용하라. 동의어로 바꾸지 마라.
 형식:
@@ -4548,7 +4566,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     // v6.0: 부분 수정 모드 표시
     const _hasCmd=!!getStepUserCommand(sid);
     const _hasOut=!!outputs[sid];
-    if(_hasCmd&&_hasOut)App.showToast('📝 기존 내용 부분 수정 모드','info');
+    if(_hasCmd&&_hasOut)App.showToast('<span class="ico" data-icon="edit"></span> 기존 내용 부분 수정 모드','info');
     
     // Step 04: KIPRIS API 실시간 검색
     if(sid==='step_04'){
@@ -5616,7 +5634,38 @@ async function runBatch25(){
   }catch(e){App.clearProgress('progressBatch');App.showToast(e.message,'error');}
   finally{loadingState.batch25=false;App.setButtonLoading('btnBatch25',false);setGlobalProcessing(false);}
 }
-async function runBatchFinish(){if(globalProcessing)return;if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);document.getElementById('resultsBatchFinish').innerHTML='';const steps=['step_16','step_17','step_18','step_19'];try{for(let i=0;i<steps.length;i++){App.showProgress('progressBatchFinish',`${STEP_NAMES[steps[i]]} (${i+1}/4)`,i+1,4);const r=await App.callClaude(buildPrompt(steps[i]));pushOutputHistory(steps[i],'llm','runBatchFinish');outputs[steps[i]]=r.text;markOutputTimestamp(steps[i]);renderBatchResult('resultsBatchFinish',steps[i],r.text);}App.clearProgress('progressBatchFinish');saveProject(true);App.showToast('마무리 완료');}catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}}
+// ★ Bug1 수정: "마무리 일괄생성"이 후반부 전체를 역설계 의존 순서로 생성.
+//   기존: [16,17,18,19]만 생성 → 02/03/04/05 누락 + 효과(16)가 해결수단(17)보다 먼저 생성되어 맥락 부실.
+//   수정: 해결수단(17)→과제(05)→효과(16)/배경(03)→기술분야(02)→부호(18)→요약(19) + 선행기술(04) 검색.
+//   각 단계는 _cascadeRender로 올바른 컨테이너(resultsBatch25/resultsBatchFinish)에 자동 라우팅.
+async function runBatchFinish(){
+  if(globalProcessing)return;
+  if(!outputs.step_06||!outputs.step_08){App.showToast('청구항+상세설명 먼저','error');return;}
+  setGlobalProcessing(true);loadingState.batchFinish=true;App.setButtonLoading('btnBatchFinish',true);
+  // 의존 순서: 해결수단→과제→효과→배경→기술분야→부호→요약
+  const steps=['step_17','step_05','step_16','step_03','step_02','step_18','step_19'];
+  const total=steps.length+1; // +선행기술 검색
+  try{
+    // 선행기술(04)이 비어 있으면 KIPRIS 검색으로 보충
+    if(!outputs.step_04&&selectedTitle){
+      App.showProgress('progressBatchFinish','선행기술 검색 중 (1/'+total+')',1,total);
+      try{const sr=await searchPriorArt(selectedTitle);outputs.step_04=sr?sr.formatted:'【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';pushOutputHistory('step_04','llm','runBatchFinish');markOutputTimestamp('step_04');_cascadeRender('step_04',outputs.step_04);}catch(e){console.warn('[runBatchFinish] 선행기술 검색 실패',e);}
+    }
+    for(let i=0;i<steps.length;i++){
+      const sid=steps[i];
+      App.showProgress('progressBatchFinish',`${STEP_NAMES[sid]} (${i+2}/${total})`,i+2,total);
+      const prompt=buildPrompt(sid);
+      if(!prompt)continue;
+      const r=await App.callClaude(prompt);
+      pushOutputHistory(sid,'llm','runBatchFinish');
+      outputs[sid]=r.text;markOutputTimestamp(sid);
+      _cascadeRender(sid,r.text);
+    }
+    App.clearProgress('progressBatchFinish');saveProject(true);
+    App.showToast('마무리 완료 (해결수단→과제→효과→배경→기술분야→부호→요약)');
+  }catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}
+  finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}
+}
 
 // ═══ v14: Phase 기반 배치 실행 (역설계 체인) ═══
 
@@ -5626,12 +5675,13 @@ async function runPhaseD(){
   if(!outputs.step_06){App.showToast('장치 청구항(A2)을 먼저 작성하세요','error');return;}
   setGlobalProcessing(true);
   const btn=document.getElementById('btnPhaseD');
-  if(btn){btn.disabled=true;btn.textContent='⏳ 역설계 진행 중...';}
+  if(btn){btn.disabled=true;btn.textContent='<span class="ico" data-icon="history"></span> 역설계 진행 중...';}
   const container=document.getElementById('resultsPhaseDChain');
   if(container)container.innerHTML='';
   
-  const steps=['step_16','step_05','step_17','step_03','step_02'];
-  const stepLabels={step_16:'D1. 효과',step_05:'D2. 과제',step_17:'D3. 해결 수단',step_03:'D4. 배경기술',step_02:'D5. 기술분야'};
+  // ★ Bug1 수정: 역설계 의존 순서 — 해결수단(17)이 과제(05)·효과(16)보다 먼저 생성돼야 맥락이 맞음
+  const steps=['step_17','step_05','step_16','step_03','step_02'];
+  const stepLabels={step_17:'D1. 해결 수단',step_05:'D2. 과제',step_16:'D3. 효과',step_03:'D4. 배경기술',step_02:'D5. 기술분야'};
   
   try{
     for(let i=0;i<steps.length;i++){
@@ -5645,12 +5695,12 @@ async function runPhaseD(){
     }
     App.clearProgress('progressPhaseD');
     saveProject(true);
-    App.showToast('✅ 역설계 체인 완료 (효과→과제→해결수단→배경→기술분야)');
+    App.showToast('<span class="ico" data-icon="check-circle"></span> 역설계 체인 완료 (효과→과제→해결수단→배경→기술분야)');
   }catch(e){
     App.clearProgress('progressPhaseD');
     App.showToast(e.message,'error');
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='🔄 역설계 체인 일괄 생성';}
+    if(btn){btn.disabled=false;btn.textContent='<span class="ico" data-icon="refresh"></span> 역설계 체인 일괄 생성';}
     setGlobalProcessing(false);
   }
 }
@@ -5671,7 +5721,7 @@ async function runPhaseF(){
       renderBatchResult('resultsBatchFinish',steps[i],r.text);
     }
     App.clearProgress('progressBatchFinish');
-    saveProject(true);App.showToast('✅ 마무리 완료 (F1→F2)');
+    saveProject(true);App.showToast('<span class="ico" data-icon="check-circle"></span> 마무리 완료 (F1→F2)');
   }catch(e){App.clearProgress('progressBatchFinish');App.showToast(e.message,'error');}
   finally{loadingState.batchFinish=false;App.setButtonLoading('btnBatchFinish',false);setGlobalProcessing(false);}
 }
@@ -5821,8 +5871,9 @@ ${diagram}`,4096);
     ];
     const html=secs.map(s=>{
       const hd=`<h2 style="font-size:12pt;font-weight:bold;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;
-      if(!s.b)return hd;
-      return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
+      const body=_stripDupHeader(s.b,s.h);
+      if(!body)return hd;
+      return hd+body.split('\n').filter(l=>l.trim()).map(l=>`<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify">${App.escapeHtml(l.trim())}</p>`).join('');
     }).join('');
     const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));
@@ -6475,10 +6526,12 @@ function _deduplicateSentences(text){
       }
     }
     
-    // 역순 제거 (겹치는 범위 병합)
+    // 역순 제거 (겹치는 범위만 병합)
+    // ★ 수정: 내림차순 정렬 기준 겹침은 (앞범위 시작 < 뒷범위 끝). 기존 조건은
+    //   겹치지 않는 범위도 항상 병합하여 중복 사이의 수학식·본문을 통째로 삭제했음.
     toRemove.sort((a,b)=>b.start-a.start);
     for(let i=toRemove.length-1;i>0;i--){
-      if(toRemove[i].start<toRemove[i-1].end){
+      if(toRemove[i-1].start<toRemove[i].end){
         toRemove[i-1]={start:Math.min(toRemove[i-1].start,toRemove[i].start),end:Math.max(toRemove[i-1].end,toRemove[i].end),text:toRemove[i-1].text};
         toRemove.splice(i,1);
       }
@@ -6535,30 +6588,65 @@ function insertMathBlocks(s08,s09){
       console.warn(`수학식 삽입 실패 — ANCHOR 매칭 불가: "${x.anchor.slice(0,50)}..."`);
     }
   }
-  // 폴백: 실패한 수학식을 키워드 기반으로 관련 문단 뒤에 삽입
+  // 폴백 1단계: 실패한 수학식을 키워드 기반으로 관련 문단 뒤에 삽입
+  let stillFailed=[];
   if(failed.length>0){
     for(const x of failed){
       const kws=(x.formula.match(/[가-힣]{3,}/g)||[]).filter(w=>!['수학식','여기서','예를','들어','이상','이하','경우','하한','상한','값이다','범위'].includes(w));
-      if(!kws.length)continue;
-      const paras=r.split(/\n\n+/);
       let bestIdx=-1,bestScore=0;
-      for(let pi=0;pi<paras.length;pi++){
-        if(/^【수학식/.test(paras[pi].trim()))continue;
-        let score=0;
-        for(const kw of kws)if(paras[pi].includes(kw))score++;
-        if(score>bestScore){bestScore=score;bestIdx=pi;}
+      if(kws.length){
+        const paras=r.split(/\n\n+/);
+        for(let pi=0;pi<paras.length;pi++){
+          if(/^【수학식/.test(paras[pi].trim()))continue;
+          let score=0;
+          for(const kw of kws)if(paras[pi].includes(kw))score++;
+          if(score>bestScore){bestScore=score;bestIdx=pi;}
+        }
       }
       if(bestIdx>=0&&bestScore>=2){
-        const before=paras.slice(0,bestIdx+1).join('\n\n');
-        const after=paras.slice(bestIdx+1).join('\n\n');
-        r=before+'\n\n'+x.formula+'\n\n'+after;
+        const paras=r.split(/\n\n+/);
+        r=paras.slice(0,bestIdx+1).join('\n\n')+'\n\n'+x.formula+'\n\n'+paras.slice(bestIdx+1).join('\n\n');
         successCount++;failCount--;
         console.log(`수학식 폴백 삽입: 키워드 ${bestScore}개 매칭 (문단 ${bestIdx})`);
+      }else{
+        stillFailed.push(x);
+      }
+    }
+  }
+  // ★ Bug3 수정: 폴백 2단계(보장 배치) — ANCHOR/키워드 모두 실패해도 드롭하지 않고
+  //   수식이 없는 가장 긴 문단들에 분산 삽입하여 생성된 수학식을 모두 반영한다.
+  if(stillFailed.length>0){
+    const usedIdx=new Set();
+    for(const x of stillFailed){
+      const paras=r.split(/\n\n+/);
+      let bestIdx=-1,bestLen=-1;
+      for(let pi=0;pi<paras.length;pi++){
+        const p=paras[pi].trim();
+        if(/^【수학식/.test(p))continue;        // 수식 문단 제외
+        if(p.length<40)continue;                  // 너무 짧은 문단 제외
+        if(usedIdx.has(pi))continue;              // 이미 사용한 문단 제외(분산)
+        if(p.length>bestLen){bestLen=p.length;bestIdx=pi;}
+      }
+      // 미사용 적합 문단이 없으면(전부 사용) 가장 긴 비수식 문단 재사용
+      if(bestIdx<0){
+        for(let pi=0;pi<paras.length;pi++){
+          const p=paras[pi].trim();
+          if(/^【수학식/.test(p)||p.length<40)continue;
+          if(p.length>bestLen){bestLen=p.length;bestIdx=pi;}
+        }
+      }
+      if(bestIdx>=0){
+        usedIdx.add(bestIdx);
+        r=paras.slice(0,bestIdx+1).join('\n\n')+'\n\n'+x.formula+'\n\n'+paras.slice(bestIdx+1).join('\n\n');
+        successCount++;failCount--;
+        console.log(`수학식 보장 배치: 문단 ${bestIdx}(${bestLen}자) 뒤 삽입`);
+      }else{
+        console.warn(`수학식 보장 배치 실패 — 적합 문단 없음: "${x.anchor.slice(0,30)}..."`);
       }
     }
   }
   if(failCount>0){
-    App.showToast(`수학식 삽입: ${successCount}개 성공, ${failCount}개 실패 (ANCHOR 매칭 불가)`,'warning');
+    App.showToast(`수학식 삽입: ${successCount}개 성공, ${failCount}개 미삽입(적합 위치 없음)`,'warning');
   }else if(successCount>0){
     App.showToast(`수학식 ${successCount}개 삽입 완료`);
   }
@@ -6629,11 +6717,11 @@ graph TD
 ★★ 도면별 계층 규칙 ★★
 - 도 1: L1(100, 200, 300...) 장치만
 - 도 2 (L1 상세화): L1(100)과 그 L2 하위(110,120,130) 포함
-  → 렌더링: 최외곽 프레임=100, 내부 박스=110,120,130 (100은 프레임으로만)
+  <span class="ico" data-icon="arrow-right"></span> 렌더링: 최외곽 프레임=100, 내부 박스=110,120,130 (100은 프레임으로만)
 - 도 3+ (L2 상세화): L2(110)와 그 L3 하위(111,112,113) 포함
-  → 렌더링: 최외곽 프레임=110, 내부 박스=111,112,113 (110은 프레임으로만)
+  <span class="ico" data-icon="arrow-right"></span> 렌더링: 최외곽 프레임=110, 내부 박스=111,112,113 (110은 프레임으로만)
 - L4 (L3 상세화): L3(121)과 그 L4 하위(1211,1212) 포함
-  → 렌더링: 최외곽 프레임=121, 내부 박스=1211,1212 (121은 프레임으로만)
+  <span class="ico" data-icon="arrow-right"></span> 렌더링: 최외곽 프레임=121, 내부 박스=1211,1212 (121은 프레임으로만)
 
 ★★ 연결관계 규칙 ★★
 - 데이터/정보 도면(~정보, ~데이터): 정보 항목은 ${getDeviceSubject()} 입력 데이터 → 상호 화살표 연결 부적절 → 연결선 없이 병렬 배치 (노드 정의만, A --> B 금지)
@@ -7534,9 +7622,23 @@ async function regenerateDiagramWithFeedback(sid){
   const hasLayoutErr=/배치|레이아웃|겹침|위치|overlap/i.test(errStr);
   const hasFigCountErr=/도면\s*수|불일치|count/.test(errStr);
 
+  // ★ Bug2 수정: 재생성 시 도면 수가 줄어드는 문제 — 명시적 개수/번호 지시 + 이전 설계 충분히 제공
+  let _figCountBlock='';
+  if(stepId==='step_07'){
+    const _tf=parseInt(document.getElementById('optDeviceFigures')?.value||4);
+    const _gc=Math.max(_tf-requiredFigures.length,0);
+    const _en=computeFigNums(_gc,0).device;
+    _figCountBlock=`\n═══ 도면 수 (절대 준수 — 누락/추가 금지) ═══\n- 정확히 ${_gc}개의 도면을 생성하라: ${_en.map(n=>'도 '+n).join(', ')}\n- 위 번호의 도면을 하나도 빠뜨리지 말고 모두 생성하라. ${_gc}개보다 적게 생성하지 마라.\n`;
+  }else if(stepId==='step_11'){
+    const _mc=parseInt(document.getElementById('optMethodFigures')?.value||2);
+    const _dc=diagramData.step_07?.length||0;
+    const _en=computeFigNums(_dc,_mc,conceptDiagramTypes.filter(ct=>ct.svgContent).length).method;
+    _figCountBlock=`\n═══ 도면 수 (절대 준수 — 누락/추가 금지) ═══\n- 정확히 ${_mc}개의 방법 도면을 생성하라: ${_en.map(n=>'도 '+n).join(', ')}\n- 위 번호의 도면을 하나도 빠뜨리지 말고 모두 생성하라. ${_mc}개보다 적게 생성하지 마라.\n`;
+  }
+
   // 피드백 프롬프트 생성
   const feedbackPrompt=`이전에 생성한 ${isMethod?'방법':'장치'} 도면 설계에 규칙 위반이 발견되었습니다. 아래 오류를 수정하여 다시 생성하세요.
-
+${_figCountBlock}
 ═══ 발견된 오류 ═══
 ${errors}
 ${aiReview?`\n═══ AI 연결관계 검증 결과 ═══\n${aiReview}\n`:''}
@@ -7577,10 +7679,10 @@ ${hasLayoutErr?`
 - 연결된 구성요소끼리 인접하게 배치하라
 - 데이터 흐름: 왼쪽→오른쪽 또는 위→아래 방향으로 자연스럽게 배치`:''}
 
-═══ 이전 도면 설계 (오류 포함) ═══
-${prevDesign.slice(0,2000)}
+═══ 이전 도면 설계 (오류 포함 — 도면 수는 유지하고 오류만 수정) ═══
+${prevDesign.slice(0,8000)}
 
-위 오류를 모두 수정하여 도면 설계를 다시 출력하세요.
+위 오류를 모두 수정하여 도면 설계를 다시 출력하세요. ★ 도면 개수는 위 "도면 수" 지시를 절대 준수하라.
 ${isMethod?'방법 흐름도는 시작/종료 노드를 반드시 포함!':'도 1에는 반드시 L1 장치만 포함해야 합니다!'}
 ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
 [장치 청구범위] ${(outputs.step_06||'').slice(0,2000)}`;
@@ -7593,26 +7695,32 @@ ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
     const r1=await App.callClaude(feedbackPrompt);
     let regenDesign=r1.text;
     
-    // ★ 재생성 후 도면 수 검증 + 강제 트림 ★
+    // ★ Bug2 수정: 재생성 후 도면 수 검증 — 부족 시 1회 재요청(누락 명시), 초과 시 트림 ★
     if(stepId==='step_07'){
       const totalFig=parseInt(document.getElementById('optDeviceFigures')?.value||4);
-      const _genCount=totalFig-requiredFigures.length;
-      const _figNums=computeFigNums(Math.max(_genCount,0),0);
-      const _expectedNums=_figNums.device;
-      const postIssues=validateDiagramDesignText(regenDesign,_genCount,_expectedNums);
-      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
-        regenDesign=_trimDesignTextToExpectedFigures(regenDesign,_expectedNums);
-        App.showToast(`도면 수 강제 조정: ${_genCount}개로 트림`,'warning');
+      const _genCount=Math.max(totalFig-requiredFigures.length,0);
+      const _expectedNums=computeFigNums(_genCount,0).device;
+      let _actual=_extractFigureNumbersFromDesign(regenDesign);
+      if(_actual.length<_genCount){
+        const missing=_expectedNums.filter(n=>!_actual.includes(n));
+        const reReq=`방금 생성한 도면 설계에 도면이 누락되었습니다(${_actual.length}/${_genCount}개). 반드시 ${_genCount}개 도면(${_expectedNums.map(n=>'도 '+n).join(', ')})을 모두 포함하여 전체 도면 설계를 다시 출력하세요. 누락된 ${missing.map(n=>'도 '+n).join(', ')}을 빠뜨리지 마세요.\n\n[기존 설계]\n${regenDesign.slice(0,8000)}`;
+        try{const rr=await App.callClaude(reReq);if(_extractFigureNumbersFromDesign(rr.text).length>_actual.length){regenDesign=rr.text;_actual=_extractFigureNumbersFromDesign(regenDesign);}}catch(e){console.warn('[regenDiagram] 도면 보충 재요청 실패',e);}
       }
+      const postIssues=validateDiagramDesignText(regenDesign,_genCount,_expectedNums);
+      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치')))regenDesign=_trimDesignTextToExpectedFigures(regenDesign,_expectedNums);
+      if(_extractFigureNumbersFromDesign(regenDesign).length<_genCount)App.showToast(`⚠ 도면이 ${_genCount}개보다 적게 생성됨 — 다시 시도해 주세요`,'warning');
     }else if(stepId==='step_11'){
       const _methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
       const _devCount=diagramData.step_07?.length||0;
-      const _figNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length);
-      const _expectedNums=_figNums.method;
-      const postIssues=validateDiagramDesignText(regenDesign,_methFigCount,_expectedNums);
-      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치'))){
-        regenDesign=_trimDesignTextToExpectedFigures(regenDesign,_expectedNums);
+      const _expectedNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length).method;
+      let _actual=_extractFigureNumbersFromDesign(regenDesign);
+      if(_actual.length<_methFigCount){
+        const missing=_expectedNums.filter(n=>!_actual.includes(n));
+        const reReq=`방금 생성한 방법 도면 설계에 도면이 누락되었습니다(${_actual.length}/${_methFigCount}개). 반드시 ${_methFigCount}개 도면(${_expectedNums.map(n=>'도 '+n).join(', ')})을 모두 포함하여 다시 출력하세요. 누락된 ${missing.map(n=>'도 '+n).join(', ')}을 빠뜨리지 마세요.\n\n[기존 설계]\n${regenDesign.slice(0,8000)}`;
+        try{const rr=await App.callClaude(reReq);if(_extractFigureNumbersFromDesign(rr.text).length>_actual.length){regenDesign=rr.text;_actual=_extractFigureNumbersFromDesign(regenDesign);}}catch(e){console.warn('[regenDiagram] 방법도면 보충 재요청 실패',e);}
       }
+      const postIssues=validateDiagramDesignText(regenDesign,_methFigCount,_expectedNums);
+      if(postIssues.some(i=>i.severity==='ERROR'&&i.message.includes('도면 수 불일치')))regenDesign=_trimDesignTextToExpectedFigures(regenDesign,_expectedNums);
     }
     
     pushOutputHistory(stepId,'llm','regenerateDiagramWithFeedback');
@@ -7902,7 +8010,7 @@ function renderDiagramsV14(sid,responseText){
     const dl=document.getElementById(sid==='step_07'?'diagramDownload07':'diagramDownload11');if(dl)dl.style.display='block';
     return true;
   }
-  console.warn('[v14] JSON 실패:',jr.error,'→ Mermaid 폴백');
+  console.warn('[v14] JSON 실패:',jr.error,'<span class="ico" data-icon="arrow-right"></span> Mermaid 폴백');
   renderDiagrams(sid,responseText);
   return false;
 }
@@ -7958,23 +8066,30 @@ function parseMermaidGraph(code){
     });
   });
   
-  // 연결선 추출
+  // 연결선 추출 (v15: 인라인 라벨/체인 대응 토큰 파서)
+  // 기존 정규식은 화살표 왼쪽이 \w로 끝나야 매칭되어, A["라벨"] --> B["라벨"] 처럼
+  // 노드가 인라인 라벨을 가지면 엣지를 통째로 누락했다. 또한 A --> B --> C 체인도
+  // 첫 엣지만 잡혔다. → 인라인 라벨/클래스지정을 제거한 골격에서 토큰 단위로 파싱.
   code.split('\n').forEach(line=>{
     const l=line.trim();
     if(!l||l.startsWith('graph')||l.startsWith('flowchart')||l==='end'||l.startsWith('style')||l.startsWith('linkStyle')||l.startsWith('classDef')||l.startsWith('subgraph'))return;
-    
-    // 연결 패턴: A --> B, A <--> B, A --- B, A -->|text| B
-    const connections=l.match(/(\w+)\s*(?:-->|<-->|---)\s*(?:\|[^|]*\|\s*)?(\w+)/g);
-    if(connections){
-      connections.forEach(conn=>{
-        const cm=conn.match(/(\w+)\s*(-->|<-->|---)\s*(?:\|([^|]*)\|\s*)?(\w+)/);
-        if(cm){
-          const[,from,arrow,edgeLabel,to]=cm;
-          if(!nodes[from])nodes[from]={id:from,label:from};
-          if(!nodes[to])nodes[to]={id:to,label:to};
-          edges.push({from,to,label:edgeLabel||'',bidirectional:arrow==='<-->'});
+    // 노드 인라인 라벨(([..]),((..)),[/../],[..],{..},(..)) 및 클래스지정(:::) 제거 → "id 화살표 id" 골격만 남김
+    const skel=l.replace(/\(\[[\s\S]*?\]\)|\(\([\s\S]*?\)\)|\[\/[\s\S]*?\/\]|\[[\s\S]*?\]|\{[\s\S]*?\}|\([\s\S]*?\)/g,' ').replace(/:::\w+/g,' ');
+    // 토큰: 화살표(<--> 우선) | 엣지라벨(|..|) | 노드ID
+    const toks=skel.match(/<-->|-->|---|\|[^|]*\||\w+/g);
+    if(!toks)return;
+    let prevId=null,arrow=null,elabel='';
+    for(const t of toks){
+      if(t==='-->'||t==='<-->'||t==='---'){arrow=t;elabel='';}
+      else if(t[0]==='|'){elabel=t.slice(1,-1).trim();}
+      else{ // 노드 ID
+        if(prevId&&arrow){
+          if(!nodes[prevId])nodes[prevId]={id:prevId,label:prevId};
+          if(!nodes[t])nodes[t]={id:t,label:t};
+          edges.push({from:prevId,to:t,label:elabel||'',bidirectional:arrow==='<-->'});
         }
-      });
+        prevId=t;arrow=null;elabel='';
+      }
     }
   });
   
@@ -8031,7 +8146,6 @@ function parseMermaidGraph(code){
   });
   
   const result={nodes:Object.values(nodes),edges:uniqueEdges};
-  console.log('Parsed Mermaid:',result);
   return result;
 }
 function layoutGraph(nodes,edges){
@@ -11112,7 +11226,7 @@ function _postRenderValidationLoop(containerId, figNum, maxAttempts, renderInfo)
     lastResult=result;
     
     if(result.pass){
-      if(attempt>0)console.log(`[PostRender] 도 ${figNum}: DOM 보정 ${attempt}회 후 통과 ✅`);
+      if(attempt>0)console.log(`[PostRender] 도 ${figNum}: DOM 보정 ${attempt}회 후 통과 <span class="ico" data-icon="check-circle"></span>`);
       return result;
     }
     
@@ -11161,7 +11275,7 @@ function _postRenderValidationLoop(containerId, figNum, maxAttempts, renderInfo)
         lastResult=result2;
 
         if(result2.pass){
-          console.log(`[PostRender] 도 ${figNum}: 재렌더링 후 통과 ✅`);
+          console.log(`[PostRender] 도 ${figNum}: 재렌더링 후 통과 <span class="ico" data-icon="check-circle"></span>`);
         }else{
           // 한 번 더 시도 — 더 큰 조정
           console.warn(`[PostRender] 도 ${figNum}: 재렌더링 후에도 ${result2.issues.length}개 문제 → 2차 재렌더링`);
@@ -11171,7 +11285,7 @@ function _postRenderValidationLoop(containerId, figNum, maxAttempts, renderInfo)
           lastResult=_postRenderValidateSvg(containerId, figNum);
 
           if(lastResult.pass){
-            console.log(`[PostRender] 도 ${figNum}: 2차 재렌더링 후 통과 ✅`);
+            console.log(`[PostRender] 도 ${figNum}: 2차 재렌더링 후 통과 <span class="ico" data-icon="check-circle"></span>`);
           }else{
             // DOM 보정 마지막 시도
             _autoFixRenderedSvg(containerId, lastResult.issues, 2);
@@ -11211,14 +11325,14 @@ function _runPostRenderValidation(sid, figNums){
   const resultEl=document.getElementById(`validationResult_${sid}`);
   if(resultEl){
     if(totalIssues===0){
-      resultEl.innerHTML='<span style="color:#2e7d32">✅ 포스트 렌더 검증 통과</span>';
+      resultEl.innerHTML='<span style="color:var(--dt-success)"><span class="ico" data-icon="check-circle"></span> 포스트 렌더 검증 통과</span>';
     }else{
       const errCount=reports.reduce((sum,r)=>sum+r.issues.filter(i=>i.severity==='ERROR').length,0);
       const warnCount=reports.reduce((sum,r)=>sum+r.issues.filter(i=>i.severity==='WARNING').length,0);
       let msg=`⚠️ 포스트 렌더: `;
       if(errCount>0)msg+=`ERROR ${errCount}개 `;
       if(warnCount>0)msg+=`WARNING ${warnCount}개`;
-      resultEl.innerHTML=`<span style="color:${errCount>0?'#c62828':'#f57c00'}">${msg}</span>`;
+      resultEl.innerHTML=`<span style="color:${errCount>0?'var(--dt-danger)':'var(--dt-warning)'}">${msg}</span>`;
       
       // 상세 리포트 (콘솔)
       reports.forEach(r=>{
@@ -11734,20 +11848,20 @@ function renderDiagrams(sid,mt){
       .map(ai=>`도 ${ai.figNum}: ${ai.issues.filter(iss=>iss.severity==='ERROR').map(iss=>`[${iss.rule}] ${iss.message}`).join('; ')}`)
       .join('\n');
     window._diagramErrors={sid,errors:errorSummary};
-    html=`<div style="background:#ffebee;border:1px solid #ef5350;border-radius:8px;padding:12px;margin-bottom:16px">
-      <div style="color:#c62828;font-weight:600;margin-bottom:8px">⚠️ 도면 규칙 위반 발견</div>
+    html=`<div style="background:#FEECEC;border:1px solid #FF6363;border-radius:8px;padding:12px;margin-bottom:16px">
+      <div style="color:var(--dt-danger);font-weight:600;margin-bottom:8px"><span class="ico" data-icon="warning"></span> 도면 규칙 위반 발견</div>
       <div style="font-size:12px;color:#b71c1c;margin-bottom:12px;white-space:pre-line">${App.escapeHtml(errorSummary)}</div>
-      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1976d2;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">🔄 규칙에 맞게 재생성</button>
+      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:var(--dt-brand-hover);color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px"><span class="ico" data-icon="refresh"></span> 규칙에 맞게 재생성</button>
     </div>`+html;
   }
   
   html+=`<div style="margin-top:12px;padding:12px;background:var(--color-bg-secondary);border-radius:8px">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button onclick="runDiagramValidation('${sid}')" style="background:#43a047;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="R0~R14 규칙 검증 + 시각적 겹침/잘림 검사">✅ 검증</button>
+      <button onclick="runDiagramValidation('${sid}')" style="background:var(--dt-success);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="R0~R14 규칙 검증 + 시각적 겹침/잘림 검사"><span class="ico" data-icon="check-circle"></span> 검증</button>
       <span style="color:var(--color-text-tertiary);font-size:11px">\u2192</span>
-      <button onclick="runAIDiagramReview('${sid}')" style="background:#7b1fa2;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="AI가 연결관계의 기술적 적절성을 평가">🤖 AI 검증</button>
+      <button onclick="runAIDiagramReview('${sid}')" style="background:#7b1fa2;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="AI가 연결관계의 기술적 적절성을 평가"><span class="ico" data-icon="robot"></span> AI 검증</button>
       <span style="color:var(--color-text-tertiary);font-size:11px">\u2192</span>
-      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:#1565c0;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="검증 결과를 반영하여 도면 재생성 (검증 미실행 시 자동 실행)">🔄 재생성</button>
+      <button onclick="regenerateDiagramWithFeedback('${sid}')" style="background:var(--dt-brand-hover);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px" title="검증 결과를 반영하여 도면 재생성 (검증 미실행 시 자동 실행)"><span class="ico" data-icon="refresh"></span> 재생성</button>
       <span id="validationResult_${sid}" style="font-size:12px;color:var(--color-text-secondary);margin-left:4px"></span>
     </div>
     <div id="aiReviewResult_${sid}" style="margin-top:8px"></div>
@@ -11825,11 +11939,11 @@ function runDiagramValidation(sid){
     
     if(errors.length||warnings.length){
       reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> `;
-      errors.forEach(e=>reportHtml+=`<span style="color:#c62828;font-size:11px">❌ [${e.rule}] ${e.message} </span>`);
-      warnings.forEach(w=>reportHtml+=`<span style="color:#f57c00;font-size:11px">⚠️ [${w.rule}] ${w.message} </span>`);
+      errors.forEach(e=>reportHtml+=`<span style="color:var(--dt-danger);font-size:11px"><span class="ico" data-icon="x"></span> [${e.rule}] ${e.message} </span>`);
+      warnings.forEach(w=>reportHtml+=`<span style="color:var(--dt-warning);font-size:11px"><span class="ico" data-icon="warning"></span> [${w.rule}] ${w.message} </span>`);
       reportHtml+='</div>';
     }else{
-      reportHtml+=`<div style="margin:4px 0;color:#2e7d32"><b>도 ${figNum}:</b> ✅ 통과 ${infos.map(i=>`(${i.message})`).join(' ')}</div>`;
+      reportHtml+=`<div style="margin:4px 0;color:var(--dt-success)"><b>도 ${figNum}:</b> <span class="ico" data-icon="check-circle"></span>  통과 ${infos.map(i=>`(${i.message})`).join(' ')}</div>`;
     }
   });
 
@@ -11868,7 +11982,7 @@ function runDiagramValidation(sid){
       if(levels.size>1){
         const mixed=[...levels].sort().join('+');
         totalErrors++;
-        reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> <span style="color:#c62828;font-size:11px">❌ [R14] 레벨 혼재(${mixed}) — 한 도면 내부는 동일 레벨이어야 함</span></div>`;
+        reportHtml+=`<div style="margin:4px 0"><b>도 ${figNum}:</b> <span style="color:var(--dt-danger);font-size:11px"><span class="ico" data-icon="x"></span> [R14] 레벨 혼재(${mixed}) — 한 도면 내부는 동일 레벨이어야 함</span></div>`;
       }
     });
   }
@@ -11876,11 +11990,11 @@ function runDiagramValidation(sid){
   const resultEl=document.getElementById(`validationResult_${sid}`);
   if(resultEl){
     if(totalErrors===0&&totalWarnings===0){
-      resultEl.innerHTML=`<span style="color:#2e7d32;font-weight:600">✅ 전체 검증 통과 (${data.length}개 도면)</span>`;
+      resultEl.innerHTML=`<span style="color:var(--dt-success);font-weight:600"><span class="ico" data-icon="check-circle"></span> 전체 검증 통과 (${data.length}개 도면)</span>`;
     }else{
       resultEl.innerHTML=`<div>
-        <span style="color:#c62828;font-weight:600">❌ 오류 ${totalErrors}건</span>,
-        <span style="color:#f57c00">⚠️ 경고 ${totalWarnings}건</span>
+        <span style="color:var(--dt-danger);font-weight:600"><span class="ico" data-icon="x"></span> 오류 ${totalErrors}건</span>,
+        <span style="color:var(--dt-warning)"><span class="ico" data-icon="warning"></span> 경고 ${totalWarnings}건</span>
         <div style="margin-top:6px;font-size:11px">${reportHtml}</div>
       </div>`;
     }
@@ -11901,9 +12015,9 @@ function runDiagramValidation(sid){
       const prErrors=prResult.reports.reduce((s,r)=>s+r.issues.filter(i=>i.severity==='ERROR').length,0);
       const prWarns=prResult.reports.reduce((s,r)=>s+r.issues.filter(i=>i.severity==='WARNING').length,0);
       if(prErrors>0||prWarns>0){
-        reportHtml+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee"><b>🔍 시각적 검증:</b> `;
-        if(prErrors>0)reportHtml+=`<span style="color:#c62828">겹침 ${prErrors}건 </span>`;
-        if(prWarns>0)reportHtml+=`<span style="color:#f57c00">잘림/넘침 ${prWarns}건 </span>`;
+        reportHtml+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee"><b><span class="ico" data-icon="search"></span> 시각적 검증:</b> `;
+        if(prErrors>0)reportHtml+=`<span style="color:var(--dt-danger)">겹침 ${prErrors}건 </span>`;
+        if(prWarns>0)reportHtml+=`<span style="color:var(--dt-warning)">잘림/넘침 ${prWarns}건 </span>`;
         prResult.reports.forEach(r=>{
           r.issues.forEach(i=>{
             const c=i.severity==='ERROR'?'#c62828':'#f57c00';
@@ -11953,7 +12067,7 @@ async function runAIDiagramReview(sid){
   }
 
   const resultEl=document.getElementById(`aiReviewResult_${sid}`);
-  if(resultEl)resultEl.innerHTML='<div style="padding:12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a">🤖 AI 연결관계 검증 중...</div>';
+  if(resultEl)resultEl.innerHTML='<div style="padding:12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a"><span class="ico" data-icon="robot"></span> AI 연결관계 검증 중...</div>';
 
   const autoFigNums=getAutoFigNums(sid);
   const designText=outputs[sid]||'';
@@ -12055,16 +12169,16 @@ ${'{'}개선안${'}'}:
     // 결과 표시
     if(resultEl){
       let html='<div style="padding:12px;background:#f3e5f5;border:1px solid #ce93d8;border-radius:8px;margin-top:8px">';
-      html+='<div style="font-weight:600;color:#6a1b9a;margin-bottom:8px">🤖 AI 연결관계 검증 결과</div>';
+      html+='<div style="font-weight:600;color:#6a1b9a;margin-bottom:8px"><span class="ico" data-icon="robot"></span> AI 연결관계 검증 결과</div>';
       if(figResults.length>0){
         figResults.forEach(fr=>{
           const icon=fr.pass?'✅':'⚠️';
-          html+=`<div style="margin-bottom:8px;padding:8px;background:${fr.pass?'#e8f5e9':'#fff3e0'};border-radius:6px">`;
+          html+=`<div style="margin-bottom:8px;padding:8px;background:${fr.pass?'#e8f5e9':'#FEF4E6'};border-radius:6px">`;
           html+=`<div style="font-weight:600;font-size:13px">${icon} 도 ${fr.figNum}</div>`;
           if(fr.reason)html+=`<div style="font-size:12px;color:#555;margin-top:2px">${App.escapeHtml(fr.reason)}</div>`;
           if(fr.suggestions.length>0){
             html+='<div style="font-size:11px;color:#6a1b9a;margin-top:4px">';
-            fr.suggestions.forEach(s=>{html+=`<div>→ ${App.escapeHtml(s)}</div>`;});
+            fr.suggestions.forEach(s=>{html+=`<div><span class="ico" data-icon="arrow-right"></span> ${App.escapeHtml(s)}</div>`;});
             html+='</div>';
           }
           html+='</div>';
@@ -12085,10 +12199,10 @@ ${'{'}개선안${'}'}:
       App.showToast('AI 검증: 일부 도면 연결관계 수정 권장','warning');
     }else{
       window._aiDiagramReview=null;
-      App.showToast('AI 검증: 모든 도면 연결관계 적절 ✅');
+      App.showToast('AI 검증: 모든 도면 연결관계 적절 <span class="ico" data-icon="check-circle"></span>');
     }
   }catch(e){
-    if(resultEl)resultEl.innerHTML=`<div style="padding:8px;background:#ffebee;border-radius:8px;font-size:12px;color:#c62828">AI 검증 실패: ${e.message}</div>`;
+    if(resultEl)resultEl.innerHTML=`<div style="padding:8px;background:#FEECEC;border-radius:8px;font-size:12px;color:var(--dt-danger)">AI 검증 실패: ${e.message}</div>`;
     App.showToast('AI 검증 실패: '+e.message,'error');
   }
 }
@@ -13545,9 +13659,17 @@ function renderTitleCards(c,text){
   c.innerHTML='<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'+cs.map(x=>`<div class="title-candidate-row" onclick="selectTitle(this,\`${x.korean.replace(/\`/g,'')}\`,\`${x.english.replace(/\`/g,'')}\`)" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:2px solid var(--color-border);border-radius:10px;cursor:pointer;transition:all 0.15s;background:#fff" onmouseover="this.style.borderColor='var(--color-primary)';this.style.background='var(--color-primary-light)'" onmouseout="if(!this.classList.contains('selected')){this.style.borderColor='var(--color-border)';this.style.background='#fff'}"><div style="width:28px;height:28px;border-radius:50%;background:var(--color-primary-light);color:var(--color-primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${x.num}</div><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--color-text-primary)">${App.escapeHtml(x.korean)}</div><div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">${App.escapeHtml(x.english)}</div></div></div>`).join('')+'</div>';
   document.getElementById('titleConfirmArea').style.display='block';
 }
-function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=renderScopeBadgeSummary(sid);h+=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="tf">${i.severity==='CRITICAL'?'🔴':'🟠'}</span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="tf">✅</span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="pushOutputHistory('${sid}','user_edit','renderClaimResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
+function renderClaimResult(c,sid,text){const st=parseClaimStats(text),iss=validateClaims(text);let h=renderScopeBadgeSummary(sid);h+=`<div class="stat-row" style="margin-top:12px"><div class="stat-card stat-card-steps"><div class="stat-card-value">${st.total}</div><div class="stat-card-label">총 청구항</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${st.independent}</div><div class="stat-card-label">독립항</div></div><div class="stat-card stat-card-cost"><div class="stat-card-value">${st.dependent}</div><div class="stat-card-label">종속항</div></div></div>`;if(iss.length)h+=iss.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':'issue-high'}"><span class="status-dot ${i.severity==='CRITICAL'?'negative':'cautionary'}"></span>${App.escapeHtml(i.message)}</div>`).join('');else h+='<div class="issue-item issue-pass"><span class="ico" data-icon="check-circle"></span>모든 검증 통과</div>';h+=`<textarea class="result-textarea" rows="14" onchange="pushOutputHistory('${sid}','user_edit','renderClaimResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea>`;c.innerHTML=h;}
 function renderEditableResult(c,sid,text){c.innerHTML=renderScopeBadgeSummary(sid)+`<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="badge badge-primary">${STEP_NAMES[sid]||sid}</span><span class="badge badge-neutral" id="charCount_${sid}">${text.length.toLocaleString()}자</span></div><textarea class="result-textarea" rows="10" onchange="pushOutputHistory('${sid}','user_edit','renderEditableResult');outputs['${sid}']=this.value;markOutputTimestamp('${sid}');saveProject(true);document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'" oninput="outputs['${sid}']=this.value;document.getElementById('charCount_${sid}').textContent=this.value.length.toLocaleString()+'자'">${App.escapeHtml(text)}</textarea></div>`;}
-function renderBatchResult(cid,sid,text){document.getElementById(cid).innerHTML+=`<div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="tf">✅</span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow">▶</span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="pushOutputHistory('${sid}','user_edit','renderBatchResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea></div>`;}
+function renderBatchResult(cid,sid,text){
+  const container=document.getElementById(cid);if(!container)return;
+  // v15: 멱등 렌더 — 동일 단계 항목이 있으면 교체(채팅 단독 수정 시 중복 방지)
+  const html=`<div class="batch-item" data-batch-step="${sid}"><div class="accordion-header" onclick="toggleAccordion(this)"><span><span class="ico" data-icon="check-circle"></span> ${STEP_NAMES[sid]} <span class="badge badge-neutral">${text.length.toLocaleString()}자</span></span><span class="arrow"><span class="ico" data-icon="chevron-down" data-size="12"></span></span></div><div class="accordion-body"><textarea class="result-textarea" style="min-height:120px" onchange="pushOutputHistory('${sid}','user_edit','renderBatchResult');outputs['${sid}']=this.value">${App.escapeHtml(text)}</textarea><div class="chat-mount" id="chatMount_${sid}"></div></div></div>`;
+  const existing=container.querySelector(`[data-batch-step="${sid}"]`);
+  if(existing){const tmp=document.createElement('div');tmp.innerHTML=html;existing.replaceWith(tmp.firstElementChild);}
+  else container.insertAdjacentHTML('beforeend',html);
+  if(window.PatentChat)PatentChat.mount(sid);
+}
 function toggleAccordion(h){h.classList.toggle('open');const b=h.nextElementSibling;if(b)b.classList.toggle('open');}
 
 // ═══════════ VALIDATION (v4.9 — full claim chain + relaxed matching) ═══════════
@@ -13652,8 +13774,8 @@ function runValidation(){
   const refIssues=validateRefNumberConsistency();
   const allIssues=[...iss,...refIssues];
   const el=document.getElementById('validationResults');
-  if(!allIssues.length){el.innerHTML='<div class="issue-item issue-pass"><span class="tossface">🎉</span>모든 검증 통과</div>';return;}
-  el.innerHTML=allIssues.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':i.severity==='HIGH'?'issue-high':'issue-warning'}"><span class="tossface">${i.severity==='CRITICAL'?'🔴':i.severity==='HIGH'?'🟠':'🟡'}</span>${App.escapeHtml(i.message)}</div>`).join('');
+  if(!allIssues.length){el.innerHTML='<div class="issue-item issue-pass"><span class="ico" data-icon="check-circle"></span>모든 검증 통과</div>';return;}
+  el.innerHTML=allIssues.map(i=>`<div class="issue-item ${i.severity==='CRITICAL'?'issue-critical':i.severity==='HIGH'?'issue-high':'issue-warning'}"><span class="status-dot ${i.severity==='CRITICAL'?'negative':i.severity==='HIGH'?'cautionary':'cautionary'}"></span> ${App.escapeHtml(i.message)}</div>`).join('');
 }
 
 // ═══ v5.6: 참조번호 일관성 검증 (명칭 불일치, 도면 미정의, 혼용) ═══
@@ -13726,7 +13848,30 @@ function validateRefNumberConsistency(){
 
 // ═══════════ OUTPUT ═══════════
 function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;const totalSteps=conceptDiagramTypes.length>0?21:20;document.getElementById('statCompleted').textContent=`${c}/${totalSteps}`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
-function renderPreview(){const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow">▶</span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('');}
+function renderPreview(){
+  // ── [G4/G5] page4 진입 시 검증 게이트 갱신 + 리뷰 결과 마운트(트리거·결과 동일 위치).
+  try { if (Patent._updateReviewGate) Patent._updateReviewGate(); } catch (_e) {}
+  // [T8 훅 이전] 통합 리뷰 엔진 결과 표시(window.ReviewUI). __patentReviewState 없으면 no-op(기존 동작 불변).
+  //   승인(Human Gate) → onChange → Patent.applyAmendments(승인분만, 3경로 정합 재검증) → recheck 재트리거.
+  try {
+    if (window.ReviewUI && window.__patentReviewState) {
+      var _card = document.getElementById('resultCardPatentReview'); if (_card) _card.style.display = '';
+      var _pm = document.getElementById('patent-review-mount');
+      if (_pm) {
+        // 결과는 넓은 공유 모달(2a)에 표시 — 카드에는 재오픈 버튼만(닫아도 세션 내 __patentReviewState 유지).
+        var _n = ((window.__patentReviewState.issues) || []).length;
+        _pm.innerHTML = '<button class="btn btn-outline btn-full" onclick="Patent.openReviewModal()"><span class="ico" data-icon="shield"></span> 검증 결과 보기' + (_n ? ' (' + _n + '건)' : '') + '</button>';
+      }
+    }
+  } catch (_e) {}
+  const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow"><span class="ico" data-icon="chevron-down" data-size="12"></span></span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('');}
+// 출력 시 항목 헤더 중복 방지: 본문 첫 줄이 해당 항목 헤더(【h】, 공백 변형 포함)면 제거.
+// 항목명이 정확히 일치할 때만 제거하므로 청구범위의 "【청구항 1】" 등은 보존됨.
+function _stripDupHeader(body,h){
+  if(!body||!h)return body;
+  const esc=h.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/\s+/g,'\\s*');
+  return body.replace(new RegExp('^\\s*【\\s*'+esc+'\\s*】[ \\t]*\\r?\\n?'),'');
+}
 function buildSpecification(){
   const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
@@ -13750,7 +13895,7 @@ function buildSpecification(){
   let extras='';
   if(outputs.step_14)extras+='\n\n[참고: 대안 청구항]\n'+outputs.step_14;
   if(outputs.step_15)extras+='\n\n[참고: 특허성 검토]\n'+outputs.step_15;
-  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${outputs.step_02||''}`,`【발명의 배경이 되는 기술】\n${outputs.step_03||''}`,`【선행기술문헌】\n${outputs.step_04||''}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${outputs.step_05||''}`,`【과제의 해결 수단】\n${outputs.step_17||''}`,`【발명의 효과】\n${outputs.step_16||''}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${getLatestMethodDescription()?'\n\n'+getLatestMethodDescription():''}`,`【부호의 설명】\n${outputs.step_18||''}`,`【청구범위】\n${allClaims}`,`【요약서】\n${outputs.step_19||''}`].filter(Boolean).join('\n\n')+extras;
+  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${_stripDupHeader(outputs.step_02||'','기술분야')}`,`【발명의 배경이 되는 기술】\n${_stripDupHeader(outputs.step_03||'','발명의 배경이 되는 기술')}`,`【선행기술문헌】\n${_stripDupHeader(outputs.step_04||'','선행기술문헌')}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${_stripDupHeader(outputs.step_05||'','해결하고자 하는 과제')}`,`【과제의 해결 수단】\n${_stripDupHeader(outputs.step_17||'','과제의 해결 수단')}`,`【발명의 효과】\n${_stripDupHeader(outputs.step_16||'','발명의 효과')}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${getLatestMethodDescription()?'\n\n'+getLatestMethodDescription():''}`,`【부호의 설명】\n${_stripDupHeader(outputs.step_18||'','부호의 설명')}`,`【청구범위】\n${allClaims}`,`【요약서】\n${_stripDupHeader(outputs.step_19||'','요약서')}`].filter(Boolean).join('\n\n')+extras;
 }
 function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
 function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
@@ -13761,7 +13906,7 @@ function downloadAsWord(){
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
   const allClaims=[outputs.step_06,outputs.step_10,outputs.step_20].filter(Boolean).join('\n\n');
   const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,getLatestMethodDescription()].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
-  const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:normal;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;if(!s.b)return hd;return hd+s.b.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
+  const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:normal;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;const body=_stripDupHeader(s.b,s.h);if(!body)return hd;return hd+body.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);App.showToast('Word 다운로드 완료');
 }
@@ -13769,6 +13914,205 @@ function downloadAsWord(){
 
 // ★ KIPRIS 키 설정은 common.js saveProfileSettings()에서 통합 관리 (v5.4)
 
+
+// ═══════════════════════════════════════════════════════════════════
+// [T8] WriterModule 연동 — 통합 리뷰 엔진(review-engine)과의 계약 2함수 (opinion T6와 동형).
+//   기존 작성·자기검토 로직은 일절 변경하지 않는다(추가만). simulate/rollback은 patent.js에 안 넣음(옵션 B).
+//   ★ patent 특수: applyAmendments 반영 후 3경로(SVG/PPTX/Canvas) 렌더 정합 재검증(E-11) — 공유 소스인
+//     도면(mermaid) 부호 ↔ 부호의 설명(step_18) 교차 정합. 불일치 시 커밋하지 않고 롤백 + 렌더회귀 반환.
+// ═══════════════════════════════════════════════════════════════════
+window.Patent = window.Patent || {};
+
+// exportSnapshot — 원본(전역 상태) 변형 없이 깊은 복사본 반환(I-1, 읽기전용).
+//   반환 형상은 profiles/patent/adapter.js: adaptSnapshot 입력과 정합.
+Patent.exportSnapshot = function() {
+  var projection = {
+    caseId: (typeof currentProjectId !== 'undefined' && currentProjectId) || '',
+    reviewId: (typeof currentProjectId !== 'undefined' && currentProjectId) ? ('rev_pat_' + currentProjectId) : undefined,
+    outputs: (typeof outputs !== 'undefined' && outputs) || {},
+    scopeCheckResults: (typeof scopeCheckResults !== 'undefined' && scopeCheckResults) || {},
+    inventionScope: (typeof inventionScope !== 'undefined' && inventionScope) || null,
+    deviceAnchorStart: (typeof deviceAnchorStart !== 'undefined') ? deviceAnchorStart : 0,
+    methodAnchorStart: (typeof methodAnchorStart !== 'undefined') ? methodAnchorStart : 0
+  };
+  try { return structuredClone(projection); }
+  catch (e) { return JSON.parse(JSON.stringify(projection)); }
+};
+
+// ═══════════ [P-T2] 출원 전 검증 트리거(클라) — G1·G3·G4 ═══════════
+// 작성·자기검토 로직은 불변. 아래는 "검증 배선"만 추가한다.
+
+// _reviewGate — 검증 발화 가능 게이트(G4). 필수 4종(청구항·상세설명·부호·도면)이 갖춰졌는가.
+//   각 범주는 장치(device) 또는 방법(method) 변형 중 하나만 있어도 충족. 자기검토/범위는 선택.
+//   반환 { ok, missing:[라벨...] }. outputs 키 판정은 updateStats 와 동일 규약.
+Patent._reviewGate = function() {
+  var o = (typeof outputs !== 'undefined' && outputs) || {};
+  var has = function(k){ return !!(o[k] && String(o[k]).trim()); };
+  var checks = [
+    { ok: has('step_06') || has('step_10'), label: '청구항(장치 또는 방법)' },
+    { ok: has('step_08') || has('step_12'), label: '상세설명(장치 또는 방법)' },
+    { ok: has('step_18'), label: '부호의 설명' },
+    { ok: has('step_07_mermaid') || has('step_11_mermaid'), label: '도면' },
+  ];
+  var missing = checks.filter(function(c){ return !c.ok; }).map(function(c){ return c.label; });
+  return { ok: missing.length === 0, missing: missing };
+};
+
+// _reviewCostEstimate — 예상 비용·시간(G3). capUsd/maxRounds 는 프로필에서 읽음(하드코딩 0).
+//   ReviewUI.policy('patent') 미가용(토글 OFF·브리지 미로드) 시 보수적 폴백.
+Patent._reviewCostEstimate = function() {
+  var pol = null;
+  try { if (window.ReviewUI && typeof window.ReviewUI.policy === 'function') pol = window.ReviewUI.policy('patent'); } catch (_e) {}
+  var cap = (pol && pol.capUsd) || 15;
+  var rounds = (pol && pol.maxRounds) || 12;
+  var minutes = Math.max(1, Math.ceil(rounds * 0.7)); // 라운드당 ~0.7분 추정
+  var spent = 0; try { spent = (typeof usage !== 'undefined' && usage && usage.cost) || 0; } catch (_e) {}
+  return { capUsd: cap, maxRounds: rounds, minutes: minutes, spent: spent };
+};
+
+// _confirmReviewCost — 비용·시간 사전고지 + 명시적 진행 동의(G3, 오발화 방지).
+//   ★ 함수로 분리 → 테스트에서 override 가능(confirm=false 시 runner 미발화 검증).
+Patent._confirmReviewCost = function(est) {
+  if (typeof window === 'undefined' || typeof window.confirm !== 'function') return true;
+  var msg = '출원 전 AI 검증을 시작합니다.\n\n'
+    + '· 예상 최대 비용: 약 $' + est.capUsd + (est.spent ? ' (현재 누적 $' + est.spent.toFixed(2) + ')' : '') + '\n'
+    + '· 예상 소요: 최대 약 ' + est.minutes + '분 (최대 ' + est.maxRounds + '라운드)\n\n'
+    + '진행하시겠습니까?';
+  return window.confirm(msg);
+};
+
+// _updateReviewGate — page4 검증 버튼 활성/비활성 + 안내(G4). renderPreview 에서 호출.
+Patent._updateReviewGate = function() {
+  var btn = document.getElementById('btnPatentReview');
+  var msgEl = document.getElementById('patentReviewGateMsg');
+  if (!btn) return;
+  var enabledModule = false;
+  try { enabledModule = !!(window.ReviewUI && window.ReviewUI.isEnabled && window.ReviewUI.isEnabled('patent')); } catch (_e) {}
+  var gate = Patent._reviewGate();
+  // 토글 OFF: 버튼은 두되 눌러도 무동작(E-21). 게이트 미충족: 비활성 + 안내.
+  if (!gate.ok) {
+    btn.disabled = true;
+    if (msgEl) msgEl.textContent = '먼저 ' + gate.missing.join(', ') + '을(를) 완료하세요.';
+  } else {
+    btn.disabled = false;
+    if (msgEl) msgEl.textContent = enabledModule ? '' : '';
+  }
+};
+
+// runReviewEngine — [G1] 검증 트리거. 토글 게이트(E-21) → 필수4종 게이트(G4) →
+//   비용확인(G3, 명시 동의) → exportSnapshot → runner(edge/test) → __patentReviewState → renderPreview 마운트.
+//   흐름 어느 단계든 실패/거부 시 runner 미발화(부작용 0).
+Patent.runReviewEngine = async function(runner, opts) {
+  opts = opts || {};
+  // (1) 토글 OFF(마스터 또는 patent 모듈) → 무동작(E-21).
+  if (!(typeof window !== 'undefined' && window.ReviewUI && typeof window.ReviewUI.isEnabled === 'function' && window.ReviewUI.isEnabled('patent'))) {
+    return null;
+  }
+  // (2) 필수 4종 게이트(G4).
+  var gate = Patent._reviewGate();
+  if (!gate.ok) {
+    try { App.showToast('먼저 ' + gate.missing.join(', ') + '을(를) 완료하세요', 'info'); } catch (_e) {}
+    return null;
+  }
+  // (3) 비용·시간 확인 — 사용자가 명시적으로 진행을 눌러야만 발화(G3, 오발화 방지).
+  //   ★ recheck 재트리거(opts.recheck)는 이미 동의한 세션의 후속이므로 재확인 생략.
+  if (!opts.recheck && !Patent._confirmReviewCost(Patent._reviewCostEstimate())) return null;
+
+  var run = runner || Patent._reviewRunner || Patent._defaultReviewRunner;
+  if (typeof run !== 'function') return null;
+  Patent._reviewRunner = run; // recheck 재트리거용 보존
+  var snapshot = Patent.exportSnapshot();
+  try { setButtonLoading && setButtonLoading('btnPatentReview', true); } catch (_e) {}
+  var result = null;
+  try { result = await run(snapshot); }
+  finally { try { setButtonLoading && setButtonLoading('btnPatentReview', false); } catch (_e) {} }
+  if (!result) return null;
+  window.__patentReviewState = result; // page4 마운트 발화 조건
+  try { if (typeof renderPreview === 'function') renderPreview(); } catch (_e) {} // best-effort 렌더
+  try { Patent.openReviewModal(); } catch (_e) {} // 검증 완료 → 넓은 공유 모달 자동 오픈(2a)
+  return result;
+};
+
+// 결과 모달 옵션·오픈(actor + 승인→applyAmendments→recheck). 자동오픈·재오픈 공유.
+Patent._reviewModalOpts = function() {
+  return {
+    actor: (App.currentUser && App.currentUser.email) || '',
+    onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) { Patent.applyAmendments(acc); if (Patent._reviewRunner) Patent.runReviewEngine(Patent._reviewRunner, { recheck: true }); } }
+  };
+};
+Patent.openReviewModal = function() {
+  try { if (window.ReviewUI && window.ReviewUI.openModal && window.__patentReviewState) window.ReviewUI.openModal(window.__patentReviewState, Patent._reviewModalOpts()); } catch (_e) {}
+};
+
+// _defaultReviewRunner — prod 기본 runner: Supabase Edge(review-orchestrate) 호출.
+//   module:'patent' 전송(G9 edge 가 PROFILES['patent'] 선택). 클라는 트리거·구독만(spec §14).
+Patent._defaultReviewRunner = async function(snapshot) {
+  // 사용자 LLM 키·역할배정 동봉(L-T3) — getReviewAuth 가 "1키 전역" 규칙 적용한 keys/assignments 산출.
+  //   ★ keys 는 HTTPS body 로 자기 Edge 에만 전달, 절대 로깅 금지(키 노출 방지).
+  var auth = (App.getReviewAuth && App.getReviewAuth()) || { keys: {}, assignments: {} };
+  var res = await App.sb.functions.invoke('review-orchestrate', { body: { snapshot: snapshot, caseId: snapshot && snapshot.caseId, module: 'patent', keys: auth.keys, assignments: auth.assignments } });
+  return (res && res.data) || null;
+};
+
+// _reviewRenderCheck — 3경로(SVG/PPTX/Canvas) 정합 구조검사(E-11).
+//   3경로는 공유 소스(mermaid)에서 _sharedExtractRefNum 로 파생되므로, 도면 부호 ⊆ 부호의 설명(step_18)을
+//   검사하면 3경로 정합의 구조 대리검증이 된다. 반환 {svg,pptx,canvas, missing}.
+Patent._reviewRenderCheck = function(o) {
+  o = o || ((typeof outputs !== 'undefined' && outputs) || {});
+  function refsOf(text) {
+    var set = {}; var s = String(text || ''); var m;
+    var p1 = /\((\d{2,4})\)/g, p2 = /(?:^|\n)\s*(\d{2,4})\s*[:：]/g;
+    while ((m = p1.exec(s)) !== null) set[m[1]] = true;
+    while ((m = p2.exec(s)) !== null) set[m[1]] = true;
+    return set;
+  }
+  var diagram = Object.assign({}, refsOf(o.step_07_mermaid), refsOf(o.step_11_mermaid));
+  var signs = refsOf(o.step_18);
+  var missing = Object.keys(diagram).filter(function(r){ return !signs[r]; });
+  var ok = missing.length === 0;
+  return { svg: ok, pptx: ok, canvas: ok, missing: missing };
+};
+
+// applyAmendments — 사람 승인 PatchPlan만 실(實)반영(구조적) + 3경로 렌더 정합 재검증(E-11).
+//   ★ I-2/E-19: accepted !== true 가 하나라도 있으면 throw(미승인 미반영).
+//   ★ 산문(청구항/상세설명) 텍스트는 재작성하지 않는다(op.content=보정 "방향"). 승인 방향을 구조적으로 기록.
+//   ★ E-11: 3경로 정합 불일치 시 커밋하지 않고 롤백 + 렌더회귀 issue 반환.
+//   ★ 원자성: 커밋-앳-엔드. 예외/롤백 시 전역 상태 불변.
+Patent.applyAmendments = function(acceptedPlans) {
+  if (!Array.isArray(acceptedPlans)) throw new Error('applyAmendments: plans 배열 필요');
+  acceptedPlans.forEach(function(pl) {
+    if (!pl || pl.accepted !== true) {
+      throw new Error('applyAmendments: 미승인 plan 반영 불가 (I-2/E-19) — ' + (pl && pl.id));
+    }
+  });
+
+  // 승인 방향을 구조적으로 기록(작업 로그 — 산문 미수정).
+  var log = [];
+  acceptedPlans.forEach(function(pl) {
+    (pl.ops || []).forEach(function(op) {
+      log.push({ op: op.op, target: op.target, direction: op.content || '', reason: op.reason || (pl.addressesIssues || [])[0] || '', planId: pl.id,
+        approvedBy: (typeof App !== 'undefined' && App.currentUser && App.currentUser.email) || 'human' });
+    });
+  });
+
+  // ★ E-11: 3경로 렌더 정합 재검증. 불일치 → 롤백(커밋 안 함) + 렌더회귀.
+  var rc = Patent._reviewRenderCheck();
+  if (!(rc.svg && rc.pptx && rc.canvas)) {
+    return {
+      rolledBack: true, renderCheck: { svg: rc.svg, pptx: rc.pptx, canvas: rc.canvas },
+      renderRegression: { type: '명확성', legalBasis: '§42(도면정합)', missing: rc.missing,
+        description: '반영 후 3경로 렌더 정합 위반(도면 부호 ' + rc.missing.slice(0, 5).join(', ') + ' 이 부호의 설명에 없음) — 롤백(E-11).' },
+      applied: [], count: 0
+    };
+  }
+
+  // 커밋-앳-엔드(정합 통과 시에만 반영 로그 기록 — 산문 원본 불변).
+  if (typeof outputs !== 'undefined' && outputs) {
+    outputs._review_applied = log;
+    outputs._review_render_check = rc;
+  }
+  return { applied: log, renderCheck: { svg: true, pptx: true, canvas: true }, count: log.length, rolledBack: false };
+};
 
 // ═══════════ DASHBOARD HOOK + INIT ═══════════
 App._onDashboard = function(){ loadDashboardProjects(); loadGlobalRefFromStorage(); };

@@ -59,14 +59,30 @@ window.DT = (function () {
      — 시스템 이모지 대신 Tossface 폰트로 렌더링
   ───────────────────────────────────────── */
   /**
-   * Tossface 이모지 span 생성
-   * @param {string} emoji - 이모지 문자
-   * @param {number} [size] - 폰트 크기 (px)
-   * @returns {string} HTML 문자열
+   * 이모지 → 단색 SVG 아이콘 매핑 (Wanted DS 호환).
+   * 알려지지 않은 이모지는 그대로 텍스트로 노출됨.
    */
+  const TF_EMOJI_MAP = {
+    "📋":"clipboard","📄":"doc","📁":"folder","📂":"folder","📑":"doc",
+    "🏷️":"tag","🏷":"tag","📦":"box","🔍":"search","⚖️":"scales","⚖":"scales",
+    "📊":"chart","🤖":"robot","👤":"user","📝":"edit","✅":"check-circle",
+    "❌":"x","⚠️":"warning","ℹ️":"info","⚡":"bolt","🔑":"lock",
+    "📥":"download","📤":"upload","🔄":"refresh","📧":"mail","💾":"save",
+    "🛠️":"settings","⚙️":"settings","🔧":"settings","🖼️":"image","🎨":"image",
+    "🗑️":"trash","👁️":"eye","💡":"lightbulb","⏳":"history","💰":"money",
+    "➕":"plus","←":"arrow-left","→":"arrow-right",
+    "🔀":"split","🏁":"flag","📎":"link","🎯":"flag","🚀":"bolt","🛡️":"shield",
+    "📜":"doc","🌐":"chart","🔬":"search","💬":"comment","🎉":"check-circle",
+    "🔁":"refresh","🔢":"chart","📭":"mail","▶":"arrow-right","↩️":"refresh",
+  };
   function tf(emoji, size) {
-    const sizeAttr = size ? ' style="font-size:' + size + 'px"' : '';
-    return '<span class="tf"' + sizeAttr + '>' + emoji + '</span>';
+    const name = TF_EMOJI_MAP[emoji];
+    if (name) {
+      const sz = size ? ' data-size="' + size + '"' : '';
+      return '<span class="ico" data-icon="' + name + '"' + sz + '></span>';
+    }
+    // 매핑 없는 경우 텍스트로 유지 (기존 호출처가 깨지지 않도록)
+    return emoji || '';
   }
 
   /* ─────────────────────────────────────────
@@ -273,7 +289,7 @@ window.DT = (function () {
     let html = '<span class="' + cls + '"' + clickAttr + '>';
     html += opts.text;
     if (opts.count != null) html += '<span class="dt-tag-count">' + opts.count + '</span>';
-    if (opts.removable) html += '<span class="dt-tag-remove">✕</span>';
+    if (opts.removable) html += '<span class="dt-tag-remove"><span class="ico" data-icon="x"></span></span>';
     html += '</span>';
     return html;
   }
@@ -621,7 +637,7 @@ window.DT = (function () {
       const ctaClick = opts.onCtaClick ? ' onclick="' + opts.onCtaClick + '"' : '';
       html += '<button class="dt-promo-cta"' + ctaClick + '>' + opts.cta + '</button>';
     }
-    if (opts.onClose) html += '<button class="dt-promo-close" onclick="' + opts.onClose + '">✕</button>';
+    if (opts.onClose) html += '<button class="dt-promo-close" onclick="' + opts.onClose + '"><span class="ico" data-icon="x"></span></button>';
     html += '</div>';
     return html;
   }
@@ -631,10 +647,10 @@ window.DT = (function () {
      — DT 스타일의 토스트 알림
   ───────────────────────────────────────── */
   const TOAST_ICONS = {
-    success: '✅',
-    error: '❌',
-    info: 'ℹ️',
-    warning: '⚠️',
+    success: 'check-circle',
+    error:   'x-circle',
+    info:    'info',
+    warning: 'warning',
   };
 
   /**
@@ -656,9 +672,11 @@ window.DT = (function () {
     }
 
     const el = document.createElement('div');
+    el.className = 'toast toast-' + type;
     el.style.cssText = 'display:flex;align-items:center;gap:8px;padding:14px 20px;border-radius:var(--dt-r-md);background:var(--dt-g900);color:var(--dt-white);font-size:var(--dt-f-md);font-weight:var(--dt-w-medium);box-shadow:var(--dt-sh-lg);animation:toastIn 0.3s ease;pointer-events:auto;max-width:400px;font-family:var(--dt-font)';
 
-    el.innerHTML = '<span class="tf">' + (TOAST_ICONS[type] || 'ℹ️') + '</span>' + message;
+    el.innerHTML = '<span class="ico" data-icon="' + (TOAST_ICONS[type] || 'info') + '" data-size="16"></span>' + message;
+    if (window.Icons && window.Icons.renderAll) window.Icons.renderAll(el);
     container.appendChild(el);
 
     setTimeout(function () {

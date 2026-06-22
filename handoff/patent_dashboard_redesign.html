@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1200, initial-scale=1">
+<title>특허 대시보드 리디자인 — STEP 3 파일럿</title>
+<link rel="stylesheet" href="shared/design-tokens.css">
+<style>
+  /* STEP 1 신규 토큰 (design-tokens.patch.css) — 파일럿에서 미리 반영 */
+  :root {
+    --dt-brand-deep: #0F3A8C;
+    --dt-brand-accent: #5B8DEF;
+    --dt-r-sm2: 8px;
+  }
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--dt-font);
+    background: var(--dt-g50);
+    color: var(--dt-g900);
+    -webkit-font-smoothing: antialiased;
+  }
+  .ico { display: inline-flex; }
+  .ico svg { display: block; }
+
+  /* ─── Header ─── */
+  .app-header {
+    height: var(--dt-nav-h);
+    background: var(--dt-white);
+    border-bottom: 1px solid var(--dt-g150);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .header-logo {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: var(--dt-brand); color: white;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 13px;
+  }
+  .header-title { font-size: var(--dt-f-md); font-weight: 700; color: var(--dt-g900); letter-spacing: -0.01em; }
+  .header-right { display: flex; align-items: center; gap: 6px; }
+  .header-user { font-size: var(--dt-f-sm); color: var(--dt-g600); margin-right: 6px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: inherit; font-weight: var(--dt-w-semibold);
+    border-radius: var(--dt-r-sm2); cursor: pointer;
+    border: 1px solid transparent; transition: var(--dt-ease-fast);
+    white-space: nowrap;
+  }
+  .btn-sm { height: 32px; padding: 0 12px; font-size: var(--dt-f-sm); }
+  .btn-md { height: 38px; padding: 0 14px; font-size: var(--dt-f-md); }
+  .btn-primary { background: var(--dt-brand); color: white; }
+  .btn-primary:hover { background: var(--dt-brand-hover); }
+  .btn-outline { background: var(--dt-white); color: var(--dt-g700); border-color: var(--dt-g200); }
+  .btn-outline:hover { background: var(--dt-g50); border-color: var(--dt-g300); }
+  .btn-ghost { background: transparent; color: var(--dt-g500); }
+  .btn-ghost:hover { background: var(--dt-g100); color: var(--dt-g700); }
+  .btn-full { width: 100%; justify-content: center; }
+
+  /* ─── Container ─── */
+  .app-container { max-width: var(--dt-max-w); margin: 0 auto; padding: 0 24px; }
+
+  /* ─── Service tabs ─── */
+  .service-tab-nav {
+    display: flex; gap: 4px;
+    border-bottom: 1px solid var(--dt-g150);
+    margin-top: 24px;
+  }
+  .service-tab {
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 44px; padding: 0 16px;
+    background: transparent; border: none;
+    font-family: inherit; font-size: var(--dt-f-md); font-weight: var(--dt-w-semibold);
+    color: var(--dt-g500); cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: var(--dt-ease-fast);
+  }
+  .service-tab:hover { color: var(--dt-g700); }
+  .service-tab.active { color: var(--dt-brand); border-bottom-color: var(--dt-brand); }
+
+  /* ─── Sub tabs (pill) ─── */
+  .sub-tab-nav { display: flex; gap: 6px; margin-top: 22px; }
+  .sub-tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 34px; padding: 0 14px;
+    background: var(--dt-white); border: 1px solid var(--dt-g200);
+    border-radius: var(--dt-r-full);
+    font-family: inherit; font-size: var(--dt-f-sm); font-weight: var(--dt-w-semibold);
+    color: var(--dt-g600); cursor: pointer; transition: var(--dt-ease-fast);
+  }
+  .sub-tab:hover { border-color: var(--dt-g300); color: var(--dt-g800); }
+  .sub-tab.active { background: var(--dt-brand); border-color: var(--dt-brand); color: white; }
+
+  /* ─── Stat cards ─── */
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 22px; }
+  .stat-card {
+    background: var(--dt-white); border: 1px solid var(--dt-g150);
+    border-radius: var(--dt-r-lg); padding: 18px 20px;
+  }
+  .stat-label { font-size: var(--dt-f-sm); color: var(--dt-g500); font-weight: var(--dt-w-medium); }
+  .stat-value {
+    margin-top: 8px; font-size: var(--dt-f-3xl); font-weight: var(--dt-w-extrabold);
+    letter-spacing: -0.03em; line-height: 1; font-feature-settings: 'tnum';
+  }
+  .stat-value .unit { font-size: var(--dt-f-md); color: var(--dt-g400); font-weight: var(--dt-w-semibold); margin-left: 3px; }
+  .stat-sub { margin-top: 6px; font-size: var(--dt-f-xs); color: var(--dt-g400); }
+  .stat-card.accent-brand .stat-value { color: var(--dt-brand); }
+  .stat-card.accent-warning .stat-value { color: var(--dt-warning); }
+  .stat-card.accent-success .stat-value { color: var(--dt-success); }
+
+  /* ─── Layout: action panel + main ─── */
+  .work-row { display: flex; gap: 20px; align-items: flex-start; margin-top: 22px; padding-bottom: 60px; }
+  .action-col { width: 248px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
+  .main-col { flex: 1; min-width: 0; }
+
+  .panel-title { font-size: var(--dt-f-xl); font-weight: var(--dt-w-bold); letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+  .panel-desc { font-size: var(--dt-f-sm); color: var(--dt-g500); margin-top: 4px; line-height: 1.5; }
+
+  .card {
+    background: var(--dt-white); border: 1px solid var(--dt-g150);
+    border-radius: var(--dt-r-lg); box-shadow: var(--dt-sh-sm);
+  }
+  .ref-card { padding: 16px; }
+  .ref-card-title { font-size: var(--dt-f-sm); font-weight: var(--dt-w-semibold); display: flex; align-items: center; gap: 6px; }
+  .ref-card-desc { font-size: var(--dt-f-xs); color: var(--dt-g500); margin: 6px 0 10px; line-height: 1.45; }
+  .ref-status { font-size: var(--dt-f-xs); color: var(--dt-g400); margin-top: 8px; text-align: center; }
+
+  /* ─── Case list ─── */
+  .list-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .list-head h3 { font-size: var(--dt-f-lg); font-weight: var(--dt-w-bold); letter-spacing: -0.01em; }
+  .list-count { font-size: var(--dt-f-sm); color: var(--dt-g500); }
+  .list-count b { color: var(--dt-g900); font-weight: var(--dt-w-bold); }
+
+  table { width: 100%; border-collapse: collapse; font-size: var(--dt-f-md); table-layout: fixed; }
+  thead th {
+    padding: 12px 16px; text-align: left;
+    font-size: var(--dt-f-sm); font-weight: var(--dt-w-semibold); color: var(--dt-g500);
+    background: var(--dt-g50); border-bottom: 1px solid var(--dt-g150);
+  }
+  thead th.c { text-align: center; }
+  tbody td { padding: 14px 16px; border-bottom: 1px solid var(--dt-g100); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { transition: var(--dt-ease-fast); cursor: pointer; }
+  tbody tr:hover { background: var(--dt-brand-pale); }
+  .case-no { font-family: var(--dt-mono); font-size: var(--dt-f-sm); color: var(--dt-g500); font-feature-settings: 'tnum'; }
+  .case-name { font-weight: var(--dt-w-semibold); color: var(--dt-g900); letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .case-sub { font-size: var(--dt-f-xs); color: var(--dt-g400); margin-top: 2px; }
+  .c { text-align: center; }
+  .case-date { font-size: var(--dt-f-sm); color: var(--dt-g500); font-feature-settings: 'tnum'; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 24px; padding: 0 10px; border-radius: var(--dt-r-full);
+    font-size: var(--dt-f-xs); font-weight: var(--dt-w-bold); letter-spacing: -0.01em;
+  }
+  .badge-brand   { background: var(--dt-brand-light);   color: var(--dt-brand-hover); }
+  .badge-warning { background: var(--dt-warning-light); color: var(--dt-warning); }
+  .badge-success { background: var(--dt-success-light); color: var(--dt-success); }
+  .badge-gray    { background: var(--dt-g100);          color: var(--dt-g500); }
+  .badge-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+  .row-actions { display: inline-flex; gap: 6px; justify-content: center; }
+
+  .section-title { margin: 24px 0 12px; font-size: var(--dt-f-lg); font-weight: var(--dt-w-bold); display: flex; align-items: center; gap: 7px; letter-spacing: -0.01em; }
+  .prov-flag { display: inline-flex; align-items: center; gap: 5px; font-size: var(--dt-f-xs); font-weight: var(--dt-w-bold); color: var(--dt-warning); padding: 3px 8px; background: var(--dt-warning-light); border-radius: var(--dt-r-full); }
+
+  .legend { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-top: 10px; font-size: var(--dt-f-xs); color: var(--dt-g400); }
+  .legend b { color: var(--dt-g600); font-weight: var(--dt-w-semibold); }
+</style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <span class="header-logo">D</span>
+      <span class="header-title">IP 문서 관리</span>
+    </div>
+    <div class="header-right">
+      <span class="header-user">노재일 변리사</span>
+      <button class="btn btn-outline btn-sm"><span class="ico">⚙</span> 계정설정</button>
+      <button class="btn btn-ghost btn-sm">로그아웃</button>
+    </div>
+  </header>
+
+  <div class="app-container">
+
+    <!-- Service tabs -->
+    <nav class="service-tab-nav">
+      <button class="service-tab active">📋 특허 명세서</button>
+      <button class="service-tab">™ 상표 출원</button>
+      <button class="service-tab">✉ 사건등록</button>
+    </nav>
+
+    <!-- Sub tabs -->
+    <nav class="sub-tab-nav">
+      <button class="sub-tab active">명세서 작성</button>
+      <button class="sub-tab">의견서 대응</button>
+      <button class="sub-tab">분할출원</button>
+    </nav>
+
+    <!-- Stat cards -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">전체 사건</div>
+        <div class="stat-value">24<span class="unit">건</span></div>
+        <div class="stat-sub">이번 달 신규 6건</div>
+      </div>
+      <div class="stat-card accent-brand">
+        <div class="stat-label">작성 중</div>
+        <div class="stat-value">7<span class="unit">건</span></div>
+        <div class="stat-sub">AI 생성 진행 3건</div>
+      </div>
+      <div class="stat-card accent-warning">
+        <div class="stat-label">검토 대기</div>
+        <div class="stat-value">5<span class="unit">건</span></div>
+        <div class="stat-sub">변리사 확인 필요</div>
+      </div>
+      <div class="stat-card accent-success">
+        <div class="stat-label">완료</div>
+        <div class="stat-value">12<span class="unit">건</span></div>
+        <div class="stat-sub">최근 7일 4건 완료</div>
+      </div>
+    </div>
+
+    <!-- Work row -->
+    <div class="work-row">
+
+      <!-- Action column -->
+      <aside class="action-col">
+        <div>
+          <h2 class="panel-title">📄 특허 명세서</h2>
+          <p class="panel-desc">AI 기반 특허명세서 자동 생성 시스템</p>
+        </div>
+        <button class="btn btn-primary btn-md btn-full" style="margin-top:6px">＋ 새 사건 만들기</button>
+        <button class="btn btn-outline btn-md btn-full">⚡ 가출원 명세서</button>
+
+        <div class="card ref-card" style="margin-top:6px">
+          <div class="ref-card-title">🔗 공통 참고 문서</div>
+          <p class="ref-card-desc">기존 특허명세서 문체를 학습해 참고합니다.</p>
+          <button class="btn btn-outline btn-sm btn-full">📄 문서 업로드</button>
+          <div class="ref-status">등록된 문서 없음</div>
+        </div>
+      </aside>
+
+      <!-- Main column -->
+      <main class="main-col">
+        <div class="list-head">
+          <h3>사건 목록</h3>
+          <div class="list-count">총 <b>24</b>건 · 작성 중 <b>7</b>건</div>
+        </div>
+
+        <div class="card" style="overflow:hidden">
+          <table>
+            <colgroup>
+              <col style="width:16%"><col style="width:40%"><col style="width:14%"><col style="width:14%"><col style="width:16%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>사건번호</th>
+                <th>사건명</th>
+                <th class="c">상태</th>
+                <th class="c">수정일</th>
+                <th class="c">작업</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="case-no">P2026-0142</span></td>
+                <td>
+                  <div class="case-name">데이터 기반 이상탐지 장치 및 그 방법</div>
+                  <div class="case-sub">장치 + 방법 · 청구항 12</div>
+                </td>
+                <td class="c"><span class="badge badge-brand"><span class="badge-dot"></span>작성 중</span></td>
+                <td class="c"><span class="case-date">06.10</span></td>
+                <td><div class="row-actions"><button class="btn btn-outline btn-sm">열기</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="case-no">P2026-0141</span></td>
+                <td>
+                  <div class="case-name">전기차 배터리 열관리 시스템</div>
+                  <div class="case-sub">장치 · 청구항 9</div>
+                </td>
+                <td class="c"><span class="badge badge-warning"><span class="badge-dot"></span>검토 대기</span></td>
+                <td class="c"><span class="case-date">06.09</span></td>
+                <td><div class="row-actions"><button class="btn btn-outline btn-sm">열기</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="case-no">P2026-0138</span></td>
+                <td>
+                  <div class="case-name">머신러닝 기반 수요예측 서버 및 동작 방법</div>
+                  <div class="case-sub">서버 + 방법 + 기록매체 · 청구항 15</div>
+                </td>
+                <td class="c"><span class="badge badge-success"><span class="badge-dot"></span>완료</span></td>
+                <td class="c"><span class="case-date">06.07</span></td>
+                <td><div class="row-actions"><button class="btn btn-outline btn-sm">열기</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="case-no">P2026-0135</span></td>
+                <td>
+                  <div class="case-name">생체신호 측정용 웨어러블 전자장치</div>
+                  <div class="case-sub">전자장치 · 청구항 8</div>
+                </td>
+                <td class="c"><span class="badge badge-success"><span class="badge-dot"></span>완료</span></td>
+                <td class="c"><span class="case-date">06.05</span></td>
+                <td><div class="row-actions"><button class="btn btn-outline btn-sm">열기</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="case-no">P2026-0131</span></td>
+                <td>
+                  <div class="case-name">자율주행 차량의 경로 생성 컴퓨터 프로그램</div>
+                  <div class="case-sub">컴퓨터 프로그램 · 청구항 6</div>
+                </td>
+                <td class="c"><span class="badge badge-brand"><span class="badge-dot"></span>작성 중</span></td>
+                <td class="c"><span class="case-date">06.03</span></td>
+                <td><div class="row-actions"><button class="btn btn-outline btn-sm">열기</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="legend">
+          <span><b>상태</b></span>
+          <span><span class="badge badge-brand" style="height:18px;padding:0 7px">작성 중</span> AI 생성·편집 단계</span>
+          <span><span class="badge badge-warning" style="height:18px;padding:0 7px">검토 대기</span> 변리사 확인</span>
+          <span><span class="badge badge-success" style="height:18px;padding:0 7px">완료</span> 산출물 발행</span>
+        </div>
+
+        <!-- 가출원 내역 -->
+        <div class="section-title">⚡ 가출원 내역 <span class="prov-flag">3건</span></div>
+        <div class="card" style="overflow:hidden">
+          <table>
+            <colgroup><col style="width:16%"><col style="width:54%"><col style="width:14%"><col style="width:16%"></colgroup>
+            <tbody>
+              <tr>
+                <td><span class="case-no">PV-0024</span></td>
+                <td><div class="case-name">초음파 기반 거리 측정 모듈</div></td>
+                <td class="c"><span class="badge badge-gray">가출원</span></td>
+                <td class="c"><span class="case-date">05.28</span></td>
+              </tr>
+              <tr>
+                <td><span class="case-no">PV-0023</span></td>
+                <td><div class="case-name">스마트팜 환경제어 알고리즘</div></td>
+                <td class="c"><span class="badge badge-gray">가출원</span></td>
+                <td class="c"><span class="case-date">05.21</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,22 @@
+name: CI
+
+# PR(모든 대상 브랜치) + main 푸시 시 테스트 실행 → 머지 전 자동 검증(초록/빨강).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: node --test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # 의존성/package.json 없음 — Node 22 ESM 구문 자동감지로 .js 테스트 직접 실행.
+      # '**/*.test.js' 는 node 가 직접 글롭 확장(node_modules 자동 제외).
+      # 대상: review-engine/__tests__/(ESM) + tests/(CommonJS) 전체.
+      - name: Run tests
+        run: node --test '**/*.test.js'

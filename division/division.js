@@ -8,9 +8,9 @@ window.Division = window.Division || {};
 
 // ═══ Constants ═══
 Division.TYPES = {
-  merge:           { code:'M', label:'청구항 병합형',     icon:'🔀', css:'dtype-merge',    desc:'등록항 + 미활용 구성 부가' },
-  category_change: { code:'C', label:'카테고리 변경형',   icon:'🔄', css:'dtype-category', desc:'방법↔장치 전환' },
-  strategic:       { code:'S', label:'전략적 분할',       icon:'🎯', css:'dtype-strategic', desc:'새 독립항 구성' }
+  merge:           { code:'M', label:'청구항 병합형',     icon: '<span class="ico" data-icon="split"></span>', css:'dtype-merge',    desc:'등록항 + 미활용 구성 부가' },
+  category_change: { code:'C', label:'카테고리 변경형',   icon: '<span class="ico" data-icon="refresh"></span>', css:'dtype-category', desc:'방법↔장치 전환' },
+  strategic:       { code:'S', label:'전략적 분할',       icon: '<span class="ico" data-icon="flag"></span>', css:'dtype-strategic', desc:'새 독립항 구성' }
 };
 
 Division.STATUS = {
@@ -26,12 +26,12 @@ Division.STATUS = {
 };
 
 Division.PIPELINE = [
-  { key:'upload',   label:'파일 업로드',  icon:'📁' },
-  { key:'parse',    label:'파싱',         icon:'🔍' },
-  { key:'analyze',  label:'분석',         icon:'📊' },
-  { key:'assemble', label:'조립',         icon:'🔧' },
-  { key:'verify',   label:'검증',         icon:'✅' },
-  { key:'confirm',  label:'확정',         icon:'🏁' }
+  { key:'upload',   label:'파일 업로드',  icon: '<span class="ico" data-icon="folder"></span>' },
+  { key:'parse',    label:'파싱',         icon: '<span class="ico" data-icon="search"></span>' },
+  { key:'analyze',  label:'분석',         icon: '<span class="ico" data-icon="chart"></span>' },
+  { key:'assemble', label:'조립',         icon: '<span class="ico" data-icon="settings"></span>' },
+  { key:'verify',   label:'검증',         icon: '<span class="ico" data-icon="check-circle"></span>' },
+  { key:'confirm',  label:'확정',         icon: '<span class="ico" data-icon="flag"></span>' }
 ];
 
 Division.STEP_TO_STATUS = { upload:'uploaded', parse:'parsed', analyze:'analyzed', assemble:'assembled', verify:'verified', confirm:'confirmed' };
@@ -143,18 +143,18 @@ Division.THRESHOLDS = {
 };
 
 Division.FILE_TYPES = {
-  application:  { label:'특허출원서',       icon:'📄', required:true },
+  application:  { label:'특허출원서',       icon: '<span class="ico" data-icon="doc"></span>', required:true },
   notification: { label:'의견제출통지서',   icon:'📨', required:true },
-  opinion:      { label:'의견서',           icon:'📝', required:true },
-  amendment:    { label:'보정서',           icon:'✏️', required:true },
+  opinion:      { label:'의견서',           icon: '<span class="ico" data-icon="edit"></span>', required:true },
+  amendment:    { label:'보정서',           icon: '<span class="ico" data-icon="edit"></span>', required:true },
   prior_art:    { label:'인용발명',         icon:'📚', required:false },
   decision:     { label:'등록결정서',       icon:'🏆', required:false }
 };
 
 Division.RISK_LABELS = {
-  safe:    { label:'안전',   icon:'🟢', css:'risk-safe' },
-  caution: { label:'주의',   icon:'🟡', css:'risk-caution' },
-  danger:  { label:'위험',   icon:'🔴', css:'risk-danger' }
+  safe:    { label:'안전',   icon: '<span class="status-dot positive"></span>', css:'risk-safe' },
+  caution: { label:'주의',   icon: '<span class="status-dot cautionary"></span>', css:'risk-caution' },
+  danger:  { label:'위험',   icon: '<span class="status-dot negative"></span>', css:'risk-danger' }
 };
 
 Division.SYS_PROMPT = '너는 대한민국 특허청(KIPO) 분할출원 실무에 정통한 15년 차 수석 변리사이다.\n원칙:\n1. 한국 특허법 제52조(분할출원)에 근거\n2. 원출원 명세서 범위 내에서만 청구항 구성\n3. 기재불비(§42③④) 회피를 최우선\n4. 특허청 표준 서식과 문체\n5. 구조화된 JSON 반환';
@@ -175,6 +175,81 @@ Division.state = {
   validationResults: [],
   specParagraphs: [],
   _runningProjectId: null  // AI 호출 중인 프로젝트 ID (레이스 컨디션 방지)
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// [T7] WriterModule 연동 — 통합 리뷰 엔진(review-engine)과의 계약 2함수 (opinion T6와 동형).
+//   기존 작성·검증 로직은 일절 변경하지 않는다(추가만). simulate/rollback은 division.js에 안 넣음(옵션 B).
+// ═══════════════════════════════════════════════════════════════════
+
+// exportSnapshot — 원본(Division.state) 변형 없이 깊은 복사본 반환(I-1, 읽기전용).
+//   반환 형상은 profiles/division/adapter.js: adaptSnapshot 입력과 정합.
+Division.exportSnapshot = function() {
+  var s = Division.state || {};
+  var cur = s.current || {};
+  var projection = {
+    caseId: cur.application_number || cur.reference_number || '',
+    reviewId: cur.id ? ('rev_div_' + cur.id) : undefined,
+    divisionType: cur.division_type || null,
+    originalClaims: s.claims || [],
+    unusedComponents: s.unusedComponents || [],
+    divisionClaims: s.divisionClaims || [],
+    specParagraphs: s.specParagraphs || [],
+    selfReview: s.validationResults || null
+  };
+  try { return structuredClone(projection); }
+  catch (e) { return JSON.parse(JSON.stringify(projection)); }
+};
+
+// applyAmendments — 사람 승인 PatchPlan만 실(實)반영(구조적) + 정합성 재검증(§47/이중특허).
+//   ★ I-2/E-19: accepted !== true 가 하나라도 있으면 throw(미승인 미반영).
+//   ★ 산문 청구항 텍스트는 재작성하지 않는다(op.content=보정 "방향"). 승인 방향을 구조적으로 기록.
+//   ★ 원자성(E-27): 작업 사본에 적용→재검증→커밋(commit-at-end). 예외 시 Division.state 불변.
+//   ★ 재검증은 기존 Division.runAutoVerify(Pass 1 코드검증) 재사용(동작 불변).
+Division.applyAmendments = function(acceptedPlans) {
+  if (!Array.isArray(acceptedPlans)) throw new Error('applyAmendments: plans 배열 필요');
+  acceptedPlans.forEach(function(pl) {
+    if (!pl || pl.accepted !== true) {
+      throw new Error('applyAmendments: 미승인 plan 반영 불가 (I-2/E-19) — ' + (pl && pl.id));
+    }
+  });
+
+  var s = Division.state || {};
+  var working;
+  try { working = structuredClone(s.divisionClaims || []); }
+  catch (e) { working = JSON.parse(JSON.stringify(s.divisionClaims || [])); }
+  var byNo = {};
+  working.forEach(function(dc) { if (dc && dc.claim_number != null) byNo[String(dc.claim_number)] = dc; });
+
+  var applied = [];
+  acceptedPlans.forEach(function(pl) {
+    (pl.ops || []).forEach(function(op) {
+      var no = String(op.target || '').replace(/^claim_/, '');
+      var dc = byNo[no];
+      if (!dc) return;
+      dc.review_amendments = dc.review_amendments || [];
+      dc.review_amendments.push({
+        op: op.op, direction: op.content || '',
+        reason: op.reason || (pl.addressesIssues || [])[0] || '', planId: pl.id,
+        approvedBy: (typeof App !== 'undefined' && App.currentUser && App.currentUser.email) || 'human'
+      });
+      applied.push({ planId: pl.id, claim_number: no, op: op.op });
+    });
+  });
+
+  // 정합성 재검증(§47/이중특허/basis) — 기존 runAutoVerify 재사용.
+  var cur = s.current || {};
+  var basisClaim = (s.claims || []).filter(function(c) { return c.division_role === 'basis'; })[0] || null;
+  var specText = (s.specParagraphs || []).map(function(p) { return p.content || ''; }).join('\n');
+  var autoIssues = [];
+  try { autoIssues = Division.runAutoVerify(working, basisClaim, s.claims || [], specText, cur.division_type) || []; } catch (e) {}
+
+  // 커밋-앳-엔드(원자성).
+  Division.state.divisionClaims = working;
+  Division.state._review_applied = applied;
+  Division.state._review_auto_issues = autoIssues;
+
+  return { applied: applied, autoIssues: autoIssues, count: applied.length };
 };
 
 // ═══ Init ═══
@@ -395,7 +470,7 @@ Division.renderList = function(){
 
   if(!ps.length){
     el.innerHTML = '<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--color-text-tertiary);font-size:13px">'
-      + '<div style="font-size:32px;margin-bottom:8px"><span class="tf">📭</span></div>'
+      + '<div style="font-size:32px;margin-bottom:8px"><span class="ico" data-icon="mail"></span></div>'
       + '분할출원 프로젝트가 없습니다.<br><span style="font-size:12px">새 프로젝트를 만들어 분할출원 청구항을 작성하세요.</span></td></tr>';
     return;
   }
@@ -641,8 +716,8 @@ Division.renderUpload = function(left, right, p){
 
   // 모드 토글
   h += '<div class="division-mode-toggle">';
-  h += '<button class="division-mode-btn' + (inputMode==='full'?' active':'') + '" onclick="Division.switchInputMode(\'full\')"><span class="tf">📋</span> 문서 업로드</button>';
-  h += '<button class="division-mode-btn' + (inputMode==='direct'?' active':'') + '" onclick="Division.switchInputMode(\'direct\')"><span class="tf">✏️</span> 청구항 직접 입력</button>';
+  h += '<button class="division-mode-btn' + (inputMode==='full'?' active':'') + '" onclick="Division.switchInputMode(\'full\')"><span class="ico" data-icon="clipboard"></span> 문서 업로드</button>';
+  h += '<button class="division-mode-btn' + (inputMode==='direct'?' active':'') + '" onclick="Division.switchInputMode(\'direct\')"><span class="ico" data-icon="edit"></span> 청구항 직접 입력</button>';
   h += '</div>';
 
   if(inputMode === 'full'){
@@ -653,10 +728,10 @@ Division.renderUpload = function(left, right, p){
     if(!allRequiredDone){
       h += '<div class="division-bulk-drop" id="divisionBulkDrop">';
       h += '<div class="division-bulk-drop-inner">';
-      h += '<div style="font-size:32px;margin-bottom:8px"><span class="tf">📂</span></div>';
+      h += '<div style="font-size:32px;margin-bottom:8px"><span class="ico" data-icon="folder"></span></div>';
       h += '<div style="font-size:14px;font-weight:600;margin-bottom:4px">PDF 파일을 여기에 드래그하세요</div>';
       h += '<div style="font-size:12px;color:var(--color-text-tertiary)">출원서 · 통지서 · 의견서 · 보정서를 한번에 넣으면 자동 분류합니다</div>';
-      h += '<div style="margin-top:12px"><label class="btn btn-outline btn-sm" style="cursor:pointer"><span class="tf">📄</span> 또는 파일 선택';
+      h += '<div style="margin-top:12px"><label class="btn btn-outline btn-sm" style="cursor:pointer"><span class="ico" data-icon="doc"></span> 또는 파일 선택';
       h += '<input type="file" accept=".pdf" multiple style="display:none" onchange="Division.handleBulkFiles(event)" />';
       h += '</label></div>';
       h += '</div></div>';
@@ -664,7 +739,7 @@ Division.renderUpload = function(left, right, p){
 
     // 분류된 파일 목록
     h += '<div class="card" style="padding:16px;' + (allRequiredDone ? '' : 'margin-top:12px') + '">';
-    h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📁</span> 파일 분류 결과</div>';
+    h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="folder"></span> 파일 분류 결과</div>';
 
     ['application','notification','opinion','amendment','prior_art','decision'].forEach(function(ft){
       var info = Division.FILE_TYPES[ft];
@@ -682,13 +757,13 @@ Division.renderUpload = function(left, right, p){
           h += '<option value="' + opt + '"' + (opt===ft?' selected':'') + '>' + Division.FILE_TYPES[opt].label + '</option>';
         });
         h += '</select>';
-        h += '<button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + uploaded.id + '\')" style="font-size:10px;color:var(--color-error);padding:4px 8px">✕</button>';
+        h += '<button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + uploaded.id + '\')" style="font-size:10px;color:var(--color-error);padding:4px 8px"><span class="ico" data-icon="x"></span></button>';
         h += '</div>';
       } else if(isRequired) {
         h += '<div class="division-file-row-missing">';
         h += '<span class="division-file-icon" style="opacity:0.4">' + info.icon + '</span>';
         h += '<span class="division-file-label" style="color:var(--color-text-tertiary)">' + info.label + ' <span style="color:var(--color-error);font-size:10px">필수</span></span>';
-        h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="tf">📄</span> 선택';
+        h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="ico" data-icon="doc"></span> 선택';
         h += '<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'' + ft + '\')" /></label>';
         h += '</div>';
       }
@@ -701,39 +776,39 @@ Division.renderUpload = function(left, right, p){
   } else {
     // ── 모드 B: 출원서 + 직접 입력 ──
     h += '<div class="card" style="padding:16px">';
-    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tf">📄</span> 특허출원서</div>';
+    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="ico" data-icon="doc"></span> 특허출원서</div>';
     h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">명세서 원문이 포함된 출원서 PDF</div>';
     var appFile = files.find(function(f){ return f.file_type === 'application'; });
     if(appFile){
-      h += '<div class="division-file-row-uploaded"><span class="division-file-icon">📄</span>';
+      h += '<div class="division-file-row-uploaded"><span class="division-file-icon"><span class="ico" data-icon="doc"></span></span>';
       h += '<div class="division-file-info"><div class="division-file-label">특허출원서</div><div class="division-file-name">' + escapeHtml(appFile.file_name||'') + '</div></div>';
-      h += '<span class="division-file-check">✅</span>';
-      h += '<button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + appFile.id + '\')" style="font-size:10px;color:var(--color-error);padding:4px 8px">✕</button></div>';
+      h += '<span class="division-file-check"><span class="ico" data-icon="check-circle"></span></span>';
+      h += '<button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + appFile.id + '\')" style="font-size:10px;color:var(--color-error);padding:4px 8px"><span class="ico" data-icon="x"></span></button></div>';
     } else {
       h += '<div class="division-bulk-drop" id="divisionBulkDrop" style="padding:20px">';
-      h += '<div class="division-bulk-drop-inner"><span class="tf" style="font-size:24px">📄</span> <span style="font-size:13px">출원서 PDF 드래그 또는 </span>';
+      h += '<div class="division-bulk-drop-inner"><span class="ico" data-icon="doc"></span> <span style="font-size:13px">출원서 PDF 드래그 또는 </span>';
       h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px;margin-left:8px">선택<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'application\')" /></label>';
       h += '</div></div>';
     }
     h += '</div>';
 
     h += '<div class="card" style="padding:16px;margin-top:12px">';
-    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="tf">✏️</span> 최종 등록 청구항</div>';
+    h += '<div style="font-size:14px;font-weight:700;margin-bottom:4px"><span class="ico" data-icon="edit"></span> 최종 등록 청구항</div>';
     h += '<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:12px">등록결정 시 확정된 청구항 전문을 붙여넣으세요.</div>';
     h += '<textarea class="textarea-field" id="divisionDirectClaims" rows="12" placeholder="【청구항 1】\n생두의 수분 함량을...\n\n【청구항 2】\n제1항에 있어서,\n..." style="font-size:13px;line-height:1.7">' + escapeHtml(p.direct_claims_text || '') + '</textarea>';
-    h += '<button class="btn btn-outline btn-sm" onclick="Division.saveDirectClaims()" style="margin-top:8px"><span class="tf">💾</span> 저장</button>';
+    h += '<button class="btn btn-outline btn-sm" onclick="Division.saveDirectClaims()" style="margin-top:8px"><span class="ico" data-icon="save"></span> 저장</button>';
     h += '</div>';
   }
 
   // 선택 파일 (공통)
   h += '<div class="card" style="padding:16px;margin-top:12px">';
-  h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📎</span> 선택 파일</div>';
+  h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="link"></span> 선택 파일</div>';
   h += '<label class="checkbox-label" style="margin-bottom:8px"><input type="checkbox" ' + (p.include_prior_art?'checked':'') + ' onchange="Division.togglePriorArt(this.checked)" /><span>인용발명 대비 분석 포함</span></label>';
   if(p.include_prior_art){
     var priorFile = files.find(function(f){ return f.file_type==='prior_art'; });
     h += '<div class="division-file-row" style="margin-left:20px"><span class="division-file-icon">📚</span><span class="division-file-label">인용발명 PDF</span>';
-    if(priorFile){ h += '<span class="division-file-status uploaded">✅</span><button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + priorFile.id + '\')" style="font-size:10px;color:var(--color-error)">삭제</button>'; }
-    else { h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="tf">📄</span> 선택<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'prior_art\')" /></label>'; }
+    if(priorFile){ h += '<span class="division-file-status uploaded"><span class="ico" data-icon="check-circle"></span></span><button class="btn btn-ghost btn-sm" onclick="Division.removeFile(\'' + priorFile.id + '\')" style="font-size:10px;color:var(--color-error)">삭제</button>'; }
+    else { h += '<label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:11px"><span class="ico" data-icon="doc"></span> 선택<input type="file" accept=".pdf" style="display:none" onchange="Division.uploadFile(event,\'prior_art\')" /></label>'; }
     h += '</div>';
   }
   h += '</div>';
@@ -758,16 +833,16 @@ Division.renderUpload = function(left, right, p){
   }
 
   var rh = '<div class="card" style="padding:20px">';
-  rh += '<div style="font-size:16px;font-weight:700;margin-bottom:12px"><span class="tf">🔀</span> 분할출원 청구항 자동 작성</div>';
+  rh += '<div style="font-size:16px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="split"></span> 분할출원 청구항 자동 작성</div>';
   rh += '<div style="font-size:13px;line-height:1.7;color:var(--color-text-secondary);margin-bottom:16px">';
   rh += inputMode==='full' ? '원출원 문서를 업로드하면, AI가 자동 분류·파싱·분석하고<br>분할출원에 적합한 새 청구항을 조립합니다.'
     : '출원서와 최종 등록 청구항을 입력하면,<br>AI가 분할출원 청구항을 구성합니다.';
   rh += '</div>';
-  rh += '<div class="division-info-box"><div style="font-weight:600;margin-bottom:8px">📋 처리 단계</div>';
+  rh += '<div class="division-info-box"><div style="font-weight:600;margin-bottom:8px"><span class="ico" data-icon="clipboard"></span> 처리 단계</div>';
   rh += '<div style="font-size:12px;line-height:1.8;color:var(--color-text-secondary)">① 파싱 — 출원서·청구항 구조화<br>② 분석 — 미활용 구성 탐색 + 리스크 스크리닝<br>③ 조립 — 독립항/종속항 자동 구성<br>④ 검증 — 기재불비 + 형식 검증<br>⑤ 확정 — 발명 명칭 + 최종 출력</div></div>';
   rh += '<div id="divisionProgress" style="margin-top:12px"></div>';
   if(canParse){
-    rh += '<button class="btn btn-primary btn-full" id="btnDivisionParse" onclick="Division.runParse()" style="margin-top:16px;padding:14px;font-size:14px"><span class="tf">🔍</span> 파싱 시작</button>';
+    rh += '<button class="btn btn-primary btn-full" id="btnDivisionParse" onclick="Division.runParse()" style="margin-top:16px;padding:14px;font-size:14px"><span class="ico" data-icon="search"></span> 파싱 시작</button>';
   } else {
     var uploadedTypes = files.map(function(f){ return f.file_type; });
     var missing = ['application','notification','opinion','amendment'].filter(function(ft){ return uploadedTypes.indexOf(ft)<0; });
@@ -856,13 +931,13 @@ Division.handleBulkFiles = function(e){
 Division._classifyAndUpload = async function(pdfFiles){
   var p = Division.state.current; if(!p) return;
   var statusEl = document.getElementById('divisionClassifyStatus');
-  if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tf">🔍</span> ' + pdfFiles.length + '개 파일 분류 중...</div>';
+  if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="ico" data-icon="search"></span> ' + pdfFiles.length + '개 파일 분류 중...</div>';
 
   var results = []; // {file, type, confidence}
 
   for(var i = 0; i < pdfFiles.length; i++){
     var file = pdfFiles[i];
-    if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tf">🔍</span> ' + (i+1) + '/' + pdfFiles.length + ' 분류 중: ' + escapeHtml(file.name) + '</div>';
+    if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="ico" data-icon="search"></span> ' + (i+1) + '/' + pdfFiles.length + ' 분류 중: ' + escapeHtml(file.name) + '</div>';
 
     try {
       // PDF 텍스트 추출 (첫 몇 페이지)
@@ -906,7 +981,7 @@ Division._classifyAndUpload = async function(pdfFiles){
   // 순차 업로드
   for(var k = 0; k < results.length; k++){
     var r = results[k];
-    if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="tf">📤</span> ' + (k+1) + '/' + results.length + ' 업로드 중: ' + escapeHtml(r.file.name) + '</div>';
+    if(statusEl) statusEl.innerHTML = '<div style="padding:10px;text-align:center;font-size:13px;color:var(--color-primary)"><span class="ico" data-icon="upload"></span> ' + (k+1) + '/' + results.length + ' 업로드 중: ' + escapeHtml(r.file.name) + '</div>';
     await Division._doUpload(r.file, r.type);
   }
 
@@ -1204,7 +1279,7 @@ Division.renderParse = function(left, right, p){
   var claims = Division.state.claims;
 
   // === 왼쪽: 청구항 분류 매트릭스 + 등록 청구항 전문 ===
-  var h = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📊</span> 청구항 분류 매트릭스</div>';
+  var h = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="chart"></span> 청구항 분류 매트릭스</div>';
   if(claims.length === 0){ h += '<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)">파싱된 청구항이 없습니다.</div>'; }
   else {
     h += '<table class="division-matrix-table"><thead><tr><th>청구항</th><th>거절</th><th>보정</th><th>분할 역할</th></tr></thead><tbody>';
@@ -1230,7 +1305,7 @@ Division.renderParse = function(left, right, p){
   // 등록 청구항 전문 (삭제 제외, 전체 표시)
   var activeClaims = claims.filter(function(c){ return c.amendment_status !== 'deleted'; });
   if(activeClaims.length > 0){
-    h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📜</span> 최종 등록 청구항 전문 <span style="font-size:11px;font-weight:400;color:var(--color-text-tertiary)">(삭제항 제외 ' + activeClaims.length + '항)</span></div>';
+    h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="doc"></span> 최종 등록 청구항 전문 <span style="font-size:11px;font-weight:400;color:var(--color-text-tertiary)">(삭제항 제외 ' + activeClaims.length + '항)</span></div>';
     activeClaims.forEach(function(c, idx){
       var registeredText = c.amended_text || c.original_text || '';
       var isBasis = c.division_role === 'basis';
@@ -1260,7 +1335,7 @@ Division.renderParse = function(left, right, p){
 
   var rh = Division._renderTypeSwitch(p.division_type);
   rh += '<div class="card" style="padding:16px">';
-  rh += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">⭐</span> 분할출원 기초 청구항</div>';
+  rh += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="flag"></span> 분할출원 기초 청구항</div>';
   if(basisClaim){
     var regText = basisClaim.amended_text || basisClaim.original_text || '';
     rh += '<div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:8px">제' + basisClaim.claim_number + '항 | ' + (basisClaim.amended_text ? '보정 후 확정본' : '원출원 그대로') + '</div>';
@@ -1279,9 +1354,9 @@ Division.renderParse = function(left, right, p){
   rh += '</div></div>';
 
   rh += '<div style="display:flex;gap:8px;margin-top:12px">';
-  rh += '<button class="btn btn-ghost" onclick="Division.rerunParse()" style="flex:1;padding:12px"><span class="tf">🔄</span> 재파싱</button>';
-  rh += '<button class="btn btn-primary" onclick="Division.confirmParse()" style="flex:1;padding:12px"><span class="tf">✅</span> 파싱 승인 → 분석</button></div>';
-  rh += '<div style="margin-top:8px;padding:10px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm);font-size:12px;color:var(--color-text-tertiary)">⚠️ 파싱 결과가 정확한지 확인 후 승인을 눌러주세요. 역할은 드롭다운으로 수정 가능합니다.</div>';
+  rh += '<button class="btn btn-ghost" onclick="Division.rerunParse()" style="flex:1;padding:12px"><span class="ico" data-icon="refresh"></span> 재파싱</button>';
+  rh += '<button class="btn btn-primary" onclick="Division.confirmParse()" style="flex:1;padding:12px"><span class="ico" data-icon="check-circle"></span> 파싱 승인 → 분석</button></div>';
+  rh += '<div style="margin-top:8px;padding:10px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm);font-size:12px;color:var(--color-text-tertiary)"><span class="ico" data-icon="warning"></span> 파싱 결과가 정확한지 확인 후 승인을 눌러주세요. 역할은 드롭다운으로 수정 가능합니다.</div>';
   right.innerHTML = rh;
 };
 
@@ -1325,7 +1400,7 @@ Division.runAnalyze = async function(){
   var capturedId = p.id;
   Division.state._runningProjectId = capturedId;
   var right = document.getElementById('divisionDetailRight');
-  right.innerHTML = '<div class="card" style="padding:20px;text-align:center"><div style="font-size:32px;margin-bottom:12px"><span class="tf">🔍</span></div><div style="font-size:14px;font-weight:600;margin-bottom:8px">분석 진행 중...</div><div id="divisionAnalyzeProgress"></div></div>';
+  right.innerHTML = '<div class="card" style="padding:20px;text-align:center"><div style="font-size:32px;margin-bottom:12px"><span class="ico" data-icon="search"></span></div><div style="font-size:14px;font-weight:600;margin-bottom:8px">분석 진행 중...</div><div id="divisionAnalyzeProgress"></div></div>';
   try {
     App.showProgress('divisionAnalyzeProgress','구성요소 분해 중...',1,4);
     var {data:paragraphs} = await sb.from('division_spec_paragraphs').select('*').eq('project_id',p.id).order('paragraph_number');
@@ -1746,7 +1821,7 @@ Division.renderAnalyze = function(left, right, p){
     var sectionTitle = divType==='merge' ? '원출원 등록 청구항 → 구체화·한정·부가 포인트'
       : divType==='category_change' ? '원출원 등록 청구항 → 카테고리 변환 대상'
       : '원출원 등록 청구항 → 전략 분할 기준';
-    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:10px"><span class="tf">📜</span> ' + sectionTitle + '</div>';
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:10px"><span class="ico" data-icon="doc"></span> ' + sectionTitle + '</div>';
 
     // 구체화 포인트 매핑: 미활용 구성의 insertion_point → 원 청구항의 어떤 구성요소에 삽입되는지
     var insertionMap = [];
@@ -1763,7 +1838,7 @@ Division.renderAnalyze = function(left, right, p){
       if(!im.target) return;
       var escaped = escapeHtml(im.target);
       var color = im.selected ? (im.riskLevel==='safe'?'#059669':'#d97706') : '#9ca3af';
-      var marker = '<span style="background:' + (im.selected?'#ecfdf5':'#f9fafb') + ';border-bottom:2px solid ' + color + ';padding:0 2px" title="' + escapeHtml(im.content) + '">' + escaped + ' <sup style="font-size:9px;color:' + color + '">+</sup></span>';
+      var marker = '<span style="background:' + (im.selected?'#F2FFF6':'var(--dt-g50)') + ';border-bottom:2px solid ' + color + ';padding:0 2px" title="' + escapeHtml(im.content) + '">' + escaped + ' <sup style="font-size:9px;color:' + color + '">+</sup></span>';
       var placeholder = '\x00PH' + imIdx + '\x00';
       placeholders.push({ placeholder:placeholder, marker:marker });
       // 첫 번째 매치만 치환하여 중복 방지
@@ -1781,7 +1856,7 @@ Division.renderAnalyze = function(left, right, p){
       var pointTitle = divType==='merge' ? '구체화·한정·부가 포인트' : divType==='category_change' ? '변환 대상 구성요소' : '활용 구성 포인트';
       var pointSelectedCount = insertionMap.filter(function(im){return im.selected;}).length;
       h += '<details style="margin-top:10px;font-size:11px;color:var(--color-text-tertiary)">';
-      h += '<summary style="font-weight:600;cursor:pointer;padding:6px 0;user-select:none">📌 ' + pointTitle + ' (' + pointSelectedCount + '/' + insertionMap.length + '건 선택) ▾</summary>';
+      h += '<summary style="font-weight:600;cursor:pointer;padding:6px 0;user-select:none"><span class="ico" data-icon="flag"></span> ' + pointTitle + ' (' + pointSelectedCount + '/' + insertionMap.length + '건 선택) ▾</summary>';
       h += '<div style="max-height:250px;overflow-y:auto;padding:4px 0">';
       insertionMap.forEach(function(im){
         var icon = im.selected ? (im.riskLevel==='safe'?'🟢':'🟡') : '⚪';
@@ -1799,10 +1874,10 @@ Division.renderAnalyze = function(left, right, p){
   // === 카테고리 변경형: 변환 방향 표시 ===
   if(divType === 'category_change'){
     var meta = p.analysis_meta || {};
-    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🔄</span> 카테고리 변환</div>';
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="refresh"></span> 카테고리 변환</div>';
     h += '<div class="division-info-box" style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;text-align:center">';
     h += '<span style="color:var(--color-primary)">' + (meta.original_category==='method'?'방법 청구항':'장치 청구항') + '</span>';
-    h += ' <span style="font-size:18px;margin:0 12px">→</span> ';
+    h += ' <span class="ico" data-icon="arrow-right" data-size="18"></span> ';
     h += '<span style="color:var(--color-success)">' + (meta.target_category==='apparatus'?'장치 청구항':'방법 청구항') + '</span>';
     h += '</div></div></div>';
   }
@@ -1813,7 +1888,7 @@ Division.renderAnalyze = function(left, right, p){
     // basisClaim, basisText는 상위 스코프에서 이미 선언됨 — 재사용
     var strategicBasisText = basisClaim ? (basisClaim.amended_text || basisClaim.original_text || '') : '';
 
-    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🎯</span> 독립항 테마 후보</div>';
+    h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="flag"></span> 독립항 테마 후보</div>';
     if(!themes.length){ h += '<div style="font-size:13px;color:var(--color-text-tertiary);padding:8px">테마 후보가 없습니다.</div>'; }
     else { themes.forEach(function(t, tidx){
       var riskInfo = Division.RISK_LABELS[t.risk_level] || Division.RISK_LABELS.safe;
@@ -1835,7 +1910,7 @@ Division.renderAnalyze = function(left, right, p){
 
       // 예상 청구항 미리보기 (스크롤 가능)
       h += '<div class="division-claim-preview-scroll">';
-      h += '<div style="font-size:11px;font-weight:600;color:var(--color-primary);margin-bottom:4px">📝 예상 독립항 (청구항 ' + (tidx+1) + ')</div>';
+      h += '<div style="font-size:11px;font-weight:600;color:var(--color-primary);margin-bottom:4px"><span class="ico" data-icon="edit"></span> 예상 독립항 (청구항 ' + (tidx+1) + ')</div>';
       if(t.key_elements && t.key_elements.length){
         var previewText = t.key_elements.map(function(el, i){
           return (i === 0 ? '' : '상기 ') + escapeHtml(el) + ';';
@@ -1854,7 +1929,7 @@ Division.renderAnalyze = function(left, right, p){
 
         h += '<details class="division-diff-details">';
         h += '<summary style="font-size:11px;color:var(--color-primary);cursor:pointer;margin-top:6px;font-weight:600">';
-        h += '⚖️ 등록 청구항과 비교 (추가 ' + diffResult.addedCount + ' / 삭제 ' + diffResult.removedCount + ')';
+        h += '<span class="ico" data-icon="scales"></span> 등록 청구항과 비교 (추가 ' + diffResult.addedCount + ' / 삭제 ' + diffResult.removedCount + ')';
         h += '</summary>';
         h += '<div class="division-diff-box">';
         h += '<div style="font-size:10px;margin-bottom:6px;color:var(--color-text-tertiary)"><span class="division-diff-added" style="padding:0 4px">추가</span> <span class="division-diff-removed" style="padding:0 4px">삭제</span> 동일</div>';
@@ -1865,9 +1940,9 @@ Division.renderAnalyze = function(left, right, p){
       // 근거/차별점
       h += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--color-divider)">';
       h += '<div style="font-size:11px;color:var(--color-text-tertiary)">근거: ' + (t.spec_paragraphs||[]).map(function(s){return '【'+s+'】';}).join(' ') + '</div>';
-      if(t.differentiation) h += '<div style="font-size:11px;color:var(--color-primary);margin-top:2px">💡 ' + escapeHtml(t.differentiation) + '</div>';
+      if(t.differentiation) h += '<div style="font-size:11px;color:var(--color-primary);margin-top:2px"><span class="ico" data-icon="lightbulb"></span> ' + escapeHtml(t.differentiation) + '</div>';
       var tFlags = Division._toArray(t.risk_flags);
-      if(tFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:2px">⚠️ ' + escapeHtml(tFlags.join(', ')) + '</div>';
+      if(tFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:2px"><span class="ico" data-icon="warning"></span> ' + escapeHtml(tFlags.join(', ')) + '</div>';
       h += '</div>';
 
       h += '</div></label></div>';
@@ -1882,7 +1957,7 @@ Division.renderAnalyze = function(left, right, p){
 
   // 1. 명칭 미리보기 (선택된 구성 키워드 기반 자동 생성)
   h += '<div class="card" style="padding:14px;margin-top:12px" id="divisionTitlePreview">';
-  h += '<div style="font-size:13px;font-weight:700;margin-bottom:8px"><span class="tf">🏷️</span> 명칭 미리보기</div>';
+  h += '<div style="font-size:13px;font-weight:700;margin-bottom:8px"><span class="ico" data-icon="tag"></span> 명칭 미리보기</div>';
   h += '<div id="divisionTitlePreviewText" style="font-size:13px;line-height:1.6;padding:8px 10px;background:var(--color-bg-tertiary);border-radius:var(--radius-sm);color:var(--color-text-tertiary)">구성을 선택하면 명칭이 자동 생성됩니다</div>';
   h += '</div>';
 
@@ -1893,7 +1968,7 @@ Division.renderAnalyze = function(left, right, p){
     h += '<span style="margin-left:auto;display:flex;gap:6px">';
     h += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="Division.bulkSelect(\'all\')">전체 선택</button>';
     h += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="Division.bulkSelect(\'none\')">전체 해제</button>';
-    h += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;color:var(--color-success)" onclick="Division.bulkSelect(\'safe\')">✅ safe만</button>';
+    h += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;color:var(--color-success)" onclick="Division.bulkSelect(\'safe\')"><span class="ico" data-icon="check-circle"></span> safe만</button>';
     h += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="Division.toggleAllCards(true)">펼치기</button>';
     h += '<button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="Division.toggleAllCards(false)">접기</button>';
     h += '</span></div>';
@@ -1921,7 +1996,7 @@ Division.renderAnalyze = function(left, right, p){
       h += '<span style="font-weight:600;font-size:13px">'+escapeHtml(uc.content.substring(0,60))+(uc.content.length>60?'...':'')+'</span>';
       var limLabels = {structural:'구조',material:'재질',shape:'형상',arrangement:'배치',functional:'기능'};
       h += '<span class="division-element-tag" style="font-size:10px">'+(limLabels[uc.limitation_type]||uc.limitation_type)+'</span>';
-      if(cd.overlap_warning) h += '<span style="font-size:10px;color:var(--color-error);font-weight:600">🔴 overlap</span>';
+      if(cd.overlap_warning) h += '<span style="font-size:10px;color:var(--color-error);font-weight:600"><span class="status-dot negative"></span> overlap</span>';
       h += '</div>';
       h += '<span style="font-size:18px;color:var(--color-text-disabled);transition:transform 0.2s" class="division-card-chevron">▾</span>';
       h += '</div>';
@@ -1929,26 +2004,26 @@ Division.renderAnalyze = function(left, right, p){
       h += '<div class="division-card-body">';
       h += '<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">';
       h += '<span class="division-element-tag">【'+uc.paragraph_number+'】</span>';
-      h += '<span class="division-element-tag">→ '+escapeHtml(uc.related_element)+'</span>';
+      h += '<span class="division-element-tag"><span class="ico" data-icon="arrow-right"></span> '+escapeHtml(uc.related_element)+'</span>';
       h += '</div>';
       if(cd.spec_source_text){
         h += '<div class="division-source-citation">';
-        h += '📄 근거: 【'+uc.paragraph_number+'】';
+        h += '<span class="ico" data-icon="doc"></span> 근거: 【'+uc.paragraph_number+'】';
         h += '<div class="citation-text">"'+escapeHtml(cd.spec_source_text.substring(0,200))+(cd.spec_source_text.length>200?'...':'')+'"</div>';
         h += '</div>';
       }
       if(uc.insertion_point){
-        h += '<div style="margin-top:6px;padding:6px 10px;background:#f0f7ff;border-radius:4px;font-size:11px;color:var(--color-primary)">📌 삽입: '+escapeHtml(uc.insertion_point)+'</div>';
+        h += '<div style="margin-top:6px;padding:6px 10px;background:#f0f7ff;border-radius:4px;font-size:11px;color:var(--color-primary)"><span class="ico" data-icon="flag"></span> 삽입: '+escapeHtml(uc.insertion_point)+'</div>';
       }
       if(cd.overlap_warning){
-        h += '<div class="division-overlap-warning">🔴 '+escapeHtml(cd.overlap_detail||'기존 청구항과 유사')+'</div>';
+        h += '<div class="division-overlap-warning"><span class="status-dot negative"></span> '+escapeHtml(cd.overlap_detail||'기존 청구항과 유사')+'</div>';
       } else if(cd.spec_source_text){
-        h += '<div class="division-no-overlap">✅ 기존 청구항 미포함</div>';
+        h += '<div class="division-no-overlap"><span class="ico" data-icon="check-circle"></span> 기존 청구항 미포함</div>';
       }
-      if(cd.registration_strategy) h += '<div class="division-reg-strategy">💡 '+escapeHtml(cd.registration_strategy.substring(0,150))+'</div>';
+      if(cd.registration_strategy) h += '<div class="division-reg-strategy"><span class="ico" data-icon="lightbulb"></span> '+escapeHtml(cd.registration_strategy.substring(0,150))+'</div>';
       var ucFlags = Division._toArray(uc.risk_flags);
-      if(ucFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:4px">⚠️ '+escapeHtml(ucFlags.join(', '))+'</div>';
-      if(uc.suggestion) h += '<div style="font-size:11px;color:var(--color-success);margin-top:2px">💡 '+escapeHtml(uc.suggestion)+'</div>';
+      if(ucFlags.length) h += '<div style="font-size:11px;color:var(--color-warning);margin-top:4px"><span class="ico" data-icon="warning"></span> '+escapeHtml(ucFlags.join(', '))+'</div>';
+      if(uc.suggestion) h += '<div style="font-size:11px;color:var(--color-success);margin-top:2px"><span class="ico" data-icon="lightbulb"></span> '+escapeHtml(uc.suggestion)+'</div>';
       h += '</div>'; // card-body
       h += '</div>'; // card
     });
@@ -1961,7 +2036,7 @@ Division.renderAnalyze = function(left, right, p){
   // 오른쪽: 유형 전환 + 요약
   var selectedCount = unused.filter(function(uc){ return uc.user_selection==='selected'; }).length;
   var rh = Division._renderTypeSwitch(p.division_type);
-  rh += '<div class="card" style="padding:20px"><div style="font-size:16px;font-weight:700;margin-bottom:16px"><span class="tf">📋</span> 구성 요약</div>';
+  rh += '<div class="card" style="padding:20px"><div style="font-size:16px;font-weight:700;margin-bottom:16px"><span class="ico" data-icon="clipboard"></span> 구성 요약</div>';
   rh += '<div class="division-summary-grid">';
   if(divType === 'strategic'){
     var summaryThemes = (p.analysis_meta && p.analysis_meta.themes) || [];
@@ -1972,7 +2047,7 @@ Division.renderAnalyze = function(left, right, p){
 
   // 청구항 구성 설정
   rh += '<div class="card" style="padding:16px;margin-top:12px">';
-  rh += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">⚙️</span> 청구항 구성</div>';
+  rh += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="settings"></span> 청구항 구성</div>';
 
   // 독립항 수
   rh += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">';
@@ -2011,8 +2086,8 @@ Division.renderAnalyze = function(left, right, p){
   rh += '</div>';
 
   rh += '<div id="divisionAssembleProgress" style="margin-top:12px"></div>';
-  rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.rerunAnalyze()" style="flex:1;padding:12px"><span class="tf">🔄</span> 재분석</button>';
-  rh += '<button class="btn btn-primary" id="btnDivisionAssemble" onclick="Division.runAssemble()" style="flex:1;padding:12px"><span class="tf">🔧</span> 조립 실행</button></div>';
+  rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.rerunAnalyze()" style="flex:1;padding:12px"><span class="ico" data-icon="refresh"></span> 재분석</button>';
+  rh += '<button class="btn btn-primary" id="btnDivisionAssemble" onclick="Division.runAssemble()" style="flex:1;padding:12px"><span class="ico" data-icon="settings"></span> 조립 실행</button></div>';
   right.innerHTML = rh;
 };
 
@@ -2052,7 +2127,7 @@ Division._updateTitlePreview = function(){
   var origTitle = (p && p.original_title_ko) || '';
 
   if(!origTitle){
-    el.innerHTML = '<span style="color:var(--color-error)">⚠️ 원출원 명칭을 추출할 수 없습니다. 파싱을 다시 실행해 주세요.</span>';
+    el.innerHTML = '<span style="color:var(--color-error)"><span class="ico" data-icon="warning" data-size="14"></span> 원출원 명칭을 추출할 수 없습니다. 파싱을 다시 실행해 주세요.</span>';
     Division.state.suggestedTitles = [];
     return;
   }
@@ -2401,12 +2476,12 @@ Division.renderAssemble = function(left, right, p){
       var diffResult = Division._wordDiff(registeredText, divText);
 
       h += '<div class="division-compare">';
-      h += '<div class="division-compare-header"><span class="tf">⚖️</span> 청구항 ' + dc.claim_number + ' 비교 (독립항)';
+      h += '<div class="division-compare-header"><span class="ico" data-icon="scales"></span> 청구항 ' + dc.claim_number + ' 비교 (독립항)';
       h += '<span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--color-text-tertiary)">추가 ' + diffResult.addedCount + ' / 삭제 ' + diffResult.removedCount + '</span>';
       h += '</div>';
       h += '<div class="division-compare-titles">';
-      h += '<div class="division-compare-col-title original">📜 등록 청구항 (원본)</div>';
-      h += '<div class="division-compare-col-title division">🔀 분할출원 청구항 (신규)</div>';
+      h += '<div class="division-compare-col-title original"><span class="ico" data-icon="doc"></span> 등록 청구항 (원본)</div>';
+      h += '<div class="division-compare-col-title division"><span class="ico" data-icon="split"></span> 분할출원 청구항 (신규)</div>';
       h += '</div>';
       h += '<div class="division-compare-body">';
       h += '<div class="division-compare-col">' + escapeHtml(Division._formatClaimText(registeredText)) + '</div>';
@@ -2417,7 +2492,7 @@ Division.renderAssemble = function(left, right, p){
     // 종속항 목록
     var divDeps = divClaims.filter(function(c){ return c.claim_type==='dependent'; });
     if(divDeps.length > 0){
-      h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📎</span> 종속항 (' + divDeps.length + '항)</div>';
+      h += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="link"></span> 종속항 (' + divDeps.length + '항)</div>';
       divDeps.forEach(function(dc){
         var divCleanText = (dc.claim_text || '').replace(/\*{2,3}/g, '');
 
@@ -2432,7 +2507,7 @@ Division.renderAssemble = function(left, right, p){
         h += '<div class="division-claim-body" style="white-space:pre-wrap">' + escapeHtml(Division._formatClaimText(divCleanText)) + '</div>';
         if(origDep){
           h += '<details style="margin-top:8px"><summary style="font-size:11px;color:var(--color-text-tertiary);cursor:pointer">원본 제' + origDep.claim_number + '항 보기</summary>';
-          h += '<div style="font-size:12px;line-height:1.7;padding:8px;background:#f8fafc;border-radius:4px;margin-top:4px">' + escapeHtml(origDep.amended_text || origDep.original_text || '') + '</div>';
+          h += '<div style="font-size:12px;line-height:1.7;padding:8px;background:var(--dt-g50);border-radius:4px;margin-top:4px">' + escapeHtml(origDep.amended_text || origDep.original_text || '') + '</div>';
           h += '</details>';
         }
         h += '</div>';
@@ -2447,7 +2522,7 @@ Division.renderAssemble = function(left, right, p){
   var indepCnt = divClaims.filter(function(c){ return c.claim_type==='independent'; }).length;
   var depCnt = divClaims.filter(function(c){ return c.claim_type==='dependent'; }).length;
 
-  var rh = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">📊</span> 변경사항 요약</div>';
+  var rh = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="chart"></span> 변경사항 요약</div>';
   rh += '<div class="division-summary-grid">';
   rh += '<div class="division-summary-item"><div class="division-summary-num">' + indepCnt + '</div><div class="division-summary-label">독립항</div></div>';
   rh += '<div class="division-summary-item"><div class="division-summary-num">' + depCnt + '</div><div class="division-summary-label">종속항</div></div>';
@@ -2458,13 +2533,13 @@ Division.renderAssemble = function(left, right, p){
   rh += '<div class="card" style="padding:14px;margin-top:12px"><div style="font-size:12px;font-weight:600;margin-bottom:8px">🖍️ 색상 범례</div>';
   rh += '<div style="font-size:12px;line-height:2">';
   rh += '<span class="division-diff-added" style="padding:2px 8px">초록 배경</span> 부가/병합/변환된 구성 (원본에 없던 내용)<br>';
-  rh += '<span style="padding:2px 8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:2px">회색 배경</span> 원본 유지 부분';
+  rh += '<span style="padding:2px 8px;background:var(--dt-g50);border:1px solid var(--dt-g150);border-radius:2px">회색 배경</span> 원본 유지 부분';
   rh += '</div></div>';
 
   rh += '<div id="divisionVerifyProgress" style="margin-top:12px"></div>';
   rh += '<div style="display:flex;gap:8px;margin-top:12px">';
-  rh += '<button class="btn btn-ghost" onclick="Division.goToStep(\'analyze\')" style="flex:1;padding:12px"><span class="tf">🔄</span> 재조립 (구성 선택)</button>';
-  rh += '<button class="btn btn-primary" id="btnDivisionVerify" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tf">✅</span> 검증 실행</button></div>';
+  rh += '<button class="btn btn-ghost" onclick="Division.goToStep(\'analyze\')" style="flex:1;padding:12px"><span class="ico" data-icon="refresh"></span> 재조립 (구성 선택)</button>';
+  rh += '<button class="btn btn-primary" id="btnDivisionVerify" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="ico" data-icon="check-circle"></span> 검증 실행</button></div>';
   right.innerHTML = rh;
 };
 
@@ -2869,9 +2944,9 @@ Division.renderVerify = function(left, right, p){
   // ─── T17: Pass 1 — 자동 검증 (코드) ───
   var severityIcons = {CRITICAL:'🔴',HIGH:'🟠',MEDIUM:'🟡'};
   h += '<div class="card division-autocheck-section">';
-  h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🔍</span> 자동 검증 (코드)</div>';
+  h += '<div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="search"></span> 자동 검증 (코드)</div>';
   if(!autoIssues.length){
-    h += '<div class="division-autocheck-pass">✅ 코드 레벨 검증 통과 — 자동 감지된 이슈 없음</div>';
+    h += '<div class="division-autocheck-pass"><span class="ico" data-icon="check-circle"></span> 코드 레벨 검증 통과 — 자동 감지된 이슈 없음</div>';
   } else {
     autoIssues.forEach(function(issue, aiIdx){
       if(issue._accepted){ return; } // 수용된 항목은 숨김
@@ -2886,16 +2961,16 @@ Division.renderVerify = function(left, right, p){
       // 수용/수정 버튼 (CRITICAL 제외 — CRITICAL은 수용 불가, 수정만 가능)
       h += '<div style="margin-top:8px;display:flex;gap:6px">';
       if(issue.severity !== 'CRITICAL'){
-        h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.acceptAutoIssue('+aiIdx+')">✅ 수용</button>';
+        h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.acceptAutoIssue('+aiIdx+')"><span class="ico" data-icon="check-circle"></span> 수용</button>';
       }
-      h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.editClaimText('+aiIdx+')">✏️ 수정</button>';
+      h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.editClaimText('+aiIdx+')"><span class="ico" data-icon="edit"></span> 수정</button>';
       h += '</div>';
       h += '</div>';
     });
     // 수용된 항목이 있으면 요약 표시
     var acceptedCount = autoIssues.filter(function(i){return i._accepted;}).length;
     if(acceptedCount > 0){
-      h += '<div style="padding:6px 10px;font-size:11px;color:var(--color-text-tertiary)">✅ 수용 처리됨: '+acceptedCount+'건</div>';
+      h += '<div style="padding:6px 10px;font-size:11px;color:var(--color-text-tertiary)"><span class="ico" data-icon="check-circle"></span> 수용 처리됨: '+acceptedCount+'건</div>';
     }
   }
   h += '</div>';
@@ -2904,33 +2979,33 @@ Division.renderVerify = function(left, right, p){
   var passCount = results.filter(function(r){ return r.result==='pass'; }).length;
   var warnCount = results.filter(function(r){ return r.result==='warning'; }).length;
   var failCount = results.filter(function(r){ return r.result==='fail'; }).length;
-  h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🤖</span> AI 검증 (LLM)</div>';
-  h += '<div class="division-val-summary"><div class="division-val-stat pass">✅ 통과 '+passCount+'</div><div class="division-val-stat warn">⚠️ 주의 '+warnCount+'</div><div class="division-val-stat fail">❌ 실패 '+failCount+'</div></div>';
+  h += '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="robot"></span> AI 검증 (LLM)</div>';
+  h += '<div class="division-val-summary"><div class="division-val-stat pass"><span class="ico" data-icon="check-circle"></span> 통과 '+passCount+'</div><div class="division-val-stat warn"><span class="ico" data-icon="warning"></span> 주의 '+warnCount+'</div><div class="division-val-stat fail"><span class="ico" data-icon="x"></span> 실패 '+failCount+'</div></div>';
   var typeLabels = {new_matter:'신규사항',basis_scope:'basis 보존/원출원 범위',double_patenting:'이중 특허',spec_support:'명세서 뒷받침',support:'명세서 뒷받침',format:'형식',abstract_expression:'추상적 표현',functional_limitation:'기능적 기재',overlap:'구성 중복'};
   if(!results.length){ h += '<div style="text-align:center;padding:20px;color:var(--color-text-tertiary)">검증 결과가 없습니다.</div>'; }
   else { results.forEach(function(vr, vrIdx){
     var resultCss = vr.result==='pass'?'vr-pass':vr.result==='warning'?'vr-warn':'vr-fail';
-    var resultIcon = vr.result==='pass'?'✅':vr.result==='warning'?'⚠️':'❌';
+    var resultIcon = vr.result==='pass'?'<span class="ico" data-icon="check-circle" data-size="14"></span>':vr.result==='warning'?'<span class="ico" data-icon="warning" data-size="14"></span>':'<span class="ico" data-icon="x-circle" data-size="14"></span>';
     var typeLabel = typeLabels[vr.check_type]||vr.check_type;
     h += '<div class="division-val-row '+resultCss+'" id="divValRow'+vrIdx+'" onclick="this.classList.toggle(\'expanded\')">';
     h += '<div class="division-val-row-header"><span>'+resultIcon+'</span><span style="font-weight:500;flex:1">'+typeLabel+'</span><span class="division-val-result-badge '+resultCss+'">'+vr.result+'</span></div>';
     h += '<div class="division-val-row-body">';
     if(vr.target_text) h += '<div style="margin-bottom:6px"><strong>대상:</strong> '+escapeHtml(vr.target_text)+'</div>';
     if(vr.detail) h += '<div style="margin-bottom:6px">'+escapeHtml(vr.detail)+'</div>';
-    if(vr.suggestion) h += '<div style="padding:8px;background:var(--color-primary-light);border-radius:var(--radius-sm);border-left:3px solid var(--color-primary)">💡 '+escapeHtml(vr.suggestion)+'</div>';
+    if(vr.suggestion) h += '<div style="padding:8px;background:var(--color-primary-light);border-radius:var(--radius-sm);border-left:3px solid var(--color-primary)"><span class="ico" data-icon="lightbulb"></span> '+escapeHtml(vr.suggestion)+'</div>';
     if(vr.spec_paragraph_number) h += '<div style="margin-top:4px;font-size:11px;color:var(--color-text-tertiary)">근거: 【'+vr.spec_paragraph_number+'】'+(vr.spec_quote?' — "'+escapeHtml(vr.spec_quote)+'"':'')+'</div>';
     if(vr.support_type){ var stLabels={direct:'직접 기재',substantial:'실질적 뒷받침',derivable:'자명한 도출',none:'근거 없음'}; var stColors={direct:'var(--color-success)',substantial:'var(--color-success)',derivable:'var(--color-warning)',none:'var(--color-error)'}; h+='<div style="margin-top:2px;font-size:11px;color:'+stColors[vr.support_type]+'">뒷받침: '+(stLabels[vr.support_type]||vr.support_type)+'</div>'; }
     // V2: 액션 버튼 (warning/fail 항목에만)
     if(vr.result === 'warning' || vr.result === 'fail'){
       h += '<div class="division-val-actions" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--color-divider);display:flex;gap:6px;flex-wrap:wrap">';
       if(vr.result === 'warning'){
-        h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.acceptWarning('+vrIdx+')" title="실질적 뒷받침 인정">✅ 수용</button>';
+        h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.acceptWarning('+vrIdx+')" title="실질적 뒷받침 인정"><span class="ico" data-icon="check-circle"></span> 수용</button>';
       }
       if(vr.result === 'fail'){
-        h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px;color:var(--color-error)" onclick="event.stopPropagation();Division.removeFailedComponent('+vrIdx+')" title="해당 구성 제거 후 분석 화면으로 이동">🗑️ 구성 제거</button>';
+        h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px;color:var(--color-error)" onclick="event.stopPropagation();Division.removeFailedComponent('+vrIdx+')" title="해당 구성 제거 후 분석 화면으로 이동"><span class="ico" data-icon="trash"></span> 구성 제거</button>';
       }
-      h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.editClaimText('+vrIdx+')" title="청구항 문언 직접 수정">✏️ 수정</button>';
-      h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.specifyBasis('+vrIdx+')" title="뒷받침 근거 단락 지정">📄 근거 지정</button>';
+      h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.editClaimText('+vrIdx+')" title="청구항 문언 직접 수정"><span class="ico" data-icon="edit"></span> 수정</button>';
+      h += '<button class="btn btn-ghost division-val-action-btn" style="font-size:11px;padding:4px 10px" onclick="event.stopPropagation();Division.specifyBasis('+vrIdx+')" title="뒷받침 근거 단락 지정"><span class="ico" data-icon="doc"></span> 근거 지정</button>';
       h += '</div>';
     }
     h += '</div></div>';
@@ -2938,7 +3013,7 @@ Division.renderVerify = function(left, right, p){
   h += '</div>';
   left.innerHTML = h;
 
-  var rh = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🏷️</span> 발명의 명칭</div>';
+  var rh = '<div class="card" style="padding:16px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="tag"></span> 발명의 명칭</div>';
 
   // 원출원 명칭 표시
   if(p.original_title_ko){
@@ -2967,7 +3042,7 @@ Division.renderVerify = function(left, right, p){
       rh += '<label class="division-title-option" style="border-color:var(--color-primary);background:var(--color-primary-light)"><input type="radio" name="divisionTitle" value="suggested_'+si+'"'+(si===0 && !p.original_title_ko?' checked':'')+' /><div>';
       rh += '<div style="font-size:13px;font-weight:500">'+escapeHtml(st.ko)+'</div>';
       if(st.en) rh += '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">'+escapeHtml(st.en)+'</div>';
-      rh += '<div style="font-size:11px;color:var(--color-primary);margin-top:2px">🏷️ 구성 선택 기반 제안</div>';
+      rh += '<div style="font-size:11px;color:var(--color-primary);margin-top:2px"><span class="ico" data-icon="tag"></span> 구성 선택 기반 제안</div>';
       rh += '</div></label>';
     });
   }
@@ -2987,15 +3062,15 @@ Division.renderVerify = function(left, right, p){
       rh += '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">'+escapeHtml(tc.en)+'</div>';
       // reason
       if(tc.reason){
-        rh += '<div style="font-size:11px;color:var(--color-primary);margin-top:4px">💡 근거: '+escapeHtml(tc.reason)+'</div>';
+        rh += '<div style="font-size:11px;color:var(--color-primary);margin-top:4px"><span class="ico" data-icon="lightbulb"></span> 근거: '+escapeHtml(tc.reason)+'</div>';
       }
       // based_on_element + 교차확인
       if(tc.based_on_element){
         var elementText = tc.based_on_element;
         // 교차확인: based_on_element가 독립항에 실제 포함되는지
         var found = allClaimText.indexOf(elementText.substring(0, Math.min(20, elementText.length))) >= 0;
-        rh += '<div style="font-size:11px;margin-top:2px;padding:4px 8px;border-radius:var(--radius-sm);background:'+(found?'#f0fdf4':'#fef2f2')+'">';
-        rh += '<span style="color:'+(found?'var(--color-success)':'var(--color-error)')+'">📌 청구항 포함 확인: '+(found?'✅':'⚠️ 미포함')+'</span>';
+        rh += '<div style="font-size:11px;margin-top:2px;padding:4px 8px;border-radius:var(--radius-sm);background:'+(found?'#f0fdf4':'#FEECEC')+'">';
+        rh += '<span style="color:'+(found?'var(--color-success)':'var(--color-error)')+'"><span class="ico" data-icon="flag"></span> 청구항 포함 확인: '+(found?'<span class="ico" data-icon="check-circle" data-size="12"></span> 포함':'<span class="ico" data-icon="warning" data-size="12"></span> 미포함')+'</span>';
         rh += '<div style="color:var(--color-text-secondary);margin-top:2px">"'+escapeHtml(elementText.substring(0,120))+(elementText.length>120?'...':'')+'"</div>';
         rh += '</div>';
       }
@@ -3012,7 +3087,7 @@ Division.renderVerify = function(left, right, p){
 
   // ⚠️ 명칭 변경 시 경고
   rh += '<div id="divisionTitleWarning" class="division-title-warning" style="display:none">';
-  rh += '<div style="font-weight:600;margin-bottom:4px">⚠️ 발명의 명칭 변경 시 유의사항</div>';
+  rh += '<div style="font-weight:600;margin-bottom:4px"><span class="ico" data-icon="warning"></span> 발명의 명칭 변경 시 유의사항</div>';
   rh += '<div style="font-size:12px;line-height:1.7">';
   rh += '분할출원의 명칭을 원출원과 다르게 하는 경우, 명세서의 다음 부분도 함께 변경해야 합니다:';
   rh += '<ul style="margin:6px 0 0 16px;padding:0"><li>【발명의 명칭】 항목</li><li>【요약서】의 발명 제목</li><li>【국제특허분류】가 달라지는 경우 IPC 코드</li><li>출원서 표지의 발명의 명칭란</li></ul>';
@@ -3035,15 +3110,15 @@ Division.renderVerify = function(left, right, p){
     if(unhandledFail > 0) msgs.push('AI 검증 실패 '+unhandledFail+'건');
     if(unhandledCritical > 0) msgs.push('자동 검증 CRITICAL '+unhandledCritical+'건');
     if(totalWarning > 0) msgs.push('주의 '+totalWarning+'건');
-    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)">❌ '+msgs.join(' / ')+' — 수정하거나 구성을 제거한 후 재검증하세요.</div>';
+    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-error-light);border-radius:var(--radius-sm);font-size:13px;color:var(--color-error)"><span class="ico" data-icon="x"></span> '+msgs.join(' / ')+' — 수정하거나 구성을 제거한 후 재검증하세요.</div>';
   } else if(totalWarning > 0){
-    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-warning-light);border-radius:var(--radius-sm);font-size:13px;color:#92400e">⚠️ 주의 '+totalWarning+'건 — "수용" 또는 "수정"을 선택하면 최종 확정할 수 있습니다.</div>';
+    rh += '<div style="margin-top:12px;padding:12px;background:var(--color-warning-light);border-radius:var(--radius-sm);font-size:13px;color:#663A00"><span class="ico" data-icon="warning"></span> 주의 '+totalWarning+'건 — "수용" 또는 "수정"을 선택하면 최종 확정할 수 있습니다.</div>';
   } else {
-    rh += '<div style="margin-top:12px;padding:12px;background:#d1fae5;border-radius:var(--radius-sm);font-size:13px;color:#065f46">✅ 모든 검증 통과 — 최종 확정할 수 있습니다.</div>';
+    rh += '<div style="margin-top:12px;padding:12px;background:#D9FFE6;border-radius:var(--radius-sm);font-size:13px;color:#006E25"><span class="ico" data-icon="check-circle"></span> 모든 검증 통과 — 최종 확정할 수 있습니다.</div>';
   }
-  rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="tf">🔄</span> 재검증</button>';
+  rh += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="Division.runVerify()" style="flex:1;padding:12px"><span class="ico" data-icon="refresh"></span> 재검증</button>';
   var canConfirm = totalBlocking === 0 && totalWarning === 0;
-  rh += '<button class="btn btn-primary" onclick="'+(canConfirm ? 'Division.confirmFinal()' : 'showToast(\'미처리 이슈를 먼저 해결하세요\',\'error\')')+'" style="flex:1;padding:12px'+(canConfirm?'':';opacity:0.5;cursor:not-allowed')+'"><span class="tf">🏁</span> 최종 확정</button></div>';
+  rh += '<button class="btn btn-primary" onclick="'+(canConfirm ? 'Division.confirmFinal()' : 'showToast(\'미처리 이슈를 먼저 해결하세요\',\'error\')')+'" style="flex:1;padding:12px'+(canConfirm?'':';opacity:0.5;cursor:not-allowed')+'"><span class="ico" data-icon="flag"></span> 최종 확정</button></div>';
   right.innerHTML = rh;
   Division._bindTitleRadios();
 };
@@ -3065,7 +3140,7 @@ Division.acceptWarning = async function(vrIdx){
   try {
     await sb.from('division_validation_results').update({ result:'pass' }).eq('id', vr.id);
     vr.result = 'pass';
-    Division._log('[Division] V3 수용: 항목', vrIdx, '→ pass, 사유:', reason);
+    Division._log('[Division] V3 수용: 항목', vrIdx, '<span class="ico" data-icon="arrow-right"></span> pass, 사유:', reason);
 
     // user_accepted_warnings 기록 시도 (컬럼 있을 때만)
     try {
@@ -3167,7 +3242,7 @@ Division.editClaimText = function(vrIdx){
 
   var claimText = targetClaim ? targetClaim.claim_text : '';
   var editHtml = '<div class="division-edit-area" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--color-divider)">';
-  editHtml += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">✏️ 청구항 '+((targetClaim&&targetClaim.claim_number)||'?')+' 문언 수정</div>';
+  editHtml += '<div style="font-size:12px;font-weight:600;margin-bottom:6px"><span class="ico" data-icon="edit"></span> 청구항 '+((targetClaim&&targetClaim.claim_number)||'?')+' 문언 수정</div>';
   editHtml += '<textarea id="divEditClaim'+vrIdx+'" style="width:100%;min-height:120px;font-size:12px;line-height:1.7;padding:10px;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-family:var(--font-family);resize:vertical">'+escapeHtml(claimText)+'</textarea>';
   editHtml += '<div style="display:flex;gap:6px;margin-top:8px">';
   editHtml += '<button class="btn btn-primary" style="font-size:11px;padding:6px 14px" onclick="Division._submitClaimEdit('+vrIdx+',\''+((targetClaim&&targetClaim.id)||'')+'\')">재검증 실행</button>';
@@ -3227,7 +3302,7 @@ Division.specifyBasis = function(vrIdx){
   // 명세서 단락 목록
   var paragraphs = Division.state.specParagraphs || [];
   var basisHtml = '<div class="division-basis-area" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--color-divider)">';
-  basisHtml += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">📄 근거 단락 지정</div>';
+  basisHtml += '<div style="font-size:12px;font-weight:600;margin-bottom:6px"><span class="ico" data-icon="doc"></span> 근거 단락 지정</div>';
   basisHtml += '<input type="text" id="divBasisSearch'+vrIdx+'" placeholder="단락번호 또는 내용으로 검색..." style="width:100%;padding:6px 10px;font-size:12px;border:1px solid var(--color-border);border-radius:var(--radius-sm);margin-bottom:8px;font-family:var(--font-family)" oninput="Division._filterBasisList('+vrIdx+')" />';
   basisHtml += '<div id="divBasisList'+vrIdx+'" style="max-height:200px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm)">';
   if(!paragraphs.length){
@@ -3344,7 +3419,7 @@ Division.runReVerify = async function(editContext){
     p.status = 're_verifying';
 
     var right = document.getElementById('divisionDetailRight');
-    if(right) right.innerHTML = '<div class="card" style="padding:20px;text-align:center"><div style="font-size:32px;margin-bottom:12px"><span class="tf">🔄</span></div><div style="font-size:14px;font-weight:600;margin-bottom:8px">재검증 진행 중...</div><div id="divisionReVerifyProgress"></div></div>';
+    if(right) right.innerHTML = '<div class="card" style="padding:20px;text-align:center"><div style="font-size:32px;margin-bottom:12px"><span class="ico" data-icon="refresh"></span></div><div style="font-size:14px;font-weight:600;margin-bottom:8px">재검증 진행 중...</div><div id="divisionReVerifyProgress"></div></div>';
 
     // 1) 청구항 텍스트
     App.showProgress('divisionReVerifyProgress','재검증 준비 중...',1,5);
@@ -3489,25 +3564,25 @@ Division.renderConfirm = function(left, right, p){
   var divClaims = Division.state.divisionClaims;
   var plainText = divClaims.map(function(dc){ return '【청구항 '+dc.claim_number+'】\n'+(dc.claim_text||'').replace(/;\s*/g,';\n'); }).join('\n\n');
   var h = '<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
-  h += '<div style="font-size:14px;font-weight:700"><span class="tf">📋</span> 청구항 전문</div>';
-  h += '<button class="btn btn-outline btn-sm" onclick="Division.copyText(\'divisionOutputText\')"><span class="tf">📋</span> 전체 복사</button></div>';
+  h += '<div style="font-size:14px;font-weight:700"><span class="ico" data-icon="clipboard"></span> 청구항 전문</div>';
+  h += '<button class="btn btn-outline btn-sm" onclick="Division.copyText(\'divisionOutputText\')"><span class="ico" data-icon="clipboard"></span> 전체 복사</button></div>';
   h += '<div id="divisionOutputText" style="white-space:pre-wrap;font-size:13px;line-height:1.8;background:var(--color-bg-tertiary);padding:16px;border-radius:var(--radius-sm);max-height:60vh;overflow-y:auto">'+escapeHtml(plainText)+'</div></div>';
   left.innerHTML = h;
 
   var rh = '<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
-  rh += '<div style="font-size:14px;font-weight:700"><span class="tf">🏷️</span> 발명의 명칭</div>';
-  rh += '<button class="btn btn-outline btn-sm" onclick="Division.copyText(\'divisionOutputTitle\')"><span class="tf">📋</span> 복사</button></div>';
+  rh += '<div style="font-size:14px;font-weight:700"><span class="ico" data-icon="tag"></span> 발명의 명칭</div>';
+  rh += '<button class="btn btn-outline btn-sm" onclick="Division.copyText(\'divisionOutputTitle\')"><span class="ico" data-icon="clipboard"></span> 복사</button></div>';
   rh += '<div id="divisionOutputTitle" style="font-size:13px;line-height:1.7"><div><strong>【국문】</strong>'+escapeHtml(p.title_ko||'')+'</div>';
   rh += '<div style="margin-top:4px"><strong>【영문】</strong>'+escapeHtml(p.title_en||'')+'</div></div>';
   if(p.title_changed){
     rh += '<div style="margin-top:10px;padding:10px 12px;background:var(--color-warning-light);border-radius:var(--radius-sm);border-left:3px solid var(--color-warning);font-size:12px;line-height:1.6">';
-    rh += '<strong>⚠️ 명칭 변경됨</strong> — 원출원과 발명의 명칭이 다릅니다.<br>';
+    rh += '<strong><span class="ico" data-icon="warning"></span> 명칭 변경됨</strong> — 원출원과 발명의 명칭이 다릅니다.<br>';
     rh += '명세서의 【발명의 명칭】, 【요약서】, 출원서 표지도 함께 수정하세요.';
     if(p.original_title_ko) rh += '<div style="margin-top:6px;color:var(--color-text-tertiary)">원출원: ' + escapeHtml(p.original_title_ko) + '</div>';
     rh += '</div>';
   }
   rh += '</div>';
-  rh += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="tf">🖍️</span> 하이라이트 버전</div>';
+  rh += '<div class="card" style="padding:16px;margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px"><span class="ico" data-icon="edit"></span> 하이라이트 버전</div>';
   rh += '<div style="font-size:13px;line-height:1.8">';
   divClaims.forEach(function(dc){
     var d = escapeHtml(dc.claim_text_highlighted||dc.claim_text);
@@ -3516,7 +3591,7 @@ Division.renderConfirm = function(left, right, p){
     rh += '<div style="margin-bottom:12px"><span style="font-weight:700;color:var(--color-primary)">【청구항 '+dc.claim_number+'】</span><br>'+d+'</div>';
   });
   rh += '</div></div>';
-  rh += '<button class="btn btn-ghost btn-full" onclick="Division.backToList()" style="margin-top:12px;padding:12px"><span class="tf">←</span> 목록으로</button>';
+  rh += '<button class="btn btn-ghost btn-full" onclick="Division.backToList()" style="margin-top:12px;padding:12px"><span class="ico" data-icon="arrow-left"></span> 목록으로</button>';
   right.innerHTML = rh;
 };
 

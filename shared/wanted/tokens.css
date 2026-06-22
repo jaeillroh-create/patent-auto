@@ -1,0 +1,476 @@
+/* ──────────────────────────────────────────────────────────────────
+   Wanted Design System — Colors & Type Foundations
+   Source: Wanted Design System (Community) Figma file (CC BY 4.0)
+   Owner: Wanted Lab (원티드랩)
+   ────────────────────────────────────────────────────────────────── */
+
+/* --- Fonts ----------------------------------------------------------
+   Pretendard JP — body / UI (Korean, English, Japanese)
+   Wanted Sans — brand / display (the Wanted-built typeface)
+   Both are loaded via the official Pretendard / Wanted Sans CDNs.
+   ──────────────────────────────────────────────────────────────── */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-jp-dynamic-subset.min.css");
+@import url("https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css");
+
+:root {
+  /* ── Atomic palette — full ramps from the Figma --------------- */
+  /* Common (pure black / white) */
+  --color-common-100: #FFFFFF;
+  --color-common-0:   #000000;
+
+  /* Neutral (warm-leaning gray) — 16 stops */
+  --color-neutral-99: #F7F7F7;
+  --color-neutral-95: #DCDCDC;
+  --color-neutral-90: #C4C4C4;
+  --color-neutral-80: #B0B0B0;
+  --color-neutral-70: #9B9B9B;
+  --color-neutral-60: #8A8A8A;
+  --color-neutral-50: #737373;
+  --color-neutral-40: #5C5C5C;
+  --color-neutral-30: #474747;
+  --color-neutral-22: #2A2A2A;
+  --color-neutral-20: #303030;
+  --color-neutral-15: #1C1C1C;
+  --color-neutral-10: #171717;
+  --color-neutral-5:  #0F0F0F;
+
+  /* Cool Neutral — Wanted's *primary* gray ramp (used for almost
+     all UI chrome: bgs, text, lines). 22 stops. */
+  --color-coolNeutral-99: #F7F7F8;
+  --color-coolNeutral-98: #F4F4F5;
+  --color-coolNeutral-97: #EAEBEC;
+  --color-coolNeutral-96: #E1E2E4;
+  --color-coolNeutral-95: #DBDCDF;
+  --color-coolNeutral-90: #C2C4C8;
+  --color-coolNeutral-80: #AEB0B6;
+  --color-coolNeutral-70: #989BA2;
+  --color-coolNeutral-60: #878A93;
+  --color-coolNeutral-50: #70737C;
+  --color-coolNeutral-40: #5A5C63;
+  --color-coolNeutral-30: #46474C;
+  --color-coolNeutral-25: #37383C;
+  --color-coolNeutral-23: #333438;
+  --color-coolNeutral-22: #2E2F33;
+  --color-coolNeutral-20: #292A2D;
+  --color-coolNeutral-17: #212225;
+  --color-coolNeutral-15: #1B1C1E;
+  --color-coolNeutral-10: #171719;
+  --color-coolNeutral-7:  #141415;
+  --color-coolNeutral-5:  #0F0F10;
+
+  /* Blue — Wanted's brand & primary action color */
+  --color-blue-99: #F7FBFF;
+  --color-blue-95: #EAF2FE;
+  --color-blue-90: #C9DEFE;
+  --color-blue-80: #9EC5FF;
+  --color-blue-70: #69A5FF;
+  --color-blue-65: #4F95FF;
+  --color-blue-60: #3385FF;
+  --color-blue-55: #1A75FF;
+  --color-blue-50: #0066FF;   /* Primary brand */
+  --color-blue-45: #005EEB;   /* Primary on light bg */
+  --color-blue-40: #0054D1;
+  --color-blue-30: #003E9C;
+  --color-blue-20: #002966;
+  --color-blue-10: #001536;
+
+  /* Red — destructive / negative status */
+  --color-red-99: #FFFAFA;
+  --color-red-95: #FEECEC;
+  --color-red-90: #FED5D5;
+  --color-red-80: #FFB5B5;
+  --color-red-70: #FF8C8C;
+  --color-red-60: #FF6363;
+  --color-red-50: #FF4242;
+  --color-red-40: #E52222;
+  --color-red-30: #B20C0C;
+  --color-red-20: #750404;
+  --color-red-10: #3B0101;
+
+  /* Green — positive / success */
+  --color-green-99: #F2FFF6;
+  --color-green-95: #D9FFE6;
+  --color-green-90: #ACFCC7;
+  --color-green-80: #7DF5A5;
+  --color-green-70: #49E57D;
+  --color-green-60: #1ED45A;
+  --color-green-50: #00BF40;   /* Status positive */
+  --color-green-40: #009632;
+  --color-green-30: #006E25;
+  --color-green-20: #004517;
+  --color-green-10: #00240C;
+
+  /* Orange — caution */
+  --color-orange-99: #FFFCF7;
+  --color-orange-95: #FEF4E6;
+  --color-orange-90: #FEE6C6;
+  --color-orange-80: #FFD49C;
+  --color-orange-70: #FFC06E;
+  --color-orange-60: #FFA938;
+  --color-orange-50: #FF9200;   /* Status cautionary */
+  --color-orange-40: #D47800;
+  --color-orange-39: #D17600;
+  --color-orange-30: #9C5800;
+  --color-orange-20: #663A00;
+  --color-orange-10: #361E00;
+
+  /* Red Orange — sub-accent */
+  --color-redOrange-99: #FFFAF7;
+  --color-redOrange-95: #FEEEE5;
+  --color-redOrange-90: #FEDBC6;
+  --color-redOrange-80: #FFC09C;
+  --color-redOrange-70: #FF9C63;
+  --color-redOrange-60: #FF7B2E;
+  --color-redOrange-50: #FF5E00;
+  --color-redOrange-48: #F55A00;
+  --color-redOrange-40: #CC4B00;
+  --color-redOrange-30: #943600;
+  --color-redOrange-20: #5C2200;
+  --color-redOrange-10: #2E1100;
+
+  /* Lime */
+  --color-lime-99: #F8FFF2;
+  --color-lime-95: #E6FFD4;
+  --color-lime-90: #CCFCA9;
+  --color-lime-80: #AEF779;
+  --color-lime-70: #88F03E;
+  --color-lime-60: #6BE016;
+  --color-lime-50: #58CF04;
+  --color-lime-40: #48AD00;
+  --color-lime-37: #429E00;
+  --color-lime-30: #347D00;
+  --color-lime-20: #225200;
+  --color-lime-10: #112900;
+
+  /* Cyan */
+  --color-cyan-99: #F7FEFF;
+  --color-cyan-95: #DEFAFF;
+  --color-cyan-90: #B5F4FF;
+  --color-cyan-80: #8AEDFF;
+  --color-cyan-70: #57DFF7;
+  --color-cyan-60: #28D0ED;
+  --color-cyan-50: #00BDDE;
+  --color-cyan-40: #0098B2;
+  --color-cyan-30: #006F82;
+  --color-cyan-20: #004854;
+  --color-cyan-10: #00252B;
+
+  /* Light Blue */
+  --color-lightBlue-99: #F7FDFF;
+  --color-lightBlue-95: #E5F6FE;
+  --color-lightBlue-90: #C4ECFE;
+  --color-lightBlue-80: #A1E1FF;
+  --color-lightBlue-70: #70D2FF;
+  --color-lightBlue-60: #3DC2FF;
+  --color-lightBlue-50: #00AEFF;
+  --color-lightBlue-40: #008DCF;
+  --color-lightBlue-30: #006796;
+  --color-lightBlue-20: #004261;
+  --color-lightBlue-10: #002130;
+
+  /* Violet — secondary brand accent */
+  --color-violet-99: #FBFAFF;
+  --color-violet-95: #F0ECFE;
+  --color-violet-90: #DBD3FE;
+  --color-violet-80: #C0B0FF;
+  --color-violet-70: #9E86FC;
+  --color-violet-60: #7D5EF7;
+  --color-violet-50: #6541F2;   /* Wanted purple accent */
+  --color-violet-45: #5B37ED;
+  --color-violet-40: #4F29E5;
+  --color-violet-30: #3A16C9;
+  --color-violet-20: #23098F;
+  --color-violet-10: #11024D;
+
+  /* Purple */
+  --color-purple-99: #FEFBFF;
+  --color-purple-95: #F9EDFF;
+  --color-purple-90: #F2D6FF;
+  --color-purple-80: #E9BAFF;
+  --color-purple-70: #DE96FF;
+  --color-purple-60: #D478FF;
+  --color-purple-50: #CB59FF;
+  --color-purple-40: #AD36E3;
+  --color-purple-30: #861CB8;
+  --color-purple-20: #580A7D;
+  --color-purple-10: #290247;
+
+  /* Pink */
+  --color-pink-99: #FFFAFE;
+  --color-pink-95: #FEECFB;
+  --color-pink-90: #FED3F7;
+  --color-pink-80: #FFB8F3;
+  --color-pink-70: #FF94ED;
+  --color-pink-60: #FA73E3;
+  --color-pink-50: #F553DA;
+  --color-pink-46: #E846CD;
+  --color-pink-40: #D331B8;
+  --color-pink-30: #A81690;
+  --color-pink-20: #730560;
+  --color-pink-10: #3D0133;
+
+  /* Opacity ramp — used for protection layers, scrims, label tints */
+  --opacity-5:   0.05;
+  --opacity-8:   0.08;
+  --opacity-12:  0.12;
+  --opacity-16:  0.16;
+  --opacity-22:  0.22;
+  --opacity-28:  0.28;
+  --opacity-35:  0.35;
+  --opacity-43:  0.43;
+  --opacity-52:  0.52;
+  --opacity-61:  0.61;
+  --opacity-74:  0.74;
+  --opacity-88:  0.88;
+  --opacity-97:  0.97;
+  --opacity-100: 1;
+
+  /* ── Semantic — Light theme (default) ------------------------- */
+  /* Primary */
+  --primary-normal:   #0066FF;          /* atomic-blue-50 */
+  --primary-strong:   #005EEB;          /* atomic-blue-45 */
+  --primary-heavy:    #0054D1;          /* atomic-blue-40 */
+
+  /* Static — same on every theme */
+  --static-white: #FFFFFF;
+  --static-black: #000000;
+
+  /* Label — text on light surfaces */
+  --label-strong:      #000000;                    /* common-0 */
+  --label-normal:      rgba(46, 47, 51, 0.88);     /* coolNeutral-22 @88 */
+  --label-neutral:     rgba(55, 56, 60, 0.61);     /* coolNeutral-25 @61 */
+  --label-alternative: rgba(55, 56, 60, 0.28);     /* coolNeutral-25 @28 */
+  --label-assistive:   rgba(55, 56, 60, 0.16);     /* coolNeutral-25 @16 */
+  --label-disable:     rgba(55, 56, 60, 0.16);
+
+  /* Background */
+  --background-normal:        #F7F7F8;             /* coolNeutral-99 */
+  --background-alternative:   #FFFFFF;
+  --background-elevated:      #FFFFFF;
+  --background-overlay-08:    rgba(255, 255, 255, 0.08);
+  --background-overlay-28:    rgba(255, 255, 255, 0.28);
+
+  /* Line / borders */
+  --line-normal:     rgba(112, 115, 124, 0.16);    /* coolNeutral-50 @16 */
+  --line-neutral:    rgba(112, 115, 124, 0.08);
+  --line-alternative:#E1E2E4;                       /* coolNeutral-96 */
+  --line-strong:     #EAEBEC;                       /* coolNeutral-97 */
+  --line-solid:      #F4F4F5;                       /* coolNeutral-98 */
+
+  /* Status */
+  --status-positive:   #00BF40;
+  --status-cautionary: #FF9200;
+  --status-negative:   #FF4242;
+  --status-info:       #0066FF;
+
+  /* Accent backgrounds — soft tints, body fg uses the *-50 ramp */
+  --accent-redOrange-bg: #FFC09C;    /* redOrange-80 ish */
+  --accent-orange-bg:    #FFD49C;
+  --accent-lime-bg:      #CCFCA9;
+  --accent-cyan-bg:      #B5F4FF;
+  --accent-lightBlue-bg: #C4ECFE;
+  --accent-violet-bg:    #DBD3FE;
+  --accent-purple-bg:    #F2D6FF;
+  --accent-pink-bg:      #FED3F7;
+
+  /* Interaction */
+  --interaction-inactive: #989BA2;    /* coolNeutral-70 */
+  --interaction-disable:  #F4F4F5;    /* coolNeutral-98 */
+  --interaction-hover:    rgba(112, 115, 124, 0.08);
+  --interaction-press:    rgba(112, 115, 124, 0.16);
+
+  /* Inverse */
+  --inverse-primary:    #DBDCDF;       /* coolNeutral-95 */
+  --inverse-background: #1B1C1E;       /* coolNeutral-15 */
+
+  /* Material / scrim */
+  --material-dimmer:    rgba(23, 23, 25, 0.52);
+  --material-thinner:   rgba(23, 23, 25, 0.28);
+
+  /* ── Elevation / shadow --------------------------------------- */
+  --shadow-small:
+    0 1px 2px -1px rgba(23, 23, 23, 0.1);
+  --shadow-emphasize:
+    0 4px 6px -1px rgba(23, 23, 23, 0.06),
+    0 2px 4px -2px rgba(23, 23, 23, 0.06);
+  --shadow-strong:
+    0 10px 15px -3px rgba(23, 23, 23, 0.07),
+    0 4px 6px -2px rgba(0, 0, 0, 0.07);
+  --shadow-heavy:
+    0 16px 24px -6px rgba(23, 23, 23, 0.08),
+    0 6px 10px -4px rgba(23, 23, 23, 0.08);
+  --shadow-modal:
+    0 24px 38px -10px rgba(23, 23, 23, 0.12),
+    0 10px 15px -5px rgba(23, 23, 23, 0.1);
+
+  /* ── Spacing & radius ---------------------------------------- */
+  /* Wanted uses a base-4 + base-8 mixed scale. Most padding values
+     in the system land on these: 2 / 4 / 6 / 8 / 10 / 12 / 16 / 20 /
+     24 / 32 / 48 / 64 / 96 / 128. */
+  --space-1:   2px;
+  --space-2:   4px;
+  --space-3:   6px;
+  --space-4:   8px;
+  --space-5:   10px;
+  --space-6:   12px;
+  --space-8:   16px;
+  --space-10:  20px;
+  --space-12:  24px;
+  --space-16:  32px;
+  --space-24:  48px;
+  --space-32:  64px;
+  --space-48:  96px;
+  --space-64:  128px;
+
+  /* Component radii — observed system values */
+  --radius-xs:    4px;    /* tags, mini chips */
+  --radius-sm:    8px;    /* inputs, small buttons */
+  --radius-md:    10px;   /* buttons (default in Figma) */
+  --radius-lg:    12px;   /* cards, dropdowns */
+  --radius-xl:    16px;   /* sub-cards inside cards */
+  --radius-2xl:   20px;   /* nested content */
+  --radius-3xl:   24px;   /* large content cards */
+  --radius-4xl:   32px;   /* outer surfaces, primary cards */
+  --radius-full:  9999px; /* pills, avatars */
+
+  /* ── Typography vars ----------------------------------------- */
+  --font-sans:    "Pretendard JP Variable", "Pretendard JP", "Pretendard Variable",
+                  "Pretendard", -apple-system, BlinkMacSystemFont,
+                  "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-display: "Wanted Sans Variable", "Wanted Sans", "Pretendard JP Variable",
+                  "Pretendard JP", sans-serif;
+  --font-mono:    "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  /* Base type tokens — directly from Figma type-style table.
+     name = (font-size / line-height / letter-spacing) */
+  --type-display2-size: 40px;  --type-display2-lh: 52px;  --type-display2-ls: -0.0282em;
+  --type-display3-size: 36px;  --type-display3-lh: 48px;  --type-display3-ls: -0.027em;
+  --type-title1-size:   32px;  --type-title1-lh:   44px;  --type-title1-ls:   -0.0253em;
+  --type-title2-size:   28px;  --type-title2-lh:   38px;  --type-title2-ls:   -0.0236em;
+  --type-title3-size:   24px;  --type-title3-lh:   32px;  --type-title3-ls:   -0.023em;
+  --type-heading1-size: 22px;  --type-heading1-lh: 30px;  --type-heading1-ls: -0.0194em;
+  --type-heading2-size: 20px;  --type-heading2-lh: 28px;  --type-heading2-ls: -0.012em;
+  --type-headline1-size:18px;  --type-headline1-lh:26px;  --type-headline1-ls:-0.002em;
+  --type-headline2-size:17px;  --type-headline2-lh:24px;  --type-headline2-ls:0;
+  --type-body1n-size:   16px;  --type-body1n-lh:   24px;  --type-body1n-ls:   0.0057em;
+  --type-body1r-size:   16px;  --type-body1r-lh:   26px;  --type-body1r-ls:   0.0057em;
+  --type-body2n-size:   15px;  --type-body2n-lh:   22px;  --type-body2n-ls:   0.0096em;
+  --type-body2r-size:   15px;  --type-body2r-lh:   24px;  --type-body2r-ls:   0.0096em;
+  --type-label1n-size:  14px;  --type-label1n-lh:  20px;  --type-label1n-ls:  0.0145em;
+  --type-label1r-size:  14px;  --type-label1r-lh:  22px;  --type-label1r-ls:  0.0145em;
+  --type-label2-size:   13px;  --type-label2-lh:   18px;  --type-label2-ls:   0.0194em;
+  --type-caption1-size: 12px;  --type-caption1-lh: 16px;  --type-caption1-ls: 0.0252em;
+  --type-caption2-size: 11px;  --type-caption2-lh: 14px;  --type-caption2-ls: 0.0311em;
+}
+
+/* ── Dark theme overrides --------------------------------------- */
+[data-theme="dark"] {
+  --label-strong:      #FFFFFF;
+  --label-normal:      rgba(247, 247, 248, 0.88);
+  --label-neutral:     rgba(247, 247, 248, 0.61);
+  --label-alternative: rgba(247, 247, 248, 0.28);
+  --label-assistive:   rgba(247, 247, 248, 0.16);
+
+  --background-normal:      #171719;
+  --background-alternative: #1B1C1E;
+  --background-elevated:    #212225;
+
+  --line-normal:       rgba(255, 255, 255, 0.16);
+  --line-alternative:  rgba(255, 255, 255, 0.08);
+  --line-strong:       #2E2F33;
+
+  --interaction-inactive: #5A5C63;
+  --interaction-disable:  #2E2F33;
+
+  --inverse-primary:    #292A2D;
+  --inverse-background: #F7F7F8;
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   Semantic typography classes (h1, h2, code, p…). Map every named
+   text style from the Figma table to a reusable class.
+   ────────────────────────────────────────────────────────────── */
+
+html, body {
+  font-family: var(--font-sans);
+  color: var(--label-normal);
+  background: var(--background-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "ss02";
+}
+
+/* Headline / title scale ----------------------------------------- */
+.t-display2,
+.t-display3,
+.t-title1, .t-title2, .t-title3,
+.t-heading1, .t-heading2,
+.t-headline1, .t-headline2,
+.t-body1n, .t-body1r, .t-body2n, .t-body2r,
+.t-label1n, .t-label1r, .t-label2,
+.t-caption1, .t-caption2 { font-family: var(--font-sans); color: var(--label-normal); }
+
+.t-display2  { font-size: var(--type-display2-size);  line-height: var(--type-display2-lh);
+               letter-spacing: var(--type-display2-ls); font-weight: 700; color: var(--label-strong); }
+.t-display3  { font-size: var(--type-display3-size);  line-height: var(--type-display3-lh);
+               letter-spacing: var(--type-display3-ls); font-weight: 700; color: var(--label-strong); }
+.t-title1    { font-size: var(--type-title1-size);    line-height: var(--type-title1-lh);
+               letter-spacing: var(--type-title1-ls);   font-weight: 700; color: var(--label-strong); }
+.t-title2    { font-size: var(--type-title2-size);    line-height: var(--type-title2-lh);
+               letter-spacing: var(--type-title2-ls);   font-weight: 700; color: var(--label-strong); }
+.t-title3    { font-size: var(--type-title3-size);    line-height: var(--type-title3-lh);
+               letter-spacing: var(--type-title3-ls);   font-weight: 700; color: var(--label-strong); }
+.t-heading1  { font-size: var(--type-heading1-size);  line-height: var(--type-heading1-lh);
+               letter-spacing: var(--type-heading1-ls); font-weight: 700; color: var(--label-strong); }
+.t-heading2  { font-size: var(--type-heading2-size);  line-height: var(--type-heading2-lh);
+               letter-spacing: var(--type-heading2-ls); font-weight: 600; color: var(--label-strong); }
+.t-headline1 { font-size: var(--type-headline1-size); line-height: var(--type-headline1-lh);
+               letter-spacing: var(--type-headline1-ls);font-weight: 600; }
+.t-headline2 { font-size: var(--type-headline2-size); line-height: var(--type-headline2-lh);
+               letter-spacing: var(--type-headline2-ls);font-weight: 700; }
+
+.t-body1n  { font-size: var(--type-body1n-size); line-height: var(--type-body1n-lh);
+             letter-spacing: var(--type-body1n-ls); font-weight: 500; }
+.t-body1r  { font-size: var(--type-body1r-size); line-height: var(--type-body1r-lh);
+             letter-spacing: var(--type-body1r-ls); font-weight: 500; }
+.t-body2n  { font-size: var(--type-body2n-size); line-height: var(--type-body2n-lh);
+             letter-spacing: var(--type-body2n-ls); font-weight: 500; }
+.t-body2r  { font-size: var(--type-body2r-size); line-height: var(--type-body2r-lh);
+             letter-spacing: var(--type-body2r-ls); font-weight: 500; }
+
+.t-label1n { font-size: var(--type-label1n-size); line-height: var(--type-label1n-lh);
+             letter-spacing: var(--type-label1n-ls); font-weight: 600; }
+.t-label1r { font-size: var(--type-label1r-size); line-height: var(--type-label1r-lh);
+             letter-spacing: var(--type-label1r-ls); font-weight: 500; }
+.t-label2  { font-size: var(--type-label2-size); line-height: var(--type-label2-lh);
+             letter-spacing: var(--type-label2-ls); font-weight: 600; }
+.t-caption1{ font-size: var(--type-caption1-size); line-height: var(--type-caption1-lh);
+             letter-spacing: var(--type-caption1-ls); font-weight: 500; color: var(--label-neutral); }
+.t-caption2{ font-size: var(--type-caption2-size); line-height: var(--type-caption2-lh);
+             letter-spacing: var(--type-caption2-ls); font-weight: 700; color: var(--label-neutral); }
+
+/* Native HTML mapping — sensible defaults so raw markdown looks ok */
+h1 { font-size: var(--type-title1-size); line-height: var(--type-title1-lh);
+     letter-spacing: var(--type-title1-ls); font-weight: 700; color: var(--label-strong);
+     margin: 0 0 .5em; }
+h2 { font-size: var(--type-title3-size); line-height: var(--type-title3-lh);
+     letter-spacing: var(--type-title3-ls); font-weight: 700; color: var(--label-strong);
+     margin: 0 0 .5em; }
+h3 { font-size: var(--type-heading1-size); line-height: var(--type-heading1-lh);
+     letter-spacing: var(--type-heading1-ls); font-weight: 700; color: var(--label-strong);
+     margin: 0 0 .5em; }
+h4 { font-size: var(--type-headline1-size); line-height: var(--type-headline1-lh);
+     letter-spacing: var(--type-headline1-ls); font-weight: 600; color: var(--label-strong);
+     margin: 0 0 .5em; }
+p  { font-size: var(--type-body1n-size); line-height: var(--type-body1r-lh);
+     letter-spacing: var(--type-body1n-ls); margin: 0 0 1em; }
+code,kbd,samp,pre {
+  font-family: var(--font-mono);
+  font-size: var(--type-body2n-size);
+}
+a {
+  color: var(--primary-normal);
+  text-decoration: none;
+}
+a:hover { text-decoration: underline; }

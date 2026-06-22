@@ -18,8 +18,8 @@ const API_PROVIDERS = {
     endpoint:'https://api.anthropic.com/v1/messages',
     keyPlaceholder:'sk-ant-api03-...', keyUrl:'https://console.anthropic.com/settings/keys',
     models:{
-      sonnet:{id:'claude-sonnet-4-5-20250929',label:'Sonnet 4.5',inputCost:3,outputCost:15},
-      opus:{id:'claude-opus-4-6',label:'Opus 4.6',inputCost:15,outputCost:75}
+      sonnet:{id:'claude-sonnet-4-6',label:'Sonnet 4.6',inputCost:3,outputCost:15},
+      opus:{id:'claude-opus-4-8',label:'Opus 4.8',inputCost:5,outputCost:25}
     }, defaultModel:'opus', cheapModel:'sonnet'
   },
   gpt: {
@@ -43,6 +43,8 @@ const API_PROVIDERS = {
 };
 let selectedProvider='claude', selectedModel='opus';
 let apiKeys={claude:'',gpt:'',gemini:''};
+// 검증 엔진 6역할 LLM 배정(L-T1) — api_key_encrypted JSON 의 roleAssignments 에 얹어 사용자별 저장(DB 마이그레이션 0).
+let roleAssignments={};
 let profileTempProvider='claude';
 let API_KEY='',currentUser=null,currentProfile=null,currentProjectId=null;
 
@@ -77,6 +79,59 @@ function updateProviderLabel(){
   if(el)el.textContent=getProvider().short;
 }
 
+// ═══ Claude 최신 모델 자동 감지 (Anthropic Models API) ═══
+// GET /v1/models 로 사용 가능한 모델 목록을 받아, 가장 최신 Opus/Sonnet을
+// 자동으로 골라 적용한다. → 새 버전(4.9, 5 등)이 출시되면 코드 수정 없이 자동 선택.
+// 네트워크/CORS 실패 시 위의 하드코딩 기본값(폴백)을 그대로 사용한다.
+const CLAUDE_MODELS_CACHE_KEY='patent_claude_models_v1';
+const CLAUDE_MODELS_TTL=12*60*60*1000; // 12시간
+
+// opus/sonnet: {id,label} 형태. 비용(inputCost/outputCost)은 기존 값 유지.
+function _applyClaudeModels(opus,sonnet){
+  const m=API_PROVIDERS.claude.models;
+  if(opus&&opus.id){m.opus.id=opus.id;if(opus.label)m.opus.label=opus.label;}
+  if(sonnet&&sonnet.id){m.sonnet.id=sonnet.id;if(sonnet.label)m.sonnet.label=sonnet.label;}
+  if(selectedProvider==='claude')updateModelToggle();
+}
+
+// 캐시된 최신 모델 정보를 즉시 적용(라벨이 깜빡이지 않도록 로드 시 1회 호출)
+function restoreCachedClaudeModels(){
+  try{
+    const c=JSON.parse(localStorage.getItem(CLAUDE_MODELS_CACHE_KEY)||'null');
+    if(c&&(c.opus||c.sonnet))_applyClaudeModels(c.opus,c.sonnet);
+  }catch(e){}
+}
+
+// Models API 호출 → 최신 Opus/Sonnet 갱신. force=true면 TTL 무시하고 즉시 갱신.
+async function refreshClaudeModels(force){
+  const key=apiKeys.claude;if(!key)return;
+  try{
+    const c=JSON.parse(localStorage.getItem(CLAUDE_MODELS_CACHE_KEY)||'null');
+    if(!force&&c&&c.ts&&(Date.now()-c.ts)<CLAUDE_MODELS_TTL)return; // 캐시 신선
+  }catch(e){}
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/models?limit=100',{
+      headers:{'x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}
+    });
+    if(!res.ok)return;
+    const data=await res.json(),list=(data&&data.data)||[];
+    // 접두사로 후보를 거른 뒤 created_at 최신순으로 1위 선택
+    const pickLatest=(prefix)=>{
+      const cands=list.filter(x=>x&&typeof x.id==='string'&&x.id.indexOf(prefix)===0);
+      if(!cands.length)return null;
+      cands.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+      return {id:cands[0].id,label:(cands[0].display_name||cands[0].id).replace(/^Claude\s+/,'')};
+    };
+    const opus=pickLatest('claude-opus-'),sonnet=pickLatest('claude-sonnet-');
+    if(!opus&&!sonnet)return;
+    _applyClaudeModels(opus,sonnet);
+    try{localStorage.setItem(CLAUDE_MODELS_CACHE_KEY,JSON.stringify({ts:Date.now(),opus,sonnet}));}catch(e){}
+  }catch(e){/* CORS/네트워크 실패 → 하드코딩 폴백 유지 */}
+}
+
+// 로드 시 캐시 즉시 적용
+restoreCachedClaudeModels();
+
 // ═══ Provider-agnostic API request/response ═══
 function buildAPIRequest(prov,modelKey,sys,user,maxTok){
   const pr=API_PROVIDERS[prov],mid=pr.models[modelKey].id,key=apiKeys[prov];
@@ -92,8 +147,8 @@ function parseAPIResponse(prov,d){
 
 // ═══ UTILITIES ═══
 function escapeHtml(t){if(!t)return '';return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');}
-function showToast(m,type='success'){if(typeof DT!=='undefined'&&DT.toast){DT.toast(m,type);return;}const c=document.getElementById('toastContainer'),icon=type==='success'?'✅':type==='error'?'❌':type==='warning'?'⚠️':'ℹ️',t=document.createElement('div');t.className='toast';t.innerHTML=`<span class="tf">${icon}</span> ${escapeHtml(m)}`;c.appendChild(t);setTimeout(()=>t.remove(),3000);}
-function showProgress(cid,label,cur,tot){const el=document.getElementById(cid);if(!el)return;const p=Math.round(cur/tot*100);el.innerHTML=`<div class="progress-container"><div class="progress-label"><div class="progress-dot"></div>${escapeHtml(label)}</div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${p}%"></div></div><div class="progress-info"><span class="tf" style="font-size:11px">📊</span><span>${cur}/${tot}</span><span>${p}%</span></div></div>`;}
+function showToast(m,type='success'){if(typeof DT!=='undefined'&&DT.toast){DT.toast(m,type);return;}const c=document.getElementById('toastContainer'),iconName=type==='success'?'check-circle':type==='error'?'x-circle':type==='warning'?'warning':'info',t=document.createElement('div');t.className='toast toast-'+type;t.innerHTML=`<span class="ico" data-icon="${iconName}" data-size="16"></span> ${escapeHtml(m)}`;c.appendChild(t);if(window.Icons&&Icons.renderAll)Icons.renderAll(t);setTimeout(()=>t.remove(),3000);}
+function showProgress(cid,label,cur,tot){const el=document.getElementById(cid);if(!el)return;const p=Math.round(cur/tot*100);el.innerHTML=`<div class="progress-container"><div class="progress-label"><div class="progress-dot"></div>${escapeHtml(label)}</div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${p}%"></div></div><div class="progress-info"><span class="ico" data-icon="chart" data-size="12"></span><span>${cur}/${tot}</span><span>${p}%</span></div></div>`;if(window.Icons&&Icons.renderAll)Icons.renderAll(el);}
 
 function clearProgress(id){const el=document.getElementById(id);if(el)el.innerHTML='';}
 function setButtonLoading(bid,on){const b=document.getElementById(bid);if(!b)return;if(on){b.classList.add('btn-loading');b.disabled=true;}else{b.classList.remove('btn-loading');b.disabled=false;}}
@@ -128,13 +183,15 @@ async function onAuthSuccess(user){
   if(!API_KEY){
     const rawKey=profile.api_key_encrypted||'';
     try{const pk=JSON.parse(rawKey);apiKeys={claude:pk.claude||'',gpt:pk.gpt||'',gemini:pk.gemini||''};if(pk.provider&&API_PROVIDERS[pk.provider])selectedProvider=pk.provider;
+      roleAssignments=(pk.roleAssignments&&typeof pk.roleAssignments==='object')?pk.roleAssignments:{}; // 역할배정 복원(L-T1)
       // KIPRIS 키를 계정별 localStorage에 캐시
       if(pk.kipris){try{localStorage.setItem('tm_kipris_api_key_'+user.id,pk.kipris);}catch(e){}}
-    }catch(e){apiKeys={claude:rawKey,gpt:'',gemini:''};}
+    }catch(e){apiKeys={claude:rawKey,gpt:'',gemini:''};roleAssignments={};}
     try{const sp=localStorage.getItem('patent_api_provider');if(sp&&API_PROVIDERS[sp])selectedProvider=sp;}catch(e){}
     selectedModel=API_PROVIDERS[selectedProvider].defaultModel;API_KEY=apiKeys[selectedProvider]||'';
     if(!API_KEY){try{API_KEY=localStorage.getItem('patent_api_key')||'';}catch(e){}}
   }
+  refreshClaudeModels(); // 최신 Claude 모델 자동 감지(비차단)
   if(typeof clearAllState==='function')clearAllState();showScreen('dashboard');
 }
 async function handleTosAccept(){if(!document.getElementById('tosCheck1').checked||!document.getElementById('tosCheck2').checked){showToast('모든 항목에 동의해 주세요','error');return;}await sb.from('profiles').update({tos_accepted:true,tos_accepted_at:new Date().toISOString()}).eq('id',currentUser.id);currentProfile.tos_accepted=true;if(currentProfile.status==='pending')showScreen('pending');else await onAuthSuccess(currentUser);}
@@ -160,6 +217,8 @@ function showApiKeyModal(){openProfileSettings();}
 function openProfileSettings(){
   profileTempProvider=selectedProvider;
   renderProfileModal();
+  fillLlmKeySlots();         // 검증 엔진 LLM 3슬롯 pre-fill(apiKeys 단일소스) — L-T2
+  renderLlmRoleArea();       // 키개수 토글 초기 렌더
   document.getElementById('profileSettingsModal').style.display='flex';
 }
 function closeProfileSettings(){document.getElementById('profileSettingsModal').style.display='none';}
@@ -186,15 +245,117 @@ function profileSelectProvider(p){
 async function saveProfileSettings(){
   const key=document.getElementById('profileApiKeyInput').value.trim();
   if(key)apiKeys[profileTempProvider]=key;
+  // 검증 엔진 LLM 3슬롯을 apiKeys 로 최종 확정(양방향 미러로 이미 동기지만 방어적 재확인) — L-T2
+  REVIEW_PROVIDERS.forEach(p=>{const el=document.getElementById(LLM_SLOT_IDS[p]);if(el)apiKeys[p]=(el.value||'').trim();});
   selectProvider(profileTempProvider);
   // 기존 프로필의 추가 필드(kipris 등) 보존
   let existing={};
   try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
-  const data={...existing,...apiKeys,provider:selectedProvider};
+  const data={...existing,...apiKeys,provider:selectedProvider,roleAssignments}; // 역할배정 보존(L-T1, KIPRIS 등 기존 필드는 ...existing 로 유지)
   try{Object.entries(apiKeys).forEach(([p,k])=>{if(k)localStorage.setItem('patent_api_key_'+p,k);});localStorage.setItem('patent_api_provider',selectedProvider);}catch(e){}
   if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
   closeProfileSettings();updateModelToggle();updateProviderLabel();
+  refreshClaudeModels(true); // 새 키로 최신 모델 즉시 갱신
   showToast(API_PROVIDERS[selectedProvider].short+' 적용됨 · '+getModelConfig().label);
+}
+
+// ═══ 검증 엔진 LLM 역할배정 데이터 계층 (L-T1) ═══════════════════════════
+//   api_key_encrypted JSON 에 roleAssignments 만 얹는다(DB 마이그레이션 0, KIPRIS/키 로직 불변).
+//   순수 함수: 인자 미지정 시 모듈 라이브 상태(apiKeys/roleAssignments)를 읽고, 인자 주면 그것으로 계산(테스트·재사용).
+const REVIEW_ROLES=['examiner_A','examiner_B','examiner_C','attorney_author','attorney_reviewer','domain_expert'];
+const REVIEW_PROVIDERS=['claude','gpt','gemini'];
+
+// 입력된(비어있지 않은) LLM provider 키만 {provider:key} 로 — Edge body(L-T3) 전송용. kipris 등은 제외.
+function getProviderKeys(keys){
+  const src=keys||apiKeys||{};const out={};
+  REVIEW_PROVIDERS.forEach(p=>{const k=((src[p]!=null?src[p]:'')+'').trim();if(k)out[p]=k;});
+  return out;
+}
+// 키가 입력된 provider 목록(개수 세기·토글용).
+function getEnteredProviders(keys){return Object.keys(getProviderKeys(keys));}
+
+// ★ 역할배정 — "1키 전역적용" 규칙 내장(UI·Edge 어디서 부르든 일관).
+//   0개 → {} (검증 불가; UI 가 차단) / 1개 → 6역할 전부 그 provider / 2개+ → 저장 배정(키 없는 provider 는 첫 입력키로 교정).
+function getRoleAssignments(keys,assignments){
+  const entered=getEnteredProviders(keys);
+  if(entered.length===0)return {};
+  const m={};
+  if(entered.length===1){const only=entered[0];REVIEW_ROLES.forEach(r=>{m[r]=only;});return m;}
+  const stored=(assignments||roleAssignments||{});
+  REVIEW_ROLES.forEach(r=>{const a=stored[r];m[r]=(a&&entered.indexOf(a)>=0)?a:entered[0];}); // 유효(키 보유)하면 사용, 아니면 첫 입력키
+  return m;
+}
+// 역할 1건 배정(메모리). roleId·provider 검증 후 반영.
+function setRoleAssignment(roleId,provider){
+  if(REVIEW_ROLES.indexOf(roleId)<0||REVIEW_PROVIDERS.indexOf(provider)<0)return false;
+  roleAssignments[roleId]=provider;return true;
+}
+// 역할배정 영속 — 기존 KIPRIS/키 JSON 보존(saveProfileSettings 와 동일 머지 패턴).
+async function saveRoleAssignments(map){
+  if(map&&typeof map==='object')Object.keys(map).forEach(r=>setRoleAssignment(r,map[r]));
+  let existing={};try{existing=JSON.parse(currentProfile?.api_key_encrypted||'{}');}catch(e){}
+  const data={...existing,roleAssignments};
+  if(currentUser){await sb.from('profiles').update({api_key_encrypted:JSON.stringify(data)}).eq('id',currentUser.id);currentProfile.api_key_encrypted=JSON.stringify(data);}
+  return getRoleAssignments();
+}
+
+// 검증 엔진 Edge 전송용 인증 묶음(L-T3) — getProviderKeys(입력 키만)+getRoleAssignments("1키 전역" 규칙 자동 적용).
+//   ★ 보안: 반환값(keys)은 HTTPS body 로 자기 Edge(review-orchestrate)에만 전달한다.
+//     절대 console.log/localStorage/에러메시지에 남기지 말 것(키 노출 사고 방지). 호출측도 keys 를 로깅 금지.
+function getReviewAuth(){ return { keys: getProviderKeys(), assignments: getRoleAssignments() }; }
+
+// ═══ 검증 엔진 LLM 설정 UI (L-T2) — 규칙은 L-T1 헬퍼가 진실원천(UI 재구현 0) ═══════════
+const REVIEW_ROLE_LABELS={
+  examiner_A:'심사관 A — 진보성·신규성 (§29)',
+  examiner_B:'심사관 B — 기재불비·뒷받침 (§42)',
+  examiner_C:'심사관 C — 청구범위·단일성 (§45)',
+  attorney_author:'출원인측 변리사 — 방어·보정방향',
+  attorney_reviewer:'독립검토 변리사 — 교차검증',
+  domain_expert:'기술분야 전문가 — 실시가능성'
+};
+const LLM_SLOT_IDS={claude:'llmKeyClaude',gpt:'llmKeyGpt',gemini:'llmKeyGemini'};
+
+// 3슬롯 입력 → apiKeys 단일 라이브 소스 갱신 + (선택 provider면) 기존 단일입력에 미러 + 실시간 토글 갱신.
+function onLlmKeyInput(provider,value){
+  if(REVIEW_PROVIDERS.indexOf(provider)<0)return;
+  apiKeys[provider]=(value||'').trim();
+  if(provider===profileTempProvider){const oi=document.getElementById('profileApiKeyInput');if(oi&&oi.value!==value)oi.value=value;}
+  renderLlmRoleArea();
+}
+// 기존 단일입력 → apiKeys + (일치 provider) 3슬롯 미러 (양방향 동기로 이중소스 충돌 차단).
+function onProfileApiKeyMirror(value){
+  apiKeys[profileTempProvider]=(value||'').trim();
+  const el=document.getElementById(LLM_SLOT_IDS[profileTempProvider]);if(el&&el.value!==value)el.value=value;
+  renderLlmRoleArea();
+}
+// 역할 드롭다운 변경 → L-T1 setRoleAssignment(검증·메모리 반영). 영속은 저장 시.
+function onLlmRoleChange(roleId,provider){setRoleAssignment(roleId,provider);}
+
+// 3슬롯 pre-fill(apiKeys 기준) — 모달 열 때 호출.
+function fillLlmKeySlots(){
+  REVIEW_PROVIDERS.forEach(p=>{const el=document.getElementById(LLM_SLOT_IDS[p]);if(el)el.value=apiKeys[p]||'';});
+}
+// ★ 키개수 토글 — getEnteredProviders/getRoleAssignments(L-T1) 가 규칙의 진실원천.
+function renderLlmRoleArea(){
+  const el=document.getElementById('llmRoleArea');if(!el)return;
+  const entered=getEnteredProviders(); // 라이브 apiKeys 기준
+  if(entered.length===0){
+    el.innerHTML='<div style="font-size:12px;color:var(--color-text-tertiary);padding:10px;background:var(--color-bg-secondary);border-radius:8px">검증 LLM 키를 1개 이상 입력하세요. (미입력 시 출원 전 검증 사용 불가)</div>';
+    return;
+  }
+  if(entered.length===1){
+    const only=entered[0];const label=(API_PROVIDERS[only]&&API_PROVIDERS[only].short)||only;
+    el.innerHTML='<div style="font-size:12px;color:var(--color-success);padding:10px;background:var(--color-bg-secondary);border-radius:8px">✓ <strong>'+escapeHtml(label)+'</strong> 단독 — 6역할 전체 자동 적용됨 (편향상쇄 없음)</div>';
+    return; // ★ 1키: 드롭다운 완전 숨김 → 사용자가 안 골라도 전역 적용
+  }
+  // 2개+ : 6역할 드롭다운 (옵션 = 입력된 provider 만)
+  const assign=getRoleAssignments();
+  const optHtml=function(sel){return entered.map(function(p){const lab=(API_PROVIDERS[p]&&API_PROVIDERS[p].short)||p;return '<option value="'+p+'"'+(p===sel?' selected':'')+'>'+escapeHtml(lab)+'</option>';}).join('');};
+  el.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px">역할별 LLM 배정 ('+entered.length+'개 provider · 편향상쇄)</div>'+
+    REVIEW_ROLES.map(function(r){
+      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="flex:1;font-size:12px;color:var(--color-text-secondary)">'+escapeHtml(REVIEW_ROLE_LABELS[r]||r)+'</span>'+
+        '<select class="input-field" style="width:128px;flex-shrink:0;padding:6px" onchange="onLlmRoleChange(\''+r+'\',this.value)">'+optHtml(assign[r])+'</select></div>';
+    }).join('');
 }
 
 // ═══ Project Rename (v5.2) ═══
@@ -281,11 +442,13 @@ Object.assign(App, {
   sb, SUPABASE_URL, SUPABASE_ANON_KEY, API_PROVIDERS, SYSTEM_PROMPT,
   apiKeys,
   getProvider, getModelConfig, getModel, selectModel, selectProvider,
-  updateModelToggle, updateProviderLabel, buildAPIRequest, parseAPIResponse,
+  updateModelToggle, updateProviderLabel, refreshClaudeModels, buildAPIRequest, parseAPIResponse,
   escapeHtml, showToast, showProgress, clearProgress, setButtonLoading,
   showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation,
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
   openProfileSettings, closeProfileSettings,
+  REVIEW_ROLES, REVIEW_PROVIDERS, getProviderKeys, getEnteredProviders, getRoleAssignments, setRoleAssignment, saveRoleAssignments, getReviewAuth,
+  REVIEW_ROLE_LABELS, onLlmKeyInput, onProfileApiKeyMirror, onLlmRoleChange, fillLlmKeySlots, renderLlmRoleArea,
   currentService: 'patent',
   _onDashboard: null  // Hook for patent.js to register dashboard load callback
 });
