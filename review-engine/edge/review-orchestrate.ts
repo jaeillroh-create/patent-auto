@@ -83,6 +83,39 @@ async function persistRun(reviewRunId: string, patch: Record<string, unknown>): 
   } catch (e: any) { console.error('[review-engine] persist 오류', String(e?.message || e)); }
 }
 
+/**
+ * 에이전트별 실행 provider 해석 — 역할배정(assignments) override + ★ 키-가용성 백스톱.
+ *  - assignments[a.id] 가 문자열이면 그 provider 로(멀티키 역할배정 반영, I-6 데이터-키).
+ *  - 해석된 provider 에 키가 없으면(hasKey=false) "키 있는 provider"로 라우팅한다:
+ *    · 가용 키 1개(=1키 입력) → 모든 에이전트가 그 provider(★ domain_expert 포함 — "no API key" 0).
+ *    · 가용 키 다수 → 첫 가용(이 분기는 배정 provider 가 무키일 때만; 정상 멀티키에선 미발생 → 배정 보존).
+ *  - 가용 키가 0개면 원 provider 유지(검증 자체가 상위에서 차단).
+ * ★ 잠복 버그 차단: 클라가 보낸 assignments 가 (구버전/캐시 등으로) domain_expert 를 누락해도,
+ *   domain_expert 의 기본 provider(gemini)에 키가 없으면 1키(claude)로 백스톱되어 누수("no API key for gemini")가 사라진다.
+ * frozen 원본 불변(provider 가 실제로 바뀔 때만 얕은 복사).
+ * @param {Array} agents  모듈 캐노니컬 agents(provider 기본값 보유)
+ * @param {Record<string,string>|null} assignments  역할배정(agent.id→provider) 또는 null
+ * @param {(provider:string)=>boolean} hasKey  provider 키 보유 여부
+ * @returns {Array} 실행용 agents(역할배정+백스톱 반영)
+ */
+export function resolveAgentProviders(
+  agents: any[],
+  assignments: Record<string, string> | null,
+  hasKey: (p: string) => boolean,
+): any[] {
+  const PROVIDERS = ['claude', 'gpt', 'gemini'];
+  const available = PROVIDERS.filter((p) => hasKey(p));
+  return agents.map((a: any) => {
+    const assigned = (assignments && typeof assignments[a.id] === 'string') ? assignments[a.id] : a.provider;
+    // (1) 배정 provider 에 키가 있으면 그대로(멀티키 역할배정 보존 — "안 건드림").
+    if (hasKey(assigned)) return assigned === a.provider ? a : { ...a, provider: assigned };
+    // (2) 배정 provider 에 키가 없으면 가용 키로 백스톱(1키 입력 → 6역할 전부 그 provider).
+    if (available.length >= 1) return { ...a, provider: available[0] };
+    // (3) 가용 키 0 — 원 provider 유지(상위에서 검증 차단).
+    return assigned === a.provider ? a : { ...a, provider: assigned };
+  });
+}
+
 /** Edge 엔트리. */
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
@@ -121,16 +154,14 @@ export default async function handler(req: Request): Promise<Response> {
   };
   const transport = makeHttpTransport({ resolveKey: resolveKeyReq, fetchImpl: fetch });
 
-  // 3b) ★ L-T4: 역할배정 override — body.assignments[agent.id] 데이터-키 조회(I-6, 문자열 분기 금지).
-  //     assignments 없으면 원본 agents 그대로(후방호환). frozen 원본 불변(얕은 복사로 provider 만 교체).
+  // 3b) ★ L-T4: 역할배정 override(body.assignments[agent.id], I-6 데이터-키) + ★ 키-가용성 백스톱.
+  //     override: 멀티키 역할배정 반영. 백스톱: 배정 후에도 "키 없는 provider"로 남은 에이전트를
+  //     실제 키가 있는 provider 로 라우팅 → 1키 입력 시 6역할 전부 그 provider(★ domain_expert 포함,
+  //     "no API key for <provider>" 0). 멀티키(각 provider 키 보유)면 배정 그대로(불변 — 역할배정 유지).
+  //     ⚠️ 잠복 버그: 구버전 클라가 assignments 에서 domain_expert 를 누락해도 백스톱이 gemini→가용키로 교정.
   const assignments: Record<string, string> | null =
     (body?.assignments && typeof body.assignments === 'object') ? body.assignments : null;
-  const agents = assignments
-    ? entry.agents.map((a: any) => {
-        const p = assignments[a.id];
-        return (p && typeof p === 'string') ? { ...a, provider: p } : a;
-      })
-    : entry.agents;
+  const agents = resolveAgentProviders(entry.agents, assignments, (p: string) => !!resolveKeyReq(p));
 
   // 4) runAgent 주입
   const runAgent = makeRunAgent({
