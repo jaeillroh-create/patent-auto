@@ -14037,7 +14037,7 @@ Patent.runReviewEngine = async function(runner, opts) {
 Patent._reviewModalOpts = function() {
   return {
     actor: (App.currentUser && App.currentUser.email) || '',
-    onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) { Patent.applyAmendments(acc); if (Patent._reviewRunner) Patent.runReviewEngine(Patent._reviewRunner, { recheck: true }); } }
+    onChange: function(rs){ var acc = (rs.patchPlans || []).filter(function(pp){ return pp.accepted === true; }); if (acc.length) { Patent.applyAmendments(acc); if (Patent._reviewRunner) Patent.runReviewEngine(Patent._reviewRunner, { recheck: true }); } try { Patent._persistReviewDecision(rs); } catch (_e) {} }
   };
 };
 Patent.openReviewModal = function() {
@@ -14046,12 +14046,76 @@ Patent.openReviewModal = function() {
 
 // _defaultReviewRunner — prod 기본 runner: Supabase Edge(review-orchestrate) 호출.
 //   module:'patent' 전송(G9 edge 가 PROFILES['patent'] 선택). 클라는 트리거·구독만(spec §14).
+//   ★ T1(504 해소): opinion.js:917-937 비동기 패턴 이식 — review_runs INSERT → reviewRunId 동봉 →
+//     Edge dual-mode(202 비동기) → 폴링. reviewRunId 없으면(테이블/RLS 불가) 기존 동기 폴백(후방호환).
+//     동기 12라운드로 게이트웨이(~150s) 504 나던 것을 비동기+폴링으로 해소(+PatentProfile maxRounds 2 로 완주).
 Patent._defaultReviewRunner = async function(snapshot) {
   // 사용자 LLM 키·역할배정 동봉(L-T3) — getReviewAuth 가 "1키 전역" 규칙 적용한 keys/assignments 산출.
   //   ★ keys 는 HTTPS body 로 자기 Edge 에만 전달, 절대 로깅 금지(키 노출 방지).
   var auth = (App.getReviewAuth && App.getReviewAuth()) || { keys: {}, assignments: {} };
-  var res = await App.sb.functions.invoke('review-orchestrate', { body: { snapshot: snapshot, caseId: snapshot && snapshot.caseId, module: 'patent', keys: auth.keys, assignments: auth.assignments } });
-  return (res && res.data) || null;
+  // 1) review_runs INSERT(RLS own) → reviewRunId. 실패 시 null → 동기 폴백.
+  var reviewRunId = null;
+  try {
+    var pid = (typeof currentProjectId !== 'undefined' && currentProjectId) || (snapshot && snapshot.caseId) || '';
+    var uid = (App.currentUser && App.currentUser.id) || null;
+    var ins = await App.sb.from('review_runs').insert({ user_id: uid, project_id: String(pid), module: 'patent', status: 'running' }).select('id').single();
+    reviewRunId = ins && ins.data && ins.data.id;
+    Patent._reviewRunId = reviewRunId; // 승인/거부 결정 빠른 영속용(_persistReviewDecision)
+  } catch (_e) {}
+  // 2) invoke — reviewRunId 동봉 시 Edge 가 202(비동기) 반환. 미동봉/구 Edge 면 동기 결과.
+  var res = await App.sb.functions.invoke('review-orchestrate', { body: { snapshot: snapshot, caseId: snapshot && snapshot.caseId, module: 'patent', keys: auth.keys, assignments: auth.assignments, reviewRunId: reviewRunId || undefined } });
+  var d = res && res.data;
+  if (!reviewRunId) return d || null;                 // 동기 폴백(테이블 없음 등)
+  if (d && d.status !== 'running') return d;          // 구 Edge 가 동기로 결과를 준 경우
+  // 3) 폴링 — 모달에 "검증 중…" 표시 → done이면 result, failed/타임아웃이면 null.
+  try { if (window.ReviewUI && window.ReviewUI.openModalMessage) window.ReviewUI.openModalMessage('검증 중… 잠시만 기다려 주세요'); } catch (_e) {}
+  return await Patent._pollReviewRun(reviewRunId);
+};
+
+// _pollReviewRun — review_runs 폴링(opinion.js:942 이식, 모듈 무관). done→result, failed→null,
+//   ★ 180s 'running' 고착 → 강제 종료(failed) — worker(백그라운드) 사망 방어.
+Patent._pollReviewRun = function(reviewRunId) {
+  return new Promise(function(resolve) {
+    if (!(window.ReviewUI && window.ReviewUI.subscribePolling)) { resolve(null); return; }
+    var done = false, sub = null;
+    function finish(result, msg) {
+      if (done) return; done = true;
+      try { if (sub && sub.stop) sub.stop(); } catch (_e) {}
+      if (msg) { try { window.ReviewUI.openModalMessage(msg); } catch (_e) {} }
+      resolve(result);
+    }
+    var killer = setTimeout(function(){
+      // worker 사망 추정 → 이 run 을 DB 에서도 failed 로 즉시 정리(본인 행·running 만, RLS). 실패해도 무해(pg_cron 백업).
+      try {
+        App.sb.from('review_runs')
+          .update({ status: 'failed', error: 'wall-clock timeout (client killer — worker 사망 추정)' })
+          .eq('id', reviewRunId).eq('status', 'running');
+      } catch (_e) {}
+      finish(null, '검증 시간 초과 — 다시 시도해 주세요');
+    }, 180000); // worker 사망 방어
+    sub = window.ReviewUI.subscribePolling({
+      intervalMs: 2000,
+      fetchState: async function() {
+        var r = await App.sb.from('review_runs').select('status,phase,result,error').eq('id', reviewRunId).single();
+        return (r && r.data) || {};
+      },
+      isDone: function(s) { return !!(s && (s.status === 'done' || s.status === 'failed')); },
+      onTick: function(s) {
+        if (done) return;
+        if (s && s.status === 'done') { clearTimeout(killer); finish(s.result || null); return; }
+        if (s && s.status === 'failed') { clearTimeout(killer); finish(null, '검증 실패: ' + ((s && s.error) || '알 수 없는 오류')); return; }
+        try { if (window.ReviewUI.openModalMessage) window.ReviewUI.openModalMessage('검증 중… (' + ((s && s.status) || 'running') + ')'); } catch (_e) {}
+      },
+    });
+  });
+};
+
+// _persistReviewDecision — 승인/거부 결정 빠른 영속(opinion.js:895 이식): review_runs.result 의 patchPlans 상태만 UPDATE.
+//   reviewRunId 없으면(동기 폴백 등) 영속 생략. best-effort(블로킹 0).
+Patent._persistReviewDecision = function(reviewState) {
+  var runId = Patent._reviewRunId;
+  if (!runId || !reviewState) return;
+  try { App.sb.from('review_runs').update({ result: reviewState, updated_at: new Date().toISOString() }).eq('id', runId); } catch (_e) {}
 };
 
 // _reviewRenderCheck — 3경로(SVG/PPTX/Canvas) 정합 구조검사(E-11).
