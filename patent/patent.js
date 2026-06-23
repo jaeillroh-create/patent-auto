@@ -83,6 +83,61 @@ const CONCEPT_DIAGRAM_TYPES={
   device_appearance:{label:'장치 외관',desc:'기기 외관 개략도',refRange:[71,80]},
   process_scene:{label:'프로세스 장면',desc:'처리 과정 시각화',refRange:[81,99]}
 };
+// ★ [P1] 예시도 목적·청구항 결속 규칙 — 메인·캐스케이드 공유(무관한 그림 방지). const 이므로 첫 사용(2714 캐스케이드) 전에 정의.
+const CONCEPT_PURPOSE_RULES=`★★★ 이 예시도의 목적 (반드시 준수) ★★★
+- 예시도는 장식이 아니라 ★청구항에 기재된 구성을 시각적으로 뒷받침·예시★ 하는 도면이다.
+- ★ 먼저 이 예시도가 시각화할 "청구항 구성"을 1개 이상 특정하고, 그 구성을 도면에 반드시 담아라.
+  발명 핵심과 무관한 일반적 화면/장면을 그리지 마라(청구된 구성이 도면에서 드러나야 한다).
+- 도면의 각 핵심 요소에 한국어 라벨과 참조번호(31~99)를 붙이고, 그 요소가 청구항/상세설명의 어느 구성에 대응하는지 알 수 있게 하라.
+★ 유형별 목적:
+- UI 화면: 청구항이 규정한 화면 구성·조작(버튼·입력·표시 영역)을 실제 화면처럼 시각화.
+- 사용자 시나리오: 청구항이 규정한 사용자-장치 상호작용 단계(요청·응답·동작)를 한 장면으로.
+- 데이터 구조: 청구항이 규정한 자료구조(필드·레코드·관계)를 행/열 테이블로 구체화.
+- 장치 외관: 청구된 물리 구성요소가 드러나는 기기 외형.
+- 프로세스 장면: 청구된 처리 과정을 물리 메타포로 시각화.`;
+// ★ [P2/P3] 예시도 응답 파싱(메인·캐스케이드 공유) — 마커별 SVG/BRIEF/REF_MAP 추출.
+//   refMap(번호↔이름) 캡처(G3 해소), 참조번호 범위 31~99 통일(G4 — 프로세스 장면 81~99 누락 수정).
+function _parseConceptRefMap(segment, svgText){
+  const out=[],seen=new Set();
+  const rmIdx=segment.indexOf('---REF_MAP---');
+  if(rmIdx>=0){
+    const block=segment.slice(rmIdx+'---REF_MAP---'.length);
+    const re=/(?:^|\n)\s*(\d{2,3})\s*[:：]\s*([^\n]+)/g;let m;
+    while((m=re.exec(block))!==null){const n=parseInt(m[1]);if(n>=31&&n<=99&&!seen.has(n)){seen.add(n);out.push({signNumber:String(n),label:m[2].trim().replace(/\s+/g,' ').slice(0,40)});}}
+  }
+  // REF_MAP 누락분은 SVG의 (번호)로 보강(라벨 없이). ★ 31~99 통일(이전 ≤79 버그 수정).
+  [...String(svgText||'').matchAll(/\((\d{2,3})\)/g)].forEach(mm=>{const n=parseInt(mm[1]);if(n>=31&&n<=99&&!seen.has(n)){seen.add(n);out.push({signNumber:String(n),label:''});}});
+  return out.sort((a,b)=>parseInt(a.signNumber)-parseInt(b.signNumber));
+}
+function _parseConceptResult(fullText, conceptTypes, figNums){
+  const count=conceptTypes.length;
+  for(let i=0;i<count;i++){
+    const ct=conceptTypes[i];
+    const figNum=figNums[i]||'?';
+    const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
+    const marker=`---CONCEPT_FIG_${figNum}---`;
+    const nextMarker=i<count-1?`---CONCEPT_FIG_${figNums[i+1]}---`:null;
+    let segment='';
+    const mIdx=fullText.indexOf(marker);
+    if(mIdx>=0){const after=fullText.slice(mIdx+marker.length);segment=nextMarker?after.slice(0,after.indexOf(nextMarker)):after;}
+    else{const allSvgs=[...fullText.matchAll(/<svg[\s\S]*?<\/svg>/gi)];if(allSvgs[i])segment=allSvgs[i][0];}
+    const svgMatch=segment.match(/<svg[\s\S]*?<\/svg>/i);
+    const svgText=svgMatch?svgMatch[0]:`<svg viewBox="0 0 680 500" xmlns="http://www.w3.org/2000/svg"><rect width="680" height="500" fill="#fff" stroke="#ccc"/><text x="340" y="250" text-anchor="middle" font-size="18" fill="#999">SVG 생성 실패 — 재시도하세요</text></svg>`;
+    const briefMatch=segment.match(/---BRIEF_DESC---\s*\n?(도\s*\d+[은는]\s+.+)/);
+    ct.briefDesc=briefMatch?briefMatch[1].trim():`도 ${figNum}은 ${selectedTitle}의 ${typeDef.label}을 나타내는 예시도이다.`;
+    ct.refMap=_parseConceptRefMap(segment, svgText);   // ★ P2: [{signNumber,label}]
+    ct.refNums=ct.refMap.map(r=>parseInt(r.signNumber)); // 하위호환(숫자 배열)
+    ct.svgContent=svgText;ct.figNum=figNum;
+  }
+}
+// outputs.step_07c 텍스트(공유) — refMap 의 "이름(번호)" 포함 → 부호의 설명(step_18)·상세설명(step_08)이 정밀 참조.
+function _buildConceptOutputText(conceptTypes, figNums){
+  return conceptTypes.map((ct,i)=>{
+    const fn=figNums[i]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
+    const refs=(ct.refMap||[]).map(r=>r.label?`${r.label}(${r.signNumber})`:`(${r.signNumber})`).join(', ');
+    return `[도 ${fn}] ${td.label} 예시도\n참조번호: ${refs}\n${ct.briefDesc||''}`;
+  }).join('\n\n');
+}
 const STEP_NAMES={step_01:'A1. 발명의 명칭',step_02:'D5. 기술분야',step_03:'D4. 배경기술',step_04:'E2. 선행기술 검색',step_05:'D2. 해결하고자 하는 과제',step_06:'A2. 장치 청구항',step_07:'B1. 장치 도면',step_07c:'B1c. 예시도/개념도',step_08:'C1. 장치 상세설명',step_09:'C2. 수학식',step_10:'A3. 방법 청구항',step_11:'B2. 방법 도면',step_12:'C3. 방법 상세설명',step_13:'E1. AI 검토',step_14:'E4. 대안 청구항',step_15:'E3. 특허성 검토',step_16:'D3. 발명의 효과',step_17:'D1. 과제의 해결 수단',step_18:'F1. 부호의 설명',step_19:'F2. 요약서',step_20:'A4. 기록매체/프로그램 청구항'};
 // Phase 없는 순수 이름 (프롬프트 내부용)
 const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술 검색',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'장치 도면',step_07c:'예시도/개념도',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'AI 검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서',step_20:'기록매체/프로그램 청구항'};
@@ -2712,36 +2767,25 @@ async function _cascadeRunConceptDiagram(){
   const typeDescs=conceptDiagramTypes.map((ct,i)=>{const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${figNums[i]||'?'}: ${td.label}`;}).join(', ');
 
   const prompt=`특허 도면 전문가로서, 아래 발명의 예시도/개념도를 SVG 코드로 직접 생성하라.
+
+${CONCEPT_PURPOSE_RULES}
+
 ⛔ 블록도/플로우차트 형태 절대 금지. "~부" 박스 라벨 금지. 흑색 선만 사용.
 ✅ 시각적 장면: 스틱 피겨, UI 화면, 테이블, 디바이스 외관 등
-SVG 규칙: viewBox="0 0 680 500", stroke="#000", fill="none"(필요시 "#fff"), font-family="Malgun Gothic,sans-serif", 참조번호 31~79.
+SVG 규칙: viewBox="0 0 680 500", stroke="#000", fill="none"(필요시 "#fff"), font-family="Malgun Gothic,sans-serif", 참조번호 31~99.
 발명의 명칭: ${selectedTitle}
 도면: ${count}개 (${figNums.map(n=>'도 '+n).join(', ')}), 유형: ${typeDescs}
-청구범위(참고): ${outputs.step_06?.slice(0,1500)||''}
-출력 형식: ${figNums.map(n=>'---CONCEPT_FIG_'+n+'---\\n<svg>...</svg>\\n---BRIEF_DESC---\\n도 '+n+'은 ...를 나타내는 예시도이다.').join('\\n')}`;
+청구범위(★ 이 예시도가 시각화할 구성을 특정해 도면에 반드시 담아라 — 블록도 복제만 금지): ${outputs.step_06?.slice(0,1500)||''}
+출력 형식(각 도면마다 SVG·간단설명·요소맵): ${figNums.map(n=>'---CONCEPT_FIG_'+n+'---\\n<svg>...</svg>\\n---BRIEF_DESC---\\n도 '+n+'은 ...를 나타내는 예시도이다.\\n---REF_MAP---\\n31: 요소이름\\n32: 요소이름').join('\\n')}
+★ REF_MAP: 도면의 각 참조번호(31~99)가 무슨 요소인지 "번호: 한국어 이름"으로 빠짐없이 적어라.`;
 
   const r=await App.callClaude(prompt,16384);
   const fullText=r.text||'';
 
-  for(let i=0;i<conceptDiagramTypes.length;i++){
-    const ct=conceptDiagramTypes[i];
-    const figNum=figNums[i]||'?';
-    const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
-    const marker=`---CONCEPT_FIG_${figNum}---`;
-    const nextMarker=i<count-1?`---CONCEPT_FIG_${figNums[i+1]}---`:null;
-    let segment='';
-    const mIdx=fullText.indexOf(marker);
-    if(mIdx>=0){const after=fullText.slice(mIdx+marker.length);segment=nextMarker?after.slice(0,after.indexOf(nextMarker)):after;}
-    else{const allSvgs=[...fullText.matchAll(/<svg[\s\S]*?<\/svg>/gi)];if(allSvgs[i])segment=allSvgs[i][0];}
-    const svgMatch=segment.match(/<svg[\s\S]*?<\/svg>/i);
-    const svgText=svgMatch?svgMatch[0]:`<svg viewBox="0 0 680 500" xmlns="http://www.w3.org/2000/svg"><rect width="680" height="500" fill="#fff"/><text x="340" y="250" text-anchor="middle" fill="#999">SVG 생성 실패</text></svg>`;
-    const briefMatch=segment.match(/---BRIEF_DESC---\s*\n?(도\s*\d+[은는]\s+.+)/);
-    ct.briefDesc=briefMatch?briefMatch[1].trim():`도 ${figNum}은 ${selectedTitle}의 ${typeDef.label}을 나타내는 예시도이다.`;
-    ct.svgContent=svgText;ct.figNum=figNum;
-    ct.refNums=[...new Set([...svgText.matchAll(/\((\d+)\)/g)].map(m=>parseInt(m[1])))].filter(n=>n>=31&&n<=79).sort((a,b)=>a-b);
-  }
+  // ★ P2/P3 공유 파서 — SVG/BRIEF/REF_MAP(번호↔이름) 추출, 참조번호 31~99 통일.
+  _parseConceptResult(fullText, conceptDiagramTypes, figNums);
   pushOutputHistory('step_07c','cascade','_cascadeRunConceptDiagram');
-  outputs.step_07c=conceptDiagramTypes.map((ct,i)=>{const fn=figNums[i]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `[도 ${fn}] ${td.label} 예시도\n참조번호: ${ct.refNums.join(', ')}\n${ct.briefDesc||''}`;}).join('\n\n');
+  outputs.step_07c=_buildConceptOutputText(conceptDiagramTypes, figNums);
   markOutputTimestamp('step_07c');
   renderConceptDiagramCards();
 }
@@ -4219,7 +4263,7 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 청구항에서 사용한 명칭과 상세설명의 명칭이 일치해야 한다.
 ${_designCompStr}
 ${_userFigBlock?`\n${_userFigBlock}\n★ 사용자 도면도 "도 N을 참조하면," 형태로 도면 번호 순서에 맞게 설명을 포함하라.\n★ 사용자 도면의 설명은 발명 내용 및 청구범위와 정합되도록, 위 도면 설명을 기초로 기술적 의미를 보완하여 작성하라.`:''}
-${conceptDiagramTypes.some(ct=>ct.svgContent)?`\n★★★ 예시도/개념도 (참조번호 31~99) ★★★\n${conceptDiagramTypes.filter(ct=>ct.svgContent).map(ct=>{const fn=_conceptFigNums[conceptDiagramTypes.indexOf(ct)]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${fn}: ${td.label} (참조번호: ${ct.refNums.join(', ')||'미정'})`;}).join('\n')}\n- 예시도도 도면 번호 순서에 맞게 "도 N을 참조하면," 형태로 설명하라.\n- 예시도의 참조번호(31~99)는 장치 참조번호(100~999)와 구분된다.\n`:''}
+${conceptDiagramTypes.some(ct=>ct.svgContent)?`\n★★★ 예시도/개념도 (참조번호 31~99) ★★★\n${conceptDiagramTypes.filter(ct=>ct.svgContent).map(ct=>{const fn=_conceptFigNums[conceptDiagramTypes.indexOf(ct)]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${fn}: ${td.label} (참조번호: ${(ct.refMap||[]).map(r=>r.label?`${r.signNumber}(${r.label})`:r.signNumber).join(', ')||(ct.refNums||[]).join(', ')||'미정'})`;}).join('\n')}\n- 예시도도 도면 번호 순서에 맞게 "도 N을 참조하면," 형태로 설명하되, ★ 위 "번호(이름)"의 이름을 그대로 사용해 "이름(번호)" 형태로 기재하라(부호의 설명과 일치).\n- 예시도의 참조번호(31~99)는 장치 참조번호(100~999)와 구분된다.\n`:''}
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
 
@@ -4545,7 +4589,7 @@ ${outputs.step_20?'"본 발명의 일 실시예에 따른 컴퓨터 판독 가�
     case 'step_18':{
       const hasMethod=includeMethodClaims&&outputs.step_11;
       // 본문·청구항·도면에서 참조번호(명칭) 전수 수집
-      const _refSources=[outputs.step_06,outputs.step_08,outputs.step_09,outputs.step_10,outputs.step_12,outputs.step_07,outputs.step_11].filter(Boolean).join('\n');
+      const _refSources=[outputs.step_06,outputs.step_08,outputs.step_09,outputs.step_10,outputs.step_12,outputs.step_07,outputs.step_11,outputs.step_07c].filter(Boolean).join('\n');
       const _refMap=new Map();
       // "명칭(참조번호)" 또는 "명칭 (참조번호)" 패턴 수집
       const _refRe=/([가-힣a-zA-Z][가-힣a-zA-Z\s]{0,15}?)\s*\((\d{2,4}|S\d{2,4})\)/g;
@@ -5522,6 +5566,8 @@ async function runConceptDiagramStep(){
 
     const prompt=`특허 도면 전문가로서, 아래 발명의 예시도/개념도를 SVG 코드로 직접 생성하라.
 
+${CONCEPT_PURPOSE_RULES}
+
 ⛔⛔⛔ 절대 금지 사항 (위반 시 도면 전체 거부) ⛔⛔⛔
 1. 박스(사각형) + 화살표로 구성된 블록도/플로우차트 형태 절대 금지
 2. "~부", "~모듈", "~엔진" 같은 기능 구성요소명을 박스 라벨로 사용 금지
@@ -5551,7 +5597,7 @@ async function runConceptDiagramStep(){
 3. stroke-width: 본체 0.8~1.5, 리더라인 0.5
 4. 폰트: font-family="Malgun Gothic,sans-serif"
 5. 텍스트: 제목 14px, 라벨 12px, 참조번호 11px
-6. 참조번호 표기: 리더라인(얇은 선) + 숫자 (예시도 전용: 31~79 범위)
+6. 참조번호 표기: 리더라인(얇은 선) + 숫자 (예시도 전용: 31~99 범위)
 7. 제목: 【도 N】을 상단 중앙에 표기
 8. 마커(화살표)는 최소한만 사용 — 시각적 장면이 핵심
 
@@ -5581,17 +5627,21 @@ async function runConceptDiagramStep(){
 도면 수: ${count}개 (${figNums.map(n=>'도 '+n).join(', ')})
 유형: ${typeDescs}
 
-═══ 청구범위 (참고만 — 블록 복제 금지) ═══
+═══ 청구범위 (★ 이 예시도가 시각화할 구성을 특정해 도면에 반드시 담아라 — 블록도 복제만 금지) ═══
 ${outputs.step_06?.slice(0,2000)||''}
 
-═══ 출력 형식 (정확히 따르라) ═══
+═══ 출력 형식 (정확히 따르라 — 각 도면: SVG + 간단설명 + 요소맵) ═══
 ---CONCEPT_FIG_${figNums[0]}---
 <svg viewBox="0 0 680 500" xmlns="http://www.w3.org/2000/svg">
   <!-- 절대 블록+화살표 구조 금지, 시각적 장면 그려라 -->
 </svg>
 ---BRIEF_DESC---
 도 ${figNums[0]}은 ...를 나타내는 예시도이다.
-${figNums.length>1?figNums.slice(1).map(n=>'\n---CONCEPT_FIG_'+n+'---\n<svg>...</svg>\n---BRIEF_DESC---\n도 '+n+'은 ...를 나타내는 예시도이다.').join(''):''}
+---REF_MAP---
+31: 요소이름
+32: 요소이름
+${figNums.length>1?figNums.slice(1).map(n=>'\n---CONCEPT_FIG_'+n+'---\n<svg>...</svg>\n---BRIEF_DESC---\n도 '+n+'은 ...를 나타내는 예시도이다.\n---REF_MAP---\n31: 요소이름\n32: 요소이름').join(''):''}
+★ REF_MAP: 도면의 각 참조번호(31~99)가 무슨 요소인지 "번호: 한국어 이름"으로 빠짐없이 적어라(부호의 설명·상세설명이 이 이름을 사용한다).
 
 ⛔ 자체 검증 — SVG 출력 전 아래를 확인하라:
 1. stroke에 "#" 뒤에 0, 3 이외의 숫자가 있는가? → 있으면 흑백으로 수정
@@ -5604,49 +5654,12 @@ ${figNums.length>1?figNums.slice(1).map(n=>'\n---CONCEPT_FIG_'+n+'---\n<svg>...<
 
     App.showProgress('progressStep07c','예시도 파싱 중...',2,2);
 
-    // 마커 기반 SVG/Brief 파싱
-    for(let i=0;i<conceptDiagramTypes.length;i++){
-      const ct=conceptDiagramTypes[i];
-      const figNum=figNums[i]||'?';
-      const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
-      const marker=`---CONCEPT_FIG_${figNum}---`;
-      const nextMarker=i<conceptDiagramTypes.length-1?`---CONCEPT_FIG_${figNums[i+1]}---`:null;
+    // ★ P2/P3 공유 파서 — 마커별 SVG/BRIEF/REF_MAP(번호↔이름) 추출, 참조번호 31~99 통일(메인·캐스케이드 일관).
+    _parseConceptResult(fullText, conceptDiagramTypes, figNums);
 
-      let segment='';
-      const markerIdx=fullText.indexOf(marker);
-      if(markerIdx>=0){
-        const afterMarker=fullText.slice(markerIdx+marker.length);
-        segment=nextMarker?afterMarker.slice(0,afterMarker.indexOf(nextMarker)):afterMarker;
-      }else{
-        // 마커 없으면 전체 텍스트에서 i번째 SVG 추출 시도
-        const allSvgs=[...fullText.matchAll(/<svg[\s\S]*?<\/svg>/gi)];
-        if(allSvgs[i])segment=allSvgs[i][0];
-      }
-
-      // SVG 추출
-      const svgMatch=segment.match(/<svg[\s\S]*?<\/svg>/i);
-      let svgText=svgMatch?svgMatch[0]:`<svg viewBox="0 0 680 500" xmlns="http://www.w3.org/2000/svg"><rect width="680" height="500" fill="#fff" stroke="#ccc"/><text x="340" y="250" text-anchor="middle" font-size="18" fill="#999">SVG 생성 실패 — 재시도하세요</text></svg>`;
-
-      // Brief description 추출
-      const briefMatch=segment.match(/---BRIEF_DESC---\s*\n?(도\s*\d+[은는]\s+.+)/);
-      if(briefMatch)ct.briefDesc=briefMatch[1].trim();
-      else ct.briefDesc=`도 ${figNum}은 ${selectedTitle}의 ${typeDef.label}을 나타내는 예시도이다.`;
-
-      // 참조번호 추출
-      const refNums=[...new Set([...svgText.matchAll(/\((\d+)\)/g)].map(m=>parseInt(m[1])))].filter(n=>n>=31&&n<=79).sort((a,b)=>a-b);
-
-      ct.svgContent=svgText;
-      ct.figNum=figNum;
-      ct.refNums=refNums;
-    }
-
-    // 결과 저장
+    // 결과 저장 — refMap 의 "이름(번호)" 포함(부호의 설명·상세설명 정밀 참조).
     pushOutputHistory('step_07c','llm','runConceptDiagramStep');
-    outputs.step_07c=conceptDiagramTypes.map((ct,i)=>{
-      const figNum=figNums[i]||'?';
-      const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
-      return `[도 ${figNum}] ${typeDef.label} 예시도\n참조번호: ${ct.refNums.join(', ')}\n${ct.briefDesc||''}`;
-    }).join('\n\n');
+    outputs.step_07c=_buildConceptOutputText(conceptDiagramTypes, figNums);
     markOutputTimestamp('step_07c');
     invalidateDownstream('step_07c');
     onStepCompleted('step_07c');
