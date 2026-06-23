@@ -146,6 +146,18 @@ function _buildConceptOutputText(conceptTypes, figNums){
     return `[도 ${fn}] ${td.label} 예시도\n참조번호: ${refs}\n${ct.briefDesc||''}`;
   }).join('\n\n');
 }
+// ★ [① SVG 제목 동기화] 예시도 SVG 제목을 ★코드가 computeFigNums(SoT) 값으로 강제★ — mermaid(svg+='【도 figNum】' 8082) 방식 이식.
+//   렌더/다운로드 시점마다 적용 → SoT(getAutoFigNums) 가 바뀌면(③ 순서지정·장치수 변동) 제목이 자동 추종. LLM이 쓴 【도 N】은 제거 후 교체.
+function _conceptSvgApplyTitle(svgStr, figNum){
+  var s=String(svgStr||'');
+  if(!/<svg\b/i.test(s)) return s;
+  // 1) LLM 이 써넣은 제목(【도 N】 텍스트) 제거 — 도면 안 어디든
+  s=s.replace(/<text\b[^>]*>[^<]*【\s*도\s*\d+\s*】[^<]*<\/text>/gi,'');
+  // 2) 코드 제목(SoT figNum) 을 여는 <svg> 태그 직후 상단 중앙에 오버레이
+  var title='<text x="340" y="28" text-anchor="middle" font-size="14" font-weight="bold" font-family="Malgun Gothic,sans-serif" fill="#000">【도 '+(figNum==null?'?':figNum)+'】</text>';
+  s=s.replace(/(<svg\b[^>]*>)/i,'$1'+title);
+  return s;
+}
 const STEP_NAMES={step_01:'A1. 발명의 명칭',step_02:'D5. 기술분야',step_03:'D4. 배경기술',step_04:'E2. 선행기술 검색',step_05:'D2. 해결하고자 하는 과제',step_06:'A2. 장치 청구항',step_07:'B1. 장치 도면',step_07c:'B1c. 예시도/개념도',step_08:'C1. 장치 상세설명',step_09:'C2. 수학식',step_10:'A3. 방법 청구항',step_11:'B2. 방법 도면',step_12:'C3. 방법 상세설명',step_13:'E1. AI 검토',step_14:'E4. 대안 청구항',step_15:'E3. 특허성 검토',step_16:'D3. 발명의 효과',step_17:'D1. 과제의 해결 수단',step_18:'F1. 부호의 설명',step_19:'F2. 요약서',step_20:'A4. 기록매체/프로그램 청구항'};
 // Phase 없는 순수 이름 (프롬프트 내부용)
 const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술 검색',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'장치 도면',step_07c:'예시도/개념도',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'AI 검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서',step_20:'기록매체/프로그램 청구항'};
@@ -2140,7 +2152,7 @@ function renderConceptDiagramCards(){
         <span>도 ${figNum} — ${App.escapeHtml(typeDef.label)}</span>
         <button class="btn btn-ghost btn-sm" onclick="Patent.refineConceptDiagramByNum(${figNum})" title="비전 정련 — 선 겹침/배치 개선(청구 구성·부호 내용 유지)"><span class="ico" data-icon="wand" data-size="12"></span> 정련</button>
       </div>
-      <div style="border:1px solid var(--color-border);border-radius:8px;padding:12px;background:#fff;overflow:auto;max-height:500px">${ct.svgContent}</div>
+      <div style="border:1px solid var(--color-border);border-radius:8px;padding:12px;background:#fff;overflow:auto;max-height:500px">${_conceptSvgApplyTitle(ct.svgContent, figNum)}</div>
     </div>`;
   }).filter(Boolean).join('');
   const dl=document.getElementById('conceptDiagramDownload');
@@ -5613,7 +5625,7 @@ ${CONCEPT_PURPOSE_RULES}
 4. 폰트: font-family="Malgun Gothic,sans-serif"
 5. 텍스트: 제목 14px, 라벨 12px, 참조번호 11px
 6. 참조번호 표기: 리더라인(얇은 선) + 숫자 (예시도 전용: 31~99 범위)
-7. 제목: 【도 N】을 상단 중앙에 표기
+7. ★ 제목(【도 N】)은 코드가 자동으로 삽입하므로 ★SVG에 도면 제목 텍스트를 넣지 마라★ (넣어도 코드가 올바른 번호로 교체한다). 상단은 도면 내용을 위해 비워 둬라.
 8. 마커(화살표)는 최소한만 사용 — 시각적 장면이 핵심
 
 ${CONCEPT_OVERLAP_RULES}
@@ -13659,7 +13671,7 @@ function downloadConceptPptx(){
     }
     const ct=generated[idx];
     const figNum=cFigNums[conceptDiagramTypes.indexOf(ct)]||idx+1;
-    const svgStr=ct.svgContent;
+    const svgStr=_conceptSvgApplyTitle(ct.svgContent, figNum); // ★ ① 다운로드 제목도 SoT(figNum) 동기화
 
     // SVG→Canvas→PNG base64→PPTX slide
     const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
@@ -13712,7 +13724,7 @@ function downloadConceptImages(format='jpeg'){
     const ct=generated[idx];
     const figNum=cFigNums[conceptDiagramTypes.indexOf(ct)]||idx+1;
     // SVG→Canvas→Image
-    const svgStr=ct.svgContent;
+    const svgStr=_conceptSvgApplyTitle(ct.svgContent, figNum); // ★ ① 다운로드 제목도 SoT(figNum) 동기화
     const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
     const url=URL.createObjectURL(blob);
     const img=new Image();
