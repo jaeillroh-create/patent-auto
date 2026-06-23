@@ -14041,6 +14041,7 @@ Patent.runReviewEngine = async function(runner, opts) {
   finally { try { setButtonLoading && setButtonLoading('btnPatentReview', false); } catch (_e) {} }
   if (!result) return null;
   window.__patentReviewState = result; // page4 마운트 발화 조건
+  Patent._reflectHintShown = false;    // ★ 새 검증마다 승인→반영 흐름 안내 1회 재발화(onChange)
   try { if (typeof renderPreview === 'function') renderPreview(); } catch (_e) {} // best-effort 렌더
   try { Patent.openReviewModal(); } catch (_e) {} // 검증 완료 → 넓은 공유 모달 자동 오픈(2a)
   return result;
@@ -14058,6 +14059,13 @@ Patent._reviewModalOpts = function() {
       if (acc.length) { try { Patent.applyAmendments(acc); } catch (_e) {} }   // 승인분(누적) 인메모리 방향 기록(유지)
       try { Patent._persistReviewDecision(rs); } catch (_e) {}                  // 결정 빠른 영속(유지)
       try { if (typeof renderPreview === 'function') renderPreview(); } catch (_e) {} // 승인 반영 클라 재렌더(edge 재검증 아님)
+      // ★ 승인→반영 흐름 안내(1회) — 승인 모달과 [반영하기]가 다른 위치(모달 vs 산출물 탭)라 길잃음 방지.
+      try {
+        if (!Patent._reflectHintShown && Patent._collectApprovedSpecOps().length) {
+          Patent._reflectHintShown = true;
+          App.showToast('승인 완료 — 이 창을 닫고 [산출물] 탭의 [승인 방향 반영]을 눌러 명세서에 반영하세요', 'info');
+        }
+      } catch (_e) {}
     }
   };
 };
@@ -14161,6 +14169,18 @@ Patent._reviewRenderCheck = function(o) {
   var missing = Object.keys(diagram).filter(function(r){ return !signs[r]; });
   var ok = missing.length === 0;
   return { svg: ok, pptx: ok, canvas: ok, missing: missing };
+};
+
+// _reviewDeltaGate — ★ delta E-11 게이트(절대 상태 아님). 보정 전(beforeO)·후(afterO)의 도면↔부호 정합을 비교해
+//   "이 보정이 새로 유발한 부호 불일치(newMissing)"만 차단 사유로 본다. 기존 불일치(preexistingMissing)는 비차단(경고).
+//   ★ add_spec_support 는 상세설명(step_08)에만 APPEND → 도면(step_07/11_mermaid)·부호의 설명(step_18) 불변
+//     → before==after → newMissing 0 → canConfirm=true. 명세서에 원래 있던 무관한 불일치에 무해한 보정이 볼모로 잡히지 않음.
+//   ★ 미래에 도면/청구항을 바꾸는 op 가 정합을 깨면 newMissing 발생 → canConfirm=false(regression 차단 의미 보존).
+Patent._reviewDeltaGate = function(beforeO, afterO) {
+  var before = (Patent._reviewRenderCheck(beforeO || {}).missing) || [];
+  var after = (Patent._reviewRenderCheck(afterO || {}).missing) || [];
+  var newMissing = after.filter(function(r){ return before.indexOf(r) < 0; });   // 보정이 "새로" 만든 누락만
+  return { canConfirm: newMissing.length === 0, newMissing: newMissing, preexistingMissing: before };
 };
 
 // applyAmendments — 사람 승인 PatchPlan만 실(實)반영(구조적) + 3경로 렌더 정합 재검증(E-11).
@@ -14291,16 +14311,19 @@ Patent.applyDirectionRewrite = async function(opts) {
   }
   if (!appended.length) { try { App.showToast('뒷받침 단락 생성 실패 — 재시도하세요', 'error'); } catch (_e) {} return null; }
 
-  // ★ E-11 도면 정합 게이트(_reviewRenderCheck) — pending 섹션 덮어 검사(상세설명 APPEND 는 부호 정합 무영향이나 방어적 실행).
+  // ★ E-11 도면 정합 게이트 — ★delta 판정(절대 상태 아님). 보정 전/후 missing 을 비교해 "이 보정이 새로 유발한 불일치"만 차단.
+  //   add_spec_support 는 도면·부호 불변(step_08 만 APPEND) → before==after → 통과(기존 불일치에 볼모 안 잡힘).
   var checkO = Object.assign({}, (typeof outputs !== 'undefined' && outputs) || {}, pending);
-  var rc = Patent._reviewRenderCheck(checkO);
+  var gate = Patent._reviewDeltaGate((typeof outputs !== 'undefined' && outputs) || {}, checkO);
 
   // ★ 보류(outputs 미커밋) — T2 [확정]에서만 outputs 반영. 비대상 섹션은 pending 에 없으므로 구조적으로 불변.
   Patent._pendingPatentRewrite = {
     pending: pending, before: before, after: { step_08: pending.step_08, step_12: pending.step_12 },
     appended: appended, failed: failed,
-    renderCheck: { svg: rc.svg, pptx: rc.pptx, canvas: rc.canvas, missing: rc.missing },
-    canConfirm: !!(rc.svg && rc.pptx && rc.canvas),
+    // ★ renderCheck: delta 기준. svg/pptx/canvas=이 보정이 렌더를 깼는가(canConfirm). missing=이 보정이 새로 만든 누락(차단 사유).
+    //   preexistingMissing=보정과 무관한 기존 도면↔부호 불일치(비차단 경고용).
+    renderCheck: { svg: gate.canConfirm, pptx: gate.canConfirm, canvas: gate.canConfirm, missing: gate.newMissing, preexistingMissing: gate.preexistingMissing },
+    canConfirm: gate.canConfirm,
   };
   try { App.showToast(appended.length + '건 뒷받침 단락 생성(보류) — 비교 후 확정하세요', 'success'); } catch (_e) {}
   return Patent._pendingPatentRewrite;
@@ -14332,9 +14355,13 @@ Patent._buildPatentRewriteDiffHtml = function(pend) {
   if (!pend) return '<p style="font-size:13px;color:var(--color-text-secondary)">반영 보류본이 없습니다.</p>';
   var esc = (typeof escapeHtml === 'function') ? escapeHtml : function(s){ return String(s == null ? '' : s); };
   var h = '';
-  // 게이트 배너(E-11 도면 부호 정합)
+  // 게이트 배너(E-11 ★delta) — 3상태: ①이 보정이 새 불일치 유발(차단) ②기존 불일치 있으나 확정 가능(비차단 경고) ③정합 통과.
+  var newMissing = (pend.renderCheck && pend.renderCheck.missing) || [];               // 이 보정이 새로 만든 누락(차단 사유)
+  var preMissing = (pend.renderCheck && pend.renderCheck.preexistingMissing) || [];    // 보정과 무관한 기존 불일치(경고)
   if (pend.canConfirm === false) {
-    h += '<div style="padding:10px 12px;border-radius:8px;background:#FDECEC;border-left:3px solid var(--color-error,#D32F2F);color:#9A1C1C;font-size:12px;margin-bottom:12px">⛔ 도면 부호 정합 위반(부호의 설명에 없는 도면 부호 ' + esc(((pend.renderCheck && pend.renderCheck.missing) || []).slice(0, 5).join(', ')) + ') — 확정 불가(E-11). [취소] 후 부호의 설명을 보강하세요.</div>';
+    h += '<div style="padding:10px 12px;border-radius:8px;background:#FDECEC;border-left:3px solid var(--color-error,#D32F2F);color:#9A1C1C;font-size:12px;margin-bottom:12px">⛔ 이 보정이 새 도면 부호 불일치(' + esc(newMissing.slice(0, 5).join(', ')) + ')를 유발 — 확정 불가(E-11). [취소] 후 도면·부호를 점검하세요.</div>';
+  } else if (preMissing.length) {
+    h += '<div style="padding:10px 12px;border-radius:8px;background:#FEF4E6;border-left:3px solid var(--color-warning,#ED6C02);color:#7A4100;font-size:12px;margin-bottom:12px">✅ 확정 가능 — 이 보정(상세설명 보강)은 도면·부호 정합을 바꾸지 않습니다.<br>※ 참고: <b>이 보정과 무관한 기존</b> 도면↔부호의 설명 불일치(' + esc(preMissing.slice(0, 5).join(', ')) + ')가 명세서에 원래 있습니다 — 부호의 설명에서 별도 보강을 권장합니다(확정은 가능).</div>';
   } else {
     h += '<div style="padding:10px 12px;border-radius:8px;background:#EAF7EE;border-left:3px solid var(--color-success,#2E7D32);color:#1B5E20;font-size:12px;margin-bottom:12px">✅ 도면 부호 정합 통과 — 청구항·부호의 설명은 변경되지 않습니다(상세설명에만 단락 추가).</div>';
   }
@@ -14376,7 +14403,7 @@ Patent.showPatentRewriteModal = function() {
     + Patent._buildPatentRewriteDiffHtml(pend)
     + '<div style="display:flex;gap:8px;margin-top:16px">'
     + '<button class="btn btn-ghost" style="flex:1;padding:10px" onclick="Patent.cancelPatentRewrite()">취소 (폐기)</button>'
-    + '<button class="btn btn-primary" style="flex:1;padding:10px" id="btnPatentRewriteConfirm" onclick="Patent._confirmPatentRewriteClick()"' + (blocked ? ' disabled title="도면 부호 정합 위반 — 확정 불가"' : '') + '><span class="ico" data-icon="check"></span> 확정 (명세서 반영)</button>'
+    + '<button class="btn btn-primary" style="flex:1;padding:10px" id="btnPatentRewriteConfirm" onclick="Patent._confirmPatentRewriteClick()"' + (blocked ? ' disabled title="이 보정이 도면 정합을 깸 — 확정 불가"' : '') + '><span class="ico" data-icon="check"></span> 확정 (명세서 반영)</button>'
     + '</div></div>';
   document.body.appendChild(modal);
   try { modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); }); } catch (_e) {} // 외부 클릭 닫기
@@ -14389,7 +14416,7 @@ Patent.confirmPatentRewrite = async function() {
   var pend = Patent._pendingPatentRewrite;
   if (!pend) { try { App.showToast('확정할 반영 보류본이 없습니다', 'error'); } catch (_e) {} return false; }
   if (pend.canConfirm === false) {
-    try { App.showToast('⚠️ 도면 부호 정합 위반(E-11)으로 확정할 수 없습니다 — 취소 후 부호의 설명을 보강하세요', 'error'); } catch (_e) {}
+    try { App.showToast('⚠️ 이 보정이 도면 부호 정합을 깨서(E-11) 확정할 수 없습니다 — 취소 후 도면·부호를 점검하세요', 'error'); } catch (_e) {}
     return false;
   }
   // ★ 확정 시에만 커밋 — appended 된 섹션만 outputs 에 반영(비대상 섹션 미기록 → 불변).

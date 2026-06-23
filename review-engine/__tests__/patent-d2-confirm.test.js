@@ -130,12 +130,23 @@ test('★ 취소 → 보류 폐기 + outputs 불변(기존 명세서 유지)', a
   assert.equal(readOutputs().step_08, DEV_BASE, '★ outputs 불변');
 });
 
-test('★ E-11 gate 차단 — canConfirm=false 면 확정 거부(outputs 불변, 보류 유지, 미영속)', async () => {
-  const pend = await makePending({ step_07_mermaid: 'graph TD; A[장치(100)] --> Z[미정의(99)]' });
-  assert.equal(pend.canConfirm, false, '부호 불일치(99) → canConfirm=false');
+test('★ delta 게이트 — 기존 도면↔부호 불일치(99) 있어도 APPEND는 delta 0 → 확정 가능(과차단 제거)', async () => {
+  const pend = await makePending({ step_07_mermaid: 'graph TD; A[장치(100)] --> Z[미정의(99)]' }); // 99 는 부호의설명에 없음(기존 불일치)
+  assert.equal(pend.canConfirm, true, '★ 기존 불일치(99)는 이 보정과 무관 → canConfirm=true(볼모 안 잡힘)');
+  assert.ok((pend.renderCheck.preexistingMissing || []).indexOf('99') >= 0, '기존 불일치(99)는 preexistingMissing 으로 기록');
+  assert.deepEqual(pend.renderCheck.missing, [], '★ 이 보정이 새로 만든 누락 0(newMissing 비어있음)');
   setProjectId('P1');
   const ok = await Patent.confirmPatentRewrite();
-  assert.equal(ok, false, '★ 확정 거부');
+  assert.equal(ok, true, '★ 확정 성공(기존 불일치로 차단되지 않음)');
+  assert.equal(readOutputs().step_08, pend.after.step_08, 'outputs 커밋');
+});
+
+test('★ regression 차단 — canConfirm=false(이 보정이 새 불일치 유발 가정) → 확정 거부(outputs 불변, 보류 유지, 미영속)', async () => {
+  const pend = await makePending();
+  pend.canConfirm = false; pend.renderCheck.missing = ['77'];   // 미래 op 가 도면 정합을 깬 상황 가정
+  setProjectId('P1');
+  const ok = await Patent.confirmPatentRewrite();
+  assert.equal(ok, false, '★ 확정 거부(regression)');
   assert.equal(readOutputs().step_08, DEV_BASE, '★ outputs 불변');
   assert.ok(Patent._pendingPatentRewrite, '보류 유지(취소 가능)');
   assert.equal(updateCaptures.length, 0, 'saveProject 미호출');
@@ -151,10 +162,21 @@ test('★ 비교 모달 HTML — 추가 단락(하이라이트) + 대상 청구�
   assert.match(html, /장치 상세설명/, '섹션 한글 라벨');
 });
 
-test('★ 비교 모달 HTML — canConfirm=false 면 확정 불가 배너', async () => {
+test('★ 비교 모달 HTML — 기존 불일치는 비차단 경고 배너("무관한 기존")', async () => {
   const pend = await makePending({ step_07_mermaid: 'graph TD; A[장치(100)] --> Z[미정의(99)]' });
+  assert.equal(pend.canConfirm, true, '확정 가능(비차단)');
   const html = Patent._buildPatentRewriteDiffHtml(pend);
-  assert.match(html, /확정 불가|위반/, '★ 차단 배너');
+  assert.match(html, /무관한 기존/, '★ 기존 불일치 = 비차단 경고("무관한 기존")');
+  assert.match(html, /확정 가능/, '확정 가능 안내');
+  assert.match(html, /99/, '기존 불일치 부호 표시');
+});
+
+test('★ 비교 모달 HTML — canConfirm=false(regression) → 차단 배너(새 불일치 유발)', async () => {
+  const pend = await makePending();
+  pend.canConfirm = false; pend.renderCheck.missing = ['77'];
+  const html = Patent._buildPatentRewriteDiffHtml(pend);
+  assert.match(html, /확정 불가/, '★ 차단 배너');
+  assert.match(html, /77/, '새 불일치 부호 표시');
 });
 
 test('★ 모달 배선 — [확정]/[취소] 인라인 onclick(addEventListener 의존 없음)', async () => {
@@ -166,8 +188,9 @@ test('★ 모달 배선 — [확정]/[취소] 인라인 onclick(addEventListener
   assert.ok(html.indexOf('disabled') < 0, '게이트 통과 시 [확정] 활성');
 });
 
-test('★ 모달 — canConfirm=false 면 [확정] disabled', async () => {
-  await makePending({ step_07_mermaid: 'graph TD; A[장치(100)] --> Z[미정의(99)]' });
+test('★ 모달 — canConfirm=false(regression) 면 [확정] disabled', async () => {
+  await makePending();
+  Patent._pendingPatentRewrite.canConfirm = false;   // regression 가정
   Patent.showPatentRewriteModal();
   const html = String(lastAppendedModal && lastAppendedModal.innerHTML || '');
   assert.match(html, /id="btnPatentRewriteConfirm"[^>]*disabled/, '★ 차단 시 [확정] 비활성');
