@@ -2003,11 +2003,16 @@ function renderRequiredFiguresList(){
   if(!requiredFigures.length){el.innerHTML='<div style="font-size:12px;color:var(--color-text-tertiary);text-align:center;padding:12px">등록된 사용자 도면이 없습니다</div>';return;}
   el.innerHTML=requiredFigures.map(f=>{
     const preview=f.fileDataUrl?`<img src="${f.fileDataUrl}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--color-border)" title="${App.escapeHtml(f.fileName||'')}" />`:'';
+    const analyzed=!!(f.analysis&&(f.analysis.elements||[]).length);
+    const statusBadge=analyzed?`<span class="badge badge-primary" style="font-size:10px" title="비전 분석됨 — T3 정합 입력">분석 ${(f.analysis.elements||[]).length}요소</span>`:'';
+    const analyzeBtn=f.fileDataUrl?`<button class="btn btn-ghost btn-sm" onclick="Patent.analyzeUserFigureByNum(${f.num}${analyzed?',true':''})" title="${analyzed?'AI 재분석':'AI 도면 분석(구성요소·부호 추출)'}"><span class="ico" data-icon="${analyzed?'refresh':'search'}" data-size="12"></span></button>`:'';
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:4px;font-size:13px">
       ${preview}
       <span class="badge badge-primary" style="min-width:40px;text-align:center">도 ${f.num}</span>
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${App.escapeHtml(f.description)}">${App.escapeHtml(f.description)}</span>
+      ${statusBadge}
       ${f.fileName?`<span class="badge badge-success" title="${App.escapeHtml(f.fileName)}"><span class="ico" data-icon="link" data-size="12"></span></span>`:''}
+      ${analyzeBtn}
       <button class="btn btn-ghost btn-sm" onclick="removeRequiredFigure(${f.num})" title="삭제"><span class="ico" data-icon="x"></span></button>
     </div>`;
   }).join('');
@@ -14031,6 +14036,66 @@ function downloadAsWord(){
 //     도면(mermaid) 부호 ↔ 부호의 설명(step_18) 교차 정합. 불일치 시 커밋하지 않고 롤백 + 렌더회귀 반환.
 // ═══════════════════════════════════════════════════════════════════
 window.Patent = window.Patent || {};
+
+// ═══ [T2] 사용자 도면 비전 분석 — callVision(T1)으로 도면의 구성요소·부호·구조·텍스트 추출 ═══
+//   ★ 정합 방향(변리사 확정): 사용자 도면이 ★기준(필수)★. 도면의 라벨·부호를 그대로 보존 추출(우리 명세서 용어로 바꾸지 않음).
+//     T3 정합이 이 추출물을 우리 명세서(부호의 설명 step_18·상세설명 step_08)와 비교해 "우리 설명을 도면에 맞춘다".
+//   ⚠️ App.callVision(공통 T1)에 의존 — 미탑재 시 안내 토스트로 안전 처리.
+// _buildFigureAnalysisPrompt — 추출 프롬프트(사용자 도면 기준, 할루시네이션 금지, 순수 JSON).
+Patent._buildFigureAnalysisPrompt = function(figData){
+  var d=(figData&&figData.description)||'';
+  return '당신은 특허 도면 분석 전문가입니다. 아래 [사용자 도면]은 출원인이 확정한 ★기준 도면★입니다. '
+    + '도면에 그려진 그대로(라벨·부호를 변형하지 말고 도면 표기 그대로) 추출하세요.\n'
+    + (d?('[출원인이 적은 도면 설명(참고)] '+d+'\n'):'')
+    + '\n추출 항목(JSON):\n'
+    + '1. elements: 도면에 그려진 각 구성요소 배열 — { "label": 도면 표기 명칭 그대로, "signNumber": 도면에 표기된 부호/번호(없으면 null), "description": 역할 추정(간결) }\n'
+    + '2. structure: 요소 간 관계 배열 — { "from": 출발 요소(label 또는 signNumber), "to": 도착 요소, "relation": 연결/포함/입력/출력 등 }\n'
+    + '3. rawText: 도면 안에 적힌 모든 텍스트(원문 그대로, 문자열)\n'
+    + '4. summary: 도면 한 줄 개요(문자열)\n'
+    + '\n★ 규칙:\n'
+    + '- ★ 도면에 보이는 라벨·부호를 그대로 보존하라. 우리 명세서 용어로 바꾸지 마라(사용자 도면이 기준).\n'
+    + '- ★ 도면에 없는 요소를 추측해 만들지 마라(할루시네이션 금지). 부호가 안 보이면 signNumber 는 null.\n'
+    + '- 순수 JSON 객체만 출력(설명·인사·코드펜스 금지). { "elements":[...], "structure":[...], "rawText":"...", "summary":"..." }';
+};
+// analyzeUserFigure — 단일 도면 분석(callVision). 결과를 figData.analysis 에 저장. 재분석 회피(opts.force 로 강제).
+Patent.analyzeUserFigure = async function(figData, opts){
+  opts=opts||{};
+  if(!figData||!figData.fileDataUrl){ try{App.showToast('이미지 파일이 있는 도면만 분석할 수 있습니다','info');}catch(_e){} return null; }
+  if(figData.analysis && !opts.force) return figData.analysis;          // ★ 재분석 회피(저장된 결과 재사용)
+  if(!(typeof App!=='undefined'&&App&&typeof App.callVision==='function')){ try{App.showToast('비전 분석 기능이 로드되지 않았습니다(새로고침 후 재시도)','error');}catch(_e){} return null; }
+  var prompt=Patent._buildFigureAnalysisPrompt(figData);
+  var r=await App.callVision(prompt,[figData.fileDataUrl],4096);
+  var j=(typeof _parseJSONSafe==='function')?_parseJSONSafe((r&&r.text)||''):null;
+  if(!j){ try{App.showToast('도 '+figData.num+' 분석 결과 파싱 실패 — 재시도하세요','error');}catch(_e){} return null; }
+  // 정규화(★ 사용자 도면 라벨·부호 보존) — T3 정합 입력 형식.
+  figData.analysis={
+    elements: Array.isArray(j.elements)?j.elements.map(function(e){return {label:String((e&&e.label)||''),signNumber:(e&&e.signNumber!=null&&e.signNumber!=='')?String(e.signNumber):null,description:String((e&&e.description)||'')};}).filter(function(e){return e.label||e.signNumber;}):[],
+    structure: Array.isArray(j.structure)?j.structure.map(function(s){return {from:String((s&&s.from)||''),to:String((s&&s.to)||''),relation:String((s&&s.relation)||'')};}):[],
+    rawText: String(j.rawText||''),
+    summary: String(j.summary||''),
+    analyzedAt: new Date().toISOString()
+  };
+  return figData.analysis;
+};
+// analyzeUserFigureByNum — 카드 [분석] 버튼 핸들러. 분석 후 재렌더 + 영속.
+Patent.analyzeUserFigureByNum = async function(num, force){
+  var f=((typeof requiredFigures!=='undefined'&&requiredFigures)||[]).find(function(x){return x.num===num;});
+  if(!f){ try{App.showToast('도 '+num+' 도면을 찾을 수 없습니다','error');}catch(_e){} return; }
+  try{App.showToast('도 '+num+' 분석 중...','info');}catch(_e){}
+  try{
+    var a=await Patent.analyzeUserFigure(f,{force:!!force});
+    if(a){ try{if(typeof renderRequiredFiguresList==='function')renderRequiredFiguresList();}catch(_e){} try{if(typeof saveProject==='function')saveProject(true);}catch(_e){} try{App.showToast('도 '+num+' 분석 완료('+(a.elements||[]).length+'요소)','success');}catch(_e){} }
+  }catch(e){ try{App.showToast('분석 실패: '+((e&&e.message)||e),'error');}catch(_e){} }
+};
+// analyzeAllUserFigures — 미분석 도면 일괄 분석(명세서 생성 전 등 일괄 트리거용). 순차 실행(레이트리밋 회피).
+Patent.analyzeAllUserFigures = async function(opts){
+  opts=opts||{};
+  var figs=((typeof requiredFigures!=='undefined'&&requiredFigures)||[]).filter(function(f){return f&&f.fileDataUrl&&(opts.force||!f.analysis);});
+  var done=0;
+  for(var i=0;i<figs.length;i++){ try{ var a=await Patent.analyzeUserFigure(figs[i],{force:!!opts.force}); if(a)done++; }catch(_e){} }
+  if(done){ try{if(typeof renderRequiredFiguresList==='function')renderRequiredFiguresList();}catch(_e){} try{if(typeof saveProject==='function')saveProject(true);}catch(_e){} }
+  return done;
+};
 
 // exportSnapshot — 원본(전역 상태) 변형 없이 깊은 복사본 반환(I-1, 읽기전용).
 //   반환 형상은 profiles/patent/adapter.js: adaptSnapshot 입력과 정합.
