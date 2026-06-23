@@ -133,11 +133,15 @@ async function refreshClaudeModels(force){
 restoreCachedClaudeModels();
 
 // ═══ Provider-agnostic API request/response ═══
-function buildAPIRequest(prov,modelKey,sys,user,maxTok){
+// data URL("data:image/png;base64,XXX") → {mediaType, data}. 형식 불일치면 null(무시).
+function _parseImageDataUrl(u){if(!u||typeof u!=='string')return null;const m=u.match(/^data:([^;]+);base64,(.+)$/);return m?{mediaType:m[1],data:m[2]}:null;}
+function buildAPIRequest(prov,modelKey,sys,user,maxTok,images){
   const pr=API_PROVIDERS[prov],mid=pr.models[modelKey].id,key=apiKeys[prov];
-  if(prov==='claude')return{url:pr.endpoint,headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:{model:mid,max_tokens:maxTok,system:sys,messages:[{role:'user',content:user}]}};
-  if(prov==='gpt')return{url:pr.endpoint,headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},body:{model:mid,max_tokens:maxTok,messages:[{role:'system',content:sys},{role:'user',content:user}]}};
-  if(prov==='gemini')return{url:`${pr.endpoint}${mid}:generateContent?key=${key}`,headers:{'Content-Type':'application/json'},body:{systemInstruction:{parts:[{text:sys}]},contents:[{parts:[{text:user}]}],generationConfig:{maxOutputTokens:maxTok}}};
+  // ★ 비전(T1): images(base64 data URL 배열)가 있으면 멀티모달 content 로, 없으면 기존 텍스트 그대로(회귀 0 — 동일 body).
+  const imgs=(Array.isArray(images)?images:[]).map(_parseImageDataUrl).filter(Boolean);
+  if(prov==='claude'){const content=imgs.length?[{type:'text',text:user},...imgs.map(im=>({type:'image',source:{type:'base64',media_type:im.mediaType,data:im.data}}))]:user;return{url:pr.endpoint,headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:{model:mid,max_tokens:maxTok,system:sys,messages:[{role:'user',content}]}};}
+  if(prov==='gpt'){const content=imgs.length?[{type:'text',text:user},...imgs.map(im=>({type:'image_url',image_url:{url:`data:${im.mediaType};base64,${im.data}`}}))]:user;return{url:pr.endpoint,headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},body:{model:mid,max_tokens:maxTok,messages:[{role:'system',content:sys},{role:'user',content}]}};}
+  if(prov==='gemini'){const parts=imgs.length?[{text:user},...imgs.map(im=>({inlineData:{mimeType:im.mediaType,data:im.data}}))]:[{text:user}];return{url:`${pr.endpoint}${mid}:generateContent?key=${key}`,headers:{'Content-Type':'application/json'},body:{systemInstruction:{parts:[{text:sys}]},contents:[{parts}],generationConfig:{maxOutputTokens:maxTok}}};}
 }
 function parseAPIResponse(prov,d){
   if(prov==='claude'){if(d.error)throw new Error(d.error.message);return{text:d.content[0].text,stopReason:d.stop_reason,it:d.usage?.input_tokens||0,ot:d.usage?.output_tokens||0};}
@@ -417,6 +421,24 @@ async function callClaudeSonnet(prompt,maxTokens=8192){
     return{text:parsed.text,stopReason:parsed.stopReason};
   }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃');throw e;}
 }
+// callVision — 멀티모달(이미지+프롬프트) 호출(T1). images=base64 data URL 배열 또는 단일 문자열(fileDataUrl 재사용).
+//   ★ 모델 셋(claude/gpt-4o/gemini) 모두 비전 지원. images 비면 텍스트 전용과 동일 경로(buildAPIRequest 회귀 0). callClaude 패턴 이식.
+async function callVision(prompt,images,maxTokens=4096){
+  if(!ensureApiKey()){openProfileSettings();throw new Error('API Key를 먼저 입력해 주세요');}
+  const prov=selectedProvider,mc=getModelConfig();
+  const imgArr=Array.isArray(images)?images:(images?[images]:[]);
+  const req=buildAPIRequest(prov,selectedModel,SYSTEM_PROMPT,prompt,maxTokens,imgArr);
+  const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),180000);
+  try{const res=await fetch(req.url,{method:'POST',signal:ctrl.signal,headers:req.headers,body:JSON.stringify(req.body)});clearTimeout(tout);
+    if(res.status===401||res.status===403){apiKeys[prov]='';API_KEY='';showToast('API Key가 유효하지 않습니다. ⚙️ 계정설정을 확인하세요.','error');throw new Error('API Key 유효하지 않음');}
+    if(res.status===429)throw new Error('요청 과다. 30초 후 재시도');if(res.status>=500)throw new Error('서버 오류');
+    const d=await res.json(),parsed=parseAPIResponse(prov,d);
+    if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
+    usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
+    if(typeof updateStats==='function')updateStats();
+    return{text:parsed.text,stopReason:parsed.stopReason};
+  }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃(3분)');throw e;}
+}
 async function callClaudeWithContinuation(prompt,pid){let full='',r=await callClaude(prompt),a=0;full=r.text;while(a<6&&r.stopReason==='max_tokens'){a++;showProgress(pid,`이어서 작성 중... (${a}/6)`,a,6);r=await callClaude(`아래 [마지막 부분]의 텍스트가 중간에 잘려 있다. 잘린 지점의 바로 다음부터 이어서 작성하라.\n- 마지막 단어가 불완전하면 해당 단어의 나머지 글자부터 시작하라.\n- [마지막 부분]의 내용을 반복하지 마라. 동일 문체.\n\n[마지막 부분]\n${full.slice(-2000)}`);const lc=full.slice(-1),fc=r.text[0]||'';if(/[가-힯a-zA-Z0-9]/.test(lc)&&/[가-힯a-zA-Z0-9]/.test(fc))full+=r.text;else full+='\n'+r.text;}clearProgress(pid);return full;}
 
 // ═══ FILE EXTRACTION ═══
@@ -444,7 +466,7 @@ Object.assign(App, {
   getProvider, getModelConfig, getModel, selectModel, selectProvider,
   updateModelToggle, updateProviderLabel, refreshClaudeModels, buildAPIRequest, parseAPIResponse,
   escapeHtml, showToast, showProgress, clearProgress, setButtonLoading,
-  showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation,
+  showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation, callVision,
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
   openProfileSettings, closeProfileSettings,
   REVIEW_ROLES, REVIEW_PROVIDERS, getProviderKeys, getEnteredProviders, getRoleAssignments, setRoleAssignment, saveRoleAssignments, getReviewAuth,
