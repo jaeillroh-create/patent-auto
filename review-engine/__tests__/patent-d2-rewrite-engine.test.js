@@ -187,7 +187,9 @@ test('★ 소스 — applyDirectionRewrite 가 APPEND 형태(기존 + 단락) + 
   const i = PATENT_SRC.indexOf('Patent.applyDirectionRewrite = ');
   assert.ok(i > 0, 'applyDirectionRewrite 정의 존재');
   const seg = PATENT_SRC.slice(i, i + 2400);
-  assert.match(seg, /op === 'add_spec_support'/, 'add_spec_support 필터');
+  // ★ add_spec_support 필터는 소스 통일 헬퍼(_collectApprovedSpecOps)로 이전됨 — applyDirectionRewrite 는 헬퍼를 호출.
+  assert.match(seg, /var specOps = Patent\._collectApprovedSpecOps\(\)/, '승인 보정 소스 통일 헬퍼 사용');
+  assert.match(PATENT_SRC, /Patent\._collectApprovedSpecOps[\s\S]{0,1400}op !== 'add_spec_support'/, 'add_spec_support 필터는 헬퍼에 존재');
   assert.match(seg, /pending\[sec\]\s*=\s*pending\[sec\]\s*\+[\s\S]*?\+\s*para/, '★ APPEND(기존 pending + 단락 para)');
   assert.match(seg, /Patent\._pendingPatentRewrite =/, '★ 보류본 _pendingPatentRewrite 설정');
   assert.match(seg, /_reviewRenderCheck\(checkO\)/, 'E-11 게이트 호출');

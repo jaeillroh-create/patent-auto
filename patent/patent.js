@@ -14231,13 +14231,46 @@ Patent._genSpecSupportParagraph = async function(dir, basisText) {
   return t || null;
 };
 
+// _collectApprovedSpecOps — 승인된 add_spec_support 보정을 ★화면과 동일한 소스★에서 수집(새로고침 내성).
+//   ★ 1순위: window.__patentReviewState.patchPlans (검증결과·승인상태 — openProject 재수화로 review_runs.result 에서 복원).
+//     화면("검증 결과 보기"·"승인됨")이 읽는 바로 그 변수 → 화면·반영 데이터 일치(검증 직후/새로고침 후 동일).
+//   ★ 2순위(fallback): outputs._review_applied (라이브 승인 직후 applyAmendments 가 채운 인메모리 로그).
+//     ⚠️ outputs._review_applied 는 projects.current_state_json 에 미영속 → 새로고침 후엔 휘발(0건의 원인).
+//   direction(op.content) 이 비면 대응 issue 본문(description)으로 basis 보강(rebut·재수화 시 direction 부재 방어).
+Patent._collectApprovedSpecOps = function() {
+  var out = [];
+  var rs = (typeof window !== 'undefined' && window.__patentReviewState) || null;
+  var plans = (rs && Array.isArray(rs.patchPlans)) ? rs.patchPlans : null;
+  if (plans && plans.length) {
+    var issuesById = {};
+    (rs.issues || []).forEach(function(it){ if (it && it.id) issuesById[it.id] = it; });
+    plans.forEach(function(pl){
+      if (!pl || pl.accepted !== true) return;                      // 승인된 plan 만(화면 "승인됨"과 동일 기준)
+      (pl.ops || []).forEach(function(op){
+        if (!op || op.op !== 'add_spec_support') return;
+        var dir = String(op.content || '').trim();
+        if (!dir) {                                                  // direction 부재 → 승인된 §42④ 지적 본문으로 보강
+          var iss = issuesById[op.reason] || issuesById[(pl.addressesIssues || [])[0]];
+          dir = (iss && String(iss.description || '').trim()) || '';
+        }
+        out.push({ op: 'add_spec_support', target: op.target || (pl.addressesIssues || [])[0] || '',
+          direction: dir, reason: op.reason || (pl.addressesIssues || [])[0] || '', planId: pl.id });
+      });
+    });
+  }
+  if (!out.length) {                                                 // fallback: 인메모리 로그(라이브, __patentReviewState 미설정 시)
+    var log = (typeof outputs !== 'undefined' && outputs && Array.isArray(outputs._review_applied)) ? outputs._review_applied : [];
+    log.forEach(function(e){ if (e && e.op === 'add_spec_support') out.push(e); });
+  }
+  return out;
+};
+
 // applyDirectionRewrite — T1: 승인된 add_spec_support 방향을 상세설명(step_08/12)에 뒷받침 단락으로 APPEND.
-//   입력: outputs._review_applied(applyAmendments 가 채운 승인 방향 로그). 출력: Patent._pendingPatentRewrite(보류본).
+//   ★ 입력 소스 통일(_collectApprovedSpecOps): __patentReviewState.patchPlans(화면·반영 동일·재수화 내성), fallback outputs._review_applied.
 //   ★ outputs 미커밋 — 변리사 [확정](T2)에서만 outputs 에 반영. 청구항 op(add_limitation/narrow_scope)·fix_* 는 다음 단계.
 Patent.applyDirectionRewrite = async function(opts) {
   opts = opts || {};
-  var log = (typeof outputs !== 'undefined' && outputs && Array.isArray(outputs._review_applied)) ? outputs._review_applied : [];
-  var specOps = log.filter(function(e){ return e && e.op === 'add_spec_support' && String(e.direction || '').trim(); });
+  var specOps = Patent._collectApprovedSpecOps();   // ★ 화면과 동일 소스(승인 plan) — 새로고침 후에도 0건 방지
   if (!specOps.length) { try { App.showToast('반영할 승인 보정(상세설명 뒷받침)이 없습니다', 'info'); } catch (_e) {} return null; }
 
   // ★ 대상 섹션(상세설명)만 클론 — 청구항(step_06/10)·도면·부호(step_18)는 미접촉(비대상 byte-identical).
