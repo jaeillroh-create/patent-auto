@@ -95,6 +95,14 @@ const CONCEPT_PURPOSE_RULES=`★★★ 이 예시도의 목적 (반드시 준수
 - 데이터 구조: 청구항이 규정한 자료구조(필드·레코드·관계)를 행/열 테이블로 구체화.
 - 장치 외관: 청구된 물리 구성요소가 드러나는 기기 외형.
 - 프로세스 장면: 청구된 처리 과정을 물리 메타포로 시각화.`;
+// ★ [A] 배치/선 겹침 방지 규칙 — step_07 "배치 품질 규칙(렌더링 겹침 방지)" 이식. 메인·캐스케이드 공유(P4 일관).
+const CONCEPT_OVERLAP_RULES=`★★★ 배치/선 겹침 방지 규칙 (렌더링 가독성 — 필수) ★★★
+- ★ 부호 리더선(번호를 가리키는 얇은 선)은 ★다른 박스·텍스트·연결선과 겹치거나 가로지르지 않게★ 짧고 곧게 그어라.
+- ★ 부호 숫자는 가리키는 요소 ★근처의 빈 공간★에 배치하고, 리더선이 다른 요소를 관통하지 않도록 경로를 잡아라.
+- 요소(박스·아이콘·텍스트) 사이에 충분한 간격을 두어 서로 겹치지 않게 하라(텍스트끼리 겹침 금지).
+- 연결선(점선/실선/화살표)의 교차를 최소화하라 — 한 영역에 선이 몰려 엉키면 요소를 재배열하라.
+- 요소가 많아 겹칠 것 같으면 개수를 줄이거나 영역을 나눠 배치하라(겹쳐 그리지 마라).
+- 모든 요소·선·번호는 viewBox(680×500) 안에 들어오게 하라.`;
 // ★ [P2/P3] 예시도 응답 파싱(메인·캐스케이드 공유) — 마커별 SVG/BRIEF/REF_MAP 추출.
 //   refMap(번호↔이름) 캡처(G3 해소), 참조번호 범위 31~99 통일(G4 — 프로세스 장면 81~99 누락 수정).
 function _parseConceptRefMap(segment, svgText){
@@ -2776,6 +2784,8 @@ ${CONCEPT_PURPOSE_RULES}
 ⛔ 블록도/플로우차트 형태 절대 금지. "~부" 박스 라벨 금지. 흑색 선만 사용.
 ✅ 시각적 장면: 스틱 피겨, UI 화면, 테이블, 디바이스 외관 등
 SVG 규칙: viewBox="0 0 680 500", stroke="#000", fill="none"(필요시 "#fff"), font-family="Malgun Gothic,sans-serif", 참조번호 31~99.
+${CONCEPT_OVERLAP_RULES}
+★ 출력 전: 부호 리더선/연결선이 다른 요소와 겹치거나 교차하는지, 요소·텍스트가 겹치는지 점검하고, 겹치면 경로·좌표를 수정해 제거하라.
 발명의 명칭: ${selectedTitle}
 도면: ${count}개 (${figNums.map(n=>'도 '+n).join(', ')}), 유형: ${typeDescs}
 청구범위(★ 이 예시도가 시각화할 구성을 특정해 도면에 반드시 담아라 — 블록도 복제만 금지): ${outputs.step_06?.slice(0,1500)||''}
@@ -2791,6 +2801,8 @@ SVG 규칙: viewBox="0 0 680 500", stroke="#000", fill="none"(필요시 "#fff"),
   outputs.step_07c=_buildConceptOutputText(conceptDiagramTypes, figNums);
   markOutputTimestamp('step_07c');
   renderConceptDiagramCards();
+  // ★ [C] 연쇄 재생성 직후에도 비전 자동 정련 1회(겹침 안전망) — callVision 있을 때만(가드), 1회만.
+  try{ if(App&&typeof App.callVision==='function'){ await Patent.refineAllConceptDiagrams({maxRounds:1}); } }catch(_e){}
 }
 
 // v10.3: 설계 텍스트에서 초과 도면 제거
@@ -5604,6 +5616,8 @@ ${CONCEPT_PURPOSE_RULES}
 7. 제목: 【도 N】을 상단 중앙에 표기
 8. 마커(화살표)는 최소한만 사용 — 시각적 장면이 핵심
 
+${CONCEPT_OVERLAP_RULES}
+
 ═══ 유형별 구체 지시 ═══
 
 [화면 구성도 선택 시]
@@ -5650,7 +5664,8 @@ ${figNums.length>1?figNums.slice(1).map(n=>'\n---CONCEPT_FIG_'+n+'---\n<svg>...<
 1. stroke에 "#" 뒤에 0, 3 이외의 숫자가 있는가? → 있으면 흑백으로 수정
 2. <rect>가 5개 이상이고 텍스트가 "~부"로 끝나는가? → 블록도임, 다시 그려라
 3. 참조번호에 a, b, c, d, e가 포함되는가? → 제거하고 순수 숫자만 사용
-4. 이 도면이 step_07 블록도와 차별화되는가? → 아니면 다시 그려라`;
+4. 이 도면이 step_07 블록도와 차별화되는가? → 아니면 다시 그려라
+5. ★ 부호 리더선/연결선이 다른 박스·텍스트·선과 겹치거나 가로지르는가? 요소·텍스트가 서로 겹치는가? → 있으면 경로·좌표를 수정해 겹침을 제거하고 다시 그려라`;
 
     const r=await App.callClaude(prompt,16384);
     const fullText=r.text||'';
@@ -5669,6 +5684,8 @@ ${figNums.length>1?figNums.slice(1).map(n=>'\n---CONCEPT_FIG_'+n+'---\n<svg>...<
 
     renderConceptDiagramCards();
     saveProject(true);
+    // ★ [C] 생성 직후 비전 자동 정련 1회(겹침 안전망) — App.callVision 있을 때만(가드), 1회만(비용·루프 제한).
+    try{ if(App&&typeof App.callVision==='function'){ App.showProgress('progressStep07c','겹침 자동 정련 중...',2,2); await Patent.refineAllConceptDiagrams({maxRounds:1}); } }catch(_e){}
     App.clearProgress('progressStep07c');
     App.showToast(`예시도 ${conceptDiagramTypes.length}종 생성 완료`);
   }catch(e){
