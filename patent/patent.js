@@ -2128,7 +2128,10 @@ function renderConceptDiagramCards(){
     const figNum=cFigNums[i]||'?';
     const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
     return `<div style="margin-bottom:16px">
-      <div style="font-weight:600;font-size:13px;margin-bottom:6px">도 ${figNum} — ${App.escapeHtml(typeDef.label)}</div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:8px">
+        <span>도 ${figNum} — ${App.escapeHtml(typeDef.label)}</span>
+        <button class="btn btn-ghost btn-sm" onclick="Patent.refineConceptDiagramByNum(${figNum})" title="비전 정련 — 선 겹침/배치 개선(청구 구성·부호 내용 유지)"><span class="ico" data-icon="wand" data-size="12"></span> 정련</button>
+      </div>
       <div style="border:1px solid var(--color-border);border-radius:8px;padding:12px;background:#fff;overflow:auto;max-height:500px">${ct.svgContent}</div>
     </div>`;
   }).filter(Boolean).join('');
@@ -14049,6 +14052,91 @@ function downloadAsWord(){
 //     도면(mermaid) 부호 ↔ 부호의 설명(step_18) 교차 정합. 불일치 시 커밋하지 않고 롤백 + 렌더회귀 반환.
 // ═══════════════════════════════════════════════════════════════════
 window.Patent = window.Patent || {};
+
+// ═══ [P5] 예시도 비전 정련 루프 — 생성 SVG → PNG → callVision 비평 → 배치/선 개선 SVG(선 겹침 해소) ═══
+//   ★ 내용(청구 구성 P1·부호 이름 P2·번호 P3) 불변, "배치/선"만 개선. SVG-direct 유지(포맷 불변).
+//   ⚠️ App.callVision(T1) 의존 — 미탑재/실패/번호누락 시 원본 유지(생성만, 정련 skip).
+// _conceptSvgToPng — SVG 문자열 → PNG dataURL(브라우저 Image+canvas). 비전 입력용(downloadConceptPptx 변환 재사용·신규 비용 0).
+Patent._conceptSvgToPng = function(svgStr){
+  return new Promise(function(resolve,reject){
+    try{
+      var blob=new Blob([String(svgStr||'')],{type:'image/svg+xml;charset=utf-8'});
+      var url=URL.createObjectURL(blob);
+      var img=new Image();
+      img.onload=function(){
+        try{
+          var canvas=document.createElement('canvas');canvas.width=1360;canvas.height=1000;
+          var cx=canvas.getContext('2d');cx.fillStyle='#FFFFFF';cx.fillRect(0,0,1360,1000);cx.drawImage(img,0,0,1360,1000);
+          var dataUrl=canvas.toDataURL('image/png');URL.revokeObjectURL(url);resolve(dataUrl);
+        }catch(e){URL.revokeObjectURL(url);reject(e);}
+      };
+      img.onerror=function(e){URL.revokeObjectURL(url);reject(e||new Error('svg img load fail'));};
+      img.src=url;
+    }catch(e){reject(e);}
+  });
+};
+// _buildConceptRefinePrompt — 선 겹침·교차 집중 비평 + 배치 개선 지시(★ 내용 불변).
+Patent._buildConceptRefinePrompt = function(svgStr){
+  return '아래 이미지는 특허 예시도(SVG를 렌더한 것)이고, 그 SVG 코드도 함께 준다. ★ 내용은 그대로 두고 "배치/선"만 개선한 SVG를 출력하라.\n\n'
+    + '[집중 점검 — 시각 결함]\n'
+    + '1. ★ 부호 리더선(숫자를 가리키는 얇은 선)이 다른 박스·텍스트·요소와 겹치거나 교차하는가? → 리더선 경로를 우회시켜 겹침/교차를 제거하라.\n'
+    + '2. 연결선(점선/실선/화살표)이 다른 요소를 관통하거나 겹치는가? → 경로를 조정하라.\n'
+    + '3. 요소·텍스트가 서로 겹치거나 간격이 너무 좁은가? → 간격을 확보하고 정렬하라.\n'
+    + '4. 비율 왜곡·viewBox 밖 이탈이 있는가? → 안으로 들여라.\n\n'
+    + '[★ 불변 — 반드시 유지]\n'
+    + '- 모든 참조번호(숫자)와 그것이 가리키는 요소를 그대로 유지하라(번호·요소 삭제/변경/추가 금지).\n'
+    + '- 도면이 담은 청구 구성·요소 구성을 그대로 유지하라(내용 변경 금지 — 배치/선만 개선).\n'
+    + '- viewBox·흑백(stroke #000)·폰트 등 기존 SVG 기술 규칙을 유지하라.\n\n'
+    + '[현재 SVG]\n'+String(svgStr||'')+'\n\n'
+    + '출력: 개선된 SVG 코드만(<svg ...>...</svg>). 설명·코드펜스 없이 SVG 하나만.';
+};
+// refineConceptDiagram — 단일 예시도 정련(1~2회). ★ 내용 보존 가드: 원본 참조번호 전부 유지돼야 채택.
+Patent.refineConceptDiagram = async function(ct, opts){
+  opts=opts||{};
+  if(!ct||!ct.svgContent) return {refined:false, reason:'no_svg'};
+  if(!(typeof App!=='undefined'&&App&&typeof App.callVision==='function')) return {refined:false, reason:'no_vision'};  // ★ 가드: 생성만(정련 skip)
+  var origNums=(Array.isArray(ct.refMap)&&ct.refMap.length)?ct.refMap.map(function(r){return String(r.signNumber);}):[...String(ct.svgContent).matchAll(/\((\d{2,3})\)/g)].map(function(x){return x[1];});
+  var maxRounds=Math.min(Math.max(parseInt(opts.maxRounds||1)||1,1),2);  // ★ 1~2회(루프·비용 가드)
+  var current=ct.svgContent, changed=false, lastReason='no_change';
+  for(var round=0; round<maxRounds; round++){
+    var png=null;
+    try{ png=await Patent._conceptSvgToPng(current); }catch(_e){ png=null; }
+    if(!png){ lastReason='png_fail'; break; }                  // PNG 변환 실패 → 원본 유지
+    var r=null;
+    try{ r=await App.callVision(Patent._buildConceptRefinePrompt(current),[png],8192); }catch(_e){ r=null; }
+    var m=r&&r.text&&String(r.text).match(/<svg[\s\S]*?<\/svg>/i);
+    if(!m){ lastReason='vision_fail'; break; }                 // 비전 실패 → 원본 유지
+    var fixed=m[0];
+    var fixedNums=[...String(fixed).matchAll(/\((\d{2,3})\)/g)].map(function(x){return x[1];});
+    if(!origNums.every(function(n){return fixedNums.indexOf(n)>=0;})){ lastReason='num_lost'; break; }  // ★ 번호 누락 → 거부, 원본 유지
+    current=fixed; changed=true;
+  }
+  if(changed){ ct.svgContent=current; ct.refinedAt=new Date().toISOString(); }
+  return {refined:changed, reason: changed?'ok':lastReason};
+};
+// refineConceptDiagramByNum — 카드 [정련] 버튼 핸들러. 정련 후 재렌더 + 영속.
+Patent.refineConceptDiagramByNum = async function(figNum){
+  var cFigNums=(typeof getAutoFigNums==='function')?getAutoFigNums('step_07c'):[];
+  var idx=cFigNums.indexOf(parseInt(figNum));
+  var ct=(idx>=0)?conceptDiagramTypes[idx]:(conceptDiagramTypes||[]).find(function(c){return String(c.figNum)===String(figNum);});
+  if(!ct||!ct.svgContent){ try{App.showToast('정련할 예시도를 찾을 수 없습니다','error');}catch(_e){} return; }
+  if(!(App&&typeof App.callVision==='function')){ try{App.showToast('비전 정련 기능이 로드되지 않았습니다(생성본 유지)','info');}catch(_e){} return; }
+  try{App.showToast('도 '+figNum+' 비전 정련 중...','info');}catch(_e){}
+  try{
+    var res=await Patent.refineConceptDiagram(ct,{maxRounds:1});
+    if(res.refined){ try{renderConceptDiagramCards();}catch(_e){} try{saveProject(true);}catch(_e){} try{App.showToast('도 '+figNum+' 정련 완료(선 겹침/배치 개선)','success');}catch(_e){} }
+    else { try{App.showToast('도 '+figNum+' 정련 미적용('+(res.reason==='num_lost'?'번호 보존 실패':res.reason==='vision_fail'?'비전 응답 없음':res.reason)+') — 원본 유지','info');}catch(_e){} }
+  }catch(e){ try{App.showToast('정련 실패: '+((e&&e.message)||e),'error');}catch(_e){} }
+};
+// refineAllConceptDiagrams — 생성된 예시도 일괄 정련(순차).
+Patent.refineAllConceptDiagrams = async function(opts){
+  opts=opts||{};
+  var list=((typeof conceptDiagramTypes!=='undefined'&&conceptDiagramTypes)||[]).filter(function(c){return c&&c.svgContent;});
+  var done=0;
+  for(var i=0;i<list.length;i++){ try{ var res=await Patent.refineConceptDiagram(list[i],{maxRounds:opts.maxRounds||1}); if(res.refined)done++; }catch(_e){} }
+  if(done){ try{renderConceptDiagramCards();}catch(_e){} try{saveProject(true);}catch(_e){} }
+  return done;
+};
 
 // ═══ [T2] 사용자 도면 비전 분석 — callVision(T1)으로 도면의 구성요소·부호·구조·텍스트 추출 ═══
 //   ★ 정합 방향(변리사 확정): 사용자 도면이 ★기준(필수)★. 도면의 라벨·부호를 그대로 보존 추출(우리 명세서 용어로 바꾸지 않음).
