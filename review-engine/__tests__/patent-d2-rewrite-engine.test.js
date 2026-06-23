@@ -132,15 +132,16 @@ test('★ E-11 도면 정합 게이트 — 부호 일치면 canConfirm=true', as
   assert.deepEqual(rw.renderCheck.missing, [], 'missing 없음');
 });
 
-test('★ E-11 도면 정합 게이트 — 도면에 부호의설명 없는 번호(99) 있으면 canConfirm=false', async () => {
+test('★ delta 게이트 — 기존 도면↔부호 불일치(99) 있어도 APPEND는 canConfirm=true(과차단 제거)', async () => {
   setOutputs({
     step_06: CLAIM_BASE, step_08: DEV_BASE, step_18: SIGN_BASE,
-    step_07_mermaid: 'graph TD; A[장치(100)] --> Z[미정의부(99)]',  // 99 는 step_18 에 없음
+    step_07_mermaid: 'graph TD; A[장치(100)] --> Z[미정의부(99)]',  // 99 는 step_18 에 없음(기존 불일치)
     _review_applied: [{ op: 'add_spec_support', target: 'claim_7', direction: '보강', planId: 'p1' }],
   });
   const rw = await Patent.applyDirectionRewrite();
-  assert.equal(rw.canConfirm, false, '★ 부호 불일치(99) → 확정 차단(E-11)');
-  assert.ok(rw.renderCheck.missing.indexOf('99') >= 0, 'missing 에 99 포함');
+  assert.equal(rw.canConfirm, true, '★ 기존 불일치(99)는 APPEND와 무관(delta 0) → canConfirm=true');
+  assert.deepEqual(rw.renderCheck.missing, [], '★ 이 보정이 만든 새 누락 0(newMissing 비어있음)');
+  assert.ok((rw.renderCheck.preexistingMissing || []).indexOf('99') >= 0, '기존 불일치(99)는 preexistingMissing 으로 기록(경고용)');
 });
 
 test('★ 다중 add_spec_support → 순서대로 모두 APPEND(기존 보존)', async () => {
@@ -192,7 +193,7 @@ test('★ 소스 — applyDirectionRewrite 가 APPEND 형태(기존 + 단락) + 
   assert.match(PATENT_SRC, /Patent\._collectApprovedSpecOps[\s\S]{0,1400}op !== 'add_spec_support'/, 'add_spec_support 필터는 헬퍼에 존재');
   assert.match(seg, /pending\[sec\]\s*=\s*pending\[sec\]\s*\+[\s\S]*?\+\s*para/, '★ APPEND(기존 pending + 단락 para)');
   assert.match(seg, /Patent\._pendingPatentRewrite =/, '★ 보류본 _pendingPatentRewrite 설정');
-  assert.match(seg, /_reviewRenderCheck\(checkO\)/, 'E-11 게이트 호출');
+  assert.match(seg, /_reviewDeltaGate\(/, 'E-11 ★delta 게이트 호출(절대 아님)');
   // ★ outputs 직접 커밋(=outputs.step_08 = ...) 이 없어야 보류(자동 반영 금지)
   assert.ok(!/outputs\.step_08\s*=/.test(seg), '★ applyDirectionRewrite 가 outputs 를 직접 커밋하지 않음(보류)');
 });
