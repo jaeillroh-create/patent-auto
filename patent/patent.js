@@ -12858,6 +12858,8 @@ function downloadPptx(sid){
       }
     });
     
+    // ★ T4: 사용자 도면(이미지) 슬라이드 추가 — 장치 도면(step_07) PPTX 에만(중복 방지). base64 fileDataUrl 재사용(비전 불필요).
+    if(sid==='step_07'){try{_appendUserFigureSlides(pptx);}catch(_uf){console.warn('user figure slides skip:',_uf);}}
     const fileName=selectedTitle||selectedTitleEn||'도면';
     pptx.writeFile({fileName:`${fileName}_도면_${new Date().toISOString().slice(0,10)}.pptx`})
       .then(()=>App.showToast('PPTX 다운로드 완료'))
@@ -13914,6 +13916,43 @@ function validateRefNumberConsistency(){
 
 // ═══════════ OUTPUT ═══════════
 function updateStats(){const c=Object.keys(outputs).filter(k=>outputs[k]&&k.startsWith('step_')&&!k.includes('mermaid')&&!k.includes('applied')).length;const totalSteps=conceptDiagramTypes.length>0?21:20;document.getElementById('statCompleted').textContent=`${c}/${totalSteps}`;document.getElementById('statApiCalls').textContent=usage.calls;document.getElementById('statCost').textContent=`$${(usage.cost||0).toFixed(2)}`;}
+// ═══ [T4] 사용자 도면 출력 반영 — 기존 base64(fileDataUrl) 이미지를 미리보기·Word·PPTX 에 삽입(비전 불필요) ═══
+// buildUserFiguresHtml — 사용자 도면 이미지 블록 HTML(미리보기·Word 공유). fileDataUrl 있는 도면만, 도 번호 순.
+//   ★ 자동 도면(mermaid)과 별개로 사용자가 올린 실제 이미지를 출력에 삽입. 텍스트 명세(buildSpecification)는 불변(.txt/clipboard 보존).
+function buildUserFiguresHtml(opts){
+  opts=opts||{};
+  var figs=((typeof requiredFigures!=='undefined'&&requiredFigures)||[]).filter(function(f){return f&&f.fileDataUrl;}).sort(function(a,b){return a.num-b.num;});
+  if(!figs.length)return '';
+  var esc=(typeof App!=='undefined'&&App.escapeHtml)?App.escapeHtml:function(s){return String(s==null?'':s);};
+  var blocks=figs.map(function(f){
+    var cap='도 '+f.num+(f.description?' — '+esc(f.description):'');
+    if(opts.word){
+      return '<div style="margin:18pt 0;text-align:center;page-break-inside:avoid">'
+        +'<img src="'+f.fileDataUrl+'" style="max-width:15cm;height:auto" />'
+        +'<p style="font-size:11pt;margin:6pt 0 0;text-align:center;font-family:\'바탕체\',BatangChe,serif">'+cap+'</p></div>';
+    }
+    return '<div style="margin:14px 0;text-align:center">'
+      +'<img src="'+f.fileDataUrl+'" style="max-width:100%;height:auto;border:1px solid var(--color-border,#ddd);border-radius:6px" />'
+      +'<div style="font-size:12px;color:var(--color-text-secondary);margin-top:6px">'+cap+'</div></div>';
+  }).join('');
+  if(opts.word){
+    return '<h2 style="font-size:12pt;font-weight:normal;font-family:\'바탕체\',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【도면】</h2>'+blocks;
+  }
+  return '<div style="margin-top:12px;border-top:1px solid var(--color-border,#eee);padding-top:12px">'
+    +'<div style="font-weight:600;font-size:13px;margin-bottom:8px"><span class="ico" data-icon="image"></span> 【도면】 사용자 도면 '+figs.length+'건</div>'
+    +blocks+'</div>';
+}
+// _appendUserFigureSlides — 사용자 도면(이미지)을 PPTX 슬라이드로 추가(addImage, base64 재사용). 도 번호 순.
+function _appendUserFigureSlides(pptx){
+  var figs=((typeof requiredFigures!=='undefined'&&requiredFigures)||[]).filter(function(f){return f&&f.fileDataUrl;}).sort(function(a,b){return a.num-b.num;});
+  figs.forEach(function(f){
+    var sl=pptx.addSlide({bkgd:'FFFFFF'});
+    sl.addText('도 '+f.num,{x:0.6,y:0.4,w:7.07,h:0.4,fontSize:14,bold:true,fontFace:'바탕체',align:'center'});
+    sl.addImage({data:f.fileDataUrl,x:0.6,y:1.0,w:7.07,h:8.5,sizing:{type:'contain',w:7.07,h:8.5}});
+    if(f.description)sl.addText(f.description,{x:0.6,y:9.7,w:7.07,h:0.6,fontSize:10,fontFace:'바탕체',align:'center'});
+  });
+}
+
 function renderPreview(){
   // ── [G4/G5] page4 진입 시 검증 게이트 갱신 + 리뷰 결과 마운트(트리거·결과 동일 위치).
   try { if (Patent._updateReviewGate) Patent._updateReviewGate(); } catch (_e) {}
@@ -13933,7 +13972,7 @@ function renderPreview(){
       }
     }
   } catch (_e) {}
-  const el=document.getElementById('previewArea'),spec=buildSpecification();if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>';return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow"><span class="ico" data-icon="chevron-down" data-size="12"></span></span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('');}
+  const el=document.getElementById('previewArea'),spec=buildSpecification();const _userFigs=buildUserFiguresHtml({});if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>'+_userFigs;return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow"><span class="ico" data-icon="chevron-down" data-size="12"></span></span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('')+_userFigs;}
 // 출력 시 항목 헤더 중복 방지: 본문 첫 줄이 해당 항목 헤더(【h】, 공백 변형 포함)면 제거.
 // 항목명이 정확히 일치할 때만 제거하므로 청구범위의 "【청구항 1】" 등은 보존됨.
 function _stripDupHeader(body,h){
@@ -13976,7 +14015,8 @@ function downloadAsWord(){
   const allClaims=[outputs.step_06,outputs.step_10,outputs.step_20].filter(Boolean).join('\n\n');
   const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,getLatestMethodDescription()].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:normal;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;const body=_stripDupHeader(s.b,s.h);if(!body)return hd;return hd+body.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
-  const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}</body></html>`;
+  const userFigHtml=buildUserFiguresHtml({word:true}); // ★ T4: 사용자 도면 이미지(base64) 삽입 — 도 번호 순
+  const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}${userFigHtml}</body></html>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);App.showToast('Word 다운로드 완료');
 }
 
