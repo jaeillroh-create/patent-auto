@@ -139,12 +139,85 @@ function _parseConceptResult(fullText, conceptTypes, figNums){
   }
 }
 // outputs.step_07c 텍스트(공유) — refMap 의 "이름(번호)" 포함 → 부호의 설명(step_18)·상세설명(step_08)이 정밀 참조.
+// ★ [B] 라벨 폴백: refMap 라벨이 비면 유형 기반 기본 이름(예: "UI 화면 요소")을 부여 → "(31)" 대신 "이름(31)" 보장
+//   → step_18 부호 정규식(이름+괄호 요구, 4622)이 예시도 부호를 누락 없이 수집(부호의 설명 누락 차단).
+function _conceptRefFallbackName(ct){
+  const td=CONCEPT_DIAGRAM_TYPES[ct&&ct.type]||{label:(ct&&ct.type)||'예시'};
+  return (td.label||'예시')+' 요소';
+}
+// 예시도 1종의 참조 "이름/번호" 쌍 배열(B 폴백 적용). 라벨 공백 → 유형 기반 기본 이름.
+function _conceptRefPairs(ct){
+  const fb=_conceptRefFallbackName(ct);
+  return ((ct&&ct.refMap)||[]).map(r=>({num:String(r.signNumber),name:(r.label&&String(r.label).trim())||fb}));
+}
 function _buildConceptOutputText(conceptTypes, figNums){
   return conceptTypes.map((ct,i)=>{
     const fn=figNums[i]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
-    const refs=(ct.refMap||[]).map(r=>r.label?`${r.label}(${r.signNumber})`:`(${r.signNumber})`).join(', ');
+    const refs=_conceptRefPairs(ct).map(p=>`${p.name}(${p.num})`).join(', ');  // ★ B: 라벨 공백도 "이름(번호)" 보장
     return `[도 ${fn}] ${td.label} 예시도\n참조번호: ${refs}\n${ct.briefDesc||''}`;
   }).join('\n\n');
+}
+// ═══ [A] 예시도 자동 반영 — 예시도 생성 = 명세서 반영 의사. 발명의 설명(step_08 계층)·부호의 설명(step_18)에
+//   예시도 설명/부호를 ★APPEND★(기존 본문 byte 보존·멱등, D2 add_spec_support 패턴). 덮어쓰기·재생성 없음. ═══
+//   ★ [C] getAutoFigNums('step_07c')(생성된 예시도 compact 번호배열)를 filter 순서와 동일 인덱스로 매핑(full 인덱스 접근 버그 제거).
+function _conceptBrief(ct, figNum){
+  const td=CONCEPT_DIAGRAM_TYPES[ct&&ct.type]||{label:(ct&&ct.type)||'예시'};
+  const n=parseInt(figNum)||0;
+  return (ct&&ct.briefDesc&&String(ct.briefDesc).trim())||`도 ${figNum}${figParticle(n)} ${selectedTitle||'본 발명'}의 ${td.label}을 나타내는 예시도이다.`;
+}
+// 예시도 1종의 발명의 설명 단락(평문) — briefDesc + 참조 "이름(번호)" 나열(B 폴백). 결정적(본문보호 APPEND용).
+function _buildConceptSpecParagraph(ct, figNum){
+  const n=parseInt(figNum)||0;
+  const brief=_conceptBrief(ct, figNum);
+  const pairs=_conceptRefPairs(ct);
+  if(!pairs.length) return brief;
+  const obj=figParticle(n)==='은'?'을':'를';                       // 도 N을/를 (받침 규칙=figParticle)
+  return brief.replace(/\s*$/,'')+` 도 ${figNum}${obj} 참조하면, ${pairs.map(p=>`${p.name}(${p.num})`).join(', ')} 등이 도시되어 있다.`;
+}
+// 생성된(svgContent) 예시도 → {ct, figNum} (★ C: filter 순서 = getAutoFigNums('step_07c') 순서로 정합)
+function _generatedConceptsWithNums(){
+  const figs=getAutoFigNums('step_07c');
+  return conceptDiagramTypes.filter(ct=>ct.svgContent).map((ct,fi)=>({ct,figNum:figs[fi]||ct.figNum||'?'}));
+}
+// 멱등 판정: 해당 예시도(도 N) 단락이 이미 상세설명에 반영됐나 — brief 일치 또는 "도 N{을|를} 참조하면 … 등이 도시되어 있다" 마커.
+//   ★ figNum 기준 → 재생성으로 brief 문구가 바뀌어도 같은 도 N 단락이 중복 누적되지 않음(본문 보호).
+function _conceptAlreadyInDesc(text, ct, figNum){
+  if(!text) return false;
+  if(String(text).indexOf(_conceptBrief(ct, figNum))>=0) return true;
+  const fn=String(figNum).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  return new RegExp('도\\s*'+fn+'[을를]\\s*참조하면[^\\n]*등이 도시되어 있다').test(text);
+}
+// 예시도 설명을 발명의 설명(step_08/09/13_applied 계층)·부호의 설명(step_18)에 자동 반영(APPEND·멱등·본문 보존).
+//   반환 {desc,ref}=신규 반영 수. step_08/step_18 부재 시 무손상 no-op(추후 생성 시 4293·4619 경로로 포함).
+function reflectConceptsToSpec(){
+  const gen=_generatedConceptsWithNums();
+  if(!gen.length) return {desc:0, ref:0};
+  // ── 발명의 설명 — 존재하는 모든 상세설명 계층에 예시도 단락 APPEND(멱등). insertBoilerplate 패턴(우선순위 보존). ──
+  const hasDescLayer=!!(outputs.step_08||outputs.step_09||outputs.step_13_applied);   // 반영 대상 계층 존재 여부
+  const latest=getLatestDescription()||'';
+  const newOnes=hasDescLayer?gen.filter(g=>!_conceptAlreadyInDesc(latest,g.ct,g.figNum)):[];   // 계층 없으면 0(추후 생성 시 4359로 포함)
+  ['step_08','step_09','step_13_applied'].forEach(L=>{
+    if(!outputs[L]) return;
+    let body=String(outputs[L]), changed=false;
+    gen.forEach(g=>{
+      if(_conceptAlreadyInDesc(body, g.ct, g.figNum)) return;         // 멱등(figNum 기준): 이미 반영됨 → skip
+      body=body.replace(/\s*$/,'')+'\n\n'+_buildConceptSpecParagraph(g.ct, g.figNum);  // ★ APPEND(기존 byte 보존)
+      changed=true;
+    });
+    if(changed){ outputs[L]=body; if(L!=='step_08')markOutputTimestamp(L); }   // step_08 timestamp 미변경(계층 우선순위 보존)
+  });
+  // ── 부호의 설명(step_18) — 예시도 부호 "이름 : 번호" 누락분만 APPEND(기존 보존·멱등). ──
+  let refAdded=0;
+  if(outputs.step_18){
+    let s18=String(outputs.step_18);
+    const have=new Set((s18.match(/\d{2,4}/g)||[]));                   // 기존 기재 번호
+    const add=[];
+    gen.forEach(g=>_conceptRefPairs(g.ct).forEach(p=>{
+      if(have.has(p.num)) return; have.add(p.num); add.push(`${p.name} : ${p.num}`);
+    }));
+    if(add.length){ outputs.step_18=s18.replace(/\s*$/,'')+'\n'+add.join('\n'); markOutputTimestamp('step_18'); refAdded=add.length; }
+  }
+  return {desc:newOnes.length, ref:refAdded};
 }
 // ★ [① SVG 제목 동기화] 예시도 SVG 제목을 ★코드가 computeFigNums(SoT) 값으로 강제★ — mermaid(svg+='【도 figNum】' 8082) 방식 이식.
 //   렌더/다운로드 시점마다 적용 → SoT(getAutoFigNums) 가 바뀌면(③ 순서지정·장치수 변동) 제목이 자동 추종. LLM이 쓴 【도 N】은 제거 후 교체.
@@ -2812,6 +2885,7 @@ ${CONCEPT_OVERLAP_RULES}
   pushOutputHistory('step_07c','cascade','_cascadeRunConceptDiagram');
   outputs.step_07c=_buildConceptOutputText(conceptDiagramTypes, figNums);
   markOutputTimestamp('step_07c');
+  reflectConceptsToSpec();   // ★ [A] 예시도 → 발명의 설명·부호의 설명 자동 반영(APPEND, 본문 보존). step_08/18 미선택 시에도 누락 방지.
   renderConceptDiagramCards();
   // ★ [C] 연쇄 재생성 직후에도 비전 자동 정련 1회(겹침 안전망) — callVision 있을 때만(가드), 1회만.
   try{ if(App&&typeof App.callVision==='function'){ await Patent.refineAllConceptDiagrams({maxRounds:1}); } }catch(_e){}
@@ -4154,8 +4228,8 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(
       const designText=outputs.step_07||'';
       const actualFigNums=_extractFigureNumbersFromDesign(designText);
       // 사용자 도면 + 예시도 번호도 포함
-      const _conceptFigNums=getAutoFigNums('step_07c');
-      const _genConceptFigNums=_conceptFigNums.filter((_,i)=>conceptDiagramTypes[i]?.svgContent);
+      const _conceptFigNums=getAutoFigNums('step_07c');   // ★ 이미 생성된(svgContent) 예시도 compact 번호배열(길이=생성수)
+      const _genConceptFigNums=_conceptFigNums;            // ★ C: full 인덱스 필터(버그) 제거 — getAutoFigNums 가 이미 생성분만 산출
       const allFigNumsRaw=[...new Set([...actualFigNums,...requiredFigures.map(f=>f.num),..._genConceptFigNums])].sort((a,b)=>a-b);
       // ★ v10.5 fix: 실제 도면 데이터가 있으면 그대로 사용 (UI 값 변경으로 인한 도면 누락/초과 방지) ★
       // step_07 미생성 시에만 computeFigNums 폴백 사용
@@ -4290,7 +4364,7 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 청구항에서 사용한 명칭과 상세설명의 명칭이 일치해야 한다.
 ${_designCompStr}
 ${_userFigBlock?`\n${_userFigBlock}\n★ 사용자 도면도 "도 N을 참조하면," 형태로 도면 번호 순서에 맞게 설명을 포함하라.\n★ 사용자 도면의 설명은 발명 내용 및 청구범위와 정합되도록, 위 도면 설명을 기초로 기술적 의미를 보완하여 작성하라.`:''}
-${conceptDiagramTypes.some(ct=>ct.svgContent)?`\n★★★ 예시도/개념도 (참조번호 31~99) ★★★\n${conceptDiagramTypes.filter(ct=>ct.svgContent).map(ct=>{const fn=_conceptFigNums[conceptDiagramTypes.indexOf(ct)]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${fn}: ${td.label} (참조번호: ${(ct.refMap||[]).map(r=>r.label?`${r.signNumber}(${r.label})`:r.signNumber).join(', ')||(ct.refNums||[]).join(', ')||'미정'})`;}).join('\n')}\n- 예시도도 도면 번호 순서에 맞게 "도 N을 참조하면," 형태로 설명하되, ★ 위 "번호(이름)"의 이름을 그대로 사용해 "이름(번호)" 형태로 기재하라(부호의 설명과 일치).\n- 예시도의 참조번호(31~99)는 장치 참조번호(100~999)와 구분된다.\n`:''}
+${conceptDiagramTypes.some(ct=>ct.svgContent)?`\n★★★ 예시도/개념도 (참조번호 31~99) ★★★\n${conceptDiagramTypes.filter(ct=>ct.svgContent).map((ct,fi)=>{const fn=_conceptFigNums[fi]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${fn}: ${td.label} (참조번호: ${(ct.refMap||[]).map(r=>r.label?`${r.signNumber}(${r.label})`:`${r.signNumber}(${_conceptRefFallbackName(ct)})`).join(', ')||(ct.refNums||[]).join(', ')||'미정'})`;}).join('\n')}\n- 예시도도 도면 번호 순서에 맞게 "도 N을 참조하면," 형태로 설명하되, ★ 위 "번호(이름)"의 이름을 그대로 사용해 "이름(번호)" 형태로 기재하라(부호의 설명과 일치).\n- 예시도의 참조번호(31~99)는 장치 참조번호(100~999)와 구분된다.\n`:''}
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
 
@@ -5691,8 +5765,13 @@ ${figNums.length>1?figNums.slice(1).map(n=>'\n---CONCEPT_FIG_'+n+'---\n<svg>...<
     pushOutputHistory('step_07c','llm','runConceptDiagramStep');
     outputs.step_07c=_buildConceptOutputText(conceptDiagramTypes, figNums);
     markOutputTimestamp('step_07c');
-    invalidateDownstream('step_07c');
+    // ★ [A] 예시도 생성 = 명세서 반영 의사 → 발명의 설명·부호의 설명에 자동 반영(APPEND, 기존 본문 보존).
+    //   (종전: invalidateDownstream 으로 stale 배지만 띄움 → 수동 옵트인이라 도4·5 누락. 이제 생성 즉시 자동 반영.)
+    const _refl=reflectConceptsToSpec();
+    if(outputs.step_08)renderOutput('step_08',outputs.step_08);
+    if(outputs.step_18)renderOutput('step_18',outputs.step_18);
     onStepCompleted('step_07c');
+    if(_refl.desc||_refl.ref)App.showToast(`예시도 설명 자동 반영 — 발명의 설명 ${_refl.desc}건·부호의 설명 ${_refl.ref}건`,'info');
 
     renderConceptDiagramCards();
     saveProject(true);
