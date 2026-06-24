@@ -684,6 +684,17 @@ async function openProject(pid){
   if(outputs.step_11_mermaid){renderDiagrams('step_11',outputs.step_11_mermaid);const dl11=document.getElementById('diagramDownload11');if(dl11)dl11.style.display='block';}
   // v11.0: 예시도/개념도 복원
   if(conceptDiagramTypes.length>0)renderConceptDiagramCards();
+  // ★ [A1] 예시도 lifecycle 배선 — 열기 직후 예시도 설명/부호를 발명의 설명(step_08 계층)·부호의 설명(step_18)에 자동 반영.
+  //   #210 reflect 는 "생성 시점"만 호출 → 기존 사건(예시도 이미 생성된 사건)은 누락 그대로였음. 열 때도 반영해 기존 사건 자동 해소.
+  //   ★ reflect 안전장치 재사용: 멱등(figNum 기준 중복 0)·본문 보존(APPEND) → 열 때마다 호출해도 안전. 예시도 없으면 no-op.
+  try{
+    const _openRefl=reflectConceptsToSpec();
+    if(_openRefl.desc||_openRefl.ref){
+      if(outputs.step_08)_cascadeRender('step_08',outputs.step_08);
+      if(outputs.step_18)_cascadeRender('step_18',outputs.step_18);
+      saveProject(true);   // 신규 반영분 1회 영속 → 이후 열기는 멱등 no-op
+    }
+  }catch(_e){}
   // v15: 단계별 채팅 수정 패널 복원
   if(window.PatentChat)PatentChat.mountAll();
   document.getElementById('headerProjectName').textContent=data.title;document.getElementById('headerUserName').textContent=currentProfile?.display_name||currentUser?.email||'';
@@ -4675,7 +4686,7 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
 - 입력/출력 데이터의 구조와 형식이 명확한지 확인
 
 [5] 보완/수정 제안
-- 위 1~4 및 8~11에서 발견된 문제에 대한 구체적 수정 문장을 제시하라
+- 위 1~4 및 8~12에서 발견된 문제에 대한 구체적 수정 문장을 제시하라
 - 형식: [위치] 현재 문장 → 수정 문장
 - ★ 기재 누락(해당 구성요소 설명이 없는 경우)에도 반드시 추가할 문장을 제시하라. "해당 없음"만 쓰고 수정 문장을 생략하지 마라.
   형식: [추가 위치] 기재 누락 → (추가할 문장: 해당 구성요소의 동작 원리, 입출력, 기술적 효과 포함)
@@ -4729,6 +4740,7 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
   <span class="ico" data-icon="arrow-right"></span> 예: "추천부(114)" vs "추천 생성부(114)" 혼용, "메모리(120)" vs "데이터베이스(120)" 혼용
   <span class="ico" data-icon="arrow-right"></span> 가장 빈도 높은 명칭으로 통일할 것을 제안하라
 - ★ 도면 미정의 참조번호 사용 검토: 도면에 정의되지 않은(존재하지 않는) 참조번호가 상세설명에서 사용되면 지적하라
+- ★ 예시도 부호 구분: 참조번호 31~99는 [예시도/개념도 설계]에 정의된 별개 부호다. 장치 도면(100~)에 없다고 "도면 미정의"로 오인하지 마라. 31~99의 정합은 [예시도/개념도 설계]를 기준으로 판단하라.
 
 [11] 청구항 형식 검토
 - 독립항이 젭슨(Jepson) 형식("~에 있어서," 전환부 + "~을 특징으로 하는" 종결부)을 올바르게 따르는지 확인
@@ -4737,6 +4749,12 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
 - 종속항이 독립항의 구성요소를 실질적으로 한정·추가하고 있는지 확인 (형식적 종속항 검출)
 - 형식 오류가 있으면 해당 청구항 번호와 구체적 문제점을 지적하라
 
+[12] ★ 예시도/개념도 정합 검토 (v15 — 예시도 lifecycle)
+- [예시도/개념도 설계]가 제공된 경우에만 검토하라(없으면 "해당 없음"으로 표기).
+- 각 예시도(도 N, 참조번호 31~99)가 상세설명에 "도 N을 참조하면, …" 형태로 기술되어 있는지 확인하라. 기재 누락 시 지적하고, 추가할 문장(도 N 소개 + 예시도 부호 설명)을 제시하라.
+- 예시도 참조번호(31~99)가 부호의 설명에 "명칭 : 번호"로 빠짐없이 기재되어 있는지 확인하라. 누락 시 지적하라.
+- 예시도 부호의 명칭이 상세설명·부호의 설명에서 동일하게 일관되는지 확인하라(혼용 지적).
+
 ═══ 출력 형식 ═══
 각 항목별로:
 ✅ 적합 또는 ⚠️ 보완 필요
@@ -4744,7 +4762,7 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
 
 마지막에 전체 요약 (보완 우선순위 포함)
 
-${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}${getLatestMethodDescription()?'\n[방법 상세설명] '+getLatestMethodDescription().slice(0,3000):''}\n[도면 설계] ${(outputs.step_07||'').slice(0,2000)}\n[원본 발명 내용] ${inv.slice(0,3000)}`;}
+${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}${getLatestMethodDescription()?'\n[방법 상세설명] '+getLatestMethodDescription().slice(0,3000):''}\n[도면 설계] ${(outputs.step_07||'').slice(0,2000)}${outputs.step_07c?'\n[예시도/개념도 설계 — 참조번호 31~99, 장치(100~)와 별개] '+outputs.step_07c.slice(0,1500):''}\n[원본 발명 내용] ${inv.slice(0,3000)}`;}
 
     case 'step_14':return `대안 청구항을 작성하라. 원본 청구항의 핵심 기술적 구성은 그대로 유지하되, 표현을 달리하라.
 
