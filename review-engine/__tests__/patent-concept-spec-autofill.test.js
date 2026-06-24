@@ -198,8 +198,10 @@ test('C ★ 정합 번호로 발명의 설명 단락 생성(미생성 혼재에�
 test('소스 ★ A — runConceptDiagramStep·cascade 둘 다 reflectConceptsToSpec 호출', () => {
   assert.ok((PATENT_SRC.match(/reflectConceptsToSpec\(\)/g) || []).length >= 3, '★ 정의 호출부 ≥3(정의1+main1+cascade1)');
   assert.match(PATENT_SRC, /const _refl=reflectConceptsToSpec\(\);/, '★ main(runConceptDiagramStep) 자동 반영');
-  // 종전 invalidateDownstream('step_07c') 자리 → 자동 반영으로 대체
-  assert.ok(!/invalidateDownstream\('step_07c'\)/.test(PATENT_SRC), "★ step_07c 수동 stale 옵트인 제거(자동 반영으로 대체)");
+  // 종전 runConceptDiagramStep 의 수동 stale 옵트인(invalidateDownstream 직후 onStepCompleted) → 자동 반영으로 대체
+  assert.ok(!/invalidateDownstream\('step_07c'\);\s*\n\s*onStepCompleted\('step_07c'\)/.test(PATENT_SRC), "★ runConceptDiagramStep 수동 stale 옵트인 제거(자동 반영 대체)");
+  // invalidateDownstream('step_07c') 는 ③ 도번호 재배치 경로(invalidateFigureDependents)에만 잔존 가능(별개 트리거) — 생성 경로엔 없음
+  assert.ok((PATENT_SRC.match(/invalidateDownstream\('step_07c'\)/g) || []).length <= 1, '★ step_07c 무효화는 ③ 도번호 재배치(invalidateFigureDependents)에만');
 });
 
 test('소스 ★ A — APPEND(덮어쓰기 X)·멱등 가드', () => {

@@ -2117,6 +2117,9 @@ function addRequiredFigure(){
     requiredFigures.sort((a,b)=>a.num-b.num);
     if(numEl){numEl.value='';}if(descEl)descEl.value='';if(fileEl)fileEl.value='';
     renderRequiredFiguresList();
+    if(typeof renderConceptDiagramTypesList==='function')renderConceptDiagramTypesList();  // ③ 사용자 도면이 예시도 번호도 밀림 + ③-3 통합 뷰
+    if(typeof renderConceptDiagramCards==='function')renderConceptDiagramCards();
+    invalidateFigureDependents();  // ④ 사용자 도면 추가 → 자동 도 번호 밀림 → 발명의 설명·부호 무효화
     saveProject(true);
     App.showToast(`도 ${num} 사용자 도면 등록${figData.fileName?' (📎 '+figData.fileName+')':''}`);
     // 다음 빈 번호 자동 제안
@@ -2144,6 +2147,9 @@ function suggestNextFigNum(){
 function removeRequiredFigure(num){
   requiredFigures=requiredFigures.filter(f=>f.num!==num);
   renderRequiredFiguresList();
+  if(typeof renderConceptDiagramTypesList==='function')renderConceptDiagramTypesList();  // ③ 자동 번호 재배치 반영 + ③-3 통합 뷰
+  if(typeof renderConceptDiagramCards==='function')renderConceptDiagramCards();
+  invalidateFigureDependents();  // ④ 사용자 도면 삭제 → 자동 도 번호 당겨짐 → 발명의 설명·부호 무효화
   saveProject(true);
 }
 function renderRequiredFiguresList(){
@@ -2174,37 +2180,120 @@ function addConceptDiagramType(){
   if(conceptDiagramTypes.find(t=>t.type===typeKey)){App.showToast('이미 추가된 유형입니다','error');return;}
   const typeDef=CONCEPT_DIAGRAM_TYPES[typeKey];
   if(!typeDef)return;
-  conceptDiagramTypes.push({type:typeKey,title:typeDef.label,figNum:0,svgContent:'',refNums:[]});
+  conceptDiagramTypes.push({type:typeKey,title:typeDef.label,figNum:0,figNumOverride:0,svgContent:'',refNums:[]});  // ③ figNumOverride:0=자동(순서 지정 시 도 번호)
   conceptDiagramCount=conceptDiagramTypes.length;
   sel.value='';
-  renderConceptDiagramTypesList();
+  renderConceptDiagramTypesList();  // ③-3 통합 순서 뷰 동기화 포함
   saveProject(true);
   App.showToast(`${typeDef.label} 예시도 추가됨`);
 }
 function removeConceptDiagramType(typeKey){
   conceptDiagramTypes=conceptDiagramTypes.filter(t=>t.type!==typeKey);
   conceptDiagramCount=conceptDiagramTypes.length;
-  renderConceptDiagramTypesList();
+  renderConceptDiagramTypesList();  // ③-3 통합 순서 뷰 동기화 포함
+  invalidateFigureDependents();  // ④ 예시도 삭제 → 자동 번호 당겨짐 → 발명의 설명·부호 무효화
   saveProject(true);
 }
 function renderConceptDiagramTypesList(){
-  const el=document.getElementById('conceptDiagramTypesList');if(!el)return;
+  const el=document.getElementById('conceptDiagramTypesList');
+  if(!el){renderUnifiedFigureOrder();return;}  // ③-3 통합 뷰는 자체 DOM 가드 보유
   if(!conceptDiagramTypes.length){
     el.innerHTML='<div style="font-size:12px;color:var(--color-text-tertiary);text-align:center;padding:8px">추가된 예시도가 없습니다</div>';
+    renderUnifiedFigureOrder();  // ③-3 예시도 없어도 장치/방법/사용자 도면 순서 표시
     return;
   }
   const cFigNums=getAutoFigNums('step_07c');
   el.innerHTML=conceptDiagramTypes.map((ct,i)=>{
     const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type,desc:''};
     const figNum=cFigNums[i]||'?';
+    const ov=parseInt(ct.figNumOverride)||0;   // ③ 지정 도 번호(0=자동)
     const statusBadge=ct.svgContent?'<span class="badge badge-success">생성됨</span>':'<span class="badge" style="background:var(--color-bg-tertiary)">대기</span>';
+    // ③ 도 번호 지정 입력: 비우면 자동(순서 밀림), 값 지정 시 해당 위치에 삽입(자동 도면 밀림)
+    const ovInput=`<input type="number" class="input-field" min="1" max="30" value="${ov>0?ov:''}" placeholder="${figNum}" onchange="setConceptFigOverride('${ct.type}',this.value)" title="도 번호 지정(비우면 자동). 지정 시 자동 도면이 밀립니다" style="width:52px;font-size:12px;padding:3px 5px;text-align:center" />`;
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--color-bg-secondary);border-radius:8px;margin-bottom:4px;font-size:13px">
-      <span class="badge badge-primary" style="min-width:40px;text-align:center">도 ${figNum}</span>
+      <span class="badge badge-primary" style="min-width:40px;text-align:center" title="${ov>0?'지정 도 번호':'자동 도 번호'}">도 ${figNum}</span>
       <span style="flex:1">${App.escapeHtml(typeDef.label)} <span style="color:var(--color-text-tertiary);font-size:11px">${App.escapeHtml(typeDef.desc)}</span></span>
+      ${ovInput}
       ${statusBadge}
       <button class="btn btn-ghost btn-sm" onclick="removeConceptDiagramType('${ct.type}')" title="삭제"><span class="ico" data-icon="x"></span></button>
     </div>`;
   }).join('');
+  renderUnifiedFigureOrder();  // ③-3 통합 순서 뷰 동기화(SoT 단일 추종)
+}
+// ═══ ③: 예시도 도 번호 지정(figNumOverride) — 충돌 검증(③-5) + 무효화(③-4) ═══
+//   비우거나 0 → 자동(순서 밀림). 값 지정 → 해당 도 번호에 예시도 삽입, 자동 도면(장치/방법) 밀림.
+//   ★ 변경 시 step_08·step_18 무효화 → 발명의 설명/부호의 설명이 새 번호 추종(④).
+function setConceptFigOverride(typeKey,val){
+  const ct=conceptDiagramTypes.find(t=>t.type===typeKey);
+  if(!ct)return;
+  const raw=String(val==null?'':val).trim();
+  const prev=parseInt(ct.figNumOverride)||0;
+  // 빈값/0 → 자동 복귀
+  if(raw===''){ if(prev!==0){ct.figNumOverride=0;_afterConceptFigOverrideChange();} return; }
+  const num=parseInt(raw);
+  // ③-5 충돌 검증 — 범위, 사용자 도면 번호, 다른 예시도 지정 번호와 중복 금지
+  const total=(diagramData.step_07?.length||0)+conceptDiagramTypes.filter(c=>c.svgContent).length+(diagramData.step_11?.length||0)+requiredFigures.length;
+  const maxFig=Math.max(total,30);
+  if(!num||num<1||num>maxFig){App.showToast(`도 번호는 1~${maxFig} 범위로 입력하세요`,'error');renderConceptDiagramTypesList();return;}
+  if(requiredFigures.find(f=>f.num===num)){App.showToast(`도 ${num}은 사용자 도면이 사용 중입니다`,'error');renderConceptDiagramTypesList();return;}
+  const dupConcept=conceptDiagramTypes.find(c=>c.type!==typeKey&&(parseInt(c.figNumOverride)||0)===num);
+  if(dupConcept){App.showToast(`도 ${num}은 다른 예시도가 지정했습니다`,'error');renderConceptDiagramTypesList();return;}
+  if(num===prev){return;}
+  ct.figNumOverride=num;
+  _afterConceptFigOverrideChange();
+  App.showToast(`예시도를 도 ${num}에 지정 — 자동 도면이 밀립니다`);
+}
+// ④ 도 번호 재배치 → 발명의 설명·부호의 설명이 새 번호 추종(무효화). 장치/방법/예시도 번호가 모두 밀릴 수 있으므로 양 도면 체인 무효화.
+function invalidateFigureDependents(){
+  invalidateDownstream('step_07c');           // → step_08(장치 상세설명), step_18(부호의 설명)
+  invalidateDownstream('step_11');            // → step_12(방법 상세설명), step_18 (방법 도면 번호도 밀림)
+}
+// 예시도 순서(번호) 변경 후처리: 무효화(④) + 재렌더 + 저장
+function _afterConceptFigOverrideChange(){
+  invalidateFigureDependents();                // ④ step_08·step_12·step_18 무효화 → 새 번호 추종
+  renderConceptDiagramTypesList();             // 입력 카드 갱신(밀린 자동 번호 반영) + ③-3 통합 뷰
+  renderConceptDiagramCards();                 // ① 제목·라벨 즉시 갱신(SoT 추종)
+  if(typeof renderRequiredFiguresList==='function')renderRequiredFiguresList();
+  saveProject(true);                           // figNumOverride 영속(payload 포함)
+}
+// ③-3: 통합 도면 순서 계획 — 장치/예시도/방법/사용자 도면을 도 번호순으로.
+//   ★ step_08 설명 빌더와 동일한 카운트·override 로 computeFigNums 호출 → 번호 불일치(divergence) 0.
+function _plannedFigureLayout(){
+  const devGen=diagramData.step_07?.length||0;
+  const devCount=devGen||Math.max(parseInt(document.getElementById('optDeviceFigures')?.value||4)-requiredFigures.length,0);
+  const hasMeth=!!(diagramData.step_11?.length||outputs.step_11||includeMethodClaims);
+  const methGen=diagramData.step_11?.length||0;
+  const methCount=methGen||(hasMeth?parseInt(document.getElementById('optMethodFigures')?.value||2):0);
+  const placed=conceptDiagramTypes.filter(ct=>ct.svgContent);   // 생성된(=번호 확정) 예시도
+  const cOverrides=placed.map(ct=>ct.figNumOverride||0);
+  const r=computeFigNums(devCount,methCount,placed.length,cOverrides);
+  const rows=[];
+  r.device.forEach(n=>rows.push({num:n,tag:'장치',cls:'badge-primary'}));
+  placed.forEach((ct,i)=>{const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};rows.push({num:r.concept[i],tag:'예시도',sub:td.label,cls:'badge-success',ov:(parseInt(ct.figNumOverride)||0)>0});});
+  r.method.forEach(n=>rows.push({num:n,tag:'방법',cls:'badge-warning'}));
+  requiredFigures.forEach(rf=>rows.push({num:rf.num,tag:'사용자',sub:rf.description,cls:'badge-neutral'}));
+  rows.sort((a,b)=>(a.num||0)-(b.num||0));
+  const pending=conceptDiagramTypes.filter(ct=>!ct.svgContent);  // 미생성 예시도(대기)
+  return{rows,pending};
+}
+function renderUnifiedFigureOrder(){
+  const el=document.getElementById('unifiedFigureOrder');if(!el)return;
+  const {rows,pending}=_plannedFigureLayout();
+  if(!rows.length&&!pending.length){el.innerHTML='';el.style.display='none';return;}
+  el.style.display='';
+  const rowHtml=rows.map(r=>{
+    const sub=r.sub?` <span style="color:var(--color-text-tertiary);font-size:11px">${App.escapeHtml(String(r.sub).slice(0,40))}</span>`:'';
+    const ovMark=r.ov?' <span class="badge badge-primary" style="font-size:9px">지정</span>':'';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;font-size:12px;border-bottom:1px solid var(--color-border)">
+      <span class="badge ${r.cls}" style="min-width:38px;text-align:center">도 ${r.num||'?'}</span>
+      <span style="flex:1">${r.tag}${sub}${ovMark}</span>
+    </div>`;
+  }).join('');
+  const pendHtml=pending.length?`<div style="font-size:11px;color:var(--color-text-tertiary);padding:6px 8px">대기(미생성): ${pending.map(ct=>{const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};const ov=parseInt(ct.figNumOverride)||0;return App.escapeHtml(td.label)+(ov>0?` → 도 ${ov} 예정`:'');}).join(', ')}</div>`:'';
+  el.innerHTML=`<div style="border:1px solid var(--color-border);border-radius:8px;overflow:hidden">
+    <div style="font-size:11px;font-weight:600;padding:6px 8px;background:var(--color-bg-secondary);color:var(--color-text-secondary)"><span class="ico" data-icon="list" data-size="12"></span> 통합 도면 순서</div>
+    ${rowHtml}${pendHtml}
+  </div>`;
 }
 function renderConceptDiagramCards(){
   const area=document.getElementById('conceptDiagramsArea');if(!area)return;
@@ -2832,7 +2921,7 @@ ${prompt.slice(0,2000)}`;
   if(sid==='step_11'){
     const methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
     const devCount=diagramData.step_07?.length||0;
-    const figNums=computeFigNums(devCount,methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length);
+    const figNums=computeFigNums(devCount,methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length,_placedConceptOverrides());
     const expectedNums=figNums.method;
     
     const preIssues=validateDiagramDesignText(designText,methFigCount,expectedNums);
@@ -3207,8 +3296,10 @@ function extractBriefDescriptions(s07,s11){
   const _uiDevCount=Math.max(parseInt(document.getElementById('optDeviceFigures')?.value||4)-requiredFigures.length,0);
   const _hasMeth=!!(methodData.length||outputs.step_11);
   const _uiMethCount=_hasMeth?parseInt(document.getElementById('optMethodFigures')?.value||2):0;
-  const _uiConcCount=conceptDiagramTypes.filter(ct=>ct.svgContent).length;
-  const _uiFigNums=computeFigNums(_uiDevCount,_uiMethCount,_uiConcCount);
+  const _uiConcepts=conceptDiagramTypes.filter(ct=>ct.svgContent);
+  const _uiConcCount=_uiConcepts.length;
+  const _uiConcOverrides=_uiConcepts.map(ct=>ct.figNumOverride||0);  // ③ 예시도 지정 번호 반영
+  const _uiFigNums=computeFigNums(_uiDevCount,_uiMethCount,_uiConcCount,_uiConcOverrides);
   const validFigNums=new Set();
   _uiFigNums.device.forEach(n=>validFigNums.add(String(n)));
   _uiFigNums.method.forEach(n=>validFigNums.add(String(n)));
@@ -3374,26 +3465,41 @@ function getRequiredFiguresInstruction(){
   const list=requiredFigures.map(f=>`- 도 ${f.num}: ${f.description}`).join('\n');
   return `\n\n[사용자 도면 — 아래 도면은 사용자가 이미 보유하고 있다. 이 번호들은 건너뛰고 나머지 도면만 새로 생성하라. 단, 도면의 간단한 설명에는 사용자 도면도 모두 포함하라.]\n${list}`;
 }
-// ═══ v10.0/v11.0: 사용자 도면 번호 스킵 — 자동 도면 번호 산출 ═══
-// devCount/methCount/conceptCount: 자동 생성할 장치/방법/개념도 도면 수
-function computeFigNums(devCount,methCount,conceptCount){
+// ═══ v10.0/v11.0/③: 사용자 도면·예시도 지정 번호 스킵 — 자동 도면 번호 산출 ═══
+// devCount/methCount/conceptCount: 자동 생성할 장치/방법/개념도 도면 수. conceptOverrides: 예시도별 지정 도 번호(figNumOverride, 0=자동).
+//   ★ ③: requiredFigures.num(사용자 업로드)에 더해 예시도 figNumOverride 도 예약 → 지정 위치에 예시도, 자동 도면은 밀림(삽입 밀림).
+function computeFigNums(devCount,methCount,conceptCount,conceptOverrides){
   conceptCount=conceptCount||0;
-  const userNums=new Set(requiredFigures.map(f=>f.num));
+  conceptOverrides=Array.isArray(conceptOverrides)?conceptOverrides:[];
+  // 예약 집합 = 사용자 업로드 번호 ∪ 예시도 지정 번호(figNumOverride)
+  const reserved=new Set(requiredFigures.map(f=>f.num));
+  conceptOverrides.forEach(n=>{const v=parseInt(n);if(v>0)reserved.add(v);});
   const devNums=[],conceptNums=[],methNums=[];
   let c=1;
-  for(let i=0;i<devCount;i++){while(userNums.has(c))c++;devNums.push(c);c++;}
-  for(let i=0;i<conceptCount;i++){while(userNums.has(c))c++;conceptNums.push(c);c++;}
-  const lastDeviceFig=conceptNums.length?conceptNums[conceptNums.length-1]:(devNums.length?devNums[devNums.length-1]:0);
-  for(let i=0;i<methCount;i++){while(userNums.has(c))c++;methNums.push(c);c++;}
-  return{device:devNums,concept:conceptNums,method:methNums,lastDeviceFig,lastFig:c-1};
+  for(let i=0;i<devCount;i++){while(reserved.has(c))c++;devNums.push(c);c++;}
+  for(let i=0;i<conceptCount;i++){
+    const ov=parseInt(conceptOverrides[i]);
+    if(ov>0){conceptNums.push(ov);}                                  // ★ 지정 번호(이미 예약)
+    else{while(reserved.has(c))c++;conceptNums.push(c);c++;}          // 자동(예약 skip)
+  }
+  for(let i=0;i<methCount;i++){while(reserved.has(c))c++;methNums.push(c);c++;}
+  const _max=arr=>arr.length?Math.max.apply(null,arr):0;
+  const lastDeviceFig=conceptNums.length?_max(conceptNums):_max(devNums);  // 방법 앞 최고 번호(override 대비 max)
+  const lastFig=Math.max(_max(devNums),_max(conceptNums),_max(methNums));  // override 가 자동 범위 밖이어도 정확
+  return{device:devNums,concept:conceptNums,method:methNums,lastDeviceFig,lastFig};
 }
-// 렌더링용: diagramData 기반 자동 도면 번호
+// 렌더링용: diagramData 기반 자동 도면 번호 (★ ③ 예시도 figNumOverride 반영)
 function getAutoFigNums(sid){
   const devCount=diagramData.step_07?.length||0;
   const methCount=diagramData.step_11?.length||0;
-  const cCount=conceptDiagramTypes.filter(ct=>ct.svgContent).length||0;
-  const r=computeFigNums(devCount,methCount,cCount);
+  const concepts=conceptDiagramTypes.filter(ct=>ct.svgContent);
+  const cOverrides=concepts.map(ct=>ct.figNumOverride||0);
+  const r=computeFigNums(devCount,methCount,concepts.length,cOverrides);
   return sid==='step_07'?r.device:sid==='step_07c'?r.concept:r.method;
+}
+// ③ 생성된(svgContent) 예시도들의 지정 도 번호 배열 — computeFigNums 4번째 인자용(figNumOverride 일관 주입)
+function _placedConceptOverrides(){
+  return conceptDiagramTypes.filter(ct=>ct.svgContent).map(ct=>ct.figNumOverride||0);
 }
 function _getConceptCount(){
   return (typeof conceptDiagramEnabled!=='undefined'&&conceptDiagramEnabled)
@@ -4429,7 +4535,7 @@ ${T}\n[장치 청구항 — 참고용] ${outputs.step_06||''}\n[장치 상세설
       const methCount=parseInt(f);
       // v10.0: 사용자 도면 스킵 반영한 방법 도면 번호 계산
       const devAutoCount=Math.max((parseInt(document.getElementById('optDeviceFigures')?.value||4))-requiredFigures.length,0);
-      const _mfn=computeFigNums(devAutoCount,methCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length);
+      const _mfn=computeFigNums(devAutoCount,methCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length,_placedConceptOverrides());
       const lf=_mfn.lastDeviceFig||getLastFigureNumber(outputs.step_07||'');
       const methAutoNums=_mfn.method;
       const firstMeth=methAutoNums[0]||(lf+1);
@@ -5553,7 +5659,7 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
     if(sid==='step_11'){
       const _methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
       const _devCount=diagramData.step_07?.length||0;
-      const _figNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length);
+      const _figNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length,_placedConceptOverrides());
       const _expectedNums=_figNums.method;
 
       const preIssues=validateDiagramDesignText(designText,_methFigCount,_expectedNums);
@@ -5637,7 +5743,7 @@ function autoDetectConceptDiagrams(){
   if(detected.length>0){
     detected.forEach(typeKey=>{
       const typeDef=CONCEPT_DIAGRAM_TYPES[typeKey];
-      conceptDiagramTypes.push({type:typeKey,title:typeDef.label,figNum:0,svgContent:'',refNums:[]});
+      conceptDiagramTypes.push({type:typeKey,title:typeDef.label,figNum:0,figNumOverride:0,svgContent:'',refNums:[]});  // ③ figNumOverride:0=자동(순서 지정 시 도 번호)
     });
     conceptDiagramCount=conceptDiagramTypes.length;
     renderConceptDiagramTypesList();
@@ -7827,7 +7933,7 @@ async function regenerateDiagramWithFeedback(sid){
   }else if(stepId==='step_11'){
     const _mc=parseInt(document.getElementById('optMethodFigures')?.value||2);
     const _dc=diagramData.step_07?.length||0;
-    const _en=computeFigNums(_dc,_mc,conceptDiagramTypes.filter(ct=>ct.svgContent).length).method;
+    const _en=computeFigNums(_dc,_mc,conceptDiagramTypes.filter(ct=>ct.svgContent).length,_placedConceptOverrides()).method;
     _figCountBlock=`\n═══ 도면 수 (절대 준수 — 누락/추가 금지) ═══\n- 정확히 ${_mc}개의 방법 도면을 생성하라: ${_en.map(n=>'도 '+n).join(', ')}\n- 위 번호의 도면을 하나도 빠뜨리지 말고 모두 생성하라. ${_mc}개보다 적게 생성하지 마라.\n`;
   }
 
@@ -7907,7 +8013,7 @@ ${!isMethod?_buildClaimComponentHierarchy(outputs.step_06||''):''}
     }else if(stepId==='step_11'){
       const _methFigCount=parseInt(document.getElementById('optMethodFigures')?.value||2);
       const _devCount=diagramData.step_07?.length||0;
-      const _expectedNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length).method;
+      const _expectedNums=computeFigNums(_devCount,_methFigCount,conceptDiagramTypes.filter(ct=>ct.svgContent).length,_placedConceptOverrides()).method;
       let _actual=_extractFigureNumbersFromDesign(regenDesign);
       if(_actual.length<_methFigCount){
         const missing=_expectedNums.filter(n=>!_actual.includes(n));
@@ -11995,7 +12101,7 @@ function renderDiagrams(sid,mt){
   // v10.0: 사용자 도면 스킵 반영 — 블록 수 기반 도면 번호 미리 계산
   const _devC=sid==='step_07'?blocks.length:(diagramData.step_07?.length||0);
   const _methC=sid==='step_11'?blocks.length:0;
-  const _cfn=computeFigNums(_devC,_methC,conceptDiagramTypes.filter(ct=>ct.svgContent).length);
+  const _cfn=computeFigNums(_devC,_methC,conceptDiagramTypes.filter(ct=>ct.svgContent).length,_placedConceptOverrides());
   const autoFigNums=sid==='step_07'?_cfn.device:_cfn.method;
   
   // 도면 설계 텍스트 (R7 검증용)
