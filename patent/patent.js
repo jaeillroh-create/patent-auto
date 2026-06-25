@@ -179,13 +179,21 @@ function _generatedConceptsWithNums(){
   const figs=getAutoFigNums('step_07c');
   return conceptDiagramTypes.filter(ct=>ct.svgContent).map((ct,fi)=>({ct,figNum:figs[fi]||ct.figNum||'?'}));
 }
-// 멱등 판정: 해당 예시도(도 N) 단락이 이미 상세설명에 반영됐나 — brief 일치 또는 "도 N{을|를} 참조하면 … 등이 도시되어 있다" 마커.
+// 멱등 판정: 해당 예시도(도 N) 단락이 이미 상세설명에 반영됐나.
 //   ★ figNum 기준 → 재생성으로 brief 문구가 바뀌어도 같은 도 N 단락이 중복 누적되지 않음(본문 보호).
+//   ★ B3 네이티브 인식: Step 8(B1)이 직접 쓴 예시도 설명(다른 문구)도 인식 → 네이티브+reflect 동시 시 중복 APPEND 방지.
 function _conceptAlreadyInDesc(text, ct, figNum){
   if(!text) return false;
-  if(String(text).indexOf(_conceptBrief(ct, figNum))>=0) return true;
+  const s=String(text);
+  if(s.indexOf(_conceptBrief(ct, figNum))>=0) return true;                         // (1) reflect 작성 brief 일치
   const fn=String(figNum).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  return new RegExp('도\\s*'+fn+'[을를]\\s*참조하면[^\\n]*등이 도시되어 있다').test(text);
+  if(new RegExp('도\\s*'+fn+'[을를]\\s*참조하면[^\\n]*등이 도시되어 있다').test(s)) return true;   // (2) reflect 마커
+  // (3) ★ 네이티브 인식: "도 N{을|를} 참조하면" + 그 예시도 부호(31~99) 중 하나가 본문에 존재 → 이미 기술됨(Step 8 네이티브 포함)
+  if(new RegExp('도\\s*'+fn+'[을를]\\s*참조하면').test(s)){
+    const nums=_conceptRefPairs(ct).map(p=>p.num);
+    if(nums.length && nums.some(n=>s.indexOf('('+n+')')>=0)) return true;
+  }
+  return false;
 }
 // 예시도 설명을 발명의 설명(step_08/09/13_applied 계층)·부호의 설명(step_18)에 자동 반영(APPEND·멱등·본문 보존).
 //   반환 {desc,ref}=신규 반영 수. step_08/step_18 부재 시 무손상 no-op(추후 생성 시 4293·4619 경로로 포함).
@@ -4472,7 +4480,7 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 앵커 종속항의 핵심 처리에 대해 1개 이상의 대안적 구현을 기술
 - 변형 실시예는 독립항의 보호범위를 뒷받침하는 방향이어야 한다
 
-★★★ 장치 도면(${figListStr})에 포함된 구성요소만 설명하라. 도면에 없는 참조번호를 임의로 추가하지 마라. ★★★
+★★★ 장치 도면(${figListStr})에 포함된 구성요소(참조번호 100~)를 빠짐없이 설명하라.${conceptDiagramTypes.some(ct=>ct.svgContent)?' 예시도 부호(31~99)는 아래 [예시도 설계]에 정의된 정당한 참조번호이므로, 장치 도면에 없더라도 누락하지 말고 그대로 사용해 설명하라.':''} 단, 장치 도면·예시도 설계 어디에도 정의되지 않은 참조번호를 임의로 창작하지 마라. ★★★
 ★★★ 참조번호 명칭 통일 규칙 (기재불비 방지 — 핵심) ★★★
 - 하나의 참조번호에는 반드시 하나의 명칭만 사용하라. 동의어/약칭을 혼용하지 마라.
   <span class="ico" data-icon="arrow-right"></span> 예: "추천부(114)"와 "추천 생성부(114)"를 혼용하면 기재불비. 하나로 통일하라.
@@ -4481,9 +4489,9 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 청구항에서 사용한 명칭과 상세설명의 명칭이 일치해야 한다.
 ${_designCompStr}
 ${_userFigBlock?`\n${_userFigBlock}\n★ 사용자 도면도 "도 N을 참조하면," 형태로 도면 번호 순서에 맞게 설명을 포함하라.\n★ 사용자 도면의 설명은 발명 내용 및 청구범위와 정합되도록, 위 도면 설명을 기초로 기술적 의미를 보완하여 작성하라.`:''}
-${conceptDiagramTypes.some(ct=>ct.svgContent)?`\n★★★ 예시도/개념도 (참조번호 31~99) ★★★\n${conceptDiagramTypes.filter(ct=>ct.svgContent).map((ct,fi)=>{const fn=_conceptFigNums[fi]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${fn}: ${td.label} (참조번호: ${(ct.refMap||[]).map(r=>r.label?`${r.signNumber}(${r.label})`:`${r.signNumber}(${_conceptRefFallbackName(ct)})`).join(', ')||(ct.refNums||[]).join(', ')||'미정'})`;}).join('\n')}\n- 예시도도 도면 번호 순서에 맞게 "도 N을 참조하면," 형태로 설명하되, ★ 위 "번호(이름)"의 이름을 그대로 사용해 "이름(번호)" 형태로 기재하라(부호의 설명과 일치).\n- 예시도의 참조번호(31~99)는 장치 참조번호(100~999)와 구분된다.\n`:''}
+${conceptDiagramTypes.some(ct=>ct.svgContent)?`\n★★★ 예시도/개념도 (참조번호 31~99) ★★★\n${conceptDiagramTypes.filter(ct=>ct.svgContent).map((ct,fi)=>{const fn=_conceptFigNums[fi]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${fn}: ${td.label} (참조번호: ${(ct.refMap||[]).map(r=>r.label?`${r.signNumber}(${r.label})`:`${r.signNumber}(${_conceptRefFallbackName(ct)})`).join(', ')||(ct.refNums||[]).join(', ')||'미정'})`;}).join('\n')}\n- ★ 예시도(도 N)도 장치 도면과 ★동일한 수준으로★ "도 N을 참조하면, …" 형태로 그 구성·동작·부호를 상세설명 본문에 ★반드시 빠짐없이★ 기술하라(예시도 설명 누락 금지). 아래 [예시도 설계]의 내용을 근거로 작성하라.\n- ★ 위 "번호(이름)"의 이름을 그대로 사용해 "이름(번호)" 형태로 기재하라(부호의 설명과 일치).\n- 예시도의 참조번호(31~99)는 장치 참조번호(100~999)와 구분된다.\n`:''}
 
-${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
+${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${outputs.step_07c?'\n[예시도 설계 — 참조번호 31~99, 장치(100~)와 별개. 아래 예시도도 상세설명에 반드시 기술하라] '+outputs.step_07c.slice(0,1500):''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
 
     case 'step_09':return buildMathPrompt('5개 내외', stripMathBlocks(getLatestDescription()||outputs.step_08||''), (outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):'');
 
@@ -5454,7 +5462,7 @@ REASON: ...
 
 [발명의 명칭] ${selectedTitle}
 [검토 결과] ${filterReviewForScope(outputs.step_13,'device')}
-[청구항 구성요소 참조] ${extractClaimComponents(outputs.step_06||'')}
+[청구항 구성요소 참조] ${extractClaimComponents(outputs.step_06||'')}${outputs.step_07c?'\n[예시도 설계 — 참조번호 31~99, 장치(100~)와 별개] '+outputs.step_07c.slice(0,1200)+'\n★ 검토가 예시도(도 N) 설명/부호 누락을 지적하면, 위 [예시도 설계]의 이름(번호)을 근거로 "도 N을 참조하면, …" 예시도 단락을 ADD_AFTER 로 추가하라.':''}
 [현재 상세설명]
 ${baseDesc}${_maybeScopeGuard('step_13_applied','text')}`);
 
