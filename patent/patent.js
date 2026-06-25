@@ -5113,7 +5113,9 @@ function sanitizeMethodFromDevice(text){
   
   // 1단계: 장치 도면 최대 번호 확인
   const deviceMax=getLastFigureNumber(outputs.step_07||'')||parseInt(document.getElementById('optDeviceFigures')?.value||4);
-  
+  // ★ 예시도(step_07c) 도 번호 — 방법 도면이 아니므로 분류에서 제외(검토 반영 시 예시도 단락 오삭제 방지). getAutoFigNums=SoT(③ override 반영).
+  const conceptFigNums=new Set(getAutoFigNums('step_07c'));
+
   // 2단계: 순서도/흐름도 도면 번호 수집 (소개문에서 추출)
   const methodFigNums=new Set();
   const introRe=/도\s+(\d+)[은는]\s*[^\n]*(?:순서도|흐름도|방법|절차)[^\n]*(?:이다|나타낸다|도시한다)/g;
@@ -5122,6 +5124,8 @@ function sanitizeMethodFromDevice(text){
   // 장치 도면 범위 밖의 도면도 방법으로 간주
   const allFigRefs=[...text.matchAll(/도\s+(\d+)/g)].map(x=>parseInt(x[1]));
   allFigRefs.forEach(n=>{if(n>deviceMax)methodFigNums.add(n);});
+  // ★ 예시도 도 번호는 방법에서 제외 — deviceMax 초과여도(또는 "방법" 단어 포함이어도) 예시도는 삭제 대상이 아니다.
+  conceptFigNums.forEach(n=>methodFigNums.delete(n));
   
   if(!methodFigNums.size){
     // 방법 도면이 없으면 단독 S단계 문장만 제거
