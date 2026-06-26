@@ -202,13 +202,14 @@ function reflectConceptsToSpec(){
   if(!gen.length) return {desc:0, ref:0};
   // ── 발명의 설명 — 존재하는 모든 상세설명 계층에 예시도 단락 APPEND(멱등). insertBoilerplate 패턴(우선순위 보존). ──
   const hasDescLayer=!!(outputs.step_08||outputs.step_09||outputs.step_13_applied);   // 반영 대상 계층 존재 여부
+  const c8c=outputs.step_08c||'';   // ★ 예시도 상세설명(step_08c, 분리) 존재 시 reflect 가 step_08 에 중복 APPEND 안 함(조립이 step_08c 를 별도 합침).
   const latest=getLatestDescription()||'';
-  const newOnes=hasDescLayer?gen.filter(g=>!_conceptAlreadyInDesc(latest,g.ct,g.figNum)):[];   // 계층 없으면 0(추후 생성 시 4359로 포함)
+  const newOnes=hasDescLayer?gen.filter(g=>!_conceptAlreadyInDesc(latest,g.ct,g.figNum)&&!_conceptAlreadyInDesc(c8c,g.ct,g.figNum)):[];   // 계층 없으면 0
   ['step_08','step_09','step_13_applied'].forEach(L=>{
     if(!outputs[L]) return;
     let body=String(outputs[L]), changed=false;
     gen.forEach(g=>{
-      if(_conceptAlreadyInDesc(body, g.ct, g.figNum)) return;         // 멱등(figNum 기준): 이미 반영됨 → skip
+      if(_conceptAlreadyInDesc(body, g.ct, g.figNum)||_conceptAlreadyInDesc(c8c, g.ct, g.figNum)) return;   // 멱등(figNum 기준): step_08/step_08c 어디든 이미 반영 → skip
       body=body.replace(/\s*$/,'')+'\n\n'+_buildConceptSpecParagraph(g.ct, g.figNum);  // ★ APPEND(기존 byte 보존)
       changed=true;
     });
@@ -239,9 +240,9 @@ function _conceptSvgApplyTitle(svgStr, figNum){
   s=s.replace(/(<svg\b[^>]*>)/i,'$1'+title);
   return s;
 }
-const STEP_NAMES={step_01:'A1. 발명의 명칭',step_02:'D5. 기술분야',step_03:'D4. 배경기술',step_04:'E2. 선행기술 검색',step_05:'D2. 해결하고자 하는 과제',step_06:'A2. 장치 청구항',step_07:'B1. 장치 도면',step_07c:'B1c. 예시도/개념도',step_08:'C1. 장치 상세설명',step_09:'C2. 수학식',step_10:'A3. 방법 청구항',step_11:'B2. 방법 도면',step_12:'C3. 방법 상세설명',step_13:'E1. AI 검토',step_14:'E4. 대안 청구항',step_15:'E3. 특허성 검토',step_16:'D3. 발명의 효과',step_17:'D1. 과제의 해결 수단',step_18:'F1. 부호의 설명',step_19:'F2. 요약서',step_20:'A4. 기록매체/프로그램 청구항'};
+const STEP_NAMES={step_01:'A1. 발명의 명칭',step_02:'D5. 기술분야',step_03:'D4. 배경기술',step_04:'E2. 선행기술 검색',step_05:'D2. 해결하고자 하는 과제',step_06:'A2. 장치 청구항',step_07:'B1. 장치 도면',step_07c:'B1c. 예시도/개념도',step_08:'C1. 장치 상세설명',step_08c:'C1c. 예시도 상세설명',step_09:'C2. 수학식',step_10:'A3. 방법 청구항',step_11:'B2. 방법 도면',step_12:'C3. 방법 상세설명',step_13:'E1. AI 검토',step_14:'E4. 대안 청구항',step_15:'E3. 특허성 검토',step_16:'D3. 발명의 효과',step_17:'D1. 과제의 해결 수단',step_18:'F1. 부호의 설명',step_19:'F2. 요약서',step_20:'A4. 기록매체/프로그램 청구항'};
 // Phase 없는 순수 이름 (프롬프트 내부용)
-const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술 검색',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'장치 도면',step_07c:'예시도/개념도',step_08:'장치 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'AI 검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서',step_20:'기록매체/프로그램 청구항'};
+const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_03:'배경기술',step_04:'선행기술 검색',step_05:'해결하고자 하는 과제',step_06:'장치 청구항',step_07:'장치 도면',step_07c:'예시도/개념도',step_08:'장치 상세설명',step_08c:'예시도 상세설명',step_09:'수학식',step_10:'방법 청구항',step_11:'방법 도면',step_12:'방법 상세설명',step_13:'AI 검토',step_14:'대안 청구항',step_15:'특허성 검토',step_16:'발명의 효과',step_17:'과제의 해결 수단',step_18:'부호의 설명',step_19:'요약서',step_20:'기록매체/프로그램 청구항'};
 
 // ═══ v9.0/v20: callClaudeWithContinuation 오버라이드 ═══
 (function(){
@@ -2494,8 +2495,9 @@ const STEP_DEPENDENCIES={
   step_06:{MUST:['step_10','step_07','step_07c','step_17'],SHOULD:['step_08','step_11','step_14','step_15','step_19','step_20']}, // 장치청구 → 방법,도면,개념도,해결수단
   step_10:{MUST:['step_11','step_12','step_17','step_20'],SHOULD:['step_14','step_15','step_18']}, // 방법청구 → 방법도면,상세,해결수단,기록매체
   step_07:{MUST:['step_08','step_18'],SHOULD:['step_09','step_13']},     // 장치도면 → 상세설명, 부호
-  step_07c:{MUST:['step_08','step_18'],SHOULD:[]},                       // 예시도 → 상세설명, 부호
+  step_07c:{MUST:['step_08','step_08c','step_18'],SHOULD:[]},            // 예시도 → 장치상세, 예시도상세, 부호
   step_08:{MUST:['step_09','step_13'],SHOULD:['step_12','step_14','step_15']}, // 상세설명 → 수학식, 검토
+  step_08c:{MUST:[],SHOULD:['step_18']},                                 // ★ 예시도 상세설명(분리) → 부호의 설명
   step_09:{MUST:[],SHOULD:['step_13']},                    // 수학식 → 검토
   step_11:{MUST:['step_12','step_18'],SHOULD:['step_13']},  // 방법도면 → 방법상세, 부호
   step_12:{MUST:['step_13'],SHOULD:[]},                    // 방법상세 → 검토
@@ -2516,7 +2518,7 @@ const STEP_DEPENDENCIES={
 // 각 step의 실행 함수 매핑 (연쇄 재생성용)
 const STEP_RUNNERS={
   step_01:'runStep',step_02:'runStep',step_03:'runStep',step_04:'runStep',step_05:'runStep',
-  step_06:'runStep',step_07:'runDiagramStep',step_07c:'runConceptDiagramStep',step_08:'runLongStep',step_09:'runMathInsertion',
+  step_06:'runStep',step_07:'runDiagramStep',step_07c:'runConceptDiagramStep',step_08:'runLongStep',step_08c:'runConceptDescStep',step_09:'runMathInsertion',
   step_10:'runStep',step_11:'runDiagramStep',step_12:'runLongStep',step_13:'runStep',
   step_14:'runStep',step_15:'runStep',step_16:'runStep',step_17:'runStep',
   step_18:'runStep',step_19:'runStep',step_20:'runStep',
@@ -3073,6 +3075,10 @@ function getLatestMethodDescription(){
   const ts13m=outputTimestamps.step_13_applied_method||0;
   if(outputs.step_12&&ts12>ts13m)return outputs.step_12;
   return outputs.step_13_applied_method||outputs.step_12||'';
+}
+// ★ 예시도 상세설명(step_08c, 분리) 최신본 — 장치(step_08)·방법(step_12)과 동급. 검토 반영 계층은 추후(step_08c 직접).
+function getLatestConceptDescription(){
+  return outputs.step_08c||'';
 }
 // 정형문 수동 삽입: 현재 Step 8 결과에 정형문을 전후에 삽입
 function insertBoilerplate(){
@@ -4494,6 +4500,31 @@ ${conceptDiagramTypes.some(ct=>ct.svgContent)?`\n★★★ 예시도/개념도 (
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${outputs.step_07c?'\n[예시도 설계 — 참조번호 31~99, 장치(100~)와 별개. 아래 예시도도 상세설명에 반드시 기술하라] '+outputs.step_07c.slice(0,1500):''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
 
+    // ═══ Step 8c: 예시도(개념도) 상세설명 — 장치(step_08)·방법(step_12)과 분리된 전용 단계(과부하 방지) ═══
+    case 'step_08c':{
+      const _cFig=getAutoFigNums('step_07c');
+      const _concepts=conceptDiagramTypes.filter(ct=>ct.svgContent);
+      const _cList=_concepts.map((ct,fi)=>{const fn=_cFig[fi]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};const refs=(ct.refMap||[]).map(r=>r.label?`${r.signNumber}(${r.label})`:`${r.signNumber}(${_conceptRefFallbackName(ct)})`).join(', ')||(ct.refNums||[]).join(', ')||'미정';return `도 ${fn}: ${td.label} (참조번호: ${refs})`;}).join('\n');
+      const _figStr=_concepts.map((ct,fi)=>'도 '+(_cFig[fi]||'?')).join(', ');
+      return `아래 예시도(개념도)에 대한 상세설명 본문만 작성하라. 이 본문은 명세서의 【발명을 실시하기 위한 구체적인 내용】에서 ★장치 상세설명 뒤, 방법 상세설명 앞★에 합쳐진다.
+
+⛔ 이것은 "예시도(개념도)" 전용 상세설명이다. 장치 도면(도 1~)·방법(흐름도)을 새로 설명하지 마라 — 예시도(${_figStr}) ${_concepts.length}개만 기술한다.
+
+★★★ 작성 규칙 ★★★
+- 각 예시도를 "도 N을 참조하면, …" 형태로 시작하여 ${_concepts.length}개 모두 빠짐없이 기술하라(예시도 누락 금지).
+- ★★ 예시도의 각 요소(31~99)가 [장치 도면 설계]의 어느 구성(100~, 예: 프로세서(120)·통신부(110)·메모리(130) 등)에 의해 ★어떻게 동작·구현되는지★ 를 기술하라. 소프트웨어적 구성이 하드웨어(장치 구성)에 의해 구체적으로 동작·구현됨을 명확히 하여(§42 실시가능성 — 최상위 구성에 의해 동작되는 식으로), 외형(화면·장면) 나열이 아니라 ★실질적·예시적 시나리오(동작 흐름)★로 기술하라.
+  예: "검색창(31)은 프로세서(120)가 실행하는 소프트웨어 모듈에 의해 표시 영역에 렌더링되고, 통신부(110)가 수신한 데이터를 결과목록(32)으로 표시한다."
+- ★ 장치 구성요소(100~)의 명칭·참조번호는 [장치 상세설명]·[장치 도면 설계]와 ★동일하게★ 사용하라(혼용 금지). 예시도 부호(31~99)는 "이름(번호)" 형태로 기재(부호의 설명과 일치). 예시도 부호(31~99)는 장치 부호(100~)와 구분된다.
+- 특허문체(~한다). 글머리 기호·마크다운 금지. ★ 본문에 "청구항 N"·"제N항" 등 청구항 번호를 직접 언급하지 마라(구성요소(참조번호)로 기술).
+- [장치 도면 설계]·[예시도 설계]에 정의되지 않은 참조번호를 임의로 창작하지 마라.
+
+[예시도 설계 — 참조번호 31~99]
+${_cList}
+${(outputs.step_07c||'').slice(0,2000)}
+
+${T}\n[장치 청구범위] ${(outputs.step_06||'').slice(0,1500)}\n[장치 도면 설계] ${(outputs.step_07||'').slice(0,2000)}\n[장치 상세설명 — 참고: 동일 명칭·참조번호 사용] ${(getLatestDescription()||'').slice(0,3000)}${styleRef}`;
+    }
+
     case 'step_09':return buildMathPrompt('5개 내외', stripMathBlocks(getLatestDescription()||outputs.step_08||''), (outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):'');
 
     // ═══ Step 10: 방법 청구항 (장치와 완전 분리) ═══
@@ -5027,6 +5058,26 @@ async function runLongStep(sid){if(globalProcessing)return;const dep=checkDepend
     // [C1 자동 연쇄] SCOPE_GUARDED 스텝 생성 후 자동 검증
     if(inventionScope?.locked_at&&(SCOPE_GUARDED_TEXT_STEPS.includes(sid)||SCOPE_GUARDED_MERMAID_STEPS.includes(sid))){try{await runScopeCheck(sid);}catch(e2){console.warn('[C1] runScopeCheck 자동 실행 실패:',sid,e2.message);}}
   }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
+// ★ 예시도 상세설명(step_08c) 전용 생성 — runLongStep 패턴 미러(방법 step_12 선례). 장치 메가룰 없는 focused 호출 → 예시도 누락 구조 차단.
+//   ★ 장치(step_08)·방법 sanitizer(sanitizeMethodFromDevice/DescFigureRefs)는 호출하지 않는다(예시도 도 번호가 deviceMax 초과라 삭제됨 — #213).
+async function runConceptDescStep(){
+  if(globalProcessing)return;
+  if(!conceptDiagramTypes.some(ct=>ct.svgContent)){App.showToast('먼저 예시도(Step 7c)를 생성하세요','error');return;}
+  if(!outputs.step_06){App.showToast('장치 청구항(Step 6)을 먼저 생성하세요','error');return;}
+  setGlobalProcessing(true);loadingState.step_08c=true;App.setButtonLoading('btnStep08c',true);
+  const pid='progressStep08c';
+  try{
+    let t=await App.callClaudeWithContinuation(buildPrompt('step_08c'),pid);
+    pushOutputHistory('step_08c','llm','runConceptDescStep');
+    outputs.step_08c=t;markOutputTimestamp('step_08c');
+    invalidateDownstream('step_08c');               // → 부호의 설명(step_18) stale
+    onStepCompleted('step_08c');
+    renderOutput('step_08c',t);
+    saveProject(true);
+    App.showToast(`예시도 상세설명 완료 [${App.getModelConfig().label}]`);
+  }catch(e){App.showToast(e.message,'error');}
+  finally{loadingState.step_08c=false;App.setButtonLoading('btnStep08c',false);App.clearProgress(pid);setGlobalProcessing(false);}
+}
 async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{
   const TARGET_MATH_COUNT=5;
   let r=await App.callClaude(buildPrompt('step_09'));
@@ -14270,7 +14321,7 @@ function buildSpecification(){
   let extras='';
   if(outputs.step_14)extras+='\n\n[참고: 대안 청구항]\n'+outputs.step_14;
   if(outputs.step_15)extras+='\n\n[참고: 특허성 검토]\n'+outputs.step_15;
-  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${_stripDupHeader(outputs.step_02||'','기술분야')}`,`【발명의 배경이 되는 기술】\n${_stripDupHeader(outputs.step_03||'','발명의 배경이 되는 기술')}`,`【선행기술문헌】\n${_stripDupHeader(outputs.step_04||'','선행기술문헌')}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${_stripDupHeader(outputs.step_05||'','해결하고자 하는 과제')}`,`【과제의 해결 수단】\n${_stripDupHeader(outputs.step_17||'','과제의 해결 수단')}`,`【발명의 효과】\n${_stripDupHeader(outputs.step_16||'','발명의 효과')}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${desc}${getLatestMethodDescription()?'\n\n'+getLatestMethodDescription():''}`,`【부호의 설명】\n${_stripDupHeader(outputs.step_18||'','부호의 설명')}`,`【청구범위】\n${allClaims}`,`【요약서】\n${_stripDupHeader(outputs.step_19||'','요약서')}`].filter(Boolean).join('\n\n')+extras;
+  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${_stripDupHeader(outputs.step_02||'','기술분야')}`,`【발명의 배경이 되는 기술】\n${_stripDupHeader(outputs.step_03||'','발명의 배경이 되는 기술')}`,`【선행기술문헌】\n${_stripDupHeader(outputs.step_04||'','선행기술문헌')}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${_stripDupHeader(outputs.step_05||'','해결하고자 하는 과제')}`,`【과제의 해결 수단】\n${_stripDupHeader(outputs.step_17||'','과제의 해결 수단')}`,`【발명의 효과】\n${_stripDupHeader(outputs.step_16||'','발명의 효과')}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${[desc,getLatestConceptDescription(),getLatestMethodDescription()].filter(Boolean).join('\n\n')}`,`【부호의 설명】\n${_stripDupHeader(outputs.step_18||'','부호의 설명')}`,`【청구범위】\n${allClaims}`,`【요약서】\n${_stripDupHeader(outputs.step_19||'','요약서')}`].filter(Boolean).join('\n\n')+extras;
 }
 function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
 function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
@@ -14280,7 +14331,7 @@ function downloadAsWord(){
   // v4.9: Include English title
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
   const allClaims=[outputs.step_06,outputs.step_10,outputs.step_20].filter(Boolean).join('\n\n');
-  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,getLatestMethodDescription()].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
+  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,getLatestConceptDescription(),getLatestMethodDescription()].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:normal;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;const body=_stripDupHeader(s.b,s.h);if(!body)return hd;return hd+body.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const userFigHtml=buildUserFiguresHtml({word:true}); // ★ T4: 사용자 도면 이미지(base64) 삽입 — 도 번호 순
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}${userFigHtml}</body></html>`;
