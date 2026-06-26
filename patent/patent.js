@@ -4441,6 +4441,7 @@ ${!hasMethodClaims?`- 방법 청구항이 생성되지 않았으므로, 방법 �
 ⛔ 출력 금지 항목:
 - [청구범위], [작성 요청], [청구항 구성] 등 메타 섹션을 출력에 포함하지 마라
 - 청구항 원문을 그대로 출력하지 마라 — 상세설명 본문만 작성하라
+- ★ 발명의 설명 본문에 "청구항 N", "제N항", "청구항 3 및 청구항 5에 관련하여" 등 ★청구항 번호를 직접 언급하지 마라★ (명세서 부적절 표현). 청구항에 기재된 구성을 설명할 때는 청구항을 가리키지 말고, 그 구성요소(참조번호) 형태(예: 통신부(110), 프로세서(120))로 구체적으로 기술하라.
 - 발명 내용 원문을 에코하지 마라
 
 ⛔⛔⛔ 수학식 포함 절대 금지 ⛔⛔⛔
@@ -4489,7 +4490,7 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 청구항에서 사용한 명칭과 상세설명의 명칭이 일치해야 한다.
 ${_designCompStr}
 ${_userFigBlock?`\n${_userFigBlock}\n★ 사용자 도면도 "도 N을 참조하면," 형태로 도면 번호 순서에 맞게 설명을 포함하라.\n★ 사용자 도면의 설명은 발명 내용 및 청구범위와 정합되도록, 위 도면 설명을 기초로 기술적 의미를 보완하여 작성하라.`:''}
-${conceptDiagramTypes.some(ct=>ct.svgContent)?`\n★★★ 예시도/개념도 (참조번호 31~99) ★★★\n${conceptDiagramTypes.filter(ct=>ct.svgContent).map((ct,fi)=>{const fn=_conceptFigNums[fi]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${fn}: ${td.label} (참조번호: ${(ct.refMap||[]).map(r=>r.label?`${r.signNumber}(${r.label})`:`${r.signNumber}(${_conceptRefFallbackName(ct)})`).join(', ')||(ct.refNums||[]).join(', ')||'미정'})`;}).join('\n')}\n- ★ 예시도(도 N)도 장치 도면과 ★동일한 수준으로★ "도 N을 참조하면, …" 형태로 그 구성·동작·부호를 상세설명 본문에 ★반드시 빠짐없이★ 기술하라(예시도 설명 누락 금지). 아래 [예시도 설계]의 내용을 근거로 작성하라.\n- ★ 위 "번호(이름)"의 이름을 그대로 사용해 "이름(번호)" 형태로 기재하라(부호의 설명과 일치).\n- 예시도의 참조번호(31~99)는 장치 참조번호(100~999)와 구분된다.\n`:''}
+${conceptDiagramTypes.some(ct=>ct.svgContent)?`\n★★★ 예시도/개념도 (참조번호 31~99) ★★★\n${conceptDiagramTypes.filter(ct=>ct.svgContent).map((ct,fi)=>{const fn=_conceptFigNums[fi]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};return `도 ${fn}: ${td.label} (참조번호: ${(ct.refMap||[]).map(r=>r.label?`${r.signNumber}(${r.label})`:`${r.signNumber}(${_conceptRefFallbackName(ct)})`).join(', ')||(ct.refNums||[]).join(', ')||'미정'})`;}).join('\n')}\n- ★ 예시도(도 N)도 장치 도면과 ★동일한 수준으로★ "도 N을 참조하면, …" 형태로 그 구성·동작·부호를 상세설명 본문에 ★반드시 빠짐없이★ 기술하라(예시도 설명 누락 금지). 아래 [예시도 설계]의 내용을 근거로 작성하라.\n- ★★ 예시도는 외형(화면·장면)만 나열하지 말고, ★예시도의 각 요소(31~99)가 [장치 도면 설계]의 어느 구성(100~, 예: 프로세서(120)·통신부(110)·메모리(130) 등)에 의해 어떻게 동작·구현되는지★ 를 함께 기술하라. 예: "검색창(31)은 프로세서(120)가 실행하는 소프트웨어 모듈에 의해 표시 영역에 렌더링되고, 통신부(110)가 수신한 데이터를 결과목록(32)으로 표시한다." ★ 소프트웨어적 구성이 하드웨어(장치 구성)에 의해 구체적으로 동작·구현됨을 명확히 하여(§42 실시가능성 — 최상위 구성에 의해 동작되는 식으로), 예시도가 도면 외형이 아니라 ★실질적·예시적 시나리오(동작 흐름)★ 로 읽히게 하라.\n- ★ 위 "번호(이름)"의 이름을 그대로 사용해 "이름(번호)" 형태로 기재하라(부호의 설명과 일치).\n- 예시도의 참조번호(31~99)는 장치 참조번호(100~999)와 구분된다.\n`:''}
 
 ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${outputs.step_07||''}${outputs.step_07c?'\n[예시도 설계 — 참조번호 31~99, 장치(100~)와 별개. 아래 예시도도 상세설명에 반드시 기술하라] '+outputs.step_07c.slice(0,1500):''}${(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_08||0))?'\\n\\n[특허성 검토 결과 — 아래 지적사항을 상세설명에 반영하여 보완하라]\\n'+outputs.step_15.slice(0,2000):''}${getFullInvention({stripMeta:true,deviceOnly:true})}${styleRef}`;}
 
@@ -5265,7 +5266,7 @@ function applyEditInstructions(originalText,edits){
     const exactIdx=result.indexOf(edit.anchor,Math.max(0,anchorStart-50));
     
     // 청구항 헤더가 CONTENT에 혼입되지 않았는지 확인
-    if(/【청구항|청구항\s*\d+|【발명|【기술분야|【배경기술/.test(edit.content)){
+    if(/【청구항|청구항\s*\d+|제\s*\d+\s*항|【발명|【기술분야|【배경기술/.test(edit.content)){   // ★ '제N항' 형태도 드롭(청구항 번호 본문 누수 차단)
       console.warn(`[applyEditInstructions] 청구항/섹션 헤더 감지 → 건너뜀: "${edit.content.slice(0,40)}..."`);
       continue;
     }
@@ -5450,6 +5451,7 @@ REASON: ...
 - ANCHOR는 [현재 상세설명]에 실제로 존재하는 문장을 정확히 복사하라 (부분 문장 가능, 20자 이상).
 - CONTENT에는 특허문체로 작성. 구성요소(참조번호) 형태 사용.
 - ⛔ 【청구항 N】, 청구항 1 등 청구항 헤더/번호/구조 절대 금지.
+- ⛔ CONTENT에 "청구항 N"·"제N항"·"청구항 3 및 청구항 5에 관련하여" 등 ★청구항 번호 직접 언급 금지★ (명세서 부적절). 검토가 "청구항 3의 뒷받침 부족"을 지적해도, CONTENT에는 청구항을 가리키지 말고 그 구성요소(참조번호)로 구체 기술하라(예: "통신부(110)는 …한다").
 - ⛔ 【수학식 N】 블록, 수학식 번호 참조 금지 (수학식은 별도 처리).
 - ⛔ "~하는 단계", "S100" 등 방법 표현 금지. 장치 구성요소(~부)의 동작만.
 - ⛔ 기존 문장을 삭제하는 편집 금지. 추가(ADD)와 수정(MODIFY)만 가능.
