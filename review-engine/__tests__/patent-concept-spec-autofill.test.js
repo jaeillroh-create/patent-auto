@@ -206,7 +206,7 @@ test('소스 ★ A — runConceptDiagramStep·cascade 둘 다 reflectConceptsToS
 
 test('소스 ★ A — APPEND(덮어쓰기 X)·멱등 가드', () => {
   assert.match(PATENT_SRC, /body=body\.replace\(\/\\s\*\$\/,''\)\+'\\n\\n'\+_buildConceptSpecParagraph/, '★ step_08 APPEND');
-  assert.match(PATENT_SRC, /if\(_conceptAlreadyInDesc\(body, g\.ct, g\.figNum\)\) return;/, '★ 멱등 가드(figNum 기준, 이미 반영 skip)');
+  assert.match(PATENT_SRC, /if\(_conceptAlreadyInDesc\(body, g\.ct, g\.figNum\)\|\|_conceptAlreadyInDesc\(c8c, g\.ct, g\.figNum\)\) return;/, '★ 멱등 가드(figNum 기준, step_08/step_08c 어디든 반영 시 skip)');
   assert.match(PATENT_SRC, /function _conceptAlreadyInDesc\(text, ct, figNum\)\{/, '★ figNum 멱등 헬퍼(중복 누적 차단)');
   assert.match(PATENT_SRC, /if\(L!=='step_08'\)markOutputTimestamp\(L\);/, '★ step_08 timestamp 미변경(우선순위 보존)');
 });
