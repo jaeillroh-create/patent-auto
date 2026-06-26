@@ -2340,6 +2340,7 @@ function renderConceptDiagramCards(){
   const dl=document.getElementById('conceptDiagramDownload');
   if(dl)dl.style.display=conceptDiagramTypes.some(ct=>ct.svgContent)?'':'none';
   renderConceptDiagramTypesList();
+  if(typeof _updateConceptDescBtn==='function')_updateConceptDescBtn();   // ★ [Task1] 예시도 생성/복원 후 예시도 상세설명 버튼 강조 갱신
 }
 
 // ═══ Project Reference Document ═══
@@ -3080,6 +3081,18 @@ function getLatestMethodDescription(){
 function getLatestConceptDescription(){
   return outputs.step_08c||'';
 }
+// ★ [Task1] 예시도(step_07c svgContent)는 있는데 예시도 상세설명(step_08c)이 비었나 → ④ 미생성(명세서에서 예시도 설명 누락).
+function _conceptDescMissing(){
+  return conceptDiagramTypes.some(ct=>ct.svgContent) && !(outputs.step_08c && String(outputs.step_08c).trim());
+}
+// ★ [Task1] "예시도 상세설명 생성" 버튼 강조 — ④ 미생성이면 강조(btn-primary)+필요 라벨, 생성됐으면 평상(btn-outline).
+function _updateConceptDescBtn(){
+  const b=document.getElementById('btnStep08c'); if(!b) return;
+  const missing=_conceptDescMissing();
+  b.classList.toggle('btn-primary', missing); b.classList.toggle('btn-outline', !missing);
+  b.innerHTML=(missing?'<span class="ico" data-icon="alert-triangle"></span> 예시도 상세설명 생성 (필요)':'<span class="ico" data-icon="edit"></span> 예시도 상세설명 생성');
+  if(window.Icons&&Icons.renderAll)try{Icons.renderAll(b);}catch(_e){}
+}
 // 정형문 수동 삽입: 현재 Step 8 결과에 정형문을 전후에 삽입
 function insertBoilerplate(){
   const cur=outputs.step_08||'';
@@ -3103,6 +3116,17 @@ function getFullDescription(){
   // If boilerplate already inserted manually, don't double-insert
   if(hasBoilerplate(body))return body;
   return STEP8_PREFIX+'\n'+body+'\n'+STEP8_SUFFIX;
+}
+// ★ [Task2] 발명을 실시하기 위한 구체적인 내용 본문 — 여는 정형문 + [장치+예시도(step_08c)+방법] + ★닫는 정형문(SUFFIX)을 섹션 맨 끝★.
+//   종전: getFullDescription 이 장치만 PREFIX/SUFFIX 로 감싸 닫는 정형문이 예시·방법 앞에 끼던 문제 해소(방법 선존재 문제도 동시 해소).
+function buildImplementationBody(){
+  const device=getLatestDescription()||'';
+  const concept=getLatestConceptDescription()||'';
+  const method=getLatestMethodDescription()||'';
+  const core=[device,concept,method].filter(Boolean).join('\n\n');
+  if(!core)return '';
+  if(hasBoilerplate(core))return core;   // 수동 정형문 삽입 케이스 → 이중 삽입 방지(그대로)
+  return STEP8_PREFIX+'\n'+core+'\n'+STEP8_SUFFIX;   // ★ 닫는 정형문이 장치+예시+방법 뒤(섹션 끝)
 }
 function getLastClaimNumber(t){const m=t.match(/【청구항\s*(\d+)】/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
 function getLastFigureNumber(t){const m=t.match(/도\s*(\d+)/g);if(!m)return 0;return Math.max(...m.map(x=>parseInt(x.match(/(\d+)/)[1])));}
@@ -5069,7 +5093,7 @@ async function runConceptDescStep(){
   try{
     let t=await App.callClaudeWithContinuation(buildPrompt('step_08c'),pid);
     pushOutputHistory('step_08c','llm','runConceptDescStep');
-    outputs.step_08c=t;markOutputTimestamp('step_08c');
+    outputs.step_08c=t;markOutputTimestamp('step_08c');_updateConceptDescBtn();   // ★ [Task1] 생성 후 버튼 강조 해제
     invalidateDownstream('step_08c');               // → 부호의 설명(step_18) stale
     onStepCompleted('step_08c');
     renderOutput('step_08c',t);
@@ -14290,7 +14314,10 @@ function renderPreview(){
       }
     }
   } catch (_e) {}
-  const el=document.getElementById('previewArea'),spec=buildSpecification();const _userFigs=buildUserFiguresHtml({});if(!spec.trim()){el.innerHTML='<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>'+_userFigs;return;}el.innerHTML=spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow"><span class="ico" data-icon="chevron-down" data-size="12"></span></span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('')+_userFigs;}
+  const el=document.getElementById('previewArea'),spec=buildSpecification();const _userFigs=buildUserFiguresHtml({});
+  // ★ [Task1] ④ 미생성 인라인 배너 — 예시도 있는데 예시도 상세설명(step_08c) 비면 명세서에서 누락됨을 미리보기 상단에 안내.
+  const _cdBanner=_conceptDescMissing()?'<div style="padding:10px 12px;border-radius:8px;background:#FFF4E5;border-left:3px solid var(--color-warning,#E8A33D);color:#7A4B00;font-size:12px;margin-bottom:12px">⚠️ 예시도 상세설명 미생성 — 예시도 설명이 명세서에서 빠집니다. Step 7c의 “예시도 상세설명 생성”을 먼저 실행하세요.</div>':'';
+  if(!spec.trim()){el.innerHTML=_cdBanner+'<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>'+_userFigs;return;}el.innerHTML=_cdBanner+spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow"><span class="ico" data-icon="chevron-down" data-size="12"></span></span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('')+_userFigs;}
 // 출력 시 항목 헤더 중복 방지: 본문 첫 줄이 해당 항목 헤더(【h】, 공백 변형 포함)면 제거.
 // 항목명이 정확히 일치할 때만 제거하므로 청구범위의 "【청구항 1】" 등은 보존됨.
 function _stripDupHeader(body,h){
@@ -14299,7 +14326,7 @@ function _stripDupHeader(body,h){
   return body.replace(new RegExp('^\\s*【\\s*'+esc+'\\s*】[ \\t]*\\r?\\n?'),'');
 }
 function buildSpecification(){
-  const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
+  const brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
   // Claims: use the latest version (after auto-correction from validation)
@@ -14321,17 +14348,20 @@ function buildSpecification(){
   let extras='';
   if(outputs.step_14)extras+='\n\n[참고: 대안 청구항]\n'+outputs.step_14;
   if(outputs.step_15)extras+='\n\n[참고: 특허성 검토]\n'+outputs.step_15;
-  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${_stripDupHeader(outputs.step_02||'','기술분야')}`,`【발명의 배경이 되는 기술】\n${_stripDupHeader(outputs.step_03||'','발명의 배경이 되는 기술')}`,`【선행기술문헌】\n${_stripDupHeader(outputs.step_04||'','선행기술문헌')}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${_stripDupHeader(outputs.step_05||'','해결하고자 하는 과제')}`,`【과제의 해결 수단】\n${_stripDupHeader(outputs.step_17||'','과제의 해결 수단')}`,`【발명의 효과】\n${_stripDupHeader(outputs.step_16||'','발명의 효과')}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${[desc,getLatestConceptDescription(),getLatestMethodDescription()].filter(Boolean).join('\n\n')}`,`【부호의 설명】\n${_stripDupHeader(outputs.step_18||'','부호의 설명')}`,`【청구범위】\n${allClaims}`,`【요약서】\n${_stripDupHeader(outputs.step_19||'','요약서')}`].filter(Boolean).join('\n\n')+extras;
+  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${_stripDupHeader(outputs.step_02||'','기술분야')}`,`【발명의 배경이 되는 기술】\n${_stripDupHeader(outputs.step_03||'','발명의 배경이 되는 기술')}`,`【선행기술문헌】\n${_stripDupHeader(outputs.step_04||'','선행기술문헌')}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${_stripDupHeader(outputs.step_05||'','해결하고자 하는 과제')}`,`【과제의 해결 수단】\n${_stripDupHeader(outputs.step_17||'','과제의 해결 수단')}`,`【발명의 효과】\n${_stripDupHeader(outputs.step_16||'','발명의 효과')}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${buildImplementationBody()}`,`【부호의 설명】\n${_stripDupHeader(outputs.step_18||'','부호의 설명')}`,`【청구범위】\n${allClaims}`,`【요약서】\n${_stripDupHeader(outputs.step_19||'','요약서')}`].filter(Boolean).join('\n\n')+extras;
 }
-function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
-function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+// ★ [Task1] ④ 미생성(예시도 있는데 step_08c 비었음) 경고 — 출력 직전 1회(누락 사실 안내, 차단은 안 함).
+function _warnConceptDescMissing(){ if(_conceptDescMissing())App.showToast('⚠️ 예시도 상세설명 미생성 — 예시도 설명이 명세서에서 빠집니다. Step 7c의 "예시도 상세설명 생성"을 먼저 실행하세요','warning'); }
+function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
+function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 
 function downloadAsWord(){
-  const desc=getFullDescription(),brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
+  _warnConceptDescMissing();   // ★ [Task1] ④ 미생성 경고
+  const brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
   const allClaims=[outputs.step_06,outputs.step_10,outputs.step_20].filter(Boolean).join('\n\n');
-  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:[desc,getLatestConceptDescription(),getLatestMethodDescription()].filter(Boolean).join('\n\n')},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
+  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:buildImplementationBody()},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:normal;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;const body=_stripDupHeader(s.b,s.h);if(!body)return hd;return hd+body.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const userFigHtml=buildUserFiguresHtml({word:true}); // ★ T4: 사용자 도면 이미지(base64) 삽입 — 도 번호 순
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}${userFigHtml}</body></html>`;
