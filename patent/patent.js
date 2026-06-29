@@ -157,6 +157,37 @@ function _buildConceptOutputText(conceptTypes, figNums){
     return `[도 ${fn}] ${td.label} 예시도\n참조번호: ${refs}\n${ct.briefDesc||''}`;
   }).join('\n\n');
 }
+// ★ [식별번호 figN 연동] 도 N 예시도의 i번째 식별번호 — 기본 5x(N*10+i), 요소>9 또는 2자리 도번호면 5xx(N*100+i).
+//   5x(51~59)는 100 미만→장치 부호(100~)와 충돌 없음. 5xx(501~)는 요소多/도10~ 용(장치 100번대 회피). 본인 스킴.
+function _conceptRefNumFor(figNum, idx, total){
+  const N=parseInt(figNum)||0;
+  const base=(N>=10 || (total||0)>9) ? N*100 : N*10;   // 5xx vs 5x
+  return String(base+(idx+1));
+}
+// ★ SVG 의 (old)→(new) 식별번호 치환 — 괄호 구분(좌표 오염 회피) + 단일 패스 콜백(원본 매치 기준 → 사이클 안전·멱등). 제목 SoT(_conceptSvgApplyTitle) 패턴 이식.
+function _conceptSvgApplyRefNums(svgStr, oldToNew){
+  return String(svgStr||'').replace(/\((\d{2,4})\)/g,(m,n)=>oldToNew[n]?'('+oldToNew[n]+')':m);
+}
+// ★ [SoT] 생성된 예시도 각각의 식별번호를 도 번호(getAutoFigNums) 기반으로 (재)배정 — refMap·svgContent·refNums·step_07c 일관.
+//   생성 직후·③ override 시 호출. 멱등(이미 figN 기반이면 no-op). step_08c/step_18 은 refMap 을 읽으므로 자동 정합(5소비처).
+function _syncConceptRefNums(){
+  const figs=getAutoFigNums('step_07c');
+  const placed=conceptDiagramTypes.filter(ct=>ct.svgContent);
+  let changed=false;
+  placed.forEach((ct,i)=>{
+    const figNum=figs[i]; if(figNum==null) return;
+    const rm=ct.refMap||[]; if(!rm.length) return;
+    const oldToNew={};
+    rm.forEach((r,j)=>{oldToNew[String(r.signNumber)]=_conceptRefNumFor(figNum,j,rm.length);});
+    if(!rm.some(r=>oldToNew[String(r.signNumber)]!==String(r.signNumber))) return;   // 멱등: 이미 figN 기반이면 skip
+    changed=true;
+    ct.svgContent=_conceptSvgApplyRefNums(ct.svgContent, oldToNew);
+    rm.forEach(r=>{r.signNumber=oldToNew[String(r.signNumber)]||r.signNumber;});
+    ct.refNums=rm.map(r=>parseInt(r.signNumber));
+  });
+  if(changed && placed.length) outputs.step_07c=_buildConceptOutputText(placed, figs);   // 공유 텍스트(step_18·step_13 입력) 재구성
+  return changed;
+}
 // ═══ [A] 예시도 자동 반영 — 예시도 생성 = 명세서 반영 의사. 발명의 설명(step_08 계층)·부호의 설명(step_18)에
 //   예시도 설명/부호를 ★APPEND★(기존 본문 byte 보존·멱등, D2 add_spec_support 패턴). 덮어쓰기·재생성 없음. ═══
 //   ★ [C] getAutoFigNums('step_07c')(생성된 예시도 compact 번호배열)를 filter 순서와 동일 인덱스로 매핑(full 인덱스 접근 버그 제거).
@@ -2257,6 +2288,7 @@ function invalidateFigureDependents(){
 // 예시도 순서(번호) 변경 후처리: 무효화(④) + 재렌더 + 저장
 function _afterConceptFigOverrideChange(){
   invalidateFigureDependents();                // ④ step_08·step_12·step_18 무효화 → 새 번호 추종
+  _syncConceptRefNums();                       // ★ ③ override: 식별번호도 새 도 번호 추종(refMap·SVG·step_07c 재번호, 멱등)
   renderConceptDiagramTypesList();             // 입력 카드 갱신(밀린 자동 번호 반영) + ③-3 통합 뷰
   renderConceptDiagramCards();                 // ① 제목·라벨 즉시 갱신(SoT 추종)
   if(typeof renderRequiredFiguresList==='function')renderRequiredFiguresList();
@@ -2983,6 +3015,7 @@ ${CONCEPT_OVERLAP_RULES}
 
   // ★ P2/P3 공유 파서 — SVG/BRIEF/REF_MAP(번호↔이름) 추출, 참조번호 31~99 통일.
   _parseConceptResult(fullText, conceptDiagramTypes, figNums);
+  _syncConceptRefNums();   // ★ 식별번호 도 번호 연동(도 N → N0번대) — refMap·SVG·step_07c 정합
   pushOutputHistory('step_07c','cascade','_cascadeRunConceptDiagram');
   outputs.step_07c=_buildConceptOutputText(conceptDiagramTypes, figNums);
   markOutputTimestamp('step_07c');
@@ -4519,7 +4552,7 @@ ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 —
 - 앵커 종속항의 핵심 처리에 대해 1개 이상의 대안적 구현을 기술
 - 변형 실시예는 독립항의 보호범위를 뒷받침하는 방향이어야 한다
 
-★★★ 장치 도면(${figListStr})에 포함된 구성요소(참조번호 100~)를 빠짐없이 설명하라. 단, 장치 도면 설계에 정의되지 않은 참조번호를 임의로 창작하지 마라. (예시도(참조번호 31~99)는 이 단계에서 다루지 않는다 — 별도 단계에서 기술됨.) ★★★
+★★★ 장치 도면(${figListStr})에 포함된 구성요소(참조번호 100~)를 빠짐없이 설명하라. 단, 장치 도면 설계에 정의되지 않은 참조번호를 임의로 창작하지 마라. (예시도(별도 부호 — 도 번호 기반)는 이 단계에서 다루지 않는다 — 별도 단계에서 기술됨.) ★★★
 ★★★ 참조번호 명칭 통일 규칙 (기재불비 방지 — 핵심) ★★★
 - 하나의 참조번호에는 반드시 하나의 명칭만 사용하라. 동의어/약칭을 혼용하지 마라.
   <span class="ico" data-icon="arrow-right"></span> 예: "추천부(114)"와 "추천 생성부(114)"를 혼용하면 기재불비. 하나로 통일하라.
@@ -4543,13 +4576,13 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${out
 
 ★★★ 작성 규칙 ★★★
 - 각 예시도를 "도 N을 참조하면, …" 형태로 시작하여 ${_concepts.length}개 모두 빠짐없이 기술하라(예시도 누락 금지).
-- ★★ 예시도의 각 요소(31~99)가 [장치 도면 설계]의 어느 구성(100~, 예: 프로세서(120)·통신부(110)·메모리(130) 등)에 의해 ★어떻게 동작·구현되는지★ 를 기술하라. 소프트웨어적 구성이 하드웨어(장치 구성)에 의해 구체적으로 동작·구현됨을 명확히 하여(§42 실시가능성 — 최상위 구성에 의해 동작되는 식으로), 외형(화면·장면) 나열이 아니라 ★실질적·예시적 시나리오(동작 흐름)★로 기술하라.
-  예: "검색창(31)은 프로세서(120)가 실행하는 소프트웨어 모듈에 의해 표시 영역에 렌더링되고, 통신부(110)가 수신한 데이터를 결과목록(32)으로 표시한다."
-- ★ 장치 구성요소(100~)의 명칭·참조번호는 [장치 상세설명]·[장치 도면 설계]와 ★동일하게★ 사용하라(혼용 금지). 예시도 부호(31~99)는 "이름(번호)" 형태로 기재(부호의 설명과 일치). 예시도 부호(31~99)는 장치 부호(100~)와 구분된다.
+- ★★ 예시도의 각 요소(예시도 부호 — 위 [예시도 설계]에 명시)가 [장치 도면 설계]의 어느 구성(100~, 예: 프로세서(120)·통신부(110)·메모리(130) 등)에 의해 ★어떻게 동작·구현되는지★ 를 기술하라. 소프트웨어적 구성이 하드웨어(장치 구성)에 의해 구체적으로 동작·구현됨을 명확히 하여(§42 실시가능성 — 최상위 구성에 의해 동작되는 식으로), 외형(화면·장면) 나열이 아니라 ★실질적·예시적 시나리오(동작 흐름)★로 기술하라.
+  예: "도 5를 참조하면, 검색창(51)은 프로세서(120)가 실행하는 소프트웨어 모듈에 의해 표시 영역에 렌더링되고, 통신부(110)가 수신한 데이터를 결과목록(52)으로 표시한다."
+- ★ 장치 구성요소(100~)의 명칭·참조번호는 [장치 상세설명]·[장치 도면 설계]와 ★동일하게★ 사용하라(혼용 금지). 예시도 부호는 ★도 번호 기반★(도 N → N1,N2… / 요소 9개 초과·도10~ 는 N01,N02…)이며, 위 [예시도 설계]에 명시된 번호를 "이름(번호)" 형태로 ★그대로★ 기재하라(SVG·부호의 설명과 일치). 예시도 부호는 장치 부호(100~)와 구분된다.
 - 특허문체(~한다). 글머리 기호·마크다운 금지. ★ 본문에 "청구항 N"·"제N항" 등 청구항 번호를 직접 언급하지 마라(구성요소(참조번호)로 기술).
 - [장치 도면 설계]·[예시도 설계]에 정의되지 않은 참조번호를 임의로 창작하지 마라.
 
-[예시도 설계 — 참조번호 31~99]
+[예시도 설계 — 식별번호는 도 번호 기반(도 N → N0번대, 예: 도 5 → 51~)]
 ${_cList}
 ${(outputs.step_07c||'').slice(0,2000)}
 
@@ -4811,7 +4844,7 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
   <span class="ico" data-icon="arrow-right"></span> 예: "추천부(114)" vs "추천 생성부(114)" 혼용, "메모리(120)" vs "데이터베이스(120)" 혼용
   <span class="ico" data-icon="arrow-right"></span> 가장 빈도 높은 명칭으로 통일할 것을 제안하라
 - ★ 도면 미정의 참조번호 사용 검토: 도면에 정의되지 않은(존재하지 않는) 참조번호가 상세설명에서 사용되면 지적하라
-- ★ 예시도 부호 구분: 참조번호 31~99는 [예시도/개념도 설계]에 정의된 별개 부호다. 장치 도면(100~)에 없다고 "도면 미정의"로 오인하지 마라. 31~99의 정합은 [예시도/개념도 설계]를 기준으로 판단하라.
+- ★ 예시도 부호 구분: 예시도 부호(도 번호 기반 — 도 N → N0번대, 예: 도 5 → 51~)는 [예시도/개념도 설계]에 정의된 별개 부호다. 장치 도면(100~)에 없다고 "도면 미정의"로 오인하지 마라. 예시도 부호의 정합은 [예시도/개념도 설계]를 기준으로 판단하라.
 
 [11] 청구항 형식 검토
 - 독립항이 젭슨(Jepson) 형식("~에 있어서," 전환부 + "~을 특징으로 하는" 종결부)을 올바르게 따르는지 확인
@@ -4823,7 +4856,7 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
 [12] ★ 예시도/개념도 정합 검토 (v15 — 예시도 lifecycle)
 - [예시도/개념도 설계]가 제공된 경우에만 검토하라(없으면 "해당 없음"으로 표기).
 - 각 예시도(도 N, 참조번호 31~99)가 ★[예시도 상세설명]★에 "도 N을 참조하면, …" 형태로 기술되어 있는지 확인하라(예시도 설명은 [상세설명](장치)이 아니라 별도 [예시도 상세설명]이 담당한다). 누락·부실 시 지적하되, ⛔ 예시도 단락을 [상세설명](장치)에 추가하라고 제안하지 마라 — 장치 상세설명에 예시도를 끼워넣는 것은 금지이며, 예시도 보완은 별도 단계(예시도 상세설명) 소관이다.
-- 예시도 참조번호(31~99)가 부호의 설명에 "명칭 : 번호"로 빠짐없이 기재되어 있는지 확인하라. 누락 시 지적하라.
+- 예시도 참조번호(도 번호 기반)가 부호의 설명에 "명칭 : 번호"로 빠짐없이 기재되어 있는지 확인하라. 누락 시 지적하라.
 - 예시도 부호의 명칭이 상세설명·부호의 설명에서 동일하게 일관되는지 확인하라(혼용 지적).
 
 ═══ 출력 형식 ═══
@@ -5577,7 +5610,7 @@ REASON: ...
 [발명의 명칭] ${selectedTitle}
 [검토 결과] ${filterReviewForScope(outputs.step_13,'device')}
 [청구항 구성요소 참조] ${extractClaimComponents(outputs.step_06||'')}
-⛔ 이것은 ★장치★ 상세설명 편집이다. 예시도(도 N, 참조번호 31~99) 단락을 장치 상세설명에 추가하지 마라 — 예시도 설명은 별도 단계(예시도 상세설명)가 담당한다. 검토가 예시도 설명/부호 누락을 지적해도, 장치 본문에 "도 N을 참조하면, …" 예시도 단락을 끼워넣는 편집(ADD_AFTER 등)을 생성하지 마라(짧은 stub 끼워넣기 금지).
+⛔ 이것은 ★장치★ 상세설명 편집이다. 예시도(도 N, 별도 부호) 단락을 장치 상세설명에 추가하지 마라 — 예시도 설명은 별도 단계(예시도 상세설명)가 담당한다. 검토가 예시도 설명/부호 누락을 지적해도, 장치 본문에 "도 N을 참조하면, …" 예시도 단락을 끼워넣는 편집(ADD_AFTER 등)을 생성하지 마라(짧은 stub 끼워넣기 금지).
 [현재 상세설명]
 ${baseDesc}${_maybeScopeGuard('step_13_applied','text')}`);
 
@@ -6007,6 +6040,7 @@ ${figNums.length>1?figNums.slice(1).map(n=>'\n---CONCEPT_FIG_'+n+'---\n<svg>...<
 
     // ★ P2/P3 공유 파서 — 마커별 SVG/BRIEF/REF_MAP(번호↔이름) 추출, 참조번호 31~99 통일(메인·캐스케이드 일관).
     _parseConceptResult(fullText, conceptDiagramTypes, figNums);
+    _syncConceptRefNums();   // ★ 식별번호 도 번호 연동(도 N → N0번대) — refMap·SVG·step_07c 정합
 
     // 결과 저장 — refMap 의 "이름(번호)" 포함(부호의 설명·상세설명 정밀 참조).
     pushOutputHistory('step_07c','llm','runConceptDiagramStep');
