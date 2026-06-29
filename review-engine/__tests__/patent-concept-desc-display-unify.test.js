@@ -94,7 +94,8 @@ test('T2 ★ btnStep08c 보조 유지 — 라벨 "재생성", 결과는 우측(�
 
 test('회귀 ★ 실행 로직 미접촉 — runImplementationDesc device→concept + _conceptDescCore renderOutput(step_08c)', () => {
   assert.match(PATENT_SRC, /async function runImplementationDesc\(\)\{[\s\S]*?await _longStepCore\('step_08'\);[\s\S]*?await _conceptDescCore\(\)/, '★ 통합 순차 실행 유지');
-  assert.match(PATENT_SRC, /renderOutput\('step_08c',t\);/, '★ _conceptDescCore 가 step_08c 렌더(우측 이동분으로)');
+  // ★ merge-into-step08: _conceptDescCore 는 별도 renderOutput('step_08c') 대신 _mergeConceptIntoStep08 으로 합본본을 Step 8 결과에 표시
+  assert.match(PATENT_SRC, /async function _conceptDescCore\(\)\{[\s\S]*?_mergeConceptIntoStep08\(\);/, '★ _conceptDescCore 가 합본(merge) 호출');
 });
 
 test('회귀 ★ 장치(C1) 표시 — resultStep08 우측 Step 8 결과 유지', () => {
@@ -103,7 +104,7 @@ test('회귀 ★ 장치(C1) 표시 — resultStep08 우측 Step 8 결과 유지'
   assert.match(PATENT_SRC, /function buildImplementationBody\(\)\{/, '★ 산출물 조립 유지');
 });
 
-test('회귀 ★ ?v= 갱신(patent.js·patent.css 20260659)', () => {
-  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260659/, '★ patent.js ?v=20260659');
-  assert.match(HTML_SRC, /patent\/patent\.css\?v=20260659/, '★ patent.css ?v=20260659(신규 CSS 반영)');
+test('회귀 ★ ?v= 갱신(patent.js 20260660 · patent.css 20260659)', () => {
+  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260660/, '★ patent.js ?v=20260660(merge-into-step08)');
+  assert.match(HTML_SRC, /patent\/patent\.css\?v=20260659/, '★ patent.css ?v=20260659(이번 PR 미변경)');
 });

@@ -1162,8 +1162,8 @@
         <div class="result-card" id="resultCard08">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 8 결과: 상세설명</div></div>
           <div id="resultStep08" class="result-area"></div>
-          <!-- ★ [T1] 예시도 상세설명(C1c) 통합 표시 — 장치(C1) 아래. 내용 있을 때만 보임(CSS :not(:empty)). 좌측 Step 7c 에서 이동 -->
-          <div id="resultStep08c"></div>
+          <!-- ★ 예시도 상세설명(C1c)은 이제 step_08 본문에 합본되어 위 resultStep08(장치+예시도)에 함께 표시됨 → 별도 컨테이너는 숨김(중복 방지). 컨테이너는 호환 위해 유지. -->
+          <div id="resultStep08c" style="display:none"></div>
           <div style="padding:0 16px 16px"><button class="btn btn-outline" id="btnInsertBoilerplate" onclick="insertBoilerplate()"><span class="ico" data-icon="link"></span> 정형문 삽입</button></div>
         </div>
         <div class="result-card" id="resultCard09">
@@ -1384,7 +1384,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260615e"></script>
-<script src="patent/patent.js?v=20260659"></script>
+<script src="patent/patent.js?v=20260660"></script>
 <script src="patent/chat.js?v=20260612"></script>
 <script src="opinion/opinion.js?v=20260637"></script>
 <script>
