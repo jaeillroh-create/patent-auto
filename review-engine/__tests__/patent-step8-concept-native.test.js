@@ -55,43 +55,36 @@ function withConcepts() {
 }
 beforeEach(() => { withConcepts(); });
 
-// ─────────── B1: Step 8 예시도 1급화 ───────────
+// ─────────── B1 은퇴(retire): step_08 = 장치 전용 환원(예시도는 step_08c 가 담당) ───────────
 
-test('B1 ★ Step 8 프롬프트 — 예시도 있으면 [예시도 설계](step_07c 전문) 주입', () => {
-  const p = step08();
-  assert.match(p, /\[예시도 설계 — 참조번호 31~99/, '★ 예시도 설계 데이터 블록(전문 주입)');
-  assert.match(p, /검색창\(31\), 결과목록\(32\)/, '★ 예시도 부호 전문이 Step 8 입력에 보임');
+test('retire ★ step_08 프롬프트 — [예시도 설계]·예시도 블록 제거(device-only)', () => {
+  const p = step08();   // 예시도 있어도
+  assert.ok(p.indexOf('[예시도 설계') < 0, '★ step_08 입력에 [예시도 설계] 없음(예시도는 step_08c)');
+  assert.ok(p.indexOf('★★★ 예시도/개념도 (참조번호 31~99)') < 0, '★ 예시도 블록 제거');
 });
 
-test('B1 ★ 4475 모순 해소 — 예시도 부호(31~99) 예외 허용 + 임의 창작은 금지(할루시 방어 유지)', () => {
+test('retire ★ 4475 device-only — 예시도 예외구·모순 제거', () => {
   const p = step08();
-  assert.match(p, /예시도 부호\(31~99\)는 아래 \[예시도 설계\]에 정의된 정당한 참조번호이므로, 장치 도면에 없더라도 누락하지 말고/, '★ 31~99 예외 허용(누락 금지)');
-  assert.match(p, /어디에도 정의되지 않은 참조번호를 임의로 창작하지 마라/, '★ 할루시네이션 방어(미정의 번호 창작 금지) 유지');
-  assert.ok(p.indexOf('포함된 구성요소만 설명하라. 도면에 없는 참조번호를 임의로 추가하지 마라') < 0, '★ 옛 모순 문구(구성요소만/추가금지) 제거');
+  assert.ok(p.indexOf('예시도 부호(31~99)는 아래 [예시도 설계]에 정의된') < 0, '★ 예시도 예외구 제거');
+  assert.match(p, /예시도\(참조번호 31~99\)는 이 단계에서 다루지 않는다/, '★ 예시도는 별도 단계(step_08c) 명시');
+  assert.match(p, /구성요소\(참조번호 100~\)를 빠짐없이 설명하라/, '장치(100~) 설명 지시 유지');
 });
 
-test('B1 ★ 예시도 설명 강제 — "반드시 빠짐없이 기술"(장치와 동일 수준)', () => {
+test('retire ★ 예시도 설명 강제구 제거(step_08 에서)', () => {
   const p = step08();
-  assert.match(p, /예시도\(도 N\)도 장치 도면과 ★동일한 수준으로★[^]*?반드시 빠짐없이★ 기술하라/, '★ 예시도 설명 강제(누락 금지)');
+  assert.ok(p.indexOf('예시도(도 N)도 장치 도면과 ★동일한 수준으로★') < 0, '★ 예시도 설명 강제구 제거(step_08c 로 이전)');
 });
 
-test('B1 ★ 예시도 없으면 — [예시도 설계] 없음 + 31~99 예외구 없음(graceful, device-only 유지)', () => {
-  setCtx(`conceptDiagramTypes=[]; outputs={step_06:'청구항', step_07:'[장치도면설계] 통신부(110)'};`);
+test('retire ★ 장치 설명 회귀 0 — 장치 프레이밍·구성요소(100~) 유지', () => {
   const p = step08();
-  assert.ok(p.indexOf('[예시도 설계') < 0, '★ 예시도 없으면 데이터 블록 없음');
-  assert.ok(p.indexOf('예시도 부호(31~99)는 아래') < 0, '★ 31~99 예외구 없음');
-  assert.match(p, /구성요소\(참조번호 100~\)를 빠짐없이 설명하라/, '장치 설명 지시는 유지');
-});
-
-test('B1 ★ 장치 설명 회귀 0 — 장치 상세설명 프레이밍·구성요소(100~) 유지', () => {
-  const p = step08();
-  assert.match(p, /이것은 "장치" 상세설명이다/, '장치 상세설명 프레이밍 유지');
+  assert.match(p, /이것은 "장치" 상세설명이다/, '장치 프레이밍 유지');
   assert.match(p, /\[장치 도면 설계\]/, '장치 도면 설계 입력 유지');
   assert.match(p, /구성요소\(참조번호 100~\)를 빠짐없이 설명하라/, '장치 구성요소(100~) 설명 유지');
 });
 
-test('B1 소스 ★ 데이터 라인 step_07c 전문 주입(요약 4484와 별개)', () => {
-  assert.match(PATENT_SRC, /\[장치 도면 설계\] \$\{outputs\.step_07\|\|''\}\$\{outputs\.step_07c\?'\\n\[예시도 설계[\s\S]*?'\+outputs\.step_07c\.slice\(0,1500\):''\}/, '★ 데이터 라인 step_07c 전문');
+test('retire 소스 ★ step_08 데이터 라인에 step_07c 미주입(device-only)', () => {
+  // step_08 의 [장치 도면 설계] 뒤 바로 특허성 검토/발명 — step_07c 주입 없음
+  assert.match(PATENT_SRC, /\[장치 도면 설계\] \$\{outputs\.step_07\|\|''\}\$\{\(outputs\.step_15/, '★ step_08 데이터 라인 step_07c 제거(특허성 검토로 바로 이어짐)');
 });
 
 // ─────────── B2: applyReview 예시도 입력 ───────────
@@ -112,8 +105,7 @@ test('B3 ★ _conceptAlreadyInDesc — Step 8 네이티브 단락(다른 문구)
   assert.equal(call(`_conceptAlreadyInDesc('도 1을 참조하면, 통신부(110)가 동작한다.', ${ct}, 4)`), false, '도4 미기술 → 미인식');
 });
 
-test('B3 ★ 네이티브+reflect 공존 — 이미 네이티브로 쓴 예시도는 reflect 가 중복 APPEND 안 함', () => {
-  // Step 8 이 도4 를 네이티브로 기술한 상태(도5 는 미기술)
+test('B3(B2 은퇴) ★ reflect 가 step_08 에 APPEND 안 함 — 네이티브 유지, 도5 도 reflect 미추가(step_08c 담당)', () => {
   setCtx(`
     diagramData={step_07:[{},{},{}]}; outputTimestamps={step_08:100}; selectedTitle='검색 시스템';
     conceptDiagramTypes=[
@@ -123,10 +115,10 @@ test('B3 ★ 네이티브+reflect 공존 — 이미 네이티브로 쓴 예시�
     outputs={ step_08:'도 1을 참조하면, 통신부(110)가 수신한다. 도 4를 참조하면, 검색창(31)이 상단에 배치되고 결과목록(32)이 표시된다.' };
   `);
   const r = JSON.parse(call('JSON.stringify(reflectConceptsToSpec())'));
-  assert.equal(r.desc, 1, '★ 도5만 신규 반영(도4 네이티브는 skip)');
+  assert.equal(r.desc, 0, '★ desc 0(step_08 APPEND 은퇴)');
   const s8 = call('outputs.step_08');
-  assert.equal((s8.match(/도 4를 참조하면/g) || []).length, 1, '★ 도4 단락 1개(네이티브, reflect 중복 없음)');
-  assert.match(s8, /도 5를 참조하면, 레코드\(41\) 등이 도시되어 있다\./, '도5는 reflect 가 보강');
+  assert.equal((s8.match(/도 4를 참조하면/g) || []).length, 1, '★ 도4 네이티브 그대로(중복 없음)');
+  assert.ok(s8.indexOf('도 5를 참조하면') < 0, '★ 도5 reflect 미추가(step_08 device 영역 미접촉 — 예시도 설명은 step_08c)');
 });
 
 test('B3 소스 ★ 네이티브 인식 분기((도 N 참조하면)+부호 존재)', () => {
@@ -136,9 +128,9 @@ test('B3 소스 ★ 네이티브 인식 분기((도 N 참조하면)+부호 존�
 
 // ─────────── 회귀 ───────────
 
-test('회귀 ★ #210 reflect·A1·③·① 유지 + 예시도 요약 블록(4484) 유지', () => {
-  assert.match(PATENT_SRC, /function reflectConceptsToSpec\(\)\{/, '#210 reflect 유지');
+test('회귀 ★ reflect(step_18 부호)·A1·① 유지 + step_08 예시도 블록(4484) 은퇴', () => {
+  assert.match(PATENT_SRC, /function reflectConceptsToSpec\(\)\{/, 'reflect 함수 유지(step_18 부호)');
   assert.match(PATENT_SRC, /const _openRefl=reflectConceptsToSpec\(\);/, 'A1 openProject reflect 유지');
   assert.match(PATENT_SRC, /\$\{_conceptSvgApplyTitle\(ct\.svgContent, figNum\)\}/, '① 제목 동기화 유지');
-  assert.match(PATENT_SRC, /★★★ 예시도\/개념도 \(참조번호 31~99\) ★★★/, '예시도 요약 블록(4484) 유지');
+  assert.ok(!/★★★ 예시도\/개념도 \(참조번호 31~99\) ★★★/.test(PATENT_SRC), '★ step_08 예시도 요약 블록(4484) 은퇴(제거)');
 });

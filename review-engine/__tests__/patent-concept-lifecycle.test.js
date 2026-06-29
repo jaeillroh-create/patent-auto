@@ -63,13 +63,12 @@ beforeEach(() => { openedLegacyProject(); });
 
 // ─────────── A1: openProject reflect (기존 사건 자동 해소) ───────────
 
-test('A1 ★ 기존 사건 열기(=reflect 호출) → 발명의 설명·부호의 설명에 예시도 자동 반영', () => {
-  // openProject 가 복원 직후 호출하는 그 reflect (생성 없이도 반영)
+test('A1(B2 은퇴) ★ 기존 사건 열기(reflect) → 부호의 설명(step_18)만 반영, step_08 미접촉', () => {
+  // openProject 가 복원 직후 호출하는 reflect — B2 은퇴 후 step_18 부호만(예시도 설명은 step_08c 담당)
   const r = reflect();
-  assert.equal(r.desc, 2, '예시도 2건 발명의 설명 반영');
-  assert.equal(r.ref, 3, '예시도 부호 3건(31·32·41) 반영');
-  assert.match(out('step_08'), /도 4를 참조하면, 검색창\(31\), 결과목록\(32\) 등이 도시되어 있다\./, '★ 도4 예시도 단락');
-  assert.match(out('step_08'), /도 5를 참조하면, 레코드\(41\) 등이 도시되어 있다\./, '★ 도5 예시도 단락');
+  assert.equal(r.desc, 0, '★ desc 0(step_08 APPEND 은퇴)');
+  assert.equal(r.ref, 3, '예시도 부호 3건(31·32·41) 부호의 설명 반영');
+  assert.ok(out('step_08').indexOf('도 4를 참조하면') < 0, '★ step_08 에 예시도 단락 없음(device-only)');
   assert.match(out('step_18'), /검색창 : 31/, '★ 부호 31');
   assert.match(out('step_18'), /레코드 : 41/, '★ 부호 41');
 });
@@ -99,7 +98,7 @@ test('A1 ★ 예시도 없는 사건 → no-op(가드)', () => {
 
 test('A1 소스 ★ openProject 복원 직후 reflect + 가드 재렌더 + 1회 영속', () => {
   assert.match(PATENT_SRC, /if\(conceptDiagramTypes\.length>0\)renderConceptDiagramCards\(\);\s*\n[\s\S]{0,400}?const _openRefl=reflectConceptsToSpec\(\);/, '★ openProject 예시도 복원 직후 reflect');
-  assert.match(PATENT_SRC, /if\(_openRefl\.desc\|\|_openRefl\.ref\)\{[\s\S]*?_cascadeRender\('step_08'[\s\S]*?_cascadeRender\('step_18'[\s\S]*?saveProject\(true\)/, '★ 반영 시 재렌더 + 1회 영속');
+  assert.match(PATENT_SRC, /if\(_openRefl\.ref\)\{[\s\S]*?_cascadeRender\('step_18'[\s\S]*?saveProject\(true\)/, '★ [B2] 부호(step_18) 반영 시 재렌더 + 1회 영속(step_08 미접촉)');
 });
 
 // ─────────── B1: Step 13 입력에 step_07c ───────────

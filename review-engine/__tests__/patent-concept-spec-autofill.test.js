@@ -61,12 +61,12 @@ beforeEach(() => { baseState(); });
 
 // ─────────── A: 자동 반영 ───────────
 
-test('A ★ 예시도 생성 → 발명의 설명(step_08)에 예시도 단락 자동 APPEND', () => {
+test('A(B2 은퇴) ★ reflect 는 발명의 설명(step_08)에 APPEND 안 함 — 예시도 설명은 step_08c 담당', () => {
   const r = reflect();
-  assert.equal(r.desc, 2, '예시도 2건 발명의 설명 반영');
+  assert.equal(r.desc, 0, '★ desc 0(step_08 APPEND 은퇴)');
   const s8 = out('step_08');
-  assert.match(s8, /도 4는 검색 화면을 나타내는 예시도이다\. 도 4를 참조하면, 검색창\(31\), 결과목록\(32\) 등이 도시되어 있다\./, '★ 도 4 예시도 단락(이름(번호))');
-  assert.match(s8, /도 5는 데이터 구조를 나타내는 예시도이다\. 도 5를 참조하면, 레코드\(41\) 등이 도시되어 있다\./, '★ 도 5 예시도 단락');
+  assert.ok(s8.indexOf('도 4를 참조하면') < 0 && s8.indexOf('도 5를 참조하면') < 0, '★ step_08 에 예시도 단락 없음(device-only 유지)');
+  assert.equal(s8, '도 1을 참조하면, 통신부(110)가 데이터를 수신한다. 도 2를 참조하면, 프로세서(120)가 처리한다.', '★ step_08 불변');
 });
 
 test('A ★ 예시도 부호 → 부호의 설명(step_18)에 "이름 : 번호" 자동 APPEND', () => {
@@ -94,16 +94,13 @@ test('A ★ 멱등 — 두 번 반영해도 중복 없음(desc/ref 0, 본문 불
   assert.equal(out('step_18'), s18a, '★ step_18 불변(중복 부호 없음)');
 });
 
-test('A ★ 재생성으로 brief 문구 바뀌어도 같은 도 N 단락 중복 누적 없음(figNum 멱등·본문 보호)', () => {
-  reflect();                                  // 1회 반영(도4·5)
-  const after1 = out('step_08');
-  // 예시도 brief 가 재생성으로 달라진 상황 시뮬레이션(같은 도4)
-  setCtx(`conceptDiagramTypes[0].briefDesc='도 4는 검색 결과 화면을 나타내는 예시도이다.';`);
-  // step_08 은 이전 반영본 유지(자동 반영은 outputs 에 누적됨) — 재반영
+test('A(B2 은퇴) ★ reflect 반복 — step_18 부호 중복 누적 없음(멱등) + step_08 영원히 미변경', () => {
+  reflect();
+  const s18a = out('step_18'), s8a = out('step_08');
   const r2 = reflect();
-  const s8 = out('step_08');
-  assert.equal((s8.match(/도 4를 참조하면/g) || []).length, 1, '★ 도 4 단락 1개만(중복 누적 차단)');
-  assert.equal((s8.match(/도 5를 참조하면/g) || []).length, 1, '도 5 단락도 1개');
+  assert.equal(r2.ref, 0, '★ 2회차 step_18 부호 0(멱등)');
+  assert.equal(out('step_18'), s18a, '★ step_18 불변(중복 부호 없음)');
+  assert.equal(out('step_08'), s8a, '★ step_08 불변(reflect 미접촉)');
 });
 
 test('A ★ step_08 부재 → no-op(추후 생성 시 4359 경로로 포함). step_18 만 있으면 부호만 반영', () => {
@@ -121,18 +118,15 @@ test('A ★ 예시도 0개(생성 전) → 완전 no-op', () => {
   assert.equal(out('step_08'), '장치설명', '본문 불변');
 });
 
-test('A ★ 최신 상세설명 계층(step_13_applied)에도 반영 + step_08 우선순위 보존', () => {
+test('A(B2 은퇴) ★ reflect 는 상세설명 계층(step_08·step_09·step_13_applied) 미변경', () => {
   setCtx(`
     outputs={ step_08:'장치 상세설명 본문', step_13_applied:'검토반영 상세설명 본문', step_18:'통신부 : 110' };
     outputTimestamps={ step_08:100, step_13_applied:200 };
   `);
   const r = reflect();
-  assert.ok(r.desc >= 1, '반영됨');
-  assert.match(out('step_13_applied'), /도 4를 참조하면/, '★ 최신 계층(step_13_applied)에 예시도 반영');
-  assert.match(out('step_08'), /도 4를 참조하면/, '★ step_08 계층에도 반영(일관)');
-  // 우선순위 보존: step_08 timestamp 가 step_13_applied 를 넘지 않음(getLatestDescription 이 여전히 step_13_applied)
-  const latest = call('getLatestDescription()');
-  assert.match(latest, /검토반영 상세설명 본문/, '★ getLatestDescription 여전히 step_13_applied(우선순위 보존)');
+  assert.equal(r.desc, 0, '★ desc 0(상세설명 계층 미접촉)');
+  assert.equal(out('step_08'), '장치 상세설명 본문', '★ step_08 불변');
+  assert.equal(out('step_13_applied'), '검토반영 상세설명 본문', '★ step_13_applied 불변');
 });
 
 // ─────────── B: 라벨 폴백 ───────────
@@ -179,18 +173,17 @@ test('C ★ 미생성 예시도 혼재 — 생성분만 getAutoFigNums 순서로
   assert.equal(gen[1].figNum, 5, "★ user_scenario=도5(과거 버그: indexOf=2→'?')");
 });
 
-test('C ★ 정합 번호로 발명의 설명 단락 생성(미생성 혼재에도 정확)', () => {
+test('C(B2) ★ 미생성 혼재 — reflect step_18 부호가 정합 번호의 생성 예시도만 반영', () => {
   setCtx(`
     diagramData={step_07:[{},{}]}; outputTimestamps={};
     conceptDiagramTypes=[
       {type:'ui_screen'},
       {type:'data_structure',svgContent:'<svg></svg>',briefDesc:'도 3은 구조이다.',refMap:[{signNumber:'61',label:'레코드'}]}
     ];
-    outputs={ step_08:'장치 설명' };
+    outputs={ step_18:'통신부 : 110' };
   `);
   reflect();
-  assert.match(out('step_08'), /도 3을 참조하면, 레코드\(61\) 등이 도시되어 있다\./, '★ 도3(정합) 단락');
-  assert.ok(out('step_08').indexOf('도 ?') < 0, "★ '도 ?' 오정렬 없음");
+  assert.match(out('step_18'), /레코드 : 61/, '★ 생성된 예시도 부호만 정합 반영(부호의 설명)');
 });
 
 // ─────────── 소스 정합 ───────────
@@ -204,11 +197,11 @@ test('소스 ★ A — runConceptDiagramStep·cascade 둘 다 reflectConceptsToS
   assert.ok((PATENT_SRC.match(/invalidateDownstream\('step_07c'\)/g) || []).length <= 1, '★ step_07c 무효화는 ③ 도번호 재배치(invalidateFigureDependents)에만');
 });
 
-test('소스 ★ A — APPEND(덮어쓰기 X)·멱등 가드', () => {
-  assert.match(PATENT_SRC, /body=body\.replace\(\/\\s\*\$\/,''\)\+'\\n\\n'\+_buildConceptSpecParagraph/, '★ step_08 APPEND');
-  assert.match(PATENT_SRC, /if\(_conceptAlreadyInDesc\(body, g\.ct, g\.figNum\)\|\|_conceptAlreadyInDesc\(c8c, g\.ct, g\.figNum\)\) return;/, '★ 멱등 가드(figNum 기준, step_08/step_08c 어디든 반영 시 skip)');
-  assert.match(PATENT_SRC, /function _conceptAlreadyInDesc\(text, ct, figNum\)\{/, '★ figNum 멱등 헬퍼(중복 누적 차단)');
-  assert.match(PATENT_SRC, /if\(L!=='step_08'\)markOutputTimestamp\(L\);/, '★ step_08 timestamp 미변경(우선순위 보존)');
+test('소스 ★ B2 은퇴 — reflect step_08 APPEND 제거, step_18 부호만(desc 항상 0)', () => {
+  // step_08 description APPEND(_buildConceptSpecParagraph)가 reflect 본문에서 제거됨
+  assert.ok(!/body=body\.replace\(\/\\s\*\$\/,''\)\+'\\n\\n'\+_buildConceptSpecParagraph/.test(PATENT_SRC), '★ step_08 APPEND 제거(은퇴)');
+  assert.match(PATENT_SRC, /\[B2\] reflect 은퇴/, '★ 은퇴 명문화');
+  assert.match(PATENT_SRC, /function reflectConceptsToSpec\(\)\{[\s\S]*?outputs\.step_18=s18[\s\S]*?return \{desc:0, ref:refAdded\}/, '★ reflect=step_18 부호만, desc 0');
 });
 
 test('소스 ★ B — 라벨 폴백 헬퍼 + _buildConceptOutputText 적용', () => {
@@ -217,10 +210,10 @@ test('소스 ★ B — 라벨 폴백 헬퍼 + _buildConceptOutputText 적용', (
   assert.match(PATENT_SRC, /const refs=_conceptRefPairs\(ct\)\.map\(p=>`\$\{p\.name\}\(\$\{p\.num\}\)`\)/, '★ _buildConceptOutputText 폴백 적용');
 });
 
-test('소스 ★ C — full 인덱스 접근 제거(filter 순서 인덱스 사용)', () => {
-  assert.ok(!/_conceptFigNums\[conceptDiagramTypes\.indexOf\(ct\)\]/.test(PATENT_SRC), '★ full indexOf 접근(버그) 제거');
-  assert.ok(!/_conceptFigNums\.filter\(\(_,i\)=>conceptDiagramTypes\[i\]\?\.svgContent\)/.test(PATENT_SRC), '★ full 인덱스 필터(버그) 제거');
-  assert.match(PATENT_SRC, /\.filter\(ct=>ct\.svgContent\)\.map\(\(ct,fi\)=>\{const fn=_conceptFigNums\[fi\]/, '★ step_08 블록 filter 순서 인덱스(fi)');
+test('소스 ★ C — full 인덱스 접근(버그) 제거 유지 + _generatedConceptsWithNums 정합', () => {
+  assert.ok(!/_conceptFigNums\[conceptDiagramTypes\.indexOf\(ct\)\]/.test(PATENT_SRC), '★ full indexOf 접근(버그) 없음');
+  assert.ok(!/_conceptFigNums\.filter\(\(_,i\)=>conceptDiagramTypes\[i\]\?\.svgContent\)/.test(PATENT_SRC), '★ full 인덱스 필터(버그) 없음');
+  assert.match(PATENT_SRC, /function _generatedConceptsWithNums\(\)\{[\s\S]*?\.filter\(ct=>ct\.svgContent\)\.map\(\(ct,fi\)=>/, '★ 생성분 filter 순서 인덱스(fi) 정합(step_08c·reflect 공용)');
 });
 
 test('소스 ★ 회귀 0 — step_18 _refSources step_07c 유지, ① 제목 동기화 유지', () => {
