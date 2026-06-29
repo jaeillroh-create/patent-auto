@@ -1065,7 +1065,7 @@
           </div>
           <!-- Step 8c: 예시도 상세설명 (장치 상세설명과 분리 — 단일호출 과부하 방지) -->
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border)">
-            <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:6px">예시도의 구성이 장치 구성(프로세서 등)에 의해 어떻게 동작·구현되는지 별도로 상세 기술합니다.</div>
+            <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:6px">※ Step 8 "상세설명 생성" 시 예시도 설명도 장치 설명 직후 자동 생성됩니다. 이 버튼은 예시도 설명만 따로 재생성하는 보조 버튼입니다(장치 상세설명 선행 필요).</div>
             <button class="btn btn-outline btn-full" id="btnStep08c" onclick="runConceptDescStep()"><span class="ico" data-icon="edit"></span> 예시도 상세설명 생성</button>
           </div>
           <div id="progressStep08c" style="margin:8px 0"></div>
@@ -1105,7 +1105,7 @@
             </div>
           </div>
           <div id="progressStep08" style="margin:8px 0"></div>
-          <button class="btn btn-primary btn-full" id="btnStep08" onclick="runLongStep('step_08')"><span class="ico" data-icon="robot"></span> 상세설명 생성</button>
+          <button class="btn btn-primary btn-full" id="btnStep08" onclick="runImplementationDesc()"><span class="ico" data-icon="robot"></span> 상세설명 생성 (장치+예시도)</button>
         </div>
 
         <!-- Step 9 수학식 -->
@@ -1382,7 +1382,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260615e"></script>
-<script src="patent/patent.js?v=20260657"></script>
+<script src="patent/patent.js?v=20260658"></script>
 <script src="patent/chat.js?v=20260612"></script>
 <script src="opinion/opinion.js?v=20260637"></script>
 <script>

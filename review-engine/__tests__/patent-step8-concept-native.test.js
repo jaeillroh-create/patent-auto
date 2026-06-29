@@ -87,11 +87,14 @@ test('retire 소스 ★ step_08 데이터 라인에 step_07c 미주입(device-on
   assert.match(PATENT_SRC, /\[장치 도면 설계\] \$\{outputs\.step_07\|\|''\}\$\{\(outputs\.step_15/, '★ step_08 데이터 라인 step_07c 제거(특허성 검토로 바로 이어짐)');
 });
 
-// ─────────── B2: applyReview 예시도 입력 ───────────
+// ─────────── B2 은퇴(T3): applyReview 예시도 짧은 stub 주입 제거 ───────────
+// ★ #212 때 추가했던 applyReview 예시도 ADD_AFTER 주입이 "짧은 stub"(④)의 원인 → T3에서 은퇴.
+//   예시도 설명은 step_08c(분리)가 담당하고, 검토 반영은 장치 본문에 예시도를 끼워넣지 않는다.
 
-test('B2 소스 ★ applyReview 편집지시 입력에 [예시도 설계](step_07c) 추가', () => {
-  assert.match(PATENT_SRC, /\$\{outputs\.step_07c\?'\\n\[예시도 설계 — 참조번호 31~99, 장치\(100~\)와 별개\] '\+outputs\.step_07c\.slice\(0,1200\)/, '★ applyReview step_07c 입력');
-  assert.match(PATENT_SRC, /검토가 예시도\(도 N\) 설명\/부호 누락을 지적하면[^]*?ADD_AFTER 로 추가하라/, '★ 예시도 단락 ADD_AFTER 지시');
+test('B2(T3 은퇴) 소스 ★ applyReview — step_07c 예시도 ADD_AFTER 주입 제거 + 장치 끼워넣기 금지', () => {
+  assert.ok(!/검토가 예시도\(도 N\) 설명\/부호 누락을 지적하면[\s\S]*?ADD_AFTER 로 추가하라/.test(PATENT_SRC), '★ 예시도 ADD_AFTER 주입 제거(짧은 stub 은퇴)');
+  assert.ok(!/\[예시도 설계 — 참조번호 31~99, 장치\(100~\)와 별개\] '\+outputs\.step_07c\.slice\(0,1200\)/.test(PATENT_SRC), '★ applyReview step_07c brief 주입 제거');
+  assert.match(PATENT_SRC, /이것은 ★장치★ 상세설명 편집이다\. 예시도\(도 N[\s\S]*?장치 상세설명에 추가하지 마라/, '★ 장치 본문 예시도 끼워넣기 금지(T3)');
 });
 
 // ─────────── B3: reflect 멱등 네이티브 인식 ───────────
