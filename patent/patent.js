@@ -2483,7 +2483,7 @@ const STEP_DEPENDENCIES={
   step_10:{MUST:['step_11','step_12','step_17','step_20'],SHOULD:['step_14','step_15','step_18']}, // 방법청구 → 방법도면,상세,해결수단,기록매체
   step_07:{MUST:['step_08','step_18'],SHOULD:['step_09','step_13']},     // 장치도면 → 상세설명, 부호
   step_07c:{MUST:['step_08','step_08c','step_18'],SHOULD:[]},            // 예시도 → 장치상세, 예시도상세, 부호
-  step_08:{MUST:['step_09','step_13'],SHOULD:['step_12','step_14','step_15']}, // 상세설명 → 수학식, 검토
+  step_08:{MUST:['step_08c','step_09','step_13'],SHOULD:['step_12','step_14','step_15']}, // ★ [T2] 상세설명 → 예시도상세(전제 순서: 장치→예시), 수학식, 검토
   step_08c:{MUST:[],SHOULD:['step_18']},                                 // ★ 예시도 상세설명(분리) → 부호의 설명
   step_09:{MUST:[],SHOULD:['step_13']},                    // 수학식 → 검토
   step_11:{MUST:['step_12','step_18'],SHOULD:['step_13']},  // 방법도면 → 방법상세, 부호
@@ -2806,6 +2806,7 @@ async function runCascadeRegeneration(sourceStep){
       else if(runner==='runDiagramStep')await _cascadeRunDiagram(sid);
       else if(runner==='runMathInsertion')await _cascadeRunMath();
       else if(runner==='runConceptDiagramStep'){if(conceptDiagramTypes.length)await _cascadeRunConceptDiagram();}
+      else if(runner==='runConceptDescStep'){if(conceptDiagramTypes.some(ct=>ct.svgContent)&&outputs.step_08)await _conceptDescCore();}   // ★ [T4] step_08c 전용 경로(장치 전제) — 종전 _cascadeRunShort 폴백 갭 해소(T2 간선으로 step_08 선행 보장)
       else await _cascadeRunShort(sid);
 
       completed++;
@@ -4798,7 +4799,7 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
 
 [12] ★ 예시도/개념도 정합 검토 (v15 — 예시도 lifecycle)
 - [예시도/개념도 설계]가 제공된 경우에만 검토하라(없으면 "해당 없음"으로 표기).
-- 각 예시도(도 N, 참조번호 31~99)가 상세설명에 "도 N을 참조하면, …" 형태로 기술되어 있는지 확인하라. 기재 누락 시 지적하고, 추가할 문장(도 N 소개 + 예시도 부호 설명)을 제시하라.
+- 각 예시도(도 N, 참조번호 31~99)가 ★[예시도 상세설명]★에 "도 N을 참조하면, …" 형태로 기술되어 있는지 확인하라(예시도 설명은 [상세설명](장치)이 아니라 별도 [예시도 상세설명]이 담당한다). 누락·부실 시 지적하되, ⛔ 예시도 단락을 [상세설명](장치)에 추가하라고 제안하지 마라 — 장치 상세설명에 예시도를 끼워넣는 것은 금지이며, 예시도 보완은 별도 단계(예시도 상세설명) 소관이다.
 - 예시도 참조번호(31~99)가 부호의 설명에 "명칭 : 번호"로 빠짐없이 기재되어 있는지 확인하라. 누락 시 지적하라.
 - 예시도 부호의 명칭이 상세설명·부호의 설명에서 동일하게 일관되는지 확인하라(혼용 지적).
 
@@ -4809,7 +4810,7 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
 
 마지막에 전체 요약 (보완 우선순위 포함)
 
-${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}${getLatestMethodDescription()?'\n[방법 상세설명] '+getLatestMethodDescription().slice(0,3000):''}\n[도면 설계] ${(outputs.step_07||'').slice(0,2000)}${outputs.step_07c?'\n[예시도/개념도 설계 — 참조번호 31~99, 장치(100~)와 별개] '+outputs.step_07c.slice(0,1500):''}\n[원본 발명 내용] ${inv.slice(0,3000)}`;}
+${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}${getLatestMethodDescription()?'\n[방법 상세설명] '+getLatestMethodDescription().slice(0,3000):''}\n[도면 설계] ${(outputs.step_07||'').slice(0,2000)}${outputs.step_07c?'\n[예시도/개념도 설계 — 참조번호 31~99, 장치(100~)와 별개] '+outputs.step_07c.slice(0,1500):''}${outputs.step_08c?'\n[예시도 상세설명 — 도 N별 본문(별도 단계에서 작성됨, 31~99 기준)] '+outputs.step_08c.slice(0,3000):''}\n[원본 발명 내용] ${inv.slice(0,3000)}`;}
 
     case 'step_14':return `대안 청구항을 작성하라. 원본 청구항의 핵심 기술적 구성은 그대로 유지하되, 표현을 달리하라.
 
@@ -4946,7 +4947,7 @@ function checkDependency(s){
   // v5.6: 방법 청구항 비활성 시 관련 스텝 차단
   const methodSteps=['step_10','step_11','step_12','step_20'];
   if(!includeMethodClaims&&methodSteps.includes(s)){return '방법 청구항이 비활성화되어 있습니다';}
-  const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저',step_20:()=>outputs.step_10?null:'방법 청구항 먼저'};return d[s]?d[s]():null;
+  const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_08c:()=>outputs.step_08?null:'장치 상세설명(Step 8) 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저',step_20:()=>outputs.step_10?null:'방법 청구항 먼저'};return d[s]?d[s]():null;
 }
 async function runStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13',step_14:'btnStep14',step_15:'btnStep15',step_20:'btnStep20'},bid=bm[sid];setGlobalProcessing(true);loadingState[sid]=true;if(bid)App.setButtonLoading(bid,true);
   try{
@@ -5035,7 +5036,9 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     // [C1 자동 연쇄] SCOPE_GUARDED 스텝 생성 후 자동 검증
     if(inventionScope?.locked_at&&(SCOPE_GUARDED_TEXT_STEPS.includes(sid)||SCOPE_GUARDED_MERMAID_STEPS.includes(sid))){try{await runScopeCheck(sid);}catch(e2){console.warn('[C1] runScopeCheck 자동 실행 실패:',sid,e2.message);}}
   }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
-async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';setGlobalProcessing(true);loadingState[sid]=true;App.setButtonLoading(bid,true);
+async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);try{await _longStepCore(sid);}finally{setGlobalProcessing(false);}}
+// ★ [T1] 가드/globalProcessing 없는 실행 코어 — 통합 핸들러(runImplementationDesc)가 device→concept 순차 호출 시 중첩 early-return 방지(진단 경고 반영).
+async function _longStepCore(sid){const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';loadingState[sid]=true;App.setButtonLoading(bid,true);
   // v6.0: 부분 수정 모드 표시
   const _hasCmd=!!getStepUserCommand(sid),_hasOut=!!outputs[sid];
   const _modeLabel=(_hasCmd&&_hasOut)?'부분 수정':'생성';
@@ -5064,14 +5067,21 @@ async function runLongStep(sid){if(globalProcessing)return;const dep=checkDepend
     outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
     // [C1 자동 연쇄] SCOPE_GUARDED 스텝 생성 후 자동 검증
     if(inventionScope?.locked_at&&(SCOPE_GUARDED_TEXT_STEPS.includes(sid)||SCOPE_GUARDED_MERMAID_STEPS.includes(sid))){try{await runScopeCheck(sid);}catch(e2){console.warn('[C1] runScopeCheck 자동 실행 실패:',sid,e2.message);}}
-  }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);setGlobalProcessing(false);}}
+  }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);}}
 // ★ 예시도 상세설명(step_08c) 전용 생성 — runLongStep 패턴 미러(방법 step_12 선례). 장치 메가룰 없는 focused 호출 → 예시도 누락 구조 차단.
 //   ★ 장치(step_08)·방법 sanitizer(sanitizeMethodFromDevice/DescFigureRefs)는 호출하지 않는다(예시도 도 번호가 deviceMax 초과라 삭제됨 — #213).
+// ★ 예시도 상세설명(step_08c) — 보조 버튼(btnStep08c) 직접 실행. ★ [T2] 장치 상세설명(step_08) 선행 요구(전제: 예시도가 장치 구성에 의해 동작·구현됨을 기술).
 async function runConceptDescStep(){
   if(globalProcessing)return;
   if(!conceptDiagramTypes.some(ct=>ct.svgContent)){App.showToast('먼저 예시도(Step 7c)를 생성하세요','error');return;}
   if(!outputs.step_06){App.showToast('장치 청구항(Step 6)을 먼저 생성하세요','error');return;}
-  setGlobalProcessing(true);loadingState.step_08c=true;App.setButtonLoading('btnStep08c',true);
+  if(!outputs.step_08){App.showToast('장치 상세설명(Step 8)을 먼저 생성하세요 — 예시도 설명은 장치 설명을 전제로 합니다','error');return;}   // ★ [T2] 순서 강제(장치→예시)
+  setGlobalProcessing(true);
+  try{await _conceptDescCore();}finally{setGlobalProcessing(false);}
+}
+// ★ [T1] 가드/globalProcessing 없는 실행 코어 — runImplementationDesc 가 장치 직후 순차 호출(중첩 early-return 방지).
+async function _conceptDescCore(){
+  loadingState.step_08c=true;App.setButtonLoading('btnStep08c',true);
   const pid='progressStep08c';
   try{
     let t=await App.callClaudeWithContinuation(buildPrompt('step_08c'),pid);
@@ -5083,7 +5093,20 @@ async function runConceptDescStep(){
     saveProject(true);
     App.showToast(`예시도 상세설명 완료 [${App.getModelConfig().label}]`);
   }catch(e){App.showToast(e.message,'error');}
-  finally{loadingState.step_08c=false;App.setButtonLoading('btnStep08c',false);App.clearProgress(pid);setGlobalProcessing(false);}
+  finally{loadingState.step_08c=false;App.setButtonLoading('btnStep08c',false);App.clearProgress(pid);}
+}
+// ★ [T1] 통합 상세설명 핸들러 — "상세설명 생성" 한 버튼: 장치(step_08) 완결 → 예시도(step_08c) 순차(전제 기반).
+//   예시도(step_07c svgContent) 없으면 장치(step_08)만. globalProcessing 1회 점유(코어는 미점유 → 중첩 안 막힘).
+async function runImplementationDesc(){
+  if(globalProcessing)return;
+  const dep=checkDependency('step_08');if(dep){App.showToast(dep,'error');return;}
+  setGlobalProcessing(true);
+  try{
+    await _longStepCore('step_08');                                                  // ① 장치 상세설명 완결
+    if(outputs.step_08 && outputs.step_06 && conceptDiagramTypes.some(ct=>ct.svgContent)){
+      await _conceptDescCore();                                                       // ② 예시도 상세설명(장치 전제)
+    }
+  }finally{setGlobalProcessing(false);}
 }
 async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{
   const TARGET_MATH_COUNT=5;
@@ -5526,7 +5549,8 @@ REASON: ...
 
 [발명의 명칭] ${selectedTitle}
 [검토 결과] ${filterReviewForScope(outputs.step_13,'device')}
-[청구항 구성요소 참조] ${extractClaimComponents(outputs.step_06||'')}${outputs.step_07c?'\n[예시도 설계 — 참조번호 31~99, 장치(100~)와 별개] '+outputs.step_07c.slice(0,1200)+'\n★ 검토가 예시도(도 N) 설명/부호 누락을 지적하면, 위 [예시도 설계]의 이름(번호)을 근거로 "도 N을 참조하면, …" 예시도 단락을 ADD_AFTER 로 추가하라.':''}
+[청구항 구성요소 참조] ${extractClaimComponents(outputs.step_06||'')}
+⛔ 이것은 ★장치★ 상세설명 편집이다. 예시도(도 N, 참조번호 31~99) 단락을 장치 상세설명에 추가하지 마라 — 예시도 설명은 별도 단계(예시도 상세설명)가 담당한다. 검토가 예시도 설명/부호 누락을 지적해도, 장치 본문에 "도 N을 참조하면, …" 예시도 단락을 끼워넣는 편집(ADD_AFTER 등)을 생성하지 마라(짧은 stub 끼워넣기 금지).
 [현재 상세설명]
 ${baseDesc}${_maybeScopeGuard('step_13_applied','text')}`);
 
