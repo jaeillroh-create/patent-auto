@@ -3183,9 +3183,13 @@ function buildImplementationBody(){
   const device=getLatestDescription()||'';
   const concept=getLatestConceptDescription()||'';
   const method=getLatestMethodDescription()||'';
-  // ★ [T3] 합본 중복 제거 — 예시도가 device(step_08 합본)에 이미 있으면 별도 추가 금지(중복 0).
+  // ★ [T3/math-dup] 합본 중복 제거 — 예시도가 device(step_08 합본)에 이미 있으면 별도 추가 금지(중복 0).
   //   없으면(구 사건·미합본) 보강하여 예시도 누락 방지. 합본 정본은 device, step_08c 는 source.
-  const conceptIn = concept && device && device.indexOf(concept.slice(0,40))>=0;
+  //   ★ 견고화: 단순 slice(0,40) 연속 매칭은 수학식(step_09)이 예시도 시작부에 【수학식】을 끼우면 깨져
+  //     conceptIn=false → 예시도 중복. stripMathBlocks(수학식 제거)+공백 전부 제거 후 첫 N자 비교로 연속성 복원.
+  const _normForDedup = s => stripMathBlocks(String(s||'')).replace(/\s+/g,'');
+  const _devN=_normForDedup(device), _conN=_normForDedup(concept);
+  const conceptIn = _conN.length>0 && _devN.indexOf(_conN.slice(0,30))>=0;
   const core=[device, conceptIn?'':concept, method].filter(Boolean).join('\n\n');
   if(!core)return '';
   if(hasBoilerplate(core))return core;   // 수동 정형문 삽입 케이스 → 이중 삽입 방지(그대로)
