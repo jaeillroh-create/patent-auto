@@ -218,5 +218,5 @@ test('소스 ★ C — full 인덱스 접근(버그) 제거 유지 + _generatedC
 
 test('소스 ★ 회귀 0 — step_18 _refSources step_07c 유지, ① 제목 동기화 유지', () => {
   assert.match(PATENT_SRC, /_refSources=\[outputs\.step_06,[^\]]*outputs\.step_07c\]/, 'step_18 부호수집 step_07c 포함 유지');
-  assert.match(PATENT_SRC, /\$\{_conceptSvgApplyTitle\(ct\.svgContent, figNum\)\}/, '① 제목 동기화 유지');
+  assert.match(PATENT_SRC, /_conceptSvgApplyTitle\(_conceptSvgApplyRefNums\(/, '① 제목 동기화 유지(통합 헬퍼 _conceptSvgForDisplay)');
 });

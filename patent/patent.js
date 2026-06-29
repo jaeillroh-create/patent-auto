@@ -115,6 +115,8 @@ function _parseConceptRefMap(segment, svgText){
   }
   // REF_MAP 누락분은 SVG의 (번호)로 보강(라벨 없이). ★ 31~99 통일(이전 ≤79 버그 수정).
   [...String(svgText||'').matchAll(/\((\d{2,3})\)/g)].forEach(mm=>{const n=parseInt(mm[1]);if(n>=31&&n<=99&&!seen.has(n)){seen.add(n);out.push({signNumber:String(n),label:''});}});
+  // ★ [T4] 맨숫자(리더라인+숫자, 생성 규칙 5981) 폴백 — 괄호 없이 그려진 부호도 수집(SVG 텍스트노드 >NN<).
+  [...String(svgText||'').matchAll(/>\s*(\d{2,3})\s*</g)].forEach(mm=>{const n=parseInt(mm[1]);if(n>=31&&n<=99&&!seen.has(n)){seen.add(n);out.push({signNumber:String(n),label:''});}});
   return out.sort((a,b)=>parseInt(a.signNumber)-parseInt(b.signNumber));
 }
 function _parseConceptResult(fullText, conceptTypes, figNums){
@@ -164,12 +166,31 @@ function _conceptRefNumFor(figNum, idx, total){
   const base=(N>=10 || (total||0)>9) ? N*100 : N*10;   // 5xx vs 5x
   return String(base+(idx+1));
 }
-// ★ SVG 의 (old)→(new) 식별번호 치환 — 괄호 구분(좌표 오염 회피) + 단일 패스 콜백(원본 매치 기준 → 사이클 안전·멱등). 제목 SoT(_conceptSvgApplyTitle) 패턴 이식.
-function _conceptSvgApplyRefNums(svgStr, oldToNew){
-  return String(svgStr||'').replace(/\((\d{2,4})\)/g,(m,n)=>oldToNew[n]?'('+oldToNew[n]+')':m);
+// ★ [render 복구] SVG 참조번호(맨숫자 텍스트노드 >NN< + 괄호 (NN))를 도 번호 기반으로 (재)표기 — render/다운로드 시점 적용(제목 _conceptSvgApplyTitle 패턴 미러).
+//   ★ 위치(rank) 기반: 현재 SVG 값과 무관하게 정렬 순위 i → _conceptRefNumFor(figNum,i,total) → 기존 사건(31 박힘)도 무재생성 복구·③ 추종·멱등.
+//   ★ 좌표·속성(x=,y=,d=,viewBox,font-size,stroke-width)·제목【도 N】 미접촉 — 텍스트노드 내용(>NN<)·괄호만 치환(="..." 좌표는 미일치).
+function _conceptSvgApplyRefNums(svgStr, figNum, total){
+  var s=String(svgStr||'');
+  if(!/<svg\b/i.test(s)) return s;
+  var vals=new Set();
+  s.replace(/>\s*(\d{2,4})\s*</g,function(m,num){ vals.add(parseInt(num)); return m; });   // 텍스트노드 숫자(생성 규칙: 리더라인+숫자=맨숫자). 좌표/속성은 ="..." 라 >NN< 미일치
+  s.replace(/\((\d{2,4})\)/g,function(m,num){ vals.add(parseInt(num)); return m; });        // 괄호형 혼용 대비
+  if(!vals.size) return s;
+  var sorted=[...vals].sort(function(a,b){ return a-b; });   // refMap 도 signNumber 정렬(파서) → rank 정합
+  var n=total||sorted.length;
+  var map={};
+  sorted.forEach(function(v,i){ map[String(v)]=_conceptRefNumFor(figNum,i,n); });
+  s=s.replace(/>(\s*)(\d{2,4})(\s*)</g,function(m,a,num,b){ return map[num]?'>'+a+map[num]+b+'<':m; });   // 콜백=원본 매치 기준 → 사이클 안전·멱등
+  s=s.replace(/\((\d{2,4})\)/g,function(m,num){ return map[num]?'('+map[num]+')':m; });
+  return s;
 }
-// ★ [SoT] 생성된 예시도 각각의 식별번호를 도 번호(getAutoFigNums) 기반으로 (재)배정 — refMap·svgContent·refNums·step_07c 일관.
-//   생성 직후·③ override 시 호출. 멱등(이미 figN 기반이면 no-op). step_08c/step_18 은 refMap 을 읽으므로 자동 정합(5소비처).
+// ★ 렌더/다운로드용 예시도 SVG — 식별번호(도 번호 기반, render 복구) + 제목(SoT) 동시 적용. svgContent 원본 불변(표시 시 파생 — 제목 패턴).
+function _conceptSvgForDisplay(ct, figNum){
+  var total=((ct&&ct.refMap)||[]).length;
+  return _conceptSvgApplyTitle(_conceptSvgApplyRefNums((ct&&ct.svgContent)||'', figNum, total), figNum);
+}
+// ★ [SoT] 생성된 예시도 각각의 식별번호(refMap)를 도 번호(getAutoFigNums) 기반으로 (재)배정 — refMap·refNums·step_07c(텍스트) 일관.
+//   생성 직후·③ override 시 호출. 멱등. step_08c/step_18 은 refMap 을 읽으므로 자동 정합. ★ SVG 그림은 render 시 _conceptSvgApplyRefNums 로 복구(맨숫자·기존 사건 포함) — 물리치환 의존 제거.
 function _syncConceptRefNums(){
   const figs=getAutoFigNums('step_07c');
   const placed=conceptDiagramTypes.filter(ct=>ct.svgContent);
@@ -181,8 +202,7 @@ function _syncConceptRefNums(){
     rm.forEach((r,j)=>{oldToNew[String(r.signNumber)]=_conceptRefNumFor(figNum,j,rm.length);});
     if(!rm.some(r=>oldToNew[String(r.signNumber)]!==String(r.signNumber))) return;   // 멱등: 이미 figN 기반이면 skip
     changed=true;
-    ct.svgContent=_conceptSvgApplyRefNums(ct.svgContent, oldToNew);
-    rm.forEach(r=>{r.signNumber=oldToNew[String(r.signNumber)]||r.signNumber;});
+    rm.forEach(r=>{r.signNumber=oldToNew[String(r.signNumber)]||r.signNumber;});   // refMap(텍스트 소비처)만 재배정 — SVG 는 render 복구
     ct.refNums=rm.map(r=>parseInt(r.signNumber));
   });
   if(changed && placed.length) outputs.step_07c=_buildConceptOutputText(placed, figs);   // 공유 텍스트(step_18·step_13 입력) 재구성
@@ -2352,7 +2372,7 @@ function renderConceptDiagramCards(){
         <span>도 ${figNum} — ${App.escapeHtml(typeDef.label)}</span>
         <button class="btn btn-ghost btn-sm" onclick="Patent.refineConceptDiagramByNum(${figNum})" title="비전 정련 — 선 겹침/배치 개선(청구 구성·부호 내용 유지)"><span class="ico" data-icon="wand" data-size="12"></span> 정련</button>
       </div>
-      <div style="border:1px solid var(--color-border);border-radius:8px;padding:12px;background:#fff;overflow:auto;max-height:500px">${_conceptSvgApplyTitle(ct.svgContent, figNum)}</div>
+      <div style="border:1px solid var(--color-border);border-radius:8px;padding:12px;background:#fff;overflow:auto;max-height:500px">${_conceptSvgForDisplay(ct, figNum)}</div>
     </div>`;
   }).filter(Boolean).join('');
   const dl=document.getElementById('conceptDiagramDownload');
@@ -14030,7 +14050,7 @@ function downloadConceptPptx(){
     }
     const ct=generated[idx];
     const figNum=cFigNums[conceptDiagramTypes.indexOf(ct)]||idx+1;
-    const svgStr=_conceptSvgApplyTitle(ct.svgContent, figNum); // ★ ① 다운로드 제목도 SoT(figNum) 동기화
+    const svgStr=_conceptSvgForDisplay(ct, figNum); // ★ ① 다운로드 제목(SoT)+식별번호(도 번호 기반) 동기화
 
     // SVG→Canvas→PNG base64→PPTX slide
     const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
@@ -14083,7 +14103,7 @@ function downloadConceptImages(format='jpeg'){
     const ct=generated[idx];
     const figNum=cFigNums[conceptDiagramTypes.indexOf(ct)]||idx+1;
     // SVG→Canvas→Image
-    const svgStr=_conceptSvgApplyTitle(ct.svgContent, figNum); // ★ ① 다운로드 제목도 SoT(figNum) 동기화
+    const svgStr=_conceptSvgForDisplay(ct, figNum); // ★ ① 다운로드 제목(SoT)+식별번호(도 번호 기반) 동기화
     const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
     const url=URL.createObjectURL(blob);
     const img=new Image();

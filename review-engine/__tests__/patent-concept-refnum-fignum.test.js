@@ -44,7 +44,8 @@ const setCtx = (s) => vm.runInContext(s, sandbox);
 // 장치 4도(도1~4) → 예시도는 도 5부터. refMap 은 LLM 산출분(31,32) 시뮬레이션.
 function ctx(devFigs = 4, elems = 2) {
   const rm = Array.from({ length: elems }, (_, j) => `{signNumber:'${31 + j}',label:'요소${j + 1}'}`).join(',');
-  const svgTexts = Array.from({ length: elems }, (_, j) => `<text>(${31 + j}) 요소${j + 1}</text>`).join('');
+  // ★ 생성 규칙(5981) = 리더라인 + 맨숫자 → SVG 는 <text x=.. y=..>NN</text> (좌표는 속성). 괄호 아님.
+  const svgTexts = Array.from({ length: elems }, (_, j) => `<text x="${100 + j * 20}" y="60">${31 + j}</text>`).join('');
   setCtx(`
     selectedTitle='검색 시스템'; diagramData={step_07:Array(${devFigs}).fill({})}; outputTimestamps={}; requiredFigures=[];
     conceptDiagramTypes=[{type:'ui_screen', svgContent:'<svg>${svgTexts}</svg>', refMap:[${rm}], refNums:[${Array.from({length:elems},(_,j)=>31+j).join(',')}], figNumOverride:0}];
@@ -63,13 +64,17 @@ test('T1 ★ _conceptRefNumFor — 5x 기본 / 요소>9·도10~ 는 5xx', () => 
   assert.equal(call('_conceptRefNumFor(10,0,2)'), '1001', '★ 2자리 도번호(도10) → 5xx(1001, 장치 100~ 회피)');
 });
 
-test('T1 ★ _syncConceptRefNums — 도 5 예시도 refMap·SVG 가 51,52 로(31,32 아님)', () => {
+test('T1 ★ _syncConceptRefNums(refMap) + render(SVG) — 51,52 (맨숫자)', () => {
   call('_syncConceptRefNums()');
   const rm = JSON.parse(call('JSON.stringify(conceptDiagramTypes[0].refMap)'));
-  assert.deepEqual(rm.map(r => r.signNumber), ['51', '52'], '★ refMap 51,52 (도5→5x)');
-  assert.match(call('conceptDiagramTypes[0].svgContent'), /\(51\)[\s\S]*\(52\)/, '★ SVG (51)(52)');
-  assert.ok(call('conceptDiagramTypes[0].svgContent').indexOf('(31)') < 0, '★ 옛 (31) 제거');
+  assert.deepEqual(rm.map(r => r.signNumber), ['51', '52'], '★ refMap 51,52 (도5→5x, 텍스트 소비처)');
   assert.deepEqual(JSON.parse(call('JSON.stringify(conceptDiagramTypes[0].refNums)')), [51, 52], '★ refNums 동기');
+  // ★ SVG 는 render 시점 치환(맨숫자) — svgContent 원본 불변, 표시는 51/52
+  const rendered = call('_conceptSvgApplyRefNums(conceptDiagramTypes[0].svgContent, getAutoFigNums("step_07c")[0], 2)');
+  assert.match(rendered, />\s*51\s*</, '★ render SVG 맨숫자 51');
+  assert.match(rendered, />\s*52\s*</, '★ render SVG 52');
+  assert.ok(rendered.indexOf('>31<') < 0 && rendered.indexOf('>32<') < 0, '★ render 옛 31/32 제거');
+  assert.match(rendered, /x="100"/, '★ 좌표(x="100") 미접촉');
 });
 
 test('T1 ★ 장치 100~ 충돌 없음 — 5x(51,52)는 100 미만', () => {
@@ -88,28 +93,34 @@ test('T1 ★ 요소>9 → 5xx (도5 → 501~)', () => {
 
 // ─────────── T2: ③ override 추종 + 멱등 ───────────
 
-test('T2 ★ 도 번호 변경(③) 추종 — 도5(51,52) → 장치 5도면이면 도6(61,62)', () => {
+test('T2 ★ 도 번호 변경(③) 추종 — 도5 → 장치 5도면이면 도6(refMap·render 61,62)', () => {
   call('_syncConceptRefNums()');   // 도5 → 51,52
   assert.deepEqual(JSON.parse(call('JSON.stringify(conceptDiagramTypes[0].refMap.map(r=>r.signNumber))')), ['51', '52']);
   setCtx(`diagramData={step_07:Array(5).fill({})};`);   // 장치 5도면 → 예시도 도 6
   call('_syncConceptRefNums()');
-  assert.deepEqual(JSON.parse(call('JSON.stringify(conceptDiagramTypes[0].refMap.map(r=>r.signNumber))')), ['61', '62'], '★ 도6 → 61,62 추종');
-  assert.match(call('conceptDiagramTypes[0].svgContent'), /\(61\)[\s\S]*\(62\)/, '★ SVG 도 추종 (61)(62)');
-  assert.ok(call('conceptDiagramTypes[0].svgContent').indexOf('(51)') < 0, '★ 옛 (51) 제거');
+  assert.deepEqual(JSON.parse(call('JSON.stringify(conceptDiagramTypes[0].refMap.map(r=>r.signNumber))')), ['61', '62'], '★ 도6 → 61,62 추종(refMap)');
+  // ★ SVG render 도 추종(위치 기반 — svgContent 원본값 무관)
+  const rendered = call('_conceptSvgApplyRefNums(conceptDiagramTypes[0].svgContent, getAutoFigNums("step_07c")[0], 2)');
+  assert.match(rendered, />\s*61\s*</, '★ render SVG 61 추종');
+  assert.ok(rendered.indexOf('>31<') < 0, '★ 옛 31 제거');
 });
 
-test('T2 ★ 멱등 — 같은 도 번호로 재호출 시 변화 없음', () => {
+test('T2 ★ 멱등 — refMap 재호출 시 변화 없음(false)', () => {
   call('_syncConceptRefNums()');
-  const a = call('conceptDiagramTypes[0].svgContent');
   const changed = call('_syncConceptRefNums()');
   assert.equal(changed, false, '★ 2회차 변화 없음(false)');
-  assert.equal(call('conceptDiagramTypes[0].svgContent'), a, '★ SVG 불변(멱등)');
 });
 
-test('T2 ★ _conceptSvgApplyRefNums — (old)→(new) 단일패스(사이클 안전)', () => {
-  // 시프트(52→51, 53→52): 콜백이 원본 매치 기준 → 사이클 없음
-  const r = call(`_conceptSvgApplyRefNums('<svg>(52)(53)</svg>', {'52':'51','53':'52'})`);
-  assert.equal(r, '<svg>(51)(52)</svg>', '★ (52)→(51),(53)→(52) 정확');
+test('T2 ★ _conceptSvgApplyRefNums(render) — 맨숫자 위치(rank) 기반·좌표 미접촉·멱등·기존 복구', () => {
+  const svg = '<svg><text x="100" y="60">31</text><text x="120" y="60">32</text></svg>';
+  const r = call(`_conceptSvgApplyRefNums(${JSON.stringify(svg)}, 5, 2)`);
+  assert.match(r, /<text x="100" y="60">51<\/text>/, '★ 도5 1번째 → 51(맨숫자), 좌표 x="100" 미접촉');
+  assert.match(r, /<text x="120" y="60">52<\/text>/, '★ 2번째 → 52');
+  const r2 = call(`_conceptSvgApplyRefNums(${JSON.stringify(r)}, 5, 2)`);
+  assert.equal(r2, r, '★ 멱등(51,52 재적용 무변화)');
+  // ★ 기존 사건 복구: svgContent 가 31 박힘이어도 figNum 5 → render 51 (현재값 무관, 무재생성)
+  const recovered = call(`_conceptSvgApplyRefNums('<svg><text>31</text><text>32</text></svg>', 5, 2)`);
+  assert.match(recovered, />51</, '★ 기존 31 박힘 → render 51 복구(무재생성)');
 });
 
 // ─────────── T3: 5소비처 정합 ───────────
@@ -142,6 +153,20 @@ test('회귀 ★ 생성 프롬프트·파서는 31~99 유지(사후 동기 방�
   assert.match(PATENT_SRC, /참조번호 31~99/, '★ SVG 생성 프롬프트 31~99 유지(사후 sync)');
 });
 
-test('회귀 ★ ?v= patent.js 20260661', () => {
-  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260661/, '★ ?v= 갱신');
+// ─────────── SVG render 복구 (이번 PR) ───────────
+
+test('T4 ★ 파서 폴백 — SVG 맨숫자(>NN<)도 refMap 보강(괄호 없이)', () => {
+  const rm = JSON.parse(call(`JSON.stringify(_parseConceptRefMap('', '<svg><text>31</text><text>32</text></svg>'))`));
+  assert.deepEqual(rm.map(r => r.signNumber), ['31', '32'], '★ 맨숫자 폴백 수집(REF_MAP 블록 없어도)');
+});
+
+test('소스 ★ _conceptSvgForDisplay 가 카드·다운로드 경로에 배선(제목+식별번호)', () => {
+  assert.match(PATENT_SRC, /function _conceptSvgForDisplay\(ct, figNum\)\{/, '★ 통합 표시 헬퍼');
+  assert.match(PATENT_SRC, /_conceptSvgApplyTitle\(_conceptSvgApplyRefNums\(/, '★ 식별번호+제목 동시 적용');
+  assert.ok((PATENT_SRC.match(/_conceptSvgForDisplay\(ct, figNum\)/g) || []).length >= 3, '★ 카드+다운로드 2곳 호출 ≥3');
+  assert.ok(!/_conceptSvgApplyTitle\(ct\.svgContent, figNum\)/.test(PATENT_SRC), '★ 직접 _conceptSvgApplyTitle(ct.svgContent) 호출 제거(통합 헬퍼 경유)');
+});
+
+test('회귀 ★ ?v= patent.js 20260662', () => {
+  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260662/, '★ ?v= 갱신');
 });

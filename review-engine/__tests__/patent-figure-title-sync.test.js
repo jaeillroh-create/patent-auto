@@ -75,10 +75,12 @@ test('★ 비-SVG 입력 → 그대로(무해)', () => {
 test('★ 소스 — 프롬프트 "제목 넣지 마라"(코드 삽입) + 렌더·다운로드 _conceptSvgApplyTitle 사용', () => {
   // 프롬프트: LLM 제목 작성 금지(코드가 삽입)
   assert.match(PATENT_SRC, /제목\(【도 N】\)은 코드가 자동으로 삽입하므로 ★SVG에 도면 제목 텍스트를 넣지 마라/, '★ 프롬프트 제목 작성 금지');
-  // 렌더: ct.svgContent 직삽입 대신 _conceptSvgApplyTitle 경유
-  assert.match(PATENT_SRC, /\$\{_conceptSvgApplyTitle\(ct\.svgContent, figNum\)\}/, '★ 렌더 제목 동기화');
-  // 다운로드(2곳): _conceptSvgApplyTitle 적용
-  assert.equal((PATENT_SRC.match(/_conceptSvgApplyTitle\(ct\.svgContent, figNum\)/g) || []).length, 3, '★ 렌더1+다운로드2 = 3곳 동기화');
+  // 렌더: ct.svgContent 직삽입 대신 _conceptSvgForDisplay(제목+식별번호) 경유 — refnum-svg 에서 통합 헬퍼로
+  assert.match(PATENT_SRC, /\$\{_conceptSvgForDisplay\(ct, figNum\)\}/, '★ 렌더 통합 표시(제목+식별번호)');
+  // 통합 헬퍼가 제목 SoT 적용(식별번호 위에)
+  assert.match(PATENT_SRC, /_conceptSvgApplyTitle\(_conceptSvgApplyRefNums\(/, '★ 제목 SoT 유지(식별번호 render 위에)');
+  // 렌더1+다운로드2 = 3곳 _conceptSvgForDisplay (정의 제외 — function 키워드 lookbehind)
+  assert.equal((PATENT_SRC.match(/(?<!function )_conceptSvgForDisplay\(ct, figNum\)/g) || []).length, 3, '★ 렌더1+다운로드2 = 3곳 동기화');
   // SoT 추종 명문화(주석)
   assert.match(PATENT_SRC, /computeFigNums\(SoT\)|SoT\(getAutoFigNums\)/, 'SoT 추종 주석');
 });

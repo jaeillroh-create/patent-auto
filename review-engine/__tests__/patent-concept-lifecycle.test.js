@@ -143,7 +143,7 @@ test('회귀 ★ #210 reflect 안전장치·③·① 유지', () => {
   assert.match(PATENT_SRC, /function _conceptAlreadyInDesc\(text, ct, figNum\)\{/, 'figNum 멱등 가드 유지');
   assert.match(PATENT_SRC, /function _generatedConceptsWithNums\(\)/, 'C 번호 매핑 유지');
   assert.match(PATENT_SRC, /function invalidateFigureDependents\(\)\{/, '③ 무효화 유지');
-  assert.match(PATENT_SRC, /\$\{_conceptSvgApplyTitle\(ct\.svgContent, figNum\)\}/, '① 제목 동기화 유지');
+  assert.match(PATENT_SRC, /_conceptSvgApplyTitle\(_conceptSvgApplyRefNums\(/, '① 제목 동기화 유지(통합 헬퍼 _conceptSvgForDisplay)');
   // 생성 시점 reflect 도 유지(2곳) + openProject(1곳) = 호출부 ≥3 + 정의 1
   assert.ok((PATENT_SRC.match(/reflectConceptsToSpec\(\)/g) || []).length >= 4, '★ reflect 호출부 ≥4(정의+생성2+openProject1)');
 });
