@@ -134,6 +134,6 @@ test('B3 소스 ★ 네이티브 인식 분기((도 N 참조하면)+부호 존�
 test('회귀 ★ reflect(step_18 부호)·A1·① 유지 + step_08 예시도 블록(4484) 은퇴', () => {
   assert.match(PATENT_SRC, /function reflectConceptsToSpec\(\)\{/, 'reflect 함수 유지(step_18 부호)');
   assert.match(PATENT_SRC, /const _openRefl=reflectConceptsToSpec\(\);/, 'A1 openProject reflect 유지');
-  assert.match(PATENT_SRC, /\$\{_conceptSvgApplyTitle\(ct\.svgContent, figNum\)\}/, '① 제목 동기화 유지');
+  assert.match(PATENT_SRC, /_conceptSvgApplyTitle\(_conceptSvgApplyRefNums\(/, '① 제목 동기화 유지(통합 헬퍼 _conceptSvgForDisplay)');
   assert.ok(!/★★★ 예시도\/개념도 \(참조번호 31~99\) ★★★/.test(PATENT_SRC), '★ step_08 예시도 요약 블록(4484) 은퇴(제거)');
 });

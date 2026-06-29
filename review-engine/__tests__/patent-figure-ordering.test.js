@@ -241,7 +241,7 @@ test('소스 ★ ③-3 — _plannedFigureLayout 가 step_08 설명빌더와 동�
 });
 
 test('소스 ★ ① 유지 — 제목 SoT 동기화(_conceptSvgApplyTitle) 무손상', () => {
-  assert.match(PATENT_SRC, /\$\{_conceptSvgApplyTitle\(ct\.svgContent, figNum\)\}/, '① 제목 동기화 유지');
+  assert.match(PATENT_SRC, /_conceptSvgApplyTitle\(_conceptSvgApplyRefNums\(/, '① 제목 동기화 유지(통합 헬퍼 _conceptSvgForDisplay)');
 });
 
 test('소스 ★ ③ 일관 — 예시도 카운트 쓰는 computeFigNums 전부 figNumOverride 주입(생성/방법/미리보기)', () => {
