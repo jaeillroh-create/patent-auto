@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="shared/design-tokens.css" />
   <link rel="stylesheet" href="shared/components.css" />
   <link rel="stylesheet" href="shared/common.css" />
-  <link rel="stylesheet" href="patent/patent.css" />
+  <link rel="stylesheet" href="patent/patent.css?v=20260659" />
   <link rel="stylesheet" href="trademark/trademark.css" />
   <link rel="stylesheet" href="opinion/opinion.css" />
   <link rel="stylesheet" href="division/division.css" />
@@ -1064,12 +1064,12 @@
             <button class="btn btn-primary btn-full" id="btnStep07c" onclick="runConceptDiagramStep()"><span class="ico" data-icon="robot"></span> 예시도 생성</button>
           </div>
           <!-- Step 8c: 예시도 상세설명 (장치 상세설명과 분리 — 단일호출 과부하 방지) -->
+          <!-- ★ [T1] 결과(C1c)는 우측 "Step 8 결과" 카드에 장치(C1) 아래로 통합 표시 → resultStep08c 는 resultCard08 로 이동 -->
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border)">
-            <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:6px">※ Step 8 "상세설명 생성" 시 예시도 설명도 장치 설명 직후 자동 생성됩니다. 이 버튼은 예시도 설명만 따로 재생성하는 보조 버튼입니다(장치 상세설명 선행 필요).</div>
-            <button class="btn btn-outline btn-full" id="btnStep08c" onclick="runConceptDescStep()"><span class="ico" data-icon="edit"></span> 예시도 상세설명 생성</button>
+            <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:6px">※ Step 8 "상세설명 생성" 시 예시도 설명도 함께 생성되어 우측 "Step 8 결과"에 장치 설명과 함께 표시됩니다. 이 버튼은 예시도 설명만 따로 재생성하는 보조 버튼입니다(장치 상세설명 선행 필요).</div>
+            <button class="btn btn-outline btn-full" id="btnStep08c" onclick="runConceptDescStep()"><span class="ico" data-icon="edit"></span> 예시도 상세설명만 재생성</button>
           </div>
           <div id="progressStep08c" style="margin:8px 0"></div>
-          <div id="resultStep08c" style="margin-top:8px"></div>
         </div>
 
         <!-- Step 8 상세설명 -->
@@ -1162,6 +1162,8 @@
         <div class="result-card" id="resultCard08">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 8 결과: 상세설명</div></div>
           <div id="resultStep08" class="result-area"></div>
+          <!-- ★ [T1] 예시도 상세설명(C1c) 통합 표시 — 장치(C1) 아래. 내용 있을 때만 보임(CSS :not(:empty)). 좌측 Step 7c 에서 이동 -->
+          <div id="resultStep08c"></div>
           <div style="padding:0 16px 16px"><button class="btn btn-outline" id="btnInsertBoilerplate" onclick="insertBoilerplate()"><span class="ico" data-icon="link"></span> 정형문 삽입</button></div>
         </div>
         <div class="result-card" id="resultCard09">
@@ -1382,7 +1384,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260615e"></script>
-<script src="patent/patent.js?v=20260658"></script>
+<script src="patent/patent.js?v=20260659"></script>
 <script src="patent/chat.js?v=20260612"></script>
 <script src="opinion/opinion.js?v=20260637"></script>
 <script>

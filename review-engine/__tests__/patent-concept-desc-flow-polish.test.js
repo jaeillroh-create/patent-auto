@@ -115,18 +115,19 @@ test('Task1 ★ step_08c 있으면 경고 없음(과경고 아님)', () => {
   assert.ok(!toasts.some(t => /예시도 상세설명 미생성/.test(t.m)), '★ step_08c 있으면 경고 없음');
 });
 
-test('Task1 ★ _updateConceptDescBtn — 미생성이면 강조(btn-primary)/라벨(필요), 생성되면 해제', () => {
-  // 버튼 stub 캡처
-  let cls = new Set(['btn-outline']); let html = '';
+test('Task1→T2 ★ _updateConceptDescBtn — 보조 강등(항상 btn-outline·"재생성", btn-primary 강조 없음)', () => {
+  // ★ display-unify(T2): 통합 버튼이 예시도까지 자동 생성 → 보조 버튼은 강조 없이 조용한 "재생성"으로 일관.
+  let cls = new Set(['btn-primary']); let html = '';   // 시작을 btn-primary 로 둬도 제거되는지 확인
   const btn = { classList: { toggle: (c, on) => { if (on) cls.add(c); else cls.delete(c); }, add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) }, get innerHTML() { return html; }, set innerHTML(v) { html = v; } };
   sandbox.document.getElementById = (id) => id === 'btnStep08c' ? btn : ({ value: '4', style: {}, dataset: {}, classList: { toggle() {}, add() {}, remove() {}, contains: () => false }, querySelectorAll: () => [], innerHTML: '' });
   setCtx(`conceptDiagramTypes=[{type:'ui_screen',svgContent:'<svg></svg>'}]; outputs={step_08:'장치'};`);
-  call('_updateConceptDescBtn()');
-  assert.ok(cls.has('btn-primary'), '★ 미생성 → btn-primary 강조');
-  assert.match(html, /필요/, '★ 라벨 (필요)');
+  call('_updateConceptDescBtn()');   // step_08c 미생성이어도
+  assert.ok(!cls.has('btn-primary') && cls.has('btn-outline'), '★ 강조 없음(항상 btn-outline)');
+  assert.match(html, /예시도 상세설명만 재생성/, '★ 보조 라벨(재생성)');
+  assert.ok(!/필요/.test(html), '★ "(필요)" 강조 라벨 제거');
   setCtx(`outputs.step_08c='도 5 설명';`);
   call('_updateConceptDescBtn()');
-  assert.ok(!cls.has('btn-primary') && cls.has('btn-outline'), '★ 생성되면 강조 해제');
+  assert.ok(!cls.has('btn-primary') && cls.has('btn-outline'), '★ 생성 후에도 동일(보조)');
   sandbox.document.getElementById = (id) => ({ value: '4', style: {}, dataset: {}, classList: { toggle() {}, add() {}, remove() {}, contains: () => false }, querySelectorAll: () => [], innerHTML: '' });
 });
 

@@ -138,10 +138,10 @@ test('★ reflect 공존 — step_08c가 예시도를 담으면 reflect가 step_
 
 // ─────────── A3 / 등록 / 소스 ───────────
 
-test('A3 소스 ★ "예시도 상세설명 생성" 버튼 + 결과/진행 컨테이너(index.html)', () => {
+test('A3 소스 ★ 예시도 상세설명 보조 버튼 + 결과/진행 컨테이너(index.html)', () => {
   assert.match(HTML_SRC, /id="btnStep08c" onclick="runConceptDescStep\(\)"/, '★ 버튼 배선');
-  assert.match(HTML_SRC, /예시도 상세설명 생성/, '★ 버튼 라벨');
-  assert.match(HTML_SRC, /id="resultStep08c"/, '★ 결과 컨테이너(renderOutput cid)');
+  assert.match(HTML_SRC, /예시도 상세설명만 재생성/, '★ 버튼 라벨(보조 재생성 — display-unify 에서 변경)');
+  assert.match(HTML_SRC, /id="resultStep08c"/, '★ 결과 컨테이너(renderOutput cid — resultCard08 로 이동)');
   assert.match(HTML_SRC, /id="progressStep08c"/, '★ 진행 컨테이너');
 });
 
