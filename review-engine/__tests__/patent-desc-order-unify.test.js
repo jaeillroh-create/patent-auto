@@ -173,8 +173,10 @@ test('회귀 ★ step_08c 분리·조립 유지 + 장치(step_08) 회귀 0', () 
   assert.match(HTML_SRC, /id="btnStep12" onclick="runLongStep\('step_12'\)"/, '★ 방법 상세설명 버튼(runLongStep) 유지');
 });
 
-test('회귀 ★ 장치 상세설명 단독 생성 정상 — runImplementationDesc 의 장치 본문 보존', async () => {
+test('회귀→merge ★ runImplementationDesc — 장치 본문 보존 + 예시도 합본(step_08=장치+예시)', async () => {
   await callA('runImplementationDesc()');
   assert.match(out('step_08'), /통신부\(110\)가 동작한다/, '★ 장치 상세설명 본문 보존(회귀 0)');
-  assert.ok(out('step_08').indexOf('검색창(31)') < 0, '★ 장치 본문에 예시도 단락 끼지 않음(분리 유지)');
+  assert.match(out('step_08'), /검색창\(31\)/, '★ merge-into-step08: 예시도가 step_08 본문에 합본(후속 자동 공유)');
+  assert.match(call('outputs.step08_device'), /통신부\(110\)/, '★ device-only 스냅샷 보존');
+  assert.ok(call('outputs.step08_device').indexOf('검색창(31)') < 0, '★ 스냅샷은 device-only(예시도 미포함 — 멱등 재구성 원천)');
 });

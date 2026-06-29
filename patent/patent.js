@@ -2881,7 +2881,10 @@ async function _cascadeRunLong(sid){
   if(sid==='step_08')t=sanitizeDescFigureRefs(t,'device');
   if(sid==='step_12')t=sanitizeDescFigureRefs(t,'method');
   pushOutputHistory(sid,'cascade','_cascadeRunLong');
-  outputs[sid]=t;markOutputTimestamp(sid);_cascadeRender(sid,t);
+  outputs[sid]=t;markOutputTimestamp(sid);
+  if(sid==='step_08')outputs.step08_device=t;   // ★ [T1] cascade 도 device 스냅샷 + 합본(예시도 기존재 시)
+  _cascadeRender(sid,t);
+  if(sid==='step_08')_mergeConceptIntoStep08();
 }
 async function _cascadeRunDiagram(sid){
   const prompt=buildPrompt(sid);
@@ -3068,6 +3071,23 @@ function getLatestMethodDescription(){
 function getLatestConceptDescription(){
   return outputs.step_08c||'';
 }
+// ★ [T1] 예시도 상세설명(step_08c)을 장치 상세설명(step_08) 본문에 합본 — "생성 분리 + 저장 합본".
+//   생성은 분리(_longStepCore/_conceptDescCore) 유지(LLM 재호출 0). 합본은 device-only 스냅샷(step08_device)에서
+//   재구성하는 텍스트 병합 → 멱등(재생성 중복 0). 합본 후 getLatestDescription 체인이 예시도를 품어
+//   후속 단계(수학식·특허성·대안·검토반영)가 자동 공유한다(호출부 무수정).
+//   ※ step08_device 는 'step_'(언더스코어) 미일치 → 진행도/렌더 루프(outputs[k].startsWith('step_'))에서 제외, saveProject 로 영속.
+function _mergeConceptIntoStep08(){
+  const dev=(outputs.step08_device||outputs.step_08||'').replace(/\s*$/,'');
+  if(!dev) return;
+  const concept=(outputs.step_08c||'').trim();
+  const merged=concept?(dev+'\n\n'+concept):dev;
+  if(merged===outputs.step_08) return;   // 멱등: 변화 없으면 no-op
+  outputs.step_08=merged;
+  markOutputTimestamp('step_08');         // 합본본을 device 체인 최신으로 → getLatestDescription 이 예시도 포함분 반환
+  // 합본으로 step_08 본문 변경 → 검토반영본(step_13_applied) 무효화(예시도 반영 위해 재생성 유도). step_08c(source)는 stale 처리 안 함.
+  if(outputs.step_13_applied){delete outputs.step_13_applied;delete outputTimestamps.step_13_applied;}
+  renderOutput('step_08',outputs.step_08);
+}
 // ★ [Task1] 예시도(step_07c svgContent)는 있는데 예시도 상세설명(step_08c)이 비었나 → ④ 미생성(명세서에서 예시도 설명 누락).
 function _conceptDescMissing(){
   return conceptDiagramTypes.some(ct=>ct.svgContent) && !(outputs.step_08c && String(outputs.step_08c).trim());
@@ -3110,7 +3130,10 @@ function buildImplementationBody(){
   const device=getLatestDescription()||'';
   const concept=getLatestConceptDescription()||'';
   const method=getLatestMethodDescription()||'';
-  const core=[device,concept,method].filter(Boolean).join('\n\n');
+  // ★ [T3] 합본 중복 제거 — 예시도가 device(step_08 합본)에 이미 있으면 별도 추가 금지(중복 0).
+  //   없으면(구 사건·미합본) 보강하여 예시도 누락 방지. 합본 정본은 device, step_08c 는 source.
+  const conceptIn = concept && device && device.indexOf(concept.slice(0,40))>=0;
+  const core=[device, conceptIn?'':concept, method].filter(Boolean).join('\n\n');
   if(!core)return '';
   if(hasBoilerplate(core))return core;   // 수동 정형문 삽입 케이스 → 이중 삽입 방지(그대로)
   return STEP8_PREFIX+'\n'+core+'\n'+STEP8_SUFFIX;   // ★ 닫는 정형문이 장치+예시+방법 뒤(섹션 끝)
@@ -4530,7 +4553,7 @@ ${T}\n[장치 청구범위] ${outputs.step_06||''}\n[장치 도면 설계] ${out
 ${_cList}
 ${(outputs.step_07c||'').slice(0,2000)}
 
-${T}\n[장치 청구범위] ${(outputs.step_06||'').slice(0,1500)}\n[장치 도면 설계] ${(outputs.step_07||'').slice(0,2000)}\n[장치 상세설명 — 참고: 동일 명칭·참조번호 사용] ${(getLatestDescription()||'').slice(0,3000)}${styleRef}`;
+${T}\n[장치 청구범위] ${(outputs.step_06||'').slice(0,1500)}\n[장치 도면 설계] ${(outputs.step_07||'').slice(0,2000)}\n[장치 상세설명 — 참고: 동일 명칭·참조번호 사용] ${(outputs.step08_device||getLatestDescription()||'').slice(0,3000)}${styleRef}`;
     }
 
     case 'step_09':return buildMathPrompt('5개 내외', stripMathBlocks(getLatestDescription()||outputs.step_08||''), (outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_09||0))?'\\n\\n[특허성 검토 결과 — 수학식으로 보완 가능한 지적사항을 반영하라]\\n'+outputs.step_15.slice(0,1500):'');
@@ -5064,7 +5087,11 @@ async function _longStepCore(sid){const bid=sid==='step_08'?'btnStep08':'btnStep
       }
     }
     pushOutputHistory(sid,'llm','runLongStep');
-    outputs[sid]=t;markOutputTimestamp(sid);invalidateDownstream(sid);onStepCompleted(sid);renderOutput(sid,t);saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
+    outputs[sid]=t;markOutputTimestamp(sid);
+    if(sid==='step_08')outputs.step08_device=t;   // ★ [T1] device-only 스냅샷(합본 재구성·concept-gen 입력의 원천 — 멱등)
+    invalidateDownstream(sid);onStepCompleted(sid);renderOutput(sid,t);
+    if(sid==='step_08')_mergeConceptIntoStep08();   // ★ [T1] 기존 예시도(step_08c)가 있으면 합본 반영(없으면 no-op)
+    saveProject(true);App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
     // [C1 자동 연쇄] SCOPE_GUARDED 스텝 생성 후 자동 검증
     if(inventionScope?.locked_at&&(SCOPE_GUARDED_TEXT_STEPS.includes(sid)||SCOPE_GUARDED_MERMAID_STEPS.includes(sid))){try{await runScopeCheck(sid);}catch(e2){console.warn('[C1] runScopeCheck 자동 실행 실패:',sid,e2.message);}}
   }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;App.setButtonLoading(bid,false);App.clearProgress(pid);}}
@@ -5088,8 +5115,8 @@ async function _conceptDescCore(){
     pushOutputHistory('step_08c','llm','runConceptDescStep');
     outputs.step_08c=t;markOutputTimestamp('step_08c');_updateConceptDescBtn();   // ★ [Task1] 생성 후 버튼 강조 해제
     invalidateDownstream('step_08c');               // → 부호의 설명(step_18) stale
+    _mergeConceptIntoStep08();                       // ★ [T1] 장치 상세설명(step_08) 본문에 합본 → 후속 단계 자동 공유. (별도 renderOutput('step_08c') 제거 — 합본본을 Step 8 결과에 표시)
     onStepCompleted('step_08c');
-    renderOutput('step_08c',t);
     saveProject(true);
     App.showToast(`예시도 상세설명 완료 [${App.getModelConfig().label}]`);
   }catch(e){App.showToast(e.message,'error');}
