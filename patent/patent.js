@@ -3072,12 +3072,12 @@ function getLatestConceptDescription(){
 function _conceptDescMissing(){
   return conceptDiagramTypes.some(ct=>ct.svgContent) && !(outputs.step_08c && String(outputs.step_08c).trim());
 }
-// ★ [Task1] "예시도 상세설명 생성" 버튼 강조 — ④ 미생성이면 강조(btn-primary)+필요 라벨, 생성됐으면 평상(btn-outline).
+// ★ [T2] 보조 버튼 강등 — 통합 "상세설명 생성(장치+예시도)"이 예시도까지 자동 생성하므로, btnStep08c 는 강조(btn-primary) 없이
+//   조용한 보조("예시도 상세설명만 재생성")로 유지. 라벨을 정적 HTML과 일관(런타임 덮어쓰기로 인한 "생성" 복귀 방지).
 function _updateConceptDescBtn(){
   const b=document.getElementById('btnStep08c'); if(!b) return;
-  const missing=_conceptDescMissing();
-  b.classList.toggle('btn-primary', missing); b.classList.toggle('btn-outline', !missing);
-  b.innerHTML=(missing?'<span class="ico" data-icon="alert-triangle"></span> 예시도 상세설명 생성 (필요)':'<span class="ico" data-icon="edit"></span> 예시도 상세설명 생성');
+  b.classList.remove('btn-primary'); b.classList.add('btn-outline');
+  b.innerHTML='<span class="ico" data-icon="edit"></span> 예시도 상세설명만 재생성';
   if(window.Icons&&Icons.renderAll)try{Icons.renderAll(b);}catch(_e){}
 }
 // 정형문 수동 삽입: 현재 Step 8 결과에 정형문을 전후에 삽입
@@ -14322,7 +14322,7 @@ function renderPreview(){
   } catch (_e) {}
   const el=document.getElementById('previewArea'),spec=buildSpecification();const _userFigs=buildUserFiguresHtml({});
   // ★ [Task1] ④ 미생성 인라인 배너 — 예시도 있는데 예시도 상세설명(step_08c) 비면 명세서에서 누락됨을 미리보기 상단에 안내.
-  const _cdBanner=_conceptDescMissing()?'<div style="padding:10px 12px;border-radius:8px;background:#FFF4E5;border-left:3px solid var(--color-warning,#E8A33D);color:#7A4B00;font-size:12px;margin-bottom:12px">⚠️ 예시도 상세설명 미생성 — 예시도 설명이 명세서에서 빠집니다. Step 7c의 “예시도 상세설명 생성”을 먼저 실행하세요.</div>':'';
+  const _cdBanner=_conceptDescMissing()?'<div style="padding:10px 12px;border-radius:8px;background:#FFF4E5;border-left:3px solid var(--color-warning,#E8A33D);color:#7A4B00;font-size:12px;margin-bottom:12px">⚠️ 예시도 상세설명 미생성 — 예시도 설명이 명세서에서 빠집니다. Step 8 “상세설명 생성(장치+예시도)”을 실행하면 예시도 설명도 함께 생성됩니다.</div>':'';
   if(!spec.trim()){el.innerHTML=_cdBanner+'<p style="color:var(--color-text-tertiary);font-size:13px;text-align:center;padding:20px">생성된 항목이 없어요</p>'+_userFigs;return;}el.innerHTML=_cdBanner+spec.split(/(?=【)/).map(s=>{const h=s.match(/【(.+?)】/);if(!h)return '';return `<div class="accordion-header" onclick="toggleAccordion(this)"><span>【${App.escapeHtml(h[1])}】</span><span class="arrow"><span class="ico" data-icon="chevron-down" data-size="12"></span></span></div><div class="accordion-body">${App.escapeHtml(s)}</div>`;}).join('')+_userFigs;}
 // 출력 시 항목 헤더 중복 방지: 본문 첫 줄이 해당 항목 헤더(【h】, 공백 변형 포함)면 제거.
 // 항목명이 정확히 일치할 때만 제거하므로 청구범위의 "【청구항 1】" 등은 보존됨.
@@ -14357,7 +14357,7 @@ function buildSpecification(){
   return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${_stripDupHeader(outputs.step_02||'','기술분야')}`,`【발명의 배경이 되는 기술】\n${_stripDupHeader(outputs.step_03||'','발명의 배경이 되는 기술')}`,`【선행기술문헌】\n${_stripDupHeader(outputs.step_04||'','선행기술문헌')}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${_stripDupHeader(outputs.step_05||'','해결하고자 하는 과제')}`,`【과제의 해결 수단】\n${_stripDupHeader(outputs.step_17||'','과제의 해결 수단')}`,`【발명의 효과】\n${_stripDupHeader(outputs.step_16||'','발명의 효과')}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${buildImplementationBody()}`,`【부호의 설명】\n${_stripDupHeader(outputs.step_18||'','부호의 설명')}`,`【청구범위】\n${allClaims}`,`【요약서】\n${_stripDupHeader(outputs.step_19||'','요약서')}`].filter(Boolean).join('\n\n')+extras;
 }
 // ★ [Task1] ④ 미생성(예시도 있는데 step_08c 비었음) 경고 — 출력 직전 1회(누락 사실 안내, 차단은 안 함).
-function _warnConceptDescMissing(){ if(_conceptDescMissing())App.showToast('⚠️ 예시도 상세설명 미생성 — 예시도 설명이 명세서에서 빠집니다. Step 7c의 "예시도 상세설명 생성"을 먼저 실행하세요','warning'); }
+function _warnConceptDescMissing(){ if(_conceptDescMissing())App.showToast('⚠️ 예시도 상세설명 미생성 — 예시도 설명이 명세서에서 빠집니다. Step 8 "상세설명 생성(장치+예시도)"을 실행하면 예시도 설명도 함께 생성됩니다','warning'); }
 function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
 function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 
