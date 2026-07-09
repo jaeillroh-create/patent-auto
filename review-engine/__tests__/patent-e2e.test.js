@@ -24,6 +24,7 @@ import { run as orchestrate } from '../kernel/orchestrator.js';
 import { makeEngineWriter } from '../profiles/patent/writerAdapter.js';
 import { approvePlan, gateView } from '../kernel/humanGate.js';
 import { PROFILES } from '../profiles/registry.js';
+import { readPatentBundle } from './helpers/patentBundle.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Patent, win, renderCalls, els;
@@ -32,7 +33,7 @@ let Patent, win, renderCalls, els;
 function mkEl(id) { return { id, style: {}, disabled: false, textContent: '', innerHTML: '', appendChild() {}, querySelectorAll: () => [] }; }
 
 before(() => {
-  let src = readFileSync(path.join(REPO_ROOT, 'patent/patent.js'), 'utf8');
+  let src = readPatentBundle(REPO_ROOT);
   src = src.replace(/\ninit\(\);\s*$/, '\n');
   src += '\n;window.__pw={setGlobals:function(g){' +
     'if("outputs" in g)outputs=g.outputs;' +

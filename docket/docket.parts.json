@@ -1,0 +1,8 @@
+[
+  "modules/00-config-fees.js",
+  "modules/01-init-ui-handlers.js",
+  "modules/02-fee-calculation.js",
+  "modules/03-data-email.js",
+  "modules/04-excel-template.js",
+  "modules/05-send-preview-reset.js"
+]

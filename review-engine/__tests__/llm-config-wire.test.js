@@ -13,6 +13,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readPatentBundle } from './helpers/patentBundle.js';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let commonApp, Opinion, captured, consoleSink;
@@ -35,7 +37,7 @@ function loadCommon() {
 
 // opinion.js 로드 → _defaultReviewRunner 확보. App.getReviewAuth 는 실제 common 것, sb.functions.invoke 는 캡처.
 function loadOpinion(appGetReviewAuth) {
-  const src = readFileSync(path.join(REPO_ROOT, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO_ROOT, 'opinion');
   consoleSink = [];
   const spy = (...a) => { consoleSink.push(a.map(x => { try { return typeof x === 'string' ? x : JSON.stringify(x); } catch (_e) { return String(x); } }).join(' ')); };
   const captureSb = {
@@ -118,7 +120,7 @@ test('getReviewAuth 자체가 keys+assignments 형상(L-T1 헬퍼 래핑)', () =
 });
 
 test('patent 러너도 동일 배선(소스 확인) — keys/assignments/module + getReviewAuth 가드', () => {
-  const src = readFileSync(path.join(REPO_ROOT, 'patent/patent.js'), 'utf8');
+  const src = readPatentBundle(REPO_ROOT);
   const i = src.indexOf('Patent._defaultReviewRunner = async'); // 정의 지점(앞선 폴백 참조 회피)
   const seg = src.slice(i, i + 1500); // T1 비동기화로 본문 확장(review_runs INSERT) → invoke 라인까지 포함하도록 창 확대
   assert.ok(seg.includes('App.getReviewAuth'), 'getReviewAuth 사용');

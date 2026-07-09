@@ -10,12 +10,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Division;
 
 before(() => {
-  const src = readFileSync(path.join(REPO_ROOT, 'division/division.js'), 'utf8');
+  const src = readModuleBundle(REPO_ROOT, 'division');
   const sandbox = {
     console: { log() {}, warn() {}, error() {} },
     structuredClone: globalThis.structuredClone,

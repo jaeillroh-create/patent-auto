@@ -14,9 +14,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readPatentBundle } from './helpers/patentBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
-const PATENT_SRC = readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8');
+const PATENT_SRC = readPatentBundle(REPO);
 
 let sandbox;
 before(() => {

@@ -10,12 +10,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { compile, _resetSeq } from '../kernel/amendmentCompiler.js';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Opinion, cap;
 
 function load() {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   cap = { claudeCalls: 0 };
   const sb = {
     from: () => ({
@@ -70,7 +71,7 @@ test('★1 거부만(승인 0) 이어도 재렌더는 수행(상태 갱신)', ()
 
 // ═══ ★2 버튼 상시 렌더 (source) ═══
 test('★2 버튼 상시 렌더 — btnDirectionRewrite 무조건 concat, 구 조건부 제거', () => {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   assert.match(src, /\+'<button class="btn btn-outline btn-full" id="btnDirectionRewrite"[^\n]*?Opinion\.startDirectionRewrite\(\)/, '버튼 무조건 렌더(상시)');
   assert.ok(!src.includes('_collectApprovedDirections(Opinion.state.draftResult||{}).length'), '★ 구 조건부(_collectApprovedDirections().length ?) 제거 — 렌더 타이밍 의존 제거');
 });

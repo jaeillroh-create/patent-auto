@@ -6,7 +6,8 @@
 // ════════════════════════════════════════════════════════════════
 const fs = require('fs');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'patent', 'patent.js'), 'utf8').split('\n');
+const { readPatentBundle } = require('./patentBundle.cjs');
+const src = readPatentBundle(path.join(__dirname, '..')).split('\n');
 function extract(name) {
   const re = new RegExp('^function\\s+' + name + '\\s*\\(');
   for (let i = 0; i < src.length; i++) {

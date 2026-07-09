@@ -12,6 +12,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openModal, closeModal, renderHTML } from '../ui/opinion-review-panel.js';
 import OpinionProfile from '../profiles/opinion/OpinionProfile.js';
+import { readPatentBundle } from './helpers/patentBundle.js';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 
@@ -82,8 +84,8 @@ test('index.html 공유 모달 — .modal-overlay/.modal-content 재사용 + 마
 });
 
 test('★ opinion·patent 동시 — 둘 다 openModal 로 배선(공유 모달 한 곳)', () => {
-  const op = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
-  const pt = readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8');
+  const op = readModuleBundle(REPO, 'opinion');
+  const pt = readPatentBundle(REPO);
   assert.ok(op.includes('ReviewUI.openModal') && op.includes('Opinion.openReviewModal'), 'opinion 자동오픈+재오픈');
   assert.ok(pt.includes('ReviewUI.openModal') && pt.includes('Patent.openReviewModal'), 'patent 자동오픈+재오픈');
   // 좌측 카드는 재오픈 버튼만(인라인 패널 마운트 제거)

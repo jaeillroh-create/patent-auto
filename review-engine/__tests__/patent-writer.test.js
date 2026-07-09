@@ -9,12 +9,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readPatentBundle } from './helpers/patentBundle.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Patent, win;
 
 before(() => {
-  let src = readFileSync(path.join(REPO_ROOT, 'patent/patent.js'), 'utf8');
+  let src = readPatentBundle(REPO_ROOT);
   // 테스트: 말미 자동 실행 init() 제거(정의만 로드). 기존 함수 정의에는 영향 없음.
   src = src.replace(/\ninit\(\);\s*$/, '\n');
   // 테스트 하니스 전용: patent.js의 let 바인딩(outputs 등)을 같은 스코프에서 설정하는 setter 주입.

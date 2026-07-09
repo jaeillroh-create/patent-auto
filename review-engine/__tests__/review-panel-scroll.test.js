@@ -9,6 +9,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { render } from '../ui/opinion-review-panel.js';
+import { readPatentBundle } from './helpers/patentBundle.js';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 // render() 는 injectStylesOnce(doc) 를 el.innerHTML 전에 호출 → 스텁으로 주입 CSS 캡처.
 function captureInjectedCss() {
@@ -57,8 +59,8 @@ test('공유 컴포넌트 — opinion·patent 동시 적용(둘 다 window.Revie
   const path = await import('node:path');
   const { fileURLToPath } = await import('node:url');
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
-  const op = readFileSync(path.join(root, 'opinion/opinion.js'), 'utf8');
-  const pt = readFileSync(path.join(root, 'patent/patent.js'), 'utf8');
+  const op = readModuleBundle(root, 'opinion');
+  const pt = readPatentBundle(root);
   assert.ok(op.includes('ReviewUI.openModal'), 'opinion 이 공유 모달 사용');
   assert.ok(pt.includes('ReviewUI.openModal'), 'patent 이 공유 모달 사용 → 한 곳 수정으로 동시 해결');
 });

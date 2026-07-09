@@ -14,9 +14,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readPatentBundle } from './helpers/patentBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
-const PATENT_SRC = readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8');
+const PATENT_SRC = readPatentBundle(REPO);
 const HTML_SRC = readFileSync(path.join(REPO, 'index.html'), 'utf8');
 const CSS_SRC = readFileSync(path.join(REPO, 'patent/patent.css'), 'utf8');
 
@@ -104,7 +105,7 @@ test('회귀 ★ 장치(C1) 표시 — resultStep08 우측 Step 8 결과 유지'
   assert.match(PATENT_SRC, /function buildImplementationBody\(\)\{/, '★ 산출물 조립 유지');
 });
 
-test('회귀 ★ ?v= 갱신(patent.js 20260663 · patent.css 20260659)', () => {
-  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260663/, '★ patent.js ?v=20260663(math-dup)');
+test('회귀 ★ ?v= 갱신(patent.js 20260701-split · patent.css 20260659)', () => {
+  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260701-split/, '★ patent.js ?v=20260701-split(split-loader)');
   assert.match(HTML_SRC, /patent\/patent\.css\?v=20260659/, '★ patent.css ?v=20260659(이번 PR 미변경)');
 });

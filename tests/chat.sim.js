@@ -11,11 +11,12 @@
 //  5) 발생 가능한 오류 경로 시뮬레이션
 // ════════════════════════════════════════════════════════════════
 const path = require('path');
+const { readPatentBundle } = require('./patentBundle.cjs');
 const fs = require('fs');
 const C = require(path.join(__dirname, '..', 'patent', 'chat.js'));
 
 // ── 실제 patent.js의 validateClaims 추출(이름 기반, 라인변경에 견고) ──
-const src = fs.readFileSync(path.join(__dirname, '..', 'patent', 'patent.js'), 'utf8').split('\n');
+const src = readPatentBundle(path.join(__dirname, '..')).split('\n');
 function extractFn(name) {
   const startRe = new RegExp('^function\\s+' + name + '\\s*\\(');
   for (let i = 0; i < src.length; i++) {

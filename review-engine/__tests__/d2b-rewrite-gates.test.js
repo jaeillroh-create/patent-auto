@@ -11,12 +11,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Opinion, cap;
 
 function load() {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   cap = { claudeCalls: 0 };
   const sb = {
     from: () => ({

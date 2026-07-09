@@ -14,9 +14,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readPatentBundle } from './helpers/patentBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
-const PATENT_SRC = readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8');
+const PATENT_SRC = readPatentBundle(REPO);
 const PROFILE_SRC = readFileSync(path.join(REPO, 'review-engine/profiles/patent/PatentProfile.js'), 'utf8');
 
 let Patent, hooks;
@@ -196,5 +197,5 @@ test('★② ESM 캐시버스트 — 패널이 index.js 를 ?v= 로 import + 패
   assert.match(panelSrc, /from '\.\.\/index\.js\?v=/, 'index.js import 에 ?v=(FEATURE_FLAGS 캐시버스트)');
   const html = readFileSync(path.join(REPO, 'index.html'), 'utf8');
   assert.match(html, /opinion-review-panel\.js\?v=2026063[4-9]/, '패널 ?v= 갱신(이후 PR 에서 추가 bump 가능)');
-  assert.match(html, /patent\/patent\.js\?v=20260(6[3-9]\d)/, 'patent.js ?v= 갱신(이후 PR 추가 bump 가능)');
+  assert.match(html, /patent\/patent\.js\?v=20260701-split/, 'patent.js ?v= 갱신(분리 로더 캐시버스트)');
 });

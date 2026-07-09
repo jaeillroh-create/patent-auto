@@ -15,9 +15,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
-const SRC = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+const SRC = readModuleBundle(REPO, 'opinion');
 const SQL = readFileSync(path.join(REPO, 'supabase/migrations/20260617_opinion_projects_status.sql'), 'utf8');
 
 // 권위 목록: opinion.js Opinion.STATUS 맵(코드가 setStatus 로 쓰는 status 전부의 출처).

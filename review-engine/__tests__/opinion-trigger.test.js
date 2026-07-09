@@ -17,6 +17,7 @@ import vm from 'node:vm';
 import OpinionProfile from '../profiles/opinion/OpinionProfile.js';
 import { run as orchestrate } from '../kernel/orchestrator.js';
 import { makeEngineWriter } from '../profiles/opinion/writerAdapter.js';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Opinion, win, els, renderCalls;
@@ -24,7 +25,7 @@ let Opinion, win, els, renderCalls;
 function mkEl(id) { return { id, style: {}, disabled: false, textContent: '', innerHTML: '', appendChild() {} }; }
 
 before(() => {
-  const src = readFileSync(path.join(REPO_ROOT, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO_ROOT, 'opinion');
   renderCalls = [];
   els = { btnOpinionReview: mkEl('btnOpinionReview'), opinionReviewGateMsg: mkEl('opinionReviewGateMsg'), opinionReviewMount: mkEl('opinionReviewMount'), reviewModalMount: mkEl('reviewModalMount'), reviewResultModal: mkEl('reviewResultModal') };
   const sandbox = {

@@ -7,8 +7,8 @@
 // ════════════════════════════════════════════════════════════════
 const fs = require('fs');
 const path = require('path');
-const PATENT_JS = path.join(__dirname, '..', 'patent', 'patent.js');
-const src = fs.readFileSync(PATENT_JS, 'utf8');
+const { readPatentBundle } = require('./patentBundle.cjs');
+const src = readPatentBundle(path.join(__dirname, '..'));
 const lines = src.split('\n');
 
 // 함수명으로 소스 추출: `function NAME(`을 찾아, 한 줄짜리면 그 줄을,

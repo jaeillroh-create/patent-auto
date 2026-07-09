@@ -11,12 +11,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Opinion, cap;
 
 function load() {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   cap = { claudeCalls: 0 };
   const sb = {
     from: () => ({
@@ -151,6 +152,6 @@ test('★ 통합: applyDirectionRewrite(보류 유지) → confirmRewrite(커밋
 });
 
 test('버튼 배선 — renderOutput 에 btnDirectionRewrite → startDirectionRewrite (상시 렌더는 fix-d2c-button-render 에서 검증)', () => {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   assert.match(src, /btnDirectionRewrite[\s\S]*?Opinion\.startDirectionRewrite\(\)/, 'startDirectionRewrite 버튼 배선');
 });

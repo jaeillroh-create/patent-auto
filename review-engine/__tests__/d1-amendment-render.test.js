@@ -17,12 +17,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Opinion;
 
 before(() => {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   const sb = {
     from: () => ({
       update: () => ({ eq: () => Promise.resolve({}) }),

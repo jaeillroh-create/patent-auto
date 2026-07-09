@@ -1,0 +1,9 @@
+[
+  "modules/00-state-review-template.js",
+  "modules/01-projects-navigation.js",
+  "modules/02-upload-files.js",
+  "modules/03-parse-type.js",
+  "modules/04-analysis-gates.js",
+  "modules/05-draft-validation-opinion.js",
+  "modules/06-output-data-json.js"
+]

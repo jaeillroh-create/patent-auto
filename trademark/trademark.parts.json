@@ -1,0 +1,6 @@
+[
+  "modules/00-core-dashboard-crud.js",
+  "modules/01-application-steps-search.js",
+  "modules/02-risk-priority-output.js",
+  "modules/03-ai-analysis-reports.js"
+]

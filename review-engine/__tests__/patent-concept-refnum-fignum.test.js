@@ -13,9 +13,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readPatentBundle } from './helpers/patentBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
-const PATENT_SRC = readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8');
+const PATENT_SRC = readPatentBundle(REPO);
 const HTML_SRC = readFileSync(path.join(REPO, 'index.html'), 'utf8');
 
 let sandbox;
@@ -167,6 +168,6 @@ test('소스 ★ _conceptSvgForDisplay 가 카드·다운로드 경로에 배선
   assert.ok(!/_conceptSvgApplyTitle\(ct\.svgContent, figNum\)/.test(PATENT_SRC), '★ 직접 _conceptSvgApplyTitle(ct.svgContent) 호출 제거(통합 헬퍼 경유)');
 });
 
-test('회귀 ★ ?v= patent.js 20260663', () => {
-  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260663/, '★ ?v= 갱신');
+test('회귀 ★ ?v= patent.js 20260701-split', () => {
+  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260701-split/, '★ ?v= 갱신');
 });

@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import OpinionProfile from '../profiles/opinion/OpinionProfile.js';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 const SNAP = { caseId: '10-1', parsed: { claims: [{ no: 1, text: 't' }] } };
@@ -19,7 +20,7 @@ const flush = async () => { for (let i = 0; i < 25; i++) await Promise.resolve()
 
 // opinion.js 를 vm 로드 + 주입형 스텁 반환.
 function load(cfg) {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   const cap = { insert: null, invokeBody: null, pollCount: 0, msgs: [], subOpts: null, timers: [] };
   let tid = 0;
   // App.sb: review_runs insert/select + functions.invoke

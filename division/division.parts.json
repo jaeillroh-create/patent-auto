@@ -1,0 +1,9 @@
+[
+  "modules/00-state-writer-utils.js",
+  "modules/01-projects-detail.js",
+  "modules/02-pipeline-upload-files.js",
+  "modules/03-parse.js",
+  "modules/04-analysis-selection.js",
+  "modules/05-assemble-verify-core.js",
+  "modules/06-verify-final-utils.js"
+]

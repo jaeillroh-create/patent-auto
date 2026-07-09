@@ -18,13 +18,14 @@ import { run as orchestrate } from '../kernel/orchestrator.js';
 import { makeEngineWriter } from '../profiles/opinion/writerAdapter.js';
 import { approvePlan, gateView } from '../kernel/humanGate.js';
 import { renderHTML } from '../ui/opinion-review-panel.js';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Opinion, win;
 
 /** opinion.js 를 vm 샌드박스로 로드(토글 ON 스텁 포함). */
 before(() => {
-  const src = readFileSync(path.join(REPO_ROOT, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO_ROOT, 'opinion');
   const sandbox = {
     console: { log() {}, warn() {}, error() {} },
     structuredClone: globalThis.structuredClone,

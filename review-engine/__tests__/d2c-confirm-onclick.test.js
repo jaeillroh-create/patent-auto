@@ -9,12 +9,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Opinion, cap, sandbox;
 
 function load() {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   cap = { insertError: null, toasts: [], modalRemoved: false };
   const sb = {
     from: () => ({
@@ -99,13 +100,13 @@ test('B-2 insert 실패 → 경고 토스트(커밋 in-memory 는 유지)', asyn
 });
 
 test('★ [확정] 인라인 onclick + addEventListener 제거, [취소]와 통일 (source)', () => {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   assert.match(src, /id="btnRewriteConfirm" onclick="Opinion\._confirmRewriteClick\(\)"/, '[확정] 인라인 onclick');
   assert.ok(!src.includes("getElementById('btnRewriteConfirm')"), '★ btn addEventListener 배선 제거(클릭 무반응 원인 제거)');
   assert.match(src, /onclick="Opinion\.cancelRewrite\(\)"/, '[취소] 인라인 onclick(배선 통일)');
 });
 
 test('B-1 파일명 시각(HHMMSS) — 구버전 혼동 방지 (source)', () => {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   assert.match(src, /toTimeString\(\)\.slice\(0,8\)\.replace\(\/:\/g,''\)/, '파일명에 시각(HHMMSS)');
 });

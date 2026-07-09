@@ -11,12 +11,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Opinion, win;
 
 before(() => {
-  const src = readFileSync(path.join(REPO_ROOT, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO_ROOT, 'opinion');
   // 최소 브라우저 전역 스텁. sandbox.window = sandbox(자기참조) → bare `Opinion` 해석.
   const sandbox = {
     console: { log() {}, warn() {}, error() {} },

@@ -10,12 +10,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readModuleBundle } from './helpers/sourceBundle.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 let Opinion;
 
 before(() => {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   const sb = { from: () => ({ select: () => ({ eq: () => ({ order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null }) }) }) }) }) }), functions: { invoke: async () => ({ data: null }) } };
   const sandbox = {
     console: { log() {}, warn() {}, error() {} }, structuredClone: globalThis.structuredClone,
@@ -77,21 +78,21 @@ test('★ getActiveTemplate — 마스킹 전문 반환(state.templates 경유)'
 });
 
 test('★2 styleGuide 강화 — 마스킹 인지 + 내용·구조 차용 금지 (source)', () => {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   assert.match(src, /\[\*\] 마스킹 부분·기술내용·논증은 절대 차용하지 마라/, '마스킹 차용 금지');
   assert.match(src, /내용·구조 차용 절대 금지/, '내용·구조 차용 금지 강화');
   assert.match(src, /섹션 구조\(순서·제목\)는 양식이 아니라 아래 본문 지시의 ## 섹션/, '구조는 tpl 섹션');
 });
 
 test('★ tpl[t] 구조 강제 유지 — 엔진 섹션 불변 (source, 사용자 의도 구조는 엔진)', () => {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   assert.match(src, /## 서두/, 'tpl 섹션 ## 서두 유지');
   assert.match(src, /## 1\. 보정내용/, 'tpl 섹션 ## 1. 보정내용 유지');
   assert.match(src, /아래 섹션 구분자\(## 제목\)를 반드시 사용/, 'tpl 구조 강제 문구 유지');
 });
 
 test('B-1 유형 불일치 플래그 — 사건 유형에 양식 없으면 _templateTypeMismatch (source)', () => {
-  const src = readFileSync(path.join(REPO, 'opinion/opinion.js'), 'utf8');
+  const src = readModuleBundle(REPO, 'opinion');
   assert.match(src, /_templateTypeMismatch/, '유형 불일치 플래그');
   assert.match(src, /양식 미적용 — 사건 유형/, '경고 메시지');
 });
