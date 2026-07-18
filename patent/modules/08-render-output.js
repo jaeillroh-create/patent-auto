@@ -134,7 +134,7 @@ function validateClaims(text){
 //   근거: 진단 — 수학식 삽입 시 문단 중복·문장 절단이 "완성 본문 결정적 검사 부재"로 통과(26P1036 실증).
 // ═══════════════════════════════════════════════════════════════════
 const SPEC_SECTION_ORDER=['발명의 설명','발명의 명칭','기술분야','발명의 배경이 되는 기술','선행기술문헌','발명의 내용','해결하고자 하는 과제','과제의 해결 수단','발명의 효과','도면의 간단한 설명','발명을 실시하기 위한 구체적인 내용','부호의 설명','청구범위','요약서'];
-const MATH_FUNC_WORDS=new Set(['min','max','log','ln','exp','sin','cos','tan','cot','sec','csc','sqrt','sum','prod','abs','mod','floor','ceil','round','argmax','argmin','lim','det']);
+const MATH_FUNC_WORDS=new Set(['min','max','log','ln','exp','sin','cos','tan','cot','sec','csc','sqrt','sum','prod','abs','mod','floor','ceil','round','argmax','argmin','lim','det','if','then','else','where']);
 function validateSpecification(specText){
   const iss=[];
   if(!specText||!String(specText).trim())return iss;
@@ -179,12 +179,25 @@ function validateSpecification(specText){
   paras.forEach((p,i)=>{ const k=norm(p); if(k.length<50)return; (paraKey[k]=paraKey[k]||[]).push(i); });
   let hasParaDup=false;
   Object.values(paraKey).forEach(idxs=>{ if(idxs.length>=2){ hasParaDup=true; iss.push({severity:'CRITICAL',check:'paragraph_duplicate',message:`문단 중복 ${idxs.length}회 (문단 #${idxs.join(', #')})`,detail:`"${paras[idxs[0]].slice(0,60)}…"`}); } });
-  // 문장 단위(전체 정규화 완전일치, ≥40자) — 문단중복으로 이미 잡혔으면 생략(중복 노이즈 방지)
+  // 문장 단위 — 문단중복으로 이미 잡혔으면 생략(중복 노이즈 방지).
+  //   ★ spec의 "첫 40자 키"는 경계 부근 절단(첫 사본 끝 163자 탈락형)을 놓친다(40자 안에서 분기하면 미그룹).
+  //     → 첫10·끝10 coarse 키로 후보만 모으고(값 판정 아님, 저비용 prefilter), 접두+접미가 짧은 쪽 전체를
+  //       덮으면(=완전일치 또는 중간 탈락 복제) 확정. 같은 서두를 공유하는 상이 문장은 접미가 짧아 p+s<len → 오탐 아님.
   if(!hasParaDup){
-    const sents=bodyNoMath.split(/(?<=\.)\s+|\n+/).map(s=>s.trim()).filter(Boolean);
-    const sentKey={};
-    sents.forEach(s=>{ const k=norm(s); if(k.length<40)return; (sentKey[k]=sentKey[k]||[]).push(s); });
-    Object.values(sentKey).filter(a=>a.length>=2).slice(0,5).forEach(a=>iss.push({severity:'HIGH',check:'sentence_duplicate',message:`문장 중복 ${a.length}회`,detail:`"${a[0].slice(0,50)}…"`}));
+    const sents=bodyNoMath.split(/(?<=\.)\s+|\n+/).map(s=>s.trim()).filter(s=>norm(s).length>=40);
+    const groups={};
+    sents.forEach(s=>{ const k=norm(s); groups['p'+k.slice(0,10)]=(groups['p'+k.slice(0,10)]||[]).concat([s]); groups['s'+k.slice(-10)]=(groups['s'+k.slice(-10)]||[]).concat([s]); });
+    const reported=new Set();
+    Object.values(groups).forEach(arr=>{ if(arr.length<2)return;
+      for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){
+        const a=norm(arr[i]),b=norm(arr[j]),lo=a.length<=b.length?a:b,hi=a.length<=b.length?b:a;
+        let p=0; while(p<lo.length&&lo[p]===hi[p])p++;
+        let s=0; while(s<lo.length-p&&lo[lo.length-1-s]===hi[hi.length-1-s])s++;
+        const key=arr[i]<arr[j]?arr[i]+' '+arr[j]:arr[j]+' '+arr[i];
+        if(p+s>=lo.length&&!reported.has(key)){ reported.add(key);
+          iss.push({severity:'HIGH',check:'sentence_duplicate',message:'문장 중복/절단복제 의심(정규화 첫40·끝40 키 일치)',detail:`"${arr[i].slice(0,60)}…"`}); }
+      }
+    });
   }
 
   // ── CHK-7: 문장 절단 ── ★ 전체 specText 스캔(수학식 "여기서" 절 내부 절단도 검출 — 26P1036 λ정의 절단이 수학식 안이므로) ★
