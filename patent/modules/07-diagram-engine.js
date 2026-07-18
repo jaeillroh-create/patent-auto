@@ -280,13 +280,6 @@ function layoutGraph(nodes,edges){
   });
   return positions;
 }
-function computeEdgeRoutes(edges,positions){
-  return edges.map((e,ei)=>{const fp=positions[e.from],tp=positions[e.to];if(!fp||!tp)return null;const sx=fp.cx,sy=fp.y+fp.h,tx=tp.cx,ty=tp.y;const segments=[];let labelPos=null;
-    if(Math.abs(sx-tx)<0.05){segments.push({type:'line',x1:sx,y1:sy,x2:tx,y2:ty,arrow:true});if(e.label)labelPos={x:sx+0.15,y:(sy+ty)/2-0.12};}
-    else{const baseM=(sy+ty)/2,offset=(ei%3-1)*0.12,midY=baseM+offset;segments.push({type:'line',x1:sx,y1:sy,x2:sx,y2:midY,arrow:false});segments.push({type:'line',x1:sx,y1:midY,x2:tx,y2:midY,arrow:false});segments.push({type:'line',x1:tx,y1:midY,x2:tx,y2:ty,arrow:true});if(e.label)labelPos={x:Math.max(sx,tx)+0.15,y:midY-0.12};}
-    return{segments,label:e.label,labelPos};
-  }).filter(Boolean);
-}
 
 // ═══ 2D Layout Engine v4.0: Hub-Centered + 제약 기반 배치 ═══
 // 원칙 1: 허브는 반드시 중앙 열
@@ -1216,53 +1209,7 @@ function svgOrthogonalEdge(route,mkId,bidir){
   return`<path d="${d}" fill="none" stroke="#000" stroke-width="1"${startMarker} marker-end="url(#${mkId})"/>`;
 }
 
-// Stagger leader line Y-positions to prevent reference number overlap
-// Enhanced v2: same-row aware + bidirectional spread + minimum gap enforcement
-function staggerLeaderYPositions(leaderEntries,minGap){
-  if(!leaderEntries.length)return;
-  minGap=minGap||18;
-  
-  // Phase 1: 같은 Y 그룹 감지 → 열 기반 사전 오프셋
-  const yGroups={};
-  leaderEntries.forEach(le=>{
-    const roundedY=Math.round(le.y*10)/10; // 소수점 1자리 반올림
-    let matched=false;
-    for(const gy of Object.keys(yGroups)){
-      if(Math.abs(parseFloat(gy)-roundedY)<minGap*0.8){
-        yGroups[gy].push(le);
-        matched=true;
-        break; // 첫 매칭 그룹에만 추가
-      }
-    }
-    if(!matched)yGroups[roundedY]=[le];
-  });
-  
-  // 같은 Y 그룹 내에서 중앙 기준 양방향 분산
-  Object.values(yGroups).forEach(group=>{
-    if(group.length<=1)return;
-    const centerY=group.reduce((s,le)=>s+le.y,0)/group.length;
-    const spread=minGap*1.2; // 각 항목 간 간격
-    const totalSpread=(group.length-1)*spread;
-    const startY=centerY-totalSpread/2;
-    // 참조번호 순서로 정렬 (작은 번호 위)
-    group.sort((a,b)=>{
-      const na=parseInt(String(a.refNum).replace(/\D/g,''))||0;
-      const nb=parseInt(String(b.refNum).replace(/\D/g,''))||0;
-      return na-nb;
-    });
-    group.forEach((le,i)=>{
-      le.y=startY+i*spread;
-    });
-  });
-  
-  // Phase 2: 전체 정렬 후 최소 간격 강제
-  leaderEntries.sort((a,b)=>a.y-b.y);
-  for(let i=1;i<leaderEntries.length;i++){
-    if(leaderEntries[i].y-leaderEntries[i-1].y<minGap){
-      leaderEntries[i].y=leaderEntries[i-1].y+minGap;
-    }
-  }
-}
+// (제거됨 · cleanup) computeEdgeRoutes·staggerLeaderYPositions — 정의만 있고 호출 0(데드코드). 진단 DIAG-spec-quality-compliance D1.
 
 // Backward-compat: returns {x1,y1,x2,y2} for PPTX/Canvas L-shape routing
 function getConnectionPoints(fromBox,toBox){
