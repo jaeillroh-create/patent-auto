@@ -141,7 +141,7 @@ async function _longStepCore(sid){const bid=sid==='step_08'?'btnStep08':'btnStep
       const _charCount=_bodyText.length;
       // v10.5: 실제 도면 수 기준 (UI 값 변경 시에도 정확한 경고)
       const _actualFigCount=_extractFigureNumbersFromDesign(outputs.step_07||'').length||parseInt(document.getElementById('optDeviceFigures')?.value||4);
-      const _dlCfg={compact:1000,standard:1500,detailed:2000,custom:customDetailChars||2000}[detailLevel]||1500;
+      const _dlCfg={compact:1000,standard:1500,detailed:2000,maximal:3000,custom:customDetailChars||2000}[detailLevel]||1500;
       const _targetTotal=_dlCfg*_actualFigCount;
       const _ratio=_charCount/_targetTotal;
       if(_ratio>1.5){

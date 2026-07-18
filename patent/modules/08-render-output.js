@@ -237,6 +237,17 @@ function validateSpecification(specText){
     if(undef.length)iss.push({severity:'HIGH',check:'math_var_undefined',message:`수학식 ${no}: 변수 ${undef.length}개 정의 없음`,detail:`미정의: ${undef.join(', ')} ("여기서" 절에 정의 필요)`});
   });
 
+  // ── CHK-9 [Item 4]: 예시 규율 — 상세설명(실시내용) 구성요소 설명 문단에 예시/실시예 마커가 없으면 보충 권장 ──
+  //   ★ 리포트만(MEDIUM) — 자동 보충 안 함. 오탐 최소화: 실시내용 섹션 내 & 참조번호(구성요소) 포함 & 40자↑ 문단만.
+  //   청구범위·요약서·배경기술·표제·수학식·정형문(참조번호 없는 문단)은 대상 제외.
+  const _implM=specText.match(/【\s*발명을 실시하기 위한 구체적인 내용\s*】([\s\S]*?)(?:\n【|$)/);
+  if(_implM){
+    const _EX=/(예를\s*들어|예컨대|일\s*예로|실시예로서|구체적으로|이를테면|가령)/;
+    const _missing=_implM[1].split(/\n{2,}/).map(p=>p.trim()).filter(p=>
+      p && !/^【/.test(p) && !/【수학식/.test(p) && /\(\d{2,4}\)/.test(p) && norm(p).length>=40 && !_EX.test(p));
+    if(_missing.length)iss.push({severity:'MEDIUM',check:'example_missing',message:`상세설명에 예시/실시예 없는 구성요소 문단 ${_missing.length}개 — 예시 보충 권장(리포트)`,detail:`예: "${_missing[0].slice(0,40)}…"`});
+  }
+
   return iss;
 }
 // [Item 2] 완성본 기계검증 패널 렌더 — 산출물 탭(page4) 미리보기 진입 시 자동 실행. severity 색은 인라인(patent.css 무변경).

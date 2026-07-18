@@ -318,7 +318,7 @@ function restoreClaimUI(){
   initUserFiguresUI();
   // Restore detail level UI
   const dlCards=document.querySelectorAll('#detailLevelCards .selection-card');
-  const dlLevels=['compact','standard','detailed','custom'];
+  const dlLevels=['compact','standard','detailed','maximal','custom'];   // ★ [Item4] 카드 DOM 순서와 정합(compact/standard/detailed/maximal/custom)
   dlCards.forEach((c,i)=>c.classList.toggle('selected',dlLevels[i]===detailLevel));
   const ci=document.getElementById('customDetailInput');
   if(ci)ci.style.display=detailLevel==='custom'?'block':'none';
