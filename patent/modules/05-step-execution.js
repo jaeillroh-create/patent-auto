@@ -457,7 +457,7 @@ function applyEditInstructions(originalText,edits){
     //   (원본이 창 밖이거나 첫 50자 한 글자만 달라도 dedup 실패 → 앵커 뒤 사본 삽입).
     //   _normForDedup(03:1159) 규칙(stripMathBlocks+공백 전제거)으로 result 전체를 정규화 검색.
     if(edit.action!=='MODIFY'){
-      const _n=s=>stripMathBlocks(String(s||'')).replace(/\s+/g,'');
+      const _n=_stripMathNorm;   // [cleanup D2] 공유 헬퍼(06)
       const _nResult=_n(result), _nContent=_n(edit.content);
       // (1) 정규화 첫 60자 키가 result 전체에 이미 존재 → 중복(창 밖 원본도 포착)
       if(_nContent.length>=20 && _nResult.includes(_nContent.slice(0,60))){

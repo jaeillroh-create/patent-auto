@@ -153,7 +153,7 @@ function validateSpecification(specText){
   const iss=[];
   if(!specText||!String(specText).trim())return iss;
   specText=String(specText);
-  const norm=s=>stripMathBlocks(String(s||'')).replace(/\s+/g,'');   // ★ _normForDedup(03:1159)와 동일 규칙(수학식 제거+공백 전제거)
+  const norm=_stripMathNorm;   // ★ [cleanup D2] 공유 헬퍼(06) — stripMathBlocks(수학식 제거)+공백 전제거. 3중복(03·05·08) 통일
   const bodyNoMath=stripMathBlocks(specText);   // 수학식 블록 제거 — 수식 내 그리스문자·파편의 CHK-2/3/7 오탐 방지
 
   // ── CHK-1: 표제 완전성·순서 ── (【청구항 N】·【수학식 N】은 섹션표제 아님 → 캐논 표제만 대상)
