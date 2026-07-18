@@ -52,11 +52,14 @@ function validateClaims(text){
   // ★ 동적 독립항 감지: 가장 작은 번호가 독립항 ★
   const claimNums=Object.keys(claims).map(Number).sort((a,b)=>a-b);
   const firstClaimNum=claimNums[0];
-  
-  // 독립항 판별: "N항에 있어서"가 없는 청구항 = 독립항
+  // 다중인용(2 이상 항 인용: 또는/내지/및) 공용 정규식 — 독립/종속 판별·금지 검출에 함께 사용.
+  //   "제N항 내지 제M항 중 어느 한 항에 있어서"도 이 패턴에 포섭 → 종속으로 정확 분류(F-Q5 해소).
+  const _MULTI=/(?:제\s*\d+\s*항|청구항\s*\d+)\s*(?:또는|내지|및)\s*(?:제\s*\d+\s*항|청구항\s*\d+)/;
+
+  // 독립항 판별: 단일 인용("N항에 있어서")도 다중인용도 아닌 청구항 = 독립항
   const independentClaims=claimNums.filter(n=>{
     const ct=claims[n];
-    return !/청구항\s*\d+\s*에\s*있어서/.test(ct)&&!/제\s*\d+\s*항에\s*있어서/.test(ct);
+    return !/청구항\s*\d+\s*에\s*있어서/.test(ct)&&!/제\s*\d+\s*항에\s*있어서/.test(ct)&&!_MULTI.test(ct);
   });
   
   if(independentClaims.length===0){
@@ -72,15 +75,15 @@ function validateClaims(text){
     const citeMatches=ct.match(/(?:청구항|제)\s*(\d+)\s*(?:항)?/g)||[];
     citeMatches.forEach(cm=>{const nm=cm.match(/(\d+)/);if(nm)allCites.push(parseInt(nm[1]));});
     claimRefs[n]={cites:[...new Set(allCites)].filter(c=>c!==n),isMultiCite:false};
-    // 다중인용 감지: "제N항 또는 제M항" 또는 "청구항 N 또는 청구항 M"
-    if(/(?:제\s*\d+\s*항|청구항\s*\d+)\s*(?:또는|내지)\s*(?:제\s*\d+\s*항|청구항\s*\d+)/.test(ct)){
+    // 다중인용 감지(_MULTI 공용): "제N항 {또는|내지|및} 제M항" — 및 포함(전면 금지 정책). "내지 … 중 어느 한 항"도 포섭.
+    if(_MULTI.test(ct)){
       claimRefs[n].isMultiCite=true;
     }
   });
   
   Object.entries(claims).forEach(([num,ct])=>{const n=parseInt(num);
     // 종속항 판별: "N항에 있어서" 존재 여부
-    const isDependent=/청구항\s*\d+에\s*있어서/.test(ct)||/제\s*\d+\s*항에\s*있어서/.test(ct);
+    const isDependent=/청구항\s*\d+에\s*있어서/.test(ct)||/제\s*\d+\s*항에\s*있어서/.test(ct)||_MULTI.test(ct);   // 다중인용도 종속으로 분류(F-Q5)
     if(isDependent){const rm=ct.match(/청구항\s*(\d+)에\s*있어서/)||ct.match(/제\s*(\d+)\s*항에\s*있어서/),rn=rm?parseInt(rm[1]):firstClaimNum;
       if(rm){if(!claims[rn])iss.push({severity:'HIGH',message:`청구항 ${num}: 참조 청구항 ${rn} 없음`});if(rn>=n)iss.push({severity:'HIGH',message:`청구항 ${num}: 자기/후행 청구항 참조`});}
       
@@ -91,13 +94,10 @@ function validateClaims(text){
         refs.cites.forEach(c=>{
           if(c>=n)iss.push({severity:'HIGH',message:`청구항 ${num}: 청구항 ${c}를 인용하나 뒤에 위치 (번호 역전 금지)`});
         });
-        // ③ 다중인용의 다중인용 금지
+        // ★ [정책 변경] 다중인용(2 이상 항 인용) 절대 금지 — 또는/내지/및 전 형태. 단일 항 인용만 허용(기본은 독립항).
+        //   종전 "택일 강제(CHK-5)·다중인용의 다중인용 금지"를 상위 단일 규칙으로 통합 — 이중계상 방지.
         if(refs.isMultiCite){
-          refs.cites.forEach(c=>{
-            if(claimRefs[c]&&claimRefs[c].isMultiCite){
-              iss.push({severity:'HIGH',message:`청구항 ${num}: 다중인용 종속항(청구항 ${c})을 다시 다중인용 — 대통령령 위반`});
-            }
-          });
+          iss.push({severity:'HIGH',check:'multi_dependent_forbidden',message:`청구항 ${num}: 다중인용(2 이상 항 인용) 금지 — 단일 항 인용으로 변경(기본은 독립항 인용, 필요 시 직전 단일 종속항)`});
         }
       }
       
@@ -130,11 +130,8 @@ function validateClaims(text){
       const _after=ct.replace(/^[\s\S]*?에\s*있어서\s*,?/,'').trim();
       if(_after.replace(/\s+/g,'').length<8)iss.push({severity:'MEDIUM',check:'anchor_no_limitation',message:`청구항 ${num}: 종속항에 실질적 부가 한정이 없음(앵커 구성 미기재 의심)`});
     }
-    // ★ [Item2 CHK-5] 다중인용은 택일적("또는"/"내지")이어야 하며, 청구항 참조를 "및"(연결)로 기재하면 대통령령 위반 ★
-    //   claim-ref 및 claim-ref 형태만 검출(본문 "A 및 B를 포함" 등 일반 '및'은 미검출).
-    if(/(?:제\s*\d+\s*항|청구항\s*\d+)\s*및\s*(?:제\s*\d+\s*항|청구항\s*\d+)/.test(ct)){
-      iss.push({severity:'HIGH',message:`청구항 ${num}: 다중인용을 "및"(연결)로 기재 — 택일적("또는"/"내지")으로 기재해야 함`});
-    }
+    // ★ [정책 변경] 종전 CHK-5(및→택일 강제)는 상위 multi_dependent_forbidden(다중인용 전면 금지)에 통합됨.
+    //   "제N항 및 제M항"은 isMultiCite(및 포함)로 감지되어 위에서 HIGH 방출 — 별도 및-검사 제거(이중계상 방지).
     KILLER_WORDS.forEach(kw=>{if(kw.pattern.test(ct))iss.push({severity:'HIGH',message:`청구항 ${num}: ${kw.msg}`});});
   });return iss;
 }

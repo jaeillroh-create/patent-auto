@@ -194,18 +194,17 @@ test('CHK-8 ★ 모든 변수 정의 시 미검출(음성) + 함수명(min)은 �
   assert.ok(!has(iss, 'math_var_undefined'), '★ 전 변수 정의 시 미검출(min 함수 오탐 없음): ' + JSON.stringify(iss.filter(i=>i.check==='math_var_undefined')));
 });
 
-// ─────────── CHK-5 (validateClaims 확장) 다중인용 "및" ───────────
-test('CHK-5 ★ 다중인용 "및"(연결) → 택일 위반 검출', () => {
+// ─────────── 다중인용 절대 금지(정책 변경: 택일 허용 → 전면 금지) ───────────
+test('정책 ★ 다중인용 "및"(연결) → multi_dependent_forbidden 검출', () => {
   const claims = '【청구항 1】 A를 포함하는 시스템.\n【청구항 2】 B를 포함하는 시스템.\n【청구항 3】 제1항 및 제2항에 있어서, C를 더 포함하는 시스템.';
-  const iss = vClaims(claims);
-  assert.ok(iss.some(i => /다중인용.*및|및.*택일/.test(i.message)), '★ "및" 다중인용 위반 검출: ' + JSON.stringify(iss.map(i=>i.message)));
+  assert.ok(vClaims(claims).some(i => i.check === 'multi_dependent_forbidden'), '★ "및" 다중인용 금지 검출');
 });
 
-test('CHK-5 ★ 택일("또는")·일반 "및"(구성 나열)은 미검출(음성)', () => {
+test('정책 ★ 다중인용 "또는"도 금지(택일 허용 폐지)·일반 "및"(구성 나열)은 미검출', () => {
   const alt = '【청구항 1】 A를 포함하는 시스템.\n【청구항 2】 B를 포함하는 시스템.\n【청구항 3】 제1항 또는 제2항에 있어서, C를 더 포함하는 시스템.';
-  assert.ok(!vClaims(alt).some(i => /다중인용.*및|및.*택일/.test(i.message)), '★ "또는" 택일은 미검출');
-  const body = '【청구항 1】 프로세서 및 메모리를 포함하는 시스템.';
-  assert.ok(!vClaims(body).some(i => /다중인용.*및|및.*택일/.test(i.message)), '★ 구성 나열 "및"은 미검출(claim-ref 아님)');
+  assert.ok(vClaims(alt).some(i => i.check === 'multi_dependent_forbidden'), '★ "또는"도 다중인용 금지(정책 변경)');
+  const body = '【청구항 1】 프로세서 및 메모리를 포함하는 시스템.\n【청구항 2】 청구항 1에 있어서, X를 더 포함하는 시스템.';
+  assert.ok(!vClaims(body).some(i => i.check === 'multi_dependent_forbidden'), '★ 구성 나열 "및"은 미검출(claim-ref 아님)');
 });
 
 // ─────────── 회귀: validateClaims 기존 동작 불변 ───────────
@@ -223,6 +222,6 @@ test('회귀 ★ 기존 검사(제한적 표현 KILLER_WORDS) 유지', () => {
 test('소스 ★ validateSpecification 정의 + 역할분담 주석 + CHK-5 확장', () => {
   assert.match(PATENT_SRC, /function validateSpecification\(specText\)\{/, '★ validateSpecification 정의');
   assert.match(PATENT_SRC, /역할 분담\(중복 구현 금지\)/, '★ 역할분담 주석(중복 구현 금지)');
-  assert.match(PATENT_SRC, /\[Item2 CHK-5\][\s\S]*?다중인용[\s\S]*?및/, '★ validateClaims CHK-5 확장');
+  assert.match(PATENT_SRC, /multi_dependent_forbidden[\s\S]*?다중인용\(2 이상 항 인용\) 금지/, '★ validateClaims 다중인용 전면 금지');
   assert.match(PATENT_SRC, /function renderSpecValidation\(\)\{/, '★ UI 렌더 함수');
 });
