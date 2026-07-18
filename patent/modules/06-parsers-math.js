@@ -87,6 +87,9 @@ function stripMathBlocks(text){
   r=r.replace(/\n{3,}/g,'\n\n');
   return r.trim();
 }
+// ★ [cleanup D2] 중복 제거용 정규화 공유 헬퍼 — stripMathBlocks(수학식 제거) + 공백 전제거.
+//   기존 3중복(_normForDedup 03·_n 05·norm 08)을 이 하나로 통일. (_normForAnchor 는 구두점 기반이라 별개)
+function _stripMathNorm(s){ return stripMathBlocks(String(s||'')).replace(/\s+/g,''); }
 // v10.2: 수학식 번호 순차 재정렬 (헤더 + 본문 교차참조 모두 갱신)
 function renumberMathBlocks(text){
   if(!text)return text;
