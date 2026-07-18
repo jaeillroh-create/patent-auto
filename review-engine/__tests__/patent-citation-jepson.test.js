@@ -107,9 +107,9 @@ test('교차 ★ MEDIUM(젭슨)만 있는 청구항 — Item3 게이트 CRITICAL
   assert.deepEqual(g, { critical: 0, high: 0 }, '★ 젭슨 MEDIUM은 게이트에 영향 없음');
 });
 
-test('교차 ★ CHK-5(다중인용 "및")와 공존·비충돌', () => {
+test('교차 ★ 다중인용 금지(multi_dependent_forbidden)와 젭슨/앵커 공존·비충돌', () => {
   const iss = vClaims('【청구항 1】 A를 포함하는 시스템.\n【청구항 2】 B를 포함하는 시스템.\n【청구항 3】 제1항 및 제2항에 있어서, C를 더 포함하는 시스템.');
-  assert.ok(iss.some(i => /다중인용.*및|및.*택일/.test(i.message)), '★ CHK-5 여전히 작동(젭슨/앵커 추가와 무충돌)');
+  assert.ok(iss.some(i => i.check === 'multi_dependent_forbidden'), '★ 다중인용 금지 작동(젭슨/앵커 추가와 무충돌)');
 });
 
 // ─────────── 회귀 ───────────
