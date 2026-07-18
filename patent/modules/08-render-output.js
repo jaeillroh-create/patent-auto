@@ -188,20 +188,26 @@ function validateSpecification(specText){
   }
 
   // ── CHK-6: 문단·블록 중복 (CRITICAL) ── (26P1036 5문단 연속 중복 직격)
-  const paras=specText.split(/\n{2,}/).map(p=>p.trim()).filter(Boolean);
+  const paras=specText.split(/\n{2,}/).map(p=>p.trim()).filter(Boolean);   // ★ CHK-7(b)용 전체 문단(무변경)
+  // ★ 중복 검사 소스에서 청구범위·요약서 제외 — 청구항/요약이 상세설명 문구를 반복하는 것은 §42④ 뒷받침상
+  //   "정당 반복"이므로 중복(6a CRITICAL·6b HIGH)으로 오탐하면 안 됨. buildSpecification 순서상 청구범위·요약서는
+  //   말미 → 둘 중 먼저 나오는 위치부터 잘라냄(순서 무관 방어). CHK-9 섹션 슬라이스 방식과 동형.
+  const _iC=specText.search(/【\s*청구범위\s*】/), _iA=specText.search(/【\s*요약서\s*】/);
+  const _cuts=[_iC,_iA].filter(i=>i>=0);
+  const _bodyBeforeClaims=_cuts.length?specText.slice(0,Math.min(..._cuts)):specText;
+  const parasForDup=_bodyBeforeClaims.split(/\n{2,}/).map(p=>p.trim()).filter(Boolean);
   const paraKey={};
   //  ★ 표제 인접 중복 승격: 문단 앞머리 표제(【…】) 접두 제거 후 키 생성 → "【표제】\n<중복문단>"(첫 사본)과
   //    맨 본문 "<중복문단>"이 동일 키가 되어 CHK-6(a) CRITICAL 로 포착(표제로 키가 갈려 HIGH로 강등되던 결함 해소).
-  //    표제 접두만 제거하므로 CHK-6(b)/7/8·감지 범위 무영향. [참고: …]·표 등 대괄호 블록은 【】 아님 → 미매칭.
-  paras.forEach((p,i)=>{ const pBody=p.replace(/^【[^】]+】\s*\n?/,''); const k=norm(pBody); if(k.length<50)return; (paraKey[k]=paraKey[k]||[]).push(i); });
+  parasForDup.forEach((p,i)=>{ const pBody=p.replace(/^【[^】]+】\s*\n?/,''); const k=norm(pBody); if(k.length<50)return; (paraKey[k]=paraKey[k]||[]).push(i); });
   let hasParaDup=false;
-  Object.values(paraKey).forEach(idxs=>{ if(idxs.length>=2){ hasParaDup=true; iss.push({severity:'CRITICAL',check:'paragraph_duplicate',message:`문단 중복 ${idxs.length}회 (문단 #${idxs.join(', #')})`,detail:`"${paras[idxs[0]].slice(0,60)}…"`}); } });
+  Object.values(paraKey).forEach(idxs=>{ if(idxs.length>=2){ hasParaDup=true; iss.push({severity:'CRITICAL',check:'paragraph_duplicate',message:`문단 중복 ${idxs.length}회 (문단 #${idxs.join(', #')})`,detail:`"${parasForDup[idxs[0]].slice(0,60)}…"`}); } });
   // 문장 단위 — 문단중복으로 이미 잡혔으면 생략(중복 노이즈 방지).
   //   ★ spec의 "첫 40자 키"는 경계 부근 절단(첫 사본 끝 163자 탈락형)을 놓친다(40자 안에서 분기하면 미그룹).
   //     → 첫10·끝10 coarse 키로 후보만 모으고(값 판정 아님, 저비용 prefilter), 접두+접미가 짧은 쪽 전체를
   //       덮으면(=완전일치 또는 중간 탈락 복제) 확정. 같은 서두를 공유하는 상이 문장은 접미가 짧아 p+s<len → 오탐 아님.
   if(!hasParaDup){
-    const sents=bodyNoMath.split(/(?<=\.)\s+|\n+/).map(s=>s.trim()).filter(s=>norm(s).length>=40);
+    const sents=stripMathBlocks(_bodyBeforeClaims).split(/(?<=\.)\s+|\n+/).map(s=>s.trim()).filter(s=>norm(s).length>=40);   // ★ 청구범위·요약서 제외(정당 반복 오탐 방지)
     const groups={};
     sents.forEach(s=>{ const k=norm(s); groups['p'+k.slice(0,10)]=(groups['p'+k.slice(0,10)]||[]).concat([s]); groups['s'+k.slice(-10)]=(groups['s'+k.slice(-10)]||[]).concat([s]); });
     const reported=new Set();
