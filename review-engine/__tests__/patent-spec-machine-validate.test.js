@@ -136,6 +136,33 @@ test('CHK-6b ★ 서두만 공유하는 상이 문장은 미검출(오탐 방지
   assert.ok(!has(vSpec(txt), 'sentence_duplicate'), '★ 공통 서두+상이 본문 → 중복 아님(첫40 그룹핑돼도 접미 짧아 미확정)');
 });
 
+// ─────────── 작업1: CHK-6(a) 표제 인접 중복 CRITICAL 승격 ───────────
+test('작업1 ★ 표제 인접 중복 — CHK-6(a) CRITICAL 승격(HIGH 강등 아님)', () => {
+  const dup = '통신부(110)는 외부 장치로부터 데이터를 수신하고, 프로세서(120)는 수신된 데이터를 분석하여 결과를 생성하고 저장부에 저장한다.'; // norm ≥50
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n' + dup + '\n\n중간 서술 문단이 여기에 위치하여 두 사본을 분리한다.\n\n' + dup;
+  const iss = vSpec(spec);
+  assert.equal(iss.filter(i => i.check === 'paragraph_duplicate' && i.severity === 'CRITICAL').length, 1, '★ 표제 붙은 첫 사본도 맨 본문과 동일 키 → CRITICAL 1건: ' + JSON.stringify(iss));
+});
+
+test('작업1 ★ 음성 — 표제+짧은 본문(50자 미만) 중복은 미검출(스킵 유지)', () => {
+  const shortBody = '간단한 요약 설명이다.'; // norm <50
+  const spec = '【기술분야】\n' + shortBody + '\n\n중간 문단.\n\n' + shortBody;
+  assert.ok(!has(vSpec(spec), 'paragraph_duplicate'), '★ 표제 제거 후 50자 미만 → 스킵');
+});
+
+test('작업1 회귀 ★ 표제 없는 본문 중간 중복 — 여전히 CRITICAL(기존 검출 불변)', () => {
+  const para = '도 1을 참조하면, 통신부(110)는 외부 장치로부터 데이터를 수신하고, 프로세서(120)는 수신된 데이터를 분석하여 결과를 생성한다.';
+  const spec = para + '\n\n' + para;
+  assert.equal(vSpec(spec).filter(i => i.check === 'paragraph_duplicate' && i.severity === 'CRITICAL').length, 1, '★ 표제 없는 중복도 CRITICAL 1건 유지');
+});
+
+test('작업1 ★ 음성 — 동일 표제 2회여도 본문이 다르면 문단중복 아님(오탐 방지)', () => {
+  const body1 = '본 발명은 검색 시스템의 정확도 향상에 관한 것으로서 종래 기술의 한계를 극복하고 사용자 만족도를 크게 높이는 매우 중요한 기술적 의의를 가진다.';
+  const body2 = '본 발명은 데이터 처리 속도의 개선에 관한 것으로서 대용량 트래픽 환경에서도 안정적으로 동작하며 상당한 산업적 가치를 지니고 있는 발명이다.';
+  const spec = '【기술분야】\n' + body1 + '\n\n【기술분야】\n' + body2;
+  assert.ok(!has(vSpec(spec), 'paragraph_duplicate'), '★ 표제 접두 제거해도 본문 상이 → 오탐 없음');
+});
+
 // ─────────── CHK-7 문장 절단 (F2) ───────────
 test('CHK-7 ★ F2(26P1036) 수학식 "여기서" 절 내부 절단(마침표 직후 숫자) 검출', () => {
   const F2 = '【수학식 3】\nG = f(N)\n여기서, G는 클램핑이 적용된 가중치 항을 나타내는 1 이상의 실수값이며 무차원량이다.2 이상 0.5 이하의 범위에서 설정되고 초기값은 0.3이다.';

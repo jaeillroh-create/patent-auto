@@ -176,7 +176,10 @@ function validateSpecification(specText){
   // ── CHK-6: 문단·블록 중복 (CRITICAL) ── (26P1036 5문단 연속 중복 직격)
   const paras=specText.split(/\n{2,}/).map(p=>p.trim()).filter(Boolean);
   const paraKey={};
-  paras.forEach((p,i)=>{ const k=norm(p); if(k.length<50)return; (paraKey[k]=paraKey[k]||[]).push(i); });
+  //  ★ 표제 인접 중복 승격: 문단 앞머리 표제(【…】) 접두 제거 후 키 생성 → "【표제】\n<중복문단>"(첫 사본)과
+  //    맨 본문 "<중복문단>"이 동일 키가 되어 CHK-6(a) CRITICAL 로 포착(표제로 키가 갈려 HIGH로 강등되던 결함 해소).
+  //    표제 접두만 제거하므로 CHK-6(b)/7/8·감지 범위 무영향. [참고: …]·표 등 대괄호 블록은 【】 아님 → 미매칭.
+  paras.forEach((p,i)=>{ const pBody=p.replace(/^【[^】]+】\s*\n?/,''); const k=norm(pBody); if(k.length<50)return; (paraKey[k]=paraKey[k]||[]).push(i); });
   let hasParaDup=false;
   Object.values(paraKey).forEach(idxs=>{ if(idxs.length>=2){ hasParaDup=true; iss.push({severity:'CRITICAL',check:'paragraph_duplicate',message:`문단 중복 ${idxs.length}회 (문단 #${idxs.join(', #')})`,detail:`"${paras[idxs[0]].slice(0,60)}…"`}); } });
   // 문장 단위 — 문단중복으로 이미 잡혔으면 생략(중복 노이즈 방지).
