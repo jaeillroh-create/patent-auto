@@ -116,9 +116,133 @@ function validateClaims(text){
         // 양쪽 모두 없음 → 기재불비
         iss.push({severity:'HIGH',message:`청구항 ${num}: "상기 ${raw}" — 인용 청구항 체인에 "${cw.join(', ')}" 선행기재 없음`});
       });}
+    // ★ [Item2 CHK-5] 다중인용은 택일적("또는"/"내지")이어야 하며, 청구항 참조를 "및"(연결)로 기재하면 대통령령 위반 ★
+    //   claim-ref 및 claim-ref 형태만 검출(본문 "A 및 B를 포함" 등 일반 '및'은 미검출).
+    if(/(?:제\s*\d+\s*항|청구항\s*\d+)\s*및\s*(?:제\s*\d+\s*항|청구항\s*\d+)/.test(ct)){
+      iss.push({severity:'HIGH',message:`청구항 ${num}: 다중인용을 "및"(연결)로 기재 — 택일적("또는"/"내지")으로 기재해야 함`});
+    }
     KILLER_WORDS.forEach(kw=>{if(kw.pattern.test(ct))iss.push({severity:'HIGH',message:`청구항 ${num}: ${kw.msg}`});});
   });return iss;
 }
+// ═══════════════════════════════════════════════════════════════════
+// [Item 2] validateSpecification — 완성 명세서(buildSpecification 산출물)의 결정적 무결성 검사.
+//   ★ 역할 분담(중복 구현 금지):
+//     · validateClaims(위): 청구항 "내부" 규칙 — 파싱·독립항·참조 무결성·다중인용(CHK-5 및/택일).
+//     · validateSpecification(여기): "본문·구조" 규칙 — 표제(CHK-1)·종결어미(CHK-2)·단위파손(CHK-3)
+//       ·도면부호 병기 본문↔부호의설명 대조(CHK-4)·문단블록 중복(CHK-6)·문장 절단(CHK-7)·수학식 변수정의(CHK-8).
+//   순수 함수(DOM 무접촉). 반환: [{severity:'CRITICAL'|'HIGH'|'MEDIUM', check, message, detail}]
+//   근거: 진단 — 수학식 삽입 시 문단 중복·문장 절단이 "완성 본문 결정적 검사 부재"로 통과(26P1036 실증).
+// ═══════════════════════════════════════════════════════════════════
+const SPEC_SECTION_ORDER=['발명의 설명','발명의 명칭','기술분야','발명의 배경이 되는 기술','선행기술문헌','발명의 내용','해결하고자 하는 과제','과제의 해결 수단','발명의 효과','도면의 간단한 설명','발명을 실시하기 위한 구체적인 내용','부호의 설명','청구범위','요약서'];
+const MATH_FUNC_WORDS=new Set(['min','max','log','ln','exp','sin','cos','tan','cot','sec','csc','sqrt','sum','prod','abs','mod','floor','ceil','round','argmax','argmin','lim','det','if','then','else','where']);
+function validateSpecification(specText){
+  const iss=[];
+  if(!specText||!String(specText).trim())return iss;
+  specText=String(specText);
+  const norm=s=>stripMathBlocks(String(s||'')).replace(/\s+/g,'');   // ★ _normForDedup(03:1159)와 동일 규칙(수학식 제거+공백 전제거)
+  const bodyNoMath=stripMathBlocks(specText);   // 수학식 블록 제거 — 수식 내 그리스문자·파편의 CHK-2/3/7 오탐 방지
+
+  // ── CHK-1: 표제 완전성·순서 ── (【청구항 N】·【수학식 N】은 섹션표제 아님 → 캐논 표제만 대상)
+  const seenOrder=[]; let hm; const headerRe=/【\s*([^】]+?)\s*】/g;
+  while((hm=headerRe.exec(specText))!==null){ const h=hm[1].replace(/\s+/g,' ').trim(); if(SPEC_SECTION_ORDER.includes(h))seenOrder.push(h); }
+  SPEC_SECTION_ORDER.forEach(h=>{ if(!seenOrder.includes(h))iss.push({severity:'HIGH',check:'heading_missing',message:`표제 누락: 【${h}】`,detail:'표준 명세서 표제가 완성본에 없음'}); });
+  let oi=0,badH='';
+  for(const h of seenOrder){ const p=SPEC_SECTION_ORDER.indexOf(h,oi); if(p<0){ const anyPos=SPEC_SECTION_ORDER.indexOf(h); if(anyPos>=0&&anyPos<oi){badH=h;break;} } else oi=p+1; }
+  if(badH)iss.push({severity:'HIGH',check:'heading_order',message:`표제 순서 오류: 【${badH}】가 표준 순서를 벗어남(중복/역순)`,detail:'표제가 표준 명세서 순서와 다름'});
+
+  // ── CHK-2: 종결어미 통일 (평서체 "~다." vs 경어체 혼재) ──
+  const politeEnd=(bodyNoMath.match(/(?:습니다|합니다|입니다|됩니다|세요|해요|어요|아요|예요)\./g)||[]);
+  const plainEnd=(bodyNoMath.match(/[가-힣]다\.(?!\d)/g)||[]);
+  if(politeEnd.length>0&&plainEnd.length>0)iss.push({severity:'MEDIUM',check:'sentence_ending',message:`종결어미 혼재 — 경어체 ${politeEnd.length}건(명세서는 평서체 "~다." 통일)`,detail:`예: ${[...new Set(politeEnd)].slice(0,3).join(', ')}`});
+
+  // ── CHK-3: 단위/인코딩 파손 ──
+  if(/�/.test(specText))iss.push({severity:'HIGH',check:'unit_corruption',message:'인코딩 파손 문자(U+FFFD) 포함',detail:'치환문자(�) 검출 — 단위·특수문자 파손 의심'});
+  const mojibake=(bodyNoMath.match(/\d\s*[Α-Ω]{1,2}[a-zA-Z]/g)||[]);   // 숫자+그리스대문자+라틴 (㎛→"ΜM" 모지바케)
+  if(mojibake.length)iss.push({severity:'MEDIUM',check:'unit_corruption',message:`단위 표기 파손 의심 ${mojibake.length}건(그리스문자 혼입)`,detail:`예: ${[...new Set(mojibake)].slice(0,3).join(', ')} (㎛ 등 단위기호 유니코드 파손 가능)`});
+
+  // ── CHK-4: 도면부호 병기 (본문 ↔ 부호의 설명 대조) ──
+  const refSecM=specText.match(/【\s*부호의 설명\s*】([\s\S]*?)(?:\n【|$)/);
+  if(refSecM){
+    const refSec=refSecM[1];
+    const defined=new Set((refSec.match(/\b\d{1,4}\b/g)||[]).map(Number).filter(n=>n>=1&&n<=9999));
+    const body=specText.replace(refSec,' ');
+    const used=new Set((body.match(/\(\d{1,4}\)/g)||[]).map(s=>parseInt(s.replace(/[()]/g,''),10)).filter(n=>n>=1&&n<=9999));
+    const usedNotDef=[...used].filter(n=>!defined.has(n)).sort((a,b)=>a-b);
+    const defNotUsed=[...defined].filter(n=>!used.has(n)).sort((a,b)=>a-b);
+    if(usedNotDef.length)iss.push({severity:'MEDIUM',check:'refnum_consistency',message:`본문 사용 부호 ${usedNotDef.length}개가 부호의 설명에 미정의`,detail:`미정의: ${usedNotDef.slice(0,10).join(', ')}${usedNotDef.length>10?' 외':''}`});
+    if(defNotUsed.length)iss.push({severity:'MEDIUM',check:'refnum_consistency',message:`부호의 설명 정의 ${defNotUsed.length}개가 본문에 미사용`,detail:`미사용: ${defNotUsed.slice(0,10).join(', ')}${defNotUsed.length>10?' 외':''}`});
+  }
+
+  // ── CHK-6: 문단·블록 중복 (CRITICAL) ── (26P1036 5문단 연속 중복 직격)
+  const paras=specText.split(/\n{2,}/).map(p=>p.trim()).filter(Boolean);
+  const paraKey={};
+  //  ★ 표제 인접 중복 승격: 문단 앞머리 표제(【…】) 접두 제거 후 키 생성 → "【표제】\n<중복문단>"(첫 사본)과
+  //    맨 본문 "<중복문단>"이 동일 키가 되어 CHK-6(a) CRITICAL 로 포착(표제로 키가 갈려 HIGH로 강등되던 결함 해소).
+  //    표제 접두만 제거하므로 CHK-6(b)/7/8·감지 범위 무영향. [참고: …]·표 등 대괄호 블록은 【】 아님 → 미매칭.
+  paras.forEach((p,i)=>{ const pBody=p.replace(/^【[^】]+】\s*\n?/,''); const k=norm(pBody); if(k.length<50)return; (paraKey[k]=paraKey[k]||[]).push(i); });
+  let hasParaDup=false;
+  Object.values(paraKey).forEach(idxs=>{ if(idxs.length>=2){ hasParaDup=true; iss.push({severity:'CRITICAL',check:'paragraph_duplicate',message:`문단 중복 ${idxs.length}회 (문단 #${idxs.join(', #')})`,detail:`"${paras[idxs[0]].slice(0,60)}…"`}); } });
+  // 문장 단위 — 문단중복으로 이미 잡혔으면 생략(중복 노이즈 방지).
+  //   ★ spec의 "첫 40자 키"는 경계 부근 절단(첫 사본 끝 163자 탈락형)을 놓친다(40자 안에서 분기하면 미그룹).
+  //     → 첫10·끝10 coarse 키로 후보만 모으고(값 판정 아님, 저비용 prefilter), 접두+접미가 짧은 쪽 전체를
+  //       덮으면(=완전일치 또는 중간 탈락 복제) 확정. 같은 서두를 공유하는 상이 문장은 접미가 짧아 p+s<len → 오탐 아님.
+  if(!hasParaDup){
+    const sents=bodyNoMath.split(/(?<=\.)\s+|\n+/).map(s=>s.trim()).filter(s=>norm(s).length>=40);
+    const groups={};
+    sents.forEach(s=>{ const k=norm(s); groups['p'+k.slice(0,10)]=(groups['p'+k.slice(0,10)]||[]).concat([s]); groups['s'+k.slice(-10)]=(groups['s'+k.slice(-10)]||[]).concat([s]); });
+    const reported=new Set();
+    Object.values(groups).forEach(arr=>{ if(arr.length<2)return;
+      for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){
+        const a=norm(arr[i]),b=norm(arr[j]),lo=a.length<=b.length?a:b,hi=a.length<=b.length?b:a;
+        let p=0; while(p<lo.length&&lo[p]===hi[p])p++;
+        let s=0; while(s<lo.length-p&&lo[lo.length-1-s]===hi[hi.length-1-s])s++;
+        const key=arr[i]<arr[j]?arr[i]+' '+arr[j]:arr[j]+' '+arr[i];
+        if(p+s>=lo.length&&!reported.has(key)){ reported.add(key);
+          iss.push({severity:'HIGH',check:'sentence_duplicate',message:'문장 중복/절단복제 의심(정규화 첫40·끝40 키 일치)',detail:`"${arr[i].slice(0,60)}…"`}); }
+      }
+    });
+  }
+
+  // ── CHK-7: 문장 절단 ── ★ 전체 specText 스캔(수학식 "여기서" 절 내부 절단도 검출 — 26P1036 λ정의 절단이 수학식 안이므로) ★
+  //   수식엔 한글이 없어 "[가-힣]다\.숫자/한글" 패턴이 formula로 오탐되지 않음.
+  (specText.match(/[가-힣]다\.\d/g)||[]).forEach(m=>iss.push({severity:'HIGH',check:'sentence_truncation',message:'문장 절단 의심 — 마침표 직후 숫자 붙음',detail:`"…${m}…" (종결 후 공백 없이 숫자 시작)`}));   // (a) "무차원량이다.2"
+  (specText.match(/[가-힣](?:다|음|함|됨)\.[가-힣]/g)||[]).forEach(m=>iss.push({severity:'HIGH',check:'sentence_truncation',message:'문장 절단 의심 — 마침표 직후 한글 붙음',detail:`"…${m}…" (종결 후 공백 없이 이어짐)`}));   // (c)
+  paras.forEach((p,i)=>{ if(/^\s*\d+(?:\.\d+)?\s*(?:이상|이하|내지|초과|미만)/.test(p))iss.push({severity:'HIGH',check:'sentence_truncation',message:`문단 #${i} 첫머리가 무주어 숫자범위로 시작 — 앞문장 절단 의심`,detail:`"${p.slice(0,40)}…"`}); });   // (b)
+
+  // ── CHK-8: 수학식 변수 정의 완전성 ── 【수학식 N】 수식부 변수 ↔ "여기서" 절 정의 대조
+  const blocks=specText.split(/(?=【\s*수학식)/).filter(b=>/^【\s*수학식/.test(b.trim()));
+  blocks.forEach(b=>{
+    const nm=b.match(/【\s*수학식\s*(\d+)\s*】/); const no=nm?nm[1]:'?';
+    const afterHeader=b.replace(/^[\s\S]*?】/,'');
+    const hereIdx=afterHeader.search(/여기서/);
+    const formulaPart=(hereIdx>=0?afterHeader.slice(0,hereIdx):afterHeader.split(/\n\n/)[0])||'';
+    let defPart=hereIdx>=0?afterHeader.slice(hereIdx):'';
+    defPart=defPart.split(/\n\n|\n【|【/)[0];   // "여기서" 절 한 문단으로 한정(먼 곳 우연일치 방지)
+    const vars=[...new Set((formulaPart.match(/[A-Za-zΑ-ω_][A-Za-z0-9_]*/g)||[]))].filter(v=>!MATH_FUNC_WORDS.has(v.toLowerCase()));
+    const undef=vars.filter(v=>{ const esc=v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); return !new RegExp(esc+'\\s*(?:는|은)').test(defPart); });
+    if(undef.length)iss.push({severity:'HIGH',check:'math_var_undefined',message:`수학식 ${no}: 변수 ${undef.length}개 정의 없음`,detail:`미정의: ${undef.join(', ')} ("여기서" 절에 정의 필요)`});
+  });
+
+  return iss;
+}
+// [Item 2] 완성본 기계검증 패널 렌더 — 산출물 탭(page4) 미리보기 진입 시 자동 실행. severity 색은 인라인(patent.css 무변경).
+function renderSpecValidation(){
+  const el=document.getElementById('specValidateResult'); if(!el)return;
+  const spec=buildSpecification();
+  if(!spec.trim()){el.innerHTML='<div class="issue-item issue-pass"><span class="ico" data-icon="check-circle"></span>검증할 완성 명세서가 없어요</div>';return;}
+  const iss=validateSpecification(spec);
+  const crit=iss.filter(i=>i.severity==='CRITICAL').length, high=iss.filter(i=>i.severity==='HIGH').length, med=iss.filter(i=>i.severity==='MEDIUM').length;
+  let h=`<div class="stat-row" style="margin-bottom:10px"><div class="stat-card stat-card-cost"><div class="stat-card-value">${crit}</div><div class="stat-card-label">CRITICAL</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${high}</div><div class="stat-card-label">HIGH</div></div><div class="stat-card stat-card-steps"><div class="stat-card-value">${med}</div><div class="stat-card-label">MEDIUM</div></div></div>`;
+  if(!iss.length){h+='<div class="issue-item issue-pass" style="border-left:3px solid var(--color-success,#3DAE7A);padding:8px 10px;border-radius:6px;background:rgba(61,174,122,0.08)"><span class="ico" data-icon="check-circle"></span> 완성본 기계검증 통과 — 표제·중복·절단·수학식 이상 없음</div>';}
+  else{h+=iss.map(i=>{
+    const col=i.severity==='CRITICAL'?'var(--color-error,#D94A4A)':(i.severity==='HIGH'?'var(--color-warning,#E8A33D)':'var(--dt-g400,#B0B0B0)');
+    const cls=i.severity==='CRITICAL'?'issue-critical':'issue-high';
+    return `<div class="issue-item ${cls}" style="border-left:3px solid ${col};padding:8px 10px;margin:4px 0;border-radius:6px;background:rgba(0,0,0,0.02)"><b>[${i.severity}·${App.escapeHtml(i.check)}]</b> ${App.escapeHtml(i.message)}${i.detail?`<br><span style="font-size:11px;color:var(--color-text-tertiary)">${App.escapeHtml(i.detail)}</span>`:''}</div>`;
+  }).join('');}
+  el.innerHTML=h;
+}
+// [Item 2] 다운로드/복사 직전 CRITICAL 경고(차단 아님 — division 선례 B: 경고+진행). 열린 결정은 PR 본문 참조.
+function _warnSpecValidation(){ try{ const sv=validateSpecification(buildSpecification()); const c=sv.filter(i=>i.severity==='CRITICAL').length; if(c)App.showToast(`⚠️ 완성본 검증 CRITICAL ${c}건(문단 중복/절단 의심) — 산출물 탭 검증 패널 확인 권장`,'warning'); }catch(_e){} }
 function runValidation(){
   const all=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n');
   if(!all){App.showToast('검증할 청구항이 없어요','error');return;}
@@ -241,6 +365,7 @@ function _appendUserFigureSlides(pptx){
 function renderPreview(){
   // ── [G4/G5] page4 진입 시 검증 게이트 갱신 + 리뷰 결과 마운트(트리거·결과 동일 위치).
   try { if (Patent._updateReviewGate) Patent._updateReviewGate(); } catch (_e) {}
+  try { renderSpecValidation(); } catch (_e) {}   // [Item 2] 완성본 기계검증 패널 자동 갱신(미리보기 진입 시)
   // [T8 훅 이전] 통합 리뷰 엔진 결과 표시(window.ReviewUI). __patentReviewState 없으면 no-op(기존 동작 불변).
   //   승인(Human Gate) → onChange → Patent.applyAmendments(승인분만, 3경로 정합 재검증) → recheck 재트리거.
   try {
@@ -295,11 +420,12 @@ function buildSpecification(){
 }
 // ★ [Task1] ④ 미생성(예시도 있는데 step_08c 비었음) 경고 — 출력 직전 1회(누락 사실 안내, 차단은 안 함).
 function _warnConceptDescMissing(){ if(_conceptDescMissing())App.showToast('⚠️ 예시도 상세설명 미생성 — 예시도 설명이 명세서에서 빠집니다. Step 8 "상세설명 생성(장치+예시도)"을 실행하면 예시도 설명도 함께 생성됩니다','warning'); }
-function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
-function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();_warnSpecValidation();navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
+function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();_warnSpecValidation();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 
 function downloadAsWord(){
   _warnConceptDescMissing();   // ★ [Task1] ④ 미생성 경고
+  _warnSpecValidation();       // [Item 2] 완성본 기계검증 CRITICAL 경고(차단 아님)
   const brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
