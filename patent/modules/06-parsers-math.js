@@ -206,7 +206,12 @@ function fuzzyFindAnchor(text,anchor){
     try{
       const re2=new RegExp(tailPhrase);
       const km2=text.match(re2);
-      if(km2&&km2.index!=null)return km2.index;
+      if(km2&&km2.index!=null){
+        // ★ FIX-B 확장: 6차도 사후검증(4·5차 동형). 매칭된 꼬리(km2.index) 위치에서 앵커 시작을 역추정한
+        //   anchor.length 창(꼬리 끝에 정렬)을 Dice 검증 — 임계 미만이면 무효(오매칭 위치 반환 차단, return -1).
+        const _est=Math.max(0,km2.index-(anchor.length-km2[0].length));
+        if(_anchorBigramDice(_aNorm,_normForAnchor(text.slice(_est,km2.index+km2[0].length)))>=0.5)return km2.index;
+      }
     }catch(e){/* 무시 */}
   }
   return -1;
