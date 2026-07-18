@@ -1333,7 +1333,7 @@ ${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${inv.slice(
     case 'step_12':{
       // ═══ B1 fix: 분량 제어 추가 (v5.5) ═══
       const dl=detailLevel;
-      const methodDetailGuide=dl==='compact'?'약 800자(공백 포함) 이내로 핵심만 간결하게':dl==='standard'?'약 1,200자(공백 포함) 내외로 균형 있게':dl==='detailed'?'약 2,000자(공백 포함) 이상으로 상세하게':dl==='custom'?`약 ${Math.round((customDetailChars||1200)*0.7)}자(공백 포함) 내외로`:'약 1,200자(공백 포함) 내외로';
+      const methodDetailGuide=dl==='compact'?'약 800자(공백 포함) 이내로 핵심만 간결하게':dl==='standard'?'약 1,200자(공백 포함) 내외로 균형 있게':dl==='detailed'?'약 2,000자(공백 포함) 이상으로 상세하게':dl==='maximal'?'약 8,000자(공백 포함) 이상으로 각 단계의 처리 내용·데이터 흐름·변형 실시예를 최대한 상세히 기술하되 절대 축약하지 말고':dl==='custom'?`약 ${Math.round((customDetailChars||1200)*0.7)}자(공백 포함) 내외로`:'약 1,200자(공백 포함) 내외로';
       // ═══ B3 fix: step_15 순환참조 — 타임스탬프 비교 (v5.5 BUG-4 수정) ═══
       const step15Ref=(outputs.step_15&&(outputTimestamps.step_15||0)>(outputTimestamps.step_12||0))?`\n\n[특허성 검토 결과 — 아래 지적사항을 방법 상세설명에 반영하여 보완하라]\n${outputs.step_15.slice(0,2000)}`:'';
       return `방법 상세설명. 단계순서에 따라 장치 동작을 참조하여 설명하라. 특허문체. 글머리 금지. 시작: "이하에서는 앞서 설명한 ${getDeviceSubject()}의 구성 및 동작을 참조하여 ${getDeviceSubject()}에 의해 수행되는 방법을 설명한다." 생략 금지. 제한성 표현 금지.
