@@ -1405,6 +1405,21 @@ function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNu
   return{objects, frameW, frameH, contentW, contentH};
 }
 
+// ═══ S3(skill §8.2): 두 박스가 마주보는 변의 좌표 범위가 겹치면 → 연결선을 겹침밴드 중앙에 직선으로 접속 ═══
+// 반환: {axis:'h'|'v', fromDir, toDir, center} (겹침 없거나 대각 배치면 null)
+function _facingOverlapBand(fromBox,toBox){
+  const fx=fromBox._sx||fromBox.x, fy=fromBox._sy||fromBox.y, fw=fromBox._sw||fromBox.w, fh=fromBox._sh||fromBox.h;
+  const tx=toBox._sx||toBox.x, ty=toBox._sy||toBox.y, tw=toBox._sw||toBox.w, th=toBox._sh||toBox.h;
+  const yTop=Math.max(fy,ty), yBot=Math.min(fy+fh,ty+th);
+  const xLeft=Math.max(fx,tx), xRight=Math.min(fx+fw,tx+tw);
+  const yOv=yBot-yTop, xOv=xRight-xLeft;
+  if(fx+fw<=tx && yOv>0) return {axis:'h', fromDir:'right', toDir:'left',  center:(yTop+yBot)/2};
+  if(tx+tw<=fx && yOv>0) return {axis:'h', fromDir:'left',  toDir:'right', center:(yTop+yBot)/2};
+  if(fy+fh<=ty && xOv>0) return {axis:'v', fromDir:'bottom',toDir:'top',   center:(xLeft+xRight)/2};
+  if(ty+th<=fy && xOv>0) return {axis:'v', fromDir:'top',   toDir:'bottom',center:(xLeft+xRight)/2};
+  return null;
+}
+
 // ═══ v10.2: 연결선 끝점을 Shape 곡면 경계에 정확히 스냅 ═══
 // getOrthogonalRoute는 직사각형 nodeBox 기반이라 cloud/database/monitor 등
 // 곡면 shape에서 연결선이 shape 밖에서 시작/끝하는 문제를 수정
@@ -1443,7 +1458,29 @@ function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT,allBoxes,coordTo
   const toAnc=_shapeAnchor(toST,toBox._sx||toBox.x,toBox._sy||toBox.y,
     toBox._sw||toBox.w,toBox._sh||toBox.h,toDir);
   const toAncX=toAnc.px, toAncY=toAnc.py;
-  
+
+  // ★ S3(skill §8.2): 직사각형 박스끼리 마주보는 변이 겹치면 → 겹침밴드 중앙에 직선으로 접속 ★
+  // 조건: (a) 양쪽 다 box 형(곡면 shape 제외) (b) 겹침밴드 존재 (c) 직선이 비퇴화(non-degenerate)
+  //       (d) 다른 박스를 관통하지 않음(_segmentIntersectsBox 로 장애물 가드)
+  if((fromBox._shapeType||'box')==='box' && (toBox._shapeType||'box')==='box'){
+    const _band=_facingOverlapBand(fromBox,toBox);
+    if(_band){
+      const _fa=_shapeAnchor(fromST,fromBox._sx||fromBox.x,fromBox._sy||fromBox.y,fromBox._sw||fromBox.w,fromBox._sh||fromBox.h,_band.fromDir);
+      const _ta=_shapeAnchor(toST,toBox._sx||toBox.x,toBox._sy||toBox.y,toBox._sw||toBox.w,toBox._sh||toBox.h,_band.toDir);
+      let sfx=_fa.px, sfy=_fa.py, stx=_ta.px, sty=_ta.py;
+      if(_band.axis==='h'){ sfy=_band.center; sty=_band.center; }
+      else { sfx=_band.center; stx=_band.center; }
+      if(Math.abs(sfx-stx)+Math.abs(sfy-sty) > _ct){
+        // ★ 장애물 가드: from/to 박스 자신은 제외(라우팅 박스 좌표 동일성으로 견고하게 식별 — 호출부가 id 없는 raw box 를 넘겨도 안전) ★
+        const _isEnd=(b)=>(b===fromBox||b===toBox||(b.x===fromBox.x&&b.y===fromBox.y&&b.w===fromBox.w&&b.h===fromBox.h)||(b.x===toBox.x&&b.y===toBox.y&&b.w===toBox.w&&b.h===toBox.h));
+        const _others=(allBoxes||[]).filter(b=>!_isEnd(b));
+        if(_others.every(b=>!_segmentIntersectsBox({x:sfx,y:sfy},{x:stx,y:sty},b,_ct))){
+          return [{x:sfx,y:sfy},{x:stx,y:sty}];
+        }
+      }
+    }
+  }
+
   // 5) 시작점 스냅
   r[0].x=fromAncX;
   r[0].y=fromAncY;
