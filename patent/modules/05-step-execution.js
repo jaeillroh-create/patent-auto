@@ -725,6 +725,8 @@ ${baseMethod}${_maybeScopeGuard('step_13_applied_method','text')}`);
     setTimeout(()=>App.clearProgress('progressApplyReview'),2000);
     saveProject(true);
     App.showToast(`검토 반영 완료${hasMethodDesc?' (장치+방법)':''} — 최종 명세서에 자동 반영됩니다`);
+    // [Item 2] 반영 직후 1회 완성본 기계검증 — 오염(문단 중복/문장 절단) 생산 지점 즉시 검출(토스트 요약만).
+    try{ const _sv=validateSpecification(buildSpecification()); const _c=_sv.filter(i=>i.severity==='CRITICAL').length, _h=_sv.filter(i=>i.severity==='HIGH').length; if(_c||_h)App.showToast(`⚠️ 완성본 검증: CRITICAL ${_c}·HIGH ${_h} — 산출물 탭에서 확인`,'warning'); }catch(_e){}
   }catch(e){App.showToast(e.message,'error');}finally{loadingState.applyReview=false;App.setButtonLoading('btnApplyReview',false);setGlobalProcessing(false);}
 }
 function showReviewDiff(mode){

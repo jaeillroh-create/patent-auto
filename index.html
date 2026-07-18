@@ -1287,6 +1287,11 @@
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 16~19 결과</div></div>
           <div id="resultsBatchFinish" class="result-area"></div>
         </div>
+        <div class="result-card" id="resultCardSpecValidate">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="shield"></span> 완성본 기계검증</div></div>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">표제·종결어미·단위·도면부호·문단중복·문장절단·수학식 변수정의를 자동 점검합니다(미리보기 진입 시 갱신).</p>
+          <div id="specValidateResult" class="result-area"></div>
+        </div>
         <div class="result-card" id="resultCardPreview">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="eye"></span> 미리보기</div></div>
           <div id="previewArea" class="result-area" style="min-height:300px"></div>
@@ -1384,12 +1389,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260615e"></script>
-<script src="patent/patent.js?v=20260702-straighten"></script>
+<script src="patent/patent.js?v=20260703-specvalidate"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260702-straighten"></script>
+<script src="opinion/opinion.js?v=20260703-specvalidate"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260702-straighten';
+  var _cv='?v=20260703-specvalidate';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1487,8 +1492,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260702-straighten"></script>
-<script src="docket.js?v=20260702-straighten"></script>
+<script src="division/division.js?v=20260703-specvalidate"></script>
+<script src="docket.js?v=20260703-specvalidate"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>
