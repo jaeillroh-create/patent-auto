@@ -318,20 +318,12 @@ function validateRefNumberConsistency(){
     }
   });
 
-  // 3. 부호의 설명 대비 본문 참조번호 누락 검출
-  const signRefs=new Set();
-  const signRe=/:\s*(\d{2,4}|S\d{2,4})\s*$/gm;
-  let sm;while((sm=signRe.exec(signTable))!==null)signRefs.add(sm[1]);
+  // 3. (P2 일원화) "본문 사용 부호 ↔ 부호의 설명 미정의" 검사는 CHK-4(validateSpecification, 완성본 기준)로 단일화.
+  //    ★ 여기서 중복 방출하면 청구항 탭·산출물 탭에 같은 결함이 다른 문구로 이중 표출(신호 혼란).
+  //    또한 청구항 탭 시점엔 step_18(부호의 설명)이 미생성일 수 있어 전 부호가 "미정의"로 조기 오탐되므로 제거.
+  //    bodyRefs 는 아래 4번(도면 미정의, 고유 검사)에서 사용하므로 수집만 유지.
   const bodyRefs=new Set();
   refNameMap.forEach((_,ref)=>bodyRefs.add(ref));
-  // 본문에서 사용되지만 부호의 설명에 없는 참조번호
-  bodyRefs.forEach(ref=>{
-    if(!signRefs.has(ref)){
-      const names=refNameMap.get(ref);
-      const primary=names?[...names.entries()].sort((a,b)=>b[1]-a[1])[0][0]:'?';
-      issues.push({severity:'MEDIUM',message:`부호의 설명 누락: ${primary}(${ref}) — 본문에서 사용되지만 부호의 설명에 미기재`});
-    }
-  });
 
   // 4. 도면에 정의되지 않은 참조번호가 본문에 사용되는지 검출
   const diagramRefs=new Set();
