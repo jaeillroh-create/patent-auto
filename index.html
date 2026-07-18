@@ -1389,12 +1389,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260615e"></script>
-<script src="patent/patent.js?v=20260706-claimgate"></script>
+<script src="patent/patent.js?v=20260707-jepson"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260706-claimgate"></script>
+<script src="opinion/opinion.js?v=20260707-jepson"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260706-claimgate';
+  var _cv='?v=20260707-jepson';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1492,8 +1492,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260706-claimgate"></script>
-<script src="docket.js?v=20260706-claimgate"></script>
+<script src="division/division.js?v=20260707-jepson"></script>
+<script src="docket.js?v=20260707-jepson"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>

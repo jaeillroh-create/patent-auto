@@ -116,6 +116,20 @@ function validateClaims(text){
         // 양쪽 모두 없음 → 기재불비
         iss.push({severity:'HIGH',message:`청구항 ${num}: "상기 ${raw}" — 인용 청구항 체인에 "${cw.join(', ')}" 선행기재 없음`});
       });}
+    // ★ [Item5] 젭슨(Jepson) 형식 기계검증 — 독립항 대상. 전환부 "~에 있어서," + 종결부 "~특징으로 하는" 존재·순서.
+    //   젭슨은 선택 양식이므로 위반은 MEDIUM(강제 아님). 둘 다 없으면 젭슨 미채택 → 미검출. 하나만 있으면 불완전 → MEDIUM.
+    if(!isDependent){
+      const _tIdx=ct.search(/에\s*있어서\s*,/), _cIdx=ct.search(/(?:것을\s*)?특징으로\s*하는/);
+      const _hasT=_tIdx>=0, _hasC=_cIdx>=0;
+      if(_hasT!==_hasC)iss.push({severity:'MEDIUM',check:'jepson_form',message:`청구항 ${num}: 젭슨 형식 불완전 — ${_hasT?'전환부("~에 있어서,")만 있고 종결부("~특징으로 하는")가 없음':'종결부("~특징으로 하는")만 있고 전환부("~에 있어서,")가 없음'}`});
+      else if(_hasT&&_hasC&&_tIdx>_cIdx)iss.push({severity:'MEDIUM',check:'jepson_form',message:`청구항 ${num}: 젭슨 형식 순서 오류 — 전환부("~에 있어서,")가 종결부보다 뒤에 위치`});
+    }
+    // ★ [Item5] 앵커/종속항 최소 검증 — 인용은 있으나 실질적 부가 한정이 없는 빈 종속항(앵커는 구체적 기술수단 부가 필요).
+    //   기존 참조 무결성(존재·번호역전)과 중복 아님(부가 내용 유무만 봄). raw 길이 기준으로 오탐 최소화(MEDIUM).
+    if(isDependent){
+      const _after=ct.replace(/^[\s\S]*?에\s*있어서\s*,?/,'').trim();
+      if(_after.replace(/\s+/g,'').length<8)iss.push({severity:'MEDIUM',check:'anchor_no_limitation',message:`청구항 ${num}: 종속항에 실질적 부가 한정이 없음(앵커 구성 미기재 의심)`});
+    }
     // ★ [Item2 CHK-5] 다중인용은 택일적("또는"/"내지")이어야 하며, 청구항 참조를 "및"(연결)로 기재하면 대통령령 위반 ★
     //   claim-ref 및 claim-ref 형태만 검출(본문 "A 및 B를 포함" 등 일반 '및'은 미검출).
     if(/(?:제\s*\d+\s*항|청구항\s*\d+)\s*및\s*(?:제\s*\d+\s*항|청구항\s*\d+)/.test(ct)){
