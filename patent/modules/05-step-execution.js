@@ -304,7 +304,8 @@ function sanitizeMethodFromDevice(text){
   
   if(!methodFigNums.size){
     // 방법 도면이 없으면 단독 S단계 문장만 제거
-    return text.replace(/^[^\n]*S\d{3}[^\n]*$/gm,'').replace(/\n{3,}/g,'\n\n').trim();
+    // ★ P3: 단계 문맥(단계 S### / S### …단계 / S###에서)일 때만 제거 — "S123 파라미터" 등 비단계 S###는 보존(과삭제 방지)
+    return text.replace(/^[^\n]*(?:단계\s*S\d{3}|S\d{3}[^\n]{0,15}단계|S\d{3}\s*에서)[^\n]*$/gm,'').replace(/\n{3,}/g,'\n\n').trim();
   }
   
   console.log(`[sanitizeMethodFromDevice] 방법 도면 번호 감지: 도 ${[...methodFigNums].sort((a,b)=>a-b).join(', ')} (장치 도면: ~도 ${deviceMax})`);
@@ -333,8 +334,8 @@ function sanitizeMethodFromDevice(text){
       continue;
     }
     
-    // 단독 S단계 문장
-    if(/S\d{3}/.test(trimmed)&&/단계|수행|실행/.test(trimmed)){
+    // 단독 S단계 문장 — ★ P3: 단계 문맥(단계 S### / S###…단계 / S###에서)일 때만. 비단계 S###(수치·식별자) 보존
+    if(/단계\s*S\d{3}|S\d{3}[^\n]{0,15}단계|S\d{3}\s*에서/.test(trimmed)){
       console.warn(`[sanitizeMethodFromDevice] S단계 문장 제거: "${trimmed.slice(0,80)}..."`);
       continue;
     }
