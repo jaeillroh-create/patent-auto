@@ -1184,11 +1184,12 @@ function sanitizeDescFigureRefs(text,type){
   
   // ★ v10.2: Step 8 수학식 제거 (수학식은 Step 9에서만 삽입) ★
   if(type==='device'){
-    // 【수학식 N】 블록 및 관련 수식/변수 설명 전체 제거
-    // "여기서," "예를 들어," 등은 수학식 직후에 나오는 설명이므로 함께 제거
-    text=text.replace(/【수학식\s*\d+】[^\n]*(?:\n(?!도\s+\d|이러한|한편|또한|구체적|상기)[^\n]*)*/g,'').trim();
+    // ★ FIX-C: crude 정규식(【수학식】 이후 특정 키워드로 시작 안 하는 모든 줄을 삼켜 일반 문단
+    //   "…저장부(133)는…"까지 소실)을 정교판 stripMathBlocks(06)로 통일 — 중복 구현 제거.
+    //   stripMathBlocks 는 "[가-힣]{2,}부(" 등 구성요소 문단에서 종결하므로 일반 문단을 보존.
+    //   (호출부는 모두 런타임 — 03:902/05:114/05:637 — 로 06 로드 후 실행. 03:1159 도 이미 stripMathBlocks 사용.)
+    text=stripMathBlocks(text).trim();
     // v10.5: "수학식 N" 참조 제거 — 【수학식 N】 헤더 잔여만 제거 (본문 참조 문장은 보존)
-    // 기존: [^\n]*수학식\s*\d+[^\n]* → 본문의 "수학식 1에 따르면..." 설명 문장까지 삭제
     text=text.replace(/^\s*【?수학식\s*\d+】?\s*$/gm,'').trim();
     text=text.replace(/\n{3,}/g,'\n\n');
   }

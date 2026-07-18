@@ -429,11 +429,26 @@ function applyEditInstructions(originalText,edits){
       if(edit.content.length<5){console.warn(`[applyEditInstructions] 재정제 후 내용 부족 → 건너뜀`);continue;}
     }
     
-    // v10.3: 중복 삽입 방지 — 이미 동일 내용이 근처에 있으면 건너뜀
-    const nearbyRegion=result.slice(Math.max(0,anchorStart-200),Math.min(result.length,anchorStart+edit.anchor.length+500));
-    if(edit.action!=='MODIFY'&&nearbyRegion.includes(edit.content.slice(0,50))){
-      console.warn(`[applyEditInstructions] 중복 감지 → 건너뜀: "${edit.content.slice(0,30)}..."`);
-      continue;
+    // ★ FIX-A: 중복 삽입 방지 전역화 — 국소 창(±500·첫50자 exact)은 26P1036형 문단블록 재서술을 놓침
+    //   (원본이 창 밖이거나 첫 50자 한 글자만 달라도 dedup 실패 → 앵커 뒤 사본 삽입).
+    //   _normForDedup(03:1159) 규칙(stripMathBlocks+공백 전제거)으로 result 전체를 정규화 검색.
+    if(edit.action!=='MODIFY'){
+      const _n=s=>stripMathBlocks(String(s||'')).replace(/\s+/g,'');
+      const _nResult=_n(result), _nContent=_n(edit.content);
+      // (1) 정규화 첫 60자 키가 result 전체에 이미 존재 → 중복(창 밖 원본도 포착)
+      if(_nContent.length>=20 && _nResult.includes(_nContent.slice(0,60))){
+        console.warn(`[applyEditInstructions] 중복(전역 정규화) 감지 → 건너뜀: "${edit.content.slice(0,30)}..."`);
+        continue;
+      }
+      // (2) 장문 CONTENT(문장 3개↑): 문장 과반이 이미 result에 정규화 포함 → 블록 재서술 차단
+      const _sents=String(edit.content).split(/(?<=[.。])\s+|\n+/).map(s=>_n(s)).filter(s=>s.length>=15);
+      if(_sents.length>=3){
+        const _dup=_sents.filter(s=>_nResult.includes(s)).length;
+        if(_dup*2>_sents.length){
+          console.warn(`[applyEditInstructions] 장문 CONTENT 과반 중복(${_dup}/${_sents.length}) → 건너뜀`);
+          continue;
+        }
+      }
     }
 
     switch(edit.action){
