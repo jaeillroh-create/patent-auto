@@ -817,6 +817,13 @@ async function runCascadeRegeneration(sourceStep){
   const total=sorted.length;
 
   for(const sid of sorted){
+    // ★ [Item 3] 품질 게이트 — 일괄 재생성도 청구항 CRITICAL이면 해당 스텝에서 중단(어느 스텝인지 표시)
+    const _cg=(typeof _claimGateStatus==='function')?_claimGateStatus(sid):{critical:0};
+    if(_cg.critical>0){
+      if(prog)prog.innerHTML+=`<div style="color:var(--dt-danger);font-size:11px"><span class="ico" data-icon="x"></span> 청구항 CRITICAL ${_cg.critical}건 — ${STEP_NAMES[sid]} 재생성 중단(청구항 먼저 보정)</div>`;
+      App.showToast(`청구항 검증 CRITICAL — ${STEP_NAMES[sid]} 이후 재생성 중단`,'error');
+      break;
+    }
     if(prog)prog.innerHTML=`<div style="margin-bottom:4px">진행: ${completed+1}/${total} — <b>${STEP_NAMES[sid]}</b> 재생성 중...</div>
       <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:var(--dt-brand-hover);border-radius:4px;height:6px;width:${Math.round(completed/total*100)}%;transition:width .3s"></div></div>`;
 

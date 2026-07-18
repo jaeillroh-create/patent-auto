@@ -15,6 +15,28 @@ function checkDependency(s){
   if(!includeMethodClaims&&methodSteps.includes(s)){return '방법 청구항이 비활성화되어 있습니다';}
   const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_08c:()=>outputs.step_08?null:'장치 상세설명(Step 8) 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저',step_20:()=>outputs.step_10?null:'방법 청구항 먼저'};return d[s]?d[s]():null;
 }
+// ═══ [Item 3] FIX 품질 게이팅 — B/C군(도면·상세설명·수학식)은 선행 청구항이 validateClaims 를 통과해야 진행 ═══
+//   장치계(07/08/09/08c): step_06 검사 / 방법계(11/12): step_06 컨텍스트 합산 + step_10 검사(05:81 패턴 재사용).
+const _CLAIM_GATE_STEPS={step_07:'device',step_08:'device',step_09:'device',step_08c:'device',step_11:'method',step_12:'method'};
+function _claimGateStatus(sid){
+  const kind=_CLAIM_GATE_STEPS[sid];
+  if(!kind)return {critical:0,high:0,issues:[]};   // B/C군 아님 → 통과(D·F군·청구항 자체는 게이트 대상 아님)
+  const issues = kind==='method'
+    ? validateClaims((outputs.step_06||'')+'\n'+(outputs.step_10||''))   // 방법: 장치 청구항 컨텍스트 합산(상기 선행기재 해소)
+    : validateClaims(outputs.step_06||'');
+  return { critical:issues.filter(i=>i.severity==='CRITICAL').length, high:issues.filter(i=>i.severity==='HIGH').length, issues };
+}
+// 게이트 판정: CRITICAL>0 → 하드 차단(false). HIGH>0 → 확인 모달(진행 true/취소 false). 0 → 통과. bulk=true면 모달 생략(CRITICAL만 차단).
+async function _claimGatePass(sid,bulk){
+  const g=_claimGateStatus(sid);
+  if(g.critical>0){ App.showToast(`⚠️ 청구항 검증 CRITICAL ${g.critical}건 — 청구항(D·검증 탭)을 먼저 보정하세요. ${STEP_NAMES[sid]||sid} 중단`,'error'); return false; }
+  if(g.high>0 && !bulk){
+    const ok=(typeof window==='undefined'||typeof window.confirm!=='function') ? true
+      : window.confirm(`청구항에 HIGH 경고 ${g.high}건이 있습니다.\n\n이대로 ${STEP_NAMES[sid]||sid}을(를) 진행하시겠습니까?\n(취소 후 청구항을 먼저 보정하는 것을 권장합니다.)`);
+    if(!ok)return false;
+  }
+  return true;
+}
 async function runStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13',step_14:'btnStep14',step_15:'btnStep15',step_20:'btnStep20'},bid=bm[sid];setGlobalProcessing(true);loadingState[sid]=true;if(bid)App.setButtonLoading(bid,true);
   try{
     // v6.0: 부분 수정 모드 표시
@@ -102,7 +124,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     // [C1 자동 연쇄] SCOPE_GUARDED 스텝 생성 후 자동 검증
     if(inventionScope?.locked_at&&(SCOPE_GUARDED_TEXT_STEPS.includes(sid)||SCOPE_GUARDED_MERMAID_STEPS.includes(sid))){try{await runScopeCheck(sid);}catch(e2){console.warn('[C1] runScopeCheck 자동 실행 실패:',sid,e2.message);}}
   }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
-async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);try{await _longStepCore(sid);}finally{setGlobalProcessing(false);}}
+async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}if(!(await _claimGatePass(sid)))return;setGlobalProcessing(true);try{await _longStepCore(sid);}finally{setGlobalProcessing(false);}}
 // ★ [T1] 가드/globalProcessing 없는 실행 코어 — 통합 핸들러(runImplementationDesc)가 device→concept 순차 호출 시 중첩 early-return 방지(진단 경고 반영).
 async function _longStepCore(sid){const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';loadingState[sid]=true;App.setButtonLoading(bid,true);
   // v6.0: 부분 수정 모드 표시
@@ -146,6 +168,7 @@ async function runConceptDescStep(){
   if(!conceptDiagramTypes.some(ct=>ct.svgContent)){App.showToast('먼저 예시도(Step 7c)를 생성하세요','error');return;}
   if(!outputs.step_06){App.showToast('장치 청구항(Step 6)을 먼저 생성하세요','error');return;}
   if(!outputs.step_08){App.showToast('장치 상세설명(Step 8)을 먼저 생성하세요 — 예시도 설명은 장치 설명을 전제로 합니다','error');return;}   // ★ [T2] 순서 강제(장치→예시)
+  if(!(await _claimGatePass('step_08c')))return;   // [Item 3] 품질 게이트
   setGlobalProcessing(true);
   try{await _conceptDescCore();}finally{setGlobalProcessing(false);}
 }
@@ -178,7 +201,7 @@ async function runImplementationDesc(){
     }
   }finally{setGlobalProcessing(false);}
 }
-async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{
+async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}if(!(await _claimGatePass('step_09')))return;setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{
   const TARGET_MATH_COUNT=5;
   let r=await App.callClaude(buildPrompt('step_09'));
   // 수학식 블록 개수 검증
@@ -786,7 +809,7 @@ async function runDiagramStep(sid){
   if(globalProcessing)return;
   const dep=checkDependency(sid);
   if(dep){App.showToast(dep,'error');return;}
-  
+  if(!(await _claimGatePass(sid)))return;   // [Item 3] 품질 게이트
   const bid=sid==='step_07'?'btnStep07':'btnStep11';
   setGlobalProcessing(true);
   loadingState[sid]=true;
