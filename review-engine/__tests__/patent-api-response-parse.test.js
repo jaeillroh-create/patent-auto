@@ -121,9 +121,29 @@ test('★ _parseJSONSafe 회귀 — 코드펜스 감싼 JSON 파싱', () => {
 
 // ─────────── 캐시버스트 토큰 동기화 ───────────
 
-test('회귀 ★ ?v= 릴리스 토큰(20260720-api-parse) + common.js(20260720a) 동기화', () => {
+test('회귀 ★ ?v= 릴리스 토큰(20260720-scope-retry) + common.js(20260720a) 동기화', () => {
   const html = readFileSync(path.join(REPO, 'index.html'), 'utf8');
-  assert.match(html, /patent\/patent\.js\?v=20260720-api-parse/, '★ patent.js 릴리스 토큰 갱신');
+  assert.match(html, /patent\/patent\.js\?v=20260720-scope-retry/, '★ patent.js 릴리스 토큰 갱신');
   assert.match(html, /shared\/common\.js\?v=20260720a/, '★ common.js 토큰 갱신(수정 반영)');
-  assert.match(PATENT_SRC.length ? readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8') : '', /version = '20260720-api-parse'/, '★ patent 로더 version 갱신');
+  assert.match(PATENT_SRC.length ? readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8') : '', /version = '20260720-scope-retry'/, '★ patent 로더 version 갱신');
+});
+
+// ─────────── (C) extractInventionScope 견고화 — 재시도·분량 상향·진단 ───────────
+
+test('★ extractInventionScope 출력 상한 4096 → 8192 상향(대형 입력 잘림 완화)', () => {
+  // extractInventionScope 는 유일하게 `let resp` 패턴 — 판정 함수(const resp, 4096)와 구분
+  assert.match(PATENT_SRC, /let resp = await App\.callClaudeSonnet\(prompt, 8192\)/, '★ 추출 1차 호출 8192(let resp)');
+});
+
+test('★ 파싱 실패 시 스키마 강화 지시로 1회 재시도', () => {
+  assert.match(PATENT_SRC, /반드시 위 스키마의 순수 JSON 객체만 출력하라/, '★ 재시도 강화 프롬프트');
+  assert.match(PATENT_SRC, /callClaudeSonnet\(prompt \+ [^\n]*, 8192\)/, '★ 재시도도 8192');
+});
+
+test('★ 진단 분기 — 빈응답/잘림(max_tokens)/비-JSON 구분 + 콘솔 원문 로깅', () => {
+  assert.match(PATENT_SRC, /모델 응답이 비어 있습니다/, '★ 빈 응답 메시지');
+  assert.match(PATENT_SRC, /응답이 잘렸습니다\(분량 초과\)/, '★ 잘림 메시지');
+  assert.match(PATENT_SRC, /stopReason === 'max_tokens'/, '★ 잘림 판정');
+  assert.match(PATENT_SRC, /JSON 형식이 아닙니다/, '★ 비-JSON 메시지');
+  assert.match(PATENT_SRC, /console\.error\('\[발명 범위\] 파싱 실패/, '★ 원문 콘솔 로깅');
 });
