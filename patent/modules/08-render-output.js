@@ -320,6 +320,17 @@ function _collectBodyRefPairs(){
   let b; const bare=/\((\d{1,4})\)/g; while((b=bare.exec(body))!==null){ const ref=parseInt(b[1],10); if(ref>=1&&ref<=9999&&!map.has(ref))map.set(ref,new Map()); }
   return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(function(e){ const ref=e[0],nm=e[1]; let best='',bc=0; nm.forEach(function(c,n){ if(c>bc){bc=c;best=n;} }); return {ref:ref,name:best}; });
 }
+// [통합생성] 부호의 설명(step_18) 결정적 직렬화 — 완성 본문에서 실제 사용된 모든 장치부호(NN)를 전수 정의(usedNotDef=0),
+//   본문 미사용 부호는 제외(defNotUsed=0) → refnum_consistency 구조적 0. 명칭은 REFTABLE(refMap) 우선, 없으면 본문 최빈 명칭.
+//   ★ device/method 뿐 아니라 효과·과제 등 기존 섹션의 (NN)까지 전수 커버(완성본 기준) → 부분 재생성에도 부호정합 성립.
+function _deriveSignDescription(refMap){
+  const pairs=_collectBodyRefPairs();   // [{ref:number, name}] — 완성 본문(부호의설명 섹션 제외) 전수
+  const devLines=pairs.map(function(p){ const key=String(p.ref); const nm=(refMap&&typeof refMap.get==='function'&&refMap.get(key))||p.name||'구성요소'; return nm+' : '+p.ref; });
+  let out=devLines.join('\n');
+  const met=refMap?[...refMap].filter(function(e){return String(e[0]).startsWith('S');}).sort(function(a,b){return parseInt(String(a[0]).slice(1),10)-parseInt(String(b[0]).slice(1),10);}):[];
+  if(met.length)out+=(out?'\n\n[방법 단계]\n':'')+met.map(function(e){return e[1]+' : '+e[0];}).join('\n');
+  return out;
+}
 // 'AI로 수정' 진입점 — (A)중복 제거(코드) → (B)부호의 설명 재생성(LLM) → (C)상세설명 의미 보정(편집지시 LLM) → 재조립·재검증.
 async function fixSpecValidationIssues(){
   if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}

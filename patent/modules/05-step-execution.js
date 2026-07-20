@@ -1630,3 +1630,76 @@ ${diagram}`,4096);
   finally{App.setButtonLoading('btnProvisionalGen',false);setGlobalProcessing(false);}
 }
 
+// ═══════════════ [단일 풀컨텍스트 생성] 상세설명 + 부호 응집 생성 ═══════════════
+// 장치 상세설명·방법 상세설명·부호의 설명을 "한 번의 컨텍스트"로 생성해 도면부호·용어 정합을 구조적으로 보장.
+// 기존 20단계 흐름은 그대로 두고 A/B 대안으로 제공(비파괴 — 게이트 미통과·실패 시 기존 outputs 무손상).
+// 센티넬 3블록(REFTABLE/DEVICE_DESC/METHOD_DESC) 파싱 + 결정론 커밋 게이트.
+function parseCohesiveBundle(raw){
+  const norm=String(raw||'').replace(/\r\n/g,'\n');
+  const grab=function(name){ const m=norm.match(new RegExp('^<<<'+name+'>>>$([\\s\\S]*?)^<<<END_'+name+'>>>$','m')); return m?m[1].trim():null; };
+  const refBlock=grab('REFTABLE'), device=grab('DEVICE_DESC'), method=grab('METHOD_DESC');
+  const refMap=new Map(); const dupNums=[];
+  (refBlock||'').split('\n').forEach(function(line){ const t=line.trim(); if(!t)return;
+    if(/^\[장치부호\]/.test(t)||/^\[방법단계\]/.test(t))return;
+    const mm=t.match(/^\(\s*(S?\d{1,4})\s*\)\s*(.+?)\s*$/);
+    if(mm){ const name=mm[2].replace(/^상기\s*/,'').replace(/^[:\s]+/,'').trim(); if(name.length>=2){ const num=mm[1]; if(refMap.has(num))dupNums.push(num); else refMap.set(num,name); } }
+  });
+  const bodyNums=new Set();
+  [device,method].filter(Boolean).forEach(function(t){ let mm; const re=/\((\d{1,4})\)/g; while((mm=re.exec(t))!==null)bodyNums.add(mm[1]); });
+  const defDevice=[...refMap.keys()].filter(function(n){return !n.startsWith('S');});
+  const notInTable=[...bodyNums].filter(function(n){return !refMap.has(n);}).sort(function(a,b){return a-b;});
+  const unusedRef=defDevice.filter(function(n){return !bodyNums.has(n);}).sort(function(a,b){return a-b;});
+  const deviceLeak=/하는\s*단계|\bS\d{2,3}\b/.test(device||'');
+  const methodOk=method?/하는\s*단계/.test(method):true;
+  let dupCount=0; try{ if(typeof _dedupParagraphs==='function')dupCount=_dedupParagraphs((device||'')+'\n\n'+(method||'')).removed; }catch(_e){}
+  return { device:device, method:method, refMap:refMap,
+    ok:{ hasRef:!!refBlock&&refMap.size>0, hasDevice:!!device, hasMethod:method!=null },
+    report:{ notInTable:notInTable, unusedRef:unusedRef, dupNums:dupNums, deviceLeak:deviceLeak, methodOk:methodOk, dupCount:dupCount } };
+}
+// 완성본 검증기 지표 스냅샷(A/B 대조용).
+function _specIssueCounts(){
+  try{ const iss=validateSpecification(buildSpecification());
+    return { refnum:iss.filter(function(i){return i.check==='refnum_consistency';}).length,
+             dup:iss.filter(function(i){return i.check==='paragraph_duplicate'||i.check==='sentence_duplicate';}).length }; }
+  catch(_e){ return {refnum:0,dup:0}; }
+}
+async function runUnifiedCohesionGen(){
+  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
+  if(!outputs.step_06){App.showToast('먼저 장치 청구항(A2)을 생성하세요','error');return;}
+  if(!outputs.step_07){App.showToast('먼저 장치 도면(B1)을 생성하세요 — 도면부호 정합의 기준입니다','error');return;}
+  const before=_specIssueCounts();
+  setGlobalProcessing(true); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',true);
+  App.showProgress('progressUnifiedGen','통합 생성 중(단일 컨텍스트)... 긴 출력은 자동 이어쓰기됩니다',0,1);
+  try{
+    const raw=await App.callClaudeWithContinuation(buildPrompt('unified_cohesion'),'progressUnifiedGen');
+    const r=parseCohesiveBundle(raw);
+    if(!r.ok.hasRef||!r.ok.hasDevice){ App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: REFTABLE/장치 상세설명 블록 누락 — 기존 내용 보존, 다시 시도하세요','error'); console.warn('[unified] block missing',r.ok); return; }
+    const rep=r.report, gate=[];
+    if(rep.notInTable.length)gate.push('본문 미정의 부호 '+rep.notInTable.length+'개('+rep.notInTable.slice(0,6).join(', ')+')');
+    if(rep.dupNums.length)gate.push('부호표 번호 중복 '+rep.dupNums.length+'개');
+    if(rep.deviceLeak)gate.push('장치 상세설명에 방법표현 누출');
+    if(!rep.methodOk)gate.push('방법 상세설명 극성 미충족');
+    if(gate.length){ App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 게이트 미통과(기존 내용 보존): '+gate.join(' · '),'error'); console.warn('[unified] gate fail',rep); return; }
+    if(!confirm('통합 생성 결과로 장치 상세설명·방법 상세설명·부호의 설명을 대체합니다. 계속할까요?\n(이전 내용은 이력에 보존됩니다)')){ App.clearProgress('progressUnifiedGen'); return; }
+    // ── 원자 커밋(3슬롯) ──
+    pushOutputHistory('step_08','unified','runUnifiedCohesionGen');
+    if(r.method&&outputs.step_10)pushOutputHistory('step_12','unified','runUnifiedCohesionGen');
+    pushOutputHistory('step_18','unified','runUnifiedCohesionGen');
+    let dev=r.device; try{if(typeof sanitizeDescFigureRefs==='function')dev=sanitizeDescFigureRefs(dev,'device');}catch(_e){}
+    outputs.step_08=dev; outputs.step08_device=dev; markOutputTimestamp('step_08');
+    if(r.method&&outputs.step_10){ let m=r.method; try{if(typeof sanitizeDescFigureRefs==='function')m=sanitizeDescFigureRefs(m,'method');}catch(_e){} outputs.step_12=m; markOutputTimestamp('step_12'); }
+    outputs.step_18=_deriveSignDescription(r.refMap); markOutputTimestamp('step_18');   // 완성 본문 기준 결정적 직렬화(refMap 명칭 우선)
+    try{if(typeof _mergeConceptIntoStep08==='function')_mergeConceptIntoStep08();}catch(_e){}   // 예시도(step_08c) 합본(있을 때만)
+    try{if(typeof reflectConceptsToSpec==='function')reflectConceptsToSpec();}catch(_e){}       // 예시도 부호 step_18 반영(있을 때만)
+    try{if(typeof invalidateDownstream==='function')invalidateDownstream('step_08');}catch(_e){}
+    if(typeof saveProject==='function')saveProject(true);
+    try{renderPreview();}catch(_e){}
+    try{renderSpecValidation();}catch(_e){}
+    App.clearProgress('progressUnifiedGen');
+    const after=_specIssueCounts();
+    const soft=rep.unusedRef.length?(' · 도면 미사용 부호 '+rep.unusedRef.length+'개 자동 제외'):'';
+    App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft,'success');
+  }catch(e){ App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); }
+  finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); }
+}
+
