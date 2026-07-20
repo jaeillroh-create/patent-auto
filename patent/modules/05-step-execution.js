@@ -1636,7 +1636,7 @@ ${diagram}`,4096);
 // 센티넬 3블록(REFTABLE/DEVICE_DESC/METHOD_DESC) 파싱 + 결정론 커밋 게이트.
 function parseCohesiveBundle(raw){
   const norm=String(raw||'').replace(/\r\n/g,'\n');
-  const grab=function(name){ const m=norm.match(new RegExp('^<<<'+name+'>>>$([\\s\\S]*?)^<<<END_'+name+'>>>$','m')); return m?m[1].trim():null; };
+  const grab=function(name){ const m=norm.match(new RegExp('^[ \\t]*<<<'+name+'>>>[ \\t]*$([\\s\\S]*?)^[ \\t]*<<<END_'+name+'>>>[ \\t]*$','m')); return m?m[1].trim():null; };   // 마커 줄 선/후행 공백 허용(LLM 흔한 삽입 tolerance)
   const refBlock=grab('REFTABLE'), device=grab('DEVICE_DESC'), method=grab('METHOD_DESC');
   const refMap=new Map(); const dupNums=[];
   (refBlock||'').split('\n').forEach(function(line){ const t=line.trim(); if(!t)return;
@@ -1649,8 +1649,10 @@ function parseCohesiveBundle(raw){
   const defDevice=[...refMap.keys()].filter(function(n){return !n.startsWith('S');});
   const notInTable=[...bodyNums].filter(function(n){return !refMap.has(n);}).sort(function(a,b){return a-b;});
   const unusedRef=defDevice.filter(function(n){return !bodyNums.has(n);}).sort(function(a,b){return a-b;});
-  const deviceLeak=/하는\s*단계|\bS\d{2,3}\b/.test(device||'');
-  const methodOk=method?/하는\s*단계/.test(method):true;
+  // ★ deviceLeak: "단계적/단계별/단계에서/단계 없이" 형태론적 오탐 배제 — "하는 단계"+조사/문말 또는 "제N단계"·S### 만 방법누출로 판정. S 자릿수 1~4 확대.
+  const deviceLeak=/하는\s*단계(?:이|가|를|은|는|와|과|;|,|\.|\s*$|\s+S\d)|제\s*\d+\s*단계|\bS\d{1,4}\b/.test(device||'');
+  // ★ methodOk: "하는 단계" 단일 리터럴 강제 완화 — 단계/과정/스텝 어휘군 또는 S### 단계식별자 중 하나면 방법 극성 인정.
+  const methodOk=method?(/하는\s*(?:단계|과정|스텝)/.test(method)||/\bS\d{1,4}\b/.test(method)):true;
   let dupCount=0; try{ if(typeof _dedupParagraphs==='function')dupCount=_dedupParagraphs((device||'')+'\n\n'+(method||'')).removed; }catch(_e){}
   return { device:device, method:method, refMap:refMap,
     ok:{ hasRef:!!refBlock&&refMap.size>0, hasDevice:!!device, hasMethod:method!=null },
@@ -1667,7 +1669,7 @@ async function runUnifiedCohesionGen(){
   if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
   if(!outputs.step_06){App.showToast('먼저 장치 청구항(A2)을 생성하세요','error');return;}
   if(!outputs.step_07){App.showToast('먼저 장치 도면(B1)을 생성하세요 — 도면부호 정합의 기준입니다','error');return;}
-  const before=_specIssueCounts();
+  const before=_specIssueCounts(); const hadMath=!!outputs.step_09;   // ★ 수학식(step_09) 존재 시 커밋 후 재삽입 필요 경고
   setGlobalProcessing(true); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',true);
   App.showProgress('progressUnifiedGen','통합 생성 중(단일 컨텍스트)... 긴 출력은 자동 이어쓰기됩니다',0,1);
   try{
@@ -1692,6 +1694,8 @@ async function runUnifiedCohesionGen(){
     try{if(typeof _mergeConceptIntoStep08==='function')_mergeConceptIntoStep08();}catch(_e){}   // 예시도(step_08c) 합본(있을 때만)
     try{if(typeof reflectConceptsToSpec==='function')reflectConceptsToSpec();}catch(_e){}       // 예시도 부호 step_18 반영(있을 때만)
     try{if(typeof invalidateDownstream==='function')invalidateDownstream('step_08');}catch(_e){}
+    // 함께 재생성한 step_12 는 stale 아님 — invalidateDownstream 의 false-stale 배지 제거(방법 브랜치 실행 시)
+    try{if(r.method&&outputs.step_10&&typeof document!=='undefined')document.querySelectorAll('.stale-warning[data-step="step_12"]').forEach(function(w){w.remove();});}catch(_e){}
     if(typeof saveProject==='function')saveProject(true);
     try{renderPreview();}catch(_e){}
     try{renderSpecValidation();}catch(_e){}
@@ -1699,6 +1703,7 @@ async function runUnifiedCohesionGen(){
     const after=_specIssueCounts();
     const soft=rep.unusedRef.length?(' · 도면 미사용 부호 '+rep.unusedRef.length+'개 자동 제외'):'';
     App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft,'success');
+    if(hadMath)App.showToast('⚠️ 기존 수학식(Step 9)은 새 상세설명에 재삽입이 필요합니다 — 미리보기·다운로드에 수학식이 빠져 있습니다','warning');
   }catch(e){ App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); }
   finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); }
 }

@@ -175,7 +175,9 @@ function validateSpecification(specText){
   const refSecM=specText.match(/【\s*부호의 설명\s*】([\s\S]*?)(?:\n【|$)/);
   if(refSecM){
     const refSec=refSecM[1];
-    const defined=new Set((refSec.match(/\b\d{1,4}\b/g)||[]).map(Number).filter(n=>n>=1&&n<=9999));
+    // ★ 명칭에 박힌 숫자(예: "제1 통신부", "S410")를 정의 부호로 오인하지 않도록 "홀로 선 숫자"만 수집.
+    //   (기존 \b\d{1,4}\b 는 한글이 비단어문자라 "제1"의 1을 경계로 오탐 → refnum_consistency 거짓 발생)
+    const defined=new Set((refSec.match(/(?<![0-9A-Za-z가-힣])\d{1,4}(?![0-9A-Za-z가-힣])/g)||[]).map(Number).filter(n=>n>=1&&n<=9999));
     const body=specText.replace(refSec,' ');
     const used=new Set((body.match(/\(\d{1,4}\)/g)||[]).map(s=>parseInt(s.replace(/[()]/g,''),10)).filter(n=>n>=1&&n<=9999));
     const usedNotDef=[...used].filter(n=>!defined.has(n)).sort((a,b)=>a-b);

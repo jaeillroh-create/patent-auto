@@ -145,3 +145,50 @@ test('★ 소스 — runUnifiedCohesionGen 비파괴 커밋 게이트 + 원자 �
   assert.match(PATENT_SRC, /outputs\.step_18=_deriveSignDescription\(r\.refMap\)/, '★ 부호의설명 결정적 직렬화');
   assert.match(PATENT_SRC, /부호불일치 '\+before\.refnum\+'→'\+after\.refnum/, '★ A/B 검증기 지표 대조');
 });
+
+// ═══════════ 적대 리뷰 반영: 9개 확인 결함 수정 ═══════════
+
+// (A) CHK-4 서수 명칭 오탐 — "구조적 0" 파탄 수정
+test('★ CHK-4 — 서수 명칭("제1 통신부 : 110")이 refnum_consistency 오탐 없음', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n도 1을 참조하면, 제1 통신부(110)는 데이터를 수신한다.\n\n【부호의 설명】\n제1 통신부 : 110';
+  const iss = JSON.parse(run('JSON.stringify(validateSpecification(' + JSON.stringify(spec) + ').filter(function(i){return i.check==="refnum_consistency";}))'));
+  assert.equal(iss.length, 0, '★ 명칭 내 숫자(제1) 오탐 제거 → refnum_consistency 0');
+});
+test('★ CHK-4 — 실제 미정의 부호는 여전히 검출(회귀 방지)', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n표시부(200)가 출력한다.\n\n【부호의 설명】\n제어부 : 100';
+  const iss = JSON.parse(run('JSON.stringify(validateSpecification(' + JSON.stringify(spec) + ').filter(function(i){return i.check==="refnum_consistency";}))'));
+  assert.ok(iss.length >= 1, '★ 본문 (200) 미정의 검출 유지(오탐 수정이 검출력을 죽이지 않음)');
+});
+
+// (B/D) deviceLeak 정규식 견고화
+test('★ deviceLeak — 정당한 장치 서술(단계적/단계별/단계에서/단계 없이) 오탐 없음', () => {
+  ['초기화하는 단계적 부팅을 수행한다', '저감하는 단계 없이 처리한다', '조절하는 단계별 제어를 수행한다', '판단하는 단계에서 동작한다'].forEach(function (d) {
+    assert.equal(pcb(bundle(REF, d + ' 제어부(100)는 통신부(110)와 동작한다.', METH)).report.deviceLeak, false, '★ "' + d + '" 오탐 아님');
+  });
+});
+test('★ deviceLeak — 실제 방법누출(하는 단계를 / S1 / S1000)은 검출', () => {
+  assert.equal(pcb(bundle(REF, DEV + ' 데이터를 저장하는 단계를 수행한다.', METH)).report.deviceLeak, true, '★ "하는 단계를"');
+  assert.equal(pcb(bundle(REF, DEV + ' S5 로 진행한다.', METH)).report.deviceLeak, true, '★ S5(1자리)');
+  assert.equal(pcb(bundle(REF, DEV + ' S1000 을 수행한다.', METH)).report.deviceLeak, true, '★ S1000(4자리)');
+});
+
+// (C) methodOk 완화
+test('★ methodOk — 과정/스텝 어휘 또는 S### 로도 방법 극성 인정', () => {
+  assert.equal(pcb(bundle(REF, DEV, '수신하는 과정을 포함한다.')).report.methodOk, true, '★ "하는 과정"');
+  assert.equal(pcb(bundle(REF, DEV, 'S410 에서 데이터를 비교한다.')).report.methodOk, true, '★ S### 단계식별자');
+});
+
+// (E) 센티넬 마커 공백 tolerance
+test('★ grab — 마커 줄 후행 공백/들여쓰기 tolerance(유효 생성 폐기 방지)', () => {
+  const withWs = '<<<REFTABLE>>>  \n' + REF + '\n  <<<END_REFTABLE>>> \n<<<DEVICE_DESC>>>\n' + DEV + '\n<<<END_DEVICE_DESC>>>';
+  const r = pcb(withWs);
+  assert.equal(r.ok.hasRef, true, '★ 후행 공백 있어도 REFTABLE 파싱');
+  assert.equal(r.ok.hasDevice, true, '★ DEVICE 파싱');
+});
+
+// (F/G) 커밋 후처리 배선(소스)
+test('★ 소스 — 함께 재생성한 step_12 false-stale 배지 제거 + 수학식 재삽입 경고', () => {
+  assert.match(PATENT_SRC, /stale-warning\[data-step="step_12"\]/, '★ (F) step_12 false-stale 배지 제거');
+  assert.match(PATENT_SRC, /hadMath=!!outputs\.step_09/, '★ (G) 수학식 존재 캡처');
+  assert.match(PATENT_SRC, /기존 수학식\(Step 9\)은 새 상세설명에 재삽입이 필요/, '★ (G) 수학식 소실 경고');
+});
