@@ -253,6 +253,29 @@ function validateSpecification(specText){
 
   return iss;
 }
+
+// ═══ [기계검증↔Step13 통합] ═══
+// 완성-조립 시점에만 판정 가능한 검사(표제 완전성/순서, 부호의 설명 대조)는 Step 13(상세설명 단계)에서 볼 수 없다.
+//   → Step13 주입·자동수정 대상에서 제외하고, 이들은 완성본 패널의 'AI로 수정'(부호설명 재생성 등)이 담당한다.
+const _FINAL_ONLY_CHECKS = new Set(['heading_missing','heading_order','refnum_consistency']);
+// 완성본 패널에서 'AI로 수정'으로 자동 보정 가능한 검사(표제 누락/순서는 스텝 재실행 사안이라 제외).
+const FIXABLE_CHECKS = new Set(['paragraph_duplicate','sentence_duplicate','sentence_truncation','sentence_ending','unit_corruption','math_var_undefined','example_missing','refnum_consistency']);
+
+// [Part1] Step 13(AI 검토) 강화 — 결정론적 기계검증 결과를 검토 프롬프트에 주입한다.
+//   Step 13이 보는 범위(상세설명·수학식)에 존재하는 결함만 필터(완성-단계 전용 검사 제외) → AI가 [5] 보완/수정 제안에 반영.
+function machineFindingsForReview(){
+  try{
+    const desc=(typeof getLatestDescription==='function'?getLatestDescription():'')||'';
+    const md=(typeof getLatestMethodDescription==='function'?getLatestMethodDescription():'')||'';
+    const src=[desc,md].filter(Boolean).join('\n\n');
+    if(!src.trim())return '';
+    const iss=validateSpecification(src).filter(i=>!_FINAL_ONLY_CHECKS.has(i.check));
+    if(!iss.length)return '';
+    const lines=iss.slice(0,15).map(i=>`- [${i.severity}·${i.check}] ${i.message}${i.detail?` (${i.detail})`:''}`);
+    if(iss.length>15)lines.push(`- 외 ${iss.length-15}건`);
+    return lines.join('\n');
+  }catch(_e){return '';}
+}
 // [Item 2] 완성본 기계검증 패널 렌더 — 산출물 탭(page4) 미리보기 진입 시 자동 실행. severity 색은 인라인(patent.css 무변경).
 function renderSpecValidation(){
   const el=document.getElementById('specValidateResult'); if(!el)return;
@@ -267,10 +290,91 @@ function renderSpecValidation(){
     const cls=i.severity==='CRITICAL'?'issue-critical':'issue-high';
     return `<div class="issue-item ${cls}" style="border-left:3px solid ${col};padding:8px 10px;margin:4px 0;border-radius:6px;background:rgba(0,0,0,0.02)"><b>[${i.severity}·${App.escapeHtml(i.check)}]</b> ${App.escapeHtml(i.message)}${i.detail?`<br><span style="font-size:11px;color:var(--color-text-tertiary)">${App.escapeHtml(i.detail)}</span>`:''}</div>`;
   }).join('');}
+  // [Part2] 'AI로 수정' — 자동 보정 가능한 검사(중복·절단·수식변수·예시·부호정합)가 있을 때만 노출.
+  const _fixN=iss.filter(i=>FIXABLE_CHECKS.has(i.check)).length;
+  if(_fixN)h+=`<button class="btn btn-primary btn-full" id="btnFixSpecValidate" style="margin-top:10px" onclick="fixSpecValidationIssues()"><span class="ico" data-icon="settings"></span> AI로 수정 (${_fixN}건 자동 보정)</button><p style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px">중복 사본 제거·문장 절단·수학식 변수 정의·예시 보충·부호정합을 상세설명/부호의 설명에 반영합니다. 표제 누락·순서는 해당 스텝 재실행이 필요합니다.</p><div id="progressFixSpecValidate"></div>`;
   el.innerHTML=h;
 }
 // [Item 2] 다운로드/복사 직전 CRITICAL 경고(차단 아님 — division 선례 B: 경고+진행). 열린 결정은 PR 본문 참조.
 function _warnSpecValidation(){ try{ const sv=validateSpecification(buildSpecification()); const c=sv.filter(i=>i.severity==='CRITICAL').length; if(c)App.showToast(`⚠️ 완성본 검증 CRITICAL ${c}건(문단 중복/절단 의심) — 산출물 탭 검증 패널 확인 권장`,'warning'); }catch(_e){} }
+
+// ═══ [Part2] 완성본 기계검증 'AI로 수정' ═══
+// 결정론적 문단 중복 제거 — 검증기 CHK-6 중복 판정 하한(norm-body ≥40자)과 정합, 첫 사본 보존.
+//   전체-문단 완전일치만 제거(삭제형이라 코드로 안전). 문단 내부 부분 중복은 (C)/수동 소관.
+function _dedupParagraphs(text){
+  if(!text)return {text:text,removed:0};
+  const norm=(typeof _stripMathNorm==='function')?_stripMathNorm:(s=>String(s||'').replace(/\s+/g,''));
+  const paras=String(text).split(/\n{2,}/);
+  const seen=new Set(); let removed=0;
+  const kept=paras.filter(p=>{ const body=p.replace(/^【[^】]+】\s*\n?/,''); const k=norm(body); if(k.length<40)return true; if(seen.has(k)){removed++;return false;} seen.add(k); return true; });
+  return {text:kept.join('\n\n'), removed:removed};
+}
+// 본문 "명칭(부호)" 쌍 수집(부호의 설명 재생성용). 부호별 최빈 명칭 채택. 부호의 설명 섹션은 제외.
+function _collectBodyRefPairs(){
+  const spec=buildSpecification();
+  const refM=spec.match(/【\s*부호의 설명\s*】([\s\S]*?)(?:\n【|$)/);
+  const body=refM?spec.replace(refM[1],' '):spec;
+  const map=new Map();
+  const re=/([가-힣A-Za-z][가-힣A-Za-z\s]{0,12}?)\s*\((\d{1,4})\)/g; let m;
+  while((m=re.exec(body))!==null){ const name=m[1].replace(/^상기\s*/,'').trim(); const ref=parseInt(m[2],10); if(!(ref>=1&&ref<=9999))continue; if(!map.has(ref))map.set(ref,new Map()); if(name.length>=2){ const nm=map.get(ref); nm.set(name,(nm.get(name)||0)+1); } }
+  let b; const bare=/\((\d{1,4})\)/g; while((b=bare.exec(body))!==null){ const ref=parseInt(b[1],10); if(ref>=1&&ref<=9999&&!map.has(ref))map.set(ref,new Map()); }
+  return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(function(e){ const ref=e[0],nm=e[1]; let best='',bc=0; nm.forEach(function(c,n){ if(c>bc){bc=c;best=n;} }); return {ref:ref,name:best}; });
+}
+// 'AI로 수정' 진입점 — (A)중복 제거(코드) → (B)부호의 설명 재생성(LLM) → (C)상세설명 의미 보정(편집지시 LLM) → 재조립·재검증.
+async function fixSpecValidationIssues(){
+  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
+  const spec0=buildSpecification();
+  if(!spec0.trim()){App.showToast('완성 명세서가 없어요','error');return;}
+  const iss=validateSpecification(spec0).filter(function(i){return FIXABLE_CHECKS.has(i.check);});
+  if(!iss.length){App.showToast('자동 수정 가능한 이슈가 없어요','info');return;}
+  const has=function(c){return iss.some(function(i){return i.check===c;});};
+  if(typeof setGlobalProcessing==='function')setGlobalProcessing(true);
+  const btn=document.getElementById('btnFixSpecValidate'); if(btn)btn.disabled=true;
+  const done=[];
+  try{
+    // ── (A) 문단 중복 사본 제거 — 코드 결정론적(장치/방법 상세설명) ──
+    if(has('paragraph_duplicate')||has('sentence_duplicate')){
+      App.showProgress('progressFixSpecValidate','중복 사본 제거 중...',1,3);
+      let rm=0;
+      const dev=getLatestDescription();
+      if(dev){ const r=_dedupParagraphs(dev); if(r.removed){ pushOutputHistory('step_13_applied','fix','fixSpecValidation'); outputs.step_13_applied=r.text; markOutputTimestamp('step_13_applied'); rm+=r.removed; } }
+      if(outputs.step_12){ const md=getLatestMethodDescription(); const r2=_dedupParagraphs(md); if(r2.removed){ pushOutputHistory('step_13_applied_method','fix','fixSpecValidation'); outputs.step_13_applied_method=r2.text; markOutputTimestamp('step_13_applied_method'); rm+=r2.removed; } }
+      if(rm)done.push(`중복 문단 ${rm}개 제거`);
+    }
+    // ── (B) 부호의 설명(step_18) 재생성 — 본문 사용 부호 전수 정의(1:1 정합) ──
+    if(has('refnum_consistency')){
+      App.showProgress('progressFixSpecValidate','부호의 설명 정합 보정 중...',2,3);
+      const pairs=_collectBodyRefPairs();
+      if(pairs.length){
+        const listTxt=pairs.map(function(p){return p.ref+': '+(p.name||'(명칭 미상)');}).join('\n');
+        const r=await App.callClaude(`아래는 특허 명세서 본문에서 실제 사용된 도면부호와 그 명칭이다. 【부호의 설명】 목록을 작성하라.\n\n[규칙]\n- 아래 목록의 모든 부호를 빠짐없이 포함하라(본문 사용 = 부호의 설명 정의, 1:1 정합).\n- 형식: "명칭 : 번호" 한 줄에 하나, 번호 오름차순.\n- (명칭 미상) 부호는 본문 문맥에 맞는 구성요소 명칭을 부여하라.\n- ⛔ 표제(【부호의 설명】) 줄·설명 문장 금지. "명칭 : 번호" 목록만 출력.\n\n[본문 사용 부호]\n${listTxt}`,4096);
+        const cleaned=String(r.text||'').replace(/^\s*【[^】]*】\s*/,'').trim();
+        if(cleaned){ pushOutputHistory('step_18','fix','fixSpecValidation'); outputs.step_18=cleaned; markOutputTimestamp('step_18'); done.push('부호의 설명 정합'); }
+      }
+    }
+    // ── (C) 상세설명 의미 보정 — 절단·수식변수 미정의·예시 누락(편집지시 LLM, 삭제 없음) ──
+    const semIss=iss.filter(function(i){return ['sentence_truncation','math_var_undefined','example_missing'].indexOf(i.check)>=0;});
+    if(semIss.length){
+      App.showProgress('progressFixSpecValidate','상세설명 의미 보정 중...',3,3);
+      const cur=getLatestDescription();
+      if(cur){
+        const issueTxt=semIss.map(function(i){return `- [${i.check}] ${i.message}${i.detail?' ('+i.detail+')':''}`;}).join('\n');
+        const ei=await App.callClaude(`아래 [기계검증 결함]을 반영하기 위한 편집 지시만 생성하라. 상세설명 전체를 다시 쓰지 마라.\n\n[편집 지시 형식]\n---EDIT_1---\nANCHOR: (수정할 위치의 기존 문장 정확히 복사. 20자 이상)\nACTION: ADD_AFTER 또는 MODIFY 또는 ADD_BEFORE\nCONTENT: (추가/수정할 순수 특허 문장. 특허문체(~한다). 구성요소(참조번호) 형태.)\nREASON: (반영하는 결함)\n\n[규칙]\n- ANCHOR는 [현재 상세설명]에 실제 존재하는 문장.\n- 문장 절단 → 절단 문장을 완결 문장으로 MODIFY.\n- 수학식 변수 미정의 → 해당 수식 근처 문장 뒤에 "여기서, X는 …이다." 정의를 ADD_AFTER.\n- 예시 누락 → 해당 구성요소 문단 뒤에 "예를 들어, …" 실시예를 ADD_AFTER.\n- ⛔ 【청구항 N】·청구항 번호·【수학식 N】 블록 생성 금지. ⛔ 문장 삭제 금지(ADD/MODIFY만).\n- ⛔ CONTENT에 "현재:"·"수정:"·"→"·"✅"·"⚠️" 등 검토 메타 금지 — 순수 명세서 문장만.\n- 최대 12개.\n\n[기계검증 결함]\n${issueTxt}\n[현재 상세설명]\n${cur}`,8192);
+        const edits=(typeof parseEditInstructions==='function')?parseEditInstructions(ei.text):[];
+        if(edits.length){
+          const fixed=applyEditInstructions(cur,edits);   // ADD/MODIFY만 — 삭제 없음. 방법혼입 sanitize 미적용(예시도 삭제 회귀 방지·생성경로 무관 유지)
+          pushOutputHistory('step_13_applied','fix','fixSpecValidation'); outputs.step_13_applied=fixed; markOutputTimestamp('step_13_applied'); done.push(`상세설명 보정(${edits.length}건)`);
+        }
+      }
+    }
+    if(typeof saveProject==='function')saveProject(true);
+    try{renderPreview();}catch(_e){}
+    renderSpecValidation();
+    App.clearProgress('progressFixSpecValidate');
+    App.showToast(done.length?`AI 수정 완료 — ${done.join(', ')}. 재검증 결과를 확인하세요.`:'적용된 수정이 없어요(수동 확인 권장)', done.length?'success':'info');
+  }catch(e){ App.clearProgress('progressFixSpecValidate'); App.showToast('AI 수정 실패: '+(e&&e.message||e),'error'); }
+  finally{ if(typeof setGlobalProcessing==='function')setGlobalProcessing(false); const b=document.getElementById('btnFixSpecValidate'); if(b)b.disabled=false; }
+}
 function runValidation(){
   const all=[outputs.step_06,outputs.step_10].filter(Boolean).join('\n');
   if(!all){App.showToast('검증할 청구항이 없어요','error');return;}

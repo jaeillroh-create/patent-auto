@@ -1351,8 +1351,9 @@ ${methodAnchorDep>0?`★★ 방법 앵커 종속항 뒷받침 규칙 (등록 핵
 
 ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_11||''}\n[장치 상세설명] ${(outputs.step_08||'').slice(0,3000)}${step15Ref}${getFullInvention({stripMeta:true})}${styleRef}`;}
     case 'step_13':{
+      const _mf=(typeof machineFindingsForReview==='function')?machineFindingsForReview():'';
       return `아래 청구범위와 상세설명을 전문적으로 검토하라.
-
+${_mf?`\n═══ ★ 기계검증이 발견한 결정론적 결함 (최우선 반영) ═══\n아래는 기계(정규식) 검증이 현재 상세설명에서 실제로 검출한 결함이다. 각 항목을 반드시 아래 [5] 보완/수정 제안에 포함하여 구체적 수정 문장을 제시하라(문단/문장 중복 → 중복 사본 제거 지시, 문장 절단 → 문장 복원, 수학식 변수 미정의 → "여기서" 절에 변수 정의 추가, 예시 누락 → 실시예 보충).\n${_mf}\n`:''}
 ═══ 검토 항목 및 기준 ═══
 
 [1] 청구항 뒷받침 검토 (특허법 제42조 제4항 제1호)
