@@ -608,10 +608,21 @@ async function extractInventionScope() {
   setGlobalProcessing(true);
   try {
     const prompt = `${INVENTION_SCOPE_SCHEMA_INSTRUCTION}\n\n<invention_description>\n${input}\n</invention_description>`;
-    const resp = await App.callClaudeSonnet(prompt, 4096);
-    const parsed = _parseJSONSafe(resp.text);
+    let resp = await App.callClaudeSonnet(prompt, 8192);
+    let parsed = _parseJSONSafe(resp.text);
     if (!parsed || !parsed.core_components) {
-      App.showToast('발명 범위 추출 실패: JSON 파싱 불가', 'error');
+      // 1차 실패 시 스키마 준수 강화 지시로 1회 재시도(모델 JSON 미준수는 흔히 재시도로 해소)
+      resp = await App.callClaudeSonnet(prompt + '\n\n★ 반드시 위 스키마의 순수 JSON 객체만 출력하라. 코드펜스·설명·주석 금지. { 로 시작해 } 로 끝내라.', 8192);
+      parsed = _parseJSONSafe(resp.text);
+    }
+    if (!parsed || !parsed.core_components) {
+      const raw = (resp && typeof resp.text === 'string') ? resp.text : '';
+      console.error('[발명 범위] 파싱 실패 · stopReason=', resp && resp.stopReason, '· len=', raw.length, '· raw(앞 800자)=', raw.slice(0, 800));
+      let msg = '발명 범위 추출 실패: ';
+      if (!raw.trim()) msg += '모델 응답이 비어 있습니다. 잠시 후 다시 시도해주세요.';
+      else if (resp && resp.stopReason === 'max_tokens') msg += '응답이 잘렸습니다(분량 초과). 발명 설명을 더 간결히 정리한 뒤 다시 시도해주세요.';
+      else msg += 'JSON 형식이 아닙니다. 다시 시도하거나 브라우저 콘솔(F12)에서 원문을 확인해주세요.';
+      App.showToast(msg, 'error');
       return;
     }
     inventionScope = {
