@@ -10,6 +10,7 @@
  */
 import { test, before } from 'node:test';
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -139,7 +140,7 @@ test('★ 소스 — 프롬프트가 기존 하드계약 보존(방법표현 금
 });
 
 test('★ 소스 — runUnifiedCohesionGen 비파괴 커밋 게이트 + 원자 커밋 + A/B 지표', () => {
-  assert.match(PATENT_SRC, /async function runUnifiedCohesionGen\(\)/, '★ 진입점');
+  assert.match(PATENT_SRC, /async function runUnifiedCohesionGen\(opts\)/, '★ 진입점(opts — 체인 silent 지원)');
   assert.match(PATENT_SRC, /게이트 미통과\(기존 내용 보존\)/, '★ 게이트 미통과 시 비파괴');
   assert.match(PATENT_SRC, /pushOutputHistory\('step_08','unified'/, '★ 이력 보존');
   assert.match(PATENT_SRC, /outputs\.step_18=_deriveSignDescription\(r\.refMap\)/, '★ 부호의설명 결정적 직렬화');
@@ -191,4 +192,32 @@ test('★ 소스 — 함께 재생성한 step_12 false-stale 배지 제거 + 수
   assert.match(PATENT_SRC, /stale-warning\[data-step="step_12"\]/, '★ (F) step_12 false-stale 배지 제거');
   assert.match(PATENT_SRC, /hadMath=!!outputs\.step_09/, '★ (G) 수학식 존재 캡처');
   assert.match(PATENT_SRC, /기존 수학식\(Step 9\)은 새 상세설명에 재삽입이 필요/, '★ (G) 수학식 소실 경고');
+});
+
+// ═══════════ [B] 발명자료 → 핵심 명세서 통합 체인(원클릭) ═══════════
+
+test('★ 소스 — runUnifiedFullChain 4단계 오케스트레이션(명칭→청구항→도면→통합)', () => {
+  assert.match(PATENT_SRC, /async function runUnifiedFullChain\(\)/, '★ 체인 진입점');
+  assert.match(PATENT_SRC, /await runStep\('step_01'\)/, '★ [1] 명칭');
+  assert.match(PATENT_SRC, /parseTitleCandidates\(outputs\.step_01/, '★ [1] 명칭 자동 선택(첫 후보)');
+  assert.match(PATENT_SRC, /await runStep\('step_06'\)/, '★ [2] 장치 청구항');
+  assert.match(PATENT_SRC, /wantMethod\)\{ await runStep\('step_10'\)/, '★ [2] 방법 청구항(옵션)');
+  assert.match(PATENT_SRC, /await runDiagramStep\('step_07'\)/, '★ [3] 장치 도면');
+  assert.match(PATENT_SRC, /await runUnifiedCohesionGen\(\{chained:true\}\)/, '★ [4] 상세설명+부호 통합(chained)');
+});
+
+test('★ 소스 — 체인 비파괴/그레이스풀 + 재진입 차단 + 전제조건 + 락 미보유', () => {
+  assert.match(PATENT_SRC, /_unifiedChainRunning/, '★ 재진입 차단 플래그');
+  assert.match(PATENT_SRC, /먼저 발명 유형을 선택하세요/, '★ 유형 전제조건');
+  assert.match(PATENT_SRC, /여기서 중단\(청구항까지 보존\)/, '★ 도면 실패 시 그레이스풀 중단(보존)');
+  assert.match(PATENT_SRC, /globalProcessing 을 직접 잡지 않는다/, '★ 락 미보유 설계(하위 early-return 방지)');
+  assert.match(PATENT_SRC, /if\(!\(opts&&opts\.chained\)&&!confirm/, '★ chained면 확인창 스킵');
+});
+
+test('★ 소스 — A.기본 탭 통합 체인 버튼 배선', () => {
+  const html = readFileSync(path.join(REPO, 'index.html'), 'utf8');
+  assert.match(html, /id="cardUnifiedFullChain"/, '★ 카드');
+  assert.match(html, /id="btnUnifiedFullChain"[\s\S]*?onclick="runUnifiedFullChain\(\)"/, '★ 버튼→함수');
+  assert.match(html, /발명자료 → 핵심 명세서/, '★ 레이블');
+  assert.match(html, /id="progressUnifiedFullChain"/, '★ 진행률 컨테이너');
 });

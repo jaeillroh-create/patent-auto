@@ -1665,8 +1665,8 @@ function _specIssueCounts(){
              dup:iss.filter(function(i){return i.check==='paragraph_duplicate'||i.check==='sentence_duplicate';}).length }; }
   catch(_e){ return {refnum:0,dup:0}; }
 }
-async function runUnifiedCohesionGen(){
-  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
+async function runUnifiedCohesionGen(opts){
+  if(!(opts&&opts.chained)&&typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
   if(!outputs.step_06){App.showToast('먼저 장치 청구항(A2)을 생성하세요','error');return;}
   if(!outputs.step_07){App.showToast('먼저 장치 도면(B1)을 생성하세요 — 도면부호 정합의 기준입니다','error');return;}
   const before=_specIssueCounts(); const hadMath=!!outputs.step_09;   // ★ 수학식(step_09) 존재 시 커밋 후 재삽입 필요 경고
@@ -1682,7 +1682,7 @@ async function runUnifiedCohesionGen(){
     if(rep.deviceLeak)gate.push('장치 상세설명에 방법표현 누출');
     if(!rep.methodOk)gate.push('방법 상세설명 극성 미충족');
     if(gate.length){ App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 게이트 미통과(기존 내용 보존): '+gate.join(' · '),'error'); console.warn('[unified] gate fail',rep); return; }
-    if(!confirm('통합 생성 결과로 장치 상세설명·방법 상세설명·부호의 설명을 대체합니다. 계속할까요?\n(이전 내용은 이력에 보존됩니다)')){ App.clearProgress('progressUnifiedGen'); return; }
+    if(!(opts&&opts.chained)&&!confirm('통합 생성 결과로 장치 상세설명·방법 상세설명·부호의 설명을 대체합니다. 계속할까요?\n(이전 내용은 이력에 보존됩니다)')){ App.clearProgress('progressUnifiedGen'); return; }
     // ── 원자 커밋(3슬롯) ──
     pushOutputHistory('step_08','unified','runUnifiedCohesionGen');
     if(r.method&&outputs.step_10)pushOutputHistory('step_12','unified','runUnifiedCohesionGen');
@@ -1706,5 +1706,56 @@ async function runUnifiedCohesionGen(){
     if(hadMath)App.showToast('⚠️ 기존 수학식(Step 9)은 새 상세설명에 재삽입이 필요합니다 — 미리보기·다운로드에 수학식이 빠져 있습니다','warning');
   }catch(e){ App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); }
   finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); }
+}
+
+// ═══ [B] 발명자료 → 핵심 명세서 통합 생성 (원클릭 체인) ═══
+// 명칭 → 청구항(장치[+방법]) → 도면(장치[+방법]) → 상세설명+부호(통합) 를 한 번의 클릭으로 순차 생성.
+// 각 단계는 기존 검증된 생성기(runStep/runDiagramStep/runUnifiedCohesionGen)를 재사용 — 오케스트레이션만 추가.
+// 체인은 globalProcessing 을 직접 잡지 않는다(각 하위 생성기가 잡고 finally 로 해제하므로, 잡으면 하위가 early-return). 재진입은 _unifiedChainRunning 플래그로 차단.
+// 비파괴/그레이스풀: 어느 단계가 실패하면 그 지점에서 중단하고 지금까지 생성분은 보존.
+let _unifiedChainRunning=false;
+async function runUnifiedFullChain(){
+  if(_unifiedChainRunning){App.showToast('통합 생성이 이미 진행 중입니다','info');return;}
+  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('다른 작업이 진행 중입니다','info');return;}
+  const inv=((typeof document!=='undefined'&&document.getElementById('projectInput')?.value)||'').trim();
+  if(inv.length<20){App.showToast('발명 자료를 먼저 입력하세요(최소 20자)','error');return;}
+  if(!selectedTitleType){App.showToast('먼저 발명 유형을 선택하세요 (Step 1의 유형 선택)','error');return;}
+  if(typeof currentProjectId!=='undefined'&&!currentProjectId){App.showToast('프로젝트를 먼저 저장하세요','error');return;}
+  const wantMethod=!!includeMethodClaims;
+  const TOTAL=4;
+  _unifiedChainRunning=true;
+  const btn=(typeof document!=='undefined')?document.getElementById('btnUnifiedFullChain'):null; if(btn)btn.disabled=true;
+  const P=function(msg,cur){App.showProgress('progressUnifiedFullChain',msg,cur,TOTAL);};
+  try{
+    // ── [1/4] 발명의 명칭 ──
+    P('[1/4] 발명의 명칭 생성...',0);
+    if(!outputs.step_01)await runStep('step_01');
+    if(!selectedTitle){
+      const cands=(typeof parseTitleCandidates==='function')?parseTitleCandidates(outputs.step_01||''):[];
+      if(cands.length){ selectedTitle=cands[0].korean||''; selectedTitleEn=cands[0].english||''; if(typeof markOutputTimestamp==='function')markOutputTimestamp('step_01'); }
+    }
+    if(!selectedTitle){ App.clearProgress('progressUnifiedFullChain'); App.showToast('명칭 생성 실패 — 다시 시도하세요','error'); return; }
+    // ── [2/4] 청구항 ──
+    P('[2/4] 청구항 생성(장치'+(wantMethod?'+방법':'')+')...',1);
+    await runStep('step_06');
+    if(!outputs.step_06){ App.clearProgress('progressUnifiedFullChain'); App.showToast('장치 청구항 생성 실패 — 여기서 중단(생성분 보존)','error'); return; }
+    if(wantMethod){ await runStep('step_10'); }
+    // ── [3/4] 도면 ──
+    P('[3/4] 도면 생성(Mermaid)...',2);
+    await runDiagramStep('step_07');
+    if(!outputs.step_07){ App.clearProgress('progressUnifiedFullChain'); App.showToast('장치 도면 생성 실패 — 여기서 중단(청구항까지 보존)','error'); return; }
+    if(wantMethod&&outputs.step_10){ await runDiagramStep('step_11'); }
+    // ── [4/4] 상세설명+부호 통합 ──
+    P('[4/4] 상세설명+부호 통합 생성...',3);
+    const _beforeDesc=outputs.step_08||'';
+    await runUnifiedCohesionGen({chained:true});
+    if((outputs.step_08||'')===_beforeDesc){ App.clearProgress('progressUnifiedFullChain'); App.showToast('상세설명·부호 통합 단계가 게이트 미통과/실패 — 청구항·도면까지는 생성됨. 산출물(F) 탭에서 재시도하세요','warning'); return; }
+    // 완료
+    App.showProgress('progressUnifiedFullChain','완료',TOTAL,TOTAL);
+    if(typeof saveProject==='function')saveProject(true);
+    setTimeout(function(){App.clearProgress('progressUnifiedFullChain');},2500);
+    App.showToast('통합 생성 완료 — 명칭·청구항·도면·상세설명·부호 생성됨. 산출물(F) 탭에서 확인하세요','success');
+  }catch(e){ App.clearProgress('progressUnifiedFullChain'); App.showToast('통합 생성 중단: '+(e&&e.message||e),'error'); console.error('[unifiedChain]',e); }
+  finally{ _unifiedChainRunning=false; const b=(typeof document!=='undefined')?document.getElementById('btnUnifiedFullChain'):null; if(b)b.disabled=false; }
 }
 
