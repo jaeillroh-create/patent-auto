@@ -1077,6 +1077,7 @@ ${outputs.step_06?.slice(0,2000)||''}
 ${figNums.length>1?figNums.slice(1).map(n=>'\n---CONCEPT_FIG_'+n+'---\n<svg>...</svg>\n---BRIEF_DESC---\n도 '+n+'은 ...를 나타내는 예시도이다.\n---REF_MAP---\n31: 에피소드 노드\n32: 사용자 프로필 카드').join(''):''}
 ★ REF_MAP 필수(§6-6): 각 참조번호(31~99)가 도면에서 실제로 가리키는 구체적 요소의 "고유 한국어 이름"을 "번호: 이름"으로 빠짐없이 적어라(부호의 설명·상세설명이 이 이름을 그대로 사용한다).
 ⛔ "데이터 구조 요소"·"UI 화면 요소" 같은 유형 총칭을 번호마다 반복하지 마라 — 각 요소의 개별 명칭(예: 에피소드 노드, 사용자 프로필 카드, 추천 랭킹표)을 서로 다르게 써라(총칭 나열은 부호↔명칭 대응을 상실시킨다).
+⛔ 서수(제1/제2/제N)+총칭 조합도 금지("제1 UI 화면 요소" 등 — 총칭 반복의 우회일 뿐이다). 각 번호는 요소의 실제 내용을 나타내는 고유 명칭(예: 대본 입력 패널, 라우팅 결과 카드, 승인 버튼)이어야 하며, 실명을 특정할 수 없으면 해당 번호의 라벨을 비워 두라(빈 라벨은 시스템이 처리한다).
 
 ⛔ 자체 검증 — SVG 출력 전 아래를 확인하라:
 1. stroke에 "#" 뒤에 0, 3 이외의 숫자가 있는가? → 있으면 흑백으로 수정
@@ -1646,7 +1647,9 @@ function parseCohesiveBundle(raw){
   const refMap=new Map(); const dupNums=[];
   (refBlock||'').split('\n').forEach(function(line){ const t=line.trim(); if(!t)return;
     if(/^\[장치부호\]/.test(t)||/^\[방법단계\]/.test(t))return;
-    const mm=t.match(/^\(\s*(S?\d{1,4})\s*\)\s*(.+?)\s*$/);
+    // ★ [배치7 N3] REF 범위 검증 — 장치 부호는 계약(C3)대로 2~4자리만 수용. 1자리 generic("(1) 시스템"~"(5) 저장 영역",
+    //   docD 실측)은 refMap에 진입 못하게 결정론 차단 → step_18 직렬화·본문 대조에서 원천 배제(본문이 쓰면 notInTable 게이트).
+    const mm=t.match(/^\(\s*(S\d{1,4}|\d{2,4})\s*\)\s*(.+?)\s*$/);
     if(mm){ const name=mm[2].replace(/^상기\s*/,'').replace(/^[:\s]+/,'').trim(); if(name.length>=2){ const num=mm[1]; if(refMap.has(num))dupNums.push(num); else refMap.set(num,name); } }
   });
   const bodyNums=new Set();
@@ -1715,6 +1718,16 @@ async function runUnifiedCohesionGen(opts){
 
 // ═══ [B] 발명자료 → 핵심 명세서 통합 생성 (원클릭 체인) ═══
 // 명칭 → 청구항(장치[+방법]) → 도면(장치[+방법]) → 상세설명+부호(통합) 를 한 번의 클릭으로 순차 생성.
+
+// ★ [배치7 N1] 전체 재생성 — 체인 산출 계열(명칭후보·청구항·도면·상세설명·부호·수학식·검토/반영본) 초기화.
+//   step_09·step_13_applied(_method)는 getLatestDescription 우선순위상 구본이 새 step_08을 가리는(섀도잉) 원인이라 반드시 함께 제거.
+//   selectedTitle(확정 명칭)은 보존 — 명칭 변경은 사용자 결정 사안(변경 시 세대 훅이 별도 추적).
+function _resetUnifiedChainOutputs(){
+  ['step_01','step_06','step_10','step_07','step_11','step_08','step08_device','step_09','step_12','step_18','step_13','step_13_applied','step_13_applied_method'].forEach(function(k){
+    if(typeof outputs==='object'&&outputs&&outputs[k]!==undefined)delete outputs[k];
+    try{ if(typeof outputTimestamps==='object'&&outputTimestamps&&outputTimestamps[k]!==undefined)delete outputTimestamps[k]; }catch(_e){}
+  });
+}
 // 각 단계는 기존 검증된 생성기(runStep/runDiagramStep/runUnifiedCohesionGen)를 재사용 — 오케스트레이션만 추가.
 // 체인은 globalProcessing 을 직접 잡지 않는다(각 하위 생성기가 잡고 finally 로 해제하므로, 잡으면 하위가 early-return). 재진입은 _unifiedChainRunning 플래그로 차단.
 // 비파괴/그레이스풀: 어느 단계가 실패하면 그 지점에서 중단하고 지금까지 생성분은 보존.
@@ -1726,6 +1739,15 @@ async function runUnifiedFullChain(){
   if(inv.length<20){App.showToast('발명 자료를 먼저 입력하세요(최소 20자)','error');return;}
   if(!selectedTitleType){App.showToast('먼저 발명 유형을 선택하세요 (Step 1의 유형 선택)','error');return;}
   if(typeof currentProjectId!=='undefined'&&!currentProjectId){App.showToast('프로젝트를 먼저 저장하세요','error');return;}
+  // ★ [배치7 N1(i)] 재실행 정책 — 기존 체인 산출물 존재 시 "이어하기/전체 새로 생성" 확인 모달.
+  //   근거(docD 실측): 부분 재생성([3/4]만 갱신, [4/4]는 게이트 미통과 시 기존 보존)이 신 부호표·구 본문 혼합
+  //   (canonical 역전·미사용 부호·서수 요소 — docA형 세대 혼합의 통합작성판)을 생성. outputs 없으면 모달 없이 진행.
+  const _hasPrev=['step_01','step_06','step_07','step_08'].some(function(k){return !!outputs[k];});
+  if(_hasPrev){
+    const _full=(typeof confirm==='function')?confirm('기존 생성 산출물이 있습니다.\n\n[확인] 전체 새로 생성 — 명칭후보·청구항·도면·상세설명·부호·수학식·검토반영본을 초기화하고 처음부터 다시 생성합니다(신·구 산출물 혼합 방지).\n[취소] 이어하기 — 빈 단계만 생성합니다(일부 단계 재사용 — 세대 혼합 가능).'):false;
+    if(_full)_resetUnifiedChainOutputs();
+    else App.showToast('이어하기 — 일부 단계를 재사용합니다. 세대 혼합 가능성이 있으니 완성 후 완성본 검증 패널을 확인하세요','info');
+  }
   const wantMethod=!!includeMethodClaims;
   // ★ [배치6 N3b] 수학식 토글 — on 시 [4/4] 완료 후 "기존 step_09 경로"(검증된 앵커/삽입 파이프라인)를 호출한다.
   //   ⛔ 통합 프롬프트 내 수식 동시 생성 금지(C9 유지) — 새 삽입 경로를 만들지 않는다(마커 표면 증가·검증 파이프라인 우회 방지, N1 사고 클래스 재발 차단).
