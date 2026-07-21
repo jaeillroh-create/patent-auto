@@ -77,6 +77,21 @@ test('★ §6-4b 회귀 — 상세설명 내부의 진짜 문단 중복은 여�
   assert.ok(checks(spec, 'paragraph_duplicate').length >= 1, '★ 진성 문단 중복 검출 유지');
 });
 
+// ─────────── §1.5 CHK-8 함수 화이트리스트/정의 + §6-5 을/를 헬퍼 ───────────
+
+test('★ §1.5 CHK-8 — clip 화이트리스트 + "X 함수는" 정의 인정(gelu 등 비화이트 함수)', () => {
+  const spec = '【수학식 1】\nY = clip(gelu(x))\n여기서, gelu 함수는 활성화 함수이고, x는 입력이며, Y는 출력이다.';
+  assert.equal(checks(spec, 'math_var_undefined').length, 0, '★ clip(화이트)·gelu("함수는" 정의)·x·Y 모두 미오탐');
+});
+
+test('★ §6-5 josaEulReul — 라벨 받침 유무로 을/를 정확 선택', () => {
+  const j = (w) => vm.runInContext('josaEulReul(' + JSON.stringify(w) + ')', sandbox, { filename: 'j.js' });
+  assert.equal(j('사용자 시나리오'), '를', '★ 모음 종성(오) → 를 (기존 "시나리오을" 오류 해소)');
+  assert.equal(j('UI 화면'), '을', '★ 받침(ㄴ) → 을');
+  assert.equal(j('데이터 구조'), '를', '★ 모음(조) → 를');
+  assert.equal(j('하드웨어 블록'), '을', '★ 받침(ㄱ) → 을');
+});
+
 // ─────────── 소스 배선 ───────────
 
 test('★ 소스 — CHK-8 그룹정의 인정 + CHK-6 도면설명 제외', () => {

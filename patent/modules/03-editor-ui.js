@@ -1320,6 +1320,9 @@ function figParticle(n){
   if([1,3,6,7,8].includes(lastDigit))return '은';
   return '는'; // 2,4,5,9
 }
+// ★ [§6-5] 목적어 조사 을/를 — 라벨 마지막 글자의 받침 유무. 받침 있으면 '을', 없으면(모음 종성) '를'.
+//   기존 `${label}을` 하드코딩(모음 라벨 "사용자 시나리오"→"시나리오을" 오류)을 이 헬퍼로 교체.
+function josaEulReul(word){ const s=String(word||''); if(!s)return '을'; const c=s.charCodeAt(s.length-1); if(c<0xAC00||c>0xD7A3)return '을'; return ((c-0xAC00)%28>0)?'을':'를'; }
 function extractBriefDescriptions(s07,s11){
   const d=[],seen=new Set();
   // v10.2: 0. Step 8 상세설명에서 도면 소개문 우선 추출
@@ -1345,7 +1348,7 @@ function extractBriefDescriptions(s07,s11){
   requiredFigures.forEach(rf=>{
     const fn=String(rf.num);const n=parseInt(fn);
     if(!seen.has(fn)){
-      d.push(`도 ${fn}${figParticle(n)} ${rf.description}을 나타내는 도면이다.`);
+      d.push(`도 ${fn}${figParticle(n)} ${rf.description}${josaEulReul(rf.description)} 나타내는 도면이다.`);
       seen.add(fn);
     }
   });
@@ -1376,7 +1379,7 @@ function extractBriefDescriptions(s07,s11){
     if(!ct.svgContent)return;
     const fn=String(conceptAutoNums[i]||'?');if(seen.has(fn))return;
     const n=parseInt(fn);const typeDef=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
-    d.push(`도 ${fn}${figParticle(n)} ${title}의 ${typeDef.label}을 나타내는 예시도이다.`);
+    d.push(`도 ${fn}${figParticle(n)} ${title}의 ${typeDef.label}${josaEulReul(typeDef.label)} 나타내는 예시도이다.`);
     seen.add(fn);
   });
   // 2c. diagramData 없을 때 텍스트 기반 폴백

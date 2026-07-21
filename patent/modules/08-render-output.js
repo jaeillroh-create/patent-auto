@@ -145,7 +145,7 @@ function validateClaims(text){
 //   근거: 진단 — 수학식 삽입 시 문단 중복·문장 절단이 "완성 본문 결정적 검사 부재"로 통과(26P1036 실증).
 // ═══════════════════════════════════════════════════════════════════
 const SPEC_SECTION_ORDER=['발명의 설명','발명의 명칭','기술분야','발명의 배경이 되는 기술','선행기술문헌','발명의 내용','해결하고자 하는 과제','과제의 해결 수단','발명의 효과','도면의 간단한 설명','발명을 실시하기 위한 구체적인 내용','부호의 설명','청구범위','요약서'];
-const MATH_FUNC_WORDS=new Set(['min','max','log','ln','exp','sin','cos','tan','cot','sec','csc','sqrt','sum','prod','abs','mod','floor','ceil','round','argmax','argmin','lim','det','if','then','else','where']);
+const MATH_FUNC_WORDS=new Set(['min','max','log','ln','exp','sin','cos','tan','cot','sec','csc','sqrt','sum','prod','abs','mod','floor','ceil','round','argmax','argmin','lim','det','if','then','else','where','clip','clamp','sign','relu','sigmoid','softmax','tanh','norm']);
 function validateSpecification(specText){
   const iss=[];
   if(!specText||!String(specText).trim())return iss;
@@ -246,7 +246,8 @@ function validateSpecification(specText){
     // ★ [§6-4a] 그룹 정의 인정 — "wc, wa, wr, we, wg는 …가중치" 처럼 쉼표 나열 뒤 는/은(또는 콜론·등호) 정의를
     //   각 변수에 대해 정의로 인정(개별 "X는"만 찾던 종전 로직이 나열 앞 변수를 미정의로 오탐하던 것 해소).
     const _dcl='[A-Za-zΑ-ω0-9_\\u2080-\\u209c\\u1d62-\\u1d6a]';
-    const undef=vars.filter(v=>{ const esc=v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); return !new RegExp(esc+'(?:\\s*[,、·/]\\s*'+_dcl+'+)*\\s*(?:는|은|:|=)').test(defPart); });
+    // ★ [§1.5] "X 함수는/함수로/함수를" 형태도 정의로 인정(함수형 토큰 원천 오탐 차단).
+    const undef=vars.filter(v=>{ const esc=v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); return !new RegExp(esc+'(?:\\s*[,、·/]\\s*'+_dcl+'+)*\\s*(?:는|은|:|=|함수)').test(defPart); });
     if(undef.length)iss.push({severity:'HIGH',check:'math_var_undefined',message:`수학식 ${no}: 변수 ${undef.length}개 정의 없음`,detail:`미정의: ${undef.join(', ')} ("여기서" 절에 정의 필요)`});
   });
 

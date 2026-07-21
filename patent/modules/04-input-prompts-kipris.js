@@ -983,7 +983,7 @@ ${genCount>=5?autoNums.slice(4).map((n,i)=>`⑤ 도 ${n}: 추가 상세화 블�
 [파트2: 도면의 간단한 설명]
 ★★★ 생성한 도면(${autoNums.map(n=>'도 '+n).join(', ')})과 사용자 도면 모두에 대해 빠짐없이 간단한 설명을 작성하라 ★★★
 ---BRIEF_DESCRIPTIONS---
-${requiredFigures.map(rf=>`도 ${rf.num}은 ${rf.description}을 나타내는 도면이다.`).join('\n')}
+${requiredFigures.map(rf=>`도 ${rf.num}${figParticle(rf.num)} ${rf.description}${josaEulReul(rf.description)} 나타내는 도면이다.`).join('\n')}
 (각 도면에 대해 "도 N은 [대상]의 [내용]을 나타내는 블록도이다." 형식으로 작성)
 
 ⛔⛔⛔ 최종 점검 ⛔⛔⛔

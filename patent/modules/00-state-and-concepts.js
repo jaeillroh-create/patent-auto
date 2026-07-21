@@ -134,7 +134,7 @@ function _parseConceptResult(fullText, conceptTypes, figNums){
     const svgMatch=segment.match(/<svg[\s\S]*?<\/svg>/i);
     const svgText=svgMatch?svgMatch[0]:`<svg viewBox="0 0 680 500" xmlns="http://www.w3.org/2000/svg"><rect width="680" height="500" fill="#fff" stroke="#ccc"/><text x="340" y="250" text-anchor="middle" font-size="18" fill="#999">SVG 생성 실패 — 재시도하세요</text></svg>`;
     const briefMatch=segment.match(/---BRIEF_DESC---\s*\n?(도\s*\d+[은는]\s+.+)/);
-    ct.briefDesc=briefMatch?briefMatch[1].trim():`도 ${figNum}은 ${selectedTitle}의 ${typeDef.label}을 나타내는 예시도이다.`;
+    ct.briefDesc=briefMatch?briefMatch[1].trim():`도 ${figNum}은 ${selectedTitle}의 ${typeDef.label}${josaEulReul(typeDef.label)} 나타내는 예시도이다.`;
     ct.refMap=_parseConceptRefMap(segment, svgText);   // ★ P2: [{signNumber,label}]
     ct.refNums=ct.refMap.map(r=>parseInt(r.signNumber)); // 하위호환(숫자 배열)
     ct.svgContent=svgText;ct.figNum=figNum;
@@ -214,7 +214,7 @@ function _syncConceptRefNums(){
 function _conceptBrief(ct, figNum){
   const td=CONCEPT_DIAGRAM_TYPES[ct&&ct.type]||{label:(ct&&ct.type)||'예시'};
   const n=parseInt(figNum)||0;
-  return (ct&&ct.briefDesc&&String(ct.briefDesc).trim())||`도 ${figNum}${figParticle(n)} ${selectedTitle||'본 발명'}의 ${td.label}을 나타내는 예시도이다.`;
+  return (ct&&ct.briefDesc&&String(ct.briefDesc).trim())||`도 ${figNum}${figParticle(n)} ${selectedTitle||'본 발명'}의 ${td.label}${josaEulReul(td.label)} 나타내는 예시도이다.`;
 }
 // 생성된(svgContent) 예시도 → {ct, figNum} (★ C: filter 순서 = getAutoFigNums('step_07c') 순서로 정합)
 function _generatedConceptsWithNums(){
