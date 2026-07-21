@@ -50,6 +50,10 @@ test('★ §6-1 diff청크 — 신명칭에 없는 제거 어절 run만, 공백�
   const c = runJSON('_termDiffChunks("적응형 모델 라우팅 서버","콘텐츠 생성 자원 라우팅 서버")');
   assert.deepEqual(c, ['적응형모델'], '★ 제거된 "적응형 모델" → "적응형모델"(5자), 공유 "라우팅/서버" 제외');
 });
+test('★ §6-1 [3.1a] diff청크 — 커넥터(및·기반)에서 분할, run 병합 금지', () => {
+  const c = runJSON('_termDiffChunks("서사 구조화 및 제작 메모리 기반 적응형 모델 라우팅 서버 및 방법","대사 보존형 서사 구조화 및 콘텐츠 생성 자원 라우팅 서버 및 방법")');
+  assert.deepEqual(c, ['제작메모리', '적응형모델'], '★ "기반"에서 분할 → 통짜 "제작메모리기반적응형모델" 방지');
+});
 test('★ §6-1 diff청크 — <5자 제거분은 버림(오탐 억제)', () => {
   assert.deepEqual(runJSON('_termDiffChunks("제작 메모리","프로덕션 메모리")'), [], '★ "제작"(2자) → 미기록');
 });
@@ -104,10 +108,37 @@ test('★ §6-1 CHK-13 회귀 — staleTerms 비면 항상 0(신규 프로젝트
   const spec = '【발명을 실시하기 위한 구체적인 내용】\n적응형 모델 라우팅 서버(100)는 처리한다.';
   assert.equal(chk13(spec).length, 0, '★ 스냅샷 없으면 미발화');
 });
-test('★ §6-1 CHK-13 — 동일 구세대 용어 다중 등장은 1건으로 dedupe', () => {
+test('★ §6-1 [3.1a] CHK-13 — 용어가 여러 섹션에 잔존하면 섹션별 발화(같은 섹션 중복은 1건)', () => {
   run('_recordStaleTerms(["적응형모델라우팅"])');
-  const spec = '【도면의 간단한 설명】\n도 1은 적응형 모델 라우팅 시스템이다.\n\n【발명의 배경이 되는 기술】\n종래의 적응형 모델 라우팅 방식은 한계가 있다.';
-  assert.equal(chk13(spec).length, 1, '★ 용어당 1건');
+  const spec = '【도면의 간단한 설명】\n도 1은 적응형 모델 라우팅 시스템이다. 상기 적응형 모델 라우팅 시스템은 동작한다.\n\n【발명의 배경이 되는 기술】\n종래의 적응형 모델 라우팅 방식은 한계가 있다.';
+  const iss = chk13(spec);
+  assert.equal(iss.length, 2, '★ 2개 섹션 → 2건(도면설명 내 2회는 1건으로 병합)');
+  assert.ok(iss.some(i => /도면의 간단한 설명/.test(i.message)) && iss.some(i => /배경/.test(i.message)), '★ 각 섹션 귀속');
+});
+
+// ─────────── [3.1b] 소급 휴리스틱 title_generation_suspect (MEDIUM) ───────────
+
+const tsuspect = (spec) => runJSON('validateSpecification(' + JSON.stringify(spec) + ').filter(function(i){return i.check==="title_generation_suspect";})');
+
+test('★ §6-1 [3.1b] 소급 — 확정명칭과 다른 세대의 명칭구가 도면설명·부호표에 잔존 → MEDIUM 발화(섹션 귀속)', () => {
+  const spec = '【발명의 명칭】\n대사 보존형 서사 구조화 및 콘텐츠 생성 자원 라우팅 서버 및 방법\n\n【도면의 간단한 설명】\n도 2는 적응형 모델 라우팅 서버(100)의 블록도이다.\n\n【부호의 설명】\n적응형 모델 라우팅 서버 : 100\n제어부 : 110';
+  const iss = tsuspect(spec);
+  assert.equal(iss.length, 2, '★ 도면설명 + 부호의 설명 2건');
+  assert.ok(iss.every(i => i.severity === 'MEDIUM'), '★ MEDIUM(휴리스틱)');
+  assert.ok(iss.some(i => /도면의 간단한 설명/.test(i.message)) && iss.some(i => /부호의 설명/.test(i.message)), '★ 섹션 귀속');
+  assert.ok(iss.some(i => /적응형모델/.test(i.message)), '★ 구세대 조각 "적응형모델" 지목');
+});
+test('★ §6-1 [3.1b] 회귀 — 명칭구가 확정명칭과 동세대면 0(docB형)', () => {
+  const spec = '【발명의 명칭】\n콘텐츠 생성 자원 라우팅 서버 및 방법\n\n【도면의 간단한 설명】\n도 2는 콘텐츠 생성 자원 라우팅 서버(100)의 블록도이다.\n\n【부호의 설명】\n콘텐츠 생성 자원 라우팅 서버 : 100';
+  assert.equal(tsuspect(spec).length, 0, '★ 동세대 → 오탐 0');
+});
+test('★ §6-1 [3.1b] 회귀 — 단순 명칭(26P1036형)은 0', () => {
+  const spec = '【발명의 명칭】\n데이터 처리 장치\n\n【도면의 간단한 설명】\n도 1은 데이터 처리 장치(10)의 구성도이다.\n\n【부호의 설명】\n데이터 처리 장치 : 10';
+  assert.equal(tsuspect(spec).length, 0, '★ 일치 → 0');
+});
+test('★ §6-1 [3.1b] 회귀 — 【발명의 명칭】 없으면 미발화', () => {
+  const spec = '【도면의 간단한 설명】\n도 1은 적응형 모델 라우팅 서버(100)이다.';
+  assert.equal(tsuspect(spec).length, 0, '★ 확정명칭 부재 → 미발화');
 });
 
 // ─────────── 소스 배선 ───────────
@@ -125,4 +156,8 @@ test('★ 소스 — termSnapshot 상태·훅·영속 배선', () => {
   assert.match(PATENT_SRC, /function _warnIfStaleInStep\(/, '★ 스텝저장 경고(결정 c)');
   assert.match(PATENT_SRC, /_FINAL_ONLY_CHECKS = new Set\(\[[^\]]*'term_generation_mismatch'/, '★ CHK-13 완성전용(Step13 주입 제외)');
   assert.ok(!/FIXABLE_CHECKS = new Set\(\[[^\]]*term_generation_mismatch/.test(PATENT_SRC), '★ CHK-13 자동수정 대상 아님(치환 금지)');
+  assert.match(PATENT_SRC, /const _TERM_CONN = new Set/, '★ [3.1a] 커넥터 분할 상수');
+  assert.match(PATENT_SRC, /function _extractTitlePhrases\(/, '★ [3.1b] 명칭구 추출');
+  assert.match(PATENT_SRC, /check:'title_generation_suspect'/, '★ [3.1b] 소급 휴리스틱 검사');
+  assert.match(PATENT_SRC, /_FINAL_ONLY_CHECKS = new Set\(\[[^\]]*'title_generation_suspect'/, '★ [3.1b] 완성전용');
 });

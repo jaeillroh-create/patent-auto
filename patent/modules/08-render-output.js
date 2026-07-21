@@ -370,14 +370,40 @@ function validateSpecification(specText){
       const _specNorm=specText.replace(/\s+/g,'');
       const _secRe=/【\s*([^】]+?)\s*】/g; const _secs=[]; let _sm;
       while((_sm=_secRe.exec(specText))!==null)_secs.push({name:_sm[1].replace(/\s+/g,' ').trim(),pos:_sm.index});
-      const _seen=new Set();
+      const _secAt=_p=>{ let _s='(본문)'; for(let i=_secs.length-1;i>=0;i--){ if(_secs[i].pos<=_p){ _s=_secs[i].name; break; } } return _s; };
       _stale.forEach(term=>{
-        if(!term||term.length<5||_seen.has(term))return;
-        if(_specNorm.indexOf(term)<0)return; _seen.add(term);
-        // 원문(공백 유연) 위치로 섹션 귀속
+        if(!term||term.length<5)return;
+        if(_specNorm.indexOf(term)<0)return;
+        // ★ [3.1a] 용어가 등장하는 각 섹션마다 1건(같은 섹션 중복은 1건) — 재생성 대상 스텝을 섹션별로 지목.
         const _flex=term.split('').map(ch=>ch.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s*');
-        let _sec='(본문)'; try{ const _mm=specText.match(new RegExp(_flex)); if(_mm){ const _p=_mm.index; for(let i=_secs.length-1;i>=0;i--){ if(_secs[i].pos<=_p){ _sec=_secs[i].name; break; } } } }catch(_e){}
-        iss.push({severity:'HIGH',check:'term_generation_mismatch',message:`구세대 용어 "${term}"이 완성본에 잔존(섹션: ${_sec}) — 해당 스텝 재생성 필요`,detail:'명칭 확정 후 재생성되지 않은 구세대 산출물 혼입 의심(§42④ 명확성 위험) — 자동 치환 금지, 스텝 재생성 권장'});
+        let _re; try{ _re=new RegExp(_flex,'g'); }catch(_e){ return; }
+        const _hitSecs=new Set(); let _mm;
+        while((_mm=_re.exec(specText))!==null){
+          const _sec=_secAt(_mm.index);
+          if(!_hitSecs.has(_sec)){ _hitSecs.add(_sec);
+            iss.push({severity:'HIGH',check:'term_generation_mismatch',message:`구세대 용어 "${term}"이 완성본에 잔존(섹션: ${_sec}) — 해당 스텝 재생성 필요`,detail:'명칭 확정 후 재생성되지 않은 구세대 산출물 혼입 의심(§42④ 명확성 위험) — 자동 치환 금지, 스텝 재생성 권장'});
+          }
+          if(_mm.index===_re.lastIndex)_re.lastIndex++;   // zero-width 방어
+        }
+      });
+    }
+  }catch(_e){}
+
+  // ── CHK-14 [§6-1 소급]: title_generation_suspect — 변경 이력 없는 기존 혼입 프로젝트 대비 휴리스틱(MEDIUM) ──
+  //   ★ CHK-13은 이 세션의 명칭 변경 이력(staleTerms)에 의존한다. 그 사각(기존 혼입·부호표까지 구세대라 dupassign도
+  //     동세대 정합으로 침묵)을 메우려, 【발명의 명칭】 확정 명칭 vs 도면의 간단한 설명·부호의 설명에서 추출한 명칭구
+  //     (…서버/시스템/장치/방법, ≥8자)를 [3.1a] diff로 대조해 old-only 청크(≥5자)가 있으면 발화. 휴리스틱이라 MEDIUM.
+  try{
+    const _tM=specText.match(/【\s*발명의 명칭\s*】\s*([^\n【]+)/);
+    if(_tM && typeof _termDiffChunks==='function' && typeof _extractTitlePhrases==='function'){
+      const _title=_tM[1].trim(); const _seenTS=new Set();
+      ['도면의 간단한 설명','부호의 설명'].forEach(tn=>{
+        const _m=specText.match(new RegExp('【\\s*'+tn+'\\s*】([\\s\\S]*?)(?:\\n【|$)'));
+        if(!_m)return;
+        _extractTitlePhrases(_m[1]).forEach(ph=>{
+          _termDiffChunks(ph, _title).forEach(c=>{ const _k=c+'|'+tn; if(_seenTS.has(_k))return; _seenTS.add(_k);
+            iss.push({severity:'MEDIUM',check:'title_generation_suspect',message:`구세대 명칭 조각 "${c}"이 ${tn}의 명칭구에 잔존(확정 명칭과 diff) — 세대 혼입 의심`,detail:'변경 이력 없는 소급 검출(휴리스틱) — 해당 섹션을 현재 발명의 명칭 세대로 재생성 권장'}); });
+        });
       });
     }
   }catch(_e){}
@@ -389,7 +415,7 @@ function validateSpecification(specText){
 // 완성-조립 시점에만 판정 가능한 검사(표제 완전성/순서, 부호의 설명 대조, 용어 세대 불일치)는 Step 13(상세설명 단계)에서
 //   볼 수 없거나 전 스텝 스캔이 필요하다.
 //   → Step13 주입·자동수정 대상에서 제외하고, 완성본 패널이 담당한다(CHK-13은 '자동 치환 금지 — 스텝 재생성 유도').
-const _FINAL_ONLY_CHECKS = new Set(['heading_missing','heading_order','refnum_consistency','term_generation_mismatch']);
+const _FINAL_ONLY_CHECKS = new Set(['heading_missing','heading_order','refnum_consistency','term_generation_mismatch','title_generation_suspect']);
 // 완성본 패널에서 'AI로 수정'으로 자동 보정 가능한 검사(표제 누락/순서는 스텝 재실행 사안이라 제외).
 const FIXABLE_CHECKS = new Set(['paragraph_duplicate','sentence_duplicate','sentence_truncation','sentence_ending','unit_corruption','math_var_undefined','example_missing','refnum_consistency']);
 

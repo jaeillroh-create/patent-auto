@@ -61,13 +61,28 @@ function _currentTermNorm(){
   ((termSnapshot&&termSnapshot.components)||[]).forEach(c=>parts.push((c&&c.name)||''));
   return parts.join('␟').replace(/\s+/g,'');
 }
-// 구명칭→신명칭 diff — 신명칭 어절집합에 없는 "제거된 연속 어절 run"을 공백제거 후 ≥5자만 청크로.
+// [3.1a] 커넥터 어절 — old-only run을 여기서 분할(병합 금지)해 "…기반…" 통짜 구절 취약화를 막는다.
+const _TERM_CONN = new Set(['및','기반','위한','이용한','통한','의','과','와','또는','위해','통해','기초한','따른']);
+// 구명칭→신명칭 diff — 신명칭 어절집합에 없는 "제거된 연속 어절 run"을 커넥터에서 분할, 공백제거 후 ≥5자만 청크로.
 function _termDiffChunks(oldT, newT){
   const tok=s=>String(s||'').split(/\s+/).filter(Boolean);
   const N=new Set(tok(newT)); const out=[]; let cur=[];
-  tok(oldT).forEach(w=>{ if(N.has(w)){ if(cur.length){ out.push(cur.join('')); cur=[]; } } else cur.push(w); });
-  if(cur.length)out.push(cur.join(''));
+  const flush=()=>{ if(cur.length){ out.push(cur.join('')); cur=[]; } };
+  tok(oldT).forEach(w=>{ if(N.has(w))flush(); else if(_TERM_CONN.has(w))flush(); else cur.push(w); });   // [3.1a] 공유어절·커넥터에서 분할
+  flush();
   return [...new Set(out.map(c=>c.replace(/\s+/g,'')).filter(c=>c.length>=5))];   // [결정 a] ≥5자
+}
+// [3.1b] 섹션 텍스트에서 "…서버/시스템/장치/방법/…"로 끝나는 명칭구(공백유지, 공백제거 ≥8자) 추출 — 리드인 조사 어절 제거.
+function _extractTitlePhrases(sectionText){
+  const out=[]; const re=/([가-힣]+(?:\s+[가-힣]+){0,6})\s*(서버|시스템|장치|방법|단말|엔진|플랫폼|모듈)/g; let m;
+  while((m=re.exec(String(sectionText||'')))!==null){
+    const words=(m[1]+' '+m[2]).replace(/\s+/g,' ').trim().split(' ');
+    let start=0;
+    for(let i=words.length-2;i>=0;i--){ if(/(는|은|이|가|를|을|의|에|로|와|과|및|도|만)$/.test(words[i])){ start=i+1; break; } }
+    const phrase=words.slice(start).join(' ');
+    if(phrase.replace(/\s+/g,'').length>=8)out.push(phrase);
+  }
+  return [...new Set(out)];
 }
 // [보강1] 복귀 프루닝 — 현재 명칭에 재등장하는 항목 제거
 function _pruneStaleTerms(){
