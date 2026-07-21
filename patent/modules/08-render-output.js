@@ -394,9 +394,11 @@ function validateSpecification(specText){
   //     동세대 정합으로 침묵)을 메우려, 【발명의 명칭】 확정 명칭 vs 도면의 간단한 설명·부호의 설명에서 추출한 명칭구
   //     (…서버/시스템/장치/방법, ≥8자)를 [3.1a] diff로 대조해 old-only 청크(≥5자)가 있으면 발화. 휴리스틱이라 MEDIUM.
   try{
-    const _tM=specText.match(/【\s*발명의 명칭\s*】\s*([^\n【]+)/);
+    // ★ [3.2] 다행 캡처 — 구형 내보내기의 명칭 문단은 내부 개행("CAD\n…서버 및 방법{Server…}")을 포함하므로
+    //   단일행 캡처는 첫 줄만 잡아 title 어절이 비어 전 명칭구가 old-only로 오탐된다. 다음 표제 전까지 통째 캡처 후 정규화.
+    const _tM=specText.match(/【\s*발명의 명칭\s*】\s*([\s\S]*?)(?=\n\s*【|$)/);
     if(_tM && typeof _termDiffChunks==='function' && typeof _extractTitlePhrases==='function'){
-      const _title=_tM[1].trim(); const _seenTS=new Set();
+      const _title=_tM[1].replace(/\{[^}]*\}/g,'').replace(/\s+/g,' ').trim(); const _seenTS=new Set();   // {영문} 병기 제거 → 공백 접기 → trim
       ['도면의 간단한 설명','부호의 설명'].forEach(tn=>{
         const _m=specText.match(new RegExp('【\\s*'+tn+'\\s*】([\\s\\S]*?)(?:\\n【|$)'));
         if(!_m)return;

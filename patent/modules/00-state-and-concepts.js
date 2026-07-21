@@ -65,7 +65,8 @@ function _currentTermNorm(){
 const _TERM_CONN = new Set(['및','기반','위한','이용한','통한','의','과','와','또는','위해','통해','기초한','따른']);
 // 구명칭→신명칭 diff — 신명칭 어절집합에 없는 "제거된 연속 어절 run"을 커넥터에서 분할, 공백제거 후 ≥5자만 청크로.
 function _termDiffChunks(oldT, newT){
-  const tok=s=>String(s||'').split(/\s+/).filter(Boolean);
+  // [3.2] 어절 말미 단음절 조사(을/를/이/가/은/는/의) 제거(스템 ≥2 유지) — "비용을↔비용" 류 어절 불일치 예방.
+  const tok=s=>String(s||'').split(/\s+/).filter(Boolean).map(w=>(w.length>=3?w.replace(/(을|를|이|가|은|는|의)$/,''):w));
   const N=new Set(tok(newT)); const out=[]; let cur=[];
   const flush=()=>{ if(cur.length){ out.push(cur.join('')); cur=[]; } };
   tok(oldT).forEach(w=>{ if(N.has(w))flush(); else if(_TERM_CONN.has(w))flush(); else cur.push(w); });   // [3.1a] 공유어절·커넥터에서 분할

@@ -140,6 +140,14 @@ test('★ §6-1 [3.1b] 회귀 — 【발명의 명칭】 없으면 미발화', (
   const spec = '【도면의 간단한 설명】\n도 1은 적응형 모델 라우팅 서버(100)이다.';
   assert.equal(tsuspect(spec).length, 0, '★ 확정명칭 부재 → 미발화');
 });
+test('★ §6-1 [3.2] 명칭 다행+{영문} 병기 정규화 — 구형 내보내기 오탐 0(26P1036형)', () => {
+  const spec = '【발명의 명칭】\n\nCAD\n도면 기반 스마트 전시 동선 안내 서버 및 방법{Server and Method for Exhibition}\n\n【도면의 간단한 설명】\n도 1은 스마트 전시 동선 안내 시스템(10)의 구성도이다.\n\n【부호의 설명】\n스마트 전시 동선 안내 서버 : 100';
+  assert.equal(tsuspect(spec).length, 0, '★ 다행 명칭 온전 추출 → "시스템"(3자<5) 침묵, 오탐 0(단일행 캡처였다면 title="CAD"로 4건 오탐)');
+});
+test('★ §6-1 [3.2] 다행 명칭이라도 진성 세대 혼입은 검출', () => {
+  const spec = '【발명의 명칭】\n\nCAD\n콘텐츠 생성 자원 라우팅 서버 및 방법{Server}\n\n【도면의 간단한 설명】\n도 2는 적응형 모델 라우팅 서버(100)의 블록도이다.';
+  assert.ok(tsuspect(spec).some(i => /적응형모델/.test(i.message)), '★ 정규화 후에도 진성 diff(적응형모델) 검출 유지');
+});
 
 // ─────────── 소스 배선 ───────────
 
@@ -160,4 +168,7 @@ test('★ 소스 — termSnapshot 상태·훅·영속 배선', () => {
   assert.match(PATENT_SRC, /function _extractTitlePhrases\(/, '★ [3.1b] 명칭구 추출');
   assert.match(PATENT_SRC, /check:'title_generation_suspect'/, '★ [3.1b] 소급 휴리스틱 검사');
   assert.match(PATENT_SRC, /_FINAL_ONLY_CHECKS = new Set\(\[[^\]]*'title_generation_suspect'/, '★ [3.1b] 완성전용');
+  assert.match(PATENT_SRC, /【\\s\*발명의 명칭\\s\*】\\s\*\(\[\\s\\S\]\*\?\)/, '★ [3.2] 명칭 다행 캡처');
+  assert.match(PATENT_SRC, /\.replace\(\/\\\{\[\^\}\]\*\\\}\/g/, '★ [3.2] {영문} 병기 제거');
+  assert.match(PATENT_SRC, /말미 단음절 조사/, '★ [3.2] 조사 strip');
 });

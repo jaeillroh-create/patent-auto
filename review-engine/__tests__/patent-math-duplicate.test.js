@@ -101,11 +101,11 @@ test('소스 ★ dedup 견고화 — stripMathBlocks + 공백 무시 containment
   assert.match(PATENT_SRC, /conceptIn\s*=\s*_conN\.length>0\s*&&\s*_devN\.indexOf\(_conN\.slice\(0,30\)\)>=0/, '★ 정규화 후 첫 N자 containment');
 });
 
-test('회귀 ★ 장치·수학식 본문 보존(케이스 B) + ?v= 20260721-b26', () => {
+test('회귀 ★ 장치·수학식 본문 보존(케이스 B) + ?v= 20260721-b27', () => {
   setup('도 5는 화면이다. 검색창(51)은 프로세서(120)에 의해 표시된다.', '도 5는 화면이다');
   const spec = call('buildImplementationBody()');
   assert.match(spec, /통신부\(110\)가 데이터를 수신한다/, '장치 본문 보존');
   assert.match(spec, /【수학식 1】/, '수학식 보존');
   assert.match(spec, /S710 단계/, '방법 본문 보존');
-  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260721-b26/, '★ ?v= 갱신');
+  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260721-b27/, '★ ?v= 갱신');
 });
