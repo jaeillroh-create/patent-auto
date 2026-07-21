@@ -93,6 +93,6 @@ test('회귀 ★ 26P1036형 본문 5문단 연속 중복 + 문장 절단 → CRI
 test('소스 ★ CHK-6(a)/(b) 청구범위·요약서 제외 소스 사용', () => {
   assert.match(PATENT_SRC, /_bodyBeforeClaims=_cuts\.length\?specText\.slice\(0,Math\.min\(\.\.\._cuts\)\):specText/, '★ 청구범위·요약서 컷 소스');
   assert.match(PATENT_SRC, /parasForDup\.forEach/, '★ CHK-6(a) parasForDup 사용');
-  assert.match(PATENT_SRC, /stripMathBlocks\(_bodyBeforeClaims\)\.split/, '★ CHK-6(b) 제외 소스 사용');
+  assert.match(PATENT_SRC, /stripMathBlocks\(_bodyForDup\)\.split/, '★ CHK-6(b) 제외 소스 사용(_bodyForDup — 청구범위·요약서 + §6-4b 도면설명 제외)');
   assert.match(PATENT_SRC, /const paras=specText\.split\(\/\\n\{2,\}\/\)[\s\S]*?CHK-7\(b\)용/, '★ CHK-7용 전체 paras 유지(무변경)');
 });

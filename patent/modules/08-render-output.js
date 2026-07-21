@@ -194,7 +194,11 @@ function validateSpecification(specText){
   const _iC=specText.search(/【\s*청구범위\s*】/), _iA=specText.search(/【\s*요약서\s*】/);
   const _cuts=[_iC,_iA].filter(i=>i>=0);
   const _bodyBeforeClaims=_cuts.length?specText.slice(0,Math.min(..._cuts)):specText;
-  const parasForDup=_bodyBeforeClaims.split(/\n{2,}/).map(p=>p.trim()).filter(Boolean);
+  // ★ [§6-4b] 도면의 간단한 설명 섹션도 중복 소스에서 제외 — "도 N은 ~이다" 도입문이 상세설명 도입부에 동일 반복
+  //   (프롬프트가 "이후 도면의 간단한 설명에서도 동일하게 사용"하라 지시)되므로 정당 반복이며 중복(6a/6b) 오탐 금지.
+  const _briefM=_bodyBeforeClaims.match(/【\s*도면의 간단한 설명\s*】[\s\S]*?(?=\n【|$)/);
+  const _bodyForDup=_briefM?_bodyBeforeClaims.replace(_briefM[0],' '):_bodyBeforeClaims;
+  const parasForDup=_bodyForDup.split(/\n{2,}/).map(p=>p.trim()).filter(Boolean);
   const paraKey={};
   //  ★ 표제 인접 중복 승격: 문단 앞머리 표제(【…】) 접두 제거 후 키 생성 → "【표제】\n<중복문단>"(첫 사본)과
   //    맨 본문 "<중복문단>"이 동일 키가 되어 CHK-6(a) CRITICAL 로 포착(표제로 키가 갈려 HIGH로 강등되던 결함 해소).
@@ -206,7 +210,7 @@ function validateSpecification(specText){
   //     → 첫10·끝10 coarse 키로 후보만 모으고(값 판정 아님, 저비용 prefilter), 접두+접미가 짧은 쪽 전체를
   //       덮으면(=완전일치 또는 중간 탈락 복제) 확정. 같은 서두를 공유하는 상이 문장은 접미가 짧아 p+s<len → 오탐 아님.
   if(!hasParaDup){
-    const sents=stripMathBlocks(_bodyBeforeClaims).split(/(?<=\.)\s+|\n+/).map(s=>s.trim()).filter(s=>norm(s).length>=40);   // ★ 청구범위·요약서 제외(정당 반복 오탐 방지)
+    const sents=stripMathBlocks(_bodyForDup).split(/(?<=\.)\s+|\n+/).map(s=>s.trim()).filter(s=>norm(s).length>=40);   // ★ 청구범위·요약서·도면의 간단한 설명 제외(정당 반복 오탐 방지 §6-4b)
     const groups={};
     sents.forEach(s=>{ const k=norm(s); groups['p'+k.slice(0,10)]=(groups['p'+k.slice(0,10)]||[]).concat([s]); groups['s'+k.slice(-10)]=(groups['s'+k.slice(-10)]||[]).concat([s]); });
     const reported=new Set();
@@ -237,8 +241,12 @@ function validateSpecification(specText){
     const formulaPart=(hereIdx>=0?afterHeader.slice(0,hereIdx):afterHeader.split(/\n\n/)[0])||'';
     let defPart=hereIdx>=0?afterHeader.slice(hereIdx):'';
     defPart=defPart.split(/\n\n|\n【|【/)[0];   // "여기서" 절 한 문단으로 한정(먼 곳 우연일치 방지)
-    const vars=[...new Set((formulaPart.match(/[A-Za-zΑ-ω_][A-Za-z0-9_]*/g)||[]))].filter(v=>!MATH_FUNC_WORDS.has(v.toLowerCase()));
-    const undef=vars.filter(v=>{ const esc=v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); return !new RegExp(esc+'\\s*(?:는|은)').test(defPart); });
+    // ★ [§6-4a] 아래첨자(wᵢ 등) 유니코드도 변수 토큰에 포함해 온전히 추출(토큰화 실패 오탐 방지).
+    const vars=[...new Set((formulaPart.match(/[A-Za-zΑ-ω_][A-Za-z0-9_₀-ₜᵢ-ᵪ]*/g)||[]))].filter(v=>!MATH_FUNC_WORDS.has(v.toLowerCase()));
+    // ★ [§6-4a] 그룹 정의 인정 — "wc, wa, wr, we, wg는 …가중치" 처럼 쉼표 나열 뒤 는/은(또는 콜론·등호) 정의를
+    //   각 변수에 대해 정의로 인정(개별 "X는"만 찾던 종전 로직이 나열 앞 변수를 미정의로 오탐하던 것 해소).
+    const _dcl='[A-Za-zΑ-ω0-9_\\u2080-\\u209c\\u1d62-\\u1d6a]';
+    const undef=vars.filter(v=>{ const esc=v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); return !new RegExp(esc+'(?:\\s*[,、·/]\\s*'+_dcl+'+)*\\s*(?:는|은|:|=)').test(defPart); });
     if(undef.length)iss.push({severity:'HIGH',check:'math_var_undefined',message:`수학식 ${no}: 변수 ${undef.length}개 정의 없음`,detail:`미정의: ${undef.join(', ')} ("여기서" 절에 정의 필요)`});
   });
 
