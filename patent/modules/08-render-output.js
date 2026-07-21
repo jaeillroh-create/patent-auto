@@ -457,6 +457,21 @@ function renderSpecValidation(){
 }
 // [Item 2] 다운로드/복사 직전 CRITICAL 경고(차단 아님 — division 선례 B: 경고+진행). 열린 결정은 PR 본문 참조.
 function _warnSpecValidation(){ try{ const sv=validateSpecification(buildSpecification()); const c=sv.filter(i=>i.severity==='CRITICAL').length; if(c)App.showToast(`⚠️ 완성본 검증 CRITICAL ${c}건(문단 중복/절단 의심) — 산출물 탭 검증 패널 확인 권장`,'warning'); }catch(_e){} }
+// [§6-2] 다운로드 게이트 — CRITICAL 결함이 있으면 명시적 확인을 요구하고, 취소 시 다운로드를 차단한다(HIGH 이하는 경고만/현행).
+//   근거: 경고 체제에서 CRITICAL 3건이 실제 다운로드까지 나간 실증(문서B). 하드 차단이 아니라 "그래도 다운로드" 명시 클릭.
+function _downloadGate(_spec){
+  try{
+    const sv=validateSpecification(_spec||buildSpecification());
+    const crit=sv.filter(i=>i.severity==='CRITICAL');
+    if(crit.length){
+      const _list=crit.slice(0,3).map(i=>'· '+(i.message||i.check)).join('\n');
+      const _msg=`완성본 검증에서 CRITICAL 결함 ${crit.length}건이 검출되었습니다.\n${_list}${crit.length>3?'\n  …':''}\n\n그래도 다운로드하시겠습니까?\n(취소하면 중단하고 산출물 탭 검증 패널에서 확인·수정할 수 있습니다)`;
+      const _proceed=(typeof confirm==='function')?confirm(_msg):true;   // headless/테스트 환경은 통과
+      if(!_proceed){ try{App.showToast('CRITICAL 결함으로 다운로드를 취소했습니다 — 검증 패널에서 수정하세요','info');}catch(_e){} return false; }
+    }
+  }catch(_e){}
+  return true;
+}
 
 // ═══ [Part2] 완성본 기계검증 'AI로 수정' ═══
 // 결정론적 문단 중복 제거 — 검증기 CHK-6 중복 판정 하한(norm-body ≥40자)과 정합, 첫 사본 보존.
@@ -719,11 +734,11 @@ function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showTo
 // [§6-7] 다운로드 파일명 스탬프 — 생성시각(YYYYMMDD-HHMMSS) + 완성본 내용 지문(해시). 같은 내용 재다운로드 시 지문이 동일해
 //   "모드 전환 후 미갱신/실패로 이전 결과가 다시 받아진 것"을 즉시 식별 가능(§6-7). 다운로드는 항상 현재 outputs(=buildSpecification)를 직렬화한다.
 function _specStamp(){ let content=''; try{content=buildSpecification();}catch(_e){} const d=new Date(); const p=n=>String(n).padStart(2,'0'); const ts=`${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; let h=0; for(let i=0;i<content.length;i++){h=(h*31+content.charCodeAt(i))>>>0;} return ts+'_'+h.toString(36); }
-function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();_warnSpecValidation();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${_specStamp()}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();if(!_downloadGate())return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${_specStamp()}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 
 function downloadAsWord(){
   _warnConceptDescMissing();   // ★ [Task1] ④ 미생성 경고
-  _warnSpecValidation();       // [Item 2] 완성본 기계검증 CRITICAL 경고(차단 아님)
+  if(!_downloadGate())return;  // [§6-2] CRITICAL 결함 시 확인 게이트(취소 시 차단)
   const brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
