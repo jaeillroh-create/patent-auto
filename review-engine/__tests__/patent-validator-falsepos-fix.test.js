@@ -92,6 +92,47 @@ test('★ §6-5 josaEulReul — 라벨 받침 유무로 을/를 정확 선택', 
   assert.equal(j('하드웨어 블록'), '을', '★ 받침(ㄱ) → 을');
 });
 
+// ═══════════ 배치 2 — 신규 검사 3종(§6-3) ═══════════
+
+// (b) CHK-10 부호 이중배정
+test('★ §6-3b — 동일 부호(125)에 상이 명칭 2개(자가보완부/재정렬부) 검출(A2)', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n제어부(100)는 데이터를 처리한다. 자가보완부(125)는 오류를 보완한다. 통신부(110)는 통신한다. 재정렬부(125)는 순서를 재정렬한다.';
+  const iss = checks(spec, 'refnum_dupassign');
+  assert.ok(iss.some(i => /125/.test(i.message)), '★ 부호 125 이중배정 검출');
+});
+test('★ §6-3b — 동일 명칭에 상이 부호 2개(125/127) 검출(A3)', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n자가보완부(125)는 보완한다. 통신부(110)는 통신한다. 자가보완부(127)는 또한 보완한다.';
+  assert.ok(checks(spec, 'refnum_dupassign').some(i => /자가보완부/.test(i.message)), '★ 동일 명칭 이중 부호 검출');
+});
+test('★ §6-3b 회귀 — 정상(상기 접두 포함) 부호는 오탐 0', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n제어부(100)는 처리하고, 상기 제어부(100)는 다시 통신부(110)로 전달하며, 저장부(120)는 저장한다.';
+  assert.equal(checks(spec, 'refnum_dupassign').length, 0, '★ 상기 접두 정규화 후 단일 명칭 → 오탐 없음');
+});
+
+// (a) CHK-11 수학식 참조 정합
+test('★ §6-3a — "다음의 수학식 N"이나 실제로는 앞에 위치(방향 불일치 B2)', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n【수학식 2】\nP = a + b\n여기서, a, b는 값이다.\n\n장치는 다음의 수학식 2에 의해 값을 산출한다.';
+  assert.ok(checks(spec, 'math_ref_mismatch').some(i => /수학식 2/.test(i.message)), '★ 방향 불일치 검출');
+});
+test('★ §6-3a — 참조한 수학식이 부재하면 검출', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n장치는 수학식 5에 의해 처리한다.';
+  assert.ok(checks(spec, 'math_ref_mismatch').some(i => /부재/.test(i.message)), '★ 수학식 5 부재 검출');
+});
+test('★ §6-3a 회귀 — 올바른 "상기 수학식 1"(앞에 정의됨)은 오탐 0', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n【수학식 1】\nY = x\n여기서 x는 입력이다.\n\n장치는 상기 수학식 1에 의해 산출한다.';
+  assert.equal(checks(spec, 'math_ref_mismatch').length, 0, '★ 정상 참조 오탐 없음');
+});
+
+// (c) CHK-12 청구항 구성요소 뒷받침
+test('★ §6-3c — 청구항 "재정렬부"가 상세설명 문언 부재(B5)', () => {
+  const spec = '【청구범위】\n【청구항 3】 벤치마크 증거 기반 재정렬부를 포함하는 서버.\n\n【발명을 실시하기 위한 구체적인 내용】\n정렬부(1241)는 순서를 정렬한다.';
+  assert.ok(checks(spec, 'claim_support_missing').some(i => /재정렬부/.test(i.detail)), '★ 재정렬부 뒷받침 부재 검출');
+});
+test('★ §6-3c 회귀 — 청구항 구성요소가 상세설명에 모두 존재하면 0', () => {
+  const spec = '【청구범위】\n【청구항 1】 제어부와 통신부를 포함하는 서버.\n\n【발명을 실시하기 위한 구체적인 내용】\n제어부(100)는 처리하고 통신부(110)는 통신한다.';
+  assert.equal(checks(spec, 'claim_support_missing').length, 0, '★ 전부 뒷받침 → 오탐 없음');
+});
+
 // ─────────── 소스 배선 ───────────
 
 test('★ 소스 — CHK-8 그룹정의 인정 + CHK-6 도면설명 제외', () => {
@@ -99,4 +140,13 @@ test('★ 소스 — CHK-8 그룹정의 인정 + CHK-6 도면설명 제외', () 
   assert.match(PATENT_SRC, /const _dcl=/, '★ §6-4a 정의문자클래스 상수');
   assert.match(PATENT_SRC, /_bodyForDup/, '★ §6-4b 도면설명 제외 소스');
   assert.match(PATENT_SRC, /도면의 간단한 설명 섹션도 중복 소스에서 제외/, '★ §6-4b 주석');
+});
+
+test('★ 소스 — 배치2 신규검사 3종 + §6-7 파일명 스탬프', () => {
+  assert.match(PATENT_SRC, /check:'refnum_dupassign'/, '★ CHK-10 부호 이중배정');
+  assert.match(PATENT_SRC, /check:'math_ref_mismatch'/, '★ CHK-11 수식 참조 정합');
+  assert.match(PATENT_SRC, /check:'claim_support_missing'/, '★ CHK-12 청구항 뒷받침');
+  assert.match(PATENT_SRC, /function _specStamp\(\)/, '★ §6-7 파일명 스탬프(생성시각+지문)');
+  assert.match(PATENT_SRC, /_specStamp\(\)\}\.txt/, '★ txt 파일명에 스탬프');
+  assert.match(PATENT_SRC, /_specStamp\(\)\}\.doc/, '★ doc 파일명에 스탬프');
 });

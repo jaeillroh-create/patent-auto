@@ -262,6 +262,50 @@ function validateSpecification(specText){
     if(_missing.length)iss.push({severity:'MEDIUM',check:'example_missing',message:`상세설명에 예시/실시예 없는 구성요소 문단 ${_missing.length}개 — 예시 보충 권장(리포트)`,detail:`예: "${_missing[0].slice(0,40)}…"`});
   }
 
+  // ── CHK-10 [§6-3b]: 부호 이중 배정 — 동일 번호↔상이 명칭 / 동일 명칭↔상이 번호 ──
+  //   구성요소 접미(부/수단/모듈/엔진 등)로 끝나는 명칭만 대상(캡션 노이즈 배제). 띄어쓰기 정규화로 "자가보완부"≡"자가 보완부".
+  // 명칭 정제: 선행 조사·접속사(및/와/과/를/을/은/는/의… 뒤 공백)를 반복 제거 + 내부 공백 제거("자가 보완부"→"자가보완부", "와 통신부"→"통신부").
+  const _cleanNm=function(s){let n=String(s);const p=/^(상기|그|이|해당|각각의|각|본|및|와|과|를|을|은|는|의|이|가|로|에|으로|또는|그리고)\s+/;while(p.test(n))n=n.replace(p,'');return n.replace(/\s+/g,'');};
+  {
+    const _cSuf=/(부|수단|모듈|엔진|유닛|저장소|메모리|매핑|테이블|레지스트리|맵)$/;
+    const _bodyRN=refSecM?specText.replace(refSecM[1],' '):specText;
+    const _r2n=new Map(), _n2r=new Map(); const _rnRe=/([가-힣A-Za-z][가-힣A-Za-z\s]{0,13}?)\s*\((\d{2,4})\)/g; let _rm2;
+    while((_rm2=_rnRe.exec(_bodyRN))!==null){ const nn=_cleanNm(_rm2[1]); const ref=_rm2[2];
+      if(nn.length<3||!_cSuf.test(nn))continue;
+      if(!_r2n.has(ref))_r2n.set(ref,new Set()); _r2n.get(ref).add(nn);
+      if(!_n2r.has(nn))_n2r.set(nn,new Set()); _n2r.get(nn).add(ref); }
+    _r2n.forEach((names,ref)=>{ if(names.size>=2)iss.push({severity:'HIGH',check:'refnum_dupassign',message:`부호 (${ref})에 서로 다른 구성요소 명칭 ${names.size}개 배정`,detail:[...names].slice(0,3).join(' / ')}); });
+    _n2r.forEach((refs,nn)=>{ if(refs.size>=2)iss.push({severity:'HIGH',check:'refnum_dupassign',message:`동일 명칭 "${nn}"에 부호 ${refs.size}개 배정`,detail:[...refs].sort((a,b)=>a-b).join(', ')}); });
+  }
+
+  // ── CHK-11 [§6-3a]: 수학식 참조 정합 — "다음의/상기 수학식 N"의 존재·방향 ──
+  {
+    const _mh=[]; let _m; const _mhRe=/【\s*수학식\s*(\d+)\s*】/g; while((_m=_mhRe.exec(specText))!==null)_mh.push({no:_m[1],pos:_m.index});
+    const _refRe=/(다음의|하기의|아래의|상기|전술한)?\s*수학식\s*(\d+)/g; let _r;
+    while((_r=_refRe.exec(specText))!==null){ const dir=_r[1]||'', no=_r[2], pos=_r.index;
+      if(_mh.some(h=>Math.abs(h.pos-pos)<=1))continue;   // 【수학식 N】 헤더 자체는 참조 아님
+      const head=_mh.find(h=>h.no===no);
+      if(!head){ iss.push({severity:'MEDIUM',check:'math_ref_mismatch',message:`수학식 ${no} 참조가 있으나 해당 수학식이 명세서에 부재`,detail:`"…수학식 ${no}…"`}); continue; }
+      if((dir==='다음의'||dir==='하기의'||dir==='아래의')&&head.pos<pos)iss.push({severity:'MEDIUM',check:'math_ref_mismatch',message:`"${dir} 수학식 ${no}"이나 해당 수식이 참조보다 앞에 위치(방향 불일치)`,detail:`뒤에 나올 수식을 가리키는데 실제로는 앞에 있음`});
+      if((dir==='상기'||dir==='전술한')&&head.pos>pos)iss.push({severity:'MEDIUM',check:'math_ref_mismatch',message:`"${dir} 수학식 ${no}"이나 해당 수식이 참조보다 뒤에 위치(방향 불일치)`,detail:`앞에 나온 수식을 가리키는데 실제로는 뒤에 있음`});
+    }
+  }
+
+  // ── CHK-12 [§6-3c]: 청구항 구성요소 명칭의 상세설명 문언 존재(뒷받침 1차 근사) ──
+  {
+    // ★ 청구범위는 【청구항 N】 하위표제를 포함(그 앞에서 잘리지 않게), 상세설명은 【수학식 N】 블록을 포함(그 앞에서 잘리지 않게).
+    const _clM=specText.match(/【\s*청구범위\s*】([\s\S]*?)(?:\n【(?!\s*청구항)|$)/);
+    const _imM=specText.match(/【\s*발명을 실시하기 위한 구체적인 내용\s*】([\s\S]*?)(?:\n【(?!\s*수학식)|$)/);
+    if(_clM&&_imM){
+      const _compSuf=/(부|수단|모듈|엔진)$/; const _comp=new Set();
+      const _cnRe=/([가-힣][가-힣A-Za-z\s]{1,13}?(?:부|수단|모듈|엔진))(?:\s*\(\d{2,4}\))?/g; let _cn;
+      while((_cn=_cnRe.exec(_clM[1]))!==null){ const nn=_cleanNm(_cn[1]); if(nn.length>=3&&_compSuf.test(nn))_comp.add(nn); }
+      const _imNorm=_imM[1].replace(/\s+/g,'');
+      const _miss=[..._comp].filter(n=>!_imNorm.includes(n));
+      if(_miss.length)iss.push({severity:'MEDIUM',check:'claim_support_missing',message:`청구항 구성요소 ${_miss.length}개가 상세설명에 동일 문언 부재(뒷받침 확인 필요)`,detail:_miss.slice(0,5).join(', ')});
+    }
+  }
+
   return iss;
 }
 
@@ -567,7 +611,10 @@ function buildSpecification(){
 // ★ [Task1] ④ 미생성(예시도 있는데 step_08c 비었음) 경고 — 출력 직전 1회(누락 사실 안내, 차단은 안 함).
 function _warnConceptDescMissing(){ if(_conceptDescMissing())App.showToast('⚠️ 예시도 상세설명 미생성 — 예시도 설명이 명세서에서 빠집니다. Step 8 "상세설명 생성(장치+예시도)"을 실행하면 예시도 설명도 함께 생성됩니다','warning'); }
 function copyToClipboard(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();_warnSpecValidation();navigator.clipboard.writeText(t).then(()=>App.showToast('복사 완료')).catch(()=>App.showToast('클립보드 접근 불가','error'));}
-function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();_warnSpecValidation();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+// [§6-7] 다운로드 파일명 스탬프 — 생성시각(YYYYMMDD-HHMMSS) + 완성본 내용 지문(해시). 같은 내용 재다운로드 시 지문이 동일해
+//   "모드 전환 후 미갱신/실패로 이전 결과가 다시 받아진 것"을 즉시 식별 가능(§6-7). 다운로드는 항상 현재 outputs(=buildSpecification)를 직렬화한다.
+function _specStamp(){ let content=''; try{content=buildSpecification();}catch(_e){} const d=new Date(); const p=n=>String(n).padStart(2,'0'); const ts=`${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; let h=0; for(let i=0;i<content.length;i++){h=(h*31+content.charCodeAt(i))>>>0;} return ts+'_'+h.toString(36); }
+function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToast('내용 없음','error');return;}_warnConceptDescMissing();_warnSpecValidation();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain;charset=utf-8'}));a.download=`특허명세서_${selectedTitle||'초안'}_${_specStamp()}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 
 function downloadAsWord(){
   _warnConceptDescMissing();   // ★ [Task1] ④ 미생성 경고
@@ -580,7 +627,7 @@ function downloadAsWord(){
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:normal;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;const body=_stripDupHeader(s.b,s.h);if(!body)return hd;return hd+body.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const userFigHtml=buildUserFiguresHtml({word:true}); // ★ T4: 사용자 도면 이미지(base64) 삽입 — 도 번호 순
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}${userFigHtml}</body></html>`;
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${new Date().toISOString().slice(0,10)}.doc`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);App.showToast('Word 다운로드 완료');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+full],{type:'application/msword'}));a.download=`특허명세서_${selectedTitle||'초안'}_${_specStamp()}.doc`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);App.showToast('Word 다운로드 완료');
 }
 
 
