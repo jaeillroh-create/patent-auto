@@ -267,8 +267,10 @@ function validateSpecification(specText){
   //     '부'-접미 요구가 비-부 명칭(메모리·프로세서)에서 캡처엔진을 gap 건너 앞 '부'토큰으로 밀어내던 오결합 차단.
   //     → 저장부·레지스트리부·메모리가 canonical과 접미관계 성립해 FP 전멸, 진성(재정렬부·품질검증부)만 잔존.
   //   ★ [§2.2 R2] c-경로 키를 절단 토큰이 아닌 "정규화 전체명칭"으로: canonical 있으면 그 명칭, 없으면 직전 인접
-  //     run에서 앞쪽 한글 어절 최대 4개 흡수(조사·동사·표제 경계 정지)한 확장 명칭. 동일판정 = 완전일치 OR
-  //     (접미일치 && 공통접미 ≥5자) → 저장부·산출부(3자) 미발화 / 자가보완부(5자) {125,127} 발화.
+  //     run에서 앞쪽 한글 어절 최대 4개 흡수(조사·동사·표제 경계 정지)한 확장 명칭.
+  //   ★ [§2.4 D1] 동일명칭 판정의 비교 키(완전일치든 공통접미든) 길이 ≥5자 미만이면 미발화(generic 3자 '저장부' 완전일치 오탐 소거).
+  //   ★ [§2.4 D2] 확장 정지어에서 '이/가' 제거 — 내용어("자가"→'가')를 조사로 오인해 절단하던 결함 수정("자가 보완부"→자가보완부 확보).
+  //   ★ [§2.4 D3(i)] 동일명칭 ≥3개 연속(간격 1 이내)번호 = 도면요소 generic 시리즈 → dupassign(HIGH) 대신 refnum_generic_series(MEDIUM) 1건으로 압축.
   //   ★ [§2.2] (b) 동일부호·상이명칭  (c) 동일명칭·상이부호  (d) b·c 이중보고 dedupe  (R3) detail 양측 명칭 표기.
   {
     const _bodyRN=refSecM?specText.replace(refSecM[1],' '):specText;
@@ -284,7 +286,8 @@ function validateSpecification(specText){
       if(_sufEnd.test(name))_canonMap.set(num,name);
     }); }
     // body: (부호) 직전 인접 무공백 run(raw, 구성접미 요구 없음) + 앞쪽 확장 전체명칭(full, canonical 없을 때 c-경로용)
-    const _STOP=/(하는|되는|하며|되며|및|의|를|을|은|는|이|가|에서|으로|로|와|과|에|한)$/;   // 조사·동사 어절 정지
+    //   ★ [§2.4 D2] 정지어에서 단음절 주격 '이/가' 제외 — "자가"·"추가"·"차이" 등 내용어가 조사로 오인돼 확장이 끊기던 결함 차단.
+    const _STOP=/(하는|되는|하며|되며|하고|되고|하여|되어|된|및|또는|의|를|을|은|는|에서|으로|와|과|에|로|한)$/;   // 조사·동사 어절 정지(이/가 제외)
     const _rnRe=/([가-힣A-Za-z·]+)\((\d{2,4})\)/g; let _rm2;
     const _pairs=[];
     while((_rm2=_rnRe.exec(_bodyRN))!==null){
@@ -296,7 +299,7 @@ function validateSpecification(specText){
       _pairs.push({raw, ref, full:(_canonMap.get(ref)||full.replace(/^상기/,''))});
     }
     const _sufRel=(x,y)=>x===y||x.endsWith(y)||y.endsWith(x);                                     // (b) 접미관계(길이 무관)
-    const _nameSame=(x,y)=>{ if(x===y)return true; const s=x.length<=y.length?x:y, l=x.length<=y.length?y:x; return l.endsWith(s)&&s.length>=5; };   // (c) 전체명칭 동일
+    const _nameSame=(x,y)=>{ const s=x.length<=y.length?x:y, l=x.length<=y.length?y:x; return l.endsWith(s)&&s.length>=5; };   // (c) [§2.4 D1] 완전일치·공통접미 모두 ≥5자 요구
     const _atoms=new Set();   // (d) dedupe 원자: "명칭|부호"
     // (b) 동일부호·상이명칭 — raw 인접 토큰을 canonical과 접미관계 대조(canonical 없으면 body 내부 클러스터링)
     const _byRef=new Map(); _pairs.forEach(p=>{ if(!_byRef.has(p.ref))_byRef.set(p.ref,new Set()); _byRef.get(p.ref).add(p.raw); });
@@ -314,10 +317,14 @@ function validateSpecification(specText){
     const _names=[...new Set(_pairs.map(p=>p.full))];
     const _groups=[]; _names.forEach(n=>{ let g=_groups.find(gr=>_nameSame(gr.rep,n)); if(!g){g={rep:n,mem:new Set(),refs:new Set()};_groups.push(g);} g.mem.add(n); });
     _pairs.forEach(p=>{ const g=_groups.find(gr=>gr.mem.has(p.full)); if(g)g.refs.add(p.ref); });
-    _groups.forEach(g=>{ if(g.refs.size<2)return;
-      const _rs=[...g.refs];
+    _groups.forEach(g=>{ if(g.refs.size<2||g.rep.length<5)return;   // [§2.4 D1] 비교 키(rep) <5자면 미발화 — generic 3자 완전일치 소거
+      const _rs=[...g.refs].map(Number).sort((a,b)=>a-b);
+      // [§2.4 D3(i)] 동일명칭 ≥3개 연속(간격 1 이내)번호 = 도면요소 generic 시리즈 → dupassign 대신 MEDIUM 1건으로 압축 보고
+      if(_rs.length>=3 && (_rs[_rs.length-1]-_rs[0])<=_rs.length){
+        iss.push({severity:'MEDIUM',check:'refnum_generic_series',message:`동일 명칭 "${g.rep}"이 연속 부호 ${_rs.length}개(${_rs[0]}~${_rs[_rs.length-1]})에 시리즈 배정`,detail:'도면요소 generic 시리즈 — 구성요소별 개별 명명 권고(리포트)'}); return;
+      }
       if([...g.mem].every(m=>_rs.every(r=>_atoms.has(m+'|'+r))))return;   // (d) b에서 전부 보고된 원자면 생략
-      iss.push({severity:'HIGH',check:'refnum_dupassign',message:`동일 명칭 "${g.rep}"에 부호 ${_rs.length}개 배정`,detail:_rs.sort((a,b)=>a-b).join(', ')});
+      iss.push({severity:'HIGH',check:'refnum_dupassign',message:`동일 명칭 "${g.rep}"에 부호 ${_rs.length}개 배정`,detail:_rs.join(', ')});
     });
   }
 
