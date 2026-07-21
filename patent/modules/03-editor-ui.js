@@ -1,5 +1,5 @@
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
-function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===4)renderPreview();}
+function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();}catch(_e){}}   // [배치8] 레일 배지·상주 검증바 갱신 + ⑤ 진입 세대혼합 경고 1회
 function toggleMethod(){
   includeMethodClaims=document.getElementById('methodToggle').checked;
   ['methodClaimsCard','methodDiagramCard','methodDescCard'].forEach(id=>{
@@ -1077,7 +1077,7 @@ async function _cascadeRunMath(){
 }
 
 // ═══ A1 fix: getLatestDescription — 타임스탬프 기반 최신본 (v5.5) ═══
-function markOutputTimestamp(sid){outputTimestamps[sid]=Date.now();try{_warnIfStaleInStep(sid);}catch(_e){}}
+function markOutputTimestamp(sid){outputTimestamps[sid]=Date.now();try{_warnIfStaleInStep(sid);}catch(_e){} try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();}catch(_e){}}   // [배치8] 산출 갱신 시 레일 배지 즉시 반영
 // [§6-1 결정 c] 스텝 출력 저장 직후 — 구세대 용어 혼입 시 경고만(차단 아님)
 function _warnIfStaleInStep(sid){
   const _stale=(typeof _activeStaleTerms==='function')?_activeStaleTerms():[]; if(!_stale.length)return;
@@ -1419,3 +1419,114 @@ function extractBriefDescriptions(s07,s11){
 }
 function stripKoreanParticles(w){if(!w||w.length<2)return w;const ps=['에서는','으로써','에서','으로','에게','부터','까지','에는','하는','되는','된','하여','있는','없는','같은','통하여','위한','대한','의한','를','을','이','가','은','는','에','의','와','과','로','도','든','인','적','로서'];for(const p of ps){if(w.endsWith(p)&&w.length>p.length+1)return w.slice(0,-p.length);}return w;}
 
+
+// ═══ [배치8] 5단계 워크플로우 레일 — 상태 모델·배지·단계 재생성(D4)·상주 검증바 (표시 계층 — 생성/검증 로직 무변경) ═══
+let _wfDesignAt=0;            // ② 설계값 변경 시각(상류 변경 트리거)
+let _wfStage5Warned=false;    // ⑤ 진입 세대혼합 경고 1회 플래그(혼합 해소 시 리셋)
+function _wfMarkDesign(){_wfDesignAt=Date.now();try{renderWorkflowRail();}catch(_e){}}
+function _wfAttachDesignListeners(){
+  ['selDeviceCategory','inpDeviceGeneralDep','inpDeviceAnchorDep','inpDeviceAnchorStart','selMethodCategory','inpMethodGeneralDep','inpMethodAnchorDep','methodToggle','optDeviceFigures','chkUnifiedMath','selUnifiedDetail','customTitleType'].forEach(function(id){
+    const el=document.getElementById(id); if(el&&!el._wfHooked){el._wfHooked=true;try{el.addEventListener('change',_wfMarkDesign);}catch(_e){}}
+  });
+}
+function _wfUpstreamAt(){
+  let t=_wfDesignAt||0;
+  try{ if(termSnapshot&&termSnapshot.updatedAt)t=Math.max(t,termSnapshot.updatedAt); }catch(_e){}
+  try{ if(inventionScope&&inventionScope.locked_at){const s=Date.parse(inventionScope.locked_at);if(!isNaN(s))t=Math.max(t,s);} }catch(_e){}
+  return t;
+}
+function _wfTs(k){return (outputTimestamps&&outputTimestamps[k])||0;}
+// 단계 상태 모델: 'none'(미생성) | 'done'(생성됨) | 'stale'(재생성 필요 — 상류 변경 시각 > 자기 산출 시각)
+function wfStageStatus(n){
+  if(n===1)return selectedTitle?'done':'none';
+  if(n===2)return selectedTitleType?'done':'none';
+  if(n===3){
+    if(!(outputs.step_06&&outputs.step_07))return 'none';
+    const ts=[_wfTs('step_06'),_wfTs('step_07')].concat(outputs.step_10?[_wfTs('step_10')]:[]).concat(outputs.step_11?[_wfTs('step_11')]:[]).filter(Boolean);
+    const own=ts.length?Math.min.apply(null,ts):0;
+    return _wfUpstreamAt()>own?'stale':'done';
+  }
+  if(n===4){
+    if(!(outputs.step_08&&outputs.step_18))return 'none';
+    const own=Math.min(_wfTs('step_08')||Infinity,_wfTs('step_18')||Infinity);
+    const sk=Math.max(_wfTs('step_06'),_wfTs('step_10'),_wfTs('step_07'),_wfTs('step_11'));
+    return (_wfUpstreamAt()>own||sk>own)?'stale':'done';
+  }
+  if(n===5){const s4=wfStageStatus(4);return s4==='done'?'done':(s4==='stale'?'stale':'none');}
+  return 'none';
+}
+function renderWorkflowRail(){
+  try{
+    _wfAttachDesignListeners();
+    for(let i=1;i<=5;i++){
+      const b=document.getElementById('wfBadge'+(i-1)); if(!b)continue;
+      const st=wfStageStatus(i);
+      if(st==='stale'){b.textContent='재생성 필요';b.style.color='var(--color-warning,#E8A33D)';b.style.fontWeight='700';}
+      else if(st==='done'){b.textContent='✓';b.style.color='var(--color-success,#3DAE7A)';b.style.fontWeight='700';}
+      else b.textContent='';
+    }
+    if(wfStageStatus(3)!=='stale'&&wfStageStatus(4)!=='stale')_wfStage5Warned=false;
+    const s=document.getElementById('wfDesignSummary');
+    if(s){
+      const dl={compact:'간결',standard:'표준',detailed:'상세',maximal:'최대',custom:'사용자'}[detailLevel]||detailLevel;
+      const mth=document.getElementById('chkUnifiedMath');
+      s.innerHTML='유형: <b>'+App.escapeHtml(selectedTitleType||'미선택')+'</b> · 장치 청구항: 독립1+일반'+deviceGeneralDep+'+앵커'+deviceAnchorDep+' · 방법: '+(includeMethodClaims?'포함':'제외')+' · 도면 수: '+(document.getElementById('optDeviceFigures')?.value||'4')+' · 수학식: '+((mth&&mth.checked)?'포함':'미포함')+' · 분량: '+dl;
+    }
+  }catch(_e){}
+}
+// ⑤ 진입 시 세대 혼합(stale) 경고 1회 — docA·docD형 혼합의 UI 차단막
+function _wfWarnStage5(){
+  try{
+    if(_wfStage5Warned)return;
+    if(wfStageStatus(3)==='stale'||wfStageStatus(4)==='stale'){_wfStage5Warned=true;App.showToast('⚠️ 상류 변경 후 재생성되지 않은 단계가 있습니다(세대 혼합 가능) — 레일의 "재생성 필요" 단계를 먼저 재생성하세요','warning');}
+  }catch(_e){}
+}
+// 상주 검증 바 — CRITICAL/HIGH/MEDIUM + CHK-0(마커)·게이트 상태. 클릭 → ⑤ 상세(renderSpecValidation)
+function renderWfValidationBar(){
+  try{
+    const bar=document.getElementById('wfValidationBar'); if(!bar)return;
+    const spec=(typeof buildSpecification==='function')?buildSpecification():'';
+    if(!spec.trim()){bar.style.display='none';return;}
+    const iss=validateSpecification(spec);
+    const c=iss.filter(function(i){return i.severity==='CRITICAL';}).length;
+    const h=iss.filter(function(i){return i.severity==='HIGH';}).length;
+    const m=iss.filter(function(i){return i.severity==='MEDIUM';}).length;
+    const ph=iss.some(function(i){return i.check==='placeholder_residue';});
+    const cEl=document.getElementById('wfBarCounts'), gEl=document.getElementById('wfBarGate');
+    if(cEl)cEl.innerHTML='CRITICAL <b style="color:var(--color-error,#D94A4A)">'+c+'</b> · HIGH <b style="color:var(--color-warning,#E8A33D)">'+h+'</b> · MEDIUM <b>'+m+'</b>'+(ph?' · <b style="color:var(--color-error,#D94A4A)">마커 잔존(CHK-0)</b>':'');
+    if(gEl)gEl.textContent=c?('게이트: 다운로드 시 확인 필요(CRITICAL '+c+')'):'게이트: 통과 가능';
+    bar.style.display='flex';
+  }catch(_e){}
+}
+function wfOpenValidation(){ try{switchTab(4); if(typeof renderSpecValidation==='function')renderSpecValidation(); const el=document.getElementById('resultCardSpecValidate'); if(el&&el.scrollIntoView)el.scrollIntoView({behavior:'smooth'});}catch(_e){} }
+// [D4] ③ 골격 단계 재생성 — 초기화(관문 14·15 산출 포함) 후 ② 값으로 순차 재실행(기존 함수 호출 재배치)
+function _wfResetStage3Outputs(){
+  ['step_06','step_10','step_14','step_15','step_07','step_11'].forEach(function(k){
+    if(typeof outputs==='object'&&outputs&&outputs[k]!==undefined)delete outputs[k];
+    try{if(outputTimestamps&&outputTimestamps[k]!==undefined)delete outputTimestamps[k];}catch(_e){}
+  });
+}
+async function wfRunStage3(){
+  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('다른 작업이 진행 중입니다','info');return;}
+  const had=!!(outputs.step_06||outputs.step_07);
+  if(had&&!((typeof confirm==='function')?confirm('③ 골격을 재생성합니다.\n기존 청구항·도면·대안·특허성 산출물을 초기화한 뒤 ② 설계값으로 다시 생성합니다(세대 혼합 방지).\n계속할까요?'):false))return;
+  if(had)_wfResetStage3Outputs();
+  const P=function(m,c,t){App.showProgress('progressWfStage3',m,c,t);};
+  const T=includeMethodClaims?4:2;
+  const btn=document.getElementById('btnWfStage3'); if(btn)btn.disabled=true;
+  try{
+    P('[1/'+T+'] 장치 청구항...',0,T); await runStep('step_06');
+    if(!outputs.step_06){App.clearProgress('progressWfStage3');App.showToast('장치 청구항 생성 실패 — 중단','error');return;}
+    let c=1;
+    if(includeMethodClaims){P('['+(c+1)+'/'+T+'] 방법 청구항...',c,T);await runStep('step_10');c++;}
+    P('['+(c+1)+'/'+T+'] 장치 도면...',c,T); await runDiagramStep('step_07'); c++;
+    if(!outputs.step_07){App.clearProgress('progressWfStage3');App.showToast('장치 도면 생성 실패 — 청구항까지 보존','error');return;}
+    if(includeMethodClaims&&outputs.step_10){P('['+(c+1)+'/'+T+'] 방법 도면...',c,T);await runDiagramStep('step_11');c++;}
+    P('완료',T,T); setTimeout(function(){App.clearProgress('progressWfStage3');},2000);
+    if(typeof saveProject==='function')saveProject(true);
+    App.showToast('③ 골격 생성 완료 — 검토 관문(대안·특허성) 확인 후 ④ 본문 통합으로 진행하세요','success');
+  }catch(e){App.clearProgress('progressWfStage3');App.showToast('골격 생성 중단: '+(e&&e.message||e),'error');console.error('[wfStage3]',e);}
+  finally{ if(btn)btn.disabled=false; try{renderWorkflowRail();renderWfValidationBar();}catch(_e){} }
+}
+// [D4] ④ 본문 통합 — 현행 cohesion 호출(무가드 덮어쓰기·이력 보존·배치9 인라인 수식/마무리 흡수)
+async function wfRunStage4(){ try{ await runUnifiedCohesionGen(); }finally{ try{renderWorkflowRail();renderWfValidationBar();}catch(_e){} } }

@@ -836,12 +836,20 @@
         <button class="btn btn-ghost btn-sm" onclick="handleLogout()">로그아웃</button>
       </div>
     </header>
-    <div class="tab-container" role="tablist">
-      <button class="tab-item active" role="tab" aria-selected="true" onclick="switchTab(0)"><span class="tab-icon ico" data-icon="clipboard"></span><span class="tab-label">A. 기본</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(1)"><span class="tab-icon ico" data-icon="scales"></span><span class="tab-label">A. 청구항</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(2)"><span class="tab-icon ico" data-icon="image"></span><span class="tab-label">B·C. 도면</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(3)"><span class="tab-icon ico" data-icon="search"></span><span class="tab-label">D·E. 검증</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(4)"><span class="tab-icon ico" data-icon="download"></span><span class="tab-label">F. 산출물</span></button>
+    <!-- [배치8] 5단계 워크플로우 레일 — 탭 대체(동일 인덱스). 배지: 미생성/생성됨/재생성 필요(wfStageStatus) -->
+    <div class="tab-container" role="tablist" id="wfRail">
+      <button class="tab-item active" role="tab" aria-selected="true" onclick="switchTab(0)"><span class="tab-icon ico" data-icon="clipboard"></span><span class="tab-label">① 발명 파악</span><span class="wf-badge" id="wfBadge0" style="font-size:10px;margin-left:4px"></span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(1)"><span class="tab-icon ico" data-icon="settings"></span><span class="tab-label">② 설계 결정</span><span class="wf-badge" id="wfBadge1" style="font-size:10px;margin-left:4px"></span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(2)"><span class="tab-icon ico" data-icon="image"></span><span class="tab-label">③ 골격(청구항·도면)</span><span class="wf-badge" id="wfBadge2" style="font-size:10px;margin-left:4px"></span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(3)"><span class="tab-icon ico" data-icon="edit"></span><span class="tab-label">④ 본문 통합·검토</span><span class="wf-badge" id="wfBadge3" style="font-size:10px;margin-left:4px"></span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(4)"><span class="tab-icon ico" data-icon="download"></span><span class="tab-label">⑤ 검증·출원</span><span class="wf-badge" id="wfBadge4" style="font-size:10px;margin-left:4px"></span></button>
+    </div>
+
+    <!-- [배치8] 상주 검증 바 — 어느 단계에서든 완성본 결함 카운트·게이트 상태 표시(클릭 → ⑤ 상세) -->
+    <div id="wfValidationBar" onclick="wfOpenValidation()" style="display:none;cursor:pointer;position:sticky;top:0;z-index:40;margin:6px 0;padding:7px 14px;border-radius:8px;border:1px solid var(--color-border);background:var(--color-bg-secondary);font-size:12px;display:flex;gap:14px;align-items:center">
+      <span style="font-weight:700">완성본 검증</span>
+      <span id="wfBarCounts" style="color:var(--color-text-secondary)">—</span>
+      <span id="wfBarGate" style="margin-left:auto;color:var(--color-text-tertiary)">게이트: —</span>
     </div>
 
     <!-- ══ TAB 0: 기본정보 ══ -->
@@ -886,17 +894,7 @@
         <div class="card" id="cardUnifiedFullChain" style="border:1.5px solid var(--color-primary)">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="bolt"></span> ⚡ 통합 생성 (발명자료 → 핵심 명세서)</div></div>
           <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 10px">발명 유형을 고른 뒤 한 번에 <b>명칭 → 청구항 → 도면 → 상세설명·부호</b>를 응집 생성합니다(도면부호·용어 정합 구조적 보장). 몇 분 소요되며, 어느 단계가 실패하면 그 지점까지 보존됩니다. 효과·과제·요약 등은 이후 F. 마무리에서 생성하세요.</p>
-          <div style="display:flex;gap:14px;align-items:center;margin:0 0 10px;flex-wrap:wrap;font-size:12px">
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="chkUnifiedMath"> 수학식 포함(상세설명에 인라인 생성 — 변수 정의·참조 규칙 자동 준수)</label>
-            <label style="display:flex;align-items:center;gap:6px">분량
-              <select id="selUnifiedDetail" onchange="detailLevel=this.value" style="font-size:12px;padding:2px 6px">
-                <option value="compact">간결(3~4천자)</option>
-                <option value="standard" selected>표준(5~7천자)</option>
-                <option value="detailed">상세(8천~1만자)</option>
-                <option value="maximal">최대(2.2~2.5만자)</option>
-              </select>
-            </label>
-          </div>
+          <p style="font-size:11px;color:var(--color-text-tertiary);padding:0 0 8px">수학식·분량 등 설계값은 <b>② 설계 결정</b> 단계에서 조정합니다(기본값으로 바로 실행 가능).</p>
           <div id="progressUnifiedFullChain" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnUnifiedFullChain" onclick="runUnifiedFullChain()"><span class="ico" data-icon="bolt"></span> 발명자료 → 핵심 명세서 통합 생성</button>
         </div>
@@ -933,6 +931,25 @@
     <div id="page1" class="page" role="tabpanel">
       <!-- 왼쪽: 설정 -->
       <div class="page-left">
+        <!-- [배치8] ② 설계 결정 — 주동선(프리플라이트 상설). 기본값으로 ③ 진행 가능, 세부는 아래 고급에서 -->
+        <div class="card" id="wfStage2Main" style="border:1.5px solid var(--color-primary)">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> ② 설계 결정 (프리플라이트)</div></div>
+          <div id="wfDesignSummary" style="font-size:12px;color:var(--color-text-secondary);margin-bottom:10px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px">설계 요약을 불러오는 중…</div>
+          <div style="display:flex;gap:14px;align-items:center;margin:0 0 10px;flex-wrap:wrap;font-size:12px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="chkUnifiedMath"> 수학식 포함(상세설명에 인라인 생성 — 변수 정의·참조 규칙 자동 준수)</label>
+            <label style="display:flex;align-items:center;gap:6px">분량
+              <select id="selUnifiedDetail" onchange="detailLevel=this.value" style="font-size:12px;padding:2px 6px">
+                <option value="compact">간결(3~4천자)</option>
+                <option value="standard" selected>표준(5~7천자)</option>
+                <option value="detailed">상세(8천~1만자)</option>
+                <option value="maximal">최대(2.2~2.5만자)</option>
+              </select>
+            </label>
+          </div>
+          <p style="font-size:11px;color:var(--color-text-tertiary)">청구항 구성(카테고리·종속항 수·앵커)의 세부 조정은 아래 <b>고급(단계별 세부)</b>에서, 골격 생성은 <b>③ 단계</b>에서 실행합니다.</p>
+        </div>
+        <details class="wf-adv" id="wfAdv1">
+          <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급(단계별 세부) — 청구항 구성·개별 생성</summary>
         <!-- Step 6 장치 청구항 설정 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="scales"></span> Step 6: 장치 청구항</div></div>
@@ -999,8 +1016,9 @@
           <div id="progressStep10" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnStep10" onclick="runStep('step_10')"><span class="ico" data-icon="robot"></span> 방법 청구항 생성</button>
         </div>
+        </details>
 
-        <!-- 추가 기능 버튼 -->
+        <!-- 추가 기능 버튼(검토 관문 14·15 — 노출 유지) -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> 추가 기능</div></div>
           <div style="display:flex;flex-direction:column;gap:8px">
@@ -1034,6 +1052,15 @@
     <div id="page2" class="page" role="tabpanel">
       <!-- 왼쪽: 설정 -->
       <div class="page-left">
+        <!-- [배치8] ③ 골격 — 주동선(단계 단위 생성/재생성, D4). 스텝 낱개 버튼은 고급으로 -->
+        <div class="card" id="wfStage3Main" style="border:1.5px solid var(--color-primary)">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="bolt"></span> ③ 골격 생성 (청구항 → 도면)</div></div>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">② 설계값으로 <b>장치 청구항 → 방법 청구항 → 장치 도면 → 방법 도면</b>을 순차 생성합니다. 재생성 시 기존 골격 산출물(청구항·도면·대안·특허성)을 초기화한 뒤 다시 생성합니다(세대 혼합 방지). 검토 관문(대안·특허성)은 ② 하단 버튼으로 실행합니다.</p>
+          <div id="progressWfStage3" style="margin:8px 0"></div>
+          <button class="btn btn-primary btn-full" id="btnWfStage3" onclick="wfRunStage3()"><span class="ico" data-icon="bolt"></span> 골격 생성/재생성 (청구항+도면)</button>
+        </div>
+        <details class="wf-adv" id="wfAdv2">
+          <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급(단계별 세부) — 도면·상세설명 개별 생성</summary>
         <!-- 필수 도면 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="flag"></span> 필수 도면 (선택)</div></div>
@@ -1152,6 +1179,7 @@
           <div id="progressStep12" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnStep12" onclick="runLongStep('step_12')"><span class="ico" data-icon="robot"></span> 방법 상세설명</button>
         </div>
+        </details>
       </div>
 
       <!-- 오른쪽: 결과 -->
@@ -1216,6 +1244,12 @@
     <div id="page3" class="page" role="tabpanel">
       <!-- 왼쪽: 설정 -->
       <div class="page-left">
+        <!-- [배치8] ④ 본문 통합 — 주동선(cohesion — 배치9로 수학식 인라인·효과/해결수단/요약 흡수) -->
+        <div class="card" id="wfStage4Main" style="border:1.5px solid var(--color-primary)">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="edit"></span> ④ 본문 통합 생성 (상세설명+부호+마무리)</div></div>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">③ 골격을 바탕으로 <b>상세설명·부호의 설명·과제의 해결 수단·발명의 효과·요약서</b>를 단일 컨텍스트로 생성합니다(② '수학식 포함' 시 수식 인라인). 재생성 시 기존 내용은 이력에 보존됩니다.</p>
+          <button class="btn btn-primary btn-full" id="btnWfStage4" onclick="wfRunStage4()"><span class="ico" data-icon="bolt"></span> 본문 통합 생성/재생성</button>
+        </div>
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="chart"></span> Phase D: 논리 프레임 (역설계)</div></div>
           <div style="padding:12px 18px;background:var(--color-primary-light);border-radius:8px;margin:0 18px 12px;font-size:12px;color:var(--color-primary)">
@@ -1417,12 +1451,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260720a"></script>
-<script src="patent/patent.js?v=20260721-b31"></script>
+<script src="patent/patent.js?v=20260721-b32"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260721-b31"></script>
+<script src="opinion/opinion.js?v=20260721-b32"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260721-b31';
+  var _cv='?v=20260721-b32';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1520,8 +1554,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260721-b31"></script>
-<script src="docket.js?v=20260721-b31"></script>
+<script src="division/division.js?v=20260721-b32"></script>
+<script src="docket.js?v=20260721-b32"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>

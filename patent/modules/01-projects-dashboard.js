@@ -251,6 +251,7 @@ async function openProject(pid){
   // Restore detail level
   detailLevel=s.detailLevel||'standard';customDetailChars=s.customDetailChars||2000;
   { const _ud=document.getElementById('selUnifiedDetail'); if(_ud&&['compact','standard','detailed','maximal'].includes(detailLevel))_ud.value=detailLevel; }   // [배치6 N3a] 통합 카드 분량 표시 동기화
+  try{ if(typeof renderWorkflowRail==='function')renderWorkflowRail(); if(typeof renderWfValidationBar==='function')renderWfValidationBar(); }catch(_e){}   // [배치8] 복원 직후 레일·검증바 갱신
   diagramData=s.diagramData||{};
   outputTimestamps=s.outputTimestamps||{};
   stepUserCommands=s.stepUserCommands||{};
