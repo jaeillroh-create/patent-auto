@@ -262,20 +262,23 @@ function validateSpecification(specText){
     if(_missing.length)iss.push({severity:'MEDIUM',check:'example_missing',message:`상세설명에 예시/실시예 없는 구성요소 문단 ${_missing.length}개 — 예시 보충 권장(리포트)`,detail:`예: "${_missing[0].slice(0,40)}…"`});
   }
 
-  // ── CHK-10 [§6-3b]: 부호 이중 배정 — 동일 번호↔상이 명칭 / 동일 명칭↔상이 번호 ──
-  //   구성요소 접미(부/수단/모듈/엔진 등)로 끝나는 명칭만 대상(캡션 노이즈 배제). 띄어쓰기 정규화로 "자가보완부"≡"자가 보완부".
-  // 명칭 정제: 선행 조사·접속사(및/와/과/를/을/은/는/의… 뒤 공백)를 반복 제거 + 내부 공백 제거("자가 보완부"→"자가보완부", "와 통신부"→"통신부").
-  const _cleanNm=function(s){let n=String(s);const p=/^(상기|그|이|해당|각각의|각|본|및|와|과|를|을|은|는|의|이|가|로|에|으로|또는|그리고)\s+/;while(p.test(n))n=n.replace(p,'');return n.replace(/\s+/g,'');};
+  // ── CHK-10 [§6-3b·§2.1]: 부호 이중 배정 — 동일 번호↔상이 명칭 / 동일 명칭↔상이 번호 ──
+  //   ★ [§2.1] (num) 직전 "무공백" 구성명사 run만 추출 → 선행 절 통째 캡처 방지("제어에 따라 통신부(110)"→"통신부").
+  //   접미 동일 취급(한쪽이 다른쪽의 접미면 같은 구성: 품질계약검증및자가보완부 ⊃ 자가보완부). 명칭 비교는 최단 접미형으로 귀속.
   {
-    const _cSuf=/(부|수단|모듈|엔진|유닛|저장소|메모리|매핑|테이블|레지스트리|맵)$/;
     const _bodyRN=refSecM?specText.replace(refSecM[1],' '):specText;
-    const _r2n=new Map(), _n2r=new Map(); const _rnRe=/([가-힣A-Za-z][가-힣A-Za-z\s]{0,13}?)\s*\((\d{2,4})\)/g; let _rm2;
-    while((_rm2=_rnRe.exec(_bodyRN))!==null){ const nn=_cleanNm(_rm2[1]); const ref=_rm2[2];
-      if(nn.length<3||!_cSuf.test(nn))continue;
-      if(!_r2n.has(ref))_r2n.set(ref,new Set()); _r2n.get(ref).add(nn);
-      if(!_n2r.has(nn))_n2r.set(nn,new Set()); _n2r.get(nn).add(ref); }
-    _r2n.forEach((names,ref)=>{ if(names.size>=2)iss.push({severity:'HIGH',check:'refnum_dupassign',message:`부호 (${ref})에 서로 다른 구성요소 명칭 ${names.size}개 배정`,detail:[...names].slice(0,3).join(' / ')}); });
-    _n2r.forEach((refs,nn)=>{ if(refs.size>=2)iss.push({severity:'HIGH',check:'refnum_dupassign',message:`동일 명칭 "${nn}"에 부호 ${refs.size}개 배정`,detail:[...refs].sort((a,b)=>a-b).join(', ')}); });
+    const _rnRe=/([가-힣A-Za-z·]+(?:부|서버|단말|모듈|장치|시스템|데이터베이스|수단|엔진|유닛|저장소|메모리|매핑|레지스트리))\s*\((\d{2,4})\)/g;
+    const _pairs=[]; let _rm2;
+    while((_rm2=_rnRe.exec(_bodyRN))!==null){ const nm=_rm2[1].replace(/^상기/,''); if(nm.length>=3)_pairs.push({name:nm,ref:_rm2[2]}); }
+    const _same=(a,b)=>a===b||a.endsWith(b)||b.endsWith(a);
+    // (1) 동일 부호↔상이 명칭 — 접미 동일은 같은 구성으로 1개 취급
+    const _byRef=new Map(); _pairs.forEach(p=>{ if(!_byRef.has(p.ref))_byRef.set(p.ref,[]); const arr=_byRef.get(p.ref); if(!arr.some(x=>_same(x,p.name)))arr.push(p.name); });
+    _byRef.forEach((names,ref)=>{ if(names.length>=2)iss.push({severity:'HIGH',check:'refnum_dupassign',message:`부호 (${ref})에 서로 다른 구성요소 명칭 ${names.length}개 배정`,detail:names.slice(0,3).join(' / ')}); });
+    // (2) 동일 명칭↔상이 부호 — 최단 접미형으로 정규화 후 부호 집합
+    const _all=[...new Set(_pairs.map(p=>p.name))];
+    const _canon=n=>{ let rep=n; _all.forEach(m=>{ if(m!==n&&n.endsWith(m)&&m.length<rep.length)rep=m; }); return rep; };
+    const _byName=new Map(); _pairs.forEach(p=>{ const c=_canon(p.name); if(!_byName.has(c))_byName.set(c,new Set()); _byName.get(c).add(p.ref); });
+    _byName.forEach((refs,c)=>{ if(refs.size>=2)iss.push({severity:'HIGH',check:'refnum_dupassign',message:`동일 명칭 "${c}"에 부호 ${refs.size}개 배정`,detail:[...refs].sort((a,b)=>a-b).join(', ')}); });
   }
 
   // ── CHK-11 [§6-3a]: 수학식 참조 정합 — "다음의/상기 수학식 N"의 존재·방향 ──
@@ -298,8 +301,9 @@ function validateSpecification(specText){
     const _imM=specText.match(/【\s*발명을 실시하기 위한 구체적인 내용\s*】([\s\S]*?)(?:\n【(?!\s*수학식)|$)/);
     if(_clM&&_imM){
       const _compSuf=/(부|수단|모듈|엔진)$/; const _comp=new Set();
-      const _cnRe=/([가-힣][가-힣A-Za-z\s]{1,13}?(?:부|수단|모듈|엔진))(?:\s*\(\d{2,4}\))?/g; let _cn;
-      while((_cn=_cnRe.exec(_clM[1]))!==null){ const nn=_cleanNm(_cn[1]); if(nn.length>=3&&_compSuf.test(nn))_comp.add(nn); }
+      // ★ [§2.1] 무공백 구성명사 head 토큰만(수식어 절 배제, 무공백 run이라 앞 절이 안 붙음) + '로부터'의 '부' 절단 방지((?!터)).
+      const _cnRe=/([가-힣]{2,15}?(?:부|수단|모듈|엔진))(?!터)/g; let _cn;
+      while((_cn=_cnRe.exec(_clM[1]))!==null){ const nn=_cn[1]; if(nn.length>=3&&_compSuf.test(nn))_comp.add(nn); }
       const _imNorm=_imM[1].replace(/\s+/g,'');
       const _miss=[..._comp].filter(n=>!_imNorm.includes(n));
       if(_miss.length)iss.push({severity:'MEDIUM',check:'claim_support_missing',message:`청구항 구성요소 ${_miss.length}개가 상세설명에 동일 문언 부재(뒷받침 확인 필요)`,detail:_miss.slice(0,5).join(', ')});
