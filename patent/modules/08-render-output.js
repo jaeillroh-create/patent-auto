@@ -263,12 +263,13 @@ function validateSpecification(specText){
   }
 
   // ── CHK-10 [§6-3b·§2.2]: 부호 이중 배정 — 부호의 설명 canonical(부호→전체명칭)을 기준축으로 ──
-  //   ★ [§2.2] generic 접미(저장부 등) 충돌 제거: 비교 키를 "절단 토큰"이 아니라 "정규화 전체명칭"으로 바꾼다.
-  //     (b) 동일부호·상이명칭: body 토큰 T가 canonical[N]과 접미관계면 동일, 아니면(구성접미사로 끝남) 이중배정.
-  //         canonical 없는 부호는 body 내부끼리 접미클러스터링(폴백, ≥2 클러스터일 때만 발화).
-  //     (c) 동일명칭·상이부호: "전체명칭 완전일치 OR (접미일치 && 공통접미 길이 ≥5자)"면 동일 명칭으로 묶어 부호집합 비교
-  //         (→ "자가보완부"(5자)의 상이부호는 발화 / "저장부"(3자)만 공유하는 상이 구성은 미발화).
-  //     (d) b·c 동일 결함 이중보고 dedupe(명칭×부호 원자 기준).
+  //   ★ [§2.2 R1] 교차결합 캡처 제거: b-경로 캡처를 "(부호) 직전 인접 무공백 run 그대로"로(구성접미 요구 삭제).
+  //     '부'-접미 요구가 비-부 명칭(메모리·프로세서)에서 캡처엔진을 gap 건너 앞 '부'토큰으로 밀어내던 오결합 차단.
+  //     → 저장부·레지스트리부·메모리가 canonical과 접미관계 성립해 FP 전멸, 진성(재정렬부·품질검증부)만 잔존.
+  //   ★ [§2.2 R2] c-경로 키를 절단 토큰이 아닌 "정규화 전체명칭"으로: canonical 있으면 그 명칭, 없으면 직전 인접
+  //     run에서 앞쪽 한글 어절 최대 4개 흡수(조사·동사·표제 경계 정지)한 확장 명칭. 동일판정 = 완전일치 OR
+  //     (접미일치 && 공통접미 ≥5자) → 저장부·산출부(3자) 미발화 / 자가보완부(5자) {125,127} 발화.
+  //   ★ [§2.2] (b) 동일부호·상이명칭  (c) 동일명칭·상이부호  (d) b·c 이중보고 dedupe  (R3) detail 양측 명칭 표기.
   {
     const _bodyRN=refSecM?specText.replace(refSecM[1],' '):specText;
     const _sufAlt='부|서버|단말|모듈|장치|시스템|데이터베이스|수단|엔진|유닛|저장소|메모리|매핑|레지스트리';
@@ -282,15 +283,23 @@ function validateSpecification(specText){
       name=name.replace(/\s+/g,'').replace(/^상기/,'').replace(/[.,;()]+$/,'');
       if(_sufEnd.test(name))_canonMap.set(num,name);
     }); }
-    // body pairs: 무공백 구성명사 run ↔ (부호)
-    const _rnRe=new RegExp('([가-힣A-Za-z·]+(?:'+_sufAlt+'))\\s*\\((\\d{2,4})\\)','g');
-    const _pairs=[]; let _rm2;
-    while((_rm2=_rnRe.exec(_bodyRN))!==null){ const nm=_rm2[1].replace(/^상기/,''); if(nm.length>=3)_pairs.push({name:nm,ref:_rm2[2]}); }
+    // body: (부호) 직전 인접 무공백 run(raw, 구성접미 요구 없음) + 앞쪽 확장 전체명칭(full, canonical 없을 때 c-경로용)
+    const _STOP=/(하는|되는|하며|되며|및|의|를|을|은|는|이|가|에서|으로|로|와|과|에|한)$/;   // 조사·동사 어절 정지
+    const _rnRe=/([가-힣A-Za-z·]+)\((\d{2,4})\)/g; let _rm2;
+    const _pairs=[];
+    while((_rm2=_rnRe.exec(_bodyRN))!==null){
+      const raw=_rm2[1].replace(/^상기/,''); const ref=_rm2[2]; if(raw.length<2)continue;
+      let full=raw; const pre=_bodyRN.slice(Math.max(0,_rm2.index-40),_rm2.index).split(/\s+/);
+      for(let k=pre.length-1,cnt=0;k>=0&&cnt<4;k--){ const w=pre[k]; if(!w)continue;
+        if(_STOP.test(w)||/^(상기|그|본|해당|각)$/.test(w)||!/^[가-힣A-Za-z·]+$/.test(w))break;   // 표제·구두점·조사 어절에서 정지
+        full=w+full; cnt++; }
+      _pairs.push({raw, ref, full:(_canonMap.get(ref)||full.replace(/^상기/,''))});
+    }
     const _sufRel=(x,y)=>x===y||x.endsWith(y)||y.endsWith(x);                                     // (b) 접미관계(길이 무관)
     const _nameSame=(x,y)=>{ if(x===y)return true; const s=x.length<=y.length?x:y, l=x.length<=y.length?y:x; return l.endsWith(s)&&s.length>=5; };   // (c) 전체명칭 동일
     const _atoms=new Set();   // (d) dedupe 원자: "명칭|부호"
-    // (b) 동일부호·상이명칭
-    const _byRef=new Map(); _pairs.forEach(p=>{ if(!_byRef.has(p.ref))_byRef.set(p.ref,new Set()); _byRef.get(p.ref).add(p.name); });
+    // (b) 동일부호·상이명칭 — raw 인접 토큰을 canonical과 접미관계 대조(canonical 없으면 body 내부 클러스터링)
+    const _byRef=new Map(); _pairs.forEach(p=>{ if(!_byRef.has(p.ref))_byRef.set(p.ref,new Set()); _byRef.get(p.ref).add(p.raw); });
     _byRef.forEach((set,ref)=>{
       const C=_canonMap.get(ref);
       const cand=C?[...set].filter(t=>!_sufRel(t,C)):[...set];          // canonical과 접미관계 아닌 것(없으면 body 전체)
@@ -299,12 +308,12 @@ function validateSpecification(specText){
       if(fire){ cl.forEach(t=>_atoms.add(t+'|'+ref));
         iss.push({severity:'HIGH',check:'refnum_dupassign',
           message:C?`부호 (${ref})에 부호의 설명 정의("${C}")와 다른 구성요소 명칭 배정`:`부호 (${ref})에 서로 다른 구성요소 명칭 ${cl.length}개 배정`,
-          detail:cl.slice(0,3).join(' / ')}); }
+          detail:C?`canonical="${C}" ↔ body="${cl.slice(0,3).join(', ')}"`:cl.slice(0,3).join(' / ')}); }   // (R3) 양측 표기
     });
-    // (c) 동일명칭·상이부호 — 전체명칭 그룹핑(≥5 접미 병합)
-    const _names=[...new Set(_pairs.map(p=>p.name))];
+    // (c) 동일명칭·상이부호 — 전체명칭(full) 그룹핑(≥5 접미 병합)
+    const _names=[...new Set(_pairs.map(p=>p.full))];
     const _groups=[]; _names.forEach(n=>{ let g=_groups.find(gr=>_nameSame(gr.rep,n)); if(!g){g={rep:n,mem:new Set(),refs:new Set()};_groups.push(g);} g.mem.add(n); });
-    _pairs.forEach(p=>{ const g=_groups.find(gr=>gr.mem.has(p.name)); if(g)g.refs.add(p.ref); });
+    _pairs.forEach(p=>{ const g=_groups.find(gr=>gr.mem.has(p.full)); if(g)g.refs.add(p.ref); });
     _groups.forEach(g=>{ if(g.refs.size<2)return;
       const _rs=[...g.refs];
       if([...g.mem].every(m=>_rs.every(r=>_atoms.has(m+'|'+r))))return;   // (d) b에서 전부 보고된 원자면 생략
