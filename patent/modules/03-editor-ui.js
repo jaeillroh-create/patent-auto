@@ -382,6 +382,8 @@ function selectTitle(el,kr,en){
   el.style.borderColor='var(--color-primary)';
   el.style.background='var(--color-primary-light)';
   
+  // [§6-1] 명칭 세대 추적 — 구 selectedTitle→신 kr diff청크를 staleTerms에 적재(outputs 존재 시)
+  try{ if(typeof _onTitleChanged==='function')_onTitleChanged(selectedTitle, kr); }catch(_e){}
   selectedTitle=kr;
   selectedTitleEn=en||'';
   document.getElementById('titleInput').value=kr;
@@ -408,7 +410,7 @@ function onTitleInput(){
   document.getElementById('batchArea').style.display=v?'block':'none';
   if(v)autoSetDeviceCategoryFromTitle(v);
   // prev 유무와 무관하게 변경 시 하류 무효화 (selectTitle과 동일 동작)
-  if(prev!==v)invalidateDownstream('step_01');
+  if(prev!==v){ invalidateDownstream('step_01'); try{ if(typeof _onTitleChanged==='function')_onTitleChanged(prev, v); }catch(_e){} }   // [§6-1] 명칭 세대 추적
   // 직접 입력한 명칭이 저장되도록 디바운스 저장 (1.5초 후)
   if(currentProjectId)_debouncedSaveTitle();
 }
@@ -1073,7 +1075,14 @@ async function _cascadeRunMath(){
 }
 
 // ═══ A1 fix: getLatestDescription — 타임스탬프 기반 최신본 (v5.5) ═══
-function markOutputTimestamp(sid){outputTimestamps[sid]=Date.now();}
+function markOutputTimestamp(sid){outputTimestamps[sid]=Date.now();try{_warnIfStaleInStep(sid);}catch(_e){}}
+// [§6-1 결정 c] 스텝 출력 저장 직후 — 구세대 용어 혼입 시 경고만(차단 아님)
+function _warnIfStaleInStep(sid){
+  const _stale=(typeof _activeStaleTerms==='function')?_activeStaleTerms():[]; if(!_stale.length)return;
+  const _txt=String((typeof outputs==='object'&&outputs&&outputs[sid])||'').replace(/\s+/g,''); if(!_txt)return;
+  const _hit=_stale.filter(t=>t&&t.length>=5&&_txt.indexOf(t)>=0);
+  if(_hit.length&&App&&typeof App.showToast==='function')App.showToast(`구세대 용어(${_hit.slice(0,2).join(', ')}) 혼입 — 이 스텝 재생성 권장`,'warning');
+}
 function getLatestDescription(){
   // v9.1: 장치 상세설명 우선순위: step_13_applied > step_09 > step_08
   // 단, 하위 step이 더 최신이면(사용자가 재생성) 하위 step 우선

@@ -47,6 +47,62 @@ let chatHistory = {}; // 단계별 독립 채팅 수정 이력 (chat.js)
 let outputTimestamps = {};
 // [P-C1] invention_scope: 발명 범위 기준선
 let inventionScope = null;
+
+// ═══ [§6-1] 용어·부호 세대 스냅샷 (term generation) ═══
+// 명칭/구성 확정 시, 구세대 명칭의 diff청크(신명칭에 없는 제거 어절, 공백제거 ≥5자)를 staleTerms에 누적한다.
+// CHK-13(term_generation_mismatch)이 완성본에 이 staleTerm이 잔존하는지(=재생성 안 된 구세대 산출물 혼입)를 검출.
+// ⚠ 자동 치환 금지 — 검출·경고·재생성 유도만. 결정: (a) diff청크+≥5자, (b) CHK-13=HIGH, (c) 스텝저장 경고만.
+let termSnapshot = { titleKo:'', titleEn:'', components:[], staleTerms:[], updatedAt:null };
+function _termSnapshotDefault(){ return { titleKo:'', titleEn:'', components:[], staleTerms:[], updatedAt:null }; }
+function _activeStaleTerms(){ return (termSnapshot && Array.isArray(termSnapshot.staleTerms)) ? termSnapshot.staleTerms : []; }
+// 현재 명칭 코퍼스(공백 제거) — 복귀 프루닝 기준(현재 명칭에 다시 등장하면 stale 아님)
+function _currentTermNorm(){
+  const parts=[ (termSnapshot&&termSnapshot.titleKo) || (typeof selectedTitle!=='undefined'?selectedTitle:'') || '' ];
+  ((termSnapshot&&termSnapshot.components)||[]).forEach(c=>parts.push((c&&c.name)||''));
+  return parts.join('␟').replace(/\s+/g,'');
+}
+// 구명칭→신명칭 diff — 신명칭 어절집합에 없는 "제거된 연속 어절 run"을 공백제거 후 ≥5자만 청크로.
+function _termDiffChunks(oldT, newT){
+  const tok=s=>String(s||'').split(/\s+/).filter(Boolean);
+  const N=new Set(tok(newT)); const out=[]; let cur=[];
+  tok(oldT).forEach(w=>{ if(N.has(w)){ if(cur.length){ out.push(cur.join('')); cur=[]; } } else cur.push(w); });
+  if(cur.length)out.push(cur.join(''));
+  return [...new Set(out.map(c=>c.replace(/\s+/g,'')).filter(c=>c.length>=5))];   // [결정 a] ≥5자
+}
+// [보강1] 복귀 프루닝 — 현재 명칭에 재등장하는 항목 제거
+function _pruneStaleTerms(){
+  if(!termSnapshot||!Array.isArray(termSnapshot.staleTerms)||!termSnapshot.staleTerms.length)return;
+  const cur=_currentTermNorm();
+  termSnapshot.staleTerms=termSnapshot.staleTerms.filter(t=>t && cur.indexOf(t)<0);
+}
+// staleTerms 갱신 — dedupe + 복귀 프루닝 + [보강3] 상한 20(최신 우선)
+function _recordStaleTerms(chunks){
+  if(!termSnapshot)termSnapshot=_termSnapshotDefault();
+  if(!Array.isArray(termSnapshot.staleTerms))termSnapshot.staleTerms=[];
+  (chunks||[]).forEach(c=>{ if(c && c.length>=5 && termSnapshot.staleTerms.indexOf(c)<0)termSnapshot.staleTerms.push(c); });
+  _pruneStaleTerms();
+  if(termSnapshot.staleTerms.length>20)termSnapshot.staleTerms=termSnapshot.staleTerms.slice(-20);
+  termSnapshot.updatedAt=Date.now();
+}
+// 명칭 변경 훅 — [보강2] outputs 존재 시에만 구세대 diff 적재(첫 확정엔 잔존 위험 없음)
+function _onTitleChanged(oldT, newT){
+  if(!termSnapshot)termSnapshot=_termSnapshotDefault();
+  termSnapshot.titleKo=newT||'';
+  if(oldT && oldT!==newT){
+    const hasOutputs = (typeof outputs==='object') && outputs && Object.keys(outputs).some(k=>k.indexOf('step_')===0 && outputs[k]);
+    if(hasOutputs)_recordStaleTerms(_termDiffChunks(oldT, newT));
+  }
+  _pruneStaleTerms();   // 신명칭이 과거 stale를 되살렸으면 제거
+}
+// 구성 명칭 변경 훅 — 각 구명칭이 신구성 집합에 없으면 diff청크 적재
+function _onComponentsChanged(oldNames, newNames){
+  if(!termSnapshot)termSnapshot=_termSnapshotDefault();
+  const _new=(newNames||[]).filter(Boolean);
+  termSnapshot.components=_new.map(n=>({name:n}));
+  const hasOutputs = (typeof outputs==='object') && outputs && Object.keys(outputs).some(k=>k.indexOf('step_')===0 && outputs[k]);
+  if(hasOutputs){ const _joined=_new.join(' '); (oldNames||[]).forEach(o=>{ if(o && _new.indexOf(o)<0)_recordStaleTerms(_termDiffChunks(o, _joined)); }); }
+  _pruneStaleTerms();
+}
 // [C1-6a] baseline 편집 UI 상태
 let _editingComponentId = null;
 let _modalAliases = [];

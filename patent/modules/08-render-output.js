@@ -361,13 +361,35 @@ function validateSpecification(specText){
     }
   }
 
+  // ── CHK-13 [§6-1]: 용어 세대 불일치 — staleTerms(구세대 명칭 diff청크)가 완성본에 잔존 ──
+  //   ★ 명칭/구성 확정 후 재생성되지 않은 구세대 산출물(도면설명·부호표 등)이 완성본에 혼입되면 §42④ 명확성 위험.
+  //   ★ [보강4 스텝 귀속] staleTerm이 등장하는 섹션(표제)을 지목. [결정 b] HIGH.
+  try{
+    const _stale=(typeof _activeStaleTerms==='function')?_activeStaleTerms():[];
+    if(_stale && _stale.length){
+      const _specNorm=specText.replace(/\s+/g,'');
+      const _secRe=/【\s*([^】]+?)\s*】/g; const _secs=[]; let _sm;
+      while((_sm=_secRe.exec(specText))!==null)_secs.push({name:_sm[1].replace(/\s+/g,' ').trim(),pos:_sm.index});
+      const _seen=new Set();
+      _stale.forEach(term=>{
+        if(!term||term.length<5||_seen.has(term))return;
+        if(_specNorm.indexOf(term)<0)return; _seen.add(term);
+        // 원문(공백 유연) 위치로 섹션 귀속
+        const _flex=term.split('').map(ch=>ch.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s*');
+        let _sec='(본문)'; try{ const _mm=specText.match(new RegExp(_flex)); if(_mm){ const _p=_mm.index; for(let i=_secs.length-1;i>=0;i--){ if(_secs[i].pos<=_p){ _sec=_secs[i].name; break; } } } }catch(_e){}
+        iss.push({severity:'HIGH',check:'term_generation_mismatch',message:`구세대 용어 "${term}"이 완성본에 잔존(섹션: ${_sec}) — 해당 스텝 재생성 필요`,detail:'명칭 확정 후 재생성되지 않은 구세대 산출물 혼입 의심(§42④ 명확성 위험) — 자동 치환 금지, 스텝 재생성 권장'});
+      });
+    }
+  }catch(_e){}
+
   return iss;
 }
 
 // ═══ [기계검증↔Step13 통합] ═══
-// 완성-조립 시점에만 판정 가능한 검사(표제 완전성/순서, 부호의 설명 대조)는 Step 13(상세설명 단계)에서 볼 수 없다.
-//   → Step13 주입·자동수정 대상에서 제외하고, 이들은 완성본 패널의 'AI로 수정'(부호설명 재생성 등)이 담당한다.
-const _FINAL_ONLY_CHECKS = new Set(['heading_missing','heading_order','refnum_consistency']);
+// 완성-조립 시점에만 판정 가능한 검사(표제 완전성/순서, 부호의 설명 대조, 용어 세대 불일치)는 Step 13(상세설명 단계)에서
+//   볼 수 없거나 전 스텝 스캔이 필요하다.
+//   → Step13 주입·자동수정 대상에서 제외하고, 완성본 패널이 담당한다(CHK-13은 '자동 치환 금지 — 스텝 재생성 유도').
+const _FINAL_ONLY_CHECKS = new Set(['heading_missing','heading_order','refnum_consistency','term_generation_mismatch']);
 // 완성본 패널에서 'AI로 수정'으로 자동 보정 가능한 검사(표제 누락/순서는 스텝 재실행 사안이라 제외).
 const FIXABLE_CHECKS = new Set(['paragraph_duplicate','sentence_duplicate','sentence_truncation','sentence_ending','unit_corruption','math_var_undefined','example_missing','refnum_consistency']);
 
