@@ -153,6 +153,19 @@ function validateSpecification(specText){
   const norm=_stripMathNorm;   // ★ [cleanup D2] 공유 헬퍼(06) — stripMathBlocks(수학식 제거)+공백 전제거. 3중복(03·05·08) 통일
   const bodyNoMath=stripMathBlocks(specText);   // 수학식 블록 제거 — 수식 내 그리스문자·파편의 CHK-2/3/7 오탐 방지
 
+  // ── CHK-0 [배치6 N1a]: 플레이스홀더/프로토콜 토큰 잔존 (CRITICAL) ──
+  //   ★ 통합 cohesion 출력계약의 센티넬 마커(<<<DEVICE_DESC>>> 등)를 LLM이 본문 중간에 에코하면(docC 실증)
+  //     완성본에 구조 토큰이 유출된다. 마커·{{템플릿}}·END_ 계열은 정당한 명세서 본문일 수 없다 → CRITICAL.
+  //   CRITICAL이므로 다운로드 게이트(§6-2)의 확인·차단 대상에 자동 포함. 수학식 블록 제외 소스(중괄호 수식 엣지 회피).
+  {
+    const _phFound=[...new Set([
+      ...(bodyNoMath.match(/<<<[A-Z_]+>>>/g)||[]),
+      ...(bodyNoMath.match(/\{\{[^}\n]{0,60}\}\}/g)||[]),
+      ...(bodyNoMath.match(/\bEND_[A-Z_]{2,}\b/g)||[])
+    ])];
+    if(_phFound.length)iss.push({severity:'CRITICAL',check:'placeholder_residue',message:`플레이스홀더/마커 토큰 ${_phFound.length}종 잔존 — 생성 프로토콜 문자열이 본문에 유출`,detail:`잔존: ${_phFound.slice(0,3).join(' , ')}${_phFound.length>3?' 외':''} — 해당 문장에서 토큰 제거 필요(통합생성 재실행 권장)`});
+  }
+
   // ── CHK-1: 표제 완전성·순서 ── (【청구항 N】·【수학식 N】은 섹션표제 아님 → 캐논 표제만 대상)
   const seenOrder=[]; let hm; const headerRe=/【\s*([^】]+?)\s*】/g;
   while((hm=headerRe.exec(specText))!==null){ const h=hm[1].replace(/\s+/g,' ').trim(); if(SPEC_SECTION_ORDER.includes(h))seenOrder.push(h); }

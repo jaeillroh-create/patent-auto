@@ -1637,7 +1637,11 @@ ${diagram}`,4096);
 // 센티넬 3블록(REFTABLE/DEVICE_DESC/METHOD_DESC) 파싱 + 결정론 커밋 게이트.
 function parseCohesiveBundle(raw){
   const norm=String(raw||'').replace(/\r\n/g,'\n');
-  const grab=function(name){ const m=norm.match(new RegExp('^[ \\t]*<<<'+name+'>>>[ \\t]*$([\\s\\S]*?)^[ \\t]*<<<END_'+name+'>>>[ \\t]*$','m')); return m?m[1].trim():null; };   // 마커 줄 선/후행 공백 허용(LLM 흔한 삽입 tolerance)
+  // ★ [배치6 N1b] 파서 위생 — 추출된 내용 내부에 LLM이 에코한 센티넬 마커(<<<DEVICE_DESC>>> 등)를 결정론적으로 제거.
+  //   마커는 구조(프로토콜) 토큰이라 정당한 본문일 수 없음 → 안전한 제거(내용 치환이 아니라 토큰 제거 — 자동치환 금지 원칙과 상충 없음).
+  //   ⚠ 완전형 <<<[A-Z_]+>>> 만 제거 — 맨 END_ 토큰(END_TO_END 류 정당 영문 가능성)은 제거하지 않고 CHK-0(placeholder_residue)이 리포트.
+  const _stripMk=function(s){ if(s==null)return null; return s.replace(/[ \t]*<<<[A-Z_]+>>>[ \t]*/g,' ').replace(/ {2,}/g,' ').replace(/[ \t]+$/gm,'').replace(/\n{3,}/g,'\n\n').trim(); };
+  const grab=function(name){ const m=norm.match(new RegExp('^[ \\t]*<<<'+name+'>>>[ \\t]*$([\\s\\S]*?)^[ \\t]*<<<END_'+name+'>>>[ \\t]*$','m')); return m?_stripMk(m[1].trim()):null; };   // 마커 줄 선/후행 공백 허용(LLM 흔한 삽입 tolerance)
   const refBlock=grab('REFTABLE'), device=grab('DEVICE_DESC'), method=grab('METHOD_DESC');
   const refMap=new Map(); const dupNums=[];
   (refBlock||'').split('\n').forEach(function(line){ const t=line.trim(); if(!t)return;
@@ -1723,7 +1727,10 @@ async function runUnifiedFullChain(){
   if(!selectedTitleType){App.showToast('먼저 발명 유형을 선택하세요 (Step 1의 유형 선택)','error');return;}
   if(typeof currentProjectId!=='undefined'&&!currentProjectId){App.showToast('프로젝트를 먼저 저장하세요','error');return;}
   const wantMethod=!!includeMethodClaims;
-  const TOTAL=4;
+  // ★ [배치6 N3b] 수학식 토글 — on 시 [4/4] 완료 후 "기존 step_09 경로"(검증된 앵커/삽입 파이프라인)를 호출한다.
+  //   ⛔ 통합 프롬프트 내 수식 동시 생성 금지(C9 유지) — 새 삽입 경로를 만들지 않는다(마커 표면 증가·검증 파이프라인 우회 방지, N1 사고 클래스 재발 차단).
+  const wantMath=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
+  const TOTAL=wantMath?5:4;
   _unifiedChainRunning=true;
   const btn=(typeof document!=='undefined')?document.getElementById('btnUnifiedFullChain'):null; if(btn)btn.disabled=true;
   const P=function(msg,cur){App.showProgress('progressUnifiedFullChain',msg,cur,TOTAL);};
@@ -1753,6 +1760,12 @@ async function runUnifiedFullChain(){
     const _beforeDesc=outputs.step_08||'';
     await runUnifiedCohesionGen({chained:true});
     if((outputs.step_08||'')===_beforeDesc){ App.clearProgress('progressUnifiedFullChain'); App.showToast('상세설명·부호 통합 단계가 게이트 미통과/실패 — 청구항·도면까지는 생성됨. 산출물(F) 탭에서 재시도하세요','warning'); return; }
+    // ── [5/5] 수학식(토글 on 시) — 기존 Step 9 파이프라인 재사용 ──
+    if(wantMath){
+      P('[5/5] 수학식 생성(Step 9 파이프라인)...',4);
+      try{ await runStep('step_09'); }catch(_e){ console.error('[unifiedChain] step_09',_e); }
+      if(!outputs.step_09)App.showToast('수학식 생성 실패 — 상세설명까지는 보존됨. C2. 수학식에서 재시도하세요','warning');
+    }
     // 완료
     App.showProgress('progressUnifiedFullChain','완료',TOTAL,TOTAL);
     if(typeof saveProject==='function')saveProject(true);

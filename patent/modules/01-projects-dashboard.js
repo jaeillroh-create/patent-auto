@@ -250,6 +250,7 @@ async function openProject(pid){
   projectRefStyleText=s.projectRefStyleText||'';requiredFigures=s.requiredFigures||[];
   // Restore detail level
   detailLevel=s.detailLevel||'standard';customDetailChars=s.customDetailChars||2000;
+  { const _ud=document.getElementById('selUnifiedDetail'); if(_ud&&['compact','standard','detailed','maximal'].includes(detailLevel))_ud.value=detailLevel; }   // [배치6 N3a] 통합 카드 분량 표시 동기화
   diagramData=s.diagramData||{};
   outputTimestamps=s.outputTimestamps||{};
   stepUserCommands=s.stepUserCommands||{};

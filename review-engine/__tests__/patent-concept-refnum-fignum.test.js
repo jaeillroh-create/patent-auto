@@ -168,6 +168,6 @@ test('소스 ★ _conceptSvgForDisplay 가 카드·다운로드 경로에 배선
   assert.ok(!/_conceptSvgApplyTitle\(ct\.svgContent, figNum\)/.test(PATENT_SRC), '★ 직접 _conceptSvgApplyTitle(ct.svgContent) 호출 제거(통합 헬퍼 경유)');
 });
 
-test('회귀 ★ ?v= patent.js 20260721-b29', () => {
-  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260721-b29/, '★ ?v= 갱신');
+test('회귀 ★ ?v= patent.js 20260721-b30', () => {
+  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260721-b30/, '★ ?v= 갱신');
 });
