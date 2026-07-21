@@ -115,8 +115,10 @@ test('★ N3a — index.html 토글(기본 off)·분량 프리셋 노출 + 복�
   assert.match(HTML_SRC, /id="selUnifiedDetail" onchange="detailLevel=this\.value"/, '★ 분량 프리셋 select(전역 연동)');
   assert.match(PATENT_SRC, /\[배치6 N3a\] 통합 카드 분량 표시 동기화/, '★ openProject 복원 시 select 동기화');
 });
-test('★ N3b 소스 — 토글 on 시에만 기존 step_09 파이프라인 호출(새 삽입 경로 없음)', () => {
-  assert.match(PATENT_SRC, /const wantMath=!!\(typeof document!=='undefined'&&document\.getElementById\('chkUnifiedMath'\)\?\.checked\)/, '★ 토글 읽기');
-  assert.match(PATENT_SRC, /const TOTAL=wantMath\?5:4;/, '★ 진행 단계 5/4 분기');
-  assert.match(PATENT_SRC, /if\(wantMath\)\{\s*\n?\s*P\('\[5\/5\] 수학식 생성\(Step 9 파이프라인\)\.\.\.',4\);\s*\n?\s*try\{ await runStep\('step_09'\); \}/, '★ 가드된 runStep(step_09) — off면 미호출');
+test('★ N3b→배치9 D1 — 토글 의미 전환: [5/5] 자동 실행 배선 제거, 인라인 파라미터로만 소비', () => {
+  assert.ok(!/const TOTAL=wantMath\?5:4;/.test(PATENT_SRC), '★ [5/5] 분기 제거(배치9 D1)');
+  assert.ok(!/\[5\/5\] 수학식 생성\(Step 9 파이프라인\)/.test(PATENT_SRC), '★ 체인 내 step_09 자동 호출 제거');
+  assert.match(PATENT_SRC, /수학식 토글 의미 전환 — \[5\/5\] Step 9 자동 실행 배선 제거/, '★ 전환 주석(체인)');
+  assert.match(PATENT_SRC, /const _mathOn=!!\(typeof document!=='undefined'&&document\.getElementById\('chkUnifiedMath'\)\?\.checked\)/, '★ 프롬프트가 토글을 인라인 파라미터로 소비');
+  assert.match(PATENT_SRC, /case 'step_09':return buildMathPrompt/, '★ Step 9 수동 경로(고급) 존치');
 });

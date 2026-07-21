@@ -1644,6 +1644,9 @@ function parseCohesiveBundle(raw){
   const _stripMk=function(s){ if(s==null)return null; return s.replace(/[ \t]*<<<[A-Z_]+>>>[ \t]*/g,' ').replace(/ {2,}/g,' ').replace(/[ \t]+$/gm,'').replace(/\n{3,}/g,'\n\n').trim(); };
   const grab=function(name){ const m=norm.match(new RegExp('^[ \\t]*<<<'+name+'>>>[ \\t]*$([\\s\\S]*?)^[ \\t]*<<<END_'+name+'>>>[ \\t]*$','m')); return m?_stripMk(m[1].trim()):null; };   // 마커 줄 선/후행 공백 허용(LLM 흔한 삽입 tolerance)
   const refBlock=grab('REFTABLE'), device=grab('DEVICE_DESC'), method=grab('METHOD_DESC');
+  // ★ [배치9 D3] 마무리 흡수 — 효과·해결수단·요약을 동일 컨텍스트에서 수확(선택 블록 — 없으면 null, 게이트 무관).
+  //   신규 마커도 grab→_stripMk 동일 위생 경로 통과(에코 마커 제거) + CHK-0(placeholder_residue) 안전망 적용.
+  const solution=grab('SOLUTION'), effects=grab('EFFECTS'), abstractTxt=grab('ABSTRACT');
   const refMap=new Map(); const dupNums=[];
   (refBlock||'').split('\n').forEach(function(line){ const t=line.trim(); if(!t)return;
     if(/^\[장치부호\]/.test(t)||/^\[방법단계\]/.test(t))return;
@@ -1662,7 +1665,7 @@ function parseCohesiveBundle(raw){
   // ★ methodOk: "하는 단계" 단일 리터럴 강제 완화 — 단계/과정/스텝 어휘군 또는 S### 단계식별자 중 하나면 방법 극성 인정.
   const methodOk=method?(/하는\s*(?:단계|과정|스텝)/.test(method)||/\bS\d{1,4}\b/.test(method)):true;
   let dupCount=0; try{ if(typeof _dedupParagraphs==='function')dupCount=_dedupParagraphs((device||'')+'\n\n'+(method||'')).removed; }catch(_e){}
-  return { device:device, method:method, refMap:refMap,
+  return { device:device, method:method, refMap:refMap, solution:solution, effects:effects, abstract:abstractTxt,
     ok:{ hasRef:!!refBlock&&refMap.size>0, hasDevice:!!device, hasMethod:method!=null },
     report:{ notInTable:notInTable, unusedRef:unusedRef, dupNums:dupNums, deviceLeak:deviceLeak, methodOk:methodOk, dupCount:dupCount } };
 }
@@ -1678,6 +1681,8 @@ async function runUnifiedCohesionGen(opts){
   if(!outputs.step_06){App.showToast('먼저 장치 청구항(A2)을 생성하세요','error');return;}
   if(!outputs.step_07){App.showToast('먼저 장치 도면(B1)을 생성하세요 — 도면부호 정합의 기준입니다','error');return;}
   const before=_specIssueCounts(); const hadMath=!!outputs.step_09;   // ★ 수학식(step_09) 존재 시 커밋 후 재삽입 필요 경고
+  // ★ [배치9 D1] 수학식 인라인 모드 — 토글 on이면 프롬프트가 본문에 【수학식】을 직접 포함(C9 전환).
+  const _mathInline=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
   setGlobalProcessing(true); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',true);
   App.showProgress('progressUnifiedGen','통합 생성 중(단일 컨텍스트)... 긴 출력은 자동 이어쓰기됩니다',0,1);
   try{
@@ -1699,6 +1704,13 @@ async function runUnifiedCohesionGen(opts){
     outputs.step_08=dev; outputs.step08_device=dev; markOutputTimestamp('step_08');
     if(r.method&&outputs.step_10){ let m=r.method; try{if(typeof sanitizeDescFigureRefs==='function')m=sanitizeDescFigureRefs(m,'method');}catch(_e){} outputs.step_12=m; markOutputTimestamp('step_12'); }
     outputs.step_18=_deriveSignDescription(r.refMap); markOutputTimestamp('step_18');   // 완성 본문 기준 결정적 직렬화(refMap 명칭 우선)
+    // ★ [배치9 D3] 마무리 흡수 커밋 — 동일 컨텍스트 산출(효과·해결수단·요약)이 있으면 원자 커밋(없으면 기존 유지·비파괴)
+    if(r.solution){ pushOutputHistory('step_17','unified','runUnifiedCohesionGen'); outputs.step_17=r.solution; markOutputTimestamp('step_17'); }
+    if(r.effects){ pushOutputHistory('step_16','unified','runUnifiedCohesionGen'); outputs.step_16=r.effects; markOutputTimestamp('step_16'); }
+    if(r.abstract){ pushOutputHistory('step_19','unified','runUnifiedCohesionGen'); outputs.step_19=r.abstract; markOutputTimestamp('step_19'); }
+    // ★ [배치9 D1] 인라인 수식 모드 — 구 step_09(수식 병합 구본)는 getLatestDescription 우선순위상 새 본문을 가리는
+    //   섀도잉 소스이므로 이력 보존 후 제거(인라인 수식이 본문에 이미 포함됨).
+    if(_mathInline&&outputs.step_09){ pushOutputHistory('step_09','unified','runUnifiedCohesionGen'); delete outputs.step_09; try{delete outputTimestamps.step_09;}catch(_e){} }
     try{if(typeof _mergeConceptIntoStep08==='function')_mergeConceptIntoStep08();}catch(_e){}   // 예시도(step_08c) 합본(있을 때만)
     try{if(typeof reflectConceptsToSpec==='function')reflectConceptsToSpec();}catch(_e){}       // 예시도 부호 step_18 반영(있을 때만)
     try{if(typeof invalidateDownstream==='function')invalidateDownstream('step_08');}catch(_e){}
@@ -1711,7 +1723,7 @@ async function runUnifiedCohesionGen(opts){
     const after=_specIssueCounts();
     const soft=rep.unusedRef.length?(' · 도면 미사용 부호 '+rep.unusedRef.length+'개 자동 제외'):'';
     App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft,'success');
-    if(hadMath)App.showToast('⚠️ 기존 수학식(Step 9)은 새 상세설명에 재삽입이 필요합니다 — 미리보기·다운로드에 수학식이 빠져 있습니다','warning');
+    if(hadMath&&!_mathInline)App.showToast('⚠️ 기존 수학식(Step 9)은 새 상세설명에 재삽입이 필요합니다 — 미리보기·다운로드에 수학식이 빠져 있습니다','warning');   // [배치9 D1] 인라인 모드에선 구 step_09를 이력 보존 후 제거했으므로 미해당
   }catch(e){ App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); }
   finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); }
 }
@@ -1749,10 +1761,9 @@ async function runUnifiedFullChain(){
     else App.showToast('이어하기 — 일부 단계를 재사용합니다. 세대 혼합 가능성이 있으니 완성 후 완성본 검증 패널을 확인하세요','info');
   }
   const wantMethod=!!includeMethodClaims;
-  // ★ [배치6 N3b] 수학식 토글 — on 시 [4/4] 완료 후 "기존 step_09 경로"(검증된 앵커/삽입 파이프라인)를 호출한다.
-  //   ⛔ 통합 프롬프트 내 수식 동시 생성 금지(C9 유지) — 새 삽입 경로를 만들지 않는다(마커 표면 증가·검증 파이프라인 우회 방지, N1 사고 클래스 재발 차단).
-  const wantMath=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
-  const TOTAL=wantMath?5:4;
+  // ★ [배치9 D1] 수학식 토글 의미 전환 — [5/5] Step 9 자동 실행 배선 제거. 토글은 cohesion 프롬프트의 인라인
+  //   파라미터(C9 전환)로만 소비된다([4/4] 안에서 수식 포함 생성). Step 9 수동 경로는 고급 모드에 존치.
+  const TOTAL=4;
   _unifiedChainRunning=true;
   const btn=(typeof document!=='undefined')?document.getElementById('btnUnifiedFullChain'):null; if(btn)btn.disabled=true;
   const P=function(msg,cur){App.showProgress('progressUnifiedFullChain',msg,cur,TOTAL);};
@@ -1782,12 +1793,7 @@ async function runUnifiedFullChain(){
     const _beforeDesc=outputs.step_08||'';
     await runUnifiedCohesionGen({chained:true});
     if((outputs.step_08||'')===_beforeDesc){ App.clearProgress('progressUnifiedFullChain'); App.showToast('상세설명·부호 통합 단계가 게이트 미통과/실패 — 청구항·도면까지는 생성됨. 산출물(F) 탭에서 재시도하세요','warning'); return; }
-    // ── [5/5] 수학식(토글 on 시) — 기존 Step 9 파이프라인 재사용 ──
-    if(wantMath){
-      P('[5/5] 수학식 생성(Step 9 파이프라인)...',4);
-      try{ await runStep('step_09'); }catch(_e){ console.error('[unifiedChain] step_09',_e); }
-      if(!outputs.step_09)App.showToast('수학식 생성 실패 — 상세설명까지는 보존됨. C2. 수학식에서 재시도하세요','warning');
-    }
+    // ([배치9 D1] 수학식은 토글 on 시 [4/4] cohesion 안에서 인라인 생성됨 — 별도 [5/5] 없음)
     // 완료
     App.showProgress('progressUnifiedFullChain','완료',TOTAL,TOTAL);
     if(typeof saveProject==='function')saveProject(true);
