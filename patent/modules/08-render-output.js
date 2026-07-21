@@ -262,23 +262,54 @@ function validateSpecification(specText){
     if(_missing.length)iss.push({severity:'MEDIUM',check:'example_missing',message:`상세설명에 예시/실시예 없는 구성요소 문단 ${_missing.length}개 — 예시 보충 권장(리포트)`,detail:`예: "${_missing[0].slice(0,40)}…"`});
   }
 
-  // ── CHK-10 [§6-3b·§2.1]: 부호 이중 배정 — 동일 번호↔상이 명칭 / 동일 명칭↔상이 번호 ──
-  //   ★ [§2.1] (num) 직전 "무공백" 구성명사 run만 추출 → 선행 절 통째 캡처 방지("제어에 따라 통신부(110)"→"통신부").
-  //   접미 동일 취급(한쪽이 다른쪽의 접미면 같은 구성: 품질계약검증및자가보완부 ⊃ 자가보완부). 명칭 비교는 최단 접미형으로 귀속.
+  // ── CHK-10 [§6-3b·§2.2]: 부호 이중 배정 — 부호의 설명 canonical(부호→전체명칭)을 기준축으로 ──
+  //   ★ [§2.2] generic 접미(저장부 등) 충돌 제거: 비교 키를 "절단 토큰"이 아니라 "정규화 전체명칭"으로 바꾼다.
+  //     (b) 동일부호·상이명칭: body 토큰 T가 canonical[N]과 접미관계면 동일, 아니면(구성접미사로 끝남) 이중배정.
+  //         canonical 없는 부호는 body 내부끼리 접미클러스터링(폴백, ≥2 클러스터일 때만 발화).
+  //     (c) 동일명칭·상이부호: "전체명칭 완전일치 OR (접미일치 && 공통접미 길이 ≥5자)"면 동일 명칭으로 묶어 부호집합 비교
+  //         (→ "자가보완부"(5자)의 상이부호는 발화 / "저장부"(3자)만 공유하는 상이 구성은 미발화).
+  //     (d) b·c 동일 결함 이중보고 dedupe(명칭×부호 원자 기준).
   {
     const _bodyRN=refSecM?specText.replace(refSecM[1],' '):specText;
-    const _rnRe=/([가-힣A-Za-z·]+(?:부|서버|단말|모듈|장치|시스템|데이터베이스|수단|엔진|유닛|저장소|메모리|매핑|레지스트리))\s*\((\d{2,4})\)/g;
+    const _sufAlt='부|서버|단말|모듈|장치|시스템|데이터베이스|수단|엔진|유닛|저장소|메모리|매핑|레지스트리';
+    const _sufEnd=new RegExp('(?:'+_sufAlt+')$');
+    // canonical: 부호의 설명 "명칭 : 번호"(또는 "번호 : 명칭") → 부호→정규화 전체명칭
+    const _canonMap=new Map();
+    if(refSecM){ refSecM[1].split(/\n/).forEach(line=>{
+      const _lm=line.trim().match(/^(.+?)\s*[:：]\s*(.+)$/); if(!_lm)return;
+      let a=_lm[1].trim(), b=_lm[2].trim(), num, name;
+      if(/^\d{1,4}$/.test(b)){num=b;name=a;} else if(/^\d{1,4}$/.test(a)){num=a;name=b;} else return;
+      name=name.replace(/\s+/g,'').replace(/^상기/,'').replace(/[.,;()]+$/,'');
+      if(_sufEnd.test(name))_canonMap.set(num,name);
+    }); }
+    // body pairs: 무공백 구성명사 run ↔ (부호)
+    const _rnRe=new RegExp('([가-힣A-Za-z·]+(?:'+_sufAlt+'))\\s*\\((\\d{2,4})\\)','g');
     const _pairs=[]; let _rm2;
     while((_rm2=_rnRe.exec(_bodyRN))!==null){ const nm=_rm2[1].replace(/^상기/,''); if(nm.length>=3)_pairs.push({name:nm,ref:_rm2[2]}); }
-    const _same=(a,b)=>a===b||a.endsWith(b)||b.endsWith(a);
-    // (1) 동일 부호↔상이 명칭 — 접미 동일은 같은 구성으로 1개 취급
-    const _byRef=new Map(); _pairs.forEach(p=>{ if(!_byRef.has(p.ref))_byRef.set(p.ref,[]); const arr=_byRef.get(p.ref); if(!arr.some(x=>_same(x,p.name)))arr.push(p.name); });
-    _byRef.forEach((names,ref)=>{ if(names.length>=2)iss.push({severity:'HIGH',check:'refnum_dupassign',message:`부호 (${ref})에 서로 다른 구성요소 명칭 ${names.length}개 배정`,detail:names.slice(0,3).join(' / ')}); });
-    // (2) 동일 명칭↔상이 부호 — 최단 접미형으로 정규화 후 부호 집합
-    const _all=[...new Set(_pairs.map(p=>p.name))];
-    const _canon=n=>{ let rep=n; _all.forEach(m=>{ if(m!==n&&n.endsWith(m)&&m.length<rep.length)rep=m; }); return rep; };
-    const _byName=new Map(); _pairs.forEach(p=>{ const c=_canon(p.name); if(!_byName.has(c))_byName.set(c,new Set()); _byName.get(c).add(p.ref); });
-    _byName.forEach((refs,c)=>{ if(refs.size>=2)iss.push({severity:'HIGH',check:'refnum_dupassign',message:`동일 명칭 "${c}"에 부호 ${refs.size}개 배정`,detail:[...refs].sort((a,b)=>a-b).join(', ')}); });
+    const _sufRel=(x,y)=>x===y||x.endsWith(y)||y.endsWith(x);                                     // (b) 접미관계(길이 무관)
+    const _nameSame=(x,y)=>{ if(x===y)return true; const s=x.length<=y.length?x:y, l=x.length<=y.length?y:x; return l.endsWith(s)&&s.length>=5; };   // (c) 전체명칭 동일
+    const _atoms=new Set();   // (d) dedupe 원자: "명칭|부호"
+    // (b) 동일부호·상이명칭
+    const _byRef=new Map(); _pairs.forEach(p=>{ if(!_byRef.has(p.ref))_byRef.set(p.ref,new Set()); _byRef.get(p.ref).add(p.name); });
+    _byRef.forEach((set,ref)=>{
+      const C=_canonMap.get(ref);
+      const cand=C?[...set].filter(t=>!_sufRel(t,C)):[...set];          // canonical과 접미관계 아닌 것(없으면 body 전체)
+      const cl=[]; cand.forEach(t=>{ if(!cl.some(c=>_sufRel(c,t)))cl.push(t); });   // 상호 접미동일은 1개 클러스터로 축약
+      const fire=C?cl.length>=1:cl.length>=2;                           // canonical 있으면 정의 불일치 1개도 발화, 없으면 내부 상충 ≥2
+      if(fire){ cl.forEach(t=>_atoms.add(t+'|'+ref));
+        iss.push({severity:'HIGH',check:'refnum_dupassign',
+          message:C?`부호 (${ref})에 부호의 설명 정의("${C}")와 다른 구성요소 명칭 배정`:`부호 (${ref})에 서로 다른 구성요소 명칭 ${cl.length}개 배정`,
+          detail:cl.slice(0,3).join(' / ')}); }
+    });
+    // (c) 동일명칭·상이부호 — 전체명칭 그룹핑(≥5 접미 병합)
+    const _names=[...new Set(_pairs.map(p=>p.name))];
+    const _groups=[]; _names.forEach(n=>{ let g=_groups.find(gr=>_nameSame(gr.rep,n)); if(!g){g={rep:n,mem:new Set(),refs:new Set()};_groups.push(g);} g.mem.add(n); });
+    _pairs.forEach(p=>{ const g=_groups.find(gr=>gr.mem.has(p.name)); if(g)g.refs.add(p.ref); });
+    _groups.forEach(g=>{ if(g.refs.size<2)return;
+      const _rs=[...g.refs];
+      if([...g.mem].every(m=>_rs.every(r=>_atoms.has(m+'|'+r))))return;   // (d) b에서 전부 보고된 원자면 생략
+      iss.push({severity:'HIGH',check:'refnum_dupassign',message:`동일 명칭 "${g.rep}"에 부호 ${_rs.length}개 배정`,detail:_rs.sort((a,b)=>a-b).join(', ')});
+    });
   }
 
   // ── CHK-11 [§6-3a]: 수학식 참조 정합 — "다음의/상기 수학식 N"의 존재·방향 ──
@@ -302,9 +333,13 @@ function validateSpecification(specText){
     if(_clM&&_imM){
       const _compSuf=/(부|수단|모듈|엔진)$/; const _comp=new Set();
       // ★ [§2.1] 무공백 구성명사 head 토큰만(수식어 절 배제, 무공백 run이라 앞 절이 안 붙음) + '로부터'의 '부' 절단 방지((?!터)).
+      //   ★ [§2.2] 지시관형사(상기) 접두 제거 후 청구항 구성요소 토큰 확정. 청구범위 전체(독립·종속항) 캡처하므로
+      //     종속항의 "…하는 X부" 구성요소도 추출 대상이다.
       const _cnRe=/([가-힣]{2,15}?(?:부|수단|모듈|엔진))(?!터)/g; let _cn;
-      while((_cn=_cnRe.exec(_clM[1]))!==null){ const nn=_cn[1]; if(nn.length>=3&&_compSuf.test(nn))_comp.add(nn); }
+      while((_cn=_cnRe.exec(_clM[1]))!==null){ const nn=_cn[1].replace(/^상기/,''); if(nn.length>=3&&_compSuf.test(nn))_comp.add(nn); }
       const _imNorm=_imM[1].replace(/\s+/g,'');
+      // ★ [§2.2] 뒷받침 판정은 "정규화 부분문자열 그대로 존재"만 인정(접미관계 금지) — 청구항 토큰 "재정렬부"가
+      //   상세설명에 그대로 있어야 present. "정렬부"⊂"재정렬부"로 존재 처리하지 않는다(정확 부분문자열 검사).
       const _miss=[..._comp].filter(n=>!_imNorm.includes(n));
       if(_miss.length)iss.push({severity:'MEDIUM',check:'claim_support_missing',message:`청구항 구성요소 ${_miss.length}개가 상세설명에 동일 문언 부재(뒷받침 확인 필요)`,detail:_miss.slice(0,5).join(', ')});
     }

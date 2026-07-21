@@ -147,6 +147,44 @@ test('★ §6-3c 회귀 — 청구항 구성요소가 상세설명에 모두 존
   assert.equal(checks(spec, 'claim_support_missing').length, 0, '★ 전부 뒷받침 → 오탐 없음');
 });
 
+// ═══════════ 배치 2.2 — 부호의 설명 canonical 기준축 + claim_support 문언 검사 ═══════════
+// ★ 실증 코퍼스 구조를 모사한 합성 픽스처(문서A=2 / 문서B=1 / 26P1036=0). 실제 코퍼스 카운트는 사용자 확인 필요.
+
+// 문서A 구조: 부호 125 canonical=자가보완부인데 body가 재정렬부(125) 배정(b) + 자가보완부가 125·127 이중부호(c) = 2건
+test('★ §2.2 문서A 모사 — dupassign 정확히 2(재정렬부/125 불일치 + 자가보완부 125·127)', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n통신부(110)는 통신하고, 무선통신부(110)는 무선으로 통신한다. 자가보완부(125)는 보완하고, 재정렬부(125)는 순서를 재정렬한다. 자가보완부(127)는 추가로 보완한다. 데이터저장부(130)는 저장하고, 임시저장부(140)는 임시로 저장한다.\n\n【부호의 설명】\n통신부 : 110\n자가보완부 : 125\n자가보완부 : 127\n데이터저장부 : 130\n임시저장부 : 140';
+  const iss = checks(spec, 'refnum_dupassign');
+  assert.equal(iss.length, 2, '★ [b] 125 불일치 + [c] 자가보완부 이중부호 = 2');
+  assert.ok(iss.some(i => /125/.test(i.message) && /자가보완부/.test(i.message)), '★ [b] 정의(자가보완부) 불일치');
+  assert.ok(iss.some(i => /동일 명칭 "자가보완부"/.test(i.message)), '★ [c] 자가보완부 125·127');
+});
+
+// 문서B 구조: 부호 125 canonical=자가보완부인데 body가 품질검증부(125) 배정(b)만 = 1건
+test('★ §2.2 문서B 모사 — dupassign 정확히 1(품질검증부/125 불일치만)', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n통신부(110)는 통신한다. 자가보완부(125)는 보완하고, 품질검증부(125)는 품질을 검증한다. 데이터저장부(130)는 저장하고, 임시저장부(140)는 임시로 저장한다.\n\n【부호의 설명】\n통신부 : 110\n자가보완부 : 125\n데이터저장부 : 130\n임시저장부 : 140';
+  const iss = checks(spec, 'refnum_dupassign');
+  assert.equal(iss.length, 1, '★ [b] 품질검증부/125 1건만');
+  assert.ok(/품질검증부|자가보완부/.test(iss[0].message + iss[0].detail), '★ 125 불일치 보고');
+});
+
+// generic 접미(저장부 3자) 충돌 제거: 데이터저장부/임시저장부는 상이 구성 → 미발화. 26P1036(클린) = 0
+test('★ §2.2 26P1036 모사 — generic 접미(저장부·통신부) 상이 구성은 오탐 0', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n통신부(110)는 통신하고, 무선통신부(110)는 무선으로 통신한다. 제어부(120)는 제어한다. 데이터저장부(130)는 저장하고, 임시저장부(140)는 임시로 저장한다.\n\n【부호의 설명】\n통신부 : 110\n제어부 : 120\n데이터저장부 : 130\n임시저장부 : 140';
+  assert.equal(checks(spec, 'refnum_dupassign').length, 0, '★ 데이터저장부≠임시저장부(공통접미 3자<5) → 미병합, 오탐 없음');
+});
+
+// canonical과 접미관계인 상세명(무선통신부⊂통신부)은 동일 구성 → [b] 미발화
+test('★ §2.2 canonical 접미관계 — "무선통신부(110)" vs 정의 "통신부"는 동일 구성(오탐 0)', () => {
+  const spec = '【발명을 실시하기 위한 구체적인 내용】\n무선통신부(110)는 무선 통신한다.\n\n【부호의 설명】\n통신부 : 110';
+  assert.equal(checks(spec, 'refnum_dupassign').length, 0, '★ 무선통신부 endsWith 통신부 → canonical 접미관계, 오탐 없음');
+});
+
+// claim_support: 재정렬부가 종속항(제2항)에만 등장 + 상세설명 부재 → 검출(종속항 추출 확인)
+test('★ §2.2 claim_support 종속항 — 종속항의 "…하는 재정렬부"도 추출·뒷받침 검사', () => {
+  const spec = '【청구범위】\n【청구항 1】 제어부와 통신부를 포함하는 서버.\n【청구항 2】 제1항에 있어서, 데이터를 재정렬하는 재정렬부를 더 포함하는 서버.\n\n【발명을 실시하기 위한 구체적인 내용】\n제어부(100)는 처리하고 통신부(110)는 통신한다.';
+  assert.ok(checks(spec, 'claim_support_missing').some(i => /재정렬부/.test(i.detail)), '★ 종속항 재정렬부 뒷받침 부재 검출');
+});
+
 // ─────────── 소스 배선 ───────────
 
 test('★ 소스 — CHK-8 그룹정의 인정 + CHK-6 도면설명 제외', () => {
@@ -160,6 +198,9 @@ test('★ 소스 — 배치2 신규검사 3종 + §6-7 파일명 스탬프', () 
   assert.match(PATENT_SRC, /check:'refnum_dupassign'/, '★ CHK-10 부호 이중배정');
   assert.match(PATENT_SRC, /check:'math_ref_mismatch'/, '★ CHK-11 수식 참조 정합');
   assert.match(PATENT_SRC, /check:'claim_support_missing'/, '★ CHK-12 청구항 뒷받침');
+  assert.match(PATENT_SRC, /부호의 설명 canonical\(부호→전체명칭\)을 기준축으로/, '★ §2.2 CHK-10 canonical 기준축');
+  assert.match(PATENT_SRC, /const _canonMap=new Map\(\)/, '★ §2.2 canonical 맵');
+  assert.match(PATENT_SRC, /뒷받침 판정은 "정규화 부분문자열 그대로 존재"만 인정/, '★ §2.2 claim_support 문언 검사');
   assert.match(PATENT_SRC, /function _specStamp\(\)/, '★ §6-7 파일명 스탬프(생성시각+지문)');
   assert.match(PATENT_SRC, /_specStamp\(\)\}\.txt/, '★ txt 파일명에 스탬프');
   assert.match(PATENT_SRC, /_specStamp\(\)\}\.doc/, '★ doc 파일명에 스탬프');
