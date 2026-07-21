@@ -364,6 +364,7 @@ function validateSpecification(specText){
   // ── CHK-13 [§6-1]: 용어 세대 불일치 — staleTerms(구세대 명칭 diff청크)가 완성본에 잔존 ──
   //   ★ 명칭/구성 확정 후 재생성되지 않은 구세대 산출물(도면설명·부호표 등)이 완성본에 혼입되면 §42④ 명확성 위험.
   //   ★ [보강4 스텝 귀속] staleTerm이 등장하는 섹션(표제)을 지목. [결정 b] HIGH.
+  const _tgClaimed=new Set();   // [배치5 ②] CHK-13이 지목한 (정규화 용어|섹션) — CHK-14 동일건 선점 억제용
   try{
     const _stale=(typeof _activeStaleTerms==='function')?_activeStaleTerms():[];
     if(_stale && _stale.length){
@@ -380,7 +381,7 @@ function validateSpecification(specText){
         const _hitSecs=new Set(); let _mm;
         while((_mm=_re.exec(specText))!==null){
           const _sec=_secAt(_mm.index);
-          if(!_hitSecs.has(_sec)){ _hitSecs.add(_sec);
+          if(!_hitSecs.has(_sec)){ _hitSecs.add(_sec); _tgClaimed.add(term+'|'+_sec);   // [배치5 ②] 선점 기록
             iss.push({severity:'HIGH',check:'term_generation_mismatch',message:`구세대 용어 "${term}"이 완성본에 잔존(섹션: ${_sec}) — 해당 스텝 재생성 필요`,detail:'명칭 확정 후 재생성되지 않은 구세대 산출물 혼입 의심(§42④ 명확성 위험) — 자동 치환 금지, 스텝 재생성 권장'});
           }
           if(_mm.index===_re.lastIndex)_re.lastIndex++;   // zero-width 방어
@@ -399,11 +400,17 @@ function validateSpecification(specText){
     const _tM=specText.match(/【\s*발명의 명칭\s*】\s*([\s\S]*?)(?=\n\s*【|$)/);
     if(_tM && typeof _termDiffChunks==='function' && typeof _extractTitlePhrases==='function'){
       const _title=_tM[1].replace(/\{[^}]*\}/g,'').replace(/\s+/g,' ').trim(); const _seenTS=new Set();   // {영문} 병기 제거 → 공백 접기 → trim
+      // ★ [배치5 ③] 공유어절 게이트 — 명칭구가 확정 명칭과 어절(길이≥2) ≥1개를 공유할 때만 diff 대상.
+      //   비제목 정당 언급("클라우드 저장 시스템", 공유 0)은 차단하고, 세대 변형("…적응형 모델 라우팅 시스템",
+      //   '라우팅' 공유)은 통과시킨다. (접미군{서버,방법} 게이트는 docA 도1 시스템-접미 진성을 소실시켜 기각 — 실측 근거.)
+      const _tiW=new Set(_title.split(/\s+/).filter(w=>w.length>=2));
       ['도면의 간단한 설명','부호의 설명'].forEach(tn=>{
         const _m=specText.match(new RegExp('【\\s*'+tn+'\\s*】([\\s\\S]*?)(?:\\n【|$)'));
         if(!_m)return;
         _extractTitlePhrases(_m[1]).forEach(ph=>{
+          if(!ph.split(/\s+/).some(w=>w.length>=2&&_tiW.has(w)))return;   // [배치5 ③] 공유어절 0 → 비제목 명칭구로 보고 제외
           _termDiffChunks(ph, _title).forEach(c=>{ const _k=c+'|'+tn; if(_seenTS.has(_k))return; _seenTS.add(_k);
+            if(_tgClaimed.has(_k))return;   // [배치5 ②] CHK-13이 같은 (용어,섹션)을 이미 지목 → HIGH 1건만 잔존(이중 표출 억제)
             iss.push({severity:'MEDIUM',check:'title_generation_suspect',message:`구세대 명칭 조각 "${c}"이 ${tn}의 명칭구에 잔존(확정 명칭과 diff) — 세대 혼입 의심`,detail:'변경 이력 없는 소급 검출(휴리스틱) — 해당 섹션을 현재 발명의 명칭 세대로 재생성 권장'}); });
         });
       });
@@ -417,7 +424,11 @@ function validateSpecification(specText){
 // 완성-조립 시점에만 판정 가능한 검사(표제 완전성/순서, 부호의 설명 대조, 용어 세대 불일치)는 Step 13(상세설명 단계)에서
 //   볼 수 없거나 전 스텝 스캔이 필요하다.
 //   → Step13 주입·자동수정 대상에서 제외하고, 완성본 패널이 담당한다(CHK-13은 '자동 치환 금지 — 스텝 재생성 유도').
-const _FINAL_ONLY_CHECKS = new Set(['heading_missing','heading_order','refnum_consistency','term_generation_mismatch','title_generation_suspect']);
+// ★ [배치5 ①] 부호계(dupassign·generic_series)도 제외 — Step13 주입은 "수정 지시"로 소비되고 applyReview가 본문에만
+//   적용하므로(부호표 step_18·도면 step_07 미동기), 부호 결함이 주입되면 본문-단독 치환으로 불일치를 재생산한다(감사 §1).
+//   claim_support_missing은 desc-only 소스에서 구조적 미주입(청구범위 부재)이던 죽은 필터 — 의미 정합상 함께 이동.
+//   CHK-6 중복·CHK-8 수식변수·CHK-11 math_ref는 상세설명 내 자기완결 수정이 가능하므로 주입 유지.
+const _FINAL_ONLY_CHECKS = new Set(['heading_missing','heading_order','refnum_consistency','term_generation_mismatch','title_generation_suspect','refnum_dupassign','refnum_generic_series','claim_support_missing']);
 // 완성본 패널에서 'AI로 수정'으로 자동 보정 가능한 검사(표제 누락/순서는 스텝 재실행 사안이라 제외).
 const FIXABLE_CHECKS = new Set(['paragraph_duplicate','sentence_duplicate','sentence_truncation','sentence_ending','unit_corruption','math_var_undefined','example_missing','refnum_consistency']);
 
@@ -703,6 +714,7 @@ function _stripDupHeader(body,h){
   const esc=h.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/\s+/g,'\\s*');
   return body.replace(new RegExp('^\\s*【\\s*'+esc+'\\s*】[ \\t]*\\r?\\n?'),'');
 }
+let _claimWarnAt=0;   // [배치5 ⑤] D-1 청구항 번호 경고 스로틀 타임스탬프(1클릭 3중 호출 → toast 1회화)
 function buildSpecification(){
   const brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
   // v4.9: Include English title
@@ -713,14 +725,18 @@ function buildSpecification(){
   const mediaClaims=outputs.step_20||''; // v5.5: 기록매체/프로그램 청구항
   const allClaims=[deviceClaims,methodClaims,mediaClaims].filter(Boolean).join('\n\n');
   // ═══ D-1 fix: 청구항 번호 연속성 최종 검증 (v5.5) ═══
+  //   ★ [배치5 ⑤] 경고 스로틀 — 다운로드 1클릭이 buildSpecification을 3회 호출(본문+게이트+스탬프)해 같은 toast가
+  //     3회 중복되던 것을 1.5초 윈도우로 1회화(감사 §6). 판정 로직은 매 호출 그대로 수행(표시만 억제).
   const claimNums=[...allClaims.matchAll(/【청구항\s*(\d+)】/g)].map(m=>parseInt(m[1]));
   if(claimNums.length>0){
+    const _cwNow=Date.now(); const _cwShow=(_cwNow-_claimWarnAt)>1500; let _cwFired=false;
     const sorted=[...claimNums].sort((a,b)=>a-b);
     for(let i=0;i<sorted.length;i++){
-      if(sorted[i]!==i+1){App.showToast(`⚠️ 청구항 번호 불연속: 청구항 ${i+1} 누락`,'warning');break;}
+      if(sorted[i]!==i+1){ if(_cwShow){App.showToast(`⚠️ 청구항 번호 불연속: 청구항 ${i+1} 누락`,'warning');_cwFired=true;} break;}
     }
     const dupes=claimNums.filter((n,i)=>claimNums.indexOf(n)!==i);
-    if(dupes.length>0)App.showToast(`⚠️ 청구항 번호 중복: ${[...new Set(dupes)].join(', ')}`,'warning');
+    if(dupes.length>0&&_cwShow){App.showToast(`⚠️ 청구항 번호 중복: ${[...new Set(dupes)].join(', ')}`,'warning');_cwFired=true;}
+    if(_cwFired)_claimWarnAt=_cwNow;
   }
   // Include step_14 (alternative claims) if available
   let extras='';

@@ -1733,7 +1733,9 @@ async function runUnifiedFullChain(){
     if(!outputs.step_01)await runStep('step_01');
     if(!selectedTitle){
       const cands=(typeof parseTitleCandidates==='function')?parseTitleCandidates(outputs.step_01||''):[];
-      if(cands.length){ selectedTitle=cands[0].korean||''; selectedTitleEn=cands[0].english||''; if(typeof markOutputTimestamp==='function')markOutputTimestamp('step_01'); }
+      if(cands.length){
+        try{ if(typeof _onTitleChanged==='function')_onTitleChanged(selectedTitle, cands[0].korean||''); }catch(_e){}   // [배치5 ④] 명칭 세대 훅 경유(감사 §3 — prune 미실행 오탐 경로 차단)
+        selectedTitle=cands[0].korean||''; selectedTitleEn=cands[0].english||''; if(typeof markOutputTimestamp==='function')markOutputTimestamp('step_01'); }
     }
     if(!selectedTitle){ App.clearProgress('progressUnifiedFullChain'); App.showToast('명칭 생성 실패 — 다시 시도하세요','error'); return; }
     // ── [2/4] 청구항 ──
