@@ -40,14 +40,17 @@ const run = (expr) => vm.runInContext(expr, sandbox, { filename: 't.js' });
 const checks = (spec, name) => JSON.parse(run('JSON.stringify(validateSpecification(' + JSON.stringify(spec) + ').filter(function(i){return i.check===' + JSON.stringify(name) + ';}))'));
 beforeEach(() => { run('clearAllState(); _methodUserSet=false; _methodMismatchAck=false;'); toasts = []; });
 
-// A) 유형→방법 배선
-test('★ A — "서버 및 방법" → 방법 on / "서버" → off / 수동 off 후 재선택 → off 유지', () => {
-  run('includeMethodClaims=false; _syncMethodFromType("서버 및 방법")');
-  assert.equal(run('includeMethodClaims'), true, '★ 방법 포함 유형 → on');
-  run('_syncMethodFromType("서버")');
+// A) 유형→방법 배선 — [배치15C-2] 방법 기본 OFF 정책 반전(자동 on 금지, 수동 opt-in만)
+test('★ A(배치15C-2) — 방법 기본 OFF: "서버 및 방법"도 자동 off, ② 방법 체크 수동 on만 true', () => {
+  run('_methodUserSet=false; includeMethodClaims=true; _syncMethodFromType("서버 및 방법")');
+  assert.equal(run('includeMethodClaims'), false, '★ 방법 포함 유형도 기본 off(정책 반전)');
+  run('_methodUserSet=false; includeMethodClaims=true; _syncMethodFromType("서버")');
   assert.equal(run('includeMethodClaims'), false, '★ 장치 전용 유형 → off');
-  run('_methodUserSet=true; includeMethodClaims=false; _syncMethodFromType("서버 및 방법")');
-  assert.equal(run('includeMethodClaims'), false, '★ 수동 오버라이드 우선');
+  run('_dbSetMethod(true)');
+  assert.equal(run('includeMethodClaims'), true, '★ ② 방법 체크 수동 on');
+  assert.equal(run('_methodUserSet'), true, '★ 수동 설정 플래그');
+  run('_syncMethodFromType("서버")');
+  assert.equal(run('includeMethodClaims'), true, '★ 수동 opt-in 후 유형 변경에도 유지(오버라이드)');
 });
 test('★ A — 배선: autoSetDeviceCategoryFromType→_syncMethodFromType, toggleMethod→오버라이드 셋', () => {
   assert.match(PATENT_SRC, /try\{_syncMethodFromType\(type\);\}catch\(_e\)\{\}/, '★ 유형 확정/자동감지 훅');

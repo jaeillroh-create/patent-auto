@@ -2,14 +2,25 @@
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===1&&typeof renderDesignBoard==='function')renderDesignBoard();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();}catch(_e){}}   // [배치8/12] 레일·검증바·② 설계 보드 갱신 + ⑤ 진입 경고
 let _methodUserSet=false;   // [배치10 A] 사용자가 방법 토글을 수동 변경하면 이후 유형 기반 자동 동기화보다 우선
 function _syncMethodFromType(t){
-  // [배치10 A] 유형→방법 배선 — '~방법'/'~서버 및 방법'(기록매체·프로그램 포함) → 기본 on, 그 외 → 기본 off.
+  // ★ [배치15C-2] 방법 기본 OFF 정책 반전 — 유형이 '~방법'/'~서버 및 방법'(기록매체·프로그램 포함)이어도
+  //   방법 세트를 자동 활성화하지 않는다. 방법 청구항은 사용자가 ② 방법 체크를 명시적으로 켤 때만 생성한다
+  //   (재일 원칙: 기본은 장치/시스템만, 방법은 별도 확인 시). 명칭↔세트 불일치는 ② 보드 안내·⑤ 게이트로 인지.
   if(_methodUserSet||!t)return;
-  const want=/방법|기록매체|프로그램/.test(t);
+  const want=false;   // 유형 무관 — 항상 기본 off(자동 on 금지)
   if(includeMethodClaims===want)return;
   includeMethodClaims=want;
   const mt=document.getElementById('methodToggle'); if(mt)mt.checked=want;
   ['methodClaimsCard','methodDiagramCard','methodDescCard'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.toggle('card-disabled',!want);});
   try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();}catch(_e){}   // 프리플라이트 요약 실시간 반영
+}
+// [배치15C-2] ② 보드 방법 청구항 명시적 opt-in — 사용자 설정(오버라이드)으로 기록.
+function _dbSetMethod(on){
+  try{ _methodUserSet=true; includeMethodClaims=!!on;
+    const mt=document.getElementById('methodToggle'); if(mt)mt.checked=!!on;
+    ['methodClaimsCard','methodDiagramCard','methodDescCard'].forEach(id=>{const e=document.getElementById(id);if(e){e.classList.toggle('card-disabled',!on);e.style.opacity=on?'1':'0.4';e.style.pointerEvents=on?'':'none';}});
+  }catch(_e){}
+  try{_wfMarkDesign();}catch(_e){}
+  try{renderDesignBoard(); if(typeof renderWorkflowRail==='function')renderWorkflowRail(); if(typeof _wizRender==='function')_wizRender();}catch(_e){}
 }
 function toggleMethod(){
   _methodUserSet=true;   // [배치10 A] 수동 변경 우선(오버라이드)
@@ -1214,11 +1225,13 @@ function _extractFigureNumbersFromDesign(text){
 
 // ═══ v9.0: 상세설명 후처리 (safety net — 근본 수정은 callClaudeWithContinuation 오버라이드) ═══
 // type: 'device' → step_08 (장치), 'method' → step_12 (방법)
-function sanitizeDescFigureRefs(text,type){
+function sanitizeDescFigureRefs(text,type,opts){
   if(!text)return text;
-  
+
   // ★ v10.2: Step 8 수학식 제거 (수학식은 Step 9에서만 삽입) ★
-  if(type==='device'){
+  // ★ [배치15C-1] 통합 인라인 수학식 모드(cohesion _mathInline)에선 본문에 【수학식】을 의도적으로 포함하므로
+  //   제거하면 안 된다(docF 실증: 체크했으나 커밋 시 stripMathBlocks로 수식 0개). opts.keepMath 시 math 처리 생략.
+  if(type==='device'&&!(opts&&opts.keepMath)){
     // ★ FIX-C: crude 정규식(【수학식】 이후 특정 키워드로 시작 안 하는 모든 줄을 삼켜 일반 문단
     //   "…저장부(133)는…"까지 소실)을 정교판 stripMathBlocks(06)로 통일 — 중복 구현 제거.
     //   stripMathBlocks 는 "[가-힣]{2,}부(" 등 구성요소 문단에서 종결하므로 일반 문단을 보존.
@@ -1763,7 +1776,9 @@ function renderDesignBoard(){
   try{
     const t=selectedTitleType||'';
     document.querySelectorAll('#dbTypeCards [data-dbtype]').forEach(function(b){const on=b.getAttribute('data-dbtype')===t;b.classList.toggle('btn-primary',on);b.classList.toggle('btn-outline',!on);});
-    const note=document.getElementById('dbMethodNote'); if(note)note.innerHTML=t?('방법 청구항: <b>'+(includeMethodClaims?'포함':'제외')+'</b> '+(_methodUserSet?'(수동 설정)':'(유형 기반 자동)')):'유형을 선택하세요.';
+    const _mchk=document.getElementById('chkDbMethod'); if(_mchk)_mchk.checked=!!includeMethodClaims;   // [배치15C-2] 방법 opt-in 체크 동기
+    const _mmatch=/방법/.test(selectedTitle||selectedTitleType||'')&&!includeMethodClaims;   // [배치15C-2] 명칭↔세트 불일치
+    const note=document.getElementById('dbMethodNote'); if(note)note.innerHTML=t?('방법 청구항: <b>'+(includeMethodClaims?'포함':'제외')+'</b> '+(_methodUserSet?'(수동 설정)':'(기본 장치/시스템만)')+(_mmatch?'<br><b style="color:var(--color-warning,#E8A33D)">명칭에 「및 방법」 포함 — 방법 세트를 생성하려면 위 「방법 청구항 포함」을 체크하세요</b>':'')):'유형을 선택하세요.';
     const ind=document.getElementById('dbIndepDep'); if(ind)ind.value=deviceIndepCount;   // [배치15B-1] 독립항 수
     const g=document.getElementById('dbGeneralDep'); if(g)g.value=deviceGeneralDep;
     const a=document.getElementById('dbAnchorDep'); if(a)a.value=deviceAnchorDep;
@@ -1789,7 +1804,7 @@ function _dbSet(field,val){
     else if(field==='indepDep'){ deviceIndepCount=Math.max(1,Math.min(5,parseInt(val)||1)); }   // [배치15B-1] 독립항 수 canonical
     else if(field==='figures'){ const e=document.getElementById('optDeviceFigures'); if(e)e.value=val; }
     else if(field==='conceptToggle'){ conceptDiagramEnabled=!!((document.getElementById('chkConceptDiagram')||{}).checked); }   // [배치15B-1] 예시도 포함 canonical
-    else if(field==='conceptCount'){ conceptTargetCount=Math.max(1,Math.min(6,parseInt(val)||1)); }   // [배치15B-1] 예시도 수
+    else if(field==='conceptCount'){ conceptTargetCount=Math.max(1,Math.min(9,parseInt(val)||1)); }   // [배치15B-1/15C-3] 예시도 수(1~9)
     else if(field==='mathCount'){ mathBlockCount=Math.max(1,Math.min(5,parseInt(val)||1)); }   // [배치15B-1] 수학식 개수(cohesion 계약)
     else if(field==='detailToggle'){ detailLevel=(document.getElementById('selUnifiedDetail')||{}).value||detailLevel; const lv=['compact','standard','detailed','maximal','custom']; document.querySelectorAll('#detailLevelCards .selection-card').forEach(function(cd,i){cd.classList.toggle('selected',lv[i]===detailLevel);}); }
     // 'mathToggle'는 canonical chkUnifiedMath 자체가 소스 — 별도 write 없이 마크/렌더만.

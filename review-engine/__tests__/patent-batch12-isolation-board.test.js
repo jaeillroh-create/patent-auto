@@ -84,9 +84,9 @@ test('★ B — _dbSet: 보드 → 전역·canonical 요소 미러(종속항·�
   assert.equal(els.optDeviceFigures.value, 6, '★ 도면 수 canonical(프롬프트 소스) 미러');
 });
 test('★ B — 유형 버튼 → _designSetType(위저드 미러)로 유형·방법 동기', () => {
-  run('_designSetType("서버 및 방법")');
+  run('_methodUserSet=false; _designSetType("서버 및 방법")');
   assert.equal(run('selectedTitleType'), '서버 및 방법', '★ 유형');
-  assert.equal(run('includeMethodClaims'), true, '★ 방법 자동 on(_syncMethodFromType)');
+  assert.equal(run('includeMethodClaims'), false, '★ [배치15C-2] 방법 기본 OFF(유형 「및 방법」도 자동 on 금지)');
 });
 test('★ B — renderDesignBoard: 현재 상태를 컨트롤·총항수에 반영(요약 아님)', () => {
   run('selectedTitleType="시스템"; deviceGeneralDep=6; deviceAnchorDep=3; detailLevel="detailed"; includeMethodClaims=false;');

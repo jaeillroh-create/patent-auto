@@ -1720,6 +1720,32 @@ ${deviceText||''}
 [방법 상세설명]
 ${methodText||'(없음)'}`;
 }
+// ★ [배치15C-1] 수학식 인라인 재요청 — 부호표(REFTABLE)는 건드리지 않고, 상세설명 본문에 정확히 N개의
+//   【수학식】 블록을 삽입해 재출력. 도면부호(NN)·구성 명칭은 원문 그대로 보존(신규 부호 도입 금지).
+function _buildMathInlineRetryPrompt(deviceText, methodText, mathN){
+  const _mn=Math.max(1,Math.min(5,parseInt(mathN)||3));
+  return `아래 상세설명 본문을 다시 출력하되, 핵심 알고리즘 위치에 **정확히 ${_mn}개**의 【수학식】 블록을 인라인으로 삽입하라. 부호표(REFTABLE)는 출력하지 마라(별도 유지됨).
+
+[출력 형식 — 아래 두 블록만(방법 없으면 METHOD_DESC 생략)]
+<<<DEVICE_DESC>>>
+…(원문 내용을 보존하면서 적절한 위치에 【수학식 1】 … 【수학식 ${_mn}】 삽입)…
+<<<END_DEVICE_DESC>>>
+<<<METHOD_DESC>>>
+…(방법 상세설명)…
+<<<END_METHOD_DESC>>>
+
+[수학식 규칙 — 엄수]
+- 정확히 ${_mn}개의 【수학식 N】 블록(N=1..${_mn}, 등장 순서). ${_mn}개보다 많거나 적게 생성 금지.
+- 각 수식 직후 "여기서, …" 절에서 모든 변수(아래첨자 포함)를 빠짐없이 정의(정의 없는 변수 금지). 변수는 본문에 이미 등장한 파라미터를 구체화하며, 본문에 없는 새 개념·새 도면부호(NN)를 도입하지 마라.
+- 수식 참조는 "상기 수학식 N"(앞 수식)·"다음의 수학식 N"(바로 뒤 수식)만. 존재하지 않는 번호·교차참조 금지.
+- ★ 원문의 모든 도면부호(NN)와 구성 명칭을 그대로 보존하라(부호표와 정합). 본문 문장을 임의 삭제하지 마라.
+
+[원본 장치 상세설명]
+${deviceText||''}
+
+[원본 방법 상세설명]
+${methodText||'(없음)'}`;
+}
 async function runUnifiedCohesionGen(opts){
   if(!(opts&&opts.chained)&&typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
   if(!outputs.step_06){App.showToast('먼저 장치 청구항(A2)을 생성하세요','error');return;}
@@ -1757,12 +1783,30 @@ async function runUnifiedCohesionGen(opts){
     if(rep.deviceLeak)gate.push('장치 상세설명에 방법표현 누출');
     if(!rep.methodOk)gate.push('방법 상세설명 극성 미충족');
     if(gate.length){ try{_lastGenError='게이트 미통과 — '+gate.join(' · ');}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 게이트 미통과(기존 내용 보존): '+gate.join(' · '),'error'); console.warn('[unified] gate fail',rep); return; }
+    // ★ [배치15C-1] 수학식 인라인 자기검증 게이트 — 토글 on(정확 계약 _mathN)인데 LLM이 수식을 조용히 누락한 경우.
+    //   본문 【수학식】 개수 < 목표면 (a)경고 (b)"수학식 N개 인라인 포함 상세설명만 재생성" 1회 재요청(A6 동형·부호표 보존)
+    //   (c)재실패 시 완료 요약 "수학식 누락 — ④ 재생성 필요". docF 실증: 체크했으나 본문 수식 0개.
+    if(_mathInline){
+      const _mathN=Math.max(1,Math.min(5,parseInt(mathBlockCount)||3));
+      const _mcnt=function(rr){ return (((rr&&rr.device)||'')+'\n'+((rr&&rr.method)||'')).match(/【\s*수학식/g)||[]; };
+      if(_mcnt(r).length<_mathN){
+        App.showToast('수학식 '+_mcnt(r).length+'/'+_mathN+'개 — 수식 미포함 감지, 상세설명만 재요청합니다(1회)','warning');
+        try{
+          const retry=await App.callClaudeWithContinuation(_buildMathInlineRetryPrompt(r.device||'', r.method||'', _mathN),'progressUnifiedGen');
+          const refBlk=(String(raw).match(/^[ \t]*<<<REFTABLE>>>[\s\S]*?^[ \t]*<<<END_REFTABLE>>>[ \t]*$/m)||[''])[0];
+          const merged=refBlk+'\n'+(retry||'');   // 부호표(REFTABLE)는 원본 유지, 본문만 교체 → 재파싱
+          const r3=parseCohesiveBundle(merged);
+          if(r3.ok.hasRef&&r3.ok.hasDevice&&_mcnt(r3).length>=_mathN){ r=r3; }
+        }catch(e){ console.warn('[unified] math retry',e); }
+      }
+      if(_mcnt(r).length<_mathN){ try{_lastGenError='수학식 누락 — ④ 재생성 필요('+_mcnt(r).length+'/'+_mathN+')';}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('수학식 인라인 미포함('+_mcnt(r).length+'/'+_mathN+') — ④ 본문 통합 재생성이 필요합니다','error'); console.warn('[unified] math gate fail'); return; }
+    }
     if(!(opts&&opts.chained)&&!confirm('통합 생성 결과로 장치 상세설명·방법 상세설명·부호의 설명을 대체합니다. 계속할까요?\n(이전 내용은 이력에 보존됩니다)')){ App.clearProgress('progressUnifiedGen'); return; }
     // ── 원자 커밋(3슬롯) ──
     pushOutputHistory('step_08','unified','runUnifiedCohesionGen');
     if(r.method&&outputs.step_10)pushOutputHistory('step_12','unified','runUnifiedCohesionGen');
     pushOutputHistory('step_18','unified','runUnifiedCohesionGen');
-    let dev=r.device; try{if(typeof sanitizeDescFigureRefs==='function')dev=sanitizeDescFigureRefs(dev,'device');}catch(_e){}
+    let dev=r.device; try{if(typeof sanitizeDescFigureRefs==='function')dev=sanitizeDescFigureRefs(dev,'device',{keepMath:_mathInline});}catch(_e){}   // [배치15C-1] 인라인 수학식 모드면 본문 수식 보존(strip 금지)
     outputs.step_08=dev; outputs.step08_device=dev; markOutputTimestamp('step_08');
     if(r.method&&outputs.step_10){ let m=r.method; try{if(typeof sanitizeDescFigureRefs==='function')m=sanitizeDescFigureRefs(m,'method');}catch(_e){} outputs.step_12=m; markOutputTimestamp('step_12'); }
     outputs.step_18=_deriveSignDescription(r.refMap); markOutputTimestamp('step_18');   // 완성 본문 기준 결정적 직렬화(refMap 명칭 우선)

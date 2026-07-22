@@ -976,6 +976,7 @@
               <button class="btn btn-outline" data-dbtype="시스템" onclick="_designSetType('시스템')">~시스템</button>
               <button class="btn btn-outline" data-dbtype="서버 및 방법" onclick="_designSetType('서버 및 방법')">~서버 및 방법</button>
             </div>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;margin-top:8px" title="기본은 장치/시스템 청구항만 생성. 방법 청구항 세트(방법 청구항·방법 도면·방법 상세설명)를 함께 생성하려면 체크하세요"><input type="checkbox" id="chkDbMethod" onchange="_dbSetMethod(this.checked)"> 방법 청구항 포함 <span style="color:var(--color-text-tertiary)">(기본: 장치/시스템만)</span></label>
             <div id="dbMethodNote" style="font-size:12px;color:var(--color-text-secondary);margin-top:6px"></div>
           </div>
           <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:10px">
@@ -985,9 +986,11 @@
             <span id="dbClaimTotal" style="font-weight:700"></span>
           </div>
           <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:6px">
-            <label>도면 수 <input type="number" id="dbFigures" min="1" max="10" style="width:56px" onchange="_dbSet('figures',this.value)"></label>
+            <label title="장치 도면 수(0~9, 직접 입력 가능). 목록에서 고르거나 숫자를 직접 입력하세요">도면 수 <input type="number" id="dbFigures" list="dbFigCountOpts" min="0" max="20" style="width:64px" onchange="_dbSet('figures',this.value)"></label>
+            <datalist id="dbFigCountOpts"><option value="0"></option><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option><option value="5"></option><option value="6"></option><option value="7"></option><option value="8"></option><option value="9"></option></datalist>
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer" title="예시도(개념도·UI 화면 등)를 체인 도면 단계에서 함께 생성합니다"><input type="checkbox" id="chkConceptDiagram" onchange="_dbSet('conceptToggle')"> 예시도 포함</label>
-            <label id="dbConceptCountWrap" style="display:none">예시도 수 <input type="number" id="dbConceptCount" min="1" max="6" style="width:56px" onchange="_dbSet('conceptCount',this.value)"></label>
+            <label id="dbConceptCountWrap" style="display:none" title="예시도 개수(1~9, 직접 입력 가능)">예시도 수 <input type="number" id="dbConceptCount" list="dbConceptCountOpts" min="1" max="9" style="width:64px" onchange="_dbSet('conceptCount',this.value)"></label>
+            <datalist id="dbConceptCountOpts"><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option><option value="5"></option><option value="6"></option></datalist>
           </div>
           <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:6px">
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="chkUnifiedMath" onchange="_dbSet('mathToggle')"> 수학식 포함(상세설명에 인라인 생성 — 변수 정의·참조 규칙 자동 준수)</label>
@@ -1121,7 +1124,7 @@
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="image"></span> Step 7: 장치 도면</div></div>
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
             <label style="font-size:13px">총 도면 수:</label>
-            <input type="number" class="input-field" id="optDeviceFigures" min="1" max="10" value="4" style="width:70px" />
+            <input type="number" class="input-field" id="optDeviceFigures" list="dbFigCountOpts" min="0" max="20" value="4" style="width:70px" />
           </div>
           <button class="btn btn-primary btn-full" id="btnStep07" onclick="runDiagramStep('step_07')"><span class="ico" data-icon="robot"></span> 장치 도면 설계</button>
         </div>
@@ -1529,12 +1532,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260720a"></script>
-<script src="patent/patent.js?v=20260722-b41"></script>
+<script src="patent/patent.js?v=20260722-b42"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260722-b41"></script>
+<script src="opinion/opinion.js?v=20260722-b42"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260722-b41';
+  var _cv='?v=20260722-b42';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1632,8 +1635,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260722-b41"></script>
-<script src="docket.js?v=20260722-b41"></script>
+<script src="division/division.js?v=20260722-b42"></script>
+<script src="docket.js?v=20260722-b42"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>

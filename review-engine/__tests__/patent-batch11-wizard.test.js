@@ -52,9 +52,9 @@ test('★ A — 판정: 명칭만(step_01) → 화면3 숨김 / step_06 존재 �
 
 // B) 양방향 미러
 test('★ B(배치14) — 위저드 축소: _wizSetType은 유형·방법만 미러(설계는 ② 보드가 담당)', () => {
-  run('_wizSetType("서버 및 방법")');
+  run('_methodUserSet=false; _wizSetType("서버 및 방법")');
   assert.equal(run('selectedTitleType'), '서버 및 방법', '★ 유형 전역(보드 타입버튼과 공유 경로)');
-  assert.equal(run('includeMethodClaims'), true, '★ _syncMethodFromType 연동(방법 자동 on)');
+  assert.equal(run('includeMethodClaims'), false, '★ [배치15C-2] 방법 기본 OFF(유형이 「및 방법」이어도 자동 on 금지)');
   assert.ok(!/id="wizGeneralDep"/.test(HTML_SRC) && !/id="wizTypeCards"/.test(HTML_SRC), '★ 위저드 유형·설계 화면 제거');
 });
 test('★ B(배치14) — openUnifiedWizard: 설계 요약 에코 + 재실행 화면은 기존 산출물 있을 때만(auto-start 방지)', () => {
