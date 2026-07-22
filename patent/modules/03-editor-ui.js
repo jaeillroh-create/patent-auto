@@ -1451,6 +1451,7 @@ function _wfUpstreamAt(){
   return t;
 }
 function _wfTs(k){return (outputTimestamps&&outputTimestamps[k])||0;}
+let _wfRunning=0;   // [배치15A-2] 통합 생성 중인 레일 단계(1~5) — 배지에 스피너 표시. 0=없음.
 // 단계 상태 모델: 'none'(미생성) | 'done'(생성됨) | 'stale'(재생성 필요 — 상류 변경 시각 > 자기 산출 시각)
 function wfStageStatus(n){
   if(n===1)return selectedTitle?'done':'none';
@@ -1475,6 +1476,8 @@ function renderWorkflowRail(){
     _wfAttachDesignListeners();
     for(let i=1;i<=5;i++){
       const b=document.getElementById('wfBadge'+(i-1)); if(!b)continue;
+      if(_wfRunning===i){b.textContent='◐';b.style.color='var(--color-primary,#4A7DFF)';b.style.fontWeight='700';try{b.classList&&b.classList.add('wf-spin');}catch(_e){}continue;}   // [배치15A-2] 생성 중 스피너
+      try{b.classList&&b.classList.remove('wf-spin');}catch(_e){}
       const st=wfStageStatus(i);
       if(st==='stale'){b.textContent='재생성 필요';b.style.color='var(--color-warning,#E8A33D)';b.style.fontWeight='700';}
       else if(st==='done'){b.textContent='✓';b.style.color='var(--color-success,#3DAE7A)';b.style.fontWeight='700';}
@@ -1585,25 +1588,101 @@ async function _wizStart(){
   if(!selectedTitleType){App.showToast('발명 유형을 ② 설계 보드에서 선택하세요','error');try{_wizClose();}catch(_e){} return;}
   const mode=(function(){ try{ const r=document.querySelector('input[name="wizRerun"]:checked'); return r?r.value:'full'; }catch(_e){ return 'full'; } })();
   const c=document.getElementById('wizConfig'), p=document.getElementById('wizProgress'), s=document.getElementById('wizSummary');
-  if(c)c.style.display='none'; if(p)p.style.display='block';
-  try{ await runUnifiedFullChain({mode:mode}); }catch(_e){}
-  // 완료 요약 — 생성 단계 수 + 완성본 경고 수(위저드가 닫혀 있으면 생략)
+  if(c)c.style.display='none'; if(s)s.style.display='none'; if(p)p.style.display='block';
+  try{ _wizPhaseReset(); }catch(_e){}
+  // [배치15A-1] 실패 표면화 — 예외를 삼키지 않고 토스트로 노출(완료 요약·배너·재렌더는 체인 종료 훅 _wizFinishSummary가 수행)
+  try{ await runUnifiedFullChain({mode:mode}); }catch(_e){ try{App.showToast('통합 생성 실패: '+(_e&&_e.message||_e),'error');}catch(_e2){} }
+}
+
+// ═══ [배치15A] 진행 체크리스트 · 완료/중단 배너 · 생성 시각 · 재개 ═══
+// phase: 명칭→기초(15A 예정 표시·15B 실행)→청구항→도면→본문. 상태 pending|plan|running|done|fail|skip.
+const _WIZ_PHASES=[
+  {id:'title',label:'명칭'},
+  {id:'basis',label:'기초(기술분야·배경·과제·해결수단)',plan:true},
+  {id:'claims',label:'청구항(장치·방법)'},
+  {id:'figures',label:'도면(Mermaid)'},
+  {id:'body',label:'본문(상세설명·부호)'}
+];
+let _wizPhaseState={}, _wizPhaseDetail={};
+function _wizPhaseReset(){ _wizPhaseState={}; _wizPhaseDetail={}; _WIZ_PHASES.forEach(function(p){ _wizPhaseState[p.id]=p.plan?'plan':'pending'; }); _wizPhaseRender(); }
+function _wizPhaseSet(id,state,detail){ _wizPhaseState[id]=state; if(detail!==undefined)_wizPhaseDetail[id]=detail; _wizPhaseRender(); }
+function _wizPhaseRender(){
   try{
-    const gen=['step_01','step_06','step_10','step_07','step_11','step_08','step_18','step_16','step_17','step_19','step_12'].filter(function(k){return !!outputs[k];}).length;
-    let cr=0,hi=0; try{ const iss=validateSpecification(buildSpecification()); cr=iss.filter(function(i){return i.severity==='CRITICAL';}).length; hi=iss.filter(function(i){return i.severity==='HIGH';}).length; }catch(_e){}
-    const st=document.getElementById('wizSummaryText');
-    if(st)st.innerHTML='생성된 단계: <b>'+gen+'</b>개 · 완성본 경고: CRITICAL <b>'+cr+'</b> · HIGH <b>'+hi+'</b><br>상세 결함은 ⑤ 검증 패널에서 확인하세요.';
-    if(p)p.style.display='none'; const sm=document.getElementById('wizSummary'); if(sm)sm.style.display='block';
-    try{renderWorkflowRail();renderWfValidationBar();}catch(_e){}
+    const host=(typeof document!=='undefined')&&document.getElementById('wizPhaseList'); if(!host)return;
+    const ic={pending:'○',plan:'◌',running:'◐',done:'✓',fail:'✗',skip:'—'};
+    const col={done:'var(--color-success,#3DAE7A)',fail:'var(--color-error,#D94A4A)',running:'var(--color-primary,#4A7DFF)',plan:'var(--color-text-tertiary)',pending:'var(--color-text-tertiary)',skip:'var(--color-text-tertiary)'};
+    host.innerHTML=_WIZ_PHASES.map(function(p){
+      const st=_wizPhaseState[p.id]||'pending', d=_wizPhaseDetail[p.id]||'';
+      const dim=(st==='pending'||st==='plan'||st==='skip');
+      return '<div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:13px;border-bottom:1px solid var(--color-border,#eee)">'
+        +'<span class="'+(st==='running'?'wiz-spin':'')+'" style="width:18px;text-align:center;color:'+(col[st]||'')+';font-weight:700">'+(ic[st]||'○')+'</span>'
+        +'<span style="flex:1"><b style="color:'+(dim?'var(--color-text-tertiary)':'inherit')+'">'+App.escapeHtml(p.label)+'</b>'
+        +(st==='plan'?' <span style="font-size:11px;color:var(--color-text-tertiary)">(예정)</span>':'')
+        +(st==='skip'?' <span style="font-size:11px;color:var(--color-text-tertiary)">(재사용)</span>':'')
+        +(d?'<br><span style="font-size:11px;color:'+(st==='fail'?'var(--color-error,#D94A4A)':'var(--color-text-tertiary)')+'">'+App.escapeHtml(d)+'</span>':'')
+        +'</span></div>';
+    }).join('');
   }catch(_e){}
+}
+// 생성 시각 포맷 — "7.22 14:33"(월.일 시:분).
+function _fmtGenTs(ms){ try{ if(!ms)return ''; const d=new Date(ms); const p=function(n){return String(n).padStart(2,'0');}; return (d.getMonth()+1)+'.'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes()); }catch(_e){ return ''; } }
+// 결과 카드 헤더 메타(시각) 공통 컴포넌트 — sid의 outputTimestamps 기준(없으면 빈 문자열).
+function _resultMetaRow(sid){
+  try{ const ts=_fmtGenTs((typeof outputTimestamps==='object'&&outputTimestamps&&outputTimestamps[sid])||0); if(!ts)return '';
+    return '<div class="result-meta" style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:6px">🕒 생성 '+ts+'</div>'; }catch(_e){ return ''; }
+}
+// 체인 생성 단계 수 · 완성본 경고 수(요약·배너 공통)
+function _chainGenCount(){ try{ return ['step_01','step_06','step_10','step_07','step_11','step_08','step_18','step_16','step_17','step_19','step_12'].filter(function(k){return !!outputs[k];}).length; }catch(_e){ return 0; } }
+function _chainWarnCount(){ try{ const iss=validateSpecification(buildSpecification()); return iss.filter(function(i){return i.severity==='CRITICAL'||i.severity==='HIGH';}).length; }catch(_e){ return 0; } }
+// 완료/중단 배너 — ② 보드 상주(오버레이 닫아도 보임). info=null이면 숨김.
+function _renderCompletionBanner(info){
+  try{
+    const host=(typeof document!=='undefined')&&document.getElementById('dbCompletionBanner'); if(!host)return;
+    if(!info){ host.style.display='none'; host.innerHTML=''; return; }
+    const ok=!info.stopped, bd=ok?'var(--color-success,#3DAE7A)':'var(--color-error,#D94A4A)', bg=ok?'rgba(61,174,122,0.10)':'rgba(217,74,74,0.10)';
+    const head=ok?('통합 생성 완료 — '+_fmtGenTs(info.at)):('통합 생성 중단: '+App.escapeHtml(info.stopLabel)+' 단계'+(info.cause?(' — '+App.escapeHtml(info.cause)):''));
+    host.innerHTML='<div style="border:1px solid '+bd+';background:'+bg+';border-radius:8px;padding:10px 12px;font-size:12px">'
+      +'<b style="color:'+bd+'">'+head+'</b><br><span style="color:var(--color-text-secondary)">생성 '+info.gen+'단계 · 완성본 경고 '+info.warn+'건</span>'
+      +(info.stopped?'<br><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="_wizResumeChain()"><span class="ico" data-icon="refresh"></span> 여기부터 재개(빈 단계만)</button>':'')
+      +'</div>';
+    host.style.display='block';
+  }catch(_e){}
+}
+// 체인 종료 훅(완료·중단 공통) — 요약 텍스트·배너 렌더 + 보드/레일/검증바 재렌더(배치15A-4 D3 수정).
+function _wizFinishSummary(info){
+  try{
+    if(!info)info={stopped:false,at:Date.now(),gen:_chainGenCount(),warn:_chainWarnCount()};
+    if(info.gen==null)info.gen=_chainGenCount(); if(info.warn==null)info.warn=_chainWarnCount();
+    _renderCompletionBanner(info);
+    const st=(typeof document!=='undefined')&&document.getElementById('wizSummaryText');
+    if(st){
+      if(info.stopped)st.innerHTML='<b style="color:var(--color-error,#D94A4A)">중단: '+App.escapeHtml(info.stopLabel)+' 단계'+(info.cause?(' — '+App.escapeHtml(info.cause)):'')+'</b><br>생성된 단계: <b>'+info.gen+'</b>개 · 완성본 경고: <b>'+info.warn+'</b>건<br><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="_wizResumeChain()"><span class="ico" data-icon="refresh"></span> 여기부터 재개(빈 단계만)</button>';
+      else st.innerHTML='<b style="color:var(--color-success,#3DAE7A)">통합 생성 완료 — '+_fmtGenTs(info.at)+'</b><br>생성된 단계: <b>'+info.gen+'</b>개 · 완성본 경고: <b>'+info.warn+'</b>건<br>상세 결함은 ⑤ 검증 패널에서 확인하세요.';
+    }
+    // 오버레이가 열려 있으면 요약 화면 전환
+    try{ const w=document.getElementById('wfWizard'), p=document.getElementById('wizProgress'), sm=document.getElementById('wizSummary');
+      if(w&&w.style.display!=='none'){ if(p)p.style.display='none'; if(sm)sm.style.display='block'; } }catch(_e){}
+    try{ renderWorkflowRail(); renderWfValidationBar(); renderDesignBoard(); }catch(_e){}
+  }catch(_e){}
+}
+// [배치15A-1] 재개 — 이어하기(빈 단계만) 재실행. 오버레이 진행 화면을 열고 continue 모드로 체인 재호출.
+async function _wizResumeChain(){
+  try{
+    const w=document.getElementById('wfWizard'), c=document.getElementById('wizConfig'), p=document.getElementById('wizProgress'), s=document.getElementById('wizSummary');
+    if(w){ w.style.display='flex'; if(c)c.style.display='none'; if(s)s.style.display='none'; if(p)p.style.display='block'; }
+    try{ _wizPhaseReset(); }catch(_e){}
+    await runUnifiedFullChain({mode:'continue'});
+  }catch(_e){ try{App.showToast('재개 실패: '+(_e&&_e.message||_e),'error');}catch(_e2){} }
 }
 
 // ═══ [배치12] 프로젝트 상태 격리(_wfHardReset) + ② 설계 보드 + 적용값 대조(genParams) ═══
 function _wfHardReset(){   // [배치12 A] 프로젝트 전환/신규 시 워크플로우 표시·플래그 완전 초기화(상태 누출 차단)
   try{ _wfStage5Warned=false; }catch(_e){}
   try{ _wfDesignAt=0; }catch(_e){}
+  try{ _wfRunning=0; }catch(_e){}                // [배치15A-2] 레일 running 스피너 리셋
   try{ _methodUserSet=false; }catch(_e){}       // 수동 방법 오버라이드 해제(신규 프로젝트 자동 동기 재개)
   try{ _methodMismatchAck=false; }catch(_e){}    // 명칭-방법 모순 확인 리셋(08)
+  try{ const cb=document.getElementById('dbCompletionBanner'); if(cb){cb.style.display='none';cb.innerHTML='';} }catch(_e){}   // [배치15A-3] 완료/중단 배너 잔상 제거
   try{ for(let i=0;i<5;i++){ const b=document.getElementById('wfBadge'+i); if(b)b.textContent=''; } }catch(_e){}   // 레일 배지 DOM 즉시 blank(렌더 실패해도 잔상 0)
   try{ const bar=document.getElementById('wfValidationBar'); if(bar)bar.style.display='none'; }catch(_e){}
   try{ if(typeof renderWorkflowRail==='function')renderWorkflowRail(); }catch(_e){}

@@ -69,7 +69,7 @@ test('★ D — 레일 done 조건은 실질 산출물 기준(빈 프로젝트 a
 test('★ A 소스 — clearAllState가 _wfHardReset 호출 + openProject 말미 1회 렌더', () => {
   assert.match(PATENT_SRC, /genParams=null;\s*\/\/ \[배치12 C\]/, '★ genParams 초기화');
   assert.match(PATENT_SRC, /if\(typeof _wfHardReset==='function'\)_wfHardReset\(\);/, '★ 하드리셋 호출');
-  assert.match(PATENT_SRC, /function _wfHardReset\(\)\{[\s\S]{0,500}wfBadge/, '★ 하드리셋이 배지 blank');
+  assert.match(PATENT_SRC, /function _wfHardReset\(\)\{[\s\S]{0,900}wfBadge/, '★ 하드리셋이 배지 blank');
   assert.match(PATENT_SRC, /try\{_methodUserSet=false;\}catch\(_e\)\{\}   \/\/ \[배치12 A\]/, '★ openProject toggleMethod 부작용 취소');
 });
 

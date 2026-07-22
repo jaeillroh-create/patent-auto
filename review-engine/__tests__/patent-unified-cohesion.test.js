@@ -201,7 +201,7 @@ test('★ 소스 — runUnifiedFullChain 4단계 오케스트레이션(명칭→
   assert.match(PATENT_SRC, /await runStep\('step_01'\)/, '★ [1] 명칭');
   assert.match(PATENT_SRC, /parseTitleCandidates\(outputs\.step_01/, '★ [1] 명칭 자동 선택(첫 후보)');
   assert.match(PATENT_SRC, /await runStep\('step_06'\)/, '★ [2] 장치 청구항');
-  assert.match(PATENT_SRC, /wantMethod\)\{ await runStep\('step_10'\)/, '★ [2] 방법 청구항(옵션)');
+  assert.match(PATENT_SRC, /wantMethod&&!\(resume&&outputs\.step_10\)\)\{ _lastGenError=''; await runStep\('step_10'\)/, '★ [2] 방법 청구항(옵션·배치15A 이어하기 가드)');
   assert.match(PATENT_SRC, /await runDiagramStep\('step_07'\)/, '★ [3] 장치 도면');
   assert.match(PATENT_SRC, /await runUnifiedCohesionGen\(\{chained:true\}\)/, '★ [4] 상세설명+부호 통합(chained)');
 });
@@ -209,7 +209,7 @@ test('★ 소스 — runUnifiedFullChain 4단계 오케스트레이션(명칭→
 test('★ 소스 — 체인 비파괴/그레이스풀 + 재진입 차단 + 전제조건 + 락 미보유', () => {
   assert.match(PATENT_SRC, /_unifiedChainRunning/, '★ 재진입 차단 플래그');
   assert.match(PATENT_SRC, /먼저 발명 유형을 선택하세요/, '★ 유형 전제조건');
-  assert.match(PATENT_SRC, /여기서 중단\(청구항까지 보존\)/, '★ 도면 실패 시 그레이스풀 중단(보존)');
+  assert.match(PATENT_SRC, /통합 생성 중단 — 도면:/, '★ 도면 실패 시 그레이스풀 중단(사유 표면화·배치15A)');
   assert.match(PATENT_SRC, /globalProcessing 을 직접 잡지 않는다/, '★ 락 미보유 설계(하위 early-return 방지)');
   assert.match(PATENT_SRC, /if\(!\(opts&&opts\.chained\)&&!confirm/, '★ chained면 확인창 스킵');
 });

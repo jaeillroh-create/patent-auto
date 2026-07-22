@@ -123,7 +123,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     onStepCompleted(sid);saveProject(true);
     // [C1 자동 연쇄] SCOPE_GUARDED 스텝 생성 후 자동 검증
     if(inventionScope?.locked_at&&(SCOPE_GUARDED_TEXT_STEPS.includes(sid)||SCOPE_GUARDED_MERMAID_STEPS.includes(sid))){try{await runScopeCheck(sid);}catch(e2){console.warn('[C1] runScopeCheck 자동 실행 실패:',sid,e2.message);}}
-  }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
+  }catch(e){try{_lastGenError=(e&&e.message)||String(e);}catch(_e){}App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
 async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}if(!(await _claimGatePass(sid)))return;setGlobalProcessing(true);try{await _longStepCore(sid);}finally{setGlobalProcessing(false);}}
 // ★ [T1] 가드/globalProcessing 없는 실행 코어 — 통합 핸들러(runImplementationDesc)가 device→concept 순차 호출 시 중첩 early-return 방지(진단 경고 반영).
 async function _longStepCore(sid){const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';loadingState[sid]=true;App.setButtonLoading(bid,true);
@@ -944,6 +944,7 @@ ${preIssues.filter(i=>i.severity==='WARNING').map(i=>'⚠ '+i.message).join('\n'
     const mermaidSid=sid+'_mermaid';
     if(inventionScope?.locked_at&&SCOPE_GUARDED_MERMAID_STEPS.includes(mermaidSid)){try{await runScopeCheck(mermaidSid);}catch(e2){console.warn('[C1] runDiagramStep 후 runScopeCheck 자동 실행 실패:',mermaidSid,e2.message);}}
   }catch(e){
+    try{_lastGenError=(e&&e.message)||String(e);}catch(_e){}
     App.showToast(e.message,'error');
   }finally{
     loadingState[sid]=false;
@@ -1688,13 +1689,13 @@ async function runUnifiedCohesionGen(opts){
   try{
     const raw=await App.callClaudeWithContinuation(buildPrompt('unified_cohesion'),'progressUnifiedGen');
     const r=parseCohesiveBundle(raw);
-    if(!r.ok.hasRef||!r.ok.hasDevice){ App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: REFTABLE/장치 상세설명 블록 누락 — 기존 내용 보존, 다시 시도하세요','error'); console.warn('[unified] block missing',r.ok); return; }
+    if(!r.ok.hasRef||!r.ok.hasDevice){ try{_lastGenError='REFTABLE/장치 상세설명 블록 누락';}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: REFTABLE/장치 상세설명 블록 누락 — 기존 내용 보존, 다시 시도하세요','error'); console.warn('[unified] block missing',r.ok); return; }
     const rep=r.report, gate=[];
     if(rep.notInTable.length)gate.push('본문 미정의 부호 '+rep.notInTable.length+'개('+rep.notInTable.slice(0,6).join(', ')+')');
     if(rep.dupNums.length)gate.push('부호표 번호 중복 '+rep.dupNums.length+'개');
     if(rep.deviceLeak)gate.push('장치 상세설명에 방법표현 누출');
     if(!rep.methodOk)gate.push('방법 상세설명 극성 미충족');
-    if(gate.length){ App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 게이트 미통과(기존 내용 보존): '+gate.join(' · '),'error'); console.warn('[unified] gate fail',rep); return; }
+    if(gate.length){ try{_lastGenError='게이트 미통과 — '+gate.join(' · ');}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 게이트 미통과(기존 내용 보존): '+gate.join(' · '),'error'); console.warn('[unified] gate fail',rep); return; }
     if(!(opts&&opts.chained)&&!confirm('통합 생성 결과로 장치 상세설명·방법 상세설명·부호의 설명을 대체합니다. 계속할까요?\n(이전 내용은 이력에 보존됩니다)')){ App.clearProgress('progressUnifiedGen'); return; }
     // ── 원자 커밋(3슬롯) ──
     pushOutputHistory('step_08','unified','runUnifiedCohesionGen');
@@ -1725,7 +1726,7 @@ async function runUnifiedCohesionGen(opts){
     const soft=rep.unusedRef.length?(' · 도면 미사용 부호 '+rep.unusedRef.length+'개 자동 제외'):'';
     App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft,'success');
     if(hadMath&&!_mathInline)App.showToast('⚠️ 기존 수학식(Step 9)은 새 상세설명에 재삽입이 필요합니다 — 미리보기·다운로드에 수학식이 빠져 있습니다','warning');   // [배치9 D1] 인라인 모드에선 구 step_09를 이력 보존 후 제거했으므로 미해당
-  }catch(e){ App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); }
+  }catch(e){ try{_lastGenError=(e&&e.message)||String(e);}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); }
   finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); }
 }
 
@@ -1746,6 +1747,7 @@ function _resetUnifiedChainOutputs(){
 // 체인은 globalProcessing 을 직접 잡지 않는다(각 하위 생성기가 잡고 finally 로 해제하므로, 잡으면 하위가 early-return). 재진입은 _unifiedChainRunning 플래그로 차단.
 // 비파괴/그레이스풀: 어느 단계가 실패하면 그 지점에서 중단하고 지금까지 생성분은 보존.
 let _unifiedChainRunning=false;
+let _lastGenError='';   // [배치15A-1] 직전 생성기(runStep/runDiagramStep/cohesion) 실패 사유 — 체인이 phase ✗·배너에 노출(침묵 catch 제거)
 async function runUnifiedFullChain(_wizOpts){
   if(_unifiedChainRunning){App.showToast('통합 생성이 이미 진행 중입니다','info');return;}
   if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('다른 작업이 진행 중입니다','info');return;}
@@ -1758,52 +1760,69 @@ async function runUnifiedFullChain(_wizOpts){
   // ★ [배치11 A] 재실행 판정 — "산출물 계열"만 본다(명칭·범위확정·참고자료는 통합 생성의 입력이지 산출물이 아님).
   //   실측 버그: 명칭 확정만 한 새 프로젝트에서 step_01 존재로 재실행 모달이 떴음 → step_01 제외.
   const _hasPrev=['step_06','step_07','step_08','step_10','step_11','step_12'].some(function(k){return !!outputs[k];});
+  let resume=false;   // [배치15A-1] 이어하기 — 산출물 있는 단계는 건너뛰고 빈 단계만 생성(재개 버튼 경로 공유)
   if(_hasPrev){
     const _full=!!(_wizOpts&&_wizOpts.mode==='full');
     if(_full)_resetUnifiedChainOutputs();
-    else App.showToast('이어하기 — 일부 단계를 재사용합니다. 세대 혼합 가능성이 있으니 완성 후 완성본 검증 패널을 확인하세요','info');
+    else { resume=true; App.showToast('이어하기 — 빈 단계만 생성합니다(기존 산출물 재사용, 완성 후 검증 패널 확인)','info'); }
   }
   const wantMethod=!!includeMethodClaims;
-  // ★ [배치9 D1] 수학식 토글 의미 전환 — [5/5] Step 9 자동 실행 배선 제거. 토글은 cohesion 프롬프트의 인라인
-  //   파라미터(C9 전환)로만 소비된다([4/4] 안에서 수식 포함 생성). Step 9 수동 경로는 고급 모드에 존치.
+  const _mathOn=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
+  // ★ [배치9 D1] 수학식 토글은 cohesion 인라인 파라미터(C9)로만 소비([4/4] 안에서 수식 포함 생성). Step 9 수동 경로는 고급에 존치.
   const TOTAL=4;
-  _unifiedChainRunning=true;
+  _unifiedChainRunning=true; try{_wfRunning=0;}catch(_e){}
   const btn=(typeof document!=='undefined')?document.getElementById('btnUnifiedFullChain'):null; if(btn)btn.disabled=true;
   const P=function(msg,cur){App.showProgress('progressUnifiedFullChain',msg,cur,TOTAL);try{const w=document.getElementById('wizProgressText');if(w)w.textContent=msg;}catch(_e){}};   // [배치11 B] 위저드 진행 미러
+  const _rail=function(n){ try{_wfRunning=n; if(typeof renderWorkflowRail==='function')renderWorkflowRail();}catch(_e){} };   // [배치15A-2] 레일 running 배지(스피너)
+  const _phase=function(id,st,detail){ try{ if(typeof _wizPhaseSet==='function')_wizPhaseSet(id,st,detail); }catch(_e){} };   // [배치15A-2] 오버레이 체크리스트
+  let stopInfo=null;   // [배치15A-1] 중단 사유 — 종료 훅이 배너·요약·재개 버튼에 노출
   try{
     // ── [1/4] 발명의 명칭 ──
-    P('[1/4] 발명의 명칭 생성...',0);
-    if(!outputs.step_01)await runStep('step_01');
+    _phase('title','running'); _rail(1); P('[1/4] 발명의 명칭 생성...',0);
+    if(!outputs.step_01){ _lastGenError=''; await runStep('step_01'); }
     if(!selectedTitle){
       const cands=(typeof parseTitleCandidates==='function')?parseTitleCandidates(outputs.step_01||''):[];
       if(cands.length){
         try{ if(typeof _onTitleChanged==='function')_onTitleChanged(selectedTitle, cands[0].korean||''); }catch(_e){}   // [배치5 ④] 명칭 세대 훅 경유(감사 §3 — prune 미실행 오탐 경로 차단)
         selectedTitle=cands[0].korean||''; selectedTitleEn=cands[0].english||''; if(typeof markOutputTimestamp==='function')markOutputTimestamp('step_01'); }
     }
-    if(!selectedTitle){ App.clearProgress('progressUnifiedFullChain'); App.showToast('명칭 생성 실패 — 다시 시도하세요','error'); return; }
+    if(!selectedTitle){ stopInfo={label:'명칭',cause:(_lastGenError||'명칭 생성 실패 — 발명 자료를 확인 후 다시 시도')}; _phase('title','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 명칭: '+stopInfo.cause,'error'); return; }
+    _phase('title','done','확정: '+selectedTitle);
+    // 기초(step_02~05)는 [배치15A]에선 예정(plan) 표시만 — [배치15B]에서 실제 phase화.
     // ── [2/4] 청구항 ──
-    P('[2/4] 청구항 생성(장치'+(wantMethod?'+방법':'')+')...',1);
-    await runStep('step_06');
-    if(!outputs.step_06){ App.clearProgress('progressUnifiedFullChain'); App.showToast('장치 청구항 생성 실패 — 여기서 중단(생성분 보존)','error'); return; }
-    if(wantMethod){ await runStep('step_10'); }
+    _phase('claims','running'); _rail(3); P('[2/4] 청구항 생성(장치'+(wantMethod?'+방법':'')+')...',1);
+    if(!(resume&&outputs.step_06)){ _lastGenError=''; await runStep('step_06'); }
+    if(!outputs.step_06){ stopInfo={label:'청구항',cause:(_lastGenError||'장치 청구항 생성 실패')}; _phase('claims','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 청구항: '+stopInfo.cause,'error'); return; }
+    if(wantMethod&&!(resume&&outputs.step_10)){ _lastGenError=''; await runStep('step_10'); }
+    _phase('claims','done','장치'+(wantMethod&&outputs.step_10?'+방법':'')+' 청구항');
     // ── [3/4] 도면 ──
-    P('[3/4] 도면 생성(Mermaid)...',2);
-    await runDiagramStep('step_07');
-    if(!outputs.step_07){ App.clearProgress('progressUnifiedFullChain'); App.showToast('장치 도면 생성 실패 — 여기서 중단(청구항까지 보존)','error'); return; }
-    if(wantMethod&&outputs.step_10){ await runDiagramStep('step_11'); }
-    try{ if(typeof _snapshotGenParams==='function')_snapshotGenParams('stage3'); }catch(_e){}   // [배치12 C] 체인 골격 스냅샷(cohesion이 stage4 스냅샷)
+    _phase('figures','running'); _rail(3); P('[3/4] 도면 생성(Mermaid)...',2);
+    if(!(resume&&outputs.step_07)){ _lastGenError=''; await runDiagramStep('step_07'); }
+    if(!outputs.step_07){ stopInfo={label:'도면',cause:(_lastGenError||'장치 도면 생성 실패')}; _phase('figures','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 도면: '+stopInfo.cause,'error'); return; }
+    if(wantMethod&&outputs.step_10&&!(resume&&outputs.step_11)){ _lastGenError=''; await runDiagramStep('step_11'); }
+    try{ if(typeof _snapshotGenParams==='function')_snapshotGenParams('stage3'); }catch(_e){}   // [배치12 C] 체인 골격 스냅샷(적용값 대조 기준)
+    _phase('figures','done','장치'+(wantMethod&&outputs.step_11?'+방법':'')+' 도면');
     // ── [4/4] 상세설명+부호 통합 ──
-    P('[4/4] 상세설명+부호 통합 생성...',3);
-    const _beforeDesc=outputs.step_08||'';
+    _phase('body','running'); _rail(4); P('[4/4] 상세설명+부호 통합 생성...',3);
+    const _beforeDesc=outputs.step_08||''; _lastGenError='';
     await runUnifiedCohesionGen({chained:true});
-    if((outputs.step_08||'')===_beforeDesc){ App.clearProgress('progressUnifiedFullChain'); App.showToast('상세설명·부호 통합 단계가 게이트 미통과/실패 — 청구항·도면까지는 생성됨. 산출물(F) 탭에서 재시도하세요','warning'); return; }
+    if((outputs.step_08||'')===_beforeDesc){ stopInfo={label:'본문',cause:(_lastGenError||'상세설명·부호 통합 게이트 미통과/실패 — 산출물(F) 탭에서 재시도')}; _phase('body','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 본문: '+stopInfo.cause,'error'); return; }
     // ([배치9 D1] 수학식은 토글 on 시 [4/4] cohesion 안에서 인라인 생성됨 — 별도 [5/5] 없음)
-    // 완료
+    _phase('body','done','상세설명·부호'+(_mathOn?'·수학식':''));
     App.showProgress('progressUnifiedFullChain','완료',TOTAL,TOTAL);
-    if(typeof saveProject==='function')saveProject(true);
     setTimeout(function(){App.clearProgress('progressUnifiedFullChain');},2500);
     App.showToast('통합 생성 완료 — 명칭·청구항·도면·상세설명·부호 생성됨. 산출물(F) 탭에서 확인하세요','success');
-  }catch(e){ App.clearProgress('progressUnifiedFullChain'); App.showToast('통합 생성 중단: '+(e&&e.message||e),'error'); console.error('[unifiedChain]',e); }
-  finally{ _unifiedChainRunning=false; const b=(typeof document!=='undefined')?document.getElementById('btnUnifiedFullChain'):null; if(b)b.disabled=false; }
+  }catch(e){ stopInfo={label:(stopInfo&&stopInfo.label)||'예외',cause:(e&&e.message||String(e))}; try{App.clearProgress('progressUnifiedFullChain');}catch(_e){} App.showToast('통합 생성 중단: '+(e&&e.message||e),'error'); console.error('[unifiedChain]',e); }
+  finally{
+    _unifiedChainRunning=false; try{_wfRunning=0;}catch(_e){}
+    const b=(typeof document!=='undefined')?document.getElementById('btnUnifiedFullChain'):null; if(b)b.disabled=false;
+    // [배치15A-4] 종료(완료·중단 공통) — 영속 + ② 보드/레일/검증바 재렌더(D3 "미생성" 수정) + 완료/중단 배너·요약
+    try{ if(typeof saveProject==='function')saveProject(true); }catch(_e){ try{App.showToast('저장 실패: '+(_e&&_e.message||_e),'error');}catch(_e2){} }
+    try{
+      const info={stopped:!!stopInfo, stopLabel:stopInfo?stopInfo.label:'', cause:stopInfo?stopInfo.cause:'', at:(typeof Date!=='undefined'?Date.now():0), gen:null, warn:null};
+      if(typeof _wizFinishSummary==='function')_wizFinishSummary(info);
+      else { try{ if(typeof renderWorkflowRail==='function')renderWorkflowRail(); if(typeof renderWfValidationBar==='function')renderWfValidationBar(); if(typeof renderDesignBoard==='function')renderDesignBoard(); }catch(_e){} }
+    }catch(_e){}
+  }
 }
 

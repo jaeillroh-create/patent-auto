@@ -68,7 +68,7 @@ test('★ N1(→배치11) 소스 — 산출물 계열 판정 + 위저드 opts �
   assert.match(PATENT_SRC, /const _hasPrev=\['step_06','step_07','step_08','step_10','step_11','step_12'\]\.some/, '★ [배치11 A] 산출물 계열만 판정(step_01 제외)');
   assert.match(PATENT_SRC, /const _full=!!\(_wizOpts&&_wizOpts\.mode==='full'\);/, '★ 위저드 모드로 전체/이어하기 결정');
   assert.match(PATENT_SRC, /if\(_full\)_resetUnifiedChainOutputs\(\);/, '★ 전체 → 초기화');
-  assert.match(PATENT_SRC, /이어하기 — 일부 단계를 재사용합니다\. 세대 혼합 가능성/, '★ 이어하기 안내 토스트 유지');
+  assert.match(PATENT_SRC, /이어하기 — 빈 단계만 생성합니다\(기존 산출물 재사용/, '★ 이어하기 안내 토스트(배치15A: 빈 단계만)');
   assert.ok(!/confirm\('기존 생성 산출물이 있습니다/.test(PATENT_SRC), '★ 구 confirm 모달 제거');
 });
 
