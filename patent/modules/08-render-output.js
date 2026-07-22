@@ -195,7 +195,7 @@ function validateSpecification(specText){
     const used=new Set((body.match(/\(\d{1,4}\)/g)||[]).map(s=>parseInt(s.replace(/[()]/g,''),10)).filter(n=>n>=1&&n<=9999));
     const usedNotDef=[...used].filter(n=>!defined.has(n)).sort((a,b)=>a-b);
     const defNotUsed=[...defined].filter(n=>!used.has(n)).sort((a,b)=>a-b);
-    if(usedNotDef.length)iss.push({severity:'MEDIUM',check:'refnum_consistency',message:`본문 사용 부호 ${usedNotDef.length}개가 부호의 설명에 미정의`,detail:`미정의: ${usedNotDef.slice(0,10).join(', ')}${usedNotDef.length>10?' 외':''}`});
+    if(usedNotDef.length)iss.push({severity:'MEDIUM',check:'refnum_consistency',message:`본문 사용 부호 ${usedNotDef.length}개가 부호의 설명에 미정의${usedNotDef.length>=10?' — ④ 본문 통합 생성이 부호표를 재생성합니다':''}`,detail:`미정의: ${usedNotDef.slice(0,10).join(', ')}${usedNotDef.length>10?' 외':''}`});   // [배치10 C] 대량 미정의 시 액션 힌트
     if(defNotUsed.length)iss.push({severity:'MEDIUM',check:'refnum_consistency',message:`부호의 설명 정의 ${defNotUsed.length}개가 본문에 미사용`,detail:`미사용: ${defNotUsed.slice(0,10).join(', ')}${defNotUsed.length>10?' 외':''}`});
   }
 
@@ -244,6 +244,23 @@ function validateSpecification(specText){
   (specText.match(/[가-힣]다\.\d/g)||[]).forEach(m=>iss.push({severity:'HIGH',check:'sentence_truncation',message:'문장 절단 의심 — 마침표 직후 숫자 붙음',detail:`"…${m}…" (종결 후 공백 없이 숫자 시작)`}));   // (a) "무차원량이다.2"
   (specText.match(/[가-힣](?:다|음|함|됨)\.[가-힣]/g)||[]).forEach(m=>iss.push({severity:'HIGH',check:'sentence_truncation',message:'문장 절단 의심 — 마침표 직후 한글 붙음',detail:`"…${m}…" (종결 후 공백 없이 이어짐)`}));   // (c)
   paras.forEach((p,i)=>{ if(/^\s*\d+(?:\.\d+)?\s*(?:이상|이하|내지|초과|미만)/.test(p))iss.push({severity:'HIGH',check:'sentence_truncation',message:`문단 #${i} 첫머리가 무주어 숫자범위로 시작 — 앞문장 절단 의심`,detail:`"${p.slice(0,40)}…"`}); });   // (b)
+  // ── (d) [배치10 B] 문단 종결 미완 — 상세설명(실시내용) 문단이 종결어미('~다.'·'~까.'·'~라.')·콜론·닫는 괄호로
+  //   끝나지 않으면 절단 의심(실증: "…원문 발화 수대" 명사-끝 절단을 기존 (a)(b)(c)가 침묵). 제외: 표제(【】)·
+  //   부호표 행(명칭 : 번호)·수학식(블록 제거)·목록 기호 행·40자 미만 단문.
+  {
+    const _tImpl=specText.match(/【\s*발명을 실시하기 위한 구체적인 내용\s*】([\s\S]*?)(?:\n【(?!\s*수학식)|$)/);
+    if(_tImpl){
+      stripMathBlocks(_tImpl[1]).split(/\n{2,}/).map(p=>p.trim()).filter(Boolean).forEach(p=>{
+        if(/^【/.test(p))return;                                        // 표제
+        if(/^[-•·※▪○①-⑳]|^\d{1,2}[.)]\s/.test(p))return;             // 목록 기호 행
+        if(/:\s*S?\d{1,4}\s*$/.test(p)||/^\(?S?\d{1,4}\)?\s*[:：]/.test(p))return;   // 부호표류 행
+        if(norm(p).length<40)return;                                     // 단문 제외(정형·라벨)
+        const last=p.split(/\n/).pop().trim();
+        if(!/(?:[다까라]\.|[:：]|[)\]」』”">\.])\s*$/.test(last))
+          iss.push({severity:'HIGH',check:'sentence_truncation',message:'문단 종결 미완 — 종결어미 없이 끝남(절단 의심)',detail:`"…${last.slice(-30)}"`});
+      });
+    }
+  }
 
   // ── CHK-8: 수학식 변수 정의 완전성 ── 【수학식 N】 수식부 변수 ↔ "여기서" 절 정의 대조
   const blocks=specText.split(/(?=【\s*수학식)/).filter(b=>/^【\s*수학식/.test(b.trim()));
@@ -483,8 +500,15 @@ function renderSpecValidation(){
 function _warnSpecValidation(){ try{ const sv=validateSpecification(buildSpecification()); const c=sv.filter(i=>i.severity==='CRITICAL').length; if(c)App.showToast(`⚠️ 완성본 검증 CRITICAL ${c}건(문단 중복/절단 의심) — 산출물 탭 검증 패널 확인 권장`,'warning'); }catch(_e){} }
 // [§6-2] 다운로드 게이트 — CRITICAL 결함이 있으면 명시적 확인을 요구하고, 취소 시 다운로드를 차단한다(HIGH 이하는 경고만/현행).
 //   근거: 경고 체제에서 CRITICAL 3건이 실제 다운로드까지 나간 실증(문서B). 하드 차단이 아니라 "그래도 다운로드" 명시 클릭.
+let _methodMismatchAck=false;   // [배치10 A] 명칭-방법 모순 확인 1회(세션)
 function _downloadGate(_spec){
   try{
+    // [배치10 A] 모순 상태(확정 명칭에 '방법' 포함 && 방법 청구항 제외) — ⑤ 게이트에서 확인 1회
+    if(!_methodMismatchAck&&typeof selectedTitle!=='undefined'&&/방법/.test(selectedTitle||'')&&typeof includeMethodClaims!=='undefined'&&!includeMethodClaims){
+      const _ok=(typeof confirm==='function')?confirm('확정 명칭에 "방법"이 포함되어 있으나 방법 청구항이 제외되어 있습니다.\n(명칭과 청구범위 불일치 — 심사 지적 소지)\n\n그래도 진행하시겠습니까?'):true;
+      if(!_ok)return false;
+      _methodMismatchAck=true;
+    }
     const sv=validateSpecification(_spec||buildSpecification());
     const crit=sv.filter(i=>i.severity==='CRITICAL');
     if(crit.length){

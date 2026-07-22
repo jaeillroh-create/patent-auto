@@ -893,7 +893,7 @@
         </div>
         <div class="card" id="cardUnifiedFullChain" style="border:1.5px solid var(--color-primary)">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="bolt"></span> ⚡ 통합 생성 (발명자료 → 핵심 명세서)</div></div>
-          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 10px">발명 유형을 고른 뒤 한 번에 <b>명칭 → 청구항 → 도면 → 상세설명·부호</b>를 응집 생성합니다(도면부호·용어 정합 구조적 보장). 몇 분 소요되며, 어느 단계가 실패하면 그 지점까지 보존됩니다. 효과·과제·요약 등은 이후 F. 마무리에서 생성하세요.</p>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 10px">발명 유형을 고른 뒤 한 번에 <b>명칭 → 청구항 → 도면 → 상세설명·부호</b>를 응집 생성합니다(도면부호·용어 정합 구조적 보장). 몇 분 소요되며, 어느 단계가 실패하면 그 지점까지 보존됩니다. 효과·해결수단·요약은 <b>④ 본문 통합</b>에서 함께 생성됩니다.</p>
           <p style="font-size:11px;color:var(--color-text-tertiary);padding:0 0 8px">수학식·분량 등 설계값은 <b>② 설계 결정</b> 단계에서 조정합니다(기본값으로 바로 실행 가능).</p>
           <div id="progressUnifiedFullChain" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnUnifiedFullChain" onclick="runUnifiedFullChain()"><span class="ico" data-icon="bolt"></span> 발명자료 → 핵심 명세서 통합 생성</button>
@@ -1029,21 +1029,11 @@
         </div>
       </div>
 
-      <!-- 오른쪽: 결과 출력 -->
+      <!-- 오른쪽: [배치10 E] 설계 요약만 — 청구항·대안·특허성 결과 카드는 ③ 탭으로 이동 -->
       <div class="page-right">
-        <div class="result-card" id="resultCard06">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 6 결과: 장치 청구항</div></div>
-          <div id="resultStep06" class="result-area"></div>
-        </div>
-        <div class="result-card" id="resultCard10">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 10 결과: 방법 청구항</div></div>
-          <div id="resultStep10" class="result-area"></div>
-        </div>
-        <div class="result-card" id="resultCardExtra">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> 대안/검토 결과</div></div>
-          <div id="resultStep14" class="result-area" style="min-height:60px"></div>
-          <div id="resultStep15" class="result-area" style="min-height:60px"></div>
-          <div id="validationResults" class="result-area" style="min-height:60px"></div>
+        <div class="result-card">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> ② 안내</div></div>
+          <div class="result-area" style="font-size:12px;color:var(--color-text-tertiary)">설계값을 정하는 단계입니다. 청구항·도면 생성과 그 결과는 <b>③ 골격</b> 탭에서 확인합니다.</div>
         </div>
       </div>
     </div>
@@ -1055,7 +1045,7 @@
         <!-- [배치8] ③ 골격 — 주동선(단계 단위 생성/재생성, D4). 스텝 낱개 버튼은 고급으로 -->
         <div class="card" id="wfStage3Main" style="border:1.5px solid var(--color-primary)">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="bolt"></span> ③ 골격 생성 (청구항 → 도면)</div></div>
-          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">② 설계값으로 <b>장치 청구항 → 방법 청구항 → 장치 도면 → 방법 도면</b>을 순차 생성합니다. 재생성 시 기존 골격 산출물(청구항·도면·대안·특허성)을 초기화한 뒤 다시 생성합니다(세대 혼합 방지). 검토 관문(대안·특허성)은 ② 하단 버튼으로 실행합니다.</p>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">② 설계값으로 <b>장치 청구항 → 방법 청구항 → 장치 도면 → 방법 도면</b>을 순차 생성합니다. 재생성 시 기존 골격 산출물(청구항·도면·대안·특허성)을 초기화한 뒤 다시 생성합니다(세대 혼합 방지). 검토 관문(대안·특허성) 실행 버튼은 ② 하단에 있고, 그 결과는 이 탭 우측에 표시됩니다.</p>
           <div id="progressWfStage3" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnWfStage3" onclick="wfRunStage3()"><span class="ico" data-icon="bolt"></span> 골격 생성/재생성 (청구항+도면)</button>
         </div>
@@ -1184,6 +1174,21 @@
 
       <!-- 오른쪽: 결과 -->
       <div class="page-right">
+        <!-- [배치10 E] 청구항·대안·특허성 결과 — ②에서 이동(로직 무변경·DOM 이동만) -->
+        <div class="result-card" id="resultCard06">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 6 결과: 장치 청구항</div></div>
+          <div id="resultStep06" class="result-area"></div>
+        </div>
+        <div class="result-card" id="resultCard10">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 10 결과: 방법 청구항</div></div>
+          <div id="resultStep10" class="result-area"></div>
+        </div>
+        <div class="result-card" id="resultCardExtra">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> 대안/검토 결과</div></div>
+          <div id="resultStep14" class="result-area" style="min-height:60px"></div>
+          <div id="resultStep15" class="result-area" style="min-height:60px"></div>
+          <div id="validationResults" class="result-area" style="min-height:60px"></div>
+        </div>
         <div class="result-card" id="resultCard07">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 7 결과: 장치 도면</div></div>
           <div id="resultStep07" class="result-area"></div>
@@ -1248,6 +1253,7 @@
         <div class="card" id="wfStage4Main" style="border:1.5px solid var(--color-primary)">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="edit"></span> ④ 본문 통합 생성 (상세설명+부호+마무리)</div></div>
           <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">③ 골격을 바탕으로 <b>상세설명·부호의 설명·과제의 해결 수단·발명의 효과·요약서</b>를 단일 컨텍스트로 생성합니다(② '수학식 포함' 시 수식 인라인). 재생성 시 기존 내용은 이력에 보존됩니다.</p>
+          <div id="progressUnifiedGen" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnWfStage4" onclick="wfRunStage4()"><span class="ico" data-icon="bolt"></span> 본문 통합 생성/재생성</button>
         </div>
         <div class="card">
@@ -1311,18 +1317,17 @@
           <div class="stat-card stat-card-api"><div class="stat-card-value" id="statApiCalls">0</div><div class="stat-card-label">API</div></div>
           <div class="stat-card stat-card-cost"><div class="stat-card-value" id="statCost">$0.00</div><div class="stat-card-label">비용</div></div>
         </div>
+        <!-- [배치10 D] 진입점 단일화 — 구 "통합 생성(단일 컨텍스트·실험)" 카드 제거(④ wfStage4Main으로 통합).
+             "마무리 일괄 생성"은 고급으로 강등: ④ 본문 통합(배치9 D3)이 효과·해결수단·요약을 함께 생성한다. -->
+        <details class="wf-adv" id="wfAdv4">
+          <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급 — 마무리 개별 일괄 생성</summary>
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="flag"></span> F. 마무리 (효과·해결수단·부호·요약서)</div></div>
-          <p style="font-size:12px;color:var(--dt-g500);padding:0 0 12px">효과 · 해결수단 · 부호설명 · 요약서</p>
+          <p style="font-size:12px;color:var(--dt-g500);padding:0 0 12px">※ <b>④ 본문 통합</b>이 효과·해결수단·요약을 함께 생성합니다. 이 버튼은 개별 재생성용 보조 경로입니다.</p>
           <div id="progressBatchFinish" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnBatchFinish" onclick="runBatchFinish()"><span class="ico" data-icon="flag"></span> 마무리 일괄 생성</button>
         </div>
-        <div class="card" id="unifiedGenCard">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> 통합 생성 (단일 컨텍스트 · 실험)</div></div>
-          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 10px">장치·방법 상세설명과 부호의 설명을 <b>한 번의 컨텍스트</b>로 생성해 도면부호·용어 불일치를 구조적으로 제거합니다. 청구항·장치 도면 생성 후 사용하세요. 기존 단계별 결과는 이력에 보존됩니다.</p>
-          <div id="progressUnifiedGen" style="margin:8px 0"></div>
-          <button class="btn btn-outline btn-full" id="btnUnifiedGen" onclick="runUnifiedCohesionGen()"><span class="ico" data-icon="settings"></span> 상세설명+부호 통합 생성</button>
-        </div>
+        </details>
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="download"></span> 다운로드</div></div>
           <div style="display:flex;flex-direction:column;gap:8px">
@@ -1451,12 +1456,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260720a"></script>
-<script src="patent/patent.js?v=20260721-b32"></script>
+<script src="patent/patent.js?v=20260721-b33"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260721-b32"></script>
+<script src="opinion/opinion.js?v=20260721-b33"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260721-b32';
+  var _cv='?v=20260721-b33';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1554,8 +1559,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260721-b32"></script>
-<script src="docket.js?v=20260721-b32"></script>
+<script src="division/division.js?v=20260721-b33"></script>
+<script src="docket.js?v=20260721-b33"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>

@@ -1,6 +1,18 @@
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
 function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();}catch(_e){}}   // [배치8] 레일 배지·상주 검증바 갱신 + ⑤ 진입 세대혼합 경고 1회
+let _methodUserSet=false;   // [배치10 A] 사용자가 방법 토글을 수동 변경하면 이후 유형 기반 자동 동기화보다 우선
+function _syncMethodFromType(t){
+  // [배치10 A] 유형→방법 배선 — '~방법'/'~서버 및 방법'(기록매체·프로그램 포함) → 기본 on, 그 외 → 기본 off.
+  if(_methodUserSet||!t)return;
+  const want=/방법|기록매체|프로그램/.test(t);
+  if(includeMethodClaims===want)return;
+  includeMethodClaims=want;
+  const mt=document.getElementById('methodToggle'); if(mt)mt.checked=want;
+  ['methodClaimsCard','methodDiagramCard','methodDescCard'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.toggle('card-disabled',!want);});
+  try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();}catch(_e){}   // 프리플라이트 요약 실시간 반영
+}
 function toggleMethod(){
+  _methodUserSet=true;   // [배치10 A] 수동 변경 우선(오버라이드)
   includeMethodClaims=document.getElementById('methodToggle').checked;
   ['methodClaimsCard','methodDiagramCard','methodDescCard'].forEach(id=>{
     const e=document.getElementById(id);
@@ -429,6 +441,7 @@ function autoSetDeviceCategoryFromType(type){
   // Also set method category
   if(/방법/.test(type)){methodCategory='method';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='method';}
   if(/기록매체/.test(type)){methodCategory='recording_medium';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='recording_medium';}
+  try{_syncMethodFromType(type);}catch(_e){}   // [배치10 A] 유형 확정/자동감지 → 방법 토글 동기(수동 오버라이드 존중)
   if(/컴퓨터\s*프로그램/.test(type)){methodCategory='computer_program_product';const mc=document.getElementById('selMethodCategory');if(mc)mc.value='computer_program_product';}
 }
 function autoSetDeviceCategoryFromTitle(title){
@@ -1470,7 +1483,8 @@ function renderWorkflowRail(){
     if(s){
       const dl={compact:'간결',standard:'표준',detailed:'상세',maximal:'최대',custom:'사용자'}[detailLevel]||detailLevel;
       const mth=document.getElementById('chkUnifiedMath');
-      s.innerHTML='유형: <b>'+App.escapeHtml(selectedTitleType||'미선택')+'</b> · 장치 청구항: 독립1+일반'+deviceGeneralDep+'+앵커'+deviceAnchorDep+' · 방법: '+(includeMethodClaims?'포함':'제외')+' · 도면 수: '+(document.getElementById('optDeviceFigures')?.value||'4')+' · 수학식: '+((mth&&mth.checked)?'포함':'미포함')+' · 분량: '+dl;
+      const _mm=/방법/.test(selectedTitle||selectedTitleType||'')&&!includeMethodClaims;   // [배치10 A] 모순: 명칭/유형에 '방법' && 방법 제외
+      s.innerHTML='유형: <b>'+App.escapeHtml(selectedTitleType||'미선택')+'</b> · 장치 청구항: 독립1+일반'+deviceGeneralDep+'+앵커'+deviceAnchorDep+' · 방법: '+(includeMethodClaims?'포함':'제외')+' · 도면 수: '+(document.getElementById('optDeviceFigures')?.value||'4')+' · 수학식: '+((mth&&mth.checked)?'포함':'미포함')+' · 분량: '+dl+(_mm?'<br><b style="color:var(--color-warning,#E8A33D)">⚠ 명칭에 "방법"이 포함되는데 방법 청구항이 제외되어 있습니다 — 방법 토글 확인</b>':'');
     }
   }catch(_e){}
 }
