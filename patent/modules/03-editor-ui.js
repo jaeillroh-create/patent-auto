@@ -1,5 +1,5 @@
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
-function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();}catch(_e){}}   // [배치8] 레일 배지·상주 검증바 갱신 + ⑤ 진입 세대혼합 경고 1회
+function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===1&&typeof renderDesignBoard==='function')renderDesignBoard();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();}catch(_e){}}   // [배치8/12] 레일·검증바·② 설계 보드 갱신 + ⑤ 진입 경고
 let _methodUserSet=false;   // [배치10 A] 사용자가 방법 토글을 수동 변경하면 이후 유형 기반 자동 동기화보다 우선
 function _syncMethodFromType(t){
   // [배치10 A] 유형→방법 배선 — '~방법'/'~서버 및 방법'(기록매체·프로그램 포함) → 기본 on, 그 외 → 기본 off.
@@ -1499,6 +1499,10 @@ function _wfWarnStage5(){
 function renderWfValidationBar(){
   try{
     const bar=document.getElementById('wfValidationBar'); if(!bar)return;
+    // [배치12 A] 실제 산출물이 있을 때만 표시 — buildSpecification은 빈 outputs에도 표제 스켈레톤을 반환하므로
+    //   그것만으로 바를 띄우면 빈/신규 프로젝트에서 잔상처럼 보인다. 스텝 산출물 존재를 게이트로.
+    const _hasContent=(typeof outputs==='object')&&outputs&&Object.keys(outputs).some(function(k){return k.indexOf('step_')===0&&outputs[k];});
+    if(!_hasContent){bar.style.display='none';return;}
     const spec=(typeof buildSpecification==='function')?buildSpecification():'';
     if(!spec.trim()){bar.style.display='none';return;}
     const iss=validateSpecification(spec);
@@ -1536,6 +1540,7 @@ async function wfRunStage3(){
     P('['+(c+1)+'/'+T+'] 장치 도면...',c,T); await runDiagramStep('step_07'); c++;
     if(!outputs.step_07){App.clearProgress('progressWfStage3');App.showToast('장치 도면 생성 실패 — 청구항까지 보존','error');return;}
     if(includeMethodClaims&&outputs.step_10){P('['+(c+1)+'/'+T+'] 방법 도면...',c,T);await runDiagramStep('step_11');c++;}
+    _snapshotGenParams('stage3');   // [배치12 C] 골격 생성 시점 설계 스냅샷(적용값 대조 기준)
     P('완료',T,T); setTimeout(function(){App.clearProgress('progressWfStage3');},2000);
     if(typeof saveProject==='function')saveProject(true);
     App.showToast('③ 골격 생성 완료 — 검토 관문(대안·특허성) 확인 후 ④ 본문 통합으로 진행하세요','success');
@@ -1597,4 +1602,67 @@ async function _wizStart(){
     if(p)p.style.display='none'; const sm=document.getElementById('wizSummary'); if(sm)sm.style.display='block';
     try{renderWorkflowRail();renderWfValidationBar();}catch(_e){}
   }catch(_e){}
+}
+
+// ═══ [배치12] 프로젝트 상태 격리(_wfHardReset) + ② 설계 보드 + 적용값 대조(genParams) ═══
+function _wfHardReset(){   // [배치12 A] 프로젝트 전환/신규 시 워크플로우 표시·플래그 완전 초기화(상태 누출 차단)
+  try{ _wfStage5Warned=false; }catch(_e){}
+  try{ _wfDesignAt=0; }catch(_e){}
+  try{ _methodUserSet=false; }catch(_e){}       // 수동 방법 오버라이드 해제(신규 프로젝트 자동 동기 재개)
+  try{ _methodMismatchAck=false; }catch(_e){}    // 명칭-방법 모순 확인 리셋(08)
+  try{ for(let i=0;i<5;i++){ const b=document.getElementById('wfBadge'+i); if(b)b.textContent=''; } }catch(_e){}   // 레일 배지 DOM 즉시 blank(렌더 실패해도 잔상 0)
+  try{ const bar=document.getElementById('wfValidationBar'); if(bar)bar.style.display='none'; }catch(_e){}
+  try{ if(typeof renderWorkflowRail==='function')renderWorkflowRail(); }catch(_e){}
+  try{ if(typeof renderDesignBoard==='function')renderDesignBoard(); }catch(_e){}
+}
+// 현재 설계 파라미터(선택값) — genParams 대조·스냅샷 공통 소스
+function _designParams(){
+  return {
+    type:selectedTitleType||'', method:!!includeMethodClaims,
+    generalDep:parseInt(deviceGeneralDep)||0, anchorDep:parseInt(deviceAnchorDep)||0,
+    figures:parseInt((document.getElementById('optDeviceFigures')||{}).value)||0,
+    math:!!((document.getElementById('chkUnifiedMath')||{}).checked), detail:detailLevel||'standard'
+  };
+}
+// [배치12 C] 생성 시점 스냅샷 — stage='stage3'(골격) | 'stage4'(본문)
+function _snapshotGenParams(stage){ try{ const p=_designParams(); p.at=Date.now(); if(!genParams||typeof genParams!=='object')genParams={}; genParams[stage]=p; }catch(_e){} }
+function _wfFmtParam(field,v){ return (field==='method'||field==='math')?((v===true||v==='true')?'포함':'제외'):v; }
+// 적용값 대조 배지 — 구조 필드는 stage3(③), 본문 필드는 stage4(④) 스냅샷과 비교
+function _renderApplyBadges(){
+  const host=document.getElementById('dbApplyBadges'); if(!host)return;
+  const cur=_designParams(); const s3=genParams&&genParams.stage3, s4=genParams&&genParams.stage4; const rows=[];
+  const cmp=function(label,field,snap,sl){
+    if(!snap){ rows.push('<span style="color:var(--color-text-tertiary)">'+label+': 미생성</span>'); return; }
+    if(String(cur[field])===String(snap[field]))rows.push('<span style="color:var(--color-success,#3DAE7A)">'+label+' 적용됨 ✓('+sl+' 생성 시)</span>');
+    else rows.push('<b style="color:var(--color-warning,#E8A33D)">'+label+' 변경됨 — '+sl+' 재생성 필요('+_wfFmtParam(field,snap[field])+'→'+_wfFmtParam(field,cur[field])+')</b>');
+  };
+  cmp('유형','type',s3,'③'); cmp('방법','method',s3,'③'); cmp('일반종속항','generalDep',s3,'③'); cmp('앵커종속항','anchorDep',s3,'③'); cmp('도면수','figures',s3,'③');
+  cmp('수학식','math',s4,'④'); cmp('분량','detail',s4,'④');
+  host.innerHTML='<div style="font-size:11px;display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--color-border)"><span style="width:100%;font-weight:700;color:var(--color-text-secondary)">적용값 대조(선택 vs 생성 시)</span>'+rows.join('')+'</div>';
+}
+// ② 설계 보드 렌더 — 컨트롤 값을 현재 상태에서 채우고 적용 배지 갱신(요약 텍스트가 아니라 컨트롤 자체가 상태)
+function renderDesignBoard(){
+  try{
+    const t=selectedTitleType||'';
+    document.querySelectorAll('#dbTypeCards [data-dbtype]').forEach(function(b){const on=b.getAttribute('data-dbtype')===t;b.classList.toggle('btn-primary',on);b.classList.toggle('btn-outline',!on);});
+    const note=document.getElementById('dbMethodNote'); if(note)note.innerHTML=t?('방법 청구항: <b>'+(includeMethodClaims?'포함':'제외')+'</b> '+(_methodUserSet?'(수동 설정)':'(유형 기반 자동)')):'유형을 선택하세요.';
+    const g=document.getElementById('dbGeneralDep'); if(g)g.value=deviceGeneralDep;
+    const a=document.getElementById('dbAnchorDep'); if(a)a.value=deviceAnchorDep;
+    const f=document.getElementById('dbFigures'); if(f)f.value=(document.getElementById('optDeviceFigures')||{}).value||'4';
+    const d=document.getElementById('selUnifiedDetail'); if(d&&['compact','standard','detailed','maximal'].includes(detailLevel))d.value=detailLevel;   // 분량 select는 canonical(chkUnifiedMath 체크박스는 사용자 상태 그대로 둠)
+    const tot=document.getElementById('dbClaimTotal'); if(tot)tot.textContent='장치 총 '+(1+(parseInt(deviceGeneralDep)||0)+(parseInt(deviceAnchorDep)||0))+'항'+(includeMethodClaims?(' · 방법 총 '+(1+(parseInt(methodGeneralDep)||0)+(parseInt(methodAnchorDep)||0))+'항'):'');
+    _renderApplyBadges();
+  }catch(_e){}
+}
+function _designSetType(t){ try{ if(typeof _wizSetType==='function')_wizSetType(t); }catch(_e){} try{renderDesignBoard();}catch(_e){} }
+function _dbSet(field,val){
+  try{
+    if(field==='generalDep'){ if(typeof updateDeviceGeneralDep==='function')updateDeviceGeneralDep(val); const e=document.getElementById('inpDeviceGeneralDep'); if(e)e.value=val; }
+    else if(field==='anchorDep'){ if(typeof updateDeviceAnchorDep==='function')updateDeviceAnchorDep(val); const e=document.getElementById('inpDeviceAnchorDep'); if(e)e.value=val; }
+    else if(field==='figures'){ const e=document.getElementById('optDeviceFigures'); if(e)e.value=val; }
+    else if(field==='detailToggle'){ detailLevel=(document.getElementById('selUnifiedDetail')||{}).value||detailLevel; const lv=['compact','standard','detailed','maximal','custom']; document.querySelectorAll('#detailLevelCards .selection-card').forEach(function(cd,i){cd.classList.toggle('selected',lv[i]===detailLevel);}); }
+    // 'mathToggle'는 canonical chkUnifiedMath 자체가 소스 — 별도 write 없이 마크/렌더만.
+  }catch(_e){}
+  try{_wfMarkDesign();}catch(_e){}   // 설계 변경 → 하류 stale 트리거(기구현)
+  try{renderDesignBoard(); if(typeof _wizRender==='function')_wizRender();}catch(_e){}
 }

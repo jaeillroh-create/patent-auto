@@ -93,7 +93,7 @@ test('★ HTML — 5단계 레일(배지)·상주 검증바·스테이지 메인
   ['① 발명 파악', '② 설계 결정', '③ 골격(청구항·도면)', '④ 본문 통합·검토', '⑤ 검증·출원'].forEach(l => assert.ok(HTML_SRC.includes(l), '★ 레일 라벨 ' + l));
   for (let i = 0; i < 5; i++) assert.ok(HTML_SRC.includes('id="wfBadge' + i + '"'), '★ 배지 ' + i);
   assert.match(HTML_SRC, /id="wfValidationBar" onclick="wfOpenValidation\(\)"/, '★ 상주 검증바');
-  assert.match(HTML_SRC, /id="wfStage2Main"[\s\S]{0,400}id="wfDesignSummary"/, '★ ② 프리플라이트 카드(설계 요약)');
+  assert.match(HTML_SRC, /id="wfStage2Main"[\s\S]{0,700}id="dbTypeCards"[\s\S]{0,2400}id="dbApplyBadges"/, '★ ② 설계 보드(유형·적용 배지 — 배치12 B)');
   assert.match(HTML_SRC, /id="btnWfStage3" onclick="wfRunStage3\(\)"/, '★ ③ 주동선 버튼');
   assert.match(HTML_SRC, /id="btnWfStage4" onclick="wfRunStage4\(\)"/, '★ ④ 주동선 버튼');
   assert.match(HTML_SRC, /<details class="wf-adv" id="wfAdv1">/, '★ ② 고급 아코디언');
@@ -104,5 +104,5 @@ test('★ HTML — 5단계 레일(배지)·상주 검증바·스테이지 메인
 test('★ 소스 — switchTab·markOutputTimestamp·openProject에 레일/바 갱신 훅', () => {
   assert.match(PATENT_SRC, /if\(i===4&&typeof _wfWarnStage5==='function'\)_wfWarnStage5\(\)/, '★ ⑤ 진입 경고 훅');
   assert.match(PATENT_SRC, /markOutputTimestamp[\s\S]{0,200}renderWorkflowRail==='function'\)renderWorkflowRail\(\)/, '★ 산출 갱신 → 배지 반영');
-  assert.match(PATENT_SRC, /\[배치8\] 복원 직후 레일·검증바 갱신/, '★ openProject 훅');
+  assert.match(PATENT_SRC, /\[배치12 A\/B\] 전체 상태 복원 후 1회 렌더/, '★ openProject 말미 렌더 훅(배치12: 전체 복원 후 1회)');
 });

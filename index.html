@@ -986,22 +986,33 @@
     <div id="page1" class="page" role="tabpanel">
       <!-- 왼쪽: 설정 -->
       <div class="page-left">
-        <!-- [배치8] ② 설계 결정 — 주동선(프리플라이트 상설). 기본값으로 ③ 진행 가능, 세부는 아래 고급에서 -->
+        <!-- [배치12 B] ② = 설계 보드(단일 진실) — 컨트롤 자체가 상태. 전부 기존 상태·② 카드 요소의 양방향 미러(새 상태 없음). -->
         <div class="card" id="wfStage2Main" style="border:1.5px solid var(--color-primary)">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> ② 설계 결정 (프리플라이트)</div></div>
-          <div id="wfDesignSummary" style="font-size:12px;color:var(--color-text-secondary);margin-bottom:10px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px">설계 요약을 불러오는 중…</div>
-          <div style="display:flex;gap:14px;align-items:center;margin:0 0 10px;flex-wrap:wrap;font-size:12px">
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="chkUnifiedMath"> 수학식 포함(상세설명에 인라인 생성 — 변수 정의·참조 규칙 자동 준수)</label>
-            <label style="display:flex;align-items:center;gap:6px">분량
-              <select id="selUnifiedDetail" onchange="detailLevel=this.value" style="font-size:12px;padding:2px 6px">
-                <option value="compact">간결(3~4천자)</option>
-                <option value="standard" selected>표준(5~7천자)</option>
-                <option value="detailed">상세(8천~1만자)</option>
-                <option value="maximal">최대(2.2~2.5만자)</option>
-              </select>
-            </label>
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> ② 설계 보드</div></div>
+          <div style="margin-bottom:12px">
+            <div style="font-size:12px;font-weight:700;margin-bottom:6px">발명 유형</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px" id="dbTypeCards">
+              <button class="btn btn-outline" data-dbtype="서버" onclick="_designSetType('서버')">~서버</button>
+              <button class="btn btn-outline" data-dbtype="방법" onclick="_designSetType('방법')">~방법</button>
+              <button class="btn btn-outline" data-dbtype="시스템" onclick="_designSetType('시스템')">~시스템</button>
+              <button class="btn btn-outline" data-dbtype="서버 및 방법" onclick="_designSetType('서버 및 방법')">~서버 및 방법</button>
+            </div>
+            <div id="dbMethodNote" style="font-size:12px;color:var(--color-text-secondary);margin-top:6px"></div>
           </div>
-          <p style="font-size:11px;color:var(--color-text-tertiary)">청구항 구성(카테고리·종속항 수·앵커)의 세부 조정은 아래 <b>고급(단계별 세부)</b>에서, 골격 생성은 <b>③ 단계</b>에서 실행합니다.</p>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:10px">
+            <label>일반 종속항 <input type="number" id="dbGeneralDep" min="0" max="20" style="width:56px" onchange="_dbSet('generalDep',this.value)"></label>
+            <label>앵커 종속항 <input type="number" id="dbAnchorDep" min="0" max="10" style="width:56px" onchange="_dbSet('anchorDep',this.value)"></label>
+            <span id="dbClaimTotal" style="font-weight:700"></span>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:6px">
+            <label>도면 수 <input type="number" id="dbFigures" min="1" max="10" style="width:56px" onchange="_dbSet('figures',this.value)"></label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="chkUnifiedMath" onchange="_dbSet('mathToggle')"> 수학식 포함(상세설명에 인라인 생성 — 변수 정의·참조 규칙 자동 준수)</label>
+            <label>분량 <select id="selUnifiedDetail" onchange="detailLevel=this.value;_dbSet('detailToggle')" style="font-size:12px;padding:2px 6px">
+              <option value="compact">간결(3~4천자)</option><option value="standard" selected>표준(5~7천자)</option><option value="detailed">상세(8천~1만자)</option><option value="maximal">최대(2.2~2.5만자)</option>
+            </select></label>
+          </div>
+          <div id="dbApplyBadges"></div>
+          <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:8px">청구항 카테고리·앵커 테마 등 세부는 아래 <b>고급</b>에서, 골격 생성은 <b>③</b>에서 실행합니다. 값을 바꾸면 하류 단계에 "재생성 필요" 배지가 표시됩니다.</p>
         </div>
         <details class="wf-adv" id="wfAdv1">
           <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급(단계별 세부) — 청구항 구성·개별 생성</summary>
@@ -1511,12 +1522,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260720a"></script>
-<script src="patent/patent.js?v=20260721-b34"></script>
+<script src="patent/patent.js?v=20260721-b35"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260721-b34"></script>
+<script src="opinion/opinion.js?v=20260721-b35"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260721-b34';
+  var _cv='?v=20260721-b35';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1614,8 +1625,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260721-b34"></script>
-<script src="docket.js?v=20260721-b34"></script>
+<script src="division/division.js?v=20260721-b35"></script>
+<script src="docket.js?v=20260721-b35"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>

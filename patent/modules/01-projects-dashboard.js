@@ -24,6 +24,8 @@ function clearAllState(){
   const mt=document.getElementById('methodToggle');if(mt){mt.checked=true;toggleMethod();}
   document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));
   const b01=document.getElementById('btnStep01');if(b01)b01.disabled=true;
+  genParams=null;   // [배치12 C] 적용값 스냅샷 초기화
+  try{ if(typeof _wfHardReset==='function')_wfHardReset(); }catch(_e){}   // [배치12 A] 워크플로우 플래그·레일 배지·검증바·수동 오버라이드 완전 초기화(상태 누출 차단)
   updateStats();
 }
 
@@ -251,7 +253,7 @@ async function openProject(pid){
   // Restore detail level
   detailLevel=s.detailLevel||'standard';customDetailChars=s.customDetailChars||2000;
   { const _ud=document.getElementById('selUnifiedDetail'); if(_ud&&['compact','standard','detailed','maximal'].includes(detailLevel))_ud.value=detailLevel; }   // [배치6 N3a] 통합 카드 분량 표시 동기화
-  try{ if(typeof renderWorkflowRail==='function')renderWorkflowRail(); if(typeof renderWfValidationBar==='function')renderWfValidationBar(); }catch(_e){}   // [배치8] 복원 직후 레일·검증바 갱신
+  genParams=(s.genParams&&typeof s.genParams==='object')?s.genParams:null;   // [배치12 C] 적용값 스냅샷 복원(레일·이 배치8 훅은 openProject 말미로 이동 — 전체 상태 복원 후 1회 렌더)
   diagramData=s.diagramData||{};
   outputTimestamps=s.outputTimestamps||{};
   stepUserCommands=s.stepUserCommands||{};
@@ -268,6 +270,7 @@ async function openProject(pid){
   if(!API_KEY){App.ensureApiKey();}
   // Restore UI
   document.getElementById('methodToggle').checked=includeMethodClaims;toggleMethod();
+  try{_methodUserSet=false;}catch(_e){}   // [배치12 A] 복원은 저장값 반영일 뿐 — 이후 유형 변경 시 자동 동기 재개(toggleMethod의 user-set 부작용 취소)
   restoreClaimUI();
   // Restore custom title type
   if(selectedTitleType){const ci=document.getElementById('customTitleType');if(ci)ci.value=selectedTitleType;document.getElementById('btnStep01').disabled=false;}
@@ -308,6 +311,8 @@ async function openProject(pid){
     window.__patentReviewState = (_rr && _rr.data && _rr.data.result) || null;
   } catch (_e) { window.__patentReviewState = null; }
   App.showScreen('main');App.updateModelToggle();App.updateProviderLabel();App.showToast(`"${data.title}" 열림`);
+  // [배치12 A/B] 전체 상태 복원 후 1회 렌더 — 레일 배지·상주 검증바·② 설계 보드(적용값 대조). 이전 프로젝트 DOM 잔상 제거.
+  try{ if(typeof renderWorkflowRail==='function')renderWorkflowRail(); if(typeof renderWfValidationBar==='function')renderWfValidationBar(); if(typeof renderDesignBoard==='function')renderDesignBoard(); }catch(_e){}
 }
 function restoreClaimUI(){
   const dc=document.getElementById('selDeviceCategory');if(dc)dc.value=deviceCategory;
@@ -334,5 +339,5 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,costTracking:_costTracking,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,chatHistory,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes,termSnapshot};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,costTracking:_costTracking,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,chatHistory,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes,termSnapshot,genParams};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 

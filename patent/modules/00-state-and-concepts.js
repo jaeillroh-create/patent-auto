@@ -53,6 +53,8 @@ let inventionScope = null;
 // CHK-13(term_generation_mismatch)이 완성본에 이 staleTerm이 잔존하는지(=재생성 안 된 구세대 산출물 혼입)를 검출.
 // ⚠ 자동 치환 금지 — 검출·경고·재생성 유도만. 결정: (a) diff청크+≥5자, (b) CHK-13=HIGH, (c) 스텝저장 경고만.
 let termSnapshot = { titleKo:'', titleEn:'', components:[], staleTerms:[], updatedAt:null };
+// [배치12 C] 적용값 스냅샷 — ③ 골격/④ 본문 생성 시점의 설계 파라미터. "선택한 값 vs 적용된 값" 대조 근거(프로젝트 영속).
+let genParams = null;   // { stage3:{type,method,generalDep,anchorDep,figures,at}, stage4:{...,math,detail,at} }
 function _termSnapshotDefault(){ return { titleKo:'', titleEn:'', components:[], staleTerms:[], updatedAt:null }; }
 function _activeStaleTerms(){ return (termSnapshot && Array.isArray(termSnapshot.staleTerms)) ? termSnapshot.staleTerms : []; }
 // 현재 명칭 코퍼스(공백 제거) — 복귀 프루닝 기준(현재 명칭에 다시 등장하면 stale 아님)

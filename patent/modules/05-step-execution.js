@@ -1711,6 +1711,7 @@ async function runUnifiedCohesionGen(opts){
     // ★ [배치9 D1] 인라인 수식 모드 — 구 step_09(수식 병합 구본)는 getLatestDescription 우선순위상 새 본문을 가리는
     //   섀도잉 소스이므로 이력 보존 후 제거(인라인 수식이 본문에 이미 포함됨).
     if(_mathInline&&outputs.step_09){ pushOutputHistory('step_09','unified','runUnifiedCohesionGen'); delete outputs.step_09; try{delete outputTimestamps.step_09;}catch(_e){} }
+    try{ if(typeof _snapshotGenParams==='function')_snapshotGenParams('stage4'); }catch(_e){}   // [배치12 C] 본문 생성 시점 설계 스냅샷(수학식·분량 대조 기준)
     try{if(typeof _mergeConceptIntoStep08==='function')_mergeConceptIntoStep08();}catch(_e){}   // 예시도(step_08c) 합본(있을 때만)
     try{if(typeof reflectConceptsToSpec==='function')reflectConceptsToSpec();}catch(_e){}       // 예시도 부호 step_18 반영(있을 때만)
     try{if(typeof invalidateDownstream==='function')invalidateDownstream('step_08');}catch(_e){}
@@ -1790,6 +1791,7 @@ async function runUnifiedFullChain(_wizOpts){
     await runDiagramStep('step_07');
     if(!outputs.step_07){ App.clearProgress('progressUnifiedFullChain'); App.showToast('장치 도면 생성 실패 — 여기서 중단(청구항까지 보존)','error'); return; }
     if(wantMethod&&outputs.step_10){ await runDiagramStep('step_11'); }
+    try{ if(typeof _snapshotGenParams==='function')_snapshotGenParams('stage3'); }catch(_e){}   // [배치12 C] 체인 골격 스냅샷(cohesion이 stage4 스냅샷)
     // ── [4/4] 상세설명+부호 통합 ──
     P('[4/4] 상세설명+부호 통합 생성...',3);
     const _beforeDesc=outputs.step_08||'';

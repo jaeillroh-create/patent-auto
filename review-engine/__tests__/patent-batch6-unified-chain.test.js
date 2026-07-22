@@ -111,8 +111,8 @@ test('★ N3c 소스 — cohesion이 dlCfg를 단계별과 동일 소비(도면�
 // ─────────── N3a·N3b — 토글 UI + 체인 배선 ───────────
 
 test('★ N3a — index.html 토글(기본 off)·분량 프리셋 노출 + 복원 동기화', () => {
-  assert.match(HTML_SRC, /<input type="checkbox" id="chkUnifiedMath">/, '★ 수학식 토글(checked 속성 없음 = 기본 off)');
-  assert.match(HTML_SRC, /id="selUnifiedDetail" onchange="detailLevel=this\.value"/, '★ 분량 프리셋 select(전역 연동)');
+  assert.match(HTML_SRC, /id="chkUnifiedMath"(?![^>]*\bchecked\b)/, '★ 수학식 토글(checked 속성 없음 = 기본 off, 배치12로 ② 보드 이동)');
+  assert.match(HTML_SRC, /id="selUnifiedDetail" onchange="detailLevel=this\.value;_dbSet/, '★ 분량 프리셋 select(전역 연동)');
   assert.match(PATENT_SRC, /\[배치6 N3a\] 통합 카드 분량 표시 동기화/, '★ openProject 복원 시 select 동기화');
 });
 test('★ N3b→배치9 D1 — 토글 의미 전환: [5/5] 자동 실행 배선 제거, 인라인 파라미터로만 소비', () => {
