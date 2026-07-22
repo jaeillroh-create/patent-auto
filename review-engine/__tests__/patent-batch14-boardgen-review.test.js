@@ -57,11 +57,14 @@ test('★ 2 — 위저드에서 유형·설계 화면 제거, 설계 요약 에�
   assert.ok(!/function _wizSetGeneralDep/.test(PATENT_SRC) && !/function _wizSetDetail/.test(PATENT_SRC), '★ 죽은 설계 setter 제거');
 });
 
-// 3) ③ 재생성 전용화
-test('★ 3 — ③ 주 CTA 보조 스타일 + "골격만 재생성" + "기본 생성 경로는 ② 통합 생성"', () => {
-  assert.match(HTML_SRC, /class="btn btn-outline btn-full" id="btnWfStage3" onclick="wfRunStage3\(\)"[\s\S]{0,120}골격만 재생성/, '★ 보조 스타일 + 라벨');
-  assert.match(HTML_SRC, /<b>기본 생성 경로는 ② 통합 생성<\/b>/, '★ 문구');
-  assert.ok(!/id="btnWfStage3"[^>]*btn-primary/.test(HTML_SRC), '★ 주 스타일(primary) 아님');
+// 3) ③ 재생성 전용화 — [배치15D-2] 큰 CTA(btnWfStage3) 제거, 섹션별 재생성만
+test('★ 3(배치15D-2) — ③ 큰 CTA 제거 + "골격 확인·재생성" + 섹션별 재생성만', () => {
+  assert.ok(!/id="btnWfStage3"/.test(HTML_SRC), '★ ③ 큰 CTA(btnWfStage3) 제거');
+  assert.match(HTML_SRC, /③ 골격 확인·재생성/, '★ ③ 재정의 타이틀');
+  assert.match(HTML_SRC, /<b>전체 생성은 ② 통합 생성<\/b>/, '★ 문구(전체는 ②)');
+  // 섹션별 재생성(청구항만/도면만)만 유지
+  assert.match(HTML_SRC, /id="btnWfRegenClaims" onclick="wfRegenClaims\(\)"/, '★ 청구항만 재생성 유지');
+  assert.match(HTML_SRC, /id="btnWfRegenFigures" onclick="wfRegenFigures\(\)"/, '★ 도면만 재생성 유지');
 });
 
 // 4a) 자동검증 버튼 제거 + 자동 경로/함수 유지

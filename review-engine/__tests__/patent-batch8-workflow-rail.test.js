@@ -94,7 +94,7 @@ test('★ HTML — 5단계 레일(배지)·상주 검증바·스테이지 메인
   for (let i = 0; i < 5; i++) assert.ok(HTML_SRC.includes('id="wfBadge' + i + '"'), '★ 배지 ' + i);
   assert.match(HTML_SRC, /id="wfValidationBar" onclick="wfOpenValidation\(\)"/, '★ 상주 검증바');
   assert.match(HTML_SRC, /id="wfStage2Main"[\s\S]{0,700}id="dbTypeCards"[\s\S]{0,4200}id="dbApplyBadges"/, '★ ② 설계 보드(유형·적용 배지 — 배치12 B/15B/15C 확장)');
-  assert.match(HTML_SRC, /id="btnWfStage3" onclick="wfRunStage3\(\)"/, '★ ③ 주동선 버튼');
+  assert.match(HTML_SRC, /id="btnWfRegenClaims" onclick="wfRegenClaims\(\)"/, '★ ③ 섹션 재생성(배치15D-2: 큰 CTA 제거)');
   assert.match(HTML_SRC, /id="btnWfStage4" onclick="wfRunStage4\(\)"/, '★ ④ 주동선 버튼');
   assert.match(HTML_SRC, /<details class="wf-adv" id="wfAdv1">/, '★ ② 고급 아코디언');
   assert.match(HTML_SRC, /<details class="wf-adv" id="wfAdv2">/, '★ ③ 고급 아코디언');

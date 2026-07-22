@@ -508,9 +508,11 @@ function renderSpecValidation(){
     const cls=i.severity==='CRITICAL'?'issue-critical':'issue-high';
     return `<div class="issue-item ${cls}" style="border-left:3px solid ${col};padding:8px 10px;margin:4px 0;border-radius:6px;background:rgba(0,0,0,0.02)"><b>[${i.severity}·${App.escapeHtml(i.check)}]</b> ${App.escapeHtml(i.message)}${i.detail?`<br><span style="font-size:11px;color:var(--color-text-tertiary)">${App.escapeHtml(i.detail)}</span>`:''}</div>`;
   }).join('');}
-  // [Part2] 'AI로 수정' — 자동 보정 가능한 검사(중복·절단·수식변수·예시·부호정합)가 있을 때만 노출.
+  // ★ [배치15D-1] ⑤ 자동보정('AI로 수정') 제거 — 본문만 수정하여 부호표·표제 정합이 깨지는 문제(docF: dupassign·
+  //   heading·meta 미해소). AI 수정 경로를 ④ 본문 통합(재생성) / ④ AI 검토(step_13 반영본)로 일원화하고, 잔존
+  //   결함은 ④로 이동해 재생성하도록 안내한다(자동보정 버튼 대신 이동 버튼).
   const _fixN=iss.filter(i=>FIXABLE_CHECKS.has(i.check)).length;
-  if(_fixN)h+=`<button class="btn btn-primary btn-full" id="btnFixSpecValidate" style="margin-top:10px" onclick="fixSpecValidationIssues()"><span class="ico" data-icon="settings"></span> AI로 수정 (${_fixN}건 자동 보정)</button><p style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px">중복 사본 제거·문장 절단·수학식 변수 정의·예시 보충·부호정합을 상세설명/부호의 설명에 반영합니다. 표제 누락·순서는 해당 스텝 재실행이 필요합니다.</p><div id="progressFixSpecValidate"></div>`;
+  if(iss.length)h+=`<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--color-border);border-radius:6px;font-size:12px;background:var(--color-bg-secondary,rgba(74,125,255,0.04))"><b>잔존 결함은 ④ 본문 통합에서 재생성하여 반영하세요.</b><br><span style="color:var(--color-text-secondary)">⑤ 자동보정은 본문만 수정해 부호표·표제 정합이 깨질 수 있어 제거되었습니다. AI 수정은 <b>④ 본문 통합 재생성</b> 또는 <b>④ AI 검토(반영)</b>로 일원화됩니다${_fixN?` (본문 반영 대상 ${_fixN}건)`:''}.</span><br><button class="btn btn-outline btn-sm" style="margin-top:8px" id="btnGoStage4FromValidate" onclick="switchTab(3)"><span class="ico" data-icon="edit"></span> ④ 본문 통합에서 재생성하여 반영</button></div>`;
   el.innerHTML=h;
 }
 // [Item 2] 다운로드/복사 직전 CRITICAL 경고(차단 아님 — division 선례 B: 경고+진행). 열린 결정은 PR 본문 참조.

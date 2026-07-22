@@ -1,5 +1,16 @@
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
-function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===1&&typeof renderDesignBoard==='function')renderDesignBoard();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();}catch(_e){}}   // [배치8/12] 레일·검증바·② 설계 보드 갱신 + ⑤ 진입 경고
+function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===1&&typeof renderDesignBoard==='function')renderDesignBoard();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();if(typeof _renderFlowBars==='function')_renderFlowBars();}catch(_e){}}   // [배치8/12/15D] 레일·검증바·② 설계 보드·전체 흐름 안내 갱신 + ⑤ 진입 경고
+// [배치15D-4] 전체 흐름 안내(각 탭 상단 1줄) — 현재 단계 강조. 정적 컨테이너(.wf-flowbar[data-flowstep])를 채운다.
+function _renderFlowBars(){
+  try{
+    const steps=['① 입력','② 전체 생성','③ 골격 확인','④ 본문 재검토','⑤ 검증·출원'];
+    (document.querySelectorAll('.wf-flowbar')||[]).forEach(function(el){
+      const cur=parseInt(el.getAttribute('data-flowstep'))||0;
+      el.innerHTML=steps.map(function(s,i){return i===cur?('<b style="color:var(--color-primary)">'+s+'</b>'):('<span style="color:var(--color-text-tertiary)">'+s+'</span>');}).join(' <span style="color:var(--color-text-tertiary);opacity:.6">→</span> ');
+    });
+  }catch(_e){}
+}
+try{ if(typeof document!=='undefined'&&typeof setTimeout==='function')setTimeout(function(){try{_renderFlowBars();}catch(_e){}},0); }catch(_e){}   // 최초 진입(page0) 1회 채움
 let _methodUserSet=false;   // [배치10 A] 사용자가 방법 토글을 수동 변경하면 이후 유형 기반 자동 동기화보다 우선
 function _syncMethodFromType(t){
   // ★ [배치15C-2] 방법 기본 OFF 정책 반전 — 유형이 '~방법'/'~서버 및 방법'(기록매체·프로그램 포함)이어도

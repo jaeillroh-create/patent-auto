@@ -102,12 +102,13 @@ test('★ 소스 — Step13(buildPrompt) 에 machineFindingsForReview 주입', (
   assert.match(PATENT_SRC, /기계검증이 발견한 결정론적 결함/, '★ 주입 배너 존재');
 });
 
-test('★ 소스 — 완성본 패널에 AI 수정 버튼 + fixSpecValidationIssues 3경로', () => {
-  assert.match(PATENT_SRC, /btnFixSpecValidate[\s\S]*?onclick="fixSpecValidationIssues\(\)"/, '★ AI로 수정 버튼');
-  assert.match(PATENT_SRC, /async function fixSpecValidationIssues\(\)/, '★ 수정 진입점 정의');
-  assert.match(PATENT_SRC, /_dedupParagraphs\(dev\)/, '★ (A) 중복 제거');
-  assert.match(PATENT_SRC, /부호의 설명.*목록을 작성|_collectBodyRefPairs\(\)/, '★ (B) 부호의 설명 재생성');
-  assert.match(PATENT_SRC, /semIss[\s\S]*?parseEditInstructions/, '★ (C) 상세설명 의미 보정(편집지시)');
+test('★ 소스(배치15D-1) — ⑤ AI 수정 버튼 제거·④ 재생성 안내로 일원화, fixSpecValidationIssues는 레거시 존치', () => {
+  // [배치15D-1] ⑤ 자동보정 버튼 제거(본문만 수정→부호표·표제 불변). AI 수정은 ④ 재생성/AI검토로 일원화.
+  assert.ok(!/onclick="fixSpecValidationIssues\(\)"/.test(PATENT_SRC), '★ AI로 수정 버튼 제거');
+  assert.match(PATENT_SRC, /id="btnGoStage4FromValidate" onclick="switchTab\(3\)"/, '★ ④ 본문 통합에서 재생성 안내 버튼');
+  assert.match(PATENT_SRC, /④ 본문 통합에서 재생성하여 반영/, '★ ④ 이동 문구');
+  // 함수는 레거시로 존치(다른 경로/향후 재사용 대비 — 소스 무손실)
+  assert.match(PATENT_SRC, /async function fixSpecValidationIssues\(\)/, '★ fixSpecValidationIssues 함수 존치(레거시)');
 });
 
 test('★ 소스 — 수정 대상 원본 갱신(step_13_applied/step_18) + 이력 보존', () => {
