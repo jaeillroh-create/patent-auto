@@ -1673,6 +1673,12 @@ function parseCohesiveBundle(raw){
   const defDevice=[...refMap.keys()].filter(function(n){return !n.startsWith('S');});
   const notInTable=[...bodyNums].filter(function(n){return !refMap.has(n);}).sort(function(a,b){return a-b;});
   const unusedRef=defDevice.filter(function(n){return !bodyNums.has(n);}).sort(function(a,b){return a-b;});
+  // ★ [검증 반영] 방법 단계부호(S###) 커버리지 — 방법 본문이 참조하는 S부호가 REFTABLE에 정의됐는가.
+  //   (bodyNums는 순수숫자만 잡아 S부호 미정의를 못 봄 → A6 재요청/최초생성이 [방법단계]를 빠뜨리면 방법부호가
+  //    부호의 설명에서 통째로 누락된 채 침묵 커밋되던 갭. 여기서 S부호 미정의를 게이트 대상으로 노출.)
+  const methodSNums=new Set();
+  if(method){ let ms; const sre=/\bS(\d{1,4})\b/g; while((ms=sre.exec(method))!==null)methodSNums.add('S'+ms[1]); }
+  const methodNotInTable=[...methodSNums].filter(function(s){return !refMap.has(s);}).sort();
   // ★ deviceLeak: "단계적/단계별/단계에서/단계 없이" 형태론적 오탐 배제 — "하는 단계"+조사/문말 또는 "제N단계"·S### 만 방법누출로 판정. S 자릿수 1~4 확대.
   const deviceLeak=/하는\s*단계(?:이|가|를|은|는|와|과|;|,|\.|\s*$|\s+S\d)|제\s*\d+\s*단계|\bS\d{1,4}\b/.test(device||'');
   // ★ methodOk: "하는 단계" 단일 리터럴 강제 완화 — 단계/과정/스텝 어휘군 또는 S### 단계식별자 중 하나면 방법 극성 인정.
@@ -1680,7 +1686,7 @@ function parseCohesiveBundle(raw){
   let dupCount=0; try{ if(typeof _dedupParagraphs==='function')dupCount=_dedupParagraphs((device||'')+'\n\n'+(method||'')).removed; }catch(_e){}
   return { device:device, method:method, refMap:refMap, solution:solution, effects:effects, abstract:abstractTxt,
     ok:{ hasRef:!!refBlock&&refMap.size>0, hasDevice:!!device, hasMethod:method!=null },
-    report:{ notInTable:notInTable, unusedRef:unusedRef, dupNums:dupNums, deviceLeak:deviceLeak, methodOk:methodOk, dupCount:dupCount } };
+    report:{ notInTable:notInTable, unusedRef:unusedRef, dupNums:dupNums, deviceLeak:deviceLeak, methodOk:methodOk, dupCount:dupCount, methodNotInTable:methodNotInTable } };
 }
 // 완성본 검증기 지표 스냅샷(A/B 대조용).
 function _specIssueCounts(){
@@ -1746,6 +1752,7 @@ async function runUnifiedCohesionGen(opts){
     }
     const rep=r.report, gate=[];
     if(rep.notInTable.length)gate.push('본문 미정의 부호 '+rep.notInTable.length+'개('+rep.notInTable.slice(0,6).join(', ')+')');
+    if(rep.methodNotInTable&&rep.methodNotInTable.length)gate.push('방법 단계부호 미정의 '+rep.methodNotInTable.length+'개('+rep.methodNotInTable.slice(0,6).join(', ')+')');   // ★ [검증 반영] 방법 S부호 커버리지
     if(rep.dupNums.length)gate.push('부호표 번호 중복 '+rep.dupNums.length+'개');
     if(rep.deviceLeak)gate.push('장치 상세설명에 방법표현 누출');
     if(!rep.methodOk)gate.push('방법 상세설명 극성 미충족');
@@ -1830,6 +1837,7 @@ async function runUnifiedFullChain(_wizOpts){
   const _rail=function(n){ try{_wfRunning=n; if(typeof renderWorkflowRail==='function')renderWorkflowRail();}catch(_e){} };   // [배치15A-2] 레일 running 배지(스피너)
   const _phase=function(id,st,detail){ try{ if(typeof _wizPhaseSet==='function')_wizPhaseSet(id,st,detail); }catch(_e){} };   // [배치15A-2] 오버레이 체크리스트
   let stopInfo=null;   // [배치15A-1] 중단 사유 — 종료 훅이 배너·요약·재개 버튼에 노출
+  _lastGenError='';    // ★ [검증 반영] 체인 진입 시 리셋 — 이전 실행/개별 스텝의 stale 사유 누출 방지(명칭 phase 오사유 표시)
   try{
     // ── [1/4] 발명의 명칭 ──
     _phase('title','running'); _rail(1); P('[1/4] 발명의 명칭 생성...',0);
@@ -1875,11 +1883,17 @@ async function runUnifiedFullChain(_wizOpts){
     _phase('figures','done','장치'+(wantMethod&&outputs.step_11?'+방법':'')+' 도면'+(_conceptN?('+예시도'+_conceptN):''));
     // ── [4/4] 상세설명+부호 통합 ──
     _phase('body','running'); _rail(4); P('[4/4] 상세설명+부호 통합 생성...',3);
-    const _beforeDesc=outputs.step_08||''; _lastGenError='';
-    await runUnifiedCohesionGen({chained:true});
-    if((outputs.step_08||'')===_beforeDesc){ stopInfo={label:'본문',cause:(_lastGenError||'상세설명·부호 통합 게이트 미통과/실패 — 산출물(F) 탭에서 재시도')}; _phase('body','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 본문: '+stopInfo.cause,'error'); return; }
-    // ([배치9 D1] 수학식은 토글 on 시 [4/4] cohesion 안에서 인라인 생성됨 — 별도 [5/5] 없음)
-    _phase('body','done','상세설명·부호'+(_mathOn?'·수학식':''));
+    // ★ [검증 반영] 이어하기(resume) 모드에서 본문(step_08·step_18)이 이미 있으면 재사용 — 덮어쓰지 않는다
+    //   ("빈 단계만 생성" 계약). 재생성 경로에서만 변경여부(change-detection)로 성공 판정(완성본을 중단 오보고 방지).
+    if(resume&&outputs.step_08&&outputs.step_18){
+      _phase('body','done','상세설명·부호(재사용)');
+    } else {
+      const _beforeDesc=outputs.step_08||''; _lastGenError='';
+      await runUnifiedCohesionGen({chained:true});
+      if((outputs.step_08||'')===_beforeDesc){ stopInfo={label:'본문',cause:(_lastGenError||'상세설명·부호 통합 게이트 미통과/실패 — 산출물(F) 탭에서 재시도')}; _phase('body','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 본문: '+stopInfo.cause,'error'); return; }
+      // ([배치9 D1] 수학식은 토글 on 시 [4/4] cohesion 안에서 인라인 생성됨 — 별도 [5/5] 없음)
+      _phase('body','done','상세설명·부호'+(_mathOn?'·수학식':''));
+    }
     App.showProgress('progressUnifiedFullChain','완료',TOTAL,TOTAL);
     setTimeout(function(){App.clearProgress('progressUnifiedFullChain');},2500);
     App.showToast('통합 생성 완료 — 명칭·청구항·도면·상세설명·부호 생성됨. 산출물(F) 탭에서 확인하세요','success');

@@ -889,7 +889,7 @@ async function _cascadeRunShort(sid){
   if(sid==='step_04'){
     const sr=await searchPriorArt(selectedTitle);
     pushOutputHistory('step_04','cascade','_cascadeRunShort');
-    outputs.step_04=sr?sr.formatted:'【특허문헌】\n(관련 선행특허��� 검색하지 못하였습니다)';
+    outputs.step_04=sr?sr.formatted:'【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';
     markOutputTimestamp('step_04');_cascadeRender('step_04',outputs.step_04);
     return;
   }
@@ -1719,15 +1719,19 @@ function _wfHardReset(){   // [배치12 A] 프로젝트 전환/신규 시 워크
   try{ if(typeof renderDesignBoard==='function')renderDesignBoard(); }catch(_e){}
 }
 // 현재 설계 파라미터(선택값) — genParams 대조·스냅샷 공통 소스
+// ★ [검증 반영·배치15B-1a] 장치 앵커 종속항 시작 청구항 번호 — 독립항 수(N)를 반영해 시프트(N>1이면 N+일반+1).
+//   step_06 R5·step_08·step_13·step_15 프롬프트가 공유(번호 정합). N=1이면 기존 deviceAnchorStart 유지.
+function _deviceAnkStart(){ const n=Math.max(1,parseInt(deviceIndepCount)||1); return (n>1)?(n+(parseInt(deviceGeneralDep)||0)+1):(parseInt(deviceAnchorStart)||(1+(parseInt(deviceGeneralDep)||0)+1)); }
 function _designParams(){
+  const _mon=!!((document.getElementById('chkUnifiedMath')||{}).checked);
   return {
     type:selectedTitleType||'', method:!!includeMethodClaims,
     indep:parseInt(deviceIndepCount)||1,   // [배치15B-1] 독립항 수(stage3)
     generalDep:parseInt(deviceGeneralDep)||0, anchorDep:parseInt(deviceAnchorDep)||0,
     figures:parseInt((document.getElementById('optDeviceFigures')||{}).value)||0,
     concept:(conceptDiagramEnabled?(parseInt(conceptTargetCount)||0):0),   // [배치15B-1] 예시도 수(0=제외, stage3)
-    math:!!((document.getElementById('chkUnifiedMath')||{}).checked),
-    mathCount:parseInt(mathBlockCount)||0,   // [배치15B-1] 수학식 개수(stage4)
+    math:_mon,
+    mathCount:(_mon?(parseInt(mathBlockCount)||0):0),   // ★ [검증 반영] 수학식 미포함 시 0 마스킹(concept와 대칭) — math off에서 개수 변경만으로 오탐 stale 방지
     detail:detailLevel||'standard'
   };
 }

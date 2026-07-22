@@ -691,7 +691,7 @@ function _buildPromptCore(stepId,inv,T,styleRef){
 ② ★★ 다중인용(2 이상의 항을 인용) 절대 금지 — "제N항 또는 제M항에 있어서", "제N항 및 제M항에 있어서", "제N항 내지 제M항 중 어느 한 항에 있어서" 등 2 이상 항을 인용하는 형태를 절대 생성하지 마라.
 ④ 종속항은 인용하는 독립항 또는 종속항보다 뒤에 기재 (번호 역전 금지)
 
-${deviceAnchorDep>0?`(R5) 등록 앵커 종속항 (청구항 ${deviceAnchorStart}부터):
+${deviceAnchorDep>0?`(R5) 등록 앵커 종속항 (청구항 ${_ankStart}부터):
 - 신규성/진보성 방어용 "창의적·구체적 기술수단" 포함
 - 수치·수식·기호 과다 기재 금지 (후속 단계에서 정량화)
 - 아래 A~C 중 최소 2개 포함:
@@ -1132,7 +1132,7 @@ ${!hasMethodClaims?`- 방법 청구항이 생성되지 않았으므로, 방법 �
 - ⛔ 단, 불필요한 반복/나열·동어반복으로 분량을 늘리지 마라. 목표 분량은 각 구성요소의 기능·동작 원리·데이터 흐름·상호 연동·변형 실시예를 빠짐없이 기술하여 채우되(반복 없이 내용을 충분히), 억지로 늘리지 마라.
 
 ${deviceAnchorDep>0?`★★ 앵커 종속항 뒷받침 규칙 (등록 핵심 — 42조 4항) ★★
-- 앵커 종속항(청구항 ${deviceAnchorStart}~${deviceAnchorStart+deviceAnchorDep-1})은 진보성 방어의 핵심이다. ★ 심사관이 별도 보정 없이 곧바로 등록을 인정할 수 있는 수준으로, 일반 종속항보다 2배 이상 상세하고 정량적 근거가 명확하게 기술하라.
+- 앵커 종속항(청구항 ${_deviceAnkStart()}~${_deviceAnkStart()+deviceAnchorDep-1})은 진보성 방어의 핵심이다. ★ 심사관이 별도 보정 없이 곧바로 등록을 인정할 수 있는 수준으로, 일반 종속항보다 2배 이상 상세하고 정량적 근거가 명확하게 기술하라.
 - 각 앵커 종속항의 기술적 구성에 대해:
   (1) 동작 원리를 단계별(입력→처리→출력)로 설명하라
   (2) "이러한 구성에 의하면, ~한 기술적 효과를 얻을 수 있다" 문장을 반드시 포함하라
@@ -1373,7 +1373,7 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
       }[detailLevel]||{charPerFig:'약 1,500자 이상',total:'약 5,000~7,000자',extra:'각 구성요소를 충분히 상세하게 기술하라.'};
       if(!dlCfg.total)dlCfg.total='약 '+(customDetailChars*Math.max(_uDevFig.length,1))+'자';
       const methodLengthPreset=detailLevel==='compact'?'약 800자':detailLevel==='detailed'?'약 2,000자 이상':detailLevel==='maximal'?'약 8,000자 이상':detailLevel==='custom'?('약 '+Math.round((customDetailChars||1200)*0.7)+'자'):'약 1,200자 이상';
-      const anchorGuide=deviceAnchorDep>0?('청구항 '+deviceAnchorStart+'~'+(deviceAnchorStart+deviceAnchorDep-1)):'(앵커 없음)';
+      const anchorGuide=deviceAnchorDep>0?('청구항 '+_deviceAnkStart()+'~'+(_deviceAnkStart()+deviceAnchorDep-1)):'(앵커 없음)';
       const designComponents=(_extractStructuredComponents(outputs.step_07||'')||[]).map(c=>c.name+'('+c.refNum+')').join(', ')||'(도면 구성요소 목록 없음)';
       const deviceClaims=outputs.step_06||'';
       const methodClaims=outputs.step_10||'(방법 청구항 없음 — <<<METHOD_DESC>>> 블록도 생략하라)';
@@ -1528,7 +1528,7 @@ ${_mf?`\n═══ ★ 기계검증이 발견한 결정론적 결함 (최우선 
 - 수치 예시 계산 결과가 본문 서술 방향(증가/감소)과 모순되지 않는지 검산
 
 ${(deviceAnchorDep>0||methodAnchorDep>0)?`[6] 앵커 종속항 뒷받침 집중 검토 (등록 핵심)
-${deviceAnchorDep>0?`- 장치 앵커 종속항(청구항 ${deviceAnchorStart}~)의 각 기술적 구성이 상세설명에서:
+${deviceAnchorDep>0?`- 장치 앵커 종속항(청구항 ${_deviceAnkStart()}~)의 각 기술적 구성이 상세설명에서:
   ① 동작 원리가 단계별(입력→처리→출력)로 설명되어 있는가?
   ② "이러한 구성에 의하면, ~" 형태의 기술적 효과가 명시되어 있는가?
   ③ 기준값/임계값/가중치의 의의가 설명되어 있는가?

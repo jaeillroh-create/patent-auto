@@ -69,14 +69,24 @@ test('★ 1 — renderDesignBoard: 총 항수 = 독립+일반+앵커(독립 N �
   assert.equal(els.dbConceptCountWrap.style.display, 'inline', '★ 예시도 포함 → 수 입력 표시');
   assert.equal(els.dbMathCountWrap.style.display, 'inline', '★ 수학식 포함 → 수 입력 표시');
 });
-test('★ 1 — genParams 대조: indep·concept(stage3)·mathCount(stage4) drift 반영', () => {
+test('★ 1 — genParams 대조: indep(stage3) drift + mathCount(stage4)는 math on일 때만(off 마스킹=오탐 방지)', () => {
   run('selectedTitleType="서버"; deviceIndepCount=1; deviceGeneralDep=5; deviceAnchorDep=4; detailLevel="standard"; genParams=null;');
   run('_snapshotGenParams("stage3"); _snapshotGenParams("stage4");');
   assert.equal(run('_genParamsDrift()'), false, '★ 스냅샷 직후 drift 없음');
   run('deviceIndepCount=3;');
   assert.equal(run('_genParamsDrift()'), true, '★ 독립항 수 변경 → stage3 drift');
-  run('deviceIndepCount=1; mathBlockCount=5;');
-  assert.equal(run('_genParamsDrift()'), true, '★ 수학식 개수 변경 → stage4 drift');
+  run('deviceIndepCount=1;');
+  // math ON: 개수 변경이 stage4 drift로 반영
+  els.chkUnifiedMath = mkEl(); els.chkUnifiedMath.checked = true;
+  run('mathBlockCount=3; _snapshotGenParams("stage4");');
+  assert.equal(run('_genParamsDrift()'), false, '★ math on 스냅샷 직후 drift 없음');
+  run('mathBlockCount=5;');
+  assert.equal(run('_genParamsDrift()'), true, '★ math on + 개수 변경 → stage4 drift');
+  // ★ [검증 반영] math OFF: 스냅샷·현재 모두 mathCount=0 마스킹 → 개수만 바꿔도 오탐 stale 없음
+  els.chkUnifiedMath.checked = false;
+  run('mathBlockCount=3; _snapshotGenParams("stage4");');
+  run('mathBlockCount=5;');
+  assert.equal(run('_genParamsDrift()'), false, '★ math off면 개수 변경 stale 마스킹(오탐 방지)');
 });
 test('★ 1a — step_06 다중 독립항 프롬프트(N>1: 상이한 권리 관점·번호 자동 시프트)', () => {
   run('selectedTitle="테스트 서버"; selectedTitleType="서버"; deviceIndepCount=3; deviceGeneralDep=4; deviceAnchorDep=2;');
@@ -181,6 +191,9 @@ test('★ A8 — 메타 응답 잔존 검출(CRITICAL) + 정상 명세 미발화
   assert.ok(iss.length && iss[0].severity === 'CRITICAL', '★ 메타 응답 → CRITICAL');
   const normal = '【발명을 실시하기 위한 구체적인 내용】\n제어부(100)는 수신된 데이터를 처리하여 결과를 저장부(110)에 제공한다. 판단부(120)는 임계값과 비교한다.';
   assert.equal(run('validateSpecification(' + JSON.stringify(normal) + ').filter(function(i){return i.check==="meta_response_residue";}).length'), 0, '★ 정상 명세 미발화');
+  // ★ [검증 반영] 평서체 정당 프로즈 오탐 금지 — "정보가 필요한 경우"·"입력되지 않은 경우"·"검색하지 못하였습니다"
+  const legit = '【발명을 실시하기 위한 구체적인 내용】\n제어부(100)는 제어 정보가 필요한 경우 상기 판단부(120)에 재인증을 요청한다. 위치 정보가 부족한 경우 인접 좌표로부터 보간을 수행한다. 센서 값이 입력되지 않은 경우 디폴트값을 적용한다.';
+  assert.equal(run('validateSpecification(' + JSON.stringify(legit) + ').filter(function(i){return i.check==="meta_response_residue";}).length'), 0, '★ 정당 조건서술("정보가 필요/부족한 경우"·"입력되지 않은 경우") 오탐 금지(HIGH 결함 수정)');
   const kipris = '【선행기술문헌】\n(관련 선행특허를 검색하지 못하였습니다)';
   assert.equal(run('validateSpecification(' + JSON.stringify(kipris) + ').filter(function(i){return i.check==="meta_response_residue";}).length'), 0, '★ KIPRIS 무결과 폴백은 제외(오탐 방지)');
 });
@@ -213,4 +226,45 @@ test('★ A9 — "상기 X": 자기 항 선행 도입 미발화 + 진성(체인�
   const iss = JSON.parse(run('JSON.stringify(validateClaims(' + JSON.stringify(claims) + ').filter(function(i){return /선행기재 없음/.test(i.message);}))'));
   assert.ok(!iss.some(i => /상기 산출된 편차/.test(i.message)), '★ 자기 항 선행 도입("편차를 산출") → 오탐 미발화');
   assert.ok(iss.some(i => /양자난수/.test(i.message)), '★ 진성 미정의("양자난수 생성기") → HIGH 발화');
+});
+
+// ═══════════ 적대 검증 반영 FIX (8건) ═══════════
+// R5 앵커번호(다중독립항): step_06 R5가 시프트된 _ankStart 사용(헤더와 충돌·일반종속항 겹침 제거)
+test('★ FIX-R5 — N>1 앵커 R5 시작번호가 헤더와 일치(_ankStart), 일반 종속항과 안 겹침', () => {
+  run('selectedTitle="s"; selectedTitleType="서버"; deviceIndepCount=2; deviceGeneralDep=6; deviceAnchorDep=3;');
+  const p = run("buildPrompt('step_06')");
+  assert.ok(/일반 종속항: 6개 \(청구항 3~8\)/.test(p), '★ 일반 종속항 3~8');
+  assert.ok(/등록 앵커 종속항: 3개 \(청구항 9~11\)/.test(p), '★ 헤더 앵커 9~11');
+  assert.ok(/\(R5\) 등록 앵커 종속항 \(청구항 9부터\)/.test(p), '★ R5도 9부터(raw 8 아님) — 헤더 일치·겹침 제거');
+  assert.ok(!/\(청구항 8부터\)/.test(p), '★ 겹치는 8부터 표기 소멸');
+});
+test('★ FIX-R5 — _deviceAnkStart 공유 헬퍼: N=1은 기존값, N>1은 시프트', () => {
+  run('deviceIndepCount=1; deviceGeneralDep=5; deviceAnchorStart=7;');
+  assert.equal(run('_deviceAnkStart()'), 7, '★ N=1 → 기존 deviceAnchorStart');
+  run('deviceIndepCount=3; deviceGeneralDep=4;');
+  assert.equal(run('_deviceAnkStart()'), 8, '★ N=3,gen=4 → 3+4+1=8');
+});
+
+// body resume 가드: 이어하기에서 본문 존재 시 재사용(덮어쓰지 않음) + 재생성 경로만 change-detection
+test('★ FIX-body-resume — resume&&step_08&&step_18 재사용 분기(덮어쓰기 방지)', () => {
+  assert.match(PATENT_SRC, /if\(resume&&outputs\.step_08&&outputs\.step_18\)\{\s*_phase\('body','done','상세설명·부호\(재사용\)'\);/, '★ 본문 존재 시 재사용(재생성 skip)');
+  assert.match(PATENT_SRC, /\} else \{\s*const _beforeDesc=outputs\.step_08\|\|''; _lastGenError='';\s*await runUnifiedCohesionGen/, '★ 재생성 경로에서만 change-detection');
+});
+
+// _lastGenError 체인 진입 리셋(사유 누출 방지)
+test('★ FIX-lastGenError — 체인 진입 시 _lastGenError 리셋', () => {
+  assert.match(PATENT_SRC, /let stopInfo=null;[\s\S]{0,120}_lastGenError='';\s*\/\/ ★ \[검증 반영\] 체인 진입 시 리셋/, '★ 진입 리셋(stale 사유 누출 차단)');
+});
+
+// A6 방법 S부호 커버리지: 방법 본문 S부호가 REFTABLE 미정의면 게이트 발화(침묵 커밋 방지)
+test('★ FIX-A6-methodS — parseCohesiveBundle: 방법 S부호 미정의 → methodNotInTable + 게이트', () => {
+  // REFTABLE에 [방법단계] 누락, 방법 본문은 S100 참조 → methodNotInTable=[S100]
+  const raw = '<<<REFTABLE>>>\n[장치부호]\n(100) 제어부\n<<<END_REFTABLE>>>\n<<<DEVICE_DESC>>>\n제어부(100)는 처리한다.\n<<<END_DEVICE_DESC>>>\n<<<METHOD_DESC>>>\nS100 단계에서 제어부가 데이터를 수신하는 단계를 수행한다.\n<<<END_METHOD_DESC>>>';
+  const rep = JSON.parse(run('JSON.stringify(parseCohesiveBundle(' + JSON.stringify(raw) + ').report)'));
+  assert.ok(rep.methodNotInTable && rep.methodNotInTable.indexOf('S100') >= 0, '★ 방법 S부호 미정의 검출');
+  // 방법 S부호가 정의되면 미검출
+  const raw2 = raw.replace('[장치부호]\n(100) 제어부', '[장치부호]\n(100) 제어부\n[방법단계]\n(S100) 수신 단계');
+  const rep2 = JSON.parse(run('JSON.stringify(parseCohesiveBundle(' + JSON.stringify(raw2) + ').report)'));
+  assert.equal((rep2.methodNotInTable || []).length, 0, '★ 방법 S부호 정의 시 통과');
+  assert.match(PATENT_SRC, /방법 단계부호 미정의 '\+rep\.methodNotInTable\.length/, '★ 게이트에 방법 S부호 커버리지 반영');
 });
