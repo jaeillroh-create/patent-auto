@@ -1664,6 +1664,7 @@ function parseCohesiveBundle(raw){
   // ★ [배치9 D3] 마무리 흡수 — 효과·해결수단·요약을 동일 컨텍스트에서 수확(선택 블록 — 없으면 null, 게이트 무관).
   //   신규 마커도 grab→_stripMk 동일 위생 경로 통과(에코 마커 제거) + CHK-0(placeholder_residue) 안전망 적용.
   const solution=grab('SOLUTION'), effects=grab('EFFECTS'), abstractTxt=grab('ABSTRACT');
+  const task=grab('TASK');   // ★ [배치15E-1] 해결하고자 하는 과제(step_05) — 청구항 확정 후 cohesion에서 역설계 생성(청구항 부재 시점 메타응답 원천 소멸)
   const refMap=new Map(); const dupNums=[];
   (refBlock||'').split('\n').forEach(function(line){ const t=line.trim(); if(!t)return;
     if(/^\[장치부호\]/.test(t)||/^\[방법단계\]/.test(t))return;
@@ -1688,7 +1689,7 @@ function parseCohesiveBundle(raw){
   // ★ methodOk: "하는 단계" 단일 리터럴 강제 완화 — 단계/과정/스텝 어휘군 또는 S### 단계식별자 중 하나면 방법 극성 인정.
   const methodOk=method?(/하는\s*(?:단계|과정|스텝)/.test(method)||/\bS\d{1,4}\b/.test(method)):true;
   let dupCount=0; try{ if(typeof _dedupParagraphs==='function')dupCount=_dedupParagraphs((device||'')+'\n\n'+(method||'')).removed; }catch(_e){}
-  return { device:device, method:method, refMap:refMap, solution:solution, effects:effects, abstract:abstractTxt,
+  return { device:device, method:method, refMap:refMap, solution:solution, effects:effects, abstract:abstractTxt, task:task,
     ok:{ hasRef:!!refBlock&&refMap.size>0, hasDevice:!!device, hasMethod:method!=null },
     report:{ notInTable:notInTable, unusedRef:unusedRef, dupNums:dupNums, deviceLeak:deviceLeak, methodOk:methodOk, dupCount:dupCount, methodNotInTable:methodNotInTable } };
 }
@@ -1826,6 +1827,7 @@ async function runUnifiedCohesionGen(opts){
     if(r.method&&outputs.step_10){ let m=r.method; try{if(typeof sanitizeDescFigureRefs==='function')m=sanitizeDescFigureRefs(m,'method');}catch(_e){} outputs.step_12=m; markOutputTimestamp('step_12'); }
     outputs.step_18=_deriveSignDescription(r.refMap); markOutputTimestamp('step_18');   // 완성 본문 기준 결정적 직렬화(refMap 명칭 우선)
     // ★ [배치9 D3] 마무리 흡수 커밋 — 동일 컨텍스트 산출(효과·해결수단·요약)이 있으면 원자 커밋(없으면 기존 유지·비파괴)
+    if(r.task){ pushOutputHistory('step_05','unified','runUnifiedCohesionGen'); outputs.step_05=r.task; markOutputTimestamp('step_05'); }   // ★ [배치15E-1] 과제 — 청구항 확정 후 역설계(메타응답 원천 소멸)
     if(r.solution){ pushOutputHistory('step_17','unified','runUnifiedCohesionGen'); outputs.step_17=r.solution; markOutputTimestamp('step_17'); }
     if(r.effects){ pushOutputHistory('step_16','unified','runUnifiedCohesionGen'); outputs.step_16=r.effects; markOutputTimestamp('step_16'); }
     if(r.abstract){ pushOutputHistory('step_19','unified','runUnifiedCohesionGen'); outputs.step_19=r.abstract; markOutputTimestamp('step_19'); }
@@ -1895,6 +1897,8 @@ async function runUnifiedFullChain(_wizOpts){
   const P=function(msg,cur){App.showProgress('progressUnifiedFullChain',msg,cur,TOTAL);try{const w=document.getElementById('wizProgressText');if(w)w.textContent=msg;}catch(_e){}};   // [배치11 B] 위저드 진행 미러
   const _rail=function(n){ try{_wfRunning=n; if(typeof renderWorkflowRail==='function')renderWorkflowRail();}catch(_e){} };   // [배치15A-2] 레일 running 배지(스피너)
   const _phase=function(id,st,detail){ try{ if(typeof _wizPhaseSet==='function')_wizPhaseSet(id,st,detail); }catch(_e){} };   // [배치15A-2] 오버레이 체크리스트
+  // ★ [배치15E-2] 체인 phase 입력 가드 — 단독 버튼과 동일 checkDependency 공유. 필수 입력 미충족 시 그 스텝 스킵+경고(침묵 메타응답 방지).
+  const _guard=function(sid){ try{ const d=(typeof checkDependency==='function')?checkDependency(sid):null; if(d){ App.showToast('['+sid+'] 건너뜀 — '+d,'warning'); return false; } }catch(_e){} return true; };
   let stopInfo=null;   // [배치15A-1] 중단 사유 — 종료 훅이 배너·요약·재개 버튼에 노출
   _lastGenError='';    // ★ [검증 반영] 체인 진입 시 리셋 — 이전 실행/개별 스텝의 stale 사유 누출 방지(명칭 phase 오사유 표시)
   try{
@@ -1909,25 +1913,28 @@ async function runUnifiedFullChain(_wizOpts){
     }
     if(!selectedTitle){ stopInfo={label:'명칭',cause:(_lastGenError||'명칭 생성 실패 — 발명 자료를 확인 후 다시 시도')}; _phase('title','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 명칭: '+stopInfo.cause,'error'); return; }
     _phase('title','done','확정: '+selectedTitle);
-    // ── [배치15B-2] 기초(기술분야·배경기술) — 명칭 확정 직후·청구항 이전. 부수사항이므로 실패해도 체인 중단 안 함(비블로킹). ──
-    _phase('basis','running'); _rail(1); P('[기초] 기술분야·배경기술 생성...',0);
-    if(!(resume&&outputs.step_02)){ _lastGenError=''; try{ await runStep('step_02'); }catch(_e){} }
-    if(!(resume&&outputs.step_03)){ _lastGenError=''; try{ await runStep('step_03'); }catch(_e){} }
+    // ── [배치15E-1] 기초(기술분야·배경·선행기술) — 명칭 종속 스텝만(step_02·03·04). ★ 과제(step_05)는 청구항을
+    //   필수 입력으로 참조하므로 여기서 제외 — 청구항 확정 후 [본문] cohesion의 TASK 블록으로 역설계 생성(메타응답 원천 소멸).
+    //   부수사항이라 실패해도 체인 중단 안 함(비블로킹). 각 스텝은 _guard(checkDependency)로 입력 미충족 시 스킵+경고(15E-2).
+    _phase('basis','running'); _rail(1); P('[기초] 기술분야·배경·선행기술 생성...',0);
+    if(_guard('step_02')&&!(resume&&outputs.step_02)){ _lastGenError=''; try{ await runStep('step_02'); }catch(_e){} }
+    if(_guard('step_03')&&!(resume&&outputs.step_03)){ _lastGenError=''; try{ await runStep('step_03'); }catch(_e){} }
+    if(_guard('step_04')&&!(resume&&outputs.step_04)){ _lastGenError=''; try{ await runStep('step_04'); }catch(_e){} }
     // 결과를 ④ 우측 기초 결과 카드(resultsBatch25)에 렌더(runStep의 renderOutput은 개별 resultStepNN 대상이라 no-op)
-    try{ if(typeof renderBatchResult==='function'){ const _rb=(typeof document!=='undefined')&&document.getElementById('resultsBatch25'); if(_rb)_rb.innerHTML=''; if(outputs.step_02)renderBatchResult('resultsBatch25','step_02',outputs.step_02); if(outputs.step_03)renderBatchResult('resultsBatch25','step_03',outputs.step_03); } }catch(_e){}
-    if(outputs.step_02||outputs.step_03)_phase('basis','done','기술분야'+(outputs.step_02&&outputs.step_03?'·배경기술':''));
+    try{ if(typeof renderBatchResult==='function'){ const _rb=(typeof document!=='undefined')&&document.getElementById('resultsBatch25'); if(_rb)_rb.innerHTML=''; ['step_02','step_03','step_04'].forEach(function(k){ if(outputs[k])renderBatchResult('resultsBatch25',k,outputs[k]); }); } }catch(_e){}
+    if(outputs.step_02||outputs.step_03||outputs.step_04)_phase('basis','done','기술분야'+(outputs.step_03?'·배경':'')+(outputs.step_04?'·선행기술':''));
     else _phase('basis','fail',(_lastGenError||'기초 생성 실패 — 청구항은 계속 진행(부수사항)'));
-    // ── [2/4] 청구항 ──
+    // ── [2/4] 청구항 ── (입력 가드 15E-2 — _guard 실패 시 생성 스킵 → 아래 출력 부재 검사가 중단 처리)
     _phase('claims','running'); _rail(3); P('[2/4] 청구항 생성(장치'+(wantMethod?'+방법':'')+')...',1);
-    if(!(resume&&outputs.step_06)){ _lastGenError=''; await runStep('step_06'); }
-    if(!outputs.step_06){ stopInfo={label:'청구항',cause:(_lastGenError||'장치 청구항 생성 실패')}; _phase('claims','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 청구항: '+stopInfo.cause,'error'); return; }
-    if(wantMethod&&!(resume&&outputs.step_10)){ _lastGenError=''; await runStep('step_10'); }
+    if(!(resume&&outputs.step_06)&&_guard('step_06')){ _lastGenError=''; await runStep('step_06'); }
+    if(!outputs.step_06){ stopInfo={label:'청구항',cause:(_lastGenError||checkDependency('step_06')||'장치 청구항 생성 실패')}; _phase('claims','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 청구항: '+stopInfo.cause,'error'); return; }
+    if(wantMethod&&!(resume&&outputs.step_10)&&_guard('step_10')){ _lastGenError=''; await runStep('step_10'); }
     _phase('claims','done','장치'+(wantMethod&&outputs.step_10?'+방법':'')+' 청구항');
     // ── [3/4] 도면 ──
     _phase('figures','running'); _rail(3); P('[3/4] 도면 생성(Mermaid)...',2);
-    if(!(resume&&outputs.step_07)){ _lastGenError=''; await runDiagramStep('step_07'); }
-    if(!outputs.step_07){ stopInfo={label:'도면',cause:(_lastGenError||'장치 도면 생성 실패')}; _phase('figures','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 도면: '+stopInfo.cause,'error'); return; }
-    if(wantMethod&&outputs.step_10&&!(resume&&outputs.step_11)){ _lastGenError=''; await runDiagramStep('step_11'); }
+    if(!(resume&&outputs.step_07)&&_guard('step_07')){ _lastGenError=''; await runDiagramStep('step_07'); }
+    if(!outputs.step_07){ stopInfo={label:'도면',cause:(_lastGenError||checkDependency('step_07')||'장치 도면 생성 실패')}; _phase('figures','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 도면: '+stopInfo.cause,'error'); return; }
+    if(wantMethod&&outputs.step_10&&!(resume&&outputs.step_11)&&_guard('step_11')){ _lastGenError=''; await runDiagramStep('step_11'); }
     // ── [배치15B-1c] 예시도(step_07c) — ② "예시도 포함" 시 목표 개수만큼 생성(제외 시 스킵) ──
     let _conceptN=0;
     if(typeof conceptDiagramEnabled!=='undefined'&&conceptDiagramEnabled){

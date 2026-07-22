@@ -121,10 +121,12 @@ test('★ 1 — 영속: saveProject 페이로드 + openProject 복원 필드', (
 
 // ═══ 2) 체인 [기초] phase + ① Step2~5 강등·결과 ④ 이동 ═══
 test('★ 2 — 체인 [기초] phase: 명칭 직후·청구항 이전 step_02·03 생성(비블로킹) + resultsBatch25 렌더', () => {
-  assert.match(PATENT_SRC, /_phase\('basis','running'\); _rail\(1\); P\('\[기초\] 기술분야·배경기술 생성/, '★ 기초 phase 진입(명칭 직후)');
-  assert.match(PATENT_SRC, /if\(!\(resume&&outputs\.step_02\)\)\{ _lastGenError=''; try\{ await runStep\('step_02'\); \}catch/, '★ 기술분야 생성(비블로킹 try)');
-  assert.match(PATENT_SRC, /if\(!\(resume&&outputs\.step_03\)\)\{ _lastGenError=''; try\{ await runStep\('step_03'\); \}catch/, '★ 배경기술 생성(비블로킹 try)');
-  assert.match(PATENT_SRC, /renderBatchResult\('resultsBatch25','step_02',outputs\.step_02\)/, '★ 기초 결과 ④ 카드 렌더');
+  assert.match(PATENT_SRC, /_phase\('basis','running'\); _rail\(1\); P\('\[기초\] 기술분야·배경·선행기술 생성/, '★ 기초 phase 진입(명칭 직후·선행기술 포함)');
+  assert.match(PATENT_SRC, /if\(_guard\('step_02'\)&&!\(resume&&outputs\.step_02\)\)\{ _lastGenError=''; try\{ await runStep\('step_02'\); \}catch/, '★ 기술분야 생성(가드·비블로킹)');
+  assert.match(PATENT_SRC, /if\(_guard\('step_03'\)&&!\(resume&&outputs\.step_03\)\)\{ _lastGenError=''; try\{ await runStep\('step_03'\); \}catch/, '★ 배경기술 생성(가드·비블로킹)');
+  assert.match(PATENT_SRC, /if\(_guard\('step_04'\)&&!\(resume&&outputs\.step_04\)\)\{ _lastGenError=''; try\{ await runStep\('step_04'\); \}catch/, '★ [15E] 선행기술(step_04) 기초에 추가');
+  assert.ok(!/await runStep\('step_05'\)/.test(PATENT_SRC), '★ [15E] 과제(step_05)는 체인 개별 runStep으로 실행 안 함(cohesion TASK로 이동)');
+  assert.match(PATENT_SRC, /\['step_02','step_03','step_04'\]\.forEach\(function\(k\)\{ if\(outputs\[k\]\)renderBatchResult\('resultsBatch25',k,outputs\[k\]\)/, '★ 기초 결과(02·03·04) ④ 카드 렌더');
   // 순서: 기초(basis)가 청구항(claims running) 이전
   const iBasis = PATENT_SRC.indexOf("_phase('basis','running')");
   const iClaims = PATENT_SRC.indexOf("_phase('claims','running')");

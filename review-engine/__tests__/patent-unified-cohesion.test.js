@@ -201,7 +201,7 @@ test('★ 소스 — runUnifiedFullChain 4단계 오케스트레이션(명칭→
   assert.match(PATENT_SRC, /await runStep\('step_01'\)/, '★ [1] 명칭');
   assert.match(PATENT_SRC, /parseTitleCandidates\(outputs\.step_01/, '★ [1] 명칭 자동 선택(첫 후보)');
   assert.match(PATENT_SRC, /await runStep\('step_06'\)/, '★ [2] 장치 청구항');
-  assert.match(PATENT_SRC, /wantMethod&&!\(resume&&outputs\.step_10\)\)\{ _lastGenError=''; await runStep\('step_10'\)/, '★ [2] 방법 청구항(옵션·배치15A 이어하기 가드)');
+  assert.match(PATENT_SRC, /wantMethod&&!\(resume&&outputs\.step_10\)&&_guard\('step_10'\)\)\{ _lastGenError=''; await runStep\('step_10'\)/, '★ [2] 방법 청구항(옵션·이어하기·15E 가드)');
   assert.match(PATENT_SRC, /await runDiagramStep\('step_07'\)/, '★ [3] 장치 도면');
   assert.match(PATENT_SRC, /await runUnifiedCohesionGen\(\{chained:true\}\)/, '★ [4] 상세설명+부호 통합(chained)');
 });

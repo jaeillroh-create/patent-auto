@@ -84,8 +84,8 @@ test('★ 1 — [4/4] 실패 시 "여기부터 재개(빈 단계만)" 버튼(_wi
   assert.match(HTML_SRC.length ? PATENT_SRC : PATENT_SRC, /onclick="_wizResumeChain\(\)"/, '★ 재개 버튼 배선');
   assert.match(PATENT_SRC, /async function _wizResumeChain\(\)\{[\s\S]{0,400}runUnifiedFullChain\(\{mode:'continue'\}\)/, '★ 재개 = 이어하기(continue)');
   // continue(resume) 모드: 산출물 있는 단계는 건너뛴다
-  assert.match(PATENT_SRC, /if\(!\(resume&&outputs\.step_06\)\)\{ _lastGenError=''; await runStep\('step_06'\)/, '★ 청구항 빈 단계만');
-  assert.match(PATENT_SRC, /if\(!\(resume&&outputs\.step_07\)\)\{ _lastGenError=''; await runDiagramStep\('step_07'\)/, '★ 도면 빈 단계만');
+  assert.match(PATENT_SRC, /if\(!\(resume&&outputs\.step_06\)&&_guard\('step_06'\)\)\{ _lastGenError=''; await runStep\('step_06'\)/, '★ 청구항 빈 단계만(+15E 가드)');
+  assert.match(PATENT_SRC, /if\(!\(resume&&outputs\.step_07\)&&_guard\('step_07'\)\)\{ _lastGenError=''; await runDiagramStep\('step_07'\)/, '★ 도면 빈 단계만(+15E 가드)');
 });
 
 // ═══ 2) 진행 가시성 — 체크리스트 + 레일 running ═══
