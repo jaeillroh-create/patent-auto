@@ -694,7 +694,11 @@ ${baseDesc}${_maybeScopeGuard('step_13_applied','text')}`);
     }
 
     // ═══ [2] 수학식 재삽입 ═══
-    if(outputs.step_09){
+    // ★ [검증 반영] 인라인 수식 모드(chkUnifiedMath)에선 step_09가 없고(통합 생성이 삭제) 수식이 step_08(cur) 본문에
+    //   있다. 종전엔 재삽입을 if(outputs.step_09)로만 게이트해 인라인 모드에서 baseDesc=stripMathBlocks로 지운 수식이
+    //   복원 안 돼 검토 반영 후 수식이 전량 소실됐다(침묵 회귀). 인라인 모드도 cur에서 추출·재삽입하도록 게이트 확장.
+    const _mathInlineAR=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
+    if(outputs.step_09||_mathInlineAR){
       App.showProgress('progressApplyReview',`[2/${totalSteps}] 수학식 재삽입 중...`,2,totalSteps);
       const existingMath=extractExistingMathBlocks(cur);
       if(existingMath.length>0){
@@ -1720,6 +1724,15 @@ ${deviceText||''}
 [방법 상세설명]
 ${methodText||'(없음)'}`;
 }
+// ★ [검증 반영] refMap → REFTABLE 블록 직렬화 — 수식 재요청 합성 시 (A6 복구 포함) 현재 refMap을 부호표로 재구성.
+function _serializeRefTable(refMap){
+  if(!refMap||!refMap.size)return '<<<REFTABLE>>>\n<<<END_REFTABLE>>>';
+  const dev=[],mth=[];
+  refMap.forEach(function(name,num){ (String(num).charAt(0)==='S'?mth:dev).push('('+num+') '+name); });
+  let s='<<<REFTABLE>>>\n[장치부호]\n'+dev.join('\n');
+  if(mth.length)s+='\n[방법단계]\n'+mth.join('\n');
+  return s+'\n<<<END_REFTABLE>>>';
+}
 // ★ [배치15C-1] 수학식 인라인 재요청 — 부호표(REFTABLE)는 건드리지 않고, 상세설명 본문에 정확히 N개의
 //   【수학식】 블록을 삽입해 재출력. 도면부호(NN)·구성 명칭은 원문 그대로 보존(신규 부호 도입 금지).
 function _buildMathInlineRetryPrompt(deviceText, methodText, mathN){
@@ -1776,16 +1789,9 @@ async function runUnifiedCohesionGen(opts){
       App.showToast(_refMiss?'부호표 재요청 실패 — ④ 본문 통합 재생성이 필요합니다(본문 보존)':'통합 생성 실패: REFTABLE/장치 상세설명 블록 누락 — 기존 내용 보존, 다시 시도하세요','error');
       console.warn('[unified] block missing',r.ok); return;
     }
-    const rep=r.report, gate=[];
-    if(rep.notInTable.length)gate.push('본문 미정의 부호 '+rep.notInTable.length+'개('+rep.notInTable.slice(0,6).join(', ')+')');
-    if(rep.methodNotInTable&&rep.methodNotInTable.length)gate.push('방법 단계부호 미정의 '+rep.methodNotInTable.length+'개('+rep.methodNotInTable.slice(0,6).join(', ')+')');   // ★ [검증 반영] 방법 S부호 커버리지
-    if(rep.dupNums.length)gate.push('부호표 번호 중복 '+rep.dupNums.length+'개');
-    if(rep.deviceLeak)gate.push('장치 상세설명에 방법표현 누출');
-    if(!rep.methodOk)gate.push('방법 상세설명 극성 미충족');
-    if(gate.length){ try{_lastGenError='게이트 미통과 — '+gate.join(' · ');}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 게이트 미통과(기존 내용 보존): '+gate.join(' · '),'error'); console.warn('[unified] gate fail',rep); return; }
-    // ★ [배치15C-1] 수학식 인라인 자기검증 게이트 — 토글 on(정확 계약 _mathN)인데 LLM이 수식을 조용히 누락한 경우.
-    //   본문 【수학식】 개수 < 목표면 (a)경고 (b)"수학식 N개 인라인 포함 상세설명만 재생성" 1회 재요청(A6 동형·부호표 보존)
-    //   (c)재실패 시 완료 요약 "수학식 누락 — ④ 재생성 필요". docF 실증: 체크했으나 본문 수식 0개.
+    // ★ [배치15C-1 + 검증 반영] 수학식 인라인 자기검증 게이트 — report 게이트보다 먼저 실행하여, 재요청으로 교체된
+    //   본문(r3)이 아래 report 게이트(부호·누출)를 반드시 통과하도록 한다(재요청 본문의 무검증 커밋 방지).
+    //   토글 on(정확 계약 _mathN)인데 본문 【수학식】 < 목표면 (a)경고 (b)상세설명만 1회 재요청 (c)재실패 시 "④ 재생성 필요".
     if(_mathInline){
       const _mathN=Math.max(1,Math.min(5,parseInt(mathBlockCount)||3));
       const _mcnt=function(rr){ return (((rr&&rr.device)||'')+'\n'+((rr&&rr.method)||'')).match(/【\s*수학식/g)||[]; };
@@ -1793,14 +1799,23 @@ async function runUnifiedCohesionGen(opts){
         App.showToast('수학식 '+_mcnt(r).length+'/'+_mathN+'개 — 수식 미포함 감지, 상세설명만 재요청합니다(1회)','warning');
         try{
           const retry=await App.callClaudeWithContinuation(_buildMathInlineRetryPrompt(r.device||'', r.method||'', _mathN),'progressUnifiedGen');
-          const refBlk=(String(raw).match(/^[ \t]*<<<REFTABLE>>>[\s\S]*?^[ \t]*<<<END_REFTABLE>>>[ \t]*$/m)||[''])[0];
-          const merged=refBlk+'\n'+(retry||'');   // 부호표(REFTABLE)는 원본 유지, 본문만 교체 → 재파싱
+          const refBlk=_serializeRefTable(r.refMap);   // ★ [검증 반영] A6 복구분 포함 현재 refMap에서 직렬화(원본 raw 아님)
+          const merged=refBlk+'\n'+(retry||'');   // 부호표(REFTABLE)는 현재 refMap 유지, 본문만 교체 → 재파싱
           const r3=parseCohesiveBundle(merged);
-          if(r3.ok.hasRef&&r3.ok.hasDevice&&_mcnt(r3).length>=_mathN){ r=r3; }
+          const _mPreserved=(!r.ok.hasMethod)||r3.ok.hasMethod;   // ★ [검증 반영] 원본에 방법 본문 있었으면 재요청도 방법 보존해야 수용(step_12 침묵 소실 방지)
+          if(r3.ok.hasRef&&r3.ok.hasDevice&&_mPreserved&&_mcnt(r3).length>=_mathN){ r=r3; }
         }catch(e){ console.warn('[unified] math retry',e); }
       }
       if(_mcnt(r).length<_mathN){ try{_lastGenError='수학식 누락 — ④ 재생성 필요('+_mcnt(r).length+'/'+_mathN+')';}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('수학식 인라인 미포함('+_mcnt(r).length+'/'+_mathN+') — ④ 본문 통합 재생성이 필요합니다','error'); console.warn('[unified] math gate fail'); return; }
     }
+    // report 게이트 — ★ 최종 r(수식 재요청 반영분)에 대해 검사(재요청이 도입한 미정의 부호·누출·중복도 여기서 차단)
+    const rep=r.report, gate=[];
+    if(rep.notInTable.length)gate.push('본문 미정의 부호 '+rep.notInTable.length+'개('+rep.notInTable.slice(0,6).join(', ')+')');
+    if(rep.methodNotInTable&&rep.methodNotInTable.length)gate.push('방법 단계부호 미정의 '+rep.methodNotInTable.length+'개('+rep.methodNotInTable.slice(0,6).join(', ')+')');   // ★ [검증 반영] 방법 S부호 커버리지
+    if(rep.dupNums.length)gate.push('부호표 번호 중복 '+rep.dupNums.length+'개');
+    if(rep.deviceLeak)gate.push('장치 상세설명에 방법표현 누출');
+    if(!rep.methodOk)gate.push('방법 상세설명 극성 미충족');
+    if(gate.length){ try{_lastGenError='게이트 미통과 — '+gate.join(' · ');}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 게이트 미통과(기존 내용 보존): '+gate.join(' · '),'error'); console.warn('[unified] gate fail',rep); return; }
     if(!(opts&&opts.chained)&&!confirm('통합 생성 결과로 장치 상세설명·방법 상세설명·부호의 설명을 대체합니다. 계속할까요?\n(이전 내용은 이력에 보존됩니다)')){ App.clearProgress('progressUnifiedGen'); return; }
     // ── 원자 커밋(3슬롯) ──
     pushOutputHistory('step_08','unified','runUnifiedCohesionGen');

@@ -272,7 +272,10 @@ async function openProject(pid){
   if(!API_KEY){App.ensureApiKey();}
   // Restore UI
   document.getElementById('methodToggle').checked=includeMethodClaims;toggleMethod();
-  try{_methodUserSet=false;}catch(_e){}   // [배치12 A] 복원은 저장값 반영일 뿐 — 이후 유형 변경 시 자동 동기 재개(toggleMethod의 user-set 부작용 취소)
+  // ★ [검증 반영] 방법 청구항·도면이 이미 생성된 프로젝트(step_10/11 존재)는 사용자가 방법을 의도적으로 켠 상태 →
+  //   _methodUserSet=true로 보호(방법 기본 OFF 정책하에서 유형 재선택 시 _syncMethodFromType가 방법을 침묵 OFF로
+  //   되돌려 ③ 재생성 때 방법 세트가 소실되는 것을 방지). 방법 산출물이 없으면 종전대로 false(자동 동기 재개).
+  try{_methodUserSet=!!(outputs.step_10||outputs.step_11);}catch(_e){}   // [배치12 A/검증반영]
   restoreClaimUI();
   // Restore custom title type
   if(selectedTitleType){const ci=document.getElementById('customTitleType');if(ci)ci.value=selectedTitleType;document.getElementById('btnStep01').disabled=false;}

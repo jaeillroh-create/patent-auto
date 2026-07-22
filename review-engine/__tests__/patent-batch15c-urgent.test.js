@@ -116,3 +116,51 @@ test('★ C3 — 도면 수·예시도 수: datalist(select+직접입력) + 0/1~
   run('_dbSet("conceptCount","9")');
   assert.equal(run('conceptTargetCount'), 9, '★ 예시도 수 1~9 조절(상한 확장)');
 });
+
+// ═══════════ 적대 검증 반영 FIX (6건) ═══════════
+// FIX1: applyReview 인라인 수식 보존(step_09 없어도 cur에서 재삽입)
+test('★ FIX1 — applyReview: 인라인 모드(chkUnifiedMath) 수식 재삽입 게이트 확장', () => {
+  assert.match(PATENT_SRC, /const _mathInlineAR=!!\(typeof document!=='undefined'&&document\.getElementById\('chkUnifiedMath'\)\?\.checked\)/, '★ applyReview 인라인 인지');
+  assert.match(PATENT_SRC, /if\(outputs\.step_09\|\|_mathInlineAR\)\{/, '★ step_09 없어도 인라인이면 재삽입');
+});
+// FIX2: 수식 재요청 방법 보존(method 드롭 retry 거부)
+test('★ FIX2 — 수식 재요청 수용 조건에 방법 보존(_mPreserved)', () => {
+  assert.match(PATENT_SRC, /const _mPreserved=\(!r\.ok\.hasMethod\)\|\|r3\.ok\.hasMethod;/, '★ 방법 보존 조건');
+  assert.match(PATENT_SRC, /if\(r3\.ok\.hasRef&&r3\.ok\.hasDevice&&_mPreserved&&_mcnt\(r3\)\.length>=_mathN\)\{ r=r3; \}/, '★ 수용 조건에 _mPreserved 포함');
+});
+test('★ FIX2 동작 — retry가 METHOD_DESC 누락 시 거부(방법 본문 침묵 소실 방지)', async () => {
+  const REF_M = '<<<REFTABLE>>>\n[장치부호]\n(100) 제어부\n[방법단계]\n(S100) 수신 단계\n<<<END_REFTABLE>>>';
+  const BODY_NOMATH_M = '<<<DEVICE_DESC>>>\n제어부(100)는 처리하도록 구성된다.\n<<<END_DEVICE_DESC>>>\n<<<METHOD_DESC>>>\nS100 단계에서 데이터를 수신하는 단계를 수행한다.\n<<<END_METHOD_DESC>>>';
+  const RETRY_DEVONLY = DESC_MATH2;   // device(수식2)만, METHOD 누락
+  run('clearAllState(); outputs.step_06="【청구항 1】 제어부."; outputs.step_07="도 1"; outputs.step_10="【청구항 2】 방법."; selectedTitle="t"; selectedTitleType="서버 및 방법"; includeMethodClaims=true; mathBlockCount=2; _lastGenError="";');
+  els.chkUnifiedMath = mkEl(); els.chkUnifiedMath.checked = true;
+  const before08 = run('outputs.step_08') || '';
+  const orig = sandbox.App.callClaudeWithContinuation; let call = 0;
+  sandbox.App.callClaudeWithContinuation = async () => { call++; return call === 1 ? (REF_M + '\n' + BODY_NOMATH_M) : RETRY_DEVONLY; };
+  try { await run('runUnifiedCohesionGen({chained:true})'); }
+  finally { sandbox.App.callClaudeWithContinuation = orig; }
+  assert.equal(run('outputs.step_08') || '', before08, '★ 방법 드롭 retry 거부 → 커밋 차단(방법 본문 보존)');
+  assert.ok(/수학식 누락/.test(run('_lastGenError') || ''), '★ 재요청 거부 → 수식 게이트 실패');
+});
+// FIX3: 수식 재요청 refBlk를 현재 refMap에서 직렬화(_serializeRefTable)
+test('★ FIX3 — 수식 재요청 refBlk를 _serializeRefTable(r.refMap)로(A6 복구분 포함) + 직렬화 형식', () => {
+  assert.match(PATENT_SRC, /const refBlk=_serializeRefTable\(r\.refMap\)/, '★ 원본 raw 아닌 현재 refMap 직렬화');
+  assert.match(PATENT_SRC, /function _serializeRefTable\(refMap\)/, '★ 헬퍼 정의');
+  const s = run('_serializeRefTable(new Map([["100","제어부"],["S100","수신 단계"]]))');
+  assert.ok(/\[장치부호\]\n\(100\) 제어부/.test(s) && /\[방법단계\]\n\(S100\) 수신 단계/.test(s), '★ 장치·방법 부호 직렬화');
+  assert.ok(/^<<<REFTABLE>>>[\s\S]*<<<END_REFTABLE>>>$/.test(s), '★ REFTABLE 블록 경계');
+});
+// FIX4: report 게이트가 수식 재요청 이후(최종 r)에 실행
+test('★ FIX4 — report 게이트(부호·누출)가 수식 재요청 뒤에 실행(재요청 본문도 게이트)', () => {
+  const iMath = PATENT_SRC.indexOf('수학식 인라인 자기검증 게이트 — report 게이트보다 먼저 실행');
+  const iRep = PATENT_SRC.indexOf('const rep=r.report, gate=[];');
+  assert.ok(iMath > 0 && iRep > iMath, '★ 수식 게이트 → report 게이트 순서');
+});
+// FIX5: 방법 산출물 있는 프로젝트 복원 시 _methodUserSet 보호
+test('★ FIX5 — openProject: 방법 산출물(step_10/11) 있으면 _methodUserSet 보호(true)', () => {
+  assert.match(PATENT_SRC, /_methodUserSet=!!\(outputs\.step_10\|\|outputs\.step_11\);/, '★ 방법 산출물 기반 보호');
+});
+// FIX6: 레거시 toggleMethod → ② 보드 미러
+test('★ FIX6 — toggleMethod가 renderDesignBoard 호출(② 체크·안내 동기)', () => {
+  assert.match(PATENT_SRC, /function toggleMethod\(\)\{[\s\S]{0,700}renderDesignBoard\(\)/, '★ 레거시 토글 → ② 보드 미러');
+});

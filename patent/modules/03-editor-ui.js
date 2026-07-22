@@ -44,6 +44,7 @@ function toggleMethod(){
       e.style.pointerEvents=includeMethodClaims?'':'none';
     }
   });
+  try{if(typeof renderDesignBoard==='function')renderDesignBoard();}catch(_e){}   // ★ [검증 반영] 레거시 토글 → ② 보드(chkDbMethod·dbMethodNote) 양방향 미러 동기(시각 이탈 방지)
 }
 function selectDetailLevel(el,level){
   document.querySelectorAll('#detailLevelCards .selection-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');detailLevel=level;
