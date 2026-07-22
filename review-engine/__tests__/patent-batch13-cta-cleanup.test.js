@@ -80,11 +80,16 @@ test('★ 6 — 구 탭명 문자열 제거·신 단계명 반영(02·05·index)
 });
 
 // 1/2/3) DOM 배치·문구
-test('★ 2 — 관문 3버튼이 ③(page2)로 이동, ②(page1)에서 제거', () => {
+test('★ 2(배치14) — 관문 카드 소멸: Step14는 ③ 고급, Step15·자동검증 버튼 제거', () => {
   const p1 = HTML_SRC.slice(HTML_SRC.indexOf('id="page1"'), HTML_SRC.indexOf('id="page2"'));
   const p2 = HTML_SRC.slice(HTML_SRC.indexOf('id="page2"'), HTML_SRC.indexOf('id="page3"'));
   assert.ok(!p1.includes('id="btnStep14"'), '★ ②에서 제거');
-  assert.match(p2, /id="wfGateCard"[\s\S]{0,600}id="btnStep14"[\s\S]{0,400}id="btnStep15"[\s\S]{0,400}runValidation\(\)/, '★ ③에 관문 3버튼');
+  assert.ok(!/id="wfGateCard"/.test(HTML_SRC), '★ 관문 카드 소멸(배치14-4)');
+  assert.ok(!/id="btnStep15"/.test(HTML_SRC), '★ Step 15 버튼 제거(→ Step 13 통합)');
+  assert.ok(!/onclick="runValidation\(\)"/.test(HTML_SRC), '★ 자동 검증 버튼 제거(자동 경로 유지)');
+  // Step 14는 ③ 고급(wfAdv2) 안으로
+  const adv2 = p2.slice(p2.indexOf('id="wfAdv2"'), p2.indexOf('id="page-right"') >= 0 ? p2.indexOf('id="page-right"') : p2.length);
+  assert.ok(p2.includes('id="btnStep14"'), '★ Step14 ③에 존치');
 });
 test('★ 1/3 — Phase D·검토반영이 ④ 고급(wfAdv3)으로, 주 흐름은 통합생성+AI검토', () => {
   const p3 = HTML_SRC.slice(HTML_SRC.indexOf('id="page3"'), HTML_SRC.indexOf('id="page4"'));

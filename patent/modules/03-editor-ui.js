@@ -1554,26 +1554,23 @@ async function wfRunStage4(){ try{ await runUnifiedCohesionGen(); }finally{ try{
 
 // ═══ [배치11 B] 통합 생성 위저드 — 기존 상태 변수의 양방향 미러(새 상태 금지). 브라우저 confirm 폐기. ═══
 function _wizHasPrev(){ return ['step_06','step_07','step_08','step_10','step_11','step_12'].some(function(k){return !!outputs[k];}); }   // [배치11 A] 판정 공유
+// [배치14-2] 위저드 축소 — 유형·설계는 ② 보드가 담당. 위저드는 "설계 요약 확인 + (기존 산출물 시)재실행 방식"만.
 function _wizRender(){
   try{
-    const t=selectedTitleType||'';
-    document.querySelectorAll('#wizTypeCards [data-wiztype]').forEach(function(b){ const on=b.getAttribute('data-wiztype')===t; b.classList.toggle('btn-primary',on); b.classList.toggle('btn-outline',!on); });
-    const note=document.getElementById('wizMethodNote');
-    if(note)note.innerHTML=t?('방법 청구항: <b>'+(includeMethodClaims?'포함':'제외')+'</b>'+(_methodUserSet?' (수동 설정 유지)':' (유형 기반 자동)')):'유형을 선택하세요.';
-    const g=document.getElementById('wizGeneralDep'); if(g)g.value=deviceGeneralDep;
-    const a=document.getElementById('wizAnchorDep'); if(a)a.value=deviceAnchorDep;
-    const tot=document.getElementById('wizClaimTotal'); if(tot)tot.textContent='→ 장치 총 '+(1+(parseInt(deviceGeneralDep)||0)+(parseInt(deviceAnchorDep)||0))+'항'+(includeMethodClaims?(' + 방법 '+(1+(parseInt(methodGeneralDep)||0)+(parseInt(methodAnchorDep)||0))+'항'):'');
-    const f=document.getElementById('wizFigures'); if(f)f.value=document.getElementById('optDeviceFigures')?.value||'4';
-    const m=document.getElementById('wizMath'); const src=document.getElementById('chkUnifiedMath'); if(m)m.checked=!!(src&&src.checked);
-    const d=document.getElementById('wizDetail'); if(d&&['compact','standard','detailed','maximal'].includes(detailLevel))d.value=detailLevel;
+    const echo=document.getElementById('wizDesignEcho');
+    if(echo){ const dl={compact:'간결',standard:'표준',detailed:'상세',maximal:'최대'}[detailLevel]||detailLevel; const mth=document.getElementById('chkUnifiedMath');
+      echo.innerHTML='유형: <b>'+App.escapeHtml(selectedTitleType||'미선택')+'</b> · 방법: <b>'+(includeMethodClaims?'포함':'제외')+'</b> · 장치 청구항 총 '+(1+(parseInt(deviceGeneralDep)||0)+(parseInt(deviceAnchorDep)||0))+'항 · 도면 '+((document.getElementById('optDeviceFigures')||{}).value||'4')+'개 · 수학식 '+((mth&&mth.checked)?'포함':'미포함')+' · 분량 '+dl+'<br><span style="color:var(--color-text-tertiary)">설계값 변경은 ② 설계 보드에서 하세요.</span>'; }
     const s3=document.getElementById('wizScreen3'); if(s3)s3.style.display=_wizHasPrev()?'block':'none';
   }catch(_e){}
 }
 function openUnifiedWizard(){
   const w=document.getElementById('wfWizard'); if(!w)return;
   const c=document.getElementById('wizConfig'), p=document.getElementById('wizProgress'), s=document.getElementById('wizSummary');
-  if(c)c.style.display='block'; if(p)p.style.display='none'; if(s)s.style.display='none';
+  if(p)p.style.display='none'; if(s)s.style.display='none';
   _wizRender(); w.style.display='flex';
+  // [배치14-2] 기존 산출물 없으면 재실행 확인이 불필요 → 설정 화면 건너뛰고 바로 진행(② 보드에서 이미 값 확정).
+  if(!_wizHasPrev()){ if(c)c.style.display='none'; _wizStart(); }
+  else if(c)c.style.display='block';
 }
 function _wizClose(){ const w=document.getElementById('wfWizard'); if(w)w.style.display='none'; }
 function _wizSetType(t){
@@ -1584,13 +1581,8 @@ function _wizSetType(t){
   else{ if(typeof onCustomTitleType==='function')onCustomTitleType(t); const ci=document.getElementById('customTitleType'); if(ci)ci.value=t; }
   _wizRender();
 }
-function _wizSetGeneralDep(v){ if(typeof updateDeviceGeneralDep==='function')updateDeviceGeneralDep(v); const e=document.getElementById('inpDeviceGeneralDep'); if(e)e.value=v; try{_wfMarkDesign();}catch(_e){} _wizRender(); }
-function _wizSetAnchorDep(v){ if(typeof updateDeviceAnchorDep==='function')updateDeviceAnchorDep(v); const e=document.getElementById('inpDeviceAnchorDep'); if(e)e.value=v; try{_wfMarkDesign();}catch(_e){} _wizRender(); }
-function _wizSetFigures(v){ const e=document.getElementById('optDeviceFigures'); if(e)e.value=v; try{_wfMarkDesign();}catch(_e){} _wizRender(); }
-function _wizSetMath(on){ const e=document.getElementById('chkUnifiedMath'); if(e)e.checked=!!on; try{_wfMarkDesign();}catch(_e){} _wizRender(); }
-function _wizSetDetail(v){ detailLevel=v; const e=document.getElementById('selUnifiedDetail'); if(e)e.value=v; try{_wfMarkDesign();}catch(_e){} _wizRender(); }
 async function _wizStart(){
-  if(!selectedTitleType){App.showToast('발명 유형을 선택하세요','error');return;}
+  if(!selectedTitleType){App.showToast('발명 유형을 ② 설계 보드에서 선택하세요','error');try{_wizClose();}catch(_e){} return;}
   const mode=(function(){ try{ const r=document.querySelector('input[name="wizRerun"]:checked'); return r?r.value:'full'; }catch(_e){ return 'full'; } })();
   const c=document.getElementById('wizConfig'), p=document.getElementById('wizProgress'), s=document.getElementById('wizSummary');
   if(c)c.style.display='none'; if(p)p.style.display='block';

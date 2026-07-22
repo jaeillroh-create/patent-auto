@@ -214,10 +214,11 @@ test('★ 소스 — 체인 비파괴/그레이스풀 + 재진입 차단 + 전�
   assert.match(PATENT_SRC, /if\(!\(opts&&opts\.chained\)&&!confirm/, '★ chained면 확인창 스킵');
 });
 
-test('★ 소스 — A.기본 탭 통합 체인 버튼 배선', () => {
+test('★ 소스 — 통합 체인 버튼 배선(배치14: ② 설계 보드로 이동)', () => {
   const html = readFileSync(path.join(REPO, 'index.html'), 'utf8');
-  assert.match(html, /id="cardUnifiedFullChain"/, '★ 카드');
-  assert.match(html, /id="btnUnifiedFullChain"[\s\S]*?onclick="runUnifiedFullChain\(\)"/, '★ 버튼→함수');
+  // [배치14-1] 버튼은 ② 설계 보드(wfStage2Main) 안으로 이동 — ①에는 안내만.
+  assert.match(html, /id="wfStage2Main"[\s\S]*?id="btnUnifiedFullChain"[\s\S]{0,120}onclick="runUnifiedFullChain\(\)"/, '★ ② 보드 내 버튼→함수');
+  assert.ok(!/id="cardUnifiedFullChain"/.test(html), '★ 구 ① 카드 제거');
   assert.match(html, /발명자료 → 핵심 명세서/, '★ 레이블');
   assert.match(html, /id="progressUnifiedFullChain"/, '★ 진행률 컨테이너');
 });

@@ -90,7 +90,7 @@ test('★ D — 구 통합 카드 제거·마무리 고급 강등·① 문구 �
   assert.ok(!/id="unifiedGenCard"/.test(HTML_SRC), '★ 구 카드 제거');
   assert.match(HTML_SRC, /<details class="wf-adv" id="wfAdv4">[\s\S]{0,1200}btnBatchFinish/, '★ 마무리 고급 접기');
   assert.match(HTML_SRC, /④ 본문 통합<\/b>이 효과·해결수단·요약을 함께 생성합니다/, '★ 흡수 안내');
-  assert.match(HTML_SRC, /효과·해결수단·요약은 <b>④ 본문 통합<\/b>에서 함께 생성됩니다/, '★ ① 문구 정정');
+  assert.match(HTML_SRC, /핵심 명세서 통합 생성<\/b>은 <b>② 설계 결정<\/b> 단계에서/, '★ ① 문구(배치14: 생성은 ②에서 안내)');
   assert.match(HTML_SRC, /id="wfStage4Main"[\s\S]{0,600}id="progressUnifiedGen"/, '★ progress ④ 이식(cohesion 진행 표시 유지)');
 });
 test('★ E — 청구항·대안·특허성 결과 카드가 ③(page2)로 이동, ②는 안내만', () => {

@@ -51,32 +51,25 @@ test('★ A — 판정: 명칭만(step_01) → 화면3 숨김 / step_06 존재 �
 });
 
 // B) 양방향 미러
-test('★ B — 위저드→전역·② 카드 반영: 유형(방법 자동 on)·종속항·도면수·수학식·분량', () => {
+test('★ B(배치14) — 위저드 축소: _wizSetType은 유형·방법만 미러(설계는 ② 보드가 담당)', () => {
   run('_wizSetType("서버 및 방법")');
-  assert.equal(run('selectedTitleType'), '서버 및 방법', '★ 유형 전역 반영');
+  assert.equal(run('selectedTitleType'), '서버 및 방법', '★ 유형 전역(보드 타입버튼과 공유 경로)');
   assert.equal(run('includeMethodClaims'), true, '★ _syncMethodFromType 연동(방법 자동 on)');
-  assert.ok(/포함/.test(els.wizMethodNote.innerHTML), '★ 방법 포함 여부 표시');
-  run('_wizSetGeneralDep(7)');
-  assert.equal(run('deviceGeneralDep'), 7, '★ 전역');
-  assert.equal(els.inpDeviceGeneralDep.value, 7, '★ ② 카드 미러');
-  run('_wizSetFigures(6)');
-  assert.equal(els.optDeviceFigures.value, 6, '★ 도면 수 미러(프롬프트 소스 동일 요소)');
-  run('_wizSetMath(true)');
-  assert.equal(els.chkUnifiedMath.checked, true, '★ 수학식 미러(인라인 파라미터 소스)');
-  run('_wizSetDetail("maximal")');
-  assert.equal(run('detailLevel'), 'maximal', '★ 분량 전역');
-  assert.equal(els.selUnifiedDetail.value, 'maximal', '★ ② 카드 미러');
+  assert.ok(!/id="wizGeneralDep"/.test(HTML_SRC) && !/id="wizTypeCards"/.test(HTML_SRC), '★ 위저드 유형·설계 화면 제거');
 });
-test('★ B — 역방향: 전역/② 값 → 위저드 열 때 반영', () => {
-  run('selectedTitleType="시스템"; deviceGeneralDep=9; deviceAnchorDep=2; detailLevel="detailed";');
+test('★ B(배치14) — openUnifiedWizard: 설계 요약 에코 + 재실행 화면은 기존 산출물 있을 때만(auto-start 방지)', () => {
+  run('clearAllState(); selectedTitleType="서버"; deviceGeneralDep=9; deviceAnchorDep=2; detailLevel="detailed"; outputs.step_06="c";');
   els.optDeviceFigures = mkEl(); els.optDeviceFigures.value = '5';
   els.chkUnifiedMath = mkEl(); els.chkUnifiedMath.checked = true;
   run('openUnifiedWizard()');
-  assert.equal(els.wizGeneralDep.value, 9, '★ 종속항 반영');
-  assert.equal(els.wizFigures.value, '5', '★ 도면 수 반영');
-  assert.equal(els.wizMath.checked, true, '★ 수학식 반영');
-  assert.equal(els.wizDetail.value, 'detailed', '★ 분량 반영');
-  assert.ok(/장치 총 12항/.test(els.wizClaimTotal.textContent), '★ 총 N항 실시간(1+9+2)');
+  assert.equal(els.wizScreen3.style.display, 'block', '★ 산출물 有 → 재실행 화면 표시(auto-start 안 함)');
+  assert.ok(/장치 청구항 총 12항/.test(els.wizDesignEcho.innerHTML), '★ 설계 요약(1+9+2)');
+  assert.ok(/도면 5개/.test(els.wizDesignEcho.innerHTML) && /수학식 포함/.test(els.wizDesignEcho.innerHTML) && /분량 상세/.test(els.wizDesignEcho.innerHTML), '★ 도면·수학식·분량 반영');
+  assert.equal(els.wizConfig.style.display, 'block', '★ 설정 화면 표시');
+});
+test('★ B(배치14) 소스 — 기존 산출물 없으면 설정 화면 건너뛰고 바로 생성(_wizStart)', () => {
+  assert.match(PATENT_SRC, /if\(!_wizHasPrev\(\)\)\{ if\(c\)c\.style\.display='none'; _wizStart\(\); \}/, '★ no-prev → auto-start');
+  assert.match(PATENT_SRC, /function _wizHasPrev\(\)\{ return \['step_06','step_07','step_08','step_10','step_11','step_12'\]\.some/, '★ 산출물 계열 판정');
 });
 
 // 체인 파라미터 배선
@@ -88,8 +81,9 @@ test('★ 배선 — 직접 클릭→위저드 경유, 위저드 start→runUnif
   assert.match(HTML_SRC, /name="wizRerun" value="full" checked/, '★ 화면3 라디오(전체 기본)');
   assert.match(HTML_SRC, /⑤ 검증으로 이동/, '★ 완료 요약 CTA');
 });
-// C) ① 문구
-test('★ C — ① 풀체인 카드 문구: 위저드 안내로 교체', () => {
-  assert.match(HTML_SRC, /클릭하면 유형·설계를 확인한 뒤 생성합니다\./, '★ 신규 문구');
-  assert.ok(!/설계값은 <b>② 설계 결정<\/b> 단계에서 조정합니다/.test(HTML_SRC), '★ 구 문구 제거');
+// C) ①/② 문구·배치(배치14: 생성 CTA ②로 이동)
+test('★ C(배치14) — ①은 안내만, 생성 버튼은 ② 보드', () => {
+  assert.match(HTML_SRC, /핵심 명세서 통합 생성<\/b>은 <b>② 설계 결정<\/b> 단계에서/, '★ ① 안내 문구');
+  assert.ok(!/id="cardUnifiedFullChain"/.test(HTML_SRC), '★ 구 ① 통합 카드 제거');
+  assert.match(HTML_SRC, /id="wfStage2Main"[\s\S]*?id="btnUnifiedFullChain"/, '★ 생성 버튼 ② 보드 내부');
 });
