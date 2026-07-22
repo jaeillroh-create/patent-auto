@@ -659,15 +659,19 @@ function _buildPromptCore(stepId,inv,T,styleRef){
       // v4.9: Auto-select category from title type if set to 'auto'
       const effectiveCat=(deviceCategory==='auto')?autoDetectCategoryFromTitle():deviceCategory;
       const catLabel=effectiveCat;
-      const anchorEnd=deviceAnchorStart+deviceAnchorDep-1;
+      // ★ [배치15B-1a] 다중 독립항 지원 — 독립항 N개면 번호 체계 자동 시프트(일반·앵커 종속항 시작 번호 재계산).
+      const _indepN=Math.max(1,parseInt(deviceIndepCount)||1);
+      const _genStart=_indepN+1, _genEnd=_indepN+deviceGeneralDep;
+      const _ankStart=(_indepN>1)?(_indepN+deviceGeneralDep+1):deviceAnchorStart;
+      const anchorEnd=_ankStart+deviceAnchorDep-1;
       const themeInst=buildAnchorThemeInstruction(anchorThemeMode,selectedAnchorThemes,deviceAnchorDep);
       return `장치 청구범위를 작성하라.
 
 [청구항 구성]
 - 독립항 카테고리: ${catLabel}
-- 독립항: 1개 (청구항 1)
-- 일반 종속항: ${deviceGeneralDep}개${deviceGeneralDep>0?' (청구항 2~'+(deviceGeneralDep+1)+')':''}
-- 등록 앵커 종속항: ${deviceAnchorDep}개${deviceAnchorDep>0?' (청구항 '+deviceAnchorStart+'~'+anchorEnd+')':''}
+- 독립항: ${_indepN}개 (청구항 1${_indepN>1?'~'+_indepN:''})${_indepN>1?` — ★ 각 독립항은 상이한 권리 관점(장치 구성 축 분리)으로 작성하라. 서로 다른 발명 구성 축을 독립적으로 보호하되, 동일 발명의 단일성(§45) 범위를 벗어나지 마라(독립항 간 구성이 부분적으로 겹칠 수 있으나 보호 관점·축이 달라야 한다). 각 독립항은 자체 완결된 젭슨 구조를 갖춘다.`:''}
+- 일반 종속항: ${deviceGeneralDep}개${deviceGeneralDep>0?' (청구항 '+_genStart+'~'+_genEnd+')':''}
+- 등록 앵커 종속항: ${deviceAnchorDep}개${deviceAnchorDep>0?' (청구항 '+_ankStart+'~'+anchorEnd+')':''}${_indepN>1?`\n- ★ 종속항 인용: 각 종속항은 독립항(제1~${_indepN}항) 중 관련 권리 관점의 항 하나를 인용하라(단일 항 인용 유지).`:''}
 - 종결어: ${getCategoryEnding(deviceCategory==='auto'?'server':deviceCategory)}
 
 [필수 작성 규칙]
@@ -1375,6 +1379,7 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
       const methodClaims=outputs.step_10||'(방법 청구항 없음 — <<<METHOD_DESC>>> 블록도 생략하라)';
       // ★ [배치9 D1] 수학식 토글 = 인라인 파라미터 — on이면 C9가 금지 대신 "인라인 수식 계약"으로 전환(CHK-8·math_ref 규칙 선반영).
       const _mathOn=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
+      const _mathN=Math.max(1,Math.min(5,parseInt(mathBlockCount)||3));   // [배치15B-1b] 수학식 개수 계약
       const deviceFigDesign=outputs.step_07||'';
       const methodFigDesign=outputs.step_11||'(방법 도면 없음)';
       return `아래 발명에 대해 【발명을 실시하기 위한 구체적인 내용】의 (가) 장치 상세설명과 (나) 방법 상세설명을, 그리고 이들이 사용할 도면부호 사전을 한 번에 작성하라. 세 산출물의 도면부호가 서로·부호의 설명과 완전히 정합해야 한다.
@@ -1434,7 +1439,9 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
   - 방법 도면: ${methodFigList}
   예시도/개념도는 이 단계에서 다루지 않는다 — 예시도 부호를 REFTABLE·본문에 넣지 마라.
 
-${_mathOn?`[C9] 【수학식 인라인 — CHK-8·참조 규칙 선반영】 상세설명 내 적절한 위치에 【수학식 N】 블록과 그 직후 "여기서, …" 정의 절을 포함하라. 번호는 1부터 등장 순서대로 부여한다. 수식에 등장하는 모든 변수(아래첨자 포함)는 "여기서" 절에서 개별 또는 그룹("a, b, c는 …") 형태로 빠짐없이 정의하라(정의 없는 변수 금지). 본문에서 이미 나온 수식을 참조할 때는 "상기 수학식 N"이라 쓰고, 수식이 바로 뒤따르는 위치에서만 "다음의 수학식 N"이라 써라(존재하지 않는 수학식 번호 참조 금지).`:`[C9] 【수학식 금지】 【수학식 N】 블록·수식·"수학식 N에 따르면" 참조를 본문에 삽입하지 마라(별도 단계 소관). 알고리즘은 자연어로만 설명하라.`}
+${_mathOn?`[C9] 【수학식 인라인 — 정확히 ${_mathN}개의 【수학식】 블록】 상세설명 내 알고리즘 핵심 위치에 **정확히 ${_mathN}개**의 【수학식 N】 블록(N=1부터 등장 순서, 마지막은 ${_mathN})과 각 블록 직후 "여기서, …" 정의 절을 포함하라 — ${_mathN}개보다 많거나 적게 생성하지 마라(개수 계약 엄수).
+★ 변수 자기검증(R3) — 기재불비 방지 핵심: 각 수식에 등장하는 모든 변수(아래첨자 포함)를 "여기서" 절에서 개별 또는 그룹("a, b, c는 …")으로 빠짐없이 정의하라(정의 없는 변수 절대 금지). 각 변수 정의는 상세설명에 이미 등장한 파라미터·구성을 구체화해야 하며, 본문에 없는 새 개념을 수식으로 도입하지 마라. 같은 변수가 복수 수식에 등장하면 정의·범위가 모순되지 않게 하라. 출력 직전 스스로 "모든 변수가 정의되었는가"를 점검하라.
+본문에서 이미 나온 수식을 참조할 때는 "상기 수학식 N", 수식이 바로 뒤따르는 위치에서만 "다음의 수학식 N"을 쓰라(존재하지 않는 번호 참조 금지, 수식의 변수 설명에서 다른 수학식 번호를 인용하는 교차참조 금지).`:`[C9] 【수학식 금지】 【수학식 N】 블록·수식·"수학식 N에 따르면" 참조를 본문에 삽입하지 마라(별도 단계 소관). 알고리즘은 자연어로만 설명하라.`}
 
 [C10] 【파라미터 명세 — 실시가능성】 핵심 알고리즘의 모든 파라미터에 대해 (1)정의 (2)값 유형 (3)값 범위(예: 0~1) (4)초기값(예: 초기값 1.0) (5)갱신 방식 (6)제한조건(상/하한·클램핑)을 서술하라. 보정/학습 계수(alpha, beta 등)에는 부호 의미·값 범위·과도 누적 방지 조건을 포함하라. "기정의된"만 쓰지 말고 예시적 값 또는 범위를 반드시 한 번은 제시하라.
 

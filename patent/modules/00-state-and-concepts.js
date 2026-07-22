@@ -34,6 +34,9 @@ let detailLevel='standard';
 let customDetailChars=2000;
 let currentProvisionalId=null;
 let deviceCategory='server', deviceGeneralDep=5, deviceAnchorDep=4, deviceAnchorStart=7;
+let deviceIndepCount=1;   // [배치15B-1] 장치 독립항 수(기본 1) — N>1이면 상이한 권리 관점의 다중 독립항. canonical.
+let mathBlockCount=3;     // [배치15B-1] 수학식 개수(수학식 포함 시 1~5) — cohesion 인라인 "정확히 N개 【수학식】" 계약. canonical.
+let conceptTargetCount=2; // [배치15B-1] 예시도 목표 개수 — 체인 도면 phase에서 step_07c 생성 시 conceptDiagramTypes를 이 수로 정렬. canonical.
 let anchorThemeMode='auto', selectedAnchorThemes=[];
 let methodCategory='method', methodGeneralDep=3, methodAnchorDep=2, methodAnchorStart=0;
 let methodAnchorThemeMode='auto', selectedMethodAnchorThemes=[];

@@ -64,7 +64,7 @@ test('★ B(배치14) — openUnifiedWizard: 설계 요약 에코 + 재실행 �
   run('openUnifiedWizard()');
   assert.equal(els.wizScreen3.style.display, 'block', '★ 산출물 有 → 재실행 화면 표시(auto-start 안 함)');
   assert.ok(/장치 청구항 총 12항/.test(els.wizDesignEcho.innerHTML), '★ 설계 요약(1+9+2)');
-  assert.ok(/도면 5개/.test(els.wizDesignEcho.innerHTML) && /수학식 포함/.test(els.wizDesignEcho.innerHTML) && /분량 상세/.test(els.wizDesignEcho.innerHTML), '★ 도면·수학식·분량 반영');
+  assert.ok(/도면 5개/.test(els.wizDesignEcho.innerHTML) && /수학식 \d개/.test(els.wizDesignEcho.innerHTML) && /분량 상세/.test(els.wizDesignEcho.innerHTML), '★ 도면·수학식(개수)·분량 반영');
   assert.equal(els.wizConfig.style.display, 'block', '★ 설정 화면 표시');
 });
 test('★ B(배치14) 소스 — 기존 산출물 없으면 설정 화면 건너뛰고 바로 생성(_wizStart)', () => {

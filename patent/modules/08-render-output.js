@@ -103,19 +103,22 @@ function validateClaims(text){
       
       // v5.1: 2-step validation — "인용하는 청구항만 검토"
       const citedText=getCitedChainText(n, claims);
-      // selfClean: 현재 청구항에서 "상기 ..." 구문을 통째로 제거 → 독립 정의 용어만 남김
-      const selfClean=ct.replace(/상기\s+[가-힣]+(?:\s[가-힣]+){0,3}/g,' ');
-      const srefs=ct.match(/상기\s+([가-힣]+(?:\s[가-힣]+){0,3})/g)||[];
-      srefs.forEach(ref=>{const raw=ref.replace(/^상기\s+/,''),cw=raw.split(/\s+/).slice(0,2).map(stripKoreanParticles).filter(w=>w.length>=2&&w!=='상기');if(!cw.length)return;
+      // ★ [배치15B-A9] 자기 항 범위 오탐 수정 — "상기 X" 판정 탐색 범위 = (1) 인용 청구항 체인 + (2) 자기 항의
+      //   "해당 지점 이전 원문". 종전 selfClean(상기 구문 통째 제거)은 greedy 제거가 선행 도입부(예: "…편차를
+      //   산출하는 단계")까지 삼켜 진성 선행기재를 못 찾는 오탐을 유발했다(docE 청구항 10). 원문 슬라이스로 교정.
+      const _sre=/상기\s+([가-힣]+(?:\s[가-힣]+){0,3})/g; let _sm;
+      while((_sm=_sre.exec(ct))!==null){
+        const raw=_sm[1], refPos=_sm.index;
+        const cw=raw.split(/\s+/).slice(0,2).map(stripKoreanParticles).filter(w=>w.length>=2&&w!=='상기');
+        if(!cw.length)continue;
         // Step 1: 인용 청구항 체인에서 키워드 검색
-        const inCited=cw.filter(w=>citedText.includes(w)).length;
-        if(inCited>0)return;
-        // Step 2: 현재 청구항 내 독립 정의 확인 (상기 구문 제거 후)
-        const inSelf=cw.filter(w=>selfClean.includes(w)).length;
-        if(inSelf>0)return;
+        if(cw.some(w=>citedText.includes(w)))continue;
+        // Step 2: 자기 항의 참조 지점 이전 원문(상기 구문 파괴 없이) — 같은 항에서 먼저 도입된 구성 인정
+        const selfBefore=ct.slice(0,refPos);
+        if(cw.some(w=>selfBefore.includes(w)))continue;
         // 양쪽 모두 없음 → 기재불비
-        iss.push({severity:'HIGH',message:`청구항 ${num}: "상기 ${raw}" — 인용 청구항 체인에 "${cw.join(', ')}" 선행기재 없음`});
-      });}
+        iss.push({severity:'HIGH',message:`청구항 ${num}: "상기 ${raw}" — 인용 청구항 체인·자기 항 선행부에 "${cw.join(', ')}" 선행기재 없음`});
+      }}
     // ★ [Item5] 젭슨(Jepson) 형식 기계검증 — 독립항 대상. 전환부 "~에 있어서," + 종결부 "~특징으로 하는" 존재·순서.
     //   젭슨은 선택 양식이므로 위반은 MEDIUM(강제 아님). 둘 다 없으면 젭슨 미채택 → 미검출. 하나만 있으면 불완전 → MEDIUM.
     if(!isDependent){
@@ -164,6 +167,17 @@ function validateSpecification(specText){
       ...(bodyNoMath.match(/\bEND_[A-Z_]{2,}\b/g)||[])
     ])];
     if(_phFound.length)iss.push({severity:'CRITICAL',check:'placeholder_residue',message:`플레이스홀더/마커 토큰 ${_phFound.length}종 잔존 — 생성 프로토콜 문자열이 본문에 유출`,detail:`잔존: ${_phFound.slice(0,3).join(' , ')}${_phFound.length>3?' 외':''} — 해당 문장에서 토큰 제거 필요(통합생성 재실행 권장)`});
+  }
+
+  // ── CHK-15 [배치15B-A8]: 메타 응답 잔존 (CRITICAL) — 가짜 성공 최후 안전망 ──
+  //   LLM이 실제 명세 대신 "정보가 입력되지 않았다/필요하다/제공하겠다" 같은 대화형 메타 응답을 반환했는데
+  //   그것이 통째로 저장·조립된 경우(docE 실증: 과제 섹션에 메타 응답 저장). 정당한 명세서 문장일 수 없다 →
+  //   CRITICAL(다운로드 게이트 §6-2 차단 대상). ※ 정당한 KIPRIS 무결과 폴백은 제외(오탐 방지).
+  {
+    const _metaScan=bodyNoMath.replace(/\(관련 선행특허를 검색하지 못하였습니다\)/g,'');
+    const _metaRe=/입력되지\s*않은|정보가\s*(?:필요|부족)|작성하여\s*제공하겠|제공하겠(?:습니다|다)|제공해\s*주시|정보를\s*알려\s*주시|검색하지\s*못하였습니다/g;
+    const _mFound=[...new Set((_metaScan.match(_metaRe)||[]))];
+    if(_mFound.length)iss.push({severity:'CRITICAL',check:'meta_response_residue',message:`메타 응답 문구 ${_mFound.length}종 잔존 — LLM 대화형 응답이 명세 본문에 저장됨(가짜 성공)`,detail:`검출: ${_mFound.slice(0,3).join(' , ')}${_mFound.length>3?' 외':''} — 해당 스텝의 필수 입력(명칭·청구항)을 확인 후 재생성 필요`});
   }
 
   // ── CHK-1: 표제 완전성·순서 ── (【청구항 N】·【수학식 N】은 섹션표제 아님 → 캐논 표제만 대상)

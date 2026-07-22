@@ -1001,6 +1001,8 @@ ${prompt.slice(0,2000)}`;
   renderDiagramsV14(sid,mr.text);
 }
 
+// [배치15B-1c] 예시도 목표 개수 정렬 — 자동감지 결과가 목표보다 많으면 잘라낸다(개수 반영). 적으면 감지분 유지.
+function _trimConceptTypesToTarget(){ try{ const n=Math.max(1,parseInt(conceptTargetCount)||1); if(conceptDiagramTypes.length>n){ conceptDiagramTypes=conceptDiagramTypes.slice(0,n); conceptDiagramCount=conceptDiagramTypes.length; if(typeof renderConceptDiagramTypesList==='function')renderConceptDiagramTypesList(); } }catch(_e){} }
 // v11.0: 연쇄 재생성용 예시도 실행
 async function _cascadeRunConceptDiagram(){
   const cFigNums=getAutoFigNums('step_07c');
@@ -1489,7 +1491,7 @@ function renderWorkflowRail(){
       const dl={compact:'간결',standard:'표준',detailed:'상세',maximal:'최대',custom:'사용자'}[detailLevel]||detailLevel;
       const mth=document.getElementById('chkUnifiedMath');
       const _mm=/방법/.test(selectedTitle||selectedTitleType||'')&&!includeMethodClaims;   // [배치10 A] 모순: 명칭/유형에 '방법' && 방법 제외
-      s.innerHTML='유형: <b>'+App.escapeHtml(selectedTitleType||'미선택')+'</b> · 장치 청구항: 독립1+일반'+deviceGeneralDep+'+앵커'+deviceAnchorDep+' · 방법: '+(includeMethodClaims?'포함':'제외')+' · 도면 수: '+(document.getElementById('optDeviceFigures')?.value||'4')+' · 수학식: '+((mth&&mth.checked)?'포함':'미포함')+' · 분량: '+dl+(_mm?'<br><b style="color:var(--color-warning,#E8A33D)">⚠ 명칭에 "방법"이 포함되는데 방법 청구항이 제외되어 있습니다 — 방법 토글 확인</b>':'');
+      s.innerHTML='유형: <b>'+App.escapeHtml(selectedTitleType||'미선택')+'</b> · 장치 청구항: 독립'+(parseInt(deviceIndepCount)||1)+'+일반'+deviceGeneralDep+'+앵커'+deviceAnchorDep+' · 방법: '+(includeMethodClaims?'포함':'제외')+' · 도면 수: '+(document.getElementById('optDeviceFigures')?.value||'4')+(conceptDiagramEnabled?(' · 예시도: '+(parseInt(conceptTargetCount)||0)):'')+' · 수학식: '+((mth&&mth.checked)?('포함('+(parseInt(mathBlockCount)||0)+')'):'미포함')+' · 분량: '+dl+(_mm?'<br><b style="color:var(--color-warning,#E8A33D)">⚠ 명칭에 "방법"이 포함되는데 방법 청구항이 제외되어 있습니다 — 방법 토글 확인</b>':'');
     }
   }catch(_e){}
 }
@@ -1555,14 +1557,42 @@ async function wfRunStage3(){
 // [D4] ④ 본문 통합 — 현행 cohesion 호출(무가드 덮어쓰기·이력 보존·배치9 인라인 수식/마무리 흡수)
 async function wfRunStage4(){ try{ await runUnifiedCohesionGen(); }finally{ try{renderWorkflowRail();renderWfValidationBar();}catch(_e){} } }
 
+// ═══ [배치15B-3] ③ 섹션별 재생성 — 청구항만 / 도면만(하류 stale 연동 유지) ═══
+async function wfRegenClaims(){
+  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('다른 작업이 진행 중입니다','info');return;}
+  if(!selectedTitle){App.showToast('먼저 ①에서 명칭을 확정하세요','error');return;}
+  const btn=document.getElementById('btnWfRegenClaims'); if(btn)btn.disabled=true;
+  try{
+    await runStep('step_06');   // runStep(step_06)이 invalidateDownstream 내포 → 도면·본문 자동 stale
+    if(!outputs.step_06){App.showToast('장치 청구항 생성 실패','error');return;}
+    if(includeMethodClaims)await runStep('step_10');
+    App.showToast('청구항만 재생성 완료 — 도면·본문은 "재생성 필요"로 표시됩니다(하류 정합)','success');
+  }catch(e){App.showToast('청구항 재생성 실패: '+(e&&e.message||e),'error');}
+  finally{ if(btn)btn.disabled=false; try{if(typeof saveProject==='function')saveProject(true);}catch(_e){} try{renderWorkflowRail();renderWfValidationBar();}catch(_e){} }
+}
+async function wfRegenFigures(){
+  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('다른 작업이 진행 중입니다','info');return;}
+  if(!outputs.step_06){App.showToast('먼저 청구항을 생성하세요 — 도면은 청구항 기반입니다','error');return;}
+  const btn=document.getElementById('btnWfRegenFigures'); if(btn)btn.disabled=true;
+  try{
+    await runDiagramStep('step_07');
+    if(!outputs.step_07){App.showToast('장치 도면 생성 실패','error');return;}
+    if(includeMethodClaims&&outputs.step_10)await runDiagramStep('step_11');
+    try{if(typeof invalidateDownstream==='function')invalidateDownstream('step_07');}catch(_e){}   // 본문(step_08) stale
+    App.showToast('도면만 재생성 완료 — 본문은 "재생성 필요"로 표시됩니다(하류 정합)','success');
+  }catch(e){App.showToast('도면 재생성 실패: '+(e&&e.message||e),'error');}
+  finally{ if(btn)btn.disabled=false; try{if(typeof saveProject==='function')saveProject(true);}catch(_e){} try{renderWorkflowRail();renderWfValidationBar();}catch(_e){} }
+}
+
 // ═══ [배치11 B] 통합 생성 위저드 — 기존 상태 변수의 양방향 미러(새 상태 금지). 브라우저 confirm 폐기. ═══
 function _wizHasPrev(){ return ['step_06','step_07','step_08','step_10','step_11','step_12'].some(function(k){return !!outputs[k];}); }   // [배치11 A] 판정 공유
 // [배치14-2] 위저드 축소 — 유형·설계는 ② 보드가 담당. 위저드는 "설계 요약 확인 + (기존 산출물 시)재실행 방식"만.
 function _wizRender(){
   try{
     const echo=document.getElementById('wizDesignEcho');
-    if(echo){ const dl={compact:'간결',standard:'표준',detailed:'상세',maximal:'최대'}[detailLevel]||detailLevel; const mth=document.getElementById('chkUnifiedMath');
-      echo.innerHTML='유형: <b>'+App.escapeHtml(selectedTitleType||'미선택')+'</b> · 방법: <b>'+(includeMethodClaims?'포함':'제외')+'</b> · 장치 청구항 총 '+(1+(parseInt(deviceGeneralDep)||0)+(parseInt(deviceAnchorDep)||0))+'항 · 도면 '+((document.getElementById('optDeviceFigures')||{}).value||'4')+'개 · 수학식 '+((mth&&mth.checked)?'포함':'미포함')+' · 분량 '+dl+'<br><span style="color:var(--color-text-tertiary)">설계값 변경은 ② 설계 보드에서 하세요.</span>'; }
+    if(echo){ const dl={compact:'간결',standard:'표준',detailed:'상세',maximal:'최대'}[detailLevel]||detailLevel; const mth=document.getElementById('chkUnifiedMath'); const _mon=!!(mth&&mth.checked);
+      const _ind=parseInt(deviceIndepCount)||1;
+      echo.innerHTML='유형: <b>'+App.escapeHtml(selectedTitleType||'미선택')+'</b> · 방법: <b>'+(includeMethodClaims?'포함':'제외')+'</b> · 장치 청구항 총 '+(_ind+(parseInt(deviceGeneralDep)||0)+(parseInt(deviceAnchorDep)||0))+'항(독립 '+_ind+') · 도면 '+((document.getElementById('optDeviceFigures')||{}).value||'4')+'개'+(conceptDiagramEnabled?(' · 예시도 '+(parseInt(conceptTargetCount)||0)+'개'):'')+' · 수학식 '+(_mon?((parseInt(mathBlockCount)||0)+'개'):'미포함')+' · 분량 '+dl+'<br><span style="color:var(--color-text-tertiary)">설계값 변경은 ② 설계 보드에서 하세요.</span>'; }
     const s3=document.getElementById('wizScreen3'); if(s3)s3.style.display=_wizHasPrev()?'block':'none';
   }catch(_e){}
 }
@@ -1598,7 +1628,7 @@ async function _wizStart(){
 // phase: 명칭→기초(15A 예정 표시·15B 실행)→청구항→도면→본문. 상태 pending|plan|running|done|fail|skip.
 const _WIZ_PHASES=[
   {id:'title',label:'명칭'},
-  {id:'basis',label:'기초(기술분야·배경·과제·해결수단)',plan:true},
+  {id:'basis',label:'기초(기술분야·배경기술)'},   // [배치15B-2] 실제 phase화(명칭 직후·청구항 이전)
   {id:'claims',label:'청구항(장치·방법)'},
   {id:'figures',label:'도면(Mermaid)'},
   {id:'body',label:'본문(상세설명·부호)'}
@@ -1692,9 +1722,13 @@ function _wfHardReset(){   // [배치12 A] 프로젝트 전환/신규 시 워크
 function _designParams(){
   return {
     type:selectedTitleType||'', method:!!includeMethodClaims,
+    indep:parseInt(deviceIndepCount)||1,   // [배치15B-1] 독립항 수(stage3)
     generalDep:parseInt(deviceGeneralDep)||0, anchorDep:parseInt(deviceAnchorDep)||0,
     figures:parseInt((document.getElementById('optDeviceFigures')||{}).value)||0,
-    math:!!((document.getElementById('chkUnifiedMath')||{}).checked), detail:detailLevel||'standard'
+    concept:(conceptDiagramEnabled?(parseInt(conceptTargetCount)||0):0),   // [배치15B-1] 예시도 수(0=제외, stage3)
+    math:!!((document.getElementById('chkUnifiedMath')||{}).checked),
+    mathCount:parseInt(mathBlockCount)||0,   // [배치15B-1] 수학식 개수(stage4)
+    detail:detailLevel||'standard'
   };
 }
 // [배치12 C] 생성 시점 스냅샷 — stage='stage3'(골격) | 'stage4'(본문)
@@ -1703,7 +1737,7 @@ function _snapshotGenParams(stage){ try{ const p=_designParams(); p.at=Date.now(
 function _genParamsDrift(){
   try{ if(!genParams)return false; const cur=_designParams();
     const drift=function(fields,snap){ return snap&&fields.some(function(f){return String(cur[f])!==String(snap[f]);}); };
-    return drift(['type','method','generalDep','anchorDep','figures'],genParams.stage3)||drift(['math','detail'],genParams.stage4);
+    return drift(['type','method','indep','generalDep','anchorDep','figures','concept'],genParams.stage3)||drift(['math','mathCount','detail'],genParams.stage4);
   }catch(_e){ return false; }
 }
 function _wfFmtParam(field,v){ return (field==='method'||field==='math')?((v===true||v==='true')?'포함':'제외'):v; }
@@ -1716,8 +1750,8 @@ function _renderApplyBadges(){
     if(String(cur[field])===String(snap[field]))rows.push('<span style="color:var(--color-success,#3DAE7A)">'+label+' 적용됨 ✓('+sl+' 생성 시)</span>');
     else rows.push('<b style="color:var(--color-warning,#E8A33D)">'+label+' 변경됨 — '+sl+' 재생성 필요('+_wfFmtParam(field,snap[field])+'→'+_wfFmtParam(field,cur[field])+')</b>');
   };
-  cmp('유형','type',s3,'③'); cmp('방법','method',s3,'③'); cmp('일반종속항','generalDep',s3,'③'); cmp('앵커종속항','anchorDep',s3,'③'); cmp('도면수','figures',s3,'③');
-  cmp('수학식','math',s4,'④'); cmp('분량','detail',s4,'④');
+  cmp('유형','type',s3,'③'); cmp('방법','method',s3,'③'); cmp('독립항','indep',s3,'③'); cmp('일반종속항','generalDep',s3,'③'); cmp('앵커종속항','anchorDep',s3,'③'); cmp('도면수','figures',s3,'③'); cmp('예시도','concept',s3,'③');
+  cmp('수학식','math',s4,'④'); cmp('수학식수','mathCount',s4,'④'); cmp('분량','detail',s4,'④');
   host.innerHTML='<div style="font-size:11px;display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--color-border)"><span style="width:100%;font-weight:700;color:var(--color-text-secondary)">적용값 대조(선택 vs 생성 시)</span>'+rows.join('')+'</div>';
 }
 // ② 설계 보드 렌더 — 컨트롤 값을 현재 상태에서 채우고 적용 배지 갱신(요약 텍스트가 아니라 컨트롤 자체가 상태)
@@ -1726,11 +1760,20 @@ function renderDesignBoard(){
     const t=selectedTitleType||'';
     document.querySelectorAll('#dbTypeCards [data-dbtype]').forEach(function(b){const on=b.getAttribute('data-dbtype')===t;b.classList.toggle('btn-primary',on);b.classList.toggle('btn-outline',!on);});
     const note=document.getElementById('dbMethodNote'); if(note)note.innerHTML=t?('방법 청구항: <b>'+(includeMethodClaims?'포함':'제외')+'</b> '+(_methodUserSet?'(수동 설정)':'(유형 기반 자동)')):'유형을 선택하세요.';
+    const ind=document.getElementById('dbIndepDep'); if(ind)ind.value=deviceIndepCount;   // [배치15B-1] 독립항 수
     const g=document.getElementById('dbGeneralDep'); if(g)g.value=deviceGeneralDep;
     const a=document.getElementById('dbAnchorDep'); if(a)a.value=deviceAnchorDep;
     const f=document.getElementById('dbFigures'); if(f)f.value=(document.getElementById('optDeviceFigures')||{}).value||'4';
+    // [배치15B-1] 예시도 포함/수 — 체크박스 canonical(conceptDiagramEnabled), 수 입력은 포함 시에만 표시
+    const cc=document.getElementById('chkConceptDiagram'); if(cc)cc.checked=!!conceptDiagramEnabled;
+    const ccw=document.getElementById('dbConceptCountWrap'); if(ccw)ccw.style.display=conceptDiagramEnabled?'inline':'none';
+    const ccn=document.getElementById('dbConceptCount'); if(ccn)ccn.value=conceptTargetCount;
+    // [배치15B-1] 수학식 개수 — 수학식 포함 시에만 표시
+    const mth=document.getElementById('chkUnifiedMath'); const mon=!!(mth&&mth.checked);
+    const mcw=document.getElementById('dbMathCountWrap'); if(mcw)mcw.style.display=mon?'inline':'none';
+    const mcn=document.getElementById('dbMathCount'); if(mcn)mcn.value=mathBlockCount;
     const d=document.getElementById('selUnifiedDetail'); if(d&&['compact','standard','detailed','maximal'].includes(detailLevel))d.value=detailLevel;   // 분량 select는 canonical(chkUnifiedMath 체크박스는 사용자 상태 그대로 둠)
-    const tot=document.getElementById('dbClaimTotal'); if(tot)tot.textContent='장치 총 '+(1+(parseInt(deviceGeneralDep)||0)+(parseInt(deviceAnchorDep)||0))+'항'+(includeMethodClaims?(' · 방법 총 '+(1+(parseInt(methodGeneralDep)||0)+(parseInt(methodAnchorDep)||0))+'항'):'');
+    const tot=document.getElementById('dbClaimTotal'); if(tot)tot.textContent='장치 총 '+((parseInt(deviceIndepCount)||1)+(parseInt(deviceGeneralDep)||0)+(parseInt(deviceAnchorDep)||0))+'항'+(includeMethodClaims?(' · 방법 총 '+(1+(parseInt(methodGeneralDep)||0)+(parseInt(methodAnchorDep)||0))+'항'):'');
     _renderApplyBadges();
   }catch(_e){}
 }
@@ -1739,7 +1782,11 @@ function _dbSet(field,val){
   try{
     if(field==='generalDep'){ if(typeof updateDeviceGeneralDep==='function')updateDeviceGeneralDep(val); const e=document.getElementById('inpDeviceGeneralDep'); if(e)e.value=val; }
     else if(field==='anchorDep'){ if(typeof updateDeviceAnchorDep==='function')updateDeviceAnchorDep(val); const e=document.getElementById('inpDeviceAnchorDep'); if(e)e.value=val; }
+    else if(field==='indepDep'){ deviceIndepCount=Math.max(1,Math.min(5,parseInt(val)||1)); }   // [배치15B-1] 독립항 수 canonical
     else if(field==='figures'){ const e=document.getElementById('optDeviceFigures'); if(e)e.value=val; }
+    else if(field==='conceptToggle'){ conceptDiagramEnabled=!!((document.getElementById('chkConceptDiagram')||{}).checked); }   // [배치15B-1] 예시도 포함 canonical
+    else if(field==='conceptCount'){ conceptTargetCount=Math.max(1,Math.min(6,parseInt(val)||1)); }   // [배치15B-1] 예시도 수
+    else if(field==='mathCount'){ mathBlockCount=Math.max(1,Math.min(5,parseInt(val)||1)); }   // [배치15B-1] 수학식 개수(cohesion 계약)
     else if(field==='detailToggle'){ detailLevel=(document.getElementById('selUnifiedDetail')||{}).value||detailLevel; const lv=['compact','standard','detailed','maximal','custom']; document.querySelectorAll('#detailLevelCards .selection-card').forEach(function(cd,i){cd.classList.toggle('selected',lv[i]===detailLevel);}); }
     // 'mathToggle'는 canonical chkUnifiedMath 자체가 소스 — 별도 write 없이 마크/렌더만.
   }catch(_e){}

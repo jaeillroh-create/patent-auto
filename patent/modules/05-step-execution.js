@@ -13,7 +13,19 @@ function checkDependency(s){
   // v5.6: 방법 청구항 비활성 시 관련 스텝 차단
   const methodSteps=['step_10','step_11','step_12','step_20'];
   if(!includeMethodClaims&&methodSteps.includes(s)){return '방법 청구항이 비활성화되어 있습니다';}
-  const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_08c:()=>outputs.step_08?null:'장치 상세설명(Step 8) 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저',step_20:()=>outputs.step_10?null:'방법 청구항 먼저'};return d[s]?d[s]():null;
+  // ★ [배치15B-A7] 필수 입력 가드 — 프롬프트가 명칭·청구항·상세설명을 "이미 확정된 입력"으로 참조하는 스텝은
+  //   그 입력이 비면 실행 차단(LLM 대화형 메타 응답 저장=가짜 성공 방지, docE 실증: 과제 섹션). 안내는 ①/③/④ 지목.
+  const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',
+    step_02:()=>selectedTitle?null:'먼저 ①에서 발명의 명칭을 확정하세요(기술분야는 명칭 기반)',
+    step_03:()=>selectedTitle?null:'먼저 ①에서 발명의 명칭을 확정하세요(배경기술은 명칭 기반)',
+    step_04:()=>selectedTitle?null:'먼저 ①에서 발명의 명칭을 확정하세요(선행기술 검색은 명칭 기반)',
+    step_05:()=>outputs.step_06?null:'먼저 ③에서 청구항을 생성하세요 — 과제는 청구항·해결수단을 역설계하여 작성됩니다',
+    step_06:()=>selectedTitle?null:'먼저 ①에서 발명의 명칭을 확정하세요',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_08c:()=>outputs.step_08?null:'장치 상세설명(Step 8) 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저',
+    step_16:()=>outputs.step_06?null:'먼저 ③에서 청구항을 생성하세요 — 발명의 효과는 청구항 기반으로 작성됩니다',
+    step_17:()=>outputs.step_06?null:'먼저 ③에서 청구항을 생성하세요 — 과제의 해결 수단은 청구항 기반으로 작성됩니다',
+    step_18:()=>outputs.step_08?null:'먼저 ④에서 상세설명을 생성하세요 — 부호의 설명은 상세설명 기반입니다',
+    step_19:()=>outputs.step_06?null:'먼저 ③에서 청구항을 생성하세요 — 요약서는 청구항 기반으로 작성됩니다',
+    step_20:()=>outputs.step_10?null:'방법 청구항 먼저'};return d[s]?d[s]():null;
 }
 // ═══ [Item 3] FIX 품질 게이팅 — B/C군(도면·상세설명·수학식)은 선행 청구항이 validateClaims 를 통과해야 진행 ═══
 //   장치계(07/08/09/08c): step_06 검사 / 방법계(11/12): step_06 컨텍스트 합산 + step_10 검사(05:81 패턴 재사용).
@@ -1677,6 +1689,31 @@ function _specIssueCounts(){
              dup:iss.filter(function(i){return i.check==='paragraph_duplicate'||i.check==='sentence_duplicate';}).length }; }
   catch(_e){ return {refnum:0,dup:0}; }
 }
+// ★ [배치15B-A6] 부호표(REFTABLE)만 지정 재요청 프롬프트 — 본문 수정 없이 부호 사전 블록 하나만 재생성.
+function _buildRefTableRetryPrompt(deviceText, methodText){
+  return `아래 상세설명 본문에 실제로 등장하는 모든 도면부호 (NN)에 대한 "부호 사전"만 출력하라. 본문은 절대 수정·재출력하지 마라.
+
+[출력 형식 — 이 블록 하나만, 다른 텍스트 금지]
+<<<REFTABLE>>>
+[장치부호]
+(100) 고유명칭
+(110) 고유명칭
+[방법단계]
+(S100) 단계명
+<<<END_REFTABLE>>>
+
+[규칙]
+- 본문에 실제 등장하는 (NN)만 포함(등장하지 않는 번호 금지, 등장하는데 누락 금지).
+- 각 번호에 서로 다른 고유한 한국어 명칭(총칭·중복 금지). 하나의 번호=하나의 명칭.
+- 장치부호는 2~4자리 숫자, 방법단계는 S+숫자. 번호·명칭 중복 금지.
+- 방법 본문이 없으면 [방법단계] 구획을 생략하라.
+
+[장치 상세설명]
+${deviceText||''}
+
+[방법 상세설명]
+${methodText||'(없음)'}`;
+}
 async function runUnifiedCohesionGen(opts){
   if(!(opts&&opts.chained)&&typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
   if(!outputs.step_06){App.showToast('먼저 장치 청구항(A2)을 생성하세요','error');return;}
@@ -1688,8 +1725,25 @@ async function runUnifiedCohesionGen(opts){
   App.showProgress('progressUnifiedGen','통합 생성 중(단일 컨텍스트)... 긴 출력은 자동 이어쓰기됩니다',0,1);
   try{
     const raw=await App.callClaudeWithContinuation(buildPrompt('unified_cohesion'),'progressUnifiedGen');
-    const r=parseCohesiveBundle(raw);
-    if(!r.ok.hasRef||!r.ok.hasDevice){ try{_lastGenError='REFTABLE/장치 상세설명 블록 누락';}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: REFTABLE/장치 상세설명 블록 누락 — 기존 내용 보존, 다시 시도하세요','error'); console.warn('[unified] block missing',r.ok); return; }
+    let r=parseCohesiveBundle(raw);
+    // ★ [배치15B-A6] 필수 블록 누락 침묵 금지 — DEVICE_DESC는 있는데 REFTABLE(부호표)만 누락이면,
+    //   전체 재생성이 아니라 "부호표만" 1회 지정 재요청 → 원 raw에 합성 후 재파싱(본문 보존). docE: 부호의 설명 공백→본문 26개 미정의.
+    if(!r.ok.hasRef&&r.ok.hasDevice){
+      App.showToast('부호표(REFTABLE) 누락 — 부호표만 지정 재요청합니다(본문 보존, 1회)','warning');
+      try{
+        const retry=await App.callClaudeWithContinuation(_buildRefTableRetryPrompt(r.device||'', r.method||''),'progressUnifiedGen');
+        const merged=(retry||'')+'\n'+raw;   // 재요청 REFTABLE 블록을 앞에 → grab이 최초 매칭
+        const r2=parseCohesiveBundle(merged);
+        if(r2.ok.hasRef&&r2.ok.hasDevice)r=r2;   // 재요청 성공 → 진행
+      }catch(e){ console.warn('[unified] reftable retry',e); }
+    }
+    if(!r.ok.hasRef||!r.ok.hasDevice){
+      const _refMiss=(r.ok.hasDevice&&!r.ok.hasRef);
+      try{_lastGenError=_refMiss?'부호표 누락 — ④ 재생성 필요':'REFTABLE/장치 상세설명 블록 누락';}catch(_e){}
+      App.clearProgress('progressUnifiedGen');
+      App.showToast(_refMiss?'부호표 재요청 실패 — ④ 본문 통합 재생성이 필요합니다(본문 보존)':'통합 생성 실패: REFTABLE/장치 상세설명 블록 누락 — 기존 내용 보존, 다시 시도하세요','error');
+      console.warn('[unified] block missing',r.ok); return;
+    }
     const rep=r.report, gate=[];
     if(rep.notInTable.length)gate.push('본문 미정의 부호 '+rep.notInTable.length+'개('+rep.notInTable.slice(0,6).join(', ')+')');
     if(rep.dupNums.length)gate.push('부호표 번호 중복 '+rep.dupNums.length+'개');
@@ -1788,7 +1842,14 @@ async function runUnifiedFullChain(_wizOpts){
     }
     if(!selectedTitle){ stopInfo={label:'명칭',cause:(_lastGenError||'명칭 생성 실패 — 발명 자료를 확인 후 다시 시도')}; _phase('title','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 명칭: '+stopInfo.cause,'error'); return; }
     _phase('title','done','확정: '+selectedTitle);
-    // 기초(step_02~05)는 [배치15A]에선 예정(plan) 표시만 — [배치15B]에서 실제 phase화.
+    // ── [배치15B-2] 기초(기술분야·배경기술) — 명칭 확정 직후·청구항 이전. 부수사항이므로 실패해도 체인 중단 안 함(비블로킹). ──
+    _phase('basis','running'); _rail(1); P('[기초] 기술분야·배경기술 생성...',0);
+    if(!(resume&&outputs.step_02)){ _lastGenError=''; try{ await runStep('step_02'); }catch(_e){} }
+    if(!(resume&&outputs.step_03)){ _lastGenError=''; try{ await runStep('step_03'); }catch(_e){} }
+    // 결과를 ④ 우측 기초 결과 카드(resultsBatch25)에 렌더(runStep의 renderOutput은 개별 resultStepNN 대상이라 no-op)
+    try{ if(typeof renderBatchResult==='function'){ const _rb=(typeof document!=='undefined')&&document.getElementById('resultsBatch25'); if(_rb)_rb.innerHTML=''; if(outputs.step_02)renderBatchResult('resultsBatch25','step_02',outputs.step_02); if(outputs.step_03)renderBatchResult('resultsBatch25','step_03',outputs.step_03); } }catch(_e){}
+    if(outputs.step_02||outputs.step_03)_phase('basis','done','기술분야'+(outputs.step_02&&outputs.step_03?'·배경기술':''));
+    else _phase('basis','fail',(_lastGenError||'기초 생성 실패 — 청구항은 계속 진행(부수사항)'));
     // ── [2/4] 청구항 ──
     _phase('claims','running'); _rail(3); P('[2/4] 청구항 생성(장치'+(wantMethod?'+방법':'')+')...',1);
     if(!(resume&&outputs.step_06)){ _lastGenError=''; await runStep('step_06'); }
@@ -1800,8 +1861,18 @@ async function runUnifiedFullChain(_wizOpts){
     if(!(resume&&outputs.step_07)){ _lastGenError=''; await runDiagramStep('step_07'); }
     if(!outputs.step_07){ stopInfo={label:'도면',cause:(_lastGenError||'장치 도면 생성 실패')}; _phase('figures','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 도면: '+stopInfo.cause,'error'); return; }
     if(wantMethod&&outputs.step_10&&!(resume&&outputs.step_11)){ _lastGenError=''; await runDiagramStep('step_11'); }
+    // ── [배치15B-1c] 예시도(step_07c) — ② "예시도 포함" 시 목표 개수만큼 생성(제외 시 스킵) ──
+    let _conceptN=0;
+    if(typeof conceptDiagramEnabled!=='undefined'&&conceptDiagramEnabled){
+      try{
+        if(typeof autoDetectConceptDiagrams==='function'&&(!conceptDiagramTypes||!conceptDiagramTypes.length))autoDetectConceptDiagrams();
+        if(typeof _trimConceptTypesToTarget==='function')_trimConceptTypesToTarget();
+        if(conceptDiagramTypes&&conceptDiagramTypes.length&&typeof _cascadeRunConceptDiagram==='function'&&!(resume&&outputs.step_07c)){ P('[3/4] 예시도 생성(SVG)...',2); await _cascadeRunConceptDiagram(); }
+        _conceptN=(conceptDiagramTypes||[]).filter(function(ct){return ct&&ct.svgContent;}).length;
+      }catch(_e){ try{_lastGenError='예시도 생성 실패: '+(_e&&_e.message||_e);}catch(_e2){} console.warn('[unifiedChain] concept',_e); }
+    }
     try{ if(typeof _snapshotGenParams==='function')_snapshotGenParams('stage3'); }catch(_e){}   // [배치12 C] 체인 골격 스냅샷(적용값 대조 기준)
-    _phase('figures','done','장치'+(wantMethod&&outputs.step_11?'+방법':'')+' 도면');
+    _phase('figures','done','장치'+(wantMethod&&outputs.step_11?'+방법':'')+' 도면'+(_conceptN?('+예시도'+_conceptN):''));
     // ── [4/4] 상세설명+부호 통합 ──
     _phase('body','running'); _rail(4); P('[4/4] 상세설명+부호 통합 생성...',3);
     const _beforeDesc=outputs.step_08||''; _lastGenError='';

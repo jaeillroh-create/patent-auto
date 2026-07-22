@@ -93,7 +93,6 @@ test('★ 2 — 체크리스트: 명칭→기초(예정)→청구항→도면→
   run('_wizPhaseReset();');
   let h = els.wizPhaseList.innerHTML;
   ['명칭','기초','청구항','도면','본문'].forEach(function(l){ assert.ok(h.includes(l), '★ '+l+' 행'); });
-  assert.ok(/기초[\s\S]{0,160}\(예정\)/.test(h), '★ 기초는 15A에서 예정 표시');
   run('_wizPhaseSet("title","running");');
   assert.ok(/◐/.test(els.wizPhaseList.innerHTML), '★ 진행 스피너 문자');
   run('_wizPhaseSet("title","done","확정: 테스트");');

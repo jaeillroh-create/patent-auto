@@ -931,13 +931,17 @@
         <div class="card" style="border:1px dashed var(--color-border)">
           <p style="font-size:12px;color:var(--color-text-secondary);margin:0"><span class="ico" data-icon="bolt"></span> <b>핵심 명세서 통합 생성</b>은 <b>② 설계 결정</b> 단계에서 설계값을 확정한 뒤 실행합니다.</p>
         </div>
+        <!-- [배치15B-2] Step 2~5(기술분야·배경·선행기술·과제)는 통합 생성의 [기초] phase가 자동 수행 → 개별/일괄은 고급 강등 -->
         <div id="batchArea" style="display:none">
-          <div class="card">
-            <div class="card-header"><div class="card-title"><span class="ico" data-icon="bolt"></span> Step 2~5: 기본 항목 (선택)</div></div>
-            <p style="font-size:12px;color:var(--dt-g500);padding:0 18px 12px">기술분야 · 배경기술 · 선행기술문헌 · 해결과제</p>
-            <div id="progressBatch" style="margin:0 18px 12px"></div>
-            <div style="padding:0 18px 18px"><button class="btn btn-primary btn-full" id="btnBatch25" onclick="runBatch25()"><span class="ico" data-icon="bolt"></span> 일괄 생성</button></div>
-          </div>
+          <details class="wf-adv" id="wfAdvBasis">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급 — 기초 항목(Step 2~5) 개별/일괄 생성 (통합 생성이 기술분야·배경을 자동 수행)</summary>
+            <div class="card">
+              <div class="card-header"><div class="card-title"><span class="ico" data-icon="bolt"></span> Step 2~5: 기본 항목 (선택)</div></div>
+              <p style="font-size:12px;color:var(--dt-g500);padding:0 18px 12px">기술분야 · 배경기술 · 선행기술문헌 · 해결과제 — 결과는 ④ 우측에 표시됩니다</p>
+              <div id="progressBatch" style="margin:0 18px 12px"></div>
+              <div style="padding:0 18px 18px"><button class="btn btn-outline btn-full" id="btnBatch25" onclick="runBatch25()"><span class="ico" data-icon="bolt"></span> 일괄 생성</button></div>
+            </div>
+          </details>
         </div>
       </div>
       <!-- 오른쪽: 결과 출력 -->
@@ -953,10 +957,7 @@
             <div id="titleConfirmMsg" class="confirm-msg" style="display:none"><span class="ico" data-icon="check-circle"></span> 명칭이 확정되었어요</div>
           </div>
         </div>
-        <div class="result-card" id="resultCard25">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 2~5 결과</div></div>
-          <div id="resultsBatch25" class="result-area"></div>
-        </div>
+        <!-- [배치15B-2] Step 2~5 결과 카드는 ④(명세서 부수사항)로 이동 — 아래 page3 참조 -->
       </div>
     </div>
 
@@ -978,13 +979,19 @@
             <div id="dbMethodNote" style="font-size:12px;color:var(--color-text-secondary);margin-top:6px"></div>
           </div>
           <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:10px">
+            <label title="독립항 수(기본 1). 2개 이상이면 각 독립항이 상이한 권리 관점(장치 구성 축 분리)으로 작성됩니다">독립항 <input type="number" id="dbIndepDep" min="1" max="5" style="width:56px" onchange="_dbSet('indepDep',this.value)"></label>
             <label>일반 종속항 <input type="number" id="dbGeneralDep" min="0" max="20" style="width:56px" onchange="_dbSet('generalDep',this.value)"></label>
             <label>앵커 종속항 <input type="number" id="dbAnchorDep" min="0" max="10" style="width:56px" onchange="_dbSet('anchorDep',this.value)"></label>
             <span id="dbClaimTotal" style="font-weight:700"></span>
           </div>
           <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:6px">
             <label>도면 수 <input type="number" id="dbFigures" min="1" max="10" style="width:56px" onchange="_dbSet('figures',this.value)"></label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer" title="예시도(개념도·UI 화면 등)를 체인 도면 단계에서 함께 생성합니다"><input type="checkbox" id="chkConceptDiagram" onchange="_dbSet('conceptToggle')"> 예시도 포함</label>
+            <label id="dbConceptCountWrap" style="display:none">예시도 수 <input type="number" id="dbConceptCount" min="1" max="6" style="width:56px" onchange="_dbSet('conceptCount',this.value)"></label>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:6px">
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="chkUnifiedMath" onchange="_dbSet('mathToggle')"> 수학식 포함(상세설명에 인라인 생성 — 변수 정의·참조 규칙 자동 준수)</label>
+            <label id="dbMathCountWrap" style="display:none">수학식 수 <input type="number" id="dbMathCount" min="1" max="5" style="width:56px" onchange="_dbSet('mathCount',this.value)"></label>
             <label>분량 <select id="selUnifiedDetail" onchange="detailLevel=this.value;_dbSet('detailToggle')" style="font-size:12px;padding:2px 6px">
               <option value="compact">간결(3~4천자)</option><option value="standard" selected>표준(5~7천자)</option><option value="detailed">상세(8천~1만자)</option><option value="maximal">최대(2.2~2.5만자)</option>
             </select></label>
@@ -996,7 +1003,7 @@
           <button class="btn btn-primary btn-full" id="btnUnifiedFullChain" onclick="runUnifiedFullChain()"><span class="ico" data-icon="bolt"></span> 발명자료 → 핵심 명세서 통합 생성</button>
           <!-- [배치15A-3] 완료·중단 배너(오버레이 닫아도 상주 · 중단 시 재개 버튼) -->
           <div id="dbCompletionBanner" style="display:none;margin-top:10px"></div>
-          <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px">명칭 → 청구항 → 도면 → 상세설명·부호·효과·해결수단·요약을 한 번에 응집 생성합니다(도면부호·용어 정합 구조적 보장). 기존 산출물이 있으면 재실행 방식을 먼저 확인합니다.</p>
+          <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px">명칭 → 기초(기술분야·배경) → 청구항 → 도면 → 상세설명·부호·효과·해결수단·요약을 한 번에 응집 생성합니다(도면부호·용어 정합 구조적 보장). 기존 산출물이 있으면 재실행 방식을 먼저 확인합니다.</p>
         </div>
         <details class="wf-adv" id="wfAdv1">
           <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급(단계별 세부) — 청구항 구성·개별 생성</summary>
@@ -1217,9 +1224,13 @@
         </details>
       </div>
 
-      <!-- 오른쪽: 결과 -->
+      <!-- 오른쪽: 결과 — [배치15B-3] 청구항 섹션 → 도면 섹션 세로 배치, 섹션별 재생성(하류 stale 연동) -->
       <div class="page-right">
-        <!-- [배치10 E] 청구항·대안·특허성 결과 — ②에서 이동(로직 무변경·DOM 이동만) -->
+        <!-- ─── 청구항 섹션 ─── -->
+        <div id="wfSecClaims" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding:8px 12px;border-left:3px solid var(--color-primary);background:var(--color-bg-secondary,rgba(74,125,255,0.04));border-radius:6px">
+          <b style="font-size:13px">청구항</b>
+          <button class="btn btn-outline btn-sm" id="btnWfRegenClaims" onclick="wfRegenClaims()"><span class="ico" data-icon="refresh"></span> 청구항만 재생성</button>
+        </div>
         <div class="result-card" id="resultCard06">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 6 결과: 장치 청구항</div></div>
           <div id="resultStep06" class="result-area"></div>
@@ -1233,6 +1244,11 @@
           <div id="resultStep14" class="result-area" style="min-height:60px"></div>
           <div id="resultStep15" class="result-area" style="min-height:60px"></div>
           <div id="validationResults" class="result-area" style="min-height:60px"></div>
+        </div>
+        <!-- ─── 도면 섹션 ─── -->
+        <div id="wfSecFigures" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:16px 0 8px;padding:8px 12px;border-left:3px solid var(--color-primary);background:var(--color-bg-secondary,rgba(74,125,255,0.04));border-radius:6px">
+          <b style="font-size:13px">도면</b>
+          <button class="btn btn-outline btn-sm" id="btnWfRegenFigures" onclick="wfRegenFigures()"><span class="ico" data-icon="refresh"></span> 도면만 재생성</button>
         </div>
         <div class="result-card" id="resultCard07">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 7 결과: 장치 도면</div></div>
@@ -1341,6 +1357,11 @@
         <div class="result-card" id="resultCard13">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 13 결과: AI 검토</div></div>
           <div id="resultStep13" class="result-area"></div>
+        </div>
+        <!-- [배치15B-2] Step 2~5 결과(기술분야·배경·선행기술·과제 — 명세서 부수사항) ①→④ 이동 -->
+        <div class="result-card" id="resultCard25">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> 기초 결과: 기술분야·배경·선행기술·과제 (Step 2~5)</div></div>
+          <div id="resultsBatch25" class="result-area"></div>
         </div>
         <div class="result-card" id="resultCardReview">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> 검토 반영 결과</div></div>
@@ -1508,12 +1529,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260720a"></script>
-<script src="patent/patent.js?v=20260722-b39"></script>
+<script src="patent/patent.js?v=20260722-b40"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260722-b39"></script>
+<script src="opinion/opinion.js?v=20260722-b40"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260722-b39';
+  var _cv='?v=20260722-b40';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1611,8 +1632,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260722-b39"></script>
-<script src="docket.js?v=20260722-b39"></script>
+<script src="division/division.js?v=20260722-b40"></script>
+<script src="docket.js?v=20260722-b40"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>

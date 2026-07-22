@@ -51,7 +51,7 @@ const setupPromptEnv = () => {
 test('★ D1 — 토글 on: C9가 인라인 수식 계약으로 전환(여기서 절·그룹 정의·상기/다음의 규칙)', () => {
   setupPromptEnv(); els.chkUnifiedMath = { checked: true };
   const p = run("buildPrompt('unified_cohesion')");
-  assert.ok(/수학식 인라인 — CHK-8·참조 규칙 선반영/.test(p), '★ 인라인 계약 진입');
+  assert.ok(/수학식 인라인 — 정확히 \d개의 【수학식】 블록/.test(p), '★ 인라인 계약 진입(배치15B-1b: 개수 계약)');
   assert.ok(/"여기서, …" 정의 절/.test(p) && /개별 또는 그룹\("a, b, c는 …"\)/.test(p), '★ 변수 전수 정의(그룹·아래첨자)');
   assert.ok(/"상기 수학식 N"/.test(p) && /"다음의 수학식 N"/.test(p), '★ 참조 방향 규칙(math_ref 선반영)');
   assert.ok(!/【수학식 금지】/.test(p), '★ 금지문 미출력');
