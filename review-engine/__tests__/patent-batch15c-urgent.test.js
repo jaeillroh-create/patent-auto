@@ -126,7 +126,9 @@ test('★ FIX1 — applyReview: 인라인 모드(chkUnifiedMath) 수식 재삽�
 // FIX2: 수식 재요청 방법 보존(method 드롭 retry 거부)
 test('★ FIX2 — 수식 재요청 수용 조건에 방법 보존(_mPreserved)', () => {
   assert.match(PATENT_SRC, /const _mPreserved=\(!r\.ok\.hasMethod\)\|\|r3\.ok\.hasMethod;/, '★ 방법 보존 조건');
-  assert.match(PATENT_SRC, /if\(r3\.ok\.hasRef&&r3\.ok\.hasDevice&&_mPreserved&&_mcnt\(r3\)\.length>=_mathN\)\{ r=r3; \}/, '★ 수용 조건에 _mPreserved 포함');
+  assert.match(PATENT_SRC, /if\(r3\.ok\.hasRef&&r3\.ok\.hasDevice&&_mPreserved&&_mcnt\(r3\)\.length>=_mathN\)\{/, '★ 수용 조건에 _mPreserved 포함');
+  // ★ [검증 반영 v2] 재요청이 안 낸 마무리 블록(과제·해결수단·효과·요약)은 원본 r에서 이월(침묵 소실 방지)
+  assert.match(PATENT_SRC, /\['task','solution','effects','abstract'\]\.forEach\(function\(k\)\{ if\(!r3\[k\]&&r\[k\]\)r3\[k\]=r\[k\]; \}\)/, '★ 마무리 블록 이월(TASK=step_05 등)');
 });
 test('★ FIX2 동작 — retry가 METHOD_DESC 누락 시 거부(방법 본문 침묵 소실 방지)', async () => {
   const REF_M = '<<<REFTABLE>>>\n[장치부호]\n(100) 제어부\n[방법단계]\n(S100) 수신 단계\n<<<END_REFTABLE>>>';

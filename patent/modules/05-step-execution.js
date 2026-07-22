@@ -1167,12 +1167,17 @@ async function runBatch25(){
     else{outputs.step_04='【특허문헌】\n(관련 선행특허를 검색하지 못하였습니다)';renderBatchResult('resultsBatch25','step_04',outputs.step_04);}
     markOutputTimestamp('step_04');
 
-    // step_05는 step_03에 의존하므로 순차 실행
-    App.showProgress('progressBatch','해결하고자 하는 과제 (2/2)',2,2);
-    const r05=await App.callClaude(buildPrompt('step_05'));
-    pushOutputHistory('step_05','llm','runBatch25');
-    outputs.step_05=r05.text;markOutputTimestamp('step_05');
-    renderBatchResult('resultsBatch25','step_05',r05.text);
+    // step_05(과제)는 청구항(step_06) 역설계 — ★ [검증 반영] 청구항 부재 시 실행 차단(메타응답 방지, checkDependency 공유).
+    //   레거시 일괄 경로가 15E 가드를 우회하던 갭. 청구항 없으면 과제만 스킵(기술분야·배경·선행기술은 이미 생성됨).
+    const _dep05=(typeof checkDependency==='function')?checkDependency('step_05'):null;
+    if(_dep05){ App.showToast('과제(step 5) 건너뜀 — '+_dep05,'warning'); }
+    else {
+      App.showProgress('progressBatch','해결하고자 하는 과제 (2/2)',2,2);
+      const r05=await App.callClaude(buildPrompt('step_05'));
+      pushOutputHistory('step_05','llm','runBatch25');
+      outputs.step_05=r05.text;markOutputTimestamp('step_05');
+      renderBatchResult('resultsBatch25','step_05',r05.text);
+    }
     
     App.clearProgress('progressBatch');
     saveProject(true);App.showToast('기본 항목 완료 (병렬 처리)');
@@ -1804,7 +1809,12 @@ async function runUnifiedCohesionGen(opts){
           const merged=refBlk+'\n'+(retry||'');   // 부호표(REFTABLE)는 현재 refMap 유지, 본문만 교체 → 재파싱
           const r3=parseCohesiveBundle(merged);
           const _mPreserved=(!r.ok.hasMethod)||r3.ok.hasMethod;   // ★ [검증 반영] 원본에 방법 본문 있었으면 재요청도 방법 보존해야 수용(step_12 침묵 소실 방지)
-          if(r3.ok.hasRef&&r3.ok.hasDevice&&_mPreserved&&_mcnt(r3).length>=_mathN){ r=r3; }
+          if(r3.ok.hasRef&&r3.ok.hasDevice&&_mPreserved&&_mcnt(r3).length>=_mathN){
+            // ★ [검증 반영] 재요청은 DEVICE/METHOD 본문만 낸다 — 마무리 블록(과제·해결수단·효과·요약)은 재요청에 없어
+            //   r3.task/solution/effects/abstract=null이 된다. 원본 r의 값을 이월해 침묵 소실을 막는다(TASK=step_05 등).
+            ['task','solution','effects','abstract'].forEach(function(k){ if(!r3[k]&&r[k])r3[k]=r[k]; });
+            r=r3;
+          }
         }catch(e){ console.warn('[unified] math retry',e); }
       }
       if(_mcnt(r).length<_mathN){ try{_lastGenError='수학식 누락 — ④ 재생성 필요('+_mcnt(r).length+'/'+_mathN+')';}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('수학식 인라인 미포함('+_mcnt(r).length+'/'+_mathN+') — ④ 본문 통합 재생성이 필요합니다','error'); console.warn('[unified] math gate fail'); return; }
@@ -1860,7 +1870,10 @@ async function runUnifiedCohesionGen(opts){
 //   selectedTitle(확정 명칭)은 보존 — 명칭 변경은 사용자 결정 사안(변경 시 세대 훅이 별도 추적).
 function _resetUnifiedChainOutputs(){
   // [배치11 A] step_01(명칭후보)·확정명칭은 초기화하지 않는다 — 유형·명칭은 통합 생성의 "입력"(산출물 아님).
-  ['step_06','step_10','step_07','step_11','step_08','step08_device','step_09','step_12','step_18','step_13','step_13_applied','step_13_applied_method'].forEach(function(k){
+  // ★ [검증 반영·배치15E] step_05(과제)·16(효과)·17(해결수단)·19(요약)는 cohesion 마무리 블록(TASK/EFFECTS/SOLUTION/ABSTRACT)이
+  //   유일 소스다. 리셋 목록에서 빠지면 cohesion이 그 블록을 생략(선택 블록)했을 때 이전 세대 값이 잔존해 세대 혼합
+  //   (특히 step_03 배경기술이 step_05를 입력으로 소비). 함께 초기화하여 "구세대 잔존"이 "가시적 공백"으로 드러나게 한다.
+  ['step_06','step_10','step_07','step_11','step_08','step08_device','step_09','step_12','step_18','step_13','step_13_applied','step_13_applied_method','step_05','step_16','step_17','step_19'].forEach(function(k){
     if(typeof outputs==='object'&&outputs&&outputs[k]!==undefined)delete outputs[k];
     try{ if(typeof outputTimestamps==='object'&&outputTimestamps&&outputTimestamps[k]!==undefined)delete outputTimestamps[k]; }catch(_e){}
   });

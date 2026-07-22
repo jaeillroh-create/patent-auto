@@ -93,3 +93,41 @@ test('★ 회귀 — 과제 섹션 메타응답("청구항을 알려/제공하�
   const metaSpec = '【해결하고자 하는 과제】\n정확한 과제 작성을 위해 청구항 정보를 제공해 주시면 작성하여 제공하겠습니다.';
   assert.ok(run('validateSpecification(' + JSON.stringify(metaSpec) + ').filter(function(i){return i.check==="meta_response_residue"&&i.severity==="CRITICAL";}).length') >= 1, '★ 과제 메타응답 CRITICAL 검출');
 });
+
+// ═══════════ 적대 검증 반영 FIX (6건) ═══════════
+// FIX1(HIGH): 수식 재요청이 마무리 블록(TASK=과제 등)을 소실시키지 않음(원본 이월)
+test('★ FIX1 소스 — 수식 재요청 수용 시 task/solution/effects/abstract 원본 이월', () => {
+  assert.match(PATENT_SRC, /\['task','solution','effects','abstract'\]\.forEach\(function\(k\)\{ if\(!r3\[k\]&&r\[k\]\)r3\[k\]=r\[k\]; \}\)/, '★ 마무리 블록 이월(math 재요청 소실 방지)');
+});
+test('★ FIX1 동작 — TASK 있는 raw + 수식 부족 → 재요청(device-only) 후 과제(step_05) 보존', async () => {
+  run('clearAllState(); outputs.step_06="【청구항 1】 제어부."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="서버"; includeMethodClaims=false; mathBlockCount=2;');
+  els.chkUnifiedMath = mkEl(); els.chkUnifiedMath.checked = true;
+  const raw1 = '<<<REFTABLE>>>\n[장치부호]\n(100) 제어부\n<<<END_REFTABLE>>>\n<<<DEVICE_DESC>>>\n제어부(100)는 처리하도록 구성된다.\n<<<END_DEVICE_DESC>>>\n<<<TASK>>>\n본 발명은 종래 처리가 비효율적이던 문제를 해결하는 것을 목적으로 한다.\n<<<END_TASK>>>';
+  const retry = '<<<DEVICE_DESC>>>\n제어부(100)는 처리하도록 구성된다.\n【수학식 1】\ny = a x\n여기서 a.\n【수학식 2】\nz = y\n여기서 z.\n<<<END_DEVICE_DESC>>>';   // 수식 O, TASK 없음
+  const orig = sandbox.App.callClaudeWithContinuation; let call = 0;
+  sandbox.App.callClaudeWithContinuation = async () => { call++; return call === 1 ? raw1 : retry; };
+  try { await run('runUnifiedCohesionGen({chained:true})'); }
+  finally { sandbox.App.callClaudeWithContinuation = orig; }
+  assert.equal(call, 2, '★ 수식 재요청 1회');
+  assert.ok(/【수학식 1】/.test(run('outputs.step_08') || ''), '★ 수식 반영');
+  assert.ok(/종래 처리가 비효율적/.test(run('outputs.step_05') || ''), '★ 과제(TASK)가 재요청에도 보존(step_05 이월)');
+});
+// FIX2/5(HIGH/MED): _resetUnifiedChainOutputs에 step_05/16/17/19 추가(세대 혼합 방지)
+test('★ FIX2/5 — full 재생성 리셋 목록에 step_05·16·17·19 포함(구세대 잔존→가시 공백)', () => {
+  run('clearAllState(); outputs.step_05="구세대 과제"; outputs.step_16="구효과"; outputs.step_17="구해결"; outputs.step_19="구요약"; outputs.step_06="c";');
+  run('_resetUnifiedChainOutputs();');
+  ['step_05','step_16','step_17','step_19','step_06'].forEach(k => assert.equal(run('outputs.' + k), undefined, '★ ' + k + ' 리셋'));
+  assert.match(PATENT_SRC, /'step_13_applied_method','step_05','step_16','step_17','step_19'/, '★ 리셋 목록에 마무리 계열 추가');
+});
+// FIX6(MED): runBatch25 레거시 경로 step_05 checkDependency 가드
+test('★ FIX6 — runBatch25가 step_05(과제) 전에 checkDependency 가드(청구항 부재 시 스킵)', () => {
+  assert.match(PATENT_SRC, /const _dep05=\(typeof checkDependency==='function'\)\?checkDependency\('step_05'\):null;/, '★ 레거시 일괄도 가드 공유');
+  assert.match(PATENT_SRC, /if\(_dep05\)\{ App\.showToast\('과제\(step 5\) 건너뜀/, '★ 청구항 부재 시 과제 스킵+경고(메타응답 재유입 차단)');
+});
+// FIX4(LOW): C12 자기검증 라벨 연속(g)(h)(i)
+test('★ FIX4 — C12 자기검증 라벨 연속화((g)(h)(i), 결번·트레일링 제거)', () => {
+  run('clearAllState(); outputs.step_06="【청구항 1】 제어부."; outputs.step_07="도1"; selectedTitle="s"; selectedTitleType="서버"; mathBlockCount=3;');
+  els.chkUnifiedMath = mkEl(); els.chkUnifiedMath.checked = true;
+  const p = run("buildPrompt('unified_cohesion')");
+  assert.ok(/\(f\)[\s\S]{0,200}\(g\) ★ 동일한 구성 명칭[\s\S]{0,200}\(h\) ★ 모든 문단[\s\S]{0,200}\(i\) 모든 수학식/.test(p), '★ f→g→h→i 순차');
+});

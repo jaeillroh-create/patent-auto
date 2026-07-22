@@ -45,7 +45,7 @@ const cohesionPrompt = () => { run('clearAllState(); outputs.step_06="【청구�
 test('★ 1 — cohesion C5/C12: 동일 명칭 단일 부호 원칙 + 자기검증 (h)', () => {
   const p = cohesionPrompt();
   assert.ok(/하나의 명칭=하나의 참조번호/.test(p) && /서로 다른 부호를 두 개 이상 배정하지 마라/.test(p), '★ C5 양방향 1:1');
-  assert.ok(/\(h\) ★ 동일한 구성 명칭에 서로 다른 부호가 두 개 이상 배정되지 않았는가/.test(p), '★ C12 (h) 동일명칭 다중부호 금지');
+  assert.ok(/\(g\) ★ 동일한 구성 명칭에 서로 다른 부호가 두 개 이상 배정되지 않았는가/.test(p), '★ C12 (g) 동일명칭 다중부호 금지(연속 라벨)');
 });
 test('★ 1 — 검증: 동일 명칭 다중 부호(docG류) → refnum_dupassign HIGH', () => {
   const spec = '【발명을 실시하기 위한 구체적인 내용】\n대사보존형서사구조화부(100)는 처리하고, 대사보존형서사구조화부(200)는 저장한다.\n【부호의 설명】\n100 : 대사보존형서사구조화부\n200 : 대사보존형서사구조화부';
@@ -56,7 +56,7 @@ test('★ 1 — 검증: 동일 명칭 다중 부호(docG류) → refnum_dupassig
 // 2) 절단 방지
 test('★ 2 — cohesion C12 (i): 모든 문단 종결어미 종료 자기검증', () => {
   const p = cohesionPrompt();
-  assert.ok(/\(i\) ★ 모든 문단이 종결어미\("~다\."\)로 끝나는가/.test(p), '★ C12 (i) 절단 문단 없음');
+  assert.ok(/\(h\) ★ 모든 문단이 종결어미\("~다\."\)로 끝나는가/.test(p), '★ C12 (h) 절단 문단 없음(연속 라벨)');
 });
 
 // 3) 수학식 변수 완전정의
@@ -66,7 +66,7 @@ test('★ 3 — cohesion C9(인라인)·C12(g): 좌·우변 전 기호(그리스
   const p = run("buildPrompt('unified_cohesion')");
   assert.ok(/좌변·우변에 등장하는 모든 기호/.test(p), '★ 좌·우변 전 기호');
   assert.ok(/그리스문자.*Σ/.test(p) && /합·곱 기호.*Σ, ∏.*인덱스/.test(p) && /rank/.test(p), '★ 그리스문자·합기호 인덱스·함수형 인자');
-  assert.ok(/모든 수학식의 좌·우변 기호가 "여기서" 절에 정의되었고/.test(p), '★ C12 (g) 좌·우변');
+  assert.ok(/\(i\) 모든 수학식의 좌·우변 기호가 "여기서" 절에 정의되었고/.test(p), '★ C12 (i) 좌·우변(연속 라벨)');
 });
 
 // 4) 예시도 실명 배선 — 빈 라벨 generic 오염 방지
