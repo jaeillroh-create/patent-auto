@@ -40,8 +40,10 @@ const run = (expr) => vm.runInContext(expr, sandbox, { filename: 't.js' });
 
 // 1) 생성 CTA ② 이동 — 파라미터 소스 무변경
 test('★ 1 — 통합 생성 버튼 ② 보드로, 파라미터 소스(도면수·수학식·분량)는 동일 요소 유지', () => {
-  assert.match(HTML_SRC, /id="wfStage2Main"[\s\S]*?id="btnUnifiedFullChain"[\s\S]{0,140}onclick="runUnifiedFullChain\(\)"/, '★ ② 보드 내 버튼');
-  assert.match(HTML_SRC, /id="wfStage2Main"[\s\S]*?id="progressUnifiedFullChain"/, '★ 진행바도 ② 이식');
+  // 카드 경계(wfStage2Main 시작 ~ 다음 섹션 wfAdv1)로 슬라이스 → "카드 안 포함"을 실제 검증(순서만이 아니라 containment).
+  const board = HTML_SRC.slice(HTML_SRC.indexOf('id="wfStage2Main"'), HTML_SRC.indexOf('id="wfAdv1"'));
+  assert.match(board, /id="btnUnifiedFullChain"[\s\S]{0,140}onclick="runUnifiedFullChain\(\)"/, '★ ② 보드 카드 안 버튼');
+  assert.match(board, /id="progressUnifiedFullChain"/, '★ 진행바도 ② 카드 안');
   // 프롬프트/체인이 읽는 소스 요소가 ② 보드에 그대로 존재(chkUnifiedMath·selUnifiedDetail·optDeviceFigures는 ②/③)
   assert.match(HTML_SRC, /id="chkUnifiedMath"/, '★ 수학식 소스');
   assert.match(HTML_SRC, /id="selUnifiedDetail"/, '★ 분량 소스');
@@ -80,7 +82,7 @@ test('★ 4b — step_13 프롬프트에 특허성(신규성·진보성) 축 + [
   assert.ok(/차별 구성/.test(p) && /자명성 리스크/.test(p) && /보완 방향/.test(p), '★ 검토 축');
   assert.ok(/"\[특허성\]" 소제목으로 구분/.test(p), '★ 결과 [특허성] 섹션 지시');
   assert.ok(/\[선행기술 — 특허성 검토용\] \[선행기술\] 인용발명 제10-0001호/.test(p), '★ 선행기술 입력 주입');
-  assert.ok(/완성 문언 수술 금지/.test(p) || /완성 문언 수술 금지|완성 문언/.test(p), '★ 방향만(문언 수술 금지)');
+  assert.match(p, /완성 문언 수술 금지 — 방향만/, '★ 방향만(완성 문언 수술 금지) — 실제 가드 문구 검증');
 });
 test('★ 4b — Step 15 단독 버튼·카드 제거, runStep(step_15) 함수는 존치(레거시)', () => {
   assert.ok(!/id="btnStep15"/.test(HTML_SRC) && !/Step 15: 특허성 검토/.test(HTML_SRC), '★ 버튼·카드 제거');
@@ -91,7 +93,9 @@ test('★ 4b — Step 15 단독 버튼·카드 제거, runStep(step_15) 함수�
 test('★ 4c — Step 14 대안 청구항이 ③ 고급(wfAdv2) 안', () => {
   const p2 = HTML_SRC.slice(HTML_SRC.indexOf('id="page2"'), HTML_SRC.indexOf('id="page3"'));
   const adv2Start = p2.indexOf('id="wfAdv2"');
-  assert.ok(adv2Start >= 0 && p2.indexOf('id="btnStep14"') > adv2Start, '★ btnStep14가 wfAdv2 이후(고급 내부)');
+  // details 경계(</details>)로 슬라이스 → wfAdv2 "안"을 실제 검증(순서 after만이 아니라 containment)
+  const adv2 = p2.slice(adv2Start, p2.indexOf('</details>', adv2Start));
+  assert.ok(adv2Start >= 0 && adv2.includes('id="btnStep14"'), '★ btnStep14가 wfAdv2 details 경계 안(containment)');
 });
 
 // 5) ④ 문구

@@ -87,9 +87,10 @@ test('★ 2(배치14) — 관문 카드 소멸: Step14는 ③ 고급, Step15·�
   assert.ok(!/id="wfGateCard"/.test(HTML_SRC), '★ 관문 카드 소멸(배치14-4)');
   assert.ok(!/id="btnStep15"/.test(HTML_SRC), '★ Step 15 버튼 제거(→ Step 13 통합)');
   assert.ok(!/onclick="runValidation\(\)"/.test(HTML_SRC), '★ 자동 검증 버튼 제거(자동 경로 유지)');
-  // Step 14는 ③ 고급(wfAdv2) 안으로
-  const adv2 = p2.slice(p2.indexOf('id="wfAdv2"'), p2.indexOf('id="page-right"') >= 0 ? p2.indexOf('id="page-right"') : p2.length);
-  assert.ok(p2.includes('id="btnStep14"'), '★ Step14 ③에 존치');
+  // Step 14는 ③ 고급(wfAdv2) 안으로 — details 경계(</details>)로 containment 검증(순서만이 아님)
+  const adv2open = p2.indexOf('id="wfAdv2"');
+  const adv2 = p2.slice(adv2open, p2.indexOf('</details>', adv2open));
+  assert.ok(adv2open >= 0 && adv2.includes('id="btnStep14"'), '★ Step14 wfAdv2 details 안(containment)');
 });
 test('★ 1/3 — Phase D·검토반영이 ④ 고급(wfAdv3)으로, 주 흐름은 통합생성+AI검토', () => {
   const p3 = HTML_SRC.slice(HTML_SRC.indexOf('id="page3"'), HTML_SRC.indexOf('id="page4"'));
