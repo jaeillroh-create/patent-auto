@@ -1735,7 +1735,8 @@ async function runUnifiedCohesionGen(opts){
 //   step_09·step_13_applied(_method)는 getLatestDescription 우선순위상 구본이 새 step_08을 가리는(섀도잉) 원인이라 반드시 함께 제거.
 //   selectedTitle(확정 명칭)은 보존 — 명칭 변경은 사용자 결정 사안(변경 시 세대 훅이 별도 추적).
 function _resetUnifiedChainOutputs(){
-  ['step_01','step_06','step_10','step_07','step_11','step_08','step08_device','step_09','step_12','step_18','step_13','step_13_applied','step_13_applied_method'].forEach(function(k){
+  // [배치11 A] step_01(명칭후보)·확정명칭은 초기화하지 않는다 — 유형·명칭은 통합 생성의 "입력"(산출물 아님).
+  ['step_06','step_10','step_07','step_11','step_08','step08_device','step_09','step_12','step_18','step_13','step_13_applied','step_13_applied_method'].forEach(function(k){
     if(typeof outputs==='object'&&outputs&&outputs[k]!==undefined)delete outputs[k];
     try{ if(typeof outputTimestamps==='object'&&outputTimestamps&&outputTimestamps[k]!==undefined)delete outputTimestamps[k]; }catch(_e){}
   });
@@ -1744,19 +1745,20 @@ function _resetUnifiedChainOutputs(){
 // 체인은 globalProcessing 을 직접 잡지 않는다(각 하위 생성기가 잡고 finally 로 해제하므로, 잡으면 하위가 early-return). 재진입은 _unifiedChainRunning 플래그로 차단.
 // 비파괴/그레이스풀: 어느 단계가 실패하면 그 지점에서 중단하고 지금까지 생성분은 보존.
 let _unifiedChainRunning=false;
-async function runUnifiedFullChain(){
+async function runUnifiedFullChain(_wizOpts){
   if(_unifiedChainRunning){App.showToast('통합 생성이 이미 진행 중입니다','info');return;}
   if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('다른 작업이 진행 중입니다','info');return;}
   const inv=((typeof document!=='undefined'&&document.getElementById('projectInput')?.value)||'').trim();
   if(inv.length<20){App.showToast('발명 자료를 먼저 입력하세요(최소 20자)','error');return;}
-  if(!selectedTitleType){App.showToast('먼저 발명 유형을 선택하세요 (Step 1의 유형 선택)','error');return;}
   if(typeof currentProjectId!=='undefined'&&!currentProjectId){App.showToast('프로젝트를 먼저 저장하세요','error');return;}
-  // ★ [배치7 N1(i)] 재실행 정책 — 기존 체인 산출물 존재 시 "이어하기/전체 새로 생성" 확인 모달.
-  //   근거(docD 실측): 부분 재생성([3/4]만 갱신, [4/4]는 게이트 미통과 시 기존 보존)이 신 부호표·구 본문 혼합
-  //   (canonical 역전·미사용 부호·서수 요소 — docA형 세대 혼합의 통합작성판)을 생성. outputs 없으면 모달 없이 진행.
-  const _hasPrev=['step_01','step_06','step_07','step_08'].some(function(k){return !!outputs[k];});
+  // ★ [배치11 B] 위저드 경유 — 직접 클릭이면 오버레이(유형→설계→재실행)를 열고, 위저드가 opts와 함께 재호출한다.
+  if(!_wizOpts&&typeof openUnifiedWizard==='function'&&typeof document!=='undefined'&&document.getElementById('wfWizard')){ openUnifiedWizard(); return; }
+  if(!selectedTitleType){App.showToast('먼저 발명 유형을 선택하세요','error');return;}
+  // ★ [배치11 A] 재실행 판정 — "산출물 계열"만 본다(명칭·범위확정·참고자료는 통합 생성의 입력이지 산출물이 아님).
+  //   실측 버그: 명칭 확정만 한 새 프로젝트에서 step_01 존재로 재실행 모달이 떴음 → step_01 제외.
+  const _hasPrev=['step_06','step_07','step_08','step_10','step_11','step_12'].some(function(k){return !!outputs[k];});
   if(_hasPrev){
-    const _full=(typeof confirm==='function')?confirm('기존 생성 산출물이 있습니다.\n\n[확인] 전체 새로 생성 — 명칭후보·청구항·도면·상세설명·부호·수학식·검토반영본을 초기화하고 처음부터 다시 생성합니다(신·구 산출물 혼합 방지).\n[취소] 이어하기 — 빈 단계만 생성합니다(일부 단계 재사용 — 세대 혼합 가능).'):false;
+    const _full=!!(_wizOpts&&_wizOpts.mode==='full');
     if(_full)_resetUnifiedChainOutputs();
     else App.showToast('이어하기 — 일부 단계를 재사용합니다. 세대 혼합 가능성이 있으니 완성 후 완성본 검증 패널을 확인하세요','info');
   }
@@ -1766,7 +1768,7 @@ async function runUnifiedFullChain(){
   const TOTAL=4;
   _unifiedChainRunning=true;
   const btn=(typeof document!=='undefined')?document.getElementById('btnUnifiedFullChain'):null; if(btn)btn.disabled=true;
-  const P=function(msg,cur){App.showProgress('progressUnifiedFullChain',msg,cur,TOTAL);};
+  const P=function(msg,cur){App.showProgress('progressUnifiedFullChain',msg,cur,TOTAL);try{const w=document.getElementById('wizProgressText');if(w)w.textContent=msg;}catch(_e){}};   // [배치11 B] 위저드 진행 미러
   try{
     // ── [1/4] 발명의 명칭 ──
     P('[1/4] 발명의 명칭 생성...',0);

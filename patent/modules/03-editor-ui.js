@@ -1544,3 +1544,57 @@ async function wfRunStage3(){
 }
 // [D4] ④ 본문 통합 — 현행 cohesion 호출(무가드 덮어쓰기·이력 보존·배치9 인라인 수식/마무리 흡수)
 async function wfRunStage4(){ try{ await runUnifiedCohesionGen(); }finally{ try{renderWorkflowRail();renderWfValidationBar();}catch(_e){} } }
+
+// ═══ [배치11 B] 통합 생성 위저드 — 기존 상태 변수의 양방향 미러(새 상태 금지). 브라우저 confirm 폐기. ═══
+function _wizHasPrev(){ return ['step_06','step_07','step_08','step_10','step_11','step_12'].some(function(k){return !!outputs[k];}); }   // [배치11 A] 판정 공유
+function _wizRender(){
+  try{
+    const t=selectedTitleType||'';
+    document.querySelectorAll('#wizTypeCards [data-wiztype]').forEach(function(b){ const on=b.getAttribute('data-wiztype')===t; b.classList.toggle('btn-primary',on); b.classList.toggle('btn-outline',!on); });
+    const note=document.getElementById('wizMethodNote');
+    if(note)note.innerHTML=t?('방법 청구항: <b>'+(includeMethodClaims?'포함':'제외')+'</b>'+(_methodUserSet?' (수동 설정 유지)':' (유형 기반 자동)')):'유형을 선택하세요.';
+    const g=document.getElementById('wizGeneralDep'); if(g)g.value=deviceGeneralDep;
+    const a=document.getElementById('wizAnchorDep'); if(a)a.value=deviceAnchorDep;
+    const tot=document.getElementById('wizClaimTotal'); if(tot)tot.textContent='→ 장치 총 '+(1+(parseInt(deviceGeneralDep)||0)+(parseInt(deviceAnchorDep)||0))+'항'+(includeMethodClaims?(' + 방법 '+(1+(parseInt(methodGeneralDep)||0)+(parseInt(methodAnchorDep)||0))+'항'):'');
+    const f=document.getElementById('wizFigures'); if(f)f.value=document.getElementById('optDeviceFigures')?.value||'4';
+    const m=document.getElementById('wizMath'); const src=document.getElementById('chkUnifiedMath'); if(m)m.checked=!!(src&&src.checked);
+    const d=document.getElementById('wizDetail'); if(d&&['compact','standard','detailed','maximal'].includes(detailLevel))d.value=detailLevel;
+    const s3=document.getElementById('wizScreen3'); if(s3)s3.style.display=_wizHasPrev()?'block':'none';
+  }catch(_e){}
+}
+function openUnifiedWizard(){
+  const w=document.getElementById('wfWizard'); if(!w)return;
+  const c=document.getElementById('wizConfig'), p=document.getElementById('wizProgress'), s=document.getElementById('wizSummary');
+  if(c)c.style.display='block'; if(p)p.style.display='none'; if(s)s.style.display='none';
+  _wizRender(); w.style.display='flex';
+}
+function _wizClose(){ const w=document.getElementById('wfWizard'); if(w)w.style.display='none'; }
+function _wizSetType(t){
+  // ② titleTypeCards의 동일 카드가 있으면 기존 selectTitleType 경로(하이라이트 포함), 없으면 onCustomTitleType 경로 — 전역·②카드 동시 반영
+  let matched=null;
+  try{ document.querySelectorAll('#titleTypeCards .selection-card').forEach(function(cd){ if((cd.getAttribute&&cd.getAttribute('onclick')||'').indexOf("'"+t+"'")>=0)matched=cd; }); }catch(_e){}
+  if(matched&&typeof selectTitleType==='function')selectTitleType(matched,t);
+  else{ if(typeof onCustomTitleType==='function')onCustomTitleType(t); const ci=document.getElementById('customTitleType'); if(ci)ci.value=t; }
+  _wizRender();
+}
+function _wizSetGeneralDep(v){ if(typeof updateDeviceGeneralDep==='function')updateDeviceGeneralDep(v); const e=document.getElementById('inpDeviceGeneralDep'); if(e)e.value=v; try{_wfMarkDesign();}catch(_e){} _wizRender(); }
+function _wizSetAnchorDep(v){ if(typeof updateDeviceAnchorDep==='function')updateDeviceAnchorDep(v); const e=document.getElementById('inpDeviceAnchorDep'); if(e)e.value=v; try{_wfMarkDesign();}catch(_e){} _wizRender(); }
+function _wizSetFigures(v){ const e=document.getElementById('optDeviceFigures'); if(e)e.value=v; try{_wfMarkDesign();}catch(_e){} _wizRender(); }
+function _wizSetMath(on){ const e=document.getElementById('chkUnifiedMath'); if(e)e.checked=!!on; try{_wfMarkDesign();}catch(_e){} _wizRender(); }
+function _wizSetDetail(v){ detailLevel=v; const e=document.getElementById('selUnifiedDetail'); if(e)e.value=v; try{_wfMarkDesign();}catch(_e){} _wizRender(); }
+async function _wizStart(){
+  if(!selectedTitleType){App.showToast('발명 유형을 선택하세요','error');return;}
+  const mode=(function(){ try{ const r=document.querySelector('input[name="wizRerun"]:checked'); return r?r.value:'full'; }catch(_e){ return 'full'; } })();
+  const c=document.getElementById('wizConfig'), p=document.getElementById('wizProgress'), s=document.getElementById('wizSummary');
+  if(c)c.style.display='none'; if(p)p.style.display='block';
+  try{ await runUnifiedFullChain({mode:mode}); }catch(_e){}
+  // 완료 요약 — 생성 단계 수 + 완성본 경고 수(위저드가 닫혀 있으면 생략)
+  try{
+    const gen=['step_01','step_06','step_10','step_07','step_11','step_08','step_18','step_16','step_17','step_19','step_12'].filter(function(k){return !!outputs[k];}).length;
+    let cr=0,hi=0; try{ const iss=validateSpecification(buildSpecification()); cr=iss.filter(function(i){return i.severity==='CRITICAL';}).length; hi=iss.filter(function(i){return i.severity==='HIGH';}).length; }catch(_e){}
+    const st=document.getElementById('wizSummaryText');
+    if(st)st.innerHTML='생성된 단계: <b>'+gen+'</b>개 · 완성본 경고: CRITICAL <b>'+cr+'</b> · HIGH <b>'+hi+'</b><br>상세 결함은 ⑤ 검증 패널에서 확인하세요.';
+    if(p)p.style.display='none'; const sm=document.getElementById('wizSummary'); if(sm)sm.style.display='block';
+    try{renderWorkflowRail();renderWfValidationBar();}catch(_e){}
+  }catch(_e){}
+}

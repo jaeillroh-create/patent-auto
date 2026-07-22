@@ -197,7 +197,7 @@ test('★ 소스 — 함께 재생성한 step_12 false-stale 배지 제거 + 수
 // ═══════════ [B] 발명자료 → 핵심 명세서 통합 체인(원클릭) ═══════════
 
 test('★ 소스 — runUnifiedFullChain 4단계 오케스트레이션(명칭→청구항→도면→통합)', () => {
-  assert.match(PATENT_SRC, /async function runUnifiedFullChain\(\)/, '★ 체인 진입점');
+  assert.match(PATENT_SRC, /async function runUnifiedFullChain\(_wizOpts\)/, '★ 체인 진입점([배치11] 위저드 opts)');
   assert.match(PATENT_SRC, /await runStep\('step_01'\)/, '★ [1] 명칭');
   assert.match(PATENT_SRC, /parseTitleCandidates\(outputs\.step_01/, '★ [1] 명칭 자동 선택(첫 후보)');
   assert.match(PATENT_SRC, /await runStep\('step_06'\)/, '★ [2] 장치 청구항');
