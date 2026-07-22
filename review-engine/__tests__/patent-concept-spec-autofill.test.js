@@ -132,7 +132,7 @@ test('A(B2 은퇴) ★ reflect 는 상세설명 계층(step_08·step_09·step_13
 
 // ─────────── B: 라벨 폴백 ───────────
 
-test('B ★ refMap 라벨 공백 → 유형 기반 기본 이름("UI 화면 요소")으로 부호 수집 가능', () => {
+test('B ★ [배치15F-4] refMap 라벨 공백 → 부호의 설명(step_18)에 generic으로 넣지 않음(총칭 오염 방지), 실명만 등재', () => {
   setCtx(`
     diagramData={step_07:[{}]}; outputTimestamps={};
     conceptDiagramTypes=[{type:'ui_screen',svgContent:'<svg></svg>',briefDesc:'도 2는 화면이다.',refMap:[{signNumber:'31',label:''},{signNumber:'32',label:'결과'}]}];
@@ -140,8 +140,8 @@ test('B ★ refMap 라벨 공백 → 유형 기반 기본 이름("UI 화면 요�
   `);
   reflect();
   const s18 = out('step_18');
-  assert.match(s18, /UI 화면 요소 : 31/, '★ 라벨 공백 → 유형 기반 이름 폴백(부호의 설명 매칭 보장)');
-  assert.match(s18, /결과 : 32/, '라벨 있는 것은 그대로');
+  assert.ok(!/UI 화면 요소 : 31/.test(s18) && !/ : 31/.test(s18), '★ 라벨 공백 부호(31)는 generic으로 부호표에 등재 안 함(§6-6 빈 라벨 처리)');
+  assert.match(s18, /결과 : 32/, '★ 실명(REF_MAP label) 있는 부호만 등재');
 });
 
 test('B ★ _buildConceptOutputText — 라벨 공백도 "이름(번호)" 보장(부호 정규식 매칭)', () => {

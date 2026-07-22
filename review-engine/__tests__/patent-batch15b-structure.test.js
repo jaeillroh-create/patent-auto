@@ -105,7 +105,7 @@ test('★ 1b — cohesion 수학식 개수 계약("정확히 N개") + 변수 자
   els.chkUnifiedMath = mkEl(); els.chkUnifiedMath.checked = true;
   const p = run("buildPrompt('unified_cohesion')");
   assert.ok(/정확히 4개의 【수학식】 블록/.test(p), '★ 개수 계약(N=4)');
-  assert.ok(/변수 자기검증\(R3\)/.test(p) && /정의 없는 변수 절대 금지/.test(p), '★ 변수 전수 정의 자기검증');
+  assert.ok(/변수 자기검증\(R3\)/.test(p) && /정의 누락 금지/.test(p), '★ 변수 전수 정의 자기검증(배치15F-3 좌·우변 전 기호)');
 });
 test('★ 1c — 체인 도면 phase 예시도(step_07c) 포함/제외·개수 배선(소스)', () => {
   assert.match(PATENT_SRC, /if\(typeof conceptDiagramEnabled!=='undefined'&&conceptDiagramEnabled\)\{/, '★ 예시도 포함 게이트');

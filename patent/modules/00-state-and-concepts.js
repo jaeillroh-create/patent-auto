@@ -229,6 +229,12 @@ function _conceptRefPairs(ct){
   const fb=_conceptRefFallbackName(ct);
   return ((ct&&ct.refMap)||[]).map(r=>({num:String(r.signNumber),name:(r.label&&String(r.label).trim())||fb}));
 }
+// ★ [배치15F-4] 폴백 없는 원본 라벨 쌍 — 부호의 설명(step_18) 반영 시 "실명(REF_MAP label)만" 등재하기 위해 사용.
+//   §6-6은 실명 특정 불가 시 라벨을 비우게 하는데(빈 라벨), 그 빈 라벨을 유형 기반 generic("~요소")으로 채워
+//   부호표에 넣으면 부호↔명칭 대응이 상실된다(generic_series·title_suspect 오염). 빈 라벨은 부호표에서 제외.
+function _conceptRefPairsRaw(ct){
+  return ((ct&&ct.refMap)||[]).map(r=>({num:String(r.signNumber),name:(r.label&&String(r.label).trim())||''}));
+}
 function _buildConceptOutputText(conceptTypes, figNums){
   return conceptTypes.map((ct,i)=>{
     const fn=figNums[i]||'?';const td=CONCEPT_DIAGRAM_TYPES[ct.type]||{label:ct.type};
@@ -327,7 +333,8 @@ function reflectConceptsToSpec(){
     let s18=String(outputs.step_18);
     const have=new Set((s18.match(/\d{2,4}/g)||[]));                   // 기존 기재 번호
     const add=[];
-    gen.forEach(g=>_conceptRefPairs(g.ct).forEach(p=>{
+    gen.forEach(g=>_conceptRefPairsRaw(g.ct).forEach(p=>{
+      if(!p.name) return;                              // ★ [배치15F-4] 실명 없는 예시도 부호는 부호표에 generic으로 넣지 않음(총칭 오염 방지)
       if(have.has(p.num)) return; have.add(p.num); add.push(`${p.name} : ${p.num}`);
     }));
     if(add.length){ outputs.step_18=s18.replace(/\s*$/,'')+'\n'+add.join('\n'); markOutputTimestamp('step_18'); refAdded=add.length; }
