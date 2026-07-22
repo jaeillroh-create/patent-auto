@@ -1083,16 +1083,6 @@
           <button class="btn btn-primary btn-full" id="btnStep10" onclick="runStep('step_10')"><span class="ico" data-icon="robot"></span> 방법 청구항 생성</button>
         </div>
         </details>
-
-        <!-- 추가 기능 버튼(검토 관문 14·15 — 노출 유지) -->
-        <div class="card">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> 추가 기능</div></div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <button class="btn btn-outline btn-full" id="btnStep14" onclick="runStep('step_14')"><span class="ico" data-icon="refresh"></span> Step 14: 대안 청구항</button>
-            <button class="btn btn-outline btn-full" id="btnStep15" onclick="runStep('step_15')"><span class="ico" data-icon="search"></span> Step 15: 특허성 검토</button>
-            <button class="btn btn-outline btn-full" onclick="runValidation()"><span class="ico" data-icon="check-circle"></span> 자동 검증</button>
-          </div>
-        </div>
       </div>
 
       <!-- 오른쪽: [배치10 E] 설계 요약만 — 청구항·대안·특허성 결과 카드는 ③ 탭으로 이동 -->
@@ -1111,12 +1101,22 @@
         <!-- [배치8] ③ 골격 — 주동선(단계 단위 생성/재생성, D4). 스텝 낱개 버튼은 고급으로 -->
         <div class="card" id="wfStage3Main" style="border:1.5px solid var(--color-primary)">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="bolt"></span> ③ 골격 생성 (청구항 → 도면)</div></div>
-          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">② 설계값으로 <b>장치 청구항 → 방법 청구항 → 장치 도면 → 방법 도면</b>을 순차 생성합니다. 재생성 시 기존 골격 산출물(청구항·도면·대안·특허성)을 초기화한 뒤 다시 생성합니다(세대 혼합 방지). 검토 관문(대안·특허성) 실행 버튼은 ② 하단에 있고, 그 결과는 이 탭 우측에 표시됩니다.</p>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">② 설계값으로 <b>장치 청구항 → 방법 청구항 → 장치 도면 → 방법 도면</b>을 순차 생성합니다. 재생성 시 기존 골격 산출물(청구항·도면·대안·특허성)을 초기화한 뒤 다시 생성합니다(세대 혼합 방지). 검토 관문(대안·특허성·자동 검증)은 아래 카드에서 실행하며, 결과는 이 탭 우측에 표시됩니다.</p>
           <div id="progressWfStage3" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnWfStage3" onclick="wfRunStage3()"><span class="ico" data-icon="bolt"></span> 골격 생성/재생성 (청구항+도면)</button>
         </div>
+        <!-- [배치13-2] 검토 관문 — 실행·결과 동일 탭(결과는 이 탭 우측 대안/검토 결과 카드) -->
+        <div class="card" id="wfGateCard">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="check-circle"></span> 검토 관문 (선택)</div></div>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">골격 확정 후 대안 청구항·특허성·자동 검증을 실행합니다. 결과는 이 탭 우측에 표시됩니다.</p>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-outline btn-full" id="btnStep14" onclick="runStep('step_14')"><span class="ico" data-icon="refresh"></span> Step 14: 대안 청구항</button>
+            <button class="btn btn-outline btn-full" id="btnStep15" onclick="runStep('step_15')"><span class="ico" data-icon="search"></span> Step 15: 특허성 검토</button>
+            <button class="btn btn-outline btn-full" onclick="runValidation()"><span class="ico" data-icon="check-circle"></span> 자동 검증</button>
+          </div>
+        </div>
         <details class="wf-adv" id="wfAdv2">
-          <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급(단계별 세부) — 도면·상세설명 개별 생성</summary>
+          <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급(단계별 세부) — 청구항·도면·상세설명 개별 생성</summary>
         <!-- 필수 도면 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="flag"></span> 필수 도면 (선택)</div></div>
@@ -1323,26 +1323,33 @@
           <button class="btn btn-primary btn-full" id="btnWfStage4" onclick="wfRunStage4()"><span class="ico" data-icon="bolt"></span> 본문 통합 생성/재생성</button>
         </div>
         <div class="card">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="chart"></span> Phase D: 논리 프레임 (역설계)</div></div>
-          <div style="padding:12px 18px;background:var(--color-primary-light);border-radius:8px;margin:0 18px 12px;font-size:12px;color:var(--color-primary)">
-            <span class="ico" data-icon="lightbulb" data-size="14"></span> 청구항 기반으로 과제·효과·배경기술을 역으로 생성합니다. (실무 변리사 작성 순서)
-          </div>
-          <div id="progressPhaseD" style="margin:8px 18px"></div>
-          <div style="padding:0 18px 18px"><button class="btn btn-primary btn-full" id="btnPhaseD" onclick="runPhaseD()"><span class="ico" data-icon="refresh"></span> 역설계 체인 일괄 생성 (D1→D5)</button></div>
-          <div id="resultsPhaseDChain" class="result-area" style="margin:0 18px 18px"></div>
-        </div>
-        <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="search"></span> Step 13: AI 검토</div></div>
           <p style="font-size:12px;color:var(--dt-g500);margin-bottom:12px">청구범위 뒷받침, 기술적 비약, 수학식 정합성 검토</p>
           <div id="progressStep13" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnStep13" onclick="runStep('step_13')"><span class="ico" data-icon="robot"></span> AI 검토 실행</button>
+          <!-- [배치13-3] 검토 반영은 ④ 본문 통합 재생성으로 일원화(별도 '검토 반영' 카드 제거) -->
+          <button class="btn btn-outline btn-full" style="margin-top:8px" onclick="wfRunStage4()"><span class="ico" data-icon="bolt"></span> 검토 반영 = ④ 본문 통합 재생성</button>
+          <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px">AI 검토 지적은 ④ 본문 통합 생성이 결정론적 기계검증과 함께 반영합니다. 개별 편집지시 반영(레거시)은 아래 고급에 있습니다.</p>
+        </div>
+        <!-- [배치13-1·3] ④ 고급 — 역설계(중복 경고)·검토 반영(레거시) -->
+        <details class="wf-adv" id="wfAdv3">
+          <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급 — 역설계·검토 반영(레거시)</summary>
+        <div class="card">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="chart"></span> Phase D: 논리 프레임 (역설계)</div></div>
+          <div style="padding:12px 18px;background:#fff3e0;border:1px solid #ffb74d;border-radius:8px;margin:0 18px 12px;font-size:12px;color:#e65100">
+            ⚠ ①(Step 2~5)·④(통합 생성)와 동일 항목(과제·효과·해결수단·배경기술·요약 등)을 생성합니다 — 중복 실행 시 마지막 결과가 덮어씁니다.
+          </div>
+          <div id="progressPhaseD" style="margin:8px 18px"></div>
+          <div style="padding:0 18px 18px"><button class="btn btn-outline btn-full" id="btnPhaseD" onclick="runPhaseD()"><span class="ico" data-icon="refresh"></span> 역설계 체인 일괄 생성 (D1→D5)</button></div>
+          <div id="resultsPhaseDChain" class="result-area" style="margin:0 18px 18px"></div>
         </div>
         <div class="card">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> 검토 반영</div></div>
-          <p style="font-size:12px;color:var(--dt-g500);margin-bottom:12px">Step 8 보완 → Step 9 수학식 재삽입</p>
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> 검토 반영 (레거시 — Step 8 보완 → Step 9 수학식 재삽입)</div></div>
+          <p style="font-size:12px;color:var(--dt-g500);margin-bottom:12px">편집지시 기반 개별 반영. 권장 경로는 위 "④ 본문 통합 재생성"입니다.</p>
           <div id="progressApplyReview" style="margin:8px 0"></div>
-          <button class="btn btn-primary btn-full" id="btnApplyReview" onclick="applyReview()" style="display:none"><span class="ico" data-icon="settings"></span> 검토 반영</button>
+          <button class="btn btn-outline btn-full" id="btnApplyReview" onclick="applyReview()" style="display:none"><span class="ico" data-icon="settings"></span> 검토 반영</button>
         </div>
+        </details>
         <!-- [C1-6b] 발명 범위 검증 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="shield"></span> 발명 범위 검증</div></div>
@@ -1435,7 +1442,7 @@
     <!-- 스티키 하단 단계 네비게이션 (특허 명세서 에디터) -->
     <div class="sticky-step-nav" id="editorStepNav">
       <div class="ssn-progress">
-        <span id="editorStepLabel">1 / 5 단계 · A. 기본</span>
+        <span id="editorStepLabel">1 / 5 단계 · ① 발명 파악</span>
         <div class="ssn-bar"><i id="editorStepBar" style="width:20%"></i></div>
       </div>
       <div class="ssn-actions">
@@ -1451,7 +1458,7 @@
 <!-- 특허 명세서 에디터 — 스티키 하단 nav 동작 (switchTab 래핑) -->
 <script>
 (function(){
-  var LABELS = ['A. 기본','A. 청구항','B·C. 도면','D·E. 검증','F. 산출물'];
+  var LABELS = ['① 발명 파악','② 설계','③ 골격','④ 본문·검토','⑤ 검증·출원'];
   var TOTAL  = LABELS.length;
   function curIdx(){
     var act = document.querySelector('#screenMain .tab-item.active');
@@ -1522,12 +1529,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260720a"></script>
-<script src="patent/patent.js?v=20260721-b35"></script>
+<script src="patent/patent.js?v=20260721-b36"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260721-b35"></script>
+<script src="opinion/opinion.js?v=20260721-b36"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260721-b35';
+  var _cv='?v=20260721-b36';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1625,8 +1632,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260721-b35"></script>
-<script src="docket.js?v=20260721-b35"></script>
+<script src="division/division.js?v=20260721-b36"></script>
+<script src="docket.js?v=20260721-b36"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>

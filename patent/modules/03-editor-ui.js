@@ -513,19 +513,21 @@ function injectAllUserCommandUIs(){
 // ═══ A4 fix: Step 의존성 무효화 시스템 (v5.5) ═══
 // ═══ v7.0: 완전 의존성 맵 (MUST=필수/SHOULD=권장) ═══
 const STEP_DEPENDENCIES={
-  // ═══ v14: 역설계 체인 반영 ═══
+  // ═══ [배치13-4] 순방향 원칙 — "상류 산출물이 바뀌면 그로부터 파생된 하류 산출물이 stale"만 등록한다.
+  //   역설계(해결수단→과제, 과제→효과·배경) 같은 "하류→상류" 역방향 잔재는 제거(변경 전파 방향 혼란·거짓 stale 유발).
+  //   ★ 효과(16)·해결수단(17)은 청구항(06)에서 직접 파생 → step_06 하류에 직접 등록(과거 step_05 경유 제거).
   step_01:{MUST:['step_06'],SHOULD:['step_02','step_03','step_04','step_05']}, // 명칭 → 청구항 + 하위 스텝
-  step_06:{MUST:['step_10','step_07','step_07c','step_17'],SHOULD:['step_08','step_11','step_14','step_15','step_19','step_20']}, // 장치청구 → 방법,도면,개념도,해결수단
+  step_06:{MUST:['step_10','step_07','step_07c','step_17'],SHOULD:['step_08','step_11','step_14','step_15','step_16','step_19','step_20']}, // 장치청구 → 방법,도면,개념도,해결수단(17),상세,효과(16),대안,특허성,요약,기록매체
   step_10:{MUST:['step_11','step_12','step_17','step_20'],SHOULD:['step_14','step_15','step_18']}, // 방법청구 → 방법도면,상세,해결수단,기록매체
-  step_07:{MUST:['step_08','step_18'],SHOULD:['step_09','step_13']},     // 장치도면 → 상세설명, 부호
+  step_07:{MUST:['step_08','step_18'],SHOULD:['step_09','step_13']},     // 장치도면 → 상세설명, 부호(step_18 확인)
   step_07c:{MUST:['step_08','step_08c','step_18'],SHOULD:[]},            // 예시도 → 장치상세, 예시도상세, 부호
   step_08:{MUST:['step_08c','step_09','step_13'],SHOULD:['step_12','step_14','step_15']}, // ★ [T2] 상세설명 → 예시도상세(전제 순서: 장치→예시), 수학식, 검토
   step_08c:{MUST:[],SHOULD:['step_18']},                                 // ★ 예시도 상세설명(분리) → 부호의 설명
   step_09:{MUST:[],SHOULD:['step_13']},                    // 수학식 → 검토
   step_11:{MUST:['step_12','step_18'],SHOULD:['step_13']},  // 방법도면 → 방법상세, 부호
   step_12:{MUST:['step_13'],SHOULD:[]},                    // 방법상세 → 검토
-  step_17:{MUST:['step_05'],SHOULD:[]},                    // ★ 역설계: 해결수단 → 과제
-  step_05:{MUST:['step_16','step_03'],SHOULD:[]},           // ★ 역설계: 과제 → 효과, 배경기술
+  step_17:{MUST:[],SHOULD:[]},                             // 과제의 해결 수단(종단 — [배치13-4] 역방향 step_05 제거)
+  step_05:{MUST:[],SHOULD:[]},                             // 해결하고자 하는 과제(종단 — [배치13-4] 역방향 step_16·step_03 제거)
   step_16:{MUST:[],SHOULD:[]},                             // 효과 (종단)
   step_03:{MUST:[],SHOULD:['step_02']},                    // 배경기술 → 기술분야
   step_02:{MUST:[],SHOULD:[]},                             // 기술분야 (종단)
@@ -1452,7 +1454,7 @@ function _wfTs(k){return (outputTimestamps&&outputTimestamps[k])||0;}
 // 단계 상태 모델: 'none'(미생성) | 'done'(생성됨) | 'stale'(재생성 필요 — 상류 변경 시각 > 자기 산출 시각)
 function wfStageStatus(n){
   if(n===1)return selectedTitle?'done':'none';
-  if(n===2)return selectedTitleType?'done':'none';
+  if(n===2){ if(!genParams||!(genParams.stage3||genParams.stage4))return 'none'; return (typeof _genParamsDrift==='function'&&_genParamsDrift())?'stale':'done'; }   // [배치13-5] 기본값만으로 done 금지 — 생성 스냅샷 존재 시에만 판정
   if(n===3){
     if(!(outputs.step_06&&outputs.step_07))return 'none';
     const ts=[_wfTs('step_06'),_wfTs('step_07')].concat(outputs.step_10?[_wfTs('step_10')]:[]).concat(outputs.step_11?[_wfTs('step_11')]:[]).filter(Boolean);
@@ -1626,6 +1628,13 @@ function _designParams(){
 }
 // [배치12 C] 생성 시점 스냅샷 — stage='stage3'(골격) | 'stage4'(본문)
 function _snapshotGenParams(stage){ try{ const p=_designParams(); p.at=Date.now(); if(!genParams||typeof genParams!=='object')genParams={}; genParams[stage]=p; }catch(_e){} }
+// [배치13-5] 설계값이 스냅샷과 달라졌는가(② stale 판정 공통) — 구조 필드는 stage3, 본문 필드는 stage4 기준.
+function _genParamsDrift(){
+  try{ if(!genParams)return false; const cur=_designParams();
+    const drift=function(fields,snap){ return snap&&fields.some(function(f){return String(cur[f])!==String(snap[f]);}); };
+    return drift(['type','method','generalDep','anchorDep','figures'],genParams.stage3)||drift(['math','detail'],genParams.stage4);
+  }catch(_e){ return false; }
+}
 function _wfFmtParam(field,v){ return (field==='method'||field==='math')?((v===true||v==='true')?'포함':'제외'):v; }
 // 적용값 대조 배지 — 구조 필드는 stage3(③), 본문 필드는 stage4(④) 스냅샷과 비교
 function _renderApplyBadges(){

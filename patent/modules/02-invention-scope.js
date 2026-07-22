@@ -924,7 +924,7 @@ function renderScopeVerificationSection() {
   if (!summaryEl || !detailsEl) return;
   // ── [G5] 통합 리뷰 엔진 마운트는 page4(renderPreview)로 이전됨(트리거·결과 동일 위치).
   if (!inventionScope?.locked_at) {
-    summaryEl.innerHTML = `<div class="scope-notice">발명 범위가 확정되지 않았습니다. A. 기본 탭에서 "범위 확정"을 먼저 진행하세요.</div>`;
+    summaryEl.innerHTML = `<div class="scope-notice">발명 범위가 확정되지 않았습니다. ① 발명 파악 단계에서 "범위 확정"을 먼저 진행하세요.</div>`;
     detailsEl.innerHTML = '';
     return;
   }

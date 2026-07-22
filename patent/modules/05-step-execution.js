@@ -29,7 +29,7 @@ function _claimGateStatus(sid){
 // 게이트 판정: CRITICAL>0 → 하드 차단(false). HIGH>0 → 확인 모달(진행 true/취소 false). 0 → 통과. bulk=true면 모달 생략(CRITICAL만 차단).
 async function _claimGatePass(sid,bulk){
   const g=_claimGateStatus(sid);
-  if(g.critical>0){ App.showToast(`⚠️ 청구항 검증 CRITICAL ${g.critical}건 — 청구항(D·검증 탭)을 먼저 보정하세요. ${STEP_NAMES[sid]||sid} 중단`,'error'); return false; }
+  if(g.critical>0){ App.showToast(`⚠️ 청구항 검증 CRITICAL ${g.critical}건 — 청구항(③ 골격 탭)을 먼저 보정하세요. ${STEP_NAMES[sid]||sid} 중단`,'error'); return false; }
   if(g.high>0 && !bulk){
     const ok=(typeof window==='undefined'||typeof window.confirm!=='function') ? true
       : window.confirm(`청구항에 HIGH 경고 ${g.high}건이 있습니다.\n\n이대로 ${STEP_NAMES[sid]||sid}을(를) 진행하시겠습니까?\n(취소 후 청구항을 먼저 보정하는 것을 권장합니다.)`);
@@ -765,7 +765,7 @@ ${baseMethod}${_maybeScopeGuard('step_13_applied_method','text')}`);
     saveProject(true);
     App.showToast(`검토 반영 완료${hasMethodDesc?' (장치+방법)':''} — 최종 명세서에 자동 반영됩니다`);
     // [Item 2] 반영 직후 1회 완성본 기계검증 — 오염(문단 중복/문장 절단) 생산 지점 즉시 검출(토스트 요약만).
-    try{ const _sv=validateSpecification(buildSpecification()); const _c=_sv.filter(i=>i.severity==='CRITICAL').length, _h=_sv.filter(i=>i.severity==='HIGH').length; if(_c||_h)App.showToast(`⚠️ 완성본 검증: CRITICAL ${_c}·HIGH ${_h} — 산출물 탭에서 확인`,'warning'); }catch(_e){}
+    try{ const _sv=validateSpecification(buildSpecification()); const _c=_sv.filter(i=>i.severity==='CRITICAL').length, _h=_sv.filter(i=>i.severity==='HIGH').length; if(_c||_h)App.showToast(`⚠️ 완성본 검증: CRITICAL ${_c}·HIGH ${_h} — ⑤ 검증·출원 탭에서 확인`,'warning'); }catch(_e){}
   }catch(e){App.showToast(e.message,'error');}finally{loadingState.applyReview=false;App.setButtonLoading('btnApplyReview',false);setGlobalProcessing(false);}
 }
 function showReviewDiff(mode){
