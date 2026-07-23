@@ -1,6 +1,6 @@
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
-  currentProjectId=null;outputs={};outputHistory={};scopeCheckResults={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
+  currentProjectId=null;outputs={};outputHistory={};scopeCheckResults={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=false;   // ★ [배치15H-1] 방법 기본 OFF
   usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};uploadedFiles=[];diagramData={};inventionScope=null;
   _judgmentCache.clear();_costTracking={judgment_calls:0,total_input_tokens:0,total_output_tokens:0,estimated_cost_usd:0,warned_50:false,stopped_100:false};
   projectRefStyleText='';requiredFigures=[];outputTimestamps={};stepUserCommands={};chatHistory={};
@@ -22,7 +22,7 @@ function clearAllState(){
   ['btnApplyReview','diagramDownload07','diagramDownload11','reviewApplyResult'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   document.querySelectorAll('.tab-item').forEach((t,i)=>{t.classList.toggle('active',i===0);t.setAttribute('aria-selected',i===0);});
   document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('active',i===0));
-  const mt=document.getElementById('methodToggle');if(mt){mt.checked=true;toggleMethod();}
+  const mt=document.getElementById('methodToggle');if(mt){mt.checked=false;toggleMethod();}   // ★ [배치15H-1] 방법 기본 OFF — 토글 체크 해제(종전 checked=true 가 line3의 =false 를 되돌리던 누락 반전지점). _methodUserSet 은 직후 _wfHardReset 이 false 로 리셋해 유형 자동동기 재개.
   document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));
   const b01=document.getElementById('btnStep01');if(b01)b01.disabled=true;
   genParams=null;   // [배치12 C] 적용값 스냅샷 초기화
@@ -230,7 +230,7 @@ async function createAndOpenProject(){
     title:t,
     project_number:projectNumber,
     invention_content:'',
-    current_state_json:{outputs:{},selectedTitle:'',selectedTitleType:'',includeMethodClaims:true,usage:{calls:0,inputTokens:0,outputTokens:0,cost:0}}
+    current_state_json:{outputs:{},selectedTitle:'',selectedTitleType:'',includeMethodClaims:false,usage:{calls:0,inputTokens:0,outputTokens:0,cost:0}}
   }).select('id').single();
   
   if(error){App.showToast('생성 실패: '+error.message,'error');return;}
@@ -241,7 +241,7 @@ async function createAndOpenProject(){
 async function openProject(pid){
   clearAllState();const{data}=await App.sb.from('projects').select('*').eq('id',pid).single();if(!data){App.showToast('불러올 수 없어요','error');return;}
   currentProjectId=data.id;document.getElementById('projectInput').value=data.invention_content||'';
-  const s=data.current_state_json||{};outputs=s.outputs||{};selectedTitle=s.selectedTitle||'';selectedTitleEn=s.selectedTitleEn||'';selectedTitleType=s.selectedTitleType||'';includeMethodClaims=s.includeMethodClaims!==false;usage=s.usage||{calls:0,inputTokens:0,outputTokens:0,cost:0};
+  const s=data.current_state_json||{};outputs=s.outputs||{};selectedTitle=s.selectedTitle||'';selectedTitleEn=s.selectedTitleEn||'';selectedTitleType=s.selectedTitleType||'';includeMethodClaims=s.includeMethodClaims===true;usage=s.usage||{calls:0,inputTokens:0,outputTokens:0,cost:0};   // ★ [배치15H-1] 명시적 저장 true만 ON(undefined/false→OFF) — 방법 세트 쓰던 프로젝트는 저장된 true 복원
   termSnapshot=(s.termSnapshot&&typeof s.termSnapshot==='object')?s.termSnapshot:_termSnapshotDefault();   // [§6-1] 용어 세대 스냅샷 복원
   // Fix: ensure cost field exists even from old saves
   if(typeof usage.cost==='undefined')usage.cost=0;

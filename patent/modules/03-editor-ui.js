@@ -1822,6 +1822,9 @@ function renderDesignBoard(){
     const cc=document.getElementById('chkConceptDiagram'); if(cc)cc.checked=!!conceptDiagramEnabled;
     const ccw=document.getElementById('dbConceptCountWrap'); if(ccw)ccw.style.display=conceptDiagramEnabled?'inline':'none';
     const ccn=document.getElementById('dbConceptCount'); if(ccn)ccn.value=conceptTargetCount;
+    // ★ [배치15H-3] 예시도 유형 선택(② 집결) — conceptDiagramTypes canonical 미러. 포함 시에만 표시.
+    const ctw=document.getElementById('dbConceptTypesWrap'); if(ctw)ctw.style.display=conceptDiagramEnabled?'block':'none';
+    const ctList=document.getElementById('dbConceptTypes'); if(ctList&&typeof CONCEPT_DIAGRAM_TYPES!=='undefined'){ const _sel=new Set((conceptDiagramTypes||[]).map(function(t){return t.type;})); ctList.innerHTML=Object.keys(CONCEPT_DIAGRAM_TYPES).map(function(k){ return '<label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" '+(_sel.has(k)?'checked':'')+' onchange="_dbToggleConceptType(\''+k+'\',this.checked)"> '+App.escapeHtml(CONCEPT_DIAGRAM_TYPES[k].label)+'</label>'; }).join(''); }
     // [배치15B-1] 수학식 개수 — 수학식 포함 시에만 표시
     const mth=document.getElementById('chkUnifiedMath'); const mon=!!(mth&&mth.checked);
     const mcw=document.getElementById('dbMathCountWrap'); if(mcw)mcw.style.display=mon?'inline':'none';
@@ -1832,6 +1835,20 @@ function renderDesignBoard(){
   }catch(_e){}
 }
 function _designSetType(t){ try{ if(typeof _wizSetType==='function')_wizSetType(t); }catch(_e){} try{renderDesignBoard();}catch(_e){} }
+// ★ [배치15H-3] ② 예시도 유형 선택 → conceptDiagramTypes canonical 반영(체인이 이 유형으로 예시도 생성; 미선택 시 자동 추천).
+function _dbToggleConceptType(typeKey, on){
+  try{
+    if(on){ if(!(conceptDiagramTypes||[]).find(function(t){return t.type===typeKey;})){ const td=(typeof CONCEPT_DIAGRAM_TYPES!=='undefined'&&CONCEPT_DIAGRAM_TYPES[typeKey])||{label:typeKey}; conceptDiagramTypes.push({type:typeKey,title:td.label,figNum:0,figNumOverride:0,svgContent:'',refNums:[]}); }
+      if(!conceptDiagramEnabled){ conceptDiagramEnabled=true; const c=document.getElementById('chkConceptDiagram'); if(c)c.checked=true; } }   // 유형 선택 = 예시도 포함 의도 → 자동 on
+    else { conceptDiagramTypes=(conceptDiagramTypes||[]).filter(function(t){return t.type!==typeKey;}); }
+    conceptDiagramCount=conceptDiagramTypes.length;
+    // ★ [배치15H-3] 명시 선택 유형이 목표 개수를 넘으면 목표를 끌어올린다(체인 _trimConceptTypesToTarget가 명시 선택을 잘라내지 않도록). 축소는 하지 않음(자동추천 여지 보존).
+    if(conceptDiagramTypes.length>(parseInt(conceptTargetCount)||0))conceptTargetCount=Math.min(9,conceptDiagramTypes.length);
+  }catch(_e){}
+  try{ if(typeof renderConceptDiagramTypesList==='function')renderConceptDiagramTypesList(); }catch(_e){}   // ③ 고급 목록도 동기
+  try{_wfMarkDesign();}catch(_e){}
+  try{renderDesignBoard(); if(typeof _wizRender==='function')_wizRender();}catch(_e){}
+}
 function _dbSet(field,val){
   try{
     if(field==='generalDep'){ if(typeof updateDeviceGeneralDep==='function')updateDeviceGeneralDep(val); const e=document.getElementById('inpDeviceGeneralDep'); if(e)e.value=val; }

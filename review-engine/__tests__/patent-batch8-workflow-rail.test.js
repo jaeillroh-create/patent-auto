@@ -93,7 +93,7 @@ test('★ HTML — 5단계 레일(배지)·상주 검증바·스테이지 메인
   ['① 발명 파악', '② 설계 결정', '③ 골격(청구항·도면)', '④ 본문 통합·검토', '⑤ 검증·출원'].forEach(l => assert.ok(HTML_SRC.includes(l), '★ 레일 라벨 ' + l));
   for (let i = 0; i < 5; i++) assert.ok(HTML_SRC.includes('id="wfBadge' + i + '"'), '★ 배지 ' + i);
   assert.match(HTML_SRC, /id="wfValidationBar" onclick="wfOpenValidation\(\)"/, '★ 상주 검증바');
-  assert.match(HTML_SRC, /id="wfStage2Main"[\s\S]{0,700}id="dbTypeCards"[\s\S]{0,4200}id="dbApplyBadges"/, '★ ② 설계 보드(유형·적용 배지 — 배치12 B/15B/15C 확장)');
+  assert.match(HTML_SRC, /id="wfStage2Main"[\s\S]{0,700}id="dbTypeCards"[\s\S]{0,5200}id="dbApplyBadges"/, '★ ② 설계 보드(유형·적용 배지 — 배치12 B/15B/15C 확장, 15H-3 예시도 유형)');
   assert.match(HTML_SRC, /id="btnWfRegenClaims" onclick="wfRegenClaims\(\)"/, '★ ③ 섹션 재생성(배치15D-2: 큰 CTA 제거)');
   assert.match(HTML_SRC, /id="btnWfStage4" onclick="wfRunStage4\(\)"/, '★ ④ 주동선 버튼');
   assert.match(HTML_SRC, /<details class="wf-adv" id="wfAdv1">/, '★ ② 고급 아코디언');

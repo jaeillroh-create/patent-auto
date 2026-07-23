@@ -994,6 +994,11 @@
             <label id="dbConceptCountWrap" style="display:none" title="예시도 개수(1~9, 직접 입력 가능)">예시도 수 <input type="number" id="dbConceptCount" list="dbConceptCountOpts" min="1" max="9" style="width:64px" onchange="_dbSet('conceptCount',this.value)"></label>
             <datalist id="dbConceptCountOpts"><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option><option value="5"></option><option value="6"></option></datalist>
           </div>
+          <!-- [배치15H-3] 예시도 유형 선택 — ③에 있던 설계 입력을 ②로 집결(설계는 ②에서 완결). 체크 = conceptDiagramTypes canonical 미러. -->
+          <div id="dbConceptTypesWrap" style="display:none;font-size:12px;margin-bottom:6px">
+            <div style="color:var(--color-text-secondary);margin-bottom:4px">예시도 유형 <span style="color:var(--color-text-tertiary)">(미선택 시 청구항 분석으로 자동 추천)</span></div>
+            <div id="dbConceptTypes" style="display:flex;flex-wrap:wrap;gap:8px 14px"></div>
+          </div>
           <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:6px">
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="chkUnifiedMath" onchange="_dbSet('mathToggle')"> 수학식 포함(상세설명에 인라인 생성 — 변수 정의·참조 규칙 자동 준수)</label>
             <label id="dbMathCountWrap" style="display:none">수학식 수 <input type="number" id="dbMathCount" min="1" max="5" style="width:56px" onchange="_dbSet('mathCount',this.value)"></label>
@@ -1539,12 +1544,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260720a"></script>
-<script src="patent/patent.js?v=20260722-b49"></script>
+<script src="patent/patent.js?v=20260722-b50"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260722-b49"></script>
+<script src="opinion/opinion.js?v=20260722-b50"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260722-b49';
+  var _cv='?v=20260722-b50';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1642,8 +1647,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260722-b49"></script>
-<script src="docket.js?v=20260722-b49"></script>
+<script src="division/division.js?v=20260722-b50"></script>
+<script src="docket.js?v=20260722-b50"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>

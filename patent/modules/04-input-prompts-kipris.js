@@ -1378,12 +1378,15 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
       const anchorGuide=deviceAnchorDep>0?('청구항 '+_deviceAnkStart()+'~'+(_deviceAnkStart()+deviceAnchorDep-1)):'(앵커 없음)';
       const designComponents=(_extractStructuredComponents(outputs.step_07||'')||[]).map(c=>c.name+'('+c.refNum+')').join(', ')||'(도면 구성요소 목록 없음)';
       const deviceClaims=outputs.step_06||'';
-      const methodClaims=outputs.step_10||'(방법 청구항 없음 — <<<METHOD_DESC>>> 블록도 생략하라)';
+      // ★ [배치15H-2] 방법 OFF면 METHOD_DESC 블록 자체를 요구하지 않는다(방법 청구항이 없으면 방법 상세설명·방법 부호도 없어야).
+      //   step_10이 구세대로 남아 있어도 includeMethodClaims=false면 방법 없음으로 처리(방법 S부호 게이트 미발동으로 이어짐).
+      const _wantMethod=(typeof includeMethodClaims==='undefined')?false:!!includeMethodClaims;
+      const methodClaims=(_wantMethod&&outputs.step_10)?outputs.step_10:'(방법 청구항 없음 — <<<METHOD_DESC>>> 블록도 생략하라)';
       // ★ [배치9 D1] 수학식 토글 = 인라인 파라미터 — on이면 C9가 금지 대신 "인라인 수식 계약"으로 전환(CHK-8·math_ref 규칙 선반영).
       const _mathOn=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
       const _mathN=Math.max(1,Math.min(5,parseInt(mathBlockCount)||3));   // [배치15B-1b] 수학식 개수 계약
       const deviceFigDesign=outputs.step_07||'';
-      const methodFigDesign=outputs.step_11||'(방법 도면 없음)';
+      const methodFigDesign=(_wantMethod&&outputs.step_11)?outputs.step_11:'(방법 도면 없음)';   // [배치15H-2] 방법 OFF → 방법 도면 참조 제외
       return `아래 발명에 대해 【발명을 실시하기 위한 구체적인 내용】의 (가) 장치 상세설명과 (나) 방법 상세설명을, 그리고 이들이 사용할 도면부호 사전을 한 번에 작성하라. 세 산출물의 도면부호가 서로·부호의 설명과 완전히 정합해야 한다.
 
 ■ 출력 계약 — 한 글자도 어기지 마라 (위반 시 출력 전체 폐기)

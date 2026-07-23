@@ -1853,12 +1853,14 @@ async function runUnifiedCohesionGen(opts){
     //   종전엔 실패 시 return으로 커밋을 안 해 이전 본문이 잔존 → "재생성해도 문서 불변" 무한루프였다.
     //   ※ 여기 항목(부호 미정의·중복·극성)은 §42(HIGH)로 CRITICAL 아님. CRITICAL(메타응답·마커)은 커밋 후 validateSpecification /
     //     _downloadGate가 그대로 차단하므로 경고 커밋이 출원 불가급을 통과시키지 않는다.
+    // ★ [배치15H-2] 방법 OFF면 방법 관련 게이트(S부호 미정의·방법 극성)를 비활성화 — LLM이 프롬프트를 어기고 METHOD_DESC를 흘려도 방법 부호 게이트가 발동하지 않도록(방법 없음 = 방법 검증 없음). deviceLeak(장치본문에 방법표현 누출)은 방법 OFF와 무관하게 유지.
+    const _wantMethod=(typeof includeMethodClaims==='undefined')?false:!!includeMethodClaims;
     const _computeGate=function(rp){ const g=[];
       if(rp.notInTable.length)g.push('본문 미정의 부호 '+rp.notInTable.length+'개('+rp.notInTable.slice(0,6).join(', ')+')');
-      if(rp.methodNotInTable&&rp.methodNotInTable.length)g.push('방법 단계부호 미정의 '+rp.methodNotInTable.length+'개('+rp.methodNotInTable.slice(0,6).join(', ')+')');
+      if(_wantMethod&&rp.methodNotInTable&&rp.methodNotInTable.length)g.push('방법 단계부호 미정의 '+rp.methodNotInTable.length+'개('+rp.methodNotInTable.slice(0,6).join(', ')+')');
       if(rp.dupNums.length)g.push('부호표 번호 중복 '+rp.dupNums.length+'개');
       if(rp.deviceLeak)g.push('장치 상세설명에 방법표현 누출');
-      if(!rp.methodOk)g.push('방법 상세설명 극성 미충족');
+      if(_wantMethod&&!rp.methodOk)g.push('방법 상세설명 극성 미충족');
       return g;
     };
     let gate=_computeGate(r.report);
