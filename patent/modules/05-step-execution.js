@@ -1800,7 +1800,9 @@ function _cohesionUseSplit(){ try{ return detailLevel==='maximal'||detailLevel==
 async function _runCohesionSplit(pid, maxTok){
   const base=buildPrompt('unified_cohesion'); if(!base)return null;
   // ── 1/2: 본문만 ──
-  const bodyPrompt=base+'\n\n★★★ [이번 출력 범위 — 1/2단계: 본문] <<<DEVICE_DESC>>> 블록(방법 청구항이 있으면 <<<METHOD_DESC>>> 포함)만 출력하라. REFTABLE·TASK·SOLUTION·EFFECTS·ABSTRACT 블록은 이번에 출력하지 마라(2단계에서 별도 생성). 본문 분량을 목표까지 최대한 채워라.';
+  const _bodyMathNote=(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')&&document.getElementById('chkUnifiedMath').checked)?' ★ 수학식(【수학식 N】 블록 + "여기서" 정의절)은 DEVICE_DESC 본문에 포함되므로 이번 1단계에 반드시 모두 포함하라(2단계 아님 — 누락 시 재생성 유발).':'';
+  // ★ [배치15K-5] 분할 1차에 수학식 포함 명시 — 수학식 게이트는 병합 후 r(=merged)에서 검사하므로 1차 본문에 수식이 있어야 오탐(누락 오판)이 없다.
+  const bodyPrompt=base+'\n\n★★★ [이번 출력 범위 — 1/2단계: 본문] <<<DEVICE_DESC>>> 블록(방법 청구항이 있으면 <<<METHOD_DESC>>> 포함)만 출력하라. REFTABLE·TASK·SOLUTION·EFFECTS·ABSTRACT 블록은 이번에 출력하지 마라(2단계에서 별도 생성). 본문 분량을 목표까지 최대한 채워라.'+_bodyMathNote;
   // ★ [배치15I 적대검증] 방법 청구항이 있으면(방법 ON) 1차 본문에 METHOD_DESC 가 반드시 있어야 한다 — 절단으로 꼬리 METHOD_DESC 가
   //   유실된 device-only 응답을 '성공'으로 수용하면 방법 상세설명(step_12)이 침묵 소실된다. hasDevice 뿐 아니라 방법 완성도도 검사.
   const _splitWantM=(typeof includeMethodClaims!=='undefined')&&!!includeMethodClaims&&!!outputs.step_10;
@@ -1816,6 +1818,21 @@ async function _runCohesionSplit(pid, maxTok){
   const merged=_finishClean+'\n'+_bodyClean;
   const rm=parseCohesiveBundle(merged);
   return (rm&&rm.ok.hasDevice&&(!_splitWantM||rm.method))?{rm:rm, merged:merged}:null;   // 병합 후 본문(+기대 방법본문) 보존 확인(merged 원문 동반 — 하류 부호표 재요청·코드 폴백이 실제 본문 참조)
+}
+// ★ [배치15K-4] 프리셋별 장치 상세설명 목표 총량(하한) — 04 프롬프트 dlCfg.total 과 정합. custom 은 도면 수 비례.
+function _cohesionTargetChars(){
+  const _volMap={compact:4000,standard:5000,detailed:8000,maximal:22000};
+  if(detailLevel==='custom'){ let fc=4; try{ const a=(typeof _extractFigureNumbersFromDesign==='function')?_extractFigureNumbersFromDesign(outputs.step_07||''):[]; fc=Math.max(a.length,(requiredFigures||[]).length,1); }catch(_e){} return Math.max(1,(parseInt(customDetailChars)||1500)*fc); }
+  return _volMap[detailLevel]||5000;
+}
+// ★ [배치15K-4] 분량 보강 재요청 — 기존 본문(용어·부호·구조)을 유지하며 각 도면 설명을 증분 확장(총량 달성). DEVICE_DESC 블록만 재출력.
+function _buildVolumeAugmentPrompt(deviceText, methodText, targetChars, mathOn){
+  return `아래 [현재 장치 상세설명]은 목표 분량(${targetChars}자 이상)에 미달한다. **기존 내용·용어·참조번호·구조를 그대로 유지**하면서, 각 도면(구성요소) 설명을 더 상세히 **확장**하여 총 ${targetChars}자 이상으로 보강한 <<<DEVICE_DESC>>> 블록 하나만 다시 출력하라.
+★ 절대 규칙: (1) 기존 문장을 삭제·요약하지 말고 확장만 하라(각 구성요소의 동작 원리·입출력·데이터 흐름·상호 연동·정량적 근거·변형 실시예를 추가). (2) 참조번호(NN)와 명칭은 현재 것을 그대로 유지(새 번호 창작·명칭 변경 금지). (3) 일반 하드웨어 상용구(프로세서·메모리 등)에 번호를 붙이지 마라. (4) 문체 "~한다" 유지, 방법 단계표현·S### 금지.${mathOn?' (5) 기존 【수학식 N】 블록과 "여기서" 정의절을 그대로 보존하라(수식 삭제 금지).':''}
+출력은 <<<DEVICE_DESC>>> … <<<END_DEVICE_DESC>>> 블록 하나만. 다른 블록·설명·코드펜스 금지.
+
+[현재 장치 상세설명]
+${deviceText}${methodText?('\n\n[참고: 방법 상세설명 — 재출력 불필요, 용어 정합용]\n'+methodText.slice(0,3000)):''}`;
 }
 async function runUnifiedCohesionGen(opts){
   if(!(opts&&opts.chained)&&typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
@@ -1897,6 +1914,25 @@ async function runUnifiedCohesionGen(opts){
       }
       if(_mcnt(r).length<_mathN){ try{_lastGenError='수학식 누락 — ④ 재생성 필요('+_mcnt(r).length+'/'+_mathN+')';}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('수학식 인라인 미포함('+_mcnt(r).length+'/'+_mathN+') — ④ 본문 통합 재생성이 필요합니다','error'); console.warn('[unified] math gate fail'); return; }
     }
+    // ★ [배치15K-4] 분량 총량 미달 보강 — 고분량 프리셋(상세/최대)에서 장치 상세설명이 목표의 80% 미만이면 기존 본문 유지·각 도면
+    //   설명 확장 재요청 1회(도면당 하한만 채우고 총량 미달하던 LLM 성향 대응). 보강 실패/미개선이면 그대로 진행(진전 보장).
+    if(_cohesionUseSplit()){
+      try{
+        const _tgtC=_cohesionTargetChars(); const _curC=(r.device||'').length;
+        if(_tgtC>0 && _curC < Math.floor(_tgtC*0.8)){
+          App.showToast('분량 미달('+_curC+'/'+_tgtC+'자) — 각 도면 설명을 확장 보강합니다(1회)','warning');
+          const aug=await App.callClaudeWithContinuation(_buildVolumeAugmentPrompt(r.device||'', r.method||'', _tgtC, _mathInline),'progressUnifiedGen',_cohMaxTok);
+          const _augDev=(String(aug).match(/<<<DEVICE_DESC>>>([\s\S]*?)<<<END_DEVICE_DESC>>>/)||[])[1];
+          if(_augDev && _augDev.trim().length>_curC){
+            const _augMerged=_serializeRefTable(r.refMap)+'\n<<<DEVICE_DESC>>>\n'+_augDev.trim()+'\n<<<END_DEVICE_DESC>>>'+(r.method?('\n<<<METHOD_DESC>>>\n'+r.method+'\n<<<END_METHOD_DESC>>>'):'');
+            const _rAug=parseCohesiveBundle(_augMerged);
+            // 보강본이 더 길고, 수학식(인라인 모드)을 보존하며, 본문·부호표가 온전하면 채택(마무리 블록은 이월)
+            const _mOk=!_mathInline||((((_rAug.device||'')+'\n'+(_rAug.method||'')).match(/【\s*수학식/g)||[]).length>=Math.max(1,Math.min(5,parseInt(mathBlockCount)||3)));
+            if(_rAug.ok.hasRef&&_rAug.ok.hasDevice&&(_rAug.device||'').length>_curC&&_mOk){ ['task','solution','effects','abstract'].forEach(function(k){ if(!_rAug[k]&&r[k])_rAug[k]=r[k]; }); r=_rAug; console.log('[unified] 분량 보강 '+_curC+'→'+(r.device||'').length+'자'); }
+          }
+        }
+      }catch(e){ console.warn('[unified] volume augment',e); }
+    }
     // ★ [배치15G] report 게이트 — 차단이 아니라 (1)자동 교정 재요청(부호표 보강, 최대 2회) → (2)잔여 시 경고 커밋(진전 보장).
     //   종전엔 실패 시 return으로 커밋을 안 해 이전 본문이 잔존 → "재생성해도 문서 불변" 무한루프였다.
     //   ※ 여기 항목(부호 미정의·중복·극성)은 §42(HIGH)로 CRITICAL 아님. CRITICAL(메타응답·마커)은 커밋 후 validateSpecification /
@@ -1964,10 +2000,7 @@ async function runUnifiedCohesionGen(opts){
     // ★ [배치15I-2] 경고 커밋 품질 하한 — 상세설명이 목표 분량의 50% 미만이거나 부호표가 코드 폴백이면 "본문 불완전"을
     //   완료 요약·⑤ 배너에 강조(사용자가 불완전본을 최종본으로 오인 차단). docH: 5,934자/목표 22,000 → 강조 표시.
     const _descLen=(outputs.step_08||'').length;
-    const _volMap={compact:4000,standard:5000,detailed:8000,maximal:22000};
-    // ★ [배치15I 적대검증] custom 목표는 프롬프트(04)와 동일하게 도면 수 비례로 산정(종전 고정 ×4 는 도면 수≠4 프로젝트를 오탐).
-    const _figCount=(function(){ try{ const a=(typeof _extractFigureNumbersFromDesign==='function')?_extractFigureNumbersFromDesign(outputs.step_07||''):[]; return Math.max(a.length,(requiredFigures||[]).length,1); }catch(_e){ return 4; } })();
-    const _tgt=(detailLevel==='custom')?Math.max(1,(parseInt(customDetailChars)||1500)*_figCount):(_volMap[detailLevel]||5000);
+    const _tgt=_cohesionTargetChars();   // ★ [배치15K-4] 목표 총량 — 15K-4 보강 재요청과 동일 기준(_cohesionTargetChars, custom 도면수 비례).
     const _lowVol=(_tgt>0 && _descLen < Math.floor(_tgt*0.5));
     // ★ [배치15I 적대검증] 방법 청구항(step_10) 있는데 방법 상세설명(step_12) 미생성 → 분할/단일 공통으로 침묵 소실되던 §42 뒷받침 결함을 불완전으로 강조.
     const _methodMissing=_wantMethod&&!!outputs.step_10&&!r.method;

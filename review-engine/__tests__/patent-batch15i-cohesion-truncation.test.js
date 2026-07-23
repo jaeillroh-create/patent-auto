@@ -183,9 +183,9 @@ test('15I/J 적대검증 소스 ★ — 분할 방법가드·폴백 S부호·rep
   assert.match(PATENT_SRC, /\\\(\(S\\d\{1,4\}\)\\\)/, '★ #2 _buildRefMapFromText S### 캡처');
   // #3 폴백 reparse(직렬화 후 재파싱)
   assert.match(PATENT_SRC, /parseCohesiveBundle\(_serializeRefTable\(_fbMap\)\+'\\n'\+raw\)/, '★ #3 폴백 reparse');
-  // #4 custom 도면수 비례 목표
-  assert.match(PATENT_SRC, /const _figCount=\(function\(\)\{[\s\S]*?_extractFigureNumbersFromDesign/, '★ #4 도면 수 산정');
-  assert.match(PATENT_SRC, /\(parseInt\(customDetailChars\)\|\|1500\)\*_figCount/, '★ #4 custom 목표 = customDetailChars×도면수');
+  // #4 custom 도면수 비례 목표 (배치15K-4: _cohesionTargetChars 헬퍼로 이동)
+  assert.match(PATENT_SRC, /function _cohesionTargetChars\(\)\{[\s\S]*?_extractFigureNumbersFromDesign/, '★ #4 도면 수 산정(_cohesionTargetChars)');
+  assert.match(PATENT_SRC, /\(parseInt\(customDetailChars\)\|\|1500\)\*fc/, '★ #4 custom 목표 = customDetailChars×도면수');
 });
 
 test('15I 소스 ★ — common.js: safeMaxTokensLarge(gemini 8192·그 외 16000) + callClaudeWithContinuation maxTokens·lastMeta', () => {

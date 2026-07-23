@@ -364,14 +364,18 @@ function validateSpecification(specText){
     const _names=[...new Set(_pairs.map(p=>p.full))];
     const _groups=[]; _names.forEach(n=>{ let g=_groups.find(gr=>_nameSame(gr.rep,n)); if(!g){g={rep:n,mem:new Set(),refs:new Set()};_groups.push(g);} g.mem.add(n); });
     _pairs.forEach(p=>{ const g=_groups.find(gr=>gr.mem.has(p.full)); if(g)g.refs.add(p.ref); });
-    _groups.forEach(g=>{ if(g.refs.size<2||g.rep.length<5)return;   // [§2.4 D1] 비교 키(rep) <5자면 미발화 — generic 3자 완전일치 소거
+    _groups.forEach(g=>{
+      // ★ [배치15K-1,2] 일반 하드웨어 상용구(프로세서·메모리·서버 등)는 <5자여도 여러 번호 배정 시 dupassign 주범 → 5자 필터 예외.
+      //   ※ "~부"(저장부·제어부·통신부 등)는 정당한 발명 구성요소 명칭일 수 있어 목록에서 제외(§2.4 D1 소거 유지).
+      const _hwBoiler=/^(프로세서|메모리|서버|데이터베이스|버스|인터페이스|씨피유|램|롬|CPU|RAM|ROM|GPU)$/.test(String(g.rep).replace(/\s+/g,''));
+      if(g.refs.size<2||(g.rep.length<5&&!_hwBoiler))return;   // [§2.4 D1] 비교 키(rep) <5자면 미발화(generic 3자 소거) — 단, 하드웨어 상용구는 예외
       const _rs=[...g.refs].map(Number).sort((a,b)=>a-b);
-      // [§2.4 D3(i)] 동일명칭 ≥3개 연속(간격 1 이내)번호 = 도면요소 generic 시리즈 → dupassign 대신 MEDIUM 1건으로 압축 보고
-      if(_rs.length>=3 && (_rs[_rs.length-1]-_rs[0])<=_rs.length){
+      // [§2.4 D3(i)] 동일명칭 ≥3개 연속(간격 1 이내)번호 = 도면요소 generic 시리즈 → dupassign 대신 MEDIUM 1건으로 압축 보고(하드웨어 상용구는 시리즈 아님 → 계속 dupassign)
+      if(!_hwBoiler && _rs.length>=3 && (_rs[_rs.length-1]-_rs[0])<=_rs.length){
         iss.push({severity:'MEDIUM',check:'refnum_generic_series',message:`동일 명칭 "${g.rep}"이 연속 부호 ${_rs.length}개(${_rs[0]}~${_rs[_rs.length-1]})에 시리즈 배정`,detail:'도면요소 generic 시리즈 — 구성요소별 개별 명명 권고(리포트)'}); return;
       }
       if([...g.mem].every(m=>_rs.every(r=>_atoms.has(m+'|'+r))))return;   // (d) b에서 전부 보고된 원자면 생략
-      iss.push({severity:'HIGH',check:'refnum_dupassign',message:`동일 명칭 "${g.rep}"에 부호 ${_rs.length}개 배정`,detail:_rs.join(', ')});
+      iss.push({severity:'HIGH',check:'refnum_dupassign',message:`동일 명칭 "${g.rep}"에 부호 ${_rs.length}개 배정`,detail:_rs.join(', ')+(_hwBoiler?' — 일반 하드웨어 상용구가 여러 번호에 반복 배정됨(총칭어에 번호 부여 금지, 청구항 구성요소 명칭에만 번호 부여 — 배치15K)':'')});
     });
   }
 

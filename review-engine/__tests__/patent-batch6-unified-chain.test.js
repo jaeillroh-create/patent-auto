@@ -104,7 +104,8 @@ test('★ N2 소스 — 신규 구성 번호 규칙(기존 번호 재사용 금�
 });
 test('★ N3c 소스 — cohesion이 dlCfg를 단계별과 동일 소비(도면당 하한 + 총 하한 + extra)', () => {
   assert.match(PATENT_SRC, /\[배치6 N3c\] 분량을 단계별\(step_08\)과 동일한 dlCfg로 소비/, '★ dlCfg 미러 주석');
-  assert.match(PATENT_SRC, /도면 1개당 \$\{dlCfg\.charPerFig\}\(공백 포함\) 이상을 최소 목표로 한다\(상한이 아니라 하한\)[\s\S]{0,400}총 분량 \$\{dlCfg\.total\}\(공백 포함\) 이상을 목표로[\s\S]{0,300}\$\{dlCfg\.extra\}[\s\S]{0,200}\$\{methodLengthPreset\}/, '★ unified C11이 하한 프레이밍(#235)으로 dlCfg 소비');
+  // ★ [배치15K-4] C11 총량 우선 재편 — 총 분량(dlCfg.total) 먼저(1차 제약), 도면당 하한(charPerFig)은 보조, 이어 extra·methodLengthPreset.
+  assert.match(PATENT_SRC, /총 분량 \$\{dlCfg\.total\}\(공백 포함\) 이상\*\*이 최우선 목표다[\s\S]{0,400}도면 1개당 \$\{dlCfg\.charPerFig\}\(공백 포함\) 이상[\s\S]{0,400}\$\{dlCfg\.extra\}[\s\S]{0,200}\$\{methodLengthPreset\}/, '★ unified C11 총량 우선 소비(dlCfg.total→charPerFig→extra→method)');
   assert.match(PATENT_SRC, /【수학식 금지】/, '★ C9 수식 금지 유지(통합 내 동시 생성 금지 — 새 삽입 경로 없음)');
 });
 

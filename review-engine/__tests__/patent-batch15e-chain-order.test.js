@@ -129,5 +129,5 @@ test('★ FIX4 — C12 자기검증 라벨 연속화((g)(h)(i), 결번·트레�
   run('clearAllState(); outputs.step_06="【청구항 1】 제어부."; outputs.step_07="도1"; selectedTitle="s"; selectedTitleType="서버"; mathBlockCount=3;');
   els.chkUnifiedMath = mkEl(); els.chkUnifiedMath.checked = true;
   const p = run("buildPrompt('unified_cohesion')");
-  assert.ok(/\(f\)[\s\S]{0,200}\(g\) ★ 동일한 구성 명칭[\s\S]{0,200}\(h\) ★ 모든 문단[\s\S]{0,200}\(i\) 모든 수학식/.test(p), '★ f→g→h→i 순차');
+  assert.ok(/\(f\)[\s\S]{0,200}\(g\) ★ 동일한 구성 명칭[\s\S]{0,300}\(g2\) ★ \[배치15K\][\s\S]{0,300}\(h\) ★ 모든 문단[\s\S]{0,300}\(i\) ★★ \[배치15K-6\] 각 수학식마다/.test(p), '★ f→g→g2→h→i 순차(배치15K g2 하드웨어·i 수식 1:1 추가)');
 });
