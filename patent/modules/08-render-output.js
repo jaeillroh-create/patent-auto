@@ -559,7 +559,7 @@ function _dedupParagraphs(text){
 //   종전 정규식 [가-힣A-Za-z\s]{0,12}? 는 14자↑ 장문 명칭에서 캡처 시작이 뒤로 밀려 앞글자를 유실(잘린 명칭이
 //   정상 명칭과 충돌 → dupassign HIGH 유발)했고, 짧은 명칭 앞엔 조사·"내지" 같은 junk를 함께 포섭했다.
 //   → 시작 char cap 을 제거(단어 그룹 {0,7})하고, 선행 비명칭 토큰을 반복 제거하여 완전형 명칭만 남긴다.
-const _REF_NAME_STRIP=/^(?:도\s*\d+\s*(?:의|을|를|은|는|에서|에|과|와|및)?|상기|그리고|또한|한편|아울러|본|해당|각각의|각|그|이는|이를|이가|이|및|또는|특히|즉|따라서|이때|여기서|포함하는|구비하는|이루어진|갖는|구성된|연결된|위한|상의|내지|는|은|을|를|와|과|의|에서|에|으로|로|도|만)\s+/;
+const _REF_NAME_STRIP=/^(?:도\s*\d+\s*(?:의|을|를|은|는|에서|에|과|와|및)?|상기|그리고|또한|한편|아울러|본|해당|각각의|각|그|이는|이를|이가|이|및|또는|특히|즉|따라서|이때|여기서|포함하는|구비하는|이루어진|갖는|구성된|연결된|위한|상의|내지|는|은|을|를|가|와|과|의|에서|에|으로|로|도|만|에게|로서|처럼|보다|마다)\s+/;
 function _cleanRefName(n){ let s=String(n||''),prev; do{prev=s;s=s.replace(_REF_NAME_STRIP,'');}while(s!==prev); return s.trim(); }
 // ★ [배치15J-4] 앞글자 유실 정밀 교정(사후 안전망) — refMap 명칭이 body 명칭의 접미이고 앞 차이가 공백 없는 ≤2자면
 //   body(본문 실사용 전체형)를 채택. 그 외엔 refMap(curated) 우선(단어 단위 over-capture는 채택하지 않음).
@@ -583,7 +583,14 @@ function _refPairsFromText(body){
   return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(function(e){ const ref=e[0],nm=e[1]; let best='',bc=0; nm.forEach(function(c,n){ if(c>bc){bc=c;best=n;} }); return {ref:ref,name:best}; });
 }
 // ★ [배치15I-3] REFTABLE 이 끝내 비면 본문 텍스트에서 refMap(번호→명칭) 을 코드로 생성(LLM 불필요, 결정론). 최소 refnum_consistency 해소.
-function _buildRefMapFromText(text){ const m=new Map(); _refPairsFromText(text).forEach(function(p){ if(p.name&&p.name.length>=2)m.set(String(p.ref),p.name); }); return m; }
+//   ★ [배치15I 적대검증] 장치부호(NN)뿐 아니라 방법 단계부호(S###)도 포섭 — 종전 _refPairsFromText 는 \d 만 잡아
+//     방법 ON+폴백 시 부호의 설명 [방법 단계] 블록이 통째로 유실되던 회귀 차단.
+function _buildRefMapFromText(text){
+  const m=new Map(); _refPairsFromText(text).forEach(function(p){ if(p.name&&p.name.length>=2)m.set(String(p.ref),p.name); });
+  const sre=/([가-힣A-Za-z][가-힣A-Za-z0-9·]*(?:\s+[가-힣A-Za-z0-9·]+){0,7})\s*\((S\d{1,4})\)/g; let sm;   // 방법 단계부호 "명칭(S###)"
+  while((sm=sre.exec(String(text||'')))!==null){ const nm=_cleanRefName(sm[1]); const s=sm[2]; if(nm.length>=2&&!m.has(s))m.set(s,nm); }
+  return m;
+}
 // [통합생성] 부호의 설명(step_18) 결정적 직렬화 — 완성 본문에서 실제 사용된 모든 장치부호(NN)를 전수 정의(usedNotDef=0),
 //   본문 미사용 부호는 제외(defNotUsed=0) → refnum_consistency 구조적 0. 명칭은 REFTABLE(refMap) 우선, 없으면 본문 최빈 명칭.
 //   ★ device/method 뿐 아니라 효과·과제 등 기존 섹션의 (NN)까지 전수 커버(완성본 기준) → 부분 재생성에도 부호정합 성립.

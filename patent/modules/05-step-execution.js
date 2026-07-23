@@ -1801,9 +1801,12 @@ async function _runCohesionSplit(pid, maxTok){
   const base=buildPrompt('unified_cohesion'); if(!base)return null;
   // ── 1/2: 본문만 ──
   const bodyPrompt=base+'\n\n★★★ [이번 출력 범위 — 1/2단계: 본문] <<<DEVICE_DESC>>> 블록(방법 청구항이 있으면 <<<METHOD_DESC>>> 포함)만 출력하라. REFTABLE·TASK·SOLUTION·EFFECTS·ABSTRACT 블록은 이번에 출력하지 마라(2단계에서 별도 생성). 본문 분량을 목표까지 최대한 채워라.';
+  // ★ [배치15I 적대검증] 방법 청구항이 있으면(방법 ON) 1차 본문에 METHOD_DESC 가 반드시 있어야 한다 — 절단으로 꼬리 METHOD_DESC 가
+  //   유실된 device-only 응답을 '성공'으로 수용하면 방법 상세설명(step_12)이 침묵 소실된다. hasDevice 뿐 아니라 방법 완성도도 검사.
+  const _splitWantM=(typeof includeMethodClaims!=='undefined')&&!!includeMethodClaims&&!!outputs.step_10;
   const rawBody=await App.callClaudeWithContinuation(bodyPrompt, pid, maxTok);
   const rb=parseCohesiveBundle(rawBody);
-  if(!rb.ok.hasDevice)return null;   // 본문 실패 → null(호출부가 단일 호출로 폴백)
+  if(!rb.ok.hasDevice||(_splitWantM&&!rb.method))return null;   // 본문(또는 기대 방법본문) 실패 → null(호출부가 단일 호출로 폴백)
   // ── 2/2: REFTABLE + 마무리(본문 컨텍스트 제공, 부호·용어 정합) ──
   const finishPrompt=base+'\n\n★★★ [이번 출력 범위 — 2/2단계: 부호표·마무리] 아래 [기생성 본문]의 부호·용어에 완전히 정합하도록 <<<REFTABLE>>>·<<<TASK>>>·<<<SOLUTION>>>·<<<EFFECTS>>>·<<<ABSTRACT>>> 블록만 출력하라. DEVICE_DESC·METHOD_DESC 는 이번에 출력하지 마라(이미 생성됨). ★ REFTABLE 은 아래 본문에 실제 등장한 모든 (NN)·S### 를 그 명칭 그대로 빠짐없이 등재하라(본문에 없는 번호 창작 금지).\n\n[기생성 본문]\n'+String(rawBody||'').slice(0,40000);
   const rawFinish=await App.callClaudeWithContinuation(finishPrompt, pid, maxTok);
@@ -1812,7 +1815,7 @@ async function _runCohesionSplit(pid, maxTok){
   const _bodyClean=String(rawBody||'').replace(/<<<REFTABLE>>>[\s\S]*?<<<END_REFTABLE>>>/g,'').replace(/<<<(TASK|SOLUTION|EFFECTS|ABSTRACT)>>>[\s\S]*?<<<END_\1>>>/g,'');
   const merged=_finishClean+'\n'+_bodyClean;
   const rm=parseCohesiveBundle(merged);
-  return (rm&&rm.ok.hasDevice)?{rm:rm, merged:merged}:null;   // 병합 후 본문 보존 확인(merged 원문 동반 — 하류 부호표 재요청·코드 폴백이 실제 본문 참조)
+  return (rm&&rm.ok.hasDevice&&(!_splitWantM||rm.method))?{rm:rm, merged:merged}:null;   // 병합 후 본문(+기대 방법본문) 보존 확인(merged 원문 동반 — 하류 부호표 재요청·코드 폴백이 실제 본문 참조)
 }
 async function runUnifiedCohesionGen(opts){
   if(!(opts&&opts.chained)&&typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
@@ -1853,7 +1856,15 @@ async function runUnifiedCohesionGen(opts){
     //   종전엔 여기서 return(차단)해 "부호표 없음"으로 재생성만 유도했으나, 본문에 부호가 실재하면 코드 폴백으로 진전 보장(refnum_consistency 해소).
     if(!r.ok.hasRef&&r.ok.hasDevice&&typeof _buildRefMapFromText==='function'){
       const _fbMap=_buildRefMapFromText((r.device||'')+'\n'+(r.method||''));
-      if(_fbMap.size){ r.refMap=_fbMap; r.ok.hasRef=true; _reftableFallback=true; App.showToast('부호표 자동 생성 — 본문에서 '+_fbMap.size+'개 부호 추출(REFTABLE 누락 코드 폴백, ⑤ 확인 권장)','warning'); console.warn('[unified] reftable code-fallback',_fbMap.size); }
+      if(_fbMap.size){
+        // ★ [배치15I 적대검증] 폴백 refMap 을 REFTABLE 로 직렬화 후 원 본문과 재파싱 → refMap·report(notInTable 등)를 일관되게 재계산.
+        //   (종전엔 r.refMap 만 세우고 r.report 를 그대로 둬 notInTable 이 과보고 → 거짓 '미정의 부호' 경고 + augment LLM 2회 낭비.)
+        let _reparsed=null;
+        try{ if(typeof _serializeRefTable==='function')_reparsed=parseCohesiveBundle(_serializeRefTable(_fbMap)+'\n'+raw); }catch(_e){}
+        if(_reparsed&&_reparsed.ok.hasRef&&_reparsed.ok.hasDevice){ ['task','solution','effects','abstract'].forEach(function(k){ if(!_reparsed[k]&&r[k])_reparsed[k]=r[k]; }); r=_reparsed; }
+        else { r.refMap=_fbMap; r.ok.hasRef=true; }   // 재파싱 실패 시 최소 refMap 세팅(degraded)
+        _reftableFallback=true; App.showToast('부호표 자동 생성 — 본문에서 '+_fbMap.size+'개 부호 추출(REFTABLE 누락 코드 폴백, ⑤ 확인 권장)','warning'); console.warn('[unified] reftable code-fallback',_fbMap.size);
+      }
     }
     if(!r.ok.hasRef||!r.ok.hasDevice){
       const _refMiss=(r.ok.hasDevice&&!r.ok.hasRef);
@@ -1954,10 +1965,14 @@ async function runUnifiedCohesionGen(opts){
     //   완료 요약·⑤ 배너에 강조(사용자가 불완전본을 최종본으로 오인 차단). docH: 5,934자/목표 22,000 → 강조 표시.
     const _descLen=(outputs.step_08||'').length;
     const _volMap={compact:4000,standard:5000,detailed:8000,maximal:22000};
-    const _tgt=(detailLevel==='custom')?Math.max(1,(parseInt(customDetailChars)||1500)*4):(_volMap[detailLevel]||5000);
+    // ★ [배치15I 적대검증] custom 목표는 프롬프트(04)와 동일하게 도면 수 비례로 산정(종전 고정 ×4 는 도면 수≠4 프로젝트를 오탐).
+    const _figCount=(function(){ try{ const a=(typeof _extractFigureNumbersFromDesign==='function')?_extractFigureNumbersFromDesign(outputs.step_07||''):[]; return Math.max(a.length,(requiredFigures||[]).length,1); }catch(_e){ return 4; } })();
+    const _tgt=(detailLevel==='custom')?Math.max(1,(parseInt(customDetailChars)||1500)*_figCount):(_volMap[detailLevel]||5000);
     const _lowVol=(_tgt>0 && _descLen < Math.floor(_tgt*0.5));
-    const _incomplete=_lowVol||_reftableFallback;
-    const _incMsg=_incomplete?('⚠ 본문이 불완전할 수 있습니다('+(_lowVol?('상세설명 '+_descLen+'자/목표 '+_tgt+'자'):'분량 정상')+(_reftableFallback?', 부호표 코드 폴백':'')+') — 분량을 낮추거나 ④ 재생성을 권장합니다'):'';
+    // ★ [배치15I 적대검증] 방법 청구항(step_10) 있는데 방법 상세설명(step_12) 미생성 → 분할/단일 공통으로 침묵 소실되던 §42 뒷받침 결함을 불완전으로 강조.
+    const _methodMissing=_wantMethod&&!!outputs.step_10&&!r.method;
+    const _incomplete=_lowVol||_reftableFallback||_methodMissing;
+    const _incMsg=_incomplete?('⚠ 본문이 불완전할 수 있습니다('+[_lowVol?('상세설명 '+_descLen+'자/목표 '+_tgt+'자'):'',_reftableFallback?'부호표 코드 폴백':'',_methodMissing?'방법 상세설명 미생성(방법 청구항 있음)':''].filter(Boolean).join(', ')+') — 분량을 낮추거나 ④ 재생성을 권장합니다'):'';
     App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft+(_gateWarn.length?(' · ⚠ 게이트 미통과 '+_gateWarn.length+'건(⑤ 확인)'):''),((_gateWarn.length||_incomplete)?'warning':'success'));
     if(_incMsg)App.showToast(_incMsg,'warning');   // ★ [배치15I-2] 불완전 강조(별도 토스트)
     if(hadMath&&!_mathInline)App.showToast('⚠️ 기존 수학식(Step 9)은 새 상세설명에 재삽입이 필요합니다 — 미리보기·다운로드에 수학식이 빠져 있습니다','warning');   // [배치9 D1] 인라인 모드에선 구 step_09를 이력 보존 후 제거했으므로 미해당

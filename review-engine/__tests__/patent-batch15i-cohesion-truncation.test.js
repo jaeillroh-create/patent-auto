@@ -118,6 +118,53 @@ test('15I-2 ★ 동작 — 상세설명이 목표 50% 미만이면 "본문 불�
   assert.ok(toasts.some(t => t.t === 'warning' && /본문이 불완전/.test(t.m)), '★ 불완전 강조 토스트(분량 미달)');
 });
 
+// ─────────────── 적대검증 반영: #2 폴백 S부호 포섭 ───────────────
+
+test('15I ★ 적대검증 #2 — _buildRefMapFromText: 방법 단계부호(S###)도 포섭', () => {
+  const o = JSON.parse(run(`JSON.stringify((function(){ const m=_buildRefMapFromText('제어부(100)가 수신하는 단계(S410) 및 처리하는 단계(S420)를 수행한다.'); return {size:m.size, s410:m.get('S410'), s420:m.get('S420'), dev:m.get('100')}; })())`));
+  assert.strictEqual(o.size, 3, '★ 장치 1 + 방법 S부호 2');
+  assert.strictEqual(o.s410, '수신하는 단계', '★ S410 명칭');
+  assert.strictEqual(o.s420, '처리하는 단계', '★ S420 명칭');
+  assert.strictEqual(o.dev, '제어부', '★ 장치부호 유지');
+});
+
+// ─────────────── 적대검증 반영: #1 분할 방법 상세설명 소실 방지 ───────────────
+
+test('15I ★ 적대검증 #1 — 분할 1차가 방법 청구항 있는데 METHOD_DESC 없으면 null(단일 호출 폴백)', async () => {
+  run('clearAllState(); outputs.step_06="【청구항 1】 제어부."; outputs.step_10="【청구항 5】 수신하는 단계를 포함하는 방법."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="장치 및 방법"; includeMethodClaims=true;');
+  // 1차 본문이 DEVICE 만(METHOD_DESC 누락 — 절단 모사) → 방법 기대 시 수용 거부(null)
+  const DEVONLY = '<<<DEVICE_DESC>>>\n제어부(100)가 동작한다.\n<<<END_DEVICE_DESC>>>';
+  sandbox.App.callClaudeWithContinuation = async () => DEVONLY;
+  const isNull = await run(`(async()=>{ const r=await _runCohesionSplit('progressUnifiedGen',16000); return r===null; })()`);
+  assert.strictEqual(isNull, true, '★ 방법 기대 + 1차 METHOD_DESC 누락 → null(폴백 유도, step_12 침묵 소실 차단)');
+});
+
+test('15I ★ 적대검증 #1 — 방법 청구항 있는데 방법 상세설명 미생성 시 "방법 상세설명 미생성" 강조', async () => {
+  run('clearAllState(); outputs.step_06="【청구항 1】 제어부."; outputs.step_10="【청구항 5】 방법."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="장치 및 방법"; includeMethodClaims=true; detailLevel="standard";');
+  els.chkUnifiedMath = mkEl();
+  // 단일 호출이 REFTABLE+DEVICE 는 있으나 METHOD_DESC 없음 → 방법 상세설명 미생성 경고
+  const NOMETHOD = '<<<REFTABLE>>>\n[장치부호]\n(100) 제어부\n<<<END_REFTABLE>>>\n<<<DEVICE_DESC>>>\n제어부(100)가 동작한다.\n<<<END_DEVICE_DESC>>>';
+  sandbox.App.callClaudeWithContinuation = async () => NOMETHOD;
+  await run('runUnifiedCohesionGen({chained:true})');
+  assert.ok(toasts.some(t => t.t === 'warning' && /방법 상세설명 미생성/.test(t.m)), '★ 방법 상세설명 미생성 강조(침묵 소실 차단)');
+});
+
+// ─────────────── 적대검증 반영: #3 폴백 report 재계산(reparse) ───────────────
+
+test('15I ★ 적대검증 #3 — 코드 폴백이 방법 S부호 포함 부호표 생성([방법 단계] 유실 방지) + 거짓 미정의 경고 없음', async () => {
+  run('clearAllState(); outputs.step_06="【청구항 1】 제어부."; outputs.step_10="【청구항 5】 방법."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="장치 및 방법"; includeMethodClaims=true;');
+  els.chkUnifiedMath = mkEl();
+  // REFTABLE 없는 본문(장치+방법) → 코드 폴백. 방법 S부호가 부호의 설명에 포함되어야.
+  const BODY = '<<<DEVICE_DESC>>>\n제어부(100)가 동작한다.\n<<<END_DEVICE_DESC>>>\n<<<METHOD_DESC>>>\n수신하는 단계(S410)를 수행한다.\n<<<END_METHOD_DESC>>>';
+  sandbox.App.callClaudeWithContinuation = async () => BODY;
+  await run('runUnifiedCohesionGen({chained:true})');
+  const s18 = run('outputs.step_18') || '';
+  assert.ok(/제어부 : 100/.test(s18), '★ 장치부호');
+  assert.ok(/\[방법 단계\]/.test(s18) && /수신하는 단계 : S410/.test(s18), '★ 방법 S부호 [방법 단계] 포함(폴백 회귀 차단)');
+  // 폴백이 refMap·report 를 일관되게 재계산 → 본문 미정의 부호 거짓 경고 없음
+  assert.ok(!toasts.some(t => /본문 미정의 부호/.test(t.m)), '★ 거짓 미정의 부호 경고 없음(reparse 정합)');
+});
+
 // ─────────────── 소스 정합 ───────────────
 
 test('15I 소스 ★ — 진단 로깅·max_tokens·분할·폴백·품질하한 배선', () => {
@@ -125,7 +172,20 @@ test('15I 소스 ★ — 진단 로깅·max_tokens·분할·폴백·품질하한
   assert.match(PATENT_SRC, /App\.safeMaxTokensLarge&&App\.safeMaxTokensLarge\(\)/, '★ 1c max_tokens 상향 배선');
   assert.match(PATENT_SRC, /function _runCohesionSplit\(pid, ?maxTok\)\{/, '★ 1b 분할 함수');
   assert.match(PATENT_SRC, /function _buildRefMapFromText\(text\)\{/, '★ 3 코드 폴백 함수');
-  assert.match(PATENT_SRC, /_incomplete=_lowVol\|\|_reftableFallback/, '★ 2 품질 하한 판정');
+  assert.match(PATENT_SRC, /_incomplete=_lowVol\|\|_reftableFallback\|\|_methodMissing/, '★ 2 품질 하한 판정(방법 미생성 포함)');
+});
+
+test('15I/J 적대검증 소스 ★ — 분할 방법가드·폴백 S부호·reparse·custom 도면스케일', () => {
+  // #1 분할 방법 완성도 가드(1차 수용·병합 반환)
+  assert.match(PATENT_SRC, /if\(!rb\.ok\.hasDevice\|\|\(_splitWantM&&!rb\.method\)\)return null;/, '★ #1 분할 1차 방법 가드');
+  assert.match(PATENT_SRC, /\(rm&&rm\.ok\.hasDevice&&\(!_splitWantM\|\|rm\.method\)\)/, '★ #1 분할 병합 반환 방법 가드');
+  // #2 폴백 S부호 포섭
+  assert.match(PATENT_SRC, /\\\(\(S\\d\{1,4\}\)\\\)/, '★ #2 _buildRefMapFromText S### 캡처');
+  // #3 폴백 reparse(직렬화 후 재파싱)
+  assert.match(PATENT_SRC, /parseCohesiveBundle\(_serializeRefTable\(_fbMap\)\+'\\n'\+raw\)/, '★ #3 폴백 reparse');
+  // #4 custom 도면수 비례 목표
+  assert.match(PATENT_SRC, /const _figCount=\(function\(\)\{[\s\S]*?_extractFigureNumbersFromDesign/, '★ #4 도면 수 산정');
+  assert.match(PATENT_SRC, /\(parseInt\(customDetailChars\)\|\|1500\)\*_figCount/, '★ #4 custom 목표 = customDetailChars×도면수');
 });
 
 test('15I 소스 ★ — common.js: safeMaxTokensLarge(gemini 8192·그 외 16000) + callClaudeWithContinuation maxTokens·lastMeta', () => {
