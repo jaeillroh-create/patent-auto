@@ -227,6 +227,6 @@ test('17-2/3 ★ 소스 — buildPrompt 이전 refPlan 확정 + 게이트 가드
   // 부호-구조 게이트가 refPlan 있을 때 비활성
   assert.match(PATENT_SRC, /if\(!_hasRP&&rp\.notInTable\.length\)/, '★ 미정의 부호 게이트 refPlan 가드');
   assert.match(PATENT_SRC, /if\(!_hasRP&&rp\.dupNums\.length\)/, '★ 번호중복 게이트 refPlan 가드');
-  // 커밋 직전 본문 정합
-  assert.match(PATENT_SRC, /if\(_hasRP && typeof _enforceRefPlan==='function'\)\{ const _eD=_enforceRefPlan\(dev,_refPlan\); dev=_eD\.text;/, '★ 커밋 직전 device enforce');
+  // 커밋 직전 전영역 정합(배치18-2: 예시도 합본 후 _enforceAllOutputs 로 상세설명·도면·마무리 일괄 정합)
+  assert.match(PATENT_SRC, /if\(_hasRP && typeof _enforceAllOutputs==='function'\)\{ const _ea=_enforceAllOutputs\(_refPlan\);/, '★ 커밋 직전 전영역 enforce(배치18)');
 });

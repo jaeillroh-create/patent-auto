@@ -1860,7 +1860,7 @@ async function runUnifiedCohesionGen(opts){
   //   buildPrompt('unified_cohesion') 이 이 전역 refPlan 을 읽어 [확정 부호표] 블록을 주입하므로, 프롬프트 구성 전에 반드시 세워야 한다.
   const _refPlan=(typeof _ensureRefPlan==='function')?(_ensureRefPlan(true)||[]):[];
   const _hasRP=!!(_refPlan&&_refPlan.length)&&typeof _refPlanToMap==='function';
-  let _refFixes=0;
+  let _refFixes=0, _refFixArea=null;   // ★ [배치18-2] 영역별 정합 건수(상세설명·도면·마무리)
   setGlobalProcessing(true); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',true);
   App.showProgress('progressUnifiedGen','통합 생성 중(단일 컨텍스트)... 긴 출력은 자동 이어쓰기됩니다',0,1);
   try{
@@ -2001,14 +2001,10 @@ async function runUnifiedCohesionGen(opts){
     if(r.method&&outputs.step_10)pushOutputHistory('step_12','unified','runUnifiedCohesionGen');
     pushOutputHistory('step_18','unified','runUnifiedCohesionGen');
     let dev=r.device; try{if(typeof sanitizeDescFigureRefs==='function')dev=sanitizeDescFigureRefs(dev,'device',{keepMath:_mathInline});}catch(_e){}   // [배치15C-1] 인라인 수학식 모드면 본문 수식 보존(strip 금지)
-    // ★ [배치17-3] 본문 사후 정합 — 커밋 직전(모든 재요청 정착 후) 본문의 "명칭(번호)"를 확정 부호표(refPlan)에 결정론적으로 맞춘다.
-    //   canonical↔body 하드웨어 치환("프로세서(100)"→"제어부(100)")·명칭/번호 불일치를 코드가 교정 → 부호 결함군 원천 소멸.
-    //   ⚠ 세션 원칙(자동 치환 금지)의 명시적 예외: 교정 대상은 "부호 표기"(형식 요소)뿐이고 기준이 청구항으로 확정돼 안전하다.
-    if(_hasRP && typeof _enforceRefPlan==='function'){ const _eD=_enforceRefPlan(dev,_refPlan); dev=_eD.text; _refFixes+=_eD.fixes; }
     outputs.step_08=dev; outputs.step08_device=dev; markOutputTimestamp('step_08');
-    if(r.method&&outputs.step_10){ let m=r.method; try{if(typeof sanitizeDescFigureRefs==='function')m=sanitizeDescFigureRefs(m,'method');}catch(_e){} if(_hasRP&&typeof _enforceRefPlan==='function'){ const _eM=_enforceRefPlan(m,_refPlan); m=_eM.text; _refFixes+=_eM.fixes; } outputs.step_12=m; markOutputTimestamp('step_12'); }
-    // ★ [배치17-2] 부호의 설명(step_18)은 확정 부호표(refPlan) 명칭으로 직렬화 — r.refMap 이 refPlan 이므로 본문 사용부호가 refPlan 명칭으로 정의된다.
-    outputs.step_18=_deriveSignDescription(r.refMap); markOutputTimestamp('step_18');   // refPlan 권위화 시 refMap=refPlan → 확정 명칭 기준. (refPlan 없으면 종전대로 본문 최빈 명칭)
+    if(r.method&&outputs.step_10){ let m=r.method; try{if(typeof sanitizeDescFigureRefs==='function')m=sanitizeDescFigureRefs(m,'method');}catch(_e){} outputs.step_12=m; markOutputTimestamp('step_12'); }
+    // ★ [배치18-2] 부호의 설명(step_18) 직렬화는 예시도 합본(_mergeConceptIntoStep08)·전영역 enforce(_enforceAllOutputs) 이후로 이동한다.
+    //   (종전 배치17은 여기서 step_18을 뽑고 마무리·예시도를 미정합 상태로 커밋해 부호표가 본문과 어긋났다 — docL 근본원인.)
     // ★ [배치9 D3] 마무리 흡수 커밋 — 동일 컨텍스트 산출(효과·해결수단·요약)이 있으면 원자 커밋(없으면 기존 유지·비파괴)
     if(r.task){ pushOutputHistory('step_05','unified','runUnifiedCohesionGen'); outputs.step_05=r.task; markOutputTimestamp('step_05'); }   // ★ [배치15E-1] 과제 — 청구항 확정 후 역설계(메타응답 원천 소멸)
     if(r.solution){ pushOutputHistory('step_17','unified','runUnifiedCohesionGen'); outputs.step_17=r.solution; markOutputTimestamp('step_17'); }
@@ -2019,6 +2015,10 @@ async function runUnifiedCohesionGen(opts){
     if(_mathInline&&outputs.step_09){ pushOutputHistory('step_09','unified','runUnifiedCohesionGen'); delete outputs.step_09; try{delete outputTimestamps.step_09;}catch(_e){} }
     try{ if(typeof _snapshotGenParams==='function')_snapshotGenParams('stage4'); }catch(_e){}   // [배치12 C] 본문 생성 시점 설계 스냅샷(수학식·분량 대조 기준)
     try{if(typeof _mergeConceptIntoStep08==='function')_mergeConceptIntoStep08();}catch(_e){}   // 예시도(step_08c) 합본(있을 때만)
+    // ★ [배치18-2] 전영역 부호 정합 — 합본된 step_08(+예시도)·도면 설명(step_07/11)·마무리(효과 step_16·해결수단 step_17·요약서 step_19)까지
+    //   확정 부호표(refPlan)에 일괄 정합한다(dupassign 검사 범위와 일치 → 구조적 0). 그 다음 부호의 설명(step_18)을 정합된 전체 스펙 기준으로 직렬화.
+    if(_hasRP && typeof _enforceAllOutputs==='function'){ const _ea=_enforceAllOutputs(_refPlan); _refFixes+=_ea.total; _refFixArea=_ea.byArea; }
+    outputs.step_18=_deriveSignDescription(r.refMap); markOutputTimestamp('step_18');   // refPlan 권위화 시 refMap=refPlan → 확정 명칭 기준. (refPlan 없으면 종전대로 본문 최빈 명칭)
     try{if(typeof reflectConceptsToSpec==='function')reflectConceptsToSpec();}catch(_e){}       // 예시도 부호 step_18 반영(있을 때만)
     try{if(typeof invalidateDownstream==='function')invalidateDownstream('step_08');}catch(_e){}
     // 함께 재생성한 step_12 는 stale 아님 — invalidateDownstream 의 false-stale 배지 제거(방법 브랜치 실행 시)
@@ -2029,7 +2029,9 @@ async function runUnifiedCohesionGen(opts){
     App.clearProgress('progressUnifiedGen');
     const after=_specIssueCounts();
     const soft=r.report.unusedRef.length?(' · 도면 미사용 부호 '+r.report.unusedRef.length+'개 자동 제외'):'';
-    const _refFixMsg=(_hasRP&&_refFixes)?(' · 부호 자동 정합 '+_refFixes+'건(확정 부호표 기준)'):'';   // ★ [배치17-3] 본문↔확정 부호표 결정론 교정 건수 노출
+    // ★ [배치18-2] 부호 자동 정합 건수 — 영역별(상세설명·도면·마무리) 내역 병기(전영역 enforce 반영).
+    const _refAreaMsg=(_refFixArea&&(_refFixArea.상세설명||_refFixArea.도면||_refFixArea.마무리))?('(상세설명 '+(_refFixArea.상세설명||0)+'·도면 '+(_refFixArea.도면||0)+'·마무리 '+(_refFixArea.마무리||0)+')'):'(확정 부호표 기준)';
+    const _refFixMsg=(_hasRP&&_refFixes)?(' · 부호 자동 정합 '+_refFixes+'건'+_refAreaMsg):'';
     // ★ [배치15I-2] 경고 커밋 품질 하한 — 상세설명이 목표 분량의 50% 미만이거나 부호표가 코드 폴백이면 "본문 불완전"을
     //   완료 요약·⑤ 배너에 강조(사용자가 불완전본을 최종본으로 오인 차단). docH: 5,934자/목표 22,000 → 강조 표시.
     const _descLen=(outputs.step_08||'').length;
@@ -2043,7 +2045,7 @@ async function runUnifiedCohesionGen(opts){
     if(_incMsg)App.showToast(_incMsg,'warning');   // ★ [배치15I-2] 불완전 강조(별도 토스트)
     if(hadMath&&!_mathInline)App.showToast('⚠️ 기존 수학식(Step 9)은 새 상세설명에 재삽입이 필요합니다 — 미리보기·다운로드에 수학식이 빠져 있습니다','warning');   // [배치9 D1] 인라인 모드에선 구 step_09를 이력 보존 후 제거했으므로 미해당
     // ★ [배치15G-3/15I-2] 재생성 결과 배너 — "조용히 안 바뀜" 해소 + 불완전 경고 가시화.
-    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:after.refnum, gateWarn:_gateWarn.slice(), autoCorr:_corr, refFixes:_refFixes, incomplete:_incomplete, incMsg:_incMsg}); }catch(_e){}
+    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:after.refnum, gateWarn:_gateWarn.slice(), autoCorr:_corr, refFixes:_refFixes, refFixArea:_refFixArea, incomplete:_incomplete, incMsg:_incMsg}); }catch(_e){}
     try{ if(typeof _renderRefPlanPanel==='function')_renderRefPlanPanel(); }catch(_e){}   // ★ [배치17-5] 재생성으로 refPlan 갱신됐을 수 있으니 확정 부호표 패널 재렌더
   }catch(e){ try{_lastGenError=(e&&e.message)||String(e);}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:false, cause:(e&&e.message||String(e))}); }catch(_e2){} }
   finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); }

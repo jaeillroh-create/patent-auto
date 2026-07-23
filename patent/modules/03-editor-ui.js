@@ -650,6 +650,12 @@ function onStepCompleted(sid){
   // 1. 해당 step의 stale-warning 배지 제거
   document.querySelectorAll(`.stale-warning[data-step="${sid}"]`).forEach(w=>w.remove());
   if(sid==='step_13'){ try{ if(typeof _updateRewriteWithReviewBtn==='function')_updateRewriteWithReviewBtn(); }catch(_e){} }   // ★ [배치15L-3] 진단 완료 → "반영해 다시 쓰기" 버튼 활성화
+  // ★ [배치18-4] 개별 스텝 재생성도 확정 부호표 정합 — 청구항(step_06/10) 재생성이면 refPlan 재배정(+패널 갱신),
+  //   본문 섹션 재생성이면 그 산출물에 enforce 적용(하드웨어 치환·번호 불일치 즉시 교정 → 개별 재생성도 부호 항상 확정표 준수).
+  try{
+    if((sid==='step_06'||sid==='step_10')&&typeof _ensureRefPlan==='function'){ _ensureRefPlan(true); if(typeof _renderRefPlanPanel==='function')_renderRefPlanPanel(); }
+    else if(typeof _enforceStepOutput==='function'){ const _n=_enforceStepOutput(sid); if(_n){ renderOutput(sid,outputs[sid]); App.showToast('부호 자동 정합 '+_n+'건(확정 부호표 기준)','info'); } }
+  }catch(_e){}
   // 2. cascade 패널 업데이트
   _updateCascadePanelItem(sid,'done');
   // 3. v10.2: 산출물 미리보기 자동 갱신 (디바운스 적용)
@@ -1625,6 +1631,23 @@ async function wfRewriteWithFixes(){
     try{renderWorkflowRail();renderWfValidationBar();_updateRewriteBtn();}catch(_e){}
   }catch(e){ try{_pendingFixTargets='';_pendingReviewNotes='';}catch(_e){} try{App.showToast('결함 반영 재작성 실패: '+(e&&e.message||e),'error');}catch(_e2){} }
 }
+// ★ [배치18-5] 검토 순서 자동화 — [진단]→[반영] 2단계를 단일 버튼으로 통합.
+//   내부 순서: ① 기계검증은 wfRewriteWithFixes 가 수집 → ② AI 진단(runDiagnosis, step_13) 먼저 실행 → ③ 진단(REVIEW_NOTES)+기계검증(FIX_TARGETS)을
+//   함께 주입해 재작성(최대 2회) → ④ 재검증·배너. 사용자는 버튼 하나만 누르면 되고 순서를 알 필요가 없다.
+async function wfDiagnoseAndRewrite(){
+  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
+  if(!(typeof outputs!=='undefined'&&outputs.step_06)){App.showToast('먼저 ③ 청구항·도면(골격)을 생성하세요','error');return;}
+  const btn=document.getElementById('btnWfRewriteFixes'); if(btn)btn.disabled=true;
+  try{
+    // ① AI 진단(step_13) — 문서 불변, 결과만 생성(타임아웃 시 16.1 축약 재시도 내장). 실패해도 기계검증 반영은 진행.
+    App.showToast('1/2 · 명세서 진단(AI) 실행 중...','info');
+    try{ if(typeof runDiagnosis==='function')await runDiagnosis(); }catch(_e){}
+    // ② 진단(REVIEW_NOTES)+기계검증(FIX_TARGETS) 동시 반영 재작성 — wfRewriteWithFixes 가 outputs.step_13 을 자동 주입.
+    App.showToast('2/2 · 진단·기계검증 결함 반영해 다시 쓰는 중...','info');
+    await wfRewriteWithFixes();
+  }catch(e){ try{App.showToast('진단·재작성 실패: '+(e&&e.message||e),'error');}catch(_e){} }
+  finally{ if(btn)btn.disabled=false; try{_updateRewriteBtn();}catch(_e){} }
+}
 // ★ [배치16-3] 통합 재작성 버튼 라벨/활성 — 골격(step_06) 있으면 활성, 반영 대상(기계검증·AI 진단) 카운트 표시.
 function _updateRewriteBtn(){
   try{
@@ -1632,8 +1655,8 @@ function _updateRewriteBtn(){
     const hasSkel=!!(typeof outputs!=='undefined'&&outputs.step_06);
     let mN=0; try{ if(outputs.step_08) mN=validateSpecification(buildSpecification()).length; }catch(_e){}
     const aN=(typeof outputs!=='undefined'&&outputs.step_13&&String(outputs.step_13).trim())?1:0;
-    if(b){ b.disabled=!hasSkel; b.title=hasSkel?'기계검증 결함·AI 진단을 반영해 상세설명·부호를 다시 씁니다(청구항·도면 유지)':'먼저 ③ 청구항·도면(골격)을 생성하세요'; }
-    if(lab)lab.textContent=hasSkel?((mN||aN)?('반영 대상: 기계검증 '+mN+'건'+(aN?(' + AI 진단 '+aN+'건'):'')):'반영할 기계검증 결함 없음 — 본문 재작성만'):'';
+    if(b){ b.disabled=!hasSkel; b.title=hasSkel?'AI 진단을 실행하고, 그 지적과 기계검증 결함을 함께 반영해 상세설명·부호를 다시 씁니다(청구항·도면 유지)':'먼저 ③ 청구항·도면(골격)을 생성하세요'; }
+    if(lab){ const _prev=aN?(' + 직전 진단 '+aN+'건'):''; lab.textContent=hasSkel?('진단(AI) 실행 후 반영 — 현재 기계검증 '+mN+'건'+_prev+' + 이번 진단 지적을 반영(진단은 버튼이 실행)'):''; }
   }catch(_e){}
 }
 // 하위호환 별칭(기존 훅/버튼 배선 유지)
@@ -1797,7 +1820,7 @@ function _renderCohesionBanner(info){
         +(_inc?('<b style="color:'+bd+'">'+App.escapeHtml(info.incMsg||'⚠ 본문이 불완전할 수 있습니다 — 분량을 낮추거나 ④ 재생성을 권장합니다')+'</b><br>'):'')
         +'<span style="color:var(--color-text-secondary)">'
         +(info.autoCorr?('부호표 자동 보강 '+info.autoCorr+'회 · '):'')
-        +(info.refFixes?('부호 자동 정합 '+info.refFixes+'건(확정 부호표) · '):'')
+        +(info.refFixes?('부호 자동 정합 '+info.refFixes+'건'+((info.refFixArea&&(info.refFixArea.상세설명||info.refFixArea.도면||info.refFixArea.마무리))?('(상세설명 '+(info.refFixArea.상세설명||0)+'·도면 '+(info.refFixArea.도면||0)+'·마무리 '+(info.refFixArea.마무리||0)+')'):'(확정 부호표)')+' · '):'')
         +'잔존 경고(HIGH+) '+hi+'건'+(warnN?(' · 게이트 미통과 '+warnN+'건: '+App.escapeHtml((info.gateWarn||[]).join(' · '))):'')+'</span>'
         +(warnN||hi||_inc?'<br><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="switchTab(4)"><span class="ico" data-icon="search"></span> ⑤ 완성본 검증에서 확인·보정</button>':'')
         +'</div>';

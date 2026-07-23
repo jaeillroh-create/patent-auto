@@ -488,6 +488,17 @@ const _FINAL_ONLY_CHECKS = new Set(['heading_missing','heading_order','refnum_co
 // ★ [배치 15K 보정] 일반 하드웨어 상용구(번호 점유 시 dupassign 힌트) — "~부"는 정당 구성요소로 제외.
 const _HW_BOILER_WORDS='프로세서|메모리|서버|데이터베이스|버스|인터페이스|씨피유|램|롬|CPU|RAM|ROM|GPU';   // ★ 단일 출처(배치17 _enforceRefPlan 이 canonical↔body 하드웨어 치환 교정에 재사용)
 const _HW_BOILER_RE=new RegExp('^('+_HW_BOILER_WORDS+')$');
+// ★ [배치18-2/3] 구성명사 정규화(단일 출처) — 청구항/본문의 "…를 실행하고 Y부"·"…하는 Y부"·"프로세서는 Y부"에서 선행 관형절·연결어미·
+//   하드웨어 주어 접두를 벗겨 최소 구성명사(Y부)만 남긴다. _assignRefNumbers(배정) 과 _enforceRefPlan(본문 정합)이 같은 규칙을 써야
+//   "실행하고 캐릭터부"(본문) 가 "캐릭터부"(refPlan) 와 매칭돼 정합된다(불일치 시 미정의로 남아 dupassign 파생 — docL 잔존 원인).
+const _MOD_STRIP_RE=/^.*(?:하는|되는|하고|하며|하여|하기\s*위한|위한|된|인|한|할|로부터|에\s*기초하여|에\s*따라|대응하여|응답하여)\s+(?=\S)/;   // 탐욕 매칭 → 마지막 어미까지 제거
+const _HW_PREFIX_STRIP_RE=new RegExp('^(?:'+_HW_BOILER_WORDS+')(?:은|는|이|가|을|를|와|과|에서)\\s+(?=\\S)');   // 하드웨어 주어 접두(조사 필수 — "메모리 저장부" 보존)
+function _normComponentName(s){
+  let n=(typeof _cleanRefName==='function')?_cleanRefName(s):String(s||'').trim();
+  n=n.replace(_HW_PREFIX_STRIP_RE,'');
+  const st=n.replace(_MOD_STRIP_RE,'');
+  return (st.length>=3)?st:n;   // 과절삭 방지(벗긴 결과가 너무 짧으면 원형 유지)
+}
 const FIXABLE_CHECKS = new Set(['paragraph_duplicate','sentence_duplicate','sentence_truncation','sentence_ending','unit_corruption','math_var_undefined','example_missing','refnum_consistency']);
 
 // [Part1] Step 13(AI 검토) 강화 — 결정론적 기계검증 결과를 검토 프롬프트에 주입한다.
@@ -514,13 +525,12 @@ function machineFindingsForReview(){
 function _assignRefNumbers(claimText, opts){
   opts=opts||{};
   const nameToNum=new Map(), numToName=new Map(), plan=[];
-  function add(name,num,level,parent){ if(!name||name.length<3||nameToNum.has(name)||numToName.has(num))return false; nameToNum.set(name,num); numToName.set(num,name); plan.push({num:num,name:name,level:level||1,parent:(parent==null?100:parent)}); return true; }
+  // ★ [배치18-3] 하드웨어 상용구(프로세서·메모리 등)는 refPlan 배정 대상에서 제외 — 이들은 구성부 부호를 점유하면 안 된다.
+  const _isHw=function(name){ try{ return (typeof _HW_BOILER_RE!=='undefined')&&_HW_BOILER_RE.test(String(name||'').replace(/\s+/g,'')); }catch(_e){ return false; } };
+  function add(name,num,level,parent){ if(!name||name.length<3||_isHw(name)||nameToNum.has(name)||numToName.has(num))return false; nameToNum.set(name,num); numToName.set(num,name); plan.push({num:num,name:name,level:level||1,parent:(parent==null?100:parent)}); return true; }
   const clean=(typeof _cleanRefName==='function')?_cleanRefName:(s=>String(s||'').trim());
-  // ★ 관형절 수식어 제거 — 청구항은 "X를 ~하는 Y부" 형태로, 부호표 명칭은 관형절(X를 ~하는)을 뺀 구성명사(Y부)다.
-  //   이를 벗기지 않으면 "데이터를 수신하는 수신부"·"수신부"가 서로 다른 명칭으로 갈려 동일 구성에 부호가 이중 배정된다.
-  //   (탐욕 매칭으로 마지막 관형형 어미까지 제거 → 최소 구성명사만 남김. 방법 단계명은 예외이므로 device 캡처에만 적용.)
-  const _MOD_RE=/^.*(?:하는|되는|하기\s*위한|위한|된|인|한|할|로부터|에\s*기초하여|에\s*따라|대응하여|응답하여)\s+(?=\S)/;
-  const devName=function(s){ let n=clean(s); const st=n.replace(_MOD_RE,''); return (st.length>=3)?st:n; };   // 벗긴 결과가 너무 짧으면 원형 유지(과절삭 방지)
+  // ★ [배치18-2/3] 구성명사 정규화는 모듈 공통 _normComponentName 사용(배정=본문정합 규칙 일치 — "실행하고 X부"·"프로세서는 X부" 접두 제거).
+  const devName=(typeof _normComponentName==='function')?_normComponentName:clean;
   const claims=String(claimText||'').split(/(?=【청구항\s*\d+】)/).filter(function(s){return /【청구항/.test(s);});
   const compRe=/([가-힣A-Za-z0-9·][가-힣A-Za-z0-9·\s]*?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터))(?=[은는이가을를와과의에로도만]?(?:\s|[,;.)및]|$))/g;
   const numRe=/([가-힣A-Za-z0-9·][가-힣A-Za-z0-9·\s]*?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터))\s*\((\d{2,4})\)/g;
@@ -564,8 +574,9 @@ function _enforceRefPlan(body, refPlan){
   // 명칭 캡처 = 구성부(~부/수단/…, 다단어) | 하드웨어 상용구(프로세서·메모리·…). 후자를 포함해야 canonical↔body 하드웨어 치환("프로세서(100)")을
   //   확정 부호표 명칭으로 되돌린다(배치17 핵심 결함군). 괄호가 문자클래스에 없어 "(번호)" 경계를 넘어 과포섭하지 않는다.
   const _NAME_ALT='[가-힣A-Za-z0-9·][가-힣A-Za-z0-9·\\s]*?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터)|'+((typeof _HW_BOILER_WORDS!=='undefined')?_HW_BOILER_WORDS:'프로세서|메모리|서버|버스|인터페이스');
+  const norm=(typeof _normComponentName==='function')?_normComponentName:clean;
   const out=String(body).replace(new RegExp('('+_NAME_ALT+')(\\s*)\\((\\d{2,4})\\)','g'), function(whole,rawName,sp,numStr){
-    const nm=clean(rawName), lead=rawName.slice(0, rawName.length-nm.length);   // 선행 문맥(조사·수식어)은 보존
+    const nm=norm(rawName), lead=rawName.slice(0, rawName.length-nm.length);   // ★ [배치18-2] 구성명사 정규화(관형절·연결어미·하드웨어 접두 제거)로 refPlan 명칭과 매칭. 선행 문맥은 lead 로 보존.
     const canon=numToName.get(numStr);
     if(canon){ if(nm!==canon){ fixes++; return lead+canon+sp+'('+numStr+')'; } return whole; }   // (a) 번호 기준 명칭 교정
     const wantNum=nameToNum.get(nm);
@@ -608,6 +619,39 @@ function _refPlanFromStep18(s18){
     plan.push({num:(num[0]==='S'?num:parseInt(num,10)), name:nm, level:1, parent:(num[0]==='S'?null:100)});
   });
   return plan;
+}
+// ★ [배치18-2] enforce 적용 범위 전면화 — 확정 부호표(refPlan) 정합을 완성 명세서 전 영역에 적용.
+//   배치17은 step_08/12(상세설명)만 정합했으나, buildSpecification·validateSpecification(dupassign/consistency)은
+//   도면 설명(step_07/11)·예시도(step_08c)·마무리(효과 step_16/해결수단 step_17/요약서 step_19)까지 스캔한다.
+//   미정합 섹션이 LLM 원부호(하드웨어 상용어·자기번호체계)를 보유해 부호 결함이 파생됐다(docL). 여기서 전 영역을 일괄 정합해
+//   dupassign 검사 범위 = enforce 범위를 일치시킨다(구조적 0). ※ 청구항(step_06/10)은 refPlan 의 기준이므로 제외(불변).
+//   ※ *_mermaid(렌더 다이어그램)는 제외 — enforce 는 산문 "명칭(번호)"만 대상, 노드 구문 훼손 방지.
+function _enforceAllOutputs(refPlan){
+  const byArea={상세설명:0, 도면:0, 마무리:0};
+  if(!refPlan||!refPlan.length||typeof _enforceRefPlan!=='function'||typeof outputs==='undefined')return {total:0, byArea:byArea, unknown:[]};
+  const AREA={ step_08:'상세설명', step08_device:'상세설명', step_08c:'상세설명', step_12:'상세설명', step_13_applied:'상세설명', step_13_applied_method:'상세설명', step_07:'도면', step_11:'도면', step_16:'마무리', step_17:'마무리', step_19:'마무리' };
+  const unknown=new Set(); let total=0;
+  Object.keys(AREA).forEach(function(k){
+    const v=outputs[k];
+    if(v && typeof v==='string'){
+      const r=_enforceRefPlan(v, refPlan);
+      if(r.fixes){ outputs[k]=r.text; byArea[AREA[k]]+=r.fixes; total+=r.fixes; try{ if(typeof markOutputTimestamp==='function')markOutputTimestamp(k); }catch(_e){} }
+      (r.unknown||[]).forEach(function(u){ unknown.add(u); });
+    }
+  });
+  return {total:total, byArea:byArea, unknown:[...unknown]};
+}
+// ★ [배치18-4] 개별 스텝 재생성 정합 — 통합 생성뿐 아니라 개별 스텝(runStep/runLongStep) 재생성 완료 시에도 확정 부호표를 따르게.
+//   ref 보유 본문 섹션만 대상(청구항 step_06/10 은 refPlan 기준이므로 제외, step_18 은 "명칭:번호" 포맷이라 대상 아님).
+function _enforceStepOutput(sid){
+  try{
+    if(typeof refPlan==='undefined'||!refPlan||!refPlan.length||typeof _enforceRefPlan!=='function'||typeof outputs==='undefined')return 0;
+    const REF_BEARING={step_07:1,step_08:1,step08_device:1,step_08c:1,step_11:1,step_12:1,step_16:1,step_17:1,step_19:1,step_13_applied:1,step_13_applied_method:1};
+    if(!REF_BEARING[sid]||!outputs[sid]||typeof outputs[sid]!=='string')return 0;
+    const r=_enforceRefPlan(outputs[sid], refPlan);
+    if(r.fixes){ outputs[sid]=r.text; try{ if(typeof markOutputTimestamp==='function')markOutputTimestamp(sid); }catch(_e){} }
+    return r.fixes;
+  }catch(_e){ return 0; }
 }
 // [Item 2] 완성본 기계검증 패널 렌더 — 산출물 탭(page4) 미리보기 진입 시 자동 실행. severity 색은 인라인(patent.css 무변경).
 // ★ [배치16-1] 기계검증 결함(validateSpecification issues)을 cohesion 재작성용 구조화 지시문(FIX_TARGETS)으로 변환.

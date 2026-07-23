@@ -97,9 +97,9 @@ test('16-2 ★ 동작 — FIX_TARGETS + REVIEW_NOTES 동시 주입', () => {
 // ─────────────── 3) 버튼 통폐합 ───────────────
 
 test('16-3 ★ HTML — ④ 통합 버튼 1개(btnWfRewriteFixes) + 반영 대상 라벨 + 진단 카드 별도', () => {
-  assert.match(HTML_SRC, /id="btnWfRewriteFixes" onclick="wfRewriteWithFixes\(\)"/, '★ 통합 재작성 버튼');
+  assert.match(HTML_SRC, /id="btnWfRewriteFixes" onclick="wfDiagnoseAndRewrite\(\)"/, '★ 통합 재작성 버튼(배치18-5: 진단+반영 단일 버튼)');
   assert.match(HTML_SRC, /id="wfRewriteTargetLabel"/, '★ 반영 대상 라벨');
-  assert.match(HTML_SRC, /명세서 진단 \(AI\) 실행/, '★ 진단은 별도 유지');
+  assert.match(HTML_SRC, /명세서 진단\(AI\)만 실행/, '★ 진단만 보조 버튼 유지');
   assert.ok(!/id="btnWfStage4"/.test(HTML_SRC) && !/id="btnRewriteWithReview"/.test(HTML_SRC), '★ 구 버튼 제거');
 });
 
@@ -109,7 +109,7 @@ test('16-3 ★ 동작 — _updateRewriteBtn 라벨: 기계검증 N건 + AI 진�
   run(`clearAllState(); selectedTitle="t"; outputs={ step_06:"【청구항 1】 제어부.", step_08:"제어부(100)가 수신부(200)로 보낸다. 제어부(100)가 처리한다.", step_18:"제어부 : 100", step_13:"[특허성] 진보성 미흡" };`);
   run('_updateRewriteBtn()');
   assert.strictEqual(els.btnWfRewriteFixes.disabled, false, '★ 골격 있으면 활성');
-  assert.match(els.wfRewriteTargetLabel.textContent, /기계검증 \d+건 \+ AI 진단 1건/, '★ 기계검증+AI 카운트');
+  assert.match(els.wfRewriteTargetLabel.textContent, /기계검증 \d+건[\s\S]*직전 진단 1건/, '★ 기계검증+직전 진단 카운트(진단은 버튼이 실행 — 배치18-5)');
 });
 
 // ─────────────── 4) 해소 검증 루프 ───────────────

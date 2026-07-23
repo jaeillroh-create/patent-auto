@@ -44,7 +44,7 @@ beforeEach(() => { Object.keys(els).forEach(k => delete els[k]); toasts = []; ru
 
 test('15L-1 ★ HTML — ④ 진단 카드 개명(명세서 진단 AI) + 문서 불변 + 중복 재생성 버튼 제거', () => {
   assert.match(HTML_SRC, /명세서 진단 \(AI\)/, '★ 카드 제목 개명');
-  assert.match(HTML_SRC, /명세서 진단 \(AI\) 실행/, '★ 진단 버튼');
+  assert.match(HTML_SRC, /명세서 진단\(AI\)만 실행/, '★ 진단만 보조 버튼(배치18-5)');
   assert.match(HTML_SRC, /id="wfDiagnoseCard"[\s\S]{0,600}문서는 변경되지 않습니다/, '★ 문서 불변 명시');
   // 진단 카드에서 "검토 반영 = ④ 본문 통합 재생성" 중복 재생성 버튼 제거(재작성 진입점 1개)
   assert.ok(!/검토 반영 = ④ 본문 통합 재생성/.test(HTML_SRC), '★ 중복 재생성 버튼 제거');
@@ -52,7 +52,7 @@ test('15L-1 ★ HTML — ④ 진단 카드 개명(명세서 진단 AI) + 문서 
 
 test('15L-1/16-3 ★ HTML — 재작성 진입점은 통합 버튼 1개(btnWfRewriteFixes), 구 버튼 제거', () => {
   const p3 = HTML_SRC.slice(HTML_SRC.indexOf('id="page3"'), HTML_SRC.indexOf('id="page4"'));
-  assert.equal((p3.match(/onclick="wfRewriteWithFixes\(\)"/g) || []).length, 1, '★ 통합 재작성 진입점 1개');
+  assert.equal((p3.match(/onclick="wfDiagnoseAndRewrite\(\)"/g) || []).length, 1, '★ 통합 재작성 진입점 1개(배치18-5: 진단+반영 단일 버튼)');
   assert.ok(!/id="btnWfStage4"/.test(p3) && !/id="btnRewriteWithReview"/.test(p3), '★ 구 버튼(본문만 재생성·반영해 다시쓰기) 제거');
 });
 
@@ -60,7 +60,7 @@ test('15L-1/16-3 ★ HTML — 재작성 진입점은 통합 버튼 1개(btnWfRew
 
 test('16-3 ★ HTML — 진단 결과는 왼쪽 통합 버튼이 자동 반영(별도 재작성 버튼 없음)', () => {
   assert.ok(!/id="btnRewriteWithReview"/.test(HTML_SRC), '★ 진단 결과 카드의 별도 재작성 버튼 제거');
-  assert.match(HTML_SRC, /결함 반영해 본문 다시 쓰기/, '★ 통합 버튼 라벨');
+  assert.match(HTML_SRC, /진단 후 결함 반영해 다시 쓰기/, '★ 통합 버튼 라벨(배치18-5)');
   assert.match(HTML_SRC, /버튼이 기계검증 결함과 함께 자동 반영/, '★ 안내: 통합 버튼이 진단+기계검증 반영');
 });
 
@@ -72,7 +72,7 @@ test('16-3 ★ 동작 — _updateRewriteBtn: 골격(step_06) 있으면 활성 + 
   run('outputs.step_06="【청구항 1】 제어부.";');
   run('_updateRewriteBtn()');
   assert.strictEqual(els.btnWfRewriteFixes.disabled, false, '★ 골격 있으면 활성');
-  assert.match(els.wfRewriteTargetLabel.textContent, /반영 대상|반영할 기계검증 결함 없음/, '★ 반영 대상 라벨');
+  assert.match(els.wfRewriteTargetLabel.textContent, /진단\(AI\) 실행 후 반영/, '★ 반영 대상 라벨(진단은 버튼이 실행 — 배치18-5)');
 });
 
 test('15L-2 ★ 동작 — _pendingReviewNotes 있으면 cohesion 프롬프트에 REVIEW_NOTES 주입', () => {
