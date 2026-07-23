@@ -1760,6 +1760,7 @@ function _wfHardReset(){   // [배치12 A] 프로젝트 전환/신규 시 워크
   try{ _methodUserSet=false; }catch(_e){}       // 수동 방법 오버라이드 해제(신규 프로젝트 자동 동기 재개)
   try{ _methodMismatchAck=false; }catch(_e){}    // 명칭-방법 모순 확인 리셋(08)
   try{ const cb=document.getElementById('dbCompletionBanner'); if(cb){cb.style.display='none';cb.innerHTML='';} }catch(_e){}   // [배치15A-3] 완료/중단 배너 잔상 제거
+  try{ const cb2=document.getElementById('cohesionBanner'); if(cb2){cb2.style.display='none';cb2.innerHTML='';} }catch(_e){}   // ★ [검증 반영·배치15G-3] ④ 재생성 배너 프로젝트 전환 시 잔상 제거(dbCompletionBanner와 동형)
   try{ for(let i=0;i<5;i++){ const b=document.getElementById('wfBadge'+i); if(b)b.textContent=''; } }catch(_e){}   // 레일 배지 DOM 즉시 blank(렌더 실패해도 잔상 0)
   try{ const bar=document.getElementById('wfValidationBar'); if(bar)bar.style.display='none'; }catch(_e){}
   try{ if(typeof renderWorkflowRail==='function')renderWorkflowRail(); }catch(_e){}

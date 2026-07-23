@@ -114,3 +114,14 @@ test('★ 4 — term_generation_mismatch: 출처 섹션 → 재생성 진입점 
   assert.ok(iss.length >= 1, '★ 구세대 용어 검출');
   assert.ok(iss.some(i => /④ 본문 통합 재생성에서 재생성 필요/.test(i.message)), '★ 출처(부호의 설명·본문) → ④ 재생성 진입점 명시');
 });
+
+// 검증 반영 FIX — 배너 프로젝트 전환 잔상 제거
+test('★ FIX — _wfHardReset이 cohesionBanner 잔상 제거(프로젝트 전환 크로스 오염 방지)', () => {
+  els.cohesionBanner = mkEl();
+  run('_renderCohesionBanner({ok:true, refnum:0, gateWarn:[], autoCorr:1});');
+  assert.equal(els.cohesionBanner.style.display, 'block', '★ 배너 표시됨(프로젝트 A)');
+  run('_wfHardReset();');
+  assert.equal(els.cohesionBanner.style.display, 'none', '★ 프로젝트 전환 시 숨김');
+  assert.equal(els.cohesionBanner.innerHTML, '', '★ 내용 제거(구프로젝트 카운트 잔상 없음)');
+  assert.match(PATENT_SRC, /const cb2=document\.getElementById\('cohesionBanner'\); if\(cb2\)\{cb2\.style\.display='none';cb2\.innerHTML='';\}/, '★ _wfHardReset 배너 정리');
+});
