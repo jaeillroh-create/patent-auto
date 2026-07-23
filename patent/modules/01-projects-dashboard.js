@@ -27,6 +27,7 @@ function clearAllState(){
   const b01=document.getElementById('btnStep01');if(b01)b01.disabled=true;
   genParams=null;   // [배치12 C] 적용값 스냅샷 초기화
   refPlan=null;   // ★ [배치17-1] 확정 부호표 초기화(프로젝트 전환 시 상태 누출 차단)
+  runLog=[];   // ★ [배치19b-5] 실행 로그 초기화
   try{ if(typeof _wfHardReset==='function')_wfHardReset(); }catch(_e){}   // [배치12 A] 워크플로우 플래그·레일 배지·검증바·수동 오버라이드 완전 초기화(상태 누출 차단)
   updateStats();
 }
@@ -258,6 +259,7 @@ async function openProject(pid){
   { const _ud=document.getElementById('selUnifiedDetail'); if(_ud&&['compact','standard','detailed','maximal'].includes(detailLevel))_ud.value=detailLevel; }   // [배치6 N3a] 통합 카드 분량 표시 동기화
   genParams=(s.genParams&&typeof s.genParams==='object')?s.genParams:null;   // [배치12 C] 적용값 스냅샷 복원(레일·이 배치8 훅은 openProject 말미로 이동 — 전체 상태 복원 후 1회 렌더)
   refPlan=(Array.isArray(s.refPlan)&&s.refPlan.length)?s.refPlan:null;   // ★ [배치17-1] 확정 부호표 복원. 없으면 null → 최초 진입 시 _ensureRefPlan 가 청구항/기존 부호표에서 역산.
+  runLog=Array.isArray(s.runLog)?s.runLog:[];   // ★ [배치19b-5] 실행 로그 복원
   diagramData=s.diagramData||{};
   outputTimestamps=s.outputTimestamps||{};
   stepUserCommands=s.stepUserCommands||{};
@@ -350,5 +352,5 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,costTracking:_costTracking,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,deviceIndepCount,mathBlockCount,conceptTargetCount,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,chatHistory,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes,termSnapshot,genParams,refPlan};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,costTracking:_costTracking,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,deviceIndepCount,mathBlockCount,conceptTargetCount,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,chatHistory,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes,termSnapshot,genParams,refPlan,runLog};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 

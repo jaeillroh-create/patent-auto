@@ -119,6 +119,6 @@ test('★ C 소스 — 스냅샷 배선(wfRunStage3 stage3 / cohesion stage4 / �
   assert.match(PATENT_SRC, /_snapshotGenParams\('stage3'\);   \/\/ \[배치12 C\] 골격 생성 시점/, '★ ③ 스냅샷');
   assert.match(PATENT_SRC, /_snapshotGenParams\('stage4'\); \}catch\(_e\)\{\}   \/\/ \[배치12 C\] 본문 생성 시점/, '★ ④ 스냅샷(cohesion)');
   assert.match(PATENT_SRC, /_snapshotGenParams\('stage3'\); \}catch\(_e\)\{\}   \/\/ \[배치12 C\] 체인 골격/, '★ 체인 스냅샷');
-  assert.match(PATENT_SRC, /termSnapshot,genParams,refPlan\}/, '★ saveProject 영속');   // ★ [배치17-1] refPlan(확정 부호표) 영속 추가
+  assert.match(PATENT_SRC, /termSnapshot,genParams,refPlan,runLog\}/, '★ saveProject 영속');   // ★ [배치17-1] refPlan(확정 부호표) 영속 추가
   assert.match(PATENT_SRC, /genParams=\(s\.genParams&&typeof s\.genParams==='object'\)\?s\.genParams:null/, '★ openProject 복원');
 });

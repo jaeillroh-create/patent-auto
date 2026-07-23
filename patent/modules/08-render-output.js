@@ -342,6 +342,7 @@ function validateSpecification(specText){
       let full=raw; const pre=_bodyRN.slice(Math.max(0,_rm2.index-40),_rm2.index).split(/\s+/);
       for(let k=pre.length-1,cnt=0;k>=0&&cnt<4;k--){ const w=pre[k]; if(!w)continue;
         if(_STOP.test(w)||/^(상기|그|본|해당|각)$/.test(w)||!/^[가-힣A-Za-z·]+$/.test(w))break;   // 표제·구두점·조사 어절에서 정지
+        if(/[가이]$/.test(w)&&w.length>=3)break;   // ★ [배치19b-2] 명사+주격조사(가/이, 3자↑=명사≥2) 앞 어절 과다흡수 차단("파라미터가 라우팅부"→라우팅부). 2자 내용어(추가·자가·차이)는 보존.
         full=w+full; cnt++; }
       _pairs.push({raw, ref, full:(_canonMap.get(ref)||full.replace(/^상기/,''))});
     }
@@ -437,7 +438,15 @@ function validateSpecification(specText){
             // ★ [배치15G-4] 섹션 → 재생성 진입점 매핑 — "어디를 고쳐야 할지" 명시(자동 치환 금지 검사이므로 사용자에게 위치 안내).
             const _SEC_REGEN={'발명을 실시하기 위한 구체적인 내용':'④ 본문 통합 재생성','부호의 설명':'④ 본문 통합 재생성','요약서':'④ 본문 통합 재생성','발명의 효과':'④ 본문 통합 재생성','과제의 해결 수단':'④ 본문 통합 재생성','해결하고자 하는 과제':'④ 본문 통합 재생성','도면의 간단한 설명':'③ 도면만 재생성','청구범위':'③ 청구항만 재생성','기술분야':'① 기초(고급 일괄) 재생성','발명의 배경이 되는 기술':'① 기초(고급 일괄) 재생성','선행기술문헌':'① 기초(고급 일괄) 재생성'};
             const _regenHint=_SEC_REGEN[_sec]||'해당 섹션 재생성';
-            iss.push({severity:'HIGH',check:'term_generation_mismatch',message:`구세대 용어 "${term}"이 완성본에 잔존(섹션: ${_sec}) — ${_regenHint}에서 재생성 필요`,detail:`명칭 확정 후 재생성되지 않은 구세대 산출물 혼입 의심(§42④ 명확성 위험) — 자동 치환 금지. 출처 섹션 「${_sec}」 → ${_regenHint}으로 해소하세요.`});
+            // ★ [배치19b-4] 무한 재생성 안내 제거 — 재생성으로 해소되지 않을 수 있으므로 ⓐ재생성/ⓑ수동수정 병기.
+            //   이미 2회 이상 재작성했는데도 잔존하면(runLog 이력) "재생성으로 해소 안 됨 — 수동 수정 권장"으로 자동 승격.
+            const _rwCount=(typeof _rewriteRunCount==='function')?_rewriteRunCount():0;
+            const _esc=_rwCount>=2;
+            const _msg=_esc
+              ? `구세대 용어 "${term}"이 ${_rwCount}회 재생성 후에도 잔존(섹션: ${_sec}) — 재생성으로 해소되지 않는 항목: 수동 수정 권장`
+              : `구세대 용어 "${term}"이 완성본에 잔존(섹션: ${_sec}) — ⓐ ${_regenHint} 또는 ⓑ 수동 수정`;
+            const _det=`구세대 용어입니다(§42④ 명확성 위험, 자동 치환 금지). ⓐ 출처 섹션 「${_sec}」을 ${_regenHint}으로 재생성하거나, ⓑ 용어가 발명 내용에 고착된 경우 수동 수정이 필요합니다(재생성으로 반복 실패 시 ⓑ).${_esc?` ★ 이미 ${_rwCount}회 재생성했으나 잔존 — 수동 수정을 권장합니다.`:''}`;
+            iss.push({severity:'HIGH',check:'term_generation_mismatch',message:_msg,detail:_det});
           }
           if(_mm.index===_re.lastIndex)_re.lastIndex++;   // zero-width 방어
         }
@@ -767,6 +776,18 @@ function _dedupAdjacentParas(text, win){
   for(let i=0;i<paras.length;i++){ if(!keys[i]||!keep[i])continue; const end=Math.min(paras.length-1,i+win);
     for(let j=i+1;j<=end;j++){ if(keep[j]&&keys[j]===keys[i]){ keep[j]=false; removed++; } } }
   return {text:paras.filter(function(_,i){return keep[i];}).join('\n\n'), removed:removed};
+}
+// ★ [배치19b-1] 방법 OFF 시 방법 도면 전용 문단(순서도·흐름도·"방법을 나타내는"·"~단계를 나타내는") 결정론 제거.
+//   방법 청구항·상세설명은 이미 제외되나 도면 소개문("도 7은 …순서도이다")이 상세설명·도면 설명에 이전 세대 잔여로 남던 §42④ 소지 차단.
+function _stripMethodFigParas(text){
+  if(!text)return {text:text, removed:0};
+  const paras=String(text).split(/\n{2,}/); let removed=0;
+  const kept=paras.filter(function(p){
+    const head=p.trim().slice(0,140);
+    if(/^도\s*\d+\s*[은는][\s\S]{0,90}(?:순서도|흐름도|플로우\s*차트|방법을\s*나타내|하는\s*단계를\s*나타내|처리\s*흐름을\s*나타내|프로세스를\s*나타내)/.test(head)){ removed++; return false; }
+    return true;
+  });
+  return {text:kept.join('\n\n'), removed:removed};
 }
 // ★ [배치19-4b] 미완/유출 센티넬 마커 결정론 제거 — 완전형(<<<X>>>)뿐 아니라 닫힘 없는 미완형(<<<X, X>>>)·바 END_ 토큰까지 정리.
 //   docM: 절단으로 "<<<END_DEVICE_DESC"(닫는 >>> 없음)가 문장 중간 유출 → placeholder_residue(CRITICAL). 형식 토큰이라 삭제 안전(CHK-0가 잡기 전 코드 정리).

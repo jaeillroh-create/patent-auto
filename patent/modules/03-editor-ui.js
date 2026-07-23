@@ -1,5 +1,5 @@
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
-function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===2&&typeof _renderRefPlanPanel==='function')_renderRefPlanPanel();if(i===3)renderScopeVerificationSection();if(i===3&&typeof _updateRewriteWithReviewBtn==='function')_updateRewriteWithReviewBtn();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===1&&typeof renderDesignBoard==='function')renderDesignBoard();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();if(typeof _renderFlowBars==='function')_renderFlowBars();}catch(_e){}}   // [배치8/12/15D] 레일·검증바·② 설계 보드·전체 흐름 안내 갱신 + ⑤ 진입 경고
+function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===2&&typeof _renderRefPlanPanel==='function')_renderRefPlanPanel();if((i===2||i===4)&&typeof _renderRunLog==='function')_renderRunLog();if(i===3)renderScopeVerificationSection();if(i===3&&typeof _updateRewriteWithReviewBtn==='function')_updateRewriteWithReviewBtn();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===1&&typeof renderDesignBoard==='function')renderDesignBoard();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();if(typeof _renderFlowBars==='function')_renderFlowBars();}catch(_e){}}   // [배치8/12/15D] 레일·검증바·② 설계 보드·전체 흐름 안내 갱신 + ⑤ 진입 경고
 // [배치15D-4] 전체 흐름 안내(각 탭 상단 1줄) — 현재 단계 강조. 정적 컨테이너(.wf-flowbar[data-flowstep])를 채운다.
 function _renderFlowBars(){
   try{
@@ -1398,25 +1398,29 @@ function figParticle(n){
 // ★ [§6-5] 목적어 조사 을/를 — 라벨 마지막 글자의 받침 유무. 받침 있으면 '을', 없으면(모음 종성) '를'.
 //   기존 `${label}을` 하드코딩(모음 라벨 "사용자 시나리오"→"시나리오을" 오류)을 이 헬퍼로 교체.
 function josaEulReul(word){ const s=String(word||''); if(!s)return '을'; const c=s.charCodeAt(s.length-1); if(c<0xAC00||c>0xD7A3)return '을'; return ((c-0xAC00)%28>0)?'을':'를'; }
+// ★ [배치19b-1] 방법 OFF 시 방법 도면 설명(순서도·흐름도·"방법을 나타내는"·"~단계를 나타내는")은 도면의 간단한 설명에서 제외.
+//   방법 청구항·상세설명은 이미 제외되나 도면 설명만 이전 세대 잔여로 남던 §42④ 소지 차단.
+function _isMethodFigBrief(line){ return /순서도|흐름도|플로우\s*차트|방법을\s*나타내|방법\s*흐름|하는\s*단계를\s*나타내|처리\s*흐름을\s*나타내|프로세스를\s*나타내/.test(String(line||'')); }
 function extractBriefDescriptions(s07,s11){
   const d=[],seen=new Set();
+  const _mOff=(typeof _renderMethodOn==='function')?!_renderMethodOn():!(typeof includeMethodClaims!=='undefined'&&includeMethodClaims);
   // v10.2: 0. Step 8 상세설명에서 도면 소개문 우선 추출
   const latestDesc=getLatestDescription();
   if(latestDesc){
     latestDesc.split('\n').forEach(l=>{
       // "도 N은 ~블록도이다." 또는 "도 N은 ~예시도이다. 도 N을 참조하면,~" (같은 줄)
       const m=l.trim().match(/^(도\s*(\d+)\s*[은는]\s+.+?(?:블록도|예시도|구성도|개념도|순서도|흐름도|도면)[^.]*이다\.)/);
-      if(m&&!seen.has(m[2])){seen.add(m[2]);d.push(m[1]);}
+      if(m&&!seen.has(m[2])){ if(_mOff&&_isMethodFigBrief(m[1]))return; seen.add(m[2]);d.push(m[1]);}   // ★ [배치19b-1] 방법 OFF → 방법 도면 설명 제외
     });
   }
   // 1. AI 출력에서 간단한 설명 추출 (Step 8에서 이미 추출된 것은 건너뜀)
   [s07,s11].forEach(t=>{if(!t)return;const i=t.indexOf('---BRIEF_DESCRIPTIONS---');
     if(i>=0){
       // 마커 이후: 도 N으로 시작하는 줄 추출
-      t.slice(i+24).trim().split('\n').filter(l=>/^도\s*\d+\s*[은는]\s/.test(l.trim())).forEach(l=>{const m=l.trim().match(/^도\s*(\d+)/);if(m&&!seen.has(m[1])){seen.add(m[1]);d.push(l.trim());}});
+      t.slice(i+24).trim().split('\n').filter(l=>/^도\s*\d+\s*[은는]\s/.test(l.trim())).forEach(l=>{const m=l.trim().match(/^도\s*(\d+)/);if(m&&!seen.has(m[1])){if(_mOff&&_isMethodFigBrief(l))return;seen.add(m[1]);d.push(l.trim());}});
     }else{
       // 마커 없을 때: "도 N은/는 ~이다." 형식만 추출 (파트1 디자인 줄 제외)
-      t.split('\n').filter(l=>/^도\s*\d+\s*[은는]\s/.test(l.trim())&&/이다\.\s*$/.test(l.trim())).forEach(l=>{const m=l.trim().match(/^도\s*(\d+)/);if(m&&!seen.has(m[1])){seen.add(m[1]);d.push(l.trim());}});
+      t.split('\n').filter(l=>/^도\s*\d+\s*[은는]\s/.test(l.trim())&&/이다\.\s*$/.test(l.trim())).forEach(l=>{const m=l.trim().match(/^도\s*(\d+)/);if(m&&!seen.has(m[1])){if(_mOff&&_isMethodFigBrief(l))return;seen.add(m[1]);d.push(l.trim());}});
     }
   });
   // 1b. v10.0: 사용자 도면 간단한 설명 추가
@@ -1664,6 +1668,31 @@ function _wfProgressRender(){
   }catch(_e){}
 }
 function _wfProgressClose(){ try{ const ov=document.getElementById('wfRewriteOverlay'); if(ov)ov.style.display='none'; if(_wfProgTimer){clearInterval(_wfProgTimer);_wfProgTimer=null;} }catch(_e){} }
+// ★ [배치19b-5] 실행 로그 — 재작성·진단·통합생성 이력 누적(성공/실패 사유). ④⑤ 접이식 패널 표시 + 재생성 반복 판정(item4 승격).
+function _pushRunLog(action, ok, detail){
+  try{
+    if(typeof runLog==='undefined'||!Array.isArray(runLog))return;
+    let t=''; try{ const d=new Date(); const p=n=>String(n).padStart(2,'0'); t=p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }catch(_e){}
+    runLog.push({t:t, action:String(action||''), ok:(ok!==false), detail:String(detail||'').slice(0,200)});
+    if(runLog.length>60)runLog=runLog.slice(-60);
+    try{ if(typeof saveProject==='function')saveProject(true); }catch(_e){}
+    _renderRunLog();
+  }catch(_e){}
+}
+function _rewriteRunCount(){ try{ return (runLog||[]).filter(function(e){ return e&&e.ok&&/재작성|본문 통합 생성|다시 쓰기/.test(e.action); }).length; }catch(_e){ return 0; } }
+function _renderRunLog(){
+  try{
+    if(typeof document==='undefined')return;
+    ['runLogPanel4','runLogPanel5'].forEach(function(id){
+      const host=document.getElementById(id); if(!host)return;
+      const rows=(typeof runLog!=='undefined'?runLog:[]).slice(-15).reverse();
+      if(!rows.length){ host.innerHTML=''; host.style.display='none'; return; }
+      host.style.display='block';
+      host.innerHTML='<details style="margin-top:8px;font-size:12px"><summary style="cursor:pointer;color:var(--color-text-secondary);font-weight:600">실행 로그 ('+runLog.length+'건)</summary>'
+        +'<div style="margin-top:6px;max-height:200px;overflow:auto">'+rows.map(function(e){ const col=e.ok?'var(--color-success,#3DAE7A)':'var(--color-error,#D94A4A)'; return '<div style="padding:3px 0;border-bottom:1px solid var(--color-border,#eee)"><span style="color:var(--color-text-tertiary)">'+App.escapeHtml(e.t||'')+'</span> <span style="color:'+col+'">'+(e.ok?'✓':'✗')+'</span> '+App.escapeHtml(e.action||'')+(e.detail?('<br><span style="font-size:11px;color:var(--color-text-tertiary)">'+App.escapeHtml(e.detail)+'</span>'):'')+'</div>'; }).join('')+'</div></details>';
+    });
+  }catch(_e){}
+}
 async function wfRewriteWithFixes(opts){
   const _own=_acquireRewriteLock(opts);
   if(_own===null){ App.showToast('이미 처리 중입니다 — 완료 후 다시 시도하세요','info'); return; }

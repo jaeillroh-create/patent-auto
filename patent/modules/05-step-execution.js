@@ -2032,6 +2032,8 @@ async function runUnifiedCohesionGen(opts){
       ['step_08','step_08c','step_12','step_16','step_17','step_19'].forEach(function(k){
         if(!outputs[k]||typeof outputs[k]!=='string')return;
         if(typeof _stripStrayMarkers==='function'){ const _m=_stripStrayMarkers(outputs[k]); if(_m.removed){ outputs[k]=_m.text; _mkRemoved+=_m.removed; try{markOutputTimestamp(k);}catch(_e){} } }
+        // ★ [배치19b-1] 방법 OFF면 상세설명·도면 소개문에서 방법 도면 전용 문단 제거(도면 설명 방법 도면 0)
+        if(!_wantMethod && typeof _stripMethodFigParas==='function'){ const _mf=_stripMethodFigParas(outputs[k]); if(_mf.removed){ outputs[k]=_mf.text; _dupRemoved+=0; try{markOutputTimestamp(k);}catch(_e){} } }
         if((k==='step_08'||k==='step_12')&&typeof _dedupAdjacentParas==='function'){ const _d=_dedupAdjacentParas(outputs[k],5); if(_d.removed){ outputs[k]=_d.text; _dupRemoved+=_d.removed; try{markOutputTimestamp(k);}catch(_e){} } }
       });
       if(_mkRemoved||_dupRemoved)console.log('[unified] 커밋 전 정리 — 미완 마커 '+_mkRemoved+'개 · 근접 중복 문단 '+_dupRemoved+'개 제거');
@@ -2071,7 +2073,8 @@ async function runUnifiedCohesionGen(opts){
     // ★ [배치15G-3/15I-2] 재생성 결과 배너 — "조용히 안 바뀜" 해소 + 불완전 경고 가시화.
     try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:after.refnum, gateWarn:_gateWarn.slice(), autoCorr:_corr, refFixes:_refFixes, refFixArea:_refFixArea, dupRemoved:_dupRemoved, mkRemoved:_mkRemoved, incomplete:_incomplete, incMsg:_incMsg}); }catch(_e){}
     try{ if(typeof _renderRefPlanPanel==='function')_renderRefPlanPanel(); }catch(_e){}   // ★ [배치17-5] 재생성으로 refPlan 갱신됐을 수 있으니 확정 부호표 패널 재렌더
-  }catch(e){ try{_lastGenError=(e&&e.message)||String(e);}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:false, cause:(e&&e.message||String(e))}); }catch(_e2){} }
+    try{ if(typeof _pushRunLog==='function')_pushRunLog('본문 통합 생성', true, '부호정합 '+_refFixes+'건·정리(마커 '+_mkRemoved+'·중복 '+_dupRemoved+')'+(_gateWarn.length?(' · 게이트경고 '+_gateWarn.length):'')+(_incomplete?' · 불완전':'')); }catch(_e){}   // ★ [배치19b-5]
+  }catch(e){ try{_lastGenError=(e&&e.message)||String(e);}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:false, cause:(e&&e.message||String(e))}); }catch(_e2){} try{ if(typeof _pushRunLog==='function')_pushRunLog('본문 통합 생성', false, (e&&e.message||String(e))); }catch(_e3){} }
   finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); _rwRel(); }
 }
 

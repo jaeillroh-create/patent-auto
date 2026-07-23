@@ -1344,6 +1344,8 @@
           <p id="wfRewriteTargetLabel" style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px"></p>
           <!-- [배치15G-3] 재생성 결과 배너 — "눌렀는데 안 바뀜"으로 보이던 문제 해소(부호표 갱신·잔존 경고·해소/잔존 카운트) -->
           <div id="cohesionBanner" style="display:none;margin-top:10px"></div>
+          <!-- [배치19b-5] 실행 로그(접이식) — 재작성·진단·통합생성 이력·실패 사유 -->
+          <div id="runLogPanel4" style="display:none"></div>
         </div>
         <!-- [배치18-5] 보조 버튼 — 재작성 없이 진단만 보고 싶을 때. 재작성까지 하려면 위 ④ '진단 후 결함 반영해 다시 쓰기' 단일 버튼을 사용. -->
         <div class="card" id="wfDiagnoseCard">
@@ -1460,6 +1462,8 @@
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="shield"></span> 완성본 기계검증</div></div>
           <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">표제·종결어미·단위·도면부호·문단중복·문장절단·수학식 변수정의를 자동 점검합니다(미리보기 진입 시 갱신).</p>
           <div id="specValidateResult" class="result-area"></div>
+          <!-- [배치19b-5] 실행 로그(접이식) — ⑤에서도 이력 확인 -->
+          <div id="runLogPanel5" style="display:none"></div>
         </div>
         <div class="result-card" id="resultCardPreview">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="eye"></span> 미리보기</div></div>
@@ -1558,12 +1562,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260723a"></script>
-<script src="patent/patent.js?v=20260722-b62"></script>
+<script src="patent/patent.js?v=20260722-b63"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260722-b62"></script>
+<script src="opinion/opinion.js?v=20260722-b63"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260722-b62';
+  var _cv='?v=20260722-b63';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1661,8 +1665,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260722-b62"></script>
-<script src="docket.js?v=20260722-b62"></script>
+<script src="division/division.js?v=20260722-b63"></script>
+<script src="docket.js?v=20260722-b63"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>

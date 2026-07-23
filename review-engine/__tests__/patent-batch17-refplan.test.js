@@ -186,7 +186,7 @@ test('17-2 ★ 동작 — 프롬프트에 [확정 부호표] 주입(REFTABLE 출
 
 test('17-1 ★ 소스 — refPlan 상태·영속·초기화 배선', () => {
   assert.match(PATENT_SRC, /let refPlan=null;\s*\/\/ ★ \[배치17\]/, '★ 전역 상태');
-  assert.match(PATENT_SRC, /termSnapshot,genParams,refPlan\}/, '★ saveProject 영속');
+  assert.match(PATENT_SRC, /termSnapshot,genParams,refPlan,runLog\}/, '★ saveProject 영속');
   assert.match(PATENT_SRC, /refPlan=\(Array\.isArray\(s\.refPlan\)&&s\.refPlan\.length\)\?s\.refPlan:null;/, '★ openProject 복원');
   assert.match(PATENT_SRC, /refPlan=null;\s*\/\/ ★ \[배치17-1\] 확정 부호표 초기화/, '★ clearAllState 초기화');
 });

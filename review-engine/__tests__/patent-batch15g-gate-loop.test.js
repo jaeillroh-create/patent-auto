@@ -114,7 +114,7 @@ test('★ 4 — term_generation_mismatch: 출처 섹션 → 재생성 진입점 
   const spec = '【부호의 설명】\n구세대명칭부 : 110\n【발명을 실시하기 위한 구체적인 내용】\n구세대명칭부(110)는 처리한다.';
   const iss = JSON.parse(run('JSON.stringify(validateSpecification(' + JSON.stringify(spec) + ').filter(function(i){return i.check==="term_generation_mismatch";}))'));
   assert.ok(iss.length >= 1, '★ 구세대 용어 검출');
-  assert.ok(iss.some(i => /④ 본문 통합 재생성에서 재생성 필요/.test(i.message)), '★ 출처(부호의 설명·본문) → ④ 재생성 진입점 명시');
+  assert.ok(iss.some(i => /④ 본문 통합 재생성/.test(i.message) && /ⓐ|수동 수정/.test(i.message)), '★ 출처 → ④ 재생성 진입점 명시 + ⓐ재생성/ⓑ수동수정(배치19b-4)');
 });
 
 // 검증 반영 FIX — 배너 프로젝트 전환 잔상 제거

@@ -157,7 +157,7 @@ test('★ 소스 — termSnapshot 상태·훅·영속 배선', () => {
   assert.match(PATENT_SRC, /function _onTitleChanged\(/, '★ 명칭 변경 훅');
   assert.match(PATENT_SRC, /function _onComponentsChanged\(/, '★ 구성 변경 훅');
   assert.match(PATENT_SRC, /check:'term_generation_mismatch'/, '★ CHK-13');
-  assert.match(PATENT_SRC, /chatHistory,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes,termSnapshot,genParams,refPlan\}/, '★ saveProject 영속');   // ★ [배치17-1] refPlan 영속 추가
+  assert.match(PATENT_SRC, /chatHistory,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes,termSnapshot,genParams,refPlan,runLog\}/, '★ saveProject 영속');   // ★ [배치19b-5] runLog 영속 추가
   assert.match(PATENT_SRC, /termSnapshot=\(s\.termSnapshot/, '★ openProject 복원');
   assert.match(PATENT_SRC, /_onTitleChanged\(selectedTitle, kr\)/, '★ selectTitle 훅(03:385)');
   assert.match(PATENT_SRC, /_onTitleChanged\(prev, v\)/, '★ onTitleInput 훅(03:406)');

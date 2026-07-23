@@ -34,6 +34,7 @@ let _pendingFixTargets='';    // ★ [배치16-1] 기계검증 결함 → cohesi
 let _step13Compact=false;     // ★ [배치16.1-3] AI 진단(step_13) 축약 모드 — 대형 문서 타임아웃 시 입력 축소 재시도.
 let refPlan=null;             // ★ [배치17] 확정 부호표(코드 결정론 배정): [{num,name,level,parent}]. 청구항 확정 시 갱신, cohesion 고정 입력.
 let _rewriteLock=false;       // ★ [배치19-1] 재작성/진단/통합생성 계열 단일 실행 락 — 최외곽 진입만 획득, 내부 연쇄는 {_locked:true}로 통과. 중복 클릭 물리 차단.
+let runLog=[];                // ★ [배치19b-5] 실행 로그 이력: [{t,action,ok,detail}]. ④⑤ 접이식 패널 표시 + 재생성 반복 판정(term_mismatch 무한 재생성 승격).
 let usage={calls:0,inputTokens:0,outputTokens:0,cost:0},loadingState={};
 let detailLevel='standard';
 let customDetailChars=2000;
@@ -338,9 +339,15 @@ function reflectConceptsToSpec(){
     let s18=String(outputs.step_18);
     const have=new Set((s18.match(/\d{2,4}/g)||[]));                   // 기존 기재 번호
     const add=[];
+    // ★ [배치19b-3] 예시도 상세설명(step_08c)이 존재하면, 그 안에서 실제 사용되는 예시도 부호만 부호표에 등재(미사용 501~507 등 진성 제외).
+    //   step_08c 미생성 시엔 사용 여부를 판단할 근거가 없으므로 종전대로 전량 등재(폴백·기존 사건 호환).
+    const _cbody=String((outputs.step_08c||'')+'\n'+(outputs.step_08||''));
+    const _checkUse=!!(outputs.step_08c&&String(outputs.step_08c).trim());
     gen.forEach(g=>_conceptRefPairsRaw(g.ct).forEach(p=>{
       if(!p.name) return;                              // ★ [배치15F-4] 실명 없는 예시도 부호는 부호표에 generic으로 넣지 않음(총칭 오염 방지)
-      if(have.has(p.num)) return; have.add(p.num); add.push(`${p.name} : ${p.num}`);
+      if(have.has(p.num)) return;
+      if(_checkUse){ let _used=true; try{ _used=new RegExp('\\('+p.num+'\\)').test(_cbody); }catch(_e){} if(!_used) return; }   // ★ [배치19b-3] 예시도 설명 있으면 미사용 부호 제외
+      have.add(p.num); add.push(`${p.name} : ${p.num}`);
     }));
     if(add.length){ outputs.step_18=s18.replace(/\s*$/,'')+'\n'+add.join('\n'); markOutputTimestamp('step_18'); refAdded=add.length; }
   }
