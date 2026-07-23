@@ -1716,12 +1716,15 @@ function _renderCohesionBanner(info){
     let hi=0; try{ const iss=validateSpecification(buildSpecification()); hi=iss.filter(function(i){return i.severity==='CRITICAL'||i.severity==='HIGH';}).length; }catch(_e){}
     if(info.ok){
       const warnN=(info.gateWarn&&info.gateWarn.length)||0;
-      const bd=warnN?'var(--color-warning,#E8A33D)':'var(--color-success,#3DAE7A)', bg=warnN?'rgba(232,163,61,0.10)':'rgba(61,174,122,0.10)';
+      const _inc=!!info.incomplete;   // ★ [배치15I-2] 본문 불완전(분량 미달·부호표 코드 폴백) — 경고 강조
+      const bd=(warnN||_inc)?'var(--color-warning,#E8A33D)':'var(--color-success,#3DAE7A)', bg=(warnN||_inc)?'rgba(232,163,61,0.10)':'rgba(61,174,122,0.10)';
       host.innerHTML='<div style="border:1px solid '+bd+';background:'+bg+';border-radius:8px;padding:10px 12px;font-size:12px">'
-        +'<b style="color:'+bd+'">본문 통합 재생성 완료</b><br><span style="color:var(--color-text-secondary)">'
+        +'<b style="color:'+bd+'">본문 통합 재생성 완료</b><br>'
+        +(_inc?('<b style="color:'+bd+'">'+App.escapeHtml(info.incMsg||'⚠ 본문이 불완전할 수 있습니다 — 분량을 낮추거나 ④ 재생성을 권장합니다')+'</b><br>'):'')
+        +'<span style="color:var(--color-text-secondary)">'
         +(info.autoCorr?('부호표 자동 보강 '+info.autoCorr+'회 · '):'')
         +'잔존 경고(HIGH+) '+hi+'건'+(warnN?(' · 게이트 미통과 '+warnN+'건: '+App.escapeHtml((info.gateWarn||[]).join(' · '))):'')+'</span>'
-        +(warnN||hi?'<br><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="switchTab(4)"><span class="ico" data-icon="search"></span> ⑤ 완성본 검증에서 확인·보정</button>':'')
+        +(warnN||hi||_inc?'<br><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="switchTab(4)"><span class="ico" data-icon="search"></span> ⑤ 완성본 검증에서 확인·보정</button>':'')
         +'</div>';
     } else {
       host.innerHTML='<div style="border:1px solid var(--color-error,#D94A4A);background:rgba(217,74,74,0.10);border-radius:8px;padding:10px 12px;font-size:12px">'

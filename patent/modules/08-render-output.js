@@ -572,12 +572,18 @@ function _collectBodyRefPairs(){
   const spec=buildSpecification();
   const refM=spec.match(/【\s*부호의 설명\s*】([\s\S]*?)(?:\n【|$)/);
   const body=refM?spec.replace(refM[1],' '):spec;
+  return _refPairsFromText(body);
+}
+// ★ [배치15I-3/15J] 임의 텍스트에서 "명칭(번호)" 쌍 결정론 추출 — REFTABLE 누락 시 본문에서 부호표를 코드 생성하는 폴백에 재사용.
+function _refPairsFromText(body){
   const map=new Map();
   const re=/([가-힣A-Za-z][가-힣A-Za-z0-9·]*(?:\s+[가-힣A-Za-z0-9·]+){0,7})\s*\((\d{1,4})\)/g; let m;   // ★ [배치15J] char cap 제거 → 단어 그룹(앞글자 유실 차단)
-  while((m=re.exec(body))!==null){ const name=_cleanRefName(m[1]); const ref=parseInt(m[2],10); if(!(ref>=1&&ref<=9999))continue; if(!map.has(ref))map.set(ref,new Map()); if(name.length>=2){ const nm=map.get(ref); nm.set(name,(nm.get(name)||0)+1); } }
-  let b; const bare=/\((\d{1,4})\)/g; while((b=bare.exec(body))!==null){ const ref=parseInt(b[1],10); if(ref>=1&&ref<=9999&&!map.has(ref))map.set(ref,new Map()); }
+  while((m=re.exec(String(body||'')))!==null){ const name=_cleanRefName(m[1]); const ref=parseInt(m[2],10); if(!(ref>=1&&ref<=9999))continue; if(!map.has(ref))map.set(ref,new Map()); if(name.length>=2){ const nm=map.get(ref); nm.set(name,(nm.get(name)||0)+1); } }
+  let b; const bare=/\((\d{1,4})\)/g; while((b=bare.exec(String(body||'')))!==null){ const ref=parseInt(b[1],10); if(ref>=1&&ref<=9999&&!map.has(ref))map.set(ref,new Map()); }
   return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(function(e){ const ref=e[0],nm=e[1]; let best='',bc=0; nm.forEach(function(c,n){ if(c>bc){bc=c;best=n;} }); return {ref:ref,name:best}; });
 }
+// ★ [배치15I-3] REFTABLE 이 끝내 비면 본문 텍스트에서 refMap(번호→명칭) 을 코드로 생성(LLM 불필요, 결정론). 최소 refnum_consistency 해소.
+function _buildRefMapFromText(text){ const m=new Map(); _refPairsFromText(text).forEach(function(p){ if(p.name&&p.name.length>=2)m.set(String(p.ref),p.name); }); return m; }
 // [통합생성] 부호의 설명(step_18) 결정적 직렬화 — 완성 본문에서 실제 사용된 모든 장치부호(NN)를 전수 정의(usedNotDef=0),
 //   본문 미사용 부호는 제외(defNotUsed=0) → refnum_consistency 구조적 0. 명칭은 REFTABLE(refMap) 우선, 없으면 본문 최빈 명칭.
 //   ★ device/method 뿐 아니라 효과·과제 등 기존 섹션의 (NN)까지 전수 커버(완성본 기준) → 부분 재생성에도 부호정합 성립.

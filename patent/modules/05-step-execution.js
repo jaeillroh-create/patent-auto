@@ -1794,19 +1794,50 @@ ${deviceText||''}
 [원본 방법 상세설명]
 ${methodText||'(없음)'}`;
 }
+// ★ [배치15I-2] 고분량 프리셋(상세/최대)에서 단일 응답 토큰 한계 초과가 구조적 → cohesion 을 2회로 분할.
+//   1차: DEVICE_DESC(+METHOD_DESC) 본문(분량 대부분) / 2차: REFTABLE+TASK+SOLUTION+EFFECTS+ABSTRACT(부호표·마무리, 1차 본문 컨텍스트).
+function _cohesionUseSplit(){ try{ return detailLevel==='maximal'||detailLevel==='detailed'; }catch(_e){ return false; } }
+async function _runCohesionSplit(pid, maxTok){
+  const base=buildPrompt('unified_cohesion'); if(!base)return null;
+  // ── 1/2: 본문만 ──
+  const bodyPrompt=base+'\n\n★★★ [이번 출력 범위 — 1/2단계: 본문] <<<DEVICE_DESC>>> 블록(방법 청구항이 있으면 <<<METHOD_DESC>>> 포함)만 출력하라. REFTABLE·TASK·SOLUTION·EFFECTS·ABSTRACT 블록은 이번에 출력하지 마라(2단계에서 별도 생성). 본문 분량을 목표까지 최대한 채워라.';
+  const rawBody=await App.callClaudeWithContinuation(bodyPrompt, pid, maxTok);
+  const rb=parseCohesiveBundle(rawBody);
+  if(!rb.ok.hasDevice)return null;   // 본문 실패 → null(호출부가 단일 호출로 폴백)
+  // ── 2/2: REFTABLE + 마무리(본문 컨텍스트 제공, 부호·용어 정합) ──
+  const finishPrompt=base+'\n\n★★★ [이번 출력 범위 — 2/2단계: 부호표·마무리] 아래 [기생성 본문]의 부호·용어에 완전히 정합하도록 <<<REFTABLE>>>·<<<TASK>>>·<<<SOLUTION>>>·<<<EFFECTS>>>·<<<ABSTRACT>>> 블록만 출력하라. DEVICE_DESC·METHOD_DESC 는 이번에 출력하지 마라(이미 생성됨). ★ REFTABLE 은 아래 본문에 실제 등장한 모든 (NN)·S### 를 그 명칭 그대로 빠짐없이 등재하라(본문에 없는 번호 창작 금지).\n\n[기생성 본문]\n'+String(rawBody||'').slice(0,40000);
+  const rawFinish=await App.callClaudeWithContinuation(finishPrompt, pid, maxTok);
+  // ── 병합: 2차(REFTABLE·마무리)에서 본문 블록 제거 + 1차(본문)에서 부호표·마무리 블록 제거 → 중복 없이 결합 후 재파싱 ──
+  const _finishClean=String(rawFinish||'').replace(/<<<DEVICE_DESC>>>[\s\S]*?<<<END_DEVICE_DESC>>>/g,'').replace(/<<<METHOD_DESC>>>[\s\S]*?<<<END_METHOD_DESC>>>/g,'');
+  const _bodyClean=String(rawBody||'').replace(/<<<REFTABLE>>>[\s\S]*?<<<END_REFTABLE>>>/g,'').replace(/<<<(TASK|SOLUTION|EFFECTS|ABSTRACT)>>>[\s\S]*?<<<END_\1>>>/g,'');
+  const merged=_finishClean+'\n'+_bodyClean;
+  const rm=parseCohesiveBundle(merged);
+  return (rm&&rm.ok.hasDevice)?{rm:rm, merged:merged}:null;   // 병합 후 본문 보존 확인(merged 원문 동반 — 하류 부호표 재요청·코드 폴백이 실제 본문 참조)
+}
 async function runUnifiedCohesionGen(opts){
   if(!(opts&&opts.chained)&&typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
   if(!outputs.step_06){App.showToast('먼저 장치 청구항(A2)을 생성하세요','error');return;}
   if(!outputs.step_07){App.showToast('먼저 장치 도면(B1)을 생성하세요 — 도면부호 정합의 기준입니다','error');return;}
   const before=_specIssueCounts(); const hadMath=!!outputs.step_09;   // ★ 수학식(step_09) 존재 시 커밋 후 재삽입 필요 경고
   let _gateWarn=[];   // ★ [배치15G-2] 자동 교정 2회 후에도 잔여한 게이트 항목 — 경고 커밋 시 완료 요약·배너에 노출
+  let _reftableFallback=false;   // ★ [배치15I-3] REFTABLE 누락 → 본문에서 코드로 부호표 생성했는지(완료 요약·배너 경고)
   // ★ [배치9 D1] 수학식 인라인 모드 — 토글 on이면 프롬프트가 본문에 【수학식】을 직접 포함(C9 전환).
   const _mathInline=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
   setGlobalProcessing(true); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',true);
   App.showProgress('progressUnifiedGen','통합 생성 중(단일 컨텍스트)... 긴 출력은 자동 이어쓰기됩니다',0,1);
   try{
-    const raw=await App.callClaudeWithContinuation(buildPrompt('unified_cohesion'),'progressUnifiedGen');
-    let r=parseCohesiveBundle(raw);
+    const _cohMaxTok=(App.safeMaxTokensLarge&&App.safeMaxTokensLarge())||undefined;   // ★ [배치15I-1c] 프로바이더 안전 상한 내 max_tokens 상향(단일 응답 절단 완화)
+    let raw='', r=null;
+    // ★ [배치15I-2] 고분량 프리셋은 2회 분할 생성 시도(본문 → 부호표·마무리). 실패 시 단일 호출로 폴백.
+    if(_cohesionUseSplit()){
+      try{ const rs=await _runCohesionSplit('progressUnifiedGen',_cohMaxTok); if(rs&&rs.rm&&rs.rm.ok.hasDevice){ r=rs.rm; raw=rs.merged||''; console.log('[unified] 분할 생성 성공(고분량 프리셋)'); } }
+      catch(e){ console.warn('[unified] split fail → 단일 호출 폴백',e); }
+      if(!r)App.showToast('분할 생성 미완 — 단일 호출로 재시도합니다','info');
+    }
+    if(!r){ raw=await App.callClaudeWithContinuation(buildPrompt('unified_cohesion'),'progressUnifiedGen',_cohMaxTok); r=parseCohesiveBundle(raw); }
+    // ★ [배치15I-1a] 절단 진단 — 응답 길이·이어쓰기 횟수·finish_reason(max_tokens=절단 확정)을 콘솔에 노출(docH 재현 시 즉시 확인).
+    try{ const _m=(App.callClaudeWithContinuation&&App.callClaudeWithContinuation.lastMeta)||{}; console.log('[unified] cohesion '+(_cohesionUseSplit()?'(분할) ':'')+'응답 길이='+((raw||'').length)+'자, 마지막 이어쓰기='+(_m.attempts||0)+'회, finish_reason='+(_m.stopReason||'?')+(_m.truncated?' ★절단(max_tokens)':'')); }catch(_e){}
+    try{ const _blk=[]; ['REFTABLE:'+(r.ok.hasRef?'O':'X'),'DEVICE_DESC:'+(r.ok.hasDevice?'O':'X'),'METHOD_DESC:'+(r.method?'O':'-'),'TASK:'+(r.task?'O':'X'),'SOLUTION:'+(r.solution?'O':'X'),'EFFECTS:'+(r.effects?'O':'X'),'ABSTRACT:'+(r.abstract?'O':'X')].forEach(function(b){_blk.push(b);}); console.log('[unified] 수신 블록 — '+_blk.join(' · ')); }catch(_e){}
     // ★ [배치15B-A6] 필수 블록 누락 침묵 금지 — DEVICE_DESC는 있는데 REFTABLE(부호표)만 누락이면,
     //   전체 재생성이 아니라 "부호표만" 1회 지정 재요청 → 원 raw에 합성 후 재파싱(본문 보존). docE: 부호의 설명 공백→본문 26개 미정의.
     if(!r.ok.hasRef&&r.ok.hasDevice){
@@ -1817,6 +1848,12 @@ async function runUnifiedCohesionGen(opts){
         const r2=parseCohesiveBundle(merged);
         if(r2.ok.hasRef&&r2.ok.hasDevice)r=r2;   // 재요청 성공 → 진행
       }catch(e){ console.warn('[unified] reftable retry',e); }
+    }
+    // ★ [배치15I-3] REFTABLE 재요청도 실패 → 본문 "명칭(번호)"에서 부호표를 코드로 생성(결정론, LLM 불필요).
+    //   종전엔 여기서 return(차단)해 "부호표 없음"으로 재생성만 유도했으나, 본문에 부호가 실재하면 코드 폴백으로 진전 보장(refnum_consistency 해소).
+    if(!r.ok.hasRef&&r.ok.hasDevice&&typeof _buildRefMapFromText==='function'){
+      const _fbMap=_buildRefMapFromText((r.device||'')+'\n'+(r.method||''));
+      if(_fbMap.size){ r.refMap=_fbMap; r.ok.hasRef=true; _reftableFallback=true; App.showToast('부호표 자동 생성 — 본문에서 '+_fbMap.size+'개 부호 추출(REFTABLE 누락 코드 폴백, ⑤ 확인 권장)','warning'); console.warn('[unified] reftable code-fallback',_fbMap.size); }
     }
     if(!r.ok.hasRef||!r.ok.hasDevice){
       const _refMiss=(r.ok.hasDevice&&!r.ok.hasRef);
@@ -1913,10 +1950,19 @@ async function runUnifiedCohesionGen(opts){
     App.clearProgress('progressUnifiedGen');
     const after=_specIssueCounts();
     const soft=r.report.unusedRef.length?(' · 도면 미사용 부호 '+r.report.unusedRef.length+'개 자동 제외'):'';
-    App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft+(_gateWarn.length?(' · ⚠ 게이트 미통과 '+_gateWarn.length+'건(⑤ 확인)'):''),(_gateWarn.length?'warning':'success'));
+    // ★ [배치15I-2] 경고 커밋 품질 하한 — 상세설명이 목표 분량의 50% 미만이거나 부호표가 코드 폴백이면 "본문 불완전"을
+    //   완료 요약·⑤ 배너에 강조(사용자가 불완전본을 최종본으로 오인 차단). docH: 5,934자/목표 22,000 → 강조 표시.
+    const _descLen=(outputs.step_08||'').length;
+    const _volMap={compact:4000,standard:5000,detailed:8000,maximal:22000};
+    const _tgt=(detailLevel==='custom')?Math.max(1,(parseInt(customDetailChars)||1500)*4):(_volMap[detailLevel]||5000);
+    const _lowVol=(_tgt>0 && _descLen < Math.floor(_tgt*0.5));
+    const _incomplete=_lowVol||_reftableFallback;
+    const _incMsg=_incomplete?('⚠ 본문이 불완전할 수 있습니다('+(_lowVol?('상세설명 '+_descLen+'자/목표 '+_tgt+'자'):'분량 정상')+(_reftableFallback?', 부호표 코드 폴백':'')+') — 분량을 낮추거나 ④ 재생성을 권장합니다'):'';
+    App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft+(_gateWarn.length?(' · ⚠ 게이트 미통과 '+_gateWarn.length+'건(⑤ 확인)'):''),((_gateWarn.length||_incomplete)?'warning':'success'));
+    if(_incMsg)App.showToast(_incMsg,'warning');   // ★ [배치15I-2] 불완전 강조(별도 토스트)
     if(hadMath&&!_mathInline)App.showToast('⚠️ 기존 수학식(Step 9)은 새 상세설명에 재삽입이 필요합니다 — 미리보기·다운로드에 수학식이 빠져 있습니다','warning');   // [배치9 D1] 인라인 모드에선 구 step_09를 이력 보존 후 제거했으므로 미해당
-    // ★ [배치15G-3] 재생성 결과 배너 — "조용히 안 바뀜"으로 보이던 문제 해소(부호표 갱신·잔존 경고 가시화).
-    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:after.refnum, gateWarn:_gateWarn.slice(), autoCorr:_corr}); }catch(_e){}
+    // ★ [배치15G-3/15I-2] 재생성 결과 배너 — "조용히 안 바뀜" 해소 + 불완전 경고 가시화.
+    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:after.refnum, gateWarn:_gateWarn.slice(), autoCorr:_corr, incomplete:_incomplete, incMsg:_incMsg}); }catch(_e){}
   }catch(e){ try{_lastGenError=(e&&e.message)||String(e);}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:false, cause:(e&&e.message||String(e))}); }catch(_e2){} }
   finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); }
 }
