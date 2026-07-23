@@ -1,5 +1,6 @@
 // ═══════════ [P-C1] INVENTION SCOPE ═══════════
 function _parseJSONSafe(text) {
+  if (typeof text !== 'string') return null;
   try { return JSON.parse(text); } catch(e) {}
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) try { return JSON.parse(fenced[1].trim()); } catch(e) {}
