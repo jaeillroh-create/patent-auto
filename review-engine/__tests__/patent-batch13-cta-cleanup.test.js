@@ -98,7 +98,9 @@ test('★ 1/3 — Phase D·검토반영이 ④ 고급(wfAdv3)으로, 주 흐름�
   // 주 흐름(고급 이전)에 btnPhaseD·btnApplyReview 없음
   const mainFlow = p3.slice(0, p3.indexOf('id="wfAdv3"'));
   assert.ok(!mainFlow.includes('id="btnPhaseD"') && !mainFlow.includes('id="btnApplyReview"'), '★ 주 흐름에서 제거');
-  assert.match(mainFlow, /id="btnWfStage4"[\s\S]*id="btnStep13"/, '★ 주 흐름 = 통합생성 + AI검토');
-  assert.match(mainFlow, /검토 반영 = ④ 본문 통합 재생성/, '★ AI검토 하단 재생성 안내 버튼');
+  assert.match(mainFlow, /id="btnWfStage4"[\s\S]*id="btnStep13"/, '★ 주 흐름 = 본문만 재생성 + 명세서 진단');
+  // ★ [배치15L-1] 진단 카드에서 중복 재생성 버튼 제거(재작성 진입점 1개로 일원화) — 진단은 '문서 불변' 명시
+  assert.match(mainFlow, /명세서 진단 \(AI\)[\s\S]{0,400}문서는 변경되지 않습니다/, '★ 진단 카드(문서 불변 명시)');
+  assert.ok(!/onclick="wfRunStage4\(\)"[\s\S]{0,200}검토 반영 = ④ 본문 통합 재생성/.test(mainFlow), '★ 진단 카드의 중복 재생성 버튼 제거');
   assert.match(p3, /①\(Step 2~5\)·④\(통합 생성\)와 동일 항목[\s\S]{0,80}중복 실행 시 마지막 결과가 덮어씁니다/, '★ 역설계 중복 경고');
 });

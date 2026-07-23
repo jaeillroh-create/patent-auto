@@ -105,7 +105,7 @@ test('회귀 ★ 장치(C1) 표시 — resultStep08 우측 Step 8 결과 유지'
   assert.match(PATENT_SRC, /function buildImplementationBody\(\)\{/, '★ 산출물 조립 유지');
 });
 
-test('회귀 ★ ?v= 갱신(patent.js 20260722-b55 · patent.css 20260659)', () => {
-  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260722-b55/, '★ patent.js ?v=20260722-b55(split-loader)');
+test('회귀 ★ ?v= 갱신(patent.js 20260722-b56 · patent.css 20260659)', () => {
+  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260722-b56/, '★ patent.js ?v=20260722-b56(split-loader)');
   assert.match(HTML_SRC, /patent\/patent\.css\?v=20260659/, '★ patent.css ?v=20260659(이번 PR 미변경)');
 });

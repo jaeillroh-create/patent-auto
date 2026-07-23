@@ -106,7 +106,7 @@ test('★ 소스(배치15D-1) — ⑤ AI 수정 버튼 제거·④ 재생성 안
   // [배치15D-1] ⑤ 자동보정 버튼 제거(본문만 수정→부호표·표제 불변). AI 수정은 ④ 재생성/AI검토로 일원화.
   assert.ok(!/onclick="fixSpecValidationIssues\(\)"/.test(PATENT_SRC), '★ AI로 수정 버튼 제거');
   assert.match(PATENT_SRC, /id="btnGoStage4FromValidate" onclick="switchTab\(3\)"/, '★ ④ 본문 통합에서 재생성 안내 버튼');
-  assert.match(PATENT_SRC, /④ 본문 통합에서 재생성하여 반영/, '★ ④ 이동 문구');
+  assert.match(PATENT_SRC, /④ 본문 통합·검토 탭으로 이동/, '★ ④ 이동 문구(배치15L-4 분기 안내)');
   // 함수는 레거시로 존치(다른 경로/향후 재사용 대비 — 소스 무손실)
   assert.match(PATENT_SRC, /async function fixSpecValidationIssues\(\)/, '★ fixSpecValidationIssues 함수 존치(레거시)');
 });

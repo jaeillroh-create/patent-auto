@@ -518,8 +518,13 @@ function renderSpecValidation(){
   // ★ [배치15D-1] ⑤ 자동보정('AI로 수정') 제거 — 본문만 수정하여 부호표·표제 정합이 깨지는 문제(docF: dupassign·
   //   heading·meta 미해소). AI 수정 경로를 ④ 본문 통합(재생성) / ④ AI 검토(step_13 반영본)로 일원화하고, 잔존
   //   결함은 ④로 이동해 재생성하도록 안내한다(자동보정 버튼 대신 이동 버튼).
-  const _fixN=iss.filter(i=>FIXABLE_CHECKS.has(i.check)).length;
-  if(iss.length)h+=`<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--color-border);border-radius:6px;font-size:12px;background:var(--color-bg-secondary,rgba(74,125,255,0.04))"><b>잔존 결함은 ④ 본문 통합에서 재생성하여 반영하세요.</b><br><span style="color:var(--color-text-secondary)">⑤ 자동보정은 본문만 수정해 부호표·표제 정합이 깨질 수 있어 제거되었습니다. AI 수정은 <b>④ 본문 통합 재생성</b> 또는 <b>④ AI 검토(반영)</b>로 일원화됩니다${_fixN?` (본문 반영 대상 ${_fixN}건)`:''}.</span><br><button class="btn btn-outline btn-sm" style="margin-top:8px" id="btnGoStage4FromValidate" onclick="switchTab(3)"><span class="ico" data-icon="edit"></span> ④ 본문 통합에서 재생성하여 반영</button></div>`;
+  // ★ [배치 15L-4] 결함 성격별 재작성 경로 분기 안내 — 구조 결함(부호·표제·중복·절단)은 '④ 본문만 재생성', 내용 결함(청구항 뒷받침·특허성)은 '④ 명세서 진단(AI) → 반영해 다시 쓰기'.
+  const _contentN=iss.filter(i=>i.check==='claim_support_missing').length;   // 뒷받침 등 내용 결함(진단→반영 경로)
+  const _structN=iss.length-_contentN;                                        // 부호·표제·중복·절단 등 구조 결함(본문만 재생성 경로)
+  if(iss.length)h+=`<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--color-border);border-radius:6px;font-size:12px;background:var(--color-bg-secondary,rgba(74,125,255,0.04))"><b>결함 성격에 따라 재작성 경로가 다릅니다(④ 탭).</b>`
+    +(_structN?`<div style="margin-top:6px">· <b>구조 결함</b>(부호·표제·중복·절단 등 ${_structN}건) → <b>④ 「본문만 재생성」</b>으로 해소됩니다(결정론적 기계검증 반영).</div>`:``)
+    +(_contentN?`<div style="margin-top:6px">· <b>내용 결함</b>(청구항 뒷받침·특허성 등 ${_contentN}건) → <b>④ 「명세서 진단(AI)」 실행 후 진단 결과의 「이 지적을 반영해 본문 다시 쓰기」</b>로 반영하세요.</div>`:``)
+    +`<button class="btn btn-outline btn-sm" style="margin-top:8px" id="btnGoStage4FromValidate" onclick="switchTab(3)"><span class="ico" data-icon="edit"></span> ④ 본문 통합·검토 탭으로 이동</button></div>`;
   el.innerHTML=h;
 }
 // [Item 2] 다운로드/복사 직전 CRITICAL 경고(차단 아님 — division 선례 B: 경고+진행). 열린 결정은 PR 본문 참조.

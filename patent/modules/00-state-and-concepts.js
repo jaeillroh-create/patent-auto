@@ -29,6 +29,7 @@ const CATEGORY_ENDINGS = {
 // ═══ Patent State ═══
 let outputs={},outputHistory={},selectedTitle='',selectedTitleEn='',selectedTitleType='',includeMethodClaims=false;   // ★ [배치15H-1] 방법 청구항 기본 OFF(명시적 opt-in 시만 ON) — 재일 원칙: 기본 장치/시스템만
 let scopeCheckResults = {};
+let _pendingReviewNotes='';   // ★ [배치15L-2] AI 진단(step_13) 지적 → cohesion 재작성 주입 대기값(REVIEW_NOTES). 소비 후 클리어.
 let usage={calls:0,inputTokens:0,outputTokens:0,cost:0},loadingState={};
 let detailLevel='standard';
 let customDetailChars=2000;

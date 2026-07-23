@@ -1,5 +1,5 @@
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
-function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===1&&typeof renderDesignBoard==='function')renderDesignBoard();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();if(typeof _renderFlowBars==='function')_renderFlowBars();}catch(_e){}}   // [배치8/12/15D] 레일·검증바·② 설계 보드·전체 흐름 안내 갱신 + ⑤ 진입 경고
+function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===3&&typeof _updateRewriteWithReviewBtn==='function')_updateRewriteWithReviewBtn();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===1&&typeof renderDesignBoard==='function')renderDesignBoard();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();if(typeof _renderFlowBars==='function')_renderFlowBars();}catch(_e){}}   // [배치8/12/15D] 레일·검증바·② 설계 보드·전체 흐름 안내 갱신 + ⑤ 진입 경고
 // [배치15D-4] 전체 흐름 안내(각 탭 상단 1줄) — 현재 단계 강조. 정적 컨테이너(.wf-flowbar[data-flowstep])를 채운다.
 function _renderFlowBars(){
   try{
@@ -649,6 +649,7 @@ function _debouncedSaveTitle(){if(_titleSaveTimer)clearTimeout(_titleSaveTimer);
 function onStepCompleted(sid){
   // 1. 해당 step의 stale-warning 배지 제거
   document.querySelectorAll(`.stale-warning[data-step="${sid}"]`).forEach(w=>w.remove());
+  if(sid==='step_13'){ try{ if(typeof _updateRewriteWithReviewBtn==='function')_updateRewriteWithReviewBtn(); }catch(_e){} }   // ★ [배치15L-3] 진단 완료 → "반영해 다시 쓰기" 버튼 활성화
   // 2. cascade 패널 업데이트
   _updateCascadePanelItem(sid,'done');
   // 3. v10.2: 산출물 미리보기 자동 갱신 (디바운스 적용)
@@ -1586,6 +1587,27 @@ async function wfRunStage3(){
 }
 // [D4] ④ 본문 통합 — 현행 cohesion 호출(무가드 덮어쓰기·이력 보존·배치9 인라인 수식/마무리 흡수)
 async function wfRunStage4(){ try{ await runUnifiedCohesionGen(); }finally{ try{renderWorkflowRail();renderWfValidationBar();}catch(_e){} } }
+// ★ [배치15L-2] 진단 결과 → 재작성 연결(이름을 사실로) — AI 진단(step_13) 지적을 REVIEW_NOTES 로 cohesion 에 주입해 본문 재작성.
+//   "무관한 재작성"이 아니라 실제 지적 반영. 주입값은 _pendingReviewNotes(전역, 05 cohesion 프롬프트가 소비 후 클리어).
+async function wfRewriteWithReview(){
+  try{
+    const rv=(typeof outputs!=='undefined'&&outputs.step_13)?String(outputs.step_13):'';
+    if(!rv.trim()){ App.showToast('먼저 「명세서 진단 (AI) 실행」을 눌러 진단 결과를 생성하세요','info'); return; }
+    _pendingReviewNotes=rv;   // cohesion 프롬프트가 <<<REVIEW_NOTES>>> 로 주입
+    App.showToast('진단 지적을 반영해 본문을 다시 씁니다(청구항·도면 유지)','info');
+    try{ await runUnifiedCohesionGen(); }
+    finally{ _pendingReviewNotes=''; try{renderWorkflowRail();renderWfValidationBar();}catch(_e){} }
+  }catch(e){ try{_pendingReviewNotes='';}catch(_e){} try{App.showToast('재작성 실패: '+(e&&e.message||e),'error');}catch(_e2){} }
+}
+// ★ [배치15L-3] "반영해 다시 쓰기" 버튼 활성/비활성 — 진단 결과(step_13) 있을 때만 활성.
+function _updateRewriteWithReviewBtn(){
+  try{
+    const b=document.getElementById('btnRewriteWithReview'); if(!b)return;
+    const has=!!(typeof outputs!=='undefined'&&outputs.step_13&&String(outputs.step_13).trim());
+    b.disabled=!has; b.title=has?'진단 지적을 반영해 상세설명·부호를 다시 씁니다':'먼저 명세서 진단(AI)을 실행하세요';
+    const h=document.getElementById('rewriteWithReviewHint'); if(h)h.textContent=has?'위 진단 지적을 반영해 상세설명·부호를 다시 씁니다(청구항·도면은 유지). 나머지 구조·용어는 보존됩니다.':'먼저 「명세서 진단 (AI) 실행」을 눌러 진단 결과를 생성하세요. 진단 지적을 반영해 상세설명·부호를 다시 씁니다(청구항·도면은 유지).';
+  }catch(_e){}
+}
 
 // ═══ [배치15B-3] ③ 섹션별 재생성 — 청구항만 / 도면만(하류 stale 연동 유지) ═══
 async function wfRegenClaims(){

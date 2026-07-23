@@ -44,7 +44,7 @@ test('★ D1 — ⑤ AI로 수정 버튼 제거 + renderSpecValidation에 ④ �
   assert.ok(!/onclick="fixSpecValidationIssues\(\)"/.test(PATENT_SRC), '★ AI로 수정 버튼 제거');
   assert.ok(!/AI로 수정 \(/.test(PATENT_SRC), '★ 자동보정 라벨 제거');
   assert.match(PATENT_SRC, /id="btnGoStage4FromValidate" onclick="switchTab\(3\)"/, '★ ④ 이동 버튼');
-  assert.match(PATENT_SRC, /잔존 결함은 ④ 본문 통합에서 재생성하여 반영/, '★ 일원화 안내');
+  assert.match(PATENT_SRC, /결함 성격에 따라 재작성 경로가 다릅니다/, '★ 결함 성격별 분기 안내(배치15L-4)');
 });
 test('★ D1 — renderSpecValidation 렌더 시 ④ 재생성 안내(결함 있을 때)', () => {
   run('clearAllState(); outputs.step_08="제어부(100)는 처리한다."; outputs.step_06="【청구항 1】 장치."; selectedTitle="t";');
