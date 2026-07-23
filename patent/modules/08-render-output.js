@@ -356,9 +356,10 @@ function validateSpecification(specText){
       const cl=[]; cand.forEach(t=>{ if(!cl.some(c=>_sufRel(c,t)))cl.push(t); });   // 상호 접미동일은 1개 클러스터로 축약
       const fire=C?cl.length>=1:cl.length>=2;                           // canonical 있으면 정의 불일치 1개도 발화, 없으면 내부 상충 ≥2
       if(fire){ cl.forEach(t=>_atoms.add(t+'|'+ref));
+        const _bHw=cl.some(t=>_HW_BOILER_RE.test(String(t).replace(/\s+/g,'')));   // ★ [배치 15K 보정] body 명칭이 하드웨어 상용구(canonical↔body 불일치=b-경로)면 동일 힌트
         iss.push({severity:'HIGH',check:'refnum_dupassign',
           message:C?`부호 (${ref})에 부호의 설명 정의("${C}")와 다른 구성요소 명칭 배정`:`부호 (${ref})에 서로 다른 구성요소 명칭 ${cl.length}개 배정`,
-          detail:C?`canonical="${C}" ↔ body="${cl.slice(0,3).join(', ')}"`:cl.slice(0,3).join(' / ')}); }   // (R3) 양측 표기
+          detail:(C?`canonical="${C}" ↔ body="${cl.slice(0,3).join(', ')}"`:cl.slice(0,3).join(' / '))+(_bHw?' — 일반 하드웨어 상용구가 구성부 번호를 점유(본문 명칭을 부호표 명칭으로 통일 필요 — 배치 15K)':'')}); }   // (R3) 양측 표기
     });
     // (c) 동일명칭·상이부호 — 전체명칭(full) 그룹핑(≥5 접미 병합)
     const _names=[...new Set(_pairs.map(p=>p.full))];
@@ -367,7 +368,7 @@ function validateSpecification(specText){
     _groups.forEach(g=>{
       // ★ [배치15K-1,2] 일반 하드웨어 상용구(프로세서·메모리·서버 등)는 <5자여도 여러 번호 배정 시 dupassign 주범 → 5자 필터 예외.
       //   ※ "~부"(저장부·제어부·통신부 등)는 정당한 발명 구성요소 명칭일 수 있어 목록에서 제외(§2.4 D1 소거 유지).
-      const _hwBoiler=/^(프로세서|메모리|서버|데이터베이스|버스|인터페이스|씨피유|램|롬|CPU|RAM|ROM|GPU)$/.test(String(g.rep).replace(/\s+/g,''));
+      const _hwBoiler=_HW_BOILER_RE.test(String(g.rep).replace(/\s+/g,''));
       if(g.refs.size<2||(g.rep.length<5&&!_hwBoiler))return;   // [§2.4 D1] 비교 키(rep) <5자면 미발화(generic 3자 소거) — 단, 하드웨어 상용구는 예외
       const _rs=[...g.refs].map(Number).sort((a,b)=>a-b);
       // [§2.4 D3(i)] 동일명칭 ≥3개 연속(간격 1 이내)번호 = 도면요소 generic 시리즈 → dupassign 대신 MEDIUM 1건으로 압축 보고(하드웨어 상용구는 시리즈 아님 → 계속 dupassign)
@@ -484,6 +485,8 @@ function validateSpecification(specText){
 //   CHK-6 중복·CHK-8 수식변수·CHK-11 math_ref는 상세설명 내 자기완결 수정이 가능하므로 주입 유지.
 const _FINAL_ONLY_CHECKS = new Set(['heading_missing','heading_order','refnum_consistency','term_generation_mismatch','title_generation_suspect','refnum_dupassign','refnum_generic_series','claim_support_missing']);
 // 완성본 패널에서 'AI로 수정'으로 자동 보정 가능한 검사(표제 누락/순서는 스텝 재실행 사안이라 제외).
+// ★ [배치 15K 보정] 일반 하드웨어 상용구(번호 점유 시 dupassign 힌트) — "~부"는 정당 구성요소로 제외.
+const _HW_BOILER_RE=/^(프로세서|메모리|서버|데이터베이스|버스|인터페이스|씨피유|램|롬|CPU|RAM|ROM|GPU)$/;
 const FIXABLE_CHECKS = new Set(['paragraph_duplicate','sentence_duplicate','sentence_truncation','sentence_ending','unit_corruption','math_var_undefined','example_missing','refnum_consistency']);
 
 // [Part1] Step 13(AI 검토) 강화 — 결정론적 기계검증 결과를 검토 프롬프트에 주입한다.

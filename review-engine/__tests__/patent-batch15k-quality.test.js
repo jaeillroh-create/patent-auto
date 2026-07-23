@@ -66,6 +66,22 @@ test('15K-1,2 ★ 동작 — 하드웨어 상용구가 여러 번호에 배정�
   assert.match(dup.detail, /일반 하드웨어 상용구/, '★ 하드웨어 상용구 원인 힌트');
 });
 
+test('15K-1,2 ★ 보정 — b-경로(canonical↔body 불일치)에서도 하드웨어 상용구 힌트 부착(docJ 실경로)', () => {
+  // docJ: 부호표 canonical="대사 보존형 서사 구조화부"(100)인데 본문이 "프로세서(100)"로 지칭 → b-경로 dupassign.
+  run(`clearAllState(); selectedTitle="t"; outputs={ step_06:"【청구항 1】 대사 보존형 서사 구조화부(100)를 포함하는 장치.", step_08:"도 1을 참조하면, 프로세서(100)가 데이터를 처리한다. 프로세서(100)는 저장하고, 프로세서(100)가 연산한다.", step_18:"대사 보존형 서사 구조화부 : 100" };`);
+  const iss = JSON.parse(run('JSON.stringify(validateSpecification(buildSpecification()))'));
+  const b = iss.find(i => i.check === 'refnum_dupassign' && /canonical=/.test(i.detail || ''));
+  assert.ok(b, '★ b-경로(canonical↔body) dupassign 발화');
+  assert.match(b.detail, /하드웨어 상용구가 구성부 번호를 점유/, '★ b-경로 하드웨어 상용구 힌트(c-경로 아닌 실경로)');
+  assert.match(b.detail, /본문 명칭을 부호표 명칭으로 통일 필요/, '★ 해소 방향 안내');
+});
+
+test('15K-1,2 ★ 보정 — b·c 경로가 공유 _HW_BOILER_RE 사용', () => {
+  assert.match(PATENT_SRC, /const _HW_BOILER_RE=\/\^\(프로세서\|메모리\|서버/, '★ 공유 상수 정의');
+  assert.match(PATENT_SRC, /const _bHw=cl\.some\(t=>_HW_BOILER_RE\.test/, '★ b-경로 사용');
+  assert.match(PATENT_SRC, /const _hwBoiler=_HW_BOILER_RE\.test/, '★ c-경로 사용');
+});
+
 test('15K-1,2 ★ — step_08c 예시가 총칭어+번호 대신 장치 구성요소 참조', () => {
   const p = run(`(function(){ var _ct={type:'ui_screen',figNum:5,refMap:[{signNumber:'51',label:'검색창'}]}; try{return _buildConceptDescPrompt?_buildConceptDescPrompt([_ct]):''}catch(e){return String(e)} })()`);
   // 프롬프트 빌더 이름이 다를 수 있어 소스로도 확인
