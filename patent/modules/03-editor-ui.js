@@ -1587,27 +1587,48 @@ async function wfRunStage3(){
 }
 // [D4] ④ 본문 통합 — 현행 cohesion 호출(무가드 덮어쓰기·이력 보존·배치9 인라인 수식/마무리 흡수)
 async function wfRunStage4(){ try{ await runUnifiedCohesionGen(); }finally{ try{renderWorkflowRail();renderWfValidationBar();}catch(_e){} } }
-// ★ [배치15L-2] 진단 결과 → 재작성 연결(이름을 사실로) — AI 진단(step_13) 지적을 REVIEW_NOTES 로 cohesion 에 주입해 본문 재작성.
-//   "무관한 재작성"이 아니라 실제 지적 반영. 주입값은 _pendingReviewNotes(전역, 05 cohesion 프롬프트가 소비 후 클리어).
-async function wfRewriteWithReview(){
+// ★ [배치16-1,2,3,4] 결함 반영해 본문 다시 쓰기 — 기계검증(FIX_TARGETS)+AI 진단(REVIEW_NOTES)을 cohesion 에 주입해 재작성하고,
+//   재생성 후 기계검증을 재실행해 해소/잔존을 집계한다. 잔존 시 잔존만 다시 FIX_TARGETS 로 넣어 최대 2회 재요청(무한 수동 반복 제거).
+//   종전 "본문만 재생성"은 검증 결과를 프롬프트에 주입하지 않아 재생성해도 결함이 안 줄던 근본 결함 — 이 함수가 "재생성=해소"를 사실로 만든다.
+async function wfRewriteWithFixes(){
   try{
-    const rv=(typeof outputs!=='undefined'&&outputs.step_13)?String(outputs.step_13):'';
-    if(!rv.trim()){ App.showToast('먼저 「명세서 진단 (AI) 실행」을 눌러 진단 결과를 생성하세요','info'); return; }
-    _pendingReviewNotes=rv;   // cohesion 프롬프트가 <<<REVIEW_NOTES>>> 로 주입
-    App.showToast('진단 지적을 반영해 본문을 다시 씁니다(청구항·도면 유지)','info');
-    try{ await runUnifiedCohesionGen(); }
-    finally{ _pendingReviewNotes=''; try{renderWorkflowRail();renderWfValidationBar();}catch(_e){} }
-  }catch(e){ try{_pendingReviewNotes='';}catch(_e){} try{App.showToast('재작성 실패: '+(e&&e.message||e),'error');}catch(_e2){} }
+    let _before=[]; try{ _before=validateSpecification(buildSpecification()); }catch(_e){}
+    const _beforeN=_before.length;
+    const _hasReview=!!(typeof outputs!=='undefined'&&outputs.step_13&&String(outputs.step_13).trim());
+    App.showToast('결함 반영 재작성 — 기계검증 '+_beforeN+'건'+(_hasReview?' + AI 진단 1건':'')+' 반영(최대 2회)','info');
+    let remain=_before, round=0;
+    try{
+      while(round<2){
+        round++;
+        _pendingFixTargets=(typeof _buildFixTargets==='function')?_buildFixTargets(remain):'';
+        _pendingReviewNotes=(_hasReview&&round===1)?String(outputs.step_13):'';
+        await runUnifiedCohesionGen({chained:true, rewrite:true});
+        let _after=[]; try{ _after=validateSpecification(buildSpecification()); }catch(_e){}
+        remain=_after;
+        if(!remain.length)break;   // 전부 해소 → 종료(2회 소진 전에도)
+      }
+    }finally{ _pendingFixTargets=''; _pendingReviewNotes=''; }
+    const _remainKeys=new Set(remain.map(_issueKey));
+    const _resolved=_before.filter(function(b){return !_remainKeys.has(_issueKey(b));}).length;
+    App.showToast('결함 반영 재작성 완료 — 기계검증 '+_beforeN+'건 중 '+_resolved+'건 해소'+(remain.length?(' · '+remain.length+'건 잔존'):' · 전부 해소'),remain.length?'warning':'success');
+    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:0, gateWarn:[], fixSummary:{before:_beforeN, resolved:_resolved, remain:remain.length, rounds:round}}); }catch(_e){}
+    try{renderWorkflowRail();renderWfValidationBar();_updateRewriteBtn();}catch(_e){}
+  }catch(e){ try{_pendingFixTargets='';_pendingReviewNotes='';}catch(_e){} try{App.showToast('결함 반영 재작성 실패: '+(e&&e.message||e),'error');}catch(_e2){} }
 }
-// ★ [배치15L-3] "반영해 다시 쓰기" 버튼 활성/비활성 — 진단 결과(step_13) 있을 때만 활성.
-function _updateRewriteWithReviewBtn(){
+// ★ [배치16-3] 통합 재작성 버튼 라벨/활성 — 골격(step_06) 있으면 활성, 반영 대상(기계검증·AI 진단) 카운트 표시.
+function _updateRewriteBtn(){
   try{
-    const b=document.getElementById('btnRewriteWithReview'); if(!b)return;
-    const has=!!(typeof outputs!=='undefined'&&outputs.step_13&&String(outputs.step_13).trim());
-    b.disabled=!has; b.title=has?'진단 지적을 반영해 상세설명·부호를 다시 씁니다':'먼저 명세서 진단(AI)을 실행하세요';
-    const h=document.getElementById('rewriteWithReviewHint'); if(h)h.textContent=has?'위 진단 지적을 반영해 상세설명·부호를 다시 씁니다(청구항·도면은 유지). 나머지 구조·용어는 보존됩니다.':'먼저 「명세서 진단 (AI) 실행」을 눌러 진단 결과를 생성하세요. 진단 지적을 반영해 상세설명·부호를 다시 씁니다(청구항·도면은 유지).';
+    const b=document.getElementById('btnWfRewriteFixes'); const lab=document.getElementById('wfRewriteTargetLabel');
+    const hasSkel=!!(typeof outputs!=='undefined'&&outputs.step_06);
+    let mN=0; try{ if(outputs.step_08) mN=validateSpecification(buildSpecification()).length; }catch(_e){}
+    const aN=(typeof outputs!=='undefined'&&outputs.step_13&&String(outputs.step_13).trim())?1:0;
+    if(b){ b.disabled=!hasSkel; b.title=hasSkel?'기계검증 결함·AI 진단을 반영해 상세설명·부호를 다시 씁니다(청구항·도면 유지)':'먼저 ③ 청구항·도면(골격)을 생성하세요'; }
+    if(lab)lab.textContent=hasSkel?((mN||aN)?('반영 대상: 기계검증 '+mN+'건'+(aN?(' + AI 진단 '+aN+'건'):'')):'반영할 기계검증 결함 없음 — 본문 재작성만'):'';
   }catch(_e){}
 }
+// 하위호환 별칭(기존 훅/버튼 배선 유지)
+async function wfRewriteWithReview(){ return wfRewriteWithFixes(); }
+function _updateRewriteWithReviewBtn(){ return _updateRewriteBtn(); }
 
 // ═══ [배치15B-3] ③ 섹션별 재생성 — 청구항만 / 도면만(하류 stale 연동 유지) ═══
 async function wfRegenClaims(){
@@ -1740,8 +1761,10 @@ function _renderCohesionBanner(info){
       const warnN=(info.gateWarn&&info.gateWarn.length)||0;
       const _inc=!!info.incomplete;   // ★ [배치15I-2] 본문 불완전(분량 미달·부호표 코드 폴백) — 경고 강조
       const bd=(warnN||_inc)?'var(--color-warning,#E8A33D)':'var(--color-success,#3DAE7A)', bg=(warnN||_inc)?'rgba(232,163,61,0.10)':'rgba(61,174,122,0.10)';
+      const _fs=info.fixSummary;   // ★ [배치16-4] 결함 반영 재작성 해소/잔존 요약
       host.innerHTML='<div style="border:1px solid '+bd+';background:'+bg+';border-radius:8px;padding:10px 12px;font-size:12px">'
-        +'<b style="color:'+bd+'">본문 통합 재생성 완료</b><br>'
+        +'<b style="color:'+bd+'">'+(_fs?'결함 반영 재작성 완료':'본문 통합 재생성 완료')+'</b><br>'
+        +(_fs?('<b style="color:'+(_fs.remain?'var(--color-warning,#E8A33D)':'var(--color-success,#3DAE7A)')+'">기계검증 '+_fs.before+'건 중 '+_fs.resolved+'건 해소'+(_fs.remain?(' · '+_fs.remain+'건 잔존'):' · 전부 해소')+' ('+_fs.rounds+'회)</b><br>'):'')
         +(_inc?('<b style="color:'+bd+'">'+App.escapeHtml(info.incMsg||'⚠ 본문이 불완전할 수 있습니다 — 분량을 낮추거나 ④ 재생성을 권장합니다')+'</b><br>'):'')
         +'<span style="color:var(--color-text-secondary)">'
         +(info.autoCorr?('부호표 자동 보강 '+info.autoCorr+'회 · '):'')

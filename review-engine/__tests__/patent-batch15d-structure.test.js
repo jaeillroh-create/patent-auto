@@ -68,8 +68,8 @@ test('★ D2 — ③ 큰 CTA(btnWfStage3) 제거 + "골격 확인·재생성" + 
 // D3) ②/④ 명명 — 범위 명시
 test('★ D3 — ② 「전체」·④ 「본문만」 범위를 이름에 명시', () => {
   assert.match(HTML_SRC, /id="btnUnifiedFullChain"[^>]*>[\s\S]{0,80}통합 생성 \(명칭·청구항·도면·본문 전체\)/, '★ ② 전체 범위 명시');
-  assert.match(HTML_SRC, /id="btnWfStage4"[^>]*>[\s\S]{0,80}본문만 재생성/, '★ ④ 본문만 명시');
-  assert.match(HTML_SRC, /④ 본문만 재생성 \(청구항·도면 유지\)/, '★ ④ 카드 타이틀(청구항·도면 유지)');
+  assert.match(HTML_SRC, /id="btnWfRewriteFixes"[^>]*>[\s\S]{0,80}결함 반영해 본문 다시 쓰기/, '★ ④ 결함 반영 재작성 명시(배치16)');
+  assert.match(HTML_SRC, /④ 결함 반영해 본문 다시 쓰기 \(청구항·도면 유지\)/, '★ ④ 카드 타이틀(청구항·도면 유지)');
 });
 
 // D4) 전체 흐름 안내 — 각 탭 상단 1줄

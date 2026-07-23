@@ -1388,6 +1388,10 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
       const _mathN=Math.max(1,Math.min(5,parseInt(mathBlockCount)||3));   // [배치15B-1b] 수학식 개수 계약
       const deviceFigDesign=outputs.step_07||'';
       const methodFigDesign=(_wantMethod&&outputs.step_11)?outputs.step_11:'(방법 도면 없음)';   // [배치15H-2] 방법 OFF → 방법 도면 참조 제외
+      // ★ [배치16-1] 기계검증 결함 주입 — _pendingFixTargets(구조화된 지시문) 있으면 FIX_TARGETS 블록으로 주입("반드시 모두 해소, 나머지 유지").
+      //   이것이 있어야 "재생성=결함 해소"가 사실이 된다(종전엔 검증 결과가 프롬프트에 전혀 주입되지 않아 재생성해도 기계검증 0 불가).
+      const _fixTargets=(typeof _pendingFixTargets!=='undefined'&&_pendingFixTargets)?String(_pendingFixTargets).slice(0,10000):'';
+      const _fixInject=_fixTargets?('\n\n★★★ [기계검증 결함 반영(배치16) — 최우선] 아래 <<<FIX_TARGETS>>>의 각 항목을 이번 재작성에서 반드시 모두 해소하라. 나머지 내용·구조·용어·참조번호는 그대로 유지한다(지적과 무관한 부분의 재설계 금지).\n<<<FIX_TARGETS>>>\n'+_fixTargets+'\n<<<END_FIX_TARGETS>>>'):'';
       // ★ [배치15L-2] AI 진단(step_13) 지적 반영 재작성 — _pendingReviewNotes 있으면 REVIEW_NOTES 블록으로 주입("지적 해소, 나머지 유지").
       const _reviewNotes=(typeof _pendingReviewNotes!=='undefined'&&_pendingReviewNotes)?String(_pendingReviewNotes).slice(0,8000):'';
       const _reviewInject=_reviewNotes?('\n\n★★★ [검토 반영 지시(배치15L) — 최우선] 아래 <<<REVIEW_NOTES>>> 의 지적사항을 이번 재작성에서 반드시 해소하라. 단, 지적과 무관한 나머지 구조·용어·참조번호는 그대로 유지한다(전면 재설계 금지 — 지적 해소에 필요한 최소 수정).\n<<<REVIEW_NOTES>>>\n'+_reviewNotes+'\n<<<END_REVIEW_NOTES>>>'):'';
@@ -1496,7 +1500,7 @@ ${deviceFigDesign}
 ${methodFigDesign}
 
 [도면 구성요소 목록 — 이 명칭·참조번호만 사용]
-${designComponents}${_reviewInject}
+${designComponents}${_fixInject}${_reviewInject}
 
 지금부터 위 출력 계약(C1~C13)을 지켜 <<<REFTABLE>>> 블록부터 순서대로 출력하라.`;
     }

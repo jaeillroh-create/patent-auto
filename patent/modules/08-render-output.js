@@ -505,6 +505,32 @@ function machineFindingsForReview(){
   }catch(_e){return '';}
 }
 // [Item 2] 완성본 기계검증 패널 렌더 — 산출물 탭(page4) 미리보기 진입 시 자동 실행. severity 색은 인라인(patent.css 무변경).
+// ★ [배치16-1] 기계검증 결함(validateSpecification issues)을 cohesion 재작성용 구조화 지시문(FIX_TARGETS)으로 변환.
+//   "무엇을 어떻게 고쳐라"의 명시적 지시로 바꿔 프롬프트에 주입 → 재생성이 실제로 결함을 해소하게 한다(종전엔 결과가 프롬프트에 미주입).
+function _buildFixTargets(issues){
+  const lines=[]; (issues||[]).forEach(function(i){
+    const msg=String(i.message||''), det=String(i.detail||''), ck=i.check;
+    if(ck==='refnum_dupassign'){
+      const cm=det.match(/canonical="([^"]+)"/), bm=det.match(/body="([^"]+)"/);
+      if(cm){ const ref=(msg.match(/부호 \((S?\d+)\)/)||[])[1]||'?'; lines.push(`· 부호 (${ref}): 본문에서 '${bm?bm[1]:'다른 명칭'}'으로 지칭된 것을 부호의 설명 명칭 '${cm[1]}'으로 통일 기재하라(총칭어·다른 명칭 사용 금지).`); }
+      else { const nm=(msg.match(/명칭 "([^"]+)"/)||[])[1]||'해당 명칭'; lines.push(`· 명칭 '${nm}'이 여러 부호(${det})에 중복 배정 — 서로 다른 구성부이면 각기 다른 명칭을, 동일 구성부이면 하나의 부호로 통일하라(하나의 명칭=하나의 부호).`); }
+    }
+    else if(ck==='refnum_consistency')lines.push(`· 부호 정합: ${msg}${det?(' ('+det+')'):''} — 본문의 모든 (NN)을 부호의 설명에 정의하고, 미사용 부호는 정리하라.`);
+    else if(ck==='refnum_generic_series')lines.push(`· ${msg} — 총칭 시리즈 대신 구성요소별 개별 명칭을 부여하라.`);
+    else if(ck==='heading_missing')lines.push(`· 표제 누락: ${msg} — 해당 표제(【…】)를 추가하라.`);
+    else if(ck==='heading_order')lines.push(`· 표제 순서: ${msg} — 규정 순서로 바로잡으라.`);
+    else if(ck==='sentence_truncation')lines.push(`· 문장 절단: ${det||msg} — 절단된 문장을 완결된 문장으로 복원하라.`);
+    else if(ck==='paragraph_duplicate'||ck==='sentence_duplicate')lines.push(`· 중복: ${msg} — 중복 문단/문장을 제거하고 한 번만 기재하라.`);
+    else if(ck==='math_var_undefined')lines.push(`· 수식 변수 미정의: ${msg}${det?(' ('+det+')'):''} — 해당 기호를 그 수식 직후 "여기서" 절에 정의하라.`);
+    else if(ck==='term_generation_mismatch')lines.push(`· 용어 불일치: ${msg} — 최신 확정 명칭으로 전 구간 통일하라.`);
+    else if(ck==='meta_response_residue')lines.push(`· 메타응답 잔류(CRITICAL): ${det||msg} — 대화형·요청형 표현을 삭제하고 순수 명세서 서술문으로 작성하라.`);
+    else if(ck==='claim_support_missing')lines.push(`· 청구항 뒷받침 부족: ${msg}${det?(' ('+det+')'):''} — 해당 구성요소를 상세설명에 명시적으로 기술하라.`);
+    else lines.push(`· [${ck}] ${msg}${det?(' — '+det):''}`);
+  });
+  return lines.join('\n');
+}
+// ★ [배치16-4] 두 검증 결과 집합의 동일 이슈 키(check+message) — 해소/잔존 카운트용.
+function _issueKey(i){ return String(i.check||'')+'|'+String(i.message||''); }
 function renderSpecValidation(){
   const el=document.getElementById('specValidateResult'); if(!el)return;
   const spec=buildSpecification();
@@ -525,8 +551,8 @@ function renderSpecValidation(){
   const _contentN=iss.filter(i=>i.check==='claim_support_missing').length;   // 뒷받침 등 내용 결함(진단→반영 경로)
   const _structN=iss.length-_contentN;                                        // 부호·표제·중복·절단 등 구조 결함(본문만 재생성 경로)
   if(iss.length)h+=`<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--color-border);border-radius:6px;font-size:12px;background:var(--color-bg-secondary,rgba(74,125,255,0.04))"><b>결함 성격에 따라 재작성 경로가 다릅니다(④ 탭).</b>`
-    +(_structN?`<div style="margin-top:6px">· <b>구조 결함</b>(부호·표제·중복·절단 등 ${_structN}건) → <b>④ 「본문만 재생성」</b>으로 해소됩니다(결정론적 기계검증 반영).</div>`:``)
-    +(_contentN?`<div style="margin-top:6px">· <b>내용 결함</b>(청구항 뒷받침·특허성 등 ${_contentN}건) → <b>④ 「명세서 진단(AI)」 실행 후 진단 결과의 「이 지적을 반영해 본문 다시 쓰기」</b>로 반영하세요.</div>`:``)
+    +(_structN?`<div style="margin-top:6px">· <b>구조 결함</b>(부호·표제·중복·절단 등 ${_structN}건) → <b>④ 「결함 반영해 본문 다시 쓰기」</b>로 해소합니다(기계검증 결함을 프롬프트에 주입해 재작성 → 재검증까지 자동).</div>`:``)
+    +(_contentN?`<div style="margin-top:6px">· <b>내용 결함</b>(청구항 뒷받침·특허성 등 ${_contentN}건) → <b>④ 「명세서 진단(AI)」 실행</b> 후 <b>④ 「결함 반영해 본문 다시 쓰기」</b>(진단 지적 + 기계검증 결함을 함께 반영).</div>`:``)
     +`<button class="btn btn-outline btn-sm" style="margin-top:8px" id="btnGoStage4FromValidate" onclick="switchTab(3)"><span class="ico" data-icon="edit"></span> ④ 본문 통합·검토 탭으로 이동</button></div>`;
   el.innerHTML=h;
 }

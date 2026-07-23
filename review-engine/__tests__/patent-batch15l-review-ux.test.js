@@ -50,27 +50,29 @@ test('15L-1 ★ HTML — ④ 진단 카드 개명(명세서 진단 AI) + 문서 
   assert.ok(!/검토 반영 = ④ 본문 통합 재생성/.test(HTML_SRC), '★ 중복 재생성 버튼 제거');
 });
 
-test('15L-1 ★ HTML — 재작성 진입점은 "본문만 재생성" 1개(btnWfStage4)', () => {
+test('15L-1/16-3 ★ HTML — 재작성 진입점은 통합 버튼 1개(btnWfRewriteFixes), 구 버튼 제거', () => {
   const p3 = HTML_SRC.slice(HTML_SRC.indexOf('id="page3"'), HTML_SRC.indexOf('id="page4"'));
-  assert.equal((p3.match(/onclick="wfRunStage4\(\)"/g) || []).length, 1, '★ wfRunStage4 진입점 1개(중복 제거)');
+  assert.equal((p3.match(/onclick="wfRewriteWithFixes\(\)"/g) || []).length, 1, '★ 통합 재작성 진입점 1개');
+  assert.ok(!/id="btnWfStage4"/.test(p3) && !/id="btnRewriteWithReview"/.test(p3), '★ 구 버튼(본문만 재생성·반영해 다시쓰기) 제거');
 });
 
-// ─────────────── 2,3) 진단 결과 → 재작성 연결 + 비활성 ───────────────
+// ─────────────── 2,3) 진단 결과 → 통합 버튼 자동 반영 ───────────────
 
-test('15L-2,3 ★ HTML — 진단 결과에 "반영해 다시 쓰기" 버튼(초기 비활성)', () => {
-  assert.match(HTML_SRC, /id="btnRewriteWithReview" onclick="wfRewriteWithReview\(\)"[^>]*disabled/, '★ 초기 비활성');
-  assert.match(HTML_SRC, /이 지적을 반영해 본문 다시 쓰기/, '★ 버튼 라벨');
+test('16-3 ★ HTML — 진단 결과는 왼쪽 통합 버튼이 자동 반영(별도 재작성 버튼 없음)', () => {
+  assert.ok(!/id="btnRewriteWithReview"/.test(HTML_SRC), '★ 진단 결과 카드의 별도 재작성 버튼 제거');
+  assert.match(HTML_SRC, /결함 반영해 본문 다시 쓰기/, '★ 통합 버튼 라벨');
+  assert.match(HTML_SRC, /버튼이 기계검증 결함과 함께 자동 반영/, '★ 안내: 통합 버튼이 진단+기계검증 반영');
 });
 
-test('15L-3 ★ 동작 — _updateRewriteWithReviewBtn: 진단(step_13) 있을 때만 활성', () => {
-  els.btnRewriteWithReview = mkEl(); els.rewriteWithReviewHint = mkEl();
-  run('clearAllState(); delete outputs.step_13;');
-  run('_updateRewriteWithReviewBtn()');
-  assert.strictEqual(els.btnRewriteWithReview.disabled, true, '★ 진단 없으면 비활성');
-  assert.match(els.btnRewriteWithReview.title, /먼저 명세서 진단/, '★ 안내 title');
-  run('outputs.step_13="[특허성] 진보성 미흡 — 구성 A 보강 필요";');
-  run('_updateRewriteWithReviewBtn()');
-  assert.strictEqual(els.btnRewriteWithReview.disabled, false, '★ 진단 있으면 활성');
+test('16-3 ★ 동작 — _updateRewriteBtn: 골격(step_06) 있으면 활성 + 반영 대상 카운트', () => {
+  els.btnWfRewriteFixes = mkEl(); els.wfRewriteTargetLabel = mkEl();
+  run('clearAllState(); delete outputs.step_06;');
+  run('_updateRewriteBtn()');
+  assert.strictEqual(els.btnWfRewriteFixes.disabled, true, '★ 골격 없으면 비활성');
+  run('outputs.step_06="【청구항 1】 제어부.";');
+  run('_updateRewriteBtn()');
+  assert.strictEqual(els.btnWfRewriteFixes.disabled, false, '★ 골격 있으면 활성');
+  assert.match(els.wfRewriteTargetLabel.textContent, /반영 대상|반영할 기계검증 결함 없음/, '★ 반영 대상 라벨');
 });
 
 test('15L-2 ★ 동작 — _pendingReviewNotes 있으면 cohesion 프롬프트에 REVIEW_NOTES 주입', () => {
@@ -89,10 +91,9 @@ test('15L-2 ★ 동작 — _pendingReviewNotes 없으면 REVIEW_NOTES 미주입'
   assert.ok(!/<<<REVIEW_NOTES>>>/.test(p), '★ 미주입(주입 대기값 없음)');
 });
 
-test('15L-2 ★ 동작 — wfRewriteWithReview: 진단 없으면 안내 후 종료(재작성 안 함)', async () => {
-  run('clearAllState(); delete outputs.step_13;');
-  await run('wfRewriteWithReview()');
-  assert.ok(toasts.some(t => /먼저.*명세서 진단.*실행/.test(t.m)), '★ 진단 없으면 안내');
+test('16-3 ★ 소스 — wfRewriteWithReview 는 wfRewriteWithFixes 별칭(하위호환)', () => {
+  assert.match(PATENT_SRC, /async function wfRewriteWithReview\(\)\{ return wfRewriteWithFixes\(\); \}/, '★ 별칭');
+  assert.match(PATENT_SRC, /function _updateRewriteWithReviewBtn\(\)\{ return _updateRewriteBtn\(\); \}/, '★ 갱신 함수 별칭');
 });
 
 // ─────────────── 4) ⑤ 패널 결함 성격별 분기 ───────────────
@@ -107,21 +108,18 @@ test('15L-4 ★ 동작 — ⑤ 검증 패널: 구조 결함 → 본문만 재생
   assert.match(h, /id="btnGoStage4FromValidate" onclick="switchTab\(3\)"/, '★ ④ 이동 버튼');
 });
 
-test('15L-4 ★ 소스 — 구조/내용 결함 분기 카운트·문구', () => {
+test('15L-4/16-5 ★ 소스 — 구조/내용 결함 분기 카운트·문구(통합 버튼)', () => {
   assert.match(PATENT_SRC, /const _contentN=iss\.filter\(i=>i\.check==='claim_support_missing'\)\.length;/, '★ 내용 결함 카운트');
   assert.match(PATENT_SRC, /const _structN=iss\.length-_contentN;/, '★ 구조 결함 카운트');
-  assert.match(PATENT_SRC, /구조 결함[\s\S]{0,80}본문만 재생성/, '★ 구조→본문만 재생성');
-  assert.match(PATENT_SRC, /내용 결함[\s\S]{0,120}명세서 진단\(AI\)/, '★ 내용→진단→반영');
+  assert.match(PATENT_SRC, /구조 결함[\s\S]{0,120}결함 반영해 본문 다시 쓰기/, '★ 구조→결함 반영 재작성');
+  assert.match(PATENT_SRC, /내용 결함[\s\S]{0,160}명세서 진단\(AI\)/, '★ 내용→진단→반영');
 });
 
 // ─────────────── 소스 배선 ───────────────
 
-test('15L 소스 ★ — wfRewriteWithReview·_updateRewriteWithReviewBtn·REVIEW_NOTES·switchTab 훅', () => {
-  assert.match(PATENT_SRC, /async function wfRewriteWithReview\(\)\{/, '★ 재작성 함수');
-  assert.match(PATENT_SRC, /_pendingReviewNotes=rv;/, '★ 진단 주입');
-  assert.match(PATENT_SRC, /finally\{ _pendingReviewNotes='';/, '★ 소비 후 클리어');
-  assert.match(PATENT_SRC, /function _updateRewriteWithReviewBtn\(\)\{/, '★ 버튼 갱신 함수');
-  assert.match(PATENT_SRC, /if\(i===3&&typeof _updateRewriteWithReviewBtn==='function'\)_updateRewriteWithReviewBtn\(\);/, '★ switchTab(④) 훅');
-  assert.match(PATENT_SRC, /if\(sid==='step_13'\)\{ try\{ if\(typeof _updateRewriteWithReviewBtn/, '★ 진단 완료 훅');
+test('15L/16 소스 ★ — REVIEW_NOTES 주입·switchTab·진단 완료 훅(별칭 유지)', () => {
   assert.match(PATENT_SRC, /const _reviewInject=_reviewNotes\?/, '★ cohesion REVIEW_NOTES 주입 계산');
+  assert.match(PATENT_SRC, /if\(i===3&&typeof _updateRewriteWithReviewBtn==='function'\)_updateRewriteWithReviewBtn\(\);/, '★ switchTab(④) 훅(별칭)');
+  assert.match(PATENT_SRC, /if\(sid==='step_13'\)\{ try\{ if\(typeof _updateRewriteWithReviewBtn/, '★ 진단 완료 훅(별칭)');
+  assert.match(PATENT_SRC, /async function wfRewriteWithReview\(\)\{ return wfRewriteWithFixes\(\); \}/, '★ wfRewriteWithReview 별칭');
 });

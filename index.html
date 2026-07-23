@@ -1323,12 +1323,14 @@
       <div class="page-left">
         <div class="wf-flowbar" data-flowstep="3" style="font-size:11px;margin-bottom:10px;padding:6px 10px;background:var(--color-bg-secondary,rgba(74,125,255,0.05));border-radius:6px"></div>
         <!-- [배치8] ④ 본문 통합 — 주동선(cohesion — 배치9로 수학식 인라인·효과/해결수단/요약 흡수) -->
+        <!-- [배치16-3] 버튼 통폐합: [본문만 재생성]+[반영해 다시 쓰기] → [결함 반영해 본문 다시 쓰기] 1개(기계검증+AI 진단 동시 반영). -->
         <div class="card" id="wfStage4Main" style="border:1.5px solid var(--color-primary)">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="edit"></span> ④ 본문만 재생성 (청구항·도면 유지)</div></div>
-          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px"><b>청구항·도면(③ 골격)은 유지</b>하고, 그 골격을 바탕으로 <b>상세설명·부호의 설명·과제의 해결 수단·발명의 효과·요약서</b>만 단일 컨텍스트로 재생성합니다(② '수학식 포함' 시 수식 인라인). 재생성 시 기존 내용은 이력에 보존됩니다. <span style="color:var(--color-text-tertiary)">전체(청구항·도면 포함) 생성은 ② 통합 생성.</span></p>
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="edit"></span> ④ 결함 반영해 본문 다시 쓰기 (청구항·도면 유지)</div></div>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px"><b>청구항·도면(③ 골격)은 유지</b>하고, <b>기계검증 결함</b>(부호·표제·중복·절단 등)과 <b>명세서 진단(AI)</b> 지적을 프롬프트에 주입해 <b>상세설명·부호의 설명·과제의 해결 수단·발명의 효과·요약서</b>를 다시 씁니다. 재생성 후 기계검증을 재실행해 <b>해소/잔존 건수</b>를 표시하고, 잔존이 있으면 최대 1회 더 반영합니다. 기존 내용은 이력에 보존됩니다.</p>
           <div id="progressUnifiedGen" style="margin:8px 0"></div>
-          <button class="btn btn-primary btn-full" id="btnWfStage4" onclick="wfRunStage4()"><span class="ico" data-icon="edit"></span> 본문만 재생성 (상세설명·부호·효과·해결수단·요약)</button>
-          <!-- [배치15G-3] 재생성 결과 배너 — "눌렀는데 안 바뀜"으로 보이던 문제 해소(부호표 갱신·잔존 경고·실패 사유 가시화) -->
+          <button class="btn btn-primary btn-full" id="btnWfRewriteFixes" onclick="wfRewriteWithFixes()"><span class="ico" data-icon="edit"></span> 결함 반영해 본문 다시 쓰기</button>
+          <p id="wfRewriteTargetLabel" style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px"></p>
+          <!-- [배치15G-3] 재생성 결과 배너 — "눌렀는데 안 바뀜"으로 보이던 문제 해소(부호표 갱신·잔존 경고·해소/잔존 카운트) -->
           <div id="cohesionBanner" style="display:none;margin-top:10px"></div>
         </div>
         <!-- [배치15L] 진단/재작성 물리 분리 — 이 카드는 '진단'만(문서 불변). 재작성 진입점은 위 '본문만 재생성' 카드 1개로 일원화. -->
@@ -1369,9 +1371,8 @@
         <div class="result-card" id="resultCard13">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> 명세서 진단 (AI) 결과</div></div>
           <div id="resultStep13" class="result-area"></div>
-          <!-- [배치15L-2,3] 진단 결과 → 재작성 연결(이름을 사실로): 지적을 REVIEW_NOTES로 주입해 본문 다시 쓰기. 진단 결과 없으면 비활성. -->
-          <button class="btn btn-primary btn-full" id="btnRewriteWithReview" onclick="wfRewriteWithReview()" style="margin-top:10px" disabled title="먼저 명세서 진단(AI)을 실행하세요"><span class="ico" data-icon="edit"></span> 이 지적을 반영해 본문 다시 쓰기</button>
-          <p id="rewriteWithReviewHint" style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px">먼저 「명세서 진단 (AI) 실행」을 눌러 진단 결과를 생성하세요. 진단 지적을 반영해 상세설명·부호를 다시 씁니다(청구항·도면은 유지).</p>
+          <!-- [배치16-3] 재작성 진입점은 왼쪽 ④ "결함 반영해 본문 다시 쓰기" 버튼 1개로 통합(기계검증+진단 동시 반영) — 진단 결과가 있으면 그 버튼이 자동 반영. -->
+          <p id="rewriteWithReviewHint" style="font-size:11px;color:var(--color-text-tertiary);margin-top:8px">진단 지적은 왼쪽 <b>「결함 반영해 본문 다시 쓰기」</b> 버튼이 기계검증 결함과 함께 자동 반영합니다(청구항·도면은 유지).</p>
         </div>
         <!-- [배치15B-2] Step 2~5 결과(기술분야·배경·선행기술·과제 — 명세서 부수사항) ①→④ 이동 -->
         <div class="result-card" id="resultCard25">
@@ -1545,12 +1546,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260723a"></script>
-<script src="patent/patent.js?v=20260722-b57"></script>
+<script src="patent/patent.js?v=20260722-b58"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260722-b57"></script>
+<script src="opinion/opinion.js?v=20260722-b58"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260722-b57';
+  var _cv='?v=20260722-b58';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1648,8 +1649,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260722-b57"></script>
-<script src="docket.js?v=20260722-b57"></script>
+<script src="division/division.js?v=20260722-b58"></script>
+<script src="docket.js?v=20260722-b58"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>
