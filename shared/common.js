@@ -144,7 +144,7 @@ function buildAPIRequest(prov,modelKey,sys,user,maxTok,images){
   if(prov==='gemini'){const parts=imgs.length?[{text:user},...imgs.map(im=>({inlineData:{mimeType:im.mediaType,data:im.data}}))]:[{text:user}];return{url:`${pr.endpoint}${mid}:generateContent?key=${key}`,headers:{'Content-Type':'application/json'},body:{systemInstruction:{parts:[{text:sys}]},contents:[{parts}],generationConfig:{maxOutputTokens:maxTok}}};}
 }
 function parseAPIResponse(prov,d){
-  if(prov==='claude'){if(d.error)throw new Error(d.error.message);const _blk=Array.isArray(d.content)?d.content:[];const _txt=_blk.filter(b=>b&&typeof b.text==='string').map(b=>b.text).join('');return{text:_txt,stopReason:d.stop_reason,it:d.usage?.input_tokens||0,ot:d.usage?.output_tokens||0};}
+  if(prov==='claude'){if(d.error)throw new Error(d.error.message);return{text:d.content[0].text,stopReason:d.stop_reason,it:d.usage?.input_tokens||0,ot:d.usage?.output_tokens||0};}
   if(prov==='gpt'){if(d.error)throw new Error(d.error.message);return{text:d.choices[0].message.content,stopReason:d.choices[0].finish_reason==='length'?'max_tokens':d.choices[0].finish_reason,it:d.usage?.prompt_tokens||0,ot:d.usage?.completion_tokens||0};}
   if(prov==='gemini'){if(d.error)throw new Error(d.error.message||d.error.status);const c=d.candidates?.[0];if(!c)throw new Error('빈 응답');return{text:c.content?.parts?.[0]?.text||'',stopReason:c.finishReason==='MAX_TOKENS'?'max_tokens':c.finishReason,it:d.usageMetadata?.promptTokenCount||0,ot:d.usageMetadata?.candidatesTokenCount||0};}
 }

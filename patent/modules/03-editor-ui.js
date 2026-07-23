@@ -817,13 +817,6 @@ async function runCascadeRegeneration(sourceStep){
   const total=sorted.length;
 
   for(const sid of sorted){
-    // ★ [Item 3] 품질 게이트 — 일괄 재생성도 청구항 CRITICAL이면 해당 스텝에서 중단(어느 스텝인지 표시)
-    const _cg=(typeof _claimGateStatus==='function')?_claimGateStatus(sid):{critical:0};
-    if(_cg.critical>0){
-      if(prog)prog.innerHTML+=`<div style="color:var(--dt-danger);font-size:11px"><span class="ico" data-icon="x"></span> 청구항 CRITICAL ${_cg.critical}건 — ${STEP_NAMES[sid]} 재생성 중단(청구항 먼저 보정)</div>`;
-      App.showToast(`청구항 검증 CRITICAL — ${STEP_NAMES[sid]} 이후 재생성 중단`,'error');
-      break;
-    }
     if(prog)prog.innerHTML=`<div style="margin-bottom:4px">진행: ${completed+1}/${total} — <b>${STEP_NAMES[sid]}</b> 재생성 중...</div>
       <div style="background:#e0e0e0;border-radius:4px;height:6px"><div style="background:var(--dt-brand-hover);border-radius:4px;height:6px;width:${Math.round(completed/total*100)}%;transition:width .3s"></div></div>`;
 
@@ -1163,7 +1156,7 @@ function buildImplementationBody(){
   //   없으면(구 사건·미합본) 보강하여 예시도 누락 방지. 합본 정본은 device, step_08c 는 source.
   //   ★ 견고화: 단순 slice(0,40) 연속 매칭은 수학식(step_09)이 예시도 시작부에 【수학식】을 끼우면 깨져
   //     conceptIn=false → 예시도 중복. stripMathBlocks(수학식 제거)+공백 전부 제거 후 첫 N자 비교로 연속성 복원.
-  const _normForDedup = _stripMathNorm;   // [cleanup D2] 공유 헬퍼(06) — stripMathBlocks+공백 전제거
+  const _normForDedup = s => stripMathBlocks(String(s||'')).replace(/\s+/g,'');
   const _devN=_normForDedup(device), _conN=_normForDedup(concept);
   const conceptIn = _conN.length>0 && _devN.indexOf(_conN.slice(0,30))>=0;
   const core=[device, conceptIn?'':concept, method].filter(Boolean).join('\n\n');
@@ -1191,12 +1184,11 @@ function sanitizeDescFigureRefs(text,type){
   
   // ★ v10.2: Step 8 수학식 제거 (수학식은 Step 9에서만 삽입) ★
   if(type==='device'){
-    // ★ FIX-C: crude 정규식(【수학식】 이후 특정 키워드로 시작 안 하는 모든 줄을 삼켜 일반 문단
-    //   "…저장부(133)는…"까지 소실)을 정교판 stripMathBlocks(06)로 통일 — 중복 구현 제거.
-    //   stripMathBlocks 는 "[가-힣]{2,}부(" 등 구성요소 문단에서 종결하므로 일반 문단을 보존.
-    //   (호출부는 모두 런타임 — 03:902/05:114/05:637 — 로 06 로드 후 실행. 03:1159 도 이미 stripMathBlocks 사용.)
-    text=stripMathBlocks(text).trim();
+    // 【수학식 N】 블록 및 관련 수식/변수 설명 전체 제거
+    // "여기서," "예를 들어," 등은 수학식 직후에 나오는 설명이므로 함께 제거
+    text=text.replace(/【수학식\s*\d+】[^\n]*(?:\n(?!도\s+\d|이러한|한편|또한|구체적|상기)[^\n]*)*/g,'').trim();
     // v10.5: "수학식 N" 참조 제거 — 【수학식 N】 헤더 잔여만 제거 (본문 참조 문장은 보존)
+    // 기존: [^\n]*수학식\s*\d+[^\n]* → 본문의 "수학식 1에 따르면..." 설명 문장까지 삭제
     text=text.replace(/^\s*【?수학식\s*\d+】?\s*$/gm,'').trim();
     text=text.replace(/\n{3,}/g,'\n\n');
   }
