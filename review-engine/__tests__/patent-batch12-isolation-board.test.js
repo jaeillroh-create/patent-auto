@@ -70,7 +70,7 @@ test('★ A 소스 — clearAllState가 _wfHardReset 호출 + openProject 말미
   assert.match(PATENT_SRC, /genParams=null;\s*\/\/ \[배치12 C\]/, '★ genParams 초기화');
   assert.match(PATENT_SRC, /if\(typeof _wfHardReset==='function'\)_wfHardReset\(\);/, '★ 하드리셋 호출');
   assert.match(PATENT_SRC, /function _wfHardReset\(\)\{[\s\S]{0,900}wfBadge/, '★ 하드리셋이 배지 blank');
-  assert.match(PATENT_SRC, /try\{_methodUserSet=!!\(outputs\.step_10\|\|outputs\.step_11\);\}catch\(_e\)\{\}/, '★ [검증반영] openProject: 방법 산출물 있으면 보호(true), 없으면 자동 동기(false)');
+  assert.match(PATENT_SRC, /try\{_methodUserSet=\(includeMethodClaims===true\)\|\|!!\(outputs\.step_10\|\|outputs\.step_11\);\}catch\(_e\)\{\}/, '★ [검증반영·배치15H] openProject: 복원된 방법-ON opt-in 또는 방법 산출물 있으면 보호(true)');
 });
 
 // B) 설계 보드 미러

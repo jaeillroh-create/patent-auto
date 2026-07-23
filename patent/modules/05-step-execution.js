@@ -2023,12 +2023,18 @@ async function runUnifiedFullChain(_wizOpts){
     _phase('body','running'); _rail(4); P('[4/4] 상세설명+부호 통합 생성...',3);
     // ★ [검증 반영] 이어하기(resume) 모드에서 본문(step_08·step_18)이 이미 있으면 재사용 — 덮어쓰지 않는다
     //   ("빈 단계만 생성" 계약). 재생성 경로에서만 변경여부(change-detection)로 성공 판정(완성본을 중단 오보고 방지).
-    if(resume&&outputs.step_08&&outputs.step_18){
+    // ★ [배치15H 적대검증] 재사용 가드에 방법 완성도 추가 — 장치 전용 생성(step_08/18 존재) 후 방법을 ON한 상태로 이어하기 하면
+    //   step_12(방법 상세설명)가 없는데도 재사용으로 건너뛰어 방법 세트가 미완성(청구항·도면만 있고 본문 없음)이 되던 갭.
+    //   wantMethod인데 step_12가 없으면 재사용하지 말고 cohesion을 돌려 방법 본문·부호를 채운다.
+    if(resume&&outputs.step_08&&outputs.step_18&&(!wantMethod||outputs.step_12)){
       _phase('body','done','상세설명·부호(재사용)');
     } else {
-      const _beforeDesc=outputs.step_08||''; _lastGenError='';
+      const _beforeDesc=outputs.step_08||''; const _beforeMethod=outputs.step_12||''; _lastGenError='';
       await runUnifiedCohesionGen({chained:true});
-      if((outputs.step_08||'')===_beforeDesc){ stopInfo={label:'본문',cause:(_lastGenError||'상세설명·부호 통합 게이트 미통과/실패 — 산출물(F) 탭에서 재시도')}; _phase('body','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 본문: '+stopInfo.cause,'error'); return; }
+      // 성공 판정: step_08 변경 OR (방법 ON인데 step_12가 새로 채워짐) — 방법 보강 목적의 재생성에서 step_08 무변경을 오실패로 보고하지 않도록.
+      const _descSame=(outputs.step_08||'')===_beforeDesc;
+      const _methodGained=wantMethod&&!_beforeMethod&&!!outputs.step_12;
+      if(_descSame&&!_methodGained){ stopInfo={label:'본문',cause:(_lastGenError||'상세설명·부호 통합 게이트 미통과/실패 — 산출물(F) 탭에서 재시도')}; _phase('body','fail',stopInfo.cause); App.showToast('통합 생성 중단 — 본문: '+stopInfo.cause,'error'); return; }
       // ([배치9 D1] 수학식은 토글 on 시 [4/4] cohesion 안에서 인라인 생성됨 — 별도 [5/5] 없음)
       _phase('body','done','상세설명·부호'+(_mathOn?'·수학식':''));
     }

@@ -50,6 +50,7 @@ beforeEach(() => { toasts = []; });
 function descState() {
   setCtx(`
     selectedTitle='검색 시스템'; diagramData={}; outputTimestamps={}; conceptDiagramTypes=[]; requiredFigures=[];
+    includeMethodClaims=true;   // ★ [배치15H] 방법 상세설명(step_12) 렌더는 방법 opt-in 시만 — 순서(장치<예시<방법) 검증은 방법 ON 케이스
     outputs={
       step_06:'【청구항 1】 통신부(110)',
       step_08:'도 1을 참조하면, 통신부(110)가 데이터를 수신한다.',

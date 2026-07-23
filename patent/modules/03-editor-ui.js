@@ -1206,10 +1206,15 @@ function getFullDescription(){
 }
 // ★ [Task2] 발명을 실시하기 위한 구체적인 내용 본문 — 여는 정형문 + [장치+예시도(step_08c)+방법] + ★닫는 정형문(SUFFIX)을 섹션 맨 끝★.
 //   종전: getFullDescription 이 장치만 PREFIX/SUFFIX 로 감싸 닫는 정형문이 예시·방법 앞에 끼던 문제 해소(방법 선존재 문제도 동시 해소).
+// ★ [배치15H 적대검증] 렌더 계층 방법 게이트 — includeMethodClaims=false면 방법 산출물을 최종 문서에서 제외.
+//   생성·cohesion·S부호 게이트(04/05)는 이미 방법 OFF를 차단하나, 과거 방법 ON으로 생성 후 OFF 전환한 프로젝트의
+//   잔존 산출물(step_10/11/12/20·방법 S부호)이 미리보기·다운로드에서 그대로 누출되던 갭(사용자가 명시적으로 제외한
+//   방법이 출원문서에 남던 high 결함) 차단. 비파괴 — outputs는 보존하고 렌더 시점에만 필터(재토글 시 복원).
+function _renderMethodOn(){ return (typeof includeMethodClaims==='undefined')?false:!!includeMethodClaims; }
 function buildImplementationBody(){
   const device=getLatestDescription()||'';
   const concept=getLatestConceptDescription()||'';
-  const method=getLatestMethodDescription()||'';
+  const method=_renderMethodOn()?(getLatestMethodDescription()||''):'';   // ★ [배치15H] 방법 OFF → 방법 상세설명 제외
   // ★ [T3/math-dup] 합본 중복 제거 — 예시도가 device(step_08 합본)에 이미 있으면 별도 추가 금지(중복 0).
   //   없으면(구 사건·미합본) 보강하여 예시도 누락 방지. 합본 정본은 device, step_08c 는 source.
   //   ★ 견고화: 단순 slice(0,40) 연속 매칭은 수학식(step_09)이 예시도 시작부에 【수학식】을 끼우면 깨져
@@ -1856,7 +1861,10 @@ function _dbSet(field,val){
     else if(field==='indepDep'){ deviceIndepCount=Math.max(1,Math.min(5,parseInt(val)||1)); }   // [배치15B-1] 독립항 수 canonical
     else if(field==='figures'){ const e=document.getElementById('optDeviceFigures'); if(e)e.value=val; }
     else if(field==='conceptToggle'){ conceptDiagramEnabled=!!((document.getElementById('chkConceptDiagram')||{}).checked); }   // [배치15B-1] 예시도 포함 canonical
-    else if(field==='conceptCount'){ conceptTargetCount=Math.max(1,Math.min(9,parseInt(val)||1)); }   // [배치15B-1/15C-3] 예시도 수(1~9)
+    else if(field==='conceptCount'){ let _n=Math.max(1,Math.min(9,parseInt(val)||1)); const _selN=(conceptDiagramTypes||[]).length;   // [배치15B-1/15C-3] 예시도 수(1~9)
+      // ★ [배치15H 적대검증] 명시 선택 유형 수보다 낮게 내리면 체인 _trimConceptTypesToTarget가 선택 유형을 침묵 절단 → 하한을 선택 수로 클램프+고지(선택=보호, 상향과 대칭).
+      if(_selN>_n){ _n=_selN; try{App.showToast('선택한 예시도 유형 '+_selN+'종이 있어 예시도 수를 그 미만으로 낮출 수 없습니다(유형 해제 후 조정하세요)','info');}catch(_e){} }
+      conceptTargetCount=_n; }
     else if(field==='mathCount'){ mathBlockCount=Math.max(1,Math.min(5,parseInt(val)||1)); }   // [배치15B-1] 수학식 개수(cohesion 계약)
     else if(field==='detailToggle'){ detailLevel=(document.getElementById('selUnifiedDetail')||{}).value||detailLevel; const lv=['compact','standard','detailed','maximal','custom']; document.querySelectorAll('#detailLevelCards .selection-card').forEach(function(cd,i){cd.classList.toggle('selected',lv[i]===detailLevel);}); }
     // 'mathToggle'는 canonical chkUnifiedMath 자체가 소스 — 별도 write 없이 마크/렌더만.

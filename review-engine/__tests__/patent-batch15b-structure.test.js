@@ -248,9 +248,10 @@ test('★ FIX-R5 — _deviceAnkStart 공유 헬퍼: N=1은 기존값, N>1은 시
 });
 
 // body resume 가드: 이어하기에서 본문 존재 시 재사용(덮어쓰지 않음) + 재생성 경로만 change-detection
-test('★ FIX-body-resume — resume&&step_08&&step_18 재사용 분기(덮어쓰기 방지)', () => {
-  assert.match(PATENT_SRC, /if\(resume&&outputs\.step_08&&outputs\.step_18\)\{\s*_phase\('body','done','상세설명·부호\(재사용\)'\);/, '★ 본문 존재 시 재사용(재생성 skip)');
-  assert.match(PATENT_SRC, /\} else \{\s*const _beforeDesc=outputs\.step_08\|\|''; _lastGenError='';\s*await runUnifiedCohesionGen/, '★ 재생성 경로에서만 change-detection');
+test('★ FIX-body-resume — resume&&step_08&&step_18(+방법완성도) 재사용 분기(덮어쓰기 방지)', () => {
+  // ★ [배치15H] 재사용 가드에 (!wantMethod||outputs.step_12) 추가 — 장치 전용 생성 후 방법 ON 이어하기에서 방법 본문 미완성 방지
+  assert.match(PATENT_SRC, /if\(resume&&outputs\.step_08&&outputs\.step_18&&\(!wantMethod\|\|outputs\.step_12\)\)\{\s*_phase\('body','done','상세설명·부호\(재사용\)'\);/, '★ 본문+방법완성도 존재 시 재사용(재생성 skip)');
+  assert.match(PATENT_SRC, /\} else \{\s*const _beforeDesc=outputs\.step_08\|\|''; const _beforeMethod=outputs\.step_12\|\|''; _lastGenError='';\s*await runUnifiedCohesionGen/, '★ 재생성 경로에서만 change-detection(방법 획득 성공판정 포함)');
 });
 
 // _lastGenError 체인 진입 리셋(사유 누출 방지)

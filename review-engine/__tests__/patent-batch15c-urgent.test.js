@@ -158,9 +158,9 @@ test('★ FIX4 — report 게이트(부호·누출)가 수식 재요청 뒤에 �
   const iRep = PATENT_SRC.indexOf('let gate=_computeGate(r.report);');
   assert.ok(iMath > 0 && iRep > iMath, '★ 수식 게이트 → report 게이트 순서');
 });
-// FIX5: 방법 산출물 있는 프로젝트 복원 시 _methodUserSet 보호
-test('★ FIX5 — openProject: 방법 산출물(step_10/11) 있으면 _methodUserSet 보호(true)', () => {
-  assert.match(PATENT_SRC, /_methodUserSet=!!\(outputs\.step_10\|\|outputs\.step_11\);/, '★ 방법 산출물 기반 보호');
+// FIX5: 방법 산출물 있는 프로젝트 복원 시 _methodUserSet 보호 (배치15H: 복원된 방법-ON opt-in 도 보호)
+test('★ FIX5 — openProject: 방법 산출물(step_10/11) 또는 복원 방법-ON 시 _methodUserSet 보호(true)', () => {
+  assert.match(PATENT_SRC, /_methodUserSet=\(includeMethodClaims===true\)\|\|!!\(outputs\.step_10\|\|outputs\.step_11\);/, '★ 복원 방법-ON opt-in 또는 방법 산출물 기반 보호');
 });
 // FIX6: 레거시 toggleMethod → ② 보드 미러
 test('★ FIX6 — toggleMethod가 renderDesignBoard 호출(② 체크·안내 동기)', () => {

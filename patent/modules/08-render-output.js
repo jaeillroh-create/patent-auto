@@ -774,14 +774,18 @@ function _stripDupHeader(body,h){
   return body.replace(new RegExp('^\\s*【\\s*'+esc+'\\s*】[ \\t]*\\r?\\n?'),'');
 }
 let _claimWarnAt=0;   // [배치5 ⑤] D-1 청구항 번호 경고 스로틀 타임스탬프(1클릭 3중 호출 → toast 1회화)
+// ★ [배치15H 적대검증] 부호의 설명(step_18) 렌더 필터 — 방법 OFF면 방법 단계부호(명칭 : S###) 줄과 [방법 단계] 헤더를
+//   제거하고 장치부호만 유지(방법 청구항/본문/도면이 제외됐는데 방법 S부호만 부호의 설명에 남아 불일치가 되는 것을 차단).
+function _step18ForRender(){ const t=outputs.step_18||''; if(_renderMethodOn())return t;
+  return t.split('\n').filter(function(l){ return !/:\s*S\d/.test(l) && !/^\s*\[방법\s*단계\]\s*$/.test(l); }).join('\n').replace(/\n{3,}/g,'\n\n').replace(/\s+$/,''); }
 function buildSpecification(){
-  const brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
+  const brief=extractBriefDescriptions(outputs.step_07||'',_renderMethodOn()?(outputs.step_11||''):'');   // ★ [배치15H] 방법 OFF → 방법 도면 약설 제외
   // v4.9: Include English title
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
   // Claims: use the latest version (after auto-correction from validation)
   const deviceClaims=outputs.step_06||'';
-  const methodClaims=outputs.step_10||'';
-  const mediaClaims=outputs.step_20||''; // v5.5: 기록매체/프로그램 청구항
+  const methodClaims=_renderMethodOn()?(outputs.step_10||''):'';   // ★ [배치15H] 방법 OFF → 방법 청구항 제외
+  const mediaClaims=_renderMethodOn()?(outputs.step_20||''):''; // v5.5: 기록매체/프로그램 청구항 — 방법 세트(방법 OFF 시 제외)
   const allClaims=[deviceClaims,methodClaims,mediaClaims].filter(Boolean).join('\n\n');
   // ═══ D-1 fix: 청구항 번호 연속성 최종 검증 (v5.5) ═══
   //   ★ [배치5 ⑤] 경고 스로틀 — 다운로드 1클릭이 buildSpecification을 3회 호출(본문+게이트+스탬프)해 같은 toast가
@@ -801,7 +805,7 @@ function buildSpecification(){
   let extras='';
   if(outputs.step_14)extras+='\n\n[참고: 대안 청구항]\n'+outputs.step_14;
   if(outputs.step_15)extras+='\n\n[참고: 특허성 검토]\n'+outputs.step_15;
-  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${_stripDupHeader(outputs.step_02||'','기술분야')}`,`【발명의 배경이 되는 기술】\n${_stripDupHeader(outputs.step_03||'','발명의 배경이 되는 기술')}`,`【선행기술문헌】\n${_stripDupHeader(outputs.step_04||'','선행기술문헌')}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${_stripDupHeader(outputs.step_05||'','해결하고자 하는 과제')}`,`【과제의 해결 수단】\n${_stripDupHeader(outputs.step_17||'','과제의 해결 수단')}`,`【발명의 효과】\n${_stripDupHeader(outputs.step_16||'','발명의 효과')}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${buildImplementationBody()}`,`【부호의 설명】\n${_stripDupHeader(outputs.step_18||'','부호의 설명')}`,`【청구범위】\n${allClaims}`,`【요약서】\n${_stripDupHeader(outputs.step_19||'','요약서')}`].filter(Boolean).join('\n\n')+extras;
+  return['【발명의 설명】',`【발명의 명칭】\n${titleLine}`,`【기술분야】\n${_stripDupHeader(outputs.step_02||'','기술분야')}`,`【발명의 배경이 되는 기술】\n${_stripDupHeader(outputs.step_03||'','발명의 배경이 되는 기술')}`,`【선행기술문헌】\n${_stripDupHeader(outputs.step_04||'','선행기술문헌')}`,'【발명의 내용】',`【해결하고자 하는 과제】\n${_stripDupHeader(outputs.step_05||'','해결하고자 하는 과제')}`,`【과제의 해결 수단】\n${_stripDupHeader(outputs.step_17||'','과제의 해결 수단')}`,`【발명의 효과】\n${_stripDupHeader(outputs.step_16||'','발명의 효과')}`,`【도면의 간단한 설명】\n${brief||''}`,`【발명을 실시하기 위한 구체적인 내용】\n${buildImplementationBody()}`,`【부호의 설명】\n${_stripDupHeader(_step18ForRender(),'부호의 설명')}`,`【청구범위】\n${allClaims}`,`【요약서】\n${_stripDupHeader(outputs.step_19||'','요약서')}`].filter(Boolean).join('\n\n')+extras;
 }
 // ★ [Task1] ④ 미생성(예시도 있는데 step_08c 비었음) 경고 — 출력 직전 1회(누락 사실 안내, 차단은 안 함).
 function _warnConceptDescMissing(){ if(_conceptDescMissing())App.showToast('⚠️ 예시도 상세설명 미생성 — 예시도 설명이 명세서에서 빠집니다. Step 8 "상세설명 생성(장치+예시도)"을 실행하면 예시도 설명도 함께 생성됩니다','warning'); }
@@ -814,11 +818,11 @@ function downloadAsTxt(){const t=buildSpecification();if(!t.trim()){App.showToas
 function downloadAsWord(){
   _warnConceptDescMissing();   // ★ [Task1] ④ 미생성 경고
   if(!_downloadGate())return;  // [§6-2] CRITICAL 결함 시 확인 게이트(취소 시 차단)
-  const brief=extractBriefDescriptions(outputs.step_07||'',outputs.step_11||'');
+  const brief=extractBriefDescriptions(outputs.step_07||'',_renderMethodOn()?(outputs.step_11||''):'');   // ★ [배치15H] 방법 OFF → 방법 도면 약설 제외
   // v4.9: Include English title
   const titleLine=selectedTitleEn?`${selectedTitle}{${selectedTitleEn}}`:selectedTitle;
-  const allClaims=[outputs.step_06,outputs.step_10,outputs.step_20].filter(Boolean).join('\n\n');
-  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:buildImplementationBody()},{h:'부호의 설명',b:outputs.step_18},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
+  const allClaims=[outputs.step_06,_renderMethodOn()?outputs.step_10:'',_renderMethodOn()?outputs.step_20:''].filter(Boolean).join('\n\n');   // ★ [배치15H] 방법 OFF → 방법·기록매체 청구항 제외
+  const secs=[{h:'발명의 설명'},{h:'발명의 명칭',b:titleLine},{h:'기술분야',b:outputs.step_02},{h:'발명의 배경이 되는 기술',b:outputs.step_03},{h:'선행기술문헌',b:outputs.step_04},{h:'발명의 내용'},{h:'해결하고자 하는 과제',b:outputs.step_05},{h:'과제의 해결 수단',b:outputs.step_17},{h:'발명의 효과',b:outputs.step_16},{h:'도면의 간단한 설명',b:brief},{h:'발명을 실시하기 위한 구체적인 내용',b:buildImplementationBody()},{h:'부호의 설명',b:_step18ForRender()},{h:'청구범위',b:allClaims},{h:'요약서',b:outputs.step_19}];
   const html=secs.map(s=>{const hd=`<h2 style="font-size:12pt;font-weight:normal;font-family:'바탕체',BatangChe,serif;margin-top:18pt;margin-bottom:6pt;text-align:justify">【${App.escapeHtml(s.h)}】</h2>`;const body=_stripDupHeader(s.b,s.h);if(!body)return hd;return hd+body.split('\n').filter(l=>l.trim()).map(l=>{const hl=/【수학식\s*\d+】/.test(l)||/__+/.test(l)?'background-color:#FFFF00;':'';return `<p style="text-indent:40pt;margin:0;line-height:200%;font-size:12pt;font-family:'바탕체',BatangChe,serif;text-align:justify;${hl}">${App.escapeHtml(l.trim())}</p>`;}).join('');}).join('');
   const userFigHtml=buildUserFiguresHtml({word:true}); // ★ T4: 사용자 도면 이미지(base64) 삽입 — 도 번호 순
   const full=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:A4;margin:2.5cm}body{font-family:'바탕체',BatangChe,serif;font-size:12pt;line-height:200%;text-align:justify}</style></head><body>${html}${userFigHtml}</body></html>`;

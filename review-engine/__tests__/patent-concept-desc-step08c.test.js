@@ -95,7 +95,7 @@ test('A1 ★ 예시도 없으면 생성 거부(가드)', async () => {
 test('A2 ★ buildSpecification — 발명을 실시하기 위한 구체적인 내용에 장치→예시→방법 순', () => {
   setCtx(`
     selectedTitle='검색 시스템'; diagramData={}; outputTimestamps={};
-    conceptDiagramTypes=[]; requiredFigures=[];
+    conceptDiagramTypes=[]; requiredFigures=[]; includeMethodClaims=true;
     outputs={
       step_06:'【청구항 1】 통신부(110)',
       step_08:'도 1을 참조하면, 통신부(110)가 데이터를 수신한다.',
@@ -113,7 +113,7 @@ test('A2 ★ buildSpecification — 발명을 실시하기 위한 구체적인 �
 
 test('A2 ★ step_08c 없으면 — 종전과 동일(장치+방법, no-op)', () => {
   setCtx(`
-    selectedTitle='검색 시스템'; diagramData={}; conceptDiagramTypes=[]; requiredFigures=[]; outputTimestamps={};
+    selectedTitle='검색 시스템'; diagramData={}; conceptDiagramTypes=[]; requiredFigures=[]; outputTimestamps={}; includeMethodClaims=true;
     outputs={step_06:'【청구항 1】 통신부(110)', step_08:'도 1을 참조하면, 통신부(110)가 동작한다.', step_12:'도 5를 참조하면, S510 단계.'};
   `);
   const spec = call('buildSpecification()');

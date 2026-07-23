@@ -32,6 +32,7 @@ before(() => {
     navigator: { clipboard: { writeText: async () => {} } },
     App, showToast() {}, escapeHtml: (s) => String(s == null ? '' : s), setButtonLoading() {}, updateStats() {}, fetch: async () => ({ ok: true, json: async () => ({}), text: async () => '' }),
     currentProjectId: '', confirm: () => true,
+    API_KEY: 'stub',   // common.js 미로드 번들에서 openProject(01:272 if(!API_KEY)) ReferenceError 방지(하네스 보정)
   };
   sandbox.window = sandbox; sandbox.globalThis = sandbox; sandbox.self = sandbox;
   sandbox.window.ReviewUI = { isEnabled: () => false };
@@ -174,9 +175,116 @@ test('15H-3 동작 ★ — 해제는 conceptTargetCount 를 낮추지 않음(자
   assert.strictEqual(run('conceptTargetCount'), 3, '★ 목표 개수는 3 유지(해제로 축소 안 함)');
 });
 
+// ─────────── 적대검증 반영: #1/#2 렌더 계층 방법 게이트(방법 OFF 누출 차단) ───────────
+
+// 방법 산출물이 모두 커밋된 상태(과거 방법 ON 생성) 설정 헬퍼.
+function methodFullState() {
+  run(`clearAllState(); selectedTitle="검색 시스템";
+    outputs={
+      step_06:"【청구항 1】 제어부(100)를 포함하는 장치.",
+      step_08:"도 1을 참조하면, 제어부(100)가 처리한다.",
+      step_10:"【청구항 5】 METHOD_CLAIM_MARK 하는 단계를 포함하는 방법.",
+      step_11:"도 3은 방법 흐름도로서 METHOD_FIG_MARK 를 도시한다.",
+      step_12:"도 3을 참조하면, S710 단계에서 METHOD_DESC_MARK 수신한다.",
+      step_18:"제어부 : 100\\n\\n[방법 단계]\\n수신하는 단계 : S710",
+      step_20:"【청구항 9】 MEDIA_CLAIM_MARK 프로그램을 기록한 기록매체."
+    };`);
+}
+
+test('#1/#2 동작 ★ — 방법 OFF: buildSpecification 이 방법 청구항·상세설명·도면약설·기록매체·S부호 제외', () => {
+  methodFullState();
+  run('includeMethodClaims=false;');
+  const spec = run('buildSpecification()') || '';
+  assert.ok(/제어부\(100\)/.test(spec), '★ 장치 내용은 유지');
+  assert.ok(!/METHOD_CLAIM_MARK/.test(spec), '★ 방법 청구항 제외');
+  assert.ok(!/METHOD_DESC_MARK/.test(spec), '★ 방법 상세설명 제외');
+  assert.ok(!/METHOD_FIG_MARK/.test(spec), '★ 방법 도면 약설 제외');
+  assert.ok(!/MEDIA_CLAIM_MARK/.test(spec), '★ 기록매체(방법 세트) 청구항 제외');
+  assert.ok(!/S710/.test(spec), '★ 부호의 설명에서 방법 S부호 제외');
+  assert.ok(!/\[방법\s*단계\]/.test(spec), '★ [방법 단계] 헤더 제외');
+});
+
+test('#1/#2 동작 ★ — 방법 ON: buildSpecification 이 방법 산출물을 모두 포함(비파괴·가역)', () => {
+  methodFullState();
+  run('includeMethodClaims=true;');
+  const spec = run('buildSpecification()') || '';
+  assert.ok(/METHOD_CLAIM_MARK/.test(spec), '★ 방법 청구항 포함');
+  assert.ok(/METHOD_DESC_MARK/.test(spec), '★ 방법 상세설명 포함');
+  assert.ok(/S710/.test(spec), '★ 방법 S부호 포함');
+  assert.ok(/MEDIA_CLAIM_MARK/.test(spec), '★ 기록매체 청구항 포함');
+});
+
+test('#1/#2 동작 ★ — 재토글 가역성: OFF→ON 시 방법 산출물이 outputs 에 보존되어 복원', () => {
+  methodFullState();
+  run('includeMethodClaims=false;'); run('buildSpecification();');
+  assert.ok(/METHOD_CLAIM_MARK/.test(run('outputs.step_10') || ''), '★ OFF 렌더가 outputs.step_10 을 파괴하지 않음');
+  run('includeMethodClaims=true;');
+  assert.ok(/METHOD_CLAIM_MARK/.test(run('buildSpecification()') || ''), '★ ON 재토글 시 방법 복원(가역)');
+});
+
+test('#1/#2 동작 ★ — _step18ForRender: 방법 OFF 시 명칭:S### 줄·[방법 단계] 헤더만 제거(장치부호 유지)', () => {
+  methodFullState();
+  run('includeMethodClaims=false;');
+  const s18 = run('_step18ForRender()') || '';
+  assert.ok(/제어부 : 100/.test(s18), '★ 장치부호 유지');
+  assert.ok(!/S710/.test(s18) && !/\[방법\s*단계\]/.test(s18), '★ 방법 S부호·헤더 제거');
+  run('includeMethodClaims=true;');
+  assert.ok(/S710/.test(run('_step18ForRender()') || ''), '★ 방법 ON 시 그대로');
+});
+
+test('#1/#2 동작 ★ — buildImplementationBody: 방법 OFF 시 방법 상세설명 제외', () => {
+  methodFullState();
+  run('includeMethodClaims=false;');
+  assert.ok(!/METHOD_DESC_MARK/.test(run('buildImplementationBody()') || ''), '★ 방법 OFF → 본문에서 방법 상세설명 제외');
+  run('includeMethodClaims=true;');
+  assert.ok(/METHOD_DESC_MARK/.test(run('buildImplementationBody()') || ''), '★ 방법 ON → 방법 상세설명 포함');
+});
+
+test('#1/#2 소스 ★ — _renderMethodOn 게이트가 3개 렌더 진입점에 배선', () => {
+  assert.match(PATENT_SRC, /function _renderMethodOn\(\)\{/, '★ 렌더 게이트 정의');
+  assert.match(PATENT_SRC, /const methodClaims=_renderMethodOn\(\)\?\(outputs\.step_10\|\|''\):'';/, '★ buildSpecification 방법 청구항 게이트');
+  assert.match(PATENT_SRC, /const method=_renderMethodOn\(\)\?\(getLatestMethodDescription\(\)\|\|''\):'';/, '★ buildImplementationBody 방법 상세설명 게이트');
+  assert.match(PATENT_SRC, /_renderMethodOn\(\)\?outputs\.step_10:''/, '★ downloadAsWord allClaims 게이트');
+});
+
+// ─────────── 적대검증 반영: #5 예시도 수 하향 시 명시 유형 절단 방지 ───────────
+
+test('#5 동작 ★ — 명시 유형 3종 후 예시도 수 1 입력 → 목표가 3 미만으로 내려가지 않음(절단 방지)', () => {
+  run('clearAllState(); conceptTargetCount=2; conceptDiagramTypes=[]; conceptDiagramEnabled=true;');
+  run('_dbToggleConceptType("ui_screen",true); _dbToggleConceptType("user_scenario",true); _dbToggleConceptType("data_structure",true);'); // →3, 목표 3
+  run('_dbSet("conceptCount","1");'); // 1로 낮춤 시도
+  assert.strictEqual(run('conceptTargetCount'), 3, '★ 선택 3종 하한으로 클램프(침묵 절단 방지)');
+  assert.strictEqual(run('conceptDiagramTypes.length'), 3, '★ 선택 유형 보존');
+});
+
+test('#5 동작 ★ — 선택 유형이 없으면 예시도 수 하향 자유', () => {
+  run('clearAllState(); conceptTargetCount=5; conceptDiagramTypes=[]; conceptDiagramEnabled=true;');
+  run('_dbSet("conceptCount","2");');
+  assert.strictEqual(run('conceptTargetCount'), 2, '★ 미선택 시 자유 하향');
+});
+
+// ─────────── 적대검증 반영: #3 resume 방법 본문 스킵 방지 ───────────
+
+test('#3 소스 ★ — resume 재사용 가드에 방법 완성도(step_12) 조건 추가', () => {
+  assert.match(PATENT_SRC, /if\(resume&&outputs\.step_08&&outputs\.step_18&&\(!wantMethod\|\|outputs\.step_12\)\)\{/, '★ 방법 ON인데 step_12 없으면 재사용 안 함');
+  assert.match(PATENT_SRC, /const _methodGained=wantMethod&&!_beforeMethod&&!!outputs\.step_12;/, '★ 방법 획득 시 step_08 무변경도 성공 판정');
+});
+
+// ─────────── 적대검증 반영: #6 복원 방법-ON opt-in 보호 ───────────
+
+test('#6 동작 ★ — openProject 복원: 저장 방법-ON(true)이나 방법 산출물 없어도 _methodUserSet 보호', async () => {
+  const origFrom = sandbox.App.sb.from;
+  try {
+    mockRow({ outputs: { step_06: '【청구항 1】 장치.' }, includeMethodClaims: true }); // step_10/11 없음
+    await run('openProject("x").catch(function(){});');
+    assert.strictEqual(run('includeMethodClaims'), true, '★ 방법-ON 복원');
+    assert.strictEqual(run('_methodUserSet'), true, '★ 방법 산출물 없어도 opt-in 보호(유형 편집 시 침묵 OFF 방지)');
+  } finally { sandbox.App.sb.from = origFrom; }
+});
+
 // ─────────────────────── 회귀: 캐시버스트 토큰 ───────────────────────
 
 test('15H 회귀 ★ — ?v= 릴리스 토큰 b50 갱신', () => {
-  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260722-b50/, '★ index.html patent.js 토큰 b50');
-  assert.match(readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8'), /version = '20260722-b50'/, '★ patent.js 로더 version b50');
+  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260722-b51/, '★ index.html patent.js 토큰 b50');
+  assert.match(readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8'), /version = '20260722-b51'/, '★ patent.js 로더 version b50');
 });
