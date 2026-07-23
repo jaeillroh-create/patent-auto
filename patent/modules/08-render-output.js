@@ -555,13 +555,26 @@ function _dedupParagraphs(text){
   return {text:kept.join('\n\n'), removed:removed};
 }
 // 본문 "명칭(부호)" 쌍 수집(부호의 설명 재생성용). 부호별 최빈 명칭 채택. 부호의 설명 섹션은 제외.
+// ★ [배치15J] 부호표 명칭 앞글자 유실/junk 혼입 방지 — 본문 "명칭(번호)" 추출 시 선행 비명칭 토큰(도면참조·지시어·접속어·수식어·범위어·조사)을 제거.
+//   종전 정규식 [가-힣A-Za-z\s]{0,12}? 는 14자↑ 장문 명칭에서 캡처 시작이 뒤로 밀려 앞글자를 유실(잘린 명칭이
+//   정상 명칭과 충돌 → dupassign HIGH 유발)했고, 짧은 명칭 앞엔 조사·"내지" 같은 junk를 함께 포섭했다.
+//   → 시작 char cap 을 제거(단어 그룹 {0,7})하고, 선행 비명칭 토큰을 반복 제거하여 완전형 명칭만 남긴다.
+const _REF_NAME_STRIP=/^(?:도\s*\d+\s*(?:의|을|를|은|는|에서|에|과|와|및)?|상기|그리고|또한|한편|아울러|본|해당|각각의|각|그|이는|이를|이가|이|및|또는|특히|즉|따라서|이때|여기서|포함하는|구비하는|이루어진|갖는|구성된|연결된|위한|상의|내지|는|은|을|를|와|과|의|에서|에|으로|로|도|만)\s+/;
+function _cleanRefName(n){ let s=String(n||''),prev; do{prev=s;s=s.replace(_REF_NAME_STRIP,'');}while(s!==prev); return s.trim(); }
+// ★ [배치15J-4] 앞글자 유실 정밀 교정(사후 안전망) — refMap 명칭이 body 명칭의 접미이고 앞 차이가 공백 없는 ≤2자면
+//   body(본문 실사용 전체형)를 채택. 그 외엔 refMap(curated) 우선(단어 단위 over-capture는 채택하지 않음).
+function _reconcileRefName(refName, bodyName){
+  if(!refName) return bodyName||''; if(!bodyName||refName===bodyName) return refName;
+  if(bodyName.length>refName.length && bodyName.endsWith(refName)){ const pre=bodyName.slice(0,bodyName.length-refName.length); if(pre.length<=2 && !/\s/.test(pre)) return bodyName; }
+  return refName;
+}
 function _collectBodyRefPairs(){
   const spec=buildSpecification();
   const refM=spec.match(/【\s*부호의 설명\s*】([\s\S]*?)(?:\n【|$)/);
   const body=refM?spec.replace(refM[1],' '):spec;
   const map=new Map();
-  const re=/([가-힣A-Za-z][가-힣A-Za-z\s]{0,12}?)\s*\((\d{1,4})\)/g; let m;
-  while((m=re.exec(body))!==null){ const name=m[1].replace(/^상기\s*/,'').trim(); const ref=parseInt(m[2],10); if(!(ref>=1&&ref<=9999))continue; if(!map.has(ref))map.set(ref,new Map()); if(name.length>=2){ const nm=map.get(ref); nm.set(name,(nm.get(name)||0)+1); } }
+  const re=/([가-힣A-Za-z][가-힣A-Za-z0-9·]*(?:\s+[가-힣A-Za-z0-9·]+){0,7})\s*\((\d{1,4})\)/g; let m;   // ★ [배치15J] char cap 제거 → 단어 그룹(앞글자 유실 차단)
+  while((m=re.exec(body))!==null){ const name=_cleanRefName(m[1]); const ref=parseInt(m[2],10); if(!(ref>=1&&ref<=9999))continue; if(!map.has(ref))map.set(ref,new Map()); if(name.length>=2){ const nm=map.get(ref); nm.set(name,(nm.get(name)||0)+1); } }
   let b; const bare=/\((\d{1,4})\)/g; while((b=bare.exec(body))!==null){ const ref=parseInt(b[1],10); if(ref>=1&&ref<=9999&&!map.has(ref))map.set(ref,new Map()); }
   return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(function(e){ const ref=e[0],nm=e[1]; let best='',bc=0; nm.forEach(function(c,n){ if(c>bc){bc=c;best=n;} }); return {ref:ref,name:best}; });
 }
@@ -570,7 +583,7 @@ function _collectBodyRefPairs(){
 //   ★ device/method 뿐 아니라 효과·과제 등 기존 섹션의 (NN)까지 전수 커버(완성본 기준) → 부분 재생성에도 부호정합 성립.
 function _deriveSignDescription(refMap){
   const pairs=_collectBodyRefPairs();   // [{ref:number, name}] — 완성 본문(부호의설명 섹션 제외) 전수
-  const devLines=pairs.map(function(p){ const key=String(p.ref); const nm=(refMap&&typeof refMap.get==='function'&&refMap.get(key))||p.name||'구성요소'; return nm+' : '+p.ref; });
+  const devLines=pairs.map(function(p){ const key=String(p.ref); const rm=(refMap&&typeof refMap.get==='function'&&refMap.get(key))||''; const nm=_reconcileRefName(rm, p.name||'')||p.name||'구성요소'; return nm+' : '+p.ref; });   // ★ [배치15J-4] refMap 앞글자 유실 시 본문 전체형으로 교정
   let out=devLines.join('\n');
   const met=refMap?[...refMap].filter(function(e){return String(e[0]).startsWith('S');}).sort(function(a,b){return parseInt(String(a[0]).slice(1),10)-parseInt(String(b[0]).slice(1),10);}):[];
   if(met.length)out+=(out?'\n\n[방법 단계]\n':'')+met.map(function(e){return e[1]+' : '+e[0];}).join('\n');
@@ -654,9 +667,9 @@ function validateRefNumberConsistency(){
 
   // 1. 본문에서 "명칭(참조번호)" 수집 → 참조번호별 명칭 빈도
   const refNameMap=new Map(); // ref → Map<name, count>
-  const refRe=/([가-힣a-zA-Z][가-힣a-zA-Z\s]{0,12}?)\s*\((\d{2,4}|S\d{2,4})\)/g;
+  const refRe=/([가-힣a-zA-Z][가-힣a-zA-Z0-9·]*(?:\s+[가-힣a-zA-Z0-9·]+){0,7})\s*\((\d{2,4}|S\d{2,4})\)/g;   // ★ [배치15J] char cap 제거 → 앞글자 유실로 인한 거짓 명칭 불일치(term_mismatch/dupassign) 방지
   let m;while((m=refRe.exec(allText))!==null){
-    const name=m[1].replace(/^상기\s*/,'').trim();
+    const name=_cleanRefName(m[1]);   // ★ [배치15J] 선행 junk(도면참조·조사·범위어) 제거
     const ref=m[2];
     if(name.length<2)continue;
     if(!refNameMap.has(ref))refNameMap.set(ref,new Map());

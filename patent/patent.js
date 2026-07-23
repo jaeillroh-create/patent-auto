@@ -16,7 +16,7 @@
     'modules/08-render-output.js',
     'modules/09-review-engine.js'
   ];
-  var version = '20260722-b51';
+  var version = '20260722-b52';
   if (typeof document === 'undefined' || typeof document.write !== 'function') return;
   for (var i = 0; i < parts.length; i++) {
     document.write('<script src="patent/' + parts[i] + '?v=' + version + '"><\/script>');
