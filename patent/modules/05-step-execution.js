@@ -15,28 +15,6 @@ function checkDependency(s){
   if(!includeMethodClaims&&methodSteps.includes(s)){return '방법 청구항이 비활성화되어 있습니다';}
   const d={step_01:()=>inv?null:'발명 내용을 먼저 입력',step_06:()=>selectedTitle?null:'명칭을 먼저 확정',step_07:()=>outputs.step_06?null:'장치 청구항 먼저',step_08:()=>(outputs.step_06&&outputs.step_07)?null:'도면 설계 먼저',step_09:()=>outputs.step_08?null:'상세설명 먼저',step_08c:()=>outputs.step_08?null:'장치 상세설명(Step 8) 먼저',step_10:()=>outputs.step_06?null:'장치 청구항 먼저',step_11:()=>outputs.step_10?null:'방법 청구항 먼저',step_12:()=>(outputs.step_10&&outputs.step_11)?null:'방법 도면 먼저',step_13:()=>(outputs.step_06&&outputs.step_08)?null:'청구항+상세설명 먼저',step_14:()=>outputs.step_06?null:'장치 청구항 먼저',step_15:()=>outputs.step_06?null:'장치 청구항 먼저',step_20:()=>outputs.step_10?null:'방법 청구항 먼저'};return d[s]?d[s]():null;
 }
-// ═══ [Item 3] FIX 품질 게이팅 — B/C군(도면·상세설명·수학식)은 선행 청구항이 validateClaims 를 통과해야 진행 ═══
-//   장치계(07/08/09/08c): step_06 검사 / 방법계(11/12): step_06 컨텍스트 합산 + step_10 검사(05:81 패턴 재사용).
-const _CLAIM_GATE_STEPS={step_07:'device',step_08:'device',step_09:'device',step_08c:'device',step_11:'method',step_12:'method'};
-function _claimGateStatus(sid){
-  const kind=_CLAIM_GATE_STEPS[sid];
-  if(!kind)return {critical:0,high:0,issues:[]};   // B/C군 아님 → 통과(D·F군·청구항 자체는 게이트 대상 아님)
-  const issues = kind==='method'
-    ? validateClaims((outputs.step_06||'')+'\n'+(outputs.step_10||''))   // 방법: 장치 청구항 컨텍스트 합산(상기 선행기재 해소)
-    : validateClaims(outputs.step_06||'');
-  return { critical:issues.filter(i=>i.severity==='CRITICAL').length, high:issues.filter(i=>i.severity==='HIGH').length, issues };
-}
-// 게이트 판정: CRITICAL>0 → 하드 차단(false). HIGH>0 → 확인 모달(진행 true/취소 false). 0 → 통과. bulk=true면 모달 생략(CRITICAL만 차단).
-async function _claimGatePass(sid,bulk){
-  const g=_claimGateStatus(sid);
-  if(g.critical>0){ App.showToast(`⚠️ 청구항 검증 CRITICAL ${g.critical}건 — 청구항(D·검증 탭)을 먼저 보정하세요. ${STEP_NAMES[sid]||sid} 중단`,'error'); return false; }
-  if(g.high>0 && !bulk){
-    const ok=(typeof window==='undefined'||typeof window.confirm!=='function') ? true
-      : window.confirm(`청구항에 HIGH 경고 ${g.high}건이 있습니다.\n\n이대로 ${STEP_NAMES[sid]||sid}을(를) 진행하시겠습니까?\n(취소 후 청구항을 먼저 보정하는 것을 권장합니다.)`);
-    if(!ok)return false;
-  }
-  return true;
-}
 async function runStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}const bm={step_01:'btnStep01',step_06:'btnStep06',step_10:'btnStep10',step_13:'btnStep13',step_14:'btnStep14',step_15:'btnStep15',step_20:'btnStep20'},bid=bm[sid];setGlobalProcessing(true);loadingState[sid]=true;if(bid)App.setButtonLoading(bid,true);
   try{
     // v6.0: 부분 수정 모드 표시
@@ -124,7 +102,7 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     // [C1 자동 연쇄] SCOPE_GUARDED 스텝 생성 후 자동 검증
     if(inventionScope?.locked_at&&(SCOPE_GUARDED_TEXT_STEPS.includes(sid)||SCOPE_GUARDED_MERMAID_STEPS.includes(sid))){try{await runScopeCheck(sid);}catch(e2){console.warn('[C1] runScopeCheck 자동 실행 실패:',sid,e2.message);}}
   }catch(e){App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
-async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}if(!(await _claimGatePass(sid)))return;setGlobalProcessing(true);try{await _longStepCore(sid);}finally{setGlobalProcessing(false);}}
+async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);try{await _longStepCore(sid);}finally{setGlobalProcessing(false);}}
 // ★ [T1] 가드/globalProcessing 없는 실행 코어 — 통합 핸들러(runImplementationDesc)가 device→concept 순차 호출 시 중첩 early-return 방지(진단 경고 반영).
 async function _longStepCore(sid){const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';loadingState[sid]=true;App.setButtonLoading(bid,true);
   // v6.0: 부분 수정 모드 표시
@@ -141,7 +119,7 @@ async function _longStepCore(sid){const bid=sid==='step_08'?'btnStep08':'btnStep
       const _charCount=_bodyText.length;
       // v10.5: 실제 도면 수 기준 (UI 값 변경 시에도 정확한 경고)
       const _actualFigCount=_extractFigureNumbersFromDesign(outputs.step_07||'').length||parseInt(document.getElementById('optDeviceFigures')?.value||4);
-      const _dlCfg={compact:1000,standard:1500,detailed:2000,maximal:3000,custom:customDetailChars||2000}[detailLevel]||1500;
+      const _dlCfg={compact:1000,standard:1500,detailed:2000,custom:customDetailChars||2000}[detailLevel]||1500;
       const _targetTotal=_dlCfg*_actualFigCount;
       const _ratio=_charCount/_targetTotal;
       if(_ratio>1.5){
@@ -168,7 +146,6 @@ async function runConceptDescStep(){
   if(!conceptDiagramTypes.some(ct=>ct.svgContent)){App.showToast('먼저 예시도(Step 7c)를 생성하세요','error');return;}
   if(!outputs.step_06){App.showToast('장치 청구항(Step 6)을 먼저 생성하세요','error');return;}
   if(!outputs.step_08){App.showToast('장치 상세설명(Step 8)을 먼저 생성하세요 — 예시도 설명은 장치 설명을 전제로 합니다','error');return;}   // ★ [T2] 순서 강제(장치→예시)
-  if(!(await _claimGatePass('step_08c')))return;   // [Item 3] 품질 게이트
   setGlobalProcessing(true);
   try{await _conceptDescCore();}finally{setGlobalProcessing(false);}
 }
@@ -201,7 +178,7 @@ async function runImplementationDesc(){
     }
   }finally{setGlobalProcessing(false);}
 }
-async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}if(!(await _claimGatePass('step_09')))return;setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{
+async function runMathInsertion(){if(globalProcessing)return;const dep=checkDependency('step_09');if(dep){App.showToast(dep,'error');return;}setGlobalProcessing(true);loadingState.step_09=true;App.setButtonLoading('btnStep09',true);try{
   const TARGET_MATH_COUNT=5;
   let r=await App.callClaude(buildPrompt('step_09'));
   // 수학식 블록 개수 검증
@@ -304,8 +281,7 @@ function sanitizeMethodFromDevice(text){
   
   if(!methodFigNums.size){
     // 방법 도면이 없으면 단독 S단계 문장만 제거
-    // ★ P3: 단계 문맥(단계 S### / S### …단계 / S###에서)일 때만 제거 — "S123 파라미터" 등 비단계 S###는 보존(과삭제 방지)
-    return text.replace(/^[^\n]*(?:단계\s*S\d{3}|S\d{3}[^\n]{0,15}단계|S\d{3}\s*에서)[^\n]*$/gm,'').replace(/\n{3,}/g,'\n\n').trim();
+    return text.replace(/^[^\n]*S\d{3}[^\n]*$/gm,'').replace(/\n{3,}/g,'\n\n').trim();
   }
   
   console.log(`[sanitizeMethodFromDevice] 방법 도면 번호 감지: 도 ${[...methodFigNums].sort((a,b)=>a-b).join(', ')} (장치 도면: ~도 ${deviceMax})`);
@@ -334,8 +310,8 @@ function sanitizeMethodFromDevice(text){
       continue;
     }
     
-    // 단독 S단계 문장 — ★ P3: 단계 문맥(단계 S### / S###…단계 / S###에서)일 때만. 비단계 S###(수치·식별자) 보존
-    if(/단계\s*S\d{3}|S\d{3}[^\n]{0,15}단계|S\d{3}\s*에서/.test(trimmed)){
+    // 단독 S단계 문장
+    if(/S\d{3}/.test(trimmed)&&/단계|수행|실행/.test(trimmed)){
       console.warn(`[sanitizeMethodFromDevice] S단계 문장 제거: "${trimmed.slice(0,80)}..."`);
       continue;
     }
@@ -453,26 +429,11 @@ function applyEditInstructions(originalText,edits){
       if(edit.content.length<5){console.warn(`[applyEditInstructions] 재정제 후 내용 부족 → 건너뜀`);continue;}
     }
     
-    // ★ FIX-A: 중복 삽입 방지 전역화 — 국소 창(±500·첫50자 exact)은 26P1036형 문단블록 재서술을 놓침
-    //   (원본이 창 밖이거나 첫 50자 한 글자만 달라도 dedup 실패 → 앵커 뒤 사본 삽입).
-    //   _normForDedup(03:1159) 규칙(stripMathBlocks+공백 전제거)으로 result 전체를 정규화 검색.
-    if(edit.action!=='MODIFY'){
-      const _n=_stripMathNorm;   // [cleanup D2] 공유 헬퍼(06)
-      const _nResult=_n(result), _nContent=_n(edit.content);
-      // (1) 정규화 첫 60자 키가 result 전체에 이미 존재 → 중복(창 밖 원본도 포착)
-      if(_nContent.length>=20 && _nResult.includes(_nContent.slice(0,60))){
-        console.warn(`[applyEditInstructions] 중복(전역 정규화) 감지 → 건너뜀: "${edit.content.slice(0,30)}..."`);
-        continue;
-      }
-      // (2) 장문 CONTENT(문장 3개↑): 문장 과반이 이미 result에 정규화 포함 → 블록 재서술 차단
-      const _sents=String(edit.content).split(/(?<=[.。])\s+|\n+/).map(s=>_n(s)).filter(s=>s.length>=15);
-      if(_sents.length>=3){
-        const _dup=_sents.filter(s=>_nResult.includes(s)).length;
-        if(_dup*2>_sents.length){
-          console.warn(`[applyEditInstructions] 장문 CONTENT 과반 중복(${_dup}/${_sents.length}) → 건너뜀`);
-          continue;
-        }
-      }
+    // v10.3: 중복 삽입 방지 — 이미 동일 내용이 근처에 있으면 건너뜀
+    const nearbyRegion=result.slice(Math.max(0,anchorStart-200),Math.min(result.length,anchorStart+edit.anchor.length+500));
+    if(edit.action!=='MODIFY'&&nearbyRegion.includes(edit.content.slice(0,50))){
+      console.warn(`[applyEditInstructions] 중복 감지 → 건너뜀: "${edit.content.slice(0,30)}..."`);
+      continue;
     }
 
     switch(edit.action){
@@ -764,8 +725,6 @@ ${baseMethod}${_maybeScopeGuard('step_13_applied_method','text')}`);
     setTimeout(()=>App.clearProgress('progressApplyReview'),2000);
     saveProject(true);
     App.showToast(`검토 반영 완료${hasMethodDesc?' (장치+방법)':''} — 최종 명세서에 자동 반영됩니다`);
-    // [Item 2] 반영 직후 1회 완성본 기계검증 — 오염(문단 중복/문장 절단) 생산 지점 즉시 검출(토스트 요약만).
-    try{ const _sv=validateSpecification(buildSpecification()); const _c=_sv.filter(i=>i.severity==='CRITICAL').length, _h=_sv.filter(i=>i.severity==='HIGH').length; if(_c||_h)App.showToast(`⚠️ 완성본 검증: CRITICAL ${_c}·HIGH ${_h} — 산출물 탭에서 확인`,'warning'); }catch(_e){}
   }catch(e){App.showToast(e.message,'error');}finally{loadingState.applyReview=false;App.setButtonLoading('btnApplyReview',false);setGlobalProcessing(false);}
 }
 function showReviewDiff(mode){
@@ -810,7 +769,7 @@ async function runDiagramStep(sid){
   if(globalProcessing)return;
   const dep=checkDependency(sid);
   if(dep){App.showToast(dep,'error');return;}
-  if(!(await _claimGatePass(sid)))return;   // [Item 3] 품질 게이트
+  
   const bid=sid==='step_07'?'btnStep07':'btnStep11';
   setGlobalProcessing(true);
   loadingState[sid]=true;

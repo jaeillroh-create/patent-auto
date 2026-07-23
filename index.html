@@ -1075,7 +1075,7 @@
         <!-- Step 8 상세설명 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="edit"></span> Step 8: 상세설명</div></div>
-          <div class="selection-cards" id="detailLevelCards" style="grid-template-columns:repeat(5,1fr);margin-bottom:12px">
+          <div class="selection-cards" id="detailLevelCards" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px">
             <div class="selection-card" onclick="selectDetailLevel(this,'compact')" style="padding:10px">
               <div class="selection-card-category"><span class="ico" data-icon="bolt" data-size="16"></span></div>
               <div class="selection-card-title" style="font-size:12px">간략</div>
@@ -1090,11 +1090,6 @@
               <div class="selection-card-category"><span class="ico" data-icon="doc" data-size="16"></span></div>
               <div class="selection-card-title" style="font-size:12px">상세</div>
               <div class="selection-card-subtitle" style="font-size:10px;color:var(--color-text-tertiary)">~2,000자/도면</div>
-            </div>
-            <div class="selection-card" onclick="selectDetailLevel(this,'maximal')" style="padding:10px">
-              <div class="selection-card-category"><span class="ico" data-icon="book" data-size="16"></span></div>
-              <div class="selection-card-title" style="font-size:12px">최대</div>
-              <div class="selection-card-subtitle" style="font-size:10px;color:var(--color-text-tertiary)">~3,000자/도면</div>
             </div>
             <div class="selection-card" onclick="selectDetailLevel(this,'custom')" style="padding:10px">
               <div class="selection-card-category"><span class="ico" data-icon="edit" data-size="16"></span></div>
@@ -1292,11 +1287,6 @@
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 16~19 결과</div></div>
           <div id="resultsBatchFinish" class="result-area"></div>
         </div>
-        <div class="result-card" id="resultCardSpecValidate">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="shield"></span> 완성본 기계검증</div></div>
-          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">표제·종결어미·단위·도면부호·문단중복·문장절단·수학식 변수정의를 자동 점검합니다(미리보기 진입 시 갱신).</p>
-          <div id="specValidateResult" class="result-area"></div>
-        </div>
         <div class="result-card" id="resultCardPreview">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="eye"></span> 미리보기</div></div>
           <div id="previewArea" class="result-area" style="min-height:300px"></div>
@@ -1393,13 +1383,13 @@
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
-<script src="shared/common.js?v=20260720a"></script>
-<script src="patent/patent.js?v=20260720-specfix"></script>
+<script src="shared/common.js?v=20260615e"></script>
+<script src="patent/patent.js?v=20260701-split"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260720-specfix"></script>
+<script src="opinion/opinion.js?v=20260701-split"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260720-specfix';
+  var _cv='?v=20260701-split';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1497,8 +1487,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260720-specfix"></script>
-<script src="docket.js?v=20260720-specfix"></script>
+<script src="division/division.js?v=20260701-split"></script>
+<script src="docket.js?v=20260701-split"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>
