@@ -60,6 +60,13 @@ test('15H-1 소스 ★ — 초기값 4곳 전수 OFF(global·clearAllState·신�
   assert.match(PATENT_SRC, /selectedTitleType:'',includeMethodClaims:false,/, '★ 신규 프로젝트 payload OFF');
   // openProject 복원 — 명시적 저장 true 만 ON(undefined/false→OFF)
   assert.match(PATENT_SRC, /includeMethodClaims=s\.includeMethodClaims===true;/, '★ openProject 복원: === true 만 ON');
+  // clearAllState 레거시 토글 동기 — checked=false(종전 checked=true 누락 반전지점)
+  assert.match(PATENT_SRC, /const mt=document\.getElementById\('methodToggle'\);if\(mt\)\{mt\.checked=false;toggleMethod\(\);\}/, '★ clearAllState methodToggle OFF');
+});
+
+test('15H-1 소스 ★ — HTML methodToggle 정적 기본값도 OFF(하드코딩 checked 제거)', () => {
+  assert.match(HTML_SRC, /<input type="checkbox" id="methodToggle" onchange="toggleMethod\(\)"/, '★ 정적 기본 unchecked(방법 OFF 정책과 정합)');
+  assert.ok(!/id="methodToggle"[^>]*\schecked/.test(HTML_SRC), '★ methodToggle 에 하드코딩 checked 없음');
 });
 
 test('15H-1 동작 ★ — clearAllState 후 includeMethodClaims === false', () => {
