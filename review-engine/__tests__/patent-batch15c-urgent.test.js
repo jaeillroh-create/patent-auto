@@ -52,7 +52,7 @@ test('★ C1 소스 — 수학식 게이트: _mathInline & 본문 【수학식�
   assert.match(PATENT_SRC, /function _buildMathInlineRetryPrompt\(deviceText, methodText, mathN\)/, '★ 재요청 프롬프트 헬퍼');
 });
 test('★ C1 동작 — 수식 0개 생성→상세설명만 1회 재요청 합성 성공(부호표 보존)', async () => {
-  run('outputs.step_06="【청구항 1】 제어부."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="서버"; includeMethodClaims=false; mathBlockCount=2;');
+  run('outputs.step_06="【청구항 1】 제어부(100)를 포함하는 장치."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="서버"; includeMethodClaims=false; mathBlockCount=2;');   // ★ [배치17] 청구항에 부호(100) 명기 → refPlan[제어부:100] 이 본문과 일치(enforce no-op) — 수학식 게이트를 refPlan 활성 상태에서 검증
   els.chkUnifiedMath = mkEl(); els.chkUnifiedMath.checked = true;
   const orig = sandbox.App.callClaudeWithContinuation; let call = 0;
   sandbox.App.callClaudeWithContinuation = async () => { call++; return call === 1 ? (REF + '\n' + DESC_NOMATH) : DESC_MATH2; };
@@ -78,7 +78,7 @@ test('★ C1 동작 — 재요청도 수식 미포함 → 커밋 차단 + "수�
   assert.ok(/수학식 누락/.test(run('_lastGenError') || ''), '★ 완료 요약용 사유 세팅');
 });
 test('★ C1 — 수학식 미체크(off)면 게이트 미적용(정상 통과)', async () => {
-  run('outputs.step_06="【청구항 1】 제어부."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="서버"; includeMethodClaims=false;');
+  run('outputs.step_06="【청구항 1】 제어부(100)를 포함하는 장치."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="서버"; includeMethodClaims=false;');   // ★ [배치17] refPlan[제어부:100] 이 본문 일치(enforce no-op)
   els.chkUnifiedMath = mkEl(); els.chkUnifiedMath.checked = false;   // math off
   const orig = sandbox.App.callClaudeWithContinuation; let call = 0;
   sandbox.App.callClaudeWithContinuation = async () => { call++; return REF + '\n' + DESC_NOMATH; };

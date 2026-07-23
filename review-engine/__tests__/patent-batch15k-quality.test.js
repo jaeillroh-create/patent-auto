@@ -77,7 +77,8 @@ test('15K-1,2 ★ 보정 — b-경로(canonical↔body 불일치)에서도 하�
 });
 
 test('15K-1,2 ★ 보정 — b·c 경로가 공유 _HW_BOILER_RE 사용', () => {
-  assert.match(PATENT_SRC, /const _HW_BOILER_RE=\/\^\(프로세서\|메모리\|서버/, '★ 공유 상수 정의');
+  assert.match(PATENT_SRC, /const _HW_BOILER_WORDS='프로세서\|메모리\|서버/, '★ 공유 상수 정의(단일 출처 어휘)');   // ★ [배치17] _HW_BOILER_WORDS 로 단일화(배치17 _enforceRefPlan 재사용)
+  assert.match(PATENT_SRC, /const _HW_BOILER_RE=new RegExp\('\^\('\+_HW_BOILER_WORDS/, '★ 정규식은 공유 어휘에서 생성');
   assert.match(PATENT_SRC, /const _bHw=cl\.some\(t=>_HW_BOILER_RE\.test/, '★ b-경로 사용');
   assert.match(PATENT_SRC, /const _hwBoiler=_HW_BOILER_RE\.test/, '★ c-경로 사용');
 });

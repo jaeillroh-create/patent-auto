@@ -69,7 +69,7 @@ test('★ D — 레일 done 조건은 실질 산출물 기준(빈 프로젝트 a
 test('★ A 소스 — clearAllState가 _wfHardReset 호출 + openProject 말미 1회 렌더', () => {
   assert.match(PATENT_SRC, /genParams=null;\s*\/\/ \[배치12 C\]/, '★ genParams 초기화');
   assert.match(PATENT_SRC, /if\(typeof _wfHardReset==='function'\)_wfHardReset\(\);/, '★ 하드리셋 호출');
-  assert.match(PATENT_SRC, /function _wfHardReset\(\)\{[\s\S]{0,900}wfBadge/, '★ 하드리셋이 배지 blank');
+  assert.match(PATENT_SRC, /function _wfHardReset\(\)\{[\s\S]{0,1100}wfBadge/, '★ 하드리셋이 배지 blank');   // ★ [배치17-5] refPlanPanel 정리 라인 추가로 창 확장
   assert.match(PATENT_SRC, /try\{_methodUserSet=\(includeMethodClaims===true\)\|\|!!\(outputs\.step_10\|\|outputs\.step_11\);\}catch\(_e\)\{\}/, '★ [검증반영·배치15H] openProject: 복원된 방법-ON opt-in 또는 방법 산출물 있으면 보호(true)');
 });
 
@@ -119,6 +119,6 @@ test('★ C 소스 — 스냅샷 배선(wfRunStage3 stage3 / cohesion stage4 / �
   assert.match(PATENT_SRC, /_snapshotGenParams\('stage3'\);   \/\/ \[배치12 C\] 골격 생성 시점/, '★ ③ 스냅샷');
   assert.match(PATENT_SRC, /_snapshotGenParams\('stage4'\); \}catch\(_e\)\{\}   \/\/ \[배치12 C\] 본문 생성 시점/, '★ ④ 스냅샷(cohesion)');
   assert.match(PATENT_SRC, /_snapshotGenParams\('stage3'\); \}catch\(_e\)\{\}   \/\/ \[배치12 C\] 체인 골격/, '★ 체인 스냅샷');
-  assert.match(PATENT_SRC, /termSnapshot,genParams\}/, '★ saveProject 영속');
+  assert.match(PATENT_SRC, /termSnapshot,genParams,refPlan\}/, '★ saveProject 영속');   // ★ [배치17-1] refPlan(확정 부호표) 영속 추가
   assert.match(PATENT_SRC, /genParams=\(s\.genParams&&typeof s\.genParams==='object'\)\?s\.genParams:null/, '★ openProject 복원');
 });

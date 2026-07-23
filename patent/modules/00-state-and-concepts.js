@@ -32,6 +32,7 @@ let scopeCheckResults = {};
 let _pendingReviewNotes='';   // ★ [배치15L-2] AI 진단(step_13) 지적 → cohesion 재작성 주입 대기값(REVIEW_NOTES). 소비 후 클리어.
 let _pendingFixTargets='';    // ★ [배치16-1] 기계검증 결함 → cohesion 재작성 주입 대기값(FIX_TARGETS, 구조화 지시문). 소비 후 클리어.
 let _step13Compact=false;     // ★ [배치16.1-3] AI 진단(step_13) 축약 모드 — 대형 문서 타임아웃 시 입력 축소 재시도.
+let refPlan=null;             // ★ [배치17] 확정 부호표(코드 결정론 배정): [{num,name,level,parent}]. 청구항 확정 시 갱신, cohesion 고정 입력.
 let usage={calls:0,inputTokens:0,outputTokens:0,cost:0},loadingState={};
 let detailLevel='standard';
 let customDetailChars=2000;

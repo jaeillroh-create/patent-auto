@@ -40,7 +40,9 @@ before(() => {
 const run = (expr) => vm.runInContext(expr, sandbox, { filename: 't.js' });
 beforeEach(() => { Object.keys(els).forEach(k => delete els[k]); toasts = []; run('clearAllState();'); });
 
-const setupCohesion = () => run('clearAllState(); outputs.step_06="【청구항 1】 제어부를 포함하는 장치."; outputs.step_07="도 1"; selectedTitle="테스트 장치"; selectedTitleType="장치"; includeMethodClaims=false;');
+// ★ [배치17] 구성부 없는 청구항("장치.")으로 refPlan 을 비운다 → REFTABLE 코드 폴백(레거시)이 활성.
+//   (구성부가 있으면 배치17 refPlan 이 부호를 확정해 폴백 자체가 비활성 — 신 동작은 batch17 테스트가 검증.)
+const setupCohesion = () => run('clearAllState(); outputs.step_06="【청구항 1】 장치."; outputs.step_07="도 1"; selectedTitle="테스트 장치"; selectedTitleType="장치"; includeMethodClaims=false;');
 
 // ─────────────── 3) REFTABLE 공백 코드 폴백 (_refPairsFromText / _buildRefMapFromText) ───────────────
 
@@ -152,7 +154,7 @@ test('15I ★ 적대검증 #1 — 방법 청구항 있는데 방법 상세설명
 // ─────────────── 적대검증 반영: #3 폴백 report 재계산(reparse) ───────────────
 
 test('15I ★ 적대검증 #3 — 코드 폴백이 방법 S부호 포함 부호표 생성([방법 단계] 유실 방지) + 거짓 미정의 경고 없음', async () => {
-  run('clearAllState(); outputs.step_06="【청구항 1】 제어부."; outputs.step_10="【청구항 5】 방법."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="장치 및 방법"; includeMethodClaims=true;');
+  run('clearAllState(); outputs.step_06="【청구항 1】 장치."; outputs.step_10="【청구항 5】 방법."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="장치 및 방법"; includeMethodClaims=true;');   // ★ [배치17] 구성부 없는 청구항 → refPlan 비활성, REFTABLE 코드 폴백(레거시) 경로 검증
   els.chkUnifiedMath = mkEl();
   // REFTABLE 없는 본문(장치+방법) → 코드 폴백. 방법 S부호가 부호의 설명에 포함되어야.
   const BODY = '<<<DEVICE_DESC>>>\n제어부(100)가 동작한다.\n<<<END_DEVICE_DESC>>>\n<<<METHOD_DESC>>>\n수신하는 단계(S410)를 수행한다.\n<<<END_METHOD_DESC>>>';

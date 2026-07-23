@@ -209,7 +209,7 @@ test('★ A6 소스 — REFTABLE만 누락 시 부호표 지정 재요청 분기
   assert.match(PATENT_SRC, /<<<REFTABLE>>>[\s\S]{0,200}<<<END_REFTABLE>>>/, '★ 부호표 블록 형식만 요청');
 });
 test('★ A6 동작 — REFTABLE 누락→부호표 재요청 합성 성공(본문 보존·1회 재요청)', async () => {
-  run('clearAllState(); outputs.step_06="【청구항 1】 제어부를 포함하는 장치."; outputs.step_07="도 1"; selectedTitle="테스트"; selectedTitleType="서버"; includeMethodClaims=false;');
+  run('clearAllState(); outputs.step_06="【청구항 1】 장치."; outputs.step_07="도 1"; selectedTitle="테스트"; selectedTitleType="서버"; includeMethodClaims=false;');   // ★ [배치17] 구성부 없는 청구항 → refPlan 비활성, REFTABLE 재요청(A6, 레거시) 경로 검증
   els.chkUnifiedMath = mkEl();
   const raw1 = '<<<DEVICE_DESC>>>\n제어부(100)는 수신부(110)로부터 데이터를 받아 처리하도록 구성된다.\n<<<END_DEVICE_DESC>>>';
   const raw2 = '<<<REFTABLE>>>\n[장치부호]\n(100) 제어부\n(110) 수신부\n<<<END_REFTABLE>>>';

@@ -1106,6 +1106,8 @@
           <!-- [배치15D-2] 큰 CTA 제거 — 전체 생성은 ② 통합 생성. ③은 청구항·도면을 개별 재생성(우측 섹션 버튼)만. -->
           <p style="font-size:12px;color:var(--color-text-secondary);padding:0 0 4px"><b>전체 생성은 ② 통합 생성</b>입니다. 여기서는 생성된 <b>청구항·도면을 확인</b>하고, 필요하면 <b>우측 섹션의 「청구항만 재생성」·「도면만 재생성」</b>으로 개별 재생성합니다(재생성 시 하류 본문은 "재생성 필요"로 표시 — 세대 혼합 방지).</p>
           <div id="progressWfStage3" style="margin:8px 0"></div>
+          <!-- [배치17-5] 확정 부호표(청구항 결정론 배정) 읽기전용 표시 — 본문 재생성 시 이 명칭·번호로 자동 정합됨을 사용자에게 명시 -->
+          <div id="refPlanPanel" style="display:none"></div>
         </div>
         <details class="wf-adv" id="wfAdv2">
           <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급(단계별 세부) — 청구항·도면·상세설명·대안 청구항 개별 생성</summary>
@@ -1546,12 +1548,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260723a"></script>
-<script src="patent/patent.js?v=20260722-b59"></script>
+<script src="patent/patent.js?v=20260722-b60"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260722-b59"></script>
+<script src="opinion/opinion.js?v=20260722-b60"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260722-b59';
+  var _cv='?v=20260722-b60';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1649,8 +1651,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260722-b59"></script>
-<script src="docket.js?v=20260722-b59"></script>
+<script src="division/division.js?v=20260722-b60"></script>
+<script src="docket.js?v=20260722-b60"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>

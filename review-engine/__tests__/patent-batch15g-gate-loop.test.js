@@ -45,12 +45,14 @@ const REF1 = '<<<REFTABLE>>>\n[장치부호]\n(100) 제어부\n<<<END_REFTABLE>>
 const DESC_MISS = '<<<DEVICE_DESC>>>\n제어부(100)는 수신부(200)로부터 데이터를 받아 처리하도록 구성된다.\n<<<END_DEVICE_DESC>>>';
 const AUG_OK = '<<<REFTABLE>>>\n[장치부호]\n(100) 제어부\n(200) 수신부\n<<<END_REFTABLE>>>';   // 200 추가됨
 
-const setupCohesion = () => run('clearAllState(); outputs.step_06="【청구항 1】 제어부."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="서버"; includeMethodClaims=false;');
+// ★ [배치17] 청구항을 구성부 없는 형태("장치.")로 둬 refPlan 이 비게 한다 → REFTABLE 자동교정·경고커밋(레거시 폴백)이 활성.
+//   (구성부가 있는 청구항이면 배치17 refPlan 이 부호를 확정해 이 REFTABLE 보강 루프 자체가 비활성 — 그 신 동작은 batch17 테스트가 검증.)
+const setupCohesion = () => run('clearAllState(); outputs.step_06="【청구항 1】 장치."; outputs.step_07="도 1"; selectedTitle="t"; selectedTitleType="서버"; includeMethodClaims=false;');
 
 // 1) 자동 교정 성공
 test('★ 1 소스 — 게이트 자동 교정 루프(_computeGate·최대 2회·부호표 보강 재요청)', () => {
   assert.match(PATENT_SRC, /const _computeGate=function\(rp\)\{/, '★ 게이트 계산 분리');
-  assert.match(PATENT_SRC, /while\(gate\.length && _corr<2\)\{/, '★ 최대 2회 자동 교정 루프');
+  assert.match(PATENT_SRC, /while\(!_hasRP && gate\.length && _corr<2\)\{/, '★ 최대 2회 자동 교정 루프(refPlan 없을 때만 — 배치17)');
   assert.match(PATENT_SRC, /_buildRefTableAugmentPrompt\(_serializeRefTable\(r\.refMap\), miss, missM/, '★ 미정의 부호 부호표 보강 재요청');
   assert.match(PATENT_SRC, /본문은 절대 출력·수정하지 마라 — 부호표만 보강한다/, '★ 본문 불변 보장');
 });

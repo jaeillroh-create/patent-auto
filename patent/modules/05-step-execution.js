@@ -1856,6 +1856,11 @@ async function runUnifiedCohesionGen(opts){
   let _reftableFallback=false;   // ★ [배치15I-3] REFTABLE 누락 → 본문에서 코드로 부호표 생성했는지(완료 요약·배너 경고)
   // ★ [배치9 D1] 수학식 인라인 모드 — 토글 on이면 프롬프트가 본문에 【수학식】을 직접 포함(C9 전환).
   const _mathInline=(typeof _mathModeActive==='function')?_mathModeActive():!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);   // ★ [배치16.1-2] 토글 OR 본문 수식 존재(재작성 시 수식 계약·게이트 유지)
+  // ★ [배치17-2] 확정 부호표(refPlan)를 buildPrompt 이전에 확정한다 — 청구항(step_06/10)에서 결정론 재배정(재생성 시 갱신).
+  //   buildPrompt('unified_cohesion') 이 이 전역 refPlan 을 읽어 [확정 부호표] 블록을 주입하므로, 프롬프트 구성 전에 반드시 세워야 한다.
+  const _refPlan=(typeof _ensureRefPlan==='function')?(_ensureRefPlan(true)||[]):[];
+  const _hasRP=!!(_refPlan&&_refPlan.length)&&typeof _refPlanToMap==='function';
+  let _refFixes=0;
   setGlobalProcessing(true); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',true);
   App.showProgress('progressUnifiedGen','통합 생성 중(단일 컨텍스트)... 긴 출력은 자동 이어쓰기됩니다',0,1);
   try{
@@ -1871,6 +1876,11 @@ async function runUnifiedCohesionGen(opts){
     // ★ [배치15I-1a] 절단 진단 — 응답 길이·이어쓰기 횟수·finish_reason(max_tokens=절단 확정)을 콘솔에 노출(docH 재현 시 즉시 확인).
     try{ const _m=(App.callClaudeWithContinuation&&App.callClaudeWithContinuation.lastMeta)||{}; console.log('[unified] cohesion '+(_cohesionUseSplit()?'(분할) ':'')+'응답 길이='+((raw||'').length)+'자, 마지막 이어쓰기='+(_m.attempts||0)+'회, finish_reason='+(_m.stopReason||'?')+(_m.truncated?' ★절단(max_tokens)':'')); }catch(_e){}
     try{ const _blk=[]; ['REFTABLE:'+(r.ok.hasRef?'O':'X'),'DEVICE_DESC:'+(r.ok.hasDevice?'O':'X'),'METHOD_DESC:'+(r.method?'O':'-'),'TASK:'+(r.task?'O':'X'),'SOLUTION:'+(r.solution?'O':'X'),'EFFECTS:'+(r.effects?'O':'X'),'ABSTRACT:'+(r.abstract?'O':'X')].forEach(function(b){_blk.push(b);}); console.log('[unified] 수신 블록 — '+_blk.join(' · ')); }catch(_e){}
+    // ═══ [배치17-2] 확정 부호표(refPlan) 권위화 — 부호 사전은 LLM 이 아니라 코드(청구항 결정론 배정)가 정한다. ═══
+    //   refPlan 이 있으면 r.refMap 을 refPlan 으로 강제하고 hasRef=true 로 세운다 → 이하 REFTABLE 재요청(A6)·코드폴백은
+    //   구조적으로 비활성(부호 사전이 이미 확정). 본문 정합(_enforceRefPlan)은 모든 재요청 정착 후 커밋 직전에 1회 수행(17-3).
+    //   (_refPlan/_hasRP/_refFixes 는 buildPrompt 이전에 함수 상단에서 이미 확정 — [확정 부호표] 프롬프트 주입 순서 보장.)
+    if(_hasRP){ r.refMap=_refPlanToMap(_refPlan); r.ok.hasRef=true; console.log('[unified] 확정 부호표 권위화 — '+_refPlan.length+'개 부호(LLM REFTABLE 무시, refPlan 기준)'); }
     // ★ [배치15B-A6] 필수 블록 누락 침묵 금지 — DEVICE_DESC는 있는데 REFTABLE(부호표)만 누락이면,
     //   전체 재생성이 아니라 "부호표만" 1회 지정 재요청 → 원 raw에 합성 후 재파싱(본문 보존). docE: 부호의 설명 공백→본문 26개 미정의.
     if(!r.ok.hasRef&&r.ok.hasDevice){
@@ -1952,18 +1962,22 @@ async function runUnifiedCohesionGen(opts){
     //     _downloadGate가 그대로 차단하므로 경고 커밋이 출원 불가급을 통과시키지 않는다.
     // ★ [배치15H-2] 방법 OFF면 방법 관련 게이트(S부호 미정의·방법 극성)를 비활성화 — LLM이 프롬프트를 어기고 METHOD_DESC를 흘려도 방법 부호 게이트가 발동하지 않도록(방법 없음 = 방법 검증 없음). deviceLeak(장치본문에 방법표현 누출)은 방법 OFF와 무관하게 유지.
     const _wantMethod=(typeof includeMethodClaims==='undefined')?false:!!includeMethodClaims;
+    // ★ [배치17-2] refPlan 권위화 시 부호-구조 게이트(미정의 부호·번호 중복)는 무의미하다 — 부호 사전이 확정(refPlan)이고
+    //   본문은 커밋 직전 _enforceRefPlan 으로 refPlan 에 결정론 정합되므로 notInTable/dupNums 는 구조적으로 0이 된다.
+    //   단 deviceLeak(장치본문 방법표현 누출)·methodOk(방법 극성)은 부호와 무관한 의미 게이트이므로 refPlan 유무와 상관없이 유지.
     const _computeGate=function(rp){ const g=[];
-      if(rp.notInTable.length)g.push('본문 미정의 부호 '+rp.notInTable.length+'개('+rp.notInTable.slice(0,6).join(', ')+')');
-      if(_wantMethod&&rp.methodNotInTable&&rp.methodNotInTable.length)g.push('방법 단계부호 미정의 '+rp.methodNotInTable.length+'개('+rp.methodNotInTable.slice(0,6).join(', ')+')');
-      if(rp.dupNums.length)g.push('부호표 번호 중복 '+rp.dupNums.length+'개');
+      if(!_hasRP&&rp.notInTable.length)g.push('본문 미정의 부호 '+rp.notInTable.length+'개('+rp.notInTable.slice(0,6).join(', ')+')');
+      if(!_hasRP&&_wantMethod&&rp.methodNotInTable&&rp.methodNotInTable.length)g.push('방법 단계부호 미정의 '+rp.methodNotInTable.length+'개('+rp.methodNotInTable.slice(0,6).join(', ')+')');
+      if(!_hasRP&&rp.dupNums.length)g.push('부호표 번호 중복 '+rp.dupNums.length+'개');
       if(rp.deviceLeak)g.push('장치 상세설명에 방법표현 누출');
       if(_wantMethod&&!rp.methodOk)g.push('방법 상세설명 극성 미충족');
       return g;
     };
     let gate=_computeGate(r.report);
     // ── (1) 자동 교정: 미정의 부호(notInTable/methodNotInTable)를 부호표에 실명 추가(본문 불변). 최대 2회. ──
+    //   ★ [배치17-2] refPlan 권위화 시 이 REFTABLE 보강 루프는 비활성(부호 사전이 코드로 확정 — 보강 대상 없음).
     let _corr=0;
-    while(gate.length && _corr<2){
+    while(!_hasRP && gate.length && _corr<2){
       const miss=r.report.notInTable||[], missM=r.report.methodNotInTable||[];
       if(!miss.length && !missM.length)break;   // 부호 미정의 외 항목(중복·극성)은 부호표 보강으로 안 고쳐짐 → 루프 탈출(경고 커밋으로)
       _corr++;
@@ -1987,9 +2001,14 @@ async function runUnifiedCohesionGen(opts){
     if(r.method&&outputs.step_10)pushOutputHistory('step_12','unified','runUnifiedCohesionGen');
     pushOutputHistory('step_18','unified','runUnifiedCohesionGen');
     let dev=r.device; try{if(typeof sanitizeDescFigureRefs==='function')dev=sanitizeDescFigureRefs(dev,'device',{keepMath:_mathInline});}catch(_e){}   // [배치15C-1] 인라인 수학식 모드면 본문 수식 보존(strip 금지)
+    // ★ [배치17-3] 본문 사후 정합 — 커밋 직전(모든 재요청 정착 후) 본문의 "명칭(번호)"를 확정 부호표(refPlan)에 결정론적으로 맞춘다.
+    //   canonical↔body 하드웨어 치환("프로세서(100)"→"제어부(100)")·명칭/번호 불일치를 코드가 교정 → 부호 결함군 원천 소멸.
+    //   ⚠ 세션 원칙(자동 치환 금지)의 명시적 예외: 교정 대상은 "부호 표기"(형식 요소)뿐이고 기준이 청구항으로 확정돼 안전하다.
+    if(_hasRP && typeof _enforceRefPlan==='function'){ const _eD=_enforceRefPlan(dev,_refPlan); dev=_eD.text; _refFixes+=_eD.fixes; }
     outputs.step_08=dev; outputs.step08_device=dev; markOutputTimestamp('step_08');
-    if(r.method&&outputs.step_10){ let m=r.method; try{if(typeof sanitizeDescFigureRefs==='function')m=sanitizeDescFigureRefs(m,'method');}catch(_e){} outputs.step_12=m; markOutputTimestamp('step_12'); }
-    outputs.step_18=_deriveSignDescription(r.refMap); markOutputTimestamp('step_18');   // 완성 본문 기준 결정적 직렬화(refMap 명칭 우선)
+    if(r.method&&outputs.step_10){ let m=r.method; try{if(typeof sanitizeDescFigureRefs==='function')m=sanitizeDescFigureRefs(m,'method');}catch(_e){} if(_hasRP&&typeof _enforceRefPlan==='function'){ const _eM=_enforceRefPlan(m,_refPlan); m=_eM.text; _refFixes+=_eM.fixes; } outputs.step_12=m; markOutputTimestamp('step_12'); }
+    // ★ [배치17-2] 부호의 설명(step_18)은 확정 부호표(refPlan) 명칭으로 직렬화 — r.refMap 이 refPlan 이므로 본문 사용부호가 refPlan 명칭으로 정의된다.
+    outputs.step_18=_deriveSignDescription(r.refMap); markOutputTimestamp('step_18');   // refPlan 권위화 시 refMap=refPlan → 확정 명칭 기준. (refPlan 없으면 종전대로 본문 최빈 명칭)
     // ★ [배치9 D3] 마무리 흡수 커밋 — 동일 컨텍스트 산출(효과·해결수단·요약)이 있으면 원자 커밋(없으면 기존 유지·비파괴)
     if(r.task){ pushOutputHistory('step_05','unified','runUnifiedCohesionGen'); outputs.step_05=r.task; markOutputTimestamp('step_05'); }   // ★ [배치15E-1] 과제 — 청구항 확정 후 역설계(메타응답 원천 소멸)
     if(r.solution){ pushOutputHistory('step_17','unified','runUnifiedCohesionGen'); outputs.step_17=r.solution; markOutputTimestamp('step_17'); }
@@ -2010,6 +2029,7 @@ async function runUnifiedCohesionGen(opts){
     App.clearProgress('progressUnifiedGen');
     const after=_specIssueCounts();
     const soft=r.report.unusedRef.length?(' · 도면 미사용 부호 '+r.report.unusedRef.length+'개 자동 제외'):'';
+    const _refFixMsg=(_hasRP&&_refFixes)?(' · 부호 자동 정합 '+_refFixes+'건(확정 부호표 기준)'):'';   // ★ [배치17-3] 본문↔확정 부호표 결정론 교정 건수 노출
     // ★ [배치15I-2] 경고 커밋 품질 하한 — 상세설명이 목표 분량의 50% 미만이거나 부호표가 코드 폴백이면 "본문 불완전"을
     //   완료 요약·⑤ 배너에 강조(사용자가 불완전본을 최종본으로 오인 차단). docH: 5,934자/목표 22,000 → 강조 표시.
     const _descLen=(outputs.step_08||'').length;
@@ -2019,11 +2039,12 @@ async function runUnifiedCohesionGen(opts){
     const _methodMissing=_wantMethod&&!!outputs.step_10&&!r.method;
     const _incomplete=_lowVol||_reftableFallback||_methodMissing;
     const _incMsg=_incomplete?('⚠ 본문이 불완전할 수 있습니다('+[_lowVol?('상세설명 '+_descLen+'자/목표 '+_tgt+'자'):'',_reftableFallback?'부호표 코드 폴백':'',_methodMissing?'방법 상세설명 미생성(방법 청구항 있음)':''].filter(Boolean).join(', ')+') — 분량을 낮추거나 ④ 재생성을 권장합니다'):'';
-    App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft+(_gateWarn.length?(' · ⚠ 게이트 미통과 '+_gateWarn.length+'건(⑤ 확인)'):''),((_gateWarn.length||_incomplete)?'warning':'success'));
+    App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft+_refFixMsg+(_gateWarn.length?(' · ⚠ 게이트 미통과 '+_gateWarn.length+'건(⑤ 확인)'):''),((_gateWarn.length||_incomplete)?'warning':'success'));
     if(_incMsg)App.showToast(_incMsg,'warning');   // ★ [배치15I-2] 불완전 강조(별도 토스트)
     if(hadMath&&!_mathInline)App.showToast('⚠️ 기존 수학식(Step 9)은 새 상세설명에 재삽입이 필요합니다 — 미리보기·다운로드에 수학식이 빠져 있습니다','warning');   // [배치9 D1] 인라인 모드에선 구 step_09를 이력 보존 후 제거했으므로 미해당
     // ★ [배치15G-3/15I-2] 재생성 결과 배너 — "조용히 안 바뀜" 해소 + 불완전 경고 가시화.
-    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:after.refnum, gateWarn:_gateWarn.slice(), autoCorr:_corr, incomplete:_incomplete, incMsg:_incMsg}); }catch(_e){}
+    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:after.refnum, gateWarn:_gateWarn.slice(), autoCorr:_corr, refFixes:_refFixes, incomplete:_incomplete, incMsg:_incMsg}); }catch(_e){}
+    try{ if(typeof _renderRefPlanPanel==='function')_renderRefPlanPanel(); }catch(_e){}   // ★ [배치17-5] 재생성으로 refPlan 갱신됐을 수 있으니 확정 부호표 패널 재렌더
   }catch(e){ try{_lastGenError=(e&&e.message)||String(e);}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:false, cause:(e&&e.message||String(e))}); }catch(_e2){} }
   finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); }
 }

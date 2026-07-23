@@ -26,6 +26,7 @@ function clearAllState(){
   document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));
   const b01=document.getElementById('btnStep01');if(b01)b01.disabled=true;
   genParams=null;   // [배치12 C] 적용값 스냅샷 초기화
+  refPlan=null;   // ★ [배치17-1] 확정 부호표 초기화(프로젝트 전환 시 상태 누출 차단)
   try{ if(typeof _wfHardReset==='function')_wfHardReset(); }catch(_e){}   // [배치12 A] 워크플로우 플래그·레일 배지·검증바·수동 오버라이드 완전 초기화(상태 누출 차단)
   updateStats();
 }
@@ -256,6 +257,7 @@ async function openProject(pid){
   detailLevel=s.detailLevel||'standard';customDetailChars=s.customDetailChars||2000;
   { const _ud=document.getElementById('selUnifiedDetail'); if(_ud&&['compact','standard','detailed','maximal'].includes(detailLevel))_ud.value=detailLevel; }   // [배치6 N3a] 통합 카드 분량 표시 동기화
   genParams=(s.genParams&&typeof s.genParams==='object')?s.genParams:null;   // [배치12 C] 적용값 스냅샷 복원(레일·이 배치8 훅은 openProject 말미로 이동 — 전체 상태 복원 후 1회 렌더)
+  refPlan=(Array.isArray(s.refPlan)&&s.refPlan.length)?s.refPlan:null;   // ★ [배치17-1] 확정 부호표 복원. 없으면 null → 최초 진입 시 _ensureRefPlan 가 청구항/기존 부호표에서 역산.
   diagramData=s.diagramData||{};
   outputTimestamps=s.outputTimestamps||{};
   stepUserCommands=s.stepUserCommands||{};
@@ -300,6 +302,10 @@ async function openProject(pid){
       saveProject(true);   // 신규 부호 반영분 1회 영속 → 이후 열기는 멱등 no-op
     }
   }catch(_e){}
+  // ★ [배치17-1] 확정 부호표 확보 — 저장된 refPlan 이 없는 레거시 프로젝트는 청구항(step_06/10) 또는 기존 부호표(step_18)에서
+  //   최초 진입 시 1회 역산해 refPlan 을 세운다(_ensureRefPlan). 이후 cohesion 재생성이 이 확정 부호표를 고정 입력으로 사용.
+  try{ if(typeof _ensureRefPlan==='function' && (!refPlan||!refPlan.length)){ _ensureRefPlan(false); if(refPlan&&refPlan.length)saveProject(true); } }catch(_e){}
+  try{ if(typeof _renderRefPlanPanel==='function')_renderRefPlanPanel(); }catch(_e){}   // ★ [배치17-5] ③ 골격 확정 부호표 패널 렌더(복원 직후)
   // v15: 단계별 채팅 수정 패널 복원
   if(window.PatentChat)PatentChat.mountAll();
   document.getElementById('headerProjectName').textContent=data.title;document.getElementById('headerUserName').textContent=currentProfile?.display_name||currentUser?.email||'';
@@ -344,5 +350,5 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,costTracking:_costTracking,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,deviceIndepCount,mathBlockCount,conceptTargetCount,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,chatHistory,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes,termSnapshot,genParams};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,costTracking:_costTracking,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,deviceIndepCount,mathBlockCount,conceptTargetCount,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,chatHistory,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes,termSnapshot,genParams,refPlan};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 

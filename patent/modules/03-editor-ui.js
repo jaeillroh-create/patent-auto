@@ -1,5 +1,5 @@
 // ═══════════ TAB & TOGGLES & CLAIM UI (v4.7) ═══════════
-function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===3)renderScopeVerificationSection();if(i===3&&typeof _updateRewriteWithReviewBtn==='function')_updateRewriteWithReviewBtn();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===1&&typeof renderDesignBoard==='function')renderDesignBoard();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();if(typeof _renderFlowBars==='function')_renderFlowBars();}catch(_e){}}   // [배치8/12/15D] 레일·검증바·② 설계 보드·전체 흐름 안내 갱신 + ⑤ 진입 경고
+function switchTab(i){document.querySelectorAll('.tab-item').forEach((t,j)=>{t.classList.toggle('active',j===i);t.setAttribute('aria-selected',j===i);});document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));if(i===2&&typeof _renderRefPlanPanel==='function')_renderRefPlanPanel();if(i===3)renderScopeVerificationSection();if(i===3&&typeof _updateRewriteWithReviewBtn==='function')_updateRewriteWithReviewBtn();if(i===4)renderPreview();try{if(typeof renderWorkflowRail==='function')renderWorkflowRail();if(typeof renderWfValidationBar==='function')renderWfValidationBar();if(i===1&&typeof renderDesignBoard==='function')renderDesignBoard();if(i===4&&typeof _wfWarnStage5==='function')_wfWarnStage5();if(typeof _renderFlowBars==='function')_renderFlowBars();}catch(_e){}}   // [배치8/12/15D] 레일·검증바·② 설계 보드·전체 흐름 안내 갱신 + ⑤ 진입 경고
 // [배치15D-4] 전체 흐름 안내(각 탭 상단 1줄) — 현재 단계 강조. 정적 컨테이너(.wf-flowbar[data-flowstep])를 채운다.
 function _renderFlowBars(){
   try{
@@ -1762,6 +1762,25 @@ function _renderCompletionBanner(info){
   }catch(_e){}
 }
 // ★ [배치15G-3] ④ 본문 통합 재생성 결과 배너 — 성공(부호표 갱신·자동보강·잔존 경고)/실패(이전 본문 유지·사유).
+// ★ [배치17-5] 확정 부호표(refPlan) 읽기전용 렌더 — ③ 골격 카드에 표시. refPlan 없으면(레거시) _ensureRefPlan 로 역산 시도.
+//   본문 재생성이 이 명칭·번호로 자동 정합됨을 사용자에게 명시(부호 결함이 왜 안 생기는지 가시화).
+function _renderRefPlanPanel(){
+  try{
+    const host=(typeof document!=='undefined')&&document.getElementById('refPlanPanel'); if(!host)return;
+    let plan=(typeof refPlan!=='undefined')?refPlan:null;
+    if((!plan||!plan.length)&&typeof _ensureRefPlan==='function'){ try{ plan=_ensureRefPlan(false); }catch(_e){} }
+    if(!plan||!plan.length){ host.style.display='none'; host.innerHTML=''; return; }
+    const dev=plan.filter(function(p){return String(p.num)[0]!=='S';}), mth=plan.filter(function(p){return String(p.num)[0]==='S';});
+    const chip=function(p){ return '<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;background:var(--color-bg-secondary,#f3f4f6);border:1px solid var(--color-border);border-radius:6px;font-size:12px"><b>'+App.escapeHtml(String(p.num))+'</b> '+App.escapeHtml(p.name)+'</span>'; };
+    host.innerHTML='<div style="border:1px solid var(--color-border);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12px">'
+      +'<b>확정 부호표 <span style="color:var(--color-text-tertiary);font-weight:400">(청구항 기준 · 읽기전용)</span></b> '
+      +'<span style="color:var(--color-text-tertiary)">— 본문 재생성 시 이 명칭·번호로 자동 정합됩니다(하드웨어 상용어 치환·번호 불일치 자동 교정).</span>'
+      +'<div style="margin-top:6px">'+dev.map(chip).join('')+'</div>'
+      +(mth.length?('<div style="margin-top:6px;color:var(--color-text-secondary)">[방법 단계] '+mth.map(chip).join('')+'</div>'):'')
+      +'</div>';
+    host.style.display='block';
+  }catch(_e){}
+}
 function _renderCohesionBanner(info){
   try{
     const host=(typeof document!=='undefined')&&document.getElementById('cohesionBanner'); if(!host)return;
@@ -1778,6 +1797,7 @@ function _renderCohesionBanner(info){
         +(_inc?('<b style="color:'+bd+'">'+App.escapeHtml(info.incMsg||'⚠ 본문이 불완전할 수 있습니다 — 분량을 낮추거나 ④ 재생성을 권장합니다')+'</b><br>'):'')
         +'<span style="color:var(--color-text-secondary)">'
         +(info.autoCorr?('부호표 자동 보강 '+info.autoCorr+'회 · '):'')
+        +(info.refFixes?('부호 자동 정합 '+info.refFixes+'건(확정 부호표) · '):'')
         +'잔존 경고(HIGH+) '+hi+'건'+(warnN?(' · 게이트 미통과 '+warnN+'건: '+App.escapeHtml((info.gateWarn||[]).join(' · '))):'')+'</span>'
         +(warnN||hi||_inc?'<br><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="switchTab(4)"><span class="ico" data-icon="search"></span> ⑤ 완성본 검증에서 확인·보정</button>':'')
         +'</div>';
@@ -1824,6 +1844,7 @@ function _wfHardReset(){   // [배치12 A] 프로젝트 전환/신규 시 워크
   try{ _methodMismatchAck=false; }catch(_e){}    // 명칭-방법 모순 확인 리셋(08)
   try{ const cb=document.getElementById('dbCompletionBanner'); if(cb){cb.style.display='none';cb.innerHTML='';} }catch(_e){}   // [배치15A-3] 완료/중단 배너 잔상 제거
   try{ const cb2=document.getElementById('cohesionBanner'); if(cb2){cb2.style.display='none';cb2.innerHTML='';} }catch(_e){}   // ★ [검증 반영·배치15G-3] ④ 재생성 배너 프로젝트 전환 시 잔상 제거(dbCompletionBanner와 동형)
+  try{ const rp2=document.getElementById('refPlanPanel'); if(rp2){rp2.style.display='none';rp2.innerHTML='';} }catch(_e){}   // ★ [배치17-5] 확정 부호표 패널도 프로젝트 전환 시 잔상 제거
   try{ for(let i=0;i<5;i++){ const b=document.getElementById('wfBadge'+i); if(b)b.textContent=''; } }catch(_e){}   // 레일 배지 DOM 즉시 blank(렌더 실패해도 잔상 0)
   try{ const bar=document.getElementById('wfValidationBar'); if(bar)bar.style.display='none'; }catch(_e){}
   try{ if(typeof renderWorkflowRail==='function')renderWorkflowRail(); }catch(_e){}

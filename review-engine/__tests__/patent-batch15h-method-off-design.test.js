@@ -112,7 +112,7 @@ test('15H-2 소스 ★ — cohesion 프롬프트가 _wantMethod 로 METHOD_DESC 
 });
 
 test('15H-2 소스 ★ — S부호 게이트(methodNotInTable·methodOk)가 방법 OFF 시 비활성', () => {
-  assert.match(PATENT_SRC, /if\(_wantMethod&&rp\.methodNotInTable&&rp\.methodNotInTable\.length\)g\.push/, '★ S부호 미정의 게이트 wantMethod 가드');
+  assert.match(PATENT_SRC, /if\(!_hasRP&&_wantMethod&&rp\.methodNotInTable&&rp\.methodNotInTable\.length\)g\.push/, '★ S부호 미정의 게이트 wantMethod 가드(refPlan 없을 때만 — 배치17)');
   assert.match(PATENT_SRC, /if\(_wantMethod&&!rp\.methodOk\)g\.push/, '★ 방법 극성 게이트 wantMethod 가드');
 });
 
@@ -292,6 +292,6 @@ test('#6 동작 ★ — openProject 복원: 저장 방법-ON(true)이나 방법 
 // ─────────────────────── 회귀: 캐시버스트 토큰 ───────────────────────
 
 test('15H 회귀 ★ — ?v= 릴리스 토큰 b50 갱신', () => {
-  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260722-b59/, '★ index.html patent.js 토큰 b50');
-  assert.match(readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8'), /version = '20260722-b59'/, '★ patent.js 로더 version b50');
+  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260722-b60/, '★ index.html patent.js 토큰 b50');
+  assert.match(readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8'), /version = '20260722-b60'/, '★ patent.js 로더 version b50');
 });

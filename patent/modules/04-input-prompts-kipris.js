@@ -1395,6 +1395,10 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
       // ★ [배치15L-2] AI 진단(step_13) 지적 반영 재작성 — _pendingReviewNotes 있으면 REVIEW_NOTES 블록으로 주입("지적 해소, 나머지 유지").
       const _reviewNotes=(typeof _pendingReviewNotes!=='undefined'&&_pendingReviewNotes)?String(_pendingReviewNotes).slice(0,8000):'';
       const _reviewInject=_reviewNotes?('\n\n★★★ [검토 반영 지시(배치15L) — 최우선] 아래 <<<REVIEW_NOTES>>> 의 지적사항을 이번 재작성에서 반드시 해소하라. 단, 지적과 무관한 나머지 구조·용어·참조번호는 그대로 유지한다(전면 재설계 금지 — 지적 해소에 필요한 최소 수정).\n<<<REVIEW_NOTES>>>\n'+_reviewNotes+'\n<<<END_REVIEW_NOTES>>>'):'';
+      // ★ [배치17-2] 확정 부호표(refPlan) 주입 — 부호 사전은 코드가 청구항에서 확정한다. LLM 은 아래 표를 "고정 입력"으로 받아
+      //   REFTABLE 에 그대로 옮기고 본문은 이 번호만 쓴다(새 번호·다른 명칭·동일구성 이중번호 금지). 부호 결함군 원천 차단의 핵심.
+      const _refPlanBlk=(typeof refPlan!=='undefined'&&refPlan&&refPlan.length&&typeof _buildRefPlanBlock==='function')?_buildRefPlanBlock(refPlan):'';
+      const _refPlanDirective=_refPlanBlk?('\n\n★★★ [확정 부호표 — 코드가 청구항에서 확정함. 절대 기준] ★★★\n아래 [확정 부호표]의 명칭·번호 쌍만 도면부호로 사용하라. ⛔ 새 번호를 만들거나, 같은 구성에 다른 번호를 붙이거나, 표의 명칭과 다르게(예: 하드웨어 상용어로) 지칭하지 마라. <<<REFTABLE>>> 블록에는 아래 표를 그대로 옮겨 적고, 본문의 모든 (NN)은 아래 표의 번호만 사용한다.\n[확정 부호표]\n'+_refPlanBlk+'\n'):'';
       return `아래 발명에 대해 【발명을 실시하기 위한 구체적인 내용】의 (가) 장치 상세설명과 (나) 방법 상세설명을, 그리고 이들이 사용할 도면부호 사전을 한 번에 작성하라. 세 산출물의 도면부호가 서로·부호의 설명과 완전히 정합해야 한다.
 
 ■ 출력 계약 — 한 글자도 어기지 마라 (위반 시 출력 전체 폐기)
@@ -1423,9 +1427,9 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
 <<<END_ABSTRACT>>>
 
 [C2] ⛔ 본문(DEVICE_DESC·METHOD_DESC) 안에서 <<< 또는 >>> 문자열을 절대 쓰지 마라(블록 경계 오분할 방지). 각 마커는 반드시 줄 맨 앞에서 시작한다.
-  ⛔ 마커 문자열(<<<REFTABLE>>>·<<<DEVICE_DESC>>>·<<<METHOD_DESC>>>·<<<END_…>>>)은 구획 경계로만 쓰고, 본문 문장 안에 절대 포함하지 마라. 각 마커는 전체 출력에서 정확히 1회씩만 등장한다(본문 중간 재등장 금지 — 발견 시 그 문장은 폐기된다).
+  ⛔ 마커 문자열(<<<REFTABLE>>>·<<<DEVICE_DESC>>>·<<<METHOD_DESC>>>·<<<END_…>>>)은 구획 경계로만 쓰고, 본문 문장 안에 절대 포함하지 마라. 각 마커는 전체 출력에서 정확히 1회씩만 등장한다(본문 중간 재등장 금지 — 발견 시 그 문장은 폐기된다).${_refPlanDirective}
 
-[C3] 【도면부호 단일 진실원천(SSOT) — 최우선】 먼저 REFTABLE 블록에 이 명세서가 사용할 모든 도면부호를 아래 형식으로 확정하라. 이 표가 유일한 부호 사전이며, 본문은 이 표에 있는 부호만 사용한다.
+[C3] 【도면부호 단일 진실원천(SSOT) — 최우선】 ${_refPlanBlk?'위 [확정 부호표]가 유일한 부호 사전이다. REFTABLE 블록에 그 표를 그대로 옮겨 적고, 본문은 그 번호만 사용한다(표에 없는 새 부호를 만들지 마라).':'먼저 REFTABLE 블록에 이 명세서가 사용할 모든 도면부호를 아래 형식으로 확정하라. 이 표가 유일한 부호 사전이며, 본문은 이 표에 있는 부호만 사용한다.'}
   형식(한 줄=한 부호, 번호 오름차순):
   [장치부호]
   (100) 명칭
