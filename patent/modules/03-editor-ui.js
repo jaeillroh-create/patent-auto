@@ -1139,6 +1139,16 @@ function getLatestDescription(){
   // 기존 우선순위
   return outputs.step_13_applied||outputs.step_09||outputs.step_08||'';
 }
+// ★ [배치16.1-2] 수학식 인라인 계약 활성 여부 — 토글 체크 OR 현재 본문에 【수학식】 존재(재생성 시 수식 유실 방지).
+//   토글은 openProject 시 미복원이므로, 수식 있는 문서를 재작성할 때 계약이 빠져 수학식이 통째로 사라지던 회귀(docJ 6→docK 0) 차단.
+//   ※ 체인(② 통합 생성)은 _resetUnifiedChainOutputs 로 본문을 비운 뒤 cohesion 을 호출하므로 본문 감지=0 → 토글이 그대로 지배(신규 생성 의도 존중).
+function _mathModeActive(){
+  try{
+    if(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')&&document.getElementById('chkUnifiedMath').checked)return true;
+    const body=(typeof getLatestDescription==='function')?(getLatestDescription()||''):'';
+    return /【\s*수학식/.test(body);
+  }catch(_e){ return false; }
+}
 // v9.1: 방법 상세설명 최신본 반환
 function getLatestMethodDescription(){
   // 우선순위: step_13_applied_method > step_12

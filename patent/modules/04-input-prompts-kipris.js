@@ -1384,7 +1384,7 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
       const _wantMethod=(typeof includeMethodClaims==='undefined')?false:!!includeMethodClaims;
       const methodClaims=(_wantMethod&&outputs.step_10)?outputs.step_10:'(방법 청구항 없음 — <<<METHOD_DESC>>> 블록도 생략하라)';
       // ★ [배치9 D1] 수학식 토글 = 인라인 파라미터 — on이면 C9가 금지 대신 "인라인 수식 계약"으로 전환(CHK-8·math_ref 규칙 선반영).
-      const _mathOn=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
+      const _mathOn=(typeof _mathModeActive==='function')?_mathModeActive():!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);   // ★ [배치16.1-2] 토글 OR 본문 수식 존재(재작성 시 수식 계약 유지)
       const _mathN=Math.max(1,Math.min(5,parseInt(mathBlockCount)||3));   // [배치15B-1b] 수학식 개수 계약
       const deviceFigDesign=outputs.step_07||'';
       const methodFigDesign=(_wantMethod&&outputs.step_11)?outputs.step_11:'(방법 도면 없음)';   // [배치15H-2] 방법 OFF → 방법 도면 참조 제외
@@ -1506,6 +1506,7 @@ ${designComponents}${_fixInject}${_reviewInject}
     }
     case 'step_13':{
       const _mf=(typeof machineFindingsForReview==='function')?machineFindingsForReview():'';
+      const _c=(typeof _step13Compact!=='undefined'&&_step13Compact);   // ★ [배치16.1-3] 축약 진단(대형 문서 타임아웃 재시도) — 입력 대폭 축소
       return `아래 청구범위와 상세설명을 전문적으로 검토하라.
 ${_mf?`\n═══ ★ 기계검증이 발견한 결정론적 결함 (최우선 반영) ═══\n아래는 기계(정규식) 검증이 현재 상세설명에서 실제로 검출한 결함이다. 각 항목을 반드시 아래 [5] 보완/수정 제안에 포함하여 구체적 수정 문장을 제시하라(문단/문장 중복 → 중복 사본 제거 지시, 문장 절단 → 문장 복원, 수학식 변수 미정의 → "여기서" 절에 변수 정의 추가, 예시 누락 → 실시예 보충).\n${_mf}\n`:''}
 ═══ 검토 항목 및 기준 ═══
@@ -1615,7 +1616,7 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
 ★ [13] 특허성 검토 결과는 반드시 "[특허성]" 소제목으로 구분하여 (차별 구성 / 자명성 리스크 / 보완 방향) 순으로 기술하라.
 마지막에 전체 요약 (보완 우선순위 포함)
 
-${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}\n[상세설명] ${(getLatestDescription()||'').slice(0,6000)}${getLatestMethodDescription()?'\n[방법 상세설명] '+getLatestMethodDescription().slice(0,3000):''}\n[도면 설계] ${(outputs.step_07||'').slice(0,2000)}${outputs.step_07c?'\n[예시도/개념도 설계 — 참조번호 31~99, 장치(100~)와 별개] '+outputs.step_07c.slice(0,1500):''}${outputs.step_08c?'\n[예시도 상세설명 — 도 N별 본문(별도 단계에서 작성됨, 31~99 기준)] '+outputs.step_08c.slice(0,3000):''}${outputs.step_04?'\n[선행기술 — 특허성 검토용] '+outputs.step_04.slice(0,2000):''}\n[원본 발명 내용] ${inv.slice(0,3000)}`;}
+${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}${outputs.step_18?'\n[부호의 설명] '+outputs.step_18.slice(0,_c?1200:2000):''}\n[상세설명] ${(getLatestDescription()||'').slice(0,_c?2500:6000)}${getLatestMethodDescription()?'\n[방법 상세설명] '+getLatestMethodDescription().slice(0,_c?1200:3000):''}\n[도면 설계] ${(outputs.step_07||'').slice(0,_c?800:2000)}${(!_c&&outputs.step_07c)?'\n[예시도/개념도 설계 — 참조번호 31~99, 장치(100~)와 별개] '+outputs.step_07c.slice(0,1500):''}${(!_c&&outputs.step_08c)?'\n[예시도 상세설명 — 도 N별 본문(별도 단계에서 작성됨, 31~99 기준)] '+outputs.step_08c.slice(0,3000):''}${(!_c&&outputs.step_04)?'\n[선행기술 — 특허성 검토용] '+outputs.step_04.slice(0,2000):''}\n[원본 발명 내용] ${inv.slice(0,_c?1200:3000)}${_c?'\n\n※ 문서가 커서 상세설명을 축약 제공했습니다 — 청구항 뒷받침·특허성 중심으로 핵심만 진단하라.':''}`;}
 
     case 'step_14':return `대안 청구항을 작성하라. 원본 청구항의 핵심 기술적 구성은 그대로 유지하되, 표현을 달리하라.
 

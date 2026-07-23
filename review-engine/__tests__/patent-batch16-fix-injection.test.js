@@ -42,10 +42,13 @@ beforeEach(() => { Object.keys(els).forEach(k => delete els[k]); toasts = []; ru
 
 // ─────────────── 1) _buildFixTargets: 결함 → 지시 변환 ───────────────
 
-test('16-1 ★ — _buildFixTargets: 부호 불일치(b-경로) → canonical 명칭 통일 지시', () => {
+test('16.1-1 ★ — _buildFixTargets: 부호 불일치(b-경로) → 총칭어 금지 + 청구항(불변) 명칭 기준', () => {
+  run('clearAllState(); outputs.step_06="【청구항 1】 대사 보존형 서사 구조화부를 포함하는 장치.";');
   const out = run(`_buildFixTargets([{check:'refnum_dupassign', message:'부호 (110)에 부호의 설명 정의("대사보존형서사구조화부")와 다른 구성요소 명칭 배정', detail:'canonical="대사보존형서사구조화부" ↔ body="프로세서"'}])`);
   assert.match(out, /부호 \(110\)/, '★ 부호 번호');
-  assert.match(out, /'프로세서'으로 지칭된 것을 부호의 설명 명칭 '대사보존형서사구조화부'으로 통일/, '★ body→canonical 지시');
+  assert.match(out, /총칭어 '프로세서'를 참조번호에 쓰지 말고, 청구항에 기재된 구체적 구성부 명칭을/, '★ 총칭어 금지 + 청구항 기준');
+  assert.match(out, /부호표 명칭이 아니라 청구항 명칭 기준/, '★ 기준을 부호표(가변)→청구항(불변)');
+  assert.match(out, /사용 가능한 구성부 명칭\(청구항 기준[\s\S]*대사 보존형 서사 구조화부/, '★ 청구항 구성부 명칭 목록 제공');
 });
 
 test('16-1 ★ — _buildFixTargets: 동일명칭 다중부호(c-경로) → 개별 명명 지시', () => {
@@ -152,6 +155,52 @@ test('16-4 ★ 동작 — 잔존 시 최대 2회(무한 반복 아님)', async (
 });
 
 // ─────────────── 소스 배선 ───────────────
+
+// ─────────────── 16.1-1 청구항 기준 ───────────────
+
+test('16.1-1 ★ — _claimComponentNames: 청구항에서 구성부 명칭 추출', () => {
+  run('clearAllState(); outputs.step_06="【청구항 1】 대사 보존형 서사 구조화부; 멀티모달 제작자원 라우팅부; 및 품질 검증부를 포함하는 장치.";');
+  const names = JSON.parse(run('JSON.stringify(_claimComponentNames())'));
+  assert.ok(names.includes('대사 보존형 서사 구조화부'), '★ 장문 구성부');
+  assert.ok(names.includes('멀티모달 제작자원 라우팅부') && names.includes('품질 검증부'), '★ 다수 구성부');
+});
+
+// ─────────────── 16.1-2 수학식 계약 유지 ───────────────
+
+test('16.1-2 ★ — _mathModeActive: 토글 OR 본문 수식 존재', () => {
+  run('clearAllState(); delete outputs.step_08;');
+  assert.strictEqual(run('_mathModeActive()'), false, '★ 토글 off + 본문 없음 → false');
+  run(`outputs.step_08="제어부(100)는 【수학식 1】 y=ax 를 적용한다. 여기서 a는 계수.";`);
+  assert.strictEqual(run('_mathModeActive()'), true, '★ 토글 off라도 본문에 수식 있으면 true');
+});
+
+test('16.1-2 ★ 동작 — 수식 있는 문서 재작성 시 cohesion 프롬프트에 C9 인라인 계약 유지(토글 off)', () => {
+  run(`clearAllState(); outputs.step_06="【청구항 1】 제어부."; outputs.step_07="도1"; selectedTitle="s"; selectedTitleType="서버"; mathBlockCount=3;
+    outputs.step_08="도 1을 참조하면 제어부(100)는 【수학식 1】 y=ax 를 적용한다. 여기서 a는 계수이다."; _pendingFixTargets="· 부호 정합: FIX";`);
+  // chkUnifiedMath 토글 없음(off) — 그래도 본문 수식 → C9 인라인 계약 존재
+  const p = run("buildPrompt('unified_cohesion')") || '';
+  assert.match(p, /수학식 인라인 — 정확히 \d개의 【수학식】 블록/, '★ C9 인라인 계약(수식 유실 방지)');
+  assert.ok(!/【수학식 금지】/.test(p), '★ 수식 금지문 미출력');
+});
+
+// ─────────────── 16.1-3 AI 진단 타임아웃 ───────────────
+
+test('16.1-3 ★ 동작 — 축약 모드(_step13Compact)면 step_13 입력이 축소·부호표 포함', () => {
+  run(`clearAllState(); selectedTitle="s"; outputs={ step_06:"【청구항 1】 제어부.", step_18:"제어부 : 100", step_08:("가나다라마".repeat(2000)) };`);  // 큰 상세설명
+  run('_step13Compact=false;'); const full = run("buildPrompt('step_13')") || '';
+  run('_step13Compact=true;'); const compact = run("buildPrompt('step_13')") || '';
+  run('_step13Compact=false;');
+  assert.ok(compact.length < full.length, '★ 축약 프롬프트가 더 짧음');
+  assert.match(compact, /문서가 커서 상세설명을 축약 제공/, '★ 축약 안내');
+  assert.match(compact, /\[부호의 설명\]/, '★ 부호표 포함(뒷받침 판단)');
+});
+
+test('16.1-3 ★ 소스 — runDiagnosis 타임아웃 축약 재시도 + 버튼 배선', () => {
+  assert.match(PATENT_SRC, /async function runDiagnosis\(\)\{/, '★ 진단 래퍼');
+  assert.match(PATENT_SRC, /타임아웃\|timeout\|시간\|초과\|abort/, '★ 타임아웃 감지');
+  assert.match(PATENT_SRC, /_step13Compact=true;[\s\S]{0,80}await runStep\('step_13'\)/, '★ 축약 재시도');
+  assert.match(HTML_SRC, /id="btnStep13" onclick="runDiagnosis\(\)"/, '★ 진단 버튼 → runDiagnosis');
+});
 
 test('16 소스 ★ — FIX_TARGETS 계산·주입·루프·별칭 배선', () => {
   assert.match(PATENT_SRC, /function _buildFixTargets\(issues\)\{/, '★ 변환 함수');

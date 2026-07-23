@@ -120,6 +120,6 @@ test('★ N3b→배치9 D1 — 토글 의미 전환: [5/5] 자동 실행 배선 
   assert.ok(!/const TOTAL=wantMath\?5:4;/.test(PATENT_SRC), '★ [5/5] 분기 제거(배치9 D1)');
   assert.ok(!/\[5\/5\] 수학식 생성\(Step 9 파이프라인\)/.test(PATENT_SRC), '★ 체인 내 step_09 자동 호출 제거');
   assert.match(PATENT_SRC, /수학식 토글은 cohesion 인라인 파라미터\(C9\)로만 소비/, '★ 전환 주석(체인·배치15A 재작성)');
-  assert.match(PATENT_SRC, /const _mathOn=!!\(typeof document!=='undefined'&&document\.getElementById\('chkUnifiedMath'\)\?\.checked\)/, '★ 프롬프트가 토글을 인라인 파라미터로 소비');
+  assert.match(PATENT_SRC, /const _mathOn=\(typeof _mathModeActive==='function'\)\?_mathModeActive\(\):!!\(typeof document!=='undefined'&&document\.getElementById\('chkUnifiedMath'\)\?\.checked\)/, '★ 프롬프트가 토글(또는 본문 수식 존재)을 인라인 파라미터로 소비(배치16.1-2)');
   assert.match(PATENT_SRC, /case 'step_09':return buildMathPrompt/, '★ Step 9 수동 경로(고급) 존치');
 });

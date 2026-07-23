@@ -136,6 +136,19 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     // [C1 자동 연쇄] SCOPE_GUARDED 스텝 생성 후 자동 검증
     if(inventionScope?.locked_at&&(SCOPE_GUARDED_TEXT_STEPS.includes(sid)||SCOPE_GUARDED_MERMAID_STEPS.includes(sid))){try{await runScopeCheck(sid);}catch(e2){console.warn('[C1] runScopeCheck 자동 실행 실패:',sid,e2.message);}}
   }catch(e){try{_lastGenError=(e&&e.message)||String(e);}catch(_e){}App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
+// ★ [배치16.1-3] AI 진단 실행 — 대형 문서에서 step_13 타임아웃 시 입력 축약해 1회 자동 재시도(분할/요약 진단).
+async function runDiagnosis(){
+  try{_lastGenError='';}catch(_e){}
+  await runStep('step_13');
+  // 실패(미생성) + 타임아웃/네트워크류 사유면 축약 재시도 1회
+  const _err=(typeof _lastGenError!=='undefined')?String(_lastGenError||''):'';
+  if(!outputs.step_13 && /타임아웃|timeout|시간|초과|abort|aborted|network|네트워크|응답 없|Failed to fetch/i.test(_err)){
+    App.showToast('문서가 커서 진단이 중단되었습니다 — 입력을 축약해 1회 재시도합니다','warning');
+    try{ _step13Compact=true; try{_lastGenError='';}catch(_e){} await runStep('step_13'); }
+    finally{ _step13Compact=false; }
+    if(!outputs.step_13)App.showToast('축약 진단도 실패했습니다 — 분량을 낮추거나 잠시 후 다시 시도하세요','error');
+  }
+}
 async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}if(!(await _claimGatePass(sid)))return;setGlobalProcessing(true);try{await _longStepCore(sid);}finally{setGlobalProcessing(false);}}
 // ★ [T1] 가드/globalProcessing 없는 실행 코어 — 통합 핸들러(runImplementationDesc)가 device→concept 순차 호출 시 중첩 early-return 방지(진단 경고 반영).
 async function _longStepCore(sid){const bid=sid==='step_08'?'btnStep08':'btnStep12',pid=sid==='step_08'?'progressStep08':'progressStep12';loadingState[sid]=true;App.setButtonLoading(bid,true);
@@ -1800,7 +1813,7 @@ function _cohesionUseSplit(){ try{ return detailLevel==='maximal'||detailLevel==
 async function _runCohesionSplit(pid, maxTok){
   const base=buildPrompt('unified_cohesion'); if(!base)return null;
   // ── 1/2: 본문만 ──
-  const _bodyMathNote=(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')&&document.getElementById('chkUnifiedMath').checked)?' ★ 수학식(【수학식 N】 블록 + "여기서" 정의절)은 DEVICE_DESC 본문에 포함되므로 이번 1단계에 반드시 모두 포함하라(2단계 아님 — 누락 시 재생성 유발).':'';
+  const _bodyMathNote=((typeof _mathModeActive==='function')?_mathModeActive():(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')&&document.getElementById('chkUnifiedMath').checked))?' ★ 수학식(【수학식 N】 블록 + "여기서" 정의절)은 DEVICE_DESC 본문에 포함되므로 이번 1단계에 반드시 모두 포함하라(2단계 아님 — 누락 시 재생성 유발).':'';
   // ★ [배치15K-5] 분할 1차에 수학식 포함 명시 — 수학식 게이트는 병합 후 r(=merged)에서 검사하므로 1차 본문에 수식이 있어야 오탐(누락 오판)이 없다.
   const bodyPrompt=base+'\n\n★★★ [이번 출력 범위 — 1/2단계: 본문] <<<DEVICE_DESC>>> 블록(방법 청구항이 있으면 <<<METHOD_DESC>>> 포함)만 출력하라. REFTABLE·TASK·SOLUTION·EFFECTS·ABSTRACT 블록은 이번에 출력하지 마라(2단계에서 별도 생성). 본문 분량을 목표까지 최대한 채워라.'+_bodyMathNote;
   // ★ [배치15I 적대검증] 방법 청구항이 있으면(방법 ON) 1차 본문에 METHOD_DESC 가 반드시 있어야 한다 — 절단으로 꼬리 METHOD_DESC 가
@@ -1842,7 +1855,7 @@ async function runUnifiedCohesionGen(opts){
   let _gateWarn=[];   // ★ [배치15G-2] 자동 교정 2회 후에도 잔여한 게이트 항목 — 경고 커밋 시 완료 요약·배너에 노출
   let _reftableFallback=false;   // ★ [배치15I-3] REFTABLE 누락 → 본문에서 코드로 부호표 생성했는지(완료 요약·배너 경고)
   // ★ [배치9 D1] 수학식 인라인 모드 — 토글 on이면 프롬프트가 본문에 【수학식】을 직접 포함(C9 전환).
-  const _mathInline=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
+  const _mathInline=(typeof _mathModeActive==='function')?_mathModeActive():!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);   // ★ [배치16.1-2] 토글 OR 본문 수식 존재(재작성 시 수식 계약·게이트 유지)
   setGlobalProcessing(true); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',true);
   App.showProgress('progressUnifiedGen','통합 생성 중(단일 컨텍스트)... 긴 출력은 자동 이어쓰기됩니다',0,1);
   try{
@@ -2055,7 +2068,7 @@ async function runUnifiedFullChain(_wizOpts){
     else { resume=true; App.showToast('이어하기 — 빈 단계만 생성합니다(기존 산출물 재사용, 완성 후 검증 패널 확인)','info'); }
   }
   const wantMethod=!!includeMethodClaims;
-  const _mathOn=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
+  const _mathOn=(typeof _mathModeActive==='function')?_mathModeActive():!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);   // ★ [배치16.1-2]
   // ★ [배치9 D1] 수학식 토글은 cohesion 인라인 파라미터(C9)로만 소비([4/4] 안에서 수식 포함 생성). Step 9 수동 경로는 고급에 존치.
   const TOTAL=4;
   _unifiedChainRunning=true; try{_wfRunning=0;}catch(_e){}

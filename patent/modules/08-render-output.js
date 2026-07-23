@@ -507,13 +507,24 @@ function machineFindingsForReview(){
 // [Item 2] 완성본 기계검증 패널 렌더 — 산출물 탭(page4) 미리보기 진입 시 자동 실행. severity 색은 인라인(patent.css 무변경).
 // ★ [배치16-1] 기계검증 결함(validateSpecification issues)을 cohesion 재작성용 구조화 지시문(FIX_TARGETS)으로 변환.
 //   "무엇을 어떻게 고쳐라"의 명시적 지시로 바꿔 프롬프트에 주입 → 재생성이 실제로 결함을 해소하게 한다(종전엔 결과가 프롬프트에 미주입).
+// ★ [배치16.1-1] 청구항(step_06/10)에서 구체적 구성부 명칭 추출 — FIX_TARGETS 의 "사용 가능 명칭"(재생성 시 불변 기준).
+function _claimComponentNames(){
+  const t=((typeof outputs!=='undefined'&&outputs.step_06)||'')+'\n'+((typeof outputs!=='undefined'&&outputs.step_10)||'');
+  const set=new Set();
+  const re=/([가-힣A-Za-z0-9][가-힣A-Za-z0-9·]*(?:\s+[가-힣A-Za-z0-9·]+){0,6}?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터))(?=[,;\.\)\s은는이가을를와과및또]|$)/g;
+  let m; while((m=re.exec(t))!==null){ let n=(typeof _cleanRefName==='function')?_cleanRefName(m[1]):m[1].trim(); if(n.length>=3&&n.length<=40)set.add(n); }
+  return [...set];
+}
 function _buildFixTargets(issues){
-  const lines=[]; (issues||[]).forEach(function(i){
+  const lines=[]; let _needClaimNames=false;
+  (issues||[]).forEach(function(i){
     const msg=String(i.message||''), det=String(i.detail||''), ck=i.check;
     if(ck==='refnum_dupassign'){
       const cm=det.match(/canonical="([^"]+)"/), bm=det.match(/body="([^"]+)"/);
-      if(cm){ const ref=(msg.match(/부호 \((S?\d+)\)/)||[])[1]||'?'; lines.push(`· 부호 (${ref}): 본문에서 '${bm?bm[1]:'다른 명칭'}'으로 지칭된 것을 부호의 설명 명칭 '${cm[1]}'으로 통일 기재하라(총칭어·다른 명칭 사용 금지).`); }
-      else { const nm=(msg.match(/명칭 "([^"]+)"/)||[])[1]||'해당 명칭'; lines.push(`· 명칭 '${nm}'이 여러 부호(${det})에 중복 배정 — 서로 다른 구성부이면 각기 다른 명칭을, 동일 구성부이면 하나의 부호로 통일하라(하나의 명칭=하나의 부호).`); }
+      // ★ [배치16.1-1] canonical↔body 불일치: 재생성 시 부호표(canonical)가 바뀌므로 "부호표 명칭 통일" 지시는 무효.
+      //   기준을 청구항(불변)으로 — 총칭어 금지 + 청구항 구성부 명칭 사용.
+      if(cm){ const ref=(msg.match(/부호 \((S?\d+)\)/)||[])[1]||'?'; const bd=bm?bm[1]:'총칭어'; _needClaimNames=true; lines.push(`· 부호 (${ref}): 총칭어 '${bd}'를 참조번호에 쓰지 말고, 청구항에 기재된 구체적 구성부 명칭을 부호의 설명·본문 양쪽에 동일하게 부여하라(프로세서·메모리·통신부·서버 등 총칭어 금지 — 부호표 명칭이 아니라 청구항 명칭 기준).`); }
+      else { const nm=(msg.match(/명칭 "([^"]+)"/)||[])[1]||'해당 명칭'; lines.push(`· 명칭 '${nm}'이 여러 부호(${det})에 중복 배정 — 서로 다른 구성부이면 각기 다른 청구항 명칭을, 동일 구성부이면 하나의 부호로 통일하라(하나의 명칭=하나의 부호).`); if(/^(프로세서|메모리|서버|데이터베이스|버스|인터페이스|씨피유|램|롬|CPU|RAM|ROM|GPU)$/.test(String(nm).replace(/\s+/g,'')))_needClaimNames=true; }
     }
     else if(ck==='refnum_consistency')lines.push(`· 부호 정합: ${msg}${det?(' ('+det+')'):''} — 본문의 모든 (NN)을 부호의 설명에 정의하고, 미사용 부호는 정리하라.`);
     else if(ck==='refnum_generic_series')lines.push(`· ${msg} — 총칭 시리즈 대신 구성요소별 개별 명칭을 부여하라.`);
@@ -527,6 +538,8 @@ function _buildFixTargets(issues){
     else if(ck==='claim_support_missing')lines.push(`· 청구항 뒷받침 부족: ${msg}${det?(' ('+det+')'):''} — 해당 구성요소를 상세설명에 명시적으로 기술하라.`);
     else lines.push(`· [${ck}] ${msg}${det?(' — '+det):''}`);
   });
+  // ★ [배치16.1-1] 총칭어 관련 지시가 있으면 청구항 구성부 명칭 목록을 머리에 제공(재생성 시 불변 기준).
+  if(_needClaimNames){ const _cn=(typeof _claimComponentNames==='function')?_claimComponentNames():[]; if(_cn.length)lines.unshift(`★ 사용 가능한 구성부 명칭(청구항 기준 — 참조번호에는 아래 명칭만 부여하라. 부호표 명칭은 재생성 시 바뀌므로 청구항 명칭을 기준으로 통일): ${_cn.join(', ')}`); }
   return lines.join('\n');
 }
 // ★ [배치16-4] 두 검증 결과 집합의 동일 이슈 키(check+message) — 해소/잔존 카운트용.
