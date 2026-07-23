@@ -137,17 +137,22 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
     if(inventionScope?.locked_at&&(SCOPE_GUARDED_TEXT_STEPS.includes(sid)||SCOPE_GUARDED_MERMAID_STEPS.includes(sid))){try{await runScopeCheck(sid);}catch(e2){console.warn('[C1] runScopeCheck 자동 실행 실패:',sid,e2.message);}}
   }catch(e){try{_lastGenError=(e&&e.message)||String(e);}catch(_e){}App.showToast(e.message,'error');}finally{loadingState[sid]=false;if(bid)App.setButtonLoading(bid,false);setGlobalProcessing(false);}}
 // ★ [배치16.1-3] AI 진단 실행 — 대형 문서에서 step_13 타임아웃 시 입력 축약해 1회 자동 재시도(분할/요약 진단).
-async function runDiagnosis(){
-  try{_lastGenError='';}catch(_e){}
-  await runStep('step_13');
-  // 실패(미생성) + 타임아웃/네트워크류 사유면 축약 재시도 1회
-  const _err=(typeof _lastGenError!=='undefined')?String(_lastGenError||''):'';
-  if(!outputs.step_13 && /타임아웃|timeout|시간|초과|abort|aborted|network|네트워크|응답 없|Failed to fetch/i.test(_err)){
-    App.showToast('문서가 커서 진단이 중단되었습니다 — 입력을 축약해 1회 재시도합니다','warning');
-    try{ _step13Compact=true; try{_lastGenError='';}catch(_e){} await runStep('step_13'); }
-    finally{ _step13Compact=false; }
-    if(!outputs.step_13)App.showToast('축약 진단도 실패했습니다 — 분량을 낮추거나 잠시 후 다시 시도하세요','error');
-  }
+async function runDiagnosis(opts){
+  // ★ [배치19-1] 재작성 락 — 단독 진단(진단만 버튼)은 소유, 통합 흐름(wfDiagnoseAndRewrite)에서 호출({_locked:true})은 통과.
+  const _rwOwn=(typeof _acquireRewriteLock==='function')?_acquireRewriteLock(opts):false;
+  if(_rwOwn===null){ App.showToast('이미 처리 중입니다 — 완료 후 다시 시도하세요','info'); return; }
+  try{
+    try{_lastGenError='';}catch(_e){}
+    await runStep('step_13');
+    // 실패(미생성) + 타임아웃/네트워크류 사유면 축약 재시도 1회
+    const _err=(typeof _lastGenError!=='undefined')?String(_lastGenError||''):'';
+    if(!outputs.step_13 && /타임아웃|timeout|시간|초과|abort|aborted|network|네트워크|응답 없|Failed to fetch/i.test(_err)){
+      App.showToast('문서가 커서 진단이 중단되었습니다 — 입력을 축약해 1회 재시도합니다','warning');
+      try{ _step13Compact=true; try{_lastGenError='';}catch(_e){} await runStep('step_13'); }
+      finally{ _step13Compact=false; }
+      if(!outputs.step_13)App.showToast('축약 진단도 실패했습니다 — 분량을 낮추거나 잠시 후 다시 시도하세요','error');
+    }
+  }finally{ if(_rwOwn&&typeof _releaseRewriteLock==='function')_releaseRewriteLock(); }
 }
 async function runLongStep(sid){if(globalProcessing)return;const dep=checkDependency(sid);if(dep){App.showToast(dep,'error');return;}if(!(await _claimGatePass(sid)))return;setGlobalProcessing(true);try{await _longStepCore(sid);}finally{setGlobalProcessing(false);}}
 // ★ [T1] 가드/globalProcessing 없는 실행 코어 — 통합 핸들러(runImplementationDesc)가 device→concept 순차 호출 시 중첩 early-return 방지(진단 경고 반영).
@@ -1848,9 +1853,14 @@ function _buildVolumeAugmentPrompt(deviceText, methodText, targetChars, mathOn){
 ${deviceText}${methodText?('\n\n[참고: 방법 상세설명 — 재출력 불필요, 용어 정합용]\n'+methodText.slice(0,3000)):''}`;
 }
 async function runUnifiedCohesionGen(opts){
-  if(!(opts&&opts.chained)&&typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
-  if(!outputs.step_06){App.showToast('먼저 장치 청구항(A2)을 생성하세요','error');return;}
-  if(!outputs.step_07){App.showToast('먼저 장치 도면(B1)을 생성하세요 — 도면부호 정합의 기준입니다','error');return;}
+  opts=opts||{};
+  // ★ [배치19-1] 재작성 락 — 직접 호출(② 통합생성 버튼 등)만 소유. chained/_locked(체인·재작성 내부)은 상위가 보유 → 통과.
+  const _rwOwn=(typeof _acquireRewriteLock==='function')?_acquireRewriteLock({_locked:(opts._locked||opts.chained)}):false;
+  if(_rwOwn===null){ App.showToast('이미 처리 중입니다 — 완료 후 다시 시도하세요','info'); return; }
+  const _rwRel=function(){ if(_rwOwn&&typeof _releaseRewriteLock==='function')_releaseRewriteLock(); };
+  if(!(opts&&opts.chained)&&typeof globalProcessing!=='undefined'&&globalProcessing){_rwRel();App.showToast('처리 중입니다','info');return;}
+  if(!outputs.step_06){_rwRel();App.showToast('먼저 장치 청구항(A2)을 생성하세요','error');return;}
+  if(!outputs.step_07){_rwRel();App.showToast('먼저 장치 도면(B1)을 생성하세요 — 도면부호 정합의 기준입니다','error');return;}
   const before=_specIssueCounts(); const hadMath=!!outputs.step_09;   // ★ 수학식(step_09) 존재 시 커밋 후 재삽입 필요 경고
   let _gateWarn=[];   // ★ [배치15G-2] 자동 교정 2회 후에도 잔여한 게이트 항목 — 경고 커밋 시 완료 요약·배너에 노출
   let _reftableFallback=false;   // ★ [배치15I-3] REFTABLE 누락 → 본문에서 코드로 부호표 생성했는지(완료 요약·배너 경고)
@@ -1861,6 +1871,7 @@ async function runUnifiedCohesionGen(opts){
   const _refPlan=(typeof _ensureRefPlan==='function')?(_ensureRefPlan(true)||[]):[];
   const _hasRP=!!(_refPlan&&_refPlan.length)&&typeof _refPlanToMap==='function';
   let _refFixes=0, _refFixArea=null;   // ★ [배치18-2] 영역별 정합 건수(상세설명·도면·마무리)
+  let _dupRemoved=0, _mkRemoved=0;   // ★ [배치19-4] 커밋 전 정리 — 근접 중복 문단·미완 마커 제거 건수(배너 표시)
   setGlobalProcessing(true); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',true);
   App.showProgress('progressUnifiedGen','통합 생성 중(단일 컨텍스트)... 긴 출력은 자동 이어쓰기됩니다',0,1);
   try{
@@ -2015,6 +2026,16 @@ async function runUnifiedCohesionGen(opts){
     if(_mathInline&&outputs.step_09){ pushOutputHistory('step_09','unified','runUnifiedCohesionGen'); delete outputs.step_09; try{delete outputTimestamps.step_09;}catch(_e){} }
     try{ if(typeof _snapshotGenParams==='function')_snapshotGenParams('stage4'); }catch(_e){}   // [배치12 C] 본문 생성 시점 설계 스냅샷(수학식·분량 대조 기준)
     try{if(typeof _mergeConceptIntoStep08==='function')_mergeConceptIntoStep08();}catch(_e){}   // 예시도(step_08c) 합본(있을 때만)
+    // ★ [배치19-4] 커밋 전 2차 방어 — (4b) 미완/유출 센티넬 마커 결정론 제거 + (4a) 인접 ±5 근접 중복 문단 제거.
+    //   docM: 중복 실행으로 분량 폭주·근접 반복·미완 마커 유출 → CRITICAL. 코드가 커밋 전 정리(형식 토큰·근접 중복만 대상, 내용 불변).
+    try{
+      ['step_08','step_08c','step_12','step_16','step_17','step_19'].forEach(function(k){
+        if(!outputs[k]||typeof outputs[k]!=='string')return;
+        if(typeof _stripStrayMarkers==='function'){ const _m=_stripStrayMarkers(outputs[k]); if(_m.removed){ outputs[k]=_m.text; _mkRemoved+=_m.removed; try{markOutputTimestamp(k);}catch(_e){} } }
+        if((k==='step_08'||k==='step_12')&&typeof _dedupAdjacentParas==='function'){ const _d=_dedupAdjacentParas(outputs[k],5); if(_d.removed){ outputs[k]=_d.text; _dupRemoved+=_d.removed; try{markOutputTimestamp(k);}catch(_e){} } }
+      });
+      if(_mkRemoved||_dupRemoved)console.log('[unified] 커밋 전 정리 — 미완 마커 '+_mkRemoved+'개 · 근접 중복 문단 '+_dupRemoved+'개 제거');
+    }catch(_e){}
     // ★ [배치18-2] 전영역 부호 정합 — 합본된 step_08(+예시도)·도면 설명(step_07/11)·마무리(효과 step_16·해결수단 step_17·요약서 step_19)까지
     //   확정 부호표(refPlan)에 일괄 정합한다(dupassign 검사 범위와 일치 → 구조적 0). 그 다음 부호의 설명(step_18)을 정합된 전체 스펙 기준으로 직렬화.
     if(_hasRP && typeof _enforceAllOutputs==='function'){ const _ea=_enforceAllOutputs(_refPlan); _refFixes+=_ea.total; _refFixArea=_ea.byArea; }
@@ -2039,16 +2060,19 @@ async function runUnifiedCohesionGen(opts){
     const _lowVol=(_tgt>0 && _descLen < Math.floor(_tgt*0.5));
     // ★ [배치15I 적대검증] 방법 청구항(step_10) 있는데 방법 상세설명(step_12) 미생성 → 분할/단일 공통으로 침묵 소실되던 §42 뒷받침 결함을 불완전으로 강조.
     const _methodMissing=_wantMethod&&!!outputs.step_10&&!r.method;
-    const _incomplete=_lowVol||_reftableFallback||_methodMissing;
-    const _incMsg=_incomplete?('⚠ 본문이 불완전할 수 있습니다('+[_lowVol?('상세설명 '+_descLen+'자/목표 '+_tgt+'자'):'',_reftableFallback?'부호표 코드 폴백':'',_methodMissing?'방법 상세설명 미생성(방법 청구항 있음)':''].filter(Boolean).join(', ')+') — 분량을 낮추거나 ④ 재생성을 권장합니다'):'';
-    App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft+_refFixMsg+(_gateWarn.length?(' · ⚠ 게이트 미통과 '+_gateWarn.length+'건(⑤ 확인)'):''),((_gateWarn.length||_incomplete)?'warning':'success'));
+    // ★ [배치19-4c] 분량 폭주 감지 — 목표 상한(_tgt)의 1.5배 초과 시 경고(중복 실행/폭주 원인). docM: 목표 2.2~2.5만 → 44,611자(2배).
+    const _overVol=(_tgt>0 && _descLen > Math.floor(_tgt*1.5));
+    const _cleanMsg=(_mkRemoved||_dupRemoved)?(' · 커밋 전 정리(미완 마커 '+_mkRemoved+'·근접중복 '+_dupRemoved+')'):'';
+    const _incomplete=_lowVol||_reftableFallback||_methodMissing||_overVol;
+    const _incMsg=_incomplete?('⚠ 본문 점검 필요('+[_lowVol?('상세설명 '+_descLen+'자/목표 '+_tgt+'자'):'',_overVol?('분량 폭주 '+_descLen+'자/목표 '+_tgt+'자의 1.5배 초과 — 중복 실행·반복 여부 확인'):'',_reftableFallback?'부호표 코드 폴백':'',_methodMissing?'방법 상세설명 미생성(방법 청구항 있음)':''].filter(Boolean).join(', ')+') — 분량을 낮추거나 ④ 재생성을 권장합니다'):'';
+    App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft+_refFixMsg+_cleanMsg+(_gateWarn.length?(' · ⚠ 게이트 미통과 '+_gateWarn.length+'건(⑤ 확인)'):''),((_gateWarn.length||_incomplete)?'warning':'success'));
     if(_incMsg)App.showToast(_incMsg,'warning');   // ★ [배치15I-2] 불완전 강조(별도 토스트)
     if(hadMath&&!_mathInline)App.showToast('⚠️ 기존 수학식(Step 9)은 새 상세설명에 재삽입이 필요합니다 — 미리보기·다운로드에 수학식이 빠져 있습니다','warning');   // [배치9 D1] 인라인 모드에선 구 step_09를 이력 보존 후 제거했으므로 미해당
     // ★ [배치15G-3/15I-2] 재생성 결과 배너 — "조용히 안 바뀜" 해소 + 불완전 경고 가시화.
-    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:after.refnum, gateWarn:_gateWarn.slice(), autoCorr:_corr, refFixes:_refFixes, refFixArea:_refFixArea, incomplete:_incomplete, incMsg:_incMsg}); }catch(_e){}
+    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:after.refnum, gateWarn:_gateWarn.slice(), autoCorr:_corr, refFixes:_refFixes, refFixArea:_refFixArea, dupRemoved:_dupRemoved, mkRemoved:_mkRemoved, incomplete:_incomplete, incMsg:_incMsg}); }catch(_e){}
     try{ if(typeof _renderRefPlanPanel==='function')_renderRefPlanPanel(); }catch(_e){}   // ★ [배치17-5] 재생성으로 refPlan 갱신됐을 수 있으니 확정 부호표 패널 재렌더
   }catch(e){ try{_lastGenError=(e&&e.message)||String(e);}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:false, cause:(e&&e.message||String(e))}); }catch(_e2){} }
-  finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); }
+  finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); _rwRel(); }
 }
 
 // ═══ [B] 발명자료 → 핵심 명세서 통합 생성 (원클릭 체인) ═══
@@ -2074,7 +2098,7 @@ let _unifiedChainRunning=false;
 let _lastGenError='';   // [배치15A-1] 직전 생성기(runStep/runDiagramStep/cohesion) 실패 사유 — 체인이 phase ✗·배너에 노출(침묵 catch 제거)
 async function runUnifiedFullChain(_wizOpts){
   if(_unifiedChainRunning){App.showToast('통합 생성이 이미 진행 중입니다','info');return;}
-  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('다른 작업이 진행 중입니다','info');return;}
+  if((typeof _rewriteLock!=='undefined'&&_rewriteLock)||(typeof globalProcessing!=='undefined'&&globalProcessing)){App.showToast('다른 작업이 진행 중입니다','info');return;}   // ★ [배치19-1] 재작성 중 통합생성 진입 차단
   const inv=((typeof document!=='undefined'&&document.getElementById('projectInput')?.value)||'').trim();
   if(inv.length<20){App.showToast('발명 자료를 먼저 입력하세요(최소 20자)','error');return;}
   if(typeof currentProjectId!=='undefined'&&!currentProjectId){App.showToast('프로젝트를 먼저 저장하세요','error');return;}

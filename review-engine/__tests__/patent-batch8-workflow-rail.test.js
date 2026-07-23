@@ -82,7 +82,7 @@ test('★ D4 — _wfResetStage3Outputs: 골격 계열 6키(관문 14·15 포함)
   assert.equal(run('outputs.step_08'), '본문', '★ ④ 산출 보존(배지로 재생성 유도)');
 });
 test('★ D4 소스 — ③ 순차 재실행(기존 함수 재배치)·④ cohesion 호출', () => {
-  assert.match(PATENT_SRC, /async function wfRunStage3\(\)[\s\S]{0,600}await runStep\('step_06'\)[\s\S]{0,600}await runDiagramStep\('step_07'\)/, '★ ③: runStep/runDiagramStep 순차');
+  assert.match(PATENT_SRC, /async function wfRunStage3\(\)[\s\S]{0,800}await runStep\('step_06'\)[\s\S]{0,600}await runDiagramStep\('step_07'\)/, '★ ③: runStep/runDiagramStep 순차');   // ★ [배치19-1] 재작성 락 가드 추가로 창 확장
   assert.match(PATENT_SRC, /if\(had\)_wfResetStage3Outputs\(\);/, '★ ③ 재생성 시 초기화 선행');
   assert.match(PATENT_SRC, /async function wfRunStage4\(\)\{ try\{ await runUnifiedCohesionGen\(\); \}/, '★ ④: 현행 cohesion 호출(무가드·이력 보존)');
 });

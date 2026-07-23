@@ -715,7 +715,8 @@ function renderSpecValidation(){
   if(iss.length)h+=`<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--color-border);border-radius:6px;font-size:12px;background:var(--color-bg-secondary,rgba(74,125,255,0.04))"><b>결함 성격에 따라 재작성 경로가 다릅니다(④ 탭).</b>`
     +(_structN?`<div style="margin-top:6px">· <b>구조 결함</b>(부호·표제·중복·절단 등 ${_structN}건) → <b>④ 「결함 반영해 본문 다시 쓰기」</b>로 해소합니다(기계검증 결함을 프롬프트에 주입해 재작성 → 재검증까지 자동).</div>`:``)
     +(_contentN?`<div style="margin-top:6px">· <b>내용 결함</b>(청구항 뒷받침·특허성 등 ${_contentN}건) → <b>④ 「명세서 진단(AI)」 실행</b> 후 <b>④ 「결함 반영해 본문 다시 쓰기」</b>(진단 지적 + 기계검증 결함을 함께 반영).</div>`:``)
-    +`<button class="btn btn-outline btn-sm" style="margin-top:8px" id="btnGoStage4FromValidate" onclick="switchTab(3)"><span class="ico" data-icon="edit"></span> ④ 본문 통합·검토 탭으로 이동</button></div>`;
+    +`<button class="btn btn-outline btn-sm" style="margin-top:8px" id="btnGoStage4FromValidate" onclick="switchTab(3)"><span class="ico" data-icon="edit"></span> ④에서 결함 반영해 다시 쓰기</button>`
+    +`<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px">여기 표시된 결함을 프롬프트에 넣어 본문을 재작성합니다(청구항·도면은 유지).</div></div>`;   // ★ [배치19-5] 이동 목적을 이름에
   el.innerHTML=h;
 }
 // [Item 2] 다운로드/복사 직전 CRITICAL 경고(차단 아님 — division 선례 B: 경고+진행). 열린 결정은 PR 본문 참조.
@@ -753,6 +754,32 @@ function _dedupParagraphs(text){
   const seen=new Set(); let removed=0;
   const kept=paras.filter(p=>{ const body=p.replace(/^【[^】]+】\s*\n?/,''); const k=norm(body); if(k.length<40)return true; if(seen.has(k)){removed++;return false;} seen.add(k); return true; });
   return {text:kept.join('\n\n'), removed:removed};
+}
+// ★ [배치19-4a] 인접 ±win 문단 근접 중복 제거(커밋 전 2차 방어) — 첫 40자(정규화) 동일한 문단이 win 이내에 있으면 뒤엣것 삭제.
+//   docM: 중복 실행으로 거리 2~3 근접 반복 6종 유입. 전역 dedup(_dedupParagraphs)보다 보수적(원거리 정당 반복은 보존).
+function _dedupAdjacentParas(text, win){
+  if(!text)return {text:text, removed:0};
+  win=win||5;
+  const norm=(typeof _stripMathNorm==='function')?_stripMathNorm:(s=>String(s||'').replace(/\s+/g,''));
+  const paras=String(text).split(/\n{2,}/);
+  const keys=paras.map(function(p){ const b=p.replace(/^【[^】]+】\s*\n?/,''); const k=norm(b); return (k.length>=40)?k.slice(0,40):null; });
+  const keep=new Array(paras.length).fill(true); let removed=0;
+  for(let i=0;i<paras.length;i++){ if(!keys[i]||!keep[i])continue; const end=Math.min(paras.length-1,i+win);
+    for(let j=i+1;j<=end;j++){ if(keep[j]&&keys[j]===keys[i]){ keep[j]=false; removed++; } } }
+  return {text:paras.filter(function(_,i){return keep[i];}).join('\n\n'), removed:removed};
+}
+// ★ [배치19-4b] 미완/유출 센티넬 마커 결정론 제거 — 완전형(<<<X>>>)뿐 아니라 닫힘 없는 미완형(<<<X, X>>>)·바 END_ 토큰까지 정리.
+//   docM: 절단으로 "<<<END_DEVICE_DESC"(닫는 >>> 없음)가 문장 중간 유출 → placeholder_residue(CRITICAL). 형식 토큰이라 삭제 안전(CHK-0가 잡기 전 코드 정리).
+function _stripStrayMarkers(s){
+  if(s==null)return {text:s, removed:0};
+  let n=0; const bump=function(){n++;return ' ';};
+  let out=String(s)
+    .replace(/<<<\/?[A-Z_]{2,}>>>/g, bump)                 // 완전형 마커
+    .replace(/<<<\/?[A-Z_]{2,}/g, bump)                    // 미완(닫힘 없는) 여는 마커 — docM 사례
+    .replace(/(?:^|[^A-Za-z])([A-Z_]{3,})>>>/g, function(m,g){ n++; return m.slice(0, m.length-(g.length+3))+' '; })   // 여는 없는 닫힘 마커
+    .replace(/\bEND_(?:DEVICE_DESC|METHOD_DESC|REFTABLE|TASK|SOLUTION|EFFECTS|ABSTRACT)\b/g, bump);   // 바 센티넬 토큰
+  out=out.replace(/[ \t]{2,}/g,' ').replace(/ +\n/g,'\n');
+  return {text:out, removed:n};
 }
 // 본문 "명칭(부호)" 쌍 수집(부호의 설명 재생성용). 부호별 최빈 명칭 채택. 부호의 설명 섹션은 제외.
 // ★ [배치15J] 부호표 명칭 앞글자 유실/junk 혼입 방지 — 본문 "명칭(번호)" 추출 시 선행 비명칭 토큰(도면참조·지시어·접속어·수식어·범위어·조사)을 제거.

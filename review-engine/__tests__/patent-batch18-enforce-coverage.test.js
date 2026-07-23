@@ -169,8 +169,8 @@ test('18-5 ★ HTML — ④ 단일 버튼(진단 후 결함 반영해 다시 쓰
 });
 
 test('18-5 ★ 소스 — wfDiagnoseAndRewrite: runDiagnosis 후 wfRewriteWithFixes(순서 자동화)', () => {
-  assert.match(PATENT_SRC, /async function wfDiagnoseAndRewrite\(\)\{/, '★ 통합 함수 정의');
-  assert.match(PATENT_SRC, /if\(typeof runDiagnosis==='function'\)await runDiagnosis\(\);[\s\S]{0,300}await wfRewriteWithFixes\(\);/, '★ 진단 → 재작성 순서');
+  assert.match(PATENT_SRC, /async function wfDiagnoseAndRewrite\(opts\)\{/, '★ 통합 함수 정의(배치19-1 락 opts)');
+  assert.match(PATENT_SRC, /if\(typeof runDiagnosis==='function'\)await runDiagnosis\(\{_locked:true\}\);[\s\S]{0,700}await wfRewriteWithFixes\(\{_locked:true\}\);/, '★ 진단 → 재작성 순서(배치19-1 내부 락 전달)');
 });
 
 test('18-5 ★ 동작 — wfDiagnoseAndRewrite: 진단(step_13) 실행 후 재작성 호출', async () => {

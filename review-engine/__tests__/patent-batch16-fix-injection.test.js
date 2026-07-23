@@ -196,7 +196,7 @@ test('16.1-3 ★ 동작 — 축약 모드(_step13Compact)면 step_13 입력이 �
 });
 
 test('16.1-3 ★ 소스 — runDiagnosis 타임아웃 축약 재시도 + 버튼 배선', () => {
-  assert.match(PATENT_SRC, /async function runDiagnosis\(\)\{/, '★ 진단 래퍼');
+  assert.match(PATENT_SRC, /async function runDiagnosis\(opts\)\{/, '★ 진단 래퍼(배치19-1 락 opts)');
   assert.match(PATENT_SRC, /타임아웃\|timeout\|시간\|초과\|abort/, '★ 타임아웃 감지');
   assert.match(PATENT_SRC, /_step13Compact=true;[\s\S]{0,80}await runStep\('step_13'\)/, '★ 축약 재시도');
   assert.match(HTML_SRC, /id="btnStep13" onclick="runDiagnosis\(\)"/, '★ 진단 버튼 → runDiagnosis');
@@ -206,7 +206,7 @@ test('16 소스 ★ — FIX_TARGETS 계산·주입·루프·별칭 배선', () =
   assert.match(PATENT_SRC, /function _buildFixTargets\(issues\)\{/, '★ 변환 함수');
   assert.match(PATENT_SRC, /const _fixInject=_fixTargets\?/, '★ cohesion FIX_TARGETS 주입 계산');
   assert.match(PATENT_SRC, /\$\{designComponents\}\$\{_fixInject\}\$\{_reviewInject\}/, '★ FIX+REVIEW 동시 주입 위치');
-  assert.match(PATENT_SRC, /async function wfRewriteWithFixes\(\)\{/, '★ 통합 재작성 루프');
+  assert.match(PATENT_SRC, /async function wfRewriteWithFixes\(opts\)\{/, '★ 통합 재작성 루프(배치19-1 락 opts)');
   assert.match(PATENT_SRC, /while\(round<2\)\{/, '★ 최대 2회 루프');
   assert.match(PATENT_SRC, /_pendingFixTargets=\(typeof _buildFixTargets==='function'\)\?_buildFixTargets\(remain\)/, '★ 잔존만 재주입');
   assert.match(PATENT_SRC, /if\(!remain\.length\)break;/, '★ 전부 해소 시 조기 종료');

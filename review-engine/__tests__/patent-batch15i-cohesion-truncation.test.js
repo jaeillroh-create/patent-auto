@@ -117,7 +117,7 @@ test('15I-2 ★ 동작 — 상세설명이 목표 50% 미만이면 "본문 불�
   const SHORT = '<<<REFTABLE>>>\n[장치부호]\n(100) 제어부\n<<<END_REFTABLE>>>\n<<<DEVICE_DESC>>>\n도 1을 참조하면, 제어부(100)가 동작한다.\n<<<END_DEVICE_DESC>>>';
   sandbox.App.callClaudeWithContinuation = async () => SHORT;
   await run('runUnifiedCohesionGen({chained:true})');
-  assert.ok(toasts.some(t => t.t === 'warning' && /본문이 불완전/.test(t.m)), '★ 불완전 강조 토스트(분량 미달)');
+  assert.ok(toasts.some(t => t.t === 'warning' && /본문 점검 필요/.test(t.m)), '★ 불완전 강조 토스트(분량 미달 — 배치19-4c 문구 통합)');
 });
 
 // ─────────────── 적대검증 반영: #2 폴백 S부호 포섭 ───────────────

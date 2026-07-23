@@ -1579,7 +1579,7 @@ function _wfResetStage3Outputs(){
   });
 }
 async function wfRunStage3(){
-  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('다른 작업이 진행 중입니다','info');return;}
+  if((typeof _rewriteLock!=='undefined'&&_rewriteLock)||(typeof globalProcessing!=='undefined'&&globalProcessing)){App.showToast('다른 작업이 진행 중입니다','info');return;}   // ★ [배치19-1] 재작성 중 ③ 재생성 진입 차단
   const had=!!(outputs.step_06||outputs.step_07);
   if(had&&!((typeof confirm==='function')?confirm('③ 골격을 재생성합니다.\n기존 청구항·도면·대안·특허성 산출물을 초기화한 뒤 ② 설계값으로 다시 생성합니다(세대 혼합 방지).\n계속할까요?'):false))return;
   if(had)_wfResetStage3Outputs();
@@ -1606,10 +1606,73 @@ async function wfRunStage4(){ try{ await runUnifiedCohesionGen(); }finally{ try{
 // ★ [배치16-1,2,3,4] 결함 반영해 본문 다시 쓰기 — 기계검증(FIX_TARGETS)+AI 진단(REVIEW_NOTES)을 cohesion 에 주입해 재작성하고,
 //   재생성 후 기계검증을 재실행해 해소/잔존을 집계한다. 잔존 시 잔존만 다시 FIX_TARGETS 로 넣어 최대 2회 재요청(무한 수동 반복 제거).
 //   종전 "본문만 재생성"은 검증 결과를 프롬프트에 주입하지 않아 재생성해도 결함이 안 줄던 근본 결함 — 이 함수가 "재생성=해소"를 사실로 만든다.
-async function wfRewriteWithFixes(){
+// ★ [배치19-1] 재작성 계열 단일 실행 락 — 최외곽 진입만 소유(획득/해제), 내부 연쇄 호출은 opts._locked 로 통과.
+//   반환: true=획득(소유·해제 책임), false=내부 통과(비소유), null=차단(재진입/타 작업 진행 중).
+//   ★ chained 우회 경로도 이 락은 통과해야 하므로, 내부 호출자는 반드시 {_locked:true} 를 넘긴다(chained 는 globalProcessing 만 우회).
+function _acquireRewriteLock(opts){
+  opts=opts||{};
+  if(opts._locked)return false;   // 상위가 이미 보유 — 통과(비소유)
+  if((typeof _rewriteLock!=='undefined'&&_rewriteLock) || (typeof globalProcessing!=='undefined'&&globalProcessing))return null;   // 차단
+  _rewriteLock=true; try{ _setRewriteBusy(true); }catch(_e){}
+  return true;
+}
+function _releaseRewriteLock(){ try{_rewriteLock=false;}catch(_e){} try{ _setRewriteBusy(false); }catch(_e){} try{ if(typeof _updateRewriteBtn==='function')_updateRewriteBtn(); }catch(_e){} }
+// 실행 중 버튼 물리 비활성 + "처리 중…" 라벨(클릭 자체 불가). 해제 시 라벨 원복.
+function _setRewriteBusy(on){
+  try{
+    if(typeof document==='undefined')return;
+    ['btnWfRewriteFixes','btnStep13','btnUnifiedGen','btnWfRegenClaims','btnWfRegenFigures'].forEach(function(id){ const b=document.getElementById(id); if(b)b.disabled=!!on; });
+    const main=document.getElementById('btnWfRewriteFixes');
+    if(main){ if(on){ if(!main.dataset._label)main.dataset._label=main.innerHTML; main.innerHTML='<span class="ico" data-icon="clock"></span> 처리 중… (완료까지 클릭 불가)'; } else if(main.dataset&&main.dataset._label){ main.innerHTML=main.dataset._label; try{delete main.dataset._label;}catch(_e){main.dataset._label='';} } }
+  }catch(_e){}
+}
+// ★ [배치19-2] 재작성 진행 오버레이 — 15A 위저드 체크리스트 스타일 재사용(경량 전용 오버레이). 각 단계 ✓/⚠/✗ + 경과시간.
+//   docM: 처리 중인지 알 수 없어 3회 클릭 → 진행 표시로 "지금 처리 중"을 시각화(락과 함께 오작동 원천 차단).
+const _WF_PROG_STEPS=[{id:'collect',label:'① 기계검증 수집'},{id:'diagnose',label:'② AI 진단'},{id:'rewrite',label:'③ 결함 반영 재작성'},{id:'recheck',label:'④ 재검증'}];
+let _wfProgState={}, _wfProgT0=0, _wfProgTimer=null;
+function _wfProgressStart(){
+  try{
+    _wfProgState={}; _WF_PROG_STEPS.forEach(function(s){_wfProgState[s.id]='pending';}); _wfProgState.collect='running';
+    try{_wfProgT0=Date.now();}catch(_e){_wfProgT0=0;}
+    const ov=document.getElementById('wfRewriteOverlay'); if(ov)ov.style.display='flex';
+    const note=document.getElementById('wfRewriteOverlayNote'); if(note)note.innerHTML='진행 중입니다 — 창을 닫지 말고 기다려 주세요(수 분 소요될 수 있음).';
+    _wfProgressRender();
+    try{ if(_wfProgTimer)clearInterval(_wfProgTimer); _wfProgTimer=setInterval(_wfProgressRender,1000); }catch(_e){}
+  }catch(_e){}
+}
+function _wfProgressStep(id,state){ try{ _wfProgState[id]=state||'done'; _wfProgressRender(); }catch(_e){} }
+function _wfProgressDone(ok,cause){
+  try{
+    try{ if(_wfProgTimer){clearInterval(_wfProgTimer);_wfProgTimer=null;} }catch(_e){}
+    const note=document.getElementById('wfRewriteOverlayNote');
+    if(note)note.innerHTML=ok?'<b style="color:var(--color-success,#3DAE7A)">완료</b> — 결과는 ⑤ 검증에서 확인하세요.':('<b style="color:var(--color-error,#D94A4A)">실패</b> — '+App.escapeHtml(cause||'사유 미상')+' (잠시 후 다시 시도)');
+    _wfProgressRender();
+    try{ setTimeout(function(){ const ov=document.getElementById('wfRewriteOverlay'); if(ov&&ok)ov.style.display='none'; }, ok?1500:0); }catch(_e){}
+  }catch(_e){}
+}
+function _wfProgressRender(){
+  try{
+    const host=document.getElementById('wfRewriteSteps');
+    if(host){
+      const ic={pending:'○',running:'◐',done:'✓',warn:'⚠',fail:'✗'};
+      const col={done:'var(--color-success,#3DAE7A)',fail:'var(--color-error,#D94A4A)',warn:'var(--color-warning,#E8A33D)',running:'var(--color-primary,#4A7DFF)',pending:'var(--color-text-tertiary)'};
+      host.innerHTML=_WF_PROG_STEPS.map(function(s){ const st=_wfProgState[s.id]||'pending'; const dim=(st==='pending');
+        return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;font-size:14px;border-bottom:1px solid var(--color-border,#eee)"><span class="'+(st==='running'?'wiz-spin':'')+'" style="width:20px;text-align:center;color:'+(col[st]||'')+';font-weight:700">'+(ic[st]||'○')+'</span><b style="color:'+(dim?'var(--color-text-tertiary)':'inherit')+'">'+App.escapeHtml(s.label)+'</b></div>'; }).join('');
+    }
+    const el=document.getElementById('wfRewriteElapsed');
+    if(el&&_wfProgT0){ let sec=0; try{sec=Math.max(0,Math.round((Date.now()-_wfProgT0)/1000));}catch(_e){} el.textContent='경과 '+Math.floor(sec/60)+'분 '+(sec%60)+'초'; }
+  }catch(_e){}
+}
+function _wfProgressClose(){ try{ const ov=document.getElementById('wfRewriteOverlay'); if(ov)ov.style.display='none'; if(_wfProgTimer){clearInterval(_wfProgTimer);_wfProgTimer=null;} }catch(_e){} }
+async function wfRewriteWithFixes(opts){
+  const _own=_acquireRewriteLock(opts);
+  if(_own===null){ App.showToast('이미 처리 중입니다 — 완료 후 다시 시도하세요','info'); return; }
   try{
     let _before=[]; try{ _before=validateSpecification(buildSpecification()); }catch(_e){}
     const _beforeN=_before.length;
+    // ★ [배치19-3] 재작성 악화 방지 — 재작성 전 상태(결함 severity + 본문 스냅샷) 확보. 결과가 나빠지면 이전 본문 유지.
+    const _beforeSev=(typeof _sevCounts==='function')?_sevCounts(_before):{high:0,crit:0};
+    const _snap=(typeof _snapshotBodyOutputs==='function')?_snapshotBodyOutputs():null;
     const _hasReview=!!(typeof outputs!=='undefined'&&outputs.step_13&&String(outputs.step_13).trim());
     App.showToast('결함 반영 재작성 — 기계검증 '+_beforeN+'건'+(_hasReview?' + AI 진단 1건':'')+' 반영(최대 2회)','info');
     let remain=_before, round=0;
@@ -1618,40 +1681,69 @@ async function wfRewriteWithFixes(){
         round++;
         _pendingFixTargets=(typeof _buildFixTargets==='function')?_buildFixTargets(remain):'';
         _pendingReviewNotes=(_hasReview&&round===1)?String(outputs.step_13):'';
-        await runUnifiedCohesionGen({chained:true, rewrite:true});
+        await runUnifiedCohesionGen({chained:true, rewrite:true, _locked:true});
         let _after=[]; try{ _after=validateSpecification(buildSpecification()); }catch(_e){}
         remain=_after;
         if(!remain.length)break;   // 전부 해소 → 종료(2회 소진 전에도)
       }
     }finally{ _pendingFixTargets=''; _pendingReviewNotes=''; }
+    // ★ [배치19-3] 악화 판정 — HIGH/CRITICAL 이 재작성 전보다 늘었으면 커밋 유지 여부를 사용자에게 확인(기본: 이전 유지).
+    const _afterSev=(typeof _sevCounts==='function')?_sevCounts(remain):{high:remain.length,crit:0};
+    const _worse=(_afterSev.crit>_beforeSev.crit)||(_afterSev.crit===_beforeSev.crit&&_afterSev.high>_beforeSev.high);
+    if(_worse && _snap){
+      const _msg='재작성 결과가 이전보다 결함이 많습니다 (HIGH '+_beforeSev.high+' → '+_afterSev.high+(_afterSev.crit||_beforeSev.crit?(', CRITICAL '+_beforeSev.crit+' → '+_afterSev.crit):'')+').\n\n[확인] 그래도 적용   /   [취소] 이전 본문 유지(권장)';
+      const _apply=(typeof confirm==='function')?confirm(_msg):false;
+      if(!_apply){
+        try{ _restoreBodyOutputs(_snap); }catch(_e){}
+        App.showToast('재작성이 결함을 늘려 이전 본문을 유지했습니다(권장)','warning');
+        try{renderPreview();}catch(_e){} try{renderSpecValidation();}catch(_e){}
+        try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:0, gateWarn:[], fixSummary:{before:_beforeN, resolved:0, remain:_before.length, rounds:round, reverted:true}}); }catch(_e){}
+        try{renderWorkflowRail();renderWfValidationBar();_updateRewriteBtn();}catch(_e){}
+        return;
+      }
+    }
     const _remainKeys=new Set(remain.map(_issueKey));
     const _resolved=_before.filter(function(b){return !_remainKeys.has(_issueKey(b));}).length;
     App.showToast('결함 반영 재작성 완료 — 기계검증 '+_beforeN+'건 중 '+_resolved+'건 해소'+(remain.length?(' · '+remain.length+'건 잔존'):' · 전부 해소'),remain.length?'warning':'success');
     try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:0, gateWarn:[], fixSummary:{before:_beforeN, resolved:_resolved, remain:remain.length, rounds:round}}); }catch(_e){}
     try{renderWorkflowRail();renderWfValidationBar();_updateRewriteBtn();}catch(_e){}
   }catch(e){ try{_pendingFixTargets='';_pendingReviewNotes='';}catch(_e){} try{App.showToast('결함 반영 재작성 실패: '+(e&&e.message||e),'error');}catch(_e2){} }
+  finally{ if(_own)_releaseRewriteLock(); }
 }
+// ★ [배치19-3] 결함 severity 집계 + 본문 스냅샷/복구(악화 시 이전 유지). 스냅샷은 본문 계열 스텝만(청구항·도면 골격 제외 — 재작성 대상).
+function _sevCounts(issues){ const c={high:0,crit:0}; (issues||[]).forEach(function(i){ const s=String(i&&i.severity||'').toUpperCase(); if(s==='CRITICAL')c.crit++; else if(s==='HIGH')c.high++; }); return c; }
+function _snapshotBodyOutputs(){ const keys=['step_05','step_08','step08_device','step_08c','step_12','step_16','step_17','step_18','step_19','step_09','step_13_applied','step_13_applied_method']; const s={}; keys.forEach(function(k){ if(typeof outputs!=='undefined'&&Object.prototype.hasOwnProperty.call(outputs,k))s[k]=outputs[k]; }); return s; }
+function _restoreBodyOutputs(snap){ if(!snap||typeof outputs==='undefined')return; const keys=['step_05','step_08','step08_device','step_08c','step_12','step_16','step_17','step_18','step_19','step_09','step_13_applied','step_13_applied_method']; keys.forEach(function(k){ if(Object.prototype.hasOwnProperty.call(snap,k))outputs[k]=snap[k]; else { try{delete outputs[k];}catch(_e){} } try{ if(typeof markOutputTimestamp==='function')markOutputTimestamp(k); }catch(_e){} }); try{ if(typeof saveProject==='function')saveProject(true); }catch(_e){} }
 // ★ [배치18-5] 검토 순서 자동화 — [진단]→[반영] 2단계를 단일 버튼으로 통합.
 //   내부 순서: ① 기계검증은 wfRewriteWithFixes 가 수집 → ② AI 진단(runDiagnosis, step_13) 먼저 실행 → ③ 진단(REVIEW_NOTES)+기계검증(FIX_TARGETS)을
 //   함께 주입해 재작성(최대 2회) → ④ 재검증·배너. 사용자는 버튼 하나만 누르면 되고 순서를 알 필요가 없다.
-async function wfDiagnoseAndRewrite(){
-  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
-  if(!(typeof outputs!=='undefined'&&outputs.step_06)){App.showToast('먼저 ③ 청구항·도면(골격)을 생성하세요','error');return;}
-  const btn=document.getElementById('btnWfRewriteFixes'); if(btn)btn.disabled=true;
+async function wfDiagnoseAndRewrite(opts){
+  const _own=_acquireRewriteLock(opts);
+  if(_own===null){ App.showToast('이미 처리 중입니다 — 완료 후 다시 시도하세요','info'); return; }
+  if(!(typeof outputs!=='undefined'&&outputs.step_06)){ if(_own)_releaseRewriteLock(); App.showToast('먼저 ③ 청구항·도면(골격)을 생성하세요','error');return;}
   try{
+    if(typeof _wfProgressStart==='function')_wfProgressStart();   // ★ [배치19-2] 진행 오버레이 시작
+    if(typeof _wfProgressStep==='function')_wfProgressStep('collect','done');   // ① 기계검증 수집(재작성 진입 시 집계)
     // ① AI 진단(step_13) — 문서 불변, 결과만 생성(타임아웃 시 16.1 축약 재시도 내장). 실패해도 기계검증 반영은 진행.
+    if(typeof _wfProgressStep==='function')_wfProgressStep('diagnose','running');
     App.showToast('1/2 · 명세서 진단(AI) 실행 중...','info');
-    try{ if(typeof runDiagnosis==='function')await runDiagnosis(); }catch(_e){}
+    try{ if(typeof runDiagnosis==='function')await runDiagnosis({_locked:true}); if(typeof _wfProgressStep==='function')_wfProgressStep('diagnose','done'); }
+    catch(_e){ if(typeof _wfProgressStep==='function')_wfProgressStep('diagnose','warn'); }
     // ② 진단(REVIEW_NOTES)+기계검증(FIX_TARGETS) 동시 반영 재작성 — wfRewriteWithFixes 가 outputs.step_13 을 자동 주입.
+    if(typeof _wfProgressStep==='function')_wfProgressStep('rewrite','running');
     App.showToast('2/2 · 진단·기계검증 결함 반영해 다시 쓰는 중...','info');
-    await wfRewriteWithFixes();
-  }catch(e){ try{App.showToast('진단·재작성 실패: '+(e&&e.message||e),'error');}catch(_e){} }
-  finally{ if(btn)btn.disabled=false; try{_updateRewriteBtn();}catch(_e){} }
+    await wfRewriteWithFixes({_locked:true});
+    if(typeof _wfProgressStep==='function'){ _wfProgressStep('rewrite','done'); _wfProgressStep('recheck','done'); }
+    if(typeof _wfProgressDone==='function')_wfProgressDone(true);
+  }catch(e){ try{ if(typeof _wfProgressDone==='function')_wfProgressDone(false,(e&&e.message||String(e))); }catch(_e){} try{App.showToast('진단·재작성 실패: '+(e&&e.message||e),'error');}catch(_e){} }
+  finally{ if(_own)_releaseRewriteLock(); }
 }
 // ★ [배치16-3] 통합 재작성 버튼 라벨/활성 — 골격(step_06) 있으면 활성, 반영 대상(기계검증·AI 진단) 카운트 표시.
 function _updateRewriteBtn(){
   try{
     const b=document.getElementById('btnWfRewriteFixes'); const lab=document.getElementById('wfRewriteTargetLabel');
+    // ★ [배치19-1] 락 보유 중엔 절대 재활성 금지 — docM 재현 원인: 진단 완료(onStepCompleted→_updateRewriteBtn)가 버튼을 되살려 중복 클릭 통과.
+    if(typeof _rewriteLock!=='undefined'&&_rewriteLock){ if(b)b.disabled=true; return; }
     const hasSkel=!!(typeof outputs!=='undefined'&&outputs.step_06);
     let mN=0; try{ if(outputs.step_08) mN=validateSpecification(buildSpecification()).length; }catch(_e){}
     const aN=(typeof outputs!=='undefined'&&outputs.step_13&&String(outputs.step_13).trim())?1:0;
@@ -1821,8 +1913,9 @@ function _renderCohesionBanner(info){
         +'<span style="color:var(--color-text-secondary)">'
         +(info.autoCorr?('부호표 자동 보강 '+info.autoCorr+'회 · '):'')
         +(info.refFixes?('부호 자동 정합 '+info.refFixes+'건'+((info.refFixArea&&(info.refFixArea.상세설명||info.refFixArea.도면||info.refFixArea.마무리))?('(상세설명 '+(info.refFixArea.상세설명||0)+'·도면 '+(info.refFixArea.도면||0)+'·마무리 '+(info.refFixArea.마무리||0)+')'):'(확정 부호표)')+' · '):'')
+        +((info.dupRemoved||info.mkRemoved)?('커밋 전 정리(미완 마커 '+(info.mkRemoved||0)+'·근접중복 '+(info.dupRemoved||0)+') · '):'')
         +'잔존 경고(HIGH+) '+hi+'건'+(warnN?(' · 게이트 미통과 '+warnN+'건: '+App.escapeHtml((info.gateWarn||[]).join(' · '))):'')+'</span>'
-        +(warnN||hi||_inc?'<br><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="switchTab(4)"><span class="ico" data-icon="search"></span> ⑤ 완성본 검증에서 확인·보정</button>':'')
+        +(warnN||hi||_inc?'<br><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="switchTab(4)"><span class="ico" data-icon="search"></span> ⑤ 검증 결과 상세 보기</button><div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px">재작성 결과의 잔존 결함 목록과 다운로드 게이트를 확인합니다(문서는 변경되지 않습니다).</div>':'')
         +'</div>';
     } else {
       host.innerHTML='<div style="border:1px solid var(--color-error,#D94A4A);background:rgba(217,74,74,0.10);border-radius:8px;padding:10px 12px;font-size:12px">'
