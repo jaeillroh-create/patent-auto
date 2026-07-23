@@ -77,7 +77,7 @@ test('★ 1 — 침묵 catch 제거: 생성기 3종 catch가 _lastGenError로 �
   // runStep / runDiagramStep / cohesion catch에서 _lastGenError 셋(체인이 phase·배너에 노출)
   assert.ok((PATENT_SRC.match(/try\{_lastGenError=\(e&&e\.message\)\|\|String\(e\);\}catch\(_e\)\{\}/g) || []).length >= 2, '★ runStep·runDiagramStep catch 사유 캡처');
   assert.match(PATENT_SRC, /catch\(e\)\{ try\{_lastGenError=\(e&&e\.message\)\|\|String\(e\);\}catch\(_e\)\{\} App\.clearProgress\('progressUnifiedGen'\)/, '★ cohesion catch 사유 캡처');
-  assert.match(PATENT_SRC, /_lastGenError='게이트 미통과 — '\+gate\.join/, '★ cohesion 게이트 사유 캡처');
+  assert.match(PATENT_SRC, /_lastGenError='수학식 누락 — ④ 재생성 필요/, '★ cohesion 수식 게이트 사유 캡처(리포트 게이트는 15G 경고 커밋으로 전환)');
   assert.equal(run('typeof _lastGenError'), 'string', '★ 전역 존재');
 });
 test('★ 1 — [4/4] 실패 시 "여기부터 재개(빈 단계만)" 버튼(_wizResumeChain) + continue 모드 빈 단계만', () => {

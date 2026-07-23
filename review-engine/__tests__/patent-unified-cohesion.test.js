@@ -141,7 +141,7 @@ test('★ 소스 — 프롬프트가 기존 하드계약 보존(방법표현 금
 
 test('★ 소스 — runUnifiedCohesionGen 비파괴 커밋 게이트 + 원자 커밋 + A/B 지표', () => {
   assert.match(PATENT_SRC, /async function runUnifiedCohesionGen\(opts\)/, '★ 진입점(opts — 체인 silent 지원)');
-  assert.match(PATENT_SRC, /게이트 미통과\(기존 내용 보존\)/, '★ 게이트 미통과 시 비파괴');
+  assert.match(PATENT_SRC, /게이트 미통과 '\+_gateWarn\.length\+'건 — 새 본문으로 커밋/, '★ [배치15G] 리포트 게이트 미통과 시 경고 커밋(무한루프 해소·비파괴는 블록누락/CRITICAL 전담)');
   assert.match(PATENT_SRC, /pushOutputHistory\('step_08','unified'/, '★ 이력 보존');
   assert.match(PATENT_SRC, /outputs\.step_18=_deriveSignDescription\(r\.refMap\)/, '★ 부호의설명 결정적 직렬화');
   assert.match(PATENT_SRC, /부호불일치 '\+before\.refnum\+'→'\+after\.refnum/, '★ A/B 검증기 지표 대조');

@@ -429,7 +429,10 @@ function validateSpecification(specText){
         while((_mm=_re.exec(specText))!==null){
           const _sec=_secAt(_mm.index);
           if(!_hitSecs.has(_sec)){ _hitSecs.add(_sec); _tgClaimed.add(term+'|'+_sec);   // [배치5 ②] 선점 기록
-            iss.push({severity:'HIGH',check:'term_generation_mismatch',message:`구세대 용어 "${term}"이 완성본에 잔존(섹션: ${_sec}) — 해당 스텝 재생성 필요`,detail:'명칭 확정 후 재생성되지 않은 구세대 산출물 혼입 의심(§42④ 명확성 위험) — 자동 치환 금지, 스텝 재생성 권장'});
+            // ★ [배치15G-4] 섹션 → 재생성 진입점 매핑 — "어디를 고쳐야 할지" 명시(자동 치환 금지 검사이므로 사용자에게 위치 안내).
+            const _SEC_REGEN={'발명을 실시하기 위한 구체적인 내용':'④ 본문 통합 재생성','부호의 설명':'④ 본문 통합 재생성','요약서':'④ 본문 통합 재생성','발명의 효과':'④ 본문 통합 재생성','과제의 해결 수단':'④ 본문 통합 재생성','해결하고자 하는 과제':'④ 본문 통합 재생성','도면의 간단한 설명':'③ 도면만 재생성','청구범위':'③ 청구항만 재생성','기술분야':'① 기초(고급 일괄) 재생성','발명의 배경이 되는 기술':'① 기초(고급 일괄) 재생성','선행기술문헌':'① 기초(고급 일괄) 재생성'};
+            const _regenHint=_SEC_REGEN[_sec]||'해당 섹션 재생성';
+            iss.push({severity:'HIGH',check:'term_generation_mismatch',message:`구세대 용어 "${term}"이 완성본에 잔존(섹션: ${_sec}) — ${_regenHint}에서 재생성 필요`,detail:`명칭 확정 후 재생성되지 않은 구세대 산출물 혼입 의심(§42④ 명확성 위험) — 자동 치환 금지. 출처 섹션 「${_sec}」 → ${_regenHint}으로 해소하세요.`});
           }
           if(_mm.index===_re.lastIndex)_re.lastIndex++;   // zero-width 방어
         }

@@ -1703,6 +1703,28 @@ function _renderCompletionBanner(info){
     host.style.display='block';
   }catch(_e){}
 }
+// ★ [배치15G-3] ④ 본문 통합 재생성 결과 배너 — 성공(부호표 갱신·자동보강·잔존 경고)/실패(이전 본문 유지·사유).
+function _renderCohesionBanner(info){
+  try{
+    const host=(typeof document!=='undefined')&&document.getElementById('cohesionBanner'); if(!host)return;
+    if(!info){ host.style.display='none'; host.innerHTML=''; return; }
+    let hi=0; try{ const iss=validateSpecification(buildSpecification()); hi=iss.filter(function(i){return i.severity==='CRITICAL'||i.severity==='HIGH';}).length; }catch(_e){}
+    if(info.ok){
+      const warnN=(info.gateWarn&&info.gateWarn.length)||0;
+      const bd=warnN?'var(--color-warning,#E8A33D)':'var(--color-success,#3DAE7A)', bg=warnN?'rgba(232,163,61,0.10)':'rgba(61,174,122,0.10)';
+      host.innerHTML='<div style="border:1px solid '+bd+';background:'+bg+';border-radius:8px;padding:10px 12px;font-size:12px">'
+        +'<b style="color:'+bd+'">본문 통합 재생성 완료</b><br><span style="color:var(--color-text-secondary)">'
+        +(info.autoCorr?('부호표 자동 보강 '+info.autoCorr+'회 · '):'')
+        +'잔존 경고(HIGH+) '+hi+'건'+(warnN?(' · 게이트 미통과 '+warnN+'건: '+App.escapeHtml((info.gateWarn||[]).join(' · '))):'')+'</span>'
+        +(warnN||hi?'<br><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="switchTab(4)"><span class="ico" data-icon="search"></span> ⑤ 완성본 검증에서 확인·보정</button>':'')
+        +'</div>';
+    } else {
+      host.innerHTML='<div style="border:1px solid var(--color-error,#D94A4A);background:rgba(217,74,74,0.10);border-radius:8px;padding:10px 12px;font-size:12px">'
+        +'<b style="color:var(--color-error,#D94A4A)">재생성 실패 — 이전 본문 유지</b><br><span style="color:var(--color-text-secondary)">사유: '+App.escapeHtml(info.cause||'알 수 없음')+'</span></div>';
+    }
+    host.style.display='block';
+  }catch(_e){}
+}
 // 체인 종료 훅(완료·중단 공통) — 요약 텍스트·배너 렌더 + 보드/레일/검증바 재렌더(배치15A-4 D3 수정).
 function _wizFinishSummary(info){
   try{

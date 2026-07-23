@@ -155,7 +155,7 @@ test('★ FIX3 — 수식 재요청 refBlk를 _serializeRefTable(r.refMap)로(A6
 // FIX4: report 게이트가 수식 재요청 이후(최종 r)에 실행
 test('★ FIX4 — report 게이트(부호·누출)가 수식 재요청 뒤에 실행(재요청 본문도 게이트)', () => {
   const iMath = PATENT_SRC.indexOf('수학식 인라인 자기검증 게이트 — report 게이트보다 먼저 실행');
-  const iRep = PATENT_SRC.indexOf('const rep=r.report, gate=[];');
+  const iRep = PATENT_SRC.indexOf('let gate=_computeGate(r.report);');
   assert.ok(iMath > 0 && iRep > iMath, '★ 수식 게이트 → report 게이트 순서');
 });
 // FIX5: 방법 산출물 있는 프로젝트 복원 시 _methodUserSet 보호

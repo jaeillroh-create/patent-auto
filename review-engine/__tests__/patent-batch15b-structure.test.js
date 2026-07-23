@@ -268,5 +268,5 @@ test('★ FIX-A6-methodS — parseCohesiveBundle: 방법 S부호 미정의 → m
   const raw2 = raw.replace('[장치부호]\n(100) 제어부', '[장치부호]\n(100) 제어부\n[방법단계]\n(S100) 수신 단계');
   const rep2 = JSON.parse(run('JSON.stringify(parseCohesiveBundle(' + JSON.stringify(raw2) + ').report)'));
   assert.equal((rep2.methodNotInTable || []).length, 0, '★ 방법 S부호 정의 시 통과');
-  assert.match(PATENT_SRC, /방법 단계부호 미정의 '\+rep\.methodNotInTable\.length/, '★ 게이트에 방법 S부호 커버리지 반영');
+  assert.match(PATENT_SRC, /방법 단계부호 미정의 '\+rp\.methodNotInTable\.length/, '★ 게이트에 방법 S부호 커버리지 반영(_computeGate)');
 });

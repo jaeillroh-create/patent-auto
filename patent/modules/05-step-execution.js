@@ -1739,6 +1739,35 @@ function _serializeRefTable(refMap){
   if(mth.length)s+='\n[방법단계]\n'+mth.join('\n');
   return s+'\n<<<END_REFTABLE>>>';
 }
+// ★ [배치15G-1] 게이트 자동 교정 — 미정의 부호(본문에 있으나 부호표에 없는 번호)를 부호표에 실명으로 추가.
+//   ★ 본문은 절대 수정하지 않는다(부호표만 보강 → 본문 바이트 불변 보장). A6/REFTABLE 재요청과 동형.
+function _buildRefTableAugmentPrompt(refBlock, missDevice, missMethod, deviceText, methodText){
+  const _md=(missDevice||[]).join(', '), _mm=(missMethod||[]).join(', ');
+  return `아래 [현재 부호표]에 [미정의 번호]를 추가하여 완전한 부호표(REFTABLE) 블록 하나만 다시 출력하라. ★ 본문은 절대 출력·수정하지 마라 — 부호표만 보강한다.
+
+[규칙]
+- [현재 부호표]의 모든 기존 항목은 그대로 유지(번호·명칭 변경 금지).
+- [미정의 번호]의 각 번호에 대해, 아래 [본문]에서 그 번호 "(NN)"이 가리키는 구성의 실제 한국어 고유 명칭을 찾아 "(NN) 명칭"으로 추가하라(총칭·서수 금지).
+- 장치부호(2~4자리 숫자)는 [장치부호] 구획, 방법 단계부호(S+숫자)는 [방법단계] 구획.
+- 번호·명칭 중복 금지(하나의 번호=하나의 명칭, 하나의 명칭=하나의 번호).
+
+[출력 형식 — 이 블록 하나만]
+<<<REFTABLE>>>
+[장치부호]
+(100) 명칭
+[방법단계]
+(S100) 단계명
+<<<END_REFTABLE>>>
+
+[미정의 번호] 장치: ${_md||'(없음)'} / 방법: ${_mm||'(없음)'}
+
+[현재 부호표]
+${refBlock}
+
+[본문 — 참조용, 절대 수정 금지]
+[장치] ${deviceText||''}
+[방법] ${methodText||'(없음)'}`;
+}
 // ★ [배치15C-1] 수학식 인라인 재요청 — 부호표(REFTABLE)는 건드리지 않고, 상세설명 본문에 정확히 N개의
 //   【수학식】 블록을 삽입해 재출력. 도면부호(NN)·구성 명칭은 원문 그대로 보존(신규 부호 도입 금지).
 function _buildMathInlineRetryPrompt(deviceText, methodText, mathN){
@@ -1770,6 +1799,7 @@ async function runUnifiedCohesionGen(opts){
   if(!outputs.step_06){App.showToast('먼저 장치 청구항(A2)을 생성하세요','error');return;}
   if(!outputs.step_07){App.showToast('먼저 장치 도면(B1)을 생성하세요 — 도면부호 정합의 기준입니다','error');return;}
   const before=_specIssueCounts(); const hadMath=!!outputs.step_09;   // ★ 수학식(step_09) 존재 시 커밋 후 재삽입 필요 경고
+  let _gateWarn=[];   // ★ [배치15G-2] 자동 교정 2회 후에도 잔여한 게이트 항목 — 경고 커밋 시 완료 요약·배너에 노출
   // ★ [배치9 D1] 수학식 인라인 모드 — 토글 on이면 프롬프트가 본문에 【수학식】을 직접 포함(C9 전환).
   const _mathInline=!!(typeof document!=='undefined'&&document.getElementById('chkUnifiedMath')?.checked);
   setGlobalProcessing(true); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',true);
@@ -1819,14 +1849,39 @@ async function runUnifiedCohesionGen(opts){
       }
       if(_mcnt(r).length<_mathN){ try{_lastGenError='수학식 누락 — ④ 재생성 필요('+_mcnt(r).length+'/'+_mathN+')';}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('수학식 인라인 미포함('+_mcnt(r).length+'/'+_mathN+') — ④ 본문 통합 재생성이 필요합니다','error'); console.warn('[unified] math gate fail'); return; }
     }
-    // report 게이트 — ★ 최종 r(수식 재요청 반영분)에 대해 검사(재요청이 도입한 미정의 부호·누출·중복도 여기서 차단)
-    const rep=r.report, gate=[];
-    if(rep.notInTable.length)gate.push('본문 미정의 부호 '+rep.notInTable.length+'개('+rep.notInTable.slice(0,6).join(', ')+')');
-    if(rep.methodNotInTable&&rep.methodNotInTable.length)gate.push('방법 단계부호 미정의 '+rep.methodNotInTable.length+'개('+rep.methodNotInTable.slice(0,6).join(', ')+')');   // ★ [검증 반영] 방법 S부호 커버리지
-    if(rep.dupNums.length)gate.push('부호표 번호 중복 '+rep.dupNums.length+'개');
-    if(rep.deviceLeak)gate.push('장치 상세설명에 방법표현 누출');
-    if(!rep.methodOk)gate.push('방법 상세설명 극성 미충족');
-    if(gate.length){ try{_lastGenError='게이트 미통과 — '+gate.join(' · ');}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 게이트 미통과(기존 내용 보존): '+gate.join(' · '),'error'); console.warn('[unified] gate fail',rep); return; }
+    // ★ [배치15G] report 게이트 — 차단이 아니라 (1)자동 교정 재요청(부호표 보강, 최대 2회) → (2)잔여 시 경고 커밋(진전 보장).
+    //   종전엔 실패 시 return으로 커밋을 안 해 이전 본문이 잔존 → "재생성해도 문서 불변" 무한루프였다.
+    //   ※ 여기 항목(부호 미정의·중복·극성)은 §42(HIGH)로 CRITICAL 아님. CRITICAL(메타응답·마커)은 커밋 후 validateSpecification /
+    //     _downloadGate가 그대로 차단하므로 경고 커밋이 출원 불가급을 통과시키지 않는다.
+    const _computeGate=function(rp){ const g=[];
+      if(rp.notInTable.length)g.push('본문 미정의 부호 '+rp.notInTable.length+'개('+rp.notInTable.slice(0,6).join(', ')+')');
+      if(rp.methodNotInTable&&rp.methodNotInTable.length)g.push('방법 단계부호 미정의 '+rp.methodNotInTable.length+'개('+rp.methodNotInTable.slice(0,6).join(', ')+')');
+      if(rp.dupNums.length)g.push('부호표 번호 중복 '+rp.dupNums.length+'개');
+      if(rp.deviceLeak)g.push('장치 상세설명에 방법표현 누출');
+      if(!rp.methodOk)g.push('방법 상세설명 극성 미충족');
+      return g;
+    };
+    let gate=_computeGate(r.report);
+    // ── (1) 자동 교정: 미정의 부호(notInTable/methodNotInTable)를 부호표에 실명 추가(본문 불변). 최대 2회. ──
+    let _corr=0;
+    while(gate.length && _corr<2){
+      const miss=r.report.notInTable||[], missM=r.report.methodNotInTable||[];
+      if(!miss.length && !missM.length)break;   // 부호 미정의 외 항목(중복·극성)은 부호표 보강으로 안 고쳐짐 → 루프 탈출(경고 커밋으로)
+      _corr++;
+      App.showToast('부호표 자동 보강 '+_corr+'/2회 — 미정의 부호 '+(miss.length+missM.length)+'개 추가 재요청','warning');
+      try{
+        const aug=await App.callClaudeWithContinuation(_buildRefTableAugmentPrompt(_serializeRefTable(r.refMap), miss, missM, r.device||'', r.method||''),'progressUnifiedGen');
+        const augBlk=(String(aug).match(/<<<REFTABLE>>>[\s\S]*?<<<END_REFTABLE>>>/)||[''])[0];
+        if(augBlk){
+          const merged=augBlk+'\n<<<DEVICE_DESC>>>\n'+(r.device||'')+'\n<<<END_DEVICE_DESC>>>'+(r.method?('\n<<<METHOD_DESC>>>\n'+r.method+'\n<<<END_METHOD_DESC>>>'):'');
+          const rC=parseCohesiveBundle(merged);
+          if(rC.ok.hasRef&&rC.ok.hasDevice){ ['task','solution','effects','abstract'].forEach(function(k){ if(!rC[k]&&r[k])rC[k]=r[k]; }); r=rC; }
+        }
+      }catch(e){ console.warn('[unified] gate autocorrect',e); }
+      gate=_computeGate(r.report);
+    }
+    // ── (2) 경고 커밋: 2회 후에도 잔여하면 차단하지 않고 새 본문으로 커밋(진전 보장) + 완료 요약·검증 패널에 노출. ──
+    if(gate.length){ _gateWarn=gate.slice(); try{_lastGenError='';}catch(_e){} App.showToast('게이트 미통과 '+_gateWarn.length+'건 — 새 본문으로 커밋합니다(⑤ 완성본 검증에서 확인·보정)','warning'); console.warn('[unified] gate warn-commit',_gateWarn); }
     if(!(opts&&opts.chained)&&!confirm('통합 생성 결과로 장치 상세설명·방법 상세설명·부호의 설명을 대체합니다. 계속할까요?\n(이전 내용은 이력에 보존됩니다)')){ App.clearProgress('progressUnifiedGen'); return; }
     // ── 원자 커밋(3슬롯) ──
     pushOutputHistory('step_08','unified','runUnifiedCohesionGen');
@@ -1855,10 +1910,12 @@ async function runUnifiedCohesionGen(opts){
     try{renderSpecValidation();}catch(_e){}
     App.clearProgress('progressUnifiedGen');
     const after=_specIssueCounts();
-    const soft=rep.unusedRef.length?(' · 도면 미사용 부호 '+rep.unusedRef.length+'개 자동 제외'):'';
-    App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft,'success');
+    const soft=r.report.unusedRef.length?(' · 도면 미사용 부호 '+r.report.unusedRef.length+'개 자동 제외'):'';
+    App.showToast('통합 생성 완료 · 부호불일치 '+before.refnum+'→'+after.refnum+', 중복 '+before.dup+'→'+after.dup+soft+(_gateWarn.length?(' · ⚠ 게이트 미통과 '+_gateWarn.length+'건(⑤ 확인)'):''),(_gateWarn.length?'warning':'success'));
     if(hadMath&&!_mathInline)App.showToast('⚠️ 기존 수학식(Step 9)은 새 상세설명에 재삽입이 필요합니다 — 미리보기·다운로드에 수학식이 빠져 있습니다','warning');   // [배치9 D1] 인라인 모드에선 구 step_09를 이력 보존 후 제거했으므로 미해당
-  }catch(e){ try{_lastGenError=(e&&e.message)||String(e);}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); }
+    // ★ [배치15G-3] 재생성 결과 배너 — "조용히 안 바뀜"으로 보이던 문제 해소(부호표 갱신·잔존 경고 가시화).
+    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:after.refnum, gateWarn:_gateWarn.slice(), autoCorr:_corr}); }catch(_e){}
+  }catch(e){ try{_lastGenError=(e&&e.message)||String(e);}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:false, cause:(e&&e.message||String(e))}); }catch(_e2){} }
   finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); }
 }
 
