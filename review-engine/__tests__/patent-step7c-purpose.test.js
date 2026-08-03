@@ -111,8 +111,8 @@ test('★ 소스 — main·cascade 프롬프트 둘 다 목적규칙·REF_MAP·3
 test('★ 소스 — 추출 단일화(_parseConceptResult) + step_08 refMap 사용 + step_18 step_07c 포함', () => {
   // 공유 파서로 추출 단일화(분산 제거)
   assert.equal((PATENT_SRC.match(/_parseConceptResult\(fullText, conceptDiagramTypes, figNums\)/g) || []).length, 2, '★ main·cascade 모두 공유 파서');
-  // step_08 주입이 refMap(이름) 사용
-  assert.match(PATENT_SRC, /\(ct\.refMap\|\|\[\]\)\.map\(r=>r\.label\?`\$\{r\.signNumber\}\(\$\{r\.label\}\)`/, '★ step_08 주입 refMap 이름 사용');
+  // step_08c 주입이 refMap 실명(라벨) 사용 — [배치15F-4 정합] 빈 라벨은 제외(부호표 미등재분을 본문에 안 씀)
+  assert.match(PATENT_SRC, /\(ct\.refMap\|\|\[\]\)\.filter\(r=>r\.label&&String\(r\.label\)\.trim\(\)\)\.map\(r=>`\$\{r\.signNumber\}\(\$\{r\.label\}\)`/, '★ step_08c 주입 refMap 실명 사용(빈 라벨 제외)');
   // step_18 _refSources 에 step_07c 추가
   assert.match(PATENT_SRC, /_refSources=\[outputs\.step_06,[^\]]*outputs\.step_07c\]/, '★ step_18 부호수집에 step_07c 포함');
 });

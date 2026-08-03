@@ -18,6 +18,8 @@
   <link rel="stylesheet" href="division/division.css" />
   <link rel="stylesheet" href="docket.css" />
   <link rel="stylesheet" href="shared/wanted/overlay.css" />
+  <!-- [배치15A] 통합 생성 진행 스피너(체크리스트·레일 running) -->
+  <style>.wiz-spin,.wf-spin{display:inline-block;animation:wizspin .9s linear infinite}@keyframes wizspin{to{transform:rotate(360deg)}}</style>
   <script src="shared/wanted/icons.js" defer></script>
 </head>
 <body>
@@ -836,18 +838,71 @@
         <button class="btn btn-ghost btn-sm" onclick="handleLogout()">로그아웃</button>
       </div>
     </header>
-    <div class="tab-container" role="tablist">
-      <button class="tab-item active" role="tab" aria-selected="true" onclick="switchTab(0)"><span class="tab-icon ico" data-icon="clipboard"></span><span class="tab-label">A. 기본</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(1)"><span class="tab-icon ico" data-icon="scales"></span><span class="tab-label">A. 청구항</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(2)"><span class="tab-icon ico" data-icon="image"></span><span class="tab-label">B·C. 도면</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(3)"><span class="tab-icon ico" data-icon="search"></span><span class="tab-label">D·E. 검증</span></button>
-      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(4)"><span class="tab-icon ico" data-icon="download"></span><span class="tab-label">F. 산출물</span></button>
+    <!-- [배치8] 5단계 워크플로우 레일 — 탭 대체(동일 인덱스). 배지: 미생성/생성됨/재생성 필요(wfStageStatus) -->
+    <div class="tab-container" role="tablist" id="wfRail">
+      <button class="tab-item active" role="tab" aria-selected="true" onclick="switchTab(0)"><span class="tab-icon ico" data-icon="clipboard"></span><span class="tab-label">① 발명 파악</span><span class="wf-badge" id="wfBadge0" style="font-size:10px;margin-left:4px"></span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(1)"><span class="tab-icon ico" data-icon="settings"></span><span class="tab-label">② 설계 결정</span><span class="wf-badge" id="wfBadge1" style="font-size:10px;margin-left:4px"></span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(2)"><span class="tab-icon ico" data-icon="image"></span><span class="tab-label">③ 골격(청구항·도면)</span><span class="wf-badge" id="wfBadge2" style="font-size:10px;margin-left:4px"></span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(3)"><span class="tab-icon ico" data-icon="edit"></span><span class="tab-label">④ 본문 통합·검토</span><span class="wf-badge" id="wfBadge3" style="font-size:10px;margin-left:4px"></span></button>
+      <button class="tab-item" role="tab" aria-selected="false" onclick="switchTab(4)"><span class="tab-icon ico" data-icon="download"></span><span class="tab-label">⑤ 검증·출원</span><span class="wf-badge" id="wfBadge4" style="font-size:10px;margin-left:4px"></span></button>
+    </div>
+
+    <!-- [배치11 B] 통합 생성 위저드 — 탭 이동 없는 단일 오버레이(유형→설계→재실행). 기존 상태 변수의 양방향 미러(새 상태 없음) -->
+    <!-- [배치19-2] 재작성 진행 오버레이 — [진단 후 결함 반영해 다시 쓰기] 실행 중 단계 표시(처리 중임을 시각화, 중복 클릭 방지 보조). -->
+    <div id="wfRewriteOverlay" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:210;align-items:center;justify-content:center">
+      <div class="card" style="max-width:460px;width:90%;margin:0">
+        <div class="card-header"><div class="card-title"><span class="ico" data-icon="edit"></span> 진단 후 결함 반영해 다시 쓰기 — 진행 중</div></div>
+        <div id="wfRewriteSteps" style="margin:6px 0 10px"></div>
+        <div id="wfRewriteElapsed" style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:6px">경과 0분 0초</div>
+        <div id="wfRewriteOverlayNote" style="font-size:12px;color:var(--color-text-secondary);margin-bottom:10px"></div>
+        <button class="btn btn-outline btn-sm btn-full" onclick="_wfProgressClose()"><span class="ico" data-icon="close"></span> 닫기(백그라운드 진행)</button>
+      </div>
+    </div>
+    <div id="wfWizard" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;align-items:center;justify-content:center">
+      <div class="card" style="max-width:600px;width:92%;max-height:88vh;overflow:auto;margin:0">
+        <div class="card-header"><div class="card-title"><span class="ico" data-icon="bolt"></span> ⚡ 통합 생성</div></div>
+        <div id="wizConfig">
+          <!-- [배치14-2] 유형·설계는 ② 설계 보드가 담당 — 위저드는 설계 요약 확인 + (기존 산출물 시) 재실행 방식만. -->
+          <div id="wizDesignEcho" style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:8px">설계 요약</div>
+          <div id="wizScreen3" style="display:none;margin-bottom:14px;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px">
+            <div style="font-size:13px;font-weight:700;margin-bottom:6px">3) 기존 산출물이 있습니다 — 재실행 방식</div>
+            <label style="display:block;font-size:12px;margin-bottom:6px;cursor:pointer"><input type="radio" name="wizRerun" value="full" checked> <b>전체 새로 생성</b> — 골격(청구항·도면)·본문(상세설명·부호·수학식·검토반영본)을 초기화 후 재생성(세대 혼합 방지 · 확정 명칭은 보존)</label>
+            <label style="display:block;font-size:12px;cursor:pointer"><input type="radio" name="wizRerun" value="continue"> <b>이어하기</b> — 빈 단계만 생성(일부 재사용 — 세대 혼합 가능, 완성 후 검증 확인)</label>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-outline" onclick="_wizClose()">취소</button>
+            <button class="btn btn-primary" id="btnWizStart" onclick="_wizStart()"><span class="ico" data-icon="bolt"></span> 생성 시작</button>
+          </div>
+        </div>
+        <div id="wizProgress" style="display:none;padding:8px 0">
+          <!-- [배치15A-2] 진행 체크리스트 — 명칭→기초(예정)→청구항→도면→본문(현재 단계 스피너·완료 ✓·실패 ✗) -->
+          <div id="wizPhaseList" style="margin-bottom:8px"></div>
+          <div id="wizProgressText" style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px">준비 중…</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary)">몇 분 소요됩니다. 이 창을 닫아도 생성은 계속되며 ② 설계 보드 진행바에 표시됩니다.</div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="btn btn-outline btn-sm" onclick="_wizClose()">백그라운드로</button></div>
+        </div>
+        <div id="wizSummary" style="display:none;padding:8px 0">
+          <div id="wizSummaryText" style="font-size:13px;margin-bottom:10px"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-outline" onclick="_wizClose()">닫기</button>
+            <button class="btn btn-primary" onclick="_wizClose();switchTab(4)"><span class="ico" data-icon="search"></span> ⑤ 검증으로 이동</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- [배치8] 상주 검증 바 — 어느 단계에서든 완성본 결함 카운트·게이트 상태 표시(클릭 → ⑤ 상세) -->
+    <div id="wfValidationBar" onclick="wfOpenValidation()" style="display:none;cursor:pointer;position:sticky;top:0;z-index:40;margin:6px 0;padding:7px 14px;border-radius:8px;border:1px solid var(--color-border);background:var(--color-bg-secondary);font-size:12px;display:flex;gap:14px;align-items:center">
+      <span style="font-weight:700">완성본 검증</span>
+      <span id="wfBarCounts" style="color:var(--color-text-secondary)">—</span>
+      <span id="wfBarGate" style="margin-left:auto;color:var(--color-text-tertiary)">게이트: —</span>
     </div>
 
     <!-- ══ TAB 0: 기본정보 ══ -->
     <div id="page0" class="page active" role="tabpanel">
       <!-- 왼쪽: 입력/설정 -->
       <div class="page-left">
+        <div class="wf-flowbar" data-flowstep="0" style="font-size:11px;margin-bottom:10px;padding:6px 10px;background:var(--color-bg-secondary,rgba(74,125,255,0.05));border-radius:6px"></div>
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="folder"></span> 발명 내용</div></div>
           <textarea class="textarea-field" id="projectInput" rows="5" placeholder="발명의 핵심 기술, 구성요소, 차별점 등을 상세히 입력해 주세요..."></textarea>
@@ -883,13 +938,21 @@
           </div>
           <button class="btn btn-primary btn-full" id="btnStep01" onclick="runStep('step_01')" disabled><span class="ico" data-icon="robot"></span> 명칭 후보 생성</button>
         </div>
+        <!-- [배치14-1] 통합 생성 CTA는 ② 설계 보드로 이동(설계값 확정 후 생성 — 순서 정합). ①은 안내만. -->
+        <div class="card" style="border:1px dashed var(--color-border)">
+          <p style="font-size:12px;color:var(--color-text-secondary);margin:0"><span class="ico" data-icon="bolt"></span> <b>핵심 명세서 통합 생성</b>은 <b>② 설계 결정</b> 단계에서 설계값을 확정한 뒤 실행합니다.</p>
+        </div>
+        <!-- [배치15B-2] Step 2~5(기술분야·배경·선행기술·과제)는 통합 생성의 [기초] phase가 자동 수행 → 개별/일괄은 고급 강등 -->
         <div id="batchArea" style="display:none">
-          <div class="card">
-            <div class="card-header"><div class="card-title"><span class="ico" data-icon="bolt"></span> Step 2~5: 기본 항목 (선택)</div></div>
-            <p style="font-size:12px;color:var(--dt-g500);padding:0 18px 12px">기술분야 · 배경기술 · 선행기술문헌 · 해결과제</p>
-            <div id="progressBatch" style="margin:0 18px 12px"></div>
-            <div style="padding:0 18px 18px"><button class="btn btn-primary btn-full" id="btnBatch25" onclick="runBatch25()"><span class="ico" data-icon="bolt"></span> 일괄 생성</button></div>
-          </div>
+          <details class="wf-adv" id="wfAdvBasis">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급 — 기초 항목(Step 2~5) 개별/일괄 생성 (통합 생성이 기술분야·배경을 자동 수행)</summary>
+            <div class="card">
+              <div class="card-header"><div class="card-title"><span class="ico" data-icon="bolt"></span> Step 2~5: 기본 항목 (선택)</div></div>
+              <p style="font-size:12px;color:var(--dt-g500);padding:0 18px 12px">기술분야 · 배경기술 · 선행기술문헌 · 해결과제 — 결과는 ④ 우측에 표시됩니다</p>
+              <div id="progressBatch" style="margin:0 18px 12px"></div>
+              <div style="padding:0 18px 18px"><button class="btn btn-outline btn-full" id="btnBatch25" onclick="runBatch25()"><span class="ico" data-icon="bolt"></span> 일괄 생성</button></div>
+            </div>
+          </details>
         </div>
       </div>
       <!-- 오른쪽: 결과 출력 -->
@@ -905,10 +968,7 @@
             <div id="titleConfirmMsg" class="confirm-msg" style="display:none"><span class="ico" data-icon="check-circle"></span> 명칭이 확정되었어요</div>
           </div>
         </div>
-        <div class="result-card" id="resultCard25">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 2~5 결과</div></div>
-          <div id="resultsBatch25" class="result-area"></div>
-        </div>
+        <!-- [배치15B-2] Step 2~5 결과 카드는 ④(명세서 부수사항)로 이동 — 아래 page3 참조 -->
       </div>
     </div>
 
@@ -916,6 +976,57 @@
     <div id="page1" class="page" role="tabpanel">
       <!-- 왼쪽: 설정 -->
       <div class="page-left">
+        <div class="wf-flowbar" data-flowstep="1" style="font-size:11px;margin-bottom:10px;padding:6px 10px;background:var(--color-bg-secondary,rgba(74,125,255,0.05));border-radius:6px"></div>
+        <!-- [배치12 B] ② = 설계 보드(단일 진실) — 컨트롤 자체가 상태. 전부 기존 상태·② 카드 요소의 양방향 미러(새 상태 없음). -->
+        <div class="card" id="wfStage2Main" style="border:1.5px solid var(--color-primary)">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> ② 설계 보드</div></div>
+          <div style="margin-bottom:12px">
+            <div style="font-size:12px;font-weight:700;margin-bottom:6px">발명 유형</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px" id="dbTypeCards">
+              <button class="btn btn-outline" data-dbtype="서버" onclick="_designSetType('서버')">~서버</button>
+              <button class="btn btn-outline" data-dbtype="방법" onclick="_designSetType('방법')">~방법</button>
+              <button class="btn btn-outline" data-dbtype="시스템" onclick="_designSetType('시스템')">~시스템</button>
+              <button class="btn btn-outline" data-dbtype="서버 및 방법" onclick="_designSetType('서버 및 방법')">~서버 및 방법</button>
+            </div>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;margin-top:8px" title="기본은 장치/시스템 청구항만 생성. 방법 청구항 세트(방법 청구항·방법 도면·방법 상세설명)를 함께 생성하려면 체크하세요"><input type="checkbox" id="chkDbMethod" onchange="_dbSetMethod(this.checked)"> 방법 청구항 포함 <span style="color:var(--color-text-tertiary)">(기본: 장치/시스템만)</span></label>
+            <div id="dbMethodNote" style="font-size:12px;color:var(--color-text-secondary);margin-top:6px"></div>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:10px">
+            <label title="독립항 수(기본 1). 2개 이상이면 각 독립항이 상이한 권리 관점(장치 구성 축 분리)으로 작성됩니다">독립항 <input type="number" id="dbIndepDep" min="1" max="5" style="width:56px" onchange="_dbSet('indepDep',this.value)"></label>
+            <label>일반 종속항 <input type="number" id="dbGeneralDep" min="0" max="20" style="width:56px" onchange="_dbSet('generalDep',this.value)"></label>
+            <label>앵커 종속항 <input type="number" id="dbAnchorDep" min="0" max="10" style="width:56px" onchange="_dbSet('anchorDep',this.value)"></label>
+            <span id="dbClaimTotal" style="font-weight:700"></span>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:6px">
+            <label title="장치 도면 수(0~9, 직접 입력 가능). 목록에서 고르거나 숫자를 직접 입력하세요">도면 수 <input type="number" id="dbFigures" list="dbFigCountOpts" min="0" max="20" style="width:64px" onchange="_dbSet('figures',this.value)"></label>
+            <datalist id="dbFigCountOpts"><option value="0"></option><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option><option value="5"></option><option value="6"></option><option value="7"></option><option value="8"></option><option value="9"></option></datalist>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer" title="예시도(개념도·UI 화면 등)를 체인 도면 단계에서 함께 생성합니다"><input type="checkbox" id="chkConceptDiagram" onchange="_dbSet('conceptToggle')"> 예시도 포함</label>
+            <label id="dbConceptCountWrap" style="display:none" title="예시도 개수(1~9, 직접 입력 가능)">예시도 수 <input type="number" id="dbConceptCount" list="dbConceptCountOpts" min="1" max="9" style="width:64px" onchange="_dbSet('conceptCount',this.value)"></label>
+            <datalist id="dbConceptCountOpts"><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option><option value="5"></option><option value="6"></option></datalist>
+          </div>
+          <!-- [배치15H-3] 예시도 유형 선택 — ③에 있던 설계 입력을 ②로 집결(설계는 ②에서 완결). 체크 = conceptDiagramTypes canonical 미러. -->
+          <div id="dbConceptTypesWrap" style="display:none;font-size:12px;margin-bottom:6px">
+            <div style="color:var(--color-text-secondary);margin-bottom:4px">예시도 유형 <span style="color:var(--color-text-tertiary)">(미선택 시 청구항 분석으로 자동 추천)</span></div>
+            <div id="dbConceptTypes" style="display:flex;flex-wrap:wrap;gap:8px 14px"></div>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:6px">
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="chkUnifiedMath" onchange="_dbSet('mathToggle')"> 수학식 포함(상세설명에 인라인 생성 — 변수 정의·참조 규칙 자동 준수)</label>
+            <label id="dbMathCountWrap" style="display:none">수학식 수 <input type="number" id="dbMathCount" min="1" max="5" style="width:56px" onchange="_dbSet('mathCount',this.value)"></label>
+            <label>분량 <select id="selUnifiedDetail" onchange="detailLevel=this.value;_dbSet('detailToggle')" style="font-size:12px;padding:2px 6px">
+              <option value="compact">간결(3~4천자)</option><option value="standard" selected>표준(5~7천자)</option><option value="detailed">상세(8천~1만자)</option><option value="maximal">최대(2.2~2.5만자)</option>
+            </select></label>
+          </div>
+          <div id="dbApplyBadges"></div>
+          <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:8px">청구항 카테고리·앵커 테마 등 세부는 아래 <b>고급</b>에서 조정합니다. 값을 바꾸면 하류 단계에 "재생성 필요" 배지가 표시됩니다.</p>
+          <!-- [배치14-1] 통합 생성 CTA — 파라미터 소스는 위 보드 그대로(이동만). -->
+          <div id="progressUnifiedFullChain" style="margin:10px 0 6px"></div>
+          <button class="btn btn-primary btn-full" id="btnUnifiedFullChain" onclick="runUnifiedFullChain()"><span class="ico" data-icon="bolt"></span> 발명자료 → 핵심 명세서 통합 생성 (명칭·청구항·도면·본문 전체)</button>
+          <!-- [배치15A-3] 완료·중단 배너(오버레이 닫아도 상주 · 중단 시 재개 버튼) -->
+          <div id="dbCompletionBanner" style="display:none;margin-top:10px"></div>
+          <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px">명칭 → 기초(기술분야·배경) → 청구항 → 도면 → 상세설명·부호·효과·해결수단·요약을 한 번에 응집 생성합니다(도면부호·용어 정합 구조적 보장). 기존 산출물이 있으면 재실행 방식을 먼저 확인합니다.</p>
+        </div>
+        <details class="wf-adv" id="wfAdv1">
+          <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급(단계별 세부) — 청구항 구성·개별 생성</summary>
         <!-- Step 6 장치 청구항 설정 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="scales"></span> Step 6: 장치 청구항</div></div>
@@ -959,7 +1070,7 @@
             <span class="ico" data-icon="scales"></span>
             <span style="font-weight:600;font-size:14px">방법 청구항 포함</span>
           </div>
-          <label class="toggle-switch"><input type="checkbox" id="methodToggle" checked onchange="toggleMethod()" /><span class="toggle-slider"></span></label>
+          <label class="toggle-switch"><input type="checkbox" id="methodToggle" onchange="toggleMethod()" /><span class="toggle-slider"></span></label>
         </div>
 
         <!-- Step 10 방법 청구항 -->
@@ -982,33 +1093,14 @@
           <div id="progressStep10" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnStep10" onclick="runStep('step_10')"><span class="ico" data-icon="robot"></span> 방법 청구항 생성</button>
         </div>
-
-        <!-- 추가 기능 버튼 -->
-        <div class="card">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> 추가 기능</div></div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <button class="btn btn-outline btn-full" id="btnStep14" onclick="runStep('step_14')"><span class="ico" data-icon="refresh"></span> Step 14: 대안 청구항</button>
-            <button class="btn btn-outline btn-full" id="btnStep15" onclick="runStep('step_15')"><span class="ico" data-icon="search"></span> Step 15: 특허성 검토</button>
-            <button class="btn btn-outline btn-full" onclick="runValidation()"><span class="ico" data-icon="check-circle"></span> 자동 검증</button>
-          </div>
-        </div>
+        </details>
       </div>
 
-      <!-- 오른쪽: 결과 출력 -->
+      <!-- 오른쪽: [배치10 E] 설계 요약만 — 청구항·대안·특허성 결과 카드는 ③ 탭으로 이동 -->
       <div class="page-right">
-        <div class="result-card" id="resultCard06">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 6 결과: 장치 청구항</div></div>
-          <div id="resultStep06" class="result-area"></div>
-        </div>
-        <div class="result-card" id="resultCard10">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 10 결과: 방법 청구항</div></div>
-          <div id="resultStep10" class="result-area"></div>
-        </div>
-        <div class="result-card" id="resultCardExtra">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> 대안/검토 결과</div></div>
-          <div id="resultStep14" class="result-area" style="min-height:60px"></div>
-          <div id="resultStep15" class="result-area" style="min-height:60px"></div>
-          <div id="validationResults" class="result-area" style="min-height:60px"></div>
+        <div class="result-card">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> ② 안내</div></div>
+          <div class="result-area" style="font-size:12px;color:var(--color-text-tertiary)">설계값을 정하는 단계입니다. 청구항·도면 생성과 그 결과는 <b>③ 골격</b> 탭에서 확인합니다.</div>
         </div>
       </div>
     </div>
@@ -1017,6 +1109,23 @@
     <div id="page2" class="page" role="tabpanel">
       <!-- 왼쪽: 설정 -->
       <div class="page-left">
+        <div class="wf-flowbar" data-flowstep="2" style="font-size:11px;margin-bottom:10px;padding:6px 10px;background:var(--color-bg-secondary,rgba(74,125,255,0.05));border-radius:6px"></div>
+        <!-- [배치8] ③ 골격 — 주동선(단계 단위 생성/재생성, D4). 스텝 낱개 버튼은 고급으로 -->
+        <div class="card" id="wfStage3Main" style="border:1.5px solid var(--color-primary)">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> ③ 골격 확인·재생성 (청구항·도면)</div></div>
+          <!-- [배치15D-2] 큰 CTA 제거 — 전체 생성은 ② 통합 생성. ③은 청구항·도면을 개별 재생성(우측 섹션 버튼)만. -->
+          <p style="font-size:12px;color:var(--color-text-secondary);padding:0 0 4px"><b>전체 생성은 ② 통합 생성</b>입니다. 여기서는 생성된 <b>청구항·도면을 확인</b>하고, 필요하면 <b>우측 섹션의 「청구항만 재생성」·「도면만 재생성」</b>으로 개별 재생성합니다(재생성 시 하류 본문은 "재생성 필요"로 표시 — 세대 혼합 방지).</p>
+          <div id="progressWfStage3" style="margin:8px 0"></div>
+          <!-- [배치17-5] 확정 부호표(청구항 결정론 배정) 읽기전용 표시 — 본문 재생성 시 이 명칭·번호로 자동 정합됨을 사용자에게 명시 -->
+          <div id="refPlanPanel" style="display:none"></div>
+        </div>
+        <details class="wf-adv" id="wfAdv2">
+          <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급(단계별 세부) — 청구항·도면·상세설명·대안 청구항 개별 생성</summary>
+        <!-- [배치14-4c] 대안 청구항(Step 14) — 관문 카드 제거에 따라 ③ 고급으로 이동(결과는 이 탭 우측 대안/검토 결과) -->
+        <div class="card">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="refresh"></span> Step 14: 대안 청구항 (선택)</div></div>
+          <button class="btn btn-outline btn-full" id="btnStep14" onclick="runStep('step_14')"><span class="ico" data-icon="refresh"></span> 대안 청구항 생성</button>
+        </div>
         <!-- 필수 도면 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="flag"></span> 필수 도면 (선택)</div></div>
@@ -1035,7 +1144,7 @@
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="image"></span> Step 7: 장치 도면</div></div>
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
             <label style="font-size:13px">총 도면 수:</label>
-            <input type="number" class="input-field" id="optDeviceFigures" min="1" max="10" value="4" style="width:70px" />
+            <input type="number" class="input-field" id="optDeviceFigures" list="dbFigCountOpts" min="0" max="20" value="4" style="width:70px" />
           </div>
           <button class="btn btn-primary btn-full" id="btnStep07" onclick="runDiagramStep('step_07')"><span class="ico" data-icon="robot"></span> 장치 도면 설계</button>
         </div>
@@ -1075,7 +1184,7 @@
         <!-- Step 8 상세설명 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="edit"></span> Step 8: 상세설명</div></div>
-          <div class="selection-cards" id="detailLevelCards" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px">
+          <div class="selection-cards" id="detailLevelCards" style="grid-template-columns:repeat(5,1fr);margin-bottom:12px">
             <div class="selection-card" onclick="selectDetailLevel(this,'compact')" style="padding:10px">
               <div class="selection-card-category"><span class="ico" data-icon="bolt" data-size="16"></span></div>
               <div class="selection-card-title" style="font-size:12px">간략</div>
@@ -1090,6 +1199,11 @@
               <div class="selection-card-category"><span class="ico" data-icon="doc" data-size="16"></span></div>
               <div class="selection-card-title" style="font-size:12px">상세</div>
               <div class="selection-card-subtitle" style="font-size:10px;color:var(--color-text-tertiary)">~2,000자/도면</div>
+            </div>
+            <div class="selection-card" onclick="selectDetailLevel(this,'maximal')" style="padding:10px">
+              <div class="selection-card-category"><span class="ico" data-icon="book" data-size="16"></span></div>
+              <div class="selection-card-title" style="font-size:12px">최대</div>
+              <div class="selection-card-subtitle" style="font-size:10px;color:var(--color-text-tertiary)">~3,000자/도면</div>
             </div>
             <div class="selection-card" onclick="selectDetailLevel(this,'custom')" style="padding:10px">
               <div class="selection-card-category"><span class="ico" data-icon="edit" data-size="16"></span></div>
@@ -1130,10 +1244,35 @@
           <div id="progressStep12" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnStep12" onclick="runLongStep('step_12')"><span class="ico" data-icon="robot"></span> 방법 상세설명</button>
         </div>
+        </details>
       </div>
 
-      <!-- 오른쪽: 결과 -->
+      <!-- 오른쪽: 결과 — [배치15B-3] 청구항 섹션 → 도면 섹션 세로 배치, 섹션별 재생성(하류 stale 연동) -->
       <div class="page-right">
+        <!-- ─── 청구항 섹션 ─── -->
+        <div id="wfSecClaims" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding:8px 12px;border-left:3px solid var(--color-primary);background:var(--color-bg-secondary,rgba(74,125,255,0.04));border-radius:6px">
+          <b style="font-size:13px">청구항</b>
+          <button class="btn btn-outline btn-sm" id="btnWfRegenClaims" onclick="wfRegenClaims()"><span class="ico" data-icon="refresh"></span> 청구항만 재생성</button>
+        </div>
+        <div class="result-card" id="resultCard06">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 6 결과: 장치 청구항</div></div>
+          <div id="resultStep06" class="result-area"></div>
+        </div>
+        <div class="result-card" id="resultCard10">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 10 결과: 방법 청구항</div></div>
+          <div id="resultStep10" class="result-area"></div>
+        </div>
+        <div class="result-card" id="resultCardExtra">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> 대안/검토 결과</div></div>
+          <div id="resultStep14" class="result-area" style="min-height:60px"></div>
+          <div id="resultStep15" class="result-area" style="min-height:60px"></div>
+          <div id="validationResults" class="result-area" style="min-height:60px"></div>
+        </div>
+        <!-- ─── 도면 섹션 ─── -->
+        <div id="wfSecFigures" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:16px 0 8px;padding:8px 12px;border-left:3px solid var(--color-primary);background:var(--color-bg-secondary,rgba(74,125,255,0.04));border-radius:6px">
+          <b style="font-size:13px">도면</b>
+          <button class="btn btn-outline btn-sm" id="btnWfRegenFigures" onclick="wfRegenFigures()"><span class="ico" data-icon="refresh"></span> 도면만 재생성</button>
+        </div>
         <div class="result-card" id="resultCard07">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 7 결과: 장치 도면</div></div>
           <div id="resultStep07" class="result-area"></div>
@@ -1194,27 +1333,46 @@
     <div id="page3" class="page" role="tabpanel">
       <!-- 왼쪽: 설정 -->
       <div class="page-left">
+        <div class="wf-flowbar" data-flowstep="3" style="font-size:11px;margin-bottom:10px;padding:6px 10px;background:var(--color-bg-secondary,rgba(74,125,255,0.05));border-radius:6px"></div>
+        <!-- [배치8] ④ 본문 통합 — 주동선(cohesion — 배치9로 수학식 인라인·효과/해결수단/요약 흡수) -->
+        <!-- [배치16-3] 버튼 통폐합: [본문만 재생성]+[반영해 다시 쓰기] → [결함 반영해 본문 다시 쓰기] 1개(기계검증+AI 진단 동시 반영). -->
+        <div class="card" id="wfStage4Main" style="border:1.5px solid var(--color-primary)">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="edit"></span> ④ 진단 후 결함 반영해 다시 쓰기 (청구항·도면 유지)</div></div>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">버튼 하나로 <b>①명세서 진단(AI) 실행 → ②진단 지적 + 기계검증 결함</b>(부호·표제·중복·절단 등)을 함께 주입해 <b>상세설명·부호의 설명·과제의 해결 수단·발명의 효과·요약서</b>를 다시 씁니다(<b>청구항·도면은 유지</b>). 재작성 후 기계검증을 재실행해 <b>해소/잔존 건수</b>를 표시하고, 잔존이 있으면 최대 1회 더 반영합니다. 기존 내용은 이력에 보존됩니다.</p>
+          <div id="progressUnifiedGen" style="margin:8px 0"></div>
+          <button class="btn btn-primary btn-full" id="btnWfRewriteFixes" onclick="wfDiagnoseAndRewrite()"><span class="ico" data-icon="edit"></span> 진단 후 결함 반영해 다시 쓰기</button>
+          <p id="wfRewriteTargetLabel" style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px"></p>
+          <!-- [배치15G-3] 재생성 결과 배너 — "눌렀는데 안 바뀜"으로 보이던 문제 해소(부호표 갱신·잔존 경고·해소/잔존 카운트) -->
+          <div id="cohesionBanner" style="display:none;margin-top:10px"></div>
+          <!-- [배치19b-5] 실행 로그(접이식) — 재작성·진단·통합생성 이력·실패 사유 -->
+          <div id="runLogPanel4" style="display:none"></div>
+        </div>
+        <!-- [배치18-5] 보조 버튼 — 재작성 없이 진단만 보고 싶을 때. 재작성까지 하려면 위 ④ '진단 후 결함 반영해 다시 쓰기' 단일 버튼을 사용. -->
+        <div class="card" id="wfDiagnoseCard">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="search"></span> 명세서 진단 (AI) — 진단만</div></div>
+          <p style="font-size:12px;color:var(--dt-g500);margin-bottom:12px"><b>청구항 뒷받침·기재불비·특허성(신규성·진보성)</b>을 점검합니다. <b style="color:var(--color-primary)">문서는 변경되지 않습니다</b> — 진단 결과만 확인하는 보조 기능입니다. 진단 후 바로 반영해 다시 쓰려면 위 ④ <b>「진단 후 결함 반영해 다시 쓰기」</b> 버튼 하나면 됩니다.</p>
+          <div id="progressStep13" style="margin:8px 0"></div>
+          <button class="btn btn-outline btn-full" id="btnStep13" onclick="runDiagnosis()"><span class="ico" data-icon="robot"></span> 명세서 진단(AI)만 실행</button>
+        </div>
+        <!-- [배치13-1·3] ④ 고급 — 역설계(중복 경고)·검토 반영(레거시) -->
+        <details class="wf-adv" id="wfAdv3">
+          <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급 — 역설계·검토 반영(레거시)</summary>
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="chart"></span> Phase D: 논리 프레임 (역설계)</div></div>
-          <div style="padding:12px 18px;background:var(--color-primary-light);border-radius:8px;margin:0 18px 12px;font-size:12px;color:var(--color-primary)">
-            <span class="ico" data-icon="lightbulb" data-size="14"></span> 청구항 기반으로 과제·효과·배경기술을 역으로 생성합니다. (실무 변리사 작성 순서)
+          <div style="padding:12px 18px;background:#fff3e0;border:1px solid #ffb74d;border-radius:8px;margin:0 18px 12px;font-size:12px;color:#e65100">
+            ⚠ ①(Step 2~5)·④(통합 생성)와 동일 항목(과제·효과·해결수단·배경기술·요약 등)을 생성합니다 — 중복 실행 시 마지막 결과가 덮어씁니다.
           </div>
           <div id="progressPhaseD" style="margin:8px 18px"></div>
-          <div style="padding:0 18px 18px"><button class="btn btn-primary btn-full" id="btnPhaseD" onclick="runPhaseD()"><span class="ico" data-icon="refresh"></span> 역설계 체인 일괄 생성 (D1→D5)</button></div>
+          <div style="padding:0 18px 18px"><button class="btn btn-outline btn-full" id="btnPhaseD" onclick="runPhaseD()"><span class="ico" data-icon="refresh"></span> 역설계 체인 일괄 생성 (D1→D5)</button></div>
           <div id="resultsPhaseDChain" class="result-area" style="margin:0 18px 18px"></div>
         </div>
         <div class="card">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="search"></span> Step 13: AI 검토</div></div>
-          <p style="font-size:12px;color:var(--dt-g500);margin-bottom:12px">청구범위 뒷받침, 기술적 비약, 수학식 정합성 검토</p>
-          <div id="progressStep13" style="margin:8px 0"></div>
-          <button class="btn btn-primary btn-full" id="btnStep13" onclick="runStep('step_13')"><span class="ico" data-icon="robot"></span> AI 검토 실행</button>
-        </div>
-        <div class="card">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> 검토 반영</div></div>
-          <p style="font-size:12px;color:var(--dt-g500);margin-bottom:12px">Step 8 보완 → Step 9 수학식 재삽입</p>
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="settings"></span> 검토 반영 (레거시 — Step 8 보완 → Step 9 수학식 재삽입)</div></div>
+          <p style="font-size:12px;color:var(--dt-g500);margin-bottom:12px">편집지시 기반 개별 반영. 권장 경로는 위 "④ 본문 통합 재생성"입니다.</p>
           <div id="progressApplyReview" style="margin:8px 0"></div>
-          <button class="btn btn-primary btn-full" id="btnApplyReview" onclick="applyReview()" style="display:none"><span class="ico" data-icon="settings"></span> 검토 반영</button>
+          <button class="btn btn-outline btn-full" id="btnApplyReview" onclick="applyReview()" style="display:none"><span class="ico" data-icon="settings"></span> 검토 반영</button>
         </div>
+        </details>
         <!-- [C1-6b] 발명 범위 검증 -->
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="shield"></span> 발명 범위 검증</div></div>
@@ -1225,8 +1383,15 @@
       <!-- 오른쪽: 결과 -->
       <div class="page-right">
         <div class="result-card" id="resultCard13">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 13 결과: AI 검토</div></div>
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> 명세서 진단 (AI) 결과</div></div>
           <div id="resultStep13" class="result-area"></div>
+          <!-- [배치18-5] 재작성 진입점은 왼쪽 ④ "진단 후 결함 반영해 다시 쓰기" 단일 버튼(진단+기계검증 동시 반영) — 이 카드는 진단만 따로 본 결과. -->
+          <p id="rewriteWithReviewHint" style="font-size:11px;color:var(--color-text-tertiary);margin-top:8px">이 진단 지적은 왼쪽 ④ <b>「진단 후 결함 반영해 다시 쓰기」</b> 버튼이 기계검증 결함과 함께 자동 반영합니다(청구항·도면은 유지).</p>
+        </div>
+        <!-- [배치15B-2] Step 2~5 결과(기술분야·배경·선행기술·과제 — 명세서 부수사항) ①→④ 이동 -->
+        <div class="result-card" id="resultCard25">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> 기초 결과: 기술분야·배경·선행기술·과제 (Step 2~5)</div></div>
+          <div id="resultsBatch25" class="result-area"></div>
         </div>
         <div class="result-card" id="resultCardReview">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> 검토 반영 결과</div></div>
@@ -1250,17 +1415,23 @@
     <div id="page4" class="page" role="tabpanel">
       <!-- 왼쪽: 설정 -->
       <div class="page-left">
+        <div class="wf-flowbar" data-flowstep="4" style="font-size:11px;margin-bottom:10px;padding:6px 10px;background:var(--color-bg-secondary,rgba(74,125,255,0.05));border-radius:6px"></div>
         <div class="stat-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
           <div class="stat-card stat-card-steps"><div class="stat-card-value" id="statCompleted">0/19</div><div class="stat-card-label">완료</div></div>
           <div class="stat-card stat-card-api"><div class="stat-card-value" id="statApiCalls">0</div><div class="stat-card-label">API</div></div>
           <div class="stat-card stat-card-cost"><div class="stat-card-value" id="statCost">$0.00</div><div class="stat-card-label">비용</div></div>
         </div>
+        <!-- [배치10 D] 진입점 단일화 — 구 "통합 생성(단일 컨텍스트·실험)" 카드 제거(④ wfStage4Main으로 통합).
+             "마무리 일괄 생성"은 고급으로 강등: ④ 본문 통합(배치9 D3)이 효과·해결수단·요약을 함께 생성한다. -->
+        <details class="wf-adv" id="wfAdv4">
+          <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--color-text-secondary);padding:6px 2px">고급 — 마무리 개별 일괄 생성</summary>
         <div class="card">
-          <div class="card-header"><div class="card-title"><span class="ico" data-icon="flag"></span> F. 마무리 (효과·해결수단·부호·요약서)</div></div>
-          <p style="font-size:12px;color:var(--dt-g500);padding:0 0 12px">효과 · 해결수단 · 부호설명 · 요약서</p>
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="flag"></span> 마무리 개별 생성 (효과·해결수단·부호·요약서 — ④ 본문 통합이 기본 경로)</div></div>
+          <p style="font-size:12px;color:var(--dt-g500);padding:0 0 12px">※ <b>④ 본문 통합</b>이 효과·해결수단·요약을 함께 생성합니다. 이 버튼은 개별 재생성용 보조 경로입니다.</p>
           <div id="progressBatchFinish" style="margin:8px 0"></div>
           <button class="btn btn-primary btn-full" id="btnBatchFinish" onclick="runBatchFinish()"><span class="ico" data-icon="flag"></span> 마무리 일괄 생성</button>
         </div>
+        </details>
         <div class="card">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="download"></span> 다운로드</div></div>
           <div style="display:flex;flex-direction:column;gap:8px">
@@ -1287,6 +1458,13 @@
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> Step 16~19 결과</div></div>
           <div id="resultsBatchFinish" class="result-area"></div>
         </div>
+        <div class="result-card" id="resultCardSpecValidate">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="shield"></span> 완성본 기계검증</div></div>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 8px">표제·종결어미·단위·도면부호·문단중복·문장절단·수학식 변수정의를 자동 점검합니다(미리보기 진입 시 갱신).</p>
+          <div id="specValidateResult" class="result-area"></div>
+          <!-- [배치19b-5] 실행 로그(접이식) — ⑤에서도 이력 확인 -->
+          <div id="runLogPanel5" style="display:none"></div>
+        </div>
         <div class="result-card" id="resultCardPreview">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="eye"></span> 미리보기</div></div>
           <div id="previewArea" class="result-area" style="min-height:300px"></div>
@@ -1297,7 +1475,7 @@
     <!-- 스티키 하단 단계 네비게이션 (특허 명세서 에디터) -->
     <div class="sticky-step-nav" id="editorStepNav">
       <div class="ssn-progress">
-        <span id="editorStepLabel">1 / 5 단계 · A. 기본</span>
+        <span id="editorStepLabel">1 / 5 단계 · ① 발명 파악</span>
         <div class="ssn-bar"><i id="editorStepBar" style="width:20%"></i></div>
       </div>
       <div class="ssn-actions">
@@ -1313,7 +1491,7 @@
 <!-- 특허 명세서 에디터 — 스티키 하단 nav 동작 (switchTab 래핑) -->
 <script>
 (function(){
-  var LABELS = ['A. 기본','A. 청구항','B·C. 도면','D·E. 검증','F. 산출물'];
+  var LABELS = ['① 발명 파악','② 설계','③ 골격','④ 본문·검토','⑤ 검증·출원'];
   var TOTAL  = LABELS.length;
   function curIdx(){
     var act = document.querySelector('#screenMain .tab-item.active');
@@ -1384,12 +1562,12 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="shared/components.js?v=20260312"></script>
 <script src="shared/common.js?v=20260723a"></script>
-<script src="patent/patent.js?v=20260723-scope-retry"></script>
+<script src="patent/patent.js?v=20260722-b63"></script>
 <script src="patent/chat.js?v=20260612"></script>
-<script src="opinion/opinion.js?v=20260701-split"></script>
+<script src="opinion/opinion.js?v=20260722-b63"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260701-split';
+  var _cv='?v=20260722-b63';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1487,8 +1665,8 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260701-split"></script>
-<script src="docket.js?v=20260701-split"></script>
+<script src="division/division.js?v=20260722-b63"></script>
+<script src="docket.js?v=20260722-b63"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
 <script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260635"></script>
 </body>

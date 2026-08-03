@@ -625,6 +625,8 @@ async function extractInventionScope() {
       App.showToast(msg, 'error');
       return;
     }
+    // [§6-1] 구성 명칭 세대 변경 추적 — 구 baseline 구성명 → 신 parsed 구성명 diff
+    const _oldComps = ((inventionScope && inventionScope.baseline && inventionScope.baseline.core_components) || []).map(c => c && c.name).filter(Boolean);
     inventionScope = {
       locked_at: new Date().toISOString(),
       locked_by: App.currentUser?.id || 'unknown',
@@ -634,6 +636,7 @@ async function extractInventionScope() {
       audit_log: [],
       _previous_versions: inventionScope?._previous_versions || []
     };
+    try{ if(typeof _onComponentsChanged==='function')_onComponentsChanged(_oldComps, (parsed.core_components||[]).map(c=>c&&c.name).filter(Boolean)); }catch(_e){}
     saveProject(true);
     renderInventionScopePanel();
     App.showToast('발명 범위가 확정되었습니다', 'success');
@@ -921,7 +924,7 @@ function renderScopeVerificationSection() {
   if (!summaryEl || !detailsEl) return;
   // ── [G5] 통합 리뷰 엔진 마운트는 page4(renderPreview)로 이전됨(트리거·결과 동일 위치).
   if (!inventionScope?.locked_at) {
-    summaryEl.innerHTML = `<div class="scope-notice">발명 범위가 확정되지 않았습니다. A. 기본 탭에서 "범위 확정"을 먼저 진행하세요.</div>`;
+    summaryEl.innerHTML = `<div class="scope-notice">발명 범위가 확정되지 않았습니다. ① 발명 파악 단계에서 "범위 확정"을 먼저 진행하세요.</div>`;
     detailsEl.innerHTML = '';
     return;
   }

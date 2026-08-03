@@ -1,12 +1,14 @@
 // ═══════════ STATE MANAGEMENT ═══════════
 function clearAllState(){
-  currentProjectId=null;outputs={};outputHistory={};scopeCheckResults={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=true;
+  currentProjectId=null;outputs={};outputHistory={};scopeCheckResults={};selectedTitle='';selectedTitleEn='';selectedTitleType='';includeMethodClaims=false;   // ★ [배치15H-1] 방법 기본 OFF
   usage={calls:0,inputTokens:0,outputTokens:0,cost:0};loadingState={};uploadedFiles=[];diagramData={};inventionScope=null;
   _judgmentCache.clear();_costTracking={judgment_calls:0,total_input_tokens:0,total_output_tokens:0,estimated_cost_usd:0,warned_50:false,stopped_100:false};
   projectRefStyleText='';requiredFigures=[];outputTimestamps={};stepUserCommands={};chatHistory={};
   conceptDiagramEnabled=false;conceptDiagramCount=0;conceptDiagramTypes=[];
+  termSnapshot=_termSnapshotDefault();   // [§6-1] 용어 세대 스냅샷 초기화
   // Claim defaults
   deviceCategory='server';deviceGeneralDep=5;deviceAnchorDep=4;deviceAnchorStart=7;
+  deviceIndepCount=1;mathBlockCount=3;conceptTargetCount=2;   // [배치15B-1] 신규 설계 파라미터 초기화
   anchorThemeMode='auto';selectedAnchorThemes=[];
   methodCategory='method';methodGeneralDep=3;methodAnchorDep=2;methodAnchorStart=0;
   methodAnchorThemeMode='auto';selectedMethodAnchorThemes=[];
@@ -20,9 +22,13 @@ function clearAllState(){
   ['btnApplyReview','diagramDownload07','diagramDownload11','reviewApplyResult'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   document.querySelectorAll('.tab-item').forEach((t,i)=>{t.classList.toggle('active',i===0);t.setAttribute('aria-selected',i===0);});
   document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('active',i===0));
-  const mt=document.getElementById('methodToggle');if(mt){mt.checked=true;toggleMethod();}
+  const mt=document.getElementById('methodToggle');if(mt){mt.checked=false;toggleMethod();}   // ★ [배치15H-1] 방법 기본 OFF — 토글 체크 해제(종전 checked=true 가 line3의 =false 를 되돌리던 누락 반전지점). _methodUserSet 은 직후 _wfHardReset 이 false 로 리셋해 유형 자동동기 재개.
   document.querySelectorAll('#titleTypeCards .selection-card').forEach(c=>c.classList.remove('selected'));
   const b01=document.getElementById('btnStep01');if(b01)b01.disabled=true;
+  genParams=null;   // [배치12 C] 적용값 스냅샷 초기화
+  refPlan=null;   // ★ [배치17-1] 확정 부호표 초기화(프로젝트 전환 시 상태 누출 차단)
+  runLog=[];   // ★ [배치19b-5] 실행 로그 초기화
+  try{ if(typeof _wfHardReset==='function')_wfHardReset(); }catch(_e){}   // [배치12 A] 워크플로우 플래그·레일 배지·검증바·수동 오버라이드 완전 초기화(상태 누출 차단)
   updateStats();
 }
 
@@ -226,7 +232,7 @@ async function createAndOpenProject(){
     title:t,
     project_number:projectNumber,
     invention_content:'',
-    current_state_json:{outputs:{},selectedTitle:'',selectedTitleType:'',includeMethodClaims:true,usage:{calls:0,inputTokens:0,outputTokens:0,cost:0}}
+    current_state_json:{outputs:{},selectedTitle:'',selectedTitleType:'',includeMethodClaims:false,usage:{calls:0,inputTokens:0,outputTokens:0,cost:0}}
   }).select('id').single();
   
   if(error){App.showToast('생성 실패: '+error.message,'error');return;}
@@ -237,17 +243,23 @@ async function createAndOpenProject(){
 async function openProject(pid){
   clearAllState();const{data}=await App.sb.from('projects').select('*').eq('id',pid).single();if(!data){App.showToast('불러올 수 없어요','error');return;}
   currentProjectId=data.id;document.getElementById('projectInput').value=data.invention_content||'';
-  const s=data.current_state_json||{};outputs=s.outputs||{};selectedTitle=s.selectedTitle||'';selectedTitleEn=s.selectedTitleEn||'';selectedTitleType=s.selectedTitleType||'';includeMethodClaims=s.includeMethodClaims!==false;usage=s.usage||{calls:0,inputTokens:0,outputTokens:0,cost:0};
+  const s=data.current_state_json||{};outputs=s.outputs||{};selectedTitle=s.selectedTitle||'';selectedTitleEn=s.selectedTitleEn||'';selectedTitleType=s.selectedTitleType||'';includeMethodClaims=s.includeMethodClaims===true;usage=s.usage||{calls:0,inputTokens:0,outputTokens:0,cost:0};   // ★ [배치15H-1] 명시적 저장 true만 ON(undefined/false→OFF) — 방법 세트 쓰던 프로젝트는 저장된 true 복원
+  termSnapshot=(s.termSnapshot&&typeof s.termSnapshot==='object')?s.termSnapshot:_termSnapshotDefault();   // [§6-1] 용어 세대 스냅샷 복원
   // Fix: ensure cost field exists even from old saves
   if(typeof usage.cost==='undefined')usage.cost=0;
   // Restore v4.7 claim config
   deviceCategory=s.deviceCategory||'server';deviceGeneralDep=typeof s.deviceGeneralDep==='number'?s.deviceGeneralDep:5;deviceAnchorDep=typeof s.deviceAnchorDep==='number'?s.deviceAnchorDep:4;deviceAnchorStart=typeof s.deviceAnchorStart==='number'?s.deviceAnchorStart:7;
+  deviceIndepCount=typeof s.deviceIndepCount==='number'?s.deviceIndepCount:1;mathBlockCount=typeof s.mathBlockCount==='number'?s.mathBlockCount:3;conceptTargetCount=typeof s.conceptTargetCount==='number'?s.conceptTargetCount:2;   // [배치15B-1] 신규 설계 파라미터 복원
   anchorThemeMode=s.anchorThemeMode||'auto';selectedAnchorThemes=s.selectedAnchorThemes||[];
   methodCategory=s.methodCategory||'method';methodGeneralDep=typeof s.methodGeneralDep==='number'?s.methodGeneralDep:3;methodAnchorDep=typeof s.methodAnchorDep==='number'?s.methodAnchorDep:2;methodAnchorStart=typeof s.methodAnchorStart==='number'?s.methodAnchorStart:0;
   methodAnchorThemeMode=s.methodAnchorThemeMode||'auto';selectedMethodAnchorThemes=s.selectedMethodAnchorThemes||[];
   projectRefStyleText=s.projectRefStyleText||'';requiredFigures=s.requiredFigures||[];
   // Restore detail level
   detailLevel=s.detailLevel||'standard';customDetailChars=s.customDetailChars||2000;
+  { const _ud=document.getElementById('selUnifiedDetail'); if(_ud&&['compact','standard','detailed','maximal'].includes(detailLevel))_ud.value=detailLevel; }   // [배치6 N3a] 통합 카드 분량 표시 동기화
+  genParams=(s.genParams&&typeof s.genParams==='object')?s.genParams:null;   // [배치12 C] 적용값 스냅샷 복원(레일·이 배치8 훅은 openProject 말미로 이동 — 전체 상태 복원 후 1회 렌더)
+  refPlan=(Array.isArray(s.refPlan)&&s.refPlan.length)?s.refPlan:null;   // ★ [배치17-1] 확정 부호표 복원. 없으면 null → 최초 진입 시 _ensureRefPlan 가 청구항/기존 부호표에서 역산.
+  runLog=Array.isArray(s.runLog)?s.runLog:[];   // ★ [배치19b-5] 실행 로그 복원
   diagramData=s.diagramData||{};
   outputTimestamps=s.outputTimestamps||{};
   stepUserCommands=s.stepUserCommands||{};
@@ -264,6 +276,10 @@ async function openProject(pid){
   if(!API_KEY){App.ensureApiKey();}
   // Restore UI
   document.getElementById('methodToggle').checked=includeMethodClaims;toggleMethod();
+  // ★ [검증 반영] 방법 청구항·도면이 이미 생성된 프로젝트(step_10/11 존재)는 사용자가 방법을 의도적으로 켠 상태 →
+  //   _methodUserSet=true로 보호(방법 기본 OFF 정책하에서 유형 재선택 시 _syncMethodFromType가 방법을 침묵 OFF로
+  //   되돌려 ③ 재생성 때 방법 세트가 소실되는 것을 방지). 방법 산출물이 없으면 종전대로 false(자동 동기 재개).
+  try{_methodUserSet=(includeMethodClaims===true)||!!(outputs.step_10||outputs.step_11);}catch(_e){}   // [배치12 A/검증반영·배치15H] 복원된 방법-ON opt-in(저장 true)도 보호 — 방법 산출물이 아직 없어도 유형/명칭 편집 시 _syncMethodFromType의 침묵 auto-OFF로 방법이 소실되던 라운드트립 불안정 차단
   restoreClaimUI();
   // Restore custom title type
   if(selectedTitleType){const ci=document.getElementById('customTitleType');if(ci)ci.value=selectedTitleType;document.getElementById('btnStep01').disabled=false;}
@@ -288,6 +304,10 @@ async function openProject(pid){
       saveProject(true);   // 신규 부호 반영분 1회 영속 → 이후 열기는 멱등 no-op
     }
   }catch(_e){}
+  // ★ [배치17-1] 확정 부호표 확보 — 저장된 refPlan 이 없는 레거시 프로젝트는 청구항(step_06/10) 또는 기존 부호표(step_18)에서
+  //   최초 진입 시 1회 역산해 refPlan 을 세운다(_ensureRefPlan). 이후 cohesion 재생성이 이 확정 부호표를 고정 입력으로 사용.
+  try{ if(typeof _ensureRefPlan==='function' && (!refPlan||!refPlan.length)){ _ensureRefPlan(false); if(refPlan&&refPlan.length)saveProject(true); } }catch(_e){}
+  try{ if(typeof _renderRefPlanPanel==='function')_renderRefPlanPanel(); }catch(_e){}   // ★ [배치17-5] ③ 골격 확정 부호표 패널 렌더(복원 직후)
   // v15: 단계별 채팅 수정 패널 복원
   if(window.PatentChat)PatentChat.mountAll();
   document.getElementById('headerProjectName').textContent=data.title;document.getElementById('headerUserName').textContent=currentProfile?.display_name||currentUser?.email||'';
@@ -304,6 +324,8 @@ async function openProject(pid){
     window.__patentReviewState = (_rr && _rr.data && _rr.data.result) || null;
   } catch (_e) { window.__patentReviewState = null; }
   App.showScreen('main');App.updateModelToggle();App.updateProviderLabel();App.showToast(`"${data.title}" 열림`);
+  // [배치12 A/B] 전체 상태 복원 후 1회 렌더 — 레일 배지·상주 검증바·② 설계 보드(적용값 대조). 이전 프로젝트 DOM 잔상 제거.
+  try{ if(typeof renderWorkflowRail==='function')renderWorkflowRail(); if(typeof renderWfValidationBar==='function')renderWfValidationBar(); if(typeof renderDesignBoard==='function')renderDesignBoard(); }catch(_e){}
 }
 function restoreClaimUI(){
   const dc=document.getElementById('selDeviceCategory');if(dc)dc.value=deviceCategory;
@@ -318,7 +340,7 @@ function restoreClaimUI(){
   initUserFiguresUI();
   // Restore detail level UI
   const dlCards=document.querySelectorAll('#detailLevelCards .selection-card');
-  const dlLevels=['compact','standard','detailed','custom'];
+  const dlLevels=['compact','standard','detailed','maximal','custom'];   // ★ [Item4] 카드 DOM 순서와 정합(compact/standard/detailed/maximal/custom)
   dlCards.forEach((c,i)=>c.classList.toggle('selected',dlLevels[i]===detailLevel));
   const ci=document.getElementById('customDetailInput');
   if(ci)ci.style.display=detailLevel==='custom'?'block':'none';
@@ -330,5 +352,5 @@ function restoreClaimUI(){
 
 async function backToDashboard(){if(currentProjectId)await saveProject(true);clearAllState();App.showScreen('dashboard');}
 async function confirmDeleteProject(id,t){if(!confirm(`"${t}" 사건을 삭제하시겠어요?`))return;await App.sb.from('projects').delete().eq('id',id);App.showToast('삭제됨');loadDashboardProjects();}
-async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,costTracking:_costTracking,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,chatHistory,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
+async function saveProject(silent=false){if(!currentProjectId)return;const t=selectedTitle||document.getElementById('projectInput').value.slice(0,30)||'새 사건';const _payload={outputs,outputHistory,inventionScope,scopeCheckResults,costTracking:_costTracking,selectedTitle,selectedTitleEn,selectedTitleType,includeMethodClaims,usage,deviceCategory,deviceGeneralDep,deviceAnchorDep,deviceAnchorStart,deviceIndepCount,mathBlockCount,conceptTargetCount,anchorThemeMode,selectedAnchorThemes,methodCategory,methodGeneralDep,methodAnchorDep,methodAnchorStart,methodAnchorThemeMode,selectedMethodAnchorThemes,projectRefStyleText,requiredFigures,detailLevel,customDetailChars,diagramData,outputTimestamps,stepUserCommands,chatHistory,conceptDiagramEnabled,conceptDiagramCount,conceptDiagramTypes,termSnapshot,genParams,refPlan,runLog};console.log('[diag] saveProject payload size:',JSON.stringify(_payload).length,'chars');await App.sb.from('projects').update({title:t,invention_content:document.getElementById('projectInput').value,current_state_json:_payload}).eq('id',currentProjectId);if(!silent)App.showToast('저장됨');}
 
