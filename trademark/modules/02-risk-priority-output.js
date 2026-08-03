@@ -818,6 +818,19 @@ ${criticalResults.slice(0, 5).map(r =>
   };
   
   // PDF에서 텍스트 추출 및 파싱
+  // ★ [출원일 누락 수정] KIPO 꼬리말 제거 — "쪽번호+날짜"가 연속으로 오는 한 덩어리일 때만 지운다.
+  //   종전엔 YYYY-MM-DD / YYYY.MM.DD 를 무맥락으로 전면 삭제해, 출원번호통지서 본문의
+  //   「출 원 일 자  2026.08.03」까지 함께 지워버렸다. 그 결과 파싱 단계에 날짜가 남지 않아
+  //   출원일이 항상 빈 값이 되고, 화면에는 입력칸 placeholder("2024.03.15")가 값처럼 보였다.
+  //   (출원서 꼬리말은 "3-1  2026-08-03" 처럼 쪽번호와 붙어 나오므로 덩어리 매칭으로 충분히 제거된다.)
+  TM.stripKipoFooter = function(pageText) {
+    return String(pageText || '')
+      .replace(/\s+\d{1,2}-\d{1,2}\s+\d{4}\s*[-.]\s*\d{1,2}\s*[-.]\s*\d{1,2}(?=\s|$)/g, ' ')  // 꼬리말(쪽번호+날짜)
+      .replace(/\s+\d{1,2}-\d{1,2}(?=\s|$)/g, ' ')       // 남은 쪽번호 단독 (3-1, 3-2 등)
+      .replace(/\s{2,}/g, ' ')                            // 연속 공백 정리
+      .trim();
+  };
+
   TM.extractFromPDF = async function(file) {
     // PDF.js 로드
     if (!window.pdfjsLib) {
@@ -842,13 +855,7 @@ ${criticalResults.slice(0, 5).map(r =>
       console.log('[TM] 페이지', i, '텍스트 아이템 수:', textContent.items.length);
       
       const pageText = textContent.items.map(item => item.str).join(' ');
-      // KIPO 출원서 꼬리말 제거: 쪽번호(3-1), 날짜(2026-03-24) 등
-      const cleanedPageText = pageText
-        .replace(/\s+\d{1,2}-\d{1,2}\s+/g, ' ')           // 쪽번호 (3-1, 3-2 등)
-        .replace(/\s+\d{4}-\d{2}-\d{2}\s*/g, ' ')          // 날짜 (2026-03-24 등)
-        .replace(/\s+\d{4}\.\d{2}\.\d{2}\s*/g, ' ')        // 날짜 (2026.03.24 등)
-        .replace(/\s{2,}/g, ' ')                            // 연속 공백 정리
-        .trim();
+      const cleanedPageText = TM.stripKipoFooter(pageText);
       fullText += cleanedPageText + '\n';
     }
     
