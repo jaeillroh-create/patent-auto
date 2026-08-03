@@ -1225,14 +1225,16 @@ ${criticalResults.slice(0, 5).map(r =>
 
     // 정규식 우선 실행 — 출원서는 형식이 정해져 있으므로 대부분 충분
     const regexResult = TM.parseApplicationTextRegex(text);
-    const hasEssentials = regexResult.applicationNumber && regexResult.classCode;
+    // ★ [출원일 오추출 수정] 출원일도 핵심 필드에 포함 — 종전엔 출원번호·상품류만 보고 즉시 반환해서
+    //   날짜가 비었거나 틀려도 AI 보완 기회가 없었다(출원번호통지서는 이 둘이 항상 있어 사실상 항상 조기 반환).
+    const hasEssentials = regexResult.applicationNumber && regexResult.classCode && regexResult.applicationDate;
     if (hasEssentials) {
       console.log('[TM] 정규식만으로 핵심 필드 추출 완료:', regexResult);
       return regexResult;
     }
 
     // 핵심 필드 부족 시에만 Claude API 호출
-    console.log('[TM] 정규식 부족 (applicationNumber:', regexResult.applicationNumber, ', classCode:', regexResult.classCode, ') → Claude API 보완');
+    console.log('[TM] 정규식 부족 (applicationNumber:', regexResult.applicationNumber, ', classCode:', regexResult.classCode, ', applicationDate:', regexResult.applicationDate, ') → Claude API 보완');
     try {
       const prompt = `다음은 상표 출원번호통지서 또는 출원서를 OCR한 텍스트입니다. 띄어쓰기가 잘못되어 있거나 글자가 누락되었을 수 있습니다.
 
@@ -1265,6 +1267,13 @@ ${text.substring(0, 2000)}
         for (const key of ['applicationNumber', 'applicationDate', 'applicantName', 'trademarkName', 'classCode', 'designatedGoods']) {
           if (!merged[key] && parsed[key]) merged[key] = parsed[key];
         }
+        // ★ [출원일 오추출 수정] AI 가 보완한 출원일도 유효성 검증 후 정규화(YYYY.MM.DD) — 무효면 채택하지 않는다.
+        if (merged.applicationDate) {
+          const _dm = String(merged.applicationDate).match(/(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})/);
+          const _norm = _dm ? TM.normalizeDateParts(_dm[1], _dm[2], _dm[3]) : '';
+          if (_norm) merged.applicationDate = _norm;
+          else { console.warn('[TM] AI 출원일 무효 — 폐기:', merged.applicationDate); merged.applicationDate = ''; }
+        }
         console.log('[TM] 병합 결과:', merged);
         return merged;
       }
@@ -1276,6 +1285,58 @@ ${text.substring(0, 2000)}
     return regexResult;
   };
   
+  // ★ [출원일 오추출 수정] 날짜 유효성 검증 — 연 1900~2099 · 월 1~12 · 일 1~31 + 실재 날짜(2025.02.30 배제).
+  //   종전엔 검증이 없어 "2025.00.97"(출원번호에서 오추출) 같은 불가능한 날짜가 그대로 통과했다.
+  TM.normalizeDateParts = function(y, m, d) {
+    const Y = parseInt(y, 10), M = parseInt(m, 10), D = parseInt(d, 10);
+    if (!(Y >= 1900 && Y <= 2099)) return '';
+    if (!(M >= 1 && M <= 12)) return '';
+    if (!(D >= 1 && D <= 31)) return '';
+    const dt = new Date(Y, M - 1, D);
+    if (dt.getFullYear() !== Y || dt.getMonth() !== M - 1 || dt.getDate() !== D) return '';
+    return Y + '.' + String(M).padStart(2, '0') + '.' + String(D).padStart(2, '0');
+  };
+
+  // 문자열에서 "첫 번째 유효한 날짜"만 채택(무효 후보는 건너뛴다). YYYY.M.D / YYYY-M-D / YYYY년 M월 D일 지원.
+  TM._firstValidDate = function(s) {
+    const re = /(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})/g;
+    let m;
+    while ((m = re.exec(String(s || ''))) !== null) {
+      const v = TM.normalizeDateParts(m[1], m[2], m[3]);
+      if (v) return v;
+    }
+    return '';
+  };
+
+  // 번호류 마스킹 — 출원번호(40-2025-0097799)·접수번호(1-1-2025-0612345-01)는 날짜가 아니다.
+  //   종전 무맥락 정규식이 이 숫자열에서 "2025.00.97"·"2025.06.12" 를 날짜로 오추출하던 근본 원인.
+  //   단, 하이픈 날짜(2025-06-09)는 3그룹·유효성 통과 시 보존한다.
+  TM._maskNumberRuns = function(s) {
+    return String(s || '').replace(/\d+(?:\s*-\s*\d+)+/g, function(run) {
+      const g = run.split(/\s*-\s*/);
+      if (g.length === 3 && /^\d{4}$/.test(g[0]) && g[1].length <= 2 && g[2].length <= 2 && TM.normalizeDateParts(g[0], g[1], g[2])) return run;
+      return ' '.repeat(run.length);
+    });
+  };
+
+  // ★ 출원일 추출 — (1)번호류 마스킹 → (2)「출원일(자)」 라벨 앵커 → (3)유효 날짜 폴백.
+  //   KIPO 출원번호통지서는 출원번호가 출원일자보다 먼저 나오므로, 라벨 앵커 없이 첫 숫자열을 잡으면 항상 틀린다.
+  TM.extractApplicationDate = function(text) {
+    if (!text) return '';
+    const t = String(text).replace(/\s+/g, ' ');
+    const masked = TM._maskNumberRuns(t);
+    // 1순위: 「출원일」/「출원일자」 라벨 뒤 40자 이내(OCR 공백 붕괴 "출 원 일 자" 대응)
+    const labelRe = /출\s*원\s*일\s*(?:자)?/g;
+    let lm;
+    while ((lm = labelRe.exec(masked)) !== null) {
+      const from = lm.index + lm[0].length;
+      const v = TM._firstValidDate(masked.slice(from, from + 40));
+      if (v) return v;
+    }
+    // 2순위: 전체에서 첫 유효 날짜(번호 마스킹·유효성 통과분만)
+    return TM._firstValidDate(masked);
+  };
+
   // 정규식 기반 파싱 (폴백용)
   TM.parseApplicationTextRegex = function(text) {
     const result = {
@@ -1300,11 +1361,15 @@ ${text.substring(0, 2000)}
       console.log('[TM] 출원번호:', result.applicationNumber);
     }
     
-    // 출원일자: 2025.06.09 또는 202506.09
-    const dateMatch = t.match(/(\d{4})[.\s-]*(\d{2})[.\s-]*(\d{2})/);
-    if (dateMatch) {
-      result.applicationDate = `${dateMatch[1]}.${dateMatch[2]}.${dateMatch[3]}`;
+    // ★ [출원일 오추출 수정] 출원일자 — 라벨 앵커 + 번호류 마스킹 + 유효성 검증(TM.extractApplicationDate).
+    //   종전 /(\d{4})[.\s-]*(\d{2})[.\s-]*(\d{2})/ 는 무맥락 첫 매칭이라 출원번호 "40-2025-0097799"에서
+    //   "2025.00.97", 접수번호 "1-1-2025-0612345-01"에서 "2025.06.12" 를 날짜로 오추출했다(실증 3/4건 오류).
+    //   ※ 원문(text) 기준으로 추출한다 — 전처리 t 는 쪽번호+날짜 패턴을 지워 정상 출원일까지 유실될 수 있다.
+    result.applicationDate = TM.extractApplicationDate(text);
+    if (result.applicationDate) {
       console.log('[TM] 출원일자:', result.applicationDate);
+    } else {
+      console.warn('[TM] 출원일자 추출 실패 — 유효한 날짜 없음(AI 보완 또는 수동 입력 필요)');
     }
     
     // 출원인: 1순위 【명칭】필드 직접 파싱, 2순위 "주식회사" 전후 매칭
