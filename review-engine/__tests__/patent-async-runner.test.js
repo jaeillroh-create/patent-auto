@@ -196,6 +196,10 @@ test('★② ESM 캐시버스트 — 패널이 index.js 를 ?v= 로 import + 패
   const panelSrc = readFileSync(path.join(REPO, 'review-engine/ui/opinion-review-panel.js'), 'utf8');
   assert.match(panelSrc, /from '\.\.\/index\.js\?v=/, 'index.js import 에 ?v=(FEATURE_FLAGS 캐시버스트)');
   const html = readFileSync(path.join(REPO, 'index.html'), 'utf8');
-  assert.match(html, /opinion-review-panel\.js\?v=2026063[4-9]/, '패널 ?v= 갱신(이후 PR 에서 추가 bump 가능)');
-  assert.match(html, /patent\/patent\.js\?v=20260722-b63/, 'patent.js ?v= 갱신(분리 로더 캐시버스트)');
+  // 토큰 값을 고정하지 않는다 — 릴리스마다 bump 되므로, "존재 + patent.js 와 동일 토큰"만 확인한다.
+  const panelTok = html.match(/opinion-review-panel\.js\?v=([^"']+)/);
+  assert.ok(panelTok, '패널 ?v= 존재');
+  const patentTok = html.match(/patent\/patent\.js\?v=([^"']+)/);
+  assert.strictEqual(panelTok[1], patentTok[1], '패널 ?v= 가 patent.js 토큰과 함께 갱신');
+  assert.match(html, /patent\/patent\.js\?v=20260803b/, 'patent.js ?v= 갱신(분리 로더 캐시버스트)');
 });
