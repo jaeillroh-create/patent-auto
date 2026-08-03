@@ -27,13 +27,22 @@ const CATEGORY_ENDINGS = {
 };
 
 // ═══ Patent State ═══
-let outputs={},outputHistory={},selectedTitle='',selectedTitleEn='',selectedTitleType='',includeMethodClaims=true;
+let outputs={},outputHistory={},selectedTitle='',selectedTitleEn='',selectedTitleType='',includeMethodClaims=false;   // ★ [배치15H-1] 방법 청구항 기본 OFF(명시적 opt-in 시만 ON) — 재일 원칙: 기본 장치/시스템만
 let scopeCheckResults = {};
+let _pendingReviewNotes='';   // ★ [배치15L-2] AI 진단(step_13) 지적 → cohesion 재작성 주입 대기값(REVIEW_NOTES). 소비 후 클리어.
+let _pendingFixTargets='';    // ★ [배치16-1] 기계검증 결함 → cohesion 재작성 주입 대기값(FIX_TARGETS, 구조화 지시문). 소비 후 클리어.
+let _step13Compact=false;     // ★ [배치16.1-3] AI 진단(step_13) 축약 모드 — 대형 문서 타임아웃 시 입력 축소 재시도.
+let refPlan=null;             // ★ [배치17] 확정 부호표(코드 결정론 배정): [{num,name,level,parent}]. 청구항 확정 시 갱신, cohesion 고정 입력.
+let _rewriteLock=false;       // ★ [배치19-1] 재작성/진단/통합생성 계열 단일 실행 락 — 최외곽 진입만 획득, 내부 연쇄는 {_locked:true}로 통과. 중복 클릭 물리 차단.
+let runLog=[];                // ★ [배치19b-5] 실행 로그 이력: [{t,action,ok,detail}]. ④⑤ 접이식 패널 표시 + 재생성 반복 판정(term_mismatch 무한 재생성 승격).
 let usage={calls:0,inputTokens:0,outputTokens:0,cost:0},loadingState={};
 let detailLevel='standard';
 let customDetailChars=2000;
 let currentProvisionalId=null;
 let deviceCategory='server', deviceGeneralDep=5, deviceAnchorDep=4, deviceAnchorStart=7;
+let deviceIndepCount=1;   // [배치15B-1] 장치 독립항 수(기본 1) — N>1이면 상이한 권리 관점의 다중 독립항. canonical.
+let mathBlockCount=3;     // [배치15B-1] 수학식 개수(수학식 포함 시 1~5) — cohesion 인라인 "정확히 N개 【수학식】" 계약. canonical.
+let conceptTargetCount=2; // [배치15B-1] 예시도 목표 개수 — 체인 도면 phase에서 step_07c 생성 시 conceptDiagramTypes를 이 수로 정렬. canonical.
 let anchorThemeMode='auto', selectedAnchorThemes=[];
 let methodCategory='method', methodGeneralDep=3, methodAnchorDep=2, methodAnchorStart=0;
 let methodAnchorThemeMode='auto', selectedMethodAnchorThemes=[];
@@ -47,6 +56,80 @@ let chatHistory = {}; // 단계별 독립 채팅 수정 이력 (chat.js)
 let outputTimestamps = {};
 // [P-C1] invention_scope: 발명 범위 기준선
 let inventionScope = null;
+
+// ═══ [§6-1] 용어·부호 세대 스냅샷 (term generation) ═══
+// 명칭/구성 확정 시, 구세대 명칭의 diff청크(신명칭에 없는 제거 어절, 공백제거 ≥5자)를 staleTerms에 누적한다.
+// CHK-13(term_generation_mismatch)이 완성본에 이 staleTerm이 잔존하는지(=재생성 안 된 구세대 산출물 혼입)를 검출.
+// ⚠ 자동 치환 금지 — 검출·경고·재생성 유도만. 결정: (a) diff청크+≥5자, (b) CHK-13=HIGH, (c) 스텝저장 경고만.
+let termSnapshot = { titleKo:'', titleEn:'', components:[], staleTerms:[], updatedAt:null };
+// [배치12 C] 적용값 스냅샷 — ③ 골격/④ 본문 생성 시점의 설계 파라미터. "선택한 값 vs 적용된 값" 대조 근거(프로젝트 영속).
+let genParams = null;   // { stage3:{type,method,generalDep,anchorDep,figures,at}, stage4:{...,math,detail,at} }
+function _termSnapshotDefault(){ return { titleKo:'', titleEn:'', components:[], staleTerms:[], updatedAt:null }; }
+function _activeStaleTerms(){ return (termSnapshot && Array.isArray(termSnapshot.staleTerms)) ? termSnapshot.staleTerms : []; }
+// 현재 명칭 코퍼스(공백 제거) — 복귀 프루닝 기준(현재 명칭에 다시 등장하면 stale 아님)
+function _currentTermNorm(){
+  const parts=[ (termSnapshot&&termSnapshot.titleKo) || (typeof selectedTitle!=='undefined'?selectedTitle:'') || '' ];
+  ((termSnapshot&&termSnapshot.components)||[]).forEach(c=>parts.push((c&&c.name)||''));
+  return parts.join('␟').replace(/\s+/g,'');
+}
+// [3.1a] 커넥터 어절 — old-only run을 여기서 분할(병합 금지)해 "…기반…" 통짜 구절 취약화를 막는다.
+const _TERM_CONN = new Set(['및','기반','위한','이용한','통한','의','과','와','또는','위해','통해','기초한','따른']);
+// 구명칭→신명칭 diff — 신명칭 어절집합에 없는 "제거된 연속 어절 run"을 커넥터에서 분할, 공백제거 후 ≥5자만 청크로.
+function _termDiffChunks(oldT, newT){
+  // [3.2] 어절 말미 단음절 조사(을/를/이/가/은/는/의) 제거(스템 ≥2 유지) — "비용을↔비용" 류 어절 불일치 예방.
+  const tok=s=>String(s||'').split(/\s+/).filter(Boolean).map(w=>(w.length>=3?w.replace(/(을|를|이|가|은|는|의)$/,''):w));
+  const N=new Set(tok(newT)); const out=[]; let cur=[];
+  const flush=()=>{ if(cur.length){ out.push(cur.join('')); cur=[]; } };
+  tok(oldT).forEach(w=>{ if(N.has(w))flush(); else if(_TERM_CONN.has(w))flush(); else cur.push(w); });   // [3.1a] 공유어절·커넥터에서 분할
+  flush();
+  return [...new Set(out.map(c=>c.replace(/\s+/g,'')).filter(c=>c.length>=5))];   // [결정 a] ≥5자
+}
+// [3.1b] 섹션 텍스트에서 "…서버/시스템/장치/방법/…"로 끝나는 명칭구(공백유지, 공백제거 ≥8자) 추출 — 리드인 조사 어절 제거.
+function _extractTitlePhrases(sectionText){
+  const out=[]; const re=/([가-힣]+(?:\s+[가-힣]+){0,6})\s*(서버|시스템|장치|방법|단말|엔진|플랫폼|모듈)/g; let m;
+  while((m=re.exec(String(sectionText||'')))!==null){
+    const words=(m[1]+' '+m[2]).replace(/\s+/g,' ').trim().split(' ');
+    let start=0;
+    for(let i=words.length-2;i>=0;i--){ if(/(는|은|이|가|를|을|의|에|로|와|과|및|도|만)$/.test(words[i])){ start=i+1; break; } }
+    const phrase=words.slice(start).join(' ');
+    if(phrase.replace(/\s+/g,'').length>=8)out.push(phrase);
+  }
+  return [...new Set(out)];
+}
+// [보강1] 복귀 프루닝 — 현재 명칭에 재등장하는 항목 제거
+function _pruneStaleTerms(){
+  if(!termSnapshot||!Array.isArray(termSnapshot.staleTerms)||!termSnapshot.staleTerms.length)return;
+  const cur=_currentTermNorm();
+  termSnapshot.staleTerms=termSnapshot.staleTerms.filter(t=>t && cur.indexOf(t)<0);
+}
+// staleTerms 갱신 — dedupe + 복귀 프루닝 + [보강3] 상한 20(최신 우선)
+function _recordStaleTerms(chunks){
+  if(!termSnapshot)termSnapshot=_termSnapshotDefault();
+  if(!Array.isArray(termSnapshot.staleTerms))termSnapshot.staleTerms=[];
+  (chunks||[]).forEach(c=>{ if(c && c.length>=5 && termSnapshot.staleTerms.indexOf(c)<0)termSnapshot.staleTerms.push(c); });
+  _pruneStaleTerms();
+  if(termSnapshot.staleTerms.length>20)termSnapshot.staleTerms=termSnapshot.staleTerms.slice(-20);
+  termSnapshot.updatedAt=Date.now();
+}
+// 명칭 변경 훅 — [보강2] outputs 존재 시에만 구세대 diff 적재(첫 확정엔 잔존 위험 없음)
+function _onTitleChanged(oldT, newT){
+  if(!termSnapshot)termSnapshot=_termSnapshotDefault();
+  termSnapshot.titleKo=newT||'';
+  if(oldT && oldT!==newT){
+    const hasOutputs = (typeof outputs==='object') && outputs && Object.keys(outputs).some(k=>k.indexOf('step_')===0 && outputs[k]);
+    if(hasOutputs)_recordStaleTerms(_termDiffChunks(oldT, newT));
+  }
+  _pruneStaleTerms();   // 신명칭이 과거 stale를 되살렸으면 제거
+}
+// 구성 명칭 변경 훅 — 각 구명칭이 신구성 집합에 없으면 diff청크 적재
+function _onComponentsChanged(oldNames, newNames){
+  if(!termSnapshot)termSnapshot=_termSnapshotDefault();
+  const _new=(newNames||[]).filter(Boolean);
+  termSnapshot.components=_new.map(n=>({name:n}));
+  const hasOutputs = (typeof outputs==='object') && outputs && Object.keys(outputs).some(k=>k.indexOf('step_')===0 && outputs[k]);
+  if(hasOutputs){ const _joined=_new.join(' '); (oldNames||[]).forEach(o=>{ if(o && _new.indexOf(o)<0)_recordStaleTerms(_termDiffChunks(o, _joined)); }); }
+  _pruneStaleTerms();
+}
 // [C1-6a] baseline 편집 UI 상태
 let _editingComponentId = null;
 let _modalAliases = [];
@@ -134,7 +217,7 @@ function _parseConceptResult(fullText, conceptTypes, figNums){
     const svgMatch=segment.match(/<svg[\s\S]*?<\/svg>/i);
     const svgText=svgMatch?svgMatch[0]:`<svg viewBox="0 0 680 500" xmlns="http://www.w3.org/2000/svg"><rect width="680" height="500" fill="#fff" stroke="#ccc"/><text x="340" y="250" text-anchor="middle" font-size="18" fill="#999">SVG 생성 실패 — 재시도하세요</text></svg>`;
     const briefMatch=segment.match(/---BRIEF_DESC---\s*\n?(도\s*\d+[은는]\s+.+)/);
-    ct.briefDesc=briefMatch?briefMatch[1].trim():`도 ${figNum}은 ${selectedTitle}의 ${typeDef.label}을 나타내는 예시도이다.`;
+    ct.briefDesc=briefMatch?briefMatch[1].trim():`도 ${figNum}은 ${selectedTitle}의 ${typeDef.label}${josaEulReul(typeDef.label)} 나타내는 예시도이다.`;
     ct.refMap=_parseConceptRefMap(segment, svgText);   // ★ P2: [{signNumber,label}]
     ct.refNums=ct.refMap.map(r=>parseInt(r.signNumber)); // 하위호환(숫자 배열)
     ct.svgContent=svgText;ct.figNum=figNum;
@@ -151,6 +234,12 @@ function _conceptRefFallbackName(ct){
 function _conceptRefPairs(ct){
   const fb=_conceptRefFallbackName(ct);
   return ((ct&&ct.refMap)||[]).map(r=>({num:String(r.signNumber),name:(r.label&&String(r.label).trim())||fb}));
+}
+// ★ [배치15F-4] 폴백 없는 원본 라벨 쌍 — 부호의 설명(step_18) 반영 시 "실명(REF_MAP label)만" 등재하기 위해 사용.
+//   §6-6은 실명 특정 불가 시 라벨을 비우게 하는데(빈 라벨), 그 빈 라벨을 유형 기반 generic("~요소")으로 채워
+//   부호표에 넣으면 부호↔명칭 대응이 상실된다(generic_series·title_suspect 오염). 빈 라벨은 부호표에서 제외.
+function _conceptRefPairsRaw(ct){
+  return ((ct&&ct.refMap)||[]).map(r=>({num:String(r.signNumber),name:(r.label&&String(r.label).trim())||''}));
 }
 function _buildConceptOutputText(conceptTypes, figNums){
   return conceptTypes.map((ct,i)=>{
@@ -214,7 +303,7 @@ function _syncConceptRefNums(){
 function _conceptBrief(ct, figNum){
   const td=CONCEPT_DIAGRAM_TYPES[ct&&ct.type]||{label:(ct&&ct.type)||'예시'};
   const n=parseInt(figNum)||0;
-  return (ct&&ct.briefDesc&&String(ct.briefDesc).trim())||`도 ${figNum}${figParticle(n)} ${selectedTitle||'본 발명'}의 ${td.label}을 나타내는 예시도이다.`;
+  return (ct&&ct.briefDesc&&String(ct.briefDesc).trim())||`도 ${figNum}${figParticle(n)} ${selectedTitle||'본 발명'}의 ${td.label}${josaEulReul(td.label)} 나타내는 예시도이다.`;
 }
 // 생성된(svgContent) 예시도 → {ct, figNum} (★ C: filter 순서 = getAutoFigNums('step_07c') 순서로 정합)
 function _generatedConceptsWithNums(){
@@ -250,8 +339,15 @@ function reflectConceptsToSpec(){
     let s18=String(outputs.step_18);
     const have=new Set((s18.match(/\d{2,4}/g)||[]));                   // 기존 기재 번호
     const add=[];
-    gen.forEach(g=>_conceptRefPairs(g.ct).forEach(p=>{
-      if(have.has(p.num)) return; have.add(p.num); add.push(`${p.name} : ${p.num}`);
+    // ★ [배치19b-3] 예시도 상세설명(step_08c)이 존재하면, 그 안에서 실제 사용되는 예시도 부호만 부호표에 등재(미사용 501~507 등 진성 제외).
+    //   step_08c 미생성 시엔 사용 여부를 판단할 근거가 없으므로 종전대로 전량 등재(폴백·기존 사건 호환).
+    const _cbody=String((outputs.step_08c||'')+'\n'+(outputs.step_08||''));
+    const _checkUse=!!(outputs.step_08c&&String(outputs.step_08c).trim());
+    gen.forEach(g=>_conceptRefPairsRaw(g.ct).forEach(p=>{
+      if(!p.name) return;                              // ★ [배치15F-4] 실명 없는 예시도 부호는 부호표에 generic으로 넣지 않음(총칭 오염 방지)
+      if(have.has(p.num)) return;
+      if(_checkUse){ let _used=true; try{ _used=new RegExp('\\('+p.num+'\\)').test(_cbody); }catch(_e){} if(!_used) return; }   // ★ [배치19b-3] 예시도 설명 있으면 미사용 부호 제외
+      have.add(p.num); add.push(`${p.name} : ${p.num}`);
     }));
     if(add.length){ outputs.step_18=s18.replace(/\s*$/,'')+'\n'+add.join('\n'); markOutputTimestamp('step_18'); refAdded=add.length; }
   }

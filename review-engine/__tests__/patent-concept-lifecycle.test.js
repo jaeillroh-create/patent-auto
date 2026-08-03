@@ -119,7 +119,7 @@ test('B1 ★ Step 13 입력 — step_07c 없으면 입력 블록 생략(무해)'
 });
 
 test('B1 소스 ★ step_13 입력에 step_07c 조건부 주입', () => {
-  assert.match(PATENT_SRC, /outputs\.step_07c\?'\\n\[예시도\/개념도 설계[\s\S]*?'\+outputs\.step_07c\.slice\(0,1500\):''/, '★ step_07c 조건부 입력');
+  assert.match(PATENT_SRC, /\(!_c&&outputs\.step_07c\)\?'\\n\[예시도\/개념도 설계[\s\S]*?'\+outputs\.step_07c\.slice\(0,1500\):''/, '★ step_07c 조건부 입력(배치16.1-3: 축약 진단 시 제외)');
 });
 
 // ─────────── B2: Step 13 예시도 검토 항목 ───────────

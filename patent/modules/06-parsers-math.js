@@ -87,6 +87,9 @@ function stripMathBlocks(text){
   r=r.replace(/\n{3,}/g,'\n\n');
   return r.trim();
 }
+// ★ [cleanup D2] 중복 제거용 정규화 공유 헬퍼 — stripMathBlocks(수학식 제거) + 공백 전제거.
+//   기존 3중복(_normForDedup 03·_n 05·norm 08)을 이 하나로 통일. (_normForAnchor 는 구두점 기반이라 별개)
+function _stripMathNorm(s){ return stripMathBlocks(String(s||'')).replace(/\s+/g,''); }
 // v10.2: 수학식 번호 순차 재정렬 (헤더 + 본문 교차참조 모두 갱신)
 function renumberMathBlocks(text){
   if(!text)return text;
@@ -179,17 +182,24 @@ function fuzzyFindAnchor(text,anchor){
       if(km&&km.index!=null)return km.index;
     }catch(e){/* regex 실패 시 4차로 */}
   }
+  // ★ FIX-B: 4·5차(부분 20자 매칭)는 반복 문형에서 오매칭·오프셋 어긋남 위험 → 반환 직전 사후 검증.
+  //   후보 위치의 anchor.length 창을 정규화하여 anchor 와 bigram Dice 유사도 측정, 임계 미만이면 무효화.
+  //   (1~3차는 신뢰도 높아 게이트 제외. 임계 보수적 — 오탐 시 삽입 실패가 오염보다 안전.)
+  const _aNorm=_normForAnchor(anchor);
   // 4차: 앵커 앞 20자로 부분 매칭
   if(anchor.length>=20){
     const partial=anchor.slice(0,20);
     const pi=text.indexOf(partial);
-    if(pi>=0)return pi;
+    if(pi>=0 && _anchorBigramDice(_aNorm,_normForAnchor(text.slice(pi,pi+anchor.length)))>=0.5)return pi;
   }
   // 5차: 앵커 뒤 20자로 부분 매칭 (AI 검토로 앞부분이 변경된 경우)
   if(anchor.length>=20){
     const tail=anchor.slice(-20);
     const ti=text.indexOf(tail);
-    if(ti>=0)return Math.max(0,ti-(anchor.length-20));
+    if(ti>=0){
+      const est=Math.max(0,ti-(anchor.length-20));
+      if(_anchorBigramDice(_aNorm,_normForAnchor(text.slice(est,est+anchor.length)))>=0.5)return est;
+    }
   }
   // 6차: 핵심 키워드 후방 3단어 연속 매칭
   if(words&&words.length>=3){
@@ -199,7 +209,12 @@ function fuzzyFindAnchor(text,anchor){
     try{
       const re2=new RegExp(tailPhrase);
       const km2=text.match(re2);
-      if(km2&&km2.index!=null)return km2.index;
+      if(km2&&km2.index!=null){
+        // ★ FIX-B 확장: 6차도 사후검증(4·5차 동형). 매칭된 꼬리(km2.index) 위치에서 앵커 시작을 역추정한
+        //   anchor.length 창(꼬리 끝에 정렬)을 Dice 검증 — 임계 미만이면 무효(오매칭 위치 반환 차단, return -1).
+        const _est=Math.max(0,km2.index-(anchor.length-km2[0].length));
+        if(_anchorBigramDice(_aNorm,_normForAnchor(text.slice(_est,km2.index+km2[0].length)))>=0.5)return km2.index;
+      }
     }catch(e){/* 무시 */}
   }
   return -1;
@@ -215,6 +230,14 @@ function _normForAnchor(s){
     else{r+=c;prev=false;}
   }
   return r.trim();
+}
+// ★ FIX-B: bigram Dice 유사도(0~1) — 후보 창이 앵커와 실질 동일 구절인지 사후 검증용.
+//   앞부분 편집(5차)에도 대부분 bigram이 공유되므로 부분편집엔 관대, 우연 20자 일치(오매칭)엔 엄격.
+function _anchorBigramDice(a,b){
+  if(!a||!b||a.length<2||b.length<2)return 0;
+  const bg=s=>{const set=new Set();for(let i=0;i<s.length-1;i++)set.add(s.slice(i,i+2));return set;};
+  const A=bg(a),B=bg(b); let inter=0; A.forEach(x=>{if(B.has(x))inter++;});
+  return (2*inter)/(A.size+B.size);
 }
 
 // v10.3: 앵커 위치에서 문장 끝(마침표) 찾기
@@ -598,6 +621,7 @@ graph TD
 ═══ 장치 도면 규칙 ═══
 - 노드 라벨에 반드시 참조번호 포함: A["통신부(110)"]
 - 참조번호는 숫자만 (100, 110, 120...)
+- ★ [배치7 N3] 장치 참조번호는 반드시 100 이상의 2~4자리 숫자만 사용하라(100번대부터). 1~99의 한두 자리 번호("시스템(1)"·"입력 데이터(2)" 류 generic 번호) 절대 금지 — 개념 요소(추상 블록)가 아니라 도면의 실제 구성요소에만 번호를 부여하라.
 - "~단계", "S숫자" 표현 금지
 - "~모듈" 금지 → "~부"로 통일
 

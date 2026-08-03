@@ -280,13 +280,6 @@ function layoutGraph(nodes,edges){
   });
   return positions;
 }
-function computeEdgeRoutes(edges,positions){
-  return edges.map((e,ei)=>{const fp=positions[e.from],tp=positions[e.to];if(!fp||!tp)return null;const sx=fp.cx,sy=fp.y+fp.h,tx=tp.cx,ty=tp.y;const segments=[];let labelPos=null;
-    if(Math.abs(sx-tx)<0.05){segments.push({type:'line',x1:sx,y1:sy,x2:tx,y2:ty,arrow:true});if(e.label)labelPos={x:sx+0.15,y:(sy+ty)/2-0.12};}
-    else{const baseM=(sy+ty)/2,offset=(ei%3-1)*0.12,midY=baseM+offset;segments.push({type:'line',x1:sx,y1:sy,x2:sx,y2:midY,arrow:false});segments.push({type:'line',x1:sx,y1:midY,x2:tx,y2:midY,arrow:false});segments.push({type:'line',x1:tx,y1:midY,x2:tx,y2:ty,arrow:true});if(e.label)labelPos={x:Math.max(sx,tx)+0.15,y:midY-0.12};}
-    return{segments,label:e.label,labelPos};
-  }).filter(Boolean);
-}
 
 // ═══ 2D Layout Engine v4.0: Hub-Centered + 제약 기반 배치 ═══
 // 원칙 1: 허브는 반드시 중앙 열
@@ -1216,53 +1209,7 @@ function svgOrthogonalEdge(route,mkId,bidir){
   return`<path d="${d}" fill="none" stroke="#000" stroke-width="1"${startMarker} marker-end="url(#${mkId})"/>`;
 }
 
-// Stagger leader line Y-positions to prevent reference number overlap
-// Enhanced v2: same-row aware + bidirectional spread + minimum gap enforcement
-function staggerLeaderYPositions(leaderEntries,minGap){
-  if(!leaderEntries.length)return;
-  minGap=minGap||18;
-  
-  // Phase 1: 같은 Y 그룹 감지 → 열 기반 사전 오프셋
-  const yGroups={};
-  leaderEntries.forEach(le=>{
-    const roundedY=Math.round(le.y*10)/10; // 소수점 1자리 반올림
-    let matched=false;
-    for(const gy of Object.keys(yGroups)){
-      if(Math.abs(parseFloat(gy)-roundedY)<minGap*0.8){
-        yGroups[gy].push(le);
-        matched=true;
-        break; // 첫 매칭 그룹에만 추가
-      }
-    }
-    if(!matched)yGroups[roundedY]=[le];
-  });
-  
-  // 같은 Y 그룹 내에서 중앙 기준 양방향 분산
-  Object.values(yGroups).forEach(group=>{
-    if(group.length<=1)return;
-    const centerY=group.reduce((s,le)=>s+le.y,0)/group.length;
-    const spread=minGap*1.2; // 각 항목 간 간격
-    const totalSpread=(group.length-1)*spread;
-    const startY=centerY-totalSpread/2;
-    // 참조번호 순서로 정렬 (작은 번호 위)
-    group.sort((a,b)=>{
-      const na=parseInt(String(a.refNum).replace(/\D/g,''))||0;
-      const nb=parseInt(String(b.refNum).replace(/\D/g,''))||0;
-      return na-nb;
-    });
-    group.forEach((le,i)=>{
-      le.y=startY+i*spread;
-    });
-  });
-  
-  // Phase 2: 전체 정렬 후 최소 간격 강제
-  leaderEntries.sort((a,b)=>a.y-b.y);
-  for(let i=1;i<leaderEntries.length;i++){
-    if(leaderEntries[i].y-leaderEntries[i-1].y<minGap){
-      leaderEntries[i].y=leaderEntries[i-1].y+minGap;
-    }
-  }
-}
+// (제거됨 · cleanup) computeEdgeRoutes·staggerLeaderYPositions — 정의만 있고 호출 0(데드코드). 진단 DIAG-spec-quality-compliance D1.
 
 // Backward-compat: returns {x1,y1,x2,y2} for PPTX/Canvas L-shape routing
 function getConnectionPoints(fromBox,toBox){
@@ -1405,6 +1352,21 @@ function computeFig2Layout(displayNodes, edges, innerGrid, innerMaxCols, innerNu
   return{objects, frameW, frameH, contentW, contentH};
 }
 
+// ═══ S3(skill §8.2): 두 박스가 마주보는 변의 좌표 범위가 겹치면 → 연결선을 겹침밴드 중앙에 직선으로 접속 ═══
+// 반환: {axis:'h'|'v', fromDir, toDir, center} (겹침 없거나 대각 배치면 null)
+function _facingOverlapBand(fromBox,toBox){
+  const fx=fromBox._sx||fromBox.x, fy=fromBox._sy||fromBox.y, fw=fromBox._sw||fromBox.w, fh=fromBox._sh||fromBox.h;
+  const tx=toBox._sx||toBox.x, ty=toBox._sy||toBox.y, tw=toBox._sw||toBox.w, th=toBox._sh||toBox.h;
+  const yTop=Math.max(fy,ty), yBot=Math.min(fy+fh,ty+th);
+  const xLeft=Math.max(fx,tx), xRight=Math.min(fx+fw,tx+tw);
+  const yOv=yBot-yTop, xOv=xRight-xLeft;
+  if(fx+fw<=tx && yOv>0) return {axis:'h', fromDir:'right', toDir:'left',  center:(yTop+yBot)/2};
+  if(tx+tw<=fx && yOv>0) return {axis:'h', fromDir:'left',  toDir:'right', center:(yTop+yBot)/2};
+  if(fy+fh<=ty && xOv>0) return {axis:'v', fromDir:'bottom',toDir:'top',   center:(xLeft+xRight)/2};
+  if(ty+th<=fy && xOv>0) return {axis:'v', fromDir:'top',   toDir:'bottom',center:(xLeft+xRight)/2};
+  return null;
+}
+
 // ═══ v10.2: 연결선 끝점을 Shape 곡면 경계에 정확히 스냅 ═══
 // getOrthogonalRoute는 직사각형 nodeBox 기반이라 cloud/database/monitor 등
 // 곡면 shape에서 연결선이 shape 밖에서 시작/끝하는 문제를 수정
@@ -1443,7 +1405,29 @@ function _snapRouteToShapeAnchors(route,fromBox,toBox,offF,offT,allBoxes,coordTo
   const toAnc=_shapeAnchor(toST,toBox._sx||toBox.x,toBox._sy||toBox.y,
     toBox._sw||toBox.w,toBox._sh||toBox.h,toDir);
   const toAncX=toAnc.px, toAncY=toAnc.py;
-  
+
+  // ★ S3(skill §8.2): 직사각형 박스끼리 마주보는 변이 겹치면 → 겹침밴드 중앙에 직선으로 접속 ★
+  // 조건: (a) 양쪽 다 box 형(곡면 shape 제외) (b) 겹침밴드 존재 (c) 직선이 비퇴화(non-degenerate)
+  //       (d) 다른 박스를 관통하지 않음(_segmentIntersectsBox 로 장애물 가드)
+  if((fromBox._shapeType||'box')==='box' && (toBox._shapeType||'box')==='box'){
+    const _band=_facingOverlapBand(fromBox,toBox);
+    if(_band){
+      const _fa=_shapeAnchor(fromST,fromBox._sx||fromBox.x,fromBox._sy||fromBox.y,fromBox._sw||fromBox.w,fromBox._sh||fromBox.h,_band.fromDir);
+      const _ta=_shapeAnchor(toST,toBox._sx||toBox.x,toBox._sy||toBox.y,toBox._sw||toBox.w,toBox._sh||toBox.h,_band.toDir);
+      let sfx=_fa.px, sfy=_fa.py, stx=_ta.px, sty=_ta.py;
+      if(_band.axis==='h'){ sfy=_band.center; sty=_band.center; }
+      else { sfx=_band.center; stx=_band.center; }
+      if(Math.abs(sfx-stx)+Math.abs(sfy-sty) > _ct){
+        // ★ 장애물 가드: from/to 박스 자신은 제외(라우팅 박스 좌표 동일성으로 견고하게 식별 — 호출부가 id 없는 raw box 를 넘겨도 안전) ★
+        const _isEnd=(b)=>(b===fromBox||b===toBox||(b.x===fromBox.x&&b.y===fromBox.y&&b.w===fromBox.w&&b.h===fromBox.h)||(b.x===toBox.x&&b.y===toBox.y&&b.w===toBox.w&&b.h===toBox.h));
+        const _others=(allBoxes||[]).filter(b=>!_isEnd(b));
+        if(_others.every(b=>!_segmentIntersectsBox({x:sfx,y:sfy},{x:stx,y:sty},b,_ct))){
+          return [{x:sfx,y:sfy},{x:stx,y:sty}];
+        }
+      }
+    }
+  }
+
   // 5) 시작점 스냅
   r[0].x=fromAncX;
   r[0].y=fromAncY;

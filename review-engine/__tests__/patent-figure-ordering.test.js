@@ -213,8 +213,8 @@ test('③-3 ★ 미생성 예시도는 pending(대기)로 분리', () => {
 
 // ─────────── 소스 정합 ───────────
 
-test('소스 ★ ③-2 — push 2곳 모두 figNumOverride:0 필드 포함', () => {
-  assert.equal((PATENT_SRC.match(/figNum:0,figNumOverride:0,svgContent:''/g) || []).length, 2, '★ 수동추가+자동감지 push 둘 다');
+test('소스 ★ ③-2 — push 3곳 모두 figNumOverride:0 필드 포함', () => {
+  assert.equal((PATENT_SRC.match(/figNum:0,figNumOverride:0,svgContent:''/g) || []).length, 3, '★ 수동추가+자동감지+②보드미러(15H-3) push 셋 다');
 });
 
 test('소스 ★ ③-2 — 도 번호 지정 input(onchange=setConceptFigOverride)', () => {

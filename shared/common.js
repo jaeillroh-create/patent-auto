@@ -439,7 +439,12 @@ async function callVision(prompt,images,maxTokens=4096){
     return{text:parsed.text,stopReason:parsed.stopReason};
   }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃(3분)');throw e;}
 }
-async function callClaudeWithContinuation(prompt,pid){let full='',r=await callClaude(prompt),a=0;full=r.text;while(a<6&&r.stopReason==='max_tokens'){a++;showProgress(pid,`이어서 작성 중... (${a}/6)`,a,6);r=await callClaude(`아래 [마지막 부분]의 텍스트가 중간에 잘려 있다. 잘린 지점의 바로 다음부터 이어서 작성하라.\n- 마지막 단어가 불완전하면 해당 단어의 나머지 글자부터 시작하라.\n- [마지막 부분]의 내용을 반복하지 마라. 동일 문체.\n\n[마지막 부분]\n${full.slice(-2000)}`);const lc=full.slice(-1),fc=r.text[0]||'';if(/[가-힯a-zA-Z0-9]/.test(lc)&&/[가-힯a-zA-Z0-9]/.test(fc))full+=r.text;else full+='\n'+r.text;}clearProgress(pid);return full;}
+// ★ [배치15I-1c] 프로바이더별 안전 상한 내에서 cohesion 등 대용량 생성용 max_tokens 상향(단일 응답 절단 완화).
+//   gemini-flash 는 출력 8192 상한이라 유지, claude(sonnet/opus)·gpt(4o/mini)는 16000까지 상향.
+function safeMaxTokensLarge(){ try{ return selectedProvider==='gemini'?8192:16000; }catch(_e){ return 8192; } }
+// ★ [배치15I-1a/1c] maxTokens 선택 인자 + 절단 진단 노출 — 마지막 stopReason·이어쓰기 횟수·길이를 함수 속성(lastMeta)으로
+//   기록해 호출부(runUnifiedCohesionGen)가 finish_reason(length=절단 확정)·수신 길이를 완료 요약/콘솔에 표시할 수 있게 한다.
+async function callClaudeWithContinuation(prompt,pid,maxTokens){let full='',r=await callClaude(prompt,maxTokens),a=0;full=r.text;while(a<6&&r.stopReason==='max_tokens'){a++;showProgress(pid,`이어서 작성 중... (${a}/6)`,a,6);r=await callClaude(`아래 [마지막 부분]의 텍스트가 중간에 잘려 있다. 잘린 지점의 바로 다음부터 이어서 작성하라.\n- 마지막 단어가 불완전하면 해당 단어의 나머지 글자부터 시작하라.\n- [마지막 부분]의 내용을 반복하지 마라. 동일 문체.\n\n[마지막 부분]\n${full.slice(-2000)}`,maxTokens);const lc=full.slice(-1),fc=r.text[0]||'';if(/[가-힯a-zA-Z0-9]/.test(lc)&&/[가-힯a-zA-Z0-9]/.test(fc))full+=r.text;else full+='\n'+r.text;}clearProgress(pid);try{callClaudeWithContinuation.lastMeta={stopReason:(r&&r.stopReason)||'',attempts:a,truncated:!!(r&&r.stopReason==='max_tokens'),length:full.length};}catch(_e){}return full;}
 
 // ═══ FILE EXTRACTION ═══
 async function extractTextFromFile(file) {
@@ -466,7 +471,7 @@ Object.assign(App, {
   getProvider, getModelConfig, getModel, selectModel, selectProvider,
   updateModelToggle, updateProviderLabel, refreshClaudeModels, buildAPIRequest, parseAPIResponse,
   escapeHtml, showToast, showProgress, clearProgress, setButtonLoading,
-  showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation, callVision,
+  showScreen, ensureApiKey, callClaude, callClaudeSonnet, callClaudeWithContinuation, callVision, safeMaxTokensLarge,
   extractTextFromFile, extractPdfText, extractDocxText, extractXlsxText, formatFileSize,
   openProfileSettings, closeProfileSettings,
   REVIEW_ROLES, REVIEW_PROVIDERS, getProviderKeys, getEnteredProviders, getRoleAssignments, setRoleAssignment, saveRoleAssignments, getReviewAuth,

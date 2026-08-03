@@ -66,7 +66,7 @@ test('A1 ★ step_08c 프롬프트 — 예시도 전용(장치 메가룰 없음)
   assert.match(p, /\[장치 도면 설계\]의 어느 구성\(100~[^]*?어떻게 동작·구현되는지/, '★ 장치 구성에 의한 동작·구현');
   assert.match(p, /소프트웨어적 구성이 하드웨어\(장치 구성\)에 의해 구체적으로 동작·구현됨/, '★ SW→HW(§42)');
   assert.match(p, /실질적·예시적 시나리오\(동작 흐름\)/, '★ 실질 시나리오');
-  assert.match(p, /검색창\(51\)은 프로세서\(120\)가 실행하는 소프트웨어/, '예시(51↔120 — 도 5 → 5x)');
+  assert.match(p, /검색창\(51\)은 \[장치 도면 설계에 정의된 상위 구성요소\(NN\)\]에 의해/, '예시(51 ↔ 장치 구성요소 — 배치15K: 총칭어+번호 제거)');
 });
 
 test('A1 ★ step_08c 프롬프트 — 예시도 목록(도 5·6)·[장치 상세설명] 참고 주입', () => {
@@ -95,7 +95,7 @@ test('A1 ★ 예시도 없으면 생성 거부(가드)', async () => {
 test('A2 ★ buildSpecification — 발명을 실시하기 위한 구체적인 내용에 장치→예시→방법 순', () => {
   setCtx(`
     selectedTitle='검색 시스템'; diagramData={}; outputTimestamps={};
-    conceptDiagramTypes=[]; requiredFigures=[];
+    conceptDiagramTypes=[]; requiredFigures=[]; includeMethodClaims=true;
     outputs={
       step_06:'【청구항 1】 통신부(110)',
       step_08:'도 1을 참조하면, 통신부(110)가 데이터를 수신한다.',
@@ -113,7 +113,7 @@ test('A2 ★ buildSpecification — 발명을 실시하기 위한 구체적인 �
 
 test('A2 ★ step_08c 없으면 — 종전과 동일(장치+방법, no-op)', () => {
   setCtx(`
-    selectedTitle='검색 시스템'; diagramData={}; conceptDiagramTypes=[]; requiredFigures=[]; outputTimestamps={};
+    selectedTitle='검색 시스템'; diagramData={}; conceptDiagramTypes=[]; requiredFigures=[]; outputTimestamps={}; includeMethodClaims=true;
     outputs={step_06:'【청구항 1】 통신부(110)', step_08:'도 1을 참조하면, 통신부(110)가 동작한다.', step_12:'도 5를 참조하면, S510 단계.'};
   `);
   const spec = call('buildSpecification()');
