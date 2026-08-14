@@ -533,12 +533,14 @@ function _normComponentName(s){
     st=(typeof _cleanRefName==='function')?_cleanRefName(st):st;   // MOD 스트립이 새로 노출한 선행 지시어(상기 등) 재정리
     const toks=st.split(/\s+/).filter(Boolean);
     if(toks.length>1){
-      const _stop=/(하는|되는|하며|되며|하고|되고|하여|되어|된|및|또는|의|를|을|은|는|에서|으로|와|과|에|로|한)$/;
+      // ★ [배치20-10] 보조사(-에도/-까지 등)·의존명사(시/때) 정지 보강 — 부호표 명명 품질용. (a) 개명 게이트가
+      //   화이트리스트라 워크 갭이 더 이상 본문 삭제로 이어지지 않지만, 명칭 후보 자체는 짧을수록 좋다.
+      const _stop=/(하는|되는|하며|되며|하고|되고|하여|되어|된|및|또는|의|를|을|은|는|에서|으로|와|과|에|로|한|에도|에는|라도|까지|부터|조차|마저)$/;
       const keep=[];
       for(let k=toks.length-1;k>=0;k--){
         const w=toks[k];
         if(keep.length){
-          if(_stop.test(w)||/^(상기|그|본|해당|각|경우|이때|여기서|직후|직전)$/.test(w))break;
+          if(_stop.test(w)||/^(상기|그|본|해당|각|경우|이때|여기서|직후|직전|시|때)$/.test(w))break;
           if(/[가이]$/.test(w)&&w.length>=3)break;   // 명사+주격조사(3자↑ — 2자 내용어 추가·자가·차이 보존, 19b-2 동일)
         }
         keep.unshift(w);
@@ -653,9 +655,20 @@ function _enforceRefPlan(body, refPlan){
     let lead=rawName.slice(0, rawName.length-nm.length);
     const _li=rawName.lastIndexOf(nm); if(_li>=0)lead=rawName.slice(0,_li);
     const canon=numToName.get(numStr);
-    if(canon){ if(nm!==canon){ fixes++; return lead+canon+sp+'('+numStr+')'; } return whole; }   // (a) 번호 기준 명칭 교정
+    if(canon){
+      // ★ [배치20-10] (a) 개명 게이트 — 화이트리스트 전환. 종전엔 nm≠canon 이면 통째 치환했는데, 후방 워크의
+      //   정지 목록(블랙리스트)에 없는 토큰('경우에도'의 보조사 -에도, 의존명사 '시' 등)이 nm 에 흡수되면
+      //   그 문맥이 canonical 치환으로 삭제됐다(5차 외부 검토 실증 — 목록 보강으로는 다음 미등재 토큰에서
+      //   반드시 재발). 개명은 "nm 이 canonical 의 일부/변형임이 증명될 때"만 수행 — 삭제가 구조적으로 불가능.
+      const tN=_sp(nm), tC=_sp(canon);
+      if(tN===tC){ if(nm!==canon){ fixes++; return lead+canon+sp+'('+numStr+')'; } return whole; }   // 공백 변형 → 표기 통일
+      if(tN.endsWith(tC))return whole;                                    // 과캡처(문맥+정식 명칭) → 이미 정합, 문맥 보존
+      if(tC.endsWith(tN)&&tN.length>=2){ fixes++; return lead+canon+sp+'('+numStr+')'; }   // 축약 표기 → 정식 명칭으로 확장
+      if(_HW_BOILER_RE.test(tN)){ fixes++; return lead+canon+sp+'('+numStr+')'; }   // 하드웨어 상용어 단독 점유 → canonical(배치17 설계 유지 — 단일 토큰 캡처라 절 삭제 불가)
+      return whole;                                                       // 무관 명칭 → 개명 금지(실질 판단은 코드 몫이 아님 — 2차 패스가 번호 박탈/경고)
+    }
     const wantNum=_fuzzyNum(nm);
-    if(wantNum!=null){ fixes++; return lead+nm+sp+'('+wantNum+')'; }   // (b) 명칭 기준 번호 교정(공백·접미 변형 포함 — 배치20-7)
+    if(wantNum!=null){ fixes++; return lead+nm+sp+'('+wantNum+')'; }   // (b) 명칭 기준 번호 교정(공백·접미 변형 포함 — 배치20-7. nm 원형 유지라 삭제 불가)
     unknown.add(numStr); return whole;   // (c) 미정의 — 경고만
   });
   // ★ [배치20-7] (d) 비구성요소 명칭의 청구 부호 점유 박탈 — "단말(200)"에서 (200)이 refPlan상 다른 구성

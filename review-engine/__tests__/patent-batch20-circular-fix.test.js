@@ -402,8 +402,11 @@ test('★20-8f — 부호표 폴백(_refPairsFromText)도 동일 정규화(step_
   const pairs = JSON.parse(run(`JSON.stringify(_refPairsFromText(${JSON.stringify('판정 직후 상기 임계값의 충족 여부 판정부(171)가 동작한다. 임계값의 충족 여부 판정부(171)는 결과를 낸다.')}))`));
   const p171 = pairs.find(p => p.ref === 171);
   assert.ok(p171 && !/직후|상기/.test(p171.name), `★ 절 잔재 없는 명칭(실제 "${p171 && p171.name}" — 종전: "직후 상기 임계값의 충족 여부" 류가 부호의 설명에 등재)`);
+  // ★ [배치20-10 갱신] 무관 명칭(동의어) 개명은 실질 판단이라 코드가 하지 않는다 — 개명 대신 번호 박탈로 위임.
+  //   ("수신부(120)"를 "세그먼트 색인부(120)"로 바꾸면 그 문장이 색인부를 서술한다고 코드가 단정하는 셈 —
+  //    5차 검토에서 이 통치환 계열이 문맥 삭제('경우에도'·'시')의 원인으로 실증되어 화이트리스트 게이트로 전환.)
   const r = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify('수신부(120)는 패킷을 받는다.')}, ${JSON.stringify([{num:120,name:'세그먼트 색인부'}])}))`));
-  assert.ok(r.text.includes('세그먼트 색인부(120)'), '★ 정당한 canonical 치환(명칭만 다른 구성부 접미)은 유지 — 정합 기능 자체는 보존');
+  assert.ok(r.text.includes('수신부는 패킷을 받는다'), '★ 무관 명칭은 개명 금지 + 번호 박탈(문장 불변 — 실질 정정은 검증기→FIX_TARGETS→LLM 레인)');
 });
 
 // ═══ [배치20-9] 3차 외부 검토(별개 출원 v3) 반영 — 잔존 근본 원인 3건 종결 ═══
@@ -439,4 +442,38 @@ test('★20-9c — 비구성 어미 번호 박탈은 refPlan 소유 여부와 �
 test('★20-9d — 도면 소개문 프롬프트에 [대상] 소속 규칙 명문화(하위 구성부 소유격 오류 예방)', () => {
   assert.match(PATENT_SRC, /소속을 뒤바꾸는 표현을 금지/, '★ "A부(110)의 B부(150)" 소속 오류 금지 규칙');
   assert.match(PATENT_SRC, /본 발명의 일 실시예에 따른 \$\{getDeviceSubject\(\)\}\(100\)/, '★ 세부 도면 [대상]의 기본 주어 지정');
+});
+
+// ═══ [배치20-10] 개명 게이트 화이트리스트 전환 — 삭제 불가능성의 구조화(5차 외부 검토 반영) ═══
+// 실증: '경우에도'(보조사 -에도)·'시'(의존명사)가 후방 워크 정지 목록에 없어 명칭에 흡수 → 규칙 (a) 통치환으로
+// 문맥 삭제가 현행 코드에서도 재현됐다. 블랙리스트 보강은 다음 미등재 토큰에서 반드시 재발하므로, (a)를
+// "nm 이 canonical 의 일부/변형임이 증명될 때만 개명"하는 화이트리스트로 전환 — 워크 완전성과 무관하게
+// 본문 삭제가 구조적으로 불가능해진다. 하드웨어 상용어 단독 개명(배치17 설계·단일 토큰)은 유지.
+
+test('★20-10a — 보조사·의존명사 문맥 보존("경우에도"·"시" — 5차 검토 실측 문형 불변)', () => {
+  const plan = [{num:150,name:'표본 충분성 판정부'},{num:170,name:'대체 참조 산출부'}];
+  const s1 = '후자의 경우에도 표본 충분성 판정부(150)의 3상태 판정이 동일한 규율로 작동하므로';
+  const s2 = '검증 미통과 시 대체 참조 산출부(170)의 결과로 다시 전환하므로';
+  [s1,s2].forEach((s,i) => {
+    const r = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify(s)}, ${JSON.stringify(plan)}))`));
+    assert.strictEqual(r.text, s, `★ 문형 ${i+1} 불변(종전: "경우에도 "·"시 " 삭제 — 워크 블랙리스트 갭)`);
+  });
+});
+
+test('★20-10b — 개명 게이트: 과캡처는 불변, 축약은 확장, 공백 변형은 통일, HW 상용어는 canonical(배치17 유지)', () => {
+  const plan = [{num:100,name:'제어부'},{num:130,name:'세그먼트 색인부'}];
+  const over = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify('워크가 놓치는 임의문맥토큰 세그먼트 색인부(130)가 동작한다.')}, ${JSON.stringify(plan)}))`));
+  assert.ok(over.text.includes('임의문맥토큰 세그먼트 색인부(130)'), '★ 과캡처(문맥+정식 명칭) → 불변(endsWith 게이트 — 워크 갭과 무관하게 삭제 불가)');
+  const abbr = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify('상기 색인부(130)가 조회한다.')}, ${JSON.stringify(plan)}))`));
+  assert.ok(abbr.text.includes('세그먼트 색인부(130)'), '★ 축약 표기 → 정식 명칭 확장(치환 대상이 canonical 접미 조각뿐 — 절 삭제 불가)');
+  const sp = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify('세그먼트색인부(130)가 동작한다.')}, ${JSON.stringify(plan)}))`));
+  assert.ok(sp.text.includes('세그먼트 색인부(130)'), '★ 공백 변형 → canonical 표기 통일');
+  const hw = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify('상기 프로세서(100)는 연산한다.')}, ${JSON.stringify(plan)}))`));
+  assert.ok(hw.text.includes('제어부(100)'), '★ 하드웨어 상용어 단독 점유 → canonical 개명 유지(단일 토큰 — 배치17 계약)');
+});
+
+test('★20-10c — 워크 정지 보강(-에도·까지·시·때)이 부호표 명명에 반영(본문 안전은 게이트가 담당)', () => {
+  assert.strictEqual(run(`_normComponentName(${JSON.stringify('경우에도 표본 충분성 판정부')})`), '표본 충분성 판정부', '★ 보조사 -에도 정지');
+  assert.strictEqual(run(`_normComponentName(${JSON.stringify('시 대체 참조 산출부')})`), '대체 참조 산출부', '★ 의존명사 시 정지');
+  assert.strictEqual(run(`_normComponentName(${JSON.stringify('온도 감지부')})`), '온도 감지부', '★ 도-끝 정상 명사(온도)는 보존(어절 전체 매칭이라 오탐 없음)');
 });
