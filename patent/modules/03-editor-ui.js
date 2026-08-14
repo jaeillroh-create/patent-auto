@@ -539,26 +539,34 @@ const STEP_DEPENDENCIES={
   // ═══ [배치13-4] 순방향 원칙 — "상류 산출물이 바뀌면 그로부터 파생된 하류 산출물이 stale"만 등록한다.
   //   역설계(해결수단→과제, 과제→효과·배경) 같은 "하류→상류" 역방향 잔재는 제거(변경 전파 방향 혼란·거짓 stale 유발).
   //   ★ 효과(16)·해결수단(17)은 청구항(06)에서 직접 파생 → step_06 하류에 직접 등록(과거 step_05 경유 제거).
-  step_01:{MUST:['step_06'],SHOULD:['step_02','step_03','step_04','step_05']}, // 명칭 → 청구항 + 하위 스텝
-  step_06:{MUST:['step_10','step_07','step_07c','step_17'],SHOULD:['step_08','step_11','step_14','step_15','step_16','step_19','step_20']}, // 장치청구 → 방법,도면,개념도,해결수단(17),상세,효과(16),대안,특허성,요약,기록매체
-  step_10:{MUST:['step_11','step_12','step_17','step_20'],SHOULD:['step_14','step_15','step_18']}, // 방법청구 → 방법도면,상세,해결수단,기록매체
-  step_07:{MUST:['step_08','step_18'],SHOULD:['step_09','step_13']},     // 장치도면 → 상세설명, 부호(step_18 확인)
+  // ═══ [배치20-2] 검토·검증 노드 그래프 분리 — 콘텐츠만 남긴다 ═══
+  //   AI 검토(step_13)·특허성(step_15)·대안청구(step_14)는 "콘텐츠"가 아니라 문서에 대한 "파생 검사"다.
+  //   이들을 콘텐츠와 같은 그래프에 두면: 본문 재작성 → 검토 '재생성 필수'(빨강) → 검토 재실행 →
+  //   특허성 '권장' → 특허성 → 본문 '보완'(15→08 역류 엣지) → 재작성 → … 의 실순환이 생긴다
+  //   (종전 그래프에 step_08→13→15→08 사이클 실재, topologicalSort 순환 폴백이 그 증거).
+  //   검토의 최신성은 ④ 버튼이 매 실행마다 진단을 새로 돌려 보장하므로 stale 배지가 필요 없다.
+  //   또한 13→04 엣지는 데이터 흐름과 반대인 허구 엣지였다(step_04는 명칭·발명내용만 읽고,
+  //   반대로 step_13이 step_04를 소비) — 'E2 재생성 권장' 거짓 배너의 원인으로 제거.
+  step_01:{MUST:['step_06'],SHOULD:['step_02','step_03','step_04','step_05']}, // 명칭 → 청구항 + 하위 스텝(선행기술 검색은 명칭 기반 — 진짜 의존)
+  step_06:{MUST:['step_10','step_07','step_07c','step_17'],SHOULD:['step_08','step_11','step_16','step_19','step_20']}, // 장치청구 → 방법,도면,개념도,해결수단(17),상세,효과(16),요약,기록매체
+  step_10:{MUST:['step_11','step_12','step_17','step_20'],SHOULD:['step_18']}, // 방법청구 → 방법도면,상세,해결수단,기록매체
+  step_07:{MUST:['step_08','step_18'],SHOULD:['step_09']},               // 장치도면 → 상세설명, 부호(step_18 확인)
   step_07c:{MUST:['step_08','step_08c','step_18'],SHOULD:[]},            // 예시도 → 장치상세, 예시도상세, 부호
-  step_08:{MUST:['step_08c','step_09','step_13'],SHOULD:['step_12','step_14','step_15']}, // ★ [T2] 상세설명 → 예시도상세(전제 순서: 장치→예시), 수학식, 검토
+  step_08:{MUST:['step_08c','step_09'],SHOULD:['step_12']},              // ★ [T2] 상세설명 → 예시도상세(전제 순서: 장치→예시), 수학식
   step_08c:{MUST:[],SHOULD:['step_18']},                                 // ★ 예시도 상세설명(분리) → 부호의 설명
-  step_09:{MUST:[],SHOULD:['step_13']},                    // 수학식 → 검토
-  step_11:{MUST:['step_12','step_18'],SHOULD:['step_13']},  // 방법도면 → 방법상세, 부호
-  step_12:{MUST:['step_13'],SHOULD:[]},                    // 방법상세 → 검토
+  step_09:{MUST:[],SHOULD:[]},                             // 수학식 (종단 — 검토는 파생 검사)
+  step_11:{MUST:['step_12','step_18'],SHOULD:[]},          // 방법도면 → 방법상세, 부호
+  step_12:{MUST:[],SHOULD:[]},                             // 방법상세 (종단)
   step_17:{MUST:[],SHOULD:[]},                             // 과제의 해결 수단(종단 — [배치13-4] 역방향 step_05 제거)
   step_05:{MUST:[],SHOULD:[]},                             // 해결하고자 하는 과제(종단 — [배치13-4] 역방향 step_16·step_03 제거)
   step_16:{MUST:[],SHOULD:[]},                             // 효과 (종단)
   step_03:{MUST:[],SHOULD:['step_02']},                    // 배경기술 → 기술분야
   step_02:{MUST:[],SHOULD:[]},                             // 기술분야 (종단)
-  step_13:{MUST:[],SHOULD:['step_15','step_04']},           // 검토 → 특허성, 선행기술
-  step_04:{MUST:[],SHOULD:['step_15']},                    // 선행기술 → 특허성
-  step_15:{MUST:[],SHOULD:['step_14','step_08','step_09','step_12']}, // 특허성 → 대안, 보완
+  step_13:{MUST:[],SHOULD:[]},                             // AI 검토 (그래프 분리 — 파생 검사, ④가 매번 새로 실행)
+  step_04:{MUST:[],SHOULD:[]},                             // 선행기술 검색 결과 (종단)
+  step_15:{MUST:[],SHOULD:[]},                             // 특허성 검토 (그래프 분리 — 종전 15→08/09/12 역류 엣지가 순환 폐쇄점이었음)
   step_20:{MUST:['step_17'],SHOULD:[]},                    // 기록매체 → 해결수단
-  step_14:{MUST:[],SHOULD:[]},                             // 대안청구 (종단)
+  step_14:{MUST:[],SHOULD:[]},                             // 대안청구 (그래프 분리)
   step_18:{MUST:[],SHOULD:[]},                             // 부호 (종단)
   step_19:{MUST:[],SHOULD:[]},                             // 요약서 (종단)
 };
@@ -1665,9 +1673,30 @@ function _wfProgressRender(){
     }
     const el=document.getElementById('wfRewriteElapsed');
     if(el&&_wfProgT0){ let sec=0; try{sec=Math.max(0,Math.round((Date.now()-_wfProgT0)/1000));}catch(_e){} el.textContent='경과 '+Math.floor(sec/60)+'분 '+(sec%60)+'초'; }
+    // ★ [배치20-3] 서브 진행 미러 — 실제 진행바(#progressUnifiedGen 등)는 탭④ 내부에 렌더되어 전면 오버레이에
+    //   가려 보이지 않았다("③ 재작성"이 수십 분간 무갱신 → 멈춘 것처럼 보임). 1초 타이머가 최신 진행 라벨
+    //   (분할 n/2·이어쓰기 a/6·재요청 등)을 오버레이 안으로 복사한다.
+    try{
+      const sp=document.getElementById('wfRewriteSubProgress');
+      if(sp){
+        let txt='';
+        ['progressUnifiedGen','progressStep13'].some(function(pid){ const pe=document.getElementById(pid); const t=pe&&pe.textContent?String(pe.textContent).trim():''; if(t){txt=t;return true;} return false; });
+        sp.textContent=txt?('· '+txt.slice(0,80)):'';
+      }
+    }catch(_e){}
   }catch(_e){}
 }
 function _wfProgressClose(){ try{ const ov=document.getElementById('wfRewriteOverlay'); if(ov)ov.style.display='none'; if(_wfProgTimer){clearInterval(_wfProgTimer);_wfProgTimer=null;} }catch(_e){} }
+// ★ [배치20-3] 사용자 중단 — 진행 중 플래그를 세우면 각 실행 루프(라운드 경계·논리 호출 경계·이어쓰기 루프)가
+//   다음 경계에서 멈춘다(진행 중인 HTTP 1건은 완료까지 대기 — 마지막 커밋 상태는 항상 보존).
+function _wfRequestCancel(){
+  try{
+    window._wfCancelRequested=true;
+    const note=document.getElementById('wfRewriteOverlayNote');
+    if(note)note.innerHTML='<b style="color:var(--color-error,#D94A4A)">중단 요청됨</b> — 진행 중인 호출이 끝나는 대로 멈춥니다(마지막 저장 상태 유지).';
+    const b=document.getElementById('btnWfCancel'); if(b)b.disabled=true;
+  }catch(_e){}
+}
 // ★ [배치19b-5] 실행 로그 — 재작성·진단·통합생성 이력 누적(성공/실패 사유). ④⑤ 접이식 패널 표시 + 재생성 반복 판정(item4 승격).
 function _pushRunLog(action, ok, detail){
   try{
@@ -1704,18 +1733,29 @@ async function wfRewriteWithFixes(opts){
     const _snap=(typeof _snapshotBodyOutputs==='function')?_snapshotBodyOutputs():null;
     const _hasReview=!!(typeof outputs!=='undefined'&&outputs.step_13&&String(outputs.step_13).trim());
     App.showToast('결함 반영 재작성 — 기계검증 '+_beforeN+'건'+(_hasReview?' + AI 진단 1건':'')+' 반영(최대 2회)','info');
-    let remain=_before, round=0;
+    let remain=_before, round=0, _genFail=null;
     try{
       while(round<2){
+        // ★ [배치20-3] 사용자 중단 — 오버레이 '중단' 버튼이 세운 플래그를 라운드 경계에서 확인.
+        if(typeof window!=='undefined'&&window._wfCancelRequested){ _genFail='사용자 중단'; break; }
         round++;
         _pendingFixTargets=(typeof _buildFixTargets==='function')?_buildFixTargets(remain):'';
         _pendingReviewNotes=(_hasReview&&round===1)?String(outputs.step_13):'';
-        await runUnifiedCohesionGen({chained:true, rewrite:true, _locked:true});
+        const _res=await runUnifiedCohesionGen({chained:true, rewrite:true, _locked:true});
+        // ★ [배치20-2] 실패 감지 — 종전엔 cohesion 이 무커밋 실패(블록 누락·수학식 게이트)해도 감지하지 못하고
+        //   round 2에서 동일한 전체 생성을 그대로 반복했다(결정론적 실패면 비용 2배·해소 0). 실패면 즉시 중단.
+        if(!_res||_res.committed===false){ _genFail=(_res&&_res.reason)||'생성 실패(무커밋)'; break; }
         let _after=[]; try{ _after=validateSpecification(buildSpecification()); }catch(_e){}
         remain=_after;
         if(!remain.length)break;   // 전부 해소 → 종료(2회 소진 전에도)
       }
     }finally{ _pendingFixTargets=''; _pendingReviewNotes=''; }
+    if(_genFail){
+      App.showToast('결함 반영 재작성 중단 — '+_genFail+' (이전 본문 유지)','error');
+      try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:false, cause:_genFail}); }catch(_e){}
+      try{renderWorkflowRail();renderWfValidationBar();_updateRewriteBtn();}catch(_e){}
+      return;
+    }
     // ★ [배치19-3] 악화 판정 — HIGH/CRITICAL 이 재작성 전보다 늘었으면 커밋 유지 여부를 사용자에게 확인(기본: 이전 유지).
     const _afterSev=(typeof _sevCounts==='function')?_sevCounts(remain):{high:remain.length,crit:0};
     const _worse=(_afterSev.crit>_beforeSev.crit)||(_afterSev.crit===_beforeSev.crit&&_afterSev.high>_beforeSev.high);
@@ -1733,8 +1773,14 @@ async function wfRewriteWithFixes(opts){
     }
     const _remainKeys=new Set(remain.map(_issueKey));
     const _resolved=_before.filter(function(b){return !_remainKeys.has(_issueKey(b));}).length;
-    App.showToast('결함 반영 재작성 완료 — 기계검증 '+_beforeN+'건 중 '+_resolved+'건 해소'+(remain.length?(' · '+remain.length+'건 잔존'):' · 전부 해소'),remain.length?'warning':'success');
-    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:0, gateWarn:[], fixSummary:{before:_beforeN, resolved:_resolved, remain:remain.length, rounds:round}}); }catch(_e){}
+    // ★ [배치20-2] 잔존을 기존/신규로 구분 — 종전 "18건 중 16건 해소·10건 잔존" 식 표기는 재작성이 새로 만든
+    //   결함이 잔존에 섞여 수치가 왜곡됐다(실제: 기존 잔존 2 + 신규 유입 8). 구분 표기로 원인을 가시화.
+    const _beforeKeys=new Set(_before.map(_issueKey));
+    const _remainOld=remain.filter(function(x){return _beforeKeys.has(_issueKey(x));}).length;
+    const _remainNew=remain.length-_remainOld;
+    const _remainMsg=remain.length?(' · 잔존 '+remain.length+'건(기존 '+_remainOld+(_remainNew?('·신규 유입 '+_remainNew):'')+')'):' · 전부 해소';
+    App.showToast('결함 반영 재작성 완료 — 기계검증 '+_beforeN+'건 중 '+_resolved+'건 해소'+_remainMsg,remain.length?'warning':'success');
+    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:0, gateWarn:[], fixSummary:{before:_beforeN, resolved:_resolved, remain:remain.length, remainOld:_remainOld, remainNew:_remainNew, rounds:round}}); }catch(_e){}
     try{renderWorkflowRail();renderWfValidationBar();_updateRewriteBtn();}catch(_e){}
   }catch(e){ try{_pendingFixTargets='';_pendingReviewNotes='';}catch(_e){} try{App.showToast('결함 반영 재작성 실패: '+(e&&e.message||e),'error');}catch(_e2){} }
   finally{ if(_own)_releaseRewriteLock(); }
@@ -1751,6 +1797,7 @@ async function wfDiagnoseAndRewrite(opts){
   if(_own===null){ App.showToast('이미 처리 중입니다 — 완료 후 다시 시도하세요','info'); return; }
   if(!(typeof outputs!=='undefined'&&outputs.step_06)){ if(_own)_releaseRewriteLock(); App.showToast('먼저 ③ 청구항·도면(골격)을 생성하세요','error');return;}
   try{
+    try{ window._wfCancelRequested=false; const _cb=document.getElementById('btnWfCancel'); if(_cb)_cb.disabled=false; }catch(_e){}   // ★ [배치20-3] 중단 플래그 리셋
     if(typeof _wfProgressStart==='function')_wfProgressStart();   // ★ [배치19-2] 진행 오버레이 시작
     if(typeof _wfProgressStep==='function')_wfProgressStep('collect','done');   // ① 기계검증 수집(재작성 진입 시 집계)
     // ① AI 진단(step_13) — 문서 불변, 결과만 생성(타임아웃 시 16.1 축약 재시도 내장). 실패해도 기계검증 반영은 진행.
@@ -1765,7 +1812,7 @@ async function wfDiagnoseAndRewrite(opts){
     if(typeof _wfProgressStep==='function'){ _wfProgressStep('rewrite','done'); _wfProgressStep('recheck','done'); }
     if(typeof _wfProgressDone==='function')_wfProgressDone(true);
   }catch(e){ try{ if(typeof _wfProgressDone==='function')_wfProgressDone(false,(e&&e.message||String(e))); }catch(_e){} try{App.showToast('진단·재작성 실패: '+(e&&e.message||e),'error');}catch(_e){} }
-  finally{ if(_own)_releaseRewriteLock(); }
+  finally{ if(_own)_releaseRewriteLock(); try{ window._wfCancelRequested=false; }catch(_e){} }
 }
 // ★ [배치16-3] 통합 재작성 버튼 라벨/활성 — 골격(step_06) 있으면 활성, 반영 대상(기계검증·AI 진단) 카운트 표시.
 function _updateRewriteBtn(){

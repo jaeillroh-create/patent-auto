@@ -381,15 +381,28 @@ const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_0
     }
     return best;
   }
-  App.callClaudeWithContinuation = async function(prompt, pid){
-    let full = '', r = await App.callClaude(prompt), a = 0;
+  // ★ [배치20-1] 시그니처 3인자 복원 — 종전 (prompt, pid) 2인자 오버라이드가 05가 넘기는
+  //   safeMaxTokensLarge()=16000을 조용히 버려 전 호출이 기본 8192로 나갔고(고분량 목표 22천자+ 대비
+  //   절단→이어쓰기 6회 구조적 발동), lastMeta 미기록으로 절단 진단(15I-1a)이 실명 상태였다.
+  App.callClaudeWithContinuation = async function(prompt, pid, maxTokens){
+    let full = '', r = await App.callClaude(prompt, maxTokens), a = 0;
     full = r.text;
 
+    // ★ [배치20-1] 낭비 루프 조기 중단 — 재시작·무진전이 연속 2회면 이어쓰기를 접는다.
+    //   (관측: 이어쓰기 4회가 각각 987/334/198/68자만 채택되고 수천 자를 폐기하며 계속 돌았다)
+    let _stallStrikes = 0, _restartStrikes = 0;
+
     while(a < 6 && r.stopReason === 'max_tokens'){
+      // ★ [배치20-3] 사용자 중단 — 이어쓰기 루프 경계에서 확인(지금까지 받은 부분은 보존·반환).
+      if(typeof window !== 'undefined' && window._wfCancelRequested){ console.warn('[v20 이어쓰기] 사용자 중단 — 이어쓰기 중지'); break; }
       a++;
       App.showProgress(pid, `이어서 작성 중... (${a}/6)`, a, 6);
 
-      const rulesCtx = prompt.slice(0, 800);
+      // ★ [배치20-1] 규칙 컨텍스트 = 앞 800자 + 끝 700자 — 분할 생성의 범위 제한·센티넬 출력 계약은
+      //   프롬프트 끝에 있어 앞 800자만 넘기면 유실되고, 모델이 문서 전체를 도 1부터 재시작한다.
+      const _rulesHead = prompt.slice(0, 800);
+      const _rulesTail = prompt.length > 1500 ? prompt.slice(-700) : '';
+      const rulesCtx = _rulesTail ? _rulesHead + '\n…(중략)…\n' + _rulesTail : _rulesHead;
 
       const figRefs = [...full.matchAll(/도\s+(\d+)[을를]\s*참조하면/g)];
       const stepRefs = [...full.matchAll(/단계\s*\(?(S\d+)\)?/g)];
@@ -427,6 +440,8 @@ ${progressInfo}
 
 ⛔ 이어쓰기 금지사항:
 - 이미 작성된 도면/단계를 다시 설명하지 마라
+- 문서를 처음부터 다시 시작하지 마라 (첫 도면·첫 블록 재출력 절대 금지)
+- 출력 계약에 <<<블록>>> 센티넬이 있으면, 이미 출력된 블록을 재출력하지 말고 잘린 블록의 나머지와 남은 블록만 이어서 완성하라
 - "도면의 간단한 설명" (도 N은 ~블록도이다) 절대 포함 금지
 - 새로운 섹션/항목(기술분야, 배경기술, 요약 등) 추가 금지
 - 현재 작성 중인 항목의 나머지만 이어서 작성하라
@@ -434,7 +449,7 @@ ${progressInfo}
 [마지막 부분]
 ${tail}`;
 
-      r = await App.callClaude(contPrompt);
+      r = await App.callClaude(contPrompt, maxTokens);
       let newText = r.text;
 
       // ★ v20: 겹침(overlap) 감지 — full 끝부분과 newText 시작부분이 동일한 문자열이면 제거 ★
@@ -445,10 +460,12 @@ ${tail}`;
       }
 
       // ★ v20: "도 N을 참조하면" 재시작 감지 — 상세설명에서만 적용 (검토는 제외) ★
+      let _restartHit = false;
       if(!_isReview && figRefs.length > 0){
         const writtenFigs = new Set(figRefs.map(m => m[1]));
         const newFigStart = newText.match(/도\s+(\d+)[을를]\s*참조하면/);
         if(newFigStart && writtenFigs.has(newFigStart[1])){
+          _restartHit = true;
           const cutAt = newFigStart.index;
           if(cutAt > 20){
             newText = newText.substring(0, cutAt).trim();
@@ -465,6 +482,17 @@ ${tail}`;
         break;
       }
 
+      // ★ [배치20-1] 연속 낭비 감지 — 재시작이 연속 2회이거나 채택분이 80자 미만 연속 2회면
+      //   더 돌려봐야 회당 수 분을 들여 수백 자만 건지는 낭비이므로 남은 이어쓰기를 포기한다.
+      _restartStrikes = _restartHit ? _restartStrikes + 1 : 0;
+      _stallStrikes = (newText.trim().length < 80) ? _stallStrikes + 1 : 0;
+      if(_restartStrikes >= 2 || _stallStrikes >= 2){
+        const _joinTight = /[가-힯ㄱ-ㆎa-zA-Z0-9]/.test(full.slice(-1)) && /[가-힯ㄱ-ㆎa-zA-Z0-9]/.test(newText[0] || '');
+        full += (_joinTight ? '' : '\n') + newText;
+        console.warn(`[v20 이어쓰기] 연속 낭비 감지(재시작 ${_restartStrikes}·무진전 ${_stallStrikes}) — 이어쓰기 조기 종료`);
+        break;
+      }
+
       // v20: 이어붙이기 — 마지막 문자가 한글/영문이고 newText 첫 문자도 한글/영문이면 공백 없이 직접 연결 (단어 이어쓰기)
       const lastChar = full.slice(-1);
       const firstChar = newText[0] || '';
@@ -478,6 +506,9 @@ ${tail}`;
       }
     }
     App.clearProgress(pid);
+    // ★ [배치20-1] lastMeta 기록(15I-1a 계약 복원) — 05:1888 진단 로그가 이어쓰기 횟수·finish_reason을
+    //   읽을 수 있게 한다(종전 오버라이드는 미기록이라 항상 "0회, finish_reason=?"로 찍혔다).
+    try{ App.callClaudeWithContinuation.lastMeta = { stopReason: (r && r.stopReason) || '', attempts: a, truncated: !!(r && r.stopReason === 'max_tokens'), length: full.length }; }catch(_e){}
     return full;
   };
 })();

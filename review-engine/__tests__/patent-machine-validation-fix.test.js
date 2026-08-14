@@ -97,9 +97,13 @@ test('★ FIXABLE_CHECKS / _FINAL_ONLY_CHECKS 멤버십', () => {
 
 // ─────────── 소스 배선 검증 ───────────
 
-test('★ 소스 — Step13(buildPrompt) 에 machineFindingsForReview 주입', () => {
-  assert.match(PATENT_SRC, /case 'step_13':\{[\s\S]*?machineFindingsForReview\(\)/, '★ step_13 케이스가 findings 계산');
-  assert.match(PATENT_SRC, /기계검증이 발견한 결정론적 결함/, '★ 주입 배너 존재');
+test('★ 소스 — [배치20-2 갱신] Step13 은 기계결함을 재서술하지 않는다(이중 주입 제거)', () => {
+  // [배치20-2] 역할 분리 — 기계결함은 FIX_TARGETS 로만 재작성에 주입된다. 종전 machineFindingsForReview 주입은
+  //   같은 결함이 REVIEW_NOTES(AI 재서술)와 FIX_TARGETS(기계 원본)로 이중 주입되어 서로 다른 지시가 충돌하던 원인.
+  const _s13=PATENT_SRC.slice(PATENT_SRC.indexOf("case 'step_13':"), PATENT_SRC.indexOf("case 'step_14':"));
+  assert.ok(!_s13.includes('machineFindingsForReview()'), '★ step_13 프롬프트에서 기계결함 주입 호출 제거(주석 언급 제외)');
+  assert.ok(!_s13.includes('기계검증이 발견한 결정론적 결함'), '★ 주입 배너 제거');
+  assert.match(_s13, /역할 분담\(중요\)/, '★ 역할 분리 지시 존재(형식·정합 지적 금지)');
 });
 
 test('★ 소스(배치15D-1) — ⑤ AI 수정 버튼 제거·④ 재생성 안내로 일원화, fixSpecValidationIssues는 레거시 존치', () => {

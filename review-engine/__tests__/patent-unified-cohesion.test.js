@@ -188,8 +188,13 @@ test('★ grab — 마커 줄 후행 공백/들여쓰기 tolerance(유효 생성
 });
 
 // (F/G) 커밋 후처리 배선(소스)
-test('★ 소스 — 함께 재생성한 step_12 false-stale 배지 제거 + 수학식 재삽입 경고', () => {
-  assert.match(PATENT_SRC, /stale-warning\[data-step="step_12"\]/, '★ (F) step_12 false-stale 배지 제거');
+test('★ 소스 — [배치20-2 갱신] 커밋 말미 자기 무효화 제거(false-stale DOM 땜질 불필요) + 수학식 재삽입 경고', () => {
+  // [배치20-2] 통합 커밋은 하류 전부를 같은 트랜잭션에서 재생성/파생하므로 invalidateDownstream('step_08')
+  //   호출 자체를 제거 — 방금 소비한 진단(step_13)을 '재생성 필수'로 재점등하던 순환 배너의 출발점이었고,
+  //   step_12 false-stale 배지를 DOM 제거로 땜질하던 코드도 함께 불필요해짐.
+  const _uc=PATENT_SRC.slice(PATENT_SRC.indexOf('async function runUnifiedCohesionGen'), PATENT_SRC.indexOf('async function runUnifiedFullChain'));
+  assert.ok(!/invalidateDownstream\('step_08'\);/.test(_uc), '★ (F) 커밋 말미 자기 무효화 호출 제거(주석 언급 제외)');
+  assert.ok(!/stale-warning\[data-step="step_12"\]/.test(_uc), '★ (F) step_12 배지 DOM 땜질 제거');
   assert.match(PATENT_SRC, /hadMath=!!outputs\.step_09/, '★ (G) 수학식 존재 캡처');
   assert.match(PATENT_SRC, /기존 수학식\(Step 9\)은 새 상세설명에 재삽입이 필요/, '★ (G) 수학식 소실 경고');
 });

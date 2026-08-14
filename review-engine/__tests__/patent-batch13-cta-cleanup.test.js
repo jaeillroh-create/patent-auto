@@ -92,15 +92,17 @@ test('★ 2(배치14) — 관문 카드 소멸: Step14는 ③ 고급, Step15·�
   const adv2 = p2.slice(adv2open, p2.indexOf('</details>', adv2open));
   assert.ok(adv2open >= 0 && adv2.includes('id="btnStep14"'), '★ Step14 wfAdv2 details 안(containment)');
 });
-test('★ 1/3 — Phase D·검토반영이 ④ 고급(wfAdv3)으로, 주 흐름은 통합생성+AI검토', () => {
+test('★ 1/3 — [배치20-2 갱신] 레거시 Phase D·검토반영 CTA 완전 제거, 주 흐름은 통합생성+AI검토', () => {
   const p3 = HTML_SRC.slice(HTML_SRC.indexOf('id="page3"'), HTML_SRC.indexOf('id="page4"'));
-  assert.match(p3, /<details class="wf-adv" id="wfAdv3">[\s\S]*?id="btnPhaseD"[\s\S]*?id="btnApplyReview"[\s\S]*?<\/details>/, '★ Phase D·검토반영 고급 내부');
-  // 주 흐름(고급 이전)에 btnPhaseD·btnApplyReview 없음
-  const mainFlow = p3.slice(0, p3.indexOf('id="wfAdv3"'));
-  assert.ok(!mainFlow.includes('id="btnPhaseD"') && !mainFlow.includes('id="btnApplyReview"'), '★ 주 흐름에서 제거');
+  // ★ [배치20-2] 고급(wfAdv3) 자체 제거 — 역설계(runPhaseD)·검토반영(applyReview)은 ④와 동일 슬롯을
+  //   경고 없이 덮어쓰는 경쟁 기록자였다. 버튼·패널을 전부 제거하고 ④ 단일 경로로 일원화.
+  assert.ok(!p3.includes('id="wfAdv3"'), '★ 레거시 고급 패널 제거');
+  assert.ok(!p3.includes('id="btnPhaseD"') && !p3.includes('id="btnApplyReview"'), '★ 레거시 버튼 제거');
+  const mainFlow = p3;
   assert.match(mainFlow, /id="btnWfRewriteFixes"[\s\S]*id="btnStep13"/, '★ 주 흐름 = 결함 반영 재작성 + 명세서 진단(배치16)');
   // ★ [배치15L-1] 진단 카드에서 중복 재생성 버튼 제거(재작성 진입점 1개로 일원화) — 진단은 '문서 불변' 명시
   assert.match(mainFlow, /명세서 진단 \(AI\)[\s\S]{0,400}문서는 변경되지 않습니다/, '★ 진단 카드(문서 불변 명시)');
   assert.ok(!/onclick="wfRunStage4\(\)"[\s\S]{0,200}검토 반영 = ④ 본문 통합 재생성/.test(mainFlow), '★ 진단 카드의 중복 재생성 버튼 제거');
-  assert.match(p3, /①\(Step 2~5\)·④\(통합 생성\)와 동일 항목[\s\S]{0,80}중복 실행 시 마지막 결과가 덮어씁니다/, '★ 역설계 중복 경고');
+  // ★ [배치20-2] 역설계 카드가 통째로 제거됐으므로 "중복 경고" 배너도 함께 소멸(경쟁 기록자 자체가 없음).
+  assert.ok(!p3.includes('runPhaseD()'), '★ 역설계 실행 배선 제거');
 });
