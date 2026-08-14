@@ -1735,7 +1735,11 @@ function _fixSummaryText(fs){
     if(!fs)return '';
     if(fs.reverted)return '기계검증 '+fs.before+'건 — 재작성이 결함을 늘려 이전 본문 유지(반영 안 됨)';
     if(!fs.remain)return '기계검증 '+fs.before+'건 → 전부 해소 (재작성 '+fs.rounds+'회)';
-    return '기계검증 '+fs.before+'건 → 잔존 '+fs.remain+'건'+(fs.remainNew?('(신규 유입 '+fs.remainNew+'건 포함)'):'')+' · 재작성 '+fs.rounds+'회';
+    // ★ [배치20-7] 3-레인 집계 — 잔존을 '재작성 대상'과 '참고(리포트 전용)'로 분리. 참고 항목(예시 보충 권장 등)은
+    //   재작성이 시도조차 하지 않는 사람-판단 몫이라, 잔존에 섞어 세면 "재작성이 못 고쳤다"로 오독된다.
+    const rep=(fs.remainReport|0), fix=(fs.remainFix!=null)?fs.remainFix:(fs.remain-rep);
+    if(!fix&&rep)return '기계검증 '+fs.before+'건 → 재작성 대상 전부 해소 · 참고(리포트 전용) '+rep+'건 (재작성 '+fs.rounds+'회)';
+    return '기계검증 '+fs.before+'건 → 잔존 '+fix+'건'+(fs.remainNew?('(신규 유입 '+fs.remainNew+'건 포함)'):'')+(rep?(' · 참고 '+rep+'건'):'')+' · 재작성 '+fs.rounds+'회';
   }catch(_e){ return ''; }
 }
 // ★ [배치20-6] AI 진단 반영 상태 문구 — 배너·토스트 공용(진단 12,000자가 "반영된 건지" 안 보이던 문제).
@@ -1770,6 +1774,10 @@ async function wfRewriteWithFixes(opts){
       while(round<2){
         // ★ [배치20-3] 사용자 중단 — 오버레이 '중단' 버튼이 세운 플래그를 라운드 경계에서 확인.
         if(typeof window!=='undefined'&&window._wfCancelRequested){ _genFail='사용자 중단'; break; }
+        // ★ [배치20-7] 참고(리포트 전용) 결함만 남으면 재라운드 중단 — 이때 _buildFixTargets 가 빈 지시를 만들어
+        //   "지시 없는 백지 재생성"(비용 낭비 + 생성형 검사 재추첨으로 신규 결함 유입 위험)이 되기 때문.
+        //   1회차는 AI 진단(REVIEW_NOTES) 반영 목적이 있으므로 항상 진입한다.
+        if(round>0&&!remain.some(function(i){return !((typeof _REPORT_ONLY_CHECKS!=='undefined')&&_REPORT_ONLY_CHECKS.has(i.check));}))break;
         round++;
         _pendingFixTargets=(typeof _buildFixTargets==='function')?_buildFixTargets(remain):'';
         _pendingReviewNotes=(_injectReview&&round===1)?String(outputs.step_13):'';
@@ -1806,10 +1814,14 @@ async function wfRewriteWithFixes(opts){
     }
     // ★ [배치20-6] 요약은 "전 N건 → 후 M건" 단일 축(_fixSummaryText) — 종전 '해소 N건'(전 항목 단위)과
     //   '잔존 M건'(후 항목 단위)을 병기해 12−6≠2 처럼 읽히던 단위 혼합 제거. 신규 유입만 별도 주석.
+    // ★ [배치20-7] 잔존을 재작성 대상/참고(리포트 전용) 레인으로 분리 집계 — 신규 유입도 재작성 레인 기준.
+    const _repSet=(typeof _REPORT_ONLY_CHECKS!=='undefined')?_REPORT_ONLY_CHECKS:new Set();
+    const _remainFixArr=remain.filter(function(i){return !_repSet.has(i.check);});
+    const _remainRep=remain.length-_remainFixArr.length;
     const _beforeKeys=new Set(_before.map(_issueKey));
-    const _remainOld=remain.filter(function(x){return _beforeKeys.has(_issueKey(x));}).length;
-    const _remainNew=remain.length-_remainOld;
-    const _fs={before:_beforeN, remain:remain.length, remainOld:_remainOld, remainNew:_remainNew, rounds:round, review:_reviewMode, crit:_afterSev.crit, high:_afterSev.high};
+    const _remainOld=_remainFixArr.filter(function(x){return _beforeKeys.has(_issueKey(x));}).length;
+    const _remainNew=_remainFixArr.length-_remainOld;
+    const _fs={before:_beforeN, remain:remain.length, remainFix:_remainFixArr.length, remainReport:_remainRep, remainOld:_remainOld, remainNew:_remainNew, rounds:round, review:_reviewMode, crit:_afterSev.crit, high:_afterSev.high};
     App.showToast('결함 반영 재작성 완료 — '+_fixSummaryText(_fs),remain.length?'warning':'success');
     if(_injectReview){ try{ _setStep13ConsumedNote(true); }catch(_e){} }
     try{ if(typeof _pushRunLog==='function')_pushRunLog('결함 반영 재작성', true, _fixSummaryText(_fs)+' · AI '+(_reviewMode==='fresh'?'반영':(_reviewMode==='prev'?'직전 반영':'미반영'))); }catch(_e){}
@@ -2032,8 +2044,10 @@ function _renderCohesionBanner(info){
       // ★ [배치20-6] 다음 행동 안내 — "잔존 = 또 다시 써야 하나?" 혼동 제거: CRITICAL 유무로 게이트 상태를 직답.
       let _guide='';
       if(_fs&&!_rvt&&_fs.remain){
+        const _rfx=(_fs.remainFix!=null)?_fs.remainFix:_fs.remain, _rrp=_fs.remainReport|0;   // ★ [배치20-7] 레인 분리
         if(_fs.crit>0)_guide='⛔ CRITICAL '+_fs.crit+'건 잔존 — 다운로드 게이트가 차단됩니다. 한 번 더 실행하거나 ⑤ 검증에서 해당 결함을 확인해 수정하세요.';
-        else _guide='다시 쓸 필요는 없습니다 — 잔존 '+_fs.remain+'건은 경고 수준(HIGH '+_fs.high+'건)으로 다운로드 게이트를 통과할 수 있습니다. ⑤ 검증에서 내용 확인 후 필요할 때만 재실행하세요. 2회 반영 후에도 남은 결함은 재실행으로 해소되지 않을 수 있습니다(수동 확인 권장).';
+        else if(!_rfx&&_rrp)_guide='다시 쓸 필요 없습니다 — 재작성 대상 결함은 전부 해소되었고, 남은 '+_rrp+'건은 참고(리포트 전용) 권장 항목입니다(예시 보충 등 — 자동 수정 대상 아님, ⑤에서 내용 확인).';
+        else _guide='다시 쓸 필요는 없습니다 — 잔존 '+_rfx+'건은 경고 수준(HIGH '+_fs.high+'건)으로 다운로드 게이트를 통과할 수 있습니다. ⑤ 검증에서 내용 확인 후 필요할 때만 재실행하세요. 2회 반영 후에도 남은 결함은 재실행으로 해소되지 않을 수 있습니다(수동 확인 권장).';
       }
       const _rvLine=(_fs&&_fs.review)?_reviewStatusText(_fs.review):'';
       host.innerHTML='<div style="border:1px solid '+bd+';background:'+bg+';border-radius:8px;padding:10px 12px;font-size:12px">'

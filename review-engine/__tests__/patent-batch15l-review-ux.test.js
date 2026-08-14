@@ -111,7 +111,8 @@ test('15L-4 ★ 동작 — ⑤ 검증 패널: 구조 결함 → 본문만 재생
 
 test('15L-4/16-5 ★ 소스 — 구조/내용 결함 분기 카운트·문구(통합 버튼)', () => {
   assert.match(PATENT_SRC, /const _contentN=iss\.filter\(i=>i\.check==='claim_support_missing'\)\.length;/, '★ 내용 결함 카운트');
-  assert.match(PATENT_SRC, /const _structN=iss\.length-_contentN;/, '★ 구조 결함 카운트');
+  // ★ [배치20-7 갱신] 참고(리포트 전용) 레인 분리 — 구조 결함 = 전체 − 내용 − 참고.
+  assert.match(PATENT_SRC, /const _structN=iss\.length-_contentN-_repN;/, '★ 구조 결함 카운트(참고 제외)');
   assert.match(PATENT_SRC, /구조 결함[\s\S]{0,120}결함 반영해 본문 다시 쓰기/, '★ 구조→결함 반영 재작성');
   assert.match(PATENT_SRC, /내용 결함[\s\S]{0,160}명세서 진단\(AI\)/, '★ 내용→진단→반영');
 });
