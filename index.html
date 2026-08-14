@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="shared/design-tokens.css" />
   <link rel="stylesheet" href="shared/components.css" />
   <link rel="stylesheet" href="shared/common.css" />
-  <link rel="stylesheet" href="patent/patent.css?v=20260814b" />
+  <link rel="stylesheet" href="patent/patent.css?v=20260814c" />
   <link rel="stylesheet" href="trademark/trademark.css" />
   <link rel="stylesheet" href="opinion/opinion.css" />
   <link rel="stylesheet" href="division/division.css" />
@@ -1374,6 +1374,8 @@
         <div class="result-card" id="resultCard13">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="doc"></span> 명세서 진단 (AI) 결과</div></div>
           <div id="resultStep13" class="result-area"></div>
+          <!-- [배치20-6] 진단 소비 상태 — 재작성이 이 진단을 방금 주입했는지 표시(반영 여부 혼동 방지). 새 진단 완료 시 리셋. -->
+          <div id="step13ConsumedNote" style="display:none;font-size:11px;margin-top:8px;padding:8px 10px;border:1px solid var(--color-success,#3DAE7A);border-radius:6px;background:rgba(61,174,122,0.08)"></div>
           <!-- [배치18-5] 재작성 진입점은 왼쪽 ④ "진단 후 결함 반영해 다시 쓰기" 단일 버튼(진단+기계검증 동시 반영) — 이 카드는 진단만 따로 본 결과. -->
           <p id="rewriteWithReviewHint" style="font-size:11px;color:var(--color-text-tertiary);margin-top:8px">이 진단 지적은 왼쪽 ④ <b>「진단 후 결함 반영해 다시 쓰기」</b> 버튼이 기계검증 결함과 함께 자동 반영합니다(청구항·도면은 유지).</p>
         </div>
@@ -1541,14 +1543,14 @@
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="shared/components.js?v=20260814b"></script>
-<script src="shared/common.js?v=20260814b"></script>
-<script src="patent/patent.js?v=20260814b"></script>
-<script src="patent/chat.js?v=20260814b"></script>
-<script src="opinion/opinion.js?v=20260814b"></script>
+<script src="shared/components.js?v=20260814c"></script>
+<script src="shared/common.js?v=20260814c"></script>
+<script src="patent/patent.js?v=20260814c"></script>
+<script src="patent/chat.js?v=20260814c"></script>
+<script src="opinion/opinion.js?v=20260814c"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260814b';
+  var _cv='?v=20260814c';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1646,9 +1648,9 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260814b"></script>
-<script src="docket.js?v=20260814b"></script>
+<script src="division/division.js?v=20260814c"></script>
+<script src="docket.js?v=20260814c"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
-<script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260814b"></script>
+<script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260814c"></script>
 </body>
 </html>

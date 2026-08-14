@@ -657,7 +657,7 @@ function _debouncedSaveTitle(){if(_titleSaveTimer)clearTimeout(_titleSaveTimer);
 function onStepCompleted(sid){
   // 1. 해당 step의 stale-warning 배지 제거
   document.querySelectorAll(`.stale-warning[data-step="${sid}"]`).forEach(w=>w.remove());
-  if(sid==='step_13'){ try{ if(typeof _updateRewriteWithReviewBtn==='function')_updateRewriteWithReviewBtn(); }catch(_e){} }   // ★ [배치15L-3] 진단 완료 → "반영해 다시 쓰기" 버튼 활성화
+  if(sid==='step_13'){ try{ if(typeof _updateRewriteWithReviewBtn==='function')_updateRewriteWithReviewBtn(); }catch(_e){} try{ if(typeof _setStep13ConsumedNote==='function')_setStep13ConsumedNote(false); }catch(_e){} }   // ★ [배치15L-3] 진단 완료 → 버튼 활성화. [배치20-6] 새 진단은 아직 미반영 — 소비 표시 리셋
   // ★ [배치18-4] 개별 스텝 재생성도 확정 부호표 정합 — 청구항(step_06/10) 재생성이면 refPlan 재배정(+패널 갱신),
   //   본문 섹션 재생성이면 그 산출물에 enforce 적용(하드웨어 치환·번호 불일치 즉시 교정 → 개별 재생성도 부호 항상 확정표 준수).
   try{
@@ -1726,6 +1726,30 @@ function _renderRunLog(){
     });
   }catch(_e){}
 }
+// ★ [배치20-6] 해소/잔존 요약 단일 서식 — 토스트·배너 공용. 단위 혼합 금지:
+//   종전 "12건 중 6건 해소 · 2건 잔존"은 '해소'가 재작성 전 항목 단위, '잔존'이 재작성 후 항목 단위라
+//   12−6≠2 로 읽혔다(_issueKey 숫자 마스킹으로 재작성 전 여러 항목이 한 결함 계열로 접히기 때문).
+//   "전 N건 → 후 M건" 단일 축으로만 표기해 산술이 항상 맞아 보이게 한다.
+function _fixSummaryText(fs){
+  try{
+    if(!fs)return '';
+    if(fs.reverted)return '기계검증 '+fs.before+'건 — 재작성이 결함을 늘려 이전 본문 유지(반영 안 됨)';
+    if(!fs.remain)return '기계검증 '+fs.before+'건 → 전부 해소 (재작성 '+fs.rounds+'회)';
+    return '기계검증 '+fs.before+'건 → 잔존 '+fs.remain+'건'+(fs.remainNew?('(신규 유입 '+fs.remainNew+'건 포함)'):'')+' · 재작성 '+fs.rounds+'회';
+  }catch(_e){ return ''; }
+}
+// ★ [배치20-6] AI 진단 반영 상태 문구 — 배너·토스트 공용(진단 12,000자가 "반영된 건지" 안 보이던 문제).
+function _reviewStatusText(mode){
+  return {fresh:'이번 진단 지적이 재작성에 반영됨(오른쪽 「명세서 진단 (AI) 결과」가 그 지적)', prev:'직전 진단 지적이 재작성에 반영됨', failed:'진단 실패 — 기계검증 결함만 반영됨', none:'진단 결과 없음 — 기계검증 결함만 반영됨'}[mode]||'';
+}
+// ★ [배치20-6] 진단 소비 상태 — 진단 지적이 방금 재작성에 주입되었음을 결과 카드에 표시.
+//   재작성 후에도 카드에는 "재작성 이전 본문 기준" 진단이 남아 있어 "이거 반영된 건가?" 혼동이 있었다.
+function _setStep13ConsumedNote(on){
+  try{ const el=(typeof document!=='undefined')&&document.getElementById('step13ConsumedNote'); if(!el)return;
+    if(on){ el.style.display='block'; el.innerHTML='<b style="color:var(--color-success,#3DAE7A)">✓ 이 진단 지적은 방금 재작성에 반영되었습니다</b> — 아래 내용은 재작성 <b>이전</b> 본문 기준 진단입니다. 반영 후 상태는 기계검증(왼쪽 배너)과 ⑤ 검증이 판정합니다.'; }
+    else { el.style.display='none'; el.innerHTML=''; }
+  }catch(_e){}
+}
 async function wfRewriteWithFixes(opts){
   const _own=_acquireRewriteLock(opts);
   if(_own===null){ App.showToast('이미 처리 중입니다 — 완료 후 다시 시도하세요','info'); return; }
@@ -1736,7 +1760,11 @@ async function wfRewriteWithFixes(opts){
     const _beforeSev=(typeof _sevCounts==='function')?_sevCounts(_before):{high:0,crit:0};
     const _snap=(typeof _snapshotBodyOutputs==='function')?_snapshotBodyOutputs():null;
     const _hasReview=!!(typeof outputs!=='undefined'&&outputs.step_13&&String(outputs.step_13).trim());
-    App.showToast('결함 반영 재작성 — 기계검증 '+_beforeN+'건'+(_hasReview?' + AI 진단 1건':'')+' 반영(최대 2회)','info');
+    // ★ [배치20-6] 진단 신선도 — wfDiagnoseAndRewrite 가 방금 실행한 진단이면 'fresh', 진단이 실패했으면
+    //   'failed'(직전 세션의 낡은 진단을 침묵 주입하던 배선 결함 차단 — 주입 생략), 단독 호출이면 'prev'.
+    const _reviewMode=(opts&&opts.reviewFresh===true)?'fresh':((opts&&opts.reviewFresh===false)?'failed':(_hasReview?'prev':'none'));
+    const _injectReview=(_reviewMode==='fresh'||_reviewMode==='prev')&&_hasReview;
+    App.showToast('결함 반영 재작성 — 기계검증 '+_beforeN+'건'+(_injectReview?' + AI 진단 지적':'')+' 반영(최대 2회)','info');
     let remain=_before, round=0, _genFail=null;
     try{
       while(round<2){
@@ -1744,7 +1772,7 @@ async function wfRewriteWithFixes(opts){
         if(typeof window!=='undefined'&&window._wfCancelRequested){ _genFail='사용자 중단'; break; }
         round++;
         _pendingFixTargets=(typeof _buildFixTargets==='function')?_buildFixTargets(remain):'';
-        _pendingReviewNotes=(_hasReview&&round===1)?String(outputs.step_13):'';
+        _pendingReviewNotes=(_injectReview&&round===1)?String(outputs.step_13):'';
         const _res=await runUnifiedCohesionGen({chained:true, rewrite:true, _locked:true});
         // ★ [배치20-2] 실패 감지 — 종전엔 cohesion 이 무커밋 실패(블록 누락·수학식 게이트)해도 감지하지 못하고
         //   round 2에서 동일한 전체 생성을 그대로 반복했다(결정론적 실패면 비용 2배·해소 0). 실패면 즉시 중단.
@@ -1770,21 +1798,22 @@ async function wfRewriteWithFixes(opts){
         try{ _restoreBodyOutputs(_snap); }catch(_e){}
         App.showToast('재작성이 결함을 늘려 이전 본문을 유지했습니다(권장)','warning');
         try{renderPreview();}catch(_e){} try{renderSpecValidation();}catch(_e){}
-        try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:0, gateWarn:[], fixSummary:{before:_beforeN, resolved:0, remain:_before.length, rounds:round, reverted:true}}); }catch(_e){}
+        try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:0, gateWarn:[], fixSummary:{before:_beforeN, remain:_before.length, remainOld:_before.length, remainNew:0, rounds:round, review:_reviewMode, crit:_beforeSev.crit, high:_beforeSev.high, reverted:true}}); }catch(_e){}
+        try{ if(typeof _pushRunLog==='function')_pushRunLog('결함 반영 재작성', false, '악화 감지 — 이전 본문 유지(반영 안 됨)'); }catch(_e){}
         try{renderWorkflowRail();renderWfValidationBar();_updateRewriteBtn();}catch(_e){}
         return;
       }
     }
-    const _remainKeys=new Set(remain.map(_issueKey));
-    const _resolved=_before.filter(function(b){return !_remainKeys.has(_issueKey(b));}).length;
-    // ★ [배치20-2] 잔존을 기존/신규로 구분 — 종전 "18건 중 16건 해소·10건 잔존" 식 표기는 재작성이 새로 만든
-    //   결함이 잔존에 섞여 수치가 왜곡됐다(실제: 기존 잔존 2 + 신규 유입 8). 구분 표기로 원인을 가시화.
+    // ★ [배치20-6] 요약은 "전 N건 → 후 M건" 단일 축(_fixSummaryText) — 종전 '해소 N건'(전 항목 단위)과
+    //   '잔존 M건'(후 항목 단위)을 병기해 12−6≠2 처럼 읽히던 단위 혼합 제거. 신규 유입만 별도 주석.
     const _beforeKeys=new Set(_before.map(_issueKey));
     const _remainOld=remain.filter(function(x){return _beforeKeys.has(_issueKey(x));}).length;
     const _remainNew=remain.length-_remainOld;
-    const _remainMsg=remain.length?(' · 잔존 '+remain.length+'건(기존 '+_remainOld+(_remainNew?('·신규 유입 '+_remainNew):'')+')'):' · 전부 해소';
-    App.showToast('결함 반영 재작성 완료 — 기계검증 '+_beforeN+'건 중 '+_resolved+'건 해소'+_remainMsg,remain.length?'warning':'success');
-    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:0, gateWarn:[], fixSummary:{before:_beforeN, resolved:_resolved, remain:remain.length, remainOld:_remainOld, remainNew:_remainNew, rounds:round}}); }catch(_e){}
+    const _fs={before:_beforeN, remain:remain.length, remainOld:_remainOld, remainNew:_remainNew, rounds:round, review:_reviewMode, crit:_afterSev.crit, high:_afterSev.high};
+    App.showToast('결함 반영 재작성 완료 — '+_fixSummaryText(_fs),remain.length?'warning':'success');
+    if(_injectReview){ try{ _setStep13ConsumedNote(true); }catch(_e){} }
+    try{ if(typeof _pushRunLog==='function')_pushRunLog('결함 반영 재작성', true, _fixSummaryText(_fs)+' · AI '+(_reviewMode==='fresh'?'반영':(_reviewMode==='prev'?'직전 반영':'미반영'))); }catch(_e){}
+    try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:0, gateWarn:[], fixSummary:_fs}); }catch(_e){}
     try{renderWorkflowRail();renderWfValidationBar();_updateRewriteBtn();}catch(_e){}
   }catch(e){ try{_pendingFixTargets='';_pendingReviewNotes='';}catch(_e){} try{App.showToast('결함 반영 재작성 실패: '+(e&&e.message||e),'error');}catch(_e2){} }
   finally{ if(_own)_releaseRewriteLock(); }
@@ -1807,12 +1836,23 @@ async function wfDiagnoseAndRewrite(opts){
     // ① AI 진단(step_13) — 문서 불변, 결과만 생성(타임아웃 시 16.1 축약 재시도 내장). 실패해도 기계검증 반영은 진행.
     if(typeof _wfProgressStep==='function')_wfProgressStep('diagnose','running');
     App.showToast('1/2 · 명세서 진단(AI) 실행 중...','info');
-    try{ if(typeof runDiagnosis==='function')await runDiagnosis({_locked:true}); if(typeof _wfProgressStep==='function')_wfProgressStep('diagnose','done'); }
+    // ★ [배치20-6] 진단 신선도 판정 — 진단이 실패하면 직전 세션의 낡은 outputs.step_13 이 남는데,
+    //   종전엔 이를 침묵 주입했다(옛 본문 기준 지적을 새 본문에 반영). 갱신 여부를 재작성에 명시 전달.
+    const _diagPrevTxt=(typeof outputs!=='undefined'&&outputs.step_13)?String(outputs.step_13):'';
+    const _diagPrevTs=(typeof outputTimestamps==='object'&&outputTimestamps&&outputTimestamps.step_13)||0;
+    let _diagFresh=false;
+    try{ if(typeof runDiagnosis==='function')await runDiagnosis({_locked:true});
+      const _nowTxt=(typeof outputs!=='undefined'&&outputs.step_13)?String(outputs.step_13):'';
+      const _nowTs=(typeof outputTimestamps==='object'&&outputTimestamps&&outputTimestamps.step_13)||0;
+      _diagFresh=!!(_nowTxt.trim()&&(_nowTs!==_diagPrevTs||_nowTxt!==_diagPrevTxt));
+      if(typeof _wfProgressStep==='function')_wfProgressStep('diagnose',_diagFresh?'done':'warn');
+    }
     catch(_e){ if(typeof _wfProgressStep==='function')_wfProgressStep('diagnose','warn'); }
-    // ② 진단(REVIEW_NOTES)+기계검증(FIX_TARGETS) 동시 반영 재작성 — wfRewriteWithFixes 가 outputs.step_13 을 자동 주입.
+    if(!_diagFresh)App.showToast('AI 진단이 갱신되지 않았습니다 — 기계검증 결함만 반영합니다','warning');
+    // ② 진단(REVIEW_NOTES)+기계검증(FIX_TARGETS) 동시 반영 재작성 — 신선도(reviewFresh)를 함께 전달.
     if(typeof _wfProgressStep==='function')_wfProgressStep('rewrite','running');
     App.showToast('2/2 · 진단·기계검증 결함 반영해 다시 쓰는 중...','info');
-    await wfRewriteWithFixes({_locked:true});
+    await wfRewriteWithFixes({_locked:true, reviewFresh:_diagFresh});
     if(typeof _wfProgressStep==='function'){ _wfProgressStep('rewrite','done'); _wfProgressStep('recheck','done'); }
     if(typeof _wfProgressDone==='function')_wfProgressDone(true);
   }catch(e){ try{ if(typeof _wfProgressDone==='function')_wfProgressDone(false,(e&&e.message||String(e))); }catch(_e){} try{App.showToast('진단·재작성 실패: '+(e&&e.message||e),'error');}catch(_e){} }
@@ -1828,7 +1868,9 @@ function _updateRewriteBtn(){
     let mN=0; try{ if(outputs.step_08) mN=validateSpecification(buildSpecification()).length; }catch(_e){}
     const aN=(typeof outputs!=='undefined'&&outputs.step_13&&String(outputs.step_13).trim())?1:0;
     if(b){ b.disabled=!hasSkel; b.title=hasSkel?'AI 진단을 실행하고, 그 지적과 기계검증 결함을 함께 반영해 상세설명·부호를 다시 씁니다(청구항·도면 유지)':'먼저 ③ 청구항·도면(골격)을 생성하세요'; }
-    if(lab){ const _prev=aN?(' + 직전 진단 '+aN+'건'):''; lab.textContent=hasSkel?('진단(AI) 실행 후 반영 — 현재 기계검증 '+mN+'건'+_prev+' + 이번 진단 지적을 반영(진단은 버튼이 실행)'):''; }
+    // ★ [배치20-6] 라벨 명료화 — 종전 "기계검증 2건 + 직전 진단 1건 + 이번 진단"의 '1건'은 지적 개수가 아니라
+    //   진단 결과 존재 여부여서 오독됐다. 반영 대상을 풀어서 표기.
+    if(lab){ lab.textContent=hasSkel?('반영 대상: 기계검증 결함 '+mN+'건 + 버튼이 새로 실행하는 AI 진단 지적'+(aN?' (직전 진단 결과 있음 — 새 진단으로 갱신 후 반영)':'')):''; }
   }catch(_e){}
 }
 // 하위호환 별칭(기존 훅/버튼 배선 유지)
@@ -1984,17 +2026,29 @@ function _renderCohesionBanner(info){
     if(info.ok){
       const warnN=(info.gateWarn&&info.gateWarn.length)||0;
       const _inc=!!info.incomplete;   // ★ [배치15I-2] 본문 불완전(분량 미달·부호표 코드 폴백) — 경고 강조
-      const bd=(warnN||_inc)?'var(--color-warning,#E8A33D)':'var(--color-success,#3DAE7A)', bg=(warnN||_inc)?'rgba(232,163,61,0.10)':'rgba(61,174,122,0.10)';
-      const _fs=info.fixSummary;   // ★ [배치16-4] 결함 반영 재작성 해소/잔존 요약
+      const _fs=info.fixSummary;   // ★ [배치16-4] 결함 반영 재작성 요약(배치20-6: 전→후 단일 축 + 행동 안내)
+      const _rvt=!!(_fs&&_fs.reverted);
+      const bd=(_rvt||warnN||_inc)?'var(--color-warning,#E8A33D)':'var(--color-success,#3DAE7A)', bg=(_rvt||warnN||_inc)?'rgba(232,163,61,0.10)':'rgba(61,174,122,0.10)';
+      // ★ [배치20-6] 다음 행동 안내 — "잔존 = 또 다시 써야 하나?" 혼동 제거: CRITICAL 유무로 게이트 상태를 직답.
+      let _guide='';
+      if(_fs&&!_rvt&&_fs.remain){
+        if(_fs.crit>0)_guide='⛔ CRITICAL '+_fs.crit+'건 잔존 — 다운로드 게이트가 차단됩니다. 한 번 더 실행하거나 ⑤ 검증에서 해당 결함을 확인해 수정하세요.';
+        else _guide='다시 쓸 필요는 없습니다 — 잔존 '+_fs.remain+'건은 경고 수준(HIGH '+_fs.high+'건)으로 다운로드 게이트를 통과할 수 있습니다. ⑤ 검증에서 내용 확인 후 필요할 때만 재실행하세요. 2회 반영 후에도 남은 결함은 재실행으로 해소되지 않을 수 있습니다(수동 확인 권장).';
+      }
+      const _rvLine=(_fs&&_fs.review)?_reviewStatusText(_fs.review):'';
       host.innerHTML='<div style="border:1px solid '+bd+';background:'+bg+';border-radius:8px;padding:10px 12px;font-size:12px">'
-        +'<b style="color:'+bd+'">'+(_fs?'결함 반영 재작성 완료':'본문 통합 재생성 완료')+'</b><br>'
-        +(_fs?('<b style="color:'+(_fs.remain?'var(--color-warning,#E8A33D)':'var(--color-success,#3DAE7A)')+'">기계검증 '+_fs.before+'건 중 '+_fs.resolved+'건 해소'+(_fs.remain?(' · '+_fs.remain+'건 잔존'):' · 전부 해소')+' ('+_fs.rounds+'회)</b><br>'):'')
+        +'<b style="color:'+bd+'">'+(_rvt?'재작성 미적용 — 이전 본문 유지':(_fs?'결함 반영 재작성 완료':'본문 통합 재생성 완료'))+'</b><br>'
+        +(_fs?('<b style="color:'+((_fs.remain||_rvt)?'var(--color-warning,#E8A33D)':'var(--color-success,#3DAE7A)')+'">'+App.escapeHtml(_fixSummaryText(_fs))+'</b><br>'):'')
+        +(_rvLine?('<span style="color:var(--color-text-secondary)">AI 진단: '+App.escapeHtml(_rvLine)+'</span><br>'):'')
+        +(_guide?('<span style="color:var(--color-text-primary)">'+App.escapeHtml(_guide)+'</span><br>'):'')
         +(_inc?('<b style="color:'+bd+'">'+App.escapeHtml(info.incMsg||'⚠ 본문이 불완전할 수 있습니다 — 분량을 낮추거나 ④ 재생성을 권장합니다')+'</b><br>'):'')
         +'<span style="color:var(--color-text-secondary)">'
         +(info.autoCorr?('부호표 자동 보강 '+info.autoCorr+'회 · '):'')
         +(info.refFixes?('부호 자동 정합 '+info.refFixes+'건'+((info.refFixArea&&(info.refFixArea.상세설명||info.refFixArea.도면||info.refFixArea.마무리))?('(상세설명 '+(info.refFixArea.상세설명||0)+'·도면 '+(info.refFixArea.도면||0)+'·마무리 '+(info.refFixArea.마무리||0)+')'):'(확정 부호표)')+' · '):'')
         +((info.dupRemoved||info.mkRemoved)?('커밋 전 정리(미완 마커 '+(info.mkRemoved||0)+'·근접중복 '+(info.dupRemoved||0)+') · '):'')
-        +'잔존 경고(HIGH+) '+hi+'건'+(warnN?(' · 게이트 미통과 '+warnN+'건: '+App.escapeHtml((info.gateWarn||[]).join(' · '))):'')+'</span>'
+        // ★ [배치20-6] _fs 경로에선 위 요약이 잔존을 이미 표기 — 별도 "잔존 경고(HIGH+)" 병기(이중 잔존 혼동) 제거.
+        +(_fs?('게이트: '+(hi? '경고 '+hi+'건(HIGH+)':'통과 가능')):('잔존 경고(HIGH+) '+hi+'건'))
+        +(warnN?(' · 게이트 미통과 '+warnN+'건: '+App.escapeHtml((info.gateWarn||[]).join(' · '))):'')+'</span>'
         +(warnN||hi||_inc?'<br><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="switchTab(4)"><span class="ico" data-icon="search"></span> ⑤ 검증 결과 상세 보기</button><div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px">재작성 결과의 잔존 결함 목록과 다운로드 게이트를 확인합니다(문서는 변경되지 않습니다).</div>':'')
         +'</div>';
     } else {
