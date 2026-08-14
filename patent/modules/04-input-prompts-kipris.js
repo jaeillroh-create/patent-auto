@@ -1004,7 +1004,7 @@ ${requiredFigures.map(rf=>`도 ${rf.num}${figParticle(rf.num)} ${rf.description}
 ★★★ 도 1은 L1(100,200,300,400) 장치만, 최외곽 박스 없음 ★★★
 ★★★ 도 2+: 최외곽 = 직계 부모 (세대 점프 금지!) ★★★
 
-${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(0,1500)}`;}
+${T}\n[장치 청구범위] ${outputs.step_06||''}\n[발명 요약] ${inv.slice(0,4000)}`;}
 
     case 'step_08':{
       const deviceFigCount=parseInt(document.getElementById('optDeviceFigures')?.value||4);
@@ -1334,7 +1334,7 @@ ${requiredFigures.length?`- 사용자 도면(${requiredFigures.map(rf=>'도 '+rf
 ★★★ 최외곽 프레임 박스 절대 금지 — 흐름도는 프레임 없이 단계만 나열 ★★★
 ★★★ 장치 구성요소(100, 110 등)는 절대 포함 금지 — S로 시작하는 단계번호만 사용 ★★★
 
-${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${inv.slice(0,1500)}`;}
+${T}\n[방법 청구범위] ${outputs.step_10||''}\n[발명 요약] ${inv.slice(0,4000)}`;}
 
     case 'step_12':{
       // ═══ B1 fix: 분량 제어 추가 (v5.5) ═══
@@ -1391,10 +1391,10 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
       const methodFigDesign=(_wantMethod&&outputs.step_11)?outputs.step_11:'(방법 도면 없음)';   // [배치15H-2] 방법 OFF → 방법 도면 참조 제외
       // ★ [배치16-1] 기계검증 결함 주입 — _pendingFixTargets(구조화된 지시문) 있으면 FIX_TARGETS 블록으로 주입("반드시 모두 해소, 나머지 유지").
       //   이것이 있어야 "재생성=결함 해소"가 사실이 된다(종전엔 검증 결과가 프롬프트에 전혀 주입되지 않아 재생성해도 기계검증 0 불가).
-      const _fixTargets=(typeof _pendingFixTargets!=='undefined'&&_pendingFixTargets)?String(_pendingFixTargets).slice(0,10000):'';
+      const _fixTargets=(typeof _pendingFixTargets!=='undefined'&&_pendingFixTargets)?String(_pendingFixTargets).slice(0,14000):'';
       const _fixInject=_fixTargets?('\n\n★★★ [기계검증 결함 반영(배치16) — 최우선] 아래 <<<FIX_TARGETS>>>의 각 항목을 이번 재작성에서 반드시 모두 해소하라. 나머지 내용·구조·용어·참조번호는 그대로 유지한다(지적과 무관한 부분의 재설계 금지).\n<<<FIX_TARGETS>>>\n'+_fixTargets+'\n<<<END_FIX_TARGETS>>>'):'';
       // ★ [배치15L-2] AI 진단(step_13) 지적 반영 재작성 — _pendingReviewNotes 있으면 REVIEW_NOTES 블록으로 주입("지적 해소, 나머지 유지").
-      const _reviewNotes=(typeof _pendingReviewNotes!=='undefined'&&_pendingReviewNotes)?String(_pendingReviewNotes).slice(0,8000):'';
+      const _reviewNotes=(typeof _pendingReviewNotes!=='undefined'&&_pendingReviewNotes)?String(_pendingReviewNotes).slice(0,16000):''   /* ★ [배치21-3] 8000→16000 — 진단 실측 12k 절단으로 AI 지적이 부분 반영되던 문제 */;
       const _reviewInject=_reviewNotes?('\n\n★★★ [검토 반영 지시(배치15L) — 최우선] 아래 <<<REVIEW_NOTES>>> 의 지적사항을 이번 재작성에서 반드시 해소하라. 단, 지적과 무관한 나머지 구조·용어·참조번호는 그대로 유지한다(전면 재설계 금지 — 지적 해소에 필요한 최소 수정).\n<<<REVIEW_NOTES>>>\n'+_reviewNotes+'\n<<<END_REVIEW_NOTES>>>'):'';
       // ★ [배치20-2] 재작성 = 기저 텍스트 최소 수정 — 종전 재작성 프롬프트에는 현재 본문이 전혀 실리지 않아
       //   매 라운드가 사실상 백지 전문 재생성이었다. "나머지 유지" 지시는 유지할 대상이 프롬프트에 없으니
@@ -1403,11 +1403,11 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[방법 도면] ${outputs.step_
       //   기저로 주입한다(신규 생성은 종전대로 백지).
       let _baseInject='';
       if(_fixTargets||_reviewNotes){
-        const _b8=String(outputs.step_08||'').slice(0,16000);
-        const _b12=(_wantMethod&&outputs.step_12)?String(outputs.step_12).slice(0,6000):'';
+        const _b8=String(outputs.step_08||'').slice(0,32000);   // ★ [배치21-3] 16000→32000 — maximal 프리셋(22~25k)·custom 상회분까지 기저 무절단(절단분은 재작성에서 통째 소실됨)
+        const _b12=(_wantMethod&&outputs.step_12)?String(outputs.step_12).slice(0,12000):'';   // ★ [배치21-3] 6000→12000
         const _bFin=['TASK:step_05','SOLUTION:step_17','EFFECTS:step_16','ABSTRACT:step_19'].map(function(p){
           const _kv=p.split(':');
-          return outputs[_kv[1]]?('['+_kv[0]+']\n'+String(outputs[_kv[1]]).slice(0,2500)):'';
+          return outputs[_kv[1]]?('['+_kv[0]+']\n'+String(outputs[_kv[1]]).slice(0,6000)):'';   // ★ [배치21-3] 2500→6000(마무리 블록 기저 절단 소실 방지)
         }).filter(Boolean).join('\n\n');
         if(_b8){
           _baseInject='\n\n★★★ [기저 텍스트 — 최소 수정 원칙(배치20-2)] 이번 작성은 백지 재생성이 아니라 아래 [현재 본문]의 "최소 수정"이다.\n'
@@ -1625,7 +1625,7 @@ ${(includeMethodClaims&&methodAnchorDep>0)?`\n- 방법 앵커 종속항도 동�
 ★ [13] 특허성 검토 결과는 반드시 "[특허성]" 소제목으로 구분하여 (차별 구성 / 자명성 리스크 / 보완 방향) 순으로 기술하라.
 마지막에 전체 요약 (보완 우선순위 포함)
 
-${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}${outputs.step_18?'\n[부호의 설명] '+outputs.step_18.slice(0,_c?1200:2000):''}\n[상세설명] ${(getLatestDescription()||'').slice(0,_c?2500:6000)}${getLatestMethodDescription()?'\n[방법 상세설명] '+getLatestMethodDescription().slice(0,_c?1200:3000):''}\n[도면 설계] ${(outputs.step_07||'').slice(0,_c?800:2000)}${(!_c&&outputs.step_07c)?'\n[예시도/개념도 설계 — 참조번호 31~99, 장치(100~)와 별개] '+outputs.step_07c.slice(0,1500):''}${(!_c&&outputs.step_08c)?'\n[예시도 상세설명 — 도 N별 본문(별도 단계에서 작성됨, 31~99 기준)] '+outputs.step_08c.slice(0,3000):''}${(!_c&&outputs.step_04)?'\n[선행기술 — 특허성 검토용] '+outputs.step_04.slice(0,2000):''}\n[원본 발명 내용] ${inv.slice(0,_c?1200:3000)}${_c?'\n\n※ 문서가 커서 상세설명을 축약 제공했습니다 — 청구항 뒷받침·특허성 중심으로 핵심만 진단하라.':''}`;}
+${T}\n[청구범위] ${outputs.step_06||''}\n${outputs.step_10||''}${outputs.step_18?'\n[부호의 설명] '+outputs.step_18.slice(0,_c?1200:3000):''}\n[상세설명] ${(getLatestDescription()||'').slice(0,_c?2500:16000)}${getLatestMethodDescription()?'\n[방법 상세설명] '+getLatestMethodDescription().slice(0,_c?1200:8000):''}\n[도면 설계] ${(outputs.step_07||'').slice(0,_c?800:2000)}${(!_c&&outputs.step_07c)?'\n[예시도/개념도 설계 — 참조번호 31~99, 장치(100~)와 별개] '+outputs.step_07c.slice(0,1500):''}${(!_c&&outputs.step_08c)?'\n[예시도 상세설명 — 도 N별 본문(별도 단계에서 작성됨, 31~99 기준)] '+outputs.step_08c.slice(0,3000):''}${(!_c&&outputs.step_04)?'\n[선행기술 — 특허성 검토용] '+outputs.step_04.slice(0,2000):''}\n[원본 발명 내용] ${inv.slice(0,_c?1200:6000)}${_c?'\n\n※ 문서가 커서 상세설명을 축약 제공했습니다 — 청구항 뒷받침·특허성 중심으로 핵심만 진단하라.':''}`;}
 
     case 'step_14':return `대안 청구항을 작성하라. 원본 청구항의 핵심 기술적 구성은 그대로 유지하되, 표현을 달리하라.
 
@@ -1756,7 +1756,7 @@ ${T}\n[방법 청구항] ${outputs.step_10||''}\n[장치 독립항 — 참고용
 // 참조부호 보존·길이)를 걸어 적용한다(백지 재작성의 결함 재추첨·기존 문장 누락 위험은 고리1에서 실증).
 function buildProofreadPrompt(sections){
   const secText=(sections||[]).map(s=>`[SECTION ${s.sid}] ${s.label}\n${s.text}`).join('\n\n');
-  const claims=((outputs.step_06||'')+(outputs.step_10?('\n'+outputs.step_10):'')).slice(0,6000);
+  const claims=((outputs.step_06||'')+(outputs.step_10?('\n'+outputs.step_10):'')).slice(0,12000);   // ★ [배치21-3] 6000→12000 — 명칭·계층 대조 기준이 잘리면 교열 판단이 부실해짐
   return `당신은 한국 특허 명세서 전문 교열자다. 아래 명세서 본문을 점검표에 따라 전수 검수하고, 문장 단위 국소 수정 패치를 산출하라.
 
 ★★★ 절대 원칙 ★★★
