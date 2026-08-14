@@ -109,7 +109,9 @@ test('16-3 ★ 동작 — _updateRewriteBtn 라벨: 기계검증 N건 + AI 진�
   run(`clearAllState(); selectedTitle="t"; outputs={ step_06:"【청구항 1】 제어부.", step_08:"제어부(100)가 수신부(200)로 보낸다. 제어부(100)가 처리한다.", step_18:"제어부 : 100", step_13:"[특허성] 진보성 미흡" };`);
   run('_updateRewriteBtn()');
   assert.strictEqual(els.btnWfRewriteFixes.disabled, false, '★ 골격 있으면 활성');
-  assert.match(els.wfRewriteTargetLabel.textContent, /기계검증 \d+건[\s\S]*직전 진단 1건/, '★ 기계검증+직전 진단 카운트(진단은 버튼이 실행 — 배치18-5)');
+  // ★ [배치20-6 갱신] "직전 진단 1건"이 지적 개수로 오독되던 문구 교체 — 반영 대상 풀어쓰기 + 직전 결과 존재 안내.
+  assert.match(els.wfRewriteTargetLabel.textContent, /기계검증 결함 \d+건[\s\S]*AI 진단 지적/, '★ 반영 대상(기계검증+이번 진단) 표기');
+  assert.match(els.wfRewriteTargetLabel.textContent, /직전 진단 결과 있음/, '★ 직전 진단 존재는 개수가 아니라 상태로 안내(배치20-6)');
 });
 
 // ─────────────── 4) 해소 검증 루프 ───────────────

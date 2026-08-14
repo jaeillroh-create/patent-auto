@@ -151,8 +151,12 @@ test('★20-2k — 소스: cohesion 상태 반환 + 재작성 루프의 실패 �
   assert.match(PATENT_SRC, /if\(!_res\|\|_res\.committed===false\)\{ _genFail=/, '★ 재작성 루프가 실패를 감지해 즉시 중단(종전: round 2 동일 전체 생성 반복)');
 });
 
-test('★20-2l — 재작성 완료 집계가 잔존을 기존/신규로 구분한다', () => {
-  assert.match(PATENT_SRC, /잔존 '\+remain\.length\+'건\(기존 '\+_remainOld/, '★ 기존/신규 유입 구분 표기(종전 "10건 잔존"에 신규 8건 은닉)');
+test('★20-2l — 재작성 완료 집계가 신규 유입을 구분하고, 요약은 전→후 단일 축(_fixSummaryText)', () => {
+  // ★ [배치20-6 갱신] 종전 "N건 중 R건 해소 · M건 잔존"은 해소(전 항목 단위)·잔존(후 항목 단위) 단위 혼합으로
+  //   12−6≠2 처럼 읽혔다(_issueKey 숫자 마스킹으로 전 항목 여러 개가 한 계열로 접힘). 전→후 단일 축 서식으로 교체.
+  assert.match(PATENT_SRC, /const _remainNew=remain\.length-_remainOld;/, '★ 신규 유입 계산 유지');
+  assert.match(PATENT_SRC, /function _fixSummaryText\(fs\)\{/, '★ 토스트·배너 공용 서식 함수');
+  assert.ok(!PATENT_SRC.includes("건 중 '+_resolved+'건 해소"), '★ 단위 혼합 표기("중 N건 해소") 제거');
 });
 
 test('★20-3a — 오버레이: 서브 진행 미러 + 중단 버튼 배선', () => {
@@ -241,4 +245,56 @@ test('★20-5d — Opus 5 전환: 모델 ID·카탈로그 미러·대용량 상�
   assert.match(cat, /id: 'claude-sonnet-5'/, '★ 카탈로그 미러 동기화(sonnet)');
   assert.match(cat, /id: 'claude-opus-5'/, '★ 카탈로그 미러 동기화(opus)');
   assert.match(COMMON_SRC, /selectedProvider==='claude'\?32000:\(selectedProvider==='gemini'\?8192:16000\)/, '★ claude 32000(스트리밍이라 시간 무관 + Opus 5 thinking 이 max_tokens 에 포함되므로 16k 는 절단 위험)');
+});
+
+// ═══ [배치20-6] ④탭 결과 보고 배선 — 수치 정합·AI 반영 표시·행동 안내(사용자 신고 기반) ═══
+// 신고: "12건 중 6건 해소 · 2건 잔존" 산술 불일치 / AI 진단 12,198자 반영 여부 불명 / 잔존 시 "또 써야 하나?" 안내 부재.
+
+test('★20-6a — _fixSummaryText: 전→후 단일 축(산술 항상 정합) + 신규 유입 주석 + reverted 상태', () => {
+  const full = run(`_fixSummaryText({before:12, remain:0, remainOld:0, remainNew:0, rounds:1})`);
+  assert.match(full, /기계검증 12건 → 전부 해소 \(재작성 1회\)/, '★ 전부 해소');
+  const part = run(`_fixSummaryText({before:12, remain:2, remainOld:1, remainNew:1, rounds:2})`);
+  assert.match(part, /기계검증 12건 → 잔존 2건\(신규 유입 1건 포함\) · 재작성 2회/, '★ 전→후 표기(종전 "중 6건 해소·2건 잔존" 단위 혼합 제거)');
+  assert.ok(!/해소/.test(part), '★ 잔존 케이스에 항목 단위가 다른 "해소 N건" 병기 없음');
+  const rvt = run(`_fixSummaryText({before:12, remain:12, reverted:true})`);
+  assert.match(rvt, /이전 본문 유지\(반영 안 됨\)/, '★ 악화 롤백이 "재작성 완료"로 위장하지 않음');
+});
+
+test('★20-6b — 재작성 완료 배너: AI 반영 상태 라인 + CRITICAL 유무별 행동 안내(또 써야 하나 직답)', () => {
+  assert.match(PATENT_SRC, /function _reviewStatusText\(mode\)\{/, '★ AI 반영 상태 문구 함수');
+  assert.match(PATENT_SRC, /이번 진단 지적이 재작성에 반영됨/, '★ fresh 문구');
+  assert.match(PATENT_SRC, /진단 실패 — 기계검증 결함만 반영됨/, '★ failed 문구(침묵 미반영 금지)');
+  assert.match(PATENT_SRC, /다시 쓸 필요는 없습니다 — 잔존 /, '★ CRITICAL 0 → 게이트 통과 가능·재실행 불필요 안내');
+  assert.match(PATENT_SRC, /CRITICAL '\+_fs\.crit\+'건 잔존 — 다운로드 게이트가 차단됩니다/, '★ CRITICAL 잔존 → 차단 안내');
+  assert.match(PATENT_SRC, /2회 반영 후에도 남은 결함은 재실행으로 해소되지 않을 수 있습니다/, '★ 반복 재실행 무익 경고');
+  // _fs 경로에서 "잔존 경고(HIGH+)"를 별도 병기하지 않음(이중 잔존 혼동 제거) — 게이트 상태로 대체
+  assert.match(PATENT_SRC, /\(_fs\?\('게이트: '\+\(hi\? '경고 '\+hi\+'건\(HIGH\+\)':'통과 가능'\)\):\('잔존 경고\(HIGH\+\) '\+hi\+'건'\)\)/, '★ 이중 잔존 표기 정리');
+});
+
+test('★20-6c — 진단 신선도 배선: 실패한 진단(낡은 step_13)을 침묵 주입하지 않는다', () => {
+  assert.match(PATENT_SRC, /_diagFresh=!!\(_nowTxt\.trim\(\)&&\(_nowTs!==_diagPrevTs\|\|_nowTxt!==_diagPrevTxt\)\)/, '★ 갱신 판정(타임스탬프·본문 비교)');
+  assert.match(PATENT_SRC, /wfRewriteWithFixes\(\{_locked:true, reviewFresh:_diagFresh\}\)/, '★ 신선도 전달');
+  assert.match(PATENT_SRC, /AI 진단이 갱신되지 않았습니다 — 기계검증 결함만 반영합니다/, '★ 실패 시 사용자 고지');
+  assert.match(PATENT_SRC, /\(opts&&opts\.reviewFresh===false\)\?'failed'/, '★ failed 모드 → 주입 생략');
+  assert.match(PATENT_SRC, /_pendingReviewNotes=\(_injectReview&&round===1\)/, '★ 주입 게이트가 신선도 모드를 따름');
+});
+
+test('★20-6d — 진단 결과 카드 소비 상태: 재작성 주입 시 표시, 새 진단 완료 시 리셋', () => {
+  assert.match(HTML_SRC, /id="step13ConsumedNote"/, '★ 카드 내 상태 슬롯');
+  assert.match(PATENT_SRC, /function _setStep13ConsumedNote\(on\)\{/, '★ 상태 헬퍼');
+  assert.match(PATENT_SRC, /이 진단 지적은 방금 재작성에 반영되었습니다/, '★ 반영됨 문구(12,198자 반영 여부 불명 해소)');
+  assert.match(PATENT_SRC, /재작성 <b>이전<\/b> 본문 기준 진단입니다/, '★ 신선도 캐비앳(반영 후에도 카드에 남는 이유 설명)');
+  assert.match(PATENT_SRC, /if\(_injectReview\)\{ try\{ _setStep13ConsumedNote\(true\); \}catch\(_e\)\{\} \}/, '★ 주입 성공 시 표시');
+  assert.match(PATENT_SRC, /if\(sid==='step_13'\)\{[^\n]*_setStep13ConsumedNote\(false\)/, '★ 새 진단 완료 → 리셋(새 지적은 아직 미반영)');
+});
+
+test('★20-6e — 동작: 잔존 케이스 토스트가 전→후 단일 축으로 나온다(단위 혼합 소멸)', async () => {
+  run(`clearAllState(); selectedTitle="t"; selectedTitleType="장치"; includeMethodClaims=false;
+    outputs={ step_06:"【청구항 1】 메모리를 포함하는 장치.", step_07:"도 1", step_08:"메모리(120)가 저장하고 메모리(130)가 캐시한다. 메모리(120)가 읽고 메모리(130)가 쓴다.", step_18:"메모리 : 120\\n메모리 : 130" };`);
+  sandbox.App.callClaudeWithContinuation = async () => '<<<REFTABLE>>>\n[장치부호]\n(120) 메모리\n(130) 메모리\n<<<END_REFTABLE>>>\n<<<DEVICE_DESC>>>\n메모리(120)가 저장하고 메모리(130)가 캐시한다. 메모리(120)가 읽고 메모리(130)가 쓴다.\n<<<END_DEVICE_DESC>>>';
+  await run('wfRewriteWithFixes()');
+  const done = toasts.map(t => t.m).filter(m => /결함 반영 재작성 완료/.test(m));
+  assert.ok(done.length, '★ 완료 토스트 존재');
+  assert.match(done[0], /기계검증 \d+건 → 잔존 \d+건/, '★ 전→후 표기');
+  assert.ok(!/건 중 \d+건 해소/.test(done[0]), '★ 단위 혼합 표기 소멸');
 });

@@ -170,7 +170,8 @@ test('18-5 ★ HTML — ④ 단일 버튼(진단 후 결함 반영해 다시 쓰
 
 test('18-5 ★ 소스 — wfDiagnoseAndRewrite: runDiagnosis 후 wfRewriteWithFixes(순서 자동화)', () => {
   assert.match(PATENT_SRC, /async function wfDiagnoseAndRewrite\(opts\)\{/, '★ 통합 함수 정의(배치19-1 락 opts)');
-  assert.match(PATENT_SRC, /if\(typeof runDiagnosis==='function'\)await runDiagnosis\(\{_locked:true\}\);[\s\S]{0,700}await wfRewriteWithFixes\(\{_locked:true\}\);/, '★ 진단 → 재작성 순서(배치19-1 내부 락 전달)');
+  // ★ [배치20-6 갱신] 재작성 호출에 진단 신선도(reviewFresh) 전달 추가 — 낡은 진단 침묵 주입 차단.
+  assert.match(PATENT_SRC, /if\(typeof runDiagnosis==='function'\)await runDiagnosis\(\{_locked:true\}\);[\s\S]{0,900}await wfRewriteWithFixes\(\{_locked:true, reviewFresh:_diagFresh\}\);/, '★ 진단 → 재작성 순서(락 + 신선도 전달)');
 });
 
 test('18-5 ★ 동작 — wfDiagnoseAndRewrite: 진단(step_13) 실행 후 재작성 호출', async () => {

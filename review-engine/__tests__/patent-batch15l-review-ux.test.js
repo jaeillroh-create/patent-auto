@@ -72,7 +72,8 @@ test('16-3 ★ 동작 — _updateRewriteBtn: 골격(step_06) 있으면 활성 + 
   run('outputs.step_06="【청구항 1】 제어부.";');
   run('_updateRewriteBtn()');
   assert.strictEqual(els.btnWfRewriteFixes.disabled, false, '★ 골격 있으면 활성');
-  assert.match(els.wfRewriteTargetLabel.textContent, /진단\(AI\) 실행 후 반영/, '★ 반영 대상 라벨(진단은 버튼이 실행 — 배치18-5)');
+  // ★ [배치20-6 갱신] 라벨 문구 교체 — "직전 진단 1건" 오독 제거, 반영 대상 풀어쓰기.
+  assert.match(els.wfRewriteTargetLabel.textContent, /반영 대상: 기계검증 결함 \d+건/, '★ 반영 대상 라벨(진단은 버튼이 실행 — 배치18-5/20-6)');
 });
 
 test('15L-2 ★ 동작 — _pendingReviewNotes 있으면 cohesion 프롬프트에 REVIEW_NOTES 주입', () => {
