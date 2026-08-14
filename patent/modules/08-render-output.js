@@ -524,6 +524,10 @@ function _normComponentName(s){
 }
 // ★ [배치20-2] example_missing 제외 — 예시 마커 유무는 실질(내용 품질)의 근사 판정이라 AI 검토([4]/[6]) 소관.
 const FIXABLE_CHECKS = new Set(['paragraph_duplicate','sentence_duplicate','sentence_truncation','sentence_ending','unit_corruption','math_var_undefined','refnum_consistency']);
+// ★ [배치20-7] 리포트 전용 결함(단일 출처) — 재작성(FIX_TARGETS)이 시도조차 하지 않는 사람-판단 항목.
+//   종전엔 이 항목들이 "잔존 N건"과 ⑤ 패널에 재작성 대상과 동급으로 섞여 "수정이 안 됐다"로 읽혔다.
+//   3-레인 집계(결정론 자동정합 / LLM 재작성 / 참고 리포트)의 '참고' 레인 판별에 03·08 이 공용한다.
+const _REPORT_ONLY_CHECKS = new Set(['title_generation_suspect','example_missing']);
 
 // [Part1] Step 13(AI 검토) 강화 — 결정론적 기계검증 결과를 검토 프롬프트에 주입한다.
 //   Step 13이 보는 범위(상세설명·수학식)에 존재하는 결함만 필터(완성-단계 전용 검사 제외) → AI가 [5] 보완/수정 제안에 반영.
@@ -551,7 +555,11 @@ function _assignRefNumbers(claimText, opts){
   const nameToNum=new Map(), numToName=new Map(), plan=[];
   // ★ [배치18-3] 하드웨어 상용구(프로세서·메모리 등)는 refPlan 배정 대상에서 제외 — 이들은 구성부 부호를 점유하면 안 된다.
   const _isHw=function(name){ try{ return (typeof _HW_BOILER_RE!=='undefined')&&_HW_BOILER_RE.test(String(name||'').replace(/\s+/g,'')); }catch(_e){ return false; } };
-  function add(name,num,level,parent){ if(!name||name.length<3||_isHw(name)||nameToNum.has(name)||numToName.has(num))return false; nameToNum.set(name,num); numToName.set(num,name); plan.push({num:num,name:name,level:level||1,parent:(parent==null?100:parent)}); return true; }
+  // ★ [배치20-7] 공백-무시 dedupe — 검증기는 공백을 지운 명칭으로 중복을 판정하는데 배정기가 "모델 레지스트리"와
+  //   "모델레지스트리"를 다른 명칭으로 취급해 부호 2개를 배정하면, 그 순간부터 dupassign(동일 명칭 복수 부호)이
+  //   구조적으로 발생한다(판정 기준 비대칭). 배정 dedupe 를 검증기와 같은 공백-무시 키로 통일.
+  const _spKeys=new Set();
+  function add(name,num,level,parent){ const _k=String(name||'').replace(/\s+/g,''); if(!name||name.length<3||_isHw(name)||nameToNum.has(name)||_spKeys.has(_k)||numToName.has(num))return false; _spKeys.add(_k); nameToNum.set(name,num); numToName.set(num,name); plan.push({num:num,name:name,level:level||1,parent:(parent==null?100:parent)}); return true; }
   const clean=(typeof _cleanRefName==='function')?_cleanRefName:(s=>String(s||'').trim());
   // ★ [배치18-2/3] 구성명사 정규화는 모듈 공통 _normComponentName 사용(배정=본문정합 규칙 일치 — "실행하고 X부"·"프로세서는 X부" 접두 제거).
   const devName=(typeof _normComponentName==='function')?_normComponentName:clean;
@@ -591,10 +599,22 @@ function _buildRefPlanBlock(refPlan){
 //   교정 대상은 "부호 표기"뿐이며 문장 내용은 불변. (a)번호는 refPlan에 있으나 명칭 상이 → refPlan 명칭으로 치환.
 //   (b)명칭은 refPlan에 있으나 번호 상이 → refPlan 번호로 치환. (c)refPlan에 없는 번호 → 경고만(자동 삭제 금지, 사람 판단).
 function _enforceRefPlan(body, refPlan){
-  if(!body||!refPlan||!refPlan.length)return {text:body||'', fixes:0, unknown:[]};
+  if(!body||!refPlan||!refPlan.length)return {text:body||'', fixes:0, unknown:[], stripped:[]};
   const numToName=_refPlanToMap(refPlan), nameToNum=_refPlanNameToNum(refPlan);
-  let fixes=0; const unknown=new Set();
+  let fixes=0; const unknown=new Set(); const stripped=[];
   const clean=(typeof _cleanRefName==='function')?_cleanRefName:(s=>String(s||'').trim());
+  // ★ [배치20-7] (b') 명칭 lookup 퍼지화 — 검증기(dupassign)는 공백 무시·공통접미(≥5자)로 결함을 잡는데
+  //   정합기는 exact Map 이라 "모델 레지스트리"(refPlan) ↔ "모델레지스트리"(본문) 같은 표기 변형을 못 고쳤다
+  //   (스캔 기준 ⊋ 수정 기준 — 판정 비대칭으로 dupassign 이 영구 잔존). 검증기와 같은 기준으로 조회한다.
+  const _sp=function(s){ return String(s||'').replace(/\s+/g,''); };
+  const _fuzzyNum=function(nm){
+    if(nameToNum.has(nm))return nameToNum.get(nm);
+    const t=_sp(nm); if(!t)return null;
+    for(const e of nameToNum){ if(_sp(e[0])===t)return e[1]; }
+    for(const e of nameToNum){ const c=_sp(e[0]); const s=c.length<=t.length?c:t, l=c.length<=t.length?t:c; if(l.endsWith(s)&&s.length>=5)return e[1]; }
+    return null;
+  };
+  const _sufRel=function(x,y){ return x===y||x.endsWith(y)||y.endsWith(x); };
   // 명칭 캡처 = 구성부(~부/수단/…, 다단어) | 하드웨어 상용구(프로세서·메모리·…). 후자를 포함해야 canonical↔body 하드웨어 치환("프로세서(100)")을
   //   확정 부호표 명칭으로 되돌린다(배치17 핵심 결함군). 괄호가 문자클래스에 없어 "(번호)" 경계를 넘어 과포섭하지 않는다.
   const _NAME_ALT='[가-힣A-Za-z0-9·][가-힣A-Za-z0-9·\\s]*?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터)|'+((typeof _HW_BOILER_WORDS!=='undefined')?_HW_BOILER_WORDS:'프로세서|메모리|서버|버스|인터페이스');
@@ -603,11 +623,25 @@ function _enforceRefPlan(body, refPlan){
     const nm=norm(rawName), lead=rawName.slice(0, rawName.length-nm.length);   // ★ [배치18-2] 구성명사 정규화(관형절·연결어미·하드웨어 접두 제거)로 refPlan 명칭과 매칭. 선행 문맥은 lead 로 보존.
     const canon=numToName.get(numStr);
     if(canon){ if(nm!==canon){ fixes++; return lead+canon+sp+'('+numStr+')'; } return whole; }   // (a) 번호 기준 명칭 교정
-    const wantNum=nameToNum.get(nm);
-    if(wantNum){ fixes++; return lead+nm+sp+'('+wantNum+')'; }   // (b) 명칭 기준 번호 교정
+    const wantNum=_fuzzyNum(nm);
+    if(wantNum!=null){ fixes++; return lead+nm+sp+'('+wantNum+')'; }   // (b) 명칭 기준 번호 교정(공백·접미 변형 포함 — 배치20-7)
     unknown.add(numStr); return whole;   // (c) 미정의 — 경고만
   });
-  return {text:out, fixes:fixes, unknown:[...unknown]};
+  // ★ [배치20-7] (d) 비구성요소 명칭의 청구 부호 점유 박탈 — "단말(200)"에서 (200)이 refPlan상 다른 구성
+  //   (예: 응답결속부)이고 '단말'이 어떤 구성 명칭과도 무관하면 번호 표기만 떼어낸다(문장 내용 불변).
+  //   종전엔 구성부 접미(_NAME_ALT)가 아닌 명칭이 정합 범위 밖이라(검증기 pair 스캔은 전 명칭 포섭) 이 결함이
+  //   재작성으로도 코드로도 못 고치는 영구 잔존이 됐다(스캔 범위 ⊋ 수정 범위 — 토큰 레벨 비대칭 절단).
+  //   번호를 떼어 그 구성이 본문 미기재가 되면 refnum_consistency 가 "청구 구성 서술 누락"으로 발화 →
+  //   FIX_TARGETS 가 LLM 에 실질 보강을 지시한다(형식=기계, 실질 공백=AI 의 역할 분담 유지).
+  const out2=out.replace(/([가-힣A-Za-z·]{2,})\((\d{2,4})\)/g, function(whole,rawName,numStr){
+    const canon=numToName.get(numStr); if(!canon)return whole;            // refPlan 밖 번호는 (c) 경고 유지(자동 삭제 금지)
+    const nm=norm(rawName);
+    if(_sufRel(_sp(nm),_sp(canon)))return whole;                          // canonical 과 동일/접미관계 → 정상 표기
+    if(_fuzzyNum(nm)!=null)return whole;                                  // 다른 구성의 명칭 → 1차 패스 (b) 소관(구성부 접미)
+    fixes++; stripped.push(rawName+'('+numStr+')→'+rawName);
+    return rawName;                                                       // 번호 표기만 제거
+  });
+  return {text:out2, fixes:fixes, unknown:[...unknown], stripped:stripped};
 }
 // ★ [배치17-1] 확정 부호표 확보 — 청구항(step_06/10)에서 결정론 배정. 없으면 기존 부호표(step_18)에서 역산(레거시 호환).
 //   force=true(청구항 재생성)일 때만 재배정 → 변리사가 손댄 확정값 보존. refPlan 은 전역 상태로 영속(saveProject/openProject).
@@ -697,7 +731,8 @@ function _buildFixTargets(issues){
   // ★ [배치20-2] 재작성으로 해소 불가능한 결함은 지시에서 제외 — 넣어봤자 라운드만 소모하고 잔존한다.
   //   · title_generation_suspect: 소스가 도면 약설(step_07)·확정 명칭이라 본문 재작성 불가침 — ③ 도면 재생성/명칭 정리로 해소.
   //   · example_missing: "예를 들어" 마커 유무의 실질 근사 판정 — 실시예 충분성은 AI 검토([4]/[6]) 소관, 리포트 전용.
-  const _UNFIXABLE_BY_REWRITE=new Set(['title_generation_suspect','example_missing']);
+  // ★ [배치20-7] 단일 출처화 — 집계(03 wfRewriteWithFixes)·⑤ 패널 배지와 같은 집합(_REPORT_ONLY_CHECKS)을 쓴다.
+  const _UNFIXABLE_BY_REWRITE=(typeof _REPORT_ONLY_CHECKS!=='undefined')?_REPORT_ONLY_CHECKS:new Set(['title_generation_suspect','example_missing']);
   (issues||[]).forEach(function(i){
     const msg=String(i.message||''), det=String(i.detail||''), ck=i.check;
     if(_UNFIXABLE_BY_REWRITE.has(ck))return;
@@ -737,19 +772,25 @@ function renderSpecValidation(){
   let h=`<div class="stat-row" style="margin-bottom:10px"><div class="stat-card stat-card-cost"><div class="stat-card-value">${crit}</div><div class="stat-card-label">CRITICAL</div></div><div class="stat-card stat-card-api"><div class="stat-card-value">${high}</div><div class="stat-card-label">HIGH</div></div><div class="stat-card stat-card-steps"><div class="stat-card-value">${med}</div><div class="stat-card-label">MEDIUM</div></div></div>`;
   if(!iss.length){h+='<div class="issue-item issue-pass" style="border-left:3px solid var(--color-success,#3DAE7A);padding:8px 10px;border-radius:6px;background:rgba(61,174,122,0.08)"><span class="ico" data-icon="check-circle"></span> 완성본 기계검증 통과 — 표제·중복·절단·수학식 이상 없음</div>';}
   else{h+=iss.map(i=>{
-    const col=i.severity==='CRITICAL'?'var(--color-error,#D94A4A)':(i.severity==='HIGH'?'var(--color-warning,#E8A33D)':'var(--dt-g400,#B0B0B0)');
+    // ★ [배치20-7] 참고(리포트 전용) 배지 — 재작성(④)이 시도하지 않는 사람-판단 항목을 재작성 대상과 시각 구분.
+    //   종전엔 동급 표기라 "④를 돌려도 이 항목이 안 없어진다 = 고장"으로 읽혔다.
+    const _rep=(typeof _REPORT_ONLY_CHECKS!=='undefined')&&_REPORT_ONLY_CHECKS.has(i.check);
+    const col=_rep?'var(--dt-g400,#B0B0B0)':(i.severity==='CRITICAL'?'var(--color-error,#D94A4A)':(i.severity==='HIGH'?'var(--color-warning,#E8A33D)':'var(--dt-g400,#B0B0B0)'));
     const cls=i.severity==='CRITICAL'?'issue-critical':'issue-high';
-    return `<div class="issue-item ${cls}" style="border-left:3px solid ${col};padding:8px 10px;margin:4px 0;border-radius:6px;background:rgba(0,0,0,0.02)"><b>[${i.severity}·${App.escapeHtml(i.check)}]</b> ${App.escapeHtml(i.message)}${i.detail?`<br><span style="font-size:11px;color:var(--color-text-tertiary)">${App.escapeHtml(i.detail)}</span>`:''}</div>`;
+    const _tag=_rep?`참고·${App.escapeHtml(i.check)}`:`${i.severity}·${App.escapeHtml(i.check)}`;
+    return `<div class="issue-item ${cls}" style="border-left:3px solid ${col};padding:8px 10px;margin:4px 0;border-radius:6px;background:rgba(0,0,0,0.02)${_rep?';opacity:.85':''}"><b>[${_tag}]</b> ${App.escapeHtml(i.message)}${i.detail?`<br><span style="font-size:11px;color:var(--color-text-tertiary)">${App.escapeHtml(i.detail)}</span>`:''}${_rep?`<br><span style="font-size:11px;color:var(--color-text-tertiary)">④ 재작성 대상이 아닌 권장 확인 항목입니다(자동 수정 안 됨 — 내용 판단은 사람/AI 진단 소관).</span>`:''}</div>`;
   }).join('');}
   // ★ [배치15D-1] ⑤ 자동보정('AI로 수정') 제거 — 본문만 수정하여 부호표·표제 정합이 깨지는 문제(docF: dupassign·
   //   heading·meta 미해소). AI 수정 경로를 ④ 본문 통합(재생성) / ④ AI 검토(step_13 반영본)로 일원화하고, 잔존
   //   결함은 ④로 이동해 재생성하도록 안내한다(자동보정 버튼 대신 이동 버튼).
   // ★ [배치 15L-4] 결함 성격별 재작성 경로 분기 안내 — 구조 결함(부호·표제·중복·절단)은 '④ 본문만 재생성', 내용 결함(청구항 뒷받침·특허성)은 '④ 명세서 진단(AI) → 반영해 다시 쓰기'.
   const _contentN=iss.filter(i=>i.check==='claim_support_missing').length;   // 뒷받침 등 내용 결함(진단→반영 경로)
-  const _structN=iss.length-_contentN;                                        // 부호·표제·중복·절단 등 구조 결함(본문만 재생성 경로)
+  const _repN=iss.filter(i=>(typeof _REPORT_ONLY_CHECKS!=='undefined')&&_REPORT_ONLY_CHECKS.has(i.check)).length;   // ★ [배치20-7] 참고(리포트 전용)
+  const _structN=iss.length-_contentN-_repN;                                  // 부호·표제·중복·절단 등 구조 결함(본문만 재생성 경로)
   if(iss.length)h+=`<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--color-border);border-radius:6px;font-size:12px;background:var(--color-bg-secondary,rgba(74,125,255,0.04))"><b>결함 성격에 따라 재작성 경로가 다릅니다(④ 탭).</b>`
     +(_structN?`<div style="margin-top:6px">· <b>구조 결함</b>(부호·표제·중복·절단 등 ${_structN}건) → <b>④ 「결함 반영해 본문 다시 쓰기」</b>로 해소합니다(기계검증 결함을 프롬프트에 주입해 재작성 → 재검증까지 자동).</div>`:``)
     +(_contentN?`<div style="margin-top:6px">· <b>내용 결함</b>(청구항 뒷받침·특허성 등 ${_contentN}건) → <b>④ 「명세서 진단(AI)」 실행</b> 후 <b>④ 「결함 반영해 본문 다시 쓰기」</b>(진단 지적 + 기계검증 결함을 함께 반영).</div>`:``)
+    +(_repN?`<div style="margin-top:6px">· <b>참고 항목</b>(예시 보충 권장 등 ${_repN}건) → 재작성 대상이 아닙니다. 내용을 확인하고 필요 시 직접 보강하거나 AI 진단 지시사항으로 다루세요.</div>`:``)
     +`<button class="btn btn-outline btn-sm" style="margin-top:8px" id="btnGoStage4FromValidate" onclick="switchTab(3)"><span class="ico" data-icon="edit"></span> ④에서 결함 반영해 다시 쓰기</button>`
     +`<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px">여기 표시된 결함을 프롬프트에 넣어 본문을 재작성합니다(청구항·도면은 유지).</div></div>`;   // ★ [배치19-5] 이동 목적을 이름에
   el.innerHTML=h;

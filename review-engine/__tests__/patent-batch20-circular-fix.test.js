@@ -154,7 +154,7 @@ test('★20-2k — 소스: cohesion 상태 반환 + 재작성 루프의 실패 �
 test('★20-2l — 재작성 완료 집계가 신규 유입을 구분하고, 요약은 전→후 단일 축(_fixSummaryText)', () => {
   // ★ [배치20-6 갱신] 종전 "N건 중 R건 해소 · M건 잔존"은 해소(전 항목 단위)·잔존(후 항목 단위) 단위 혼합으로
   //   12−6≠2 처럼 읽혔다(_issueKey 숫자 마스킹으로 전 항목 여러 개가 한 계열로 접힘). 전→후 단일 축 서식으로 교체.
-  assert.match(PATENT_SRC, /const _remainNew=remain\.length-_remainOld;/, '★ 신규 유입 계산 유지');
+  assert.match(PATENT_SRC, /const _remainNew=_remainFixArr\.length-_remainOld;/, '★ 신규 유입 계산 유지(배치20-7: 재작성 레인 기준)');
   assert.match(PATENT_SRC, /function _fixSummaryText\(fs\)\{/, '★ 토스트·배너 공용 서식 함수');
   assert.ok(!PATENT_SRC.includes("건 중 '+_resolved+'건 해소"), '★ 단위 혼합 표기("중 N건 해소") 제거');
 });
@@ -297,4 +297,51 @@ test('★20-6e — 동작: 잔존 케이스 토스트가 전→후 단일 축으
   assert.ok(done.length, '★ 완료 토스트 존재');
   assert.match(done[0], /기계검증 \d+건 → 잔존 \d+건/, '★ 전→후 표기');
   assert.ok(!/건 중 \d+건 해소/.test(done[0]), '★ 단위 혼합 표기 소멸');
+});
+
+// ═══ [배치20-7] 잔존 결함의 논리적 해소 — 3-레인 분류(결정론/재작성/참고) + 정합기 판정 기준 통일 ═══
+// 신고: 2회 재작성 후에도 같은 3건 잔존(단말(200) 점유·모델레지스트리 부호 2개·예시 부재).
+// 규명: ① 정합기(_enforceRefPlan)가 구성부 접미 명칭만 수정 — 검증기는 전 명칭을 스캔(토큰 레벨 스캔⊋수정 비대칭).
+//   ② 검증기는 공백 무시·공통접미로 중복 판정하는데 배정·정합기는 exact 비교(판정 기준 비대칭).
+//   ③ 참고(리포트 전용) 항목이 잔존 집계에 동급으로 섞여 "재작성이 못 고침"으로 오독 + 참고만 남으면
+//      FIX_TARGETS 가 비어 지시 없는 백지 재생성이 돌던 낭비.
+
+test('★20-7a — 정합기 (d): 비구성 명칭의 청구 부호 점유를 박탈(문장 불변·번호만 제거)', () => {
+  const r = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify('단말(200)이 데이터를 전송한다. 응답결속부(200)는 이를 검증한다. 수집부(501)는 그대로 둔다.')}, [{num:200,name:'응답결속부'}]))`));
+  assert.ok(r.text.includes('단말이 데이터를 전송한다'), '★ 단말(200) → 단말 (점유 박탈 — 종전: 접미 비대칭으로 영구 잔존)');
+  assert.ok(r.text.includes('응답결속부(200)는'), '★ canonical 표기는 불변');
+  assert.ok(r.text.includes('수집부(501)'), '★ refPlan 밖 번호는 자동 삭제 금지(경고만) — 기존 (c) 유지');
+  assert.ok((r.unknown||[]).includes('501'), '★ 미정의 번호 경고 수집');
+  assert.strictEqual((r.stripped||[]).length, 1, '★ 박탈 이력 1건 기록');
+});
+
+test('★20-7b — 정합기 (b\'): 명칭 조회 퍼지화(공백 무시·공통접미 ≥5자 — 검증기와 동일 기준)', () => {
+  const r1 = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify('모델레지스트리(250)를 갱신한다.')}, [{num:150,name:'모델 레지스트리'}]))`));
+  assert.ok(r1.text.includes('모델레지스트리(150)'), '★ 공백 변형 명칭 → refPlan 번호로 재번호(종전: exact 미스 → (c) 방치 → dupassign 영구 잔존)');
+  const r2 = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify('통합모델레지스트리(250)를 조회한다.')}, [{num:150,name:'모델레지스트리'}]))`));
+  assert.ok(r2.text.includes('(150)'), '★ 공통접미(≥5자) 변형도 재번호');
+});
+
+test('★20-7c — 배정기: 공백-무시 dedupe(같은 구성의 표기 변형에 부호 2개 배정 원천 차단)', () => {
+  const plan = JSON.parse(run(`JSON.stringify(_assignRefNumbers(${JSON.stringify('【청구항 1】 모델 레지스트리(150)를 포함하는 장치.\n【청구항 2】 제 1 항에 있어서, 상기 모델레지스트리는 버전을 저장하는 장치.')}))`));
+  const regEntries = plan.filter(p => String(p.name).replace(/\s+/g,'').includes('모델레지스트리'));
+  assert.strictEqual(regEntries.length, 1, `★ 공백 변형 1건만 배정(실제 ${regEntries.length} — 종전: 2개 배정 → dupassign 구조 발생)`);
+});
+
+test('★20-7d — 3-레인 집계: 참고(리포트 전용) 분리 + 참고만 남으면 재라운드 중단', () => {
+  const only = run(`_fixSummaryText({before:10, remain:1, remainFix:0, remainReport:1, rounds:2})`);
+  assert.match(only, /기계검증 10건 → 재작성 대상 전부 해소 · 참고\(리포트 전용\) 1건/, '★ 재작성 몫은 다 했음을 명시(종전: "잔존 1건"으로 실패처럼 읽힘)');
+  const mix = run(`_fixSummaryText({before:10, remain:3, remainFix:2, remainReport:1, remainOld:1, remainNew:1, rounds:2})`);
+  assert.match(mix, /잔존 2건\(신규 유입 1건 포함\) · 참고 1건 · 재작성 2회/, '★ 레인 분리 표기');
+  assert.match(PATENT_SRC, /if\(round>0&&!remain\.some/, '★ 참고만 남으면 재라운드 중단(빈 FIX_TARGETS 백지 재생성 방지)');
+  assert.match(PATENT_SRC, /const _remainRep=remain\.length-_remainFixArr\.length;/, '★ 레인 분리 집계');
+  assert.match(PATENT_SRC, /남은 '\+_rrp\+'건은 참고\(리포트 전용\) 권장 항목/, '★ 배너 행동 안내가 참고 레인을 직답');
+  assert.match(PATENT_SRC, /const _REPORT_ONLY_CHECKS = new Set\(\['title_generation_suspect','example_missing'\]\)/, '★ 단일 출처 집합');
+  assert.match(PATENT_SRC, /const _UNFIXABLE_BY_REWRITE=\(typeof _REPORT_ONLY_CHECKS!=='undefined'\)\?_REPORT_ONLY_CHECKS/, '★ FIX_TARGETS 제외 집합과 동일 출처');
+});
+
+test('★20-7e — ⑤ 완성본 패널: 참고 배지·안내 분리(재작성 대상과 동급 표기 해소)', () => {
+  assert.match(PATENT_SRC, /const _rep=\(typeof _REPORT_ONLY_CHECKS!=='undefined'\)&&_REPORT_ONLY_CHECKS\.has\(i\.check\)/, '★ 항목별 참고 판별');
+  assert.match(PATENT_SRC, /④ 재작성 대상이 아닌 권장 확인 항목입니다/, '★ 항목 하단 설명');
+  assert.match(PATENT_SRC, /참고 항목<\/b>\(예시 보충 권장 등/, '★ 경로 안내에 참고 레인 별도 문단');
 });
