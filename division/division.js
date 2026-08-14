@@ -13,7 +13,7 @@
     'modules/05-assemble-verify-core.js',
     'modules/06-verify-final-utils.js'
 ];
-  var version = '20260803b';
+  var version = '20260814a';
   var prefix = 'division/';
 
   function writeScripts() {

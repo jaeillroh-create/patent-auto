@@ -27,6 +27,8 @@ function toggleAccordion(h){h.classList.toggle('open');const b=h.nextElementSibl
 
 // ═══════════ VALIDATION (v4.9 — full claim chain + relaxed matching) ═══════════
 const KILLER_WORDS=[{pattern:/반드시/,msg:'"반드시" — 제한적 표현'},{pattern:/에 한하여/,msg:'"~에 한하여" — 제한적 표현'},{pattern:/에 한정/,msg:'"~에 한정" — 제한적 표현'},{pattern:/에 제한/,msg:'"~에 제한" — 제한적 표현'},{pattern:/필수적으로/,msg:'"필수적으로" — 제한적 표현'},{pattern:/무조건/,msg:'"무조건" — 제한적 표현'},{pattern:/오직/,msg:'"오직" — 제한적 표현'}];
+// ★ [배치20-2] 불확정 용어 목록 — 종전 step_13 AI 검토 [8] 항목의 결정론 가능분을 기계로 이식(§42④2 명확성).
+const VAGUE_TERMS=[{pattern:/적절한/,msg:'"적절한" — 불확정 용어'},{pattern:/필요에\s*따라/,msg:'"필요에 따라" — 불확정 용어'},{pattern:/바람직하게는/,msg:'"바람직하게는" — 불확정 용어'},{pattern:/소정의/,msg:'"소정의" — 불확정 용어'},{pattern:/대략/,msg:'"대략" — 불확정 용어'}];
 // v4.9: Get full text of claim chain (claim N → references → parent → ... → independent)
 // v5.1: Get ONLY cited claim chain text (follows "청구항 N에 있어서" references upward)
 // Does NOT include unrelated claims — only the direct citation path
@@ -136,6 +138,13 @@ function validateClaims(text){
     // ★ [정책 변경] 종전 CHK-5(및→택일 강제)는 상위 multi_dependent_forbidden(다중인용 전면 금지)에 통합됨.
     //   "제N항 및 제M항"은 isMultiCite(및 포함)로 감지되어 위에서 HIGH 방출 — 별도 및-검사 제거(이중계상 방지).
     KILLER_WORDS.forEach(kw=>{if(kw.pattern.test(ct))iss.push({severity:'HIGH',message:`청구항 ${num}: ${kw.msg}`});});
+    // ★ [배치20-2] 역할 분리 이식 — 결정론 검출 가능한데 AI 검토에만 있던 두 검사를 기계로 옮김.
+    //   (a) 불확정 용어(§42④2 명확성): "적절한/필요에 따라/바람직하게는/소정의/대략" — 목록 매칭.
+    //   (b) 카테고리 혼입: 장치 청구항("~장치/시스템/서버"류 종결)에 "~하는 단계" 방법 표현 혼입.
+    VAGUE_TERMS.forEach(vt=>{if(vt.pattern.test(ct))iss.push({severity:'MEDIUM',check:'vague_term',message:`청구항 ${num}: ${vt.msg}`});});
+    if(!isDependent&&/(장치|시스템|서버|단말|기기|매체|프로그램)[^가-힣]{0,6}$/.test(ct.trim())&&/하는\s*단계/.test(ct)){
+      iss.push({severity:'HIGH',check:'category_mixin',message:`청구항 ${num}: 장치 청구항에 방법적 표현("~하는 단계") 혼입 — 카테고리 불명확(§42④2)`});
+    }
   });return iss;
 }
 // ═══════════════════════════════════════════════════════════════════
@@ -153,6 +162,11 @@ function validateSpecification(specText){
   const iss=[];
   if(!specText||!String(specText).trim())return iss;
   specText=String(specText);
+  // ★ [배치20-2] 검사 범위 = 공식 명세서 본문 한정 — 말미 [참고: …] extras(step_14 대안 청구항·step_15 특허성
+  //   검토)는 AI 검토 산출물이라 경어체·부호·용어 검사 대상이 아니고, 재작성·enforce 어느 쪽도 건드리지 않아
+  //   여기서 발화한 결함은 어떤 루프로도 해소 불가(불멸 결함)였다. 스캔 전에 절단한다(미리보기·다운로드는 그대로).
+  const _exIdx=specText.indexOf('\n[참고: ');
+  if(_exIdx>0)specText=specText.slice(0,_exIdx);
   const norm=_stripMathNorm;   // ★ [cleanup D2] 공유 헬퍼(06) — stripMathBlocks(수학식 제거)+공백 전제거. 3중복(03·05·08) 통일
   const bodyNoMath=stripMathBlocks(specText);   // 수학식 블록 제거 — 수식 내 그리스문자·파편의 CHK-2/3/7 오탐 방지
 
@@ -508,7 +522,8 @@ function _normComponentName(s){
   const st=n.replace(_MOD_STRIP_RE,'');
   return (st.length>=3)?st:n;   // 과절삭 방지(벗긴 결과가 너무 짧으면 원형 유지)
 }
-const FIXABLE_CHECKS = new Set(['paragraph_duplicate','sentence_duplicate','sentence_truncation','sentence_ending','unit_corruption','math_var_undefined','example_missing','refnum_consistency']);
+// ★ [배치20-2] example_missing 제외 — 예시 마커 유무는 실질(내용 품질)의 근사 판정이라 AI 검토([4]/[6]) 소관.
+const FIXABLE_CHECKS = new Set(['paragraph_duplicate','sentence_duplicate','sentence_truncation','sentence_ending','unit_corruption','math_var_undefined','refnum_consistency']);
 
 // [Part1] Step 13(AI 검토) 강화 — 결정론적 기계검증 결과를 검토 프롬프트에 주입한다.
 //   Step 13이 보는 범위(상세설명·수학식)에 존재하는 결함만 필터(완성-단계 전용 검사 제외) → AI가 [5] 보완/수정 제안에 반영.
@@ -638,7 +653,11 @@ function _refPlanFromStep18(s18){
 function _enforceAllOutputs(refPlan){
   const byArea={상세설명:0, 도면:0, 마무리:0};
   if(!refPlan||!refPlan.length||typeof _enforceRefPlan!=='function'||typeof outputs==='undefined')return {total:0, byArea:byArea, unknown:[]};
-  const AREA={ step_08:'상세설명', step08_device:'상세설명', step_08c:'상세설명', step_12:'상세설명', step_13_applied:'상세설명', step_13_applied_method:'상세설명', step_07:'도면', step_11:'도면', step_16:'마무리', step_17:'마무리', step_19:'마무리' };
+  // ★ [배치20-2] 스캔=정합 범위 일치 — 검증(validateSpecification)은 완성본 전체(과제 step_05·기초 step_02/03 포함)를
+  //   스캔하는데 enforce 가 그 섹션을 건너뛰면, 재작성 후 그 섹션들에서 부호·명칭 결함이 "해소 불가 신규"로 계속
+  //   발화한다(순환 오류의 β-다리 일부). step_05(cohesion TASK 슬롯)·step_02/03(기초)을 정합 범위에 추가.
+  //   (step_04 선행기술문헌은 문헌명 훼손 위험이 있어 제외 유지.)
+  const AREA={ step_08:'상세설명', step08_device:'상세설명', step_08c:'상세설명', step_12:'상세설명', step_13_applied:'상세설명', step_13_applied_method:'상세설명', step_07:'도면', step_11:'도면', step_05:'마무리', step_16:'마무리', step_17:'마무리', step_19:'마무리', step_02:'마무리', step_03:'마무리' };
   const unknown=new Set(); let total=0;
   Object.keys(AREA).forEach(function(k){
     const v=outputs[k];
@@ -675,8 +694,13 @@ function _claimComponentNames(){
 }
 function _buildFixTargets(issues){
   const lines=[]; let _needClaimNames=false;
+  // ★ [배치20-2] 재작성으로 해소 불가능한 결함은 지시에서 제외 — 넣어봤자 라운드만 소모하고 잔존한다.
+  //   · title_generation_suspect: 소스가 도면 약설(step_07)·확정 명칭이라 본문 재작성 불가침 — ③ 도면 재생성/명칭 정리로 해소.
+  //   · example_missing: "예를 들어" 마커 유무의 실질 근사 판정 — 실시예 충분성은 AI 검토([4]/[6]) 소관, 리포트 전용.
+  const _UNFIXABLE_BY_REWRITE=new Set(['title_generation_suspect','example_missing']);
   (issues||[]).forEach(function(i){
     const msg=String(i.message||''), det=String(i.detail||''), ck=i.check;
+    if(_UNFIXABLE_BY_REWRITE.has(ck))return;
     if(ck==='refnum_dupassign'){
       const cm=det.match(/canonical="([^"]+)"/), bm=det.match(/body="([^"]+)"/);
       // ★ [배치16.1-1] canonical↔body 불일치: 재생성 시 부호표(canonical)가 바뀌므로 "부호표 명칭 통일" 지시는 무효.
@@ -701,7 +725,9 @@ function _buildFixTargets(issues){
   return lines.join('\n');
 }
 // ★ [배치16-4] 두 검증 결과 집합의 동일 이슈 키(check+message) — 해소/잔존 카운트용.
-function _issueKey(i){ return String(i.check||'')+'|'+String(i.message||''); }
+// ★ [배치20-2] 키 안정화 — message에 개수·문단번호가 박혀 있어(예: "부호 3개 미정의", "문단 #4,#7") 개수만
+//   변해도 구키=해소·신키=신규로 이중 계상되던 왜곡을 숫자 마스킹으로 제거(같은 결함=같은 키).
+function _issueKey(i){ return String(i.check||'')+'|'+String(i.message||'').replace(/\d+/g,'#'); }
 function renderSpecValidation(){
   const el=document.getElementById('specValidateResult'); if(!el)return;
   const spec=buildSpecification();

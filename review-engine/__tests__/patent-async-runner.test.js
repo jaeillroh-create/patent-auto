@@ -201,5 +201,5 @@ test('★② ESM 캐시버스트 — 패널이 index.js 를 ?v= 로 import + 패
   assert.ok(panelTok, '패널 ?v= 존재');
   const patentTok = html.match(/patent\/patent\.js\?v=([^"']+)/);
   assert.strictEqual(panelTok[1], patentTok[1], '패널 ?v= 가 patent.js 토큰과 함께 갱신');
-  assert.match(html, /patent\/patent\.js\?v=20260803b/, 'patent.js ?v= 갱신(분리 로더 캐시버스트)');
+  assert.match(html, /patent\/patent\.js\?v=20260814a/, 'patent.js ?v= 갱신(분리 로더 캐시버스트)');
 });

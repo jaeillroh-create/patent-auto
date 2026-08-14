@@ -393,6 +393,8 @@ const STEP_NAMES_CLEAN={step_01:'발명의 명칭',step_02:'기술분야',step_0
     let _stallStrikes = 0, _restartStrikes = 0;
 
     while(a < 6 && r.stopReason === 'max_tokens'){
+      // ★ [배치20-3] 사용자 중단 — 이어쓰기 루프 경계에서 확인(지금까지 받은 부분은 보존·반환).
+      if(typeof window !== 'undefined' && window._wfCancelRequested){ console.warn('[v20 이어쓰기] 사용자 중단 — 이어쓰기 중지'); break; }
       a++;
       App.showProgress(pid, `이어서 작성 중... (${a}/6)`, a, 6);
 

@@ -129,7 +129,9 @@ async function runStep(sid){if(globalProcessing)return;const dep=checkDependency
       else App.showToast(`방법 청구항 완료 (${correctionRound}회 수정, ${finalIssues.length}건 잔여 — 경미한 사항)`, 'info');
     }
     else{
-      if(sid==='step_13')document.getElementById('btnApplyReview').style.display='block';
+      // ★ [배치20-2] 레거시 applyReview 버튼 부활 제거 — 검토 반영은 ④ 통합 재작성(REVIEW_NOTES 주입)으로
+      //   일원화됐다. 종전엔 진단 실행이 접힌 레거시 패널의 '검토 반영' 버튼을 되살려 제3의 본문 편집
+      //   경로(step_13_applied 섀도잉)를 열었다.
       App.showToast(`${STEP_NAMES[sid]} 완료 [${App.getModelConfig().label}]`);
     }
     onStepCompleted(sid);saveProject(true);
@@ -1815,6 +1817,9 @@ ${methodText||'(없음)'}`;
 // ★ [배치15I-2] 고분량 프리셋(상세/최대)에서 단일 응답 토큰 한계 초과가 구조적 → cohesion 을 2회로 분할.
 //   1차: DEVICE_DESC(+METHOD_DESC) 본문(분량 대부분) / 2차: REFTABLE+TASK+SOLUTION+EFFECTS+ABSTRACT(부호표·마무리, 1차 본문 컨텍스트).
 function _cohesionUseSplit(){ try{ return detailLevel==='maximal'||detailLevel==='detailed'; }catch(_e){ return false; } }
+// ★ [배치20-3] 사용자 중단 게이트 — 오버레이 '중단' 버튼이 세운 플래그를 논리 호출 경계에서 확인.
+//   throw 로 상위 catch(무커밋 실패 경로)에 합류 → 마지막 커밋 상태가 그대로 보존된다.
+function _wfCancelGate(){ if(typeof window!=='undefined'&&window._wfCancelRequested)throw new Error('사용자 중단'); }
 async function _runCohesionSplit(pid, maxTok){
   const base=buildPrompt('unified_cohesion'); if(!base)return null;
   // ── 1/2: 본문만 ──
@@ -1825,6 +1830,7 @@ async function _runCohesionSplit(pid, maxTok){
   //   유실된 device-only 응답을 '성공'으로 수용하면 방법 상세설명(step_12)이 침묵 소실된다. hasDevice 뿐 아니라 방법 완성도도 검사.
   const _splitWantM=(typeof includeMethodClaims!=='undefined')&&!!includeMethodClaims&&!!outputs.step_10;
   const rawBody=await App.callClaudeWithContinuation(bodyPrompt, pid, maxTok);
+  _wfCancelGate();   // ★ [배치20-3] 논리 호출 경계 중단 지점
   const rb=parseCohesiveBundle(rawBody);
   if(!rb.ok.hasDevice||(_splitWantM&&!rb.method))return null;   // 본문(또는 기대 방법본문) 실패 → null(호출부가 단일 호출로 폴백)
   // ── 2/2: REFTABLE + 마무리(본문 컨텍스트 제공, 부호·용어 정합) ──
@@ -1883,6 +1889,7 @@ async function runUnifiedCohesionGen(opts){
       catch(e){ console.warn('[unified] split fail → 단일 호출 폴백',e); }
       if(!r)App.showToast('분할 생성 미완 — 단일 호출로 재시도합니다','info');
     }
+    _wfCancelGate();   // ★ [배치20-3] 폴백 진입 전 중단 지점
     if(!r){ raw=await App.callClaudeWithContinuation(buildPrompt('unified_cohesion'),'progressUnifiedGen',_cohMaxTok); r=parseCohesiveBundle(raw); }
     // ★ [배치15I-1a] 절단 진단 — 응답 길이·이어쓰기 횟수·finish_reason(max_tokens=절단 확정)을 콘솔에 노출(docH 재현 시 즉시 확인).
     try{ const _m=(App.callClaudeWithContinuation&&App.callClaudeWithContinuation.lastMeta)||{}; console.log('[unified] cohesion '+(_cohesionUseSplit()?'(분할) ':'')+'응답 길이='+((raw||'').length)+'자, 마지막 이어쓰기='+(_m.attempts||0)+'회, finish_reason='+(_m.stopReason||'?')+(_m.truncated?' ★절단(max_tokens)':'')); }catch(_e){}
@@ -1922,7 +1929,7 @@ async function runUnifiedCohesionGen(opts){
       try{_lastGenError=_refMiss?'부호표 누락 — ④ 재생성 필요':'REFTABLE/장치 상세설명 블록 누락';}catch(_e){}
       App.clearProgress('progressUnifiedGen');
       App.showToast(_refMiss?'부호표 재요청 실패 — ④ 본문 통합 재생성이 필요합니다(본문 보존)':'통합 생성 실패: REFTABLE/장치 상세설명 블록 누락 — 기존 내용 보존, 다시 시도하세요','error');
-      console.warn('[unified] block missing',r.ok); return;
+      console.warn('[unified] block missing',r.ok); return {committed:false, reason:'필수 블록 누락(DEVICE_DESC)'};
     }
     // ★ [배치15C-1 + 검증 반영] 수학식 인라인 자기검증 게이트 — report 게이트보다 먼저 실행하여, 재요청으로 교체된
     //   본문(r3)이 아래 report 게이트(부호·누출)를 반드시 통과하도록 한다(재요청 본문의 무검증 커밋 방지).
@@ -1931,9 +1938,10 @@ async function runUnifiedCohesionGen(opts){
       const _mathN=Math.max(1,Math.min(5,parseInt(mathBlockCount)||3));
       const _mcnt=function(rr){ return (((rr&&rr.device)||'')+'\n'+((rr&&rr.method)||'')).match(/【\s*수학식/g)||[]; };
       if(_mcnt(r).length<_mathN){
+        _wfCancelGate();   // ★ [배치20-3] 수학식 재요청 전 중단 지점
         App.showToast('수학식 '+_mcnt(r).length+'/'+_mathN+'개 — 수식 미포함 감지, 상세설명만 재요청합니다(1회)','warning');
         try{
-          const retry=await App.callClaudeWithContinuation(_buildMathInlineRetryPrompt(r.device||'', r.method||'', _mathN),'progressUnifiedGen');
+          const retry=await App.callClaudeWithContinuation(_buildMathInlineRetryPrompt(r.device||'', r.method||'', _mathN),'progressUnifiedGen',_cohMaxTok);
           const refBlk=_serializeRefTable(r.refMap);   // ★ [검증 반영] A6 복구분 포함 현재 refMap에서 직렬화(원본 raw 아님)
           const merged=refBlk+'\n'+(retry||'');   // 부호표(REFTABLE)는 현재 refMap 유지, 본문만 교체 → 재파싱
           const r3=parseCohesiveBundle(merged);
@@ -1946,7 +1954,7 @@ async function runUnifiedCohesionGen(opts){
           }
         }catch(e){ console.warn('[unified] math retry',e); }
       }
-      if(_mcnt(r).length<_mathN){ try{_lastGenError='수학식 누락 — ④ 재생성 필요('+_mcnt(r).length+'/'+_mathN+')';}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('수학식 인라인 미포함('+_mcnt(r).length+'/'+_mathN+') — ④ 본문 통합 재생성이 필요합니다','error'); console.warn('[unified] math gate fail'); return; }
+      if(_mcnt(r).length<_mathN){ try{_lastGenError='수학식 누락 — ④ 재생성 필요('+_mcnt(r).length+'/'+_mathN+')';}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('수학식 인라인 미포함('+_mcnt(r).length+'/'+_mathN+') — ④ 본문 통합 재생성이 필요합니다','error'); console.warn('[unified] math gate fail'); return {committed:false, reason:'수학식 인라인 게이트 실패('+_mcnt(r).length+'/'+_mathN+')'}; }
     }
     // ★ [배치15K-4] 분량 총량 미달 보강 — 고분량 프리셋(상세/최대)에서 장치 상세설명이 목표의 80% 미만이면 기존 본문 유지·각 도면
     //   설명 확장 재요청 1회(도면당 하한만 채우고 총량 미달하던 LLM 성향 대응). 보강 실패/미개선이면 그대로 진행(진전 보장).
@@ -1954,6 +1962,7 @@ async function runUnifiedCohesionGen(opts){
       try{
         const _tgtC=_cohesionTargetChars(); const _curC=(r.device||'').length;
         if(_tgtC>0 && _curC < Math.floor(_tgtC*0.8)){
+          _wfCancelGate();   // ★ [배치20-3] 분량 보강 전 중단 지점
           App.showToast('분량 미달('+_curC+'/'+_tgtC+'자) — 각 도면 설명을 확장 보강합니다(1회)','warning');
           const aug=await App.callClaudeWithContinuation(_buildVolumeAugmentPrompt(r.device||'', r.method||'', _tgtC, _mathInline),'progressUnifiedGen',_cohMaxTok);
           const _augDev=(String(aug).match(/<<<DEVICE_DESC>>>([\s\S]*?)<<<END_DEVICE_DESC>>>/)||[])[1];
@@ -2006,7 +2015,7 @@ async function runUnifiedCohesionGen(opts){
     }
     // ── (2) 경고 커밋: 2회 후에도 잔여하면 차단하지 않고 새 본문으로 커밋(진전 보장) + 완료 요약·검증 패널에 노출. ──
     if(gate.length){ _gateWarn=gate.slice(); try{_lastGenError='';}catch(_e){} App.showToast('게이트 미통과 '+_gateWarn.length+'건 — 새 본문으로 커밋합니다(⑤ 완성본 검증에서 확인·보정)','warning'); console.warn('[unified] gate warn-commit',_gateWarn); }
-    if(!(opts&&opts.chained)&&!confirm('통합 생성 결과로 장치 상세설명·방법 상세설명·부호의 설명을 대체합니다. 계속할까요?\n(이전 내용은 이력에 보존됩니다)')){ App.clearProgress('progressUnifiedGen'); return; }
+    if(!(opts&&opts.chained)&&!confirm('통합 생성 결과로 장치 상세설명·방법 상세설명·부호의 설명을 대체합니다. 계속할까요?\n(이전 내용은 이력에 보존됩니다)')){ App.clearProgress('progressUnifiedGen'); return {committed:false, reason:'사용자 취소'}; }
     // ── 원자 커밋(3슬롯) ──
     pushOutputHistory('step_08','unified','runUnifiedCohesionGen');
     if(r.method&&outputs.step_10)pushOutputHistory('step_12','unified','runUnifiedCohesionGen');
@@ -2043,9 +2052,12 @@ async function runUnifiedCohesionGen(opts){
     if(_hasRP && typeof _enforceAllOutputs==='function'){ const _ea=_enforceAllOutputs(_refPlan); _refFixes+=_ea.total; _refFixArea=_ea.byArea; }
     outputs.step_18=_deriveSignDescription(r.refMap); markOutputTimestamp('step_18');   // refPlan 권위화 시 refMap=refPlan → 확정 명칭 기준. (refPlan 없으면 종전대로 본문 최빈 명칭)
     try{if(typeof reflectConceptsToSpec==='function')reflectConceptsToSpec();}catch(_e){}       // 예시도 부호 step_18 반영(있을 때만)
-    try{if(typeof invalidateDownstream==='function')invalidateDownstream('step_08');}catch(_e){}
-    // 함께 재생성한 step_12 는 stale 아님 — invalidateDownstream 의 false-stale 배지 제거(방법 브랜치 실행 시)
-    try{if(r.method&&outputs.step_10&&typeof document!=='undefined')document.querySelectorAll('.stale-warning[data-step="step_12"]').forEach(function(w){w.remove();});}catch(_e){}
+    // ★ [배치20-2] 커밋 말미 자기 무효화 제거 — 통합 생성은 step_08의 하류(step_08c 합본·step_09 인라인·
+    //   step_12·step_18)를 같은 트랜잭션에서 전부 재생성/파생하므로 invalidateDownstream('step_08')은
+    //   정당한 대상이 없다. 종전엔 이 호출이 방금 소비한 AI 검토(step_13)를 매번 '재생성 필수'(빨강)로
+    //   점등해 "④ 실행 → E1 필수 → E1 재실행 → E2 권장 → …" 순환 배너의 출발점이 됐고, 함께 재생성한
+    //   step_12의 거짓 배지를 DOM 제거로 땜질하고 있었다. 검토 최신성은 ④가 매 실행마다 진단을 새로
+    //   돌려 보장한다(그래프에서도 검토 노드 분리 — 03 STEP_DEPENDENCIES 참조).
     if(typeof saveProject==='function')saveProject(true);
     try{renderPreview();}catch(_e){}
     try{renderSpecValidation();}catch(_e){}
@@ -2074,7 +2086,8 @@ async function runUnifiedCohesionGen(opts){
     try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:true, refnum:after.refnum, gateWarn:_gateWarn.slice(), autoCorr:_corr, refFixes:_refFixes, refFixArea:_refFixArea, dupRemoved:_dupRemoved, mkRemoved:_mkRemoved, incomplete:_incomplete, incMsg:_incMsg}); }catch(_e){}
     try{ if(typeof _renderRefPlanPanel==='function')_renderRefPlanPanel(); }catch(_e){}   // ★ [배치17-5] 재생성으로 refPlan 갱신됐을 수 있으니 확정 부호표 패널 재렌더
     try{ if(typeof _pushRunLog==='function')_pushRunLog('본문 통합 생성', true, '부호정합 '+_refFixes+'건·정리(마커 '+_mkRemoved+'·중복 '+_dupRemoved+')'+(_gateWarn.length?(' · 게이트경고 '+_gateWarn.length):'')+(_incomplete?' · 불완전':'')); }catch(_e){}   // ★ [배치19b-5]
-  }catch(e){ try{_lastGenError=(e&&e.message)||String(e);}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:false, cause:(e&&e.message||String(e))}); }catch(_e2){} try{ if(typeof _pushRunLog==='function')_pushRunLog('본문 통합 생성', false, (e&&e.message||String(e))); }catch(_e3){} }
+    return {committed:true, incomplete:_incomplete};   // ★ [배치20-2] 상위 재작성 루프의 실패 감지용 상태 반환
+  }catch(e){ try{_lastGenError=(e&&e.message)||String(e);}catch(_e){} App.clearProgress('progressUnifiedGen'); App.showToast('통합 생성 실패: '+(e&&e.message||e),'error'); console.error('[unified]',e); try{ if(typeof _renderCohesionBanner==='function')_renderCohesionBanner({ok:false, cause:(e&&e.message||String(e))}); }catch(_e2){} try{ if(typeof _pushRunLog==='function')_pushRunLog('본문 통합 생성', false, (e&&e.message||String(e))); }catch(_e3){} return {committed:false, reason:(e&&e.message)||String(e)}; }
   finally{ setGlobalProcessing(false); if(App.setButtonLoading)App.setButtonLoading('btnUnifiedGen',false); _rwRel(); }
 }
 
