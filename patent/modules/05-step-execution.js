@@ -2232,3 +2232,72 @@ async function runUnifiedFullChain(_wizOpts){
   }
 }
 
+
+// ═══ [배치21-1] AI 교열 레인 — 검출은 LLM(점검표 전수), 수정은 국소 패치 + 코드 게이트 ═══
+// 교열 대상 섹션 수집 — 청구항(step_06/10)·도면(step_07/11)은 불변 원칙이라 제외(읽기 전용 컨텍스트로만 제공).
+function _proofreadSections(){
+  const list=[];
+  const dev=(typeof outputs.step_13_applied==='string'&&outputs.step_13_applied.trim())?'step_13_applied':'step_08';
+  const mth=(typeof outputs.step_13_applied_method==='string'&&outputs.step_13_applied_method.trim())?'step_13_applied_method':'step_12';
+  const MAP=[['step_02','기술분야'],['step_03','배경기술'],['step_05','해결하고자 하는 과제'],[dev,'상세설명(장치)'],[mth,'상세설명(방법)'],['step_17','과제의 해결 수단'],['step_16','발명의 효과'],['step_18','부호의 설명'],['step_19','요약서']];
+  MAP.forEach(function(e){ const v=outputs[e[0]]; if(v&&typeof v==='string'&&v.trim())list.push({sid:e[0],label:e[1],text:v}); });
+  return list;
+}
+// 패치 게이트 — LLM 판단을 코드가 검증 후 적용. 게이트: 허용 섹션·원문 축자 일치·참조부호 집합 보존·
+// 마커 금지·길이 급변 금지. 통과 못 하면 적용하지 않고 사유와 함께 보류(잘못 고침의 구조적 차단).
+function _applyProofreadPatches(patches){
+  const res={applied:[],skipped:[],touched:new Set()};
+  const OK=new Set(['step_02','step_03','step_05','step_08','step_13_applied','step_08c','step_12','step_13_applied_method','step_16','step_17','step_18','step_19']);
+  const refs=function(s){ return (String(s).match(/\((S?\d{2,4})\)/g)||[]).sort().join(','); };
+  (patches||[]).forEach(function(p){
+    try{
+      if(!p||!OK.has(p.section)){ res.skipped.push({p:p,why:'허용 섹션 아님(청구항·도면 불변)'}); return; }
+      const src=outputs[p.section];
+      const before=String(p.before||''), after=String(p.after||'');
+      if(!src||typeof src!=='string'||before.length<8||!after.trim()){ res.skipped.push({p:p,why:'패치 형식 미달'}); return; }
+      if(src.indexOf(before)<0){ res.skipped.push({p:p,why:'원문 불일치(before 미발견)'}); return; }
+      if(refs(before)!==refs(after)){ res.skipped.push({p:p,why:'참조부호 변경(보존 게이트)'}); return; }
+      if(/<<<|>>>/.test(after)){ res.skipped.push({p:p,why:'마커 혼입'}); return; }
+      const ratio=after.length/Math.max(1,before.length);
+      if(ratio<0.3||ratio>3){ res.skipped.push({p:p,why:'길이 급변(0.3~3배 게이트)'}); return; }
+      if(!res.touched.has(p.section)){ try{pushOutputHistory(p.section,'proofread','runProofread');}catch(_e){} res.touched.add(p.section); }
+      outputs[p.section]=src.split(before).join(after);
+      try{markOutputTimestamp(p.section);}catch(_e){}
+      res.applied.push(p);
+    }catch(_e){ res.skipped.push({p:p,why:'적용 예외'}); }
+  });
+  return res;
+}
+function _renderProofreadResult(data,res){
+  try{
+    const el=(typeof document!=='undefined')&&document.getElementById('proofreadResult'); if(!el)return;
+    const esc=App.escapeHtml; const reps=(data&&data.reports)||[];
+    let h='<div style="font-size:12px;border:1px solid var(--color-border);border-radius:8px;padding:10px 12px">';
+    h+='<b>AI 교열 완료</b> — 수정 '+res.applied.length+'건 적용 · 보류 '+res.skipped.length+'건 · 리포트 '+reps.length+'건';
+    if(res.applied.length){ h+='<details style="margin-top:6px"><summary style="cursor:pointer">적용된 수정 ('+res.applied.length+')</summary>'+res.applied.map(function(p){ return '<div style="padding:4px 0;border-bottom:1px solid var(--color-border)"><b>['+esc(p.class||'')+'·'+esc(p.section||'')+']</b> '+esc(p.reason||'')+'<br><span style="color:var(--color-error,#D94A4A);text-decoration:line-through">'+esc(String(p.before).slice(0,90))+'</span><br><span style="color:var(--color-success,#3DAE7A)">'+esc(String(p.after).slice(0,90))+'</span></div>'; }).join('')+'</details>'; }
+    if(res.skipped.length){ h+='<details style="margin-top:6px"><summary style="cursor:pointer;color:var(--color-text-tertiary)">보류 ('+res.skipped.length+' — 게이트 미통과, 문서 불변)</summary>'+res.skipped.map(function(s){ return '<div style="padding:3px 0;color:var(--color-text-tertiary)">'+esc(s.why)+': '+esc(String((s.p&&s.p.before)||'').slice(0,70))+'</div>'; }).join('')+'</details>'; }
+    if(reps.length){ h+='<details open style="margin-top:6px"><summary style="cursor:pointer"><b>리포트 ('+reps.length+' — 사람 판단 필요, 자동 수정 안 함)</b></summary>'+reps.map(function(r){ return '<div style="padding:3px 0">· <b>'+esc(r.where||'')+'</b> — '+esc(r.note||'')+'</div>'; }).join('')+'</details>'; }
+    h+='</div>';
+    el.innerHTML=h; el.style.display='block';
+  }catch(_e){}
+}
+async function runProofread(){
+  if(typeof globalProcessing!=='undefined'&&globalProcessing){App.showToast('처리 중입니다','info');return;}
+  const secs=_proofreadSections();
+  if(!secs.length){App.showToast('교열할 본문이 없습니다 — 먼저 ④에서 본문을 생성하세요','error');return;}
+  if(typeof setGlobalProcessing==='function')setGlobalProcessing(true);
+  App.setButtonLoading('btnProofread',true);
+  App.showProgress('progressProofread','AI 교열 — 점검표 전수 검수 중...',0,1);
+  try{
+    const r=await App.callClaude(buildProofreadPrompt(secs),(App.safeMaxTokensLarge&&App.safeMaxTokensLarge())||8192);
+    let data=null;
+    try{ const t=String((r&&r.text)||''); const s=t.indexOf('{'), e=t.lastIndexOf('}'); if(s>=0&&e>s)data=JSON.parse(t.slice(s,e+1)); }catch(_e){}
+    if(!data||!Array.isArray(data.patches)){ App.showToast('교열 응답 해석 실패 — 잠시 후 다시 시도하세요','error'); return; }
+    const res=_applyProofreadPatches(data.patches);
+    if(res.applied.length){ try{renderPreview();}catch(_e){} try{renderSpecValidation();}catch(_e){} try{saveProject(true);}catch(_e){} }
+    _renderProofreadResult(data,res);
+    try{ if(typeof _pushRunLog==='function')_pushRunLog('AI 교열', true, '패치 '+res.applied.length+'건 적용 · 보류 '+res.skipped.length+' · 리포트 '+((data.reports||[]).length)); }catch(_e){}
+    App.showToast('AI 교열 완료 — 수정 '+res.applied.length+'건 적용 · 보류 '+res.skipped.length+'건 · 리포트 '+((data.reports||[]).length)+'건',res.applied.length?'success':'info');
+  }catch(e){ App.showToast('AI 교열 실패: '+(e&&e.message||e),'error'); try{ if(typeof _pushRunLog==='function')_pushRunLog('AI 교열', false, (e&&e.message)||String(e)); }catch(_e){} }
+  finally{ App.setButtonLoading('btnProofread',false); App.clearProgress('progressProofread'); if(typeof setGlobalProcessing==='function')setGlobalProcessing(false); }
+}
