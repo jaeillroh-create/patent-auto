@@ -514,7 +514,9 @@ const _HW_BOILER_RE=new RegExp('^('+_HW_BOILER_WORDS+')$');
 // ★ [배치18-2/3] 구성명사 정규화(단일 출처) — 청구항/본문의 "…를 실행하고 Y부"·"…하는 Y부"·"프로세서는 Y부"에서 선행 관형절·연결어미·
 //   하드웨어 주어 접두를 벗겨 최소 구성명사(Y부)만 남긴다. _assignRefNumbers(배정) 과 _enforceRefPlan(본문 정합)이 같은 규칙을 써야
 //   "실행하고 캐릭터부"(본문) 가 "캐릭터부"(refPlan) 와 매칭돼 정합된다(불일치 시 미정의로 남아 dupassign 파생 — docL 잔존 원인).
-const _MOD_STRIP_RE=/^.*(?:하는|되는|하고|하며|하여|하기\s*위한|위한|된|인|한|할|로부터|에\s*기초하여|에\s*따라|대응하여|응답하여)\s+(?=\S)/;   // 탐욕 매칭 → 마지막 어미까지 제거
+// ★ [배치21-2] 단음절 어미 '인'·'한' 제거 — '상한'·'무인' 등 내용명사 절단('상한 설정부'→'설정부' — 부호표
+//   명칭 불일치 유발). 관형형 잔재('인접한 X부'류)가 명칭에 남아도 접미 매칭·(a) 게이트가 흡수한다(명명 전용).
+const _MOD_STRIP_RE=/^.*(?:하는|되는|하고|하며|하여|하기\s*위한|위한|된|할|로부터|에\s*기초하여|에\s*따라|대응하여|응답하여)\s+(?=\S)/;   // 탐욕 매칭 → 마지막 어미까지 제거
 const _HW_PREFIX_STRIP_RE=new RegExp('^(?:'+_HW_BOILER_WORDS+')(?:은|는|이|가|을|를|와|과|에서)\\s+(?=\\S)');   // 하드웨어 주어 접두(조사 필수 — "메모리 저장부" 보존)
 // ★ [배치20-8] 비구성 어미 — '부'로 끝나지만 구성부가 아닌 일반명사(전부·일부·내부 등). 배정 차단용.
 //   실증: 청구항 "복수의 평가 지표 전부(240)에 대하여"에서 '전부'가 구성 접미로 오인돼 refPlan에 등재 →
@@ -535,7 +537,11 @@ function _normComponentName(s){
     if(toks.length>1){
       // ★ [배치20-10] 보조사(-에도/-까지 등)·의존명사(시/때) 정지 보강 — 부호표 명명 품질용. (a) 개명 게이트가
       //   화이트리스트라 워크 갭이 더 이상 본문 삭제로 이어지지 않지만, 명칭 후보 자체는 짧을수록 좋다.
-      const _stop=/(하는|되는|하며|되며|하고|되고|하여|되어|된|및|또는|의|를|을|은|는|에서|으로|와|과|에|로|한|에도|에는|라도|까지|부터|조차|마저)$/;
+      // ★ [배치21-2] 명사 충돌 어미 제거(로·과·와·에·한) — '경로'·'결과'·'상한' 등 내용명사가 조사로 오인돼
+      //   정당 명칭이 절단됐다("이중 경로 순위 산출부"→"순위 산출부" → 부호의 설명-본문 명칭 불일치의 근원).
+      //   워크는 이제 명명 품질 전용이고 본문 안전은 (a) 화이트리스트 게이트가 담당하므로, 과잉 정지보다
+      //   과소 정지(긴 명칭 허용 — 접미 매칭이 흡수)가 옳다.
+      const _stop=/(하는|되는|하며|되며|하고|되고|하여|되어|된|및|또는|의|를|을|은|는|에서|으로|에도|에는|라도|까지|부터|조차|마저)$/;
       const keep=[];
       for(let k=toks.length-1;k>=0;k--){
         const w=toks[k];
@@ -619,7 +625,11 @@ function _refPlanNameToNum(refPlan){ const m=new Map(); (refPlan||[]).forEach(fu
 function _buildRefPlanBlock(refPlan){
   if(!refPlan||!refPlan.length)return '';
   const dev=refPlan.filter(function(p){return String(p.num)[0]!=='S';}), mth=refPlan.filter(function(p){return String(p.num)[0]==='S';});
-  let s='[장치부호]\n(100) 장치 본체/시스템\n'+dev.map(function(p){return '('+p.num+') '+p.name;}).join('\n');
+  // ★ [배치21-2] 플레이스홀더 유출 차단 — "(100) 장치 본체/시스템"이 확정 부호표로 주입되자 LLM 이 이를
+  //   산문에 그대로 복사("장치 본체/시스템(100)" — 외부 검토 실증)했다. 실제 장치 주어를 쓰고, 계층(하위
+  //   구성)을 표기해 포함 관계 서술의 단일 진실원천으로 만든다.
+  const _subj=(typeof getDeviceSubject==='function'&&getDeviceSubject())||'장치 본체';
+  let s='[장치부호]\n(100) '+_subj+' — 최상위(전체 장치. 아래 구성부의 포함 주체는 이것뿐이다)\n'+dev.map(function(p){ const _par=(p&&p.level>=2&&p.parent&&p.parent!==100)?(' — ('+p.parent+')의 하위 구성'):''; return '('+p.num+') '+p.name+_par; }).join('\n');
   if(mth.length)s+='\n[방법단계]\n'+mth.map(function(p){return '('+p.num+') '+p.name;}).join('\n');
   return s;
 }

@@ -48,10 +48,10 @@ test('★21-1a — 프롬프트: 일반화 점검표(A~F)·절대 원칙·JSON �
   run(`outputs.step_06='【청구항 1】 데이터 저장부(110)를 포함하는 서버.'; outputs.step_08='도 1을 참조하면, 데이터 저장부(110)는 값을 보관한다.'; outputs.step_16='효과가 있다.';`);
   const p = run(`buildProofreadPrompt(_proofreadSections())`);
   assert.ok(p.includes('문장 성분 탈락 비문'), '★ A 성분 탈락(외부 검토 목적어/시/경우 유형 일반화)');
-  assert.ok(p.includes('소속·수식 관계 오류'), '★ B 소속 오류');
+  assert.ok(p.includes("소속·구성 계층 오류"), "★ B 소속·계층 오류(배치21-2 확장 제목)");
   assert.ok(p.includes('유령 명칭'), '★ C 명칭·부호 정합');
   assert.ok(p.includes('의미 역전'), '★ D 의미 역전·내부 모순');
-  assert.ok(p.includes('수식 정합'), '★ E 수식');
+  assert.ok(p.includes('수식·파라미터 정합'), '★ E 수식·파라미터(배치21-2 확장 제목)');
   assert.ok(p.includes('사상 및 필드'), '★ F 관용구(재발 이력 명시)');
   assert.ok(p.includes('전문 재작성 금지'), '★ 국소 패치 원칙');
   assert.ok(p.includes('참조부호 보존'), '★ 부호 보존 원칙');
@@ -99,4 +99,46 @@ test('★21-1d — UI 배선 + 정책 주석(규칙 레이어 동결)', () => {
   assert.match(HTML_SRC, /청구항·도면 불변<\/b>, 전문 재작성 없음/, '★ 카드가 불변 원칙을 명시');
   assert.match(PATENT_SRC, /정책\(규칙 레이어 동결\)/, '★ 두더지잡기 종료 정책이 소스에 명문화');
   assert.match(PATENT_SRC, /⑤ 「AI 교열」로 문장·표기 전수 검수/, '★ ④ 완료 안내가 교열로 연결');
+});
+
+// ═══ [배치21-2] 6차 외부 검토 반영 — 신규 결함의 자체 원인 3건 확정·수정 + 점검표 일반화 ═══
+// 재현으로 확정한 자체 원인: ① "(100) 장치 본체/시스템" 플레이스홀더가 확정 부호표로 주입돼 LLM 이 산문에
+// 복사("장치 본체/시스템(100)"). ② 후방 워크가 명사 충돌 어미(경로·결과·상한의 로/과/한)에서 정당 명칭을
+// 절단("이중 경로 순위 산출부"→"순위 산출부" — 부호의 설명 명칭 불일치의 근원). ③ 배치20-9 [대상] 규칙의
+// "또는 그 직계 상위 구성부" 모호성 + 도면 허브 지시("가장 많은 연결")가 포함 관계 모순·허브 3중 선언 유발.
+
+test('★21-2a — 워크 명사 충돌 어미 비절단(경로·결과·상한 보존) + 기존 정지 유지', () => {
+  assert.strictEqual(run(`_normComponentName(${JSON.stringify('이중 경로 순위 산출부')})`), '이중 경로 순위 산출부', '★ 경로(로$) 비절단 — 부호의 설명 "순위 산출부 : 170" 불일치의 근원 종결');
+  assert.strictEqual(run(`_normComponentName(${JSON.stringify('판정 결과 결속부')})`), '판정 결과 결속부', '★ 결과(과$) 비절단');
+  assert.strictEqual(run(`_normComponentName(${JSON.stringify('상한 설정부')})`), '상한 설정부', '★ 상한(한$) 비절단');
+  assert.strictEqual(run(`_normComponentName(${JSON.stringify('가 생성한 요청 스냅샷은 세그먼트 색인부')})`), '세그먼트 색인부', '★ 조사-끝 어절(은$) 정지는 유지');
+  assert.strictEqual(run(`_normComponentName(${JSON.stringify('경우에도 표본 충분성 판정부')})`), '표본 충분성 판정부', '★ 보조사(에도$) 정지는 유지');
+});
+
+test('★21-2b — 확정 부호표: 플레이스홀더 소멸 + 실제 장치 주어 + 계층(하위) 표기', () => {
+  run(`selectedTitle='정책사업 분석·매칭 서버'; selectedTitleType='서버';`);
+  const blk = run(`_buildRefPlanBlock([{num:110,name:'요청 조립부',level:1,parent:100},{num:121,name:'승격 게이트부',level:2,parent:120}])`);
+  assert.ok(!blk.includes('장치 본체/시스템'), '★ 플레이스홀더 소멸(LLM 이 산문에 복사하던 "장치 본체/시스템(100)" 유출 차단)');
+  assert.ok(/\(100\) .*최상위/.test(blk), '★ (100) 실제 주어 + 최상위 명시');
+  assert.ok(blk.includes('(121) 승격 게이트부 — (120)의 하위 구성'), '★ 계층 표기 — 포함 관계의 단일 진실원천');
+});
+
+test('★21-2c — 생성 프롬프트: 포함 관계 규칙·[대상] 항상 서버(100)·허브 도면-한정', () => {
+  assert.match(PATENT_SRC, /하위 구성부를 다른 구성부의 포함 주체로 서술하지 마라/, '★ cohesion 포함 관계 규칙(같은 부호 두 부모 금지)');
+  assert.match(PATENT_SRC, /\[대상\] 규칙: 도 2 이후 세부 구성 도면의 \[대상\]은 항상/, '★ [대상]=서버(100) 고정("직계 상위 구성부" 허용 문구 제거 — 포함 관계 모순의 근원)');
+  assert.ok(!PATENT_SRC.includes('또는 그 직계 상위 구성부로 하라'), '★ 모호 문구 소멸');
+  assert.match(PATENT_SRC, /이 도면 안에서 가장 많은 연결을 가진 노드/, '★ 허브 정의 도면-한정(전역 최상급 3중 선언 차단)');
+  assert.match(PATENT_SRC, /전역 최상급의 허브 서술을 본문에 쓰지 마라/, '★ cohesion 본문 최상급 금지');
+});
+
+test('★21-2d — 교열 점검표 일반화 보강: 계층 트리·최상급 중복·독립변수 결합·파라미터 전수·숫자 검산·이중 용어', () => {
+  run(`outputs.step_06='【청구항 1】 요청 조립부(110)를 포함하는 서버.'; outputs.step_08='본문.'; refPlan=[{num:110,name:'요청 조립부',level:1,parent:100}];`);
+  const p = run(`buildProofreadPrompt(_proofreadSections())`);
+  assert.ok(p.includes('하나의 트리를 이루는지'), '★ B: 포함 관계 단일 트리(같은 부호 두 부모 모순)');
+  assert.ok(p.includes('전역 최상급'), '★ D: 최상급 중복 선언(허브 3중)');
+  assert.ok(p.includes('서로 독립인 변수를 일대일로 묶어'), '★ D: 독립 변수 결합(등급-완화류)');
+  assert.ok(p.includes('미정의 파라미터'), '★ E: 파라미터 전수 정의(하한 미정의류)');
+  assert.ok(p.includes('계산 가능한 값'), '★ R: 숫자 검산 리포트(8,550만·884,694류 — 수정 금지·보고 전용)');
+  assert.ok(p.includes('서로 다른 층위 이중 사용'), '★ C: 용어 이중 사용(판단 불가류)');
+  assert.ok(p.includes('[구성 계층 — 코드가 청구항에서 확정'), '★ 계층 기준 블록 주입(교열의 검증 기준)');
 });
