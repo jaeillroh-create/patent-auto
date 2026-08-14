@@ -292,6 +292,6 @@ test('#6 동작 ★ — openProject 복원: 저장 방법-ON(true)이나 방법 
 // ─────────────────────── 회귀: 캐시버스트 토큰 ───────────────────────
 
 test('15H 회귀 ★ — ?v= 릴리스 토큰 b50 갱신', () => {
-  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260814d/, '★ index.html patent.js 토큰 b50');
-  assert.match(readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8'), /version = '20260814d'/, '★ patent.js 로더 version b50');
+  assert.match(HTML_SRC, /patent\/patent\.js\?v=20260814e/, '★ index.html patent.js 토큰 b50');
+  assert.match(readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8'), /version = '20260814e'/, '★ patent.js 로더 version b50');
 });

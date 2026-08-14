@@ -516,10 +516,36 @@ const _HW_BOILER_RE=new RegExp('^('+_HW_BOILER_WORDS+')$');
 //   "실행하고 캐릭터부"(본문) 가 "캐릭터부"(refPlan) 와 매칭돼 정합된다(불일치 시 미정의로 남아 dupassign 파생 — docL 잔존 원인).
 const _MOD_STRIP_RE=/^.*(?:하는|되는|하고|하며|하여|하기\s*위한|위한|된|인|한|할|로부터|에\s*기초하여|에\s*따라|대응하여|응답하여)\s+(?=\S)/;   // 탐욕 매칭 → 마지막 어미까지 제거
 const _HW_PREFIX_STRIP_RE=new RegExp('^(?:'+_HW_BOILER_WORDS+')(?:은|는|이|가|을|를|와|과|에서)\\s+(?=\\S)');   // 하드웨어 주어 접두(조사 필수 — "메모리 저장부" 보존)
+// ★ [배치20-8] 비구성 어미 — '부'로 끝나지만 구성부가 아닌 일반명사(전부·일부·내부 등). 배정 차단용.
+//   실증: 청구항 "복수의 평가 지표 전부(240)에 대하여"에서 '전부'가 구성 접미로 오인돼 refPlan에 등재 →
+//   [확정 부호표]를 받은 LLM 이 본문에 "평가 지표 전부(240)"를 충실히 재생산(개념에 도면부호 결함).
+const _NON_COMP_TAIL_RE=/(^|\s)(전부|일부|내부|외부|상부|하부|후부|측부|대부분)$/;
 function _normComponentName(s){
   let n=(typeof _cleanRefName==='function')?_cleanRefName(s):String(s||'').trim();
   n=n.replace(_HW_PREFIX_STRIP_RE,'');
-  const st=n.replace(_MOD_STRIP_RE,'');
+  let st=n.replace(_MOD_STRIP_RE,'');
+  // ★ [배치20-8] 후방 토큰 워크 — 명칭 캡처(numRe/compRe/_NAME_ALT)가 공백을 포섭해 "절 전체"를 명칭으로
+  //   오인하던 근본 결함 차단. 실증(외부 검토 v1/v2 문서): "요청 스냅샷은 세그먼트 색인부"가 통째로 명칭이 되어
+  //   canonical 치환 시 목적어("요청 스냅샷은")·조건절("…경우 제2 상태로 결정되어")·수식 주어("n_min은")가
+  //   본문에서 삭제됐다(_MOD_STRIP_RE 는 '되어·이면서' 등 미등재 어미를 못 끊음). 끝(구성명사)에서 앞으로
+  //   걸으며 조사·연결어미로 끝나는 어절/지시어를 만나면 중단 — 검증기 §2.4 D2·19b-2 와 동일 규칙로 통일.
+  try{
+    st=(typeof _cleanRefName==='function')?_cleanRefName(st):st;   // MOD 스트립이 새로 노출한 선행 지시어(상기 등) 재정리
+    const toks=st.split(/\s+/).filter(Boolean);
+    if(toks.length>1){
+      const _stop=/(하는|되는|하며|되며|하고|되고|하여|되어|된|및|또는|의|를|을|은|는|에서|으로|와|과|에|로|한)$/;
+      const keep=[];
+      for(let k=toks.length-1;k>=0;k--){
+        const w=toks[k];
+        if(keep.length){
+          if(_stop.test(w)||/^(상기|그|본|해당|각|경우|이때|여기서|직후|직전)$/.test(w))break;
+          if(/[가이]$/.test(w)&&w.length>=3)break;   // 명사+주격조사(3자↑ — 2자 내용어 추가·자가·차이 보존, 19b-2 동일)
+        }
+        keep.unshift(w);
+      }
+      if(keep.length)st=keep.join(' ');
+    }
+  }catch(_e){}
   return (st.length>=3)?st:n;   // 과절삭 방지(벗긴 결과가 너무 짧으면 원형 유지)
 }
 // ★ [배치20-2] example_missing 제외 — 예시 마커 유무는 실질(내용 품질)의 근사 판정이라 AI 검토([4]/[6]) 소관.
@@ -559,7 +585,8 @@ function _assignRefNumbers(claimText, opts){
   //   "모델레지스트리"를 다른 명칭으로 취급해 부호 2개를 배정하면, 그 순간부터 dupassign(동일 명칭 복수 부호)이
   //   구조적으로 발생한다(판정 기준 비대칭). 배정 dedupe 를 검증기와 같은 공백-무시 키로 통일.
   const _spKeys=new Set();
-  function add(name,num,level,parent){ const _k=String(name||'').replace(/\s+/g,''); if(!name||name.length<3||_isHw(name)||nameToNum.has(name)||_spKeys.has(_k)||numToName.has(num))return false; _spKeys.add(_k); nameToNum.set(name,num); numToName.set(num,name); plan.push({num:num,name:name,level:level||1,parent:(parent==null?100:parent)}); return true; }
+  // ★ [배치20-8] 비구성 어미(전부·일부 등) 배정 차단 — '부' 접미 오인으로 개념이 부호를 받던 결함(예: "평가 지표 전부(240)").
+  function add(name,num,level,parent){ const _k=String(name||'').replace(/\s+/g,''); if(!name||name.length<3||_isHw(name)||(typeof _NON_COMP_TAIL_RE!=='undefined'&&_NON_COMP_TAIL_RE.test(name))||nameToNum.has(name)||_spKeys.has(_k)||numToName.has(num))return false; _spKeys.add(_k); nameToNum.set(name,num); numToName.set(num,name); plan.push({num:num,name:name,level:level||1,parent:(parent==null?100:parent)}); return true; }
   const clean=(typeof _cleanRefName==='function')?_cleanRefName:(s=>String(s||'').trim());
   // ★ [배치18-2/3] 구성명사 정규화는 모듈 공통 _normComponentName 사용(배정=본문정합 규칙 일치 — "실행하고 X부"·"프로세서는 X부" 접두 제거).
   const devName=(typeof _normComponentName==='function')?_normComponentName:clean;
@@ -620,7 +647,11 @@ function _enforceRefPlan(body, refPlan){
   const _NAME_ALT='[가-힣A-Za-z0-9·][가-힣A-Za-z0-9·\\s]*?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터)|'+((typeof _HW_BOILER_WORDS!=='undefined')?_HW_BOILER_WORDS:'프로세서|메모리|서버|버스|인터페이스');
   const norm=(typeof _normComponentName==='function')?_normComponentName:clean;
   const out=String(body).replace(new RegExp('('+_NAME_ALT+')(\\s*)\\((\\d{2,4})\\)','g'), function(whole,rawName,sp,numStr){
-    const nm=norm(rawName), lead=rawName.slice(0, rawName.length-nm.length);   // ★ [배치18-2] 구성명사 정규화(관형절·연결어미·하드웨어 접두 제거)로 refPlan 명칭과 매칭. 선행 문맥은 lead 로 보존.
+    const nm=norm(rawName);   // ★ [배치18-2] 구성명사 정규화(관형절·연결어미·하드웨어 접두 제거)로 refPlan 명칭과 매칭. 선행 문맥은 lead 로 보존.
+    // ★ [배치20-8] lead 는 길이 차감(접미 가정) 대신 실제 위치로 — 워크가 공백을 정규화해 nm 이 rawName 의
+    //   문자 그대로의 접미가 아닐 수 있다. lead 훼손은 곧 본문 삭제이므로 위치 탐색을 우선한다.
+    let lead=rawName.slice(0, rawName.length-nm.length);
+    const _li=rawName.lastIndexOf(nm); if(_li>=0)lead=rawName.slice(0,_li);
     const canon=numToName.get(numStr);
     if(canon){ if(nm!==canon){ fixes++; return lead+canon+sp+'('+numStr+')'; } return whole; }   // (a) 번호 기준 명칭 교정
     const wantNum=_fuzzyNum(nm);
@@ -645,9 +676,30 @@ function _enforceRefPlan(body, refPlan){
 }
 // ★ [배치17-1] 확정 부호표 확보 — 청구항(step_06/10)에서 결정론 배정. 없으면 기존 부호표(step_18)에서 역산(레거시 호환).
 //   force=true(청구항 재생성)일 때만 재배정 → 변리사가 손댄 확정값 보존. refPlan 은 전역 상태로 영속(saveProject/openProject).
+// ★ [배치20-8] 저장 refPlan 치유 — 구버전 배정기가 절 포섭 캡처로 만든 쓰레기 명칭("상기 모델 카드를 상기
+//   모델 레지스트리" 류)이 프로젝트에 영속되면, enforce (a)가 그 명칭을 canonical 로 삼아 본문의 정상 명칭을
+//   쓰레기로 계속 갈아치운다(오염 전파). 로드 시 명칭을 후방 워크로 재정규화하고 비구성·중복 항목을 걷어낸다.
+//   방법 단계(S부호, "…하는 단계")는 정규화 대상이 아니므로 원형 보존.
+function _sanitizeRefPlan(plan){
+  try{
+    if(!plan||!plan.length)return plan;
+    const seen=new Set(); const out=[];
+    plan.forEach(function(p){
+      if(!p||!p.name)return;
+      if(String(p.num)[0]==='S'){ const k0='S|'+String(p.name).replace(/\s+/g,''); if(seen.has(k0))return; seen.add(k0); out.push(p); return; }
+      let nm=(typeof _normComponentName==='function')?_normComponentName(String(p.name)):String(p.name).trim();
+      if(!nm||nm.length<3)return;
+      if(typeof _NON_COMP_TAIL_RE!=='undefined'&&_NON_COMP_TAIL_RE.test(nm))return;
+      if(typeof _HW_BOILER_RE!=='undefined'&&_HW_BOILER_RE.test(nm.replace(/\s+/g,'')))return;
+      const k=nm.replace(/\s+/g,''); if(seen.has(k))return; seen.add(k);
+      out.push({num:p.num,name:nm,level:p.level||1,parent:(p.parent==null?100:p.parent)});
+    });
+    return out.length?out:plan;
+  }catch(_e){ return plan; }
+}
 function _ensureRefPlan(force){
   try{
-    if(!force && refPlan && refPlan.length)return refPlan;
+    if(!force && refPlan && refPlan.length){ refPlan=_sanitizeRefPlan(refPlan); return refPlan; }   // ★ [배치20-8] 영속 오염 치유
     const claims=(typeof outputs!=='undefined'&&outputs.step_06)||'';
     if(claims){
       const wantM=(typeof includeMethodClaims!=='undefined')&&!!includeMethodClaims&&!!(typeof outputs!=='undefined'&&outputs.step_10);
@@ -656,7 +708,7 @@ function _ensureRefPlan(force){
     }
     // 청구항이 없고 기존 부호표(step_18)만 있는 레거시 프로젝트 → 역산으로 refPlan 복원(최초 진입 1회)
     if(!force && (!refPlan||!refPlan.length) && typeof outputs!=='undefined' && outputs.step_18){
-      refPlan=_refPlanFromStep18(outputs.step_18);
+      refPlan=_sanitizeRefPlan(_refPlanFromStep18(outputs.step_18));
       return refPlan;
     }
     return refPlan;
@@ -893,7 +945,9 @@ function _collectBodyRefPairs(){
 function _refPairsFromText(body){
   const map=new Map();
   const re=/([가-힣A-Za-z][가-힣A-Za-z0-9·]*(?:\s+[가-힣A-Za-z0-9·]+){0,7})\s*\((\d{1,4})\)/g; let m;   // ★ [배치15J] char cap 제거 → 단어 그룹(앞글자 유실 차단)
-  while((m=re.exec(String(body||'')))!==null){ const name=_cleanRefName(m[1]); const ref=parseInt(m[2],10); if(!(ref>=1&&ref<=9999))continue; if(!map.has(ref))map.set(ref,new Map()); if(name.length>=2){ const nm=map.get(ref); nm.set(name,(nm.get(name)||0)+1); } }
+  // ★ [배치20-8] 명칭 후보를 후방 워크 정규화(_normComponentName)로 — 종전 _cleanRefName 만으로는 절 포섭 캡처가
+  //   그대로 부호표 후보가 되어 "직후 상기 임계값의 충족 여부 : 171" 류 오염이 step_18 에 실렸다.
+  while((m=re.exec(String(body||'')))!==null){ const name=(typeof _normComponentName==='function')?_normComponentName(m[1]):_cleanRefName(m[1]); const ref=parseInt(m[2],10); if(!(ref>=1&&ref<=9999))continue; if(!map.has(ref))map.set(ref,new Map()); if(name.length>=2){ const nm=map.get(ref); nm.set(name,(nm.get(name)||0)+1); } }
   let b; const bare=/\((\d{1,4})\)/g; while((b=bare.exec(String(body||'')))!==null){ const ref=parseInt(b[1],10); if(ref>=1&&ref<=9999&&!map.has(ref))map.set(ref,new Map()); }
   return [...map.entries()].sort((a,b)=>a[0]-b[0]).map(function(e){ const ref=e[0],nm=e[1]; let best='',bc=0; nm.forEach(function(c,n){ if(c>bc){bc=c;best=n;} }); return {ref:ref,name:best}; });
 }

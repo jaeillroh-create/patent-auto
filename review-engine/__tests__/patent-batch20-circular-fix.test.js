@@ -345,3 +345,63 @@ test('★20-7e — ⑤ 완성본 패널: 참고 배지·안내 분리(재작성 
   assert.match(PATENT_SRC, /④ 재작성 대상이 아닌 권장 확인 항목입니다/, '★ 항목 하단 설명');
   assert.match(PATENT_SRC, /참고 항목<\/b>\(예시 보충 권장 등/, '★ 경로 안내에 참고 레인 별도 문단');
 });
+
+// ═══ [배치20-8] 본문 삭제 사고 근본 수정 — 정합기 명칭 캡처의 절 포섭 차단 ═══
+// 외부 검토(v1/v2 .doc)에서 발견된 문서 훼손 4종("요청 스냅샷은" 목적어 탈락 15곳·"경우" 탈락·제2 상태
+// 조건절 통삭제·"n_min은"→"n_" 수식 주어 훼손·"평가 지표 전부(240)" 개념 부호)을 코드로 전수 재현해
+// 범인을 확정: LLM 이 아니라 _enforceRefPlan 규칙 (a). 명칭 캡처(_NAME_ALT/numRe/compRe)의 문자클래스가
+// 공백을 포함해 절 전체를 '명칭'으로 오인 → _MOD_STRIP_RE 가 못 끊는 어미(되어·이면서 등)면 정규화가
+// 절을 그대로 명칭으로 남김 → canonical 치환이 절(목적어·조건절·수식 주어)을 삭제. 수정: 후방 토큰 워크
+// (검증기 §2.4 D2·19b-2 와 동일 규칙)로 명칭을 최종 명사구로 한정 + lead 위치 기반 보존 + 배정·부호표
+// 폴백·영속 refPlan 치유까지 같은 정규화로 통일.
+
+test('★20-8a — 정합기가 목적어·"경우"를 더 이상 삭제하지 않는다(검토 문서 실측 문형 불변)', () => {
+  const plan = [{num:110,name:'요청 조립부'},{num:120,name:'세그먼트 색인부'},{num:150,name:'순위 산출부'}];
+  const body = '요청 조립부(110)가 생성한 요청 스냅샷은 세그먼트 색인부(120)로 전달되고, 모델이 가용한 경우 순위 산출부(150)는 학습 경로를 선택한다.';
+  const r = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify(body)}, ${JSON.stringify(plan)}))`));
+  assert.strictEqual(r.text, body, '★ 불변(종전: "요청 스냅샷은 "·"경우 " 삭제 — fixes:2 로 "교정" 위장)');
+  assert.strictEqual(r.fixes, 0, '★ 교정 0건');
+});
+
+test('★20-8b — 조건절 통삭제 재발 방지(제2 상태 정의 소실 실측 문형 불변)', () => {
+  const plan = [{num:170,name:'조건 완화 처리부'}];
+  const body = '임계값 이상인 경우 제1 상태로 결정되어 완화 없이 순위 산출 결과가 확정되고, 임계값 미만이면서 동의를 나타내는 경우 제2 상태로 결정되어 조건 완화 처리부(170)가 호출되며, 임계값 미만이면서 동의를 나타내지 아니하는 경우 제3 상태로 결정된다.';
+  const r = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify(body)}, ${JSON.stringify(plan)}))`));
+  assert.strictEqual(r.text, body, '★ 불변(종전: "…되어" 를 _MOD_STRIP 이 못 끊어 제2 상태 조건절 전체가 canonical 로 치환·소실)');
+});
+
+test('★20-8c — 수학식 정의 주어 보존("n_min은"·"제1 경계값과 제2 경계값은" 실측 문형 불변)', () => {
+  const plan = [{num:130,name:'데이터 저장부'}];
+  const body = '관측 표본 수 하한으로서 n_min은 데이터 저장부(130)에 외부화된 값이다. 제1 경계값과 제2 경계값은 데이터 저장부(130)에 외부화된 정수형 등급 경계값이다.';
+  const r = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify(body)}, ${JSON.stringify(plan)}))`));
+  assert.strictEqual(r.text, body, '★ 불변(종전: "n_min은"→"n_"·경계값 주어 통삭제)');
+});
+
+test('★20-8d — 배정기: 절 포섭·비구성 어미 차단(쓰레기 canonical 원천 차단)', () => {
+  const claim = '【청구항 1】 승격 판정 결과를 담은 모델 카드를 구성하여 모델 레지스트리(150)에 등재하는 모델 카드 등재부(250); 및 복수의 평가 지표 전부(240)에 대하여 판정하는 승격 게이트부(230)를 포함하는 서버.';
+  const plan = JSON.parse(run(`JSON.stringify(_assignRefNumbers(${JSON.stringify(claim)}))`));
+  assert.ok(!plan.some(p => /전부/.test(p.name)), '★ "복수의 평가 지표 전부" 미배정(개념에 부호 부여 결함 차단 — LLM 이 [확정 부호표]를 따라 재생산하던 경로)');
+  assert.ok(plan.some(p => p.num === 150 && p.name === '모델 레지스트리'), '★ 관형절 미포섭 등재');
+  assert.ok(plan.some(p => p.num === 250 && p.name === '모델 카드 등재부'), '★ 정상 구성부 보존');
+  assert.ok(plan.every(p => !/(상기 |를 $|은 $|가 $)/.test(p.name + ' ')), '★ 조사·지시어 잔재 0');
+});
+
+test('★20-8e — _normComponentName 후방 워크 + 영속 refPlan 치유(_sanitizeRefPlan)', () => {
+  assert.strictEqual(run(`_normComponentName(${JSON.stringify('가 생성한 요청 스냅샷은 세그먼트 색인부')})`), '세그먼트 색인부', '★ 조사-끝 어절에서 중단');
+  assert.strictEqual(run(`_normComponentName(${JSON.stringify('임계값 미만이면서 동의를 나타내는 경우 제2 상태로 결정되어 조건 완화 처리부')})`), '조건 완화 처리부', '★ "되어" 등 미등재 어미도 워크가 처리');
+  assert.strictEqual(run(`_normComponentName(${JSON.stringify('표본 충분성 판정부')})`), '표본 충분성 판정부', '★ 정상 다단어 명칭 불변');
+  const dirty = [{num:150,name:'모델 카드를 상기 모델 레지스트리'},{num:250,name:'모델 카드 등재부'},{num:240,name:'복수의 평가 지표 전부'},{num:'S110',name:'수집하는 단계'}];
+  const s = JSON.parse(run(`JSON.stringify(_sanitizeRefPlan(${JSON.stringify(dirty)}))`));
+  assert.ok(s.some(p => p.num === 150 && p.name === '모델 레지스트리'), '★ 영속 쓰레기 명칭 재정규화(구버전 프로젝트 치유)');
+  assert.ok(!s.some(p => /전부/.test(p.name)), '★ 비구성 항목 제거');
+  assert.ok(s.some(p => p.num === 'S110' && p.name === '수집하는 단계'), '★ 방법 단계(S)는 원형 보존');
+  assert.match(PATENT_SRC, /refPlan=_sanitizeRefPlan\(refPlan\); return refPlan;/, '★ 로드 경로 배선');
+});
+
+test('★20-8f — 부호표 폴백(_refPairsFromText)도 동일 정규화(step_18 오염 차단) + 정당 정합 유지', () => {
+  const pairs = JSON.parse(run(`JSON.stringify(_refPairsFromText(${JSON.stringify('판정 직후 상기 임계값의 충족 여부 판정부(171)가 동작한다. 임계값의 충족 여부 판정부(171)는 결과를 낸다.')}))`));
+  const p171 = pairs.find(p => p.ref === 171);
+  assert.ok(p171 && !/직후|상기/.test(p171.name), `★ 절 잔재 없는 명칭(실제 "${p171 && p171.name}" — 종전: "직후 상기 임계값의 충족 여부" 류가 부호의 설명에 등재)`);
+  const r = JSON.parse(run(`JSON.stringify(_enforceRefPlan(${JSON.stringify('수신부(120)는 패킷을 받는다.')}, ${JSON.stringify([{num:120,name:'세그먼트 색인부'}])}))`));
+  assert.ok(r.text.includes('세그먼트 색인부(120)'), '★ 정당한 canonical 치환(명칭만 다른 구성부 접미)은 유지 — 정합 기능 자체는 보존');
+});
