@@ -18,8 +18,8 @@ const API_PROVIDERS = {
     endpoint:'https://api.anthropic.com/v1/messages',
     keyPlaceholder:'sk-ant-api03-...', keyUrl:'https://console.anthropic.com/settings/keys',
     models:{
-      sonnet:{id:'claude-sonnet-4-6',label:'Sonnet 4.6',inputCost:3,outputCost:15},
-      opus:{id:'claude-opus-4-8',label:'Opus 4.8',inputCost:5,outputCost:25}
+      sonnet:{id:'claude-sonnet-5',label:'Sonnet 5',inputCost:3,outputCost:15},
+      opus:{id:'claude-opus-5',label:'Opus 5',inputCost:5,outputCost:25}
     }, defaultModel:'opus', cheapModel:'sonnet'
   },
   gpt: {
@@ -396,16 +396,62 @@ async function callClaude(prompt,maxTokens=8192){
   if(!ensureApiKey()){openProfileSettings();throw new Error('API Key를 먼저 입력해 주세요');}
   const prov=selectedProvider,mc=getModelConfig();
   const req=buildAPIRequest(prov,selectedModel,SYSTEM_PROMPT,prompt,maxTokens);
-  const ctrl=new AbortController(),tout=setTimeout(()=>ctrl.abort(),180000);
-  try{const res=await fetch(req.url,{method:'POST',signal:ctrl.signal,headers:req.headers,body:JSON.stringify(req.body)});clearTimeout(tout);
-    if(res.status===401||res.status===403){apiKeys[prov]='';API_KEY='';showToast('API Key가 유효하지 않습니다. ⚙️ 계정설정을 확인하세요.','error');throw new Error('API Key 유효하지 않음');}
-    if(res.status===429)throw new Error('요청 과다. 30초 후 재시도');if(res.status>=500)throw new Error('서버 오류');
-    const d=await res.json(),parsed=parseAPIResponse(prov,d);
-    if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
-    usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
+  // ★ [배치20-5] Claude 는 SSE 스트리밍 수신 — 특허 명세서는 2만자+ 생성이 정상 워크로드라 "총 시간 제한"
+  //   이라는 개념 자체가 부적합하다(공식 권고도 장문 출력은 스트리밍). 스트리밍은 총 시간 무제한이고,
+  //   대신 "유휴"(청크가 90초간 안 옴)만 이상으로 감시한다. 부가 효과: 실시간 수신 글자수(_genStreamChars)와
+  //   중단 버튼(_wfCancelRequested)이 호출 진행 중간에도 즉시 반응한다.
+  // ★ [배치20-4] 비스트리밍 프로바이더(gpt/gemini)는 타임아웃을 max_tokens 에 비례 — 고정 3분은 8192 토큰
+  //   기준이었다(16000 토큰 생성은 4~6분이 정상 소요). 8192 이하 3분 유지, 초과분 비례 확장(상한 10분).
+  const _isStream=(prov==='claude');
+  if(_isStream)req.body.stream=true;
+  const _tmoMs=(maxTokens&&maxTokens>8192)?Math.min(600000,Math.round(180000*maxTokens/8192)):180000;
+  const _idleMs=90000;
+  const ctrl=new AbortController();
+  let tout=setTimeout(()=>ctrl.abort(),_isStream?_idleMs:_tmoMs);
+  const _resetIdle=()=>{ if(!_isStream)return; clearTimeout(tout); tout=setTimeout(()=>ctrl.abort(),_idleMs); };
+  const _tmoMsg=_isStream?'스트림 유휴 타임아웃(90초) — 네트워크 상태를 확인하세요':'타임아웃('+Math.round(_tmoMs/60000)+'분)';
+  try{const res=await fetch(req.url,{method:'POST',signal:ctrl.signal,headers:req.headers,body:JSON.stringify(req.body)});
+    if(res.status===401||res.status===403){clearTimeout(tout);apiKeys[prov]='';API_KEY='';showToast('API Key가 유효하지 않습니다. ⚙️ 계정설정을 확인하세요.','error');throw new Error('API Key 유효하지 않음');}
+    if(res.status===429){clearTimeout(tout);throw new Error('요청 과다. 30초 후 재시도');}if(res.status>=500){clearTimeout(tout);throw new Error('서버 오류');}
+    if(!_isStream){
+      const d=await res.json();clearTimeout(tout);
+      const parsed=parseAPIResponse(prov,d);
+      if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=parsed.it;usage.outputTokens+=parsed.ot;
+      usage.cost+=(parsed.it*mc.inputCost/1e6)+(parsed.ot*mc.outputCost/1e6);}
+      if(typeof updateStats==='function')updateStats();
+      return{text:parsed.text,stopReason:parsed.stopReason};
+    }
+    if(!res.ok){const d=await res.json().catch(()=>({}));clearTimeout(tout);throw new Error((d&&d.error&&d.error.message)||('오류 '+res.status));}
+    // ── SSE 파싱: content_block_delta(text_delta) 누적 · message_delta 에서 stop_reason/출력토큰 · message_start 에서 입력토큰 ──
+    const reader=res.body.getReader(),dec=new TextDecoder();
+    let buf='',text='',stopReason='',it=0,ot=0;
+    try{window._genStreamChars=0;}catch(_e){}
+    while(true){
+      const {done,value}=await reader.read();
+      if(done)break;
+      _resetIdle();
+      // ★ [배치20-3 연동] 중단 버튼이 스트리밍 수신 중간에도 즉시 반응(다음 청크 경계에서 abort)
+      if(typeof window!=='undefined'&&window._wfCancelRequested){try{ctrl.abort();}catch(_e){}clearTimeout(tout);throw new Error('사용자 중단');}
+      buf+=dec.decode(value,{stream:true});
+      let nl;
+      while((nl=buf.indexOf('\n'))>=0){
+        const line=buf.slice(0,nl).trim();buf=buf.slice(nl+1);
+        if(!line.startsWith('data:'))continue;
+        const payload=line.slice(5).trim();
+        if(!payload||payload==='[DONE]')continue;
+        let ev;try{ev=JSON.parse(payload);}catch(_e){continue;}
+        if(ev.type==='content_block_delta'&&ev.delta&&typeof ev.delta.text==='string'){text+=ev.delta.text;try{window._genStreamChars=text.length;}catch(_e){}}
+        else if(ev.type==='message_start'&&ev.message&&ev.message.usage)it=ev.message.usage.input_tokens||0;
+        else if(ev.type==='message_delta'){if(ev.delta&&ev.delta.stop_reason)stopReason=ev.delta.stop_reason;if(ev.usage&&typeof ev.usage.output_tokens==='number')ot=ev.usage.output_tokens;}
+        else if(ev.type==='error')throw new Error((ev.error&&ev.error.message)||'스트림 오류');
+      }
+    }
+    clearTimeout(tout);
+    if(typeof usage!=='undefined'){usage.calls++;usage.inputTokens+=it;usage.outputTokens+=ot;
+    usage.cost+=(it*mc.inputCost/1e6)+(ot*mc.outputCost/1e6);}
     if(typeof updateStats==='function')updateStats();
-    return{text:parsed.text,stopReason:parsed.stopReason};
-  }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃(3분)');throw e;}
+    return{text:text,stopReason:stopReason};
+  }catch(e){clearTimeout(tout);if(e&&e.name==='AbortError')throw new Error(_tmoMsg);throw e;}
 }
 async function callClaudeSonnet(prompt,maxTokens=8192){
   if(!ensureApiKey()){openProfileSettings();throw new Error('API Key를 먼저 입력해 주세요');}
@@ -440,8 +486,10 @@ async function callVision(prompt,images,maxTokens=4096){
   }catch(e){clearTimeout(tout);if(e.name==='AbortError')throw new Error('타임아웃(3분)');throw e;}
 }
 // ★ [배치15I-1c] 프로바이더별 안전 상한 내에서 cohesion 등 대용량 생성용 max_tokens 상향(단일 응답 절단 완화).
-//   gemini-flash 는 출력 8192 상한이라 유지, claude(sonnet/opus)·gpt(4o/mini)는 16000까지 상향.
-function safeMaxTokensLarge(){ try{ return selectedProvider==='gemini'?8192:16000; }catch(_e){ return 8192; } }
+//   gemini-flash 는 출력 8192 상한이라 유지, gpt(4o/mini)는 16000.
+// ★ [배치20-5] claude 는 32000 — SSE 스트리밍(유휴 감시)이라 총시간 타임아웃 걱정이 없고,
+//   Opus 5 는 thinking 이 기본 ON이며 그 토큰이 max_tokens 에 포함되므로 16k 로는 본문이 절단될 수 있다.
+function safeMaxTokensLarge(){ try{ return selectedProvider==='claude'?32000:(selectedProvider==='gemini'?8192:16000); }catch(_e){ return 8192; } }
 // ★ [배치15I-1a/1c] maxTokens 선택 인자 + 절단 진단 노출 — 마지막 stopReason·이어쓰기 횟수·길이를 함수 속성(lastMeta)으로
 //   기록해 호출부(runUnifiedCohesionGen)가 finish_reason(length=절단 확정)·수신 길이를 완료 요약/콘솔에 표시할 수 있게 한다.
 async function callClaudeWithContinuation(prompt,pid,maxTokens){let full='',r=await callClaude(prompt,maxTokens),a=0;full=r.text;while(a<6&&r.stopReason==='max_tokens'){a++;showProgress(pid,`이어서 작성 중... (${a}/6)`,a,6);r=await callClaude(`아래 [마지막 부분]의 텍스트가 중간에 잘려 있다. 잘린 지점의 바로 다음부터 이어서 작성하라.\n- 마지막 단어가 불완전하면 해당 단어의 나머지 글자부터 시작하라.\n- [마지막 부분]의 내용을 반복하지 마라. 동일 문체.\n\n[마지막 부분]\n${full.slice(-2000)}`,maxTokens);const lc=full.slice(-1),fc=r.text[0]||'';if(/[가-힯a-zA-Z0-9]/.test(lc)&&/[가-힯a-zA-Z0-9]/.test(fc))full+=r.text;else full+='\n'+r.text;}clearProgress(pid);try{callClaudeWithContinuation.lastMeta={stopReason:(r&&r.stopReason)||'',attempts:a,truncated:!!(r&&r.stopReason==='max_tokens'),length:full.length};}catch(_e){}return full;}

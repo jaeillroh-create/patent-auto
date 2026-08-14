@@ -14,8 +14,8 @@ export const PROVIDERS = Object.freeze({
   claude: {
     endpoint: 'https://api.anthropic.com/v1/messages',
     models: {
-      sonnet: { id: 'claude-sonnet-4-6', inputCost: 3, outputCost: 15 },
-      opus: { id: 'claude-opus-4-8', inputCost: 5, outputCost: 25 },
+      sonnet: { id: 'claude-sonnet-5', inputCost: 3, outputCost: 15 },
+      opus: { id: 'claude-opus-5', inputCost: 5, outputCost: 25 },
     },
     defaultModel: 'sonnet',
   },

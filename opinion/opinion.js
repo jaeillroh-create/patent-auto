@@ -13,7 +13,7 @@
     'modules/05-draft-validation-opinion.js',
     'modules/06-output-data-json.js'
 ];
-  var version = '20260814a';
+  var version = '20260814b';
   var prefix = 'opinion/';
 
   function writeScripts() {

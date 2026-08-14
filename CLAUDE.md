@@ -235,7 +235,7 @@ adminPanel (관리자 패널)
 ### LLM API 프로바이더
 | 프로바이더 | 엔드포인트 | 모델 |
 |-----------|-----------|------|
-| Claude | `https://api.anthropic.com/v1/messages` | `claude-sonnet-4-5-20250929`, `claude-opus-4-6` |
+| Claude | `https://api.anthropic.com/v1/messages` | `claude-sonnet-5`, `claude-opus-5` |
 | GPT | `https://api.openai.com/v1/chat/completions` | `gpt-4o-mini`, `gpt-4o` |
 | Gemini | `https://generativelanguage.googleapis.com/v1beta/models/` | `gemini-2.0-flash`, `gemini-2.5-pro-preview-06-05` |
 

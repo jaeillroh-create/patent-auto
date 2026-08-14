@@ -179,3 +179,66 @@ test('★20-2m — "진단만" 실행이 진짜 문서 불변·부수효과 0(�
   assert.ok(!HTML_SRC.includes('id="btnPhaseD"'), '★ 레거시 역설계 버튼 제거');
   assert.ok(!HTML_SRC.includes('id="wfAdv3"'), '★ 레거시 고급 패널 제거');
 });
+
+// ═══ [배치20-4/20-5] 본문 생성 타임아웃 해소 — SSE 스트리밍 + 적응 폴백 ═══
+// 실측: 통합 생성 [4/4] 본문에서 분할·폴백 모두 "타임아웃(3분)" — 20-1이 16k 토큰을 실제 적용하기
+// 시작하자 고정 180초 하드컷에 전멸. 수정: claude 는 SSE 스트리밍(총시간 제한 폐지, 유휴 90초만 감시),
+// gpt/gemini 는 max_tokens 비례 타임아웃, 분할 타임아웃 시 폴백은 8192 로 강등(이어쓰기가 이어붙임).
+
+const COMMON_SRC = readFileSync(path.join(REPO, 'shared/common.js'), 'utf8');
+const _fnSlice = (src, name, nextName) => {
+  const s = src.indexOf(name); const e = src.indexOf(nextName, s);
+  assert.ok(s > 0 && e > s, `함수 경계 탐지 실패: ${name} → ${nextName}`);
+  return src.slice(s, e);
+};
+
+test('★20-4a — callClaude: 비스트리밍 프로바이더는 max_tokens 비례 타임아웃(8192 이하 3분 불변, 상한 10분)', () => {
+  const cc = _fnSlice(COMMON_SRC, 'async function callClaude(', 'async function callClaudeSonnet(');
+  assert.match(cc, /maxTokens&&maxTokens>8192\)\?Math\.min\(600000,Math\.round\(180000\*maxTokens\/8192\)\):180000/, '★ 비례 스케일(16000→약 6분, 상한 10분)');
+  assert.ok(!cc.includes("throw new Error('타임아웃(3분)')"), '★ callClaude 본체에 3분 하드코딩 메시지 없음(실제 분 표기)');
+  // callClaudeSonnet/callVision(경량 8192 이하 고정)은 고정 3분 유지가 정상 — 회귀로 오인 금지
+  const cs = _fnSlice(COMMON_SRC, 'async function callClaudeSonnet(', 'async function callVision(');
+  assert.ok(cs.includes('ctrl.abort(),180000'), '★ 경량 호출(callClaudeSonnet)은 고정 180초 유지');
+});
+
+test('★20-4b — 적응 폴백: 분할 타임아웃 → 폴백은 8192 강등 + 사용자 중단은 폴백으로 삼키지 않음', () => {
+  assert.match(PATENT_SRC, /_splitTimedOut=\/타임아웃\/\.test\(String\(\(e&&e\.message\)\|\|''\)\)/, '★ 분할 실패가 타임아웃인지 식별');
+  assert.match(PATENT_SRC, /const _fbTok=_splitTimedOut\?undefined:_cohMaxTok/, '★ 타임아웃 폴백은 기본 8192(재타임아웃 방지) — 절단분은 v20 이어쓰기가 결합');
+  assert.match(PATENT_SRC, /if\(e&&\/사용자 중단\/\.test\(String\(e\.message\|\|''\)\)\)throw e;/, '★ 분할 내부 중단이 catch 에 삼켜져 폴백이 계속 돌던 버그 수정(즉시 전파)');
+});
+
+test('★20-5a — callClaude: claude 는 SSE 스트리밍 + 유휴(90초) 감시로 총시간 제한 폐지', () => {
+  const cc = _fnSlice(COMMON_SRC, 'async function callClaude(', 'async function callClaudeSonnet(');
+  assert.match(cc, /const _isStream=\(prov==='claude'\)/, '★ claude 만 스트리밍(타 프로바이더 동작 불변)');
+  assert.match(cc, /if\(_isStream\)req\.body\.stream=true/, '★ 요청에 stream:true');
+  assert.match(cc, /const _idleMs=90000/, '★ 유휴 타임아웃 90초(청크 간 간격만 감시 — 총 생성 시간은 무제한)');
+  assert.match(cc, /const _resetIdle=\(\)=>\{ if\(!_isStream\)return; clearTimeout\(tout\); tout=setTimeout/, '★ 청크 수신마다 유휴 타이머 리셋');
+  assert.match(cc, /스트림 유휴 타임아웃\(90초\)/, '★ 유휴 초과 시 원인 구분 가능한 메시지');
+});
+
+test('★20-5b — callClaude: SSE 이벤트 파싱(텍스트 누적·usage·stop_reason·에러)', () => {
+  const cc = _fnSlice(COMMON_SRC, 'async function callClaude(', 'async function callClaudeSonnet(');
+  assert.match(cc, /ev\.type==='content_block_delta'&&ev\.delta&&typeof ev\.delta\.text==='string'/, '★ text_delta 누적');
+  assert.match(cc, /ev\.type==='message_start'&&ev\.message&&ev\.message\.usage/, '★ input_tokens 수집');
+  assert.match(cc, /ev\.type==='message_delta'/, '★ stop_reason·output_tokens 수집(이어쓰기 판단에 필수)');
+  assert.match(cc, /ev\.type==='error'/, '★ 스트림 내 error 이벤트를 예외로 승격');
+  assert.match(cc, /return\{text:text,stopReason:stopReason\}/, '★ 반환 계약 {text,stopReason} 유지(호출부 불변)');
+});
+
+test('★20-5c — 스트리밍 중 실시간 수신량·중단: _genStreamChars 갱신 + 오버레이 표시 + 취소 즉시 반영', () => {
+  const cc = _fnSlice(COMMON_SRC, 'async function callClaude(', 'async function callClaudeSonnet(');
+  assert.match(cc, /window\._genStreamChars=0/, '★ 스트림 시작 시 카운터 리셋');
+  assert.match(cc, /window\._genStreamChars=text\.length/, '★ 청크마다 수신 자수 갱신');
+  assert.match(cc, /window\._wfCancelRequested\)\{try\{ctrl\.abort\(\)/, '★ 중단 요청 시 스트림 즉시 abort(종전: HTTP 1건 완주 대기)');
+  assert.match(PATENT_SRC, /_genStreamChars\)\|0/, '★ 오버레이 서브 진행이 수신 자수를 읽음');
+  assert.match(PATENT_SRC, /'· 수신 '\+live\.toLocaleString\(\)\+'자'/, '★ "수신 N자" 라이브 표시(멈춤/진행 즉시 구분)');
+});
+
+test('★20-5d — Opus 5 전환: 모델 ID·카탈로그 미러·대용량 상한 32000', () => {
+  assert.match(COMMON_SRC, /sonnet:\{id:'claude-sonnet-5',label:'Sonnet 5'/, '★ Sonnet 5');
+  assert.match(COMMON_SRC, /opus:\{id:'claude-opus-5',label:'Opus 5',inputCost:5,outputCost:25\}/, '★ Opus 5(비용 5/25 동일)');
+  const cat = readFileSync(path.join(REPO, 'review-engine/adapters/providerCatalog.js'), 'utf8');
+  assert.match(cat, /id: 'claude-sonnet-5'/, '★ 카탈로그 미러 동기화(sonnet)');
+  assert.match(cat, /id: 'claude-opus-5'/, '★ 카탈로그 미러 동기화(opus)');
+  assert.match(COMMON_SRC, /selectedProvider==='claude'\?32000:\(selectedProvider==='gemini'\?8192:16000\)/, '★ claude 32000(스트리밍이라 시간 무관 + Opus 5 thinking 이 max_tokens 에 포함되므로 16k 는 절단 위험)');
+});
