@@ -665,8 +665,13 @@ function _enforceRefPlan(body, refPlan){
   //   번호를 떼어 그 구성이 본문 미기재가 되면 refnum_consistency 가 "청구 구성 서술 누락"으로 발화 →
   //   FIX_TARGETS 가 LLM 에 실질 보강을 지시한다(형식=기계, 실질 공백=AI 의 역할 분담 유지).
   const out2=out.replace(/([가-힣A-Za-z·]{2,})\((\d{2,4})\)/g, function(whole,rawName,numStr){
+    const _nm0=norm(rawName);
+    // ★ [배치20-9] 비구성 어미(전부·일부 등)가 번호를 달고 있으면 refPlan 소유 여부와 무관하게 박탈 —
+    //   개념·영역어는 도면요소일 수 없음이 확정적이라 (c)의 "자동 삭제 금지" 원칙의 안전한 예외.
+    //   실증: "복수의 평가 지표 전부(250)" — 배정 차단(20-8) 후에도 구문서·LLM 재생산으로 본문에 잔존하던 건.
+    if(typeof _NON_COMP_TAIL_RE!=='undefined'&&_NON_COMP_TAIL_RE.test(_nm0)){ fixes++; stripped.push(rawName+'('+numStr+')→'+rawName); return rawName; }
     const canon=numToName.get(numStr); if(!canon)return whole;            // refPlan 밖 번호는 (c) 경고 유지(자동 삭제 금지)
-    const nm=norm(rawName);
+    const nm=_nm0;
     if(_sufRel(_sp(nm),_sp(canon)))return whole;                          // canonical 과 동일/접미관계 → 정상 표기
     if(_fuzzyNum(nm)!=null)return whole;                                  // 다른 구성의 명칭 → 1차 패스 (b) 소관(구성부 접미)
     fixes++; stripped.push(rawName+'('+numStr+')→'+rawName);

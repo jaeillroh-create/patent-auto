@@ -121,11 +121,11 @@ test('★ _parseJSONSafe 회귀 — 코드펜스 감싼 JSON 파싱', () => {
 
 // ─────────── 캐시버스트 토큰 동기화 ───────────
 
-test('회귀 ★ ?v= 릴리스 토큰(20260814e) + common.js(20260814e) 동기화', () => {
+test('회귀 ★ ?v= 릴리스 토큰(20260814f) + common.js(20260814f) 동기화', () => {
   const html = readFileSync(path.join(REPO, 'index.html'), 'utf8');
-  assert.match(html, /patent\/patent\.js\?v=20260814e/, '★ patent.js 릴리스 토큰 갱신');
-  assert.match(html, /shared\/common\.js\?v=20260814e/, '★ common.js 토큰 갱신(수정 반영)');
-  assert.match(PATENT_SRC.length ? readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8') : '', /version = '20260814e'/, '★ patent 로더 version 갱신');
+  assert.match(html, /patent\/patent\.js\?v=20260814f/, '★ patent.js 릴리스 토큰 갱신');
+  assert.match(html, /shared\/common\.js\?v=20260814f/, '★ common.js 토큰 갱신(수정 반영)');
+  assert.match(PATENT_SRC.length ? readFileSync(path.join(REPO, 'patent/patent.js'), 'utf8') : '', /version = '20260814f'/, '★ patent 로더 version 갱신');
 });
 
 // ─────────── (C) extractInventionScope 견고화 — 재시도·분량 상향·진단 ───────────

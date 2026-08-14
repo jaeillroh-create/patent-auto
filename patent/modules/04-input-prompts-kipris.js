@@ -989,6 +989,7 @@ ${genCount>=5?autoNums.slice(4).map((n,i)=>`⑤ 도 ${n}: 추가 상세화 블�
 ---BRIEF_DESCRIPTIONS---
 ${requiredFigures.map(rf=>`도 ${rf.num}${figParticle(rf.num)} ${rf.description}${josaEulReul(rf.description)} 나타내는 도면이다.`).join('\n')}
 (각 도면에 대해 "도 N은 [대상]의 [내용]을 나타내는 블록도이다." 형식으로 작성)
+- ★ [대상] 규칙: 도 2 이후 세부 구성 도면의 [대상]은 "본 발명의 일 실시예에 따른 ${getDeviceSubject()}(100)" 또는 그 직계 상위 구성부로 하라. 하위 구성부를 [대상] 소유격의 주어로 삼아 "A부(110)의 B부(150)"처럼 소속을 뒤바꾸는 표현을 금지한다(B부가 A부의 하위가 아닌 경우 잘못된 소속 기재가 된다 — 본문 "도 N을 참조하면" 단락에도 동일 규칙 적용).
 
 ⛔⛔⛔ 최종 점검 ⛔⛔⛔
 - 도면 수가 정확히 ${genCount}개인가? (${autoNums.map(n=>'도 '+n).join(', ')})
