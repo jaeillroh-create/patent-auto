@@ -335,7 +335,7 @@ function validateSpecification(specText){
   //   ★ [§2.2] (b) 동일부호·상이명칭  (c) 동일명칭·상이부호  (d) b·c 이중보고 dedupe  (R3) detail 양측 명칭 표기.
   {
     const _bodyRN=refSecM?specText.replace(refSecM[1],' '):specText;
-    const _sufAlt='부|서버|단말|모듈|장치|시스템|데이터베이스|수단|엔진|유닛|저장소|메모리|매핑|레지스트리';
+    const _sufAlt='부|서버|단말|모듈|장치|시스템|데이터베이스|수단|엔진|유닛|저장소|메모리|매핑|레지스트리|샘플러|스케줄러|인코더|디코더|분류기|검출기|추출기|생성기|변환기';   // ★ [배치21-3] 배정기 접미와 동기(검증⊋배정 비대칭 해소)
     const _sufEnd=new RegExp('(?:'+_sufAlt+')$');
     // canonical: 부호의 설명 "명칭 : 번호"(또는 "번호 : 명칭") → 부호→정규화 전체명칭
     const _canonMap=new Map();
@@ -599,8 +599,11 @@ function _assignRefNumbers(claimText, opts){
   // ★ [배치18-2/3] 구성명사 정규화는 모듈 공통 _normComponentName 사용(배정=본문정합 규칙 일치 — "실행하고 X부"·"프로세서는 X부" 접두 제거).
   const devName=(typeof _normComponentName==='function')?_normComponentName:clean;
   const claims=String(claimText||'').split(/(?=【청구항\s*\d+】)/).filter(function(s){return /【청구항/.test(s);});
-  const compRe=/([가-힣A-Za-z0-9·][가-힣A-Za-z0-9·\s]*?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터))(?=[은는이가을를와과의에로도만]?(?:\s|[,;.)및]|$))/g;
-  const numRe=/([가-힣A-Za-z0-9·][가-힣A-Za-z0-9·\s]*?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터))\s*\((\d{2,4})\)/g;
+  // ★ [배치21-3] 구성 접미 확장(샘플러·분류기 등 '~기'류 명시 어휘) — 청구항의 '음성 샘플러'가 접미 미포섭으로
+  //   refPlan·부호표·본문 커버리지 체계 전체에서 제외되던 결함(외부 검토 7판본 연속 잔존)의 구조 원인 종결.
+  //   단독 '기'는 일반명사(초기·대기 등) 오포섭 위험으로 제외, 명시 어휘만 추가. 검증기 _sufAlt 와 동기.
+  const compRe=/([가-힣A-Za-z0-9·][가-힣A-Za-z0-9·\s]*?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터|저장소|샘플러|스케줄러|인코더|디코더|분류기|검출기|추출기|생성기|변환기))(?=[은는이가을를와과의에로도만]?(?:\s|[,;.)및]|$))/g;
+  const numRe=/([가-힣A-Za-z0-9·][가-힣A-Za-z0-9·\s]*?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터|저장소|샘플러|스케줄러|인코더|디코더|분류기|검출기|추출기|생성기|변환기))\s*\((\d{2,4})\)/g;
   // 1) 청구항에 이미 있는 명칭(번호) 채택(변리사 확정값 우선)
   claims.forEach(function(c){ numRe.lastIndex=0; let m; while((m=numRe.exec(c))!==null){ const nm=devName(m[1]); const num=parseInt(m[2],10); if(nm.length>=3&&num>=100&&num<=9999)add(nm,num,1,100); } });
   // 2) 미배정 구성부 순차 배정 — 독립항=상위(10단위), 의존항 신규=참조부모의 하위(parent+1)
@@ -656,7 +659,7 @@ function _enforceRefPlan(body, refPlan){
   const _sufRel=function(x,y){ return x===y||x.endsWith(y)||y.endsWith(x); };
   // 명칭 캡처 = 구성부(~부/수단/…, 다단어) | 하드웨어 상용구(프로세서·메모리·…). 후자를 포함해야 canonical↔body 하드웨어 치환("프로세서(100)")을
   //   확정 부호표 명칭으로 되돌린다(배치17 핵심 결함군). 괄호가 문자클래스에 없어 "(번호)" 경계를 넘어 과포섭하지 않는다.
-  const _NAME_ALT='[가-힣A-Za-z0-9·][가-힣A-Za-z0-9·\\s]*?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터)|'+((typeof _HW_BOILER_WORDS!=='undefined')?_HW_BOILER_WORDS:'프로세서|메모리|서버|버스|인터페이스');
+  const _NAME_ALT='[가-힣A-Za-z0-9·][가-힣A-Za-z0-9·\\s]*?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터|저장소|샘플러|스케줄러|인코더|디코더|분류기|검출기|추출기|생성기|변환기)|'+((typeof _HW_BOILER_WORDS!=='undefined')?_HW_BOILER_WORDS:'프로세서|메모리|서버|버스|인터페이스');
   const norm=(typeof _normComponentName==='function')?_normComponentName:clean;
   const out=String(body).replace(new RegExp('('+_NAME_ALT+')(\\s*)\\((\\d{2,4})\\)','g'), function(whole,rawName,sp,numStr){
     const nm=norm(rawName);   // ★ [배치18-2] 구성명사 정규화(관형절·연결어미·하드웨어 접두 제거)로 refPlan 명칭과 매칭. 선행 문맥은 lead 로 보존.
@@ -802,7 +805,7 @@ function _enforceStepOutput(sid){
 function _claimComponentNames(){
   const t=((typeof outputs!=='undefined'&&outputs.step_06)||'')+'\n'+((typeof outputs!=='undefined'&&outputs.step_10)||'');
   const set=new Set();
-  const re=/([가-힣A-Za-z0-9][가-힣A-Za-z0-9·]*(?:\s+[가-힣A-Za-z0-9·]+){0,6}?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터))(?=[,;\.\)\s은는이가을를와과및또]|$)/g;
+  const re=/([가-힣A-Za-z0-9][가-힣A-Za-z0-9·]*(?:\s+[가-힣A-Za-z0-9·]+){0,6}?(?:부|수단|모듈|엔진|유닛|레지스트리|라우터|저장소|샘플러|스케줄러|인코더|디코더|분류기|검출기|추출기|생성기|변환기))(?=[,;\.\)\s은는이가을를와과및또]|$)/g;
   let m; while((m=re.exec(t))!==null){ let n=(typeof _cleanRefName==='function')?_cleanRefName(m[1]):m[1].trim(); if(n.length>=3&&n.length<=40)set.add(n); }
   return [...set];
 }

@@ -142,3 +142,41 @@ test('★21-2d — 교열 점검표 일반화 보강: 계층 트리·최상급 �
   assert.ok(p.includes('서로 다른 층위 이중 사용'), '★ C: 용어 이중 사용(판단 불가류)');
   assert.ok(p.includes('[구성 계층 — 코드가 청구항에서 확정'), '★ 계층 기준 블록 주입(교열의 검증 기준)');
 });
+
+// ═══ [배치21-3] 충실성 최적화(야간 통합) — 접미 목록 동기 + 구시대 절단 한도 현행화 ═══
+// 조사 결론: 발명 입력 채널 자체(청구항 getFullInvention·cohesion [발명 내용 전문])는 무절단 설계로 충실하나,
+// ① 구성 접미 목록이 '샘플러'류를 미포섭해 청구항 구성요소가 refPlan·부호표·커버리지 체계에서 제외
+//    (외부 검토 7판본 연속 '음성 샘플러' 뒷받침 잔존의 구조 원인 — 검증기 _sufAlt ⊋ 배정기 접미 비대칭 포함),
+// ② 2차 경로의 절단 한도가 8k 시절 값: 기저 주입 16000 < maximal 프리셋 25000(재작성 시 본문 후반 통째
+//    소실 — 클램핑 문구·파라미터 정의 소실 실증과 부합), REVIEW_NOTES 8000 < 진단 실측 12,198자(부분 반영),
+//    진단 입력 6000 < 본문 20k(후반부 결함 미발견), 교열 청구범위 6000(대조 기준 절단).
+
+test('★21-3a — 접미 확장: 청구항 "음성 샘플러"가 배정·정합 체계에 포섭된다(7판본 잔존 원인 종결)', () => {
+  const plan = JSON.parse(run(`JSON.stringify(_assignRefNumbers(${JSON.stringify('【청구항 1】 학습 표본 구성부(210)를 포함하는 서버.\n【청구항 2】 제 1 항에 있어서, 상기 학습 표본 구성부(210)에 연계되는 음성 샘플러를 더 포함하는 서버.')}))`));
+  assert.ok(plan.some(p => p.name === '음성 샘플러'), '★ 음성 샘플러 배정(종전: 접미 미포섭 → refPlan·부호표·본문 커버리지에서 투명)');
+  const cls = JSON.parse(run(`JSON.stringify(_assignRefNumbers(${JSON.stringify('【청구항 1】 특징 분류기(220)를 포함하는 장치.')}))`));
+  assert.ok(cls.some(p => p.name === '특징 분류기' && String(p.num) === '220'), '★ ~기류 명시 어휘(분류기) 포섭');
+  assert.match(PATENT_SRC, /메모리\|매핑\|레지스트리\|샘플러\|스케줄러/, '★ 검증기 _sufAlt 동기(검증⊋배정 비대칭 해소)');
+});
+
+test('★21-3b — 기저 주입 한도 현행화: maximal 프리셋(25k)에서 본문 후반 소실 불가', () => {
+  assert.match(PATENT_SRC, /slice\(0,32000\);\s+\/\/ ★ \[배치21-3\] 16000→32000/, '★ 장치 기저 32000(종전 16000 — 재작성이 후반 6~9천자를 기저 없이 재생성/누락하던 구조 원인)');
+  assert.match(PATENT_SRC, /slice\(0,12000\):'';\s+\/\/ ★ \[배치21-3\] 6000→12000/, '★ 방법 기저 12000');
+  assert.match(PATENT_SRC, /slice\(0,6000\)\):'';\s+\/\/ ★ \[배치21-3\] 2500→6000/, '★ 마무리 블록 기저 6000');
+});
+
+test('★21-3c — 반영·진단·교열 입력 한도 현행화(실측 정합)', () => {
+  assert.match(PATENT_SRC, /_pendingReviewNotes\)\.slice\(0,16000\)/, '★ REVIEW_NOTES 16000(진단 실측 12,198자 > 종전 8000 절단 → AI 지적 부분 반영 문제)');
+  assert.match(PATENT_SRC, /_pendingFixTargets\)\.slice\(0,14000\)/, '★ FIX_TARGETS 14000');
+  assert.match(PATENT_SRC, /slice\(0,_c\?2500:16000\)/, '★ 진단 상세설명 입력 16000(종전 6000 — 20k 본문의 후반부 결함 미발견 원인. 축약 모드 2500은 타임아웃 대비 유지)');
+  assert.match(PATENT_SRC, /slice\(0,_c\?1200:8000\)/, '★ 진단 방법 상세설명 8000');
+  assert.match(PATENT_SRC, /\.slice\(0,12000\);\s+\/\/ ★ \[배치21-3\] 6000→12000 — 명칭·계층 대조 기준/, '★ 교열 청구범위 기준 12000');
+});
+
+test('★21-3d — 충실 채널 불변 확인(회귀 방지): 청구항·본문 발명 입력은 무절단 유지', () => {
+  const i6 = PATENT_SRC.indexOf("case 'step_06'");
+  const s6 = PATENT_SRC.slice(i6, i6 + 8000);
+  assert.ok(s6.includes('getFullInvention()'), '★ 청구항 생성은 발명 전문(업로드 파일 포함) 무절단');
+  assert.match(PATENT_SRC, /\[발명 내용 전문\]\n\$\{inv\}/, '★ cohesion 본문 생성도 발명 전문 무절단');
+  assert.match(PATENT_SRC, /발명 내용 반영 완전성/, '★ cohesion 자기점검 [7] 유지(내용 누락 자기검증 계약)');
+});
