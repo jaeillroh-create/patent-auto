@@ -1884,13 +1884,20 @@ async function runUnifiedCohesionGen(opts){
     const _cohMaxTok=(App.safeMaxTokensLarge&&App.safeMaxTokensLarge())||undefined;   // ★ [배치15I-1c] 프로바이더 안전 상한 내 max_tokens 상향(단일 응답 절단 완화)
     let raw='', r=null;
     // ★ [배치15I-2] 고분량 프리셋은 2회 분할 생성 시도(본문 → 부호표·마무리). 실패 시 단일 호출로 폴백.
+    let _splitTimedOut=false;
     if(_cohesionUseSplit()){
       try{ const rs=await _runCohesionSplit('progressUnifiedGen',_cohMaxTok); if(rs&&rs.rm&&rs.rm.ok.hasDevice){ r=rs.rm; raw=rs.merged||''; console.log('[unified] 분할 생성 성공(고분량 프리셋)'); } }
-      catch(e){ console.warn('[unified] split fail → 단일 호출 폴백',e); }
-      if(!r)App.showToast('분할 생성 미완 — 단일 호출로 재시도합니다','info');
+      catch(e){
+        if(e&&/사용자 중단/.test(String(e.message||'')))throw e;   // ★ [배치20-3] 중단은 폴백으로 삼키지 않고 즉시 전파
+        _splitTimedOut=/타임아웃/.test(String((e&&e.message)||''));
+        console.warn('[unified] split fail → 단일 호출 폴백',e);
+      }
+      if(!r)App.showToast(_splitTimedOut?'분할 생성 타임아웃 — 토큰을 낮춰(이어쓰기 모드) 재시도합니다':'분할 생성 미완 — 단일 호출로 재시도합니다','info');
     }
     _wfCancelGate();   // ★ [배치20-3] 폴백 진입 전 중단 지점
-    if(!r){ raw=await App.callClaudeWithContinuation(buildPrompt('unified_cohesion'),'progressUnifiedGen',_cohMaxTok); r=parseCohesiveBundle(raw); }
+    // ★ [배치20-4] 적응 폴백 — 분할이 "타임아웃"으로 실패했으면 같은 16k 재시도는 또 타임아웃일 확률이 높다.
+    //   폴백은 기본 8192(호출당 3분 이내)로 내리고, 절단분은 v20 이어쓰기(20-1 수정판)가 이어붙인다.
+    if(!r){ const _fbTok=_splitTimedOut?undefined:_cohMaxTok; raw=await App.callClaudeWithContinuation(buildPrompt('unified_cohesion'),'progressUnifiedGen',_fbTok); r=parseCohesiveBundle(raw); }
     // ★ [배치15I-1a] 절단 진단 — 응답 길이·이어쓰기 횟수·finish_reason(max_tokens=절단 확정)을 콘솔에 노출(docH 재현 시 즉시 확인).
     try{ const _m=(App.callClaudeWithContinuation&&App.callClaudeWithContinuation.lastMeta)||{}; console.log('[unified] cohesion '+(_cohesionUseSplit()?'(분할) ':'')+'응답 길이='+((raw||'').length)+'자, 마지막 이어쓰기='+(_m.attempts||0)+'회, finish_reason='+(_m.stopReason||'?')+(_m.truncated?' ★절단(max_tokens)':'')); }catch(_e){}
     try{ const _blk=[]; ['REFTABLE:'+(r.ok.hasRef?'O':'X'),'DEVICE_DESC:'+(r.ok.hasDevice?'O':'X'),'METHOD_DESC:'+(r.method?'O':'-'),'TASK:'+(r.task?'O':'X'),'SOLUTION:'+(r.solution?'O':'X'),'EFFECTS:'+(r.effects?'O':'X'),'ABSTRACT:'+(r.abstract?'O':'X')].forEach(function(b){_blk.push(b);}); console.log('[unified] 수신 블록 — '+_blk.join(' · ')); }catch(_e){}

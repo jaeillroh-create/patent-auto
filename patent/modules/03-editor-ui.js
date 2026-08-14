@@ -1681,7 +1681,11 @@ function _wfProgressRender(){
       if(sp){
         let txt='';
         ['progressUnifiedGen','progressStep13'].some(function(pid){ const pe=document.getElementById(pid); const t=pe&&pe.textContent?String(pe.textContent).trim():''; if(t){txt=t;return true;} return false; });
-        sp.textContent=txt?('· '+txt.slice(0,80)):'';
+        // ★ [배치20-5] SSE 스트리밍 수신량 라이브 표시 — callClaude 가 청크마다 window._genStreamChars 를
+        //   갱신하므로, 긴 생성 중에도 "지금 몇 자 수신했는지"가 1초마다 늘어나 멈춤/진행을 즉시 구분할 수 있다.
+        let live=0; try{ live=(typeof window!=='undefined'&&window._genStreamChars)|0; }catch(_e){}
+        if(live>0)txt=(txt?txt+' ':'')+'· 수신 '+live.toLocaleString()+'자';
+        sp.textContent=txt?('· '+txt.slice(0,110)):'';
       }
     }catch(_e){}
   }catch(_e){}
