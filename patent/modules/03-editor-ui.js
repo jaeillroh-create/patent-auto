@@ -2046,7 +2046,7 @@ function _renderCohesionBanner(info){
       if(_fs&&!_rvt&&_fs.remain){
         const _rfx=(_fs.remainFix!=null)?_fs.remainFix:_fs.remain, _rrp=_fs.remainReport|0;   // ★ [배치20-7] 레인 분리
         if(_fs.crit>0)_guide='⛔ CRITICAL '+_fs.crit+'건 잔존 — 다운로드 게이트가 차단됩니다. 한 번 더 실행하거나 ⑤ 검증에서 해당 결함을 확인해 수정하세요.';
-        else if(!_rfx&&_rrp)_guide='다시 쓸 필요 없습니다 — 재작성 대상 결함은 전부 해소되었고, 남은 '+_rrp+'건은 참고(리포트 전용) 권장 항목입니다(예시 보충 등 — 자동 수정 대상 아님, ⑤에서 내용 확인).';
+        else if(!_rfx&&_rrp)_guide='다시 쓸 필요 없습니다 — 재작성 대상 결함은 전부 해소되었고, 남은 '+_rrp+'건은 참고(리포트 전용) 권장 항목입니다(예시 보충 등 — 자동 수정 대상 아님, ⑤에서 내용 확인). 출원 전에 ⑤ 「AI 교열」로 문장·표기 전수 검수를 한 번 실행하는 것을 권장합니다.';
         else _guide='다시 쓸 필요는 없습니다 — 잔존 '+_rfx+'건은 경고 수준(HIGH '+_fs.high+'건)으로 다운로드 게이트를 통과할 수 있습니다. ⑤ 검증에서 내용 확인 후 필요할 때만 재실행하세요. 2회 반영 후에도 남은 결함은 재실행으로 해소되지 않을 수 있습니다(수동 확인 권장).';
       }
       const _rvLine=(_fs&&_fs.review)?_reviewStatusText(_fs.review):'';

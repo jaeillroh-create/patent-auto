@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="shared/design-tokens.css" />
   <link rel="stylesheet" href="shared/components.css" />
   <link rel="stylesheet" href="shared/common.css" />
-  <link rel="stylesheet" href="patent/patent.css?v=20260814g" />
+  <link rel="stylesheet" href="patent/patent.css?v=20260814h" />
   <link rel="stylesheet" href="trademark/trademark.css" />
   <link rel="stylesheet" href="opinion/opinion.css" />
   <link rel="stylesheet" href="division/division.css" />
@@ -1423,6 +1423,15 @@
             <button class="btn btn-outline btn-full" onclick="copyToClipboard()"><span class="ico" data-icon="clipboard"></span> 클립보드 복사</button>
           </div>
         </div>
+        <!-- [배치21-1] 출원 전 AI 교열 — 검출은 LLM(외부 검토 결함 유형의 일반화 점검표), 수정은 문장 단위
+             국소 패치를 코드 게이트(원문 일치·참조부호 보존·길이)로 적용. 전문 재작성 없음(재추첨 위험 차단). -->
+        <div class="card" id="proofreadCard">
+          <div class="card-header"><div class="card-title"><span class="ico" data-icon="edit"></span> 출원 전 AI 교열 (문장·표기 전수 검수)</div></div>
+          <p style="font-size:12px;color:var(--color-text-tertiary);padding:0 0 10px">성분 탈락 비문·소속 오류·명칭/부호 정합·의미 역전·수식 기호 정합·관용구 오기를 AI가 <b>전수 검수</b>하고, 문장 단위 <b>국소 수정만</b> 게이트를 거쳐 반영합니다(<b>청구항·도면 불변</b>, 전문 재작성 없음). 숫자 사실관계·청구범위 구조는 수정하지 않고 리포트로 보고합니다.</p>
+          <div id="progressProofread" style="margin:8px 0"></div>
+          <button class="btn btn-primary btn-full" id="btnProofread" onclick="runProofread()"><span class="ico" data-icon="search"></span> AI 교열 실행 (검수 → 국소 반영)</button>
+          <div id="proofreadResult" style="display:none;margin-top:10px"></div>
+        </div>
         <!-- 출원 전 AI 검증(통합 리뷰 엔진) — 토글 OFF면 무동작(E-21). 필수4종 미충족 시 비활성(G4). -->
         <div class="card" id="patentReviewCard">
           <div class="card-header"><div class="card-title"><span class="ico" data-icon="shield"></span> 출원 전 AI 검증</div></div>
@@ -1543,14 +1552,14 @@
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="shared/components.js?v=20260814g"></script>
-<script src="shared/common.js?v=20260814g"></script>
-<script src="patent/patent.js?v=20260814g"></script>
-<script src="patent/chat.js?v=20260814g"></script>
-<script src="opinion/opinion.js?v=20260814g"></script>
+<script src="shared/components.js?v=20260814h"></script>
+<script src="shared/common.js?v=20260814h"></script>
+<script src="patent/patent.js?v=20260814h"></script>
+<script src="patent/chat.js?v=20260814h"></script>
+<script src="opinion/opinion.js?v=20260814h"></script>
 <script>
   // trademark.js 조건부 로드 (캐시 버스팅 적용)
-  var _cv='?v=20260814g';
+  var _cv='?v=20260814h';
   window.addEventListener('trademark:modules-loaded', function(){
     if(window.App && App.currentService === 'trademark' && window.TM && typeof TM.init === 'function') {
       TM.init();
@@ -1648,9 +1657,9 @@
   </div>
 </div>
 
-<script src="division/division.js?v=20260814g"></script>
-<script src="docket.js?v=20260814g"></script>
+<script src="division/division.js?v=20260814h"></script>
+<script src="docket.js?v=20260814h"></script>
 <!-- 통합 리뷰 엔진 UI (ESM) — classic SPA ↔ ESM 브리지: window.ReviewUI 노출 (읽고 지적만, 반영 X) -->
-<script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260814g"></script>
+<script type="module" src="review-engine/ui/opinion-review-panel.js?v=20260814h"></script>
 </body>
 </html>

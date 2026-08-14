@@ -10,7 +10,7 @@
     'modules/02-risk-priority-output.js',
     'modules/03-ai-analysis-reports.js'
 ];
-  var version = '20260814g';
+  var version = '20260814h';
   var prefix = 'trademark/';
 
   function writeScripts() {
